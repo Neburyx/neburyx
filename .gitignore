@@ -1,0 +1,25 @@
+# macOS and editors
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# dependencies and build output
+node_modules/
+__pycache__/
+.venv/
+dist/
+build/
+
+# secrets and local config
+.env*
+!.env.example
+*.pem
+*.key
+
+# documents and backups that must never be committed here
+*.docx
+*.bkp
+*.dtmp
+.$*
+~$*
