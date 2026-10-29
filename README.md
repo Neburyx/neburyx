@@ -6,7 +6,8 @@ to explain every link it shows.
 
 **Status: pre-release.** There is no code here yet.
 
-**Licence: not yet chosen.** No licence is granted until a `LICENSE` file is added.
+**Licence:** Apache-2.0 (see [LICENSE](LICENSE) and [NOTICE](NOTICE)), except the `ee/` directory, which is
+not covered by it and is reserved for a separate commercial licence.
 
 ## Layout
 
