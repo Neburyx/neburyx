@@ -7,7 +7,7 @@ wouldn't want a reader to see.
 
 Neburyx is a graph investigation workbench that runs on top of an existing Neo4j database. It
 explores a bounded network around an entity, explains each link with its source evidence, and stays
-safe on very high-degree nodes. The repo is **pre-release**: layout, licence files and the build tooling; no product code yet.
+safe on very high-degree nodes. The repo is **pre-release**: the build tooling and an API server that serves the web build; no product features yet.
 
 ## Layout
 
@@ -63,8 +63,17 @@ Node 24 LTS (`.nvmrc`; with nvm, `nvm use`) and pnpm through Corepack, at the ve
 | Lint | `pnpm lint` |
 | Unit tests | `pnpm test` |
 
-CI runs the same four checks as separate jobs (`.github/workflows/ci.yml`). There is no run command
-or demo environment yet: no application code exists. Add the run and demo commands here when they do.
+To run the API with the built web app (after `pnpm build`):
+
+```bash
+NEBURYX_WEB_ROOT=apps/web/dist node services/api/dist/main.js
+```
+
+It listens on `127.0.0.1:8080` unless `NEBURYX_HOST` and `NEBURYX_PORT` say otherwise, and logs a
+warning if started outside a container on a non-loopback address.
+
+CI runs the same four checks as separate jobs (`.github/workflows/ci.yml`). There is no demo
+environment yet. Add its commands here when it exists.
 
 ## Conventions
 
