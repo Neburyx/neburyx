@@ -58,6 +58,8 @@ here: install, run, test, lint, and how to start the demo environment.
 ## Conventions
 
 - Keep changes small and focused. One concern per commit, with a plain-language message.
+- Write code to [docs/coding-guidelines.md](docs/coding-guidelines.md): TypeScript rules, when to
+  comment and when not to, tests, and what differs between the API and the web client.
 - Add tests with code. Cover the failure paths of the gate and the paging behaviour on high-degree nodes.
 - Public docs describe what the product does and how to run it. Don't put roadmap dates, pricing or
   internal planning in them.
