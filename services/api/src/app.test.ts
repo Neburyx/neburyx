@@ -2,7 +2,7 @@ import { rmSync } from 'node:fs';
 import pino from 'pino';
 import { afterAll, describe, expect, it } from 'vitest';
 import { buildApp } from './app.js';
-import { APP_JS, INDEX_HTML, makeWebRoot, V1_FILE } from './test-support.js';
+import { APP_JS, INDEX_HTML, makeWebRoot, V1_FILE } from './testing/web-root.js';
 
 const webRoot = makeWebRoot();
 afterAll(() => rmSync(webRoot, { recursive: true, force: true }));
@@ -18,7 +18,7 @@ describe('paths under /v1', () => {
     expect(response.statusCode).toBe(404);
     expect(response.headers['content-type']).toContain('application/json');
     expect(response.body).not.toContain('<!doctype');
-    expect(JSON.parse(response.body)).toEqual({ statusCode: 404, error: 'Not Found' });
+    expect(JSON.parse(response.body)).toMatchObject({ error: { code: 'NOT_FOUND', retryable: false } });
   });
 
   it.each([

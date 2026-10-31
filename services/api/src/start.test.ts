@@ -6,7 +6,7 @@ import pino from 'pino';
 import { z } from 'zod';
 import { afterAll, describe, expect, it } from 'vitest';
 import { start, type StartIo } from './start.js';
-import { makeWebRoot } from './test-support.js';
+import { makeWebRoot } from './testing/web-root.js';
 
 const webRoot = makeWebRoot();
 const emptyRoot = mkdtempSync(join(tmpdir(), 'empty-root-'));

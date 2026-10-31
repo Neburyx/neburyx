@@ -5,16 +5,19 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "test:contract": "vitest run --passWithNoTests contract.test"
   },
   "dependencies": {
     "@fastify/static": "10.1.8",
+    "@neburyx/contracts": "workspace:*",
     "fastify": "5.12.7",
     "pino": "10.4.0",
     "zod": "4.6.7"
   },
   "devDependencies": {
     "@types/node": "24.19.2",
+    "ajv": "8.20.0",
     "vitest": "5.0.5"
   }
 }

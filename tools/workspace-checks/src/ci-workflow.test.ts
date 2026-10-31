@@ -42,6 +42,7 @@ describe('CI workflow', () => {
     ['typecheck', 'typecheck'],
     ['unit', 'test'],
     ['build', 'build'],
+    ['contract', 'test:contract'],
   ])('job %s installs frozen and ends with the root script %s', (job, script) => {
     const steps = workflow.jobs[job]?.steps ?? [];
     expect(steps.map((step) => step.uses?.split('@')[0] ?? step.run)).toEqual([
@@ -55,7 +56,7 @@ describe('CI workflow', () => {
     expect(Object.keys(rootScripts)).toContain(script);
   });
 
-  it('defines exactly the four jobs', () => {
-    expect(Object.keys(workflow.jobs).sort()).toEqual(['build', 'lint', 'typecheck', 'unit']);
+  it('defines exactly the five jobs', () => {
+    expect(Object.keys(workflow.jobs).sort()).toEqual(['build', 'contract', 'lint', 'typecheck', 'unit']);
   });
 });

@@ -1,0 +1,25 @@
+import { describe, expect, it } from 'vitest';
+import { ERROR_CODES } from './error-codes.js';
+import { allowedDetails, ERROR_DETAIL_KEYS } from './error-details.js';
+
+describe('allowedDetails', () => {
+  it.each([{ maxPage: '50' }, { maxPage: 0 }, { maxPage: 1.5 }, { query: 'MATCH (n)' }, 'text', 42, null, undefined])(
+    'drops %j',
+    (details) => {
+      expect(allowedDetails('QUERY_BUDGET_EXCEEDED', details)).toBeUndefined();
+    },
+  );
+
+  it('keeps only the named field of a code', () => {
+    expect(allowedDetails('QUERY_BUDGET_EXCEEDED', { maxPage: 50, retryAfterMs: 5, query: 'MATCH (n)' })).toEqual({ maxPage: 50 });
+    expect(allowedDetails('RATE_LIMITED', { retryAfterMs: 2000, maxPage: 50 })).toEqual({ retryAfterMs: 2000 });
+  });
+
+  it('allows no field for a code that names none', () => {
+    expect(allowedDetails('ACCESS_DENIED', { maxPage: 50 })).toBeUndefined();
+  });
+
+  it('names a field list for every code', () => {
+    expect(Object.keys(ERROR_DETAIL_KEYS).sort()).toEqual([...ERROR_CODES].sort());
+  });
+});

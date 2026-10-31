@@ -2,12 +2,30 @@
   "name": "@neburyx/contracts",
   "private": true,
   "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "openapi.json"
+  ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json",
+    "generate": "pnpm build && node dist/generate.js",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "test:contract": "vitest run --passWithNoTests contract.test"
+  },
+  "dependencies": {
+    "zod": "4.6.7"
   },
   "devDependencies": {
+    "@types/node": "24.19.2",
     "vitest": "5.0.5"
   }
 }

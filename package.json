@@ -8,9 +8,10 @@
   },
   "scripts": {
     "build": "pnpm -r build",
-    "typecheck": "pnpm -r typecheck",
+    "typecheck": "pnpm --filter @neburyx/contracts build && pnpm -r typecheck",
     "lint": "eslint . --max-warnings 0",
-    "test": "pnpm -r test"
+    "test": "pnpm --filter @neburyx/contracts build && pnpm -r test",
+    "test:contract": "pnpm --filter @neburyx/contracts build && pnpm -r --if-present test:contract"
   },
   "devDependencies": {
     "eslint": "10.14.0",

@@ -5,7 +5,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { buildApp } from './app.js';
 import { createLogger } from './logger.js';
-import { makeWebRoot } from './test-support.js';
+import { makeWebRoot } from './testing/web-root.js';
 
 const webRoot = makeWebRoot();
 afterAll(() => rmSync(webRoot, { recursive: true, force: true }));
@@ -195,7 +195,7 @@ describe('values that must stay out of the logs', () => {
     expect(response.statusCode).toBe(400);
     expect(response.headers['x-trace-id']).toMatch(TRACE_ID);
     expect(response.body).not.toContain(ACCOUNT);
-    expect(JSON.parse(response.body)).toEqual({ statusCode: 400, error: 'Bad Request' });
+    expect(JSON.parse(response.body)).toMatchObject({ error: { code: 'INVALID_REQUEST', traceId: response.headers['x-trace-id'] } });
     expect(onlyCompletedLine()).toMatchObject({ statusCode: 400, route: 'unmatched', traceId: response.headers['x-trace-id'] });
     expectNoneOf([ACCOUNT, '%zz']);
   });
@@ -218,6 +218,7 @@ describe('failures before a request exists', () => {
     expect(text.startsWith('HTTP/1.1 400 Bad Request')).toBe(true);
     const traceId = /x-trace-id: (tr-[0-9a-f-]{36})/.exec(text)?.[1];
     expect(traceId).toMatch(TRACE_ID);
+    expect(JSON.parse(text.split('\r\n\r\n')[1] ?? '')).toMatchObject({ error: { code: 'INVALID_REQUEST', traceId } });
     expect(onlyCompletedLine()).toMatchObject({ statusCode: 400, traceId });
     expectNoneOf([EMAIL]);
   });
@@ -291,6 +292,7 @@ describe('requests that fail after they were created', () => {
     const traceId = /x-trace-id: (tr-[0-9a-f-]{36})/.exec(text)?.[1];
     expect(text.startsWith('HTTP/1.1 400 Bad Request')).toBe(true);
     expect(traceId).toMatch(TRACE_ID);
+    expect(JSON.parse(text.split('\r\n\r\n')[1] ?? '')).toMatchObject({ error: { code: 'INVALID_REQUEST', traceId } });
     expect(completedLines().map((line) => line.traceId)).toEqual([traceId]);
     expect(onlyCompletedLine()).toMatchObject({ statusCode: 400, route: '/v1/test/hold-body' });
     expectNoneOf([EMAIL]);
@@ -357,6 +359,254 @@ describe('pipelined requests', () => {
     expect([...text.matchAll(/x-trace-id: (tr-[0-9a-f-]{36})/g)].map((match) => match[1])).toEqual(
       completed.map((line) => line.traceId),
     );
+  });
+});
+
+describe('parser failures next to other responses', () => {
+  async function listening(addRoutes: (server: Awaited<ReturnType<typeof app>>) => void): Promise<{ readonly server: Awaited<ReturnType<typeof app>>; readonly port: number }> {
+    const server = await app();
+    addRoutes(server);
+    await server.listen({ host: '127.0.0.1', port: 0 });
+    const address = server.server.address();
+    return { server, port: typeof address === 'object' && address !== null ? address.port : 0 };
+  }
+
+  function collect(socket: ReturnType<typeof connect>): { readonly received: Buffer[]; readonly closed: Promise<void> } {
+    const received: Buffer[] = [];
+    socket.on('data', (chunk: Buffer) => received.push(chunk));
+    return { received, closed: new Promise<void>((done) => socket.on('close', () => done())) };
+  }
+
+  it('answers a parser failure in a HEAD request’s own framing without a body', async () => {
+    const release = deferred();
+    const { server, port } = await listening((added) => {
+      added.get('/v1/test/hold', async () => {
+        await release.promise;
+        return { ok: true };
+      });
+    });
+    const socket = connect(port, '127.0.0.1');
+    const { received, closed } = collect(socket);
+    socket.write('HEAD /v1/test/hold HTTP/1.1\r\nhost: x\r\ntransfer-encoding: chunked\r\n\r\nZZ\r\n');
+    await closed;
+    release.release();
+    await server.close();
+    const text = Buffer.concat(received).toString('utf8');
+    expect(text.startsWith('HTTP/1.1 400 Bad Request')).toBe(true);
+    expect(text.split('\r\n\r\n')[1]).toBe('');
+    expect(onlyCompletedLine()).toMatchObject({ statusCode: 400, method: 'HEAD' });
+  });
+
+  it('answers garbage after a pending request only after that request’s response, in order', async () => {
+    const entered = deferred();
+    const release = deferred();
+    const { server, port } = await listening((added) => {
+      added.get('/v1/test/hold', async () => {
+        entered.release();
+        await release.promise;
+        return { ok: true };
+      });
+    });
+    const socket = connect(port, '127.0.0.1');
+    const { received, closed } = collect(socket);
+    socket.write('GET /v1/test/hold HTTP/1.1\r\nhost: x\r\n\r\nGARBAGE\r\n\r\n');
+    await entered.promise;
+    expect(Buffer.concat(received).toString('utf8')).toBe('');
+    release.release();
+    await closed;
+    await server.close();
+    const text = Buffer.concat(received).toString('utf8');
+    const ids = [...text.matchAll(/x-trace-id: (tr-[0-9a-f-]{36})/g)].map((match) => match[1]);
+    expect(text.startsWith('HTTP/1.1 200')).toBe(true);
+    expect(text.indexOf('HTTP/1.1 400')).toBeGreaterThan(text.indexOf('{"ok":true}'));
+    expect(ids).toHaveLength(2);
+    expect(ids[0]).not.toBe(ids[1]);
+    const completed = completedLines();
+    expect(completed.map((line) => line.statusCode)).toEqual([200, 400]);
+    expect(completed.map((line) => line.traceId)).toEqual(ids);
+  });
+
+  it('does not wait for a request that was served by the fallback and has completed', async () => {
+    const { server, port } = await listening(() => undefined);
+    const socket = connect(port, '127.0.0.1');
+    const { received, closed } = collect(socket);
+    const served = deferred();
+    socket.on('data', () => {
+      if (Buffer.concat(received).toString('utf8').includes('fixture')) served.release();
+    });
+    socket.write('GET /investigations/abc HTTP/1.1\r\nhost: x\r\n\r\n');
+    await served.promise;
+    await lineWritten((line) => line.event === 'request.completed');
+    socket.write('GARBAGE\r\n\r\n');
+    await closed;
+    await server.close();
+    const text = Buffer.concat(received).toString('utf8');
+    expect(text.startsWith('HTTP/1.1 200')).toBe(true);
+    expect(text).toContain('HTTP/1.1 400 Bad Request');
+    expect(completedLines().map((line) => line.statusCode)).toEqual([200, 400]);
+  });
+
+  it('answers garbage after a streaming response only once that response has ended', async () => {
+    const endStream = deferred();
+    const { server, port } = await listening((added) => {
+      added.get('/v1/test/streaming', async (_request, reply) => {
+        const stream = new Readable({ read: () => undefined });
+        stream.push('first chunk');
+        void endStream.promise.then(() => stream.push(null));
+        return reply.send(stream);
+      });
+    });
+    const socket = connect(port, '127.0.0.1');
+    const { received, closed } = collect(socket);
+    const firstBytes = deferred();
+    socket.on('data', () => firstBytes.release());
+    socket.write('GET /v1/test/streaming HTTP/1.1\r\nhost: x\r\n\r\n');
+    await firstBytes.promise;
+    socket.write('GARBAGE\r\n\r\n');
+    expect(Buffer.concat(received).toString('utf8')).not.toContain('HTTP/1.1 400');
+    endStream.release();
+    await closed;
+    await server.close();
+    const text = Buffer.concat(received).toString('utf8');
+    expect(text.startsWith('HTTP/1.1 200')).toBe(true);
+    expect(text.indexOf('HTTP/1.1 400')).toBeGreaterThan(text.indexOf('first chunk'));
+    expect(completedLines().map((line) => line.statusCode)).toEqual([200, 400]);
+  });
+
+  it('cuts the connection when the framing error belongs to a request whose response has started', async () => {
+    const { server, port } = await listening((added) => {
+      added.get('/v1/test/streaming-open', async (_request, reply) => {
+        const stream = new Readable({ read: () => undefined });
+        stream.push('first chunk');
+        return reply.send(stream);
+      });
+    });
+    const socket = connect(port, '127.0.0.1');
+    const { received, closed } = collect(socket);
+    const firstBytes = deferred();
+    socket.on('data', () => firstBytes.release());
+    socket.write('GET /v1/test/streaming-open HTTP/1.1\r\nhost: x\r\ntransfer-encoding: chunked\r\n\r\n');
+    await firstBytes.promise;
+    socket.write('ZZ\r\n');
+    await closed;
+    await server.close();
+    const text = Buffer.concat(received).toString('utf8');
+    expect(text.startsWith('HTTP/1.1 200')).toBe(true);
+    expect(text).not.toContain('HTTP/1.1 400');
+    expect(onlyCompletedLine()).toMatchObject({ aborted: true, route: '/v1/test/streaming-open' });
+  });
+});
+
+describe('pipelined requests with a pending earlier response', () => {
+  function memorySocket(): { readonly socket: Duplex; readonly received: Buffer[] } {
+    const received: Buffer[] = [];
+    const socket = new Duplex({
+      read: () => undefined,
+      write: (chunk: Buffer, _encoding, callback) => {
+        received.push(chunk);
+        callback();
+      },
+    });
+    Object.assign(socket, { setTimeout: () => socket, setNoDelay: () => socket, setKeepAlive: () => socket, remoteAddress: '127.0.0.1' });
+    return { socket, received };
+  }
+
+  async function secondRequestWithBadFraming(
+    firstRoute: (server: Awaited<ReturnType<typeof app>>, finish: () => void) => void,
+  ): Promise<{ readonly text: () => string; readonly secondId: () => string; readonly push: (data: string) => void; readonly done: () => Promise<void> }> {
+    const server = await app();
+    const firstDone = deferred();
+    const secondCreated = deferred();
+    let secondId = '';
+    firstRoute(server, firstDone.release);
+    server.post('/v1/test/second', async () => ({ ok: true }));
+    server.addHook('onRequest', async (request) => {
+      if (request.url !== '/v1/test/second') return;
+      secondId = request.id;
+      secondCreated.release();
+    });
+    await server.ready();
+    const { socket, received } = memorySocket();
+    const closed = new Promise<void>((done) => socket.on('close', () => done()));
+    server.server.emit('connection', socket);
+    socket.push(
+      'GET /v1/test/first HTTP/1.1\r\nhost: x\r\n\r\n' +
+        'POST /v1/test/second HTTP/1.1\r\nhost: x\r\ncontent-type: application/json\r\ntransfer-encoding: chunked\r\n\r\n',
+    );
+    await secondCreated.promise;
+    socket.push('ZZ\r\n');
+    await new Promise((done) => setImmediate(done));
+    return {
+      text: () => Buffer.concat(received).toString('utf8'),
+      secondId: () => secondId,
+      push: (data: string) => socket.push(data),
+      done: async () => {
+        await lineWritten((line) => line.event === 'request.completed' && line.statusCode === 400);
+        socket.destroy();
+        await closed;
+      },
+    };
+  }
+
+  it('waits for a first response that has not started', async () => {
+    const release = deferred();
+    const run = await secondRequestWithBadFraming((server) => {
+      server.get('/v1/test/first', async () => {
+        await release.promise;
+        return { ok: true };
+      });
+    });
+    expect(run.text()).not.toContain('HTTP/1.1 400');
+    release.release();
+    await run.done();
+    const text = run.text();
+    expect(text.startsWith('HTTP/1.1 200')).toBe(true);
+    expect(text.indexOf('HTTP/1.1 400')).toBeGreaterThan(text.indexOf('{"ok":true}'));
+    const completed = completedLines();
+    expect(completed.map((line) => line.statusCode)).toEqual([200, 400]);
+    expect(completed[1]?.traceId).toBe(run.secondId());
+    expect(text).toContain(`x-trace-id: ${run.secondId()}`);
+  });
+
+  it('keeps one waiter per connection when the bad data keeps arriving', async () => {
+    const warnings: string[] = [];
+    const onWarning = (warning: Error): number => warnings.push(warning.name);
+    process.on('warning', onWarning);
+    const release = deferred();
+    const run = await secondRequestWithBadFraming((server) => {
+      server.get('/v1/test/first', async () => {
+        await release.promise;
+        return { ok: true };
+      });
+    });
+    for (let count = 0; count < 15; count += 1) run.push('ZZ\r\n');
+    await new Promise((done) => setImmediate(done));
+    release.release();
+    await run.done();
+    process.off('warning', onWarning);
+    expect(warnings).toEqual([]);
+    expect(completedLines().map((line) => line.statusCode)).toEqual([200, 400]);
+    expect(run.text().match(/HTTP\/1\.1 400/g)).toHaveLength(1);
+  });
+
+  it('waits for a first response that is streaming', async () => {
+    const end = deferred();
+    const run = await secondRequestWithBadFraming((server) => {
+      server.get('/v1/test/first', async (_request, reply) => {
+        const stream = new Readable({ read: () => undefined });
+        stream.push('first chunk');
+        void end.promise.then(() => stream.push(null));
+        return reply.send(stream);
+      });
+    });
+    expect(run.text()).toContain('first chunk');
+    expect(run.text()).not.toContain('HTTP/1.1 400');
+    end.release();
+    await run.done();
+    const text = run.text();
+    expect(text.indexOf('HTTP/1.1 400')).toBeGreaterThan(text.indexOf('first chunk'));
+    expect(completedLines().map((line) => line.statusCode)).toEqual([200, 400]);
+    expect(completedLines()[1]?.traceId).toBe(run.secondId());
   });
 });
 
