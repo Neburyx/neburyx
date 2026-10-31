@@ -7,7 +7,7 @@ wouldn't want a reader to see.
 
 Neburyx is a graph investigation workbench that runs on top of an existing Neo4j database. It
 explores a bounded network around an entity, explains each link with its source evidence, and stays
-safe on very high-degree nodes. The repo is **pre-release**: layout and licence files only, no code yet.
+safe on very high-degree nodes. The repo is **pre-release**: layout, licence files and the build tooling; no product code yet.
 
 ## Layout
 
@@ -52,8 +52,19 @@ safe on very high-degree nodes. The repo is **pre-release**: layout and licence 
 
 ## Build, test and run
 
-No code exists yet, so there are no commands. When the stack is chosen and the skeleton lands, list
-here: install, run, test, lint, and how to start the demo environment.
+Node 24 LTS (`.nvmrc`; with nvm, `nvm use`) and pnpm through Corepack, at the version pinned in
+`package.json`. Commands run from the repo root:
+
+| Task | Command |
+|---|---|
+| Install | `corepack enable`, then `pnpm install --frozen-lockfile` |
+| Build | `pnpm build` |
+| Type-check | `pnpm typecheck` |
+| Lint | `pnpm lint` |
+| Unit tests | `pnpm test` |
+
+CI runs the same four checks as separate jobs (`.github/workflows/ci.yml`). There is no run command
+or demo environment yet: no application code exists. Add the run and demo commands here when they do.
 
 ## Conventions
 

@@ -1,0 +1,6 @@
+engineStrict: true
+packages:
+  - apps/*
+  - services/*
+  - packages/*
+  - tools/*
