@@ -57,8 +57,20 @@ describe('CI workflow', () => {
     expect(Object.keys(rootScripts)).toContain(script);
   });
 
-  it('defines exactly the seven jobs', () => {
-    expect(Object.keys(workflow.jobs).sort()).toEqual(['build', 'contract', 'image', 'integration', 'lint', 'typecheck', 'unit']);
+  it('defines exactly the eight jobs', () => {
+    expect(Object.keys(workflow.jobs).sort()).toEqual(['build', 'compose', 'contract', 'image', 'integration', 'lint', 'typecheck', 'unit']);
+  });
+
+  it('installs frozen and ends with the compose test in the compose job', () => {
+    const steps = workflow.jobs['compose']?.steps ?? [];
+    expect(steps.map((step) => step.uses?.split('@')[0] ?? step.run)).toEqual([
+      'actions/checkout',
+      'actions/setup-node',
+      'corepack enable',
+      'pnpm install --frozen-lockfile',
+      'pnpm test:compose',
+    ]);
+    expect(Object.keys(rootScripts)).toContain('test:compose');
   });
 
   it('builds the image for both platforms and checks the result, after running the image test', () => {

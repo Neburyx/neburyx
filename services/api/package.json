@@ -8,7 +8,8 @@
     "test": "vitest run --passWithNoTests",
     "test:contract": "vitest run --passWithNoTests contract.test",
     "test:integration": "vitest run --config vitest.integration.config.ts",
-    "test:image": "vitest run --config vitest.image.config.ts"
+    "test:image": "vitest run --config vitest.image.config.ts",
+    "test:compose": "vitest run --config vitest.compose.config.ts"
   },
   "dependencies": {
     "@fastify/static": "10.1.8",

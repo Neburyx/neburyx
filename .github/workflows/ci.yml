@@ -89,3 +89,15 @@ jobs:
       - run: pnpm test:image
       - run: docker buildx build --platform linux/amd64,linux/arm64 -f deploy/docker/Dockerfile --output type=oci,dest=${{ runner.temp }}/neburyx.oci.tar .
       - run: node deploy/docker/check-platforms.mjs ${{ runner.temp }}/neburyx.oci.tar
+
+  compose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:compose

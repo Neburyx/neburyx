@@ -1,0 +1,52 @@
+name: neburyx
+
+services:
+  db:
+    image: postgres:16.15
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${NEBURYX_DB_ADMIN_PASSWORD:?set NEBURYX_DB_ADMIN_PASSWORD in the .env file}
+      NEBURYX_DB_MIGRATION_PASSWORD: ${NEBURYX_DB_MIGRATION_PASSWORD:?set NEBURYX_DB_MIGRATION_PASSWORD in the .env file}
+      NEBURYX_DB_APP_PASSWORD: ${NEBURYX_DB_APP_PASSWORD:?set NEBURYX_DB_APP_PASSWORD in the .env file}
+    volumes:
+      - neburyx-db:/var/lib/postgresql/data
+      - ./initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  migrate:
+    image: ${NEBURYX_IMAGE:-neburyx}:${NEBURYX_TAG:-latest}
+    command: ["migrate"]
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_MIGRATION_URL: postgres://neburyx_migrate:${NEBURYX_DB_MIGRATION_PASSWORD:?set NEBURYX_DB_MIGRATION_PASSWORD in the .env file}@db:5432/neburyx
+      DATABASE_APP_ROLE: neburyx_app
+
+  api:
+    image: ${NEBURYX_IMAGE:-neburyx}:${NEBURYX_TAG:-latest}
+    command: ["api"]
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: postgres://neburyx_app:${NEBURYX_DB_APP_PASSWORD:?set NEBURYX_DB_APP_PASSWORD in the .env file}@db:5432/neburyx
+    ports:
+      - "127.0.0.1:${NEBURYX_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/readyz').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 5s
+      timeout: 4s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  neburyx-db:

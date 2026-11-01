@@ -13,7 +13,8 @@
     "test": "pnpm --filter @neburyx/contracts build && pnpm -r test",
     "test:contract": "pnpm --filter @neburyx/contracts build && pnpm -r --if-present test:contract",
     "test:integration": "pnpm --filter @neburyx/contracts build && pnpm --filter @neburyx/api build && pnpm --filter @neburyx/api test:integration",
-    "test:image": "pnpm --filter @neburyx/api test:image"
+    "test:image": "pnpm --filter @neburyx/api test:image",
+    "test:compose": "pnpm --filter @neburyx/api test:compose"
   },
   "devDependencies": {
     "eslint": "10.14.0",
