@@ -30,6 +30,25 @@ function savedImage(layers: Readonly<Record<string, string>>): string {
   return saved;
 }
 
+function tarEntry(name: string, mode: number, content: string, type: '0' | '5'): Buffer {
+  const header = Buffer.alloc(512);
+  header.write(name, 0, 'utf8');
+  header.write(`${mode.toString(8).padStart(7, '0')}\0`, 100);
+  header.write('0000000\0', 108);
+  header.write('0000000\0', 116);
+  header.write(`${Buffer.byteLength(content).toString(8).padStart(11, '0')}\0`, 124);
+  header.write('00000000000\0', 136);
+  header.write('        ', 148);
+  header.write(type, 156);
+  header.write('ustar\0', 257);
+  header.write('00', 263);
+  const sum = [...header].reduce((total, byte) => total + byte, 0);
+  header.write(`${sum.toString(8).padStart(6, '0')}\0 `, 148);
+  const body = Buffer.alloc(Math.ceil(Buffer.byteLength(content) / 512) * 512);
+  body.write(content, 0, 'utf8');
+  return Buffer.concat([header, body]);
+}
+
 describe('containsText', () => {
   it('finds text in a file and reports a clean folder as clean', async () => {
     const dirty = folder();
@@ -65,6 +84,19 @@ describe('extractLayers', () => {
     const saved = folder();
     writeFileSync(join(saved, 'manifest.json'), '[]');
     await expect(extractLayers(saved, folder())).rejects.toThrow();
+  });
+});
+
+describe('extractLayers with a layer whose folder cannot be entered', () => {
+  it('still lets the files in it be searched', async () => {
+    const saved = folder();
+    mkdirSync(join(saved, 'blobs'));
+    const archive = Buffer.concat([tarEntry('locked/', 0o000, '', '5'), tarEntry('locked/secret.txt', 0o000, 'hidden needle', '0'), Buffer.alloc(1024)]);
+    writeFileSync(join(saved, 'blobs', 'layer.tar'), archive);
+    writeFileSync(join(saved, 'manifest.json'), JSON.stringify([{ Config: 'c', RepoTags: [], Layers: ['blobs/layer.tar'] }]));
+    const layers = await extractLayers(saved, folder());
+    expect(await containsText(layers[0] ?? '', 'needle')).toBe(true);
+    expect(configurationFilesIn(layers[0] ?? '')).toEqual([]);
   });
 });
 

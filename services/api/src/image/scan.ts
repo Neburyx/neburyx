@@ -16,6 +16,7 @@ export async function extractLayers(saved: string, into: string): Promise<readon
     const target = join(into, `layer-${index}`);
     mkdirSync(target);
     await run('tar', ['-xf', join(saved, layer), '-C', target], { maxBuffer: 256 * 1024 * 1024 });
+    await run('chmod', ['-R', 'u+rwX', target]);
     folders.push(target);
   }
   return folders;
