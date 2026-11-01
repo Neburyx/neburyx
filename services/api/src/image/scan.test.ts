@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -97,6 +97,16 @@ describe('extractLayers with a layer whose folder cannot be entered', () => {
     const layers = await extractLayers(saved, folder());
     expect(await containsText(layers[0] ?? '', 'needle')).toBe(true);
     expect(configurationFilesIn(layers[0] ?? '')).toEqual([]);
+  });
+});
+
+describe('configurationFilesIn and links that point outside the layer', () => {
+  it('does not follow a link to a folder on the machine that runs the check', () => {
+    const outside = folder();
+    writeFileSync(join(outside, 'neburyx.yaml'), '');
+    const root = folder();
+    symlinkSync(outside, join(root, 'link'));
+    expect(configurationFilesIn(root)).toEqual([]);
   });
 });
 

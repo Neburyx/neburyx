@@ -32,6 +32,12 @@ export async function containsText(folder: string, text: string): Promise<boolea
   }
 }
 
-export function configurationFilesIn(folder: string): readonly string[] {
-  return readdirSync(folder, { recursive: true, encoding: 'utf8' }).filter((entry) => NAMES_OF_CONFIGURATION.test(entry));
+export function configurationFilesIn(folder: string, below = ''): readonly string[] {
+  const names: string[] = [];
+  for (const entry of readdirSync(join(folder, below), { withFileTypes: true })) {
+    const path = join(below, entry.name);
+    if (NAMES_OF_CONFIGURATION.test(path)) names.push(path);
+    if (entry.isDirectory()) names.push(...configurationFilesIn(folder, path));
+  }
+  return names;
 }
