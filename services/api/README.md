@@ -41,3 +41,7 @@ connection.
 **`GET /v1/me`** returns the calling principal (`id`, `displayName`, `role`), the `edition`, the
 `identityMode` and the permitted `sources` (an empty list for now). The response schema is in
 `packages/contracts/openapi.json`. A database error answers `INTERNAL_ERROR`.
+
+**Commands.** `dist/cli.js` runs `api` (the default) or `migrate`. In the container image these are
+the two ways to start it (`docker run … neburyx api`, `docker run … neburyx migrate`); see
+`deploy/docker/README.md`. The `api` command stops cleanly on `SIGTERM` and `SIGINT`.

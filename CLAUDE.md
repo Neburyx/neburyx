@@ -7,7 +7,7 @@ wouldn't want a reader to see.
 
 Neburyx is a graph investigation workbench that runs on top of an existing Neo4j database. It
 explores a bounded network around an entity, explains each link with its source evidence, and stays
-safe on very high-degree nodes. The repo is **pre-release**: the build tooling, an API server that serves the web build, the database migrations and `GET /v1/me`; no product features yet.
+safe on very high-degree nodes. The repo is **pre-release**: the build tooling, an API server that serves the web build, the database migrations, `GET /v1/me` and the container image; no product features yet.
 
 ## Layout
 
@@ -17,7 +17,7 @@ safe on very high-degree nodes. The repo is **pre-release**: the build tooling, 
 | `services/api` | Backend API |
 | `ee/` | Modules under a separate commercial licence (placeholder) |
 | `packages/contracts` | API contract and generated client types |
-| `deploy/docker` | Container image build |
+| `deploy/docker` | Container image build (`Dockerfile`; see its README) |
 | `deploy/demo` | Demo environment on a synthetic graph |
 | `tools/demo-graph` | Synthetic demo graph generator |
 | `docs/` | Public technical documentation |
@@ -64,6 +64,7 @@ Node 24 LTS (`.nvmrc`; with nvm, `nvm use`) and pnpm through Corepack, at the ve
 | Unit tests | `pnpm test` |
 | Contract test | `pnpm test:contract` |
 | Integration tests (a Postgres container; needs Docker) | `pnpm test:integration` |
+| Image tests (builds the image and runs it; needs Docker, takes minutes) | `pnpm test:image` |
 | Regenerate `packages/contracts/openapi.json` | `pnpm --filter @neburyx/contracts generate` |
 
 To run the API with the built web app (after `pnpm build` and `neburyx migrate`; `DATABASE_URL` is the app role's connection string):
@@ -77,7 +78,7 @@ To create or upgrade the database (after `pnpm build`): `DATABASE_MIGRATION_URL=
 The API listens on `127.0.0.1:8080` unless `NEBURYX_HOST` and `NEBURYX_PORT` say otherwise, and logs a
 warning if started outside a container on a non-loopback address.
 
-CI runs lint, type-check, unit tests, the contract test, the integration tests and the build as separate jobs (`.github/workflows/ci.yml`). There is no demo
+CI runs lint, type-check, unit tests, the contract test, the integration tests, the build and the image build (both platforms) as separate jobs (`.github/workflows/ci.yml`). There is no demo
 environment yet. Add its commands here when it exists.
 
 ## Conventions

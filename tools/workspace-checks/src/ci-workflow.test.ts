@@ -57,7 +57,26 @@ describe('CI workflow', () => {
     expect(Object.keys(rootScripts)).toContain(script);
   });
 
-  it('defines exactly the six jobs', () => {
-    expect(Object.keys(workflow.jobs).sort()).toEqual(['build', 'contract', 'integration', 'lint', 'typecheck', 'unit']);
+  it('defines exactly the seven jobs', () => {
+    expect(Object.keys(workflow.jobs).sort()).toEqual(['build', 'contract', 'image', 'integration', 'lint', 'typecheck', 'unit']);
+  });
+
+  it('builds the image for both platforms and checks the result, after running the image test', () => {
+    const steps = workflow.jobs['image']?.steps ?? [];
+    expect(steps.map((step) => step.uses?.split('@')[0] ?? step.run?.split(' ').slice(0, 2).join(' '))).toEqual([
+      'actions/checkout',
+      'actions/setup-node',
+      'corepack enable',
+      'pnpm install',
+      'docker/setup-qemu-action',
+      'docker/setup-buildx-action',
+      'pnpm test:image',
+      'docker buildx',
+      'node deploy/docker/check-platforms.mjs',
+    ]);
+    const build = steps.find((step) => step.run?.startsWith('docker buildx build'))?.run ?? '';
+    expect(build).toContain('--platform linux/amd64,linux/arm64');
+    expect(build).toContain('-f deploy/docker/Dockerfile');
+    expect(Object.keys(rootScripts)).toContain('test:image');
   });
 });

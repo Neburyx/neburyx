@@ -1,0 +1,9 @@
+.git
+.github
+**/node_modules
+**/dist
+**/.env*
+**/neburyx.yaml
+**/*.pem
+**/*.key
+**/.DS_Store
