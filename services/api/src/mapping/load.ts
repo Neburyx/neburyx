@@ -12,12 +12,12 @@ export const MAX_MAPPING_BYTES = 1024 * 1024;
 
 const MAX_IDENTIFIER_LENGTH = 80;
 const MAX_ICON_LENGTH = 40;
-const CONTEXT_SECTIONS: Readonly<Record<string, { readonly label: string; readonly key: string }>> = {
-  entities: { label: 'entity', key: 'type' },
-  relationships: { label: 'relationship', key: 'type' },
-  derived: { label: 'derived rule', key: 'id' },
-  patterns: { label: 'pattern', key: 'id' },
-};
+const CONTEXT_SECTIONS: ReadonlyMap<string, { readonly label: string; readonly key: string }> = new Map([
+  ['entities', { label: 'entity', key: 'type' }],
+  ['relationships', { label: 'relationship', key: 'type' }],
+  ['derived', { label: 'derived rule', key: 'id' }],
+  ['patterns', { label: 'pattern', key: 'id' }],
+]);
 
 type Segments = readonly (string | number)[];
 
@@ -41,7 +41,7 @@ function contextOf(data: unknown, segments: Segments): string | undefined {
   const parts: string[] = [];
   const source = identifierAt(data, ['sources', index, 'id']);
   if (source !== undefined) parts.push(`source ${source}`);
-  const described = typeof section === 'string' ? CONTEXT_SECTIONS[section] : undefined;
+  const described = typeof section === 'string' ? CONTEXT_SECTIONS.get(section) : undefined;
   if (described !== undefined && typeof position === 'number') {
     const name = identifierAt(data, ['sources', index, section ?? '', position, described.key]);
     if (name !== undefined) parts.push(`${described.label} ${name}`);

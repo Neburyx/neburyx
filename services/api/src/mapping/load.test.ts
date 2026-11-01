@@ -260,6 +260,7 @@ describe('hostile input', () => {
     const paths = issuesOf(text).map((issue) => issue.path);
     expect(paths).toContain('sources[0].__proto__');
     expect(paths).toContain('sources[0].constructor');
+    expect(issuesOf(text).find((issue) => issue.path === 'sources[0].constructor')?.context).toBe('source demo');
     expect(Reflect.get({}, 'polluted')).toBeUndefined();
     expect(Reflect.get(Object.prototype, 'polluted')).toBeUndefined();
   });

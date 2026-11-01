@@ -8,6 +8,7 @@ import { isInContainer, warnIfExposed } from './exposure.js';
 import { IdentityStartError } from './identity/errors.js';
 import { MappingError } from './mapping/diagnostics.js';
 import { loadMappingFile } from './mapping/load.js';
+import type { MappingModel } from './mapping/model.js';
 import { createAppStore, type AppStore } from './app-store.js';
 import { startJobRunner, type JobRunner } from './jobs/runner.js';
 import { registeredTasks, TaskConfigError, validateTasks, type Task } from './jobs/tasks.js';
@@ -44,6 +45,8 @@ function describeStartFailure(error: unknown): string {
       return 'NEBURYX_PORT is already in use';
     case 'EACCES':
       return 'NEBURYX_PORT needs more privileges than this process has';
+    case '42P01':
+      return 'the database schema is behind this version; run neburyx migrate';
     case 'EADDRNOTAVAIL':
     case 'ENOTFOUND':
     case 'EAI_AGAIN':
@@ -68,9 +71,10 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
     return { exitCode: 1 };
   }
 
+  let mapping: MappingModel = { sources: [] };
   if (config.mappingPath !== undefined) {
     try {
-      loadMappingFile(config.mappingPath);
+      mapping = loadMappingFile(config.mappingPath);
     } catch (error) {
       if (!(error instanceof MappingError)) throw error;
       io.stderr.write(`${error.message}\n`);
@@ -98,6 +102,9 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
       io.migrationsDirectory ?? SHIPPED_MIGRATIONS,
     );
     await store.initialize();
+    for (const sourceId of await store.syncSources(mapping.sources)) {
+      io.logger.warn({ event: 'source.identity_changed', sourceId }, 'source now points to a different database');
+    }
     jobs = await startJobRunner(
       config.databaseUrl,
       tasks,
@@ -105,7 +112,7 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
       () => io.logger.warn({ event: 'database.connection_error' }, 'database connection error'),
     );
     warnIfExposed(io.logger, config.host, isInContainer(env, io.fileExists ?? existsSync));
-    app = await buildApp({ webRoot: config.webRoot, logger: io.logger, store, jobs });
+    app = await buildApp({ webRoot: config.webRoot, logger: io.logger, store, jobs, mapping });
     await app.listen({ host: config.host, port: io.portOverride ?? config.port });
     return { exitCode: 0, app };
   } catch (error) {

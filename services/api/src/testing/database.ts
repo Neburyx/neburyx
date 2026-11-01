@@ -45,11 +45,11 @@ export async function runInProcess(
   return { code, stdout, stderr };
 }
 
-export async function attempt(url: string, statement: string): Promise<string> {
+export async function attempt(url: string, statement: string, parameters: readonly unknown[] = []): Promise<string> {
   const client = new pg.Client({ connectionString: url });
   await client.connect();
   try {
-    await client.query(statement);
+    await client.query(statement, [...parameters]);
     return 'allowed';
   } catch (error) {
     return error instanceof Error ? error.message : 'refused';

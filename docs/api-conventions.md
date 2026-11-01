@@ -16,6 +16,7 @@ exports). Graph reads (search and expansion) have their own page shapes and budg
   unless the endpoint returns a count with its quality label (`exact`, `estimated`, `lowerBound` or `unknown`).
 - A cursor is opaque, signed, expiring, and bound to the user, the route, the sort, the filters, the source when the list is
   scoped to one, and the policy version.
+- `GET /v1/sources` is the one exception: it returns every configured source in one response, ordered by id, with `nextCursor` always `null`. The configuration file defines the list and it is small, so it is not paged, and it takes no query parameters (any is `INVALID_REQUEST`).
 - A limit above 100 is refused with `QUERY_BUDGET_EXCEEDED` (and the maximum in `details.maxPage`), never clamped. A limit that
   is not a positive integer is `INVALID_REQUEST`. A cursor that is invalid, altered, expired, or whose binding (user, route,
   source, policy version, sort or filters) does not match the request is `CURSOR_INVALIDATED`.

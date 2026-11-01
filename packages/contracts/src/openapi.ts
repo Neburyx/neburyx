@@ -3,6 +3,7 @@ import { errorResponseSchema } from './error-response.js';
 import { healthResponseSchema } from './health.js';
 import { meResponseSchema } from './me.js';
 import { readyResponseSchema } from './ready.js';
+import { sourcesResponseSchema } from './sources.js';
 
 const API_TITLE = 'Neburyx API';
 const API_VERSION = '0.0.0';
@@ -11,7 +12,7 @@ export interface OpenApiDocument {
   readonly openapi: string;
   readonly info: { readonly title: string; readonly version: string };
   readonly paths: Readonly<Record<string, unknown>>;
-  readonly components: { readonly schemas: { readonly ErrorResponse: Record<string, unknown>; readonly HealthResponse: Record<string, unknown>; readonly MeResponse: Record<string, unknown>; readonly ReadyResponse: Record<string, unknown> } };
+  readonly components: { readonly schemas: { readonly ErrorResponse: Record<string, unknown>; readonly HealthResponse: Record<string, unknown>; readonly MeResponse: Record<string, unknown>; readonly ReadyResponse: Record<string, unknown>; readonly SourcesResponse: Record<string, unknown> } };
 }
 
 function schemaJson(schema: z.ZodType): Record<string, unknown> {
@@ -28,6 +29,7 @@ export function buildOpenApiDocument(
   meResponse: z.ZodType = meResponseSchema,
   healthResponse: z.ZodType = healthResponseSchema,
   readyResponse: z.ZodType = readyResponseSchema,
+  sourcesResponse: z.ZodType = sourcesResponseSchema,
 ): OpenApiDocument {
   return {
     openapi: '3.1.0',
@@ -60,9 +62,22 @@ export function buildOpenApiDocument(
           },
         },
       },
+      '/v1/sources': {
+        get: {
+          operationId: 'listSources',
+          summary: 'The configured sources, with their state and a summary of their mapping',
+          description:
+            'Returns every configured source in one response, ordered by id, with nextCursor always null: the configuration file defines the list and it is small, so it is not paged (an exception to the pagination convention). mappingSummary holds exact counts of configured definitions, not of graph data. The list takes no query parameters.',
+          responses: {
+            '200': { description: 'The configured sources', content: jsonBody('SourcesResponse') },
+            '400': { description: 'A query parameter was sent', content: jsonBody('ErrorResponse') },
+            '500': { description: 'The sources could not be read', content: jsonBody('ErrorResponse') },
+          },
+        },
+      },
     },
     components: {
-      schemas: { ErrorResponse: schemaJson(errorResponse), HealthResponse: schemaJson(healthResponse), MeResponse: schemaJson(meResponse), ReadyResponse: schemaJson(readyResponse) },
+      schemas: { ErrorResponse: schemaJson(errorResponse), HealthResponse: schemaJson(healthResponse), MeResponse: schemaJson(meResponse), ReadyResponse: schemaJson(readyResponse), SourcesResponse: schemaJson(sourcesResponse) },
     },
   };
 }

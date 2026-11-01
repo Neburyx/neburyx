@@ -50,6 +50,7 @@ describe('two migrate processes started together', () => {
           { name: '0001-baseline' },
           { name: '0002-deployment-and-users' },
           { name: '0003-applied-migrations-function' },
+          { name: '0004-sources' },
         ]);
         const queue = await check.query('SELECT id FROM graphile_worker.migrations');
         expect(new Set(queue.rows.map((row: { id: number }) => row.id)).size).toBe(queue.rows.length);

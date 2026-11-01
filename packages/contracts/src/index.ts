@@ -14,3 +14,5 @@ export { databaseCheckSchema, migrationsCheckSchema, readyResponseSchema } from 
 export type { ReadyChecks, ReadyResponse } from './ready.js';
 export { ICON_KEYS, PRESET_TEMPLATES, iconKeySchema, presetTemplateSchema } from './mapping.js';
 export type { IconKey, PresetTemplate } from './mapping.js';
+export { SOURCE_STATES, mappingSummarySchema, sourceStateSchema, sourceSummarySchema, sourcesResponseSchema } from './sources.js';
+export type { SourceState, SourceSummary, SourcesResponse } from './sources.js';

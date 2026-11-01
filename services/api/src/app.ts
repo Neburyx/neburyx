@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type { Socket } from 'node:net';
 import fastifyStatic from '@fastify/static';
-import { type ErrorCode, healthResponseSchema, meResponseSchema, readyResponseSchema } from '@neburyx/contracts';
+import { type ErrorCode, healthResponseSchema, meResponseSchema, readyResponseSchema, sourcesResponseSchema } from '@neburyx/contracts';
+import { z } from 'zod';
 import Fastify, {
   type FastifyBaseLogger,
   type FastifyInstance,
@@ -9,9 +10,11 @@ import Fastify, {
   type FastifyRequest,
   LogController,
 } from 'fastify';
-import { codeForFailure, detailsOf, errorResponse, errorStatus } from './errors.js';
+import { AppError, codeForFailure, detailsOf, errorResponse, errorStatus } from './errors.js';
 import type { AppStore } from './app-store.js';
 import type { JobRunner } from './jobs/runner.js';
+import type { MappingModel } from './mapping/model.js';
+import { summariesOf } from './registry/summary.js';
 import { readinessResponse } from './health/readiness.js';
 import { communitySeams } from './seams/community-seams.js';
 import type { Seams } from './seams/seams.js';
@@ -23,9 +26,11 @@ export interface AppOptions {
   readonly store: AppStore;
   readonly jobs?: JobRunner | undefined;
   readonly seams?: Seams | undefined;
+  readonly mapping?: MappingModel | undefined;
 }
 
 const API_PREFIX = '/v1';
+const noQuerySchema = z.strictObject({});
 const PROBE_PATHS: ReadonlySet<string> = new Set(['/healthz', '/readyz']);
 const TRACE_HEADER = 'x-trace-id';
 const UNMATCHED_ROUTE = 'unmatched';
@@ -222,7 +227,19 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
     return reply.code(statusCode).send(readyResponseSchema.parse(body));
   });
 
-  app.get('/v1/me', { exposeHeadRoute: false, config: { permission: 'principal' } }, async () => meResponseSchema.parse({ ...(await options.store.current()), sources: [] }));
+  const mapping: MappingModel = options.mapping ?? { sources: [] };
+
+  app.get('/v1/me', { exposeHeadRoute: false, config: { permission: 'principal' } }, async () => {
+    const [identity, rows] = await Promise.all([options.store.current(), options.store.listSources()]);
+    const sources = summariesOf(rows, mapping).map((source) => ({ sourceId: source.id, viewSensitive: true, synthetic: source.synthetic }));
+    return meResponseSchema.parse({ ...identity, sources });
+  });
+
+  app.get('/v1/sources', { exposeHeadRoute: false, config: { permission: 'principal' } }, async (request) => {
+    if (!noQuerySchema.safeParse(request.query).success) throw new AppError('INVALID_REQUEST');
+    const rows = await options.store.listSources();
+    return sourcesResponseSchema.parse({ items: summariesOf(rows, mapping), nextCursor: null });
+  });
 
   appSeams.set(app, options.seams ?? communitySeams());
 

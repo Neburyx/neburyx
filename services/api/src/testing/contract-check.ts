@@ -49,6 +49,7 @@ function pointer(...parts: readonly string[]): string {
 
 function newAjv(document: OpenApiDocument): Ajv2020 {
   const ajv = new Ajv2020({ strict: false });
+  for (const [name, check] of CHECKED_FORMATS) ajv.addFormat(name, check);
   ajv.addSchema({ $id: 'document', ...document });
   return ajv;
 }
@@ -75,8 +76,11 @@ function isJson(contentType: unknown): boolean {
   return typeof contentType === 'string' && contentType.split(';')[0]?.trim().toLowerCase() === 'application/json';
 }
 
-function usesFormat(document: OpenApiDocument): boolean {
-  return JSON.stringify(document).includes('"format":"');
+const utcDateTime = z.iso.datetime();
+const CHECKED_FORMATS: ReadonlyMap<string, (value: string) => boolean> = new Map([['date-time', (value: string) => utcDateTime.safeParse(value).success]]);
+
+function usesUnsupportedFormat(document: OpenApiDocument): boolean {
+  return [...JSON.stringify(document).matchAll(/"format":"([^"]*)"/g)].some((match) => !CHECKED_FORMATS.has(match[1] ?? ''));
 }
 
 interface Observed {
@@ -151,7 +155,7 @@ export async function checkOperations(
   const ajv = newAjv(document);
   const failures: ContractFailure[] = [];
   const documented = new Set<string>();
-  const formatsUnchecked = usesFormat(document);
+  const formatsUnchecked = usesUnsupportedFormat(document);
   if (formatsUnchecked) failures.push({ route: 'document', problem: 'the document uses a format the contract check cannot validate' });
 
   for (const [path, item] of Object.entries(document.paths)) {
@@ -180,10 +184,10 @@ export async function checkOperations(
       }
       const response = await app.inject({ method: httpMethod, url: example.url, payload: example.payload });
       const status = String(response.statusCode);
-      const key = status in operation.data.responses ? status : 'default';
+      const key = Object.hasOwn(operation.data.responses, status) ? status : 'default';
       const described = responseSchema.safeParse(operation.data.responses[key]);
       if (!described.success) {
-        failures.push({ route, problem: key === 'default' && !(key in operation.data.responses) ? `status ${status} is not documented` : 'the response is malformed in the document' });
+        failures.push({ route, problem: key === 'default' && !Object.hasOwn(operation.data.responses, key) ? `status ${status} is not documented` : 'the response is malformed in the document' });
         continue;
       }
       const json = described.data.content?.['application/json'];

@@ -23,6 +23,7 @@ function fixtureDocument(extraPaths: Record<string, unknown>): ReturnType<typeof
       '/healthz': committed.paths['/healthz'],
       '/readyz': committed.paths['/readyz'],
       '/v1/me': committed.paths['/v1/me'],
+      '/v1/sources': committed.paths['/v1/sources'],
       '/v1/test/thing': {
         get: {
           responses: {
@@ -44,6 +45,7 @@ function fixtureDocument(extraPaths: Record<string, unknown>): ReturnType<typeof
         HealthResponse: committed.components.schemas['HealthResponse'],
         MeResponse: committed.components.schemas['MeResponse'],
         ReadyResponse: committed.components.schemas['ReadyResponse'],
+        SourcesResponse: committed.components.schemas['SourcesResponse'],
         Thing: { type: 'object', required: ['name'], properties: { name: { type: 'string' } }, additionalProperties: false },
       },
     },
@@ -184,6 +186,42 @@ describe('a document the check cannot trust', () => {
     ]);
   });
 
+  it('validates a date-time format and reports a value that is not a UTC ISO-8601 time', async () => {
+    const server = await app();
+    server.get('/v1/test/thing', async () => ({ name: 'x' }));
+    server.get('/v1/test/ref', async () => ({ at: '2026-11-01T10:00:00.250Z' }));
+    server.get('/v1/test/stamp', async () => ({ at: 'yesterday' }));
+    server.get('/v1/test/offset', async () => ({ at: '2026-11-01T10:00:00+02:00' }));
+    server.get('/v1/test/impossible-date', async () => ({ at: '2026-02-30T10:00:00Z' }));
+    server.get('/v1/test/hour-24', async () => ({ at: '2026-11-01T24:00:00Z' }));
+    const stamp = { type: 'object', required: ['at'], properties: { at: { type: 'string', format: 'date-time' } }, additionalProperties: false };
+    const respond = (schema: unknown): Record<string, unknown> => ({ get: { responses: { '200': { content: { 'application/json': { schema } } } } } });
+    const document = fixtureDocument({
+      '/v1/test/ref': respond(stamp),
+      '/v1/test/stamp': respond(stamp),
+      '/v1/test/offset': respond(stamp),
+      '/v1/test/impossible-date': respond(stamp),
+      '/v1/test/hour-24': respond(stamp),
+    });
+    expect(await checkOperations(server, document)).toEqual([
+      { route: 'GET /v1/test/stamp', problem: 'the response does not match the document' },
+      { route: 'GET /v1/test/offset', problem: 'the response does not match the document' },
+      { route: 'GET /v1/test/impossible-date', problem: 'the response does not match the document' },
+      { route: 'GET /v1/test/hour-24', problem: 'the response does not match the document' },
+    ]);
+  });
+
+  it.each(['toString', 'constructor', '__proto__', 'hasOwnProperty', 'valueOf'])('still refuses the unsupported format named %s', async (format) => {
+    const server = await app();
+    server.get('/v1/test/thing', async () => ({ name: 'x' }));
+    server.get('/v1/test/ref', async () => ({ name: 'x' }));
+    const document = fixtureDocument(referencing({ $ref: '#/components/schemas/Odd' }));
+    document.components.schemas['Odd'] = { type: 'object', properties: { name: { type: 'string', format } } };
+    expect(await checkOperations(server, document)).toEqual([
+      { route: 'document', problem: 'the document uses a format the contract check cannot validate' },
+    ]);
+  });
+
   it('reports a response that is not JSON and a body the document does not describe', async () => {
     const server = await app();
     server.get('/v1/test/thing', async (_request, reply) => reply.type('text/plain').send('{"name":"x"}'));
@@ -277,13 +315,14 @@ describe('a document the check cannot trust', () => {
       instance.get('/v1/test/from-plugin', async () => ({ name: 'x' }));
     });
     const empty = parseDocument({
-      paths: { '/healthz': committed.paths['/healthz'], '/readyz': committed.paths['/readyz'], '/v1/me': committed.paths['/v1/me'] },
+      paths: { '/healthz': committed.paths['/healthz'], '/readyz': committed.paths['/readyz'], '/v1/me': committed.paths['/v1/me'], '/v1/sources': committed.paths['/v1/sources'] },
       components: {
         schemas: {
           ErrorResponse: committed.components.schemas['ErrorResponse'],
           HealthResponse: committed.components.schemas['HealthResponse'],
           MeResponse: committed.components.schemas['MeResponse'],
           ReadyResponse: committed.components.schemas['ReadyResponse'],
+          SourcesResponse: committed.components.schemas['SourcesResponse'],
         },
       },
     });

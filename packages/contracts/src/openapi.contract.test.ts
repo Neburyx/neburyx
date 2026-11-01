@@ -7,6 +7,7 @@ import { healthResponseSchema } from './health.js';
 import { meResponseSchema } from './me.js';
 import { readyResponseSchema } from './ready.js';
 import { buildOpenApiDocument } from './openapi.js';
+import { sourcesResponseSchema } from './sources.js';
 
 const committed: unknown = JSON.parse(readFileSync(fileURLToPath(new URL('../openapi.json', import.meta.url)), 'utf8'));
 
@@ -46,6 +47,25 @@ describe('the committed packages/contracts/openapi.json', () => {
     expect(buildOpenApiDocument().paths['/v1/me']).toMatchObject({
       get: { responses: { '200': { content: { 'application/json': { schema: { $ref: '#/components/schemas/MeResponse' } } } } } },
     });
+  });
+
+  it('differs from a document built from a changed GET /v1/sources schema', () => {
+    expect(buildOpenApiDocument(undefined, undefined, undefined, undefined, sourcesResponseSchema.extend({ extra: z.string() }))).not.toEqual(committed);
+  });
+
+  it('lists GET /v1/sources with the SourcesResponse schema, the error responses and the unpaged exception', () => {
+    const operation = buildOpenApiDocument().paths['/v1/sources'];
+    expect(operation).toMatchObject({
+      get: {
+        responses: {
+          '200': { content: { 'application/json': { schema: { $ref: '#/components/schemas/SourcesResponse' } } } },
+          '400': { content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } } },
+          '500': { content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } } },
+        },
+      },
+    });
+    expect(JSON.stringify(operation)).toContain('not paged');
+    expect(JSON.stringify(operation)).toContain('exact counts of configured definitions');
   });
 
   it('equals the generated document', () => {
