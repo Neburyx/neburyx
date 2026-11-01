@@ -15,6 +15,7 @@ import type { JobRunner } from './jobs/runner.js';
 import { readinessResponse } from './health/readiness.js';
 import { communitySeams } from './seams/community-seams.js';
 import type { Seams } from './seams/seams.js';
+import type { RegisteredRoute } from './permissions.js';
 
 export interface AppOptions {
   readonly webRoot: string;
@@ -53,6 +54,12 @@ export function apiRoutesOf(app: FastifyInstance): readonly { readonly method: s
 }
 
 const appSeams = new WeakMap<FastifyInstance, Seams>();
+const registeredRoutes = new WeakMap<FastifyInstance, RegisteredRoute[]>();
+
+/** Every route the application registered, whatever its path, with the permission it declared; the web build's file routes are left out. */
+export function registeredRoutesOf(app: FastifyInstance): readonly RegisteredRoute[] {
+  return registeredRoutes.get(app) ?? [];
+}
 
 export function seamsOf(app: FastifyInstance): Seams {
   const seams = appSeams.get(app);
@@ -153,12 +160,16 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
     await options.store.close();
   });
 
-  await app.register(fastifyStatic, { root: options.webRoot });
-
   const routes: { readonly method: string; readonly url: string }[] = [];
   apiRoutes.set(app, routes);
+  const registered: RegisteredRoute[] = [];
+  registeredRoutes.set(app, registered);
   const getRoutesWithHead = new Set<string>();
+  // installed before any route exists, so a route added anywhere is seen; only the web build's file routes are skipped
+  let registeringWebFiles = false;
   app.addHook('onRoute', (route) => {
+    if (registeringWebFiles) return;
+    for (const method of [route.method].flat()) registered.push({ method, url: route.url, permission: route.config?.permission });
     if (!route.url.startsWith(API_PREFIX) && !PROBE_PATHS.has(route.url)) return;
     const headIsGenerated = getRoutesWithHead.has(route.url);
     for (const method of [route.method].flat()) {
@@ -166,6 +177,13 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       if (!(method === 'HEAD' && headIsGenerated)) routes.push({ method, url: route.url });
     }
   });
+
+  registeringWebFiles = true;
+  try {
+    await app.register(fastifyStatic, { root: options.webRoot });
+  } finally {
+    registeringWebFiles = false;
+  }
 
   app.addHook('onRequest', async (request, reply) => {
     inFlight.set(request.raw.socket, [...(inFlight.get(request.raw.socket) ?? []), { request, reply }]);
@@ -197,14 +215,14 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
     return reply.sendFile('index.html');
   });
 
-  app.get('/healthz', async () => healthResponseSchema.parse({ status: 'ok' }));
+  app.get('/healthz', { config: { permission: 'public' } }, async () => healthResponseSchema.parse({ status: 'ok' }));
 
-  app.get('/readyz', async (_request, reply) => {
+  app.get('/readyz', { config: { permission: 'public' } }, async (_request, reply) => {
     const { statusCode, body } = readinessResponse(await options.store.readiness());
     return reply.code(statusCode).send(readyResponseSchema.parse(body));
   });
 
-  app.get('/v1/me', { exposeHeadRoute: false }, async () => meResponseSchema.parse({ ...(await options.store.current()), sources: [] }));
+  app.get('/v1/me', { exposeHeadRoute: false, config: { permission: 'principal' } }, async () => meResponseSchema.parse({ ...(await options.store.current()), sources: [] }));
 
   appSeams.set(app, options.seams ?? communitySeams());
 

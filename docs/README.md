@@ -4,3 +4,4 @@ Public technical documentation. Pre-release placeholder: the technical architect
 
 - [coding-guidelines.md](coding-guidelines.md): how code is written here (TypeScript rules, comments, tests, API and web client).
 - [architecture-checks.md](architecture-checks.md): the two structural checks that fail the build (nothing outside the gate reaches the adapter; Community never imports `ee/`) and what they cannot see.
+- [api-conventions.md](api-conventions.md): the rules every endpoint follows: pagination, field limits, idempotency keys, concurrency and the permission each route declares.

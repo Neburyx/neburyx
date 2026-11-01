@@ -71,7 +71,7 @@ These shape code directly. Breaking one is a bug, whatever the tests say.
 - **Time and numbers.** Timestamps are ISO-8601 UTC strings at boundaries and `Date` or a library type
   inside; do not parse dates with ad hoc regexes. Times shown to people say UTC. Use integers for
   counts and sizes. Do not compare floats for equality.
-- **Changing shared things.** Follow the API conventions for concurrency and retries: an `ETag` and
+- **Changing shared things.** Follow the [API conventions](api-conventions.md) for concurrency and retries: an `ETag` and
   `expectedVersion` on updates, an idempotency key on creates that a retry could repeat.
 - **Text.** The product is English-only for now; do not add an i18n layer, but keep user-facing
   strings in one place per feature rather than scattered through logic.
