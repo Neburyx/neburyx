@@ -17,6 +17,7 @@ not covered by it and is reserved for a separate commercial licence.
 | `services/api` | Backend API |
 | `ee/` | Modules under a separate commercial licence (placeholder) |
 | `packages/contracts` | API contract and generated client types |
+| `domain-packs` | Ready-made mapping files, one directory per domain |
 | `deploy/docker` | Container image build |
 | `deploy/demo` | Demo environment on a synthetic graph |
 | `tools/demo-graph` | Synthetic demo graph generator |

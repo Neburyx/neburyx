@@ -1,0 +1,115 @@
+sources:
+  - id: banking-demo
+    uri: "bolt://demo-banking-graph:7687"
+    database: neo4j
+    auth: { kind: basic, username_env: DEMO_NEO4J_USER, password_env: DEMO_NEO4J_PASSWORD }
+    synthetic: true
+    vocabulary: { case_ref: "Referral" }
+
+    entities:
+      - type: account
+        label: Account
+        stable_id: accountId
+        title: "Account {accountId}"
+        search: [accountId, holderName]
+        pii: [holderName, phone]
+        filterable: [status, accountKind]
+        display: { icon: money, key_properties: [accountKind, status, openedOn], state_property: status }
+      - type: customer
+        label: Customer
+        stable_id: customerId
+        title: "{fullName}"
+        search: [customerId, fullName]
+        pii: [fullName, dateOfBirth, phone]
+        reference: [authId]
+        link: "https://records.example.test/customers/{customerId}"
+        display: { icon: person, key_properties: [customerId, segment] }
+      - type: device
+        label: Device
+        stable_id: fingerprint
+        search: [fingerprint]
+        filterable: [platform]
+        display: { icon: terminal, key_properties: [platform, firstSeen] }
+      - type: ip_address
+        label: IpAddress
+        stable_id: address
+        search: [address]
+        filterable: [network]
+        display: { icon: network, key_properties: [address, network] }
+      - type: transaction
+        label: Transaction
+        stable_id: transactionId
+        title: "Transaction {transactionId}"
+        search: [transactionId]
+        reference: [paymentRef]
+        filterable: [status, channel, amount]
+        display: { icon: document, key_properties: [amount, channel, status], state_property: status }
+      - type: merchant
+        label: Merchant
+        stable_id: merchantId
+        title: "{name}"
+        search: [merchantId, name]
+        filterable: [category]
+        display: { icon: storefront, key_properties: [name, category] }
+
+    relationships:
+      - type: HOLDS_ACCOUNT
+        from: customer
+        to: account
+      - type: USES_DEVICE
+        from: account
+        to: device
+        stable_id: eventId
+        observed_at: lastSeen
+        evidence: [sourceRecordId]
+        filterable: [channel]
+        evidence_link: "https://events.example.test/records/{sourceRecordId}"
+      - type: CONNECTS_FROM
+        from: account
+        to: ip_address
+        stable_id: eventId
+        observed_at: lastSeen
+        evidence: [sourceRecordId]
+        evidence_link: "https://events.example.test/records/{sourceRecordId}"
+      - type: INITIATED
+        from: account
+        to: transaction
+        stable_id: eventId
+        observed_at: initiatedAt
+      - type: PAID_TO
+        from: transaction
+        to: merchant
+      - type: TRANSFERRED_TO
+        from: account
+        to: account
+
+    derived:
+      - id: shared-device
+        from: account
+        to: account
+        via: [USES_DEVICE, device, USES_DEVICE]
+        rule_version: 1
+        stop_list_property: isShared
+      - id: shared-address
+        from: account
+        to: account
+        via: [CONNECTS_FROM, ip_address, CONNECTS_FROM]
+        rule_version: 1
+        stop_list_property: isShared
+
+    patterns:
+      - id: shared-devices
+        name: "Shared devices"
+        template: shared-attribute
+        bind: { anchor: account, attribute: device, via: USES_DEVICE }
+        labels: { anchor: "Starting account", limit: "Max matching accounts" }
+      - id: shared-addresses
+        name: "Shared addresses"
+        template: shared-attribute
+        bind: { anchor: account, attribute: ip_address, via: CONNECTS_FROM }
+        labels: { anchor: "Starting account", limit: "Max matching accounts" }
+      - id: connected-accounts
+        name: "Connected accounts"
+        template: linked-entities
+        bind: { anchor: account, target: account, via: TRANSFERRED_TO }
+        labels: { anchor: "Starting account", limit: "Max connected accounts" }

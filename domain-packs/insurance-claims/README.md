@@ -1,0 +1,19 @@
+# Insurance claims pack
+
+A deliberately small mapping for a synthetic graph of insurance claims. It shows the same image serving an unrelated domain with no code change.
+
+- **Source:** `insurance-demo`, flagged synthetic. It expects a graph at `bolt://demo-insurance-graph:7687`, database `neo4j`, with the user and password in the environment variables `DEMO_NEO4J_USER` and `DEMO_NEO4J_PASSWORD`.
+- **Case reference:** a case is called a *Claim no.*
+- **Entity types (7):** claims, policies, claimants, vehicles, repairers, addresses and phones. Claimant names and dates of birth are marked `pii`. A claim has a link to its source record.
+- **Derived rule:** claimants who share a phone number, with a property that stops shared numbers from linking people.
+
+| Preset | Template | What it asks |
+|---|---|---|
+| Shared addresses | `shared-attribute` | Which claimants live at the same address as this claimant |
+| Claims by claimant | `linked-entities` | Which claims this claimant has filed |
+
+Each preset gives its parameters a label ("Starting claimant").
+
+**For the demo data:** the demo graph of this pack has one scripted case and no supernode (no record with a very large number of connections). The demo definition, when it is added, must keep to that.
+
+To adapt the pack to your own graph, follow [Start from a pack](../README.md#start-from-a-pack).

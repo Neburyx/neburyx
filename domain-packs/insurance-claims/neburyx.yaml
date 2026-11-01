@@ -1,0 +1,98 @@
+sources:
+  - id: insurance-demo
+    uri: "bolt://demo-insurance-graph:7687"
+    database: neo4j
+    auth: { kind: basic, username_env: DEMO_NEO4J_USER, password_env: DEMO_NEO4J_PASSWORD }
+    synthetic: true
+    vocabulary: { case_ref: "Claim no." }
+
+    entities:
+      - type: claim
+        label: Claim
+        stable_id: claimNumber
+        title: "Claim {claimNumber}"
+        search: [claimNumber]
+        filterable: [status, lossType]
+        link: "https://records.example.test/claims/{claimNumber}"
+        display: { icon: folder, key_properties: [lossType, status, filedOn], state_property: status }
+      - type: policy
+        label: Policy
+        stable_id: policyNumber
+        title: "Policy {policyNumber}"
+        search: [policyNumber]
+        filterable: [cover]
+        display: { icon: shield, key_properties: [cover, startedOn] }
+      - type: claimant
+        label: Claimant
+        stable_id: claimantId
+        title: "{fullName}"
+        search: [claimantId, fullName]
+        pii: [fullName, dateOfBirth]
+        display: { icon: person }
+      - type: vehicle
+        label: Vehicle
+        stable_id: vin
+        search: [vin]
+        filterable: [make]
+        display: { icon: car, key_properties: [make, model, year] }
+      - type: repairer
+        label: Repairer
+        stable_id: repairerId
+        title: "{name}"
+        search: [repairerId, name]
+        display: { icon: wrench }
+      - type: address
+        label: Address
+        stable_id: addressId
+        search: [addressId, line1]
+        display: { icon: house, key_properties: [line1, city] }
+      - type: phone
+        label: Phone
+        stable_id: number
+        search: [number]
+        pii: [owner]
+        display: { icon: telephone }
+
+    relationships:
+      - type: UNDER_POLICY
+        from: claim
+        to: policy
+      - type: FILED_BY
+        from: claim
+        to: claimant
+        stable_id: eventId
+        observed_at: filedAt
+        evidence: [sourceRecordId]
+        evidence_link: "https://records.example.test/events/{sourceRecordId}"
+      - type: INVOLVES_VEHICLE
+        from: claim
+        to: vehicle
+      - type: REPAIRED_BY
+        from: claim
+        to: repairer
+      - type: LIVES_AT
+        from: claimant
+        to: address
+      - type: REACHED_AT
+        from: claimant
+        to: phone
+
+    derived:
+      - id: shared-phone
+        from: claimant
+        to: claimant
+        via: [REACHED_AT, phone, REACHED_AT]
+        rule_version: 1
+        stop_list_property: isShared
+
+    patterns:
+      - id: shared-addresses
+        name: "Shared addresses"
+        template: shared-attribute
+        bind: { anchor: claimant, attribute: address, via: LIVES_AT }
+        labels: { anchor: "Starting claimant", limit: "Max matching claimants" }
+      - id: claimant-claims
+        name: "Claims by claimant"
+        template: linked-entities
+        bind: { anchor: claimant, target: claim, via: FILED_BY }
+        labels: { anchor: "Starting claimant", limit: "Max claims" }
