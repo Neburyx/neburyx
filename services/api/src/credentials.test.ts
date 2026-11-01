@@ -3,7 +3,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { parseConfig } from './config.js';
 import { createLogger } from './logger.js';
 import { start } from './start.js';
-import { memoryIdentityStore } from './testing/identity.js';
+import { memoryAppStore } from './testing/app-store.js';
 import { makeWebRoot } from './testing/web-root.js';
 
 const webRoot = makeWebRoot();
@@ -21,7 +21,7 @@ async function serve(env: Readonly<Record<string, string>>): Promise<{ readonly 
       logger: createLogger({ write: (chunk: string) => lines.push(chunk) }),
       defaultWebRoot: webRoot,
       portOverride: 0,
-      openIdentity: memoryIdentityStore,
+      openStore: memoryAppStore,
     },
   );
   expect(result.exitCode).toBe(0);

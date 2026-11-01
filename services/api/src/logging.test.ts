@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { buildApp } from './app.js';
 import { createLogger } from './logger.js';
 import { makeWebRoot } from './testing/web-root.js';
-import { memoryIdentityStore } from './testing/identity.js';
+import { memoryAppStore } from './testing/app-store.js';
 
 const webRoot = makeWebRoot();
 afterAll(() => rmSync(webRoot, { recursive: true, force: true }));
@@ -68,7 +68,7 @@ function deferred(): { readonly promise: Promise<void>; readonly release: () => 
 }
 
 async function app(): ReturnType<typeof buildApp> {
-  const server = await buildApp({ webRoot, logger: createLogger({ write: record }), identity: memoryIdentityStore() });
+  const server = await buildApp({ webRoot, logger: createLogger({ write: record }), store: memoryAppStore() });
   server.get('/v1/test/query', async () => ({ ok: true }));
   server.post('/v1/test/echo', async () => ({ ok: true }));
   server.get('/v1/test/boom', async () => {

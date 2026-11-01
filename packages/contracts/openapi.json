@@ -5,6 +5,52 @@
     "version": "0.0.0"
   },
   "paths": {
+    "/healthz": {
+      "get": {
+        "operationId": "getHealth",
+        "summary": "Liveness: the process is running",
+        "responses": {
+          "200": {
+            "description": "The process is alive",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/readyz": {
+      "get": {
+        "operationId": "getReady",
+        "summary": "Readiness: the app can serve",
+        "responses": {
+          "200": {
+            "description": "Every check is ok",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadyResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A check is not ok",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadyResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/me": {
       "get": {
         "operationId": "getMe",
@@ -603,6 +649,19 @@
         ],
         "additionalProperties": false
       },
+      "HealthResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "ok"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "additionalProperties": false
+      },
       "MeResponse": {
         "type": "object",
         "properties": {
@@ -685,6 +744,48 @@
           "edition",
           "identityMode",
           "sources"
+        ],
+        "additionalProperties": false
+      },
+      "ReadyResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ready",
+              "not_ready"
+            ]
+          },
+          "checks": {
+            "type": "object",
+            "properties": {
+              "database": {
+                "type": "string",
+                "enum": [
+                  "ok",
+                  "unreachable"
+                ]
+              },
+              "migrations": {
+                "type": "string",
+                "enum": [
+                  "ok",
+                  "pending",
+                  "unknown"
+                ]
+              }
+            },
+            "required": [
+              "database",
+              "migrations"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "status",
+          "checks"
         ],
         "additionalProperties": false
       }

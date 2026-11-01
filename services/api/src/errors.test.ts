@@ -6,7 +6,7 @@ import { createLogger } from './logger.js';
 import { AppError } from './errors.js';
 import { CYPHER, IDENTIFIER, registerErrorRoutes } from './testing/error-routes.js';
 import { makeWebRoot } from './testing/web-root.js';
-import { memoryIdentityStore } from './testing/identity.js';
+import { memoryAppStore } from './testing/app-store.js';
 
 const webRoot = makeWebRoot();
 afterAll(() => rmSync(webRoot, { recursive: true, force: true }));
@@ -19,7 +19,7 @@ beforeEach(() => {
 });
 
 async function app(): ReturnType<typeof buildApp> {
-  const server = await buildApp({ webRoot, logger: createLogger({ write: (chunk: string) => output.push(chunk) }), identity: memoryIdentityStore() });
+  const server = await buildApp({ webRoot, logger: createLogger({ write: (chunk: string) => output.push(chunk) }), store: memoryAppStore() });
   registerErrorRoutes(server);
   return server;
 }

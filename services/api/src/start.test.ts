@@ -6,7 +6,7 @@ import pino from 'pino';
 import { z } from 'zod';
 import { afterAll, describe, expect, it } from 'vitest';
 import { start, type StartIo } from './start.js';
-import { memoryIdentityStore } from './testing/identity.js';
+import { memoryAppStore } from './testing/app-store.js';
 import { makeWebRoot } from './testing/web-root.js';
 
 const webRoot = makeWebRoot();
@@ -35,7 +35,7 @@ function io(overrides: Partial<StartIo> = {}): { readonly io: StartIo; readonly 
       stderr: { write: (text) => errors.push(text) },
       logger: pino({ level: 'silent' }),
       defaultWebRoot: webRoot,
-      openIdentity: memoryIdentityStore,
+      openStore: memoryAppStore,
       ...overrides,
     },
   };

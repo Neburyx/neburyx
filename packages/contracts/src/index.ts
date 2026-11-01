@@ -8,3 +8,7 @@ export { buildOpenApiDocument } from './openapi.js';
 export type { OpenApiDocument } from './openapi.js';
 export { editionSchema, identityModeSchema, meResponseSchema, permittedSourceSchema, roleSchema } from './me.js';
 export type { MeResponse } from './me.js';
+export { healthResponseSchema } from './health.js';
+export type { HealthResponse } from './health.js';
+export { databaseCheckSchema, migrationsCheckSchema, readyResponseSchema } from './ready.js';
+export type { ReadyChecks, ReadyResponse } from './ready.js';

@@ -3,16 +3,16 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { buildApp } from './app.js';
 import { createLogger } from './logger.js';
 import { checkContract, checkErrorResponses, checkOperations, type ErrorCase } from './testing/contract-check.js';
-import { loadCommittedDocument, parseDocument } from './testing/document.js';
+import { loadCommittedDocument, parseDocument, validatorFor } from './testing/document.js';
 import { registerErrorRoutes } from './testing/error-routes.js';
 import { makeWebRoot } from './testing/web-root.js';
-import { memoryIdentityStore } from './testing/identity.js';
+import { memoryAppStore } from './testing/app-store.js';
 
 const webRoot = makeWebRoot();
 afterAll(() => rmSync(webRoot, { recursive: true, force: true }));
 
 async function app(): ReturnType<typeof buildApp> {
-  return buildApp({ webRoot, logger: createLogger({ write: () => undefined }), identity: memoryIdentityStore() });
+  return buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store: memoryAppStore() });
 }
 
 const committed = loadCommittedDocument();
@@ -20,6 +20,8 @@ const committed = loadCommittedDocument();
 function fixtureDocument(extraPaths: Record<string, unknown>): ReturnType<typeof parseDocument> {
   return parseDocument({
     paths: {
+      '/healthz': committed.paths['/healthz'],
+      '/readyz': committed.paths['/readyz'],
       '/v1/me': committed.paths['/v1/me'],
       '/v1/test/thing': {
         get: {
@@ -39,7 +41,9 @@ function fixtureDocument(extraPaths: Record<string, unknown>): ReturnType<typeof
     components: {
       schemas: {
         ErrorResponse: committed.components.schemas['ErrorResponse'],
+        HealthResponse: committed.components.schemas['HealthResponse'],
         MeResponse: committed.components.schemas['MeResponse'],
+        ReadyResponse: committed.components.schemas['ReadyResponse'],
         Thing: { type: 'object', required: ['name'], properties: { name: { type: 'string' } }, additionalProperties: false },
       },
     },
@@ -51,6 +55,47 @@ function referencing(schema: unknown): Record<string, unknown> {
     '/v1/test/ref': { get: { responses: { '200': { content: { 'application/json': { schema } } } } } },
   };
 }
+
+describe('a probe route at the root', () => {
+  it('is reported by name when it is not in the document', async () => {
+    const server = await app();
+    server.get('/v1/test/thing', async () => ({ name: 'x' }));
+    const document = fixtureDocument({});
+    delete document.paths['/healthz'];
+    expect(await checkOperations(server, document)).toEqual([{ route: 'GET /healthz', problem: 'the route is not in the document' }]);
+  });
+
+  it('is reported by name when its response does not match the document', async () => {
+    const server = await buildApp({
+      webRoot,
+      logger: createLogger({ write: () => undefined }),
+      store: memoryAppStore(),
+    });
+    server.get('/v1/test/thing', async () => ({ name: 'x' }));
+    const document = fixtureDocument({});
+    document.components.schemas['HealthResponse'] = { type: 'object', required: ['alive'], properties: { alive: { type: 'boolean' } }, additionalProperties: false };
+    expect(await checkOperations(server, document)).toEqual([{ route: 'GET /healthz', problem: 'the response does not match the document' }]);
+  });
+});
+
+describe('GET /readyz when it is not ready', () => {
+  it('answers 503 with a body that matches the documented ReadyResponse', async () => {
+    const down = { ...memoryAppStore(), readiness: () => Promise.resolve({ database: 'unreachable' as const, migrations: 'unknown' as const }) };
+    const server = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store: down });
+    const response = await server.inject({ method: 'GET', url: '/readyz' });
+    expect(response.statusCode).toBe(503);
+    expect(validatorFor(committed, 'ReadyResponse')(response.json())).toBe(true);
+  });
+
+  it('is reported when the 503 body no longer matches the document', async () => {
+    const down = { ...memoryAppStore(), readiness: () => Promise.resolve({ database: 'unreachable' as const, migrations: 'unknown' as const }) };
+    const server = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store: down });
+    const response = await server.inject({ method: 'GET', url: '/readyz' });
+    const changed = { ...committed.components.schemas['ReadyResponse'], required: ['status', 'checks', 'extra'] };
+    const document = { ...committed, components: { schemas: { ...committed.components.schemas, ReadyResponse: changed } } };
+    expect(validatorFor(document, 'ReadyResponse')(response.json())).toBe(false);
+  });
+});
 
 describe('a route that disagrees with its document', () => {
   it('is reported by name when the body does not match the schema', async () => {
@@ -232,8 +277,15 @@ describe('a document the check cannot trust', () => {
       instance.get('/v1/test/from-plugin', async () => ({ name: 'x' }));
     });
     const empty = parseDocument({
-      paths: { '/v1/me': committed.paths['/v1/me'] },
-      components: { schemas: { ErrorResponse: committed.components.schemas['ErrorResponse'], MeResponse: committed.components.schemas['MeResponse'] } },
+      paths: { '/healthz': committed.paths['/healthz'], '/readyz': committed.paths['/readyz'], '/v1/me': committed.paths['/v1/me'] },
+      components: {
+        schemas: {
+          ErrorResponse: committed.components.schemas['ErrorResponse'],
+          HealthResponse: committed.components.schemas['HealthResponse'],
+          MeResponse: committed.components.schemas['MeResponse'],
+          ReadyResponse: committed.components.schemas['ReadyResponse'],
+        },
+      },
     });
     expect(await checkOperations(server, empty)).toEqual([
       { route: 'GET /v1/test/from-plugin', problem: 'the route is not in the document' },

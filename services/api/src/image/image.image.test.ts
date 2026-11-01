@@ -109,6 +109,7 @@ describe('the migrate command', () => {
     expect(await rows(database.ownerUrl, 'SELECT name FROM kysely_migration ORDER BY name')).toEqual([
       { name: '0001-baseline' },
       { name: '0002-deployment-and-users' },
+      { name: '0003-applied-migrations-function' },
     ]);
   });
 });

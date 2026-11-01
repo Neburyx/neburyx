@@ -1,18 +1,22 @@
 import { accessSync, constants, existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { FastifyBaseLogger, FastifyInstance } from 'fastify';
 import { buildApp } from './app.js';
 import { ConfigError, parseConfig } from './config.js';
 import { isInContainer, warnIfExposed } from './exposure.js';
 import { IdentityStartError } from './identity/errors.js';
-import { createIdentityStore, type IdentityStore } from './identity/store.js';
+import { createAppStore, type AppStore } from './app-store.js';
+
+const SHIPPED_MIGRATIONS = fileURLToPath(new URL('../migrations', import.meta.url));
 
 export interface StartIo {
   readonly stderr: { write(text: string): unknown };
   readonly logger: FastifyBaseLogger;
   readonly defaultWebRoot: string;
   readonly portOverride?: number;
-  readonly openIdentity?: (url: string, onConnectionError: () => void) => IdentityStore;
+  readonly openStore?: (url: string, onConnectionError: () => void, migrationsDirectory: string) => AppStore;
+  readonly migrationsDirectory?: string;
   readonly fileExists?: (path: string) => boolean;
 }
 
@@ -59,21 +63,24 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
     return { exitCode: 1 };
   }
 
-  let identity: IdentityStore | undefined;
+  let store: AppStore | undefined;
   let app: FastifyInstance | undefined;
   try {
-    identity = (io.openIdentity ?? createIdentityStore)(config.databaseUrl, () =>
-      io.logger.warn({ event: 'database.connection_error' }, 'database connection error'),
+    const openStore = io.openStore ?? ((url, report, directory) => createAppStore(url, report, { migrationsDirectory: directory }));
+    store = openStore(
+      config.databaseUrl,
+      () => io.logger.warn({ event: 'database.connection_error' }, 'database connection error'),
+      io.migrationsDirectory ?? SHIPPED_MIGRATIONS,
     );
-    await identity.initialize();
+    await store.initialize();
     warnIfExposed(io.logger, config.host, isInContainer(env, io.fileExists ?? existsSync));
-    app = await buildApp({ webRoot: config.webRoot, logger: io.logger, identity });
+    app = await buildApp({ webRoot: config.webRoot, logger: io.logger, store });
     await app.listen({ host: config.host, port: io.portOverride ?? config.port });
     return { exitCode: 0, app };
   } catch (error) {
     io.stderr.write(`${error instanceof IdentityStartError ? error.message : describeStartFailure(error)}\n`);
     if (app) await app.close();
-    else await identity?.close();
+    else await store?.close();
     return { exitCode: 1 };
   }
 }

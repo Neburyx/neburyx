@@ -3,6 +3,10 @@ import { basename, join } from 'node:path';
 import { sql } from 'kysely';
 import type { Migration, MigrationProvider } from 'kysely/migration';
 
+export async function migrationFileNames(directory: string): Promise<readonly string[]> {
+  return (await readdir(directory)).filter((file) => file.endsWith('.sql')).sort().map((file) => basename(file, '.sql'));
+}
+
 export function sqlFileProvider(directory: string): MigrationProvider {
   return {
     async getMigrations(): Promise<Record<string, Migration>> {

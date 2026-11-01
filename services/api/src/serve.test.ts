@@ -4,7 +4,7 @@ import { rmSync } from 'node:fs';
 import pino from 'pino';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import { serve, type ShutdownTimes, type Signals } from './serve.js';
-import { memoryIdentityStore } from './testing/identity.js';
+import { memoryAppStore } from './testing/app-store.js';
 import { makeWebRoot } from './testing/web-root.js';
 
 const webRoot = makeWebRoot();
@@ -33,7 +33,7 @@ const io = (stderr: string[] = []): Parameters<typeof serve>[1] => ({
   stderr: { write: (text) => stderr.push(text) },
   logger: pino({ level: 'silent' }),
   defaultWebRoot: webRoot,
-  openIdentity: memoryIdentityStore,
+  openStore: memoryAppStore,
   portOverride: 0,
 });
 
@@ -65,8 +65,8 @@ describe('serve', () => {
 
   it('drops a request that is still being answered after the grace period, then exits 0', async () => {
     const run = signals();
-    const hanging = (): ReturnType<typeof memoryIdentityStore> => ({ ...memoryIdentityStore(), current: () => new Promise(() => undefined) });
-    const started = await serve(ENV, { ...io(), openIdentity: hanging }, run.signals, QUICK);
+    const hanging = (): ReturnType<typeof memoryAppStore> => ({ ...memoryAppStore(), current: () => new Promise(() => undefined) });
+    const started = await serve(ENV, { ...io(), openStore: hanging }, run.signals, QUICK);
     if (started.exitCode !== 0) throw new Error('the server did not start');
     const address = started.app.server.address();
     if (address === null || typeof address === 'string') throw new Error('the server has no port');
@@ -82,8 +82,8 @@ describe('serve', () => {
 
   it('gives up with exit 1 when closing never finishes', async () => {
     const run = signals();
-    const stuck = (): ReturnType<typeof memoryIdentityStore> => ({ ...memoryIdentityStore(), close: () => new Promise<void>(() => undefined) });
-    await serve(ENV, { ...io(), openIdentity: stuck }, run.signals, { graceMs: 50, deadlineMs: 200 });
+    const stuck = (): ReturnType<typeof memoryAppStore> => ({ ...memoryAppStore(), close: () => new Promise<void>(() => undefined) });
+    await serve(ENV, { ...io(), openStore: stuck }, run.signals, { graceMs: 50, deadlineMs: 200 });
     run.emitter.emit('SIGINT');
     await vi.waitFor(() => expect(run.exits).toEqual([1]), { timeout: 1500 });
   });

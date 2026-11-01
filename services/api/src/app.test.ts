@@ -3,13 +3,13 @@ import pino from 'pino';
 import { afterAll, describe, expect, it } from 'vitest';
 import { buildApp } from './app.js';
 import { APP_JS, INDEX_HTML, makeWebRoot, V1_FILE } from './testing/web-root.js';
-import { LOCAL_IDENTITY, memoryIdentityStore } from './testing/identity.js';
+import { LOCAL_IDENTITY, memoryAppStore } from './testing/app-store.js';
 
 const webRoot = makeWebRoot();
 afterAll(() => rmSync(webRoot, { recursive: true, force: true }));
 
 async function app(): ReturnType<typeof buildApp> {
-  return buildApp({ webRoot, logger: pino({ level: 'silent' }), identity: memoryIdentityStore() });
+  return buildApp({ webRoot, logger: pino({ level: 'silent' }), store: memoryAppStore() });
 }
 
 describe('paths under /v1', () => {
@@ -79,5 +79,48 @@ describe('GET /v1/me', () => {
     const response = await (await app()).inject({ method, url: '/v1/me' });
     expect(response.statusCode).toBe(404);
     expect(response.json()).toMatchObject({ error: { code: 'NOT_FOUND' } });
+  });
+});
+
+describe('GET /healthz', () => {
+  it('answers 200 with exactly the ok status', async () => {
+    const response = await (await app()).inject({ method: 'GET', url: '/healthz' });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ status: 'ok' });
+  });
+
+  it('answers 200 while every database call fails', async () => {
+    const failing = { ...memoryAppStore(), current: () => Promise.reject(new Error('database down')) };
+    const server = await buildApp({ webRoot, logger: pino({ level: 'silent' }), store: failing });
+    const response = await server.inject({ method: 'GET', url: '/healthz' });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ status: 'ok' });
+  });
+
+  it.each(['POST', 'PUT', 'PATCH', 'DELETE'] as const)('answers %s like any other unmatched path', async (method) => {
+    const response = await (await app()).inject({ method, url: '/healthz' });
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toMatchObject({ error: { code: 'NOT_FOUND' } });
+  });
+});
+
+describe('GET /readyz', () => {
+  it('answers 200 ready when every check is ok', async () => {
+    const response = await (await app()).inject({ method: 'GET', url: '/readyz' });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ status: 'ready', checks: { database: 'ok', migrations: 'ok' } });
+  });
+
+  it('answers 503 not_ready when the database check is not ok', async () => {
+    const down = { ...memoryAppStore(), readiness: () => Promise.resolve({ database: 'unreachable' as const, migrations: 'unknown' as const }) };
+    const server = await buildApp({ webRoot, logger: pino({ level: 'silent' }), store: down });
+    const response = await server.inject({ method: 'GET', url: '/readyz' });
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toEqual({ status: 'not_ready', checks: { database: 'unreachable', migrations: 'unknown' } });
+  });
+
+  it.each(['POST', 'PUT', 'PATCH', 'DELETE'] as const)('answers %s like any other unmatched path', async (method) => {
+    const response = await (await app()).inject({ method, url: '/readyz' });
+    expect(response.statusCode).toBe(404);
   });
 });

@@ -1,7 +1,7 @@
 import { createServer, type Server, type Socket } from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
-import { IdentityStartError } from './errors.js';
-import { createIdentityStore } from './store.js';
+import { IdentityStartError } from './identity/errors.js';
+import { createAppStore } from './app-store.js';
 
 const servers: Server[] = [];
 const sockets: Socket[] = [];
@@ -25,7 +25,7 @@ async function listen(onConnection: (socket: Socket) => void): Promise<string> {
 
 async function failure(url: string, timeoutMs: number): Promise<unknown> {
   const errors: number[] = [];
-  const store = createIdentityStore(url, () => errors.push(1), timeoutMs);
+  const store = createAppStore(url, () => errors.push(1), { migrationsDirectory: '.', connectionTimeoutMs: timeoutMs });
   try {
     await store.initialize();
     return undefined;

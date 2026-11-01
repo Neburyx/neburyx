@@ -3,7 +3,7 @@ import { Kysely, PostgresDialect } from 'kysely';
 import { Migrator, NO_MIGRATIONS } from 'kysely/migration';
 import pg from 'pg';
 import { isConnectionError } from '../database-errors.js';
-import { grantDefaultsOnce, grantQueue, historyTablesExist, protectHistory, roleExists } from './grants.js';
+import { grantDefaultsOnce, grantMigrationNames, grantQueue, historyTablesExist, protectHistory, roleExists } from './grants.js';
 import { sqlFileProvider } from './provider.js';
 
 export interface MigrateOptions {
@@ -95,6 +95,17 @@ async function runPhases(
   if (failed) return { status: 'migration-failed', file: failed.migrationName };
   if (error) return { status: isLost(error) ? 'unreachable' : 'failed' };
   const applied = (results ?? []).filter((result) => result.status === 'Success').map((result) => result.migrationName);
+
+  try {
+    const grant = await pool.connect();
+    try {
+      await grantMigrationNames(grant, options.appRole);
+    } finally {
+      grant.release();
+    }
+  } catch (error) {
+    return { status: isLost(error) ? 'unreachable' : 'failed' };
+  }
 
   try {
     await runMigrations({ pgPool: pool, logger: silentLogger });

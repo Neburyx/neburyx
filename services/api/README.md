@@ -45,3 +45,11 @@ connection.
 **Commands.** `dist/cli.js` runs `api` (the default) or `migrate`. In the container image these are
 the two ways to start it (`docker run … neburyx api`, `docker run … neburyx migrate`); see
 `deploy/docker/README.md`. The `api` command stops cleanly on `SIGTERM` and `SIGINT`.
+
+**Probes.** `GET /healthz` answers `{ "status": "ok" }` while the process runs. `GET /readyz` answers
+200 `{ "status": "ready", "checks": { "database": "ok", "migrations": "ok" } }` when the API can reach
+Postgres and every migration it ships has been applied, and 503 with `"status": "not_ready"` otherwise
+(`database`: `unreachable`; `migrations`: `pending` or `unknown`). It asks Postgres on each call and gives up
+after 2 seconds. A response never carries a connection string, host, user or file name. The API sees which
+migrations are applied through a function that `neburyx migrate` creates and grants to the app role; the
+migration history tables stay closed to it.

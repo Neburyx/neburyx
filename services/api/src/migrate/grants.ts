@@ -55,6 +55,12 @@ async function policyIsCurrent(client: pg.PoolClient, table: string, role: strin
   return (result.rowCount ?? 0) > 0;
 }
 
+export async function grantMigrationNames(client: pg.PoolClient, role: string): Promise<void> {
+  const found = await client.query(`SELECT to_regprocedure('public.applied_migrations()') IS NOT NULL AS found`);
+  if (found.rows[0]?.found !== true) return;
+  await client.query(`GRANT EXECUTE ON FUNCTION public.applied_migrations() TO ${client.escapeIdentifier(role)}`);
+}
+
 export async function grantQueue(client: pg.PoolClient, role: string): Promise<void> {
   const app = client.escapeIdentifier(role);
   await inTransaction(client, async () => {

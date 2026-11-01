@@ -1,5 +1,5 @@
 import type { Identity } from '../identity/identity.js';
-import type { IdentityStore } from '../identity/store.js';
+import type { AppStore } from '../app-store.js';
 
 export const LOCAL_IDENTITY: Identity = {
   principal: { id: '0192f000-0000-7000-8000-000000000001', displayName: 'Local workspace', role: 'administrator' },
@@ -7,10 +7,11 @@ export const LOCAL_IDENTITY: Identity = {
   identityMode: 'none',
 };
 
-export function memoryIdentityStore(): IdentityStore {
+export function memoryAppStore(): AppStore {
   return {
     initialize: () => Promise.resolve(),
     current: () => Promise.resolve(LOCAL_IDENTITY),
+    readiness: () => Promise.resolve({ database: 'ok', migrations: 'ok' }),
     close: () => Promise.resolve(),
   };
 }

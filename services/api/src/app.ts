@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Socket } from 'node:net';
 import fastifyStatic from '@fastify/static';
-import { type ErrorCode, meResponseSchema } from '@neburyx/contracts';
+import { type ErrorCode, healthResponseSchema, meResponseSchema, readyResponseSchema } from '@neburyx/contracts';
 import Fastify, {
   type FastifyBaseLogger,
   type FastifyInstance,
@@ -10,15 +10,17 @@ import Fastify, {
   LogController,
 } from 'fastify';
 import { codeForFailure, detailsOf, errorResponse, errorStatus } from './errors.js';
-import type { IdentityStore } from './identity/store.js';
+import type { AppStore } from './app-store.js';
+import { readinessResponse } from './health/readiness.js';
 
 export interface AppOptions {
   readonly webRoot: string;
   readonly logger: FastifyBaseLogger;
-  readonly identity: IdentityStore;
+  readonly store: AppStore;
 }
 
 const API_PREFIX = '/v1';
+const PROBE_PATHS: ReadonlySet<string> = new Set(['/healthz', '/readyz']);
 const TRACE_HEADER = 'x-trace-id';
 const UNMATCHED_ROUTE = 'unmatched';
 const UNHANDLED_ERROR_KIND = 'unhandled_error';
@@ -129,7 +131,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
   });
 
   app.addHook('onClose', async () => {
-    await options.identity.close();
+    await options.store.close();
   });
 
   await app.register(fastifyStatic, { root: options.webRoot });
@@ -138,7 +140,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
   apiRoutes.set(app, routes);
   const getRoutesWithHead = new Set<string>();
   app.addHook('onRoute', (route) => {
-    if (!route.url.startsWith(API_PREFIX)) return;
+    if (!route.url.startsWith(API_PREFIX) && !PROBE_PATHS.has(route.url)) return;
     const headIsGenerated = getRoutesWithHead.has(route.url);
     for (const method of [route.method].flat()) {
       if (method === 'GET' && route.exposeHeadRoute !== false) getRoutesWithHead.add(route.url);
@@ -176,7 +178,14 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
     return reply.sendFile('index.html');
   });
 
-  app.get('/v1/me', { exposeHeadRoute: false }, async () => meResponseSchema.parse({ ...(await options.identity.current()), sources: [] }));
+  app.get('/healthz', async () => healthResponseSchema.parse({ status: 'ok' }));
+
+  app.get('/readyz', async (_request, reply) => {
+    const { statusCode, body } = readinessResponse(await options.store.readiness());
+    return reply.code(statusCode).send(readyResponseSchema.parse(body));
+  });
+
+  app.get('/v1/me', { exposeHeadRoute: false }, async () => meResponseSchema.parse({ ...(await options.store.current()), sources: [] }));
 
   return app;
 }
