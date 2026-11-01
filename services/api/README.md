@@ -1,7 +1,7 @@
 # services/api
 
-Backend API (TypeScript on Node, Fastify). Pre-release: it serves the built web app and answers
-unknown `/v1` paths with 404; it has no endpoints yet.
+Backend API (TypeScript on Node, Fastify). Pre-release: it serves the built web app, answers
+`GET /v1/me` and answers unknown `/v1` paths with 404.
 
 Configuration comes from the environment:
 
@@ -10,6 +10,7 @@ Configuration comes from the environment:
 | `NEBURYX_HOST` | `127.0.0.1` | Address to listen on (an IP address or a host name). A non-loopback address outside a container logs a warning |
 | `NEBURYX_PORT` | `8080` | Port to listen on (1 to 65535) |
 | `NEBURYX_WEB_ROOT` | `apps/web/dist` in the repo | Folder of the built web app; it must hold a readable `index.html` |
+| `DATABASE_URL` | required | Postgres connection string of the app role (`postgres://` or `postgresql://`) |
 | `NEBURYX_CONTAINER` | unset | Set to `true` inside a container so the exposure warning is skipped |
 
 A start-up failure prints a message that names the variable, never its value, and exits 1.
@@ -29,3 +30,14 @@ role's connection string in `DATABASE_MIGRATION_URL` and the name of the role th
 `DATABASE_APP_ROLE`, which it grants ordinary read and write rights on the tables and nothing
 structural. Several copies can run at once; they take turns. See `migrations/README.md` for how to
 add a migration. The API itself never reads `DATABASE_MIGRATION_URL`.
+
+**First start.** The API needs a database that `neburyx migrate` has already prepared. On start it
+creates the single `deployment` row (edition `community`, identity mode `none`) and the `local`
+administrator user if they are missing, and leaves them alone afterwards; copies that start at the
+same time agree on one of each. It exits 1 with `the database could not be reached` or
+`the database has not been migrated` when it cannot do that, and prints nothing else about the
+connection.
+
+**`GET /v1/me`** returns the calling principal (`id`, `displayName`, `role`), the `edition`, the
+`identityMode` and the permitted `sources` (an empty list for now). The response schema is in
+`packages/contracts/openapi.json`. A database error answers `INTERNAL_ERROR`.

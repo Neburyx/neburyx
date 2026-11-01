@@ -4,7 +4,36 @@
     "title": "Neburyx API",
     "version": "0.0.0"
   },
-  "paths": {},
+  "paths": {
+    "/v1/me": {
+      "get": {
+        "operationId": "getMe",
+        "summary": "The calling principal, the edition and the permitted sources",
+        "responses": {
+          "200": {
+            "description": "The principal",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The identity could not be read",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
   "components": {
     "schemas": {
       "ErrorResponse": {
@@ -571,6 +600,91 @@
         },
         "required": [
           "error"
+        ],
+        "additionalProperties": false
+      },
+      "MeResponse": {
+        "type": "object",
+        "properties": {
+          "principal": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+              },
+              "displayName": {
+                "type": "string",
+                "minLength": 1
+              },
+              "role": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": [
+                      "administrator",
+                      "investigator",
+                      "viewer"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "displayName",
+              "role"
+            ],
+            "additionalProperties": false
+          },
+          "edition": {
+            "type": "string",
+            "enum": [
+              "community",
+              "enterprise"
+            ]
+          },
+          "identityMode": {
+            "type": "string",
+            "enum": [
+              "none",
+              "sso",
+              "user_based"
+            ]
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "sourceId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "viewSensitive": {
+                  "type": "boolean"
+                },
+                "synthetic": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "sourceId",
+                "viewSensitive",
+                "synthetic"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "principal",
+          "edition",
+          "identityMode",
+          "sources"
         ],
         "additionalProperties": false
       }

@@ -6,3 +6,5 @@ export { ERROR_TABLE, findMissingCodes } from './error-table.js';
 export type { ErrorEntry } from './error-table.js';
 export { buildOpenApiDocument } from './openapi.js';
 export type { OpenApiDocument } from './openapi.js';
+export { editionSchema, identityModeSchema, meResponseSchema, permittedSourceSchema, roleSchema } from './me.js';
+export type { MeResponse } from './me.js';

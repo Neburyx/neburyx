@@ -7,7 +7,7 @@ wouldn't want a reader to see.
 
 Neburyx is a graph investigation workbench that runs on top of an existing Neo4j database. It
 explores a bounded network around an entity, explains each link with its source evidence, and stays
-safe on very high-degree nodes. The repo is **pre-release**: the build tooling and an API server that serves the web build; no product features yet.
+safe on very high-degree nodes. The repo is **pre-release**: the build tooling, an API server that serves the web build, the database migrations and `GET /v1/me`; no product features yet.
 
 ## Layout
 
@@ -66,10 +66,10 @@ Node 24 LTS (`.nvmrc`; with nvm, `nvm use`) and pnpm through Corepack, at the ve
 | Integration tests (a Postgres container; needs Docker) | `pnpm test:integration` |
 | Regenerate `packages/contracts/openapi.json` | `pnpm --filter @neburyx/contracts generate` |
 
-To run the API with the built web app (after `pnpm build`):
+To run the API with the built web app (after `pnpm build` and `neburyx migrate`; `DATABASE_URL` is the app role's connection string):
 
 ```bash
-NEBURYX_WEB_ROOT=apps/web/dist node services/api/dist/main.js
+DATABASE_URL=… NEBURYX_WEB_ROOT=apps/web/dist node services/api/dist/main.js
 ```
 
 To create or upgrade the database (after `pnpm build`): `DATABASE_MIGRATION_URL=… DATABASE_APP_ROLE=… node services/api/dist/cli.js migrate`.

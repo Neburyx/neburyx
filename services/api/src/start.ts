@@ -4,12 +4,15 @@ import type { FastifyBaseLogger, FastifyInstance } from 'fastify';
 import { buildApp } from './app.js';
 import { ConfigError, parseConfig } from './config.js';
 import { isInContainer, warnIfExposed } from './exposure.js';
+import { IdentityStartError } from './identity/errors.js';
+import { createIdentityStore, type IdentityStore } from './identity/store.js';
 
 export interface StartIo {
   readonly stderr: { write(text: string): unknown };
   readonly logger: FastifyBaseLogger;
   readonly defaultWebRoot: string;
   readonly portOverride?: number;
+  readonly openIdentity?: (url: string, onConnectionError: () => void) => IdentityStore;
   readonly fileExists?: (path: string) => boolean;
 }
 
@@ -56,15 +59,21 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
     return { exitCode: 1 };
   }
 
+  let identity: IdentityStore | undefined;
   let app: FastifyInstance | undefined;
   try {
+    identity = (io.openIdentity ?? createIdentityStore)(config.databaseUrl, () =>
+      io.logger.warn({ event: 'database.connection_error' }, 'database connection error'),
+    );
+    await identity.initialize();
     warnIfExposed(io.logger, config.host, isInContainer(env, io.fileExists ?? existsSync));
-    app = await buildApp({ webRoot: config.webRoot, logger: io.logger });
+    app = await buildApp({ webRoot: config.webRoot, logger: io.logger, identity });
     await app.listen({ host: config.host, port: io.portOverride ?? config.port });
     return { exitCode: 0, app };
   } catch (error) {
-    io.stderr.write(`${describeStartFailure(error)}\n`);
-    await app?.close();
+    io.stderr.write(`${error instanceof IdentityStartError ? error.message : describeStartFailure(error)}\n`);
+    if (app) await app.close();
+    else await identity?.close();
     return { exitCode: 1 };
   }
 }

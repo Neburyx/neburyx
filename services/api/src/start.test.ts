@@ -6,6 +6,7 @@ import pino from 'pino';
 import { z } from 'zod';
 import { afterAll, describe, expect, it } from 'vitest';
 import { start, type StartIo } from './start.js';
+import { memoryIdentityStore } from './testing/identity.js';
 import { makeWebRoot } from './testing/web-root.js';
 
 const webRoot = makeWebRoot();
@@ -22,6 +23,8 @@ afterAll(() => {
   }
 });
 
+const DATABASE_ENV = { DATABASE_URL: 'postgres://app_user@db.example.test:5432/neburyx' };
+
 const logLineSchema = z.object({ event: z.string().optional(), msg: z.string() });
 
 function io(overrides: Partial<StartIo> = {}): { readonly io: StartIo; readonly errors: string[] } {
@@ -32,12 +35,20 @@ function io(overrides: Partial<StartIo> = {}): { readonly io: StartIo; readonly 
       stderr: { write: (text) => errors.push(text) },
       logger: pino({ level: 'silent' }),
       defaultWebRoot: webRoot,
+      openIdentity: memoryIdentityStore,
       ...overrides,
     },
   };
 }
 
 describe('start-up failures', () => {
+  it('exits 1 naming DATABASE_URL when it is not set', async () => {
+    const run = io();
+    const result = await start({}, run.io);
+    expect(result.exitCode).toBe(1);
+    expect(run.errors.join('')).toBe('invalid configuration: DATABASE_URL\n');
+  });
+
   it.each([
     ['a folder that does not exist', join(tmpdir(), 'no-such-folder-for-web-root')],
     ['a folder without index.html', emptyRoot],
@@ -45,7 +56,7 @@ describe('start-up failures', () => {
     ['a folder whose index.html cannot be read', unreadableIndexRoot],
   ])('exits 1 for %s, naming the key and not the value', async (_name, folder) => {
     const run = io();
-    const result = await start({ NEBURYX_WEB_ROOT: folder }, run.io);
+    const result = await start({ ...DATABASE_ENV, NEBURYX_WEB_ROOT: folder }, run.io);
     expect(result.exitCode).toBe(1);
     expect(run.errors.join('')).toContain('NEBURYX_WEB_ROOT');
     expect(run.errors.join('')).not.toContain(folder);
@@ -59,9 +70,13 @@ describe('start-up failures', () => {
     ['NEBURYX_HOST', ''],
     ['NEBURYX_HOST', 'bad host'],
     ['NEBURYX_HOST', '999.1.1.1'],
+    ['DATABASE_URL', ''],
+    ['DATABASE_URL', 'mysql://app:secret-word@db.example.test/neburyx'],
+    ['DATABASE_URL', 'postgres://app:%FF@db.example.test/neburyx'],
+    ['DATABASE_URL', 'postgres://%FF/neburyx'],
   ])('exits 1 for %s=%j, naming the key and not the value', async (key, value) => {
     const run = io();
-    const result = await start({ [key]: value }, run.io);
+    const result = await start({ ...DATABASE_ENV, [key]: value }, run.io);
     expect(result.exitCode).toBe(1);
     expect(run.errors.join('')).toContain(key);
     if (value.length > 0) expect(run.errors.join('')).not.toContain(value);
@@ -75,7 +90,7 @@ describe('start-up that cannot listen', () => {
     const address = taken.address();
     const port = typeof address === 'object' && address !== null ? address.port : 0;
     const run = io();
-    const result = await start({ NEBURYX_PORT: String(port) }, run.io);
+    const result = await start({ ...DATABASE_ENV, NEBURYX_PORT: String(port) }, run.io);
     taken.close();
     expect(result.exitCode).toBe(1);
     expect(run.errors.join('')).toContain('NEBURYX_PORT');
@@ -84,14 +99,14 @@ describe('start-up that cannot listen', () => {
 
   it('never throws for a scoped IPv6 host and never prints its value', async () => {
     const run = io({ portOverride: 0 });
-    const result = await start({ NEBURYX_HOST: 'fe80::1%lo0' }, run.io);
+    const result = await start({ ...DATABASE_ENV, NEBURYX_HOST: 'fe80::1%lo0' }, run.io);
     if (result.exitCode === 0) await result.app.close();
     expect(run.errors.join('')).not.toContain('fe80');
   });
 
   it('exits 1 naming NEBURYX_HOST when the address is not this machine’s, without the value', async () => {
     const run = io({ portOverride: 0 });
-    const result = await start({ NEBURYX_HOST: '192.0.2.1' }, run.io);
+    const result = await start({ ...DATABASE_ENV, NEBURYX_HOST: '192.0.2.1' }, run.io);
     expect(result.exitCode).toBe(1);
     expect(run.errors.join('')).toContain('NEBURYX_HOST');
     expect(run.errors.join('')).not.toContain('192.0.2.1');
@@ -101,7 +116,7 @@ describe('start-up that cannot listen', () => {
 describe('start-up', () => {
   it('listens on the loopback address by default', async () => {
     const run = io({ portOverride: 0 });
-    const result = await start({}, run.io);
+    const result = await start({ ...DATABASE_ENV }, run.io);
     expect(result.exitCode).toBe(0);
     if (result.exitCode !== 0) return;
     const address = result.app.server.address();
@@ -111,7 +126,7 @@ describe('start-up', () => {
 
   it('serves a web folder given as a relative path', async () => {
     const run = io({ defaultWebRoot: emptyRoot, portOverride: 0 });
-    const result = await start({ NEBURYX_WEB_ROOT: relative(process.cwd(), webRoot) }, run.io);
+    const result = await start({ ...DATABASE_ENV, NEBURYX_WEB_ROOT: relative(process.cwd(), webRoot) }, run.io);
     expect(result.exitCode).toBe(0);
     if (result.exitCode !== 0) return;
     const response = await result.app.inject({ method: 'GET', url: '/' });
@@ -121,7 +136,7 @@ describe('start-up', () => {
 
   it('serves the configured web folder', async () => {
     const run = io({ defaultWebRoot: emptyRoot, portOverride: 0 });
-    const result = await start({ NEBURYX_WEB_ROOT: webRoot }, run.io);
+    const result = await start({ ...DATABASE_ENV, NEBURYX_WEB_ROOT: webRoot }, run.io);
     expect(result.exitCode).toBe(0);
     if (result.exitCode !== 0) return;
     const response = await result.app.inject({ method: 'GET', url: '/' });
@@ -143,7 +158,7 @@ describe('exposure warning at start-up', () => {
 
   it('writes the warning once, before the server starts listening', async () => {
     const { lines, run } = captured();
-    const result = await start({ NEBURYX_HOST: '0.0.0.0' }, run);
+    const result = await start({ ...DATABASE_ENV, NEBURYX_HOST: '0.0.0.0' }, run);
     expect(result.exitCode).toBe(0);
     if (result.exitCode !== 0) return;
     await result.app.inject({ method: 'GET', url: '/' });
@@ -159,7 +174,7 @@ describe('exposure warning at start-up', () => {
 
   it('writes no warning on the default loopback host', async () => {
     const { lines, run } = captured();
-    const result = await start({}, run);
+    const result = await start({ ...DATABASE_ENV }, run);
     expect(result.exitCode).toBe(0);
     if (result.exitCode !== 0) return;
     expect(lines.join('')).not.toContain('server.exposed');
@@ -168,7 +183,7 @@ describe('exposure warning at start-up', () => {
 
   it('writes no warning inside a container', async () => {
     const { lines, run } = captured();
-    const result = await start({ NEBURYX_HOST: '0.0.0.0', NEBURYX_CONTAINER: 'true' }, run);
+    const result = await start({ ...DATABASE_ENV, NEBURYX_HOST: '0.0.0.0', NEBURYX_CONTAINER: 'true' }, run);
     expect(result.exitCode).toBe(0);
     if (result.exitCode !== 0) return;
     expect(lines.join('')).not.toContain('server.exposed');

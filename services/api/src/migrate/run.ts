@@ -2,6 +2,7 @@ import { Logger, runMigrations } from 'graphile-worker';
 import { Kysely, PostgresDialect } from 'kysely';
 import { Migrator, NO_MIGRATIONS } from 'kysely/migration';
 import pg from 'pg';
+import { isConnectionError } from '../database-errors.js';
 import { grantDefaultsOnce, grantQueue, historyTablesExist, protectHistory, roleExists } from './grants.js';
 import { sqlFileProvider } from './provider.js';
 
@@ -22,21 +23,12 @@ export type MigrateOutcome =
 
 export const RUN_LOCK_ID = '5156813097145562941';
 
-const CONNECTION_ERROR_CODES = new Set(['ECONNREFUSED', 'ENOTFOUND', 'ETIMEDOUT', 'EAI_AGAIN', 'ECONNRESET', 'EHOSTUNREACH']);
 const silentLogger = new Logger(() => () => undefined);
 
 class LostConnection extends Error {}
 
-function errorCode(error: unknown): string | undefined {
-  if (typeof error !== 'object' || error === null || !('code' in error)) return undefined;
-  return typeof error.code === 'string' ? error.code : undefined;
-}
-
-function isConnectionError(error: unknown): boolean {
-  if (error instanceof LostConnection) return true;
-  const code = errorCode(error);
-  if (code === undefined) return false;
-  return CONNECTION_ERROR_CODES.has(code) || ['08', '28', '57'].some((prefix) => code.startsWith(prefix)) || code === '3D000';
+function isLost(error: unknown): boolean {
+  return error instanceof LostConnection || isConnectionError(error);
 }
 
 export async function migrate(options: MigrateOptions): Promise<MigrateOutcome> {
@@ -60,7 +52,7 @@ export async function migrate(options: MigrateOptions): Promise<MigrateOutcome> 
     outcome = await runPhases(pool, db, options, stillConnected);
     stillConnected();
   } catch (error) {
-    outcome = { status: isConnectionError(error) ? 'unreachable' : 'failed' };
+    outcome = { status: isLost(error) ? 'unreachable' : 'failed' };
   } finally {
     if (lock) {
       // Cleanup must not replace the outcome: a lost connection has already ended the session lock.
@@ -101,7 +93,7 @@ async function runPhases(
   stillConnected();
   const failed = results?.find((result) => result.status === 'Error');
   if (failed) return { status: 'migration-failed', file: failed.migrationName };
-  if (error) return { status: isConnectionError(error) ? 'unreachable' : 'failed' };
+  if (error) return { status: isLost(error) ? 'unreachable' : 'failed' };
   const applied = (results ?? []).filter((result) => result.status === 'Success').map((result) => result.migrationName);
 
   try {
@@ -114,7 +106,7 @@ async function runPhases(
       finish.release();
     }
   } catch (error) {
-    return { status: isConnectionError(error) ? 'unreachable' : 'queue-step-failed' };
+    return { status: isLost(error) ? 'unreachable' : 'queue-step-failed' };
   }
   return { status: 'done', applied };
 }

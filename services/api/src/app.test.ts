@@ -3,12 +3,13 @@ import pino from 'pino';
 import { afterAll, describe, expect, it } from 'vitest';
 import { buildApp } from './app.js';
 import { APP_JS, INDEX_HTML, makeWebRoot, V1_FILE } from './testing/web-root.js';
+import { LOCAL_IDENTITY, memoryIdentityStore } from './testing/identity.js';
 
 const webRoot = makeWebRoot();
 afterAll(() => rmSync(webRoot, { recursive: true, force: true }));
 
 async function app(): ReturnType<typeof buildApp> {
-  return buildApp({ webRoot, logger: pino({ level: 'silent' }) });
+  return buildApp({ webRoot, logger: pino({ level: 'silent' }), identity: memoryIdentityStore() });
 }
 
 describe('paths under /v1', () => {
@@ -67,3 +68,16 @@ describe('the web build', () => {
   });
 });
 
+describe('GET /v1/me', () => {
+  it('answers with the identity the store holds', async () => {
+    const response = await (await app()).inject({ method: 'GET', url: '/v1/me' });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ ...LOCAL_IDENTITY, sources: [] });
+  });
+
+  it.each(['HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'] as const)('answers %s like any other unmatched /v1 route', async (method) => {
+    const response = await (await app()).inject({ method, url: '/v1/me' });
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toMatchObject({ error: { code: 'NOT_FOUND' } });
+  });
+});

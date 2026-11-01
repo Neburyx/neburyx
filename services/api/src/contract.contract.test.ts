@@ -6,17 +6,21 @@ import { checkContract, checkErrorResponses, checkOperations, type ErrorCase } f
 import { loadCommittedDocument, parseDocument } from './testing/document.js';
 import { registerErrorRoutes } from './testing/error-routes.js';
 import { makeWebRoot } from './testing/web-root.js';
+import { memoryIdentityStore } from './testing/identity.js';
 
 const webRoot = makeWebRoot();
 afterAll(() => rmSync(webRoot, { recursive: true, force: true }));
 
 async function app(): ReturnType<typeof buildApp> {
-  return buildApp({ webRoot, logger: createLogger({ write: () => undefined }) });
+  return buildApp({ webRoot, logger: createLogger({ write: () => undefined }), identity: memoryIdentityStore() });
 }
+
+const committed = loadCommittedDocument();
 
 function fixtureDocument(extraPaths: Record<string, unknown>): ReturnType<typeof parseDocument> {
   return parseDocument({
     paths: {
+      '/v1/me': committed.paths['/v1/me'],
       '/v1/test/thing': {
         get: {
           responses: {
@@ -34,7 +38,8 @@ function fixtureDocument(extraPaths: Record<string, unknown>): ReturnType<typeof
     },
     components: {
       schemas: {
-        ErrorResponse: loadCommittedDocument().components.schemas['ErrorResponse'],
+        ErrorResponse: committed.components.schemas['ErrorResponse'],
+        MeResponse: committed.components.schemas['MeResponse'],
         Thing: { type: 'object', required: ['name'], properties: { name: { type: 'string' } }, additionalProperties: false },
       },
     },
@@ -226,7 +231,10 @@ describe('a document the check cannot trust', () => {
     void server.register(async (instance) => {
       instance.get('/v1/test/from-plugin', async () => ({ name: 'x' }));
     });
-    const empty = parseDocument({ paths: {}, components: { schemas: {} } });
+    const empty = parseDocument({
+      paths: { '/v1/me': committed.paths['/v1/me'] },
+      components: { schemas: { ErrorResponse: committed.components.schemas['ErrorResponse'], MeResponse: committed.components.schemas['MeResponse'] } },
+    });
     expect(await checkOperations(server, empty)).toEqual([
       { route: 'GET /v1/test/from-plugin', problem: 'the route is not in the document' },
     ]);

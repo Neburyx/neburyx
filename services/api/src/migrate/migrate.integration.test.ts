@@ -101,7 +101,10 @@ describe('a job queue step that fails after the application migrations were appl
     expect(failed.code).toBe(1);
     expect(failed.stderr).toBe('the job queue step failed after the application migrations were applied; run the command again\n');
     expect(failed.stdout).toBe('');
-    expect(await rows(database.ownerUrl, 'SELECT name FROM kysely_migration')).toEqual([{ name: '0001-baseline' }]);
+    expect(await rows(database.ownerUrl, 'SELECT name FROM kysely_migration ORDER BY name')).toEqual([
+      { name: '0001-baseline' },
+      { name: '0002-deployment-and-users' },
+    ]);
     expect(await attempt(database.appUrl, 'SELECT * FROM kysely_migration')).toMatch(/permission denied/);
     await vi.waitFor(
       async () => {

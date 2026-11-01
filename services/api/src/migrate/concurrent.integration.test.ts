@@ -46,7 +46,7 @@ describe('two migrate processes started together', () => {
       const check = new pg.Client({ connectionString: database.ownerUrl });
       await check.connect();
       try {
-        expect((await check.query('SELECT name FROM kysely_migration')).rows).toEqual([{ name: '0001-baseline' }]);
+        expect((await check.query('SELECT name FROM kysely_migration ORDER BY name')).rows).toEqual([{ name: '0001-baseline' }, { name: '0002-deployment-and-users' }]);
         const queue = await check.query('SELECT id FROM graphile_worker.migrations');
         expect(new Set(queue.rows.map((row: { id: number }) => row.id)).size).toBe(queue.rows.length);
       } finally {

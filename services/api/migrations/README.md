@@ -6,7 +6,7 @@ runs as the migration role (`DATABASE_MIGRATION_URL`); the API never holds that 
 ## Adding a migration
 
 - Add a new `.sql` file whose name sorts **after** every existing one, for example
-  `0002-describe-the-change.sql`. A file that sorts before an applied migration is refused: the run
+  `0003-describe-the-change.sql`. A file that sorts before an applied migration is refused: the run
   stops, names the file, and applies nothing.
 - Write plain SQL. All pending files run as one batch in one transaction, so either all of them
   apply or none does.

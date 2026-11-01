@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Socket } from 'node:net';
 import fastifyStatic from '@fastify/static';
-import type { ErrorCode } from '@neburyx/contracts';
+import { type ErrorCode, meResponseSchema } from '@neburyx/contracts';
 import Fastify, {
   type FastifyBaseLogger,
   type FastifyInstance,
@@ -10,10 +10,12 @@ import Fastify, {
   LogController,
 } from 'fastify';
 import { codeForFailure, detailsOf, errorResponse, errorStatus } from './errors.js';
+import type { IdentityStore } from './identity/store.js';
 
 export interface AppOptions {
   readonly webRoot: string;
   readonly logger: FastifyBaseLogger;
+  readonly identity: IdentityStore;
 }
 
 const API_PREFIX = '/v1';
@@ -126,6 +128,10 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
     },
   });
 
+  app.addHook('onClose', async () => {
+    await options.identity.close();
+  });
+
   await app.register(fastifyStatic, { root: options.webRoot });
 
   const routes: { readonly method: string; readonly url: string }[] = [];
@@ -169,6 +175,8 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
     if (!servesPage) return sendApiError(reply, request, 'NOT_FOUND');
     return reply.sendFile('index.html');
   });
+
+  app.get('/v1/me', { exposeHeadRoute: false }, async () => meResponseSchema.parse({ ...(await options.identity.current()), sources: [] }));
 
   return app;
 }
