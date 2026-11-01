@@ -25,15 +25,15 @@ const fullEntities: Json[] = [
     pii: ['name'],
     filterable: ['status'],
     link: 'https://records.example.test/PRIVATE_LINK_PATH/{id}',
-    display: { icon: 'document', key_properties: ['status', 'amount'], state_property: 'status' },
+    display: { icon: 'document', key_properties: ['status', 'size'], state_property: 'status' },
   },
   { type: 'node_b', label: 'NodeB', stable_id: 'key' },
 ];
 const fullRelationships: Json[] = [
-  { type: 'EVENT', from: 'node_a', to: 'node_b', stable_id: 'eventId', observed_at: 'seenAt', evidence: ['recordId'], filterable: ['kind'], evidence_link: 'https://audit.example.test/PRIVATE_EVIDENCE_PATH/{recordId}' },
+  { type: 'EVENT', from: 'node_a', to: 'node_b', stable_id: 'entryId', observed_at: 'seenAt', evidence: ['recordId'], filterable: ['kind'], evidence_link: 'https://audit.example.test/PRIVATE_EVIDENCE_PATH/{recordId}' },
   { type: 'LINKS', from: 'node_b', to: 'node_a' },
 ];
-const fullDerived: Json[] = [{ id: 'shared', from: 'node_a', to: 'node_a', via: ['EVENT', 'node_b', 'LINKS'], rule_version: 2, stop_list_property: 'isShared' }];
+const fullDerived: Json[] = [{ id: 'shared', from: 'node_a', to: 'node_a', via: ['EVENT', 'node_b', 'LINKS'], rule_version: 2, stop_list_property: 'isIgnored' }];
 const fullPatterns: Json[] = [{ id: 'p', name: 'Shared things', template: 'shared-attribute', bind: { anchor: 'node_a', attribute: 'node_b', via: 'EVENT' }, labels: { anchor: 'Starting item', limit: 'Max items' } }];
 
 function fullSource(id = 'demo', overrides: Json = {}): Json {
@@ -86,7 +86,7 @@ describe('the profile of a configured source', () => {
       icon: 'document',
       title: 'Item {name}',
       titleUsesPii: true,
-      keyProperties: ['status', 'amount'],
+      keyProperties: ['status', 'size'],
       stateProperty: 'status',
       searchable: ['name', 'code'],
       filterable: ['status'],
@@ -230,7 +230,7 @@ describe('cache validation', () => {
 
   it.each([
     ['a mapped property', { entities: [{ ...fullEntities[0], search: ['name', 'code', 'extra'] }, fullEntities[1]] }],
-    ['a display setting', { entities: [{ ...fullEntities[0], display: { icon: 'shield', key_properties: ['status', 'amount'], state_property: 'status' } }, fullEntities[1]] }],
+    ['a display setting', { entities: [{ ...fullEntities[0], display: { icon: 'shield', key_properties: ['status', 'size'], state_property: 'status' } }, fullEntities[1]] }],
     ['a pattern preset', { patterns: [{ ...fullPatterns[0], name: 'Renamed' }] }],
   ])('answers 200 with a new tag for the old tag after a change to %s', async (_name, change) => {
     const before = await profileOf(await appFor(mappingOf(fullSource())));

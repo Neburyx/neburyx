@@ -12,7 +12,7 @@ const fullEntity = {
   reference: ['ref'],
   pii: ['name'],
   filterable: ['status'],
-  display: { icon: 'document', key_properties: ['status', 'amount'], state_property: 'status' },
+  display: { icon: 'document', key_properties: ['status', 'size'], state_property: 'status' },
 };
 
 describe('entity and relationship types as written', () => {
@@ -26,7 +26,7 @@ describe('entity and relationship types as written', () => {
               type: 'EVENT',
               from: 'node_c',
               to: 'node_d',
-              stable_id: 'eventId',
+              stable_id: 'entryId',
               observed_at: 'seenAt',
               evidence: ['recordId'],
               filterable: ['kind'],
@@ -43,13 +43,13 @@ describe('entity and relationship types as written', () => {
       reference: ['ref'],
       pii: ['name'],
       filterable: ['status'],
-      display: { icon: 'document', keyProperties: ['status', 'amount'], stateProperty: 'status' },
+      display: { icon: 'document', keyProperties: ['status', 'size'], stateProperty: 'status' },
     });
     expect(source.relationships[0]).toMatchObject({
       type: 'EVENT',
       from: 'node_c',
       to: 'node_d',
-      stableId: 'eventId',
+      stableId: 'entryId',
       aggregate: false,
       observedAt: 'seenAt',
       evidence: ['recordId'],

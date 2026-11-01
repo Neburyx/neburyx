@@ -7,7 +7,7 @@ const entities = [
   { type: 'node_b', label: 'NodeB', stable_id: 'key' },
 ];
 const relationships = [{ type: 'LINKS', from: 'node_a', to: 'node_b' }];
-const rule = { id: 'shared', from: 'node_a', to: 'node_a', via: ['LINKS', 'node_b', 'LINKS'], rule_version: 1, stop_list_property: 'isShared' };
+const rule = { id: 'shared', from: 'node_a', to: 'node_a', via: ['LINKS', 'node_b', 'LINKS'], rule_version: 1, stop_list_property: 'isIgnored' };
 
 function withRule(overrides: Json): Json {
   return baseSource({ entities, relationships, derived: [{ ...rule, ...overrides }] });
@@ -21,7 +21,7 @@ describe('derived-edge rules', () => {
       to: 'node_a',
       via: ['LINKS', 'node_b', 'LINKS'],
       ruleVersion: 1,
-      stopListProperty: 'isShared',
+      stopListProperty: 'isIgnored',
     });
   });
 

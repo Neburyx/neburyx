@@ -13,7 +13,7 @@ export interface ImportRef {
 type Origin = string | undefined;
 type Declared = Map<ts.Node, Map<string, Origin>>;
 
-function scriptKindOf(fileName: string): ts.ScriptKind {
+export function scriptKindOf(fileName: string): ts.ScriptKind {
   switch (extname(fileName)) {
     case '.tsx':
       return ts.ScriptKind.TSX;

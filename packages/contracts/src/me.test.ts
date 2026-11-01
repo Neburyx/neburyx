@@ -17,7 +17,7 @@ describe('meResponseSchema', () => {
   it.each([
     ['an unknown edition', { ...valid, edition: 'free' }],
     ['an unknown identity mode', { ...valid, identityMode: 'password' }],
-    ['an unknown role', { ...valid, principal: { ...valid.principal, role: 'owner' } }],
+    ['an unknown role', { ...valid, principal: { ...valid.principal, role: 'unlisted' } }],
     ['an id that is not a UUID', { ...valid, principal: { ...valid.principal, id: 'local' } }],
     ['an empty display name', { ...valid, principal: { ...valid.principal, displayName: '' } }],
     ['a field it does not define', { ...valid, preferences: {} }],

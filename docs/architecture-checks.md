@@ -1,7 +1,9 @@
 # Architecture checks
 
-Two checks run with the unit tests (`pnpm test`, and so in CI) and fail the build when code breaks a structural rule.
-They live in `tools/workspace-checks/src/architecture/`. Each reports the file, line and import that breaks the rule.
+Three checks run with the unit tests (`pnpm test`, and so in CI) and fail the build when code breaks a structural rule.
+The first two live in `tools/workspace-checks/src/architecture/` and each reports the file, line and import that breaks the
+rule. The third, [no domain words in code](#no-domain-words-in-code), lives in `tools/workspace-checks/src/domain-words/`
+and reports the file, line and word.
 
 ## No way around the gate
 
@@ -56,3 +58,35 @@ They read imports, not calls. They cannot see:
   restricted one, a class that extends one).
 
 Review covers those. The gate has one place that builds it, and the checks keep the modules that hold the executor closed.
+
+## No domain words in code
+
+No entity type, label, relationship type or property key of a shipped domain pack appears as a string literal in
+`services/api`, `apps/web` or `packages/contracts`. Domain wording belongs in a pack under `domain-packs/`, so one image
+serves any domain with no code change.
+
+**What it reads.** Every `domain-packs/*/neburyx.yaml`: each entity `type`, `label` and `stable_id`; each relationship
+`type`, `stable_id` and `observed_at`; every property named in `search`, `pii`, `filterable`, `reference`, `evidence` or
+`key_properties`; the `state_property` and the `stop_list_property`; and the property names inside `title` placeholders.
+Preset and rule ids and names, the vocabulary, source ids, addresses, credential variable names and link templates are not
+identifiers. If no pack is found, a pack file is missing, is not valid YAML or has another shape, or a pack yields no
+identifiers, the check fails and names the file; it never passes for nothing.
+
+**What counts as a match.** A string literal, or a template literal with no substitutions, whose whole value equals an
+identifier, compared exactly and with the same case. A phrase that only contains the word ("account settings") is not a match.
+Quoted object keys, element accesses such as `row['x']`, JSX attribute values and import specifiers are string literals and
+are matched; a JSX attribute value is read after its numeric and basic named character references (`&#100;`, `&amp;`) are decoded. Tests and fixtures are scanned too, so a test holds no pack name and reads names from the packs. The check reads
+`.ts`, `.tsx`, `.mts`, `.cts`, `.js`, `.jsx`, `.mjs` and `.cjs` files in the three directories, skips `node_modules/`,
+`dist/` and `.git/`, and does not follow symbolic links.
+
+**When it fails.** Each line gives the file and line, the word, and what the word is in which pack. Rename the literal, move
+the wording into a pack (and read it from there), or, for a word the product itself uses, add it to the allowlist with a reason.
+
+**The allowlist.** `tools/workspace-checks/src/domain-words/allowlist.ts` lists a word and the reason for it. It holds only
+words that are ordinary in code or part of the product's own vocabulary, such as a property called `name`. Its tests require
+a reason on every entry, no repeats, that each word is an identifier of a shipped pack, and that the scanned code still uses
+each word as a literal, so an entry that nothing uses has to be removed.
+
+**What it cannot see.** Strings built at run time; comments; JSX text, which is where interface copy usually lives; template
+parts that have substitutions; a word spelled or cased differently from the pack; and domain wording in interface copy beyond
+identifiers. Review covers those.

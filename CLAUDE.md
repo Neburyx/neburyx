@@ -43,7 +43,9 @@ safe on very high-degree nodes. The repo is **pre-release**: the build tooling, 
    build Cypher by concatenating user input.
 5. **Never fetch a full neighborhood.** Expansion is paged and bounded. Counts are labelled exact,
    estimated, lower-bound or unknown. Never present a guessed number as exact.
-6. **Boring to operate**: one container image, config-driven, no customer-specific code.
+6. **Boring to operate**: one container image, config-driven, no customer-specific code. Domain words live in
+   `domain-packs/`, never in code; a check fails the build if a pack's entity type, label, relationship type or
+   property key appears as a string literal in `services/api`, `apps/web` or `packages/contracts`.
 
 ## Data and secrets
 
