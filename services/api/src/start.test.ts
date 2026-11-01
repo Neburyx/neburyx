@@ -41,6 +41,24 @@ function io(overrides: Partial<StartIo> = {}): { readonly io: StartIo; readonly 
   };
 }
 
+describe('start-up failures from the task list', () => {
+  const noop = (): Promise<void> => Promise.resolve();
+
+  it('exits 1 naming a task that is registered twice, before touching the database', async () => {
+    const run = io({ tasks: [{ name: 'purge', run: noop }, { name: 'purge', run: noop }] });
+    const result = await start({ ...DATABASE_ENV }, run.io);
+    expect(result.exitCode).toBe(1);
+    expect(run.errors.join('')).toBe('invalid configuration: task purge registered twice\n');
+  });
+
+  it('exits 1 naming a task whose schedule is not a cron expression', async () => {
+    const run = io({ tasks: [{ name: 'expire', run: noop, schedule: 'sometimes' }] });
+    const result = await start({ ...DATABASE_ENV }, run.io);
+    expect(result.exitCode).toBe(1);
+    expect(run.errors.join('')).toBe('invalid configuration: task expire has a schedule that is not a valid cron expression\n');
+  });
+});
+
 describe('start-up failures', () => {
   it('exits 1 naming DATABASE_URL when it is not set', async () => {
     const run = io();

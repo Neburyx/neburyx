@@ -53,3 +53,11 @@ Postgres and every migration it ships has been applied, and 503 with `"status": 
 after 2 seconds. A response never carries a connection string, host, user or file name. The API sees which
 migrations are applied through a function that `neburyx migrate` creates and grants to the app role; the
 migration history tables stay closed to it.
+
+**Jobs.** Background tasks run inside the API process, on graphile-worker and the same Postgres. The tasks the API
+registers are listed in `src/jobs/tasks.ts` (none yet); each has a name, a handler and an optional cron
+schedule. With no task registered the API opens no queue connection. On shutdown the runner stops taking
+jobs and waits for the running one within the API's shutdown limit. A failed job is retried by
+graphile-worker's defaults; the API's log names the failed task and never the job's payload or error text.
+Two tasks with the same name, or a schedule that is not a cron expression, stop start-up with a message
+naming the task.

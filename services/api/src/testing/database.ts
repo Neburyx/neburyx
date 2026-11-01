@@ -21,11 +21,11 @@ export function removeFixtureFolders(): void {
   for (const folder of folders) rmSync(folder, { recursive: true, force: true });
 }
 
-export async function rows(url: string, query: string): Promise<readonly Record<string, unknown>[]> {
+export async function rows(url: string, query: string, parameters: readonly unknown[] = []): Promise<readonly Record<string, unknown>[]> {
   const client = new pg.Client({ connectionString: url });
   await client.connect();
   try {
-    return (await client.query(query)).rows;
+    return (await client.query(query, [...parameters])).rows;
   } finally {
     await client.end();
   }

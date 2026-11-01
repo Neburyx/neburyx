@@ -11,12 +11,14 @@ import Fastify, {
 } from 'fastify';
 import { codeForFailure, detailsOf, errorResponse, errorStatus } from './errors.js';
 import type { AppStore } from './app-store.js';
+import type { JobRunner } from './jobs/runner.js';
 import { readinessResponse } from './health/readiness.js';
 
 export interface AppOptions {
   readonly webRoot: string;
   readonly logger: FastifyBaseLogger;
   readonly store: AppStore;
+  readonly jobs?: JobRunner | undefined;
 }
 
 const API_PREFIX = '/v1';
@@ -130,7 +132,13 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
     },
   });
 
+  let stoppingJobs: Promise<void> | undefined;
+  app.addHook('preClose', () => {
+    stoppingJobs = options.jobs?.stop();
+    stoppingJobs?.catch(() => undefined);
+  });
   app.addHook('onClose', async () => {
+    await stoppingJobs;
     await options.store.close();
   });
 

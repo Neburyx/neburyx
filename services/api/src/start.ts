@@ -7,6 +7,8 @@ import { ConfigError, parseConfig } from './config.js';
 import { isInContainer, warnIfExposed } from './exposure.js';
 import { IdentityStartError } from './identity/errors.js';
 import { createAppStore, type AppStore } from './app-store.js';
+import { startJobRunner, type JobRunner } from './jobs/runner.js';
+import { registeredTasks, TaskConfigError, validateTasks, type Task } from './jobs/tasks.js';
 
 const SHIPPED_MIGRATIONS = fileURLToPath(new URL('../migrations', import.meta.url));
 
@@ -17,6 +19,7 @@ export interface StartIo {
   readonly portOverride?: number;
   readonly openStore?: (url: string, onConnectionError: () => void, migrationsDirectory: string) => AppStore;
   readonly migrationsDirectory?: string;
+  readonly tasks?: readonly Task[];
   readonly fileExists?: (path: string) => boolean;
 }
 
@@ -63,7 +66,17 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
     return { exitCode: 1 };
   }
 
+  const tasks = io.tasks ?? registeredTasks;
+  try {
+    validateTasks(tasks);
+  } catch (error) {
+    if (!(error instanceof TaskConfigError)) throw error;
+    io.stderr.write(`${error.message}\n`);
+    return { exitCode: 1 };
+  }
+
   let store: AppStore | undefined;
+  let jobs: JobRunner | undefined;
   let app: FastifyInstance | undefined;
   try {
     const openStore = io.openStore ?? ((url, report, directory) => createAppStore(url, report, { migrationsDirectory: directory }));
@@ -73,14 +86,23 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
       io.migrationsDirectory ?? SHIPPED_MIGRATIONS,
     );
     await store.initialize();
+    jobs = await startJobRunner(
+      config.databaseUrl,
+      tasks,
+      io.logger,
+      () => io.logger.warn({ event: 'database.connection_error' }, 'database connection error'),
+    );
     warnIfExposed(io.logger, config.host, isInContainer(env, io.fileExists ?? existsSync));
-    app = await buildApp({ webRoot: config.webRoot, logger: io.logger, store });
+    app = await buildApp({ webRoot: config.webRoot, logger: io.logger, store, jobs });
     await app.listen({ host: config.host, port: io.portOverride ?? config.port });
     return { exitCode: 0, app };
   } catch (error) {
     io.stderr.write(`${error instanceof IdentityStartError ? error.message : describeStartFailure(error)}\n`);
     if (app) await app.close();
-    else await store?.close();
+    else {
+      await jobs?.stop();
+      await store?.close();
+    }
     return { exitCode: 1 };
   }
 }

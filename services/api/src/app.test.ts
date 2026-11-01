@@ -3,6 +3,7 @@ import pino from 'pino';
 import { afterAll, describe, expect, it } from 'vitest';
 import { buildApp } from './app.js';
 import { APP_JS, INDEX_HTML, makeWebRoot, V1_FILE } from './testing/web-root.js';
+import { connect } from 'node:net';
 import { LOCAL_IDENTITY, memoryAppStore } from './testing/app-store.js';
 
 const webRoot = makeWebRoot();
@@ -122,5 +123,47 @@ describe('GET /readyz', () => {
   it.each(['POST', 'PUT', 'PATCH', 'DELETE'] as const)('answers %s like any other unmatched path', async (method) => {
     const response = await (await app()).inject({ method, url: '/readyz' });
     expect(response.statusCode).toBe(404);
+  });
+});
+
+describe('closing the app', () => {
+  it('stops the job runner as soon as closing begins, while a request is still being answered, and before the store closes', async () => {
+    const order: string[] = [];
+    let requestEntered: () => void = () => undefined;
+    const entered = new Promise<void>((resolve) => (requestEntered = resolve));
+    let runnerStopping: () => void = () => undefined;
+    const stopping = new Promise<void>((resolve) => (runnerStopping = resolve));
+    const store = {
+      ...memoryAppStore(),
+      current: () => {
+        requestEntered();
+        return new Promise<never>(() => undefined);
+      },
+      close: () => Promise.resolve(void order.push('store closed')),
+    };
+    const jobs = {
+      stop: () => {
+        order.push('jobs stopped');
+        runnerStopping();
+        return Promise.resolve();
+      },
+    };
+    const server = await buildApp({ webRoot, logger: pino({ level: 'silent' }), store, jobs });
+    await server.listen({ host: '127.0.0.1', port: 0 });
+    const address = server.server.address();
+    if (address === null || typeof address === 'string') throw new Error('no port');
+    const socket = connect(address.port, '127.0.0.1');
+    socket.on('error', () => undefined);
+    await new Promise<void>((resolve) => socket.once('connect', resolve));
+    socket.write('GET /v1/me HTTP/1.1\r\nHost: localhost\r\n\r\n');
+    await entered;
+
+    const closing = server.close();
+    await stopping;
+    expect(order).toEqual(['jobs stopped']);
+    server.server.closeAllConnections();
+    await closing;
+    expect(order).toEqual(['jobs stopped', 'store closed']);
+    socket.destroy();
   });
 });
