@@ -3,19 +3,17 @@ import { communitySeams } from '../seams/community-seams.js';
 import type { Principal, Seams } from '../seams/seams.js';
 import { DEFAULT_BUDGETS } from '../gate/budgets.js';
 import { createGate } from '../gate/gate.js';
+import type { GateDeps } from '../gate/deps.js';
+import type { ExecuteCall, ExecuteOutcome, ReadExecutor } from '../gate/executor.js';
 import type {
   Budgets,
   ElementRef,
-  ExecuteCall,
-  ExecuteOutcome,
   Gate,
-  GateDeps,
   GateObserver,
   GateRequest,
   GateStage,
   Item,
   Params,
-  ReadExecutor,
   Row,
   Template,
   TemplateCatalog,

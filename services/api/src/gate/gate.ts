@@ -4,7 +4,8 @@ import { auditResultFor, FALLBACK_AUDIT_ACTION } from './audit.js';
 import { authorizeRequest } from './authorize.js';
 import { executeRead } from './execute.js';
 import { exhaustive } from './exhaustive.js';
-import type { Gate, GateContext, GateDeps, GatePage, GateRequest, GateStage } from './types.js';
+import type { GateDeps } from './deps.js';
+import type { Gate, GateContext, GatePage, GateRequest, GateStage } from './types.js';
 import { findTemplate, validateRequest } from './validate.js';
 
 interface Progress {

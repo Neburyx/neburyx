@@ -1,7 +1,8 @@
 import { AppError } from '../errors.js';
 import type { Coordinator, ReadLease } from '../seams/seams.js';
 import { exhaustive } from './exhaustive.js';
-import type { Clock, GateContext, GateLogger, Params, ReadExecutor, Row, Template } from './types.js';
+import type { ReadExecutor } from './executor.js';
+import type { Clock, GateContext, GateLogger, Params, Row, Template } from './types.js';
 
 export interface ExecuteDeps {
   readonly coordinator: Coordinator;

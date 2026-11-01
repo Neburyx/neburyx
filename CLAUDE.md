@@ -37,7 +37,7 @@ safe on very high-degree nodes. The repo is **pre-release**: the build tooling, 
 1. **Read-only** access to the customer's Neo4j. No write queries, ever.
 2. **One investigation per source.** Never combine sources silently.
 3. **All source reads go through one gate**: resolve context, validate, authorize, execute, normalize,
-   redact, audit. No code path reaches the database around it.
+   redact, audit. No code path reaches the database around it. An architecture check enforces it ([docs/architecture-checks.md](docs/architecture-checks.md)).
 4. **No arbitrary query text reaches Neo4j.** Queries come from fixed, parameterised templates. Never
    build Cypher by concatenating user input.
 5. **Never fetch a full neighborhood.** Expansion is paged and bounded. Counts are labelled exact,

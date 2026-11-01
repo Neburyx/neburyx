@@ -1,5 +1,5 @@
 import type { ZodType } from 'zod';
-import type { Principal, Seams } from '../seams/seams.js';
+import type { Principal } from '../seams/seams.js';
 
 export const GATE_STAGES = ['resolve', 'validate', 'authorize', 'execute', 'normalize', 'redact', 'audit'] as const;
 export type GateStage = (typeof GATE_STAGES)[number];
@@ -52,28 +52,6 @@ export interface GateContext {
   readonly deadlineAt: number;
 }
 
-export interface ExecuteCall {
-  readonly sourceId: string;
-  readonly templateId: string;
-  readonly templateVersion: string;
-  readonly cypher: string;
-  readonly parameters: Params;
-  readonly accessMode: 'READ';
-  readonly timeoutMs: number;
-  readonly rowLimit: number;
-  readonly deadlineAt: number;
-  readonly traceId: string;
-}
-
-export type ExecuteOutcome =
-  | { readonly status: 'rows'; readonly rows: readonly Row[] }
-  | { readonly status: 'timeout' }
-  | { readonly status: 'unavailable' };
-
-export interface ReadExecutor {
-  execute(call: ExecuteCall): Promise<ExecuteOutcome>;
-}
-
 export interface GatePage {
   readonly items: readonly Item[];
   readonly hasMore: boolean;
@@ -88,17 +66,6 @@ export interface GateLogger {
 }
 
 export type Clock = () => number;
-
-export interface GateDeps {
-  readonly seams: Pick<Seams, 'policy' | 'coordinator' | 'audit'>;
-  readonly catalog: TemplateCatalog;
-  readonly executor: ReadExecutor;
-  readonly budgetsFor: (sourceId: string) => Budgets;
-  readonly redact: (items: readonly Item[], context: GateContext) => readonly Item[];
-  readonly clock: Clock;
-  readonly logger: GateLogger;
-  readonly observer?: GateObserver | undefined;
-}
 
 export interface Gate {
   run(request: GateRequest): Promise<GatePage>;
