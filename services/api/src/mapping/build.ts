@@ -40,6 +40,17 @@ function unique(values: readonly string[]): string[] {
   return [...new Set(values)];
 }
 
+export function defaultKeyProperties(
+  stableId: string,
+  search: readonly string[],
+  filterable: readonly string[],
+  pii: readonly string[],
+): string[] {
+  return unique([stableId, ...search, ...filterable])
+    .filter((property) => !pii.includes(property))
+    .slice(0, MAX_DEFAULT_KEY_PROPERTIES);
+}
+
 function parseTitle(title: string): { readonly properties: string[] } | { readonly problem: string } {
   const properties: string[] = [];
   for (const match of title.matchAll(TITLE_PLACEHOLDER)) {
@@ -63,9 +74,7 @@ function buildEntity(raw: RawEntity, path: readonly (string | number)[], report:
   if ('problem' in parsedTitle) report([...path, 'title'], parsedTitle.problem);
   const titleProperties = 'properties' in parsedTitle ? parsedTitle.properties : [];
 
-  const defaultKeys = unique([raw.stable_id, ...search, ...filterable])
-    .filter((property) => !pii.includes(property))
-    .slice(0, MAX_DEFAULT_KEY_PROPERTIES);
+  const defaultKeys = defaultKeyProperties(raw.stable_id, search, filterable, pii);
   return {
     type: raw.type,
     label: raw.label,

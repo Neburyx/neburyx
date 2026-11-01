@@ -162,7 +162,7 @@ describe('hostile keys', () => {
   ].join('\n');
 
   it('refuses a map value that is not text, so a hostile label never becomes an object', () => {
-    expect(() => parseMapping(`${fileOf(baseSource())}${presets}`, 'neburyx.yaml')).toThrow('must be a map of non-empty text values');
+    expect(() => parseMapping(`${fileOf(baseSource())}${presets}`, 'neburyx.yaml')).toThrow('must be a map of non-empty text keys and values');
   });
 
   it('keeps __proto__, constructor and prototype as own data on null-prototype objects and pollutes nothing', () => {

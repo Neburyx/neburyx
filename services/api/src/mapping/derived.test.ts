@@ -99,6 +99,11 @@ describe('pattern presets', () => {
     expect(other?.configHash).not.toBe(parseMapping(labelled, 'neburyx.yaml').sources[0]?.configHash);
   });
 
+  it('refuses a label or a bind entry whose key is empty', () => {
+    expectRefused(withPresets({ ...sharedPreset, labels: { '': 'Start' } }), 'sources[0].patterns[0].labels', 'must be a map');
+    expectRefused(withPresets({ ...sharedPreset, bind: { ...sharedPreset.bind, '': 'node_a' } }), 'sources[0].patterns[0].bind', 'must be a map');
+  });
+
   it('refuses bind or labels that are not maps of text', () => {
     expectRefused(withPresets({ ...sharedPreset, labels: ['x'] }), 'sources[0].patterns[0].labels', 'must be a map');
     expectRefused(withPresets({ ...sharedPreset, bind: { ...sharedPreset.bind, via: '' } }), 'sources[0].patterns[0].bind', 'must be a map');

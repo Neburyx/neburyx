@@ -36,6 +36,10 @@ const METHODS = [
   ['trace', 'TRACE'],
 ] as const;
 
+const PRODUCT_EXAMPLES: Readonly<Record<string, OperationExample>> = {
+  'GET /v1/sources/{id}/profile': { url: '/v1/sources/demo/profile' },
+};
+
 const PATH_ITEM_MEMBERS = new Set(['summary', 'description', 'servers', 'parameters']);
 
 const operationSchema = z.object({ responses: z.record(z.string(), z.unknown()) });
@@ -177,7 +181,7 @@ export async function checkOperations(
         continue;
       }
       documented.add(`${httpMethod} ${path.replaceAll(/\{(\w+)\}/g, ':$1')}`);
-      const example = examples[route] ?? (path.includes('{') ? undefined : { url: path });
+      const example = examples[route] ?? PRODUCT_EXAMPLES[route] ?? (path.includes('{') ? undefined : { url: path });
       if (example === undefined) {
         failures.push({ route, problem: 'the operation has no example request' });
         continue;

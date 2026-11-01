@@ -101,11 +101,11 @@ function isStringMap(value: unknown): value is Readonly<Record<string, string>> 
   if (Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null) return false;
   return Object.getOwnPropertyNames(value).every((key) => {
     const member: unknown = Object.getOwnPropertyDescriptor(value, key)?.value;
-    return typeof member === 'string' && member.length > 0;
+    return key.length > 0 && typeof member === 'string' && member.length > 0;
   });
 }
 
-const stringMap = z.custom<Readonly<Record<string, string>>>(isStringMap, { message: 'must be a map of non-empty text values' });
+const stringMap = z.custom<Readonly<Record<string, string>>>(isStringMap, { message: 'must be a map of non-empty text keys and values' });
 
 const presetSchema = z.strictObject({
   id: name,

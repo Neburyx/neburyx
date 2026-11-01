@@ -22,7 +22,7 @@ export function baseSource(overrides: Json = {}): Json {
 }
 
 export function fileOf(...sources: Json[]): string {
-  return stringify({ sources }, { aliasDuplicateObjects: false });
+  return stringify({ sources }, { aliasDuplicateObjects: false, blockQuote: false });
 }
 
 const MARKER = 'SUPPLIED_MARKER';

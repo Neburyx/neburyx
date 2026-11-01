@@ -16,3 +16,5 @@ export { ICON_KEYS, PRESET_TEMPLATES, iconKeySchema, presetTemplateSchema } from
 export type { IconKey, PresetTemplate } from './mapping.js';
 export { SOURCE_STATES, mappingSummarySchema, sourceStateSchema, sourceSummarySchema, sourcesResponseSchema } from './sources.js';
 export type { SourceState, SourceSummary, SourcesResponse } from './sources.js';
+export { BIND_KEYS, derivedRuleProfileSchema, entityTypeProfileSchema, presetProfileSchema, relationshipTypeProfileSchema, sourceProfileSchema } from './profile.js';
+export type { SourceProfile } from './profile.js';

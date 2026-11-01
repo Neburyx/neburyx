@@ -6,8 +6,8 @@ describe('buildOpenApiDocument', () => {
     const document = buildOpenApiDocument();
     expect(document.openapi).toBe('3.1.0');
     expect(document.info.title).toBe('Neburyx API');
-    expect(Object.keys(document.paths)).toEqual(['/healthz', '/readyz', '/v1/me', '/v1/sources']);
-    expect(Object.keys(document.components.schemas)).toEqual(['ErrorResponse', 'HealthResponse', 'MeResponse', 'ReadyResponse', 'SourcesResponse']);
+    expect(Object.keys(document.paths)).toEqual(['/healthz', '/readyz', '/v1/me', '/v1/sources/{id}/profile', '/v1/sources']);
+    expect(Object.keys(document.components.schemas)).toEqual(['ErrorResponse', 'HealthResponse', 'MeResponse', 'ReadyResponse', 'SourceProfile', 'SourcesResponse']);
     expect(document.components.schemas.ErrorResponse).not.toHaveProperty('$schema');
     expect(document.components.schemas.MeResponse).not.toHaveProperty('$schema');
   });

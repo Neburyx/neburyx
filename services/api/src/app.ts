@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Socket } from 'node:net';
 import fastifyStatic from '@fastify/static';
-import { type ErrorCode, healthResponseSchema, meResponseSchema, readyResponseSchema, sourcesResponseSchema } from '@neburyx/contracts';
+import { type ErrorCode, healthResponseSchema, meResponseSchema, readyResponseSchema, sourceProfileSchema, sourcesResponseSchema } from '@neburyx/contracts';
 import { z } from 'zod';
 import Fastify, {
   type FastifyBaseLogger,
@@ -14,6 +14,8 @@ import { AppError, codeForFailure, detailsOf, errorResponse, errorStatus } from 
 import type { AppStore } from './app-store.js';
 import type { JobRunner } from './jobs/runner.js';
 import type { MappingModel } from './mapping/model.js';
+import { buildSourceProfile } from './registry/profile.js';
+import { matchesEntityTag } from './registry/etag.js';
 import { summariesOf } from './registry/summary.js';
 import { readinessResponse } from './health/readiness.js';
 import { communitySeams } from './seams/community-seams.js';
@@ -31,6 +33,7 @@ export interface AppOptions {
 
 const API_PREFIX = '/v1';
 const noQuerySchema = z.strictObject({});
+const profileParamsSchema = z.strictObject({ id: z.string() });
 const PROBE_PATHS: ReadonlySet<string> = new Set(['/healthz', '/readyz']);
 const TRACE_HEADER = 'x-trace-id';
 const UNMATCHED_ROUTE = 'unmatched';
@@ -239,6 +242,17 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
     if (!noQuerySchema.safeParse(request.query).success) throw new AppError('INVALID_REQUEST');
     const rows = await options.store.listSources();
     return sourcesResponseSchema.parse({ items: summariesOf(rows, mapping), nextCursor: null });
+  });
+
+  app.get('/v1/sources/:id/profile', { exposeHeadRoute: false, config: { permission: 'principal' } }, async (request, reply) => {
+    if (!noQuerySchema.safeParse(request.query).success) throw new AppError('INVALID_REQUEST');
+    const params = profileParamsSchema.safeParse(request.params);
+    const source = params.success ? mapping.sources.find((candidate) => candidate.id === params.data.id) : undefined;
+    if (source === undefined) throw new AppError('NOT_FOUND');
+    const tag = `"${source.configHash}"`;
+    reply.header('etag', tag);
+    if (matchesEntityTag(request.headers['if-none-match'], tag)) return reply.code(304).send();
+    return sourceProfileSchema.parse(buildSourceProfile(source));
   });
 
   appSeams.set(app, options.seams ?? communitySeams());

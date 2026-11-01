@@ -7,6 +7,7 @@ import { healthResponseSchema } from './health.js';
 import { meResponseSchema } from './me.js';
 import { readyResponseSchema } from './ready.js';
 import { buildOpenApiDocument } from './openapi.js';
+import { sourceProfileSchema } from './profile.js';
 import { sourcesResponseSchema } from './sources.js';
 
 const committed: unknown = JSON.parse(readFileSync(fileURLToPath(new URL('../openapi.json', import.meta.url)), 'utf8'));
@@ -66,6 +67,26 @@ describe('the committed packages/contracts/openapi.json', () => {
     });
     expect(JSON.stringify(operation)).toContain('not paged');
     expect(JSON.stringify(operation)).toContain('exact counts of configured definitions');
+  });
+
+  it('differs from a document built from a changed GET /v1/sources/{id}/profile schema', () => {
+    expect(buildOpenApiDocument(undefined, undefined, undefined, undefined, undefined, sourceProfileSchema.extend({ extra: z.string() }))).not.toEqual(committed);
+  });
+
+  it('lists GET /v1/sources/{id}/profile with the id parameter, the ETag header, 200, 304, 400 and 404', () => {
+    const operation = buildOpenApiDocument().paths['/v1/sources/{id}/profile'];
+    expect(operation).toMatchObject({
+      get: {
+        parameters: [{ name: 'id', in: 'path', required: true }, { name: 'If-None-Match', in: 'header', required: false }],
+        responses: {
+          '200': { headers: { ETag: {} }, content: { 'application/json': { schema: { $ref: '#/components/schemas/SourceProfile' } } } },
+          '304': { headers: { ETag: {} } },
+          '400': { content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } } },
+          '404': { content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } } },
+        },
+      },
+    });
+    expect(JSON.stringify(operation)).not.toContain('"500"');
   });
 
   it('equals the generated document', () => {

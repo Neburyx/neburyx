@@ -3,6 +3,7 @@ import { errorResponseSchema } from './error-response.js';
 import { healthResponseSchema } from './health.js';
 import { meResponseSchema } from './me.js';
 import { readyResponseSchema } from './ready.js';
+import { sourceProfileSchema } from './profile.js';
 import { sourcesResponseSchema } from './sources.js';
 
 const API_TITLE = 'Neburyx API';
@@ -12,7 +13,7 @@ export interface OpenApiDocument {
   readonly openapi: string;
   readonly info: { readonly title: string; readonly version: string };
   readonly paths: Readonly<Record<string, unknown>>;
-  readonly components: { readonly schemas: { readonly ErrorResponse: Record<string, unknown>; readonly HealthResponse: Record<string, unknown>; readonly MeResponse: Record<string, unknown>; readonly ReadyResponse: Record<string, unknown>; readonly SourcesResponse: Record<string, unknown> } };
+  readonly components: { readonly schemas: { readonly ErrorResponse: Record<string, unknown>; readonly HealthResponse: Record<string, unknown>; readonly MeResponse: Record<string, unknown>; readonly ReadyResponse: Record<string, unknown>; readonly SourceProfile: Record<string, unknown>; readonly SourcesResponse: Record<string, unknown> } };
 }
 
 function schemaJson(schema: z.ZodType): Record<string, unknown> {
@@ -30,6 +31,7 @@ export function buildOpenApiDocument(
   healthResponse: z.ZodType = healthResponseSchema,
   readyResponse: z.ZodType = readyResponseSchema,
   sourcesResponse: z.ZodType = sourcesResponseSchema,
+  sourceProfile: z.ZodType = sourceProfileSchema,
 ): OpenApiDocument {
   return {
     openapi: '3.1.0',
@@ -62,6 +64,31 @@ export function buildOpenApiDocument(
           },
         },
       },
+      '/v1/sources/{id}/profile': {
+        get: {
+          operationId: 'getSourceProfile',
+          summary: "A source's display model, built from its validated mapping",
+          description:
+            'Holds the entity and relationship types, icons, titles, key properties, searchable, filterable and personal-data properties, derived rules, pattern presets, the vocabulary and a read-only mapping excerpt. It never holds the address, the database, credentials, budgets or link templates. The ETag is the source\'s mapping hash: send it back in If-None-Match to get 304 until the mapping changes.',
+          parameters: [
+            { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+            { name: 'If-None-Match', in: 'header', required: false, description: 'Entity tags from an earlier ETag, or *', schema: { type: 'string' } },
+          ],
+          responses: {
+            '200': {
+              description: 'The profile',
+              headers: { ETag: { description: "The source's mapping hash as a strong tag", schema: { type: 'string' } } },
+              content: jsonBody('SourceProfile'),
+            },
+            '304': {
+              description: 'The profile has not changed since the tag in If-None-Match',
+              headers: { ETag: { description: "The source's mapping hash as a strong tag", schema: { type: 'string' } } },
+            },
+            '400': { description: 'A query parameter was sent, or the URL is malformed', content: jsonBody('ErrorResponse') },
+            '404': { description: 'No configured source has this id', content: jsonBody('ErrorResponse') },
+          },
+        },
+      },
       '/v1/sources': {
         get: {
           operationId: 'listSources',
@@ -77,7 +104,7 @@ export function buildOpenApiDocument(
       },
     },
     components: {
-      schemas: { ErrorResponse: schemaJson(errorResponse), HealthResponse: schemaJson(healthResponse), MeResponse: schemaJson(meResponse), ReadyResponse: schemaJson(readyResponse), SourcesResponse: schemaJson(sourcesResponse) },
+      schemas: { ErrorResponse: schemaJson(errorResponse), HealthResponse: schemaJson(healthResponse), MeResponse: schemaJson(meResponse), ReadyResponse: schemaJson(readyResponse), SourceProfile: schemaJson(sourceProfile), SourcesResponse: schemaJson(sourcesResponse) },
     },
   };
 }

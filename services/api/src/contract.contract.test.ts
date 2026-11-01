@@ -7,12 +7,14 @@ import { loadCommittedDocument, parseDocument, validatorFor } from './testing/do
 import { registerErrorRoutes } from './testing/error-routes.js';
 import { makeWebRoot } from './testing/web-root.js';
 import { memoryAppStore } from './testing/app-store.js';
+import { parseMapping } from './mapping/load.js';
+import { baseSource, fileOf } from './testing/mapping.js';
 
 const webRoot = makeWebRoot();
 afterAll(() => rmSync(webRoot, { recursive: true, force: true }));
 
 async function app(): ReturnType<typeof buildApp> {
-  return buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store: memoryAppStore() });
+  return buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store: memoryAppStore(), mapping: parseMapping(fileOf(baseSource({ id: 'demo' })), 'neburyx.yaml') });
 }
 
 const committed = loadCommittedDocument();
@@ -24,6 +26,7 @@ function fixtureDocument(extraPaths: Record<string, unknown>): ReturnType<typeof
       '/readyz': committed.paths['/readyz'],
       '/v1/me': committed.paths['/v1/me'],
       '/v1/sources': committed.paths['/v1/sources'],
+      '/v1/sources/{id}/profile': committed.paths['/v1/sources/{id}/profile'],
       '/v1/test/thing': {
         get: {
           responses: {
@@ -46,6 +49,7 @@ function fixtureDocument(extraPaths: Record<string, unknown>): ReturnType<typeof
         MeResponse: committed.components.schemas['MeResponse'],
         ReadyResponse: committed.components.schemas['ReadyResponse'],
         SourcesResponse: committed.components.schemas['SourcesResponse'],
+        SourceProfile: committed.components.schemas['SourceProfile'],
         Thing: { type: 'object', required: ['name'], properties: { name: { type: 'string' } }, additionalProperties: false },
       },
     },
@@ -315,7 +319,7 @@ describe('a document the check cannot trust', () => {
       instance.get('/v1/test/from-plugin', async () => ({ name: 'x' }));
     });
     const empty = parseDocument({
-      paths: { '/healthz': committed.paths['/healthz'], '/readyz': committed.paths['/readyz'], '/v1/me': committed.paths['/v1/me'], '/v1/sources': committed.paths['/v1/sources'] },
+      paths: { '/healthz': committed.paths['/healthz'], '/readyz': committed.paths['/readyz'], '/v1/me': committed.paths['/v1/me'], '/v1/sources': committed.paths['/v1/sources'], '/v1/sources/{id}/profile': committed.paths['/v1/sources/{id}/profile'] },
       components: {
         schemas: {
           ErrorResponse: committed.components.schemas['ErrorResponse'],
@@ -323,6 +327,7 @@ describe('a document the check cannot trust', () => {
           MeResponse: committed.components.schemas['MeResponse'],
           ReadyResponse: committed.components.schemas['ReadyResponse'],
           SourcesResponse: committed.components.schemas['SourcesResponse'],
+          SourceProfile: committed.components.schemas['SourceProfile'],
         },
       },
     });
@@ -392,6 +397,9 @@ describe('the running API against the committed openapi.json', () => {
   const productionCases: readonly ErrorCase[] = [
     { method: 'GET', url: '/v1/anything' },
     { method: 'GET', url: '/v1/entities/ACC-12345/%zz' },
+    { method: 'GET', url: '/v1/sources/nope/profile' },
+    { method: 'GET', url: '/v1/sources/%ZZ/profile' },
+    { method: 'GET', url: '/v1/sources/demo/profile?limit=1' },
     { method: 'POST', url: '/v1/anything', payload: '{}', headers: { 'content-type': 'application/json' } },
     { raw: 'GARBAGE\r\n\r\n' },
     { raw: 'POST /v1/anything HTTP/1.1\r\nhost: x\r\ncontent-type: application/json\r\ntransfer-encoding: chunked\r\n\r\nZZ\r\n' },
