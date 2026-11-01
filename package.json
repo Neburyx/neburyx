@@ -11,7 +11,8 @@
     "typecheck": "pnpm --filter @neburyx/contracts build && pnpm -r typecheck",
     "lint": "eslint . --max-warnings 0",
     "test": "pnpm --filter @neburyx/contracts build && pnpm -r test",
-    "test:contract": "pnpm --filter @neburyx/contracts build && pnpm -r --if-present test:contract"
+    "test:contract": "pnpm --filter @neburyx/contracts build && pnpm -r --if-present test:contract",
+    "test:integration": "pnpm --filter @neburyx/contracts build && pnpm --filter @neburyx/api build && pnpm --filter @neburyx/api test:integration"
   },
   "devDependencies": {
     "eslint": "10.14.0",

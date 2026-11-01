@@ -22,3 +22,10 @@ code (and optional `details` with the fields that code allows).
 **Tracing and logs.** Every response carries an `X-Trace-Id` header, equal to `traceId` in an error
 body. Logs are JSON, carry the same ID, and hold no request data: no query string, body, headers,
 path values or error text.
+
+**Database.** `neburyx migrate` (built to `dist/cli.js`) creates or upgrades the Postgres database from
+the plain SQL files in `migrations/` and installs the job queue's tables. It takes the migration
+role's connection string in `DATABASE_MIGRATION_URL` and the name of the role the API will use in
+`DATABASE_APP_ROLE`, which it grants ordinary read and write rights on the tables and nothing
+structural. Several copies can run at once; they take turns. See `migrations/README.md` for how to
+add a migration. The API itself never reads `DATABASE_MIGRATION_URL`.

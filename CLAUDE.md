@@ -63,6 +63,7 @@ Node 24 LTS (`.nvmrc`; with nvm, `nvm use`) and pnpm through Corepack, at the ve
 | Lint | `pnpm lint` |
 | Unit tests | `pnpm test` |
 | Contract test | `pnpm test:contract` |
+| Integration tests (a Postgres container; needs Docker) | `pnpm test:integration` |
 | Regenerate `packages/contracts/openapi.json` | `pnpm --filter @neburyx/contracts generate` |
 
 To run the API with the built web app (after `pnpm build`):
@@ -71,10 +72,12 @@ To run the API with the built web app (after `pnpm build`):
 NEBURYX_WEB_ROOT=apps/web/dist node services/api/dist/main.js
 ```
 
-It listens on `127.0.0.1:8080` unless `NEBURYX_HOST` and `NEBURYX_PORT` say otherwise, and logs a
+To create or upgrade the database (after `pnpm build`): `DATABASE_MIGRATION_URL=… DATABASE_APP_ROLE=… node services/api/dist/cli.js migrate`.
+
+The API listens on `127.0.0.1:8080` unless `NEBURYX_HOST` and `NEBURYX_PORT` say otherwise, and logs a
 warning if started outside a container on a non-loopback address.
 
-CI runs lint, type-check, unit tests, the contract test and the build as separate jobs (`.github/workflows/ci.yml`). There is no demo
+CI runs lint, type-check, unit tests, the contract test, the integration tests and the build as separate jobs (`.github/workflows/ci.yml`). There is no demo
 environment yet. Add its commands here when it exists.
 
 ## Conventions
