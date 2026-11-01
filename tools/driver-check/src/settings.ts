@@ -1,0 +1,11 @@
+export const NODE_COUNT = 3000;
+export const READ_TIMEOUT_MS = 1000;
+export const CLOSE_TIMEOUT_MS = 20_000;
+export const SETTLE_LIMIT_MS = 30_000;
+export const TAIL_MS = 15_000;
+export const RUN_END_MS = 45_000;
+export const POLL_MS = 500;
+export const POLL_LIMIT_MS = 2000;
+export const PHASE_LIMIT_MS = 60_000;
+export const CLEANUP_LIMIT_MS = 5000;
+export const RUNNING_WAIT_MS = 10_000;

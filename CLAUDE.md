@@ -21,6 +21,7 @@ safe on very high-degree nodes. The repo is **pre-release**: the build tooling, 
 | `deploy/compose` | Community install: image + Postgres, loopback only (see its README) |
 | `deploy/demo` | Demo environment on a synthetic graph |
 | `tools/demo-graph` | Synthetic demo graph generator |
+| `tools/driver-check` | By-hand check of how `neo4j-driver` and Neo4j behave on a transaction timeout and on a close mid-query (see its README) |
 | `docs/` | Public technical documentation |
 
 ## Licensing
@@ -67,6 +68,7 @@ Node 24 LTS (`.nvmrc`; with nvm, `nvm use`) and pnpm through Corepack, at the ve
 | Integration tests (a Postgres container; needs Docker) | `pnpm test:integration` |
 | Image tests (builds the image and runs it; needs Docker, takes minutes) | `pnpm test:image` |
 | Compose tests (brings the Community stack up, upgrades it; needs Docker, takes minutes) | `pnpm test:compose` |
+| Driver timeout check (starts Neo4j containers; needs Docker, takes about ten minutes; not in CI) | `pnpm check:driver` |
 | Regenerate `packages/contracts/openapi.json` | `pnpm --filter @neburyx/contracts generate` |
 
 To run the API with the built web app (after `pnpm build` and `neburyx migrate`; `DATABASE_URL` is the app role's connection string):

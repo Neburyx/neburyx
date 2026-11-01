@@ -14,7 +14,8 @@
     "test:contract": "pnpm --filter @neburyx/contracts build && pnpm -r --if-present test:contract",
     "test:integration": "pnpm --filter @neburyx/contracts build && pnpm --filter @neburyx/api build && pnpm --filter @neburyx/api test:integration",
     "test:image": "pnpm --filter @neburyx/api test:image",
-    "test:compose": "pnpm --filter @neburyx/api test:compose"
+    "test:compose": "pnpm --filter @neburyx/api test:compose",
+    "check:driver": "pnpm --filter @neburyx/driver-check check"
   },
   "devDependencies": {
     "eslint": "10.14.0",
