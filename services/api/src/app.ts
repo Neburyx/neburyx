@@ -13,12 +13,15 @@ import { codeForFailure, detailsOf, errorResponse, errorStatus } from './errors.
 import type { AppStore } from './app-store.js';
 import type { JobRunner } from './jobs/runner.js';
 import { readinessResponse } from './health/readiness.js';
+import { communitySeams } from './seams/community-seams.js';
+import type { Seams } from './seams/seams.js';
 
 export interface AppOptions {
   readonly webRoot: string;
   readonly logger: FastifyBaseLogger;
   readonly store: AppStore;
   readonly jobs?: JobRunner | undefined;
+  readonly seams?: Seams | undefined;
 }
 
 const API_PREFIX = '/v1';
@@ -47,6 +50,14 @@ const apiRoutes = new WeakMap<FastifyInstance, { readonly method: string; readon
 
 export function apiRoutesOf(app: FastifyInstance): readonly { readonly method: string; readonly url: string }[] {
   return apiRoutes.get(app) ?? [];
+}
+
+const appSeams = new WeakMap<FastifyInstance, Seams>();
+
+export function seamsOf(app: FastifyInstance): Seams {
+  const seams = appSeams.get(app);
+  if (!seams) throw new Error('seamsOf was given an app that buildApp did not build');
+  return seams;
 }
 
 export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
@@ -194,6 +205,8 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
   });
 
   app.get('/v1/me', { exposeHeadRoute: false }, async () => meResponseSchema.parse({ ...(await options.store.current()), sources: [] }));
+
+  appSeams.set(app, options.seams ?? communitySeams());
 
   return app;
 }
