@@ -36,6 +36,15 @@ describe('parseConfig', () => {
     );
   });
 
+  it('leaves the mapping path unset by default and resolves it when set', () => {
+    expect(parseConfig({ ...database }, defaults).mappingPath).toBeUndefined();
+    expect(parseConfig({ ...database, NEBURYX_CONFIG: 'conf/neburyx.yaml' }, defaults).mappingPath).toBe(resolve('conf/neburyx.yaml'));
+  });
+
+  it('rejects an empty mapping path naming only the key', () => {
+    expect(() => parseConfig({ ...database, NEBURYX_CONFIG: '' }, defaults)).toThrow('NEBURYX_CONFIG');
+  });
+
   it('defaults to the loopback address and port 8080', () => {
     expect(parseConfig({ ...database }, defaults)).toEqual({ host: '127.0.0.1', port: 8080, webRoot: '/default/web', databaseUrl: DATABASE_URL });
     expect(DEFAULT_HOST).toBe('127.0.0.1');

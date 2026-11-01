@@ -10,6 +10,7 @@ Configuration comes from the environment:
 | `NEBURYX_HOST` | `127.0.0.1` | Address to listen on (an IP address or a host name). A non-loopback address outside a container logs a warning |
 | `NEBURYX_PORT` | `8080` | Port to listen on (1 to 65535) |
 | `NEBURYX_WEB_ROOT` | `apps/web/dist` in the repo | Folder of the built web app; it must hold a readable `index.html` |
+| `NEBURYX_CONFIG` | unset | Path of the `neburyx.yaml` mapping. When set, the file is read and checked at start-up and the server stops with a message naming the problem and its place in the file if it is invalid. The file is a strict subset of YAML 1.2: block or flow mappings, sequences and scalars; plain, single-quoted and double-quoted strings; and comments. Refused, with the line and column and never the value: a directive other than `%YAML 1.2`, tags, anchors, aliases, merge keys, block scalars, keys that are not plain text, duplicate keys, more than one document, and any parser error or warning. When unset, the server starts with no sources |
 | `DATABASE_URL` | required | Postgres connection string of the app role (`postgres://` or `postgresql://`) |
 | `NEBURYX_CONTAINER` | unset | Set to `true` inside a container so the exposure warning is skipped |
 

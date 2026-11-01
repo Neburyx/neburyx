@@ -1,0 +1,243 @@
+import { ICON_KEYS } from '@neburyx/contracts';
+import { describe, expect, it } from 'vitest';
+import { parseMapping } from './load.js';
+import { baseSource, expectRefused, fileOf, firstSource, issuesOf, load, type Json } from '../testing/mapping.js';
+
+const fullEntity = {
+  type: 'node_c',
+  label: 'NodeC',
+  stable_id: 'id',
+  title: 'Item {name}',
+  search: ['name', 'code'],
+  reference: ['ref'],
+  pii: ['name'],
+  filterable: ['status'],
+  display: { icon: 'document', key_properties: ['status', 'amount'], state_property: 'status' },
+};
+
+describe('entity and relationship types as written', () => {
+  it('holds every key of a full entity and relationship', () => {
+    const source = firstSource(
+      load(
+        baseSource({
+          entities: [fullEntity, { type: 'node_d', label: 'NodeD', stable_id: 'key' }],
+          relationships: [
+            {
+              type: 'EVENT',
+              from: 'node_c',
+              to: 'node_d',
+              stable_id: 'eventId',
+              observed_at: 'seenAt',
+              evidence: ['recordId'],
+              filterable: ['kind'],
+            },
+          ],
+        }),
+      ),
+    );
+    expect(source.entities[0]).toMatchObject({
+      title: 'Item {name}',
+      titleProperties: ['name'],
+      titleUsesPii: true,
+      search: ['name', 'code'],
+      reference: ['ref'],
+      pii: ['name'],
+      filterable: ['status'],
+      display: { icon: 'document', keyProperties: ['status', 'amount'], stateProperty: 'status' },
+    });
+    expect(source.relationships[0]).toMatchObject({
+      type: 'EVENT',
+      from: 'node_c',
+      to: 'node_d',
+      stableId: 'eventId',
+      aggregate: false,
+      observedAt: 'seenAt',
+      evidence: ['recordId'],
+      filterable: ['kind'],
+    });
+  });
+
+  it('defaults the title, icon and key properties of an entity that omits them', () => {
+    const entity = {
+      type: 'node_c',
+      label: 'NodeC',
+      stable_id: 'id',
+      search: ['name', 'code'],
+      filterable: ['status'],
+      pii: ['name'],
+    };
+    const [loaded] = firstSource(load(baseSource({ entities: [entity], relationships: undefined }))).entities;
+    expect(loaded).toMatchObject({ title: '{id}', display: { icon: 'generic', keyProperties: ['id', 'code', 'status'] } });
+  });
+
+  it('caps the default key properties at three', () => {
+    const entity = { type: 'node_c', label: 'NodeC', stable_id: 'id', search: ['a', 'b', 'c', 'd'] };
+    const [loaded] = firstSource(load(baseSource({ entities: [entity], relationships: undefined }))).entities;
+    expect(loaded?.display.keyProperties).toEqual(['id', 'a', 'b']);
+  });
+
+  it('records a relationship without a stable ID as an aggregate type', () => {
+    const [relationship] = firstSource(load(baseSource())).relationships;
+    expect(relationship).toMatchObject({ aggregate: true, evidence: [], filterable: [] });
+    expect(relationship?.stableId).toBeUndefined();
+  });
+
+  it('allows a pii property to be searchable', () => {
+    const entity = { type: 'node_c', label: 'NodeC', stable_id: 'id', search: ['name'], pii: ['name'] };
+    expect(() => load(baseSource({ entities: [entity], relationships: undefined }))).not.toThrow();
+  });
+
+  it('marks an entity whose default title is not built from a pii property', () => {
+    const [loaded] = firstSource(load(baseSource())).entities;
+    expect(loaded?.titleUsesPii).toBe(false);
+  });
+});
+
+describe('property names', () => {
+  it.each(['external-id', 'full name', 'Größe', '名前'])('accepts the property name %s as a stable ID, in a title and in a link', (property) => {
+    const entity = { type: 'node_c', label: 'NodeC', stable_id: property, title: `Item {${property}}`, link: `https://records.example.test/items/{${property}}` };
+    const [loaded] = firstSource(load(baseSource({ entities: [entity], relationships: undefined }))).entities;
+    expect(loaded).toMatchObject({ titleProperties: [property], link: { placeholder: property } });
+  });
+
+  it('builds the default title of a hyphenated stable ID', () => {
+    const entity = { type: 'node_c', label: 'NodeC', stable_id: 'external-id' };
+    expect(firstSource(load(baseSource({ entities: [entity], relationships: undefined }))).entities[0]).toMatchObject({ title: '{external-id}', titleProperties: ['external-id'] });
+  });
+});
+
+describe('braces in property names', () => {
+  it.each([
+    ['stable_id', { stable_id: 'a{b' }],
+    ['search', { stable_id: 'id', search: ['a}b'] }],
+    ['filterable', { stable_id: 'id', filterable: ['{x}'] }],
+    ['pii', { stable_id: 'id', pii: ['a{'] }],
+    ['reference', { stable_id: 'id', reference: ['}'] }],
+    ['display.key_properties', { stable_id: 'id', display: { key_properties: ['a{b'] } }],
+    ['display.state_property', { stable_id: 'id', display: { state_property: 'a}b' } }],
+  ])('refuses a brace in %s', (_name, extra: Json) => {
+    const issues = issuesOf(fileOf(baseSource({ entities: [{ type: 'node_c', label: 'NodeC', ...extra }], relationships: undefined })));
+    expect(issues.some((issue) => issue.path.startsWith('sources[0].entities[0]') && issue.reason === 'has an invalid format')).toBe(true);
+  });
+
+  it('refuses a brace in the stop-list property of a derived rule', () => {
+    const rule = { id: 'r', from: 'node_a', to: 'node_a', via: ['LINKS', 'node_b', 'LINKS'], rule_version: 1, stop_list_property: 'a{b' };
+    expectRefused(baseSource({ derived: [rule] }), 'sources[0].derived[0].stop_list_property', 'invalid format');
+  });
+
+  it.each([
+    ['stable_id', { stable_id: 'a{b' }, 'sources[0].relationships[0].stable_id'],
+    ['filterable', { filterable: ['a}b'] }, 'sources[0].relationships[0].filterable[0]'],
+  ])('refuses a brace in the %s of a relationship', (_name, extra: Json, path) => {
+    expectRefused(baseSource({ relationships: [{ type: 'LINKS', from: 'node_a', to: 'node_b', ...extra }] }), path, 'invalid format');
+  });
+
+  it('refuses a brace in relationship and derived-rule property names', () => {
+    expectRefused(baseSource({ relationships: [{ type: 'LINKS', from: 'node_a', to: 'node_b', evidence: ['a{b'] }] }), 'sources[0].relationships[0].evidence[0]', 'invalid format');
+    expectRefused(baseSource({ relationships: [{ type: 'LINKS', from: 'node_a', to: 'node_b', observed_at: 'a}' }] }), 'sources[0].relationships[0].observed_at', 'invalid format');
+  });
+});
+
+describe('icons', () => {
+  it.each(ICON_KEYS)('accepts the icon key %s', (icon) => {
+    const entity = { type: 'node_c', label: 'NodeC', stable_id: 'id', display: { icon } };
+    expect(firstSource(load(baseSource({ entities: [entity], relationships: undefined }))).entities[0]?.display.icon).toBe(icon);
+  });
+
+  it.each([
+    [40, '"' + 'k'.repeat(40) + '"'],
+    [41, '"' + 'k'.repeat(40) + '…"'],
+  ])('quotes an unknown icon of %i characters, cutting it at 40', (length, quoted) => {
+    const entity = { type: 'node_c', label: 'NodeC', stable_id: 'id', display: { icon: 'k'.repeat(length) } };
+    const issue = expectRefused(baseSource({ entities: [entity], relationships: undefined }), 'sources[0].entities[0].display.icon', 'must be one of');
+    expect(issue.reason).toContain(`(got ${quoted})`);
+  });
+
+  it('names the entity path and refuses an icon outside the fixed set', () => {
+    const entity = { type: 'node_c', label: 'NodeC', stable_id: 'id', display: { icon: 'sparkle' } };
+    const issue = expectRefused(baseSource({ entities: [entity], relationships: undefined }), 'sources[0].entities[0].display.icon', 'must be one of', 'source demo, entity node_c');
+    expect(issue.reason).toContain('(got "sparkle")');
+  });
+});
+
+describe('duplicates and references', () => {
+  const entities = [
+    { type: 'node_a', label: 'NodeA', stable_id: 'id' },
+    { type: 'node_a', label: 'NodeAgain', stable_id: 'id' },
+  ];
+
+  it('refuses an entity type that appears twice in one source', () => {
+    expectRefused(baseSource({ entities, relationships: undefined }), 'sources[0].entities[1].type', 'repeats entity type node_a');
+  });
+
+  it('does not mistake different relationships for duplicates when their names join to the same text', () => {
+    const named = [
+      { type: 'node_a', label: 'A', stable_id: 'id' },
+      { type: 'b', label: 'B', stable_id: 'id' },
+      { type: 'a from b', label: 'C', stable_id: 'id' },
+      { type: 'c', label: 'D', stable_id: 'id' },
+    ];
+    const relationships = [
+      { type: 'X', from: 'a from b', to: 'c' },
+      { type: 'X from node_a', from: 'b', to: 'c' },
+    ];
+    expect(firstSource(load(baseSource({ entities: named, relationships }))).relationships).toHaveLength(2);
+  });
+
+  it('refuses a relationship that repeats its type and endpoints', () => {
+    const relationships = [
+      { type: 'LINKS', from: 'node_a', to: 'node_b' },
+      { type: 'LINKS', from: 'node_a', to: 'node_b' },
+    ];
+    expectRefused(baseSource({ relationships }), 'sources[0].relationships[1].type', 'repeats relationship');
+  });
+
+  it('accepts one relationship type between different endpoints', () => {
+    const relationships = [
+      { type: 'LINKS', from: 'node_a', to: 'node_b' },
+      { type: 'LINKS', from: 'node_b', to: 'node_a' },
+    ];
+    expect(firstSource(load(baseSource({ relationships }))).relationships).toHaveLength(2);
+  });
+
+  it('accepts the same entity type and relationship type in two sources', () => {
+    const text = fileOf(baseSource({ id: 'one' }), baseSource({ id: 'two' }));
+    expect(parseMapping(text, 'neburyx.yaml').sources).toHaveLength(2);
+  });
+
+  it('refuses a relationship endpoint that its own source does not map', () => {
+    expectRefused(baseSource({ relationships: [{ type: 'LINKS', from: 'node_a', to: 'missing' }] }), 'sources[0].relationships[0].to', 'names missing', 'source demo, relationship LINKS');
+  });
+
+  it('refuses an endpoint that only another source maps', () => {
+    const other = baseSource({ id: 'other', entities: [{ type: 'only_here', label: 'Only', stable_id: 'id' }], relationships: undefined });
+    const first = baseSource({ relationships: [{ type: 'LINKS', from: 'node_a', to: 'only_here' }] });
+    const issues = issuesOf(fileOf(first, other));
+    expect(issues.some((issue) => issue.path === 'sources[0].relationships[0].to')).toBe(true);
+  });
+});
+
+describe('pii and projection rules', () => {
+  it('refuses a stable ID that is also pii, naming the entity and property', () => {
+    const entity = { type: 'node_c', label: 'NodeC', stable_id: 'id', pii: ['id'] };
+    expectRefused(baseSource({ entities: [entity], relationships: undefined }), 'sources[0].entities[0].pii', 'lists id, which is the stable ID of node_c', 'source demo, entity node_c');
+  });
+
+  it.each([
+    ['an empty placeholder', 'Item {}'],
+    ['an unbalanced placeholder', 'Item {name'],
+    ['a stray brace', 'Item name}'],
+    ['a nested placeholder', 'Item {{name}}'],
+  ])('refuses a title with %s', (_name, title) => {
+    const entity = { type: 'node_c', label: 'NodeC', stable_id: 'id', title };
+    expectRefused(baseSource({ entities: [entity], relationships: undefined }), 'sources[0].entities[0].title', 'placeholder');
+  });
+
+  it.each([
+    ['observed_at', { observed_at: 4 }, 'sources[0].relationships[0].observed_at', 'must be string'],
+    ['evidence entries', { evidence: [4] }, 'sources[0].relationships[0].evidence[0]', 'must be string'],
+    ['an empty evidence entry', { evidence: [''] }, 'sources[0].relationships[0].evidence[0]', 'must not be empty'],
+  ])('refuses %s of the wrong shape', (_name, extra: Json, path, reason) => {
+    expectRefused(baseSource({ relationships: [{ type: 'LINKS', from: 'node_a', to: 'node_b', ...extra }] }), path, reason);
+  });
+});

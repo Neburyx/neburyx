@@ -6,6 +6,8 @@ import { buildApp } from './app.js';
 import { ConfigError, parseConfig } from './config.js';
 import { isInContainer, warnIfExposed } from './exposure.js';
 import { IdentityStartError } from './identity/errors.js';
+import { MappingError } from './mapping/diagnostics.js';
+import { loadMappingFile } from './mapping/load.js';
 import { createAppStore, type AppStore } from './app-store.js';
 import { startJobRunner, type JobRunner } from './jobs/runner.js';
 import { registeredTasks, TaskConfigError, validateTasks, type Task } from './jobs/tasks.js';
@@ -64,6 +66,16 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
   if (!hasReadableIndex(config.webRoot)) {
     io.stderr.write('invalid configuration: NEBURYX_WEB_ROOT has no readable index.html\n');
     return { exitCode: 1 };
+  }
+
+  if (config.mappingPath !== undefined) {
+    try {
+      loadMappingFile(config.mappingPath);
+    } catch (error) {
+      if (!(error instanceof MappingError)) throw error;
+      io.stderr.write(`${error.message}\n`);
+      return { exitCode: 1 };
+    }
   }
 
   const tasks = io.tasks ?? registeredTasks;

@@ -15,7 +15,13 @@ function isValidHost(host: string): boolean {
   return HOSTNAME.test(host);
 }
 
-const keys = { host: 'NEBURYX_HOST', port: 'NEBURYX_PORT', webRoot: 'NEBURYX_WEB_ROOT', databaseUrl: 'DATABASE_URL' } as const;
+const keys = {
+  host: 'NEBURYX_HOST',
+  port: 'NEBURYX_PORT',
+  webRoot: 'NEBURYX_WEB_ROOT',
+  databaseUrl: 'DATABASE_URL',
+  mappingPath: 'NEBURYX_CONFIG',
+} as const;
 
 function isPostgresUrl(value: string): boolean {
   try {
@@ -37,6 +43,7 @@ const configSchema = z.object({
     .pipe(z.number().int().min(1).max(MAX_PORT)),
   webRoot: z.string().min(1).transform((path) => resolve(path)),
   databaseUrl: z.string().refine(isPostgresUrl),
+  mappingPath: z.string().min(1).transform((path) => resolve(path)).optional(),
 });
 
 export type Config = z.infer<typeof configSchema>;
@@ -59,12 +66,13 @@ export function parseConfig(
     port: env[keys.port] ?? String(DEFAULT_PORT),
     webRoot: env[keys.webRoot] ?? defaults.webRoot,
     databaseUrl: env[keys.databaseUrl],
+    mappingPath: env[keys.mappingPath],
   });
   if (result.success) return result.data;
 
   const failed = result.error.issues.flatMap((issue) => {
     const field = issue.path[0];
-    return field === 'host' || field === 'port' || field === 'webRoot' || field === 'databaseUrl' ? [keys[field]] : [];
+    return field === 'host' || field === 'port' || field === 'webRoot' || field === 'databaseUrl' || field === 'mappingPath' ? [keys[field]] : [];
   });
   throw new ConfigError([...new Set(failed)]);
 }

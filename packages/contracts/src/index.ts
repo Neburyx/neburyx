@@ -12,3 +12,5 @@ export { healthResponseSchema } from './health.js';
 export type { HealthResponse } from './health.js';
 export { databaseCheckSchema, migrationsCheckSchema, readyResponseSchema } from './ready.js';
 export type { ReadyChecks, ReadyResponse } from './ready.js';
+export { ICON_KEYS, PRESET_TEMPLATES, iconKeySchema, presetTemplateSchema } from './mapping.js';
+export type { IconKey, PresetTemplate } from './mapping.js';
