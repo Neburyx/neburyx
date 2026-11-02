@@ -1,0 +1,67 @@
+import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { describe, expect, it } from 'vitest';
+import { existsSync } from 'node:fs';
+import { readDefinition } from './definition.js';
+import { writeExport } from './export.js';
+import { generate } from './generate.js';
+import { loadExport } from './load.js';
+import { readMappingSource } from './mapping.js';
+import { listPacks, packFiles } from './packs.js';
+import { ExportError } from './validate.js';
+import { dataFile, scratch } from './testing/export-helpers.js';
+import { recordingDriver } from './testing/recording-driver.js';
+
+const SHIPPED = ['banking-fraud', 'insurance-claims'] as const;
+const packs = listPacks();
+
+function dataBytes(directory: string): Map<string, string> {
+  const files = new Map<string, string>();
+  for (const sub of ['nodes', 'relationships']) for (const name of readdirSync(join(directory, sub)).sort()) files.set(`${sub}/${name}`, readFileSync(join(directory, sub, name), 'utf8'));
+  return files;
+}
+
+describe('the shipped packs', () => {
+  it.each(SHIPPED)('%s is found on disk and has a demo definition', (name) => {
+    expect(packs).toContain(name);
+    expect(existsSync(packFiles(name).definition)).toBe(true);
+  });
+});
+
+describe.each(packs.filter((name) => existsSync(packFiles(name).definition)))('the %s demo definition', (name) => {
+  const files = packFiles(name);
+  const mapping = readMappingSource(files.mapping);
+  const definition = readDefinition(files.definition, mapping);
+
+  it('is valid against its mapping, and every mapped type is generated', () => {
+    expect(definition.entities.map((entity) => entity.type).sort()).toEqual(mapping.entities.map((entity) => entity.type).sort());
+    expect(new Set(definition.blocks.map((block) => block.type))).toEqual(new Set(mapping.relationships.map((relationship) => relationship.type)));
+  });
+
+  it('gives byte-identical data files and manifest for the same seed at full size, and different ones for another seed', () => {
+    const write = (seed: number) => {
+      const directory = join(scratch(), 'export');
+      writeExport(directory, generate(mapping, definition, seed));
+      return directory;
+    };
+    const first = write(definition.seed);
+    const second = write(definition.seed);
+    const other = write(definition.seed + 1);
+    expect(dataBytes(first)).toEqual(dataBytes(second));
+    expect(readFileSync(join(first, 'manifest.json'), 'utf8')).toBe(readFileSync(join(second, 'manifest.json'), 'utf8'));
+    const changed = [...dataBytes(first)].some(([file, text]) => dataBytes(other).get(file) !== text);
+    expect(changed).toBe(true);
+  });
+
+  it('is refused by the loader before it connects when one byte of a data file is altered', async () => {
+    const directory = join(scratch(), 'export');
+    writeExport(directory, generate(mapping, definition, definition.seed));
+    const file = join(directory, dataFile(directory, mapping.entities[0]?.type ?? ''));
+    const text = readFileSync(file, 'utf8');
+    writeFileSync(file, `${text.slice(0, 20)}${text[20] === 'A' ? 'B' : 'A'}${text.slice(21)}`);
+    const { factory, recording } = recordingDriver();
+    const env = { [mapping.usernameEnv]: 'reader', [mapping.passwordEnv]: 'a password value' };
+    await expect(loadExport({ directory, source: mapping, env, reset: false, createDriver: factory })).rejects.toThrow(ExportError);
+    expect(recording.drivers).toBe(0);
+  });
+});

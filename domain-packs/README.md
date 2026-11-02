@@ -13,7 +13,7 @@ A domain pack is a directory of plain YAML and Markdown that describes one kind 
 |---|---|
 | `neburyx.yaml` | A complete mapping file for **one source**: connection address, credentials by reference, entity and relationship types, display settings, derived rules and pattern presets. Run it as it is with `NEBURYX_CONFIG`. |
 | `README.md` | The pack in plain words: what it maps, its presets, and the address and variables it expects. |
-| `demo.yaml` | Only for a pack that has a demo: the definition of its synthetic demo data. Not every pack has one yet. |
+| `demo.yaml` | Only for a pack that has a demo: the definition of its synthetic demo data, built into a graph by `tools/demo-graph`. |
 
 Every pack here describes a **synthetic** graph (`synthetic: true`). The address in each file is a host name on the demo network, and the credentials are the names of environment variables, never values.
 

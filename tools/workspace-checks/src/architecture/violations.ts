@@ -1,4 +1,4 @@
-export type Rule = 'adapter-access' | 'community-imports-ee';
+export type Rule = 'adapter-access' | 'community-imports-ee' | 'demo-graph-isolated';
 
 export interface Violation {
   readonly rule: Rule;

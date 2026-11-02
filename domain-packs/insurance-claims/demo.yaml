@@ -1,0 +1,122 @@
+# Demo dataset for the insurance pack: a small synthetic graph with rings, a shared phone on the stop list, duplicate addresses and gaps. No supernode.
+seed: 20261101
+
+entities:
+  claim:
+    count: 2000
+    properties:
+      claimNumber: { sequence: { prefix: "CL-", width: 6 } }
+      status: { choice: [open, review, settled, denied], weights: [3, 2, 4, 1] }
+      lossType: { choice: [collision, theft, glass, fire, water] }
+      filedOn: { date: { from: "2023-01-01", to: "2026-09-30" } }
+  policy:
+    count: 1500
+    properties:
+      policyNumber: { sequence: { prefix: "PO-", width: 6 } }
+      cover: { choice: [basic, standard, premium] }
+      startedOn: { date: { from: "2019-01-01", to: "2026-06-30" } }
+  claimant:
+    count: 1500
+    properties:
+      claimantId: { sequence: { prefix: "CT-", width: 5 } }
+      fullName: { join: [{ choice: [Ada, Bram, Cleo, Dara, Eli, Faye, Gus, Hana, Ivo, Jun, Kira, Leo, Mara, Nico, Orla, Pia] }, " ", { choice: [Alder, Birch, Cedar, Dunn, Elm, Fenn, Gale, Hale, Ives, Jett, Knox, Lowe, Marsh, Nash, Orr, Park] }] }
+      dateOfBirth: { date: { from: "1945-01-01", to: "2005-12-31" } }
+  vehicle:
+    count: 1200
+    properties:
+      vin: { sequence: { prefix: "VIN-", width: 8 } }
+      make: { choice: [Acme, Borealis, Corvid, Dyno] }
+      model: { choice: [Sedan, Hatch, Van, Truck] }
+      year: { int: { min: 2005, max: 2025 } }
+  repairer:
+    count: 60
+    properties:
+      repairerId: { sequence: { prefix: "RP-", width: 3 } }
+      name: { join: ["Repairer ", { sequence: { width: 3 } }] }
+  address:
+    count: 1400
+    properties:
+      addressId: { sequence: { prefix: "AD-", width: 5 } }
+      line1:
+        byIndex:
+          ranges:
+            - { from: 0, to: 120, rule: { cycle: { values: ["1 Alder Road", "2 Birch Road", "3 Cedar Road", "4 Dunn Road", "5 Elm Road", "6 Fenn Road", "7 Gale Road", "8 Hale Road", "9 Ives Road", "10 Jett Road", "11 Knox Road", "12 Lowe Road", "13 Marsh Road", "14 Nash Road", "15 Orr Road", "16 Park Road", "17 Quill Road", "18 Rowan Road", "19 Sedge Road", "20 Thorn Road", "21 Umber Road", "22 Vale Road", "23 Wren Road", "24 Yew Road", "25 Ash Road", "26 Bay Road", "27 Clay Road", "28 Dale Road", "29 Eaves Road", "30 Fold Road", "31 Glen Road", "32 Heath Road", "33 Isle Road", "34 Kerr Road", "35 Lark Road", "36 Moor Road", "37 Nook Road", "38 Oak Road", "39 Pine Road", "40 Reed Road"], every: 3 } } }
+          default: { join: [{ sequence: { width: 0, start: 1000 } }, " Example Lane"] }
+      city:
+        byIndex:
+          ranges:
+            - { from: 0, to: 120, rule: { cycle: { values: [Northvale, Eastmere, Southford, Westbury], every: 3 } } }
+          default: { choice: [Northvale, Eastmere, Southford, Westbury] }
+  phone:
+    count: 1500
+    properties:
+      number: { sequence: { prefix: "+1-555-", width: 6 } }
+      owner: { join: [{ choice: [Ada, Bram, Cleo, Dara, Eli, Faye, Gus, Hana, Ivo, Jun, Kira, Leo, Mara, Nico, Orla, Pia] }, " ", { choice: [Alder, Birch, Cedar, Dunn, Elm, Fenn, Gale, Hale, Ives, Jett, Knox, Lowe, Marsh, Nash, Orr, Park] }] }
+      isShared: { byIndex: { default: false, ranges: [{ from: 0, to: 1, rule: true }] } }
+
+relationships:
+  - type: UNDER_POLICY
+    from: claim
+    to: policy
+    pattern: random
+    perFrom: { min: 1, max: 1 }
+  - type: FILED_BY
+    from: claim
+    to: claimant
+    pattern: random
+    perFrom: { min: 1, max: 1 }
+    properties:
+      eventId: { sequence: { prefix: "FB-", width: 6 } }
+      filedAt: { datetime: { from: "2023-01-01T00:00:00Z", to: "2026-09-30T23:59:59Z" }, missing: 0.05 }
+      sourceRecordId: { join: ["SRC-FB-", { sequence: { width: 6 } }] }
+  - type: INVOLVES_VEHICLE
+    from: claim
+    to: vehicle
+    pattern: random
+    perFrom: { min: 0, max: 1 }
+  - type: REPAIRED_BY
+    from: claim
+    to: repairer
+    pattern: random
+    perFrom: { min: 1, max: 1 }
+
+  # Addresses: claimants live at random addresses, thirty rings of four share one, and a hundred live at the duplicated ones.
+  - type: LIVES_AT
+    from: claimant
+    to: address
+    pattern: random
+    perFrom: { min: 1, max: 1 }
+    toRange: { start: 300, count: 1100 }
+  - type: LIVES_AT
+    from: claimant
+    to: address
+    pattern: ring
+    groups: 30
+    size: 4
+    fromStart: 100
+    toStart: 200
+  - type: LIVES_AT
+    from: claimant
+    to: address
+    pattern: random
+    perFrom: { min: 1, max: 1 }
+    fromRange: { start: 400, count: 100 }
+    toRange: { start: 0, count: 120 }
+
+  # Phones: claimants reach random phones, thirty rings of four share one, and thirty share one phone on the stop list.
+  - type: REACHED_AT
+    from: claimant
+    to: phone
+    pattern: random
+    perFrom: { min: 1, max: 1 }
+    toRange: { start: 100, count: 1400 }
+    supernodes:
+      - { to: 0, from: { start: 0, count: 30 } }
+  - type: REACHED_AT
+    from: claimant
+    to: phone
+    pattern: ring
+    groups: 30
+    size: 4
+    fromStart: 100
+    toStart: 10

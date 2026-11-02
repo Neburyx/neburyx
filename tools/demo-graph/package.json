@@ -1,0 +1,23 @@
+{
+  "name": "@neburyx/demo-graph",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run --passWithNoTests",
+    "test:neo4j": "vitest run --config vitest.neo4j.config.ts --reporter=verbose",
+    "cli": "pnpm build && node dist/main.js"
+  },
+  "dependencies": {
+    "neo4j-driver": "6.3.0",
+    "yaml": "2.9.1",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@testcontainers/neo4j": "12.2.1",
+    "@types/node": "24.19.2",
+    "typescript": "6.0.3",
+    "vitest": "5.0.5"
+  }
+}

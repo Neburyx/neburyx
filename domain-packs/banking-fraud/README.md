@@ -15,3 +15,5 @@ A mapping for a synthetic graph of bank accounts and the things that connect the
 | Connected accounts | `linked-entities` | Which accounts this account has transferred to |
 
 Each preset gives its parameters a label ("Starting account"). To adapt the pack to your own graph, follow [Start from a pack](../README.md#start-from-a-pack).
+
+**Demo data.** `demo.yaml` describes the synthetic demo graph of this pack: customers, accounts, devices, addresses, transactions and merchants, with three supernodes (of 1,000, 10,000 and 100,000 neighbors), rings of accounts that share a device and an address, devices on the stop list, and some missing timestamps. `tools/demo-graph` builds it into a demo database; see its README.

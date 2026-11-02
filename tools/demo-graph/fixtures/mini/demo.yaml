@@ -1,0 +1,33 @@
+seed: 7
+entities:
+  widget:
+    count: 50
+    properties:
+      widgetId: { sequence: { prefix: "W", width: 4 } }
+      colour: { choice: [red, green, blue], weights: [1, 2, 3] }
+  gadget:
+    count: 20
+    properties:
+      gadgetId: { sequence: { prefix: "G", width: 3 } }
+      size: { int: { min: 1, max: 9 } }
+      weight: { decimal: { min: 0.5, max: 9.5, places: 2 } }
+      madeOn: { date: { from: "2020-01-01", to: "2020-12-31" } }
+      serial: { int: { min: "9007199254740993", max: "9007199254740999" } }
+      batch: { join: ["B-", { sequence: { width: 3 } }] }
+      isCommon: { byIndex: { default: false, ranges: [{ from: 0, to: 2, rule: true }] } }
+relationships:
+  - type: HAS
+    from: widget
+    to: gadget
+    pattern: random
+    perFrom: { min: 1, max: 2 }
+    properties:
+      linkId: { sequence: { prefix: "L", width: 5 } }
+      seenAt: { datetime: { from: "2026-01-01T00:00:00Z", to: "2026-06-30T23:59:59Z" }, missing: 0.2 }
+      source: { join: ["rec-", { sequence: { width: 5 } }] }
+      kind: { choice: [a, b] }
+  - type: NEAR
+    from: widget
+    to: widget
+    pattern: random
+    perFrom: { min: 0, max: 1 }

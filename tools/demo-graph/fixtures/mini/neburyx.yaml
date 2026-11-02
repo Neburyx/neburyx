@@ -1,0 +1,14 @@
+sources:
+  - id: mini-demo
+    uri: "bolt://mini-graph:7687"
+    database: neo4j
+    auth: { kind: basic, username_env: MINI_USER, password_env: MINI_PASSWORD }
+    synthetic: true
+    entities:
+      - { type: widget, label: Widget, stable_id: widgetId, search: [widgetId, colour], filterable: [colour] }
+      - { type: gadget, label: Gadget, stable_id: gadgetId, search: [gadgetId], filterable: [size, weight, madeOn, serial], reference: [batch] }
+    relationships:
+      - { type: HAS, from: widget, to: gadget, stable_id: linkId, observed_at: seenAt, evidence: [source], filterable: [kind] }
+      - { type: NEAR, from: widget, to: widget }
+    derived:
+      - { id: twin, from: widget, to: widget, via: [HAS, gadget, HAS], rule_version: 1, stop_list_property: isCommon }

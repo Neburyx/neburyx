@@ -1,0 +1,138 @@
+# Demo dataset for the banking pack: a synthetic graph with three supernodes, rings, NAT devices on the stop list and gaps.
+seed: 20261101
+
+entities:
+  customer:
+    count: 9000
+    properties:
+      customerId: { sequence: { prefix: "CU-", width: 7 } }
+      fullName: { join: [{ choice: [Ada, Bram, Cleo, Dara, Eli, Faye, Gus, Hana, Ivo, Jun, Kira, Leo, Mara, Nico, Orla, Pia] }, " ", { choice: [Alder, Birch, Cedar, Dunn, Elm, Fenn, Gale, Hale, Ives, Jett, Knox, Lowe, Marsh, Nash, Orr, Park] }] }
+      dateOfBirth: { date: { from: "1940-01-01", to: "2005-12-31" } }
+      phone: { join: ["+1-555-", { int: { min: 1000, max: 9999 } }] }
+      authId: { sequence: { prefix: "AUTH-", width: 7 } }
+      segment: { choice: [retail, premier, small-business], weights: [6, 2, 2] }
+  account:
+    count: 12000
+    properties:
+      accountId: { sequence: { prefix: "AC-", width: 7 } }
+      holderName: { join: [{ choice: [Ada, Bram, Cleo, Dara, Eli, Faye, Gus, Hana, Ivo, Jun, Kira, Leo, Mara, Nico, Orla, Pia] }, " ", { choice: [Alder, Birch, Cedar, Dunn, Elm, Fenn, Gale, Hale, Ives, Jett, Knox, Lowe, Marsh, Nash, Orr, Park] }] }
+      phone: { join: ["+1-555-", { int: { min: 1000, max: 9999 } }] }
+      status: { choice: [active, dormant, frozen], weights: [8, 2, 1] }
+      accountKind: { choice: [checking, savings, business] }
+      openedOn: { date: { from: "2015-01-01", to: "2026-09-30" } }
+  device:
+    count: 3000
+    properties:
+      fingerprint: { sequence: { prefix: "DV-", width: 6 } }
+      platform: { choice: [ios, android, windows, macos, linux, browser] }
+      firstSeen: { datetime: { from: "2020-01-01T00:00:00Z", to: "2026-09-30T23:59:59Z" } }
+      isShared: { byIndex: { default: false, ranges: [{ from: 0, to: 5, rule: true }] } }
+  ip_address:
+    count: 4000
+    properties:
+      address: { sequence: { prefix: "ip-", width: 5 } }
+      network: { choice: [mobile, residential, corporate, hosting], weights: [4, 6, 2, 1] }
+      isShared: { byIndex: { default: false, ranges: [{ from: 0, to: 1, rule: true }] } }
+  transaction:
+    count: 120000
+    properties:
+      transactionId: { sequence: { prefix: "TX-", width: 7 } }
+      paymentRef: { sequence: { prefix: "PR-", width: 8 } }
+      status: { choice: [settled, pending, reversed], weights: [8, 2, 1] }
+      channel: { choice: [card, transfer, wallet] }
+      amount: { decimal: { min: 1.0, max: 5000.0, places: 2 } }
+  merchant:
+    count: 500
+    properties:
+      merchantId: { sequence: { prefix: "MR-", width: 4 } }
+      name: { join: ["Merchant ", { sequence: { width: 4 } }] }
+      category: { choice: [grocery, travel, fuel, electronics, dining, services] }
+
+relationships:
+  - type: HOLDS_ACCOUNT
+    from: customer
+    to: account
+    pattern: random
+    perFrom: { min: 1, max: 2 }
+
+  # Devices: one NAT device with 1,000 accounts, four more NAT devices, and the rest spread at random.
+  - type: USES_DEVICE
+    from: account
+    to: device
+    pattern: random
+    perFrom: { min: 1, max: 2 }
+    toRange: { start: 100, count: 2900 }
+    supernodes:
+      - { to: 0, from: { start: 0, count: 1000 } }
+      - { to: 1, from: { start: 1000, count: 60 } }
+      - { to: 2, from: { start: 1060, count: 60 } }
+      - { to: 3, from: { start: 1120, count: 60 } }
+      - { to: 4, from: { start: 1180, count: 60 } }
+    properties:
+      eventId: { sequence: { prefix: "UD-", width: 7 } }
+      lastSeen: { datetime: { from: "2025-01-01T00:00:00Z", to: "2026-09-30T23:59:59Z" }, missing: 0.06 }
+      sourceRecordId: { join: ["SRC-UD-", { sequence: { width: 7 } }] }
+      channel: { choice: [app, web, branch] }
+  # Rings: forty groups of six accounts, each group on a device of its own.
+  - type: USES_DEVICE
+    from: account
+    to: device
+    pattern: ring
+    groups: 40
+    size: 6
+    fromStart: 2000
+    toStart: 10
+    properties:
+      eventId: { sequence: { prefix: "UD-", width: 7 } }
+      lastSeen: { datetime: { from: "2025-01-01T00:00:00Z", to: "2026-09-30T23:59:59Z" }, missing: 0.06 }
+      sourceRecordId: { join: ["SRC-UD-", { sequence: { width: 7 } }] }
+      channel: { choice: [app, web, branch] }
+
+  # Addresses: one gateway with 10,000 accounts, and the rest spread at random.
+  - type: CONNECTS_FROM
+    from: account
+    to: ip_address
+    pattern: random
+    perFrom: { min: 1, max: 2 }
+    toRange: { start: 100, count: 3900 }
+    supernodes:
+      - { to: 0, from: { start: 0, count: 10000 } }
+    properties:
+      eventId: { sequence: { prefix: "CF-", width: 7 } }
+      lastSeen: { datetime: { from: "2025-01-01T00:00:00Z", to: "2026-09-30T23:59:59Z" }, missing: 0.06 }
+      sourceRecordId: { join: ["SRC-CF-", { sequence: { width: 7 } }] }
+  - type: CONNECTS_FROM
+    from: account
+    to: ip_address
+    pattern: ring
+    groups: 40
+    size: 6
+    fromStart: 2000
+    toStart: 10
+    properties:
+      eventId: { sequence: { prefix: "CF-", width: 7 } }
+      lastSeen: { datetime: { from: "2025-01-01T00:00:00Z", to: "2026-09-30T23:59:59Z" }, missing: 0.06 }
+      sourceRecordId: { join: ["SRC-CF-", { sequence: { width: 7 } }] }
+
+  # Transactions: each has one initiating account; one merchant receives 100,000 of them.
+  - type: INITIATED
+    from: account
+    to: transaction
+    pattern: random
+    perTo: { min: 1, max: 1 }
+    properties:
+      eventId: { sequence: { prefix: "IN-", width: 7 } }
+      initiatedAt: { datetime: { from: "2025-01-01T00:00:00Z", to: "2026-09-30T23:59:59Z" }, missing: 0.04 }
+  - type: PAID_TO
+    from: transaction
+    to: merchant
+    pattern: random
+    perFrom: { min: 1, max: 1 }
+    toRange: { start: 1, count: 499 }
+    supernodes:
+      - { to: 0, from: { start: 0, count: 100000 } }
+  - type: TRANSFERRED_TO
+    from: account
+    to: account
+    pattern: random
+    perFrom: { min: 0, max: 2 }

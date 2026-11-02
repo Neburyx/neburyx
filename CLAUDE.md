@@ -69,7 +69,8 @@ Node 24 LTS (`.nvmrc`; with nvm, `nvm use`) and pnpm through Corepack, at the ve
 | Unit tests | `pnpm test` |
 | Contract test | `pnpm test:contract` |
 | Integration tests (a Postgres container; needs Docker) | `pnpm test:integration` |
-| Neo4j tests (a Neo4j container; needs Docker; the image is `neo4j:5.26` unless `NEBURYX_NEO4J_IMAGE` names another) | `pnpm test:neo4j` |
+| Neo4j tests, the adapter's and the demo graph tool's (Neo4j containers; need Docker; the image is `neo4j:5.26` unless `NEBURYX_NEO4J_IMAGE` names another) | `pnpm test:neo4j` |
+| Build a pack's demo graph into a demo Neo4j (see `tools/demo-graph/README.md`) | `pnpm demo-graph build --pack banking-fraud --uri bolt://localhost:7687` |
 | Image tests (builds the image and runs it; needs Docker, takes minutes) | `pnpm test:image` |
 | Compose tests (brings the Community stack up, upgrades it; needs Docker, takes minutes) | `pnpm test:compose` |
 | Driver timeout check (starts Neo4j containers; needs Docker, takes about ten minutes; not in CI) | `pnpm check:driver` |

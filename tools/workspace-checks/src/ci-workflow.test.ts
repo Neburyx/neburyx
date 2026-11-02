@@ -81,6 +81,11 @@ describe('CI workflow', () => {
     expect(Object.keys(rootScripts)).toContain('test:neo4j');
   });
 
+  it('runs the Neo4j tests of the adapter and of the demo graph tool in the one root script', () => {
+    expect(rootScripts['test:neo4j']).toContain('pnpm --filter @neburyx/api test:neo4j');
+    expect(rootScripts['test:neo4j']).toContain('pnpm --filter @neburyx/demo-graph test:neo4j');
+  });
+
   it('installs frozen and ends with the compose test in the compose job', () => {
     const steps = workflow.jobs['compose']?.steps ?? [];
     expect(steps.map((step) => step.uses?.split('@')[0] ?? step.run)).toEqual([

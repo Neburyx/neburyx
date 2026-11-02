@@ -14,6 +14,6 @@ A deliberately small mapping for a synthetic graph of insurance claims. It shows
 
 Each preset gives its parameters a label ("Starting claimant").
 
-**For the demo data:** the demo graph of this pack has one scripted case and no supernode (no record with a very large number of connections). The demo definition, when it is added, must keep to that.
+**Demo data.** `demo.yaml` describes the synthetic demo graph of this pack, built by `tools/demo-graph`: rings of claimants that share a phone or an address, a phone on the stop list, duplicated addresses (the same street and city under different IDs) and some missing timestamps. The graph has no supernode: no record has more than 100 neighbors.
 
 To adapt the pack to your own graph, follow [Start from a pack](../README.md#start-from-a-pack).
