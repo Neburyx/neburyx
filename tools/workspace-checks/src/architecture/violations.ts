@@ -1,4 +1,4 @@
-export type Rule = 'adapter-access' | 'community-imports-ee' | 'demo-graph-isolated' | 'system-principal' | 'source-gate';
+export type Rule = 'adapter-access' | 'community-imports-ee' | 'demo-graph-isolated' | 'system-principal' | 'source-gate' | 'write-probe' | 'test-source-command';
 
 export interface Violation {
   readonly rule: Rule;

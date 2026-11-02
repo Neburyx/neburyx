@@ -1,6 +1,8 @@
 import { AppError } from '../errors.js';
 
 export const UNSUPPORTED_VERSION_REASON = 'The server version is not on the support matrix.';
+export const PRIVILEGES_UNREADABLE_REASON = 'The server listed privileges that could not be read, so read-only is not verified.';
+export const LOGIN_CAN_WRITE_REASON = 'The login can write to the source; give Neburyx a login that can only read.';
 
 export type FailureReason = 'unreachable' | 'authentication' | 'credentials' | 'database' | 'refused' | 'timeout';
 
@@ -31,4 +33,13 @@ export function failureReasonOf(error: unknown): FailureReason | undefined {
     default:
       return undefined;
   }
+}
+
+/**
+ * Whether a failure of the privileges read means the login's privileges could not be inspected, which is a result of its own (`not-verified`): the server refused the read,
+ * it timed out, the connection failed, or the adapter could not run it. Anything else (a busy source, a full pool, a closed executor, a failure of another stage) is rethrown.
+ */
+export function isReadNotVerified(error: unknown): boolean {
+  if (failureReasonOf(error) !== undefined) return true;
+  return error instanceof AppError && error.code === 'INTERNAL_ERROR' && error.reason === 'read-failed';
 }

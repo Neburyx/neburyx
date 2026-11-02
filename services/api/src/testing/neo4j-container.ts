@@ -29,6 +29,8 @@ export interface RunningNeo4j {
 export interface StartNeo4jOptions {
   /** Binds the Bolt port to this host port, so that the address stays the same when the container is halted and resumed. */
   readonly hostPort?: number;
+  /** Extra settings of the server, as environment variables of the image (`NEO4J_server_databases_default__to__read__only`). */
+  readonly environment?: Readonly<Record<string, string>>;
 }
 
 export async function startNeo4j(image = neo4jImageFrom(process.env), options: StartNeo4jOptions = {}): Promise<RunningNeo4j> {
@@ -37,6 +39,7 @@ export async function startNeo4j(image = neo4jImageFrom(process.env), options: S
   try {
     const container = new Neo4jContainer(image).withPassword(password).withStartupTimeout(STARTUP_LIMIT_MS);
     if (options.hostPort !== undefined) container.withExposedPorts({ container: 7687, host: options.hostPort });
+    if (options.environment !== undefined) container.withEnvironment({ ...options.environment });
     started = await container.start();
   } catch (error) {
     throw new Error(`could not start the Neo4j image ${image}: ${error instanceof Error ? error.message : 'unknown error'}`);

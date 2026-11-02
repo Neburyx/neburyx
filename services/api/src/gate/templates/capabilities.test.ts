@@ -2,23 +2,33 @@ import { describe, expect, it } from 'vitest';
 import { OPERATIONS } from '../../sources/operations.js';
 import { auditing, mappingOf, sourceWith } from '../../testing/gate-fixtures.js';
 import { gateRequest, LOCAL_PRINCIPAL, TestExecutor } from '../../testing/gate.js';
-import { fakeSourceTester } from '../../testing/source-tester.js';
+import { fakeSourceTester, serverExecutor } from '../../testing/source-tester.js';
 import { testSourceGate } from '../../testing/source-gate.js';
 import { SYSTEM_ID } from '../system-principal.js';
 import { defaultCatalog } from '../assemble.js';
 import { CAPABILITIES_ID, capabilitiesTemplate, isSupportedServer } from './capabilities.js';
 import { CONNECTIVITY_ID } from './connectivity.js';
+import { PRIVILEGES_ID } from './privileges.js';
 
 const mapping = mappingOf(sourceWith('alpha'));
 const request = { traceId: 'tr-test', principal: LOCAL_PRINCIPAL, sourceId: 'alpha' };
 
 function answering(name: string, version: unknown, edition = 'community') {
-  return new TestExecutor(() => Promise.resolve({ status: 'rows', rows: [{ name, version, edition }] }));
+  return serverExecutor({ status: 'rows', rows: [{ name, version, edition }] });
 }
 
 const DECLARED = Object.entries(OPERATIONS).map(([name, status]) => ({ name, status }));
 
 describe('the default catalog', () => {
+  it('holds the privileges template with scope system, no parameters, the audit action source.privileges and a paged Cypher that is fixed', () => {
+    const template = defaultCatalog().find(PRIVILEGES_ID);
+    expect(template).toMatchObject({ scope: 'system', paged: true, auditAction: 'source.privileges', entityParams: [], relationshipParams: [], integerParameters: [] });
+    expect(template?.paramsSchema.safeParse({}).success).toBe(true);
+    expect(template?.paramsSchema.safeParse({ a: 1 }).success).toBe(false);
+    expect(template?.cypher).toMatch(/^SHOW USER PRIVILEGES YIELD access, action, resource, graph, segment WHERE NOT action IN \[[^\]]*\] RETURN DISTINCT access, action, resource, graph, segment LIMIT \$limit \+ 1$/);
+    expect(template?.cypher).not.toContain('@');
+  });
+
   it.each([CONNECTIVITY_ID, CAPABILITIES_ID])('holds the %s template with scope system, no parameters and no marker', (id) => {
     const template = defaultCatalog().find(id);
     expect(template).toMatchObject({ scope: 'system', paged: false, entityParams: [], relationshipParams: [] });
@@ -79,7 +89,7 @@ describe('rows that do not match the template', () => {
     ['a version that is not text', [{ name: 'Neo4j Kernel', version: 5.26, edition: 'community' }]],
     ['an empty product', [{ name: '', version: '5.26.0', edition: 'community' }]],
   ])('%s gives INTERNAL_ERROR and no report', async (_name, rows) => {
-    const executor = new TestExecutor(() => Promise.resolve({ status: 'rows', rows }));
+    const executor = serverExecutor({ status: 'rows', rows });
     const { tester } = fakeSourceTester(mapping, executor);
     await expect(tester.run(request)).rejects.toMatchObject({ code: 'INTERNAL_ERROR' });
   });

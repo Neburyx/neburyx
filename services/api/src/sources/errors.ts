@@ -25,7 +25,12 @@ const AUTHENTICATION_CODES: ReadonlySet<string> = new Set([
   'Neo.ClientError.Security.CredentialsExpired',
 ]);
 const DATABASE_CODES: ReadonlySet<string> = new Set(['Neo.ClientError.Database.DatabaseNotFound']);
-const REFUSED_CODES: ReadonlySet<string> = new Set(['Neo.ClientError.Security.Forbidden']);
+const REFUSED_CODES: ReadonlySet<string> = new Set([
+  'Neo.ClientError.Security.Forbidden',
+  // a Community server answers an administration command this way, and a user database answers it to a statement that belongs to the system database
+  'Neo.ClientError.Statement.UnsupportedAdministrationCommand',
+  'Neo.ClientError.Statement.NotSystemDatabaseError',
+]);
 const REFUSED_PREFIX = 'Neo.ClientError.Procedure.';
 const ACQUISITION_TIMEOUT = 'Connection acquisition timed out';
 const SERVER_CODE = /^Neo\.[A-Za-z]+\.[A-Za-z]+\.[A-Za-z]+$/;

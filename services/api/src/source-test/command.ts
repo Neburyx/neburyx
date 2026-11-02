@@ -10,6 +10,8 @@ import type { Clock, GateLogger } from '../gate/types.js';
 import { MappingError } from '../mapping/diagnostics.js';
 import { loadMappingFile } from '../mapping/load.js';
 import { communitySeams } from '../seams/community-seams.js';
+import { runWriteProbe, type ProbeDriverFactory } from '../sources/write-probe.js';
+import type { ProbeAnswer, WriteProbe } from './probe.js';
 import { createSourceTester } from './tester.js';
 
 const SHIPPED_MIGRATIONS = fileURLToPath(new URL('../../migrations', import.meta.url));
@@ -27,6 +29,8 @@ export interface TestSourceIo {
   readonly migrationsDirectory?: string;
   readonly openStore?: (url: string, directory: string) => CommandStore;
   readonly openSourceGate?: (options: SourceGateOptions) => SourceGate;
+  /** Opens the driver of the write probe; the tests give a fake. */
+  readonly openProbeDriver?: ProbeDriverFactory;
 }
 
 const NEVER_LOG: GateLogger = { warn: () => undefined };
@@ -58,6 +62,25 @@ function describeFailure(error: unknown): string {
   return databaseMessage(error) ?? 'the source could not be tested; try again\n';
 }
 
+const READ_ONLY_WORDS: Readonly<Record<SourceTestReport['readOnlyCheck'], string>> = {
+  'privileges-inspected': 'privileges inspected',
+  'not-verified': 'not verified',
+  'write-probe': 'write probe',
+};
+
+const PROBE_LINES: Readonly<Record<ProbeAnswer, string>> = {
+  'can-write': 'Write probe: login can write',
+  'cannot-write': 'Write probe: the server refused to create a node',
+  inconclusive: 'Write probe: could not be completed',
+};
+
+/** The line about the probe that follows the report: what it found, or why it did not run. */
+function probeLine(report: SourceTestReport, answer: ProbeAnswer | undefined): string {
+  if (report.outcome === 'fail') return 'Write probe: not run, the source did not answer';
+  if (report.versionSupported !== true) return 'Write probe: not run, the server version is not on the support matrix';
+  return PROBE_LINES[answer ?? 'inconclusive'];
+}
+
 function lines(report: SourceTestReport): string {
   const server = report.server === null ? 'not reached' : `${report.server.product} ${report.server.version} (${report.server.edition})`;
   const supported = report.versionSupported === null ? 'unknown' : report.versionSupported ? 'yes' : 'no';
@@ -72,22 +95,24 @@ function lines(report: SourceTestReport): string {
     `Version supported: ${supported}`,
     `Operations: ${operations === '' ? 'none' : operations}`,
     `Mapping: ${mapping.entityTypes} entity types, ${mapping.relationshipTypes} relationship types, ${mapping.derivedRules} derived rules`,
-    `Read-only: ${report.readOnlyCheck === 'not-verified' ? 'not verified' : report.readOnlyCheck}`,
+    `Read-only: ${READ_ONLY_WORDS[report.readOnlyCheck]}`,
+    `Login can write: ${report.loginCanWrite === null ? 'unknown' : report.loginCanWrite ? 'yes' : 'no'}`,
     `Checked at: ${report.checkedAt}`,
     '',
   ].join('\n');
 }
 
 /**
- * `neburyx test-source --name <source>`: tests one configured source as the local identity and prints the report.
+ * `neburyx test-source --name <source> [--write-probe]`: tests one configured source as the local identity and prints the report; the flag also runs the write probe.
  * Exit 0 for pass and warn, 1 for fail and for any configuration, database or run error, 2 for a usage error or an unknown source name.
  */
 export async function runTestSourceCommand(args: readonly string[], env: Readonly<Record<string, string | undefined>>, io: TestSourceIo): Promise<number> {
-  const name = parseTestSourceArgs(args);
-  if (name === undefined) {
+  const parsed = parseTestSourceArgs(args);
+  if (parsed === undefined) {
     io.stderr.write(TEST_SOURCE_USAGE);
     return USAGE_ERROR;
   }
+  const { name } = parsed;
 
   let config;
   try {
@@ -116,6 +141,8 @@ export async function runTestSourceCommand(args: readonly string[], env: Readonl
   }
 
   const logger = io.logger ?? NEVER_LOG;
+  // the probe's one line of trouble (a rollback that failed) is what an operator needs to see, so it reaches stderr as a line of fields
+  const probeLogger: GateLogger = io.logger ?? { warn: (fields) => void io.stderr.write(`${JSON.stringify(fields)}\n`) };
   const directory = io.migrationsDirectory ?? SHIPPED_MIGRATIONS;
   const store = (io.openStore ?? ((url, migrations) => createAppStore(url, () => undefined, { migrationsDirectory: migrations })))(config.databaseUrl, directory);
   let sourceGate: SourceGate | undefined;
@@ -124,9 +151,16 @@ export async function runTestSourceCommand(args: readonly string[], env: Readonl
     const identity = await store.current().catch((error: unknown) => {
       throw new CommandFailure(databaseMessage(error) ?? IDENTITY_MESSAGE);
     });
-    const tester = createSourceTester({ gate: sourceGate.gate, mapping, store, ...(io.clock === undefined ? {} : { clock: io.clock }) });
+    const probed: { answer?: ProbeAnswer } = {};
+    const probe: WriteProbe = async (source, traceId) => {
+      // said before the probe opens its transaction, on the stream that is not the report
+      io.stderr.write(`write probe: opening a write transaction on source ${source.id} and rolling it back\n`);
+      probed.answer = await runWriteProbe(source, traceId, { env, logger: probeLogger, ...(io.openProbeDriver === undefined ? {} : { createDriver: io.openProbeDriver }) });
+      return probed.answer;
+    };
+    const tester = createSourceTester({ gate: sourceGate.gate, mapping, store, ...(io.clock === undefined ? {} : { clock: io.clock }), ...(parsed.writeProbe ? { probe } : {}), logger });
     const report = await tester.run({ traceId: `tr-cli-${Date.now()}`, principal: identity.principal, sourceId: name });
-    io.stdout.write(lines(report));
+    io.stdout.write(lines(report) + (parsed.writeProbe ? `${probeLine(report, probed.answer)}\n` : ''));
     return report.outcome === 'fail' ? FAILURE : 0;
   } catch (error) {
     io.stderr.write(describeFailure(error));

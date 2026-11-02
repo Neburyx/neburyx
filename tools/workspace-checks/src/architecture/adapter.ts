@@ -9,18 +9,22 @@ const API_SRC = 'services/api/src';
 const SOURCES_ZONE = `${API_SRC}/sources`;
 const GATE_ZONE = `${API_SRC}/gate`;
 const TESTING_ZONE = `${API_SRC}/testing`;
+/** The one module outside gate/ and sources/ that may import a module under sources/, and the module it may import: the test-source command runs the write probe. */
+const PROBE_IMPORTER = `${API_SRC}/source-test/command.ts`;
+const PROBE_MODULE = `${SOURCES_ZONE}/write-probe`;
 const EXECUTOR_MODULES: readonly string[] = [`${GATE_ZONE}/executor`, `${GATE_ZONE}/execute`, `${GATE_ZONE}/deps`, `${GATE_ZONE}/gate`, `${GATE_ZONE}/assemble`];
 const DRIVER_PACKAGE = /^neo4j-driver(?:\/|$)/;
 const TEST_FILE = /\.test\.[cm]?[jt]sx?$/;
 const TEST_MODULE = /\.test$/;
 
-type Target = 'driver' | 'sources' | 'executor' | 'test-code';
+type Target = 'driver' | 'sources' | 'executor' | 'test-code' | 'write-probe';
 
 function targetOf(file: string, specifier: string): Target | undefined {
   if (DRIVER_PACKAGE.test(specifier)) return 'driver';
   const resolved = resolveRelative(file, specifier);
   if (resolved === undefined) return undefined;
   if (isInsideDirectory(resolved, TESTING_ZONE) || (resolved.kind !== 'index' && TEST_MODULE.test(resolved.path))) return 'test-code';
+  if (isFileModule(resolved, PROBE_MODULE)) return 'write-probe';
   if (isInsideDirectory(resolved, SOURCES_ZONE)) return 'sources';
   if (EXECUTOR_MODULES.some((module) => isFileModule(resolved, module))) return 'executor';
   return undefined;
@@ -39,6 +43,7 @@ function zoneReason(file: string, target: Target): string | undefined {
   const inGate = isInside(file, GATE_ZONE);
   if (target === 'test-code') return 'production code reaches test code';
   if (target === 'driver' && !inSources) return 'only the adapter under sources/ talks to the driver';
+  if (target === 'write-probe') return inSources || inGate || file === PROBE_IMPORTER ? undefined : 'only the gate reaches the adapter';
   if ((target === 'sources' || target === 'executor') && !inSources && !inGate) return 'only the gate reaches the adapter';
   return undefined;
 }

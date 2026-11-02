@@ -17,14 +17,18 @@ describe('parseCommand', () => {
   });
 
   it('prints the usage line the image documents', () => {
-    expect(USAGE).toBe('usage: neburyx api | migrate | test-source --name <source>\n');
-    expect(TEST_SOURCE_USAGE).toBe('usage: neburyx test-source --name <source>\n');
+    expect(USAGE).toBe('usage: neburyx api | migrate | test-source --name <source> [--write-probe]\n');
+    expect(TEST_SOURCE_USAGE).toBe('usage: neburyx test-source --name <source> [--write-probe]\n');
   });
 });
 
 describe('parseTestSourceArgs', () => {
   it('reads the source name', () => {
-    expect(parseTestSourceArgs(['--name', 'alpha'])).toBe('alpha');
+    expect(parseTestSourceArgs(['--name', 'alpha'])).toEqual({ name: 'alpha', writeProbe: false });
+  });
+
+  it.each([[['--name', 'alpha', '--write-probe']], [['--write-probe', '--name', 'alpha']]])('reads the write probe flag once, before or after the name: %j', (args) => {
+    expect(parseTestSourceArgs(args)).toEqual({ name: 'alpha', writeProbe: true });
   });
 
   it.each([
@@ -35,8 +39,16 @@ describe('parseTestSourceArgs', () => {
     [['--name', 'alpha', '--name', 'beta']],
     [['--name', 'alpha', 'extra']],
     [['--write-probe']],
-    [['--write-probe', '--name', 'alpha']],
-    [['--name', 'alpha', '--write-probe']],
+    [['--write-probe', '--write-probe', '--name', 'alpha']],
+    [['--name', 'alpha', '--write-probe', '--write-probe']],
+    [['--write-probe', '--name', 'alpha', '--write-probe']],
+    [['--write-probe', 'yes', '--name', 'alpha']],
+    [['--name', 'alpha', '--write-probe', 'yes']],
+    [['--name', '--write-probe']],
+    [['--write-probe', '--name', '--write-probe']],
+    [['--write-probe', '--name']],
+    [['--write-probe=true', '--name', 'alpha']],
+    [['--name', 'alpha', '--probe']],
     [['alpha']],
     [['--other', 'alpha']],
   ])('refuses %j', (args) => {

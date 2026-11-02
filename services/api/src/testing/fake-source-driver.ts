@@ -5,11 +5,18 @@ export type CloseBehaviour = 'ok' | 'hang' | 'reject';
 
 export interface FakeBehaviour {
   readonly rows?: readonly Row[];
+  /** The rows of the privileges read; absent, the read ends as a Community server ends it, with the server's refusal. */
+  readonly privileges?: readonly Row[];
+  readonly privilegesError?: unknown;
+  readonly privilegesHang?: boolean;
   readonly endless?: boolean;
   readonly streamError?: unknown;
   readonly manual?: boolean;
   readonly beginError?: unknown;
   readonly beginHang?: boolean;
+  /** Fails the transactions after the first one, as when the capabilities read answered and the next read does not. */
+  readonly laterBeginError?: unknown;
+  readonly laterBeginHang?: boolean;
   readonly beginGate?: Promise<void>;
   readonly sessionClose?: CloseBehaviour;
   readonly driverClose?: CloseBehaviour;
@@ -27,14 +34,20 @@ export interface FakeDriver {
   readonly settings: DriverSettings;
   readonly sessions: FakeSession[];
   closeCalls: number;
+  /** The transactions begun on this driver, so a later read of one source is told from the first read of another. */
+  begins: number;
 }
 
 export interface FakeDrivers {
   readonly factory: DriverFactory;
   readonly drivers: FakeDriver[];
   readonly forbidden: string[];
+  begins: number;
   behaviour: FakeBehaviour;
 }
+
+const COMMUNITY_REFUSAL = 'Neo.ClientError.Statement.UnsupportedAdministrationCommand';
+const isPrivileges = (cypher: string): boolean => cypher.startsWith('SHOW USER PRIVILEGES');
 
 function settle(how: CloseBehaviour | undefined): Promise<void> {
   if (how === 'hang') return new Promise<void>(() => undefined);
@@ -52,10 +65,11 @@ function trap(forbidden: string[], name: string): () => never {
 export function fakeDrivers(initial: FakeBehaviour = {}): FakeDrivers {
   const fake: FakeDrivers = {
     behaviour: initial,
+    begins: 0,
     drivers: [],
     forbidden: [],
     factory: (settings) => {
-      const driver: FakeDriver = { settings, sessions: [], closeCalls: 0 };
+      const driver: FakeDriver = { settings, sessions: [], closeCalls: 0, begins: 0 };
       fake.drivers.push(driver);
       return Object.assign({
         session: (config: SessionConfig) => {
@@ -65,6 +79,10 @@ export function fakeDrivers(initial: FakeBehaviour = {}): FakeDrivers {
             {
               beginTransaction: async (transaction: TransactionConfig) => {
                 session.begins.push(transaction);
+                fake.begins += 1;
+                driver.begins += 1;
+                if (driver.begins > 1 && fake.behaviour.laterBeginHang === true) return await new Promise<never>(() => undefined);
+                if (driver.begins > 1 && fake.behaviour.laterBeginError !== undefined) throw fake.behaviour.laterBeginError;
                 if (fake.behaviour.beginHang === true) return await new Promise<never>(() => undefined);
                 if (fake.behaviour.beginGate !== undefined) await fake.behaviour.beginGate;
                 if (fake.behaviour.beginError !== undefined) throw fake.behaviour.beginError;
@@ -74,6 +92,14 @@ export function fakeDrivers(initial: FakeBehaviour = {}): FakeDrivers {
                     return {
                       subscribe: (observer: RowObserver) => {
                         session.observer = observer;
+                        if (isPrivileges(cypher)) {
+                          if (fake.behaviour.privilegesHang === true) return;
+                          if (fake.behaviour.privileges !== undefined) {
+                            for (const row of fake.behaviour.privileges) observer.onNext(row);
+                            observer.onCompleted();
+                          } else observer.onError(fake.behaviour.privilegesError ?? neo4jError(COMMUNITY_REFUSAL));
+                          return;
+                        }
                         if (fake.behaviour.manual === true) return;
                         for (const row of fake.behaviour.rows ?? []) observer.onNext(row);
                         if (fake.behaviour.streamError !== undefined) observer.onError(fake.behaviour.streamError);

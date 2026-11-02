@@ -1,9 +1,10 @@
 import type { SourceTestReport } from '@neburyx/contracts';
 import { AppError } from '../errors.js';
-import type { Clock, Gate } from '../gate/types.js';
+import type { Clock, Gate, GateLogger } from '../gate/types.js';
 import type { MappingModel } from '../mapping/model.js';
 import type { Principal } from '../seams/seams.js';
 import { checkSource, type CheckRequest, type CheckStore } from './check.js';
+import type { WriteProbe } from './probe.js';
 
 export interface SourceTestRequest {
   readonly traceId: string;
@@ -21,6 +22,9 @@ export interface SourceTesterDeps {
   readonly mapping: MappingModel;
   readonly store: CheckStore;
   readonly clock?: Clock;
+  /** Given by the `test-source` command when it runs the opt-in write probe; the route builds its tester without one. */
+  readonly probe?: WriteProbe;
+  readonly logger?: GateLogger;
 }
 
 export function createSourceTester(deps: SourceTesterDeps): SourceTester {
@@ -30,7 +34,7 @@ export function createSourceTester(deps: SourceTesterDeps): SourceTester {
       const source = deps.mapping.sources.find((candidate) => candidate.id === request.sourceId);
       if (source === undefined) throw new AppError('NOT_FOUND');
       const run = (gateRequest: CheckRequest) => deps.gate.run({ ...gateRequest, principal: request.principal });
-      return checkSource({ store: deps.store, clock }, source, run, request.traceId, request.principal.id);
+      return checkSource({ store: deps.store, clock, ...(deps.probe === undefined ? {} : { probe: deps.probe }), ...(deps.logger === undefined ? {} : { logger: deps.logger }) }, source, run, request.traceId, request.principal.id);
     },
   };
 }

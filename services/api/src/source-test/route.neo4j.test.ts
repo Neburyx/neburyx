@@ -45,10 +45,27 @@ describe(`POST /v1/sources/{id}/test against ${neo4jImageFrom(process.env)}`, ()
     expect(response.statusCode).toBe(200);
     const report = sourceTestReportSchema.parse(response.json());
     const tag = server.image.split(':')[1] ?? '';
-    expect(report).toMatchObject({ sourceId: 'alpha', outcome: 'pass', state: 'connected', stateReason: null, versionSupported: true, readOnlyCheck: 'not-verified' });
+    expect(report).toMatchObject({ sourceId: 'alpha', outcome: 'pass', state: 'connected', stateReason: null, versionSupported: true, readOnlyCheck: 'not-verified', loginCanWrite: null });
     expect(report.server?.product).toBe('Neo4j Kernel');
     expect(report.server?.version === tag || report.server?.version.startsWith(`${tag}.`)).toBe(true);
     expect(report.operations.length).toBeGreaterThan(0);
+  });
+
+  it('ends the privileges read with the server code UnsupportedAdministrationCommand for the exact template Cypher, which the gate reports as a refusal', async () => {
+    const lines: object[] = [];
+    const mapping = mappingOf(
+      sourceWith('gamma', { uri: server.boltUri, database: 'neo4j', auth: { kind: 'basic', username_env: NEO4J_ENV_USER, password_env: NEO4J_ENV_PASSWORD } }),
+    );
+    const parts = createSourceGate({ mapping, env: envFor(server), seams: communitySeams(), logger: { warn: (fields) => void lines.push(fields) } });
+    try {
+      const failure: unknown = await parts.gate
+        .run({ traceId: 'tr-privileges', principal: LOCAL_PRINCIPAL, sourceId: 'gamma', templateId: 'privileges', params: {}, limit: 5 })
+        .catch((caught: unknown) => caught);
+      expect(failure).toMatchObject({ code: 'SOURCE_UNAVAILABLE', reason: 'refused' });
+      expect(lines).toEqual([{ event: 'source.read_failed', sourceId: 'gamma', serverCode: 'Neo.ClientError.Statement.UnsupportedAdministrationCommand' }]);
+    } finally {
+      await parts.close();
+    }
   });
 });
 

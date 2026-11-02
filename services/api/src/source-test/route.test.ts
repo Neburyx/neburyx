@@ -1,12 +1,12 @@
 import { rmSync } from 'node:fs';
 import pino from 'pino';
 import { afterAll, describe, expect, it } from 'vitest';
-import { sourceTestReportSchema } from '@neburyx/contracts';
+import { buildOpenApiDocument, sourceTestReportSchema } from '@neburyx/contracts';
 import { buildApp } from '../app.js';
 import { mappingOf, sourceWith } from '../testing/gate-fixtures.js';
 import { memoryAppStore } from '../testing/app-store.js';
 import { TestExecutor } from '../testing/gate.js';
-import { fakeSourceTester, SERVER_ROW } from '../testing/source-tester.js';
+import { fakeSourceTester, SERVER_ROW, serverExecutor } from '../testing/source-tester.js';
 import { makeWebRoot } from '../testing/web-root.js';
 
 const webRoot = makeWebRoot();
@@ -26,12 +26,27 @@ describe('POST /v1/sources/{id}/test', () => {
     const response = await app.inject({ method: 'POST', url: '/v1/sources/alpha/test' });
     expect(response.statusCode).toBe(200);
     expect(sourceTestReportSchema.parse(response.json())).toMatchObject({ sourceId: 'alpha', outcome: 'pass', state: 'connected' });
-    expect(executor.calls).toHaveLength(1);
+    expect(executor.calls.map((call) => call.templateId)).toEqual(['capabilities', 'privileges']);
     await app.close();
   });
 
+  it('answers 200 with the privileges facts: a login that can write is a warn with the fixed sentence, a read-only login is inspected', async () => {
+    const write = fakeSourceTester(mapping, serverExecutor(undefined, { status: 'rows', rows: [{ access: 'GRANTED', action: 'write', resource: 'graph', graph: '*', segment: 'NODE(*)' }] }));
+    const readOnly = fakeSourceTester(mapping, serverExecutor(undefined, { status: 'rows', rows: [] }));
+    for (const [parts, expected] of [
+      [write, { outcome: 'warn', state: 'degraded', stateReason: 'The login can write to the source; give Neburyx a login that can only read.', readOnlyCheck: 'privileges-inspected', loginCanWrite: true }],
+      [readOnly, { outcome: 'pass', state: 'connected', stateReason: null, readOnlyCheck: 'privileges-inspected', loginCanWrite: false }],
+    ] as const) {
+      const app = await buildApp({ webRoot, logger: pino({ level: 'silent' }), store: parts.store, mapping, sourceTester: parts.tester });
+      const response = await app.inject({ method: 'POST', url: '/v1/sources/alpha/test' });
+      expect(response.statusCode).toBe(200);
+      expect(sourceTestReportSchema.parse(response.json())).toMatchObject(expected);
+      await app.close();
+    }
+  });
+
   it('answers 200 with a warn report for a server that reports an empty version', async () => {
-    const parts = fakeSourceTester(mapping, new TestExecutor(() => Promise.resolve({ status: 'rows', rows: [{ ...SERVER_ROW, version: '' }] })));
+    const parts = fakeSourceTester(mapping, serverExecutor({ status: 'rows', rows: [{ ...SERVER_ROW, version: '' }] }));
     const app = await buildApp({ webRoot, logger: pino({ level: 'silent' }), store: parts.store, mapping, sourceTester: parts.tester });
     const response = await app.inject({ method: 'POST', url: '/v1/sources/alpha/test' });
     expect(response.statusCode).toBe(200);
@@ -59,6 +74,10 @@ describe('POST /v1/sources/{id}/test', () => {
   it.each([
     ['a JSON body', { payload: '{}', headers: { 'content-type': 'application/json' } }],
     ['a query string', { query: { limit: '1' } }],
+    ['a body that names a write probe', { payload: '{"writeProbe":true}', headers: { 'content-type': 'application/json' } }],
+    ['a body that names a write probe with a dash', { payload: '{"write-probe":true}', headers: { 'content-type': 'application/json' } }],
+    ['a query string that names a write probe', { query: { writeProbe: 'true' } }],
+    ['a query string that names a write probe with a dash', { query: { 'write-probe': '1' } }],
   ])('answers INVALID_REQUEST for %s, with no read', async (_name, extra) => {
     const { app, executor } = await appWith();
     const response = await app.inject({ method: 'POST', url: '/v1/sources/alpha/test', ...extra });
@@ -66,6 +85,16 @@ describe('POST /v1/sources/{id}/test', () => {
     expect(response.json()).toMatchObject({ error: { code: 'INVALID_REQUEST' } });
     expect(executor.calls).toEqual([]);
     await app.close();
+  });
+
+  it('shows no body and no query parameter, and none that names a probe, in the OpenAPI document', () => {
+    const operation: unknown = buildOpenApiDocument().paths['/v1/sources/{id}/test'];
+    const text = JSON.stringify(operation);
+    expect(operation).toMatchObject({ post: { parameters: [{ name: 'id', in: 'path' }] } });
+    // the description may say the probe is out of reach; no parameter or body may name it
+    expect(text).not.toMatch(/"name":"[^"]*probe/i);
+    expect(text).not.toContain('requestBody');
+    expect(text.match(/"in":/g)).toHaveLength(1);
   });
 
   it('answers INTERNAL_ERROR when the app was built without a tester', async () => {

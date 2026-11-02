@@ -20,7 +20,8 @@ Match the file you are editing first. These rules decide the cases the surroundi
 These shape code directly. Breaking one is a bug, whatever the tests say.
 
 - **Read-only.** No write query reaches the customer's Neo4j. No helper, option or flag makes that
-  possible.
+  possible, except the one named path: the opt-in write probe of `test-source --write-probe`, which rolls its
+  transaction back, is reached only by that command, and is confined by an architecture check.
 - **One gate.** Every source read goes through the gate: resolve context, validate, authorize,
   execute, normalize, redact, audit. Nothing calls the adapter or the driver around it. Routes and
   services call the gate; an architecture test fails if anything calls the adapter outside it.

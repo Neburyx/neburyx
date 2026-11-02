@@ -15,7 +15,7 @@ import { fakeDrivers } from './testing/fake-source-driver.js';
 import { mappingOf, sourceWith } from './testing/gate-fixtures.js';
 import { TestExecutor } from './testing/gate.js';
 import { fileOf } from './testing/mapping.js';
-import { SERVER_ROW } from './testing/source-tester.js';
+import { SERVER_ROW, serverExecutor } from './testing/source-tester.js';
 import { testSourceGate } from './testing/source-gate.js';
 import { SourceGateError } from './gate/allowlist.js';
 import type { SourceGate, SourceGateOptions } from './gate/source-gate.js';
@@ -314,7 +314,7 @@ describe('the startup check in start', () => {
   const down = (call: ExecuteCall) => Promise.resolve(call.sourceId === 'alpha' ? ({ status: 'unavailable', reason: 'unreachable' } as const) : ({ status: 'rows', rows: [SERVER_ROW] } as const));
 
   it('checks every source before the server listens, and starts although one is down', async () => {
-    const parts = wired(new TestExecutor(down));
+    const parts = wired(serverExecutor(down));
     const run = io(parts.io);
     const result = await start(ENV, run.io);
     expect(result.exitCode).toBe(0);
@@ -333,7 +333,7 @@ describe('the startup check in start', () => {
   });
 
   it('runs no check for a mapping with no source', async () => {
-    const parts = wired(new TestExecutor(down));
+    const parts = wired(serverExecutor(down));
     const result = await start(DATABASE_ENV, io(parts.io).io);
     expect(result.exitCode).toBe(0);
     expect(parts.executor.calls).toEqual([]);
@@ -341,7 +341,7 @@ describe('the startup check in start', () => {
   });
 
   it('stops with the message of a rule that names a problem, closing the gate and the store', async () => {
-    const parts = wired(new TestExecutor(down));
+    const parts = wired(serverExecutor(down));
     const run = io({ ...parts.io, startupProblem: (results) => (results.some((result) => result.outcome === 'fail') ? 'source alpha failed its check' : undefined) });
     const result = await start(ENV, run.io);
     expect(result.exitCode).toBe(1);
@@ -350,7 +350,7 @@ describe('the startup check in start', () => {
   });
 
   it('stops when the check cannot be stored, closing the gate and the store', async () => {
-    const parts = wired(new TestExecutor(down));
+    const parts = wired(serverExecutor(down));
     const failing = memoryStoreWith({ failRecording: true });
     const run = io({ ...parts.io, openStore: () => ({ ...failing, close: () => (parts.closed.push('store'), failing.close()) }) });
     const result = await start(ENV, run.io);
@@ -397,6 +397,44 @@ describe('the startup check against sources that never answer', () => {
   });
 });
 
+describe('the startup check against sources whose privileges read never answers', () => {
+  const folder = mkdtempSync(join(tmpdir(), 'startup-privileges-hang-'));
+  afterAll(() => rmSync(folder, { recursive: true, force: true }));
+  const file = join(folder, 'neburyx.yaml');
+  writeFileSync(file, fileOf(sourceWith('alpha'), sourceWith('beta')));
+
+  it('starts within two gate deadlines, with exit 0, and stores both sources as connected with read-only not verified', async () => {
+    const store = memoryAppStore();
+    const fake = fakeDrivers({ rows: [SERVER_ROW], laterBeginHang: true });
+    const run = io({
+      portOverride: 0,
+      openStore: () => store,
+      openSourceGate: (options: SourceGateOptions): SourceGate => {
+        const executor = createNeo4jExecutor({ sources: options.mapping.sources, env: { DEMO_USER: 'u', DEMO_PASSWORD: 'p' }, logger: options.logger, createDriver: fake.factory });
+        const defaults = communitySeams();
+        const parts = assembleGate({ mapping: options.mapping, seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit }, executor, logger: options.logger });
+        return { ...parts, close: () => executor.close() };
+      },
+    });
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    try {
+      const started = start({ ...DATABASE_ENV, NEBURYX_CONFIG: file }, run.io);
+      // the capabilities reads answer at once; the privileges reads run to the deadline of their own request
+      await vi.advanceTimersByTimeAsync(DEFAULT_BUDGETS.requestTimeoutMs * 2);
+      vi.useRealTimers();
+      const result = await started;
+      expect(result.exitCode).toBe(0);
+      expect(store.checks.map((check) => [check.report.sourceId, check.report.state, check.report.readOnlyCheck, check.report.loginCanWrite])).toEqual([
+        ['alpha', 'connected', 'not-verified', null],
+        ['beta', 'connected', 'not-verified', null],
+      ]);
+      if (result.exitCode === 0) await result.app.close();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe('the ping timer in start', () => {
   const folder = mkdtempSync(join(tmpdir(), 'ping-timer-'));
   afterAll(() => rmSync(folder, { recursive: true, force: true }));
@@ -413,7 +451,7 @@ describe('the ping timer in start', () => {
 
   it('pings every source on each tick after the server listens, and /readyz follows the answers', async () => {
     let answers = true;
-    const executor = new TestExecutor((call) => Promise.resolve(call.templateId === 'connectivity' && !answers ? { status: 'unavailable', reason: 'unreachable' } : { status: 'rows', rows: [SERVER_ROW] }));
+    const executor = serverExecutor((call) => (call.templateId === 'connectivity' && !answers ? { status: 'unavailable', reason: 'unreachable' } : { status: 'rows', rows: [SERVER_ROW] }));
     const run = io({ ...wired(executor), portOverride: 0, pingIntervalMs: 20 });
     const result = await start(ENV, run.io);
     expect(result.exitCode).toBe(0);
@@ -429,7 +467,7 @@ describe('the ping timer in start', () => {
   });
 
   it('starts no ping and no timer when the start fails, and none after the app closed', async () => {
-    const executor = new TestExecutor(() => Promise.resolve({ status: 'rows', rows: [SERVER_ROW] }));
+    const executor = serverExecutor();
     const spy = vi.spyOn(globalThis, 'setInterval');
     const blocker = createServer();
     await new Promise<void>((resolve) => blocker.listen(0, '127.0.0.1', resolve));
@@ -491,7 +529,7 @@ describe('the startup check when the schema is behind', () => {
   const mapping = mappingOf(sourceWith('alpha'));
 
   it.each(['42P01', '42703'])('exits 1 with the migrate message when storing the check fails with %s', async (code) => {
-    const parts = testSourceGate(mapping, { executor: new TestExecutor(() => Promise.resolve({ status: 'rows', rows: [SERVER_ROW] })) });
+    const parts = testSourceGate(mapping, { executor: serverExecutor() });
     const failing = { ...memoryAppStore(), recordSourceCheck: () => Promise.reject(Object.assign(new Error('relation or column is missing'), { code })) };
     const run = io({ openStore: () => failing, openSourceGate: (): SourceGate => ({ gate: parts.gate, system: parts.system, close: () => Promise.resolve() }), portOverride: 0 });
     const result = await start({ ...DATABASE_ENV, NEBURYX_CONFIG: file }, run.io);
@@ -512,7 +550,7 @@ describe('the ping timer while the gate cannot grant a read', () => {
     const coordinator = {
       acquireRead: () => (mode === 'hang' ? new Promise<never>(() => undefined) : Promise.resolve(mode === 'busy' ? ({ status: 'busy' } as const) : ({ status: 'granted', lease: { release: () => Promise.resolve() } } as const))),
     };
-    const executor = new TestExecutor(() => Promise.resolve({ status: 'rows', rows: [SERVER_ROW] }));
+    const executor = serverExecutor();
     const parts = testSourceGate(mapping, { executor, seams: { ...communitySeams(), coordinator } });
     const run = io({ openSourceGate: (): SourceGate => ({ gate: parts.gate, system: parts.system, close: () => Promise.resolve() }), portOverride: 0, pingIntervalMs: 20 });
     const result = await start({ ...DATABASE_ENV, NEBURYX_CONFIG: file }, run.io);

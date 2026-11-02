@@ -21,19 +21,25 @@ export const operationSchema = z.strictObject({
   status: z.enum(OPERATION_STATUSES),
 });
 
-export const sourceTestReportSchema = z.strictObject({
-  schemaVersion: z.literal(1),
-  sourceId: text,
-  checkedAt: z.iso.datetime(),
-  outcome: testOutcomeSchema,
-  state: sourceStateSchema.exclude(['unknown']),
-  stateReason: text.nullable(),
-  server: serverInfoSchema.nullable(),
-  versionSupported: z.boolean().nullable(),
-  operations: z.array(operationSchema),
-  readOnlyCheck: readOnlyCheckSchema,
-  mappingSummary: mappingSummarySchema,
-});
+export const sourceTestReportSchema = z
+  .strictObject({
+    schemaVersion: z.literal(1),
+    sourceId: text,
+    checkedAt: z.iso.datetime(),
+    outcome: testOutcomeSchema,
+    state: sourceStateSchema.exclude(['unknown']),
+    stateReason: text.nullable(),
+    server: serverInfoSchema.nullable(),
+    versionSupported: z.boolean().nullable(),
+    operations: z.array(operationSchema),
+    readOnlyCheck: readOnlyCheckSchema,
+    loginCanWrite: z.boolean().nullable(),
+    mappingSummary: mappingSummarySchema,
+  })
+  .refine((report) => (report.loginCanWrite === null) === (report.readOnlyCheck === 'not-verified'), {
+    message: 'loginCanWrite is null if and only if readOnlyCheck is not-verified',
+    path: ['loginCanWrite'],
+  });
 
 export type SourceTestReport = z.infer<typeof sourceTestReportSchema>;
 export type TestOutcome = z.infer<typeof testOutcomeSchema>;

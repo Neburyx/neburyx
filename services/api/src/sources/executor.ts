@@ -2,6 +2,7 @@ import type { UnavailableReason } from '../errors.js';
 import type { Clock, GateLogger, Row } from '../gate/types.js';
 import type { ExecuteCall, ExecuteOutcome, ReadExecutor } from '../gate/executor.js';
 import type { SourceModel } from '../mapping/model.js';
+import { credentialsOf, driverSettingsOf } from './credentials.js';
 import { neo4jDriverFactory, type DriverFactory, type SourceDriver, type SourceSession } from './driver.js';
 import { AdapterError, classify, serverCodeOf } from './errors.js';
 import { prepareParameters } from './parameters.js';
@@ -56,20 +57,12 @@ export function createNeo4jExecutor(options: Neo4jExecutorOptions): Neo4jExecuto
   function driverFor(source: SourceModel): SourceDriver | undefined {
     const existing = drivers.get(source.id);
     if (existing !== undefined) return existing;
-    const username = options.env[source.auth.usernameEnv];
-    const password = options.env[source.auth.passwordEnv];
-    if (username === undefined || username === '' || password === undefined || password === '') {
+    const credentials = credentialsOf(source, options.env);
+    if (credentials === undefined) {
       options.logger.warn({ event: 'source.credentials_missing', sourceId: source.id }, 'source credentials are not set');
       return undefined;
     }
-    const driver = createDriver({
-      uri: source.uri,
-      username,
-      password,
-      maxConnectionPoolSize: source.budgets.sourceConcurrency,
-      connectionAcquisitionTimeout: source.budgets.queueWaitMs,
-      connectionTimeout: source.budgets.timeoutMs,
-    });
+    const driver = createDriver(driverSettingsOf(source, credentials, source.budgets.sourceConcurrency));
     drivers.set(source.id, driver);
     return driver;
   }

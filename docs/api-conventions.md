@@ -102,8 +102,11 @@ app.get('/v1/me', { config: { permission: 'principal' } }, handler);
 
 ## Testing a source
 
-`POST /v1/sources/{id}/test` runs the capabilities check on a configured source through the gate, as the calling principal,
-and returns the report. It declares `principal`; in Community every principal that the policy allows to read the source may
+`POST /v1/sources/{id}/test` runs two reads on a configured source through the gate, as the calling principal (the capabilities of the server, then the privileges of the login),
+and returns the report. The report says whether the login can write: `readOnlyCheck` is `privileges-inspected` and `loginCanWrite` is `true` or `false`, or `readOnlyCheck` is
+`not-verified` and `loginCanWrite` is `null`, as on a Community server, which cannot list privileges. A login that can write gives outcome `warn` and the reason
+"The login can write to the source; give Neburyx a login that can only read." A run that cannot show whether the login writes is not a failure. A listing the check cannot read (a row that is not five strings) is a `warn` with the reason "The server listed privileges that could not be read, so read-only is not verified." The route never runs the write probe,
+which only the `test-source` command runs on request (`readOnlyCheck` is then `write-probe`). It declares `principal`; in Community every principal that the policy allows to read the source may
 call it. It takes no body and no query parameters (either is `INVALID_REQUEST`) and no version header. An unknown id is
 `NOT_FOUND`. A source that is reachable but on a server version outside the support matrix gives a report with outcome `warn`.
 The report carries a fixed, plain reason and never an address, a credential or query text.

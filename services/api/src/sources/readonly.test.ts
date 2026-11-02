@@ -1,6 +1,6 @@
-import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import { expectNoForbiddenCalls, fakeDrivers, neo4jError, type FakeBehaviour } from '../testing/fake-source-driver.js';
@@ -8,7 +8,10 @@ import { callFor, rig, useClock } from '../testing/source-rig.js';
 import { AdapterError } from './errors.js';
 
 const SOURCES = dirname(fileURLToPath(import.meta.url));
-const FORBIDDEN = /\b(?:WRITE|executeRead|executeWrite|readTransaction|writeTransaction|executeQuery)\b/;
+const FORBIDDEN = /\b(?:WRITE|commit|executeRead|executeWrite|readTransaction|writeTransaction|executeQuery)\b/;
+/** The write probe is the one file that names the write access mode; it still may not commit or use a managed or one-shot method. */
+const PROBE_FILE = 'write-probe.ts';
+const FORBIDDEN_IN_PROBE = /\b(?:commit|executeRead|executeWrite|readTransaction|writeTransaction|executeQuery)\b/;
 const scratch = mkdtempSync(join(tmpdir(), 'readonly-'));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
 
@@ -19,7 +22,7 @@ function productionFiles(folder: string): string[] {
 }
 
 function forbiddenIn(file: string): string | undefined {
-  return FORBIDDEN.exec(readFileSync(file, 'utf8'))?.[0];
+  return (basename(file) === PROBE_FILE ? FORBIDDEN_IN_PROBE : FORBIDDEN).exec(readFileSync(file, 'utf8'))?.[0];
 }
 
 interface ExecutorPath {
@@ -79,10 +82,37 @@ describe('the production files of the adapter', () => {
     expect(files.flatMap((file) => forbiddenIn(file) ?? [])).toEqual([]);
   });
 
-  it.each(['WRITE', 'executeRead', 'executeWrite', 'readTransaction', 'writeTransaction', 'executeQuery'])('are found out when they name %s', (name) => {
+  it.each(['WRITE', 'commit', 'executeRead', 'executeWrite', 'readTransaction', 'writeTransaction', 'executeQuery'])('are found out when they name %s', (name) => {
     const planted = join(scratch, `planted-${name}.ts`);
     writeFileSync(planted, `export const x = driver.${name};\n`);
     expect(forbiddenIn(planted)).toBe(name);
+  });
+
+  it('hold one session that can write, in the write probe, and no call that commits', () => {
+    const files = productionFiles(SOURCES);
+    const writing = files.filter((file) => /\bWRITE\b/.test(readFileSync(file, 'utf8'))).map((file) => basename(file));
+    expect(writing).toEqual([PROBE_FILE]);
+    expect(files.filter((file) => /\bcommit\b/.test(readFileSync(file, 'utf8')))).toEqual([]);
+  });
+
+  it('exempt the write probe from the write access mode and nothing else: it names WRITE and not commit or a managed or one-shot method', () => {
+    const probe = join(SOURCES, PROBE_FILE);
+    expect(readFileSync(probe, 'utf8')).toMatch(/\bWRITE\b/);
+    expect(forbiddenIn(probe)).toBeUndefined();
+    expect(productionFiles(SOURCES).map((file) => basename(file))).toContain(PROBE_FILE);
+  });
+
+  it.each(['commit', 'executeWrite', 'writeTransaction', 'executeQuery', 'executeRead', 'readTransaction'])('find the write probe out when it names %s', (name) => {
+    const planted = join(scratch, 'planted', PROBE_FILE);
+    mkdirSync(join(scratch, 'planted'), { recursive: true });
+    writeFileSync(planted, `export const x = transaction.${name};\n`);
+    expect(forbiddenIn(planted)).toBe(name);
+  });
+
+  it('does not exempt another file that names WRITE, though the probe is exempt', () => {
+    const planted = join(scratch, 'planted-other.ts');
+    writeFileSync(planted, 'export const x = neo4j.session.WRITE;\n');
+    expect(forbiddenIn(planted)).toBe('WRITE');
   });
 
   it('may name beginTransaction and the transaction run', () => {

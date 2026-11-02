@@ -47,6 +47,22 @@ Test files (`*.test.*`) and `services/api/src/testing/` are exempt, as above. A 
 that may import it, so `gate/types.ts`, `start.ts` and `source-test/command.ts` cannot pass the system principal or the system runner on. Both rules read the same
 imports and re-exports as the adapter check, in the folders `services/`, `packages/`, `apps/` and `ee/`, and report the file, line and import.
 
+## The write probe
+
+The product reads. The one place that writes is the opt-in write probe of `neburyx test-source --write-probe`: it opens its own driver, runs `CREATE ()` in a write
+transaction and always rolls it back (see the probe's module, `services/api/src/sources/write-probe.ts`). It does not go through the gate, so three rules confine it:
+
+| Rule | Import | Allowed in |
+|---|---|---|
+| `adapter-access` | the one module under `services/api/src/sources/` that a file outside `gate/` and `sources/` may import: `sources/write-probe.ts` | `services/api/src/source-test/command.ts` (one exception in `adapter.ts`; every other `sources/` module is still reported there) |
+| `write-probe` | `sources/write-probe.ts` | `services/api/src/source-test/command.ts` only. A file under `gate/` or `sources/` is reported too, and the command never re-exports it |
+| `test-source-command` | the command module, `services/api/src/source-test/command.ts` | `services/api/src/cli.ts` only, with no re-export |
+
+The tester takes the probe as an optional function whose type is declared in `source-test/probe.ts`, so it imports nothing from `sources/`; the route builds its tester without
+one. Test files and `services/api/src/testing/` are exempt, as above, and static, type-only and dynamic imports and every form of re-export are read the same way.
+`services/api/src/sources/readonly.test.ts` adds a scan: no file of the adapter names a write access mode or a managed or one-shot query method, and `commit` is among
+those words; only the probe's module is exempt from the write access mode, and it is checked instead for the absence of `commit` and the managed and one-shot methods.
+
 ## Community never imports `ee/`
 
 Any file outside `ee/` (including `tools/`) that imports a module under `ee/`, or the package names `ee` or `@neburyx/ee`

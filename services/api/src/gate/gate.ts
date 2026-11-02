@@ -1,4 +1,5 @@
 import { AppError } from '../errors.js';
+import { AdapterError } from '../sources/errors.js';
 import type { AuditEvent } from '../seams/seams.js';
 import { auditResultFor, FALLBACK_AUDIT_ACTION } from './audit.js';
 import { authorizeRequest } from './authorize.js';
@@ -77,7 +78,8 @@ async function recordAudit(deps: GateDeps, request: GateRequest, progress: Progr
 function asAppError(deps: GateDeps, error: unknown, stage: GateStage): AppError {
   if (error instanceof AppError) return error;
   deps.logger.warn({ event: 'gate.internal_error', stage }, 'gate stage failed unexpectedly');
-  return new AppError('INTERNAL_ERROR');
+  // the tag tells a read the adapter could not run (already logged with the server code) from any other internal failure
+  return error instanceof AdapterError && error.code === 'READ_FAILED' && stage === 'execute' ? new AppError('INTERNAL_ERROR', undefined, 'read-failed') : new AppError('INTERNAL_ERROR');
 }
 
 type Attempt = { readonly status: 'page'; readonly page: GatePage } | { readonly status: 'failure'; readonly failure: AppError };

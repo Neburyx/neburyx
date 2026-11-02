@@ -143,7 +143,7 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
       store,
       jobs,
       mapping,
-      sourceTester: createSourceTester({ gate: gate.gate, mapping, store: openedStore }),
+      sourceTester: createSourceTester({ gate: gate.gate, mapping, store: openedStore, logger: io.logger }),
       reachability,
       stopPing: () => pingSchedule?.stop(),
       drainPing: () => pingSchedule?.drain() ?? Promise.resolve(),

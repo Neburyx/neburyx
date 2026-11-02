@@ -35,7 +35,7 @@ safe on very high-degree nodes. The repo is **pre-release**: the build tooling, 
 
 ## Rules that hold for all code
 
-1. **Read-only** access to the customer's Neo4j. No write queries, ever.
+1. **Read-only** access to the customer's Neo4j. No write queries, ever, but one: the opt-in write probe of `test-source --write-probe`, which creates one empty node in a write transaction it always rolls back. No route, setting or screen reaches it; an architecture check confines it ([docs/architecture-checks.md](docs/architecture-checks.md)).
 2. **One investigation per source.** Never combine sources silently.
 3. **All source reads go through one gate**: resolve context, validate, authorize, execute, normalize,
    redact, audit. No code path reaches the database around it. An architecture check enforces it ([docs/architecture-checks.md](docs/architecture-checks.md)).
@@ -82,7 +82,7 @@ To run the API with the built web app (after `pnpm build` and `neburyx migrate`;
 DATABASE_URL=… NEBURYX_WEB_ROOT=apps/web/dist node services/api/dist/main.js
 ```
 
-To test a configured source (after `pnpm build`, `neburyx migrate` and one start of the API; it prints the server version and a mapping summary, and exits `0` for pass and warn, `1` for fail, `2` for a usage error): `DATABASE_URL=… NEBURYX_CONFIG=… node services/api/dist/cli.js test-source --name <source>`.
+To test a configured source (after `pnpm build`, `neburyx migrate` and one start of the API; it prints the server version, a mapping summary and whether the login can write, and exits `0` for pass and warn, `1` for fail, `2` for a usage error): `DATABASE_URL=… NEBURYX_CONFIG=… node services/api/dist/cli.js test-source --name <source>`. `--write-probe` also tries one write in a transaction it rolls back, to confirm that a login cannot write; use it in a test environment, never against a source you cannot afford to touch.
 
 To create or upgrade the database (after `pnpm build`): `DATABASE_MIGRATION_URL=… DATABASE_APP_ROLE=… node services/api/dist/cli.js migrate`.
 

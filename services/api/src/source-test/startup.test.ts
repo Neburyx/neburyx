@@ -4,7 +4,7 @@ import { memoryAppStore, memoryStoreWith } from '../testing/app-store.js';
 import { auditing, mappingOf, sourceWith } from '../testing/gate-fixtures.js';
 import { TestExecutor } from '../testing/gate.js';
 import { testSourceGate } from '../testing/source-gate.js';
-import { SERVER_ROW } from '../testing/source-tester.js';
+import { SERVER_ROW, serverExecutor } from '../testing/source-tester.js';
 import { createStartupChecker, startupProblem } from './startup.js';
 
 const mapping = mappingOf(sourceWith('alpha'), sourceWith('beta'));
@@ -28,13 +28,13 @@ function checker(executor: TestExecutor, store = memoryAppStore(), mappingModel 
   return { checker: createStartupChecker({ system: parts.system, mapping: mappingModel, store, logger: log, clock }), store, log, recording };
 }
 
-const answering = () => new TestExecutor(() => Promise.resolve({ status: 'rows', rows: [SERVER_ROW] }));
+const answering = () => serverExecutor();
 
 describe('the startup check', () => {
   it('starts every source before any has answered, as the system principal, and stores each result with no user', async () => {
     const started: string[] = [];
     const waiting: (() => void)[] = [];
-    const executor = new TestExecutor(
+    const executor = serverExecutor(
       (call) =>
         new Promise((resolve) => {
           started.push(call.sourceId);
@@ -50,11 +50,13 @@ describe('the startup check', () => {
     expect(recording.events.map((event) => [event.actorId, event.actorRole, event.action])).toEqual([
       [SYSTEM_ID, null, 'source.capabilities'],
       [SYSTEM_ID, null, 'source.capabilities'],
+      [SYSTEM_ID, null, 'source.privileges'],
+      [SYSTEM_ID, null, 'source.privileges'],
     ]);
   });
 
   it('records a down source and an answering one, and writes exactly one line per source with only the id and the outcome', async () => {
-    const executor = new TestExecutor((call) => Promise.resolve(call.sourceId === 'alpha' ? { status: 'unavailable', reason: 'unreachable' } : { status: 'rows', rows: [SERVER_ROW] }));
+    const executor = serverExecutor((call) => (call.sourceId === 'alpha' ? { status: 'unavailable', reason: 'unreachable' } : { status: 'rows', rows: [SERVER_ROW] }));
     const { checker: startup, store, log } = checker(executor);
     const results = await startup.run();
     expect(results).toEqual([{ sourceId: 'alpha', outcome: 'fail' }, { sourceId: 'beta', outcome: 'pass' }]);
@@ -66,7 +68,7 @@ describe('the startup check', () => {
   });
 
   it('stores a warn for a server that reports an empty version, and the start goes on', async () => {
-    const executor = new TestExecutor(() => Promise.resolve({ status: 'rows', rows: [{ ...SERVER_ROW, version: '' }] }));
+    const executor = serverExecutor({ status: 'rows', rows: [{ ...SERVER_ROW, version: '' }] });
     const { checker: startup, store } = checker(executor);
     expect((await startup.run()).map((result) => result.outcome)).toEqual(['warn', 'warn']);
     expect(store.checks.map((check) => check.report.state)).toEqual(['degraded', 'degraded']);

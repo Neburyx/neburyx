@@ -8,6 +8,7 @@ import { createNeo4jExecutor } from '../sources/executor.js';
 import { communitySeams } from '../seams/community-seams.js';
 import type { Seams } from '../seams/seams.js';
 import { memoryAppStore, memoryStoreWith, type MemoryAppStore } from '../testing/app-store.js';
+import { fakeProbeDriver, type FakeProbeBehaviour } from '../testing/fake-probe-driver.js';
 import { fakeDrivers, neo4jError, type FakeBehaviour } from '../testing/fake-source-driver.js';
 import { sourceWith } from '../testing/gate-fixtures.js';
 import { fileOf } from '../testing/mapping.js';
@@ -63,7 +64,7 @@ describe('a usage error', () => {
   it.each([[[]], [['--name']], [['--write-probe']], [['--name', 'alpha', 'extra']]])('prints the usage on stderr and exits 2 for %j', async (args) => {
     const result = await run(args, env());
     expect(result.code).toBe(2);
-    expect(result.err).toBe('usage: neburyx test-source --name <source>\n');
+    expect(result.err).toBe('usage: neburyx test-source --name <source> [--write-probe]\n');
     expect(result.out).toBe('');
     expect(result.fake.drivers).toEqual([]);
   });
@@ -76,10 +77,24 @@ describe('a source that answers', () => {
     expect(result.err).toBe('');
     expect(result.out).toContain('Source: alpha\nOutcome: pass\nState: connected\nServer: Neo4j Kernel 5.26.32 (community)\nVersion supported: yes\n');
     expect(result.out).toContain('Operations: execute (supported), searchEntities (by-template)');
-    expect(result.out).toContain('Mapping: 2 entity types, 2 relationship types, 0 derived rules\nRead-only: not verified\nChecked at: 2026-11-02T10:00:00.000Z\n');
+    expect(result.out).toContain('Mapping: 2 entity types, 2 relationship types, 0 derived rules\nRead-only: not verified\nLogin can write: unknown\nChecked at: 2026-11-02T10:00:00.000Z\n');
     expect(result.store.checks).toHaveLength(1);
     expect(result.fake.drivers[0]?.closeCalls).toBe(1);
     expect(result.store.checks[0]).toMatchObject({ triggeredBy: (await result.store.current()).principal.id });
+  });
+
+  it('prints that the privileges were inspected and the login cannot write, for a listing with no right beyond reading', async () => {
+    const result = await run(['--name', 'alpha'], env(), { rows: [SERVER_ROW], privileges: [] });
+    expect(result.code).toBe(0);
+    expect(result.out).toContain('Outcome: pass\nState: connected\n');
+    expect(result.out).toContain('Read-only: privileges inspected\nLogin can write: no\nChecked at:');
+  });
+
+  it('exits 0 and prints the fixed reason and that the login can write, for a listing that grants a write right', async () => {
+    const result = await run(['--name', 'alpha'], env(), { rows: [SERVER_ROW], privileges: [{ access: 'GRANTED', action: 'write', resource: 'graph', graph: '*', segment: 'NODE(*)' }] });
+    expect(result.code).toBe(0);
+    expect(result.out).toContain('Outcome: warn\nState: degraded\nReason: The login can write to the source; give Neburyx a login that can only read.\n');
+    expect(result.out).toContain('Read-only: privileges inspected\nLogin can write: yes\n');
   });
 
   it('exits 0 and prints the reason for a version outside the support matrix', async () => {
@@ -88,15 +103,108 @@ describe('a source that answers', () => {
     expect(result.out).toContain('Outcome: warn\nState: degraded\nReason: The server version is not on the support matrix.\n');
   });
 
-  it('sees one read transaction in read mode with the capabilities Cypher and nothing else', async () => {
+  it('sees two read transactions in read mode, one with the capabilities Cypher and one with the privileges Cypher, and nothing else', async () => {
     const result = await run(['--name', 'alpha'], env());
     expect(result.fake.drivers).toHaveLength(1);
     const sessions = result.fake.drivers[0]?.sessions ?? [];
-    expect(sessions).toHaveLength(1);
-    expect(sessions[0]?.config.defaultAccessMode).toBe('READ');
-    expect(sessions[0]?.begins).toHaveLength(1);
-    expect(sessions[0]?.queries.map((query) => query.cypher)).toEqual(["CALL dbms.components() YIELD name, versions, edition WHERE name = 'Neo4j Kernel' RETURN name, versions[0] AS version, edition"]);
+    expect(sessions).toHaveLength(2);
+    for (const session of sessions) {
+      expect(session.config.defaultAccessMode).toBe('READ');
+      expect(session.begins).toHaveLength(1);
+    }
+    expect(sessions.flatMap((session) => session.queries.map((query) => query.cypher))).toEqual([
+      "CALL dbms.components() YIELD name, versions, edition WHERE name = 'Neo4j Kernel' RETURN name, versions[0] AS version, edition",
+      "SHOW USER PRIVILEGES YIELD access, action, resource, graph, segment WHERE NOT action IN ['access', 'traverse', 'read', 'match', 'execute', 'execute_function', 'load', 'show_index', 'show_constraint'] RETURN DISTINCT access, action, resource, graph, segment LIMIT $limit + 1",
+    ]);
     expect(result.fake.forbidden).toEqual([]);
+  });
+});
+
+describe('the write probe flag', () => {
+  const READ_ONLY = { rows: [SERVER_ROW], privileges: [] };
+  const probeRun = (args: readonly string[], probe: FakeProbeBehaviour = {}, behaviour: FakeBehaviour = READ_ONLY) => {
+    const probes = fakeProbeDriver(probe);
+    return run(args, env(), behaviour, { openProbeDriver: probes.factory }).then((result) => ({ ...result, probes }));
+  };
+
+  it.each([[['--name', 'alpha', '--write-probe']], [['--write-probe', '--name', 'alpha']]])('runs the probe with %j and says so on stderr before it opens the transaction', async (args) => {
+    const result = await probeRun(args);
+    expect(result.err).toBe('write probe: opening a write transaction on source alpha and rolling it back\n');
+    expect(result.probes.sessions).toHaveLength(1);
+    expect(result.probes.sessions[0]?.statements).toEqual(['CREATE () RETURN 1 AS probe']);
+    expect(result.probes.sessions[0]?.rollbacks).toBe(1);
+    expect(result.probes.forbidden).toEqual([]);
+  });
+
+  it('runs no probe and opens no probe driver without the flag', async () => {
+    const probes = fakeProbeDriver();
+    const result = await run(['--name', 'alpha'], env(), READ_ONLY, { openProbeDriver: probes.factory });
+    expect(result.err).toBe('');
+    expect(result.out).not.toContain('Write probe');
+    expect(probes.settings).toEqual([]);
+  });
+
+  it('prints that the login can write, with outcome warn and the write probe as the check, when the statement is accepted', async () => {
+    const result = await probeRun(['--name', 'alpha', '--write-probe']);
+    expect(result.code).toBe(0);
+    expect(result.out).toContain('Outcome: warn\nState: degraded\nReason: The login can write to the source; give Neburyx a login that can only read.\n');
+    expect(result.out).toContain('Read-only: write probe\nLogin can write: yes\nChecked at: 2026-11-02T10:00:00.000Z\nWrite probe: login can write\n');
+    expect(result.store.checks[0]?.report).toMatchObject({ readOnlyCheck: 'write-probe', loginCanWrite: true, outcome: 'warn' });
+  });
+
+  it('prints that the server refused to create a node, and that the login cannot write, when the privileges showed no write right', async () => {
+    const result = await probeRun(['--name', 'alpha', '--write-probe'], { runError: neo4jError('Neo.ClientError.Security.Forbidden') });
+    expect(result.out).toContain('Outcome: pass\nState: connected\n');
+    expect(result.out).toContain('Read-only: write probe\nLogin can write: no\nChecked at: 2026-11-02T10:00:00.000Z\nWrite probe: the server refused to create a node\n');
+    expect(result.store.checks[0]?.report).toMatchObject({ readOnlyCheck: 'write-probe', loginCanWrite: false });
+  });
+
+  it('keeps a write right that the privileges show when the server refuses to create a node, since that refusal does not show that the login cannot write', async () => {
+    const result = await probeRun(['--name', 'alpha', '--write-probe'], { runError: neo4jError('Neo.ClientError.Security.Forbidden') }, { rows: [SERVER_ROW], privileges: [{ access: 'GRANTED', action: 'set_property', resource: 'property(note)', graph: '*', segment: 'NODE(*)' }] });
+    expect(result.out).toContain('Outcome: warn\nState: degraded\nReason: The login can write to the source; give Neburyx a login that can only read.\n');
+    expect(result.out).toContain('Read-only: privileges inspected\nLogin can write: yes\nChecked at: 2026-11-02T10:00:00.000Z\nWrite probe: the server refused to create a node\n');
+    expect(result.store.checks[0]?.report).toMatchObject({ readOnlyCheck: 'privileges-inspected', loginCanWrite: true, outcome: 'warn' });
+  });
+
+  it.each([
+    ['a Community server that refuses the privileges', { rows: [SERVER_ROW] }, 'Read-only: not verified\nLogin can write: unknown', null, 'not-verified'],
+    ['a listing of a login that only reads', READ_ONLY, 'Read-only: privileges inspected\nLogin can write: no', false, 'privileges-inspected'],
+  ] as const)('keeps the result of the privileges for %s when the probe is inconclusive, and prints that it could not be completed', async (_name, behaviour, lines, canWrite, check) => {
+    const result = await probeRun(['--name', 'alpha', '--write-probe'], { runError: neo4jError('Neo.TransientError.General.DatabaseUnavailable') }, behaviour);
+    expect(result.code).toBe(0);
+    expect(result.out).toContain(`${lines}\nChecked at: 2026-11-02T10:00:00.000Z\nWrite probe: could not be completed\n`);
+    expect(result.store.checks[0]?.report).toMatchObject({ readOnlyCheck: check, loginCanWrite: canWrite });
+  });
+
+  it('does not run the probe, and says so, for a source that did not answer', async () => {
+    const probes = fakeProbeDriver();
+    const result = await run(['--name', 'alpha', '--write-probe'], env(), { beginError: neo4jError('ServiceUnavailable') }, { openProbeDriver: probes.factory });
+    expect(result.code).toBe(1);
+    expect(result.out).toContain('Outcome: fail');
+    expect(result.out.endsWith('Write probe: not run, the source did not answer\n')).toBe(true);
+    expect(result.err).toBe('');
+    expect(probes.settings).toEqual([]);
+  });
+
+  it('does not run the probe, and says so, for a server version outside the support matrix', async () => {
+    const probes = fakeProbeDriver();
+    const result = await run(['--name', 'alpha', '--write-probe'], env(), { rows: [{ ...SERVER_ROW, version: '4.4.0' }], privileges: [] }, { openProbeDriver: probes.factory });
+    expect(result.code).toBe(0);
+    expect(result.out.endsWith('Write probe: not run, the server version is not on the support matrix\n')).toBe(true);
+    expect(result.err).toBe('');
+    expect(probes.settings).toEqual([]);
+  });
+
+  it('writes the line of a rollback that failed to stderr, as the fields only, after the notice', async () => {
+    const result = await probeRun(['--name', 'alpha', '--write-probe'], { rollbackError: neo4jError('ServiceUnavailable', 'MARKER_MESSAGE') });
+    expect(result.code).toBe(0);
+    expect(result.err).toBe('write probe: opening a write transaction on source alpha and rolling it back\n{"event":"source.write_probe_rollback_failed","sourceId":"alpha"}\n');
+    expect(result.out).toContain('Write probe: login can write\n');
+  });
+
+  it('prints nothing of the credentials, the address or the driver message', async () => {
+    const result = await probeRun(['--name', 'alpha', '--write-probe'], { runError: neo4jError('Neo.ClientError.Security.Forbidden', 'MARKER_MESSAGE bolt://MARKER_HOST') });
+    expect(result.out + result.err).not.toContain('MARKER');
   });
 });
 

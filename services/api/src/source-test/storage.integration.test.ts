@@ -12,9 +12,8 @@ import { identityHashOf } from '../registry/identity-hash.js';
 import { runCli } from '../testing/cli.js';
 import { attempt, rows } from '../testing/database.js';
 import { mappingOf, sourceWith } from '../testing/gate-fixtures.js';
-import { TestExecutor } from '../testing/gate.js';
 import { startPostgres, type TestDatabase, type TestPostgres } from '../testing/postgres.js';
-import { fakeSourceTester, SERVER_ROW } from '../testing/source-tester.js';
+import { fakeSourceTester, serverExecutor } from '../testing/source-tester.js';
 import { webRoot } from '../testing/start-api.js';
 import { createSourceTester } from './tester.js';
 import { testSourceGate } from '../testing/source-gate.js';
@@ -57,7 +56,7 @@ async function openStore(): Promise<{ readonly database: TestDatabase; readonly 
 
 const SERVER: CapabilitiesItem = { product: 'Neo4j Kernel', version: '5.26.32', edition: 'community', versionSupported: true, operations: [] };
 const at = (minute: number): string => new Date(Date.UTC(2026, 10, 2, 10, minute, 0)).toISOString();
-const pass = (sourceId: 'alpha' | 'beta', checkedAt: string): SourceTestReport => reportFromServer(sourceId === 'alpha' ? alpha : beta, SERVER, checkedAt);
+const pass = (sourceId: 'alpha' | 'beta', checkedAt: string): SourceTestReport => reportFromServer(sourceId === 'alpha' ? alpha : beta, SERVER, null, checkedAt);
 const checkOf = (id: string, report: SourceTestReport, triggeredBy: string | null) => ({ id, report, triggeredBy, identityHash: identityHashOf(report.sourceId === 'beta' ? beta : alpha) });
 const failed = (checkedAt: string): SourceTestReport => reportFromFailure(alpha, 'unreachable', checkedAt);
 
@@ -105,7 +104,7 @@ describe('a stored run', () => {
 
   it('stores a warn report for a server that reported an empty version', async () => {
     const { database, store } = await openStore();
-    await store.recordSourceCheck(checkOf(uuidv7(), reportFromServer(alpha, { ...SERVER, version: '', versionSupported: false }, at(1)), null));
+    await store.recordSourceCheck(checkOf(uuidv7(), reportFromServer(alpha, { ...SERVER, version: '', versionSupported: false }, null, at(1)), null));
     const stored = await rows(database.ownerUrl, `SELECT outcome, server_version FROM source_checks`);
     expect(stored).toEqual([{ outcome: 'warn', server_version: 'Neo4j ' }]);
     expect((await store.listSources()).find((row) => row.id === 'alpha')).toMatchObject({ state: 'degraded' });
@@ -117,7 +116,7 @@ describe('a stored run', () => {
 
   it.each([
     ['pass', pass('alpha', at(1)), 'connected', null],
-    ['warn', reportFromServer(alpha, { ...SERVER, versionSupported: false }, at(1)), 'degraded', 'The server version is not on the support matrix.'],
+    ['warn', reportFromServer(alpha, { ...SERVER, versionSupported: false }, null, at(1)), 'degraded', 'The server version is not on the support matrix.'],
     ['fail', failed(at(1)), 'unavailable', 'The source could not be reached.'],
   ])('moves the state of the source after a %s', async (_name, report, state, reason) => {
     const { store } = await openStore();
@@ -158,7 +157,7 @@ describe('a stored run', () => {
 });
 
 describe('the tester and the route over the real database', () => {
-  async function appOver(store: AppStore, executor = new TestExecutor(() => Promise.resolve({ status: 'rows', rows: [SERVER_ROW] }))) {
+  async function appOver(store: AppStore, executor = serverExecutor()) {
     const parts = testSourceGate(mapping, { executor });
     const tester = createSourceTester({ gate: parts.gate, mapping, store, clock: () => Date.now() });
     const app = await buildApp({ webRoot, logger: pino({ level: 'silent' }), store, mapping, sourceTester: tester });

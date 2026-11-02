@@ -59,8 +59,8 @@ async function open(): Promise<{ readonly database: TestDatabase; readonly store
 
 const CAPS = { product: 'Neo4j Kernel', version: '5.26.32', edition: 'community', versionSupported: true, operations: [] };
 const at = (minute: number): string => new Date(Date.UTC(2026, 10, 2, 10, minute, 0)).toISOString();
-const pass = (minute = 1): SourceTestReport => reportFromServer(alpha, CAPS, at(minute));
-const warn = (minute = 1): SourceTestReport => reportFromServer(alpha, { ...CAPS, versionSupported: false }, at(minute));
+const pass = (minute = 1): SourceTestReport => reportFromServer(alpha, CAPS, null, at(minute));
+const warn = (minute = 1): SourceTestReport => reportFromServer(alpha, { ...CAPS, versionSupported: false }, null, at(minute));
 const fail = (minute = 1): SourceTestReport => reportFromFailure(alpha, 'unreachable', at(minute));
 const test = (store: AppStore, report: SourceTestReport, identityHash = identityHashOf(alpha)) => store.recordSourceCheck({ id: uuidv7(), report, triggeredBy: null, identityHash });
 const NEVER_DROPPED = '2099-01-01T00:00:00.000Z';

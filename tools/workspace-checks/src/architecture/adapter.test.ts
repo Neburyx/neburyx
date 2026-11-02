@@ -48,6 +48,28 @@ describe('the driver', () => {
   });
 });
 
+describe('the write probe', () => {
+  it('is allowed in the test-source command, which is the one file outside gate/ and sources/ that may import a module under sources/', () => {
+    expect(snippet(`${API}/source-test/command.ts`, "import { runWriteProbe } from '../sources/write-probe.js';")).toEqual([]);
+    expect(snippet(`${API}/source-test/command.ts`, "import type { ProbeDriver } from '../sources/write-probe.js';")).toEqual([]);
+  });
+
+  it('is the only module under sources/ the command may import', () => {
+    expect(snippet(`${API}/source-test/command.ts`, "import { createNeo4jExecutor } from '../sources/executor.js';")).toMatchObject([{ rule: 'adapter-access', reason: 'only the gate reaches the adapter' }]);
+    expect(snippet(`${API}/source-test/command.ts`, "import { credentialsOf } from '../sources/credentials.js';")).toHaveLength(1);
+  });
+
+  it.each([
+    ['another file in source-test/', `${API}/source-test/tester.ts`],
+    ['a route', `${API}/routes/sources.ts`],
+    ['the start module', `${API}/start.ts`],
+    ['Enterprise code', 'ee/policy/a.ts'],
+  ])('is reported in %s', (_name, file) => {
+    const specifier = file.startsWith('ee/') ? `../../${API}/sources/write-probe.js` : `${'../'.repeat(file.split('/').length - API.split('/').length - 1)}sources/write-probe.js`;
+    expect(snippet(file, `import { runWriteProbe } from '${specifier.startsWith('.') ? specifier : `./${specifier}`}';`)).toHaveLength(1);
+  });
+});
+
 describe('test code', () => {
   it('may import the driver, sources/ and the executor modules', () => {
     const imports = "import d from 'neo4j-driver';\nimport { a } from '../sources/neo4j-adapter.js';\nimport { e } from '../gate/execute.js';";

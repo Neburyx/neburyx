@@ -1,0 +1,779 @@
+{
+ "note": "Synthetic. The rows SHOW USER PRIVILEGES returned to logins created for the capture on an Enterprise server: one login per built-in role and two with custom roles on the database nbxprivcheck (nbx_test_ro: reads only; nbx_test_sneaky: reads and SET PROPERTY on one property). Every name is one the capture created; the rows are unfiltered, so they include the read rights the privileges template never asks for.",
+ "server": {
+  "product": "Neo4j Kernel",
+  "version": "5.26.32",
+  "edition": "enterprise"
+ },
+ "logins": {
+  "reader": {
+   "roles": [
+    "reader"
+   ],
+   "rows": [
+    {
+     "access": "GRANTED",
+     "action": "load",
+     "resource": "file",
+     "graph": "*",
+     "segment": "ALL DATA",
+     "role": "PUBLIC",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "execute",
+     "resource": "database",
+     "graph": "*",
+     "segment": "FUNCTION(*)",
+     "role": "PUBLIC",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "execute",
+     "resource": "database",
+     "graph": "*",
+     "segment": "PROCEDURE(*)",
+     "role": "PUBLIC",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "access",
+     "resource": "database",
+     "graph": "HOME",
+     "segment": "database",
+     "role": "PUBLIC",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "match",
+     "resource": "all_properties",
+     "graph": "*",
+     "segment": "NODE(*)",
+     "role": "reader",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "match",
+     "resource": "all_properties",
+     "graph": "*",
+     "segment": "RELATIONSHIP(*)",
+     "role": "reader",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "access",
+     "resource": "database",
+     "graph": "*",
+     "segment": "database",
+     "role": "reader",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "show_constraint",
+     "resource": "database",
+     "graph": "*",
+     "segment": "database",
+     "role": "reader",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "show_index",
+     "resource": "database",
+     "graph": "*",
+     "segment": "database",
+     "role": "reader",
+     "immutable": false
+    }
+   ]
+  },
+  "editor": {
+   "roles": [
+    "editor"
+   ],
+   "rows": [
+    {
+     "access": "GRANTED",
+     "action": "load",
+     "resource": "file",
+     "graph": "*",
+     "segment": "ALL DATA",
+     "role": "PUBLIC",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "execute",
+     "resource": "database",
+     "graph": "*",
+     "segment": "FUNCTION(*)",
+     "role": "PUBLIC",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "execute",
+     "resource": "database",
+     "graph": "*",
+     "segment": "PROCEDURE(*)",
+     "role": "PUBLIC",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "access",
+     "resource": "database",
+     "graph": "HOME",
+     "segment": "database",
+     "role": "PUBLIC",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "match",
+     "resource": "all_properties",
+     "graph": "*",
+     "segment": "NODE(*)",
+     "role": "editor",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "write",
+     "resource": "graph",
+     "graph": "*",
+     "segment": "NODE(*)",
+     "role": "editor",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "match",
+     "resource": "all_properties",
+     "graph": "*",
+     "segment": "RELATIONSHIP(*)",
+     "role": "editor",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "write",
+     "resource": "graph",
+     "graph": "*",
+     "segment": "RELATIONSHIP(*)",
+     "role": "editor",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "access",
+     "resource": "database",
+     "graph": "*",
+     "segment": "database",
+     "role": "editor",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "show_constraint",
+     "resource": "database",
+     "graph": "*",
+     "segment": "database",
+     "role": "editor",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "show_index",
+     "resource": "database",
+     "graph": "*",
+     "segment": "database",
+     "role": "editor",
+     "immutable": false
+    }
+   ]
+  },
+  "publisher": {
+   "roles": [
+    "publisher"
+   ],
+   "rows": [
+    {
+     "access": "GRANTED",
+     "action": "load",
+     "resource": "file",
+     "graph": "*",
+     "segment": "ALL DATA",
+     "role": "PUBLIC",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "execute",
+     "resource": "database",
+     "graph": "*",
+     "segment": "FUNCTION(*)",
+     "role": "PUBLIC",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "execute",
+     "resource": "database",
+     "graph": "*",
+     "segment": "PROCEDURE(*)",
+     "role": "PUBLIC",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "access",
+     "resource": "database",
+     "graph": "HOME",
+     "segment": "database",
+     "role": "PUBLIC",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "match",
+     "resource": "all_properties",
+     "graph": "*",
+     "segment": "NODE(*)",
+     "role": "publisher",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "write",
+     "resource": "graph",
+     "graph": "*",
+     "segment": "NODE(*)",
+     "role": "publisher",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "match",
+     "resource": "all_properties",
+     "graph": "*",
+     "segment": "RELATIONSHIP(*)",
+     "role": "publisher",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "write",
+     "resource": "graph",
+     "graph": "*",
+     "segment": "RELATIONSHIP(*)",
+     "role": "publisher",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "access",
+     "resource": "database",
+     "graph": "*",
+     "segment": "database",
+     "role": "publisher",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "show_constraint",
+     "resource": "database",
+     "graph": "*",
+     "segment": "database",
+     "role": "publisher",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "show_index",
+     "resource": "database",
+     "graph": "*",
+     "segment": "database",
+     "role": "publisher",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "token",
+     "resource": "database",
+     "graph": "*",
+     "segment": "database",
+     "role": "publisher",
+     "immutable": false
+    }
+   ]
+  },
+  "architect": {
+   "roles": [
+    "architect"
+   ],
+   "rows": [
+    {
+     "access": "GRANTED",
+     "action": "load",
+     "resource": "file",
+     "graph": "*",
+     "segment": "ALL DATA",
+     "role": "PUBLIC",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "execute",
+     "resource": "database",
+     "graph": "*",
+     "segment": "FUNCTION(*)",
+     "role": "PUBLIC",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "execute",
+     "resource": "database",
+     "graph": "*",
+     "segment": "PROCEDURE(*)",
+     "role": "PUBLIC",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "access",
+     "resource": "database",
+     "graph": "HOME",
+     "segment": "database",
+     "role": "PUBLIC",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "match",
+     "resource": "all_properties",
+     "graph": "*",
+     "segment": "NODE(*)",
+     "role": "architect",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "write",
+     "resource": "graph",
+     "graph": "*",
+     "segment": "NODE(*)",
+     "role": "architect",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "match",
+     "resource": "all_properties",
+     "graph": "*",
+     "segment": "RELATIONSHIP(*)",
+     "role": "architect",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "write",
+     "resource": "graph",
+     "graph": "*",
+     "segment": "RELATIONSHIP(*)",
+     "role": "architect",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "access",
+     "resource": "database",
+     "graph": "*",
+     "segment": "database",
+     "role": "architect",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "constraint",
+     "resource": "database",
+     "graph": "*",
+     "segment": "database",
+     "role": "architect",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "index",
+     "resource": "database",
+     "graph": "*",
+     "segment": "database",
+     "role": "architect",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "show_constraint",
+     "resource": "database",
+     "graph": "*",
+     "segment": "database",
+     "role": "architect",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "show_index",
+     "resource": "database",
+     "graph": "*",
+     "segment": "database",
+     "role": "architect",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "token",
+     "resource": "database",
+     "graph": "*",
+     "segment": "database",
+     "role": "architect",
+     "immutable": false
+    }
+   ]
+  },
+  "admin": {
+   "roles": [
+    "admin"
+   ],
+   "rows": [
+    {
+     "access": "GRANTED",
+     "action": "load",
+     "resource": "file",
+     "graph": "*",
+     "segment": "ALL DATA",
+     "role": "PUBLIC",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "execute",
+     "resource": "database",
+     "graph": "*",
+     "segment": "FUNCTION(*)",
+     "role": "PUBLIC",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "execute",
+     "resource": "database",
+     "graph": "*",
+     "segment": "PROCEDURE(*)",
+     "role": "PUBLIC",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "access",
+     "resource": "database",
+     "graph": "HOME",
+     "segment": "database",
+     "role": "PUBLIC",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "load",
+     "resource": "file",
+     "graph": "*",
+     "segment": "ALL DATA",
+     "role": "admin",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "match",
+     "resource": "all_properties",
+     "graph": "*",
+     "segment": "NODE(*)",
+     "role": "admin",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "write",
+     "resource": "graph",
+     "graph": "*",
+     "segment": "NODE(*)",
+     "role": "admin",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "match",
+     "resource": "all_properties",
+     "graph": "*",
+     "segment": "RELATIONSHIP(*)",
+     "role": "admin",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "write",
+     "resource": "graph",
+     "graph": "*",
+     "segment": "RELATIONSHIP(*)",
+     "role": "admin",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "transaction_management",
+     "resource": "database",
+     "graph": "*",
+     "segment": "USER(*)",
+     "role": "admin",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "access",
+     "resource": "database",
+     "graph": "*",
+     "segment": "database",
+     "role": "admin",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "constraint",
+     "resource": "database",
+     "graph": "*",
+     "segment": "database",
+     "role": "admin",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "dbms_actions",
+     "resource": "database",
+     "graph": "*",
+     "segment": "database",
+     "role": "admin",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "index",
+     "resource": "database",
+     "graph": "*",
+     "segment": "database",
+     "role": "admin",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "show_constraint",
+     "resource": "database",
+     "graph": "*",
+     "segment": "database",
+     "role": "admin",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "show_index",
+     "resource": "database",
+     "graph": "*",
+     "segment": "database",
+     "role": "admin",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "start_database",
+     "resource": "database",
+     "graph": "*",
+     "segment": "database",
+     "role": "admin",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "stop_database",
+     "resource": "database",
+     "graph": "*",
+     "segment": "database",
+     "role": "admin",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "token",
+     "resource": "database",
+     "graph": "*",
+     "segment": "database",
+     "role": "admin",
+     "immutable": false
+    }
+   ]
+  },
+  "readonly": {
+   "roles": [
+    "nbx_test_ro"
+   ],
+   "rows": [
+    {
+     "access": "GRANTED",
+     "action": "load",
+     "resource": "file",
+     "graph": "*",
+     "segment": "ALL DATA",
+     "role": "PUBLIC",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "execute",
+     "resource": "database",
+     "graph": "*",
+     "segment": "FUNCTION(*)",
+     "role": "PUBLIC",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "execute",
+     "resource": "database",
+     "graph": "*",
+     "segment": "PROCEDURE(*)",
+     "role": "PUBLIC",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "access",
+     "resource": "database",
+     "graph": "HOME",
+     "segment": "database",
+     "role": "PUBLIC",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "match",
+     "resource": "all_properties",
+     "graph": "nbxprivcheck",
+     "segment": "NODE(*)",
+     "role": "nbx_test_ro",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "match",
+     "resource": "all_properties",
+     "graph": "nbxprivcheck",
+     "segment": "RELATIONSHIP(*)",
+     "role": "nbx_test_ro",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "access",
+     "resource": "database",
+     "graph": "nbxprivcheck",
+     "segment": "database",
+     "role": "nbx_test_ro",
+     "immutable": false
+    }
+   ]
+  },
+  "sneaky": {
+   "roles": [
+    "nbx_test_sneaky"
+   ],
+   "rows": [
+    {
+     "access": "GRANTED",
+     "action": "load",
+     "resource": "file",
+     "graph": "*",
+     "segment": "ALL DATA",
+     "role": "PUBLIC",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "execute",
+     "resource": "database",
+     "graph": "*",
+     "segment": "FUNCTION(*)",
+     "role": "PUBLIC",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "execute",
+     "resource": "database",
+     "graph": "*",
+     "segment": "PROCEDURE(*)",
+     "role": "PUBLIC",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "access",
+     "resource": "database",
+     "graph": "HOME",
+     "segment": "database",
+     "role": "PUBLIC",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "match",
+     "resource": "all_properties",
+     "graph": "nbxprivcheck",
+     "segment": "NODE(*)",
+     "role": "nbx_test_sneaky",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "set_property",
+     "resource": "property(note)",
+     "graph": "nbxprivcheck",
+     "segment": "NODE(*)",
+     "role": "nbx_test_sneaky",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "match",
+     "resource": "all_properties",
+     "graph": "nbxprivcheck",
+     "segment": "RELATIONSHIP(*)",
+     "role": "nbx_test_sneaky",
+     "immutable": false
+    },
+    {
+     "access": "GRANTED",
+     "action": "access",
+     "resource": "database",
+     "graph": "nbxprivcheck",
+     "segment": "database",
+     "role": "nbx_test_sneaky",
+     "immutable": false
+    }
+   ]
+  }
+ }
+}

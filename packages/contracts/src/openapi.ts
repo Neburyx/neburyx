@@ -98,7 +98,7 @@ export function buildOpenApiDocument(
           operationId: 'testSource',
           summary: 'Test a configured source and report what it answered',
           description:
-            'Runs the capabilities check through the gate as the calling principal and returns the report. The request takes no body and no query parameters. A source that does not answer is still a 200: the report says outcome fail and gives a fixed, plain reason that holds no address, credential or query text.',
+            'Reads the capabilities of the server and then the privileges of the login through the gate as the calling principal, and returns the report. The request takes no body and no query parameters, so it cannot ask for the write probe, which only the command line runs. A source that does not answer is still a 200: the report says outcome fail and gives a fixed, plain reason that holds no address, credential or query text.',
           parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
           responses: {
             '200': { description: 'The report of the run', content: jsonBody('SourceTestReport') },

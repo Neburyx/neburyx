@@ -31,7 +31,7 @@ export function startupProblem(_results: readonly StartupResult[]): string | und
   return undefined;
 }
 
-/** Tests every mapped source at once through the system runner and stores each result; each run is bounded by the gate's request deadline. */
+/** Tests every mapped source at once through the system runner and stores each result; each run makes two reads one after the other, each bounded by the gate's request deadline. */
 export function createStartupChecker(deps: StartupCheckerDeps): StartupChecker {
   const clock = deps.clock ?? Date.now;
   async function checkOne(sourceId: string): Promise<StartupResult> {
@@ -39,7 +39,7 @@ export function createStartupChecker(deps: StartupCheckerDeps): StartupChecker {
     if (source === undefined) return { sourceId, outcome: 'error' };
     let outcome: StartupResult['outcome'];
     try {
-      const report = await checkSource({ store: deps.store, clock }, source, (request) => deps.system.run(request), `tr-startup-${sourceId}`, null);
+      const report = await checkSource({ store: deps.store, clock, logger: deps.logger }, source, (request) => deps.system.run(request), `tr-startup-${sourceId}`, null);
       outcome = report.outcome;
     } catch (error) {
       // a failure of the gate says nothing about the source; a failure of the database is not caught here and stops the start

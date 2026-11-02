@@ -160,7 +160,7 @@ describe('a command the image does not have', () => {
   it('exits 2 and prints the usage line', async () => {
     const result = await docker(['run', '--rm', TAG, 'bogus']);
     expect(result.code).toBe(2);
-    expect(result.stderr).toBe('usage: neburyx api | migrate | test-source --name <source>\n');
+    expect(result.stderr).toBe('usage: neburyx api | migrate | test-source --name <source> [--write-probe]\n');
   });
 });
 
@@ -168,7 +168,7 @@ describe('the test-source command', () => {
   it('exits 2 and prints its usage line for arguments it does not take', async () => {
     const result = await docker(['run', '--rm', TAG, 'test-source']);
     expect(result.code).toBe(2);
-    expect(result.stderr).toBe('usage: neburyx test-source --name <source>\n');
+    expect(result.stderr).toBe('usage: neburyx test-source --name <source> [--write-probe]\n');
   });
 
   it('exits 1 naming DATABASE_URL when it is not set, and the mapping file when that is missing', async () => {

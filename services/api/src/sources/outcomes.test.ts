@@ -132,6 +132,20 @@ describe('a source that cannot be reached', () => {
   });
 });
 
+describe('a statement the server refuses because of what it is', () => {
+  it.each(['Neo.ClientError.Statement.UnsupportedAdministrationCommand', 'Neo.ClientError.Statement.NotSystemDatabaseError'])(
+    'answers unavailable with the reason refused for %s, and writes one read_failed line with the server code and no driver text',
+    async (code) => {
+      useClock();
+      const made = rig({ streamError: neo4jError(code, 'MARKER_MESSAGE') });
+      expect(await made.executor.execute(callFor())).toEqual({ status: 'unavailable', reason: 'refused' });
+      await flush();
+      expect(made.logs.map((line) => line.fields)).toEqual([{ event: 'source.read_failed', sourceId: 'demo', serverCode: code }]);
+      expect(JSON.stringify(made.logs)).not.toContain('MARKER_MESSAGE');
+    },
+  );
+});
+
 describe('any other driver error', () => {
   const MARKERS = ['MARKER_QUERY_TEXT', 'MARKER_PARAMETER', 'MARKER_ROW', 'MARKER_MESSAGE'];
 
