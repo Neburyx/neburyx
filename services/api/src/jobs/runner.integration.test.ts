@@ -129,7 +129,7 @@ describe('the job runner of the API', () => {
     const sessionsBefore = await listeners(database);
     const second = await startApi({ DATABASE_URL: database.appUrl }, undefined, { tasks: [endless] });
     expect(second.result.exitCode).toBe(0);
-    expect(await listeners(database)).toBeGreaterThan(sessionsBefore);
+    await vi.waitFor(async () => expect(await listeners(database)).toBeGreaterThan(sessionsBefore), WAIT);
     expect(await queued(database)).toMatchObject([{ task_identifier: 'endless', locked: true }]);
     expect(events).toEqual(['started']);
     await stopApi(second.result);
