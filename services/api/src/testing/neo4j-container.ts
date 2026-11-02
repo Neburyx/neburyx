@@ -61,6 +61,19 @@ export async function startNeo4j(image = neo4jImageFrom(process.env), options: S
       await dockerOk(['start', started.getId()]);
       const answered = await pollUntil(() => admin.getServerInfo().then(() => true, () => false), STARTUP_LIMIT_MS, 1000);
       if (!answered) throw new Error('the Neo4j server did not answer after it was started again');
+      // the server answers a query of its own once its database is online, which is the signal that a client can read
+      const reads = await pollUntil(async () => {
+        const session = admin.session({ database: 'neo4j' });
+        try {
+          await session.run('RETURN 1');
+          return true;
+        } catch {
+          return false;
+        } finally {
+          await session.close();
+        }
+      }, STARTUP_LIMIT_MS, 500);
+      if (!reads) throw new Error('the Neo4j database did not answer a query after it was started again');
     },
   };
 }
