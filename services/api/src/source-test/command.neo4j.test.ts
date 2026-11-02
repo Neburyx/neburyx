@@ -9,8 +9,7 @@ import { buildApp } from '../app.js';
 import { createAppStore, type AppStore } from '../app-store.js';
 import { createSourceGate } from '../gate/source-gate.js';
 import { communitySeams } from '../seams/community-seams.js';
-import { runCli } from '../testing/cli.js';
-import { rows } from '../testing/database.js';
+import { rows, runInProcess } from '../testing/database.js';
 import { mappingOf, sourceWith } from '../testing/gate-fixtures.js';
 import { fileOf } from '../testing/mapping.js';
 import { envFor, neo4jImageFrom, NEO4J_ENV_PASSWORD, NEO4J_ENV_USER, runAll, startNeo4j, type RunningNeo4j } from '../testing/neo4j-container.js';
@@ -31,8 +30,8 @@ const options = () => ({ uri: neo4jServer.boltUri, database: 'neo4j', auth: { ki
 beforeAll(async () => {
   [neo4jServer, postgres] = await Promise.all([startNeo4j(), startPostgres()]);
   database = await postgres.newDatabase();
-  const migrated = await runCli(['migrate'], { DATABASE_MIGRATION_URL: database.ownerUrl, DATABASE_APP_ROLE: database.appRole }).done;
-  expect(migrated.code).toBe(0);
+  const migrated = await runInProcess({ DATABASE_MIGRATION_URL: database.ownerUrl, DATABASE_APP_ROLE: database.appRole }, SHIPPED);
+  expect(migrated.code, migrated.stderr).toBe(0);
   store = createAppStore(database.appUrl, () => undefined, { migrationsDirectory: SHIPPED });
   await store.initialize();
   await store.syncSources(mappingOf(sourceWith('alpha', options()), sourceWith('beta', options())).sources);

@@ -2,16 +2,17 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { sourcesResponseSchema } from '@neburyx/contracts';
-import { runCli } from '../testing/cli.js';
-import { rows } from '../testing/database.js';
+import { rows, runInProcess } from '../testing/database.js';
 import { sourceWith } from '../testing/gate-fixtures.js';
 import { fileOf } from '../testing/mapping.js';
 import { envFor, neo4jImageFrom, NEO4J_ENV_PASSWORD, NEO4J_ENV_USER, runAll, startNeo4j, type RunningNeo4j } from '../testing/neo4j-container.js';
 import { startPostgres, type TestDatabase, type TestPostgres } from '../testing/postgres.js';
 import { startApi, stopApi, webRoot } from '../testing/start-api.js';
 
+const SHIPPED = fileURLToPath(new URL('../../migrations', import.meta.url));
 const folder = mkdtempSync(join(tmpdir(), 'startup-neo4j-'));
 let neo4jServer: RunningNeo4j;
 let postgres: TestPostgres;
@@ -38,8 +39,8 @@ const auth = { kind: 'basic', username_env: NEO4J_ENV_USER, password_env: NEO4J_
 
 async function migrated(): Promise<TestDatabase> {
   const database = await postgres.newDatabase();
-  const result = await runCli(['migrate'], { DATABASE_MIGRATION_URL: database.ownerUrl, DATABASE_APP_ROLE: database.appRole }).done;
-  expect(result.code).toBe(0);
+  const result = await runInProcess({ DATABASE_MIGRATION_URL: database.ownerUrl, DATABASE_APP_ROLE: database.appRole }, SHIPPED);
+  expect(result.code, result.stderr).toBe(0);
   return database;
 }
 
