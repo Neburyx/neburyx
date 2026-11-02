@@ -3,6 +3,7 @@ import type { ExecuteCall, ExecuteOutcome, ReadExecutor } from '../gate/executor
 import type { SourceModel } from '../mapping/model.js';
 import { neo4jDriverFactory, type DriverFactory, type SourceDriver, type SourceSession } from './driver.js';
 import { AdapterError, classify, serverCodeOf } from './errors.js';
+import { prepareParameters } from './parameters.js';
 import { OPERATIONS, type CancelResult } from './operations.js';
 
 export interface Neo4jExecutorOptions {
@@ -115,7 +116,7 @@ export function createNeo4jExecutor(options: Neo4jExecutorOptions): Neo4jExecuto
           .beginTransaction({ timeout, metadata: { traceId: call.traceId, templateId: call.templateId, templateVersion: call.templateVersion } })
           .then((transaction) => {
             if (settled) return;
-            transaction.run(call.cypher, call.parameters).subscribe({
+            transaction.run(call.cypher, prepareParameters(call.parameters, call.integerParameters ?? [])).subscribe({
               onNext: (row) => {
                 if (settled) return;
                 rows.push(row);

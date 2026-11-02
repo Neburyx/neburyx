@@ -1,3 +1,3 @@
-import { createGate } from '../../services/api/src/gate/gate.js';
+import type { Gate } from '../../services/api/src/gate/types.js';
 
-export const run = createGate;
+export type Run = Gate;

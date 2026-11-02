@@ -246,3 +246,12 @@ describe('the real repository tree', () => {
     expect(paths).toEqual(expect.arrayContaining([`${API}/gate/gate.ts`, `${API}/app.ts`]));
   });
 });
+
+describe('the modules that take an executor to build a gate', () => {
+  it.each(['gate', 'assemble'])('%s is reported from a route, not from the gate or the adapter folder, and not when re-exported through gate/types.ts', (name) => {
+    expect(snippet(`${API}/routes/x.ts`, `import { build } from '../gate/${name}.js';`)).toMatchObject([{ file: `${API}/routes/x.ts`, specifier: `../gate/${name}.js`, line: 1 }]);
+    expect(snippet(`${API}/gate/source-gate.ts`, `import { build } from './${name}.js';`)).toEqual([]);
+    expect(snippet(`${API}/sources/x.ts`, `import { build } from '../gate/${name}.js';`)).toEqual([]);
+    expect(snippet(`${API}/gate/types.ts`, `export { build } from './${name}.js';`)).toHaveLength(1);
+  });
+});

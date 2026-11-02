@@ -2,7 +2,8 @@ import { AppError } from '../errors.js';
 import type { Coordinator, ReadLease } from '../seams/seams.js';
 import { exhaustive } from './exhaustive.js';
 import type { ReadExecutor } from './executor.js';
-import type { Clock, GateContext, GateLogger, Params, Row, Template } from './types.js';
+import type { Rendered } from './render.js';
+import type { Clock, GateContext, GateLogger, Row, Template } from './types.js';
 
 export interface ExecuteDeps {
   readonly coordinator: Coordinator;
@@ -29,7 +30,7 @@ export async function executeRead(
   deps: ExecuteDeps,
   context: GateContext,
   template: Template,
-  params: Params,
+  rendered: Rendered,
   limit: number,
 ): Promise<ExecuteResult> {
   if (deps.clock() >= context.deadlineAt) throw new AppError('QUERY_TIMEOUT');
@@ -51,8 +52,9 @@ export async function executeRead(
       sourceId: context.sourceId,
       templateId: template.id,
       templateVersion: template.version,
-      cypher: template.cypher,
-      parameters: params,
+      cypher: rendered.cypher,
+      parameters: rendered.parameters,
+      integerParameters: template.integerParameters,
       accessMode: 'READ',
       timeoutMs: context.budgets.timeoutMs,
       rowLimit: limit + 1,

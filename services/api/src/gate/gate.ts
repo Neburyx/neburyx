@@ -5,7 +5,8 @@ import { authorizeRequest } from './authorize.js';
 import { executeRead } from './execute.js';
 import { exhaustive } from './exhaustive.js';
 import type { GateDeps } from './deps.js';
-import type { Gate, GateContext, GatePage, GateRequest, GateStage } from './types.js';
+import { SYSTEM_PRINCIPAL } from './system-principal.js';
+import type { Gate, GateContext, GatePage, GateRequest, GateStage, SystemRunner } from './types.js';
 import { findTemplate, validateRequest } from './validate.js';
 
 interface Progress {
@@ -25,27 +26,29 @@ async function inStage<T>(deps: GateDeps, progress: Progress, stage: GateStage, 
   }
 }
 
-function resolveContext(deps: GateDeps, request: GateRequest): GateContext {
+function resolveContext(deps: GateDeps, request: GateRequest, system: boolean): GateContext {
   const budgets = deps.budgetsFor(request.sourceId);
   return {
     traceId: request.traceId,
     principal: request.principal,
+    system,
     sourceId: request.sourceId,
     budgets,
+    allowlist: deps.allowlistFor(request.sourceId),
     deadlineAt: deps.clock() + budgets.requestTimeoutMs,
   };
 }
 
-async function runStages(deps: GateDeps, request: GateRequest, progress: Progress): Promise<GatePage> {
-  const context = await inStage(deps, progress, 'resolve', () => resolveContext(deps, request));
-  const { template, params } = await inStage(deps, progress, 'validate', () => {
+async function runStages(deps: GateDeps, request: GateRequest, system: boolean, progress: Progress): Promise<GatePage> {
+  const context = await inStage(deps, progress, 'resolve', () => resolveContext(deps, request, system));
+  const { template, rendered } = await inStage(deps, progress, 'validate', () => {
     const found = findTemplate(deps.catalog, request);
     progress.action = found.auditAction;
     return validateRequest(deps.catalog, found, request, context);
   });
-  await inStage(deps, progress, 'authorize', () => authorizeRequest(deps.seams.policy, context));
+  await inStage(deps, progress, 'authorize', () => authorizeRequest(deps.seams.policy, context, template));
   const result = await inStage(deps, progress, 'execute', () =>
-    executeRead({ coordinator: deps.seams.coordinator, executor: deps.executor, clock: deps.clock, logger: deps.logger }, context, template, params, request.limit),
+    executeRead({ coordinator: deps.seams.coordinator, executor: deps.executor, clock: deps.clock, logger: deps.logger }, context, template, rendered, request.limit),
   );
   const items = await inStage(deps, progress, 'normalize', () => template.normalize(result.rows));
   const redacted = await inStage(deps, progress, 'redact', () => deps.redact(items, context));
@@ -79,29 +82,39 @@ function asAppError(deps: GateDeps, error: unknown, stage: GateStage): AppError 
 
 type Attempt = { readonly status: 'page'; readonly page: GatePage } | { readonly status: 'failure'; readonly failure: AppError };
 
-async function attempt(deps: GateDeps, request: GateRequest, progress: Progress): Promise<Attempt> {
+async function attempt(deps: GateDeps, request: GateRequest, system: boolean, progress: Progress): Promise<Attempt> {
   try {
-    return { status: 'page', page: await runStages(deps, request, progress) };
+    return { status: 'page', page: await runStages(deps, request, system, progress) };
   } catch (error) {
     return { status: 'failure', failure: asAppError(deps, error, progress.stage) };
   }
 }
 
-export function createGate(deps: GateDeps): Gate {
+async function runGate(deps: GateDeps, request: GateRequest, system: boolean): Promise<GatePage> {
+  const progress: Progress = { stage: 'resolve', action: FALLBACK_AUDIT_ACTION };
+  const outcome = await attempt(deps, request, system, progress);
+  switch (outcome.status) {
+    case 'page':
+      await recordAudit(deps, request, progress, undefined);
+      return outcome.page;
+    case 'failure':
+      await recordAudit(deps, request, progress, outcome.failure);
+      throw outcome.failure;
+    default:
+      return exhaustive(outcome);
+  }
+}
+
+export function createGates(deps: GateDeps): { readonly gate: Gate; readonly system: SystemRunner } {
   return {
-    async run(request) {
-      const progress: Progress = { stage: 'resolve', action: FALLBACK_AUDIT_ACTION };
-      const outcome = await attempt(deps, request, progress);
-      switch (outcome.status) {
-        case 'page':
-          await recordAudit(deps, request, progress, undefined);
-          return outcome.page;
-        case 'failure':
-          await recordAudit(deps, request, progress, outcome.failure);
-          throw outcome.failure;
-        default:
-          return exhaustive(outcome);
-      }
+    gate: { run: (request) => runGate(deps, request, false) },
+    system: {
+      run: (request) =>
+        runGate(deps, { traceId: request.traceId, principal: SYSTEM_PRINCIPAL, sourceId: request.sourceId, templateId: request.templateId, params: request.params, limit: request.limit }, true),
     },
   };
+}
+
+export function createGate(deps: GateDeps): Gate {
+  return createGates(deps).gate;
 }

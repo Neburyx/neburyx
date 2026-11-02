@@ -6,6 +6,7 @@ export interface ExecuteCall {
   readonly templateVersion: string;
   readonly cypher: string;
   readonly parameters: Params;
+  readonly integerParameters?: readonly string[];
   readonly accessMode: 'READ';
   readonly timeoutMs: number;
   readonly rowLimit: number;

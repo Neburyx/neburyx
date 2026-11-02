@@ -14,7 +14,7 @@ Every source read goes through the gate. Until the adapter exists, the check rea
 |---|---|
 | the `neo4j-driver` package or a subpath | `services/api/src/sources/` |
 | a module under `services/api/src/sources/` | `services/api/src/gate/` and `services/api/src/sources/` |
-| the gate's executor modules: `gate/executor.ts`, `gate/execute.ts`, `gate/deps.ts` | `services/api/src/gate/` and `services/api/src/sources/` |
+| the gate's executor modules: `gate/executor.ts`, `gate/execute.ts`, `gate/deps.ts`, and the two that take an executor to build a gate, `gate/gate.ts` and `gate/assemble.ts` | `services/api/src/gate/` and `services/api/src/sources/` |
 
 - Test files (`*.test.*` in any scanned extension) and `services/api/src/testing/` are exempt, because they fake or seed the
   outside world. Production code may not import or re-export them.
@@ -22,7 +22,7 @@ Every source read goes through the gate. Until the adapter exists, the check rea
   on. Re-exports read: `export … from`, `export *`, an import followed by `export { x }`, `export default x`, `export = x`, an
   exported constant that is just the binding or a property of it, `module.exports = x`, and an exported type written with an
   inline `import('…')`.
-- Routes use the gate through `createGate` and the types `Gate`, `GateRequest` and `GatePage`.
+- Routes use the `Gate` they are handed, through the types `Gate`, `GateRequest` and `GatePage`. Outside `gate/` and `sources/`, production code can reach the gate only through the module that exports `createSourceGate` (next section).
 - A relative specifier names a file when it carries an extension (`./sources.js` is a file next to a folder `sources/`, not
   the folder), a folder when it ends in `/index` (with or without an extension), and either when it has no extension; the
   check reads an extensionless specifier whichever way is stricter for the rule at hand.
@@ -31,6 +31,21 @@ Every source read goes through the gate. Until the adapter exists, the check rea
   and `require()` with a literal specifier. A query or fragment on a relative specifier is ignored.
 
 When a new place must build the gate with the adapter, change the zones in `adapter.ts`, so the change is visible in review.
+
+## The system principal and the system runner
+
+`createSourceGate` builds the gate and the Neo4j executor from the mapping, and returns the user `Gate` (which has `run` only), a separate
+system runner and a `close()`. Routes receive only the `Gate`; the system runner goes to the startup check and the scheduled ping. Two rules
+keep the capabilities where they belong (`tools/workspace-checks/src/architecture/gate-capabilities.ts`):
+
+| Import | Allowed in |
+|---|---|
+| the system-principal module, `gate/system-principal.ts` | `services/api/src/gate/` |
+| the module that exports `createSourceGate`, `gate/source-gate.ts` | `services/api/src/gate/` and `services/api/src/start.ts` |
+
+Test files (`*.test.*`) and `services/api/src/testing/` are exempt, as above. A re-export of either module is never allowed, even from a file
+that may import it, so `gate/types.ts` and `start.ts` cannot pass the system principal or the system runner on. Both rules read the same
+imports and re-exports as the adapter check, in the folders `services/`, `packages/`, `apps/` and `ee/`, and report the file, line and import.
 
 ## Community never imports `ee/`
 

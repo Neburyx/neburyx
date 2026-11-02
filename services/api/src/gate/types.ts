@@ -14,14 +14,26 @@ export type Params = Readonly<Record<string, unknown>>;
 export type Row = Readonly<Record<string, unknown>>;
 export type Item = Readonly<Record<string, unknown>>;
 
+export type TemplateScope = 'system' | 'user';
+
 export interface Template {
   readonly id: string;
   readonly version: string;
   readonly auditAction: string;
   readonly cypher: string;
   readonly paramsSchema: ZodType<Params>;
+  readonly scope: TemplateScope;
+  readonly paged: boolean;
+  readonly entityParams: readonly string[];
+  readonly relationshipParams: readonly string[];
+  readonly integerParameters: readonly string[];
   refsOf(params: Params): readonly ElementRef[];
   normalize(rows: readonly Row[]): readonly Item[];
+}
+
+export interface SourceAllowlist {
+  readonly entityLabels: ReadonlyMap<string, string>;
+  readonly relationshipTypes: ReadonlySet<string>;
 }
 
 export interface TemplateCatalog {
@@ -47,8 +59,10 @@ export interface GateRequest {
 export interface GateContext {
   readonly traceId: string;
   readonly principal: Principal;
+  readonly system: boolean;
   readonly sourceId: string;
   readonly budgets: Budgets;
+  readonly allowlist: SourceAllowlist;
   readonly deadlineAt: number;
 }
 
@@ -69,4 +83,16 @@ export type Clock = () => number;
 
 export interface Gate {
   run(request: GateRequest): Promise<GatePage>;
+}
+
+export interface SystemRequest {
+  readonly traceId: string;
+  readonly sourceId: string;
+  readonly templateId: string;
+  readonly params: unknown;
+  readonly limit: number;
+}
+
+export interface SystemRunner {
+  run(request: SystemRequest): Promise<GatePage>;
 }

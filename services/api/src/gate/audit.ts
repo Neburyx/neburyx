@@ -4,7 +4,7 @@ import type { ErrorCode } from '@neburyx/contracts';
 
 export const FALLBACK_AUDIT_ACTION = 'gate.read';
 
-const REFUSED_CODES: ReadonlySet<ErrorCode> = new Set<ErrorCode>(['INVALID_REQUEST', 'QUERY_BUDGET_EXCEEDED', 'SOURCE_MISMATCH']);
+const REFUSED_CODES: ReadonlySet<ErrorCode> = new Set<ErrorCode>(['INVALID_REQUEST', 'QUERY_BUDGET_EXCEEDED', 'SOURCE_MISMATCH', 'NOT_FOUND']);
 
 export function auditResultFor(failure: AppError | undefined): AuditResult {
   if (!failure) return 'success';

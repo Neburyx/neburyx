@@ -25,7 +25,7 @@ describe('a ref from another source', () => {
   });
 
   it('is accepted when the ref names the bound source', async () => {
-    const { gate, executor } = harness();
+    const { gate, executor } = harness({ allowlistFor: () => ({ entityLabels: new Map([['item', 'Item']]), relationshipTypes: new Set() }) });
     await gate.run(gateRequest({ params: { key: 'k1', ref: { sourceId: SOURCE_A, entityType: 'item', stableId: '1' } } }));
     expect(executor.calls).toHaveLength(1);
   });
@@ -86,6 +86,6 @@ describe('parameter text that looks like a query', () => {
     const call = executor.calls[0];
     expect(call?.cypher).toBe(TEST_CYPHER);
     expect(call?.cypher).not.toContain(text);
-    expect(call?.parameters).toEqual({ key: text });
+    expect(call?.parameters).toEqual({ key: text, limit: 10 });
   });
 });

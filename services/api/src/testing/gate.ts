@@ -2,13 +2,15 @@ import { z } from 'zod';
 import { communitySeams } from '../seams/community-seams.js';
 import type { Principal, Seams } from '../seams/seams.js';
 import { DEFAULT_BUDGETS } from '../gate/budgets.js';
-import { createGate } from '../gate/gate.js';
+import { createGates } from '../gate/gate.js';
 import type { GateDeps } from '../gate/deps.js';
 import type { ExecuteCall, ExecuteOutcome, ReadExecutor } from '../gate/executor.js';
 import type {
   Budgets,
   ElementRef,
   Gate,
+  SourceAllowlist,
+  SystemRunner,
   GateObserver,
   GateRequest,
   GateStage,
@@ -33,6 +35,11 @@ export function testTemplate(overrides: Partial<Template> = {}): Template {
     auditAction: 'test.read',
     cypher: TEST_CYPHER,
     paramsSchema: z.strictObject({ key: z.string(), ref: refSchema.optional() }),
+    scope: 'user',
+    paged: false,
+    entityParams: [],
+    relationshipParams: [],
+    integerParameters: [],
     refsOf: (params: Params): readonly ElementRef[] => {
       const parsed = refSchema.safeParse(params['ref']);
       return parsed.success ? [parsed.data] : [];
@@ -88,8 +95,11 @@ export function gateRequest(overrides: Partial<GateRequest> = {}): GateRequest {
   };
 }
 
+export const EMPTY_ALLOWLIST: SourceAllowlist = { entityLabels: new Map(), relationshipTypes: new Set() };
+
 export interface Harness {
   readonly gate: Gate;
+  readonly system: SystemRunner;
   readonly executor: TestExecutor;
   readonly observer: ReturnType<typeof recordingObserver>;
   readonly logs: { fields: object; message: string }[];
@@ -100,6 +110,7 @@ export interface HarnessOptions {
   readonly catalog?: TemplateCatalog;
   readonly executor?: TestExecutor;
   readonly budgetsFor?: (sourceId: string) => Budgets;
+  readonly allowlistFor?: (sourceId: string) => SourceAllowlist;
   readonly redact?: GateDeps['redact'];
   readonly clock?: () => number;
 }
@@ -109,15 +120,16 @@ export function harness(options: HarnessOptions = {}): Harness {
   const observer = recordingObserver();
   const logs: { fields: object; message: string }[] = [];
   const defaults = communitySeams();
-  const gate = createGate({
+  const { gate, system } = createGates({
     seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit, ...options.seams },
     catalog: options.catalog ?? testCatalog(),
     executor,
     budgetsFor: options.budgetsFor ?? (() => DEFAULT_BUDGETS),
+    allowlistFor: options.allowlistFor ?? (() => EMPTY_ALLOWLIST),
     redact: options.redact ?? ((items) => items),
     clock: options.clock ?? (() => 1_000_000),
     logger: { warn: (fields, message) => void logs.push({ fields, message }) },
     observer,
   });
-  return { gate, executor, observer, logs };
+  return { gate, system, executor, observer, logs };
 }

@@ -1,6 +1,7 @@
 import { rmSync } from 'node:fs';
 import { meResponseSchema } from '@neburyx/contracts';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { SYSTEM_ID } from '../gate/system-principal.js';
 import { runCli } from '../testing/cli.js';
 import { rows } from '../testing/database.js';
 import { forwardTo } from '../testing/forwarder.js';
@@ -40,7 +41,9 @@ describe('GET /v1/me on a started API', () => {
         identityMode: 'none',
         sources: [],
       });
-      expect(meResponseSchema.safeParse(response.json()).success).toBe(true);
+      const body = meResponseSchema.parse(response.json());
+      expect(body.principal.id).not.toBe(SYSTEM_ID);
+      expect(body.principal.id[14]).toBe('7');
     } finally {
       await stopApi(result);
     }
