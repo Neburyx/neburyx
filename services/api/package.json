@@ -8,6 +8,7 @@
     "test": "vitest run --passWithNoTests",
     "test:contract": "vitest run --passWithNoTests contract.test",
     "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:neo4j": "vitest run --config vitest.neo4j.config.ts --reporter=verbose",
     "test:image": "vitest run --config vitest.image.config.ts",
     "test:compose": "vitest run --config vitest.compose.config.ts"
   },
@@ -17,12 +18,14 @@
     "fastify": "5.12.7",
     "graphile-worker": "0.18.0",
     "kysely": "0.29.7",
+    "neo4j-driver": "6.3.0",
     "pg": "8.23.1",
     "pino": "10.4.0",
     "yaml": "2.9.1",
     "zod": "4.6.7"
   },
   "devDependencies": {
+    "@testcontainers/neo4j": "12.2.1",
     "@testcontainers/postgresql": "12.2.1",
     "@types/node": "24.19.2",
     "@types/pg": "8.23.1",

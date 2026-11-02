@@ -62,3 +62,15 @@ jobs and waits for the running one within the API's shutdown limit. A failed job
 graphile-worker's defaults; the API's log names the failed task and never the job's payload or error text.
 Two tasks with the same name, or a schedule that is not a cron expression, stop start-up with a message
 naming the task.
+
+**The Neo4j adapter.** `src/sources/` is the only production code that imports `neo4j-driver`. `createNeo4jExecutor` builds the
+gate's read executor from the validated mapping: one connection pool per source, created on the first call and sized by the
+source's budgets, with encryption decided by the scheme of its address. Credentials are read at the first call from the
+environment variables the mapping names. A call answers `rows` (never more than the row limit), `timeout`, or
+`unavailable`; any other driver error is thrown without the query, a parameter or a row in it. Sessions use read access
+mode and every read runs in an explicit read transaction; Neo4j does not promise to reject a write sent that way, so the
+source's own privileges and the fixed read templates matter too.
+
+**Neo4j tests.** `pnpm test:neo4j` runs the `*.neo4j.test.ts` files against a Neo4j container (Docker is needed). The server is
+`neo4j:5.26` unless `NEBURYX_NEO4J_IMAGE` names another image; CI runs both `neo4j:5.26` and `neo4j:2026`. A test that cannot
+start the server fails with the image's name and never skips.

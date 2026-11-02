@@ -10,10 +10,15 @@ const stepSchema = z.object({
   run: z.string().optional(),
   with: z.record(z.string(), z.string()).optional(),
 });
+const jobSchema = z.object({
+  env: z.record(z.string(), z.string()).optional(),
+  strategy: z.object({ 'fail-fast': z.boolean().optional(), matrix: z.record(z.string(), z.array(z.string())) }).optional(),
+  steps: z.array(stepSchema),
+});
 const workflowSchema = z.object({
   on: z.object({ push: z.unknown(), pull_request: z.unknown() }),
   permissions: z.record(z.string(), z.string()),
-  jobs: z.record(z.string(), z.object({ steps: z.array(stepSchema) })),
+  jobs: z.record(z.string(), jobSchema),
 });
 
 const workflow = workflowSchema.parse(parse(readFileSync(join(repoRoot, '.github', 'workflows', 'ci.yml'), 'utf8')));
@@ -57,8 +62,23 @@ describe('CI workflow', () => {
     expect(Object.keys(rootScripts)).toContain(script);
   });
 
-  it('defines exactly the eight jobs', () => {
-    expect(Object.keys(workflow.jobs).sort()).toEqual(['build', 'compose', 'contract', 'image', 'integration', 'lint', 'typecheck', 'unit']);
+  it('defines exactly the nine jobs', () => {
+    expect(Object.keys(workflow.jobs).sort()).toEqual(['build', 'compose', 'contract', 'image', 'integration', 'lint', 'neo4j', 'typecheck', 'unit']);
+  });
+
+  it('runs the Neo4j tests once for each of Neo4j 5.26 and 2026, with the image reaching the tests', () => {
+    const job = workflow.jobs['neo4j'];
+    expect(job?.strategy).toEqual({ 'fail-fast': false, matrix: { image: ['neo4j:5.26', 'neo4j:2026'] } });
+    expect(job?.env).toEqual({ NEBURYX_NEO4J_IMAGE: '${{ matrix.image }}' });
+    expect((job?.steps ?? []).map((step) => step.uses?.split('@')[0] ?? step.run)).toEqual([
+      'actions/checkout',
+      'actions/setup-node',
+      'corepack enable',
+      'pnpm install --frozen-lockfile',
+      'pnpm test:neo4j',
+    ]);
+    expect(job?.steps[1]?.with).toEqual({ 'node-version-file': '.nvmrc' });
+    expect(Object.keys(rootScripts)).toContain('test:neo4j');
   });
 
   it('installs frozen and ends with the compose test in the compose job', () => {

@@ -69,6 +69,7 @@ Node 24 LTS (`.nvmrc`; with nvm, `nvm use`) and pnpm through Corepack, at the ve
 | Unit tests | `pnpm test` |
 | Contract test | `pnpm test:contract` |
 | Integration tests (a Postgres container; needs Docker) | `pnpm test:integration` |
+| Neo4j tests (a Neo4j container; needs Docker; the image is `neo4j:5.26` unless `NEBURYX_NEO4J_IMAGE` names another) | `pnpm test:neo4j` |
 | Image tests (builds the image and runs it; needs Docker, takes minutes) | `pnpm test:image` |
 | Compose tests (brings the Community stack up, upgrades it; needs Docker, takes minutes) | `pnpm test:compose` |
 | Driver timeout check (starts Neo4j containers; needs Docker, takes about ten minutes; not in CI) | `pnpm check:driver` |
@@ -85,7 +86,7 @@ To create or upgrade the database (after `pnpm build`): `DATABASE_MIGRATION_URL=
 The API listens on `127.0.0.1:8080` unless `NEBURYX_HOST` and `NEBURYX_PORT` say otherwise, and logs a
 warning if started outside a container on a non-loopback address.
 
-CI runs lint, type-check, unit tests, the contract test, the integration tests, the build, the image build (both platforms) and the compose test as separate jobs (`.github/workflows/ci.yml`). There is no demo
+CI runs lint, type-check, unit tests, the contract test, the integration tests, the Neo4j tests (on Neo4j 5.26 and 2026), the build, the image build (both platforms) and the compose test as separate jobs (`.github/workflows/ci.yml`). There is no demo
 environment yet. Add its commands here when it exists.
 
 ## Conventions
