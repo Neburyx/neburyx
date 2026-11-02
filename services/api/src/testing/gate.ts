@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ALWAYS_USABLE } from './usability.js';
 import { communitySeams } from '../seams/community-seams.js';
 import type { Principal, Seams } from '../seams/seams.js';
 import { DEFAULT_BUDGETS } from '../gate/budgets.js';
@@ -95,7 +96,7 @@ export function gateRequest(overrides: Partial<GateRequest> = {}): GateRequest {
   };
 }
 
-export const EMPTY_ALLOWLIST: SourceAllowlist = { entityLabels: new Map(), relationshipTypes: new Set() };
+export const EMPTY_ALLOWLIST: SourceAllowlist = { entityLabels: new Map(), relationshipTypes: new Set(), stableIds: new Map(), properties: new Set() };
 
 export interface Harness {
   readonly gate: Gate;
@@ -113,6 +114,7 @@ export interface HarnessOptions {
   readonly allowlistFor?: (sourceId: string) => SourceAllowlist;
   readonly redact?: GateDeps['redact'];
   readonly clock?: () => number;
+  readonly usability?: GateDeps['usability'];
 }
 
 export function harness(options: HarnessOptions = {}): Harness {
@@ -127,6 +129,7 @@ export function harness(options: HarnessOptions = {}): Harness {
     budgetsFor: options.budgetsFor ?? (() => DEFAULT_BUDGETS),
     allowlistFor: options.allowlistFor ?? (() => EMPTY_ALLOWLIST),
     redact: options.redact ?? ((items) => items),
+    usability: options.usability ?? ALWAYS_USABLE,
     clock: options.clock ?? (() => 1_000_000),
     logger: { warn: (fields, message) => void logs.push({ fields, message }) },
     observer,

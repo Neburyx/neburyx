@@ -77,7 +77,7 @@ describe('the function that lists applied migrations', () => {
     await client.connect();
     try {
       const result = await client.query<{ name: string }>('SELECT public.applied_migrations() AS name');
-      expect(result.rows.map((row) => row.name)).toEqual(['0001-baseline', '0002-deployment-and-users', '0003-applied-migrations-function', '0004-sources', '0005-source-checks', '0006-source-check-identity']);
+      expect(result.rows.map((row) => row.name)).toEqual(['0001-baseline', '0002-deployment-and-users', '0003-applied-migrations-function', '0004-sources', '0005-source-checks', '0006-source-check-identity', '0007-source-check-config']);
       expect(Object.keys(result.fields.map((field) => field.name))).toHaveLength(1);
     } finally {
       await client.end();

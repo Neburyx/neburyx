@@ -1,4 +1,5 @@
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { ALWAYS_USABLE } from './testing/usability.js';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
@@ -6,7 +7,7 @@ import pino from 'pino';
 import { z } from 'zod';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import type { AppStore } from './app-store.js';
-import type { ExecuteCall } from './gate/executor.js';
+import type { ExecuteCall, ExecuteOutcome } from './gate/executor.js';
 import { assembleGate } from './gate/assemble.js';
 import { DEFAULT_BUDGETS } from './gate/budgets.js';
 import { communitySeams } from './seams/community-seams.js';
@@ -15,12 +16,13 @@ import { fakeDrivers } from './testing/fake-source-driver.js';
 import { mappingOf, sourceWith } from './testing/gate-fixtures.js';
 import { TestExecutor } from './testing/gate.js';
 import { fileOf } from './testing/mapping.js';
-import { SERVER_ROW, serverExecutor } from './testing/source-tester.js';
+import { fittingSchemaAnswer, SERVER_ROW, serverExecutor } from './testing/source-tester.js';
 import { testSourceGate } from './testing/source-gate.js';
 import { SourceGateError } from './gate/allowlist.js';
 import type { SourceGate, SourceGateOptions } from './gate/source-gate.js';
 import { READINESS_LIMIT_MS } from './health/readiness.js';
 import { SHUTDOWN_TIMES } from './serve.js';
+import { createSourceTester } from './source-test/tester.js';
 import { start, type StartIo } from './start.js';
 import { memoryAppStore, memoryStoreWith } from './testing/app-store.js';
 import { makeWebRoot } from './testing/web-root.js';
@@ -332,6 +334,148 @@ describe('the startup check in start', () => {
     await result.app.close();
   });
 
+  describe('with a mapping that does not fit a source', () => {
+    const noTokens = (call: ExecuteCall): ExecuteOutcome => (call.sourceId === 'alpha' && call.templateId === 'schema-tokens' ? { status: 'rows', rows: [{ labels: [], types: [] }] } : fittingSchemaAnswer(call));
+
+    it('stops before the server listens with exit 1, one line for each failing finding that names the source, and the reports already stored', async () => {
+      const parts = wired(serverExecutor(undefined, undefined, noTokens));
+      const run = io(parts.io);
+      const result = await start(ENV, run.io);
+      expect(result.exitCode).toBe(1);
+      const lines = run.errors.join('').split('\n');
+      expect(lines.slice(0, 3)).toEqual([
+        'source alpha: Entity type "person" (label "Person"): no node carries the label',
+        'source alpha: Entity type "order_line" (label "Order Line"): no node carries the label',
+        'source alpha: Relationship type "KNOWS" from "person" to "person": no relationship of the type exists',
+      ]);
+      expect(lines.at(-2)).toBe('Fix the source, then run test-source or test it from the Sources page.');
+      expect(run.errors.join('')).not.toContain('beta');
+      expect(parts.store.checks.map((check) => [check.report.sourceId, check.report.outcome, check.report.state])).toEqual([['alpha', 'fail', 'unavailable'], ['beta', 'pass', 'connected']]);
+      expect(parts.lines.map((line) => logLineSchema.parse(JSON.parse(line))).some((line) => line.msg.startsWith('Server listening'))).toBe(false);
+      expect(parts.closed).toEqual(['gate', 'store']);
+    });
+
+    it('goes on for a warning, for checks that could not be verified, and for a source that is down', async () => {
+      for (const answer of [
+        (call: ExecuteCall): ExecuteOutcome => (call.templateId === 'schema-indexes' ? { status: 'unavailable', reason: 'refused' } : fittingSchemaAnswer(call)),
+        (call: ExecuteCall): ExecuteOutcome => (call.templateId === 'schema-indexes' ? { status: 'rows', rows: [{ indexes: [], truncated: true }] } : fittingSchemaAnswer(call)),
+      ]) {
+        const parts = wired(serverExecutor(undefined, undefined, answer));
+        const result = await start(ENV, io(parts.io).io);
+        expect(result.exitCode).toBe(0);
+        expect(parts.store.checks.map((check) => check.report.mappingChecks.status)).toEqual(['not-verified', 'not-verified']);
+        if (result.exitCode === 0) await result.app.close();
+      }
+      const parts = wired(serverExecutor(down));
+      const result = await start(ENV, io(parts.io).io);
+      expect(result.exitCode).toBe(0);
+      if (result.exitCode === 0) await result.app.close();
+    });
+
+    it('hands the gate the record of the running server: usable for a source whose check passed or only warned, unusable for none the start let through, unchecked for one that was down', async () => {
+      const parts = wired(serverExecutor(down));
+      let handed: SourceGateOptions['usability'] | undefined;
+      const run = io({ ...parts.io, openSourceGate: (options: SourceGateOptions): SourceGate => ((handed = options.usability), parts.io.openSourceGate()) });
+      const result = await start(ENV, run.io);
+      expect(result.exitCode).toBe(0);
+      expect([handed?.isUsable('alpha'), handed?.isUsable('beta')]).toEqual([false, true]);
+      if (result.exitCode === 0) await result.app.close();
+    });
+
+    describe('first contact', () => {
+      /** A source that is down at the start, and answers once `up.on` is set. */
+      function lateSource(schema: (call: ExecuteCall) => ExecuteOutcome = fittingSchemaAnswer, hold?: Promise<void>) {
+        const up = { on: false };
+        const executor = serverExecutor(
+          async (call) => {
+            if (call.sourceId === 'alpha' && !up.on) return { status: 'unavailable', reason: 'unreachable' } as const;
+            if (hold !== undefined && up.on && call.templateId === 'capabilities') await hold;
+            return { status: 'rows', rows: [SERVER_ROW] } as const;
+          },
+          undefined,
+          schema,
+        );
+        const parts = wired(executor);
+        let handed: SourceGateOptions['usability'] | undefined;
+        const run = io({ ...parts.io, pingIntervalMs: 20, openSourceGate: (options: SourceGateOptions): SourceGate => ((handed = options.usability), parts.io.openSourceGate()) });
+        return { up, parts, run, usable: (id: string) => handed?.isUsable(id) };
+      }
+
+      it('checks a source that was down at the start when it first answers, and makes it usable with the state of the report', async () => {
+        const { up, parts, run, usable } = lateSource();
+        const result = await start(ENV, run.io);
+        expect(result.exitCode).toBe(0);
+        if (result.exitCode !== 0) return;
+        expect([usable('alpha'), usable('beta')]).toEqual([false, true]);
+        up.on = true;
+        await vi.waitFor(() => expect(usable('alpha')).toBe(true), { timeout: 5000, interval: 20 });
+        await vi.waitFor(async () => expect((await parts.store.listSources())[0]).toMatchObject({ id: 'alpha', state: 'connected' }), { timeout: 5000, interval: 20 });
+        expect(parts.store.checks.filter((check) => check.report.sourceId === 'alpha' && check.report.server !== null)).toHaveLength(1);
+        await result.app.close();
+      });
+
+      it('leaves a source with a wrong mapping unusable and unavailable with the reason, and does not check it again', async () => {
+        const wrong = (call: ExecuteCall): ExecuteOutcome => (call.sourceId === 'alpha' && call.templateId === 'schema-tokens' ? { status: 'rows', rows: [{ labels: [], types: [] }] } : fittingSchemaAnswer(call));
+        const { up, parts, run, usable } = lateSource(wrong);
+        const result = await start(ENV, run.io);
+        if (result.exitCode !== 0) throw new Error('the API did not start');
+        up.on = true;
+        await vi.waitFor(async () => expect((await parts.store.listSources())[0]).toMatchObject({ id: 'alpha', state: 'unavailable', stateReason: expect.stringMatching(/^The mapping does not fit the source: /) }), { timeout: 5000, interval: 20 });
+        const checks = parts.store.checks.length;
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        expect(parts.store.checks).toHaveLength(checks);
+        expect(usable('alpha')).toBe(false);
+        // the ping that follows keeps the state of that check: it reached the source and was stored since the start
+        expect((await parts.store.listSources())[0]).toMatchObject({ state: 'unavailable' });
+        await result.app.close();
+      });
+
+      it('follows a passing check that another process stored, within one ping interval', async () => {
+        const wrong = (call: ExecuteCall): ExecuteOutcome => (call.sourceId === 'alpha' && call.templateId === 'schema-tokens' ? { status: 'rows', rows: [{ labels: [], types: [] }] } : fittingSchemaAnswer(call));
+        const { up, parts, run, usable } = lateSource(wrong);
+        const result = await start(ENV, run.io);
+        if (result.exitCode !== 0) throw new Error('the API did not start');
+        up.on = true;
+        await vi.waitFor(async () => expect((await parts.store.listSources())[0]?.stateReason).toMatch(/^The mapping does not fit the source: /), { timeout: 5000, interval: 20 });
+        expect(usable('alpha')).toBe(false);
+        // the command, in its own process, finds the mapping fixed and stores its report in the same database
+        const { gate } = testSourceGate(mapping, { executor: serverExecutor() });
+        const tester = createSourceTester({ gate, mapping, store: parts.store });
+        await tester.run({ traceId: 'tr-command', principal: (await parts.store.current()).principal, sourceId: 'alpha' });
+        await vi.waitFor(() => expect(usable('alpha')).toBe(true), { timeout: 5000, interval: 20 });
+        await result.app.close();
+      });
+
+      it('waits for a check that is running when the API is closed, and starts no other', async () => {
+        let release: (() => void) | undefined;
+        const hold = new Promise<void>((resolve) => (release = resolve));
+        const { up, parts, run } = lateSource(fittingSchemaAnswer, hold);
+        const result = await start(ENV, run.io);
+        if (result.exitCode !== 0) throw new Error('the API did not start');
+        up.on = true;
+        await vi.waitFor(() => expect(parts.executor.calls.filter((call) => call.sourceId === 'alpha' && call.templateId === 'capabilities').length).toBeGreaterThan(1), { timeout: 5000, interval: 20 });
+        let closed = false;
+        const closing = result.app.close().then(() => (closed = true));
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        expect(closed).toBe(false);
+        expect(parts.closed).toEqual([]);
+        release?.();
+        await closing;
+        expect(parts.closed).toEqual(['gate', 'store']);
+        const calls = parts.executor.calls.length;
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        expect(parts.executor.calls).toHaveLength(calls);
+      });
+    });
+
+    it('holds no address, credential or query text in the message, and shows a reachable source with a wrong mapping as reachable', async () => {
+      const parts = wired(serverExecutor(undefined, undefined, noTokens));
+      const run = io(parts.io);
+      await start(ENV, run.io);
+      expect(run.errors.join('')).not.toMatch(/graph\.example\.test|DEMO_|MATCH|CALL |password/i);
+    });
+  });
+
   it('runs no check for a mapping with no source', async () => {
     const parts = wired(serverExecutor(down));
     const result = await start(DATABASE_ENV, io(parts.io).io);
@@ -375,7 +519,7 @@ describe('the startup check against sources that never answer', () => {
       openSourceGate: (options: SourceGateOptions): SourceGate => {
         const executor = createNeo4jExecutor({ sources: options.mapping.sources, env: { DEMO_USER: 'u', DEMO_PASSWORD: 'p' }, logger: options.logger, createDriver: fake.factory });
         const defaults = communitySeams();
-        const parts = assembleGate({ mapping: options.mapping, seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit }, executor, logger: options.logger });
+        const parts = assembleGate({ usability: ALWAYS_USABLE, mapping: options.mapping, seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit }, executor, logger: options.logger });
         return { ...parts, close: () => executor.close() };
       },
     });
@@ -405,14 +549,14 @@ describe('the startup check against sources whose privileges read never answers'
 
   it('starts within two gate deadlines, with exit 0, and stores both sources as connected with read-only not verified', async () => {
     const store = memoryAppStore();
-    const fake = fakeDrivers({ rows: [SERVER_ROW], laterBeginHang: true });
+    const fake = fakeDrivers({ rows: [SERVER_ROW], privilegesHang: true });
     const run = io({
       portOverride: 0,
       openStore: () => store,
       openSourceGate: (options: SourceGateOptions): SourceGate => {
         const executor = createNeo4jExecutor({ sources: options.mapping.sources, env: { DEMO_USER: 'u', DEMO_PASSWORD: 'p' }, logger: options.logger, createDriver: fake.factory });
         const defaults = communitySeams();
-        const parts = assembleGate({ mapping: options.mapping, seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit }, executor, logger: options.logger });
+        const parts = assembleGate({ usability: ALWAYS_USABLE, mapping: options.mapping, seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit }, executor, logger: options.logger });
         return { ...parts, close: () => executor.close() };
       },
     });
@@ -503,7 +647,7 @@ describe('closing while a ping is stuck', () => {
       openSourceGate: (options: SourceGateOptions): SourceGate => {
         const executor = createNeo4jExecutor({ sources: options.mapping.sources, env: { DEMO_USER: 'u', DEMO_PASSWORD: 'p' }, logger: options.logger, createDriver: fake.factory });
         const defaults = communitySeams();
-        const parts = assembleGate({ mapping: options.mapping, seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit }, executor, logger: options.logger });
+        const parts = assembleGate({ usability: ALWAYS_USABLE, mapping: options.mapping, seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit }, executor, logger: options.logger });
         return { ...parts, close: () => executor.close() };
       },
     });

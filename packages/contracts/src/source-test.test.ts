@@ -13,6 +13,7 @@ const pass = {
   operations: [{ name: 'execute', status: 'supported' }],
   readOnlyCheck: 'not-verified',
   loginCanWrite: null,
+  mappingChecks: { status: 'pass', findings: [] },
   mappingSummary: { entityTypes: 2, relationshipTypes: 1, derivedRules: 0 },
 };
 
@@ -55,3 +56,42 @@ describe('sourceTestReportSchema', () => {
     expect(sourceTestReportSchema.safeParse(report).success).toBe(false);
   });
 });
+
+const finding = (check: string, severity: string, extra: Record<string, unknown> = {}) => ({ severity, check, entityType: 'gadget', message: 'a fixed sentence', ...extra });
+const withMapping = (mappingChecks: unknown, extra: Record<string, unknown> = {}) => ({ ...pass, ...extra, mappingChecks });
+const failing = { outcome: 'fail', state: 'unavailable', stateReason: 'The mapping does not fit the source: a fixed sentence. Fix the source, then run test-source or test it from the Sources page.' };
+
+describe('mappingChecks in the report', () => {
+  it.each([
+    ['pass without a finding', withMapping({ status: 'pass', findings: [] })],
+    ['not-run without a finding', withMapping({ status: 'not-run', findings: [] })],
+    ['warn with only warnings', withMapping({ status: 'warn', findings: [finding('sort-index', 'warn', { property: 'madeAt' })] }, { outcome: 'warn', state: 'degraded', stateReason: 'x' })],
+    ['not-verified with a finding that something was not verified and a warning', withMapping({ status: 'not-verified', findings: [finding('sort-index', 'warn'), finding('schema-refused', 'warn')] }, { outcome: 'warn', state: 'degraded', stateReason: 'x' })],
+    ['fail with a failure and a finding that something was not verified', withMapping({ status: 'fail', findings: [finding('label', 'fail'), finding('schema-refused', 'warn')] }, failing)],
+    ['a relationship finding with its from and to', withMapping({ status: 'fail', findings: [finding('relationship-type', 'fail', { entityType: undefined, relationshipType: 'KNOWS', from: 'a', to: 'b' })] }, failing)],
+  ])('accepts %s', (_name, report) => {
+    expect(sourceTestReportSchema.safeParse(report).success).toBe(true);
+  });
+
+  it.each([
+    ['no mappingChecks', { ...pass, mappingChecks: undefined }],
+    ['pass with a finding', withMapping({ status: 'pass', findings: [finding('sort-index', 'warn')] })],
+    ['not-run with a finding', withMapping({ status: 'not-run', findings: [finding('sort-index', 'warn')] })],
+    ['warn with no finding', withMapping({ status: 'warn', findings: [] })],
+    ['warn with a failure', withMapping({ status: 'warn', findings: [finding('label', 'fail')] })],
+    ['warn with a finding that something was not verified', withMapping({ status: 'warn', findings: [finding('schema-refused', 'warn')] })],
+    ['not-verified with a failure', withMapping({ status: 'not-verified', findings: [finding('label', 'fail'), finding('schema-refused', 'warn')] })],
+    ['not-verified with only a plain warning', withMapping({ status: 'not-verified', findings: [finding('sort-index', 'warn')] })],
+    ['fail with no failure', withMapping({ status: 'fail', findings: [finding('sort-index', 'warn')] }, failing)],
+    ['fail while the outcome is pass', withMapping({ status: 'fail', findings: [finding('label', 'fail')] })],
+    ['fail while the state is degraded', withMapping({ status: 'fail', findings: [finding('label', 'fail')] }, { outcome: 'fail', state: 'degraded', stateReason: 'x' })],
+    ['a check that is not known', withMapping({ status: 'fail', findings: [finding('guessed', 'fail')] }, failing)],
+    ['a severity that does not match the check', withMapping({ status: 'fail', findings: [finding('label', 'warn')] }, failing)],
+    ['a finding with an unknown key', withMapping({ status: 'fail', findings: [finding('label', 'fail', { value: 'x' })] }, failing)],
+    ['an empty message', withMapping({ status: 'fail', findings: [finding('label', 'fail', { message: '' })] }, failing)],
+    ['a status that is not known', withMapping({ status: 'maybe', findings: [] })],
+  ])('refuses %s', (_name, report) => {
+    expect(sourceTestReportSchema.safeParse(report).success).toBe(false);
+  });
+});
+

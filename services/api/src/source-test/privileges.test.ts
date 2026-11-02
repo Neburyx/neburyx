@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { ALWAYS_USABLE } from '../testing/usability.js';
 import { sourceTestReportSchema } from '@neburyx/contracts';
 import { assembleGate } from '../gate/assemble.js';
 import { createNeo4jExecutor } from '../sources/executor.js';
@@ -31,7 +32,7 @@ function rig(behaviour: FakeBehaviour, options: { readonly maxPage?: number; rea
   const logger = { warn: (fields: object, message: string) => void logs.push({ fields: { ...fields }, message }) };
   const executor = createNeo4jExecutor({ sources: mapping.sources, env: ENV, logger, createDriver: fake.factory });
   const defaults = communitySeams();
-  const parts = assembleGate({ mapping, seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit, ...options.seams }, executor, logger, ...(options.redact === undefined ? {} : { redact: options.redact }) });
+  const parts = assembleGate({ usability: ALWAYS_USABLE, mapping, seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit, ...options.seams }, executor, logger, ...(options.redact === undefined ? {} : { redact: options.redact }) });
   const store = memoryAppStore();
   const tester = createSourceTester({ gate: parts.gate, mapping, store, logger, clock: () => Date.UTC(2026, 10, 2, 10, 0, 0) });
   return { tester, fake, logs, executor, store, gate: parts.gate };
@@ -61,7 +62,7 @@ describe('a server that cannot list the privileges', () => {
     ['a sign-in the server then refuses', neo4jError('Neo.ClientError.Security.Unauthorized', 'MARKER_MESSAGE')],
     ['an error the executor does not know', neo4jError('Neo.ClientError.Statement.SyntaxError', 'MARKER_MESSAGE')],
   ])('%s when the second read starts is reported with read-only not verified and the rest of the report as the capabilities read made it', async (_name, error) => {
-    const { tester, store } = rig({ laterBeginError: error });
+    const { tester, store } = rig({ privilegesError: error });
     const report = sourceTestReportSchema.parse(await tester.run(request));
     expect(report).toMatchObject({ outcome: 'pass', state: 'connected', server: { product: 'Neo4j Kernel', version: '5.26.32' }, versionSupported: true, readOnlyCheck: 'not-verified', loginCanWrite: null });
     expect(store.checks).toHaveLength(1);
@@ -90,7 +91,7 @@ describe('a server that cannot list the privileges', () => {
 
 describe('a failure of the privileges read that says nothing about the source', () => {
   it.each([
-    ['a full pool', () => rig({ laterBeginError: neo4jError('N/A', 'Connection acquisition timed out in 2000 ms.') }), 'SOURCE_UNAVAILABLE'],
+    ['a full pool', () => rig({ privilegesError: neo4jError('N/A', 'Connection acquisition timed out in 2000 ms.') }), 'SOURCE_UNAVAILABLE'],
     [
       'a source that turns busy',
       () => {
@@ -218,8 +219,8 @@ describe('a server that lists the privileges', () => {
     const { tester, fake } = rig({ privileges: [] });
     await tester.run(request);
     const sessions = fake.drivers.flatMap((driver) => driver.sessions);
-    expect(sessions).toHaveLength(2);
-    expect(sessions.map((session) => session.config.defaultAccessMode)).toEqual(['READ', 'READ']);
+    expect(sessions).toHaveLength(4);
+    expect(sessions.map((session) => session.config.defaultAccessMode)).toEqual(['READ', 'READ', 'READ', 'READ']);
     expect(fake.forbidden).toEqual([]);
   });
 });

@@ -27,18 +27,25 @@ describe('the reachability cache', () => {
 });
 
 describe('seeding from the startup check', () => {
-  it('reads pass and warn as reachable, fail as unreachable, and error or no result as unknown', () => {
-    const cache = createReachabilityCache(['a', 'b', 'c', 'd', 'e']);
+  it('reads a source that answered as reachable, one that did not as unreachable, and a run that did not settle, or no result, as unknown', () => {
+    const cache = createReachabilityCache(['a', 'b', 'c', 'd', 'e', 'f']);
     seedFromStartup(
       cache,
       [
-        { sourceId: 'a', outcome: 'pass' },
-        { sourceId: 'b', outcome: 'warn' },
-        { sourceId: 'c', outcome: 'fail' },
-        { sourceId: 'd', outcome: 'error' },
+        { sourceId: 'a', outcome: 'pass', answered: true, findings: [] },
+        { sourceId: 'b', outcome: 'warn', answered: true, findings: [] },
+        { sourceId: 'c', outcome: 'fail', answered: false, findings: [] },
+        { sourceId: 'd', outcome: 'error', answered: false, findings: [] },
+        { sourceId: 'f', outcome: 'fail', answered: true, findings: [{ severity: 'fail', check: 'label', message: 'a wrong mapping' }] },
       ],
     );
-    expect([cache.get('a'), cache.get('b'), cache.get('c'), cache.get('d'), cache.get('e')]).toEqual(['reachable', 'reachable', 'unreachable', 'unknown', 'unknown']);
-    expect(cache.counts()).toEqual({ reachable: 2, unreachable: 1, unknown: 2 });
+    expect([cache.get('a'), cache.get('b'), cache.get('c'), cache.get('d'), cache.get('e'), cache.get('f')]).toEqual(['reachable', 'reachable', 'unreachable', 'unknown', 'unknown', 'reachable']);
+    expect(cache.counts()).toEqual({ reachable: 3, unreachable: 1, unknown: 2 });
+  });
+
+  it('reads a source that answered the capabilities read but whose later read did not settle as reachable', () => {
+    const cache = createReachabilityCache(['a']);
+    seedFromStartup(cache, [{ sourceId: 'a', outcome: 'error', answered: true, findings: [] }]);
+    expect(cache.get('a')).toBe('reachable');
   });
 });

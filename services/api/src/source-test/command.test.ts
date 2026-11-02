@@ -1,4 +1,5 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { ALWAYS_USABLE } from '../testing/usability.js';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -52,7 +53,7 @@ async function run(args: readonly string[], environment: Record<string, string |
     openSourceGate: (options: SourceGateOptions) => {
       const executor = createNeo4jExecutor({ sources: options.mapping.sources, env: options.env, logger: options.logger, createDriver: fake.factory });
       const defaults = communitySeams();
-      const parts = assembleGate({ mapping: options.mapping, seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit, ...seams }, executor, logger: options.logger });
+      const parts = assembleGate({ usability: ALWAYS_USABLE, mapping: options.mapping, seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit, ...seams }, executor, logger: options.logger });
       return { ...parts, close: () => executor.close() };
     },
     ...overrides,
@@ -77,7 +78,7 @@ describe('a source that answers', () => {
     expect(result.err).toBe('');
     expect(result.out).toContain('Source: alpha\nOutcome: pass\nState: connected\nServer: Neo4j Kernel 5.26.32 (community)\nVersion supported: yes\n');
     expect(result.out).toContain('Operations: execute (supported), searchEntities (by-template)');
-    expect(result.out).toContain('Mapping: 2 entity types, 2 relationship types, 0 derived rules\nRead-only: not verified\nLogin can write: unknown\nChecked at: 2026-11-02T10:00:00.000Z\n');
+    expect(result.out).toContain('Mapping: 2 entity types, 2 relationship types, 0 derived rules\nRead-only: not verified\nLogin can write: unknown\nMapping checks: pass\nChecked at: 2026-11-02T10:00:00.000Z\n');
     expect(result.store.checks).toHaveLength(1);
     expect(result.fake.drivers[0]?.closeCalls).toBe(1);
     expect(result.store.checks[0]).toMatchObject({ triggeredBy: (await result.store.current()).principal.id });
@@ -87,7 +88,7 @@ describe('a source that answers', () => {
     const result = await run(['--name', 'alpha'], env(), { rows: [SERVER_ROW], privileges: [] });
     expect(result.code).toBe(0);
     expect(result.out).toContain('Outcome: pass\nState: connected\n');
-    expect(result.out).toContain('Read-only: privileges inspected\nLogin can write: no\nChecked at:');
+    expect(result.out).toContain('Read-only: privileges inspected\nLogin can write: no\nMapping checks: pass\nChecked at:');
   });
 
   it('exits 0 and prints the fixed reason and that the login can write, for a listing that grants a write right', async () => {
@@ -103,11 +104,11 @@ describe('a source that answers', () => {
     expect(result.out).toContain('Outcome: warn\nState: degraded\nReason: The server version is not on the support matrix.\n');
   });
 
-  it('sees two read transactions in read mode, one with the capabilities Cypher and one with the privileges Cypher, and nothing else', async () => {
+  it('sees four read transactions in read mode, one for each of the capabilities, the privileges, the labels and types and the indexes, and nothing else', async () => {
     const result = await run(['--name', 'alpha'], env());
     expect(result.fake.drivers).toHaveLength(1);
     const sessions = result.fake.drivers[0]?.sessions ?? [];
-    expect(sessions).toHaveLength(2);
+    expect(sessions).toHaveLength(4);
     for (const session of sessions) {
       expect(session.config.defaultAccessMode).toBe('READ');
       expect(session.begins).toHaveLength(1);
@@ -115,8 +116,53 @@ describe('a source that answers', () => {
     expect(sessions.flatMap((session) => session.queries.map((query) => query.cypher))).toEqual([
       "CALL dbms.components() YIELD name, versions, edition WHERE name = 'Neo4j Kernel' RETURN name, versions[0] AS version, edition",
       "SHOW USER PRIVILEGES YIELD access, action, resource, graph, segment WHERE NOT action IN ['access', 'traverse', 'read', 'match', 'execute', 'execute_function', 'load', 'show_index', 'show_constraint'] RETURN DISTINCT access, action, resource, graph, segment LIMIT $limit + 1",
+      'CALL { CALL db.labels() YIELD label RETURN collect(label) AS labels } CALL { CALL db.relationshipTypes() YIELD relationshipType RETURN collect(relationshipType) AS types } RETURN [l IN $mappedLabels WHERE l IN labels] AS labels, [t IN $mappedTypes WHERE t IN types] AS types',
+      "SHOW INDEXES YIELD type, entityType, labelsOrTypes, properties, state, owningConstraint WHERE type IN ['RANGE', 'TEXT'] AND labelsOrTypes[0] IN ($mappedLabels + $mappedTypes) AND properties[0] IN $mappedProperties RETURN collect({type: type, entityType: entityType, name: labelsOrTypes[0], property: properties[0], single: size(properties) = 1, state: state, constrained: owningConstraint IS NOT NULL})[..500] AS indexes, count(*) > 500 AS truncated",
     ]);
     expect(result.fake.forbidden).toEqual([]);
+  });
+});
+
+describe('the record the command hands its gate', () => {
+  it('has every source unchecked, because the command runs system-scope templates only', async () => {
+    let handed: SourceGateOptions['usability'] | undefined;
+    await run(['--name', 'alpha'], env(), { rows: [SERVER_ROW] }, {
+      openSourceGate: (options: SourceGateOptions) => {
+        handed = options.usability;
+        const executor = createNeo4jExecutor({ sources: options.mapping.sources, env: options.env, logger: options.logger, createDriver: fakeDrivers({ rows: [SERVER_ROW] }).factory });
+        const defaults = communitySeams();
+        const parts = assembleGate({ usability: options.usability, mapping: options.mapping, seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit }, executor, logger: options.logger });
+        return { ...parts, close: () => executor.close() };
+      },
+    });
+    expect([handed?.isUsable('alpha'), handed?.isUsable('beta')]).toEqual([false, false]);
+  });
+});
+
+describe('the mapping checks in the output', () => {
+  it('prints that they pass, and a line for each finding with its severity and message when they do not', async () => {
+    const fits = await run(['--name', 'alpha'], env());
+    expect(fits.out).toContain('Mapping checks: pass\nChecked at:');
+    const wrong = await run(['--name', 'alpha'], env(), { rows: [SERVER_ROW], schemaTokens: [{ labels: [], types: [] }] });
+    expect(wrong.code).toBe(1);
+    expect(wrong.out).toContain('Outcome: fail\nState: unavailable\nReason: The mapping does not fit the source: ');
+    expect(wrong.out).toContain('Mapping checks: fail\n  fail: Entity type "person" (label "Person"): no node carries the label\n  fail: Entity type "order_line" (label "Order Line"): no node carries the label\n');
+    expect(wrong.out).toContain('  fail: Relationship type "KNOWS" from "person" to "person": no relationship of the type exists\n');
+    expect(wrong.store.checks).toHaveLength(1);
+  });
+
+  it('prints not verified for a login that may not list indexes, and not run for a source that did not answer', async () => {
+    const refused = await run(['--name', 'alpha'], env(), { rows: [SERVER_ROW], schemaError: { read: 'indexes', error: neo4jError('Neo.ClientError.Security.Forbidden') } });
+    expect(refused.code).toBe(0);
+    expect(refused.out).toContain('Mapping checks: not verified\n  warn: The index checks were not verified because the login may not list indexes (grant SHOW INDEX and SHOW CONSTRAINT); a search on this source may scan.\n');
+    const down = await run(['--name', 'alpha'], env(), { beginError: neo4jError('ServiceUnavailable') });
+    expect(down.out).toContain('Mapping checks: not run\n');
+  });
+
+  it('says the source could not be tested, and stores nothing, when a schema read times out', async () => {
+    const result = await run(['--name', 'alpha'], env(), { rows: [SERVER_ROW], schemaError: { read: 'tokens', error: neo4jError('Neo.ClientError.Transaction.TransactionTimedOut') } });
+    expect([result.code, result.err, result.out]).toEqual([1, 'the source did not answer in time; try again\n', '']);
+    expect(result.store.checks).toEqual([]);
   });
 });
 
@@ -148,27 +194,27 @@ describe('the write probe flag', () => {
     const result = await probeRun(['--name', 'alpha', '--write-probe']);
     expect(result.code).toBe(0);
     expect(result.out).toContain('Outcome: warn\nState: degraded\nReason: The login can write to the source; give Neburyx a login that can only read.\n');
-    expect(result.out).toContain('Read-only: write probe\nLogin can write: yes\nChecked at: 2026-11-02T10:00:00.000Z\nWrite probe: login can write\n');
+    expect(result.out).toContain('Read-only: write probe\nLogin can write: yes\nMapping checks: pass\nChecked at: 2026-11-02T10:00:00.000Z\nWrite probe: login can write\n');
     expect(result.store.checks[0]?.report).toMatchObject({ readOnlyCheck: 'write-probe', loginCanWrite: true, outcome: 'warn' });
   });
 
   it('prints that the server refused to create a node, and that the login cannot write, when the privileges showed no write right', async () => {
     const result = await probeRun(['--name', 'alpha', '--write-probe'], { runError: neo4jError('Neo.ClientError.Security.Forbidden') });
     expect(result.out).toContain('Outcome: pass\nState: connected\n');
-    expect(result.out).toContain('Read-only: write probe\nLogin can write: no\nChecked at: 2026-11-02T10:00:00.000Z\nWrite probe: the server refused to create a node\n');
+    expect(result.out).toContain('Read-only: write probe\nLogin can write: no\nMapping checks: pass\nChecked at: 2026-11-02T10:00:00.000Z\nWrite probe: the server refused to create a node\n');
     expect(result.store.checks[0]?.report).toMatchObject({ readOnlyCheck: 'write-probe', loginCanWrite: false });
   });
 
   it('keeps a write right that the privileges show when the server refuses to create a node, since that refusal does not show that the login cannot write', async () => {
     const result = await probeRun(['--name', 'alpha', '--write-probe'], { runError: neo4jError('Neo.ClientError.Security.Forbidden') }, { rows: [SERVER_ROW], privileges: [{ access: 'GRANTED', action: 'set_property', resource: 'property(note)', graph: '*', segment: 'NODE(*)' }] });
     expect(result.out).toContain('Outcome: warn\nState: degraded\nReason: The login can write to the source; give Neburyx a login that can only read.\n');
-    expect(result.out).toContain('Read-only: privileges inspected\nLogin can write: yes\nChecked at: 2026-11-02T10:00:00.000Z\nWrite probe: the server refused to create a node\n');
+    expect(result.out).toContain('Read-only: privileges inspected\nLogin can write: yes\nMapping checks: pass\nChecked at: 2026-11-02T10:00:00.000Z\nWrite probe: the server refused to create a node\n');
     expect(result.store.checks[0]?.report).toMatchObject({ readOnlyCheck: 'privileges-inspected', loginCanWrite: true, outcome: 'warn' });
   });
 
   it.each([
-    ['a Community server that refuses the privileges', { rows: [SERVER_ROW] }, 'Read-only: not verified\nLogin can write: unknown', null, 'not-verified'],
-    ['a listing of a login that only reads', READ_ONLY, 'Read-only: privileges inspected\nLogin can write: no', false, 'privileges-inspected'],
+    ['a Community server that refuses the privileges', { rows: [SERVER_ROW] }, 'Read-only: not verified\nLogin can write: unknown\nMapping checks: pass', null, 'not-verified'],
+    ['a listing of a login that only reads', READ_ONLY, 'Read-only: privileges inspected\nLogin can write: no\nMapping checks: pass', false, 'privileges-inspected'],
   ] as const)('keeps the result of the privileges for %s when the probe is inconclusive, and prints that it could not be completed', async (_name, behaviour, lines, canWrite, check) => {
     const result = await probeRun(['--name', 'alpha', '--write-probe'], { runError: neo4jError('Neo.TransientError.General.DatabaseUnavailable') }, behaviour);
     expect(result.code).toBe(0);

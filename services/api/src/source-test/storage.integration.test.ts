@@ -57,7 +57,7 @@ async function openStore(): Promise<{ readonly database: TestDatabase; readonly 
 const SERVER: CapabilitiesItem = { product: 'Neo4j Kernel', version: '5.26.32', edition: 'community', versionSupported: true, operations: [] };
 const at = (minute: number): string => new Date(Date.UTC(2026, 10, 2, 10, minute, 0)).toISOString();
 const pass = (sourceId: 'alpha' | 'beta', checkedAt: string): SourceTestReport => reportFromServer(sourceId === 'alpha' ? alpha : beta, SERVER, null, checkedAt);
-const checkOf = (id: string, report: SourceTestReport, triggeredBy: string | null) => ({ id, report, triggeredBy, identityHash: identityHashOf(report.sourceId === 'beta' ? beta : alpha) });
+const checkOf = (id: string, report: SourceTestReport, triggeredBy: string | null) => ({ id, report, triggeredBy, identityHash: identityHashOf(report.sourceId === 'beta' ? beta : alpha), configHash: (report.sourceId === 'beta' ? beta : alpha).configHash });
 const failed = (checkedAt: string): SourceTestReport => reportFromFailure(alpha, 'unreachable', checkedAt);
 
 describe('the source_checks table', () => {
@@ -66,7 +66,7 @@ describe('the source_checks table', () => {
     await migrate(database);
     await migrate(database);
     const columns = await rows(database.ownerUrl, `SELECT column_name FROM information_schema.columns WHERE table_name = 'source_checks' ORDER BY ordinal_position`);
-    expect(columns.map((column) => column['column_name'])).toEqual(['id', 'source_id', 'checked_at', 'triggered_by', 'outcome', 'server_version', 'read_only_check', 'schema_hash', 'report', 'identity_hash']);
+    expect(columns.map((column) => column['column_name'])).toEqual(['id', 'source_id', 'checked_at', 'triggered_by', 'outcome', 'server_version', 'read_only_check', 'schema_hash', 'report', 'identity_hash', 'config_hash']);
     await rows(database.ownerUrl, `INSERT INTO sources (id, alias, connector, uri, database, secret_ref, config_hash, identity_hash) VALUES ('alpha', 'alpha', 'neo4j', 'bolt://x', 'neo4j', 'a:b', 'h', 'i')`);
     const insert = (outcome: string, readOnly: string, source = 'alpha', by: string | null = null) =>
       attempt(

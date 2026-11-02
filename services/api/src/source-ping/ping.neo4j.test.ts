@@ -9,6 +9,7 @@ import { rows, runInProcess } from '../testing/database.js';
 import { sourceWith } from '../testing/gate-fixtures.js';
 import { fileOf } from '../testing/mapping.js';
 import { neo4jImageFrom, pollUntil, runAll, startNeo4j, type RunningNeo4j } from '../testing/neo4j-container.js';
+import { seedFixtureGraph } from '../testing/seed-graph.js';
 import { startPostgres, type TestDatabase, type TestPostgres } from '../testing/postgres.js';
 import { startApi, stopApi, webRoot } from '../testing/start-api.js';
 
@@ -35,6 +36,7 @@ async function freePort(): Promise<number> {
 beforeAll(async () => {
   const port = await freePort();
   [postgres, steady, flaky] = await Promise.all([startPostgres(), startNeo4j(), startNeo4j(undefined, { hostPort: port })]);
+  await Promise.all([seedFixtureGraph(steady), seedFixtureGraph(flaky)]);
 });
 
 afterAll(async () => {

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { ALWAYS_USABLE } from '../testing/usability.js';
 import { AppError } from '../errors.js';
 import { assembleGate } from '../gate/assemble.js';
 import { DEFAULT_BUDGETS } from '../gate/budgets.js';
@@ -163,7 +164,7 @@ describe('a source that never answers', () => {
     const fake = fakeDrivers({ beginHang: true });
     const executor = createNeo4jExecutor({ sources: mapping.sources, env: { DEMO_USER: 'u', DEMO_PASSWORD: 'p' }, logger: { warn: () => undefined }, createDriver: fake.factory });
     const defaults = communitySeams();
-    const parts = assembleGate({ mapping, seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit }, executor, logger: { warn: () => undefined } });
+    const parts = assembleGate({ usability: ALWAYS_USABLE, mapping, seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit }, executor, logger: { warn: () => undefined } });
     const cache = createReachabilityCache(ids);
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
     try {

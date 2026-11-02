@@ -1,4 +1,5 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { ALWAYS_USABLE } from '../testing/usability.js';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -13,6 +14,7 @@ import { rows, runInProcess } from '../testing/database.js';
 import { mappingOf, sourceWith } from '../testing/gate-fixtures.js';
 import { fileOf } from '../testing/mapping.js';
 import { envFor, neo4jImageFrom, NEO4J_ENV_PASSWORD, NEO4J_ENV_USER, runAll, startNeo4j, type RunningNeo4j } from '../testing/neo4j-container.js';
+import { seedFixtureGraph } from '../testing/seed-graph.js';
 import { startPostgres, type TestDatabase, type TestPostgres } from '../testing/postgres.js';
 import { webRoot } from '../testing/start-api.js';
 import { runTestSourceCommand } from './command.js';
@@ -29,6 +31,7 @@ const options = () => ({ uri: neo4jServer.boltUri, database: 'neo4j', auth: { ki
 
 beforeAll(async () => {
   [neo4jServer, postgres] = await Promise.all([startNeo4j(), startPostgres()]);
+  await seedFixtureGraph(neo4jServer);
   database = await postgres.newDatabase();
   const migrated = await runInProcess({ DATABASE_MIGRATION_URL: database.ownerUrl, DATABASE_APP_ROLE: database.appRole }, SHIPPED);
   expect(migrated.code, migrated.stderr).toBe(0);
@@ -63,7 +66,7 @@ describe(`neburyx test-source against ${neo4jImageFrom(process.env)}`, () => {
     expect(result.err).toBe('');
 
     const mapping = mappingOf(sourceWith('alpha', options()), sourceWith('beta', options()));
-    const gate = createSourceGate({ mapping, env: envFor(neo4jServer), seams: communitySeams(), logger: { warn: () => undefined } });
+    const gate = createSourceGate({ usability: ALWAYS_USABLE, mapping, env: envFor(neo4jServer), seams: communitySeams(), logger: { warn: () => undefined } });
     const routeStore = createAppStore(database.appUrl, () => undefined, { migrationsDirectory: SHIPPED });
     const app = await buildApp({ webRoot, logger: pino({ level: 'silent' }), store: routeStore, mapping, sourceTester: createSourceTester({ gate: gate.gate, mapping, store: routeStore }) });
     const report = sourceTestReportSchema.parse((await app.inject({ method: 'POST', url: '/v1/sources/alpha/test' })).json());

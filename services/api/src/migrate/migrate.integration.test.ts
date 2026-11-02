@@ -108,6 +108,7 @@ describe('a job queue step that fails after the application migrations were appl
       { name: '0004-sources' },
       { name: '0005-source-checks' },
       { name: '0006-source-check-identity' },
+      { name: '0007-source-check-config' },
     ]);
     expect(await attempt(database.appUrl, 'SELECT * FROM kysely_migration')).toMatch(/permission denied/);
     await vi.waitFor(

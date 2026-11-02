@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { hasStrayMarkerCharacter, markersOf } from './render.js';
-import type { Template, TemplateCatalog } from './types.js';
+import { GATE_PARAMETERS, type Template, type TemplateCatalog } from './types.js';
 
 export type TemplateDefinition = Omit<Template, 'integerParameters'>;
 
@@ -37,11 +37,26 @@ function shapeOf(definition: TemplateDefinition): Shape {
   return { properties };
 }
 
+/** A gate-filled parameter is declared exactly when the Cypher uses it, and a caller cannot also give it. */
+function checkGateParameters(definition: TemplateDefinition, shape: Shape): void {
+  const declared = definition.gateParameters ?? [];
+  for (const name of GATE_PARAMETERS) {
+    const used = new RegExp(`\\$${name}(?![\\w])`).test(definition.cypher);
+    if (declared.includes(name) && !used) throw new CatalogError(definition.id, `declares the gate-filled parameter ${name} its Cypher never uses`);
+    if (used && !declared.includes(name)) throw new CatalogError(definition.id, `uses the gate-filled parameter ${name} without declaring it`);
+    if (declared.includes(name) && shape.properties.has(name)) throw new CatalogError(definition.id, `has the gate-filled parameter ${name} in its parameter schema`);
+  }
+}
+
 function checkMarkers(definition: TemplateDefinition, shape: Shape): void {
   if (hasStrayMarkerCharacter(definition.cypher)) throw new CatalogError(definition.id, 'has Cypher with an @ that is not a marker');
   const used = markersOf(definition.cypher);
+  for (const marker of used) {
+    if (marker.kind === 'stableId' && !definition.entityParams.includes(marker.name)) throw new CatalogError(definition.id, 'has a stable id marker that no declared entity parameter backs');
+  }
   const declared = [...definition.entityParams.map((name) => ({ kind: 'entity', name })), ...definition.relationshipParams.map((name) => ({ kind: 'relationship', name }))];
   for (const marker of used) {
+    if (marker.kind === 'stableId') continue;
     if (!declared.some((entry) => entry.kind === marker.kind && entry.name === marker.name)) throw new CatalogError(definition.id, `has ${article(marker.kind)} ${marker.kind} marker it does not declare`);
   }
   for (const entry of declared) {
@@ -55,6 +70,7 @@ function build(definition: TemplateDefinition): Template {
   if (shape.properties.has(RESERVED)) throw new CatalogError(definition.id, 'declares the reserved parameter limit');
   if (definition.paged && !PAGED_LIMIT.test(definition.cypher)) throw new CatalogError(definition.id, 'is paged and its Cypher has no LIMIT $limit + 1');
   checkMarkers(definition, shape);
+  checkGateParameters(definition, shape);
   const integerParameters = [...shape.properties].flatMap(([name, type]) => (type === 'integer' ? [name] : []));
   return { ...definition, integerParameters };
 }

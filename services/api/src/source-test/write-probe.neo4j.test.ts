@@ -1,4 +1,5 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { ALWAYS_USABLE } from '../testing/usability.js';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import neo4j from 'neo4j-driver';
@@ -6,6 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { memoryAppStore } from '../testing/app-store.js';
 import { sourceWith } from '../testing/gate-fixtures.js';
 import { fileOf } from '../testing/mapping.js';
+import { seedFixtureGraph } from '../testing/seed-graph.js';
 import { createSourceGate } from '../gate/source-gate.js';
 import { communitySeams } from '../seams/community-seams.js';
 import { mappingOf } from '../testing/gate-fixtures.js';
@@ -32,6 +34,7 @@ const mappingFor = (server: RunningNeo4j, name: string): string => {
 beforeAll(async () => {
   [normal, readOnly] = await Promise.all([startNeo4j(), startNeo4j(neo4jImageFrom(process.env), { environment: READ_ONLY_DEFAULT })]);
   // a small synthetic graph, with a label, a relationship type and a property key, so that a leftover of the probe would show against it
+  await seedFixtureGraph(normal);
   await runAdmin(normal, 'CREATE (:Item {n: 1})-[:NEXT {w: 1}]->(:Item {n: 2})');
 });
 
@@ -101,7 +104,8 @@ describe(`a test run leaves the source as it was, on ${neo4jImageFrom(process.en
     ['a run with the probe', ['--name', 'alpha', '--write-probe']],
   ])('%s changes no count, no label, no relationship type and no property key', async (_name, args) => {
     const before = await snapshot(normal);
-    expect(before).toMatchObject({ nodes: 2, relationships: 1, labels: ['Item'], relationshipTypes: ['NEXT'] });
+    expect(before.labels).toContain('Item');
+    expect(before.relationshipTypes).toContain('NEXT');
     const result = await command(normal, args);
     expect(result.code).toBe(0);
     expect(await snapshot(normal)).toEqual(before);
@@ -116,13 +120,13 @@ describe(`a test run leaves the source as it was, on ${neo4jImageFrom(process.en
   it('changes nothing for the route, the startup check and several pings, which are the other ways a source is read', async () => {
     const before = await snapshot(normal);
     const mapping = mappingOf(sourceWith('alpha', { uri: normal.boltUri, database: 'neo4j', auth: { kind: 'basic', username_env: NEO4J_ENV_USER, password_env: NEO4J_ENV_PASSWORD } }));
-    const parts = createSourceGate({ mapping, env: envFor(normal), seams: communitySeams(), logger: { warn: () => undefined } });
+    const parts = createSourceGate({ usability: ALWAYS_USABLE, mapping, env: envFor(normal), seams: communitySeams(), logger: { warn: () => undefined } });
     try {
       const store = memoryAppStore();
       const logger = { info: () => undefined, warn: () => undefined };
       const tester = createSourceTester({ gate: parts.gate, mapping, store });
       expect((await tester.run({ traceId: 'tr-route', principal: LOCAL_PRINCIPAL, sourceId: 'alpha' })).outcome).toBe('pass');
-      expect(await createStartupChecker({ system: parts.system, mapping, store, logger }).run()).toEqual([{ sourceId: 'alpha', outcome: 'pass' }]);
+      expect(await createStartupChecker({ system: parts.system, mapping, store, logger }).run()).toEqual([{ sourceId: 'alpha', outcome: 'pass', answered: true, findings: [] }]);
       const ping = createScheduledPing({ system: parts.system, mapping, cache: createReachabilityCache(['alpha']) });
       for (let tick = 0; tick < 3; tick += 1) expect((await ping.run())[0]?.current).toBe('reachable');
     } finally {

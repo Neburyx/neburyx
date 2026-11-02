@@ -37,7 +37,7 @@ describe('a run for a source that answers', () => {
     const executor = serverExecutor();
     const parts = testSourceGate(mapping, { executor, seams: recording.seams });
     await createSourceTester({ gate: parts.gate, mapping, store: memoryAppStore() }).run(request());
-    expect(executor.calls).toHaveLength(2);
+    expect(executor.calls.map((call) => call.templateId)).toEqual(['capabilities', 'privileges', 'schema-tokens', 'schema-indexes']);
     expect(executor.calls[0]).toMatchObject({
       cypher: "CALL dbms.components() YIELD name, versions, edition WHERE name = 'Neo4j Kernel' RETURN name, versions[0] AS version, edition",
       accessMode: 'READ',
@@ -47,6 +47,8 @@ describe('a run for a source that answers', () => {
     expect(recording.events).toEqual([
       expect.objectContaining({ actorId: LOCAL_PRINCIPAL.id, actorRole: LOCAL_PRINCIPAL.role, action: 'source.capabilities', result: 'success', sourceId: 'alpha' }),
       expect.objectContaining({ actorId: LOCAL_PRINCIPAL.id, actorRole: LOCAL_PRINCIPAL.role, action: 'source.privileges', result: 'failed', sourceId: 'alpha' }),
+      expect.objectContaining({ actorId: LOCAL_PRINCIPAL.id, actorRole: LOCAL_PRINCIPAL.role, action: 'source.schema_tokens', result: 'success', sourceId: 'alpha' }),
+      expect.objectContaining({ actorId: LOCAL_PRINCIPAL.id, actorRole: LOCAL_PRINCIPAL.role, action: 'source.schema_indexes', result: 'success', sourceId: 'alpha' }),
     ]);
     expect(recording.events.every((event) => event.actorId !== SYSTEM_ID)).toBe(true);
   });

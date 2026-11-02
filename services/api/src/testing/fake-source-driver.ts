@@ -1,4 +1,5 @@
 import type { Params, Row } from '../gate/types.js';
+import { fittingIndexes, fittingTokens, NO_DUPLICATES } from './fitting-schema.js';
 import type { DriverFactory, DriverSettings, RowObserver, SessionConfig, TransactionConfig } from '../sources/driver.js';
 
 export type CloseBehaviour = 'ok' | 'hang' | 'reject';
@@ -9,6 +10,13 @@ export interface FakeBehaviour {
   readonly privileges?: readonly Row[];
   readonly privilegesError?: unknown;
   readonly privilegesHang?: boolean;
+  /** The rows of the schema reads; absent, a read answers as a source whose schema fits the mapping. */
+  readonly schemaTokens?: readonly Row[];
+  readonly schemaIndexes?: readonly Row[];
+  readonly scans?: readonly Row[];
+  /** Fails a schema read with this error, whichever of the three it is, when set for it: `tokens`, `indexes` or `scan`. */
+  readonly schemaError?: { readonly read: 'tokens' | 'indexes' | 'scan'; readonly error: unknown };
+  readonly schemaHang?: 'tokens' | 'indexes' | 'scan';
   readonly endless?: boolean;
   readonly streamError?: unknown;
   readonly manual?: boolean;
@@ -48,6 +56,13 @@ export interface FakeDrivers {
 
 const COMMUNITY_REFUSAL = 'Neo.ClientError.Statement.UnsupportedAdministrationCommand';
 const isPrivileges = (cypher: string): boolean => cypher.startsWith('SHOW USER PRIVILEGES');
+
+/** Which schema read a statement is, from the start of its fixed Cypher. */
+function schemaReadOf(cypher: string): 'tokens' | 'indexes' | 'scan' | undefined {
+  if (cypher.startsWith('CALL { CALL db.labels()')) return 'tokens';
+  if (cypher.startsWith('SHOW INDEXES')) return 'indexes';
+  return cypher.includes('USING INDEX') ? 'scan' : undefined;
+}
 
 function settle(how: CloseBehaviour | undefined): Promise<void> {
   if (how === 'hang') return new Promise<void>(() => undefined);
@@ -92,6 +107,18 @@ export function fakeDrivers(initial: FakeBehaviour = {}): FakeDrivers {
                     return {
                       subscribe: (observer: RowObserver) => {
                         session.observer = observer;
+                        const schemaRead = schemaReadOf(cypher);
+                        if (schemaRead !== undefined) {
+                          if (fake.behaviour.schemaHang === schemaRead) return;
+                          if (fake.behaviour.schemaError?.read === schemaRead) {
+                            observer.onError(fake.behaviour.schemaError.error);
+                            return;
+                          }
+                          const given = { tokens: fake.behaviour.schemaTokens, indexes: fake.behaviour.schemaIndexes, scan: fake.behaviour.scans }[schemaRead];
+                          for (const row of given ?? [{ tokens: fittingTokens(parameters), indexes: fittingIndexes(parameters), scan: NO_DUPLICATES }[schemaRead]]) observer.onNext(row);
+                          observer.onCompleted();
+                          return;
+                        }
                         if (isPrivileges(cypher)) {
                           if (fake.behaviour.privilegesHang === true) return;
                           if (fake.behaviour.privileges !== undefined) {

@@ -1,4 +1,5 @@
 import { rmSync } from 'node:fs';
+import { ALWAYS_USABLE } from '../testing/usability.js';
 import { createServer } from 'node:net';
 import pino from 'pino';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -9,6 +10,7 @@ import { communitySeams } from '../seams/community-seams.js';
 import { memoryAppStore } from '../testing/app-store.js';
 import { mappingOf, sourceWith } from '../testing/gate-fixtures.js';
 import { envFor, neo4jImageFrom, NEO4J_ENV_PASSWORD, NEO4J_ENV_USER, runAll, startNeo4j, type RunningNeo4j } from '../testing/neo4j-container.js';
+import { seedFixtureGraph } from '../testing/seed-graph.js';
 import { makeWebRoot } from '../testing/web-root.js';
 import { LOCAL_PRINCIPAL } from '../testing/gate.js';
 import { createSourceTester } from './tester.js';
@@ -20,10 +22,11 @@ let app: Awaited<ReturnType<typeof buildApp>>;
 
 beforeAll(async () => {
   server = await startNeo4j();
+  await seedFixtureGraph(server);
   const mapping = mappingOf(
     sourceWith('alpha', { uri: server.boltUri, database: 'neo4j', auth: { kind: 'basic', username_env: NEO4J_ENV_USER, password_env: NEO4J_ENV_PASSWORD } }),
   );
-  sourceGate = createSourceGate({ mapping, env: envFor(server), seams: communitySeams(), logger: { warn: () => undefined } });
+  sourceGate = createSourceGate({ usability: ALWAYS_USABLE, mapping, env: envFor(server), seams: communitySeams(), logger: { warn: () => undefined } });
   app = await buildApp({
     webRoot,
     logger: pino({ level: 'silent' }),
@@ -56,7 +59,7 @@ describe(`POST /v1/sources/{id}/test against ${neo4jImageFrom(process.env)}`, ()
     const mapping = mappingOf(
       sourceWith('gamma', { uri: server.boltUri, database: 'neo4j', auth: { kind: 'basic', username_env: NEO4J_ENV_USER, password_env: NEO4J_ENV_PASSWORD } }),
     );
-    const parts = createSourceGate({ mapping, env: envFor(server), seams: communitySeams(), logger: { warn: (fields) => void lines.push(fields) } });
+    const parts = createSourceGate({ usability: ALWAYS_USABLE, mapping, env: envFor(server), seams: communitySeams(), logger: { warn: (fields) => void lines.push(fields) } });
     try {
       const failure: unknown = await parts.gate
         .run({ traceId: 'tr-privileges', principal: LOCAL_PRINCIPAL, sourceId: 'gamma', templateId: 'privileges', params: {}, limit: 5 })
@@ -82,7 +85,7 @@ describe(`a source that fails, on ${neo4jImageFrom(process.env)}`, () => {
     const mapping = mappingOf(
       sourceWith('beta', { uri: server.boltUri, database: 'neo4j', auth: { kind: 'basic', username_env: NEO4J_ENV_USER, password_env: NEO4J_ENV_PASSWORD }, ...overrides }),
     );
-    const parts = createSourceGate({ mapping, env, seams: communitySeams(), logger: { warn: () => undefined } });
+    const parts = createSourceGate({ usability: ALWAYS_USABLE, mapping, env, seams: communitySeams(), logger: { warn: () => undefined } });
     try {
       return await createSourceTester({ gate: parts.gate, mapping, store: memoryAppStore() }).run({ traceId: 'tr-failure', principal: LOCAL_PRINCIPAL, sourceId: 'beta' });
     } finally {

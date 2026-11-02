@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { ALWAYS_USABLE } from '../testing/usability.js';
 import { AppError } from '../errors.js';
 import { auditing, integerTemplate, mappingOf, nodesTemplate, sourceWith } from '../testing/gate-fixtures.js';
 import { gateRequest, LOCAL_PRINCIPAL } from '../testing/gate.js';
@@ -22,6 +23,7 @@ const sourceOptions = () => ({
 
 function openGate(): SourceGate {
   return createSourceGate({
+usability: ALWAYS_USABLE,
     mapping: mappingOf(sourceWith('alpha', sourceOptions())),
     env: envFor(server),
     seams: events.seams,
@@ -91,7 +93,7 @@ describe('templates with quoted names, the page limit and integer parameters, ag
   const open = () => {
     const mapping = mappingOf(sourceWith('alpha', sourceOptions()));
     const executor = createNeo4jExecutor({ sources: mapping.sources, env: envFor(server), logger: { warn: () => undefined } });
-    const parts = assembleGate({ mapping, seams: events.seams, executor, logger: { warn: () => undefined }, catalog });
+    const parts = assembleGate({ usability: ALWAYS_USABLE, mapping, seams: events.seams, executor, logger: { warn: () => undefined }, catalog });
     return { ...parts, close: () => executor.close() };
   };
 

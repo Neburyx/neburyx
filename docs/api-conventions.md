@@ -102,10 +102,15 @@ app.get('/v1/me', { config: { permission: 'principal' } }, handler);
 
 ## Testing a source
 
-`POST /v1/sources/{id}/test` runs two reads on a configured source through the gate, as the calling principal (the capabilities of the server, then the privileges of the login),
+`POST /v1/sources/{id}/test` runs reads on a configured source through the gate, as the calling principal (the capabilities of the server, the privileges of the login, and the schema reads for the mapping: labels, relationship types, indexes and the stable-id check),
 and returns the report. The report says whether the login can write: `readOnlyCheck` is `privileges-inspected` and `loginCanWrite` is `true` or `false`, or `readOnlyCheck` is
 `not-verified` and `loginCanWrite` is `null`, as on a Community server, which cannot list privileges. A login that can write gives outcome `warn` and the reason
-"The login can write to the source; give Neburyx a login that can only read." A run that cannot show whether the login writes is not a failure. A listing the check cannot read (a row that is not five strings) is a `warn` with the reason "The server listed privileges that could not be read, so read-only is not verified." The route never runs the write probe,
+"The login can write to the source; give Neburyx a login that can only read." A run that cannot show whether the login writes is not a failure. A listing the check cannot read (a row that is not five strings) is a `warn` with the reason "The server listed privileges that could not be read, so read-only is not verified." The report also carries `mappingChecks`: whether the labels, relationship types, indexes and stable ids that the mapping names exist on the source. Its `status` is `pass`, `warn`
+(a missing sort index, an index still being built, a stable id that nothing enforces as unique), `not-verified` (the login may not list indexes, an answer that could not be read,
+a duplicate check that ran out of time), `fail` (a missing label, relationship type or index, a stable id that is not indexed or not unique) or `not-run` (the source did not answer, or its
+server version is not on the support matrix). A failure makes the outcome `fail` and the state `unavailable` with a reason that names the first problem and says what to do; the source then serves no data
+read until a later check passes. Each finding names the entity type or relationship type, the property and the check, and never an address, a credential, a node value or a name the mapping does not use.
+A source that stops answering during the schema reads gives an error (`504` or `503`) and no report, because that says nothing about the mapping. The route never runs the write probe,
 which only the `test-source` command runs on request (`readOnlyCheck` is then `write-probe`). It declares `principal`; in Community every principal that the policy allows to read the source may
 call it. It takes no body and no query parameters (either is `INVALID_REQUEST`) and no version header. An unknown id is
 `NOT_FOUND`. A source that is reachable but on a server version outside the support matrix gives a report with outcome `warn`.

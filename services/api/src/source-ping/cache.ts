@@ -33,9 +33,10 @@ export function allUnknown(sourceCount: number): ReachabilityView {
   return { counts: () => ({ reachable: 0, unreachable: 0, unknown: sourceCount }) };
 }
 
-/** The startup check answered with a report (`pass`, `warn`) or with a failure of the source (`fail`); `error` says nothing about the source. */
+/** A source that answered the capabilities read is reachable, whatever the rest of its check found; one that did not is unreachable, unless the run did not settle, which says nothing. */
 export function seedFromStartup(cache: ReachabilityCache, results: readonly StartupResult[]): void {
   for (const result of results) {
-    if (result.outcome !== 'error') cache.set(result.sourceId, result.outcome === 'fail' ? 'unreachable' : 'reachable');
+    if (result.answered) cache.set(result.sourceId, 'reachable');
+    else if (result.outcome !== 'error') cache.set(result.sourceId, 'unreachable');
   }
 }

@@ -49,6 +49,19 @@ export function memoryStoreWith(options: MemoryAppStoreOptions): MemoryAppStore 
       );
       return Promise.resolve();
     },
+    latestQualifyingChecks: (sources, since) =>
+      Promise.resolve(
+        sources.flatMap((source) => {
+          const found = [...checks]
+            .reverse()
+            .find((check) => check.report.sourceId === source.id && check.identityHash === source.identityHash && check.configHash === source.configHash && check.report.checkedAt >= since && check.report.server !== null);
+          return found === undefined ? [] : [{ sourceId: source.id, checkedAt: found.report.checkedAt, report: found.report }];
+        }),
+      ),
+    markSourceUnchecked: (sourceId, reason) => {
+      rows = rows.map((row) => (row.id === sourceId ? { ...row, state: 'unknown', stateReason: reason } : row));
+      return Promise.resolve();
+    },
     // Only the Postgres suite proves the identity rule and the rule that a fresher test wins; this double follows neither, so unit tests do not assert on them.
     applyPingState: (change: PingStateChange) => {
       if (options.failPingState === true) return Promise.reject(new Error('the state could not be written'));

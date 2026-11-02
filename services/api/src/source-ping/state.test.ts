@@ -2,18 +2,23 @@ import { describe, expect, it, vi } from 'vitest';
 import { memoryStoreWith } from '../testing/app-store.js';
 import type { PingResult } from './ping.js';
 import { startPingSchedule } from './schedule.js';
+import { mappingOf, sourceWith } from '../testing/gate-fixtures.js';
+import { identityHashOf } from '../registry/identity-hash.js';
 import { applyPingResults } from './state.js';
 
+const mapping = mappingOf(sourceWith('a'), sourceWith('b'), sourceWith('c'));
+const context = { mapping, since: '2026-11-02T10:00:00.000Z' };
+const [sourceA, sourceB] = mapping.sources;
 const result = (sourceId: string, overrides: Partial<PingResult> = {}): PingResult => ({ sourceId, previous: 'reachable', current: 'unreachable', reason: 'The source could not be reached.', skipped: false, recovered: false, startedAt: 1_000, ...overrides });
 
 describe('writing the state of the results', () => {
   it('writes the failed and the reached results, with the time the read started, and nothing for a skipped one', async () => {
     const changes: unknown[] = [];
     const store = { applyPingState: (change: unknown) => (changes.push(change), Promise.resolve(true)) };
-    await applyPingResults(store, { warn: () => undefined }, [result('a'), result('b', { current: 'reachable', reason: null }), result('c', { skipped: true })]);
+    await applyPingResults(store, { warn: () => undefined }, [result('a'), result('b', { current: 'reachable', reason: null }), result('c', { skipped: true })], context);
     expect(changes).toEqual([
-      { sourceId: 'a', reachable: false, reason: 'The source could not be reached.', observedAt: '1970-01-01T00:00:01.000Z' },
-      { sourceId: 'b', reachable: true, reason: null, observedAt: '1970-01-01T00:00:01.000Z' },
+      { sourceId: 'a', reachable: false, reason: 'The source could not be reached.', observedAt: '1970-01-01T00:00:01.000Z', identityHash: identityHashOf(sourceA), configHash: sourceA?.configHash, since: context.since },
+      { sourceId: 'b', reachable: true, reason: null, observedAt: '1970-01-01T00:00:01.000Z', identityHash: identityHashOf(sourceB), configHash: sourceB?.configHash, since: context.since },
     ]);
   });
 
@@ -21,7 +26,7 @@ describe('writing the state of the results', () => {
     const lines: { fields: object; message: string }[] = [];
     const written: string[] = [];
     const store = { applyPingState: (change: { sourceId: string }) => (change.sourceId === 'a' ? Promise.reject(new Error('refused, with a secret') ) : (written.push(change.sourceId), Promise.resolve(true))) };
-    await applyPingResults(store, { warn: (fields, message) => void lines.push({ fields, message }) }, [result('a'), result('b')]);
+    await applyPingResults(store, { warn: (fields, message) => void lines.push({ fields, message }) }, [result('a'), result('b')], context);
     expect(lines).toEqual([{ fields: { event: 'source.ping_state_failed', sourceId: 'a' }, message: 'source ping state write failed' }]);
     expect(written).toEqual(['b']);
   });
@@ -29,8 +34,8 @@ describe('writing the state of the results', () => {
   it('tries again on the next run after a failed write', async () => {
     const store = memoryStoreWith({ sources: [{ id: 'a', alias: 'a', state: 'connected', stateReason: null, synthetic: false, lastTestAt: null }], failPingState: true });
     const lines: object[] = [];
-    await applyPingResults(store, { warn: (fields) => void lines.push(fields) }, [result('a')]);
-    await applyPingResults(store, { warn: (fields) => void lines.push(fields) }, [result('a')]);
+    await applyPingResults(store, { warn: (fields) => void lines.push(fields) }, [result('a')], context);
+    await applyPingResults(store, { warn: (fields) => void lines.push(fields) }, [result('a')], context);
     expect(lines).toHaveLength(2);
   });
 });
@@ -46,7 +51,7 @@ describe('closing while a state write is in flight', () => {
       const schedule = startPingSchedule({
         ping: { run: () => Promise.resolve([result('a')]), metrics: { snapshot: () => ({}) } },
         intervalMs: 100,
-        onResults: (results) => applyPingResults(store, { warn: (fields) => void lines.push(fields) }, results),
+        onResults: (results) => applyPingResults(store, { warn: (fields) => void lines.push(fields) }, results, context),
       });
       await vi.advanceTimersByTimeAsync(100);
       schedule.stop();

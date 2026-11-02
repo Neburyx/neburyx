@@ -18,5 +18,19 @@ export { SOURCE_STATES, mappingSummarySchema, sourceStateSchema, sourceSummarySc
 export type { SourceState, SourceSummary, SourcesResponse } from './sources.js';
 export { BIND_KEYS, derivedRuleProfileSchema, entityTypeProfileSchema, presetProfileSchema, relationshipTypeProfileSchema, sourceProfileSchema } from './profile.js';
 export type { SourceProfile } from './profile.js';
-export { OPERATION_STATUSES, READ_ONLY_CHECKS, TEST_OUTCOMES, operationSchema, readOnlyCheckSchema, serverInfoSchema, sourceTestReportSchema, testOutcomeSchema } from './source-test.js';
-export type { SourceTestReport, TestOutcome } from './source-test.js';
+export {
+  MAPPING_CHECK_SEVERITY,
+  MAPPING_CHECK_STATUSES,
+  OPERATION_STATUSES,
+  READ_ONLY_CHECKS,
+  TEST_OUTCOMES,
+  UNVERIFIED_CHECKS,
+  mappingChecksSchema,
+  mappingFindingSchema,
+  operationSchema,
+  readOnlyCheckSchema,
+  serverInfoSchema,
+  sourceTestReportSchema,
+  testOutcomeSchema,
+} from './source-test.js';
+export type { MappingCheck, MappingChecks, MappingFinding, SourceTestReport, TestOutcome } from './source-test.js';

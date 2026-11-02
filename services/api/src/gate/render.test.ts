@@ -13,6 +13,8 @@ function templateOf(id: string) {
 const ALLOWLIST: SourceAllowlist = {
   entityLabels: new Map([['person', 'Person']]),
   relationshipTypes: new Set(['KNOWS', 'HAS LINE']),
+  stableIds: new Map([['person', 'id']]),
+  properties: new Set(['id', 'name']),
 };
 
 describe('renderTemplate', () => {
@@ -40,5 +42,34 @@ describe('nameProblem', () => {
     ['Order Line', undefined],
   ])('for %j', (name, problem) => {
     expect(nameProblem(name)).toBe(problem);
+  });
+});
+
+describe('the gate-filled parameters and the stable id marker', () => {
+  const filled = createTemplateCatalog({
+    templates: [
+      {
+        ...nodesTemplate,
+        id: 'schema',
+        cypher: 'MATCH (n:@entity(kind)) WHERE n.@stableId(kind) IN $mappedProperties AND size($mappedLabels + $mappedTypes) > 0 RETURN n.@stableId(kind) AS id LIMIT $limit + 1',
+        gateParameters: ['mappedLabels', 'mappedTypes', 'mappedProperties'],
+      },
+    ],
+  }).find('schema');
+  if (filled === undefined) throw new Error('no template schema');
+
+  it('writes the stable id of the entity type as a quoted name and adds the lists from the allowlist, sorted, after the limit', () => {
+    const rendered = renderTemplate(filled, { kind: 'person' }, ALLOWLIST, 5);
+    expect(rendered.cypher).toBe('MATCH (n:`Person`) WHERE n.`id` IN $mappedProperties AND size($mappedLabels + $mappedTypes) > 0 RETURN n.`id` AS id LIMIT $limit + 1');
+    expect(rendered.parameters).toEqual({ limit: 5, mappedLabels: ['Person'], mappedTypes: ['HAS LINE', 'KNOWS'], mappedProperties: ['id', 'name'] });
+  });
+
+  it('cannot be given by a caller: a request that sets one is refused by the parameter schema, and a value in the request never reaches the parameters', () => {
+    const { parameters } = renderTemplate(filled, { kind: 'person', mappedLabels: ['Injected'] }, ALLOWLIST, 5);
+    expect(parameters['mappedLabels']).toEqual(['Person']);
+  });
+
+  it('refuses an entity type that is not in the allowlist', () => {
+    expect(() => renderTemplate(filled, { kind: 'absent' }, ALLOWLIST, 5)).toThrow();
   });
 });

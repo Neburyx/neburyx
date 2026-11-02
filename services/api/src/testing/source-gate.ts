@@ -1,4 +1,5 @@
 import { communitySeams } from '../seams/community-seams.js';
+import { ALWAYS_USABLE } from './usability.js';
 import { assembleGate, type AssembleOptions } from '../gate/assemble.js';
 import type { MappingModel } from '../mapping/model.js';
 import { TestExecutor } from './gate.js';
@@ -9,6 +10,7 @@ export function testSourceGate(mapping: MappingModel, overrides: Partial<Omit<As
   const defaults = communitySeams();
   const parts = assembleGate({
     mapping,
+    usability: overrides.usability ?? ALWAYS_USABLE,
     seams: overrides.seams ?? { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit },
     executor,
     logger: overrides.logger ?? { warn: (fields, message) => void logs.push({ fields, message }) },

@@ -47,7 +47,7 @@ async function runStages(deps: GateDeps, request: GateRequest, system: boolean, 
     progress.action = found.auditAction;
     return validateRequest(deps.catalog, found, request, context);
   });
-  await inStage(deps, progress, 'authorize', () => authorizeRequest(deps.seams.policy, context, template));
+  await inStage(deps, progress, 'authorize', () => authorizeRequest(deps.seams.policy, deps.usability, context, template));
   const result = await inStage(deps, progress, 'execute', () =>
     executeRead({ coordinator: deps.seams.coordinator, executor: deps.executor, clock: deps.clock, logger: deps.logger }, context, template, rendered, request.limit),
   );

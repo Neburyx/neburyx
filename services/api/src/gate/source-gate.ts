@@ -1,5 +1,6 @@
 import type { MappingModel } from '../mapping/model.js';
 import type { Seams } from '../seams/seams.js';
+import type { SourceUsability } from '../source-test/usability.js';
 import { createNeo4jExecutor } from '../sources/executor.js';
 import { assembleGate } from './assemble.js';
 import type { Clock, Gate, GateLogger, GateObserver, SystemRunner } from './types.js';
@@ -11,6 +12,8 @@ export interface SourceGateOptions {
   readonly logger: GateLogger;
   readonly clock?: Clock;
   readonly observer?: GateObserver;
+  /** Whether a data read may go to a source: the record of the running server, or one in which every source is unchecked for a process that runs system-scope templates only. */
+  readonly usability: SourceUsability;
 }
 
 export interface SourceGate {
@@ -33,6 +36,7 @@ export function createSourceGate(options: SourceGateOptions): SourceGate {
       seams: options.seams,
       executor,
       logger: options.logger,
+      usability: options.usability,
       ...(options.clock === undefined ? {} : { clock: options.clock }),
       ...(options.observer === undefined ? {} : { observer: options.observer }),
     });

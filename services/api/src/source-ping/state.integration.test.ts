@@ -1,4 +1,5 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { ALWAYS_USABLE } from '../testing/usability.js';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -62,12 +63,15 @@ const at = (minute: number): string => new Date(Date.UTC(2026, 10, 2, 10, minute
 const pass = (minute = 1): SourceTestReport => reportFromServer(alpha, CAPS, null, at(minute));
 const warn = (minute = 1): SourceTestReport => reportFromServer(alpha, { ...CAPS, versionSupported: false }, null, at(minute));
 const fail = (minute = 1): SourceTestReport => reportFromFailure(alpha, 'unreachable', at(minute));
-const test = (store: AppStore, report: SourceTestReport, identityHash = identityHashOf(alpha)) => store.recordSourceCheck({ id: uuidv7(), report, triggeredBy: null, identityHash });
+const test = (store: AppStore, report: SourceTestReport, identityHash = identityHashOf(alpha), configHash = alpha.configHash) => store.recordSourceCheck({ id: uuidv7(), report, triggeredBy: null, identityHash, configHash });
 const NEVER_DROPPED = '2099-01-01T00:00:00.000Z';
-const ping = (store: AppStore, reachable: boolean, observedAt = NEVER_DROPPED) =>
-  store.applyPingState({ sourceId: 'alpha', reachable, reason: reachable ? null : FAILURE_SENTENCES.unreachable, observedAt });
+/** The start of the process the tests stand for: a check stored at or after it counts. */
+const SINCE = at(0);
+const ping = (store: AppStore, reachable: boolean, observedAt = NEVER_DROPPED, since = SINCE) =>
+  store.applyPingState({ sourceId: 'alpha', reachable, reason: reachable ? null : FAILURE_SENTENCES.unreachable, observedAt, identityHash: identityHashOf(alpha), configHash: alpha.configHash, since });
 const stateOf = async (database: TestDatabase) => (await rows(database.ownerUrl, `SELECT state, state_reason FROM sources WHERE id = 'alpha'`))[0];
 const UNREACHABLE = { state: 'unavailable', state_reason: FAILURE_SENTENCES.unreachable };
+const NOT_CHECKED = { state: 'unknown', state_reason: 'The source has not been checked since the start.' };
 
 describe('the migration', () => {
   it('adds a nullable identity_hash to source_checks, and a second run changes nothing', async () => {
@@ -108,28 +112,30 @@ describe('a ping after a warn or a fail', () => {
     expect(await stateOf(database)).toEqual({ state: 'degraded', state_reason: 'The server version is not on the support matrix.' });
   });
 
-  it('leaves unavailable with the test reason when the last test failed', async () => {
+  it('goes from the test reason to not checked when the last test did not reach the source and the ping succeeds: a test that did not reach the source says nothing now', async () => {
     const { database, store } = await open();
     await test(store, reportFromFailure(alpha, 'authentication', at(1)));
-    expect(await ping(store, true)).toBe(false);
     expect(await stateOf(database)).toEqual({ state: 'unavailable', state_reason: FAILURE_SENTENCES.authentication });
+    expect(await ping(store, true)).toBe(true);
+    expect(await stateOf(database)).toEqual(NOT_CHECKED);
   });
 
-  it('keeps a source that was down at start-up unavailable with the test sentence while its pings succeed', async () => {
+  it('shows a source that was down at start-up as not checked while its pings succeed, and not as the stale reason of the start', async () => {
     const { database, store } = await open();
     await test(store, fail());
+    expect(await stateOf(database)).toEqual(UNREACHABLE);
     for (let run = 0; run < 3; run += 1) await ping(store, true);
-    expect(await stateOf(database)).toEqual({ state: 'unavailable', state_reason: FAILURE_SENTENCES.unreachable });
+    expect(await stateOf(database)).toEqual(NOT_CHECKED);
   });
 });
 
 describe('a source that was never tested, or tested against another connection', () => {
-  it('is unavailable after a failed ping and unknown with no reason after a successful one', async () => {
+  it('is unavailable after a failed ping and not checked after a successful one', async () => {
     const { database, store } = await open();
     await ping(store, false);
     expect(await stateOf(database)).toEqual(UNREACHABLE);
     await ping(store, true);
-    expect(await stateOf(database)).toEqual({ state: 'unknown', state_reason: null });
+    expect(await stateOf(database)).toEqual(NOT_CHECKED);
   });
 
   it.each([
@@ -139,11 +145,7 @@ describe('a source that was never tested, or tested against another connection',
     const { database, store } = await open();
     await test(store, { ...pass(), checkedAt }, 'another-connection');
     await ping(store, true);
-    expect(await stateOf(database)).toEqual({ state: 'unknown', state_reason: null });
-    await test(store, { ...warn(), checkedAt });
-    await ping(store, false);
-    await ping(store, true);
-    expect(await stateOf(database)).toMatchObject({ state: 'degraded' });
+    expect(await stateOf(database)).toEqual(NOT_CHECKED);
   });
 
   it('does not take the result of a command run against a re-pointed mapping while the API still uses the old connection', async () => {
@@ -159,7 +161,7 @@ describe('a source that was never tested, or tested against another connection',
       openSourceGate: (options: SourceGateOptions) => {
         const executor = createNeo4jExecutor({ sources: options.mapping.sources, env: options.env, logger: options.logger, createDriver: fake.factory });
         const defaults = communitySeams();
-        const parts = assembleGate({ mapping: options.mapping, seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit }, executor, logger: options.logger });
+        const parts = assembleGate({ usability: ALWAYS_USABLE, mapping: options.mapping, seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit }, executor, logger: options.logger });
         return { ...parts, close: () => executor.close() };
       },
     });
@@ -168,6 +170,132 @@ describe('a source that was never tested, or tested against another connection',
     expect(await stateOf(database)).toEqual({ state: 'connected', state_reason: null });
     await ping(store, false);
     await ping(store, true);
+    expect(await stateOf(database)).toEqual(NOT_CHECKED);
+  });
+});
+
+describe('which stored checks a successful ping restores the state from', () => {
+  it('counts a check that reached the source, matches the identity and the mapping and was stored since the start', async () => {
+    const { database, store } = await open();
+    await test(store, warn(5));
+    await ping(store, false);
+    await ping(store, true);
+    expect(await stateOf(database)).toMatchObject({ state: 'degraded' });
+  });
+
+  it('does not count a check stored before this process started, whatever state it left', async () => {
+    const { database, store } = await open();
+    await test(store, pass(1));
+    await ping(store, false);
+    await ping(store, true, NEVER_DROPPED, at(30));
+    expect(await stateOf(database)).toEqual(NOT_CHECKED);
+  });
+
+  it('does not count a check of another mapping, nor one without a mapping hash', async () => {
+    const { database, store } = await open();
+    await test(store, pass(), identityHashOf(alpha), 'another-mapping');
+    expect(await stateOf(database)).toEqual({ state: 'connected', state_reason: null });
+    await ping(store, true);
+    expect(await stateOf(database)).toEqual(NOT_CHECKED);
+    await rows(database.ownerUrl, 'UPDATE source_checks SET config_hash = NULL');
+    await ping(store, true);
+    expect(await stateOf(database)).toEqual(NOT_CHECKED);
+  });
+
+  it('does not count a check that did not reach the source, though it is the newest', async () => {
+    const { database, store } = await open();
+    await test(store, pass(1));
+    await test(store, fail(2));
+    expect(await stateOf(database)).toEqual(UNREACHABLE);
+    await ping(store, true);
+    expect(await stateOf(database)).toMatchObject({ state: 'connected' });
+  });
+
+  it('is set by a check that is stored, whether or not it reached the source: the state follows the row just stored', async () => {
+    const { database, store } = await open();
+    await test(store, pass(1));
+    expect(await stateOf(database)).toEqual({ state: 'connected', state_reason: null });
+    await test(store, fail(2));
+    expect(await stateOf(database)).toEqual(UNREACHABLE);
+  });
+});
+
+describe('the checks that count for the verdict of the running server', () => {
+  const sources = [{ id: 'alpha', identityHash: identityHashOf(alpha), configHash: alpha.configHash }];
+  const found = async (store: AppStore, since = SINCE) => (await store.latestQualifyingChecks(sources, since)).map((entry) => [entry.sourceId, entry.report.mappingChecks.status, entry.checkedAt]);
+
+  it('is the newest check that reached the source, for this identity and this mapping, stored since the start', async () => {
+    const { store } = await open();
+    await test(store, pass(1));
+    await test(store, warn(2));
+    expect(await found(store)).toEqual([['alpha', 'not-run', at(2)]]);
+  });
+
+  it.each([
+    ['one stored before the process started (a pass from yesterday)', async (store: AppStore) => test(store, pass(1)), at(30)],
+    ['one for another connection', async (store: AppStore) => test(store, pass(), 'another-connection'), SINCE],
+    ['one for another mapping', async (store: AppStore) => test(store, pass(), identityHashOf(alpha), 'another-mapping'), SINCE],
+    ['one that did not reach the source', async (store: AppStore) => test(store, fail()), SINCE],
+  ])('does not count %s', async (_name, store_, since) => {
+    const { store } = await open();
+    await store_(store);
+    expect(await found(store, since)).toEqual([]);
+  });
+
+  it('does not count a check stored without a mapping hash, as the earlier versions did', async () => {
+    const { database, store } = await open();
+    await test(store, pass());
+    await rows(database.ownerUrl, 'UPDATE source_checks SET config_hash = NULL');
+    expect(await found(store)).toEqual([]);
+  });
+
+  it('reads a report stored by the earlier versions, without mapping checks, as not run', async () => {
+    const { database, store } = await open();
+    await test(store, pass());
+    await rows(database.ownerUrl, `UPDATE source_checks SET report = report - 'mappingChecks' - 'loginCanWrite'`);
+    expect(await found(store)).toEqual([['alpha', 'not-run', at(1)]]);
+  });
+
+  it('is what another process stored: a second store over the same database sees the check of the first', async () => {
+    const { database, store } = await open();
+    const other = createAppStore(database.appUrl, () => undefined, { migrationsDirectory: fileURLToPath(new URL('../../migrations', import.meta.url)) });
+    try {
+      await test(other, pass());
+      expect(await found(store)).toEqual([['alpha', 'not-run', at(1)]]);
+    } finally {
+      await other.close();
+    }
+  });
+
+  it('leaves out a row this version cannot read, reports its source, and still returns the other rows', async () => {
+    const { database, store } = await open();
+    await test(store, pass());
+    await rows(database.ownerUrl, `UPDATE source_checks SET report = jsonb_set(report, '{fieldFromANewerVersion}', 'true'::jsonb)`);
+    const skipped: string[] = [];
+    expect(await store.latestQualifyingChecks(sources, SINCE, (sourceId) => skipped.push(sourceId))).toEqual([]);
+    expect(skipped).toEqual(['alpha']);
+    await test(store, warn(5));
+    expect((await store.latestQualifyingChecks(sources, SINCE, (sourceId) => skipped.push(sourceId))).map((entry) => entry.checkedAt)).toEqual([at(5)]);
+    // the unreadable row is no longer the newest, so it is not read again
+    expect(skipped).toEqual(['alpha']);
+  });
+
+  it('is gone once fifty newer checks that did not reach the source have pruned it, which is why the record keeps the verdict it holds', async () => {
+    const { store } = await open();
+    await test(store, pass(1));
+    for (let minute = 2; minute < 2 + 50; minute += 1) await test(store, fail(minute % 59));
+    expect(await found(store)).toEqual([]);
+  });
+});
+
+describe('syncing the sources', () => {
+  it('resets the state to unknown when the mapping of a source changed with the connection the same, and leaves it when nothing changed', async () => {
+    const { database, store } = await open();
+    await test(store, pass());
+    await store.syncSources(mapping.sources);
+    expect(await stateOf(database)).toEqual({ state: 'connected', state_reason: null });
+    const edited = mappingOf(sourceWith('alpha', { budgets: { timeout_ms: 1234 } }));
+    expect(await store.syncSources(edited.sources)).toEqual([]);
     expect(await stateOf(database)).toEqual({ state: 'unknown', state_reason: null });
   });
 });
@@ -203,7 +331,7 @@ describe('what a ping writes', () => {
     await rows(database.ownerUrl, `UPDATE sources SET removed_at = now() WHERE id = 'alpha'`);
     const before = await version(database);
     expect(await ping(store, false)).toBe(false);
-    expect(await store.applyPingState({ sourceId: 'absent', reachable: false, reason: 'x', observedAt: NEVER_DROPPED })).toBe(false);
+    expect(await store.applyPingState({ sourceId: 'absent', reachable: false, reason: 'x', observedAt: NEVER_DROPPED, identityHash: 'x', configHash: 'y', since: SINCE })).toBe(false);
     expect(await version(database)).toEqual(before);
     expect(await stateOf(database)).toEqual({ state: 'unknown', state_reason: null });
   });

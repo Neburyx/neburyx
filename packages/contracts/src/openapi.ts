@@ -98,7 +98,7 @@ export function buildOpenApiDocument(
           operationId: 'testSource',
           summary: 'Test a configured source and report what it answered',
           description:
-            'Reads the capabilities of the server and then the privileges of the login through the gate as the calling principal, and returns the report. The request takes no body and no query parameters, so it cannot ask for the write probe, which only the command line runs. A source that does not answer is still a 200: the report says outcome fail and gives a fixed, plain reason that holds no address, credential or query text.',
+            'Reads the capabilities of the server, the privileges of the login and the schema the mapping depends on (labels, relationship types, indexes, stable ids) through the gate as the calling principal, and returns the report. The request takes no body and no query parameters, so it cannot ask for the write probe, which only the command line runs. A source that does not answer is still a 200: the report says outcome fail and gives a fixed, plain reason that holds no address, credential or query text. A source that stops answering during the schema reads gives an error, not a report.',
           parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
           responses: {
             '200': { description: 'The report of the run', content: jsonBody('SourceTestReport') },
@@ -106,7 +106,8 @@ export function buildOpenApiDocument(
             '403': { description: 'The policy does not allow this principal to read the source', content: jsonBody('ErrorResponse') },
             '404': { description: 'No configured source has this id', content: jsonBody('ErrorResponse') },
             '500': { description: 'The run could not be completed', content: jsonBody('ErrorResponse') },
-            '503': { description: 'The source is busy', content: jsonBody('ErrorResponse') },
+            '503': { description: 'The source is busy, or stopped answering during the schema reads', content: jsonBody('ErrorResponse') },
+            '504': { description: 'The source did not answer a schema read in time', content: jsonBody('ErrorResponse') },
           },
         },
       },

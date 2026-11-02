@@ -84,3 +84,40 @@ describe('a template the catalog refuses, naming the template and the problem', 
     expect(() => createTemplateCatalog({ templates: [markerTemplate] })).not.toThrow();
   });
 });
+
+describe('gate-filled parameters', () => {
+  const filled = variant({ id: 'filled', cypher: 'RETURN [x IN $mappedLabels WHERE true] AS labels', paramsSchema: z.strictObject({}), entityParams: [], paged: false, gateParameters: ['mappedLabels'] });
+
+  it('are accepted when the Cypher uses each one and the parameter schema has none of them', () => {
+    expect(createTemplateCatalog({ templates: [filled] }).find('filled')?.gateParameters).toEqual(['mappedLabels']);
+  });
+
+  it('are refused when the Cypher never uses a declared one', () => {
+    expect(failure({ ...filled, cypher: 'RETURN 1 AS one' })).toBe('the template filled declares the gate-filled parameter mappedLabels its Cypher never uses');
+  });
+
+  it('are refused when the Cypher uses one that is not declared', () => {
+    expect(failure({ ...filled, gateParameters: [] })).toBe('the template filled uses the gate-filled parameter mappedLabels without declaring it');
+  });
+
+  it('are refused when a caller could also give one', () => {
+    expect(failure({ ...filled, paramsSchema: z.strictObject({ mappedLabels: z.array(z.string()) }) })).toBe('the template filled has the gate-filled parameter mappedLabels in its parameter schema');
+  });
+
+  it('are not mistaken for a longer name: $mappedLabelsX is not $mappedLabels', () => {
+    expect(failure({ ...filled, cypher: 'RETURN $mappedLabelsX AS labels' })).toBe('the template filled declares the gate-filled parameter mappedLabels its Cypher never uses');
+  });
+});
+
+describe('the stable id marker', () => {
+  it('is accepted when a declared entity parameter backs it', () => {
+    const template = variant({ id: 'stable', cypher: 'MATCH (n:@entity(kind)) WHERE n.@stableId(kind) IS NOT NULL RETURN count(n) AS c', paged: false });
+    expect(createTemplateCatalog({ templates: [template] }).find('stable')?.entityParams).toEqual(['kind']);
+  });
+
+  it('is refused when no declared entity parameter backs it', () => {
+    expect(failure(variant({ id: 'stable', cypher: 'MATCH (n:@entity(kind)) WHERE n.@stableId(other) IS NOT NULL RETURN count(n) AS c', paged: false }))).toBe(
+      'the template stable has a stable id marker that no declared entity parameter backs',
+    );
+  });
+});

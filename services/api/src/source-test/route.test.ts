@@ -26,7 +26,7 @@ describe('POST /v1/sources/{id}/test', () => {
     const response = await app.inject({ method: 'POST', url: '/v1/sources/alpha/test' });
     expect(response.statusCode).toBe(200);
     expect(sourceTestReportSchema.parse(response.json())).toMatchObject({ sourceId: 'alpha', outcome: 'pass', state: 'connected' });
-    expect(executor.calls.map((call) => call.templateId)).toEqual(['capabilities', 'privileges']);
+    expect(executor.calls.map((call) => call.templateId)).toEqual(['capabilities', 'privileges', 'schema-tokens', 'schema-indexes']);
     await app.close();
   });
 

@@ -1,4 +1,5 @@
 import { rmSync } from 'node:fs';
+import { ALWAYS_USABLE } from '../testing/usability.js';
 import pino from 'pino';
 import { afterAll, describe, expect, it } from 'vitest';
 import { sourceTestReportSchema } from '@neburyx/contracts';
@@ -35,7 +36,7 @@ function rig(behaviour: FakeBehaviour, env: Record<string, string | undefined> =
   const logger = { warn: (fields: object, message: string) => void logs.push({ fields: { ...fields }, message }) };
   const executor = createNeo4jExecutor({ sources: mapping.sources, env, logger, createDriver: fake.factory });
   const defaults = communitySeams();
-  const parts = assembleGate({ mapping, seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit, ...seams }, executor, logger });
+  const parts = assembleGate({ usability: ALWAYS_USABLE, mapping, seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit, ...seams }, executor, logger });
   const tester = createSourceTester({ gate: parts.gate, mapping, store: memoryAppStore(), clock: () => Date.UTC(2026, 10, 2, 10, 0, 0) });
   return { tester, fake, logs, executor, gate: parts.gate };
 }
@@ -148,6 +149,17 @@ describe('POST /v1/sources/{id}/test for each failure', () => {
     ['a full pool', () => rig({ beginError: neo4jError('N/A', 'Connection acquisition timed out in 2000 ms.') }), 503, 'SOURCE_UNAVAILABLE'],
   ])('answers the shared error body for %s', async (_name, make, status, code) => {
     const response = await respond(make());
+    expect(response.statusCode).toBe(status);
+    expect(response.json()).toMatchObject({ error: { code } });
+    expect(JSON.stringify(response.json())).not.toContain('MARKER');
+  });
+
+  it.each([
+    ['a timeout of a schema read', { read: 'tokens', error: neo4jError('Neo.ClientError.Transaction.TransactionTimedOut', message) } as const, 504, 'QUERY_TIMEOUT'],
+    ['a lost connection during a schema read', { read: 'indexes', error: neo4jError('ServiceUnavailable', message) } as const, 503, 'SOURCE_UNAVAILABLE'],
+    ['an error of a schema read the executor does not know', { read: 'indexes', error: neo4jError('Neo.ClientError.Statement.SyntaxError', message) } as const, 500, 'INTERNAL_ERROR'],
+  ])('answers the shared error body, not a report, for %s after the capabilities read answered', async (_name, schemaError, status, code) => {
+    const response = await respond(rig({ rows: [SERVER_ROW], schemaError }));
     expect(response.statusCode).toBe(status);
     expect(response.json()).toMatchObject({ error: { code } });
     expect(JSON.stringify(response.json())).not.toContain('MARKER');

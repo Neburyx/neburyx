@@ -16,6 +16,9 @@ import { SourceGateError } from './gate/allowlist.js';
 import { createReachabilityCache, seedFromStartup } from './source-ping/cache.js';
 import { createScheduledPing } from './source-ping/ping.js';
 import { applyPingResults } from './source-ping/state.js';
+import { createFirstContact, type FirstContact } from './source-test/first-contact.js';
+import { createUsabilityRecord } from './source-test/usability.js';
+import { refreshUsability } from './source-test/usability-refresh.js';
 import { PING_INTERVAL_MS, startPingSchedule, type PingSchedule } from './source-ping/schedule.js';
 import { createStartupChecker, startupProblem, type StartupResult } from './source-test/startup.js';
 import { createSourceTester } from './source-test/tester.js';
@@ -111,6 +114,7 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
   let sourceGate: SourceGate | undefined;
   let app: FastifyInstance | undefined;
   let pingSchedule: PingSchedule | undefined;
+  let firstContact: FirstContact | undefined;
   try {
     const openStore = io.openStore ?? ((url, report, directory) => createAppStore(url, report, { migrationsDirectory: directory }));
     store = openStore(
@@ -118,14 +122,24 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
       () => io.logger.warn({ event: 'database.connection_error' }, 'database connection error'),
       io.migrationsDirectory ?? SHIPPED_MIGRATIONS,
     );
+    // the checks that count for this process are the ones stored from here on
+    const startedAt = new Date().toISOString();
     await store.initialize();
     const openedStore = store;
+    const usability = createUsabilityRecord();
+    const observingStore = {
+      ...openedStore,
+      recordSourceCheck: async (check: Parameters<AppStore['recordSourceCheck']>[0]) => {
+        await openedStore.recordSourceCheck(check);
+        usability.observe(check.report);
+      },
+    };
     for (const sourceId of await store.syncSources(mapping.sources)) {
       io.logger.warn({ event: 'source.identity_changed', sourceId }, 'source now points to a different database');
     }
-    sourceGate = (io.openSourceGate ?? createSourceGate)({ mapping, env, seams: communitySeams(), logger: io.logger });
+    sourceGate = (io.openSourceGate ?? createSourceGate)({ mapping, env, seams: communitySeams(), logger: io.logger, usability });
     const gate = sourceGate;
-    const results = await createStartupChecker({ system: gate.system, mapping, store: openedStore, logger: io.logger }).run();
+    const results = await createStartupChecker({ system: gate.system, mapping, store: observingStore, logger: io.logger }).run();
     const reachability = createReachabilityCache(mapping.sources.map((source) => source.id));
     seedFromStartup(reachability, results);
     const problem = (io.startupProblem ?? startupProblem)(results);
@@ -143,17 +157,31 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
       store,
       jobs,
       mapping,
-      sourceTester: createSourceTester({ gate: gate.gate, mapping, store: openedStore, logger: io.logger }),
+      sourceTester: createSourceTester({ gate: gate.gate, mapping, store: observingStore, logger: io.logger }),
       reachability,
-      stopPing: () => pingSchedule?.stop(),
-      drainPing: () => pingSchedule?.drain() ?? Promise.resolve(),
+      stopPing: () => {
+        pingSchedule?.stop();
+        firstContact?.stop();
+      },
+      // a first-contact check that was already running ends before the sources and the store are closed
+      drainPing: async () => {
+        await pingSchedule?.drain();
+        await firstContact?.drain();
+      },
       closeSources: () => gate.close(),
     });
     await app.listen({ host: config.host, port: io.portOverride ?? config.port });
+    const pingIntervalMs = io.pingIntervalMs ?? PING_INTERVAL_MS;
+    const contact = createFirstContact({ system: gate.system, mapping, store: observingStore, record: usability, logger: io.logger, intervalMs: pingIntervalMs });
+    firstContact = contact;
     pingSchedule = startPingSchedule({
       ping: createScheduledPing({ system: gate.system, mapping, cache: reachability }),
-      intervalMs: io.pingIntervalMs ?? PING_INTERVAL_MS,
-      onResults: (results) => applyPingResults(openedStore, io.logger, results),
+      intervalMs: pingIntervalMs,
+      onResults: async (results) => {
+        await applyPingResults(openedStore, io.logger, results, { mapping, since: startedAt });
+        await refreshUsability(openedStore, usability, mapping, startedAt, io.logger);
+        contact.afterTick(results);
+      },
       onFailure: () => io.logger.warn({ event: 'source.ping_failed' }, 'source ping failed'),
     });
     return { exitCode: 0, app };

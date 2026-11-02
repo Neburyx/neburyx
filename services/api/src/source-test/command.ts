@@ -13,6 +13,7 @@ import { communitySeams } from '../seams/community-seams.js';
 import { runWriteProbe, type ProbeDriverFactory } from '../sources/write-probe.js';
 import type { ProbeAnswer, WriteProbe } from './probe.js';
 import { createSourceTester } from './tester.js';
+import { ALL_UNCHECKED } from './usability.js';
 
 const SHIPPED_MIGRATIONS = fileURLToPath(new URL('../../migrations', import.meta.url));
 
@@ -53,6 +54,8 @@ function describeFailure(error: unknown): string {
         return 'the database does not know this source yet; start the API once so that it creates the local identity and the sources\n';
       case 'SOURCE_BUSY':
         return 'the source is busy; try again shortly\n';
+      case 'QUERY_TIMEOUT':
+        return 'the source did not answer in time; try again\n';
       case 'ACCESS_DENIED':
         return 'you are not allowed to test this source\n';
       default:
@@ -81,6 +84,14 @@ function probeLine(report: SourceTestReport, answer: ProbeAnswer | undefined): s
   return PROBE_LINES[answer ?? 'inconclusive'];
 }
 
+const MAPPING_WORDS: Readonly<Record<SourceTestReport['mappingChecks']['status'], string>> = {
+  pass: 'pass',
+  warn: 'warn',
+  fail: 'fail',
+  'not-run': 'not run',
+  'not-verified': 'not verified',
+};
+
 function lines(report: SourceTestReport): string {
   const server = report.server === null ? 'not reached' : `${report.server.product} ${report.server.version} (${report.server.edition})`;
   const supported = report.versionSupported === null ? 'unknown' : report.versionSupported ? 'yes' : 'no';
@@ -97,6 +108,8 @@ function lines(report: SourceTestReport): string {
     `Mapping: ${mapping.entityTypes} entity types, ${mapping.relationshipTypes} relationship types, ${mapping.derivedRules} derived rules`,
     `Read-only: ${READ_ONLY_WORDS[report.readOnlyCheck]}`,
     `Login can write: ${report.loginCanWrite === null ? 'unknown' : report.loginCanWrite ? 'yes' : 'no'}`,
+    `Mapping checks: ${MAPPING_WORDS[report.mappingChecks.status]}`,
+    ...report.mappingChecks.findings.map((finding) => `  ${finding.severity}: ${finding.message}`),
     `Checked at: ${report.checkedAt}`,
     '',
   ].join('\n');
@@ -147,7 +160,7 @@ export async function runTestSourceCommand(args: readonly string[], env: Readonl
   const store = (io.openStore ?? ((url, migrations) => createAppStore(url, () => undefined, { migrationsDirectory: migrations })))(config.databaseUrl, directory);
   let sourceGate: SourceGate | undefined;
   try {
-    sourceGate = (io.openSourceGate ?? createSourceGate)({ mapping, env, seams: communitySeams(), logger, ...(io.clock === undefined ? {} : { clock: io.clock }) });
+    sourceGate = (io.openSourceGate ?? createSourceGate)({ mapping, env, seams: communitySeams(), logger, usability: ALL_UNCHECKED, ...(io.clock === undefined ? {} : { clock: io.clock }) });
     const identity = await store.current().catch((error: unknown) => {
       throw new CommandFailure(databaseMessage(error) ?? IDENTITY_MESSAGE);
     });

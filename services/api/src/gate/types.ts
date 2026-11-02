@@ -16,6 +16,10 @@ export type Item = Readonly<Record<string, unknown>>;
 
 export type TemplateScope = 'system' | 'user';
 
+/** The parameters the gate fills in from the source's allowlist; a request cannot give them. */
+export const GATE_PARAMETERS = ['mappedLabels', 'mappedTypes', 'mappedProperties'] as const;
+export type GateParameter = (typeof GATE_PARAMETERS)[number];
+
 export interface Template {
   readonly id: string;
   readonly version: string;
@@ -27,6 +31,8 @@ export interface Template {
   readonly entityParams: readonly string[];
   readonly relationshipParams: readonly string[];
   readonly integerParameters: readonly string[];
+  /** The parameters of this template that the gate fills in (the Cypher uses each, and the parameter schema has none of them). */
+  readonly gateParameters?: readonly GateParameter[];
   /** False for a template whose runs through the system runner write no audit event (the scheduled ping); absent means they do. */
   readonly auditSystemRuns?: boolean;
   refsOf(params: Params): readonly ElementRef[];
@@ -36,6 +42,10 @@ export interface Template {
 export interface SourceAllowlist {
   readonly entityLabels: ReadonlyMap<string, string>;
   readonly relationshipTypes: ReadonlySet<string>;
+  /** The `stable_id` property of each entity type, by type. */
+  readonly stableIds: ReadonlyMap<string, string>;
+  /** Every property name the mapping names: search, reference, evidence, sort and stable id properties. */
+  readonly properties: ReadonlySet<string>;
 }
 
 export interface TemplateCatalog {

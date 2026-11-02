@@ -161,7 +161,7 @@
       "post": {
         "operationId": "testSource",
         "summary": "Test a configured source and report what it answered",
-        "description": "Reads the capabilities of the server and then the privileges of the login through the gate as the calling principal, and returns the report. The request takes no body and no query parameters, so it cannot ask for the write probe, which only the command line runs. A source that does not answer is still a 200: the report says outcome fail and gives a fixed, plain reason that holds no address, credential or query text.",
+        "description": "Reads the capabilities of the server, the privileges of the login and the schema the mapping depends on (labels, relationship types, indexes, stable ids) through the gate as the calling principal, and returns the report. The request takes no body and no query parameters, so it cannot ask for the write probe, which only the command line runs. A source that does not answer is still a 200: the report says outcome fail and gives a fixed, plain reason that holds no address, credential or query text. A source that stops answering during the schema reads gives an error, not a report.",
         "parameters": [
           {
             "name": "id",
@@ -224,7 +224,17 @@
             }
           },
           "503": {
-            "description": "The source is busy",
+            "description": "The source is busy, or stopped answering during the schema reads",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The source did not answer a schema read in time",
             "content": {
               "application/json": {
                 "schema": {
@@ -1435,6 +1445,91 @@
               "null"
             ]
           },
+          "mappingChecks": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": [
+                  "pass",
+                  "warn",
+                  "fail",
+                  "not-run",
+                  "not-verified"
+                ]
+              },
+              "findings": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "severity": {
+                      "type": "string",
+                      "enum": [
+                        "fail",
+                        "warn"
+                      ]
+                    },
+                    "check": {
+                      "type": "string",
+                      "enum": [
+                        "label",
+                        "relationship-type",
+                        "search-index",
+                        "reference-index",
+                        "evidence-index",
+                        "index-failed",
+                        "stable-id-unindexed",
+                        "stable-id-unique",
+                        "sort-index",
+                        "index-building",
+                        "stable-id-unenforced",
+                        "rel-stable-id-unindexed",
+                        "schema-refused",
+                        "schema-unreadable",
+                        "stable-id-unverified"
+                      ]
+                    },
+                    "entityType": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "relationshipType": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "from": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "to": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "property": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "severity",
+                    "check",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "status",
+              "findings"
+            ],
+            "additionalProperties": false
+          },
           "mappingSummary": {
             "type": "object",
             "properties": {
@@ -1474,6 +1569,7 @@
           "operations",
           "readOnlyCheck",
           "loginCanWrite",
+          "mappingChecks",
           "mappingSummary"
         ],
         "additionalProperties": false

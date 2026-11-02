@@ -1,6 +1,7 @@
 import { AppError } from '../errors.js';
 import type { MappingModel, SourceModel } from '../mapping/model.js';
 import type { Seams } from '../seams/seams.js';
+import type { SourceUsability } from '../source-test/usability.js';
 import { allowlistFromMapping } from './allowlist.js';
 import { DEFAULT_BUDGETS } from './budgets.js';
 import { createTemplateCatalog } from './catalog.js';
@@ -9,6 +10,9 @@ import { createGates } from './gate.js';
 import { capabilitiesTemplate } from './templates/capabilities.js';
 import { connectivityTemplate } from './templates/connectivity.js';
 import { privilegesTemplate } from './templates/privileges.js';
+import { schemaIndexesTemplate } from './templates/schema-indexes.js';
+import { schemaTokensTemplate } from './templates/schema-tokens.js';
+import { stableIdDuplicatesTemplate } from './templates/stable-id-duplicates.js';
 import type { Budgets, Clock, Gate, GateLogger, GateObserver, Item, SourceAllowlist, SystemRunner, TemplateCatalog, GateContext } from './types.js';
 
 export interface AssembleOptions {
@@ -20,10 +24,12 @@ export interface AssembleOptions {
   readonly observer?: GateObserver;
   readonly catalog?: TemplateCatalog;
   readonly redact?: (items: readonly Item[], context: GateContext) => readonly Item[];
+  /** Whether a data read may go to a source. */
+  readonly usability: SourceUsability;
 }
 
 export function defaultCatalog(): TemplateCatalog {
-  return createTemplateCatalog({ templates: [connectivityTemplate, capabilitiesTemplate, privilegesTemplate] });
+  return createTemplateCatalog({ templates: [connectivityTemplate, capabilitiesTemplate, privilegesTemplate, schemaTokensTemplate, schemaIndexesTemplate, stableIdDuplicatesTemplate] });
 }
 
 function budgetsFrom(source: SourceModel): Budgets {
@@ -51,5 +57,6 @@ export function assembleGate(options: AssembleOptions): { readonly gate: Gate; r
     clock: options.clock ?? Date.now,
     logger: options.logger,
     observer: options.observer,
+    usability: options.usability,
   });
 }

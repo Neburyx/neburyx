@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { TemplateDefinition } from '../catalog.js';
 import type { Item, Row } from '../types.js';
+import { unreadableOf } from './unreadable.js';
 
 export const PRIVILEGES_ID = 'privileges';
 
@@ -15,20 +16,15 @@ export const privilegeRowSchema = z.strictObject({
 
 export type PrivilegeRow = z.infer<typeof privilegeRowSchema>;
 
-/** What stands for a row that is not five strings: the type of each column it has, never a value, so that the check can say it could not read the listing. */
-export type UnreadableRow = { readonly unreadable: Readonly<Record<string, string>> };
-
 function normalize(rows: readonly Row[]): readonly Item[] {
   return rows.map((row): Item => {
     const parsed = privilegeRowSchema.safeParse(row);
-    if (parsed.success) return parsed.data;
-    const unreadable: UnreadableRow = { unreadable: Object.fromEntries(Object.entries(row).map(([column, value]) => [column, typeof value])) };
-    return unreadable;
+    return parsed.success ? parsed.data : unreadableOf(row);
   });
 }
 
 /**
- * Everything the login holds except the plain read rights and the rights every login has by default (the PUBLIC role: execute, load, the index and constraint listings),
+ * Everything the login holds except the plain read rights and the rights every login has by default (the PUBLIC role: execute, load; the roles from reader upward add the index and constraint listings),
  * so that an action name a newer server adds comes back instead of being filtered away.
  */
 export const privilegesTemplate: TemplateDefinition = {

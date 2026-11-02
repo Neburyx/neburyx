@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events';
+import { ALWAYS_USABLE } from './testing/usability.js';
 import { connect } from 'node:net';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -114,7 +115,7 @@ describe('serve while a ping is stuck', () => {
       openSourceGate: (gateOptions: SourceGateOptions): SourceGate => {
         const executor = createNeo4jExecutor({ sources: gateOptions.mapping.sources, env: { DEMO_USER: 'u', DEMO_PASSWORD: 'p' }, logger: gateOptions.logger, createDriver: fake.factory });
         const defaults = communitySeams();
-        const parts = assembleGate({ mapping: gateOptions.mapping, seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit }, executor, logger: gateOptions.logger });
+        const parts = assembleGate({ usability: ALWAYS_USABLE, mapping: gateOptions.mapping, seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit }, executor, logger: gateOptions.logger });
         return { ...parts, close: () => executor.close() };
       },
     };

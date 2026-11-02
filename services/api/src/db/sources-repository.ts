@@ -51,8 +51,8 @@ export async function syncSources(pool: pg.Pool, sources: readonly SourceModel[]
            synthetic = EXCLUDED.synthetic,
            config_hash = EXCLUDED.config_hash,
            identity_hash = EXCLUDED.identity_hash,
-           state = CASE WHEN sources.identity_hash <> EXCLUDED.identity_hash THEN 'unknown' ELSE sources.state END,
-           state_reason = CASE WHEN sources.identity_hash <> EXCLUDED.identity_hash THEN NULL ELSE sources.state_reason END,
+           state = CASE WHEN sources.identity_hash <> EXCLUDED.identity_hash OR sources.config_hash <> EXCLUDED.config_hash THEN 'unknown' ELSE sources.state END,
+           state_reason = CASE WHEN sources.identity_hash <> EXCLUDED.identity_hash OR sources.config_hash <> EXCLUDED.config_hash THEN NULL ELSE sources.state_reason END,
            removed_at = NULL,
            updated_at = CASE
              WHEN (sources.uri, sources.database, sources.secret_ref, sources.synthetic, sources.config_hash, sources.identity_hash, sources.removed_at IS NULL)

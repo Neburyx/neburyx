@@ -48,13 +48,15 @@ function mappingFile(...sources: Json[]): string {
 }
 
 const source = (id: string, overrides: Json = {}): Json => baseSource({ id, ...overrides });
+/** What a start whose check does not settle leaves in the row: not checked since the start. */
+const NOT_CHECKED = 'The source has not been checked since the start.';
 
 interface Boot {
   readonly logs: string[];
   readonly code: number;
 }
 
-/** A gate whose sources never answer in a way that is a verdict, so the startup check leaves the states these tests set up as they are. */
+/** A gate whose sources never answer in a way that is a verdict, so the startup check does not settle and no check row is stored. */
 function unansweringGate(options: SourceGateOptions) {
   const parts = testSourceGate(options.mapping, { executor: new TestExecutor(() => Promise.resolve({ status: 'unavailable', reason: 'closed' })) });
   return { gate: parts.gate, system: parts.system, close: () => Promise.resolve() };
@@ -128,7 +130,7 @@ describe('rows at start-up', () => {
     expect((await boot(database, file)).code).toBe(0);
     const [alpha, beta] = await sourceRows(database);
     const mapping = parseMapping(fileOf(source('alpha'), source('beta', { synthetic: true, uri: 'bolt://other.example.test:7687', database: 'second' })), 'x');
-    expect(alpha).toMatchObject({ id: 'alpha', alias: 'alpha', connector: 'neo4j', uri: 'neo4j+s://graph.example.test:7687', database: 'neo4j', synthetic: false, state: 'unknown', state_reason: null, removed_at: null, config_hash: mapping.sources[0]?.configHash });
+    expect(alpha).toMatchObject({ id: 'alpha', alias: 'alpha', connector: 'neo4j', uri: 'neo4j+s://graph.example.test:7687', database: 'neo4j', synthetic: false, state: 'unknown', state_reason: NOT_CHECKED, removed_at: null, config_hash: mapping.sources[0]?.configHash });
     expect(beta).toMatchObject({ id: 'beta', uri: 'bolt://other.example.test:7687', database: 'second', synthetic: true, config_hash: mapping.sources[1]?.configHash });
     expect(typeof alpha?.['identity_hash']).toBe('string');
   });
@@ -162,7 +164,7 @@ describe('row updates', () => {
     await rows(database.ownerUrl, `UPDATE sources SET state = 'connected', state_reason = 'checked by hand' WHERE id = 'alpha'`);
   }
 
-  it('changes the hash and the update time when the mapped types change, and keeps created_at, state and reason', async () => {
+  it('changes the hash and the update time when the mapped types change, keeps created_at and resets the state, which the start that follows marks as not checked', async () => {
     const database = await migrated();
     await boot(database, mappingFile(source('alpha')));
     await withStateSet(database);
@@ -172,7 +174,7 @@ describe('row updates', () => {
     expect(after['config_hash']).not.toBe(before['config_hash']);
     expect(after['updated_at']).toBeInstanceOf(Date);
     expect(Number(after['updated_at'])).toBeGreaterThan(Number(before['updated_at']));
-    expect(after).toMatchObject({ created_at: before['created_at'], state: 'connected', state_reason: 'checked by hand', identity_hash: before['identity_hash'] });
+    expect(after).toMatchObject({ created_at: before['created_at'], state: 'unknown', state_reason: NOT_CHECKED, identity_hash: before['identity_hash'] });
   });
 
   it('leaves a source alone when another source in the file is edited', async () => {
@@ -255,15 +257,15 @@ describe('the sources endpoints on a started API', () => {
   it('lists the sources with the state a row holds and never the address, database or credential names', async () => {
     const database = await migrated();
     const file = mappingFile(source('alpha'), source('beta', { synthetic: true }));
-    await boot(database, file);
-    await rows(database.ownerUrl, `UPDATE sources SET state = 'unavailable', state_reason = 'TLS handshake failed' WHERE id = 'beta'`);
     const { result } = await startApi({ DATABASE_URL: database.appUrl, NEBURYX_CONFIG: file }, undefined, { openSourceGate: unansweringGate });
     if (result.exitCode !== 0) throw new Error('the API did not start');
+    // the list shows what a row holds when it is asked
+    await rows(database.ownerUrl, `UPDATE sources SET state = 'unavailable', state_reason = 'TLS handshake failed' WHERE id = 'beta'`);
     try {
       const response = await result.app.inject({ method: 'GET', url: '/v1/sources' });
       expect(response.statusCode).toBe(200);
       expect(response.json().items).toMatchObject([
-        { id: 'alpha', state: 'unknown', stateReason: null, synthetic: false, readOnly: true, lastTestAt: null },
+        { id: 'alpha', state: 'unknown', stateReason: NOT_CHECKED, synthetic: false, readOnly: true, lastTestAt: null },
         { id: 'beta', state: 'unavailable', stateReason: 'TLS handshake failed', synthetic: true },
       ]);
       for (const secret of ['graph.example.test', 'DEMO_USER', 'DEMO_PASSWORD', 'config_hash', 'secret_ref']) expect(response.body).not.toContain(secret);
@@ -425,7 +427,7 @@ describe('identity changes', () => {
     const logs = await logsOf(database, mappingFile(source('alpha', { uri: 'neo4j+s://moved.example.test:7687' })));
     const after = await rowOf(database, 'alpha');
     expect(after['identity_hash']).not.toBe(before['identity_hash']);
-    expect(after).toMatchObject({ state: 'unknown', state_reason: null });
+    expect(after).toMatchObject({ state: 'unknown', state_reason: NOT_CHECKED });
     const events = logs.split('\n').filter((line) => line.includes('source.identity_changed'));
     expect(events).toHaveLength(1);
     expect(JSON.parse(events[0] ?? '{}')).toMatchObject({ sourceId: 'alpha' });
@@ -439,7 +441,7 @@ describe('identity changes', () => {
     const hashBefore = (await rowOf(database, 'alpha'))['identity_hash'];
     const logs = await logsOf(database, mappingFile(source('alpha', { database: 'private-database-name' })));
     const changed = await rowOf(database, 'alpha');
-    expect(changed).toMatchObject({ state: 'unknown', state_reason: null });
+    expect(changed).toMatchObject({ state: 'unknown', state_reason: NOT_CHECKED });
     expect(changed['identity_hash']).not.toBe(hashBefore);
     const events = logs.split('\n').filter((line) => line.includes('source.identity_changed'));
     expect(events).toHaveLength(1);
@@ -447,7 +449,7 @@ describe('identity changes', () => {
     expect(logs).not.toContain('private-database-name');
   });
 
-  it('keeps the identity, the state and the log quiet for changes that are not the connection', async () => {
+  it('keeps the identity and the log quiet for changes that are not the connection, though a changed mapping resets the state', async () => {
     const database = await migrated();
     await boot(database, mappingFile(source('alpha')));
     await rows(database.ownerUrl, `UPDATE sources SET state = 'connected', state_reason = 'checked by hand' WHERE id = 'alpha'`);
@@ -462,7 +464,7 @@ describe('identity changes', () => {
       const logs = await logsOf(database, mappingFile(source('alpha', change)));
       expect(logs).not.toContain('source.identity_changed');
       const after = await rowOf(database, 'alpha');
-      expect(after).toMatchObject({ identity_hash: before['identity_hash'], state: 'connected', state_reason: 'checked by hand' });
+      expect(after).toMatchObject({ identity_hash: before['identity_hash'], state: 'unknown', state_reason: NOT_CHECKED });
       expect(after['config_hash']).not.toBe(previousHash);
       previousHash = after['config_hash'];
     }

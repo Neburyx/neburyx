@@ -2,6 +2,8 @@ import { AppError } from '../errors.js';
 
 export const UNSUPPORTED_VERSION_REASON = 'The server version is not on the support matrix.';
 export const PRIVILEGES_UNREADABLE_REASON = 'The server listed privileges that could not be read, so read-only is not verified.';
+export const NOT_CHECKED_SINCE_START = 'The source has not been checked since the start.';
+export const FIX_THE_SOURCE = 'Fix the source, then run test-source or test it from the Sources page.';
 export const LOGIN_CAN_WRITE_REASON = 'The login can write to the source; give Neburyx a login that can only read.';
 
 export type FailureReason = 'unreachable' | 'authentication' | 'credentials' | 'database' | 'refused' | 'timeout';

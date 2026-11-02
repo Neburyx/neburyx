@@ -1,4 +1,5 @@
 import type { Seams } from '../seams/seams.js';
+import type { SourceUsability } from '../source-test/usability.js';
 import type { ReadExecutor } from './executor.js';
 import type { Budgets, Clock, GateContext, GateLogger, GateObserver, Item, SourceAllowlist, TemplateCatalog } from './types.js';
 
@@ -12,4 +13,6 @@ export interface GateDeps {
   readonly clock: Clock;
   readonly logger: GateLogger;
   readonly observer?: GateObserver | undefined;
+  /** Whether a data read may go to a source; required, so that a gate built without it cannot be mistaken for one that checks. */
+  readonly usability: SourceUsability;
 }
