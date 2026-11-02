@@ -1,13 +1,19 @@
 import { allowedDetails, ERROR_TABLE, type ErrorCode, type ErrorResponse } from '@neburyx/contracts';
 
+/** Why a read could not reach a source; a fixed tag that is never sent in a response or written to a log. */
+export const UNAVAILABLE_REASONS = ['unreachable', 'authentication', 'credentials', 'database', 'refused', 'pool-full', 'closed'] as const;
+export type UnavailableReason = (typeof UNAVAILABLE_REASONS)[number];
+
 export class AppError extends Error {
   readonly code: ErrorCode;
   readonly details: unknown;
+  readonly reason: UnavailableReason | undefined;
 
-  constructor(code: ErrorCode, details?: unknown) {
+  constructor(code: ErrorCode, details?: unknown, reason?: UnavailableReason) {
     super(code);
     this.code = code;
     this.details = details;
+    this.reason = reason;
   }
 }
 

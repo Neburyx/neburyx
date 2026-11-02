@@ -13,7 +13,7 @@ import { makeWebRoot } from '../testing/web-root.js';
 const webRoot = makeWebRoot();
 afterAll(() => rmSync(webRoot, { recursive: true, force: true }));
 
-const row = (id: string, overrides: Partial<SourceRow> = {}): SourceRow => ({ id, alias: id, state: 'unknown', stateReason: null, synthetic: false, ...overrides });
+const row = (id: string, overrides: Partial<SourceRow> = {}): SourceRow => ({ id, alias: id, state: 'unknown', stateReason: null, synthetic: false, lastTestAt: null, ...overrides });
 
 function mappingOf(...ids: string[]): ReturnType<typeof parseMapping> {
   return parseMapping(fileOf(...ids.map((id) => baseSource({ id }))), 'neburyx.yaml');

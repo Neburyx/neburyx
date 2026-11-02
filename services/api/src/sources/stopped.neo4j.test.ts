@@ -34,6 +34,6 @@ describe('a source whose server has stopped', () => {
   it('answers unavailable', async () => {
     expect(await executor.execute(call())).toMatchObject({ status: 'rows' });
     await server.stop();
-    expect(await executor.execute(call())).toEqual({ status: 'unavailable' });
+    expect(await executor.execute(call())).toEqual({ status: 'unavailable', reason: 'unreachable' });
   });
 });

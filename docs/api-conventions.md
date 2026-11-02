@@ -99,3 +99,11 @@ app.get('/v1/me', { config: { permission: 'principal' } }, handler);
   not part of the check.
 - Nothing enforces the value at run time yet, because Community has one principal. Enterprise adds roles and capabilities as
   further values when its policy exists.
+
+## Testing a source
+
+`POST /v1/sources/{id}/test` runs the capabilities check on a configured source through the gate, as the calling principal,
+and returns the report. It declares `principal`; in Community every principal that the policy allows to read the source may
+call it. It takes no body and no query parameters (either is `INVALID_REQUEST`) and no version header. An unknown id is
+`NOT_FOUND`. A source that is reachable but on a server version outside the support matrix gives a report with outcome `warn`.
+The report carries a fixed, plain reason and never an address, a credential or query text.

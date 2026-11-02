@@ -156,6 +156,85 @@
         }
       }
     },
+    "/v1/sources/{id}/test": {
+      "post": {
+        "operationId": "testSource",
+        "summary": "Test a configured source and report what it answered",
+        "description": "Runs the capabilities check through the gate as the calling principal and returns the report. The request takes no body and no query parameters. A source that does not answer is still a 200: the report says outcome fail and gives a fixed, plain reason that holds no address, credential or query text.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The report of the run",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceTestReport"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A body or a query parameter was sent",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The policy does not allow this principal to read the source",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No configured source has this id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The run could not be completed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The source is busy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/sources": {
       "get": {
         "operationId": "listSources",
@@ -1208,6 +1287,159 @@
           "derivedRules",
           "presets",
           "mappingExcerpt"
+        ],
+        "additionalProperties": false
+      },
+      "SourceTestReport": {
+        "type": "object",
+        "properties": {
+          "schemaVersion": {
+            "type": "number",
+            "const": 1
+          },
+          "sourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "checkedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "warn",
+              "fail"
+            ]
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "connected",
+              "degraded",
+              "unavailable"
+            ]
+          },
+          "stateReason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "server": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "product": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "version": {
+                    "type": "string"
+                  },
+                  "edition": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "product",
+                  "version",
+                  "edition"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "versionSupported": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "operations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "supported",
+                    "by-template",
+                    "unsupported"
+                  ]
+                }
+              },
+              "required": [
+                "name",
+                "status"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "readOnlyCheck": {
+            "type": "string",
+            "enum": [
+              "privileges-inspected",
+              "write-probe",
+              "not-verified"
+            ]
+          },
+          "mappingSummary": {
+            "type": "object",
+            "properties": {
+              "entityTypes": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "relationshipTypes": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "derivedRules": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "entityTypes",
+              "relationshipTypes",
+              "derivedRules"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "sourceId",
+          "checkedAt",
+          "outcome",
+          "state",
+          "stateReason",
+          "server",
+          "versionSupported",
+          "operations",
+          "readOnlyCheck",
+          "mappingSummary"
         ],
         "additionalProperties": false
       },

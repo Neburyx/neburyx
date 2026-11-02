@@ -1,3 +1,4 @@
+import type { UnavailableReason } from '../errors.js';
 import type { Params, Row } from './types.js';
 
 export interface ExecuteCall {
@@ -17,7 +18,7 @@ export interface ExecuteCall {
 export type ExecuteOutcome =
   | { readonly status: 'rows'; readonly rows: readonly Row[] }
   | { readonly status: 'timeout' }
-  | { readonly status: 'unavailable' };
+  | { readonly status: 'unavailable'; readonly reason: UnavailableReason };
 
 export interface ReadExecutor {
   execute(call: ExecuteCall): Promise<ExecuteOutcome>;

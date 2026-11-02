@@ -4,6 +4,7 @@ import { healthResponseSchema } from './health.js';
 import { meResponseSchema } from './me.js';
 import { readyResponseSchema } from './ready.js';
 import { sourceProfileSchema } from './profile.js';
+import { sourceTestReportSchema } from './source-test.js';
 import { sourcesResponseSchema } from './sources.js';
 
 const API_TITLE = 'Neburyx API';
@@ -13,7 +14,7 @@ export interface OpenApiDocument {
   readonly openapi: string;
   readonly info: { readonly title: string; readonly version: string };
   readonly paths: Readonly<Record<string, unknown>>;
-  readonly components: { readonly schemas: { readonly ErrorResponse: Record<string, unknown>; readonly HealthResponse: Record<string, unknown>; readonly MeResponse: Record<string, unknown>; readonly ReadyResponse: Record<string, unknown>; readonly SourceProfile: Record<string, unknown>; readonly SourcesResponse: Record<string, unknown> } };
+  readonly components: { readonly schemas: { readonly ErrorResponse: Record<string, unknown>; readonly HealthResponse: Record<string, unknown>; readonly MeResponse: Record<string, unknown>; readonly ReadyResponse: Record<string, unknown>; readonly SourceProfile: Record<string, unknown>; readonly SourceTestReport: Record<string, unknown>; readonly SourcesResponse: Record<string, unknown> } };
 }
 
 function schemaJson(schema: z.ZodType): Record<string, unknown> {
@@ -32,6 +33,7 @@ export function buildOpenApiDocument(
   readyResponse: z.ZodType = readyResponseSchema,
   sourcesResponse: z.ZodType = sourcesResponseSchema,
   sourceProfile: z.ZodType = sourceProfileSchema,
+  sourceTestReport: z.ZodType = sourceTestReportSchema,
 ): OpenApiDocument {
   return {
     openapi: '3.1.0',
@@ -89,6 +91,23 @@ export function buildOpenApiDocument(
           },
         },
       },
+      '/v1/sources/{id}/test': {
+        post: {
+          operationId: 'testSource',
+          summary: 'Test a configured source and report what it answered',
+          description:
+            'Runs the capabilities check through the gate as the calling principal and returns the report. The request takes no body and no query parameters. A source that does not answer is still a 200: the report says outcome fail and gives a fixed, plain reason that holds no address, credential or query text.',
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+          responses: {
+            '200': { description: 'The report of the run', content: jsonBody('SourceTestReport') },
+            '400': { description: 'A body or a query parameter was sent', content: jsonBody('ErrorResponse') },
+            '403': { description: 'The policy does not allow this principal to read the source', content: jsonBody('ErrorResponse') },
+            '404': { description: 'No configured source has this id', content: jsonBody('ErrorResponse') },
+            '500': { description: 'The run could not be completed', content: jsonBody('ErrorResponse') },
+            '503': { description: 'The source is busy', content: jsonBody('ErrorResponse') },
+          },
+        },
+      },
       '/v1/sources': {
         get: {
           operationId: 'listSources',
@@ -104,7 +123,7 @@ export function buildOpenApiDocument(
       },
     },
     components: {
-      schemas: { ErrorResponse: schemaJson(errorResponse), HealthResponse: schemaJson(healthResponse), MeResponse: schemaJson(meResponse), ReadyResponse: schemaJson(readyResponse), SourceProfile: schemaJson(sourceProfile), SourcesResponse: schemaJson(sourcesResponse) },
+      schemas: { ErrorResponse: schemaJson(errorResponse), HealthResponse: schemaJson(healthResponse), MeResponse: schemaJson(meResponse), ReadyResponse: schemaJson(readyResponse), SourceProfile: schemaJson(sourceProfile), SourceTestReport: schemaJson(sourceTestReport), SourcesResponse: schemaJson(sourcesResponse) },
     },
   };
 }

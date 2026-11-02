@@ -57,10 +57,17 @@ describe('who may import the system principal', () => {
 });
 
 describe('who may import createSourceGate', () => {
-  it('is gate/ and start.ts, and nothing else', () => {
+  it('is gate/, start.ts and the test-source command, and nothing else', () => {
     expect(snippet(`${API}/start.ts`, "import { createSourceGate } from './gate/source-gate.js';")).toEqual([]);
+    expect(snippet(`${API}/source-test/command.ts`, "import { createSourceGate } from '../gate/source-gate.js';")).toEqual([]);
+    expect(snippet(`${API}/source-test/tester.ts`, "import { createSourceGate } from '../gate/source-gate.js';")).toMatchObject([{ rule: 'source-gate' }]);
+    expect(snippet(`${API}/cli.ts`, "import { createSourceGate } from './gate/source-gate.js';")).toHaveLength(1);
     expect(snippet(`${API}/gate/other.ts`, "import { createSourceGate } from './source-gate.js';")).toEqual([]);
     expect(snippet(`${API}/app.ts`, "import { createSourceGate } from './gate/source-gate.js';")).toHaveLength(1);
+  });
+
+  it('is reported when the test-source command re-exports it', () => {
+    expect(snippet(`${API}/source-test/command.ts`, "export { createSourceGate } from '../gate/source-gate.js';")).toMatchObject([{ rule: 'source-gate' }]);
   });
 
   it('is reported when start.ts re-exports it', () => {

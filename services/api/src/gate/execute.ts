@@ -68,7 +68,7 @@ export async function executeRead(
     case 'timeout':
       throw new AppError('QUERY_TIMEOUT');
     case 'unavailable':
-      throw new AppError('SOURCE_UNAVAILABLE');
+      throw new AppError('SOURCE_UNAVAILABLE', undefined, outcome.reason);
     case 'rows':
       return { rows: outcome.rows.slice(0, limit), hasMore: outcome.rows.length > limit };
     default:

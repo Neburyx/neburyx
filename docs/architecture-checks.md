@@ -41,10 +41,10 @@ keep the capabilities where they belong (`tools/workspace-checks/src/architectur
 | Import | Allowed in |
 |---|---|
 | the system-principal module, `gate/system-principal.ts` | `services/api/src/gate/` |
-| the module that exports `createSourceGate`, `gate/source-gate.ts` | `services/api/src/gate/` and `services/api/src/start.ts` |
+| the module that exports `createSourceGate`, `gate/source-gate.ts` | `services/api/src/gate/`, `services/api/src/start.ts` and `services/api/src/source-test/command.ts` (the `test-source` command builds its own gate and uses only the `Gate` it returns) |
 
 Test files (`*.test.*`) and `services/api/src/testing/` are exempt, as above. A re-export of either module is never allowed, even from a file
-that may import it, so `gate/types.ts` and `start.ts` cannot pass the system principal or the system runner on. Both rules read the same
+that may import it, so `gate/types.ts`, `start.ts` and `source-test/command.ts` cannot pass the system principal or the system runner on. Both rules read the same
 imports and re-exports as the adapter check, in the folders `services/`, `packages/`, `apps/` and `ee/`, and report the file, line and import.
 
 ## Community never imports `ee/`

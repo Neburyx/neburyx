@@ -10,6 +10,11 @@ import { MappingError } from './mapping/diagnostics.js';
 import { loadMappingFile } from './mapping/load.js';
 import type { MappingModel } from './mapping/model.js';
 import { createAppStore, type AppStore } from './app-store.js';
+import { communitySeams } from './seams/community-seams.js';
+import { createSourceGate, type SourceGate, type SourceGateOptions } from './gate/source-gate.js';
+import { SourceGateError } from './gate/allowlist.js';
+import { createStartupChecker, startupProblem, type StartupResult } from './source-test/startup.js';
+import { createSourceTester } from './source-test/tester.js';
 import { startJobRunner, type JobRunner } from './jobs/runner.js';
 import { registeredTasks, TaskConfigError, validateTasks, type Task } from './jobs/tasks.js';
 
@@ -20,11 +25,15 @@ export interface StartIo {
   readonly logger: FastifyBaseLogger;
   readonly defaultWebRoot: string;
   readonly portOverride?: number;
+  readonly startupProblem?: (results: readonly StartupResult[]) => string | undefined;
+  readonly openSourceGate?: (options: SourceGateOptions) => SourceGate;
   readonly openStore?: (url: string, onConnectionError: () => void, migrationsDirectory: string) => AppStore;
   readonly migrationsDirectory?: string;
   readonly tasks?: readonly Task[];
   readonly fileExists?: (path: string) => boolean;
 }
+
+class StartupStop extends Error {}
 
 export type StartResult = { readonly exitCode: 0; readonly app: FastifyInstance } | { readonly exitCode: 1 };
 
@@ -93,6 +102,7 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
 
   let store: AppStore | undefined;
   let jobs: JobRunner | undefined;
+  let sourceGate: SourceGate | undefined;
   let app: FastifyInstance | undefined;
   try {
     const openStore = io.openStore ?? ((url, report, directory) => createAppStore(url, report, { migrationsDirectory: directory }));
@@ -102,9 +112,15 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
       io.migrationsDirectory ?? SHIPPED_MIGRATIONS,
     );
     await store.initialize();
+    const openedStore = store;
     for (const sourceId of await store.syncSources(mapping.sources)) {
       io.logger.warn({ event: 'source.identity_changed', sourceId }, 'source now points to a different database');
     }
+    sourceGate = (io.openSourceGate ?? createSourceGate)({ mapping, env, seams: communitySeams(), logger: io.logger });
+    const gate = sourceGate;
+    const results = await createStartupChecker({ system: gate.system, mapping, store: openedStore, logger: io.logger }).run();
+    const problem = (io.startupProblem ?? startupProblem)(results);
+    if (problem !== undefined) throw new StartupStop(problem);
     jobs = await startJobRunner(
       config.databaseUrl,
       tasks,
@@ -112,14 +128,23 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
       () => io.logger.warn({ event: 'database.connection_error' }, 'database connection error'),
     );
     warnIfExposed(io.logger, config.host, isInContainer(env, io.fileExists ?? existsSync));
-    app = await buildApp({ webRoot: config.webRoot, logger: io.logger, store, jobs, mapping });
+    app = await buildApp({
+      webRoot: config.webRoot,
+      logger: io.logger,
+      store,
+      jobs,
+      mapping,
+      sourceTester: createSourceTester({ gate: gate.gate, mapping, store: openedStore }),
+      closeSources: () => gate.close(),
+    });
     await app.listen({ host: config.host, port: io.portOverride ?? config.port });
     return { exitCode: 0, app };
   } catch (error) {
-    io.stderr.write(`${error instanceof IdentityStartError ? error.message : describeStartFailure(error)}\n`);
+    io.stderr.write(`${error instanceof IdentityStartError || error instanceof SourceGateError || error instanceof StartupStop ? error.message : describeStartFailure(error)}\n`);
     if (app) await app.close();
     else {
       await jobs?.stop();
+      await sourceGate?.close();
       await store?.close();
     }
     return { exitCode: 1 };

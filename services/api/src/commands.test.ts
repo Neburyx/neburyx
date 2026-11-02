@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseCommand, USAGE } from './commands.js';
+import { parseCommand, parseTestSourceArgs, TEST_SOURCE_USAGE, USAGE } from './commands.js';
 
 describe('parseCommand', () => {
   it.each([
@@ -7,6 +7,7 @@ describe('parseCommand', () => {
     [['api'], 'api'],
     [['migrate'], 'migrate'],
     [['migrate', 'extra'], 'migrate'],
+    [['test-source', '--name', 'alpha'], 'test-source'],
   ] as const)('reads %j as %s', (args, expected) => {
     expect(parseCommand(args)).toBe(expected);
   });
@@ -16,6 +17,29 @@ describe('parseCommand', () => {
   });
 
   it('prints the usage line the image documents', () => {
-    expect(USAGE).toBe('usage: neburyx api | migrate\n');
+    expect(USAGE).toBe('usage: neburyx api | migrate | test-source --name <source>\n');
+    expect(TEST_SOURCE_USAGE).toBe('usage: neburyx test-source --name <source>\n');
+  });
+});
+
+describe('parseTestSourceArgs', () => {
+  it('reads the source name', () => {
+    expect(parseTestSourceArgs(['--name', 'alpha'])).toBe('alpha');
+  });
+
+  it.each([
+    [[]],
+    [['--name']],
+    [['--name', '']],
+    [['--name', '--name']],
+    [['--name', 'alpha', '--name', 'beta']],
+    [['--name', 'alpha', 'extra']],
+    [['--write-probe']],
+    [['--write-probe', '--name', 'alpha']],
+    [['--name', 'alpha', '--write-probe']],
+    [['alpha']],
+    [['--other', 'alpha']],
+  ])('refuses %j', (args) => {
+    expect(parseTestSourceArgs(args)).toBeUndefined();
   });
 });

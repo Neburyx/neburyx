@@ -59,10 +59,10 @@ describe('the connectivity template through the gate', () => {
   });
 
   it.each([
-    ['timeout', 'QUERY_TIMEOUT'],
-    ['unavailable', 'SOURCE_UNAVAILABLE'],
-  ] as const)('answers %s from the executor with %s', async (status, code) => {
-    const { gate } = testSourceGate(mapping, { executor: new TestExecutor(() => Promise.resolve({ status })) });
+    [{ status: 'timeout' }, 'QUERY_TIMEOUT'],
+    [{ status: 'unavailable', reason: 'unreachable' }, 'SOURCE_UNAVAILABLE'],
+  ] as const)('answers %j from the executor with %s', async (outcome, code) => {
+    const { gate } = testSourceGate(mapping, { executor: new TestExecutor(() => Promise.resolve(outcome)) });
     expect(await codeOf(gate.run(connectivity()))).toBe(code);
   });
 });

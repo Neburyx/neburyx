@@ -38,6 +38,7 @@ const METHODS = [
 
 const PRODUCT_EXAMPLES: Readonly<Record<string, OperationExample>> = {
   'GET /v1/sources/{id}/profile': { url: '/v1/sources/demo/profile' },
+  'POST /v1/sources/{id}/test': { url: '/v1/sources/demo/test' },
 };
 
 const PATH_ITEM_MEMBERS = new Set(['summary', 'description', 'servers', 'parameters']);

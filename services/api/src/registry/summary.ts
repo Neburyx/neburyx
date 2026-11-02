@@ -1,6 +1,10 @@
 import type { SourceSummary } from '@neburyx/contracts';
 import type { SourceRow } from '../db/sources-repository.js';
-import type { MappingModel } from '../mapping/model.js';
+import type { MappingModel, SourceModel } from '../mapping/model.js';
+
+export function mappingSummaryOf(source: SourceModel): SourceSummary['mappingSummary'] {
+  return { entityTypes: source.entities.length, relationshipTypes: source.relationships.length, derivedRules: source.derived.length };
+}
 
 export function summariesOf(rows: readonly SourceRow[], mapping: MappingModel): SourceSummary[] {
   return [...rows].sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0)).flatMap((row) => {
@@ -14,12 +18,8 @@ export function summariesOf(rows: readonly SourceRow[], mapping: MappingModel): 
         stateReason: row.stateReason,
         readOnly: true,
         synthetic: row.synthetic,
-        lastTestAt: null,
-        mappingSummary: {
-          entityTypes: source.entities.length,
-          relationshipTypes: source.relationships.length,
-          derivedRules: source.derived.length,
-        },
+        lastTestAt: row.lastTestAt,
+        mappingSummary: mappingSummaryOf(source),
       },
     ];
   });

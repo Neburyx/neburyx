@@ -75,7 +75,7 @@ describe('a call the adapter will not run', () => {
   ])('answers unavailable without connecting when %s, and logs only the source id', async (_name, env) => {
     useClock();
     const { executor, fake, logs } = rig({ rows: ROWS }, [sourceModel()], env);
-    expect(await executor.execute(callFor())).toEqual({ status: 'unavailable' });
+    expect(await executor.execute(callFor())).toEqual({ status: 'unavailable', reason: 'credentials' });
     expect(fake.drivers).toHaveLength(0);
     expect(logs).toEqual([{ fields: { event: 'source.credentials_missing', sourceId: 'demo' }, message: 'source credentials are not set' }]);
   });
@@ -83,7 +83,7 @@ describe('a call the adapter will not run', () => {
   it('reads the credentials again on the next call and recovers once they are set', async () => {
     useClock();
     const made = rig({ rows: [] }, [sourceModel()], {});
-    expect(await made.executor.execute(callFor())).toEqual({ status: 'unavailable' });
+    expect(await made.executor.execute(callFor())).toEqual({ status: 'unavailable', reason: 'credentials' });
     Object.assign(made.env, ENV);
     expect(await made.executor.execute(callFor())).toEqual({ status: 'rows', rows: [] });
     expect(made.fake.drivers[0]?.settings).toMatchObject({ username: 'reader', password: 'a password value' });
@@ -92,7 +92,7 @@ describe('a call the adapter will not run', () => {
   it('answers unavailable for a source id that is not in the mapping', async () => {
     useClock();
     const { executor, fake } = rig({ rows: ROWS });
-    expect(await executor.execute(callFor({ sourceId: 'other' }))).toEqual({ status: 'unavailable' });
+    expect(await executor.execute(callFor({ sourceId: 'other' }))).toEqual({ status: 'unavailable', reason: 'closed' });
     expect(fake.drivers).toHaveLength(0);
   });
 

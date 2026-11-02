@@ -82,6 +82,8 @@ To run the API with the built web app (after `pnpm build` and `neburyx migrate`;
 DATABASE_URL=… NEBURYX_WEB_ROOT=apps/web/dist node services/api/dist/main.js
 ```
 
+To test a configured source (after `pnpm build`, `neburyx migrate` and one start of the API; it prints the server version and a mapping summary, and exits `0` for pass and warn, `1` for fail, `2` for a usage error): `DATABASE_URL=… NEBURYX_CONFIG=… node services/api/dist/cli.js test-source --name <source>`.
+
 To create or upgrade the database (after `pnpm build`): `DATABASE_MIGRATION_URL=… DATABASE_APP_ROLE=… node services/api/dist/cli.js migrate`.
 
 The API listens on `127.0.0.1:8080` unless `NEBURYX_HOST` and `NEBURYX_PORT` say otherwise, and logs a

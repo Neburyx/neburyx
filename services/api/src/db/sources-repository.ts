@@ -11,6 +11,7 @@ export interface SourceRow {
   readonly state: SourceState;
   readonly stateReason: string | null;
   readonly synthetic: boolean;
+  readonly lastTestAt: string | null;
 }
 
 interface ListedRow {
@@ -19,6 +20,7 @@ interface ListedRow {
   readonly state: SourceState;
   readonly state_reason: string | null;
   readonly synthetic: boolean;
+  readonly last_test_at: Date | null;
 }
 
 export function secretRefOf(source: SourceModel): string {
@@ -72,6 +74,17 @@ export async function syncSources(pool: pg.Pool, sources: readonly SourceModel[]
 }
 
 export async function listSourceRows(db: pg.Pool): Promise<readonly SourceRow[]> {
-  const result = await db.query<ListedRow>('SELECT id, alias, state, state_reason, synthetic FROM sources WHERE removed_at IS NULL ORDER BY id COLLATE "C"');
-  return result.rows.map((row) => ({ id: row.id, alias: row.alias, state: row.state, stateReason: row.state_reason, synthetic: row.synthetic }));
+  const result = await db.query<ListedRow>(
+    `SELECT id, alias, state, state_reason, synthetic,
+            (SELECT max(checked_at) FROM source_checks WHERE source_checks.source_id = sources.id) AS last_test_at
+     FROM sources WHERE removed_at IS NULL ORDER BY id COLLATE "C"`,
+  );
+  return result.rows.map((row) => ({
+    id: row.id,
+    alias: row.alias,
+    state: row.state,
+    stateReason: row.state_reason,
+    synthetic: row.synthetic,
+    lastTestAt: row.last_test_at === null ? null : row.last_test_at.toISOString(),
+  }));
 }

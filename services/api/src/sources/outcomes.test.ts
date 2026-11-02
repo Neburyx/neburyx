@@ -96,7 +96,7 @@ describe('a source that cannot be reached', () => {
   ])('answers unavailable for %s, keeps the driver and recovers on the next call', async (_name, code) => {
     useClock();
     const made = rig({ beginError: neo4jError(code) });
-    expect(await made.executor.execute(callFor())).toEqual({ status: 'unavailable' });
+    expect(await made.executor.execute(callFor())).toEqual({ status: 'unavailable', reason: 'unreachable' });
     made.fake.behaviour = { rows: [{ n: 1 }] };
     expect(await made.executor.execute(callFor())).toEqual({ status: 'rows', rows: [{ n: 1 }] });
     expect(made.fake.drivers).toHaveLength(1);
@@ -106,13 +106,13 @@ describe('a source that cannot be reached', () => {
   it('answers unavailable for a pool acquisition timeout, which the driver raises without a code of its own', async () => {
     useClock();
     const { executor } = rig({ beginError: neo4jError('N/A', 'Connection acquisition timed out in 2000 ms. Pool status: Active conn count = 1, Idle conn count = 0.') });
-    expect(await executor.execute(callFor())).toEqual({ status: 'unavailable' });
+    expect(await executor.execute(callFor())).toEqual({ status: 'unavailable', reason: 'pool-full' });
   });
 
   it('answers unavailable for an authentication failure and discards the driver, so corrected credentials are read again', async () => {
     useClock();
     const made = rig({ beginError: neo4jError('Neo.ClientError.Security.Unauthorized') });
-    expect(await made.executor.execute(callFor())).toEqual({ status: 'unavailable' });
+    expect(await made.executor.execute(callFor())).toEqual({ status: 'unavailable', reason: 'authentication' });
     await flush();
     expect(made.fake.drivers[0]?.closeCalls).toBe(1);
     made.env['DEMO_PASSWORD'] = 'the corrected password';
@@ -126,7 +126,7 @@ describe('a source that cannot be reached', () => {
   it.each(['Neo.ClientError.Security.AuthenticationRateLimit', 'Neo.ClientError.Security.CredentialsExpired'])('treats %s as an authentication failure', async (code) => {
     useClock();
     const made = rig({ streamError: neo4jError(code) });
-    expect(await made.executor.execute(callFor())).toEqual({ status: 'unavailable' });
+    expect(await made.executor.execute(callFor())).toEqual({ status: 'unavailable', reason: 'authentication' });
     await flush();
     expect(made.fake.drivers[0]?.closeCalls).toBe(1);
   });

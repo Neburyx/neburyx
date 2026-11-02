@@ -60,7 +60,7 @@ describe('a request whose deadline has passed before execute', () => {
 
 describe('an executor that fails', () => {
   it('reporting the source unavailable gives SOURCE_UNAVAILABLE', async () => {
-    const executor = new TestExecutor(() => Promise.resolve({ status: 'unavailable' }));
+    const executor = new TestExecutor(() => Promise.resolve({ status: 'unavailable', reason: 'unreachable' }));
     const { gate } = harness({ executor });
     await expect(gate.run(gateRequest())).rejects.toMatchObject({ code: 'SOURCE_UNAVAILABLE' });
   });

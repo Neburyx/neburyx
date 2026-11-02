@@ -8,7 +8,7 @@ export const connectivityTemplate: TemplateDefinition = {
   id: CONNECTIVITY_ID,
   version: '1',
   auditAction: 'source.connectivity',
-  cypher: 'CALL dbms.components() YIELD name, versions, edition RETURN name, versions[0] AS version, edition',
+  cypher: "CALL dbms.components() YIELD name, versions, edition WHERE name = 'Neo4j Kernel' RETURN name, versions[0] AS version, edition",
   paramsSchema: z.strictObject({}),
   scope: 'system',
   paged: false,

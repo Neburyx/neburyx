@@ -36,7 +36,7 @@ describe('a source with a wrong password', () => {
   it('answers unavailable, and rows once the password is corrected', async () => {
     const correct = env[NEO4J_ENV_PASSWORD] ?? '';
     env[NEO4J_ENV_PASSWORD] = 'a wrong password';
-    expect(await executor.execute(call())).toEqual({ status: 'unavailable' });
+    expect(await executor.execute(call())).toEqual({ status: 'unavailable', reason: 'authentication' });
     env[NEO4J_ENV_PASSWORD] = correct;
     expect(await executor.execute(call())).toMatchObject({ status: 'rows' });
   });

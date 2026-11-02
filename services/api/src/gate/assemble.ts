@@ -6,6 +6,7 @@ import { DEFAULT_BUDGETS } from './budgets.js';
 import { createTemplateCatalog } from './catalog.js';
 import type { ReadExecutor } from './executor.js';
 import { createGates } from './gate.js';
+import { capabilitiesTemplate } from './templates/capabilities.js';
 import { connectivityTemplate } from './templates/connectivity.js';
 import type { Budgets, Clock, Gate, GateLogger, GateObserver, Item, SourceAllowlist, SystemRunner, TemplateCatalog, GateContext } from './types.js';
 
@@ -21,7 +22,7 @@ export interface AssembleOptions {
 }
 
 export function defaultCatalog(): TemplateCatalog {
-  return createTemplateCatalog({ templates: [connectivityTemplate] });
+  return createTemplateCatalog({ templates: [connectivityTemplate, capabilitiesTemplate] });
 }
 
 function budgetsFrom(source: SourceModel): Budgets {

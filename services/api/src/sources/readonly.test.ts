@@ -113,7 +113,7 @@ describe('the declared operations', () => {
       expandNeighbors: 'by-template',
       findBoundedPaths: 'by-template',
       runTemplate: 'by-template',
-      capabilities: 'unsupported',
+      capabilities: 'by-template',
       cancel: 'unsupported',
     });
   });

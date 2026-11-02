@@ -1,3 +1,4 @@
+import type { UnavailableReason } from '../errors.js';
 import type { Clock, GateLogger, Row } from '../gate/types.js';
 import type { ExecuteCall, ExecuteOutcome, ReadExecutor } from '../gate/executor.js';
 import type { SourceModel } from '../mapping/model.js';
@@ -20,7 +21,7 @@ export interface Neo4jExecutor extends ReadExecutor {
   close(): Promise<void>;
 }
 
-const UNAVAILABLE: ExecuteOutcome = { status: 'unavailable' };
+const unavailable = (reason: UnavailableReason): ExecuteOutcome => ({ status: 'unavailable', reason });
 const TIMEOUT: ExecuteOutcome = { status: 'timeout' };
 
 export function createNeo4jExecutor(options: Neo4jExecutorOptions): Neo4jExecutor {
@@ -97,10 +98,13 @@ export function createNeo4jExecutor(options: Neo4jExecutorOptions): Neo4jExecuto
         settle(() => {
           const kind = classify(error);
           if (kind === 'timeout') resolve(TIMEOUT);
-          else if (kind === 'unavailable') resolve(UNAVAILABLE);
+          else if (kind === 'unreachable' || kind === 'pool-full') resolve(unavailable(kind));
           else if (kind === 'authentication') {
             discard(source, driver);
-            resolve(UNAVAILABLE);
+            resolve(unavailable('authentication'));
+          } else if (kind === 'database' || kind === 'refused') {
+            options.logger.warn({ event: 'source.read_failed', sourceId: source.id, serverCode: serverCodeOf(error) }, 'source read failed');
+            resolve(unavailable(kind));
           } else {
             options.logger.warn({ event: 'source.read_failed', sourceId: source.id, serverCode: serverCodeOf(error) }, 'source read failed');
             reject(new AdapterError('READ_FAILED'));
@@ -140,7 +144,7 @@ export function createNeo4jExecutor(options: Neo4jExecutorOptions): Neo4jExecuto
       const mode: string = call.accessMode;
       if (mode !== 'READ') throw new AdapterError('NOT_READ_ONLY');
       const source = sources.get(call.sourceId);
-      if (closing !== undefined || source === undefined) return UNAVAILABLE;
+      if (closing !== undefined || source === undefined) return unavailable('closed');
       const remainingMs = call.deadlineAt - clock();
       if (remainingMs <= 0) return TIMEOUT;
       let driver: SourceDriver | undefined;
@@ -150,7 +154,7 @@ export function createNeo4jExecutor(options: Neo4jExecutorOptions): Neo4jExecuto
         options.logger.warn({ event: 'source.read_failed', sourceId: source.id, serverCode: serverCodeOf(error) }, 'source read failed');
         throw new AdapterError('READ_FAILED');
       }
-      if (driver === undefined) return UNAVAILABLE;
+      if (driver === undefined) return unavailable('credentials');
       return await read(source, driver, call, remainingMs);
     },
     close() {

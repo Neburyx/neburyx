@@ -9,7 +9,7 @@ export const OPERATIONS = {
   expandNeighbors: 'by-template',
   findBoundedPaths: 'by-template',
   runTemplate: 'by-template',
-  capabilities: 'unsupported',
+  capabilities: 'by-template',
   cancel: 'unsupported',
 } as const satisfies Readonly<Record<string, OperationStatus>>;
 

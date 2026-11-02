@@ -76,3 +76,15 @@ export function parseConfig(
   });
   throw new ConfigError([...new Set(failed)]);
 }
+
+const commandConfigSchema = configSchema.pick({ databaseUrl: true, mappingPath: true });
+
+export type CommandConfig = z.infer<typeof commandConfigSchema>;
+
+/** The settings a command that talks to the database and reads the mapping needs; the server's host, port and web folder do not matter to it. */
+export function parseCommandConfig(env: Readonly<Record<string, string | undefined>>): CommandConfig {
+  const result = commandConfigSchema.safeParse({ databaseUrl: env[keys.databaseUrl], mappingPath: env[keys.mappingPath] });
+  if (result.success) return result.data;
+  const failed = result.error.issues.flatMap((issue) => (issue.path[0] === 'databaseUrl' || issue.path[0] === 'mappingPath' ? [keys[issue.path[0]]] : []));
+  throw new ConfigError([...new Set(failed)]);
+}

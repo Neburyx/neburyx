@@ -95,6 +95,7 @@ describe('the routes of the app', () => {
     expect(declared.get('GET /healthz')).toBe('public');
     expect(declared.get('GET /readyz')).toBe('public');
     expect(declared.get('GET /v1/me')).toBe('principal');
+    expect(declared.get('POST /v1/sources/:id/test')).toBe('principal');
   });
 
   it('leave out the web build file routes, which are public by construction', async () => {

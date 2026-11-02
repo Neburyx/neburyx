@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Socket } from 'node:net';
 import fastifyStatic from '@fastify/static';
-import { type ErrorCode, healthResponseSchema, meResponseSchema, readyResponseSchema, sourceProfileSchema, sourcesResponseSchema } from '@neburyx/contracts';
+import { type ErrorCode, healthResponseSchema, meResponseSchema, readyResponseSchema, sourceProfileSchema, sourceTestReportSchema, sourcesResponseSchema } from '@neburyx/contracts';
 import { z } from 'zod';
 import Fastify, {
   type FastifyBaseLogger,
@@ -21,6 +21,7 @@ import { readinessResponse } from './health/readiness.js';
 import { communitySeams } from './seams/community-seams.js';
 import type { Seams } from './seams/seams.js';
 import type { RegisteredRoute } from './permissions.js';
+import type { SourceTester } from './source-test/tester.js';
 
 export interface AppOptions {
   readonly webRoot: string;
@@ -29,6 +30,8 @@ export interface AppOptions {
   readonly jobs?: JobRunner | undefined;
   readonly seams?: Seams | undefined;
   readonly mapping?: MappingModel | undefined;
+  readonly sourceTester?: SourceTester | undefined;
+  readonly closeSources?: (() => Promise<void>) | undefined;
 }
 
 const API_PREFIX = '/v1';
@@ -165,6 +168,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
   });
   app.addHook('onClose', async () => {
     await stoppingJobs;
+    await options.closeSources?.();
     await options.store.close();
   });
 
@@ -253,6 +257,16 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
     reply.header('etag', tag);
     if (matchesEntityTag(request.headers['if-none-match'], tag)) return reply.code(304).send();
     return sourceProfileSchema.parse(buildSourceProfile(source));
+  });
+
+  app.post('/v1/sources/:id/test', { config: { permission: 'principal' } }, async (request) => {
+    if (!noQuerySchema.safeParse(request.query).success || request.body !== undefined) throw new AppError('INVALID_REQUEST');
+    const params = profileParamsSchema.safeParse(request.params);
+    if (!params.success) throw new AppError('INVALID_REQUEST');
+    if (options.sourceTester === undefined) throw new AppError('INTERNAL_ERROR');
+    const identity = await options.store.current();
+    const report = await options.sourceTester.run({ traceId: request.id, principal: identity.principal, sourceId: params.data.id });
+    return sourceTestReportSchema.parse(report);
   });
 
   appSeams.set(app, options.seams ?? communitySeams());

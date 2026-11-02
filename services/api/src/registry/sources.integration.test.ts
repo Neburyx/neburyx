@@ -14,6 +14,9 @@ import { attempt, rows, runInProcess } from '../testing/database.js';
 import { baseSource, fileOf, type Json } from '../testing/mapping.js';
 import { startPostgres, type TestDatabase, type TestPostgres } from '../testing/postgres.js';
 import { startApi, stopApi, webRoot } from '../testing/start-api.js';
+import { TestExecutor } from '../testing/gate.js';
+import { testSourceGate } from '../testing/source-gate.js';
+import type { SourceGateOptions } from '../gate/source-gate.js';
 
 const SHIPPED = fileURLToPath(new URL('../../migrations', import.meta.url));
 let postgres: TestPostgres;
@@ -51,13 +54,19 @@ interface Boot {
   readonly code: number;
 }
 
+/** A gate whose sources never answer in a way that is a verdict, so the startup check leaves the states these tests set up as they are. */
+function unansweringGate(options: SourceGateOptions) {
+  const parts = testSourceGate(options.mapping, { executor: new TestExecutor(() => Promise.resolve({ status: 'unavailable', reason: 'closed' })) });
+  return { gate: parts.gate, system: parts.system, close: () => Promise.resolve() };
+}
+
 async function boot(database: TestDatabase, file: string | undefined, env: Record<string, string> = {}): Promise<Boot> {
   const logs: string[] = [];
   const logger = pino({ level: 'info' }, { write: (line: string) => logs.push(line) });
   const { result } = await startApi(
     { DATABASE_URL: database.appUrl, ...(file === undefined ? {} : { NEBURYX_CONFIG: file }), ...env },
     undefined,
-    { logger },
+    { logger, openSourceGate: unansweringGate },
   );
   await stopApi(result);
   return { logs, code: result.exitCode };
@@ -248,7 +257,7 @@ describe('the sources endpoints on a started API', () => {
     const file = mappingFile(source('alpha'), source('beta', { synthetic: true }));
     await boot(database, file);
     await rows(database.ownerUrl, `UPDATE sources SET state = 'unavailable', state_reason = 'TLS handshake failed' WHERE id = 'beta'`);
-    const { result } = await startApi({ DATABASE_URL: database.appUrl, NEBURYX_CONFIG: file });
+    const { result } = await startApi({ DATABASE_URL: database.appUrl, NEBURYX_CONFIG: file }, undefined, { openSourceGate: unansweringGate });
     if (result.exitCode !== 0) throw new Error('the API did not start');
     try {
       const response = await result.app.inject({ method: 'GET', url: '/v1/sources' });

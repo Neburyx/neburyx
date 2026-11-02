@@ -70,7 +70,7 @@ describe('closing the executor', () => {
     expect(made.fake.drivers.map((driver) => driver.closeCalls)).toEqual([1, 1]);
     await made.executor.close();
     expect(made.fake.drivers.map((driver) => driver.closeCalls)).toEqual([1, 1]);
-    expect(await made.executor.execute(callFor())).toEqual({ status: 'unavailable' });
+    expect(await made.executor.execute(callFor())).toEqual({ status: 'unavailable', reason: 'closed' });
     expect(made.fake.drivers).toHaveLength(2);
   });
 

@@ -15,7 +15,7 @@ export class AdapterError extends Error {
   }
 }
 
-export type FailureKind = 'timeout' | 'unavailable' | 'authentication' | 'other';
+export type FailureKind = 'timeout' | 'unreachable' | 'pool-full' | 'authentication' | 'database' | 'refused' | 'other';
 
 const TIMEOUT_FAMILY = 'Neo.ClientError.Transaction.TransactionTimedOut';
 const CONNECTION_CODES: ReadonlySet<string> = new Set(['ServiceUnavailable', 'SessionExpired']);
@@ -24,6 +24,9 @@ const AUTHENTICATION_CODES: ReadonlySet<string> = new Set([
   'Neo.ClientError.Security.AuthenticationRateLimit',
   'Neo.ClientError.Security.CredentialsExpired',
 ]);
+const DATABASE_CODES: ReadonlySet<string> = new Set(['Neo.ClientError.Database.DatabaseNotFound']);
+const REFUSED_CODES: ReadonlySet<string> = new Set(['Neo.ClientError.Security.Forbidden']);
+const REFUSED_PREFIX = 'Neo.ClientError.Procedure.';
 const ACQUISITION_TIMEOUT = 'Connection acquisition timed out';
 const SERVER_CODE = /^Neo\.[A-Za-z]+\.[A-Za-z]+\.[A-Za-z]+$/;
 
@@ -37,9 +40,11 @@ export function classify(error: unknown): FailureKind {
   const code = fieldOf(error, 'code');
   if (code.startsWith(TIMEOUT_FAMILY)) return 'timeout';
   if (AUTHENTICATION_CODES.has(code)) return 'authentication';
-  if (CONNECTION_CODES.has(code)) return 'unavailable';
+  if (CONNECTION_CODES.has(code)) return 'unreachable';
+  if (DATABASE_CODES.has(code)) return 'database';
+  if (REFUSED_CODES.has(code) || code.startsWith(REFUSED_PREFIX)) return 'refused';
   // the driver raises the pool wait as a general error with no code of its own
-  if (fieldOf(error, 'message').startsWith(ACQUISITION_TIMEOUT)) return 'unavailable';
+  if (fieldOf(error, 'message').startsWith(ACQUISITION_TIMEOUT)) return 'pool-full';
   return 'other';
 }
 

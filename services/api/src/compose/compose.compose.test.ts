@@ -17,13 +17,13 @@ beforeAll(async () => {
   await buildDerivedImage(
     `${IMAGE}:${TAG_A}`,
     `${IMAGE}:${TAG_B}`,
-    '0004-upgrade-marker.sql',
+    '0006-upgrade-marker.sql',
     'CREATE TABLE upgrade_marker (id integer PRIMARY KEY);\nINSERT INTO upgrade_marker (id) VALUES (1);\n',
   );
   await buildDerivedImage(
     `${IMAGE}:${TAG_A}`,
     `${IMAGE}:${TAG_C}`,
-    '0004-broken.sql',
+    '0006-broken.sql',
     'CREATE TABLE half_done (id integer);\nSELECT * FROM table_that_does_not_exist;\n',
   );
 });

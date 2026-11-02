@@ -160,7 +160,24 @@ describe('a command the image does not have', () => {
   it('exits 2 and prints the usage line', async () => {
     const result = await docker(['run', '--rm', TAG, 'bogus']);
     expect(result.code).toBe(2);
-    expect(result.stderr).toBe('usage: neburyx api | migrate\n');
+    expect(result.stderr).toBe('usage: neburyx api | migrate | test-source --name <source>\n');
+  });
+});
+
+describe('the test-source command', () => {
+  it('exits 2 and prints its usage line for arguments it does not take', async () => {
+    const result = await docker(['run', '--rm', TAG, 'test-source']);
+    expect(result.code).toBe(2);
+    expect(result.stderr).toBe('usage: neburyx test-source --name <source>\n');
+  });
+
+  it('exits 1 naming DATABASE_URL when it is not set, and the mapping file when that is missing', async () => {
+    const bare = await docker(['run', '--rm', TAG, 'test-source', '--name', 'alpha']);
+    expect(bare.code).toBe(1);
+    expect(bare.stderr).toBe('invalid configuration: DATABASE_URL\n');
+    const noMapping = await docker(['run', '--rm', '-e', 'DATABASE_URL=postgres://app@db.example.test:5432/neburyx', TAG, 'test-source', '--name', 'alpha']);
+    expect(noMapping.code).toBe(1);
+    expect(noMapping.stderr).toBe('test-source needs NEBURYX_CONFIG, the path of the mapping file\n');
   });
 });
 
