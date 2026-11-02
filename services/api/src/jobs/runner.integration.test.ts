@@ -69,7 +69,8 @@ describe('the job runner of the API', () => {
     const { result } = await startApi({ DATABASE_URL: database.appUrl }, undefined, { tasks: [task('record', (payload) => Promise.resolve(void received.push(payload)))] });
     if (result.exitCode !== 0) throw new Error('the API did not start');
     try {
-      expect(await listeners(database)).toBeGreaterThan(0);
+      // the queue session opens after the runner has started; a job queued before it exists is found by the next poll
+      await vi.waitFor(async () => expect(await listeners(database)).toBeGreaterThan(0), WAIT);
       await enqueue(database, 'record', { n: 7 });
       await vi.waitFor(() => expect(received).toEqual([{ n: 7 }]), WAIT);
     } finally {
