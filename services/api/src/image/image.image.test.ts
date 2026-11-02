@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -15,6 +15,7 @@ import { configurationFilesIn, containsText, extractLayers } from './scan.js';
 
 const repository = fileURLToPath(new URL('../../../../', import.meta.url));
 const dockerfile = join(repository, 'deploy/docker/Dockerfile');
+const MIGRATIONS_DIRECTORY = join(repository, 'services/api/migrations');
 const TAG = `neburyx-image-test:${randomBytes(4).toString('hex')}`;
 const HOST_ALIAS = 'host.docker.internal';
 const STOP_WITHIN_MS = 5000;
@@ -106,11 +107,12 @@ describe('the image as built', () => {
 describe('the migrate command', () => {
   it('migrates an empty database and exits 0', async () => {
     const database = await migratedDatabase();
-    expect(await rows(database.ownerUrl, 'SELECT name FROM kysely_migration ORDER BY name')).toEqual([
-      { name: '0001-baseline' },
-      { name: '0002-deployment-and-users' },
-      { name: '0003-applied-migrations-function' },
-    ]);
+    const shipped = readdirSync(MIGRATIONS_DIRECTORY)
+      .filter((file) => file.endsWith('.sql'))
+      .map((file) => ({ name: file.slice(0, -'.sql'.length) }))
+      .sort((left, right) => left.name.localeCompare(right.name));
+    expect(shipped.length).toBeGreaterThan(3);
+    expect(await rows(database.ownerUrl, 'SELECT name FROM kysely_migration ORDER BY name')).toEqual(shipped);
   });
 });
 

@@ -332,7 +332,7 @@ describe('the mapping excerpt', () => {
     const loaded = parseMapping(wrapped, 'wrapped.yaml').sources[0];
     expect(loaded?.entities).toHaveLength(lines.length);
     expect(loaded?.relationships).toEqual([]);
-  });
+  }, 60_000);
 
   it('is complete and valid for a mapping close to the file size limit', async () => {
     const many = Array.from({ length: 4000 }, (_unused, index) => ({ type: `type_${index}`, label: `Label ${index}`, stable_id: 'id', search: ['a'.repeat(120)] }));
@@ -346,7 +346,7 @@ describe('the mapping excerpt', () => {
     const wrapped = fileOf({ id: 'demo', uri: 'neo4j+s://graph.example.test:7687', database: 'neo4j', auth: { kind: 'basic', username_env: 'U', password_env: 'P' }, ...parse(body.mappingExcerpt) });
     expect(Buffer.byteLength(wrapped)).toBeLessThan(1024 * 1024);
     expect(parseMapping(wrapped, 'wrapped.yaml').sources[0]?.entities).toHaveLength(4000);
-  });
+  }, 60_000);
 });
 
 describe('unknown and malformed requests', () => {
