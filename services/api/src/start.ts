@@ -13,6 +13,10 @@ import { createAppStore, type AppStore } from './app-store.js';
 import { communitySeams } from './seams/community-seams.js';
 import { createSourceGate, type SourceGate, type SourceGateOptions } from './gate/source-gate.js';
 import { SourceGateError } from './gate/allowlist.js';
+import { createReachabilityCache, seedFromStartup } from './source-ping/cache.js';
+import { createScheduledPing } from './source-ping/ping.js';
+import { applyPingResults } from './source-ping/state.js';
+import { PING_INTERVAL_MS, startPingSchedule, type PingSchedule } from './source-ping/schedule.js';
 import { createStartupChecker, startupProblem, type StartupResult } from './source-test/startup.js';
 import { createSourceTester } from './source-test/tester.js';
 import { startJobRunner, type JobRunner } from './jobs/runner.js';
@@ -25,6 +29,7 @@ export interface StartIo {
   readonly logger: FastifyBaseLogger;
   readonly defaultWebRoot: string;
   readonly portOverride?: number;
+  readonly pingIntervalMs?: number;
   readonly startupProblem?: (results: readonly StartupResult[]) => string | undefined;
   readonly openSourceGate?: (options: SourceGateOptions) => SourceGate;
   readonly openStore?: (url: string, onConnectionError: () => void, migrationsDirectory: string) => AppStore;
@@ -55,6 +60,7 @@ function describeStartFailure(error: unknown): string {
     case 'EACCES':
       return 'NEBURYX_PORT needs more privileges than this process has';
     case '42P01':
+    case '42703':
       return 'the database schema is behind this version; run neburyx migrate';
     case 'EADDRNOTAVAIL':
     case 'ENOTFOUND':
@@ -104,6 +110,7 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
   let jobs: JobRunner | undefined;
   let sourceGate: SourceGate | undefined;
   let app: FastifyInstance | undefined;
+  let pingSchedule: PingSchedule | undefined;
   try {
     const openStore = io.openStore ?? ((url, report, directory) => createAppStore(url, report, { migrationsDirectory: directory }));
     store = openStore(
@@ -119,6 +126,8 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
     sourceGate = (io.openSourceGate ?? createSourceGate)({ mapping, env, seams: communitySeams(), logger: io.logger });
     const gate = sourceGate;
     const results = await createStartupChecker({ system: gate.system, mapping, store: openedStore, logger: io.logger }).run();
+    const reachability = createReachabilityCache(mapping.sources.map((source) => source.id));
+    seedFromStartup(reachability, results);
     const problem = (io.startupProblem ?? startupProblem)(results);
     if (problem !== undefined) throw new StartupStop(problem);
     jobs = await startJobRunner(
@@ -135,9 +144,18 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
       jobs,
       mapping,
       sourceTester: createSourceTester({ gate: gate.gate, mapping, store: openedStore }),
+      reachability,
+      stopPing: () => pingSchedule?.stop(),
+      drainPing: () => pingSchedule?.drain() ?? Promise.resolve(),
       closeSources: () => gate.close(),
     });
     await app.listen({ host: config.host, port: io.portOverride ?? config.port });
+    pingSchedule = startPingSchedule({
+      ping: createScheduledPing({ system: gate.system, mapping, cache: reachability }),
+      intervalMs: io.pingIntervalMs ?? PING_INTERVAL_MS,
+      onResults: (results) => applyPingResults(openedStore, io.logger, results),
+      onFailure: () => io.logger.warn({ event: 'source.ping_failed' }, 'source ping failed'),
+    });
     return { exitCode: 0, app };
   } catch (error) {
     io.stderr.write(`${error instanceof IdentityStartError || error instanceof SourceGateError || error instanceof StartupStop ? error.message : describeStartFailure(error)}\n`);

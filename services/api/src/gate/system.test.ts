@@ -7,10 +7,11 @@ import { testSourceGate } from '../testing/source-gate.js';
 import { createTemplateCatalog } from './catalog.js';
 import { createSourceGate } from './source-gate.js';
 import { SYSTEM_ID, SYSTEM_PRINCIPAL } from './system-principal.js';
+import { capabilitiesTemplate } from './templates/capabilities.js';
 import { connectivityTemplate } from './templates/connectivity.js';
 
 const mapping = mappingOf(sourceWith('alpha'));
-const catalog = createTemplateCatalog({ templates: [connectivityTemplate, nodesTemplate] });
+const catalog = createTemplateCatalog({ templates: [connectivityTemplate, capabilitiesTemplate, nodesTemplate] });
 const COMPONENT = { name: 'Neo4j Kernel', version: '5.26.0', edition: 'community' };
 const withComponent = () => new TestExecutor(() => Promise.resolve({ status: 'rows', rows: [COMPONENT] }));
 const systemRequest = (templateId: string, params: unknown = {}) => ({ traceId: 'tr-system', sourceId: 'alpha', templateId, params, limit: 1 });
@@ -25,13 +26,13 @@ async function codeOf(promise: Promise<unknown>): Promise<string> {
 }
 
 describe('the system runner', () => {
-  it('runs the connectivity template and audits the fixed system id with a null role', async () => {
+  it('runs a system template and audits the fixed system id with a null role', async () => {
     const recording = auditing();
     const { system, executor } = testSourceGate(mapping, { catalog, seams: recording.seams, executor: withComponent() });
-    const page = await system.run(systemRequest('connectivity'));
-    expect(page.items).toEqual([{ product: 'Neo4j Kernel', version: '5.26.0', edition: 'community' }]);
+    const page = await system.run(systemRequest('capabilities'));
+    expect(page.items).toMatchObject([{ product: 'Neo4j Kernel', version: '5.26.0', edition: 'community', versionSupported: true }]);
     expect(executor.calls).toHaveLength(1);
-    expect(recording.events).toEqual([{ actorId: SYSTEM_ID, actorRole: null, action: 'source.connectivity', result: 'success', sourceId: 'alpha', traceId: 'tr-system' }]);
+    expect(recording.events).toEqual([{ actorId: SYSTEM_ID, actorRole: null, action: 'source.capabilities', result: 'success', sourceId: 'alpha', traceId: 'tr-system' }]);
   });
 
   it('refuses a template whose scope is user with ACCESS_DENIED from the authorize stage, after validate, audited denied, with the executor not called', async () => {
@@ -65,7 +66,7 @@ describe('the system runner', () => {
     const seen: Principal[] = [];
     const coordinator = { acquireRead: (request: { principal: Principal }) => (seen.push(request.principal), Promise.resolve({ status: 'granted' as const, lease: { release: () => Promise.resolve() } })) };
     const { system } = testSourceGate(mapping, { catalog, seams: { ...recording.seams, coordinator }, executor: withComponent() });
-    await system.run(Object.assign(systemRequest('connectivity'), { principal: LOCAL_PRINCIPAL }));
+    await system.run(Object.assign(systemRequest('capabilities'), { principal: LOCAL_PRINCIPAL }));
     expect(recording.events[0]?.actorId).toBe(SYSTEM_ID);
     expect(seen).toEqual([SYSTEM_PRINCIPAL]);
   });

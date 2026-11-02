@@ -8,6 +8,7 @@ import { createAppStore, type AppStore } from '../app-store.js';
 import { KEPT_CHECKS, serverVersionOf } from '../db/source-checks-repository.js';
 import type { CapabilitiesItem } from '../gate/templates/capabilities.js';
 import { uuidv7 } from '../identity/uuid.js';
+import { identityHashOf } from '../registry/identity-hash.js';
 import { runCli } from '../testing/cli.js';
 import { attempt, rows } from '../testing/database.js';
 import { mappingOf, sourceWith } from '../testing/gate-fixtures.js';
@@ -57,6 +58,7 @@ async function openStore(): Promise<{ readonly database: TestDatabase; readonly 
 const SERVER: CapabilitiesItem = { product: 'Neo4j Kernel', version: '5.26.32', edition: 'community', versionSupported: true, operations: [] };
 const at = (minute: number): string => new Date(Date.UTC(2026, 10, 2, 10, minute, 0)).toISOString();
 const pass = (sourceId: 'alpha' | 'beta', checkedAt: string): SourceTestReport => reportFromServer(sourceId === 'alpha' ? alpha : beta, SERVER, checkedAt);
+const checkOf = (id: string, report: SourceTestReport, triggeredBy: string | null) => ({ id, report, triggeredBy, identityHash: identityHashOf(report.sourceId === 'beta' ? beta : alpha) });
 const failed = (checkedAt: string): SourceTestReport => reportFromFailure(alpha, 'unreachable', checkedAt);
 
 describe('the source_checks table', () => {
@@ -65,7 +67,7 @@ describe('the source_checks table', () => {
     await migrate(database);
     await migrate(database);
     const columns = await rows(database.ownerUrl, `SELECT column_name FROM information_schema.columns WHERE table_name = 'source_checks' ORDER BY ordinal_position`);
-    expect(columns.map((column) => column['column_name'])).toEqual(['id', 'source_id', 'checked_at', 'triggered_by', 'outcome', 'server_version', 'read_only_check', 'schema_hash', 'report']);
+    expect(columns.map((column) => column['column_name'])).toEqual(['id', 'source_id', 'checked_at', 'triggered_by', 'outcome', 'server_version', 'read_only_check', 'schema_hash', 'report', 'identity_hash']);
     await rows(database.ownerUrl, `INSERT INTO sources (id, alias, connector, uri, database, secret_ref, config_hash, identity_hash) VALUES ('alpha', 'alpha', 'neo4j', 'bolt://x', 'neo4j', 'a:b', 'h', 'i')`);
     const insert = (outcome: string, readOnly: string, source = 'alpha', by: string | null = null) =>
       attempt(
@@ -88,9 +90,9 @@ describe('a stored run', () => {
   it('keeps the outcome, the server text, the report and who started it, and null for a startup run', async () => {
     const { database, store } = await openStore();
     const user = (await store.current()).principal.id;
-    await store.recordSourceCheck({ id: uuidv7(), report: pass('alpha', at(1)), triggeredBy: user });
-    await store.recordSourceCheck({ id: uuidv7(), report: failed(at(2)), triggeredBy: user });
-    await store.recordSourceCheck({ id: uuidv7(), report: pass('alpha', at(3)), triggeredBy: null });
+    await store.recordSourceCheck(checkOf(uuidv7(), pass('alpha', at(1)), user));
+    await store.recordSourceCheck(checkOf(uuidv7(), failed(at(2)), user));
+    await store.recordSourceCheck(checkOf(uuidv7(), pass('alpha', at(3)), null));
     const stored = await rows(database.ownerUrl, `SELECT checked_at, triggered_by, outcome, server_version, read_only_check, schema_hash, report FROM source_checks ORDER BY checked_at`);
     expect(stored.map((row) => [row['outcome'], row['server_version'], row['triggered_by'], row['read_only_check'], row['schema_hash']])).toEqual([
       ['pass', 'Neo4j 5.26.32', user, 'not-verified', null],
@@ -103,7 +105,7 @@ describe('a stored run', () => {
 
   it('stores a warn report for a server that reported an empty version', async () => {
     const { database, store } = await openStore();
-    await store.recordSourceCheck({ id: uuidv7(), report: reportFromServer(alpha, { ...SERVER, version: '', versionSupported: false }, at(1)), triggeredBy: null });
+    await store.recordSourceCheck(checkOf(uuidv7(), reportFromServer(alpha, { ...SERVER, version: '', versionSupported: false }, at(1)), null));
     const stored = await rows(database.ownerUrl, `SELECT outcome, server_version FROM source_checks`);
     expect(stored).toEqual([{ outcome: 'warn', server_version: 'Neo4j ' }]);
     expect((await store.listSources()).find((row) => row.id === 'alpha')).toMatchObject({ state: 'degraded' });
@@ -119,15 +121,15 @@ describe('a stored run', () => {
     ['fail', failed(at(1)), 'unavailable', 'The source could not be reached.'],
   ])('moves the state of the source after a %s', async (_name, report, state, reason) => {
     const { store } = await openStore();
-    await store.recordSourceCheck({ id: uuidv7(), report, triggeredBy: null });
+    await store.recordSourceCheck(checkOf(uuidv7(), report, null));
     const listed = (await store.listSources()).find((row) => row.id === 'alpha');
     expect(listed).toMatchObject({ state, stateReason: reason, lastTestAt: at(1) });
   });
 
   it('keeps the newest 50 rows of one source and leaves another source alone', async () => {
     const { database, store } = await openStore();
-    for (let minute = 0; minute < 3; minute += 1) await store.recordSourceCheck({ id: uuidv7(), report: pass('beta', at(minute)), triggeredBy: null });
-    for (let minute = 0; minute < KEPT_CHECKS + 2; minute += 1) await store.recordSourceCheck({ id: uuidv7(), report: pass('alpha', at(minute)), triggeredBy: null });
+    for (let minute = 0; minute < 3; minute += 1) await store.recordSourceCheck(checkOf(uuidv7(), pass('beta', at(minute)), null));
+    for (let minute = 0; minute < KEPT_CHECKS + 2; minute += 1) await store.recordSourceCheck(checkOf(uuidv7(), pass('alpha', at(minute)), null));
     const counts = await rows(database.ownerUrl, `SELECT source_id, count(*)::int AS kept, min(checked_at) AS oldest FROM source_checks GROUP BY source_id ORDER BY source_id`);
     expect(counts.map((row) => [row['source_id'], row['kept']])).toEqual([['alpha', KEPT_CHECKS], ['beta', 3]]);
     expect(new Date(String(counts[0]?.['oldest'])).toISOString()).toBe(at(2));
@@ -135,13 +137,13 @@ describe('a stored run', () => {
 
   it('follows the newest row by time when runs are stored out of order, and by id when the times are equal', async () => {
     const { store } = await openStore();
-    await store.recordSourceCheck({ id: uuidv7(), report: failed(at(5)), triggeredBy: null });
-    await store.recordSourceCheck({ id: uuidv7(), report: pass('alpha', at(4)), triggeredBy: null });
+    await store.recordSourceCheck(checkOf(uuidv7(), failed(at(5)), null));
+    await store.recordSourceCheck(checkOf(uuidv7(), pass('alpha', at(4)), null));
     expect((await store.listSources()).find((row) => row.id === 'alpha')).toMatchObject({ state: 'unavailable', lastTestAt: at(5) });
     const [first, second] = [uuidv7(), uuidv7()].sort();
     if (first === undefined || second === undefined) throw new Error('two ids');
-    await store.recordSourceCheck({ id: second, report: failed(at(6)), triggeredBy: null });
-    await store.recordSourceCheck({ id: first, report: pass('alpha', at(6)), triggeredBy: null });
+    await store.recordSourceCheck(checkOf(second, failed(at(6)), null));
+    await store.recordSourceCheck(checkOf(first, pass('alpha', at(6)), null));
     expect((await store.listSources()).find((row) => row.id === 'alpha')).toMatchObject({ state: 'unavailable' });
   });
 
@@ -150,7 +152,7 @@ describe('a stored run', () => {
     await rows(database.ownerUrl, `UPDATE sources SET removed_at = now() WHERE id = 'beta'`);
     expect(await store.hasActiveSource('beta')).toBe(false);
     expect(await store.hasActiveSource('absent')).toBe(false);
-    await expect(store.recordSourceCheck({ id: uuidv7(), report: pass('beta', at(1)), triggeredBy: null })).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(store.recordSourceCheck(checkOf(uuidv7(), pass('beta', at(1)), null))).rejects.toMatchObject({ code: 'NOT_FOUND' });
     expect(await rows(database.ownerUrl, 'SELECT id FROM source_checks')).toEqual([]);
   });
 });

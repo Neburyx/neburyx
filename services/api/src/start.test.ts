@@ -19,6 +19,8 @@ import { SERVER_ROW } from './testing/source-tester.js';
 import { testSourceGate } from './testing/source-gate.js';
 import { SourceGateError } from './gate/allowlist.js';
 import type { SourceGate, SourceGateOptions } from './gate/source-gate.js';
+import { READINESS_LIMIT_MS } from './health/readiness.js';
+import { SHUTDOWN_TIMES } from './serve.js';
 import { start, type StartIo } from './start.js';
 import { memoryAppStore, memoryStoreWith } from './testing/app-store.js';
 import { makeWebRoot } from './testing/web-root.js';
@@ -324,6 +326,9 @@ describe('the startup check in start', () => {
     expect(events.findLastIndex((line) => line.event === 'source.startup_check')).toBeLessThan(listening);
     expect(parts.store.checks.map((check) => [check.report.sourceId, check.report.state, check.triggeredBy])).toEqual([['alpha', 'unavailable', null], ['beta', 'connected', null]]);
     expect((await parts.store.listSources()).map((row) => row.state)).toEqual(['unavailable', 'connected']);
+    const ready = await result.app.inject({ method: 'GET', url: '/readyz' });
+    expect(ready.statusCode).toBe(200);
+    expect(ready.json().sources).toEqual({ reachable: 1, unreachable: 1, unknown: 0 });
     await result.app.close();
   });
 
@@ -389,5 +394,148 @@ describe('the startup check against sources that never answer', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('the ping timer in start', () => {
+  const folder = mkdtempSync(join(tmpdir(), 'ping-timer-'));
+  afterAll(() => rmSync(folder, { recursive: true, force: true }));
+  const file = join(folder, 'neburyx.yaml');
+  writeFileSync(file, fileOf(sourceWith('alpha'), sourceWith('beta')));
+  const ENV = { ...DATABASE_ENV, NEBURYX_CONFIG: file };
+  const mapping = mappingOf(sourceWith('alpha'), sourceWith('beta'));
+  const pings = (executor: TestExecutor) => executor.calls.filter((call) => call.templateId === 'connectivity');
+
+  function wired(executor: TestExecutor) {
+    const parts = testSourceGate(mapping, { executor });
+    return { openSourceGate: (): SourceGate => ({ gate: parts.gate, system: parts.system, close: () => Promise.resolve() }) };
+  }
+
+  it('pings every source on each tick after the server listens, and /readyz follows the answers', async () => {
+    let answers = true;
+    const executor = new TestExecutor((call) => Promise.resolve(call.templateId === 'connectivity' && !answers ? { status: 'unavailable', reason: 'unreachable' } : { status: 'rows', rows: [SERVER_ROW] }));
+    const run = io({ ...wired(executor), portOverride: 0, pingIntervalMs: 20 });
+    const result = await start(ENV, run.io);
+    expect(result.exitCode).toBe(0);
+    if (result.exitCode !== 0) return;
+    const ready = async () => (await result.app.inject({ method: 'GET', url: '/readyz' })).json().sources;
+    expect(await ready()).toEqual({ reachable: 2, unreachable: 0, unknown: 0 });
+    await vi.waitFor(() => expect(pings(executor).length).toBeGreaterThanOrEqual(4));
+    answers = false;
+    await vi.waitFor(async () => expect(await ready()).toEqual({ reachable: 0, unreachable: 2, unknown: 0 }));
+    answers = true;
+    await vi.waitFor(async () => expect(await ready()).toEqual({ reachable: 2, unreachable: 0, unknown: 0 }));
+    await result.app.close();
+  });
+
+  it('starts no ping and no timer when the start fails, and none after the app closed', async () => {
+    const executor = new TestExecutor(() => Promise.resolve({ status: 'rows', rows: [SERVER_ROW] }));
+    const spy = vi.spyOn(globalThis, 'setInterval');
+    const blocker = createServer();
+    await new Promise<void>((resolve) => blocker.listen(0, '127.0.0.1', resolve));
+    const address = blocker.address();
+    const port = typeof address === 'object' && address !== null ? address.port : 0;
+    const failed = await start(ENV, { ...io({ ...wired(executor), pingIntervalMs: 20 }).io, portOverride: port });
+    await new Promise<void>((resolve) => blocker.close(() => resolve()));
+    expect(failed.exitCode).toBe(1);
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
+
+    const started = await start(ENV, { ...io({ ...wired(executor), pingIntervalMs: 20 }).io, portOverride: 0 });
+    if (started.exitCode !== 0) throw new Error('the API did not start');
+    await vi.waitFor(() => expect(pings(executor).length).toBeGreaterThanOrEqual(2));
+    await started.app.close();
+    const after = pings(executor).length;
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    expect(pings(executor).length).toBe(after);
+  });
+});
+
+describe('closing while a ping is stuck', () => {
+  const folder = mkdtempSync(join(tmpdir(), 'ping-stuck-'));
+  afterAll(() => rmSync(folder, { recursive: true, force: true }));
+  const file = join(folder, 'neburyx.yaml');
+  writeFileSync(file, fileOf(sourceWith('alpha')));
+
+  it('returns within the shutdown grace of the process, with no new run and the timer cleared', async () => {
+    const fake = fakeDrivers({ rows: [SERVER_ROW] });
+    const run = io({
+      portOverride: 0,
+      pingIntervalMs: 20,
+      openSourceGate: (options: SourceGateOptions): SourceGate => {
+        const executor = createNeo4jExecutor({ sources: options.mapping.sources, env: { DEMO_USER: 'u', DEMO_PASSWORD: 'p' }, logger: options.logger, createDriver: fake.factory });
+        const defaults = communitySeams();
+        const parts = assembleGate({ mapping: options.mapping, seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit }, executor, logger: options.logger });
+        return { ...parts, close: () => executor.close() };
+      },
+    });
+    const result = await start({ ...DATABASE_ENV, NEBURYX_CONFIG: file }, run.io);
+    if (result.exitCode !== 0) throw new Error('the API did not start');
+    const before = fake.drivers[0]?.sessions.length ?? 0;
+    fake.behaviour = { beginHang: true };
+    await vi.waitFor(() => expect(fake.drivers[0]?.sessions.length ?? 0).toBeGreaterThan(before));
+    const began = Date.now();
+    await result.app.close();
+    expect(Date.now() - began).toBeLessThan(SHUTDOWN_TIMES.graceMs);
+    const sessions = fake.drivers[0]?.sessions.length ?? 0;
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    expect(fake.drivers[0]?.sessions.length).toBe(sessions);
+  });
+});
+
+describe('the startup check when the schema is behind', () => {
+  const folder = mkdtempSync(join(tmpdir(), 'startup-behind-'));
+  afterAll(() => rmSync(folder, { recursive: true, force: true }));
+  const file = join(folder, 'neburyx.yaml');
+  writeFileSync(file, fileOf(sourceWith('alpha')));
+  const mapping = mappingOf(sourceWith('alpha'));
+
+  it.each(['42P01', '42703'])('exits 1 with the migrate message when storing the check fails with %s', async (code) => {
+    const parts = testSourceGate(mapping, { executor: new TestExecutor(() => Promise.resolve({ status: 'rows', rows: [SERVER_ROW] })) });
+    const failing = { ...memoryAppStore(), recordSourceCheck: () => Promise.reject(Object.assign(new Error('relation or column is missing'), { code })) };
+    const run = io({ openStore: () => failing, openSourceGate: (): SourceGate => ({ gate: parts.gate, system: parts.system, close: () => Promise.resolve() }), portOverride: 0 });
+    const result = await start({ ...DATABASE_ENV, NEBURYX_CONFIG: file }, run.io);
+    expect(result.exitCode).toBe(1);
+    expect(run.errors.join('')).toBe('the database schema is behind this version; run neburyx migrate\n');
+  });
+});
+
+describe('the ping timer while the gate cannot grant a read', () => {
+  const folder = mkdtempSync(join(tmpdir(), 'ping-held-'));
+  afterAll(() => rmSync(folder, { recursive: true, force: true }));
+  const file = join(folder, 'neburyx.yaml');
+  writeFileSync(file, fileOf(sourceWith('alpha'), sourceWith('beta')));
+  const mapping = mappingOf(sourceWith('alpha'), sourceWith('beta'));
+
+  it('answers /readyz from the cache with the counts of the start while pings are held, and keeps them when the pings end busy', async () => {
+    let mode: 'grant' | 'hang' | 'busy' = 'grant';
+    const coordinator = {
+      acquireRead: () => (mode === 'hang' ? new Promise<never>(() => undefined) : Promise.resolve(mode === 'busy' ? ({ status: 'busy' } as const) : ({ status: 'granted', lease: { release: () => Promise.resolve() } } as const))),
+    };
+    const executor = new TestExecutor(() => Promise.resolve({ status: 'rows', rows: [SERVER_ROW] }));
+    const parts = testSourceGate(mapping, { executor, seams: { ...communitySeams(), coordinator } });
+    const run = io({ openSourceGate: (): SourceGate => ({ gate: parts.gate, system: parts.system, close: () => Promise.resolve() }), portOverride: 0, pingIntervalMs: 20 });
+    const result = await start({ ...DATABASE_ENV, NEBURYX_CONFIG: file }, run.io);
+    if (result.exitCode !== 0) throw new Error('the API did not start');
+    const ready = async () => {
+      const began = Date.now();
+      const response = await result.app.inject({ method: 'GET', url: '/readyz' });
+      expect(Date.now() - began).toBeLessThan(READINESS_LIMIT_MS);
+      return response.json().sources;
+    };
+    expect(await ready()).toEqual({ reachable: 2, unreachable: 0, unknown: 0 });
+    const pinged = () => executor.calls.filter((call) => call.templateId === 'connectivity').length;
+    await vi.waitFor(() => expect(pinged()).toBeGreaterThanOrEqual(2));
+    mode = 'busy';
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    const whileBusy = pinged();
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    expect(await ready()).toEqual({ reachable: 2, unreachable: 0, unknown: 0 });
+    expect(pinged()).toBe(whileBusy);
+    mode = 'hang';
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    expect(await ready()).toEqual({ reachable: 2, unreachable: 0, unknown: 0 });
+    expect(pinged()).toBe(whileBusy);
+    await result.app.close();
   });
 });

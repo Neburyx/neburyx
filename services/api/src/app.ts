@@ -21,6 +21,7 @@ import { readinessResponse } from './health/readiness.js';
 import { communitySeams } from './seams/community-seams.js';
 import type { Seams } from './seams/seams.js';
 import type { RegisteredRoute } from './permissions.js';
+import { allUnknown, type ReachabilityView } from './source-ping/cache.js';
 import type { SourceTester } from './source-test/tester.js';
 
 export interface AppOptions {
@@ -31,6 +32,9 @@ export interface AppOptions {
   readonly seams?: Seams | undefined;
   readonly mapping?: MappingModel | undefined;
   readonly sourceTester?: SourceTester | undefined;
+  readonly reachability?: ReachabilityView | undefined;
+  readonly stopPing?: (() => void) | undefined;
+  readonly drainPing?: (() => Promise<void>) | undefined;
   readonly closeSources?: (() => Promise<void>) | undefined;
 }
 
@@ -163,11 +167,13 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
 
   let stoppingJobs: Promise<void> | undefined;
   app.addHook('preClose', () => {
+    options.stopPing?.();
     stoppingJobs = options.jobs?.stop();
     stoppingJobs?.catch(() => undefined);
   });
   app.addHook('onClose', async () => {
     await stoppingJobs;
+    await options.drainPing?.();
     await options.closeSources?.();
     await options.store.close();
   });
@@ -229,8 +235,10 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
 
   app.get('/healthz', { config: { permission: 'public' } }, async () => healthResponseSchema.parse({ status: 'ok' }));
 
+  const reachability = options.reachability ?? allUnknown(options.mapping?.sources.length ?? 0);
+
   app.get('/readyz', { config: { permission: 'public' } }, async (_request, reply) => {
-    const { statusCode, body } = readinessResponse(await options.store.readiness());
+    const { statusCode, body } = readinessResponse(await options.store.readiness(), reachability.counts());
     return reply.code(statusCode).send(readyResponseSchema.parse(body));
   });
 

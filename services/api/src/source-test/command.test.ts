@@ -163,6 +163,7 @@ describe('a configuration or database problem', () => {
     ['28P01', undefined, 'the database could not be reached\n'],
     [undefined, 'timeout exceeded when trying to connect', 'the database could not be reached\n'],
     ['42P01', undefined, 'the database schema is behind this version; run neburyx migrate\n'],
+    ['42703', undefined, 'the database schema is behind this version; run neburyx migrate\n'],
   ])('exits 1 with a plain line when the database fails with code %s and message %s, with no connection detail', async (code, text, line) => {
     const failure = Object.assign(new Error(text ?? 'MARKER_DB_PASSWORD at db.example.test'), code === undefined ? {} : { code });
     const store: CommandStore = { ...memoryAppStore(), current: () => Promise.reject(failure) };

@@ -217,7 +217,7 @@ describe('an upgrade by changing the image tag', () => {
     expect(await localUser(stack)).toBe(before);
     const ready = await fetch(`${stack.url}/readyz`);
     expect(ready.status).toBe(200);
-    expect(await ready.json()).toEqual({ status: 'ready', checks: { database: 'ok', migrations: 'ok' } });
+    expect(await ready.json()).toEqual({ status: 'ready', checks: { database: 'ok', migrations: 'ok' }, sources: { reachable: 0, unreachable: 0, unknown: 0 } });
   });
 
   it('stops at a failing migration without starting the new api, leaves the database as it was, and recovers on the working image', async () => {

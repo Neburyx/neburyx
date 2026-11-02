@@ -5,6 +5,7 @@ import { CAPABILITIES_ID, capabilitiesItemSchema } from '../gate/templates/capab
 import type { Clock, GatePage } from '../gate/types.js';
 import { uuidv7 } from '../identity/uuid.js';
 import type { SourceModel } from '../mapping/model.js';
+import { identityHashOf } from '../registry/identity-hash.js';
 import { failureReasonOf } from './reasons.js';
 import { reportFromFailure, reportFromServer } from './report.js';
 
@@ -48,6 +49,6 @@ async function verdictFor(source: SourceModel, run: CheckRun, traceId: string, c
 export async function checkSource(deps: CheckDeps, source: SourceModel, run: CheckRun, traceId: string, triggeredBy: string | null): Promise<SourceTestReport> {
   if (!(await deps.store.hasActiveSource(source.id))) throw new AppError('NOT_FOUND');
   const report = await verdictFor(source, run, traceId, deps.clock);
-  await deps.store.recordSourceCheck({ id: uuidv7(), report, triggeredBy });
+  await deps.store.recordSourceCheck({ id: uuidv7(), report, triggeredBy, identityHash: identityHashOf(source) });
   return report;
 }

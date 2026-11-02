@@ -119,7 +119,7 @@ describe('GET /readyz', () => {
   it('answers 200 ready when every check is ok', async () => {
     const response = await (await app()).inject({ method: 'GET', url: '/readyz' });
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ status: 'ready', checks: { database: 'ok', migrations: 'ok' } });
+    expect(response.json()).toEqual({ status: 'ready', checks: { database: 'ok', migrations: 'ok' }, sources: { reachable: 0, unreachable: 0, unknown: 0 } });
   });
 
   it('answers 503 not_ready when the database check is not ok', async () => {
@@ -127,7 +127,7 @@ describe('GET /readyz', () => {
     const server = await buildApp({ webRoot, logger: pino({ level: 'silent' }), store: down });
     const response = await server.inject({ method: 'GET', url: '/readyz' });
     expect(response.statusCode).toBe(503);
-    expect(response.json()).toEqual({ status: 'not_ready', checks: { database: 'unreachable', migrations: 'unknown' } });
+    expect(response.json()).toEqual({ status: 'not_ready', checks: { database: 'unreachable', migrations: 'unknown' }, sources: { reachable: 0, unreachable: 0, unknown: 0 } });
   });
 
   it.each(['POST', 'PUT', 'PATCH', 'DELETE'] as const)('answers %s like any other unmatched path', async (method) => {

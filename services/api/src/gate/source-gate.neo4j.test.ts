@@ -48,8 +48,9 @@ afterAll(async () => {
 });
 
 describe(`the connectivity template on ${neo4jImageFrom(process.env)}`, () => {
-  it('returns the server product, version and edition through the system runner, audited as the system principal', async () => {
+  it('returns the server product, version and edition through the system runner, and writes no audit event for it', async () => {
     const parts = openGate();
+    const before = events.events.length;
     try {
       const page = await parts.system.run({ traceId: 'tr-connect', sourceId: 'alpha', templateId: 'connectivity', params: {}, limit: 1 });
       const tag = server.image.split(':')[1] ?? '';
@@ -57,7 +58,9 @@ describe(`the connectivity template on ${neo4jImageFrom(process.env)}`, () => {
       expect(page.items[0]).toMatchObject({ product: 'Neo4j Kernel', edition: expect.any(String) });
       const version = String(Object.entries(page.items[0] ?? {}).find(([key]) => key === 'version')?.[1]);
       expect(version === tag || version.startsWith(`${tag}.`)).toBe(true);
-      expect(events.events.at(-1)).toMatchObject({ actorId: SYSTEM_ID, actorRole: null, action: 'source.connectivity', result: 'success', sourceId: 'alpha' });
+      expect(events.events.length).toBe(before);
+      await parts.system.run({ traceId: 'tr-capabilities', sourceId: 'alpha', templateId: 'capabilities', params: {}, limit: 1 });
+      expect(events.events.at(-1)).toMatchObject({ actorId: SYSTEM_ID, actorRole: null, action: 'source.capabilities', result: 'success', sourceId: 'alpha' });
     } finally {
       await parts.close();
     }

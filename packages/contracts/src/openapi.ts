@@ -50,6 +50,8 @@ export function buildOpenApiDocument(
         get: {
           operationId: 'getReady',
           summary: 'Readiness: the app can serve',
+          description:
+            'The status is 200 and status is ready exactly when Postgres is reachable and every migration is applied (the checks). The sources member holds counts of the configured sources by what the last ping found: reachable, unreachable or unknown. It names no source, and a source that is down does not change the status; GET /v1/sources has the state of each source.',
           responses: {
             '200': { description: 'Every check is ok', content: jsonBody('ReadyResponse') },
             '503': { description: 'A check is not ok', content: jsonBody('ReadyResponse') },

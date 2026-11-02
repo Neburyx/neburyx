@@ -37,7 +37,7 @@ const IDENTITY_MESSAGE = 'the local identity is missing; start the API once so t
 
 function databaseMessage(error: unknown): string | undefined {
   if (isConnectionError(error)) return 'the database could not be reached\n';
-  if (errorCode(error) === '42P01') return 'the database schema is behind this version; run neburyx migrate\n';
+  if (errorCode(error) === '42P01' || errorCode(error) === '42703') return 'the database schema is behind this version; run neburyx migrate\n';
   return undefined;
 }
 

@@ -27,6 +27,8 @@ export interface Template {
   readonly entityParams: readonly string[];
   readonly relationshipParams: readonly string[];
   readonly integerParameters: readonly string[];
+  /** False for a template whose runs through the system runner write no audit event (the scheduled ping); absent means they do. */
+  readonly auditSystemRuns?: boolean;
   refsOf(params: Params): readonly ElementRef[];
   normalize(rows: readonly Row[]): readonly Item[];
 }

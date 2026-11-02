@@ -1,6 +1,6 @@
 import type { AppStore } from '../app-store.js';
 import { sourceTestReportSchema } from '@neburyx/contracts';
-import type { SourceCheck } from '../db/source-checks-repository.js';
+import type { PingStateChange, SourceCheck } from '../db/source-checks-repository.js';
 import type { SourceRow } from '../db/sources-repository.js';
 import type { Identity } from '../identity/identity.js';
 import type { SourceModel } from '../mapping/model.js';
@@ -16,6 +16,7 @@ export interface MemoryAppStoreOptions {
   readonly failSources?: boolean;
   readonly inactiveSources?: readonly string[];
   readonly failRecording?: boolean;
+  readonly failPingState?: boolean;
 }
 
 export interface MemoryAppStore extends AppStore {
@@ -47,6 +48,19 @@ export function memoryStoreWith(options: MemoryAppStoreOptions): MemoryAppStore 
         row.id === check.report.sourceId ? { ...row, state: check.report.state, stateReason: check.report.stateReason, lastTestAt: check.report.checkedAt } : row,
       );
       return Promise.resolve();
+    },
+    // Only the Postgres suite proves the identity rule and the rule that a fresher test wins; this double follows neither, so unit tests do not assert on them.
+    applyPingState: (change: PingStateChange) => {
+      if (options.failPingState === true) return Promise.reject(new Error('the state could not be written'));
+      const row = rows.find((candidate) => candidate.id === change.sourceId);
+      if (row === undefined) return Promise.resolve(false);
+      const latest = [...checks].reverse().find((check) => check.report.sourceId === change.sourceId);
+      const next = change.reachable
+        ? { state: latest?.report.state ?? ('unknown' as const), stateReason: latest?.report.stateReason ?? null }
+        : { state: 'unavailable' as const, stateReason: change.reason };
+      const changed = row.state !== next.state || row.stateReason !== next.stateReason;
+      rows = rows.map((candidate) => (candidate.id === change.sourceId ? { ...candidate, ...next } : candidate));
+      return Promise.resolve(changed);
     },
     readiness: () => Promise.resolve({ database: 'ok', migrations: 'ok' }),
     close: () => Promise.resolve(),

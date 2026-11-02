@@ -93,12 +93,14 @@ async function attempt(deps: GateDeps, request: GateRequest, system: boolean, pr
 async function runGate(deps: GateDeps, request: GateRequest, system: boolean): Promise<GatePage> {
   const progress: Progress = { stage: 'resolve', action: FALLBACK_AUDIT_ACTION };
   const outcome = await attempt(deps, request, system, progress);
+  // decided from the catalog entry of the requested template, so it holds whatever stage the run fails in
+  const audited = !(system && deps.catalog.find(request.templateId)?.auditSystemRuns === false);
   switch (outcome.status) {
     case 'page':
-      await recordAudit(deps, request, progress, undefined);
+      if (audited) await recordAudit(deps, request, progress, undefined);
       return outcome.page;
     case 'failure':
-      await recordAudit(deps, request, progress, outcome.failure);
+      if (audited) await recordAudit(deps, request, progress, outcome.failure);
       throw outcome.failure;
     default:
       return exhaustive(outcome);

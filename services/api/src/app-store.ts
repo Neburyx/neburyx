@@ -4,7 +4,7 @@ import { checkMigrations, pingDatabase } from './db/readiness-repository.js';
 import { migrationFileNames } from './migrate/provider.js';
 import { PROBE_STEP_MS, READINESS_LIMIT_MS, runReadiness } from './health/readiness.js';
 import { readIdentity, seedFirstStart } from './db/identity-repository.js';
-import { hasActiveSource, recordSourceCheck, type SourceCheck } from './db/source-checks-repository.js';
+import { applyPingState, hasActiveSource, recordSourceCheck, type PingStateChange, type SourceCheck } from './db/source-checks-repository.js';
 import { listSourceRows, syncSources, type SourceRow } from './db/sources-repository.js';
 import type { SourceModel } from './mapping/model.js';
 import { toStartError } from './identity/errors.js';
@@ -17,6 +17,7 @@ export interface AppStore {
   listSources(): Promise<readonly SourceRow[]>;
   hasActiveSource(sourceId: string): Promise<boolean>;
   recordSourceCheck(check: SourceCheck): Promise<void>;
+  applyPingState(change: PingStateChange): Promise<boolean>;
   readiness(): Promise<ReadyChecks>;
   close(): Promise<void>;
 }
@@ -55,6 +56,7 @@ export function createAppStore(url: string, onConnectionError: () => void, optio
     listSources: () => listSourceRows(pool),
     hasActiveSource: (sourceId) => hasActiveSource(pool, sourceId),
     recordSourceCheck: (check) => recordSourceCheck(pool, check),
+    applyPingState: (change) => applyPingState(pool, change),
     readiness: () => runReadiness({ ping: () => pingDatabase(probes), migrations: shippedMigrations }, READINESS_LIMIT_MS),
     async close(): Promise<void> {
       await Promise.all([pool.end(), probes.end()]);

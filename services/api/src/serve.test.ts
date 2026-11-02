@@ -1,10 +1,20 @@
 import { EventEmitter } from 'node:events';
 import { connect } from 'node:net';
-import { rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import pino from 'pino';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import { serve, type ShutdownTimes, type Signals } from './serve.js';
+import { assembleGate } from './gate/assemble.js';
+import type { SourceGate, SourceGateOptions } from './gate/source-gate.js';
+import { communitySeams } from './seams/community-seams.js';
+import { createNeo4jExecutor } from './sources/executor.js';
 import { memoryAppStore } from './testing/app-store.js';
+import { fakeDrivers } from './testing/fake-source-driver.js';
+import { sourceWith } from './testing/gate-fixtures.js';
+import { fileOf } from './testing/mapping.js';
+import { SERVER_ROW } from './testing/source-tester.js';
 import { makeWebRoot } from './testing/web-root.js';
 
 const webRoot = makeWebRoot();
@@ -86,5 +96,37 @@ describe('serve', () => {
     await serve(ENV, { ...io(), openStore: stuck }, run.signals, { graceMs: 50, deadlineMs: 200 });
     run.emitter.emit('SIGINT');
     await vi.waitFor(() => expect(run.exits).toEqual([1]), { timeout: 1500 });
+  });
+});
+
+describe('serve while a ping is stuck', () => {
+  const folder = mkdtempSync(join(tmpdir(), 'serve-ping-'));
+  afterAll(() => rmSync(folder, { recursive: true, force: true }));
+  const file = join(folder, 'neburyx.yaml');
+  writeFileSync(file, fileOf(sourceWith('alpha')));
+
+  it('exits 0 within the deadline on SIGTERM', async () => {
+    const fake = fakeDrivers({ rows: [SERVER_ROW] });
+    const run = signals();
+    const options: Parameters<typeof serve>[1] = {
+      ...io(),
+      pingIntervalMs: 20,
+      openSourceGate: (gateOptions: SourceGateOptions): SourceGate => {
+        const executor = createNeo4jExecutor({ sources: gateOptions.mapping.sources, env: { DEMO_USER: 'u', DEMO_PASSWORD: 'p' }, logger: gateOptions.logger, createDriver: fake.factory });
+        const defaults = communitySeams();
+        const parts = assembleGate({ mapping: gateOptions.mapping, seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit }, executor, logger: gateOptions.logger });
+        return { ...parts, close: () => executor.close() };
+      },
+    };
+    await serve({ ...ENV, NEBURYX_CONFIG: file }, options, run.signals, QUICK);
+    const before = fake.drivers[0]?.sessions.length ?? 0;
+    fake.behaviour = { beginHang: true };
+    await vi.waitFor(() => expect(fake.drivers[0]?.sessions.length ?? 0).toBeGreaterThan(before));
+    const began = Date.now();
+    run.emitter.emit('SIGTERM');
+    await vi.waitFor(() => expect(run.exits).toEqual([0]));
+    expect(Date.now() - began).toBeLessThan(QUICK.deadlineMs);
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    expect(run.exits).toEqual([0]);
   });
 });

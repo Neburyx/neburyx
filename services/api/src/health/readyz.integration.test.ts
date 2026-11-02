@@ -115,7 +115,7 @@ describe('GET /readyz against a real Postgres', () => {
     try {
       const ready = await api.call('/readyz');
       expect(ready.status).toBe(200);
-      expect(JSON.parse(ready.body)).toEqual({ status: 'ready', checks: { database: 'ok', migrations: 'ok' } });
+      expect(JSON.parse(ready.body)).toEqual({ status: 'ready', checks: { database: 'ok', migrations: 'ok' }, sources: { reachable: 0, unreachable: 0, unknown: 0 } });
       expectNoSecrets(api.secrets, ready.body, (await api.call('/healthz')).body);
     } finally {
       await api.stop();
@@ -129,7 +129,7 @@ describe('GET /readyz against a real Postgres', () => {
       const down = await api.call('/readyz');
       expect(down.status).toBe(503);
       expect(down.tookMs).toBeLessThan(WITHIN_MS);
-      expect(JSON.parse(down.body)).toEqual({ status: 'not_ready', checks: { database: 'unreachable', migrations: 'unknown' } });
+      expect(JSON.parse(down.body)).toEqual({ status: 'not_ready', checks: { database: 'unreachable', migrations: 'unknown' }, sources: { reachable: 0, unreachable: 0, unknown: 0 } });
       const alive = await api.call('/healthz');
       expect(alive.status).toBe(200);
       expectNoSecrets(api.secrets, down.body, alive.body);
@@ -137,7 +137,7 @@ describe('GET /readyz against a real Postgres', () => {
       await api.forwarder.resume();
       const back = await api.call('/readyz');
       expect(back.status).toBe(200);
-      expect(JSON.parse(back.body)).toEqual({ status: 'ready', checks: { database: 'ok', migrations: 'ok' } });
+      expect(JSON.parse(back.body)).toEqual({ status: 'ready', checks: { database: 'ok', migrations: 'ok' }, sources: { reachable: 0, unreachable: 0, unknown: 0 } });
     } finally {
       await api.stop();
     }
@@ -151,7 +151,7 @@ describe('GET /readyz against a real Postgres', () => {
         const stalled = await api.call('/readyz');
         expect(stalled.status).toBe(503);
         expect(stalled.tookMs).toBeLessThan(WITHIN_MS);
-        expect(JSON.parse(stalled.body)).toEqual({ status: 'not_ready', checks: { database: 'unreachable', migrations: 'unknown' } });
+        expect(JSON.parse(stalled.body)).toEqual({ status: 'not_ready', checks: { database: 'unreachable', migrations: 'unknown' }, sources: { reachable: 0, unreachable: 0, unknown: 0 } });
         expectNoSecrets(api.secrets, stalled.body);
       }
       await api.forwarder.resume();
@@ -190,7 +190,7 @@ describe('the migrations check of /readyz', () => {
     try {
       const pending = await api.call('/readyz');
       expect(pending.status).toBe(503);
-      expect(JSON.parse(pending.body)).toEqual({ status: 'not_ready', checks: { database: 'ok', migrations: 'pending' } });
+      expect(JSON.parse(pending.body)).toEqual({ status: 'not_ready', checks: { database: 'ok', migrations: 'pending' }, sources: { reachable: 0, unreachable: 0, unknown: 0 } });
       expect((await api.call('/healthz')).status).toBe(200);
       expectNoSecrets([...api.secrets, '0004-not-applied'], pending.body);
     } finally {

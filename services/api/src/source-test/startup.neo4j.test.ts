@@ -68,6 +68,9 @@ describe(`the startup check against ${neo4jImageFrom(process.env)}`, () => {
         ['beta', 'unavailable', 'The source could not be reached.'],
       ]);
       expect(listed.items.every((item) => item.lastTestAt !== null)).toBe(true);
+      const ready = await result.app.inject({ method: 'GET', url: '/readyz' });
+      expect(ready.statusCode).toBe(200);
+      expect(ready.json().sources).toEqual({ reachable: 1, unreachable: 1, unknown: 0 });
       const stored = await rows(database.ownerUrl, 'SELECT source_id, outcome, server_version, triggered_by FROM source_checks ORDER BY source_id');
       const tag = neo4jServer.image.split(':')[1] ?? '';
       expect(stored.map((row) => [row['source_id'], row['outcome'], row['triggered_by']])).toEqual([['alpha', 'pass', null], ['beta', 'fail', null]]);

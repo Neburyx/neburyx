@@ -1,11 +1,12 @@
-import type { ReadyChecks, ReadyResponse } from '@neburyx/contracts';
+import type { ReadyChecks, ReadyResponse, SourceReachability } from '@neburyx/contracts';
 
 export const READINESS_LIMIT_MS = 2000;
 export const PROBE_STEP_MS = 1500;
 
-export function readinessResponse(checks: ReadyChecks): { readonly statusCode: 200 | 503; readonly body: ReadyResponse } {
+/** The status depends on the checks only; the source counts are information beside them. */
+export function readinessResponse(checks: ReadyChecks, sources: SourceReachability): { readonly statusCode: 200 | 503; readonly body: ReadyResponse } {
   const ready = Object.values(checks).every((state) => state === 'ok');
-  return { statusCode: ready ? 200 : 503, body: { status: ready ? 'ready' : 'not_ready', checks } };
+  return { statusCode: ready ? 200 : 503, body: { status: ready ? 'ready' : 'not_ready', checks, sources } };
 }
 
 export interface ReadinessSteps {

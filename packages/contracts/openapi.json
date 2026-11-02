@@ -27,6 +27,7 @@
       "get": {
         "operationId": "getReady",
         "summary": "Readiness: the app can serve",
+        "description": "The status is 200 and status is ready exactly when Postgres is reachable and every migration is applied (the checks). The sources member holds counts of the configured sources by what the last ping found: reachable, unreachable or unknown. It names no source, and a source that is down does not change the status; GET /v1/sources has the state of each source.",
         "responses": {
           "200": {
             "description": "Every check is ok",
@@ -976,11 +977,38 @@
               "migrations"
             ],
             "additionalProperties": false
+          },
+          "sources": {
+            "type": "object",
+            "properties": {
+              "reachable": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "unreachable": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "unknown": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "reachable",
+              "unreachable",
+              "unknown"
+            ],
+            "additionalProperties": false
           }
         },
         "required": [
           "status",
-          "checks"
+          "checks",
+          "sources"
         ],
         "additionalProperties": false
       },

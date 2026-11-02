@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { dockerOk } from '../image/docker.js';
 import { Neo4jContainer } from '@testcontainers/neo4j';
 import neo4j, { type Driver } from 'neo4j-driver';
 import type { SourceModel } from '../mapping/model.js';
@@ -19,13 +20,24 @@ export interface RunningNeo4j {
   readonly password: string;
   readonly admin: Driver;
   stop(): Promise<void>;
+  /** Stops the container without removing it. Only for a server started with a fixed host port. */
+  halt(): Promise<void>;
+  /** Starts a halted container again at the same address and returns once the server answers. */
+  resume(): Promise<void>;
 }
 
-export async function startNeo4j(image = neo4jImageFrom(process.env)): Promise<RunningNeo4j> {
+export interface StartNeo4jOptions {
+  /** Binds the Bolt port to this host port, so that the address stays the same when the container is halted and resumed. */
+  readonly hostPort?: number;
+}
+
+export async function startNeo4j(image = neo4jImageFrom(process.env), options: StartNeo4jOptions = {}): Promise<RunningNeo4j> {
   const password = randomUUID();
   let started;
   try {
-    started = await new Neo4jContainer(image).withPassword(password).withStartupTimeout(STARTUP_LIMIT_MS).start();
+    const container = new Neo4jContainer(image).withPassword(password).withStartupTimeout(STARTUP_LIMIT_MS);
+    if (options.hostPort !== undefined) container.withExposedPorts({ container: 7687, host: options.hostPort });
+    started = await container.start();
   } catch (error) {
     throw new Error(`could not start the Neo4j image ${image}: ${error instanceof Error ? error.message : 'unknown error'}`);
   }
@@ -41,6 +53,14 @@ export async function startNeo4j(image = neo4jImageFrom(process.env)): Promise<R
       if (stopped) return;
       stopped = true;
       await runAll([() => admin.close(), () => started.stop()]);
+    },
+    halt: async () => {
+      await dockerOk(['stop', started.getId()]);
+    },
+    resume: async () => {
+      await dockerOk(['start', started.getId()]);
+      const answered = await pollUntil(() => admin.getServerInfo().then(() => true, () => false), STARTUP_LIMIT_MS, 1000);
+      if (!answered) throw new Error('the Neo4j server did not answer after it was started again');
     },
   };
 }

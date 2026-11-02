@@ -1,13 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import { readinessResponse, runReadiness } from './readiness.js';
 
+const NO_SOURCES = { reachable: 0, unreachable: 0, unknown: 0 };
+
 describe('readinessResponse', () => {
   it('is ready with 200 only when every check is ok', () => {
-    expect(readinessResponse({ database: 'ok', migrations: 'ok' })).toEqual({ statusCode: 200, body: { status: 'ready', checks: { database: 'ok', migrations: 'ok' } } });
-    expect(readinessResponse({ database: 'ok', migrations: 'pending' })).toEqual({
+    expect(readinessResponse({ database: 'ok', migrations: 'ok' }, NO_SOURCES)).toEqual({ statusCode: 200, body: { status: 'ready', checks: { database: 'ok', migrations: 'ok' }, sources: NO_SOURCES } });
+    expect(readinessResponse({ database: 'ok', migrations: 'pending' }, NO_SOURCES)).toEqual({
       statusCode: 503,
-      body: { status: 'not_ready', checks: { database: 'ok', migrations: 'pending' } },
+      body: { status: 'not_ready', checks: { database: 'ok', migrations: 'pending' }, sources: NO_SOURCES },
     });
+  });
+
+  it('does not let the sources change the status', () => {
+    const down = { reachable: 0, unreachable: 3, unknown: 0 };
+    expect(readinessResponse({ database: 'ok', migrations: 'ok' }, down)).toEqual({ statusCode: 200, body: { status: 'ready', checks: { database: 'ok', migrations: 'ok' }, sources: down } });
+    expect(readinessResponse({ database: 'unreachable', migrations: 'unknown' }, down).statusCode).toBe(503);
   });
 });
 
