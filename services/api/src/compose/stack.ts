@@ -13,6 +13,48 @@ export const repository = fileURLToPath(new URL('../../../../', import.meta.url)
 export const composeFile = join(repository, 'deploy/compose/compose.yaml');
 export const demoComposeFile = join(repository, 'deploy/demo/compose.yaml');
 const WAIT_SECONDS = 150;
+/**
+ * How long `docker compose up --wait` may wait for the demo stack. A full start takes 38 s here with every container on
+ * two CPUs. On the CI runner it is inferred, not measured directly, to be about 220 s on a cold runner (run
+ * 41593551817), and a wait of 150 s expired while the second graph was still starting (run 41600744318). 600 s is
+ * more than two and a half times the inferred figure. The Community stack keeps 150 s: its tests time out at 300 s.
+ */
+export const DEMO_WAIT_SECONDS = 600;
+
+const inspectSchema = z.object({
+  Name: z.string(),
+  State: z.object({
+    Status: z.string(),
+    ExitCode: z.number(),
+    Health: z.object({ Status: z.string(), FailingStreak: z.number(), Log: z.array(z.object({ Start: z.string(), End: z.string(), ExitCode: z.number(), Output: z.string() })).nullable().transform((log) => log ?? []).optional() }).optional(),
+  }),
+});
+
+export function maskSecrets(text: string, secrets: readonly string[]): string {
+  return [...new Set(secrets)]
+    .filter((secret) => secret !== '')
+    .sort((left, right) => right.length - left.length)
+    .reduce((masked, secret) => masked.replaceAll(secret, '***'), text);
+}
+
+/** One line per container (and its last three health checks), from `docker inspect` JSON, with every secret masked before anything is shortened. */
+export function describeContainers(inspections: readonly string[], secrets: readonly string[]): string {
+  return inspections
+    .map((raw, position) => {
+      let parsed: ReturnType<typeof inspectSchema.safeParse>;
+      try {
+        parsed = inspectSchema.safeParse(JSON.parse(raw));
+      } catch {
+        return `container ${position + 1}: could not be inspected`;
+      }
+      if (!parsed.success) return `container ${position + 1}: could not be inspected`;
+      const { Name, State } = parsed.data;
+      const checks = (State.Health?.Log ?? []).slice(-3).map((entry) => `[exit ${entry.ExitCode}, ${entry.Start} to ${entry.End}] ${maskSecrets(entry.Output, secrets).trim().slice(0, 200)}`);
+      const health = State.Health === undefined ? '' : `, health ${State.Health.Status} (failing streak ${State.Health.FailingStreak})`;
+      return maskSecrets(`${Name.replace(/^\//, '')}: ${State.Status}, exit code ${State.ExitCode}${health}${checks.length === 0 ? '' : `\n  last health checks: ${checks.join(' | ')}`}`, secrets);
+    })
+    .join('\n');
+}
 
 const eventSchema = z.object({
   Action: z.string(),
@@ -28,6 +70,7 @@ export interface StackOptions {
   readonly overrides?: readonly string[];
   readonly file?: string;
   readonly settings?: Readonly<Record<string, string>>;
+  readonly waitSeconds?: number;
 }
 
 export class Stack {
@@ -77,7 +120,20 @@ export class Stack {
   }
 
   async up(): Promise<DockerResult> {
-    return this.compose(['up', '--wait', '--wait-timeout', String(WAIT_SECONDS)]);
+    const result = await this.compose(['up', '--wait', '--wait-timeout', String(this.options.waitSeconds ?? WAIT_SECONDS)]);
+    return result.code === 0 ? result : { ...result, stderr: `${result.stderr}\n${await this.diagnostics()}` };
+  }
+
+  /** What each container of the project looked like. Best effort: it never throws, so it cannot replace the failure it explains. */
+  async diagnostics(): Promise<string> {
+    const secrets = [...Object.values(this.passwords), ...Object.values(this.options.settings ?? {})];
+    try {
+      const ids = (await dockerOk(['ps', '-aq', '--filter', `label=com.docker.compose.project=${this.project}`])).split('\n').filter(Boolean);
+      const inspections = await Promise.all(ids.map(async (id) => (await docker(['inspect', '--format', '{{json .}}', id])).stdout));
+      return describeContainers(inspections, secrets);
+    } catch (error) {
+      return maskSecrets(`the containers could not be described: ${error instanceof Error ? error.message : 'unknown error'}`, secrets);
+    }
   }
 
   record(): Promise<EventRecorder> {

@@ -7,7 +7,7 @@ import { afterAll, beforeAll, describe, expect, it, onTestFinished, vi } from 'v
 import { parse } from 'yaml';
 import { z } from 'zod';
 import { docker, dockerOk, dockerStream } from '../image/docker.js';
-import { demoComposeFile, repository, serviceOf, Stack, type EventRecorder } from './stack.js';
+import { DEMO_WAIT_SECONDS, demoComposeFile, repository, serviceOf, Stack, type EventRecorder } from './stack.js';
 
 const IMAGE = 'neburyx-demo-test';
 const TAG = `d-${randomBytes(3).toString('hex')}`;
@@ -16,10 +16,10 @@ const LOADER_IMAGE = `neburyx-demo-loader-test:${TAG}`;
  * Time allowed to a test that starts a demo stack. Measured: one full start (databases, migration, both graph loads,
  * api healthy) takes 38 s on this machine with every container pinned to 2 CPUs. On the CI runner it is inferred, not
  * measured directly: run 41593551817 took 1,508 s for this file, three tests that each started their own stack timed
- * out at 300 s, and the two starts that finished account for the rest, about 220 s each. 600 s leaves more than two
- * and a half times that figure.
+ * out at 300 s, and the two starts that finished account for the rest, about 220 s each. A test that starts the stack
+ * may wait for it for the whole of `DEMO_WAIT_SECONDS` (600 s) and then run its own steps, so it gets 900 s.
  */
-const STACK_TEST_TIMEOUT_MS = 600_000;
+const STACK_TEST_TIMEOUT_MS = 900_000;
 const stacks: Stack[] = [];
 const folders: string[] = [];
 
@@ -40,7 +40,7 @@ function settings(): Record<string, string> {
 }
 
 async function demoStack(extra: { readonly omit?: readonly string[]; readonly overrides?: readonly string[]; readonly settings?: Record<string, string> } = {}): Promise<Stack> {
-  const stack = await Stack.create({ image: IMAGE, tag: TAG, file: demoComposeFile, settings: extra.settings ?? settings(), ...(extra.omit === undefined ? {} : { omit: extra.omit }), ...(extra.overrides === undefined ? {} : { overrides: extra.overrides }) });
+  const stack = await Stack.create({ image: IMAGE, tag: TAG, file: demoComposeFile, waitSeconds: DEMO_WAIT_SECONDS, settings: extra.settings ?? settings(), ...(extra.omit === undefined ? {} : { omit: extra.omit }), ...(extra.overrides === undefined ? {} : { overrides: extra.overrides }) });
   stacks.push(stack);
   return stack;
 }
@@ -325,12 +325,17 @@ describe('a demo stack with a step that fails', () => {
     const override = overrideFile(
       'services:\n  load-banking:\n    environment:\n      DEMO_NEO4J_PASSWORD: not-the-password-of-the-graph\n  load-insurance:\n    command: ["generate", "--pack", "insurance-claims", "--out", "/tmp/unused"]\n',
     );
-    const stack = await demoStack({ overrides: [override] });
+    const values = settings();
+    const stack = await demoStack({ overrides: [override], settings: values });
     const recorder = await stack.record();
     onTestFinished(() => release(stack, recorder));
     const since = Date.now() * 1e6;
     const refused = await stack.up();
     expect(refused.code).not.toBe(0);
+    expect(refused.stderr).toContain('load-banking-1: exited, exit code 1');
+    expect(refused.stderr).toContain('demo-banking-graph-1: running, exit code 0, health healthy');
+    expect(refused.stderr).not.toContain(values['DEMO_NEO4J_PASSWORD']);
+    expect(refused.stderr).not.toContain(stack.passwords.NEBURYX_DB_APP_PASSWORD);
     await recorder.sync();
     const events = recorder.since(since);
     expect(events.find((event) => serviceOf(event) === 'load-banking' && event.Action === 'die')?.Actor.Attributes['exitCode']).toBe('1');

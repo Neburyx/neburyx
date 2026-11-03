@@ -7,6 +7,18 @@ x-loader: &loader
   image: ${NEBURYX_DEMO_LOADER_IMAGE:-neburyx-demo-loader}
   restart: "no"
 
+x-graph-health: &graph-health
+  test:
+    - CMD-SHELL
+    - >-
+      wget -q -O- --header "Authorization: Basic $$(printf 'neo4j:%s' "$$DEMO_NEO4J_PASSWORD" | base64 -w0)"
+      --header "Content-Type: application/json" --post-data '{"statements":[{"statement":"RETURN 1"}]}'
+      http://127.0.0.1:7474/db/neo4j/tx/commit | grep -q '"errors":\[\]'
+  start_period: 60s
+  interval: 3s
+  timeout: 10s
+  retries: 60
+
 x-graph-password: &graph-password ${DEMO_NEO4J_PASSWORD:?set DEMO_NEO4J_PASSWORD in the .env file}
 
 services:
@@ -32,11 +44,7 @@ services:
       NEO4J_server_memory_heap_initial__size: 1g
       NEO4J_server_memory_heap_max__size: 1g
       NEO4J_server_memory_pagecache_size: 256m
-    healthcheck:
-      test: ["CMD-SHELL", "cypher-shell -u neo4j -p \"$$DEMO_NEO4J_PASSWORD\" 'RETURN 1'"]
-      interval: 3s
-      timeout: 5s
-      retries: 40
+    healthcheck: *graph-health
 
   demo-insurance-graph:
     image: ${NEBURYX_DEMO_NEO4J_IMAGE:-neo4j:5.26}
@@ -47,11 +55,7 @@ services:
       NEO4J_server_memory_heap_initial__size: 1g
       NEO4J_server_memory_heap_max__size: 1g
       NEO4J_server_memory_pagecache_size: 256m
-    healthcheck:
-      test: ["CMD-SHELL", "cypher-shell -u neo4j -p \"$$DEMO_NEO4J_PASSWORD\" 'RETURN 1'"]
-      interval: 3s
-      timeout: 5s
-      retries: 40
+    healthcheck: *graph-health
 
   load-banking:
     <<: *loader
