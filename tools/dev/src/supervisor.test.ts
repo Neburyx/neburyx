@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, watch, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer as createHttpServer } from 'node:http';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -6,6 +6,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { API_READY_TIMEOUT_MS, supervise, type ApiSpec, type ChildSpec } from './supervisor.js';
+import { settle } from './testing/settle.js';
 
 const fixtures = join(dirname(fileURLToPath(import.meta.url)), 'testing');
 const folders: string[] = [];
@@ -43,17 +44,6 @@ async function waitUntil(condition: () => boolean, ms = 10_000, describeState: (
     if (Date.now() > deadline) throw new Error(`condition not met; ${describeState()}`);
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
-}
-
-/** Returns once the file system has reported a file written in the folder, so the creation of the folder itself can no longer be reported as a change to a watcher started afterwards. */
-async function settle(folder: string): Promise<void> {
-  let seen = false;
-  const watcher = watch(folder, { recursive: true }, () => {
-    seen = true;
-  });
-  writeFileSync(join(folder, '.settled'), '');
-  await waitUntil(() => seen);
-  watcher.close();
 }
 
 interface Scene {
