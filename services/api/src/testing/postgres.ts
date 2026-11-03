@@ -13,6 +13,9 @@ export interface TestDatabase {
 
 export interface TestPostgres {
   newDatabase(): Promise<TestDatabase>;
+  /** Runs a script with the container's own psql as its superuser, the way an operator would run it, with the given psql variables. */
+  runPsql(sql: string, variables: Readonly<Record<string, string>>): Promise<void>;
+  address(): { readonly host: string; readonly port: number };
   stop(): Promise<void>;
 }
 
@@ -53,6 +56,12 @@ export async function startPostgres(): Promise<TestPostgres> {
         adminUrl: urlFor('test', 'test'),
       };
     },
+    async runPsql(sql: string, variables: Readonly<Record<string, string>>): Promise<void> {
+      await container.copyContentToContainer([{ content: sql, target: '/tmp/script.sql' }]);
+      const result = await container.exec(['psql', '-v', 'ON_ERROR_STOP=1', '-U', 'test', '-d', 'test', ...Object.entries(variables).flatMap(([name, value]) => ['-v', `${name}=${value}`]), '-f', '/tmp/script.sql']);
+      if (result.exitCode !== 0) throw new Error(`psql failed (${result.exitCode}): ${result.output.slice(-500)}`);
+    },
+    address: () => ({ host, port }),
     async stop(): Promise<void> {
       await container.stop();
     },
