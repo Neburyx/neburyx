@@ -100,6 +100,20 @@ describe('a key that looks like a constant but is not trusted', () => {
   });
 });
 
+describe('an object of keys that can be changed', () => {
+  const listed = (text: string) => checkEnvExample(root('# One.\nLISTED=', { 'services/api/src/a.ts': "export const x = process.env['LISTED'];\n", 'services/api/src/b.ts': text }));
+
+  it('is unresolved when a property is assigned, or the object is passed somewhere that could change it', () => {
+    expect(listed("const keys = { host: 'LISTED' } as const;\n(keys as { host: string }).host = 'UNLISTED';\nexport const x = process.env[keys.host];\n").map((violation) => violation.kind)).toContain('unresolved');
+    expect(listed("const keys = { host: 'LISTED' };\nkeys.host = 'UNLISTED';\nexport const x = process.env[keys.host];\n")).toEqual([{ kind: 'unresolved', file: 'services/api/src/b.ts', line: 3 }]);
+    expect(listed("const keys = { host: 'LISTED' };\nexport function f(change: (value: typeof keys) => void) { change(keys); }\nexport const x = process.env[keys.host];\n")).toEqual([{ kind: 'unresolved', file: 'services/api/src/b.ts', line: 3 }]);
+  });
+
+  it('is trusted while it is only read', () => {
+    expect(listed("const keys = { host: 'LISTED' } as const;\nexport const x = process.env[keys.host];\nexport const y = keys['host'];\n")).toEqual([]);
+  });
+});
+
 describe('the credential resolver', () => {
   const resolver = 'export const read = (source: { auth: { usernameEnv: string } }, env: Record<string, string | undefined>) => env[source.auth.usernameEnv];\n';
 

@@ -210,6 +210,21 @@ describe('stopping', () => {
     expect(alive(grandchild)).toBe(false);
   }, 30_000);
 
+  it('stops everything and rejects when the API launch itself fails after the children started (a second report that throws)', async () => {
+    const started: number[] = [];
+    let reports = 0;
+    const run = await scene({}, {
+      onPids: (pids) => {
+        started.push(...pids);
+        reports += 1;
+        if (reports === 2) throw new Error('the launch failed');
+      },
+    });
+    await expect(run.done).rejects.toThrow('the launch failed');
+    expect(started.length).toBeGreaterThanOrEqual(2);
+    expect(started.some((pid) => alive(pid))).toBe(false);
+  }, 30_000);
+
   it('stops what it started when the setup itself fails, and rejects with that failure', async () => {
     const started: number[] = [];
     const run = await scene({}, {

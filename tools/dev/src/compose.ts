@@ -1,3 +1,4 @@
+import { devNull } from 'node:os';
 import { join } from 'node:path';
 import type { Environment } from './environments.js';
 import type { Run, RunResult } from './exec.js';
@@ -44,7 +45,7 @@ export class Compose {
   ) {}
 
   private args(rest: string[], envFile: boolean): string[] {
-    return ['compose', '-p', PROJECT, ...(envFile ? ['--env-file', join(this.root, '.env')] : []), '-f', join(this.root, 'deploy/demo/compose.yaml'), '-f', join(this.root, 'deploy/demo/compose.dev.yaml'), ...rest];
+    return ['compose', '-p', PROJECT, '--env-file', envFile ? join(this.root, '.env') : devNull, '-f', join(this.root, 'deploy/demo/compose.yaml'), '-f', join(this.root, 'deploy/demo/compose.dev.yaml'), ...rest];
   }
 
   private checkStopped(): void {

@@ -244,7 +244,7 @@ describe('pnpm dev down', () => {
       const { deps, calls, removed } = rig({ files });
       expect(await down(deps)).toBe(0);
       const [call] = calls;
-      expect(call?.args).not.toContain('--env-file');
+      expect(call?.args.slice(call.args.indexOf('--env-file'), call.args.indexOf('--env-file') + 2)).toEqual(['--env-file', '/dev/null']);
       expect(call?.args.slice(-3)).toEqual(['down', '-v', '--remove-orphans']);
       expect(settingValues(call ?? { command: '', args: [], options: {} }).every((value) => value === 'not-used')).toBe(true);
       expect(removed).toEqual([join(ROOT, '.dev')]);

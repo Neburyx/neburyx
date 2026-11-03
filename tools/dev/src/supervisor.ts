@@ -108,6 +108,10 @@ export async function supervise(options: Supervision): Promise<number> {
       out(message);
       void stopEverything().then(() => resolve(1));
     };
+    const crash = (error: unknown): void => {
+      if (finished) return;
+      void stopEverything().then(() => reject(error));
+    };
 
     const launchApi = async (): Promise<void> => {
       const child = new Running(api, graceMs);
@@ -132,12 +136,14 @@ export async function supervise(options: Supervision): Promise<number> {
     const changed = (): void => {
       clearTimeout(timer);
       timer = setTimeout(() => {
-        restart = restart.then(async () => {
-          if (finished) return;
-          out(`a file changed; restarting ${api.name}`);
-          await apiProcess?.stop();
-          if (!finished) await launchApi();
-        });
+        restart = restart
+          .then(async () => {
+            if (finished) return;
+            out(`a file changed; restarting ${api.name}`);
+            await apiProcess?.stop();
+            if (!finished) await launchApi();
+          })
+          .catch(crash);
       }, api.debounceMs ?? RESTART_DEBOUNCE_MS);
     };
 
@@ -156,7 +162,7 @@ export async function supervise(options: Supervision): Promise<number> {
         watcher.on('error', () => fail(`watching ${folder} failed; stopping everything`));
         watchers.push(watcher);
       }
-      void launchApi();
+      launchApi().catch(crash);
       void options.stopRequested.then(() => {
         if (finished) return;
         void stopEverything().then(() => resolve(0));

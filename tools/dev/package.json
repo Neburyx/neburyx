@@ -5,7 +5,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "test:compose": "vitest run --config vitest.compose.config.ts"
   },
   "devDependencies": {
     "@types/node": "24.19.2",

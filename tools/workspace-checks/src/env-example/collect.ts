@@ -30,6 +30,35 @@ function bindingNames(name: ts.BindingName, into: string[]): void {
   for (const element of name.elements) if (!ts.isOmittedExpression(element)) bindingNames(element.name, into);
 }
 
+function isAssignmentTarget(access: ts.Node): boolean {
+  const parent = access.parent;
+  if (ts.isBinaryExpression(parent)) return parent.left === access && parent.operatorToken.kind >= ts.SyntaxKind.FirstAssignment && parent.operatorToken.kind <= ts.SyntaxKind.LastAssignment;
+  if (ts.isPrefixUnaryExpression(parent) || ts.isPostfixUnaryExpression(parent)) return parent.operator === ts.SyntaxKind.PlusPlusToken || parent.operator === ts.SyntaxKind.MinusMinusToken;
+  return ts.isDeleteExpression(parent);
+}
+
+function isDeclarationOrMemberName(identifier: ts.Identifier): boolean {
+  const parent = identifier.parent;
+  if (ts.isPropertyAccessExpression(parent)) return parent.name === identifier;
+  if (ts.isVariableDeclaration(parent) || ts.isPropertyAssignment(parent) || ts.isPropertyDeclaration(parent) || ts.isPropertySignature(parent) || ts.isMethodDeclaration(parent)) return parent.name === identifier;
+  return false;
+}
+
+/** An object of constants is trusted only when every use of it is reading one of its properties. */
+function onlyReadFrom(source: ts.SourceFile, name: string): boolean {
+  let clean = true;
+  const visit = (node: ts.Node): void => {
+    if (ts.isIdentifier(node) && node.text === name && !isDeclarationOrMemberName(node)) {
+      const parent = node.parent;
+      const reads = (ts.isPropertyAccessExpression(parent) || ts.isElementAccessExpression(parent)) && parent.expression === node && !isAssignmentTarget(parent);
+      if (!reads) clean = false;
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return clean;
+}
+
 /** How many times each name is declared anywhere in the file (variables, parameters, functions, classes, imports), so a name that is shadowed or redeclared is not trusted. */
 function declarationCounts(source: ts.SourceFile): Map<string, number> {
   const counts = new Map<string, number>();
@@ -57,7 +86,7 @@ function constantsOf(source: ts.SourceFile): Map<string, Constant> {
       const text = textOf(declaration.initializer);
       const initializer = unwrap(declaration.initializer);
       if (text !== undefined) constants.set(declaration.name.text, text);
-      else if (ts.isObjectLiteralExpression(initializer)) {
+      else if (ts.isObjectLiteralExpression(initializer) && onlyReadFrom(source, declaration.name.text)) {
         const properties = new Map<string, string>();
         for (const property of initializer.properties) {
           if (!ts.isPropertyAssignment(property) || !(ts.isIdentifier(property.name) || ts.isStringLiteral(property.name))) continue;

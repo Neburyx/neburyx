@@ -38,15 +38,16 @@ export const run: Run = (command, args, options = {}) =>
     child.stdout?.on('data', (chunk: Buffer) => collect(chunk, 'out'));
     child.stderr?.on('data', (chunk: Buffer) => collect(chunk, 'err'));
     let cancelled = false;
+    let terminated: Promise<void> = Promise.resolve();
     const cancel = (): void => {
       cancelled = true;
-      if (child.pid !== undefined) void terminateGroup(child.pid, STOP_GRACE_MS);
+      if (child.pid !== undefined) terminated = terminateGroup(child.pid, STOP_GRACE_MS);
     };
     options.signal?.addEventListener('abort', cancel, { once: true });
     child.once('error', () => resolve({ code: NOT_STARTED, stdout, stderr }));
     child.once('close', (code) => {
       options.signal?.removeEventListener('abort', cancel);
-      resolve({ code: cancelled ? CANCELLED : (code ?? 1), stdout, stderr });
+      void terminated.then(() => resolve({ code: cancelled ? CANCELLED : (code ?? 1), stdout, stderr }));
     });
   });
 
