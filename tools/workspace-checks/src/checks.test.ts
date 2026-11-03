@@ -17,12 +17,15 @@ describe('lint rules', () => {
     ['non-null-assertion.ts', '@typescript-eslint/no-non-null-assertion'],
     ['ts-ignore.ts', '@typescript-eslint/ban-ts-comment'],
     ['console-log.ts', 'no-console'],
+    ['explicit-any.tsx', '@typescript-eslint/no-explicit-any'],
+    ['console-log.tsx', 'no-console'],
   ])('reports exactly the matching rule for %s', async (file, rule) => {
     expect(await lintRuleIds(file)).toEqual([rule]);
   });
 
-  it('reports nothing for a clean fixture', async () => {
+  it('reports nothing for a clean fixture, in a .ts and in a .tsx file', async () => {
     expect(await lintRuleIds('clean.ts')).toEqual([]);
+    expect(await lintRuleIds('clean.tsx')).toEqual([]);
   });
 
   it('counts a parse error as a diagnostic without a rule', async () => {

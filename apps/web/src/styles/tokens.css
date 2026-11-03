@@ -1,0 +1,33 @@
+:root {
+  --color-surface: #ffffff;
+  --color-surface-muted: #f4f5f7;
+  --color-text: #1b1f24;
+  --color-text-muted: #4b5563;
+  --color-border: #d0d5dd;
+  --color-accent: #1f5fa8;
+  --color-danger: #a4262c;
+  --color-focus: #ffb000;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 16px;
+  --space-4: 24px;
+  --space-5: 40px;
+
+  --content-padding: 40px;
+  --section-gap: 24px;
+  --border-width: 1px;
+  --focus-width: 3px;
+  --focus-offset: 2px;
+  --radius: 4px;
+
+  --font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
+  --font-size-small: 12px;
+  --font-size-body: 14px;
+  --font-size-heading-2: 20px;
+  --font-size-heading-1: 24px;
+  --line-height: 1.5;
+
+  --focus-outline: var(--focus-width) solid var(--color-focus);
+}

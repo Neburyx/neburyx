@@ -3,7 +3,7 @@ import tseslint from 'typescript-eslint';
 export default [
   { ignores: ['**/dist/**', 'node_modules/**', 'tools/workspace-checks/fixtures/**'] },
   {
-    files: ['**/*.ts'],
+    files: ['**/*.ts', '**/*.tsx'],
     languageOptions: { parser: tseslint.parser },
     plugins: { '@typescript-eslint': tseslint.plugin },
     rules: {

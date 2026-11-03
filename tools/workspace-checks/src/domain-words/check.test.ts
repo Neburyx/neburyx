@@ -31,6 +31,16 @@ describe('a pack identifier used as a string literal', () => {
   });
 });
 
+describe('a pack identifier in a web component (.tsx)', () => {
+  it('is reported when it is a JSX attribute value or a string in a component, with the file and line', () => {
+    const root = makeRoot({ 'domain-packs/sample/neburyx.yaml': PACK, 'apps/web/src/Panel.tsx': "export const Panel = () => <Icon kind=\"widget\" label={'Widget'} />;\n" });
+    expect(checkDomainWords(root)).toEqual([
+      { file: 'apps/web/src/Panel.tsx', line: 1, word: 'widget', uses: ['entity type in sample'] },
+      { file: 'apps/web/src/Panel.tsx', line: 1, word: 'Widget', uses: ['label in sample'] },
+    ]);
+  });
+});
+
 describe('a repository without packs', () => {
   it.each([
     ['no packs folder', { 'services/api/src/a.ts': 'export {};\n' }],

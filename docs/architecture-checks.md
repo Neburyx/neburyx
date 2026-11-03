@@ -3,7 +3,7 @@
 Three checks run with the unit tests (`pnpm test`, and so in CI) and fail the build when code breaks a structural rule.
 The first two live in `tools/workspace-checks/src/architecture/` and each reports the file, line and import that breaks the
 rule. The third, [no domain words in code](#no-domain-words-in-code), lives in `tools/workspace-checks/src/domain-words/`
-and reports the file, line and word.
+and reports the file, line and word. The [web client rules](#the-web-client) are a fourth group, in the same folder as the first two.
 
 ## No way around the gate
 
@@ -125,3 +125,16 @@ each word as a literal, so an entry that nothing uses has to be removed.
 **What it cannot see.** Strings built at run time; comments; JSX text, which is where interface copy usually lives; template
 parts that have substitutions; a word spelled or cased differently from the pack; and domain wording in interface copy beyond
 identifiers. Review covers those.
+
+## The web client
+
+Rules for `apps/web/src`, checked in `tools/workspace-checks/src/architecture/web-client.ts` (file, line and reason are reported; test files are exempt from the first three):
+
+| Rule | What fails the build |
+|---|---|
+| Reads go through the API client | a call to `fetch` with a path that starts with `/v1` outside `apps/web/src/api/` |
+| No second type for an API shape | an `interface` or an object-shaped `type` alias, in `apps/web/src` including the client folder, whose name is also an export of `@neburyx/contracts` or ends in `Response`, `Request`, `Payload`, `Body` or `Dto`. A type derived with `z.infer` from a contracts schema, one imported from contracts, and a client-only type (transport options, a failure union, component props) pass |
+| No query text | an upper-case Cypher clause keyword (`MATCH`, `OPTIONAL MATCH`, `MERGE`, `CREATE`, `RETURN`, `WITH`, `UNWIND`, `SET`, `REMOVE`, `DETACH`, `DELETE`, `CALL`, `LOAD CSV`) followed by a space and a parenthesis, bracket, brace, identifier or number, in a string, a template or a JSX text |
+| No database client | a dependency of `apps/web` on a graph or database client (a package name that contains `neo4j`, `cypher`, `bolt`, `postgres`, `kysely`, `mongodb`, `mysql`, `sqlite`, `redis` or `valkey`, or is `pg`) |
+
+The checks are by name and shape, so a duplicate of a contracts type under an unrelated name, or query text assembled from fragments or written in lower case, is for review. Imports from `ee/` and domain words in `.tsx` files are covered by the checks above; ESLint's rules apply to `.tsx` files too.

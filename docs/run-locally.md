@@ -24,7 +24,7 @@ pnpm dev
 4. writes `.dev/neburyx.yaml`, the mapping of the two demo sources made from the packs in `domain-packs/` with each source's address pointing at its container;
 5. runs the API and the web dev server, with their compilers in watch mode.
 
-It prints the addresses. Open the web app one; `GET /v1/sources` on the API lists both demo sources as `connected` and `synthetic`. A change to a source file of the contracts, the API or the web app reaches the running app without restarting the command.
+It prints the addresses. Open the web app one; `GET /v1/sources` on the API lists both demo sources as `connected` and `synthetic`. A change to a source file of the contracts, the API or the web app reaches the running app without restarting the command. The web app's `/dev/fixture` page (development builds only) lists the configured sources, shows the profile of the one you choose and loads a synthetic graph drawn from that profile into the client.
 
 The demo servers are Neo4j Community, which cannot list privileges, so `test-source` reports `Read-only: not verified` for them, and the demo logins are not read-only logins.
 

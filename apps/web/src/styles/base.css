@@ -1,0 +1,75 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: var(--font-family);
+  font-size: var(--font-size-body);
+  line-height: var(--line-height);
+}
+
+h1 {
+  margin: 0;
+  font-size: var(--font-size-heading-1);
+}
+
+h2 {
+  margin: 0;
+  font-size: var(--font-size-heading-2);
+}
+
+header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--content-padding);
+  border-bottom: var(--border-width) solid var(--color-border);
+  background: var(--color-surface-muted);
+}
+
+nav ul {
+  display: flex;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+a {
+  color: var(--color-accent);
+}
+
+a[aria-current='page'] {
+  font-weight: 700;
+  text-decoration: underline;
+}
+
+main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--section-gap);
+  padding: var(--content-padding) var(--content-padding) 0;
+}
+
+section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+[role='alert'] {
+  margin: 0;
+  color: var(--color-danger);
+  font-family: var(--font-mono);
+}
+
+:focus-visible {
+  outline: var(--focus-outline);
+  outline-offset: var(--focus-offset);
+}
