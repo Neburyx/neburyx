@@ -21,6 +21,7 @@ not covered by it and is reserved for a separate commercial licence.
 | `deploy/docker` | Container image build |
 | `deploy/demo` | Demo environment on a synthetic graph |
 | `tools/demo-graph` | Synthetic demo graph generator |
+| `tools/dev` | The `pnpm dev` command that runs the app locally |
 | `docs/` | Public technical documentation |
 
 This repository contains no internal or private material, and uses synthetic data only.
@@ -38,3 +39,5 @@ pnpm typecheck
 pnpm lint
 pnpm test
 ```
+
+To run the app on your machine against the demo graphs, run `pnpm dev` (see [Run it locally](docs/run-locally.md)).

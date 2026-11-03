@@ -22,6 +22,7 @@ safe on very high-degree nodes. The repo is **pre-release**: the build tooling, 
 | `deploy/compose` | Community install: image + Postgres, loopback only (see its README) |
 | `deploy/demo` | Demo environment: the product and two synthetic demo graphs, loopback only (see its README) |
 | `tools/demo-graph` | Synthetic demo graph generator |
+| `tools/dev` | The `pnpm dev` command: runs the app locally against the demo graphs (see `docs/run-locally.md`) |
 | `tools/driver-check` | By-hand check of how `neo4j-driver` and Neo4j behave on a transaction timeout and on a close mid-query (see its README) |
 | `docs/` | Public technical documentation |
 
@@ -73,6 +74,7 @@ Node 24 LTS (`.nvmrc`; with nvm, `nvm use`) and pnpm through Corepack, at the ve
 | Build a pack's demo graph into a demo Neo4j (see `tools/demo-graph/README.md`) | `pnpm demo-graph build --pack banking-fraud --uri bolt://localhost:7687` |
 | Image tests (builds the image and runs it; needs Docker, takes minutes) | `pnpm test:image` |
 | Compose tests (brings the Community stack up and upgrades it, and brings the demo stack up; need Docker, take minutes) | `pnpm test:compose` |
+| Run the app locally against the demo graphs, with the API and web app in watch mode (needs Docker; `pnpm dev:down` removes what it started) | `pnpm dev` |
 | Run the demo (the product and two synthetic demo graphs; see `deploy/demo/README.md`) | `cd deploy/demo && cp .env.example .env`, fill it in, then `docker compose up --wait` |
 | Driver timeout check (starts Neo4j containers; needs Docker, takes about ten minutes; not in CI) | `pnpm check:driver` |
 | Regenerate `packages/contracts/openapi.json` | `pnpm --filter @neburyx/contracts generate` |
