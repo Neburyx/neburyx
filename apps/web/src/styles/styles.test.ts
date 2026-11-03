@@ -25,7 +25,7 @@ function stylesheets(): Array<{ readonly name: string; readonly css: string }> {
 describe('the stylesheets', () => {
   it('define colours, spacing steps, type sizes and the focus outline once, as tokens', () => {
     const tokens = readFileSync(join(DIRECTORY, 'tokens.css'), 'utf8');
-    for (const name of ['--color-text', '--color-focus', '--space-1', '--space-5', '--font-size-body', '--font-size-heading-1', '--focus-outline', '--content-padding', '--section-gap']) expect(tokens).toContain(`${name}:`);
+    for (const name of ['--color-text', '--color-focus', '--space-4', '--space-40', '--font-size-body', '--font-size-heading-1', '--focus-outline', '--content-padding', '--section-gap']) expect(tokens).toContain(`${name}:`);
   });
 
   it('use no colour literal and no raw length outside the token file', () => {
@@ -37,20 +37,28 @@ describe('the stylesheets', () => {
     expect(violations('a {\n  padding: 12px;\n}')).toHaveLength(1);
     expect(violations('a {\n  font-size: 1.2rem;\n}')).toHaveLength(1);
     expect(violations('a {\n  color: rgb(1, 2, 3);\n}')).toHaveLength(1);
-    expect(violations('a {\n  padding: var(--space-3);\n  margin: 0;\n}')).toEqual([]);
+    expect(violations('a {\n  padding: var(--space-16);\n  margin: 0;\n}')).toEqual([]);
   });
 
-  it('give the content area a 40 px side and top padding and a 24 px gap between sections', () => {
+  it('give the content area a 40 px side and top padding, a 32 px bottom padding and a 24 px gap between sections', () => {
     const tokens = readFileSync(join(DIRECTORY, 'tokens.css'), 'utf8');
     expect(tokens).toMatch(/--content-padding:\s*40px;/);
     expect(tokens).toMatch(/--section-gap:\s*24px;/);
+    expect(tokens).toMatch(/--content-padding-bottom:\s*32px;/);
     const base = readFileSync(join(DIRECTORY, 'base.css'), 'utf8');
-    expect(base).toMatch(/main \{[^}]*gap: var\(--section-gap\);[^}]*padding: var\(--content-padding\) var\(--content-padding\) 0;/s);
+    expect(base).toMatch(/main \{[^}]*gap: var\(--section-gap\);[^}]*padding: var\(--content-padding\) var\(--content-padding\) var\(--content-padding-bottom\);/s);
   });
 
   it('draw the keyboard focus outline from the token, and mark the current page by more than colour', () => {
     const base = readFileSync(join(DIRECTORY, 'base.css'), 'utf8');
     expect(base).toMatch(/:focus-visible \{[^}]*outline: var\(--focus-outline\);/s);
     expect(base).toMatch(/a\[aria-current='page'\] \{[^}]*(font-weight|text-decoration)/s);
+  });
+
+  it('let long unbroken values wrap in the sidebar and in the page heading, and set the Enterprise name in semibold', () => {
+    const base = readFileSync(join(DIRECTORY, 'base.css'), 'utf8');
+    expect(base).toMatch(/\.sidebar \{[^}]*overflow-wrap: anywhere;/s);
+    expect(base).toMatch(/\.page-heading \{[^}]*overflow-wrap: anywhere;/s);
+    expect(base).toMatch(/\.identity-name \{[^}]*font-weight: var\(--font-weight-semibold\);/s);
   });
 });

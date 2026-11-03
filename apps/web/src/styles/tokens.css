@@ -1,33 +1,60 @@
 :root {
   --color-surface: #ffffff;
-  --color-surface-muted: #f4f5f7;
-  --color-text: #1b1f24;
-  --color-text-muted: #4b5563;
-  --color-border: #d0d5dd;
-  --color-accent: #1f5fa8;
-  --color-danger: #a4262c;
+  --color-surface-muted: #f7f8fa;
+  --color-text: #252932;
+  --color-text-muted: #525b6a;
+  --color-border: #e6e8ec;
+  --color-icon: #777e8a;
+  --color-accent: #5264a7;
+  --color-accent-surface: #eaedf7;
+  --color-badge-surface: #eef0f8;
+  --color-badge-text: #46568b;
+  --color-success-surface: #eaf5ee;
+  --color-success-text: #295c3d;
+  --color-neutral-surface: #f1f3f5;
+  --color-neutral-text: #4f5969;
+  --color-danger-surface: #fbecee;
+  --color-danger: #992933;
   --color-focus: #ffb000;
 
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 16px;
-  --space-4: 24px;
-  --space-5: 40px;
+  --space-4: 4px;
+  --space-8: 8px;
+  --space-10: 10px;
+  --space-12: 12px;
+  --space-16: 16px;
+  --space-20: 20px;
+  --space-24: 24px;
+  --space-32: 32px;
+  --space-40: 40px;
 
+  --sidebar-width: 208px;
+  --full-height: 100vh;
   --content-padding: 40px;
+  --content-padding-bottom: 32px;
   --section-gap: 24px;
+  --nav-item-height: 40px;
+  --icon-size: 18px;
+  --logo-size: 24px;
   --border-width: 1px;
   --focus-width: 3px;
   --focus-offset: 2px;
-  --radius: 4px;
+  --radius: 6px;
+  --radius-badge: 5px;
 
-  --font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
+  --font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
   --font-size-small: 12px;
-  --font-size-body: 14px;
+  --font-size-body: 13px;
+  --font-size-title: 14px;
+  --font-size-brand: 20px;
   --font-size-heading-2: 20px;
-  --font-size-heading-1: 24px;
-  --line-height: 1.5;
+  --font-size-heading-1: 28px;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --line-height: 1.45;
+  --line-height-heading-1: 34px;
+  --line-height-compact: 18px;
+  --badge-height: 22px;
 
   --focus-outline: var(--focus-width) solid var(--color-focus);
 }

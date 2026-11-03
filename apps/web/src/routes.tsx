@@ -1,16 +1,15 @@
-import { NavLink, Outlet, Link, type RouteObject } from 'react-router';
-import { Principal } from './principal.js';
+import { Link, Outlet, type RouteObject } from 'react-router';
 import type { ApiClient } from './api/client.js';
+import { PageHeading } from './shell/page-heading.js';
+import { PageShell } from './shell/page-shell.js';
+import { createShellData, ShellDataProvider } from './shell/shell-data.js';
 
-interface PageProps {
-  readonly title: string;
-}
+const NOT_BUILT = 'This screen is not built yet.';
 
-function NotBuiltYet({ title }: PageProps) {
+function NotBuiltYet({ title }: { readonly title: string }) {
   return (
     <section>
-      <h2>{title}</h2>
-      <p>This screen is not built yet.</p>
+      <PageHeading title={title} description={NOT_BUILT} />
     </section>
   );
 }
@@ -18,7 +17,7 @@ function NotBuiltYet({ title }: PageProps) {
 function NotFound() {
   return (
     <section>
-      <h2>Page not found</h2>
+      <PageHeading title="Page not found" description="There is no page at this address." />
       <p>
         <Link to="/">Back to Home</Link>
       </p>
@@ -26,34 +25,12 @@ function NotFound() {
   );
 }
 
-const NAVIGATION = [
-  { to: '/', label: 'Home', end: true },
-  { to: '/investigations', label: 'Investigations', end: false },
-  { to: '/sources', label: 'Sources', end: false },
-] as const;
-
-function Layout({ client }: { readonly client: ApiClient }) {
+function BareExplore() {
   return (
-    <>
-      <header>
-        <h1>Neburyx</h1>
-        <Principal client={client} />
-        <nav aria-label="Main">
-          <ul>
-            {NAVIGATION.map((item) => (
-              <li key={item.to}>
-                <NavLink to={item.to} end={item.end}>
-                  {item.label}
-                </NavLink>
-              </li>
-            ))}
-          </ul>
-        </nav>
-      </header>
-      <main>
-        <Outlet />
-      </main>
-    </>
+    <main>
+      <h1>Explore</h1>
+      <p>{NOT_BUILT}</p>
+    </main>
   );
 }
 
@@ -71,17 +48,27 @@ function developmentRoutes(client: ApiClient): RouteObject[] {
 }
 
 export function appRoutes(client: ApiClient): RouteObject[] {
+  const shellData = createShellData(client);
   return [
     {
       path: '/',
-      element: <Layout client={client} />,
+      element: (
+        <ShellDataProvider store={shellData}>
+          <Outlet />
+        </ShellDataProvider>
+      ),
       children: [
-        { index: true, element: <NotBuiltYet title="Home" /> },
-        { path: 'investigations', element: <NotBuiltYet title="Investigations" /> },
-        { path: 'sources', element: <NotBuiltYet title="Sources" /> },
-        { path: 'explore', element: <NotBuiltYet title="Explore" /> },
-        ...developmentRoutes(client),
-        { path: '*', element: <NotFound /> },
+        {
+          element: <PageShell />,
+          children: [
+            { index: true, element: <NotBuiltYet title="Home" /> },
+            { path: 'investigations', element: <NotBuiltYet title="Investigations" /> },
+            { path: 'sources', element: <NotBuiltYet title="Sources" /> },
+            ...developmentRoutes(client),
+            { path: '*', element: <NotFound /> },
+          ],
+        },
+        { path: 'explore', element: <BareExplore /> },
       ],
     },
   ];

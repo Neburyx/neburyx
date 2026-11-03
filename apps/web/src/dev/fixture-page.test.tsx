@@ -1,43 +1,52 @@
-import { render, screen } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { SourceSummary } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
 import { fakeClient } from '../api/fake-client.js';
-import { createClientState } from '../state/client-state.js';
-import { ClientStateProvider } from '../state/context.js';
-import { FixturePage } from './fixture-page.js';
+import { counted, renderApp } from '../test-utils.js';
 import { testProfile } from './test-profile.js';
 
 const ME = { principal: { id: '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d', displayName: 'Local user', role: 'administrator' as const }, edition: 'community' as const, identityMode: 'none' as const, sources: [] };
 const SOURCE: SourceSummary = { id: 'source-a', alias: 'Source a', state: 'connected', stateReason: null, readOnly: true, synthetic: true, lastTestAt: null, mappingSummary: { entityTypes: 3, relationshipTypes: 2, derivedRules: 1 } };
 
-function renderPage(profile = testProfile()) {
-  const client = fakeClient({
+function clientFor(profile = testProfile()) {
+  return fakeClient({
     getMe: async () => ({ ok: true, value: ME }),
     getSources: async () => ({ ok: true, value: { items: [SOURCE], nextCursor: null } }),
     getProfile: async () => ({ ok: true, value: profile }),
   });
-  render(
-    <ClientStateProvider state={createClientState()}>
-      <FixturePage client={client} />
-    </ClientStateProvider>,
-  );
+}
+
+function renderPage(profile = testProfile()) {
+  return renderApp('/dev/fixture', clientFor(profile));
 }
 
 describe('the fixture page', () => {
   it('shows why Load is unavailable when the principal cannot be read', async () => {
-    const client = fakeClient({
+    renderApp('/dev/fixture', fakeClient({
       getSources: async () => ({ ok: true, value: { items: [SOURCE], nextCursor: null } }),
       getProfile: async () => ({ ok: true, value: testProfile() }),
-    });
-    render(
-      <ClientStateProvider state={createClientState()}>
-        <FixturePage client={client} />
-      </ClientStateProvider>,
-    );
+    }));
     await userEvent.setup().click(await screen.findByRole('button', { name: 'Source a' }));
-    expect((await screen.findByRole('alert')).textContent).toBe('NETWORK_UNAVAILABLE');
+    expect((await screen.findAllByText('NETWORK_UNAVAILABLE')).length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: 'Load' }).hasAttribute('disabled')).toBe(true);
+  });
+
+  it('starts with the shared page heading: the title, the source in view, the Synthetic data badge and a description', async () => {
+    renderPage();
+    expect((await screen.findByRole('heading', { level: 1 })).textContent).toBe('Fixture graph');
+    expect(await screen.findByText('Synthetic data')).toBeTruthy();
+    expect(document.querySelector('.page-heading > p')?.textContent?.length).toBeGreaterThan(0);
+  });
+
+  it('reuses the shell\'s answers: choosing a source and a profile asks for the principal and the sources no more than once', async () => {
+    const { client, calls } = counted(clientFor());
+    renderApp('/dev/fixture', client);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Source a' }));
+    await user.click(await screen.findByRole('button', { name: 'Load' }));
+    await screen.findByText('120 entities · 180 relationships · loaded · exact');
+    expect(calls).toEqual({ me: 1, sources: 1 });
   });
 
   it('loads a graph from the chosen source and says how many entities and relationships were loaded, exact', async () => {

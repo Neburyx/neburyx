@@ -3,6 +3,7 @@ import type { SourceProfile } from '@neburyx/contracts';
 import type { ApiClient } from '../api/client.js';
 import { useRequest } from '../api/use-request.js';
 import { FailureNotice } from '../failure-notice.js';
+import { answeredData, retainedFailure, useShellData } from '../shell/shell-data.js';
 
 function ProfileSummary({ client, sourceId, actions }: { readonly client: ApiClient; readonly sourceId: string; readonly actions?: ((profile: SourceProfile) => ReactNode) | undefined }) {
   const load = useCallback((signal: AbortSignal) => client.getProfile(sourceId, signal), [client, sourceId]);
@@ -32,15 +33,13 @@ function ProfileSummary({ client, sourceId, actions }: { readonly client: ApiCli
 }
 
 export function SourcesPanel({ client, actions }: { readonly client: ApiClient; readonly actions?: (profile: SourceProfile) => ReactNode }) {
-  const load = useCallback((signal: AbortSignal) => client.getSources(signal), [client]);
-  const { state } = useRequest(load);
+  const { sources: request } = useShellData();
   const [chosen, setChosen] = useState<string | undefined>(undefined);
-  const sources = state.phase === 'ready' || state.phase === 'loading' ? state.data : undefined;
+  const sources = answeredData(request);
+  const failure = retainedFailure(request);
 
-  if (state.phase === 'failed') return <FailureNotice failure={state.failure} />;
-  const retained = state.phase === 'ready' ? state.failure : undefined;
-  if (sources === undefined) return <p role="status">Loading the sources</p>;
-  const notice = retained === undefined ? null : <FailureNotice failure={retained} />;
+  if (sources === undefined) return failure === undefined ? <p role="status">Loading the sources</p> : <FailureNotice failure={failure} />;
+  const notice = failure === undefined ? null : <FailureNotice failure={failure} />;
   if (sources.items.length === 0) {
     return (
       <>

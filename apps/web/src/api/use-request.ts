@@ -16,7 +16,7 @@ function dataOf<T>(state: RequestState<T>): T | undefined {
   return state.phase === 'ready' || state.phase === 'loading' ? state.data : undefined;
 }
 
-function reduce<T>(state: RequestState<T>, action: Action<T>): RequestState<T> {
+export function reduceRequest<T>(state: RequestState<T>, action: Action<T>): RequestState<T> {
   const data = dataOf(state);
   switch (action.type) {
     case 'start':
@@ -33,7 +33,7 @@ function reduce<T>(state: RequestState<T>, action: Action<T>): RequestState<T> {
   }
 }
 
-const UNEXPECTED: ApiResult<never> = { ok: false, failure: { code: 'UNEXPECTED_FAILURE' } };
+export const UNEXPECTED: ApiResult<never> = { ok: false, failure: { code: 'UNEXPECTED_FAILURE' } };
 
 export interface RequestControls<T> {
   readonly state: RequestState<T>;
@@ -43,7 +43,7 @@ export interface RequestControls<T> {
 
 /** Runs `load` on mount and whenever `load` changes. Only the newest request's answer is used; an aborted one is ignored. */
 export function useRequest<T>(load: (signal: AbortSignal) => Promise<ApiResult<T>>): RequestControls<T> {
-  const [state, dispatch] = useReducer(reduce<T>, { phase: 'idle' });
+  const [state, dispatch] = useReducer(reduceRequest<T>, { phase: 'idle' });
   const newest = useRef<AbortController | undefined>(undefined);
 
   const run = useCallback(() => {

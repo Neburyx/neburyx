@@ -17,6 +17,7 @@ COPY --from=builder /out/api/node_modules ./node_modules
 COPY --from=builder /out/api/dist ./dist
 COPY --from=builder /out/api/migrations ./migrations
 COPY --from=builder /repo/apps/web/dist ./web
+COPY --from=builder /repo/LICENSE /repo/NOTICE /repo/THIRD-PARTY-NOTICES.md ./legal/
 USER node
 EXPOSE 8080
 ENTRYPOINT ["node", "dist/cli.js"]
