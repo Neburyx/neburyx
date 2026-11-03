@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "outDir": "dist/node",
+    "rootDir": "src",
+    "declaration": false
+  },
+  "include": ["src/runner", "src/measure", "src/adapter.ts", "src/adapters/names.ts", "src/page/handle.ts"],
+  "exclude": ["src/**/*.test.ts"]
+}

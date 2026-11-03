@@ -23,6 +23,7 @@ safe on very high-degree nodes. The repo is **pre-release**: the build tooling, 
 | `deploy/demo` | Demo environment: the product and two synthetic demo graphs, loopback only (see its README) |
 | `tools/demo-graph` | Synthetic demo graph generator |
 | `tools/dev` | The `pnpm dev` command: runs the app locally against the demo graphs (see `docs/run-locally.md`) |
+| `tools/renderer-spike` | Harness that draws one synthetic graph with two graph renderers and measures frame rate, node movement on incremental layout, grouping and keyboard access (see its README) |
 | `tools/driver-check` | By-hand check of how `neo4j-driver` and Neo4j behave on a transaction timeout and on a close mid-query (see its README) |
 | `docs/` | Public technical documentation |
 

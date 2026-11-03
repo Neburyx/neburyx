@@ -1,0 +1,28 @@
+{
+  "name": "@neburyx/renderer-spike",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit -p tsconfig.json && vite build",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run --passWithNoTests",
+    "dev": "vite",
+    "spike": "pnpm build && tsc -p tsconfig.node.json && node dist/node/runner/main.js",
+    "bundle-size": "tsc -p tsconfig.node.json && node dist/node/runner/bundle-size.js"
+  },
+  "dependencies": {
+    "@neburyx/contracts": "workspace:*",
+    "cytoscape": "3.34.4",
+    "graphology": "0.26.0",
+    "graphology-layout-forceatlas2": "0.10.1",
+    "sigma": "4.0.4",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "playwright": "1.64.1",
+    "typescript": "6.0.3",
+    "vite": "8.3.5",
+    "vitest": "5.0.5"
+  }
+}

@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Renderer spike harness</title>
+    <style>
+      html, body { margin: 0; height: 100%; font-family: system-ui, sans-serif; background: #ffffff; color: #1b1b1b; }
+      #status { position: fixed; top: 8px; left: 8px; z-index: 1; padding: 4px 8px; background: #ffffffd9; font-size: 12px; }
+      #canvas { position: fixed; inset: 0; }
+    </style>
+  </head>
+  <body>
+    <div id="status" role="status"></div>
+    <div id="live" aria-live="polite" style="position: fixed; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%);"></div>
+    <div id="canvas"></div>
+    <script type="module" src="/src/page/main.ts"></script>
+  </body>
+</html>
