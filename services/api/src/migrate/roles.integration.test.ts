@@ -126,7 +126,8 @@ describe('what the app role can do', () => {
     await asAppRole(database, async (client) => {
       await client.query(`SELECT graphile_worker.add_job('noop', '{}'::json)`);
     });
-    await runOnce({ connectionString: database.appUrl, taskList: { noop: async () => void (ran += 1) } });
+    // without a batch delay the library deletes a finished job without waiting for it, so runOnce can return before the row is gone
+    await runOnce({ connectionString: database.appUrl, taskList: { noop: async () => void (ran += 1) }, preset: { worker: { completeJobBatchDelay: 0 } } });
     expect(ran).toBe(1);
     expect(await rows(database.ownerUrl, 'SELECT count(*)::int AS n FROM graphile_worker.jobs')).toEqual([{ n: 0 }]);
   });
