@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readImports, type ImportForm } from './imports.js';
+import { mayNameTarget, readImports, type ImportForm } from './imports.js';
 import { resolveRelative } from './resolve.js';
 
 describe('readImports', () => {
@@ -199,5 +199,26 @@ describe('resolveRelative', () => {
 
   it('gives nothing for a package name', () => {
     expect(resolveRelative('a/b.ts', 'neo4j-driver')).toBeUndefined();
+  });
+});
+
+describe('mayNameTarget', () => {
+  it.each([
+    ["import { a } from '../ee/a.js';", true],
+    ["import { a } from '@neburyx/ee';", true],
+    ["import { a } from '../\\u0065e/a.js';", true],
+    ["import { a } from '../\\x65e/a.js';", true],
+    ["import { a } from '../\\145e/a.js';", true],
+    ["import { a } from '../\\e\\e/a.js';", true],
+    ["import { a } from '../e\\\ne/a.js';", true],
+    ["import { a } from '../..\\057ee/a.js';", true],
+    ["import { a } from '@neburyx/demo\\055graph';", true],
+    ["import { a } from '@neburyx/demo\\-graph';", true],
+    ["import { a } from '../a\\0.js';", true],
+    ["import { a } from '../services/a.js';", false],
+    ["const need = 'a\\nb\\\\c';", false],
+    ['const need = /a\\.b\\/c/;', false],
+  ])('for %j says %s', (text, expected) => {
+    expect(mayNameTarget(text, /\bee\b/)).toBe(expected);
   });
 });

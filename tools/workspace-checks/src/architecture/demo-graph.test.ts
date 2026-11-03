@@ -24,6 +24,13 @@ describe('product code that imports the demo graph tool', () => {
     expect(snippet(path, text)).toMatchObject([{ rule: 'demo-graph-isolated', file: path }]);
   });
 
+  it('is reported when an escape sequence spells the folder name', () => {
+    expect(snippet('services/api/src/a.ts', "import { build } from '../../../tools/demo-\\u0067raph/src/load.js';")).toHaveLength(1);
+    expect(snippet('services/api/src/a.ts', "import { build } from '@neburyx/demo\\-graph';")).toHaveLength(1);
+    expect(snippet('services/api/src/a.ts', "import { build } from '@neburyx/demo\\055graph';")).toHaveLength(1);
+    expect(snippet('services/api/src/a.ts', "import { build } from '../../..\\057tools/demo-graph/src/load.js';")).toHaveLength(1);
+  });
+
   it.each([
     "import { z } from 'zod';",
     "import { a } from './demo-graph-notes.js';",

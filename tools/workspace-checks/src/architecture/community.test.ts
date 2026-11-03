@@ -76,6 +76,16 @@ describe('a name that only looks like ee/', () => {
   );
 });
 
+describe('a folder name written with an escape sequence', () => {
+  it('is still reported as ee/', () => {
+    expect(snippet('services/api/src/x.ts', "import { a } from '../../../\\u0065e/a.js';")).toHaveLength(1);
+    expect(snippet('services/api/src/x.ts', "const m = await import('../../../e\\x65/a.js');")).toHaveLength(1);
+    expect(snippet('services/api/src/x.ts', "import { a } from '../../../\\e\\e/a.js';")).toHaveLength(1);
+    expect(snippet('services/api/src/x.ts', "import { a } from '../../../\\145e/a.js';")).toHaveLength(1);
+    expect(snippet('services/api/src/x.ts', "import { a } from '../../..\\057ee/a.js';")).toHaveLength(1);
+  });
+});
+
 describe('code under ee/', () => {
   it('may import Community code', () => {
     expect(fixture('ee-inward')).toEqual([]);

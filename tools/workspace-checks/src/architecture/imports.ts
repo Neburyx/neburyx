@@ -210,6 +210,15 @@ function declaredTypeName(statement: ts.Node): string | undefined {
     : undefined;
 }
 
+// Only escapes that give a control character or punctuation other than a hyphen are harmless; any other letter, a digit (octal, \0 included) or a hyphen can spell a name or the character beside it.
+const HARMLESS_ESCAPED = String.raw`[ntrbfv\\'"\x60$/.()[\]{}|*+?^:]`;
+const NAME_SPELLING_ESCAPE = new RegExp(String.raw`^(?:[^\\]|\\${HARMLESS_ESCAPED})*\\(?!${HARMLESS_ESCAPED})`);
+
+/** A specifier that reaches a target holds the target's name unless an escape spells it, so a file with neither need not be parsed. */
+export function mayNameTarget(text: string, name: RegExp): boolean {
+  return name.test(text) || NAME_SPELLING_ESCAPE.test(text);
+}
+
 export function readImports(fileName: string, text: string): ImportRef[] {
   const source = ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, true, scriptKindOf(fileName));
   const declared = declaredNames(source);

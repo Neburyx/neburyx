@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { readImports } from './imports.js';
+import { mayNameTarget, readImports } from './imports.js';
 import { isInside, isInsideDirectory, resolveRelative } from './resolve.js';
 import type { SourceFile } from './tree.js';
 import type { Violation } from './violations.js';
@@ -8,12 +8,14 @@ import type { Violation } from './violations.js';
 export const DEMO_GRAPH_SCAN_ROOTS: readonly string[] = ['services', 'apps', 'packages', 'ee'];
 
 const TOOL_ZONE = 'tools/demo-graph';
+const TOOL_NAME = /demo-graph/;
 const TOOL_PACKAGE = /^@neburyx\/demo-graph(?:\/|$)/;
 const DEPENDENCY_FIELDS = ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies'] as const;
 
 export function checkDemoGraphIsolated(files: readonly SourceFile[]): Violation[] {
   const violations: Violation[] = [];
   for (const file of files) {
+    if (!mayNameTarget(file.text, TOOL_NAME)) continue;
     for (const ref of readImports(file.path, file.text)) {
       if (ref.form === 'reexport-binding') continue;
       const resolved = resolveRelative(file.path, ref.specifier);
