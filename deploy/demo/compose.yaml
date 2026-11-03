@@ -29,6 +29,9 @@ services:
     environment:
       NEO4J_AUTH: neo4j/${DEMO_NEO4J_PASSWORD:?set DEMO_NEO4J_PASSWORD in the .env file}
       DEMO_NEO4J_PASSWORD: *graph-password
+      NEO4J_server_memory_heap_initial__size: 1g
+      NEO4J_server_memory_heap_max__size: 1g
+      NEO4J_server_memory_pagecache_size: 256m
     healthcheck:
       test: ["CMD-SHELL", "cypher-shell -u neo4j -p \"$$DEMO_NEO4J_PASSWORD\" 'RETURN 1'"]
       interval: 3s
@@ -41,6 +44,9 @@ services:
     environment:
       NEO4J_AUTH: neo4j/${DEMO_NEO4J_PASSWORD:?set DEMO_NEO4J_PASSWORD in the .env file}
       DEMO_NEO4J_PASSWORD: *graph-password
+      NEO4J_server_memory_heap_initial__size: 1g
+      NEO4J_server_memory_heap_max__size: 1g
+      NEO4J_server_memory_pagecache_size: 256m
     healthcheck:
       test: ["CMD-SHELL", "cypher-shell -u neo4j -p \"$$DEMO_NEO4J_PASSWORD\" 'RETURN 1'"]
       interval: 3s

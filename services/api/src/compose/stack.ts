@@ -1,6 +1,8 @@
+import { spawn, type ChildProcessByStdio } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
+import type { Readable } from 'node:stream';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -78,6 +80,10 @@ export class Stack {
     return this.compose(['up', '--wait', '--wait-timeout', String(WAIT_SECONDS)]);
   }
 
+  record(): Promise<EventRecorder> {
+    return EventRecorder.start(this.project, `${this.options.image}:${this.tag}`);
+  }
+
   async containerId(service: string): Promise<string> {
     return dockerOk(['ps', '-aq', '--filter', `label=com.docker.compose.project=${this.project}`, '--filter', `label=com.docker.compose.service=${service}`]);
   }
@@ -97,7 +103,101 @@ export class Stack {
 
   async destroy(): Promise<void> {
     await this.compose(['down', '-v', '--remove-orphans', '--timeout', '5']);
+    const label = `label=com.docker.compose.project=${this.project}`;
+    const left = [
+      await dockerOk(['ps', '-aq', '--filter', label]),
+      await dockerOk(['network', 'ls', '-q', '--filter', label]),
+      await dockerOk(['volume', 'ls', '-q', '--filter', label]),
+    ];
+    if (left.some((found) => found !== '')) throw new Error(`containers, networks or volumes of project ${this.project} are still present after docker compose down`);
     rmSync(this.folder, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Collects the start and die events of a project's containers as they happen. `docker events --since` replays from the
+ * daemon's buffer of 256 events, which the health checks of a busy stack overflow, so a test that reads after the fact
+ * can lose the first events.
+ */
+export class EventRecorder {
+  readonly events: ContainerEvent[] = [];
+  private readonly child: ChildProcessByStdio<null, Readable, null>;
+  private readonly closed: Promise<void>;
+  private rest = '';
+  private failure: Error | undefined;
+
+  private constructor(
+    private readonly project: string,
+    private readonly markerImage: string,
+  ) {
+    this.child = spawn(
+      'docker',
+      ['events', '--since', String(Math.floor(Date.now() / 1000) - 1), '--filter', `label=com.docker.compose.project=${project}`, '--filter', 'type=container', '--filter', 'event=start', '--filter', 'event=die', '--filter', 'event=create', '--format', '{{json .}}'],
+      { stdio: ['ignore', 'pipe', 'ignore'] },
+    );
+    this.child.stdout.setEncoding('utf8');
+    this.child.stdout.on('data', (chunk: string) => {
+      try {
+        this.read(chunk);
+      } catch (error) {
+        this.failure ??= error instanceof Error ? error : new Error('the event recorder could not read an event');
+      }
+    });
+    this.child.once('error', (error) => {
+      this.failure ??= error;
+    });
+    this.closed = new Promise((resolve) => this.child.once('close', () => resolve()));
+  }
+
+  /** Starts the stream and returns once it is subscribed: a marker created after the start is seen. */
+  static async start(project: string, markerImage: string): Promise<EventRecorder> {
+    const recorder = new EventRecorder(project, markerImage);
+    try {
+      await recorder.sync();
+    } catch (error) {
+      await recorder.stop();
+      throw error;
+    }
+    return recorder;
+  }
+
+  private read(chunk: string): void {
+    const lines = (this.rest + chunk).split('\n');
+    this.rest = lines.pop() ?? '';
+    for (const line of lines.filter(Boolean)) this.events.push(eventSchema.parse(JSON.parse(line)));
+  }
+
+  private check(): void {
+    if (this.failure !== undefined) throw new Error(`the event recorder failed: ${this.failure.message}`);
+  }
+
+  /** Returns once every event that happened before the call has been recorded: events arrive in order, so a container created now is seen after them. */
+  async sync(): Promise<void> {
+    const marker = randomBytes(6).toString('hex');
+    const id = await dockerOk(['create', '--label', `com.docker.compose.project=${this.project}`, '--label', `neburyx.marker=${marker}`, this.markerImage]);
+    try {
+      const deadline = Date.now() + 30_000;
+      while (!this.events.some((event) => event.Actor.Attributes['neburyx.marker'] === marker)) {
+        this.check();
+        if (Date.now() > deadline) throw new Error('the event recorder did not see its marker');
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+    } finally {
+      const removed = await docker(['rm', '-f', id]);
+      if (removed.code !== 0) throw new Error(`the marker container ${id.slice(0, 12)} could not be removed: ${removed.stderr.slice(-300)}`);
+    }
+  }
+
+  since(sinceNano: number): ContainerEvent[] {
+    this.check();
+    return this.events.filter((event) => event.timeNano >= sinceNano && event.Actor.Attributes['neburyx.marker'] === undefined);
+  }
+
+  async stop(): Promise<void> {
+    this.child.kill();
+    const timer = setTimeout(() => this.child.kill('SIGKILL'), 5000);
+    await this.closed;
+    clearTimeout(timer);
   }
 }
 

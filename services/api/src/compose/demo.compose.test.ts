@@ -3,11 +3,11 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'n
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { sourcesResponseSchema } from '@neburyx/contracts';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { parse } from 'yaml';
 import { z } from 'zod';
 import { docker, dockerOk, dockerStream } from '../image/docker.js';
-import { demoComposeFile, repository, serviceOf, Stack } from './stack.js';
+import { demoComposeFile, repository, serviceOf, Stack, type EventRecorder } from './stack.js';
 
 const IMAGE = 'neburyx-demo-test';
 const TAG = `d-${randomBytes(3).toString('hex')}`;
@@ -49,6 +49,13 @@ function cypherShell(stack: Stack, graph: string, statement: string) {
   return stack.compose(['exec', '-T', graph, 'sh', '-c', 'cypher-shell -u neo4j -p "$DEMO_NEO4J_PASSWORD" --format plain "$1"', 'sh', statement]);
 }
 
+async function release(stack: Stack, recorder?: EventRecorder): Promise<void> {
+  await recorder?.stop();
+  await stack.destroy();
+  const position = stacks.indexOf(stack);
+  if (position >= 0) stacks.splice(position, 1);
+}
+
 function overrideFile(text: string): string {
   const folder = mkdtempSync(join(tmpdir(), 'demo-override-'));
   folders.push(folder);
@@ -57,8 +64,9 @@ function overrideFile(text: string): string {
   return file;
 }
 
-async function startsOf(stack: Stack, sinceNano: number, service: string): Promise<number> {
-  return (await stack.events(sinceNano)).filter((event) => serviceOf(event) === service && event.Action === 'start').length;
+async function startsOf(recorder: EventRecorder, sinceNano: number, service: string): Promise<number> {
+  await recorder.sync();
+  return recorder.since(sinceNano).filter((event) => serviceOf(event) === service && event.Action === 'start').length;
 }
 
 const bindings = z.record(z.string(), z.array(z.object({ HostIp: z.string(), HostPort: z.string() })).nullable());
@@ -69,13 +77,19 @@ const composeModel = z.object({
 
 describe('the demo stack', () => {
   let stack: Stack;
+  let recorder: EventRecorder;
   let startedAt: number;
 
   beforeAll(async () => {
     stack = await demoStack();
+    recorder = await stack.record();
     startedAt = Date.now() * 1e6;
     const result = await stack.up();
     expect(result.code, result.stderr).toBe(0);
+  });
+
+  afterAll(async () => {
+    await release(stack, recorder);
   });
 
   it('shows both demo sources as connected and synthetic', async () => {
@@ -92,7 +106,8 @@ describe('the demo stack', () => {
   });
 
   it('finishes the config container and both loaders with exit code 0 before the api container starts', async () => {
-    const events = await stack.events(startedAt);
+    await recorder.sync();
+    const events = recorder.since(startedAt);
     const serving = events.find((event) => serviceOf(event) === 'api' && event.Action === 'start');
     expect(serving).toBeDefined();
     for (const service of ['config', 'load-banking', 'load-insurance']) {
@@ -138,24 +153,29 @@ describe('a demo stack with a step that fails', () => {
   it('starts no api container when the config step fails over an older mapping in the volume, or a loader is refused', async () => {
     const override = overrideFile('services: {}\n');
     const stack = await demoStack({ overrides: [override] });
-    const first = await stack.up();
-    expect(first.code, first.stderr).toBe(0);
-    expect((await stack.compose(['down', '--timeout', '5'])).code).toBe(0);
+    const recorder = await stack.record();
+    try {
+      const first = await stack.up();
+      expect(first.code, first.stderr).toBe(0);
+      expect((await stack.compose(['down', '--timeout', '5'])).code).toBe(0);
 
-    writeFileSync(override, 'services:\n  config:\n    command: ["combine", "--packs", "no-such-pack", "--out", "/config/neburyx.yaml"]\n');
-    let since = Date.now() * 1e6;
-    const brokenConfig = await stack.up();
-    expect(brokenConfig.code).not.toBe(0);
-    expect(brokenConfig.stderr).toContain('config');
-    expect(await startsOf(stack, since, 'api')).toBe(0);
-    expect((await stack.compose(['down', '--timeout', '5'])).code).toBe(0);
+      writeFileSync(override, 'services:\n  config:\n    command: ["combine", "--packs", "no-such-pack", "--out", "/config/neburyx.yaml"]\n');
+      let since = Date.now() * 1e6;
+      const brokenConfig = await stack.up();
+      expect(brokenConfig.code).not.toBe(0);
+      expect(brokenConfig.stderr).toContain('config');
+      expect(await startsOf(recorder, since, 'api')).toBe(0);
+      expect((await stack.compose(['down', '--timeout', '5'])).code).toBe(0);
 
-    writeFileSync(override, 'services:\n  load-banking:\n    environment:\n      DEMO_NEO4J_PASSWORD: not-the-password-of-the-graph\n');
-    since = Date.now() * 1e6;
-    const refused = await stack.up();
-    expect(refused.code).not.toBe(0);
-    expect(refused.stderr).toContain('load-banking');
-    expect(await startsOf(stack, since, 'api')).toBe(0);
+      writeFileSync(override, 'services:\n  load-banking:\n    environment:\n      DEMO_NEO4J_PASSWORD: not-the-password-of-the-graph\n');
+      since = Date.now() * 1e6;
+      const refused = await stack.up();
+      expect(refused.code).not.toBe(0);
+      expect(refused.stderr).toContain('load-banking');
+      expect(await startsOf(recorder, since, 'api')).toBe(0);
+    } finally {
+      await release(stack, recorder);
+    }
   });
 });
 
@@ -164,6 +184,7 @@ describe('a demo stack with a setting that is missing or wrong', () => {
 
   it.each(REQUIRED.flatMap((name) => [[name, 'missing'] as const, [name, 'empty'] as const]))('stops docker compose up before any container exists, naming %s when it is %s', async (name, how) => {
     const stack = await demoStack({ ...(how === 'missing' ? { omit: [name] } : { settings: { ...settings(), [name]: '' } }) });
+    onTestFinished(() => release(stack));
     const result = await stack.compose(['up', '--no-start']);
     expect(result.code).not.toBe(0);
     expect(result.stderr).toContain(name);
@@ -173,12 +194,14 @@ describe('a demo stack with a setting that is missing or wrong', () => {
   it('stops the api with exit code 1 and a message that names the variable and does not repeat its value, for a cursor key that is not a key', async () => {
     const bad = 'this-is-not-a-cursor-key-value';
     const stack = await demoStack({ settings: { ...settings(), NEBURYX_CURSOR_KEY: bad } });
+    const recorder = await stack.record();
+    onTestFinished(() => release(stack, recorder));
     const since = Date.now() * 1e6;
     const result = await stack.compose(['up', '-d']);
     expect(result.code, result.stderr).toBe(0);
     await vi.waitFor(
       async () => {
-        const died = (await stack.events(since)).find((event) => serviceOf(event) === 'api' && event.Action === 'die');
+        const died = recorder.since(since).find((event) => serviceOf(event) === 'api' && event.Action === 'die');
         expect(died?.Actor.Attributes['exitCode']).toBe('1');
       },
       { timeout: 120_000, interval: 3000 },
@@ -193,12 +216,15 @@ describe('a demo stack with a setting that is missing or wrong', () => {
 describe('a demo stack that was stopped', () => {
   it('loads both graphs again and shows both sources connected when it is started again', async () => {
     const stack = await demoStack();
+    const recorder = await stack.record();
+    onTestFinished(() => release(stack, recorder));
     expect((await stack.up()).code).toBe(0);
     expect((await stack.compose(['stop'])).code).toBe(0);
     const since = Date.now() * 1e6;
     const again = await stack.up();
     expect(again.code, again.stderr).toBe(0);
-    const events = await stack.events(since);
+    await recorder.sync();
+    const events = recorder.since(since);
     for (const service of ['load-banking', 'load-insurance']) {
       expect(events.find((event) => serviceOf(event) === service && event.Action === 'die')?.Actor.Attributes['exitCode'], service).toBe('0');
     }
@@ -241,11 +267,17 @@ const GRAPH_OF: Record<(typeof DEMO_PACKS)[number], string> = { 'banking-fraud':
 
 describe('test-source on the demo stack', () => {
   let stack: Stack;
+  let recorder: EventRecorder;
 
   beforeAll(async () => {
     stack = await demoStack();
+    recorder = await stack.record();
     const result = await stack.up();
     expect(result.code, result.stderr).toBe(0);
+  });
+
+  afterAll(async () => {
+    await release(stack, recorder);
   });
 
   function testSource(name: string) {
@@ -253,7 +285,8 @@ describe('test-source on the demo stack', () => {
   }
 
   async function loaderStartsSince(since: number): Promise<number> {
-    const events = await stack.events(since);
+    await recorder.sync();
+    const events = recorder.since(since);
     return events.filter((event) => ['load-banking', 'load-insurance', 'config'].includes(serviceOf(event) ?? '') && event.Action === 'start').length;
   }
 
