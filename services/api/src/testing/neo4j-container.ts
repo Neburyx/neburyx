@@ -7,6 +7,24 @@ import { baseSource, firstSource, load, type Json } from './mapping.js';
 
 export const DEFAULT_NEO4J_IMAGE = 'neo4j:5.26';
 const STARTUP_LIMIT_MS = 240_000;
+/**
+ * testcontainers 12.2.1 waits a fixed 30 s for the host port to be bound and offers no setting for it, so
+ * `withStartupTimeout` cannot cover that wait. Docker here binds a port in about 0.15 s, so a timeout is a rare
+ * stall of the Docker daemon and a new attempt succeeds.
+ */
+export const START_ATTEMPTS = 3;
+const PORT_BOUND_TIMEOUT = /Timed out after \d+ms while waiting for container ports to be bound/;
+
+/** Starts again only when the port-bound wait timed out, up to `attempts` in all; every other error is thrown at once. */
+export async function startWithRetry<T>(start: () => Promise<T>, attempts = START_ATTEMPTS): Promise<T> {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await start();
+    } catch (error) {
+      if (attempt >= attempts || !(error instanceof Error) || !PORT_BOUND_TIMEOUT.test(error.message)) throw error;
+    }
+  }
+}
 
 export function neo4jImageFrom(env: Readonly<Record<string, string | undefined>>): string {
   const image = env['NEBURYX_NEO4J_IMAGE'];
@@ -37,10 +55,13 @@ export async function startNeo4j(image = neo4jImageFrom(process.env), options: S
   const password = randomUUID();
   let started;
   try {
-    const container = new Neo4jContainer(image).withPassword(password).withStartupTimeout(STARTUP_LIMIT_MS);
-    if (options.hostPort !== undefined) container.withExposedPorts({ container: 7687, host: options.hostPort });
-    if (options.environment !== undefined) container.withEnvironment({ ...options.environment });
-    started = await container.start();
+    // a failed attempt keeps its container until the run ends, and it can hold a fixed host port the next attempt needs
+    started = await startWithRetry(() => {
+      const container = new Neo4jContainer(image).withPassword(password).withStartupTimeout(STARTUP_LIMIT_MS);
+      if (options.hostPort !== undefined) container.withExposedPorts({ container: 7687, host: options.hostPort });
+      if (options.environment !== undefined) container.withEnvironment({ ...options.environment });
+      return container.start();
+    }, options.hostPort === undefined ? START_ATTEMPTS : 1);
   } catch (error) {
     throw new Error(`could not start the Neo4j image ${image}: ${error instanceof Error ? error.message : 'unknown error'}`);
   }
