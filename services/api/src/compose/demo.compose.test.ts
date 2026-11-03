@@ -299,6 +299,31 @@ describe('the demo stack', () => {
   });
 });
 
+describe('the development override', () => {
+  const override = join(repository, 'deploy/demo/compose.dev.yaml');
+
+  it('publishes the database and each graph on one port bound to 127.0.0.1, nothing else, and starts no api, migrate or config container', { timeout: STACK_TEST_TIMEOUT_MS }, async () => {
+    const stack = await demoStack({ overrides: [override] });
+    onTestFinished(() => release(stack));
+    const started = await stack.compose(['up', '-d', '--wait', '--wait-timeout', String(DEMO_WAIT_SECONDS), 'db', 'demo-banking-graph', 'demo-insurance-graph']);
+    expect(started.code, started.stderr).toBe(0);
+    const model = composeModel.parse(JSON.parse((await stack.compose(['config', '--format', 'json'])).stdout));
+    for (const [name, service] of Object.entries(model.services)) {
+      const expected = ['db', 'demo-banking-graph', 'demo-insurance-graph'].includes(name) ? ['127.0.0.1'] : name === 'api' ? ['127.0.0.1'] : [];
+      expect((service.ports ?? []).map((port) => port.host_ip), name).toEqual(expected);
+    }
+    for (const [service, containerPort] of [['db', 5432], ['demo-banking-graph', 7687], ['demo-insurance-graph', 7687]] as const) {
+      const raw = await dockerOk(['inspect', '--format', '{{json .HostConfig.PortBindings}}', await stack.containerId(service)]);
+      const published = Object.values(bindings.parse(JSON.parse(raw))).flatMap((list) => list ?? []);
+      expect(published, service).toHaveLength(1);
+      expect(published[0]?.HostIp, service).toBe('127.0.0.1');
+      const found = await stack.compose(['port', service, String(containerPort)]);
+      expect(found.stdout.trim(), service).toMatch(/^127\.0\.0\.1:\d+$/);
+    }
+    for (const service of ['api', 'migrate', 'config', 'load-banking', 'load-insurance']) expect(await stack.containerId(service), service).toBe('');
+  });
+});
+
 describe('a demo stack with a step that fails', () => {
   it('starts no api container when the config step fails over an older mapping in the volume', { timeout: STACK_TEST_TIMEOUT_MS }, async () => {
     const override = overrideFile(API_WITHOUT_GRAPHS);
