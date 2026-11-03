@@ -122,7 +122,8 @@ export async function supervise(options: Supervision): Promise<number> {
         out(`${api.name} exited by itself (${code === null ? 'signal' : `exit code ${code}`}); it starts again when a file changes`);
       });
       const isReady = await becomesReady(api.healthUrl, child, api.readyTimeoutMs ?? API_READY_TIMEOUT_MS);
-      if (finished || apiProcess !== child) return;
+      // a start the supervisor itself stopped (a restart) is not a start that failed; the restart's own start is waited for instead
+      if (finished || apiProcess !== child || child.stopping) return;
       if (isReady) {
         everReady = true;
         ready.add(child);

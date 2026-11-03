@@ -135,6 +135,37 @@ describe('the API supervisor', () => {
     expect(run.messages.join('\n')).not.toContain('after the change');
   }, 30_000);
 
+  it('restarts an API that is still starting when a watched file changes, and waits for the new one instead of failing (the compiler writing its first output), even when a helper of the old one keeps its group alive for a moment', async () => {
+    const run = await scene({ START_DELAY_MS: '1500', LINGERING_HELPER: '1' }, { readyTimeoutMs: 6000, stopGraceMs: 600 });
+    await run.waitFor(() => run.apiLines().length === 1 && run.lines('helper').length === 1);
+    const firstPid = run.pidOf(run.apiLines()[0]);
+    writeFileSync(join(run.watched, 'main.js'), 'first output');
+    await run.waitFor(() => run.apiLines().length === 2);
+    await run.waitFor(() => run.messages.includes('the API is ready'));
+    expect(alive(firstPid)).toBe(false);
+    expect(run.messages.join('\n')).not.toContain('did not become ready');
+    expect(await Promise.race([run.done, new Promise((resolve) => setTimeout(() => resolve('still running'), 300))])).toBe('still running');
+    run.stop();
+    expect(await run.done).toBe(0);
+  }, 30_000);
+
+  it('survives several changes during the first start and ends with one ready API', async () => {
+    const run = await scene({ START_DELAY_MS: '1200', LINGERING_HELPER: '1' }, { readyTimeoutMs: 6000, stopGraceMs: 400 });
+    await run.waitFor(() => run.apiLines().length === 1 && run.lines('helper').length === 1);
+    for (const [index, name] of ['a.js', 'b.js', 'c.js'].entries()) {
+      writeFileSync(join(run.watched, name), name);
+      await run.waitFor(() => run.apiLines().length === index + 2);
+    }
+    await run.waitFor(() => run.messages[run.messages.length - 1] === 'the API is ready');
+    expect(run.messages.join('\n')).not.toContain('did not become ready');
+    const pids = run.apiLines().map((line) => run.pidOf(line));
+    expect(pids).toHaveLength(4);
+    expect(pids.slice(0, -1).some((pid) => alive(pid))).toBe(false);
+    expect(alive(pids[3] ?? 0)).toBe(true);
+    run.stop();
+    expect(await run.done).toBe(0);
+  }, 30_000);
+
   it('exits 1 at once when the API fails to start', async () => {
     const started = Date.now();
     const run = await scene({ FAIL_AT_START: '1' });
