@@ -1,0 +1,12 @@
+preset:
+  entity: { type: claimant, id: CT-00100 }
+  case_ref: "CL-001007"
+
+cases:
+  - id: claimants-sharing-a-phone
+    title: Four claimants share one phone, and thirty share the phone on the stop list
+    expect:
+      - { node: { type: phone, id: "+1-555-000010" }, via: REACHED_AT, direction: in, ids: [CT-00100, CT-00101, CT-00102, CT-00103] }
+      - { node: { type: phone, id: "+1-555-000010" }, property: isShared, equals: false }
+      - { node: { type: phone, id: "+1-555-000000" }, via: REACHED_AT, direction: in, count: 30 }
+      - { node: { type: phone, id: "+1-555-000000" }, property: isShared, equals: true }

@@ -18,6 +18,7 @@ import { makeWebRoot } from './testing/web-root.js';
 const PACKS_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'domain-packs');
 const MAPPING_FILE = 'neburyx.yaml';
 const DEMO_FILE = 'demo.yaml';
+const CASES_FILE = 'cases.yaml';
 const THIS_FILE = fileURLToPath(import.meta.url);
 
 const SHIPPED_ENTITY_TYPES = new Map([
@@ -117,8 +118,8 @@ describe('finding the packs', () => {
 });
 
 describe.each(packs)('the %s pack: the mapping file', (pack) => {
-  it('holds the mapping file and a README, and a demo definition when the pack has one, and nothing else', () => {
-    expect(readdirSync(join(PACKS_ROOT, pack)).filter((name) => name !== DEMO_FILE).sort()).toEqual(['README.md', MAPPING_FILE]);
+  it('holds the mapping file and a README, and a demo definition and demo cases when the pack has them, and nothing else', () => {
+    expect(readdirSync(join(PACKS_ROOT, pack)).filter((name) => name !== DEMO_FILE && name !== CASES_FILE).sort()).toEqual(['README.md', MAPPING_FILE]);
   });
 
   it('loads with one synthetic source, the entity types the architecture gives and a case reference label', () => {

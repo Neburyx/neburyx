@@ -1,5 +1,6 @@
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { readCases } from './cases.js';
 import { readDefinition, type Definition } from './definition.js';
 import { writeExport } from './export.js';
 import { generate } from './generate.js';
@@ -8,6 +9,7 @@ import { readMappingSource, type MappingSource } from './mapping.js';
 import { packFiles } from './packs.js';
 import { readExport, type ExportData } from './validate.js';
 import { derivedPairs, derivedRuleHolds, flaggedIndexes, flaggedNodes, idsOf, maxNeighbors, missingProbability, missingShare, populated, ringBlocks, ringPairs, ringsHold, supernodesOf, withinFiveDeviations } from './testing/checks.js';
+import { checkCases, presetExists, type Run } from './testing/cases.js';
 import { numberOf, query, startNeo4j, type RunningNeo4j } from './testing/container.js';
 import { scratch } from './testing/export-helpers.js';
 
@@ -91,5 +93,13 @@ describe('the insurance demo graph', () => {
       expect(await derivedPairs(server, mapping, rule.id, true)).toBeGreaterThanOrEqual(ringPairs(definition, rule.via[0] ?? ''));
       await derivedRuleHolds(server, mapping, definition, data, rule.id);
     }
+  });
+
+  it('gives the answer written in its scripted case and holds the starting entity of its preset', async () => {
+    const cases = readCases(files.cases, mapping, definition);
+    expect(cases.cases).toHaveLength(1);
+    const run: Run = (cypher, parameters) => query(server, cypher, parameters);
+    expect(await checkCases(cases, mapping, run)).toEqual([]);
+    expect(await presetExists(cases, mapping, run)).toBe(true);
   });
 });

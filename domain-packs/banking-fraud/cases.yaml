@@ -1,0 +1,25 @@
+preset:
+  entity: { type: account, id: AC-0002000 }
+  case_ref: "REF-DEMO-1001"
+
+cases:
+  - id: ring-on-one-device
+    title: Six accounts share one device and one address
+    expect:
+      - { node: { type: device, id: DV-000010 }, via: USES_DEVICE, direction: in, ids: [AC-0002000, AC-0002001, AC-0002002, AC-0002003, AC-0002004, AC-0002005] }
+      - { node: { type: device, id: DV-000010 }, property: isShared, equals: false }
+      - { node: { type: ip_address, id: ip-00010 }, via: CONNECTS_FROM, direction: in, ids: [AC-0002000, AC-0002001, AC-0002002, AC-0002003, AC-0002004, AC-0002005] }
+  - id: shared-device-on-the-stop-list
+    title: One device on the stop list holds 1,000 accounts
+    expect:
+      - { node: { type: device, id: DV-000000 }, via: USES_DEVICE, direction: in, count: 1000 }
+      - { node: { type: device, id: DV-000000 }, property: isShared, equals: true }
+  - id: gateway-address-on-the-stop-list
+    title: One address on the stop list holds 10,000 accounts
+    expect:
+      - { node: { type: ip_address, id: ip-00000 }, via: CONNECTS_FROM, direction: in, count: 10000 }
+      - { node: { type: ip_address, id: ip-00000 }, property: isShared, equals: true }
+  - id: merchant-with-100000-payments
+    title: One merchant receives 100,000 payments
+    expect:
+      - { node: { type: merchant, id: MR-0000 }, via: PAID_TO, direction: in, count: 100000 }

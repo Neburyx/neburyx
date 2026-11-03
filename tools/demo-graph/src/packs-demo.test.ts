@@ -2,13 +2,14 @@ import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { existsSync } from 'node:fs';
+import { checkNamedNodes, namedNodes, readCases } from './cases.js';
 import { readDefinition } from './definition.js';
 import { writeExport } from './export.js';
 import { generate } from './generate.js';
 import { loadExport } from './load.js';
 import { readMappingSource } from './mapping.js';
 import { listPacks, packFiles } from './packs.js';
-import { ExportError } from './validate.js';
+import { ExportError, readExport } from './validate.js';
 import { dataFile, scratch } from './testing/export-helpers.js';
 import { recordingDriver } from './testing/recording-driver.js';
 
@@ -63,5 +64,40 @@ describe.each(packs.filter((name) => existsSync(packFiles(name).definition)))('t
     const env = { [mapping.usernameEnv]: 'reader', [mapping.passwordEnv]: 'a password value' };
     await expect(loadExport({ directory, source: mapping, env, reset: false, createDriver: factory })).rejects.toThrow(ExportError);
     expect(recording.drivers).toBe(0);
+  });
+
+  it.runIf(existsSync(files.cases))('has cases whose named nodes all exist in the export, and refuses a case that names a node that is not there', () => {
+    const cases = readCases(files.cases, mapping, definition);
+    const directory = join(scratch(), 'export');
+    writeExport(directory, generate(mapping, definition, definition.seed));
+    const data = readExport(directory);
+    expect(() => checkNamedNodes(cases, mapping, data)).not.toThrow();
+    const first = cases.cases[0]?.expect[0];
+    if (first === undefined) throw new Error('the pack has no case');
+    const missing = { preset: cases.preset, cases: [{ id: 'missing-node', title: 'A node that is not there', expect: [{ ...first, node: { type: first.node.type, id: 'NOT-IN-THE-EXPORT' } }] }] };
+    let message = '';
+    try {
+      checkNamedNodes(missing, mapping, data);
+    } catch (error) {
+      message = error instanceof Error ? error.message : '';
+    }
+    expect(message).toContain('case missing-node, expectation 1: names a node that is not in the export');
+    expect(message).not.toContain('NOT-IN-THE-EXPORT');
+    expect(namedNodes(cases).filter(({ node }) => node.type === cases.preset.entity.type && node.id === cases.preset.entity.id).length).toBeGreaterThan(1);
+    expect(() => checkNamedNodes({ ...cases, preset: { ...cases.preset, entity: { type: cases.preset.entity.type, id: 'NOT-IN-THE-EXPORT' } } }, mapping, data)).toThrow(/preset: names a node that is not in the export/);
+  });
+});
+
+describe('the scripted demo cases of the shipped packs', () => {
+  const counts = SHIPPED.map((name) => {
+    const files = packFiles(name);
+    const mapping = readMappingSource(files.mapping);
+    return { name, cases: readCases(files.cases, mapping, readDefinition(files.definition, mapping)).cases };
+  });
+
+  it('are five in all, at least one in each pack and one in the insurance pack', () => {
+    expect(counts.reduce((total, pack) => total + pack.cases.length, 0)).toBe(5);
+    for (const pack of counts) expect(pack.cases.length, pack.name).toBeGreaterThanOrEqual(1);
+    expect(counts.find((pack) => pack.name === 'insurance-claims')?.cases).toHaveLength(1);
   });
 });

@@ -13,13 +13,14 @@ export interface PackFiles {
   readonly name: string;
   readonly mapping: string;
   readonly definition: string;
+  readonly cases: string;
 }
 
 export function packFiles(name: string, folder = PACKS_FOLDER): PackFiles {
   if (!PACK_NAME.test(name)) throw new PackNameError('a pack name has lower-case letters, digits and hyphens only');
   const directory = join(folder, name);
   if (!existsSync(directory)) throw new PackNameError('there is no such pack');
-  return { name, mapping: join(directory, 'neburyx.yaml'), definition: join(directory, 'demo.yaml') };
+  return { name, mapping: join(directory, 'neburyx.yaml'), definition: join(directory, 'demo.yaml'), cases: join(directory, 'cases.yaml') };
 }
 
 export function listPacks(folder = PACKS_FOLDER): string[] {

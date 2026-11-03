@@ -17,3 +17,5 @@ A mapping for a synthetic graph of bank accounts and the things that connect the
 Each preset gives its parameters a label ("Starting account"). To adapt the pack to your own graph, follow [Start from a pack](../README.md#start-from-a-pack).
 
 **Demo data.** `demo.yaml` describes the synthetic demo graph of this pack: customers, accounts, devices, addresses, transactions and merchants, with three supernodes (of 1,000, 10,000 and 100,000 neighbors), rings of accounts that share a device and an address, devices on the stop list, and some missing timestamps. `tools/demo-graph` builds it into a demo database; see its README.
+
+**Demo cases.** `cases.yaml` holds four scripted cases with known answers for the default seed: a ring of six accounts on one device and one address, a device on the stop list with 1,000 accounts, an address on the stop list with 10,000 accounts, and a merchant with 100,000 payments. It also holds the preset investigation, which starts at one of the ring's accounts.

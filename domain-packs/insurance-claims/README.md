@@ -17,3 +17,5 @@ Each preset gives its parameters a label ("Starting claimant").
 **Demo data.** `demo.yaml` describes the synthetic demo graph of this pack, built by `tools/demo-graph`: rings of claimants that share a phone or an address, a phone on the stop list, duplicated addresses (the same street and city under different IDs) and some missing timestamps. The graph has no supernode: no record has more than 100 neighbors.
 
 To adapt the pack to your own graph, follow [Start from a pack](../README.md#start-from-a-pack).
+
+**Demo cases.** `cases.yaml` holds one scripted case with a known answer for the default seed: four claimants who share one phone, and the phone on the stop list that thirty claimants share. It also holds the preset investigation, which starts at one of those claimants.

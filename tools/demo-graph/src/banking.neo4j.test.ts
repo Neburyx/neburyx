@@ -1,5 +1,6 @@
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { readCases } from './cases.js';
 import { readDefinition, type Definition } from './definition.js';
 import { writeExport } from './export.js';
 import { generate } from './generate.js';
@@ -8,7 +9,8 @@ import { readMappingSource, type MappingSource } from './mapping.js';
 import { packFiles } from './packs.js';
 import { readExport, type ExportData } from './validate.js';
 import { distinctNeighbors, derivedPairs, derivedRuleHolds, flaggedIndexes, flaggedNodes, idsOf, maxNeighbors, missingProbability, missingShare, populated, ringBlocks, ringPairs, ringsHold, supernodesOf, withinFiveDeviations } from './testing/checks.js';
-import { startNeo4j, type RunningNeo4j } from './testing/container.js';
+import { checkCases, presetExists, type Run } from './testing/cases.js';
+import { query, startNeo4j, type RunningNeo4j } from './testing/container.js';
 import { scratch } from './testing/export-helpers.js';
 
 const files = packFiles('banking-fraud');
@@ -98,5 +100,13 @@ describe('the banking demo graph at full size', () => {
   it('holds the largest neighbourhood that the definition names and no larger', async () => {
     const largest = Math.max(...supernodesOf(definition).map((supernode) => supernode.neighbors));
     expect(await maxNeighbors(server)).toBe(largest);
+  });
+
+  it('gives the answer written in each of its scripted cases and holds the starting entity of its preset', async () => {
+    const cases = readCases(files.cases, mapping, definition);
+    expect(cases.cases.length).toBeGreaterThan(0);
+    const run: Run = (cypher, parameters) => query(server, cypher, parameters);
+    expect(await checkCases(cases, mapping, run)).toEqual([]);
+    expect(await presetExists(cases, mapping, run)).toBe(true);
   });
 });
