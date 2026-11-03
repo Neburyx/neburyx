@@ -109,6 +109,18 @@ describe('an object of keys that can be changed', () => {
     expect(listed("const keys = { host: 'LISTED' };\nexport function f(change: (value: typeof keys) => void) { change(keys); }\nexport const x = process.env[keys.host];\n")).toEqual([{ kind: 'unresolved', file: 'services/api/src/b.ts', line: 3 }]);
   });
 
+  it.each([
+    ['a parenthesized assignment', "const keys = { host: 'LISTED' };\n(keys.host) = 'UNLISTED';\nexport const x = process.env[keys.host];\n"],
+    ['an object destructuring assignment', "const keys = { host: 'LISTED' };\n({ host: keys.host } = { host: 'UNLISTED' });\nexport const x = process.env[keys.host];\n"],
+    ['an array destructuring assignment', "const keys = { host: 'LISTED' };\n[keys.host] = ['UNLISTED'];\nexport const x = process.env[keys.host];\n"],
+    ['a for-of target', "const keys = { host: 'LISTED' };\nfor (keys.host of ['UNLISTED']) void keys;\nexport const x = process.env[keys.host];\n"],
+    ['a compound assignment', "const keys = { host: 'LISTED' };\nkeys.host += 'X';\nexport const x = process.env[keys.host];\n"],
+    ['a spread in the initializer that can override a key', "const other = { host: 'UNLISTED' };\nconst keys = { host: 'LISTED', ...other };\nexport const x = process.env[keys.host];\n"],
+    ['a computed member in the initializer', "const name = 'host';\nconst keys = { host: 'LISTED', [name]: 'UNLISTED' };\nexport const x = process.env[keys.host];\n"],
+  ])('is unresolved after %s', (_name, text) => {
+    expect(listed(text).map((violation) => violation.kind)).toEqual(['unresolved']);
+  });
+
   it('is trusted while it is only read', () => {
     expect(listed("const keys = { host: 'LISTED' } as const;\nexport const x = process.env[keys.host];\nexport const y = keys['host'];\n")).toEqual([]);
   });

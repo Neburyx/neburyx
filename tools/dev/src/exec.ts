@@ -17,6 +17,7 @@ export interface RunOptions {
   readonly env?: Readonly<Record<string, string>>;
   readonly show?: boolean;
   readonly signal?: AbortSignal;
+  readonly stopGraceMs?: number;
 }
 
 export type Run = (command: string, args: readonly string[], options?: RunOptions) => Promise<RunResult>;
@@ -41,7 +42,7 @@ export const run: Run = (command, args, options = {}) =>
     let terminated: Promise<void> = Promise.resolve();
     const cancel = (): void => {
       cancelled = true;
-      if (child.pid !== undefined) terminated = terminateGroup(child.pid, STOP_GRACE_MS);
+      if (child.pid !== undefined) terminated = terminateGroup(child.pid, options.stopGraceMs ?? STOP_GRACE_MS);
     };
     options.signal?.addEventListener('abort', cancel, { once: true });
     child.once('error', () => resolve({ code: NOT_STARTED, stdout, stderr }));

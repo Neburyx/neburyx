@@ -5,7 +5,9 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { run } from './exec.js';
 
 const folders: string[] = [];
-afterEach(() => {
+const cleanups: (() => Promise<void>)[] = [];
+afterEach(async () => {
+  for (const cleanup of cleanups.splice(0)) await cleanup();
   for (const folder of folders.splice(0)) rmSync(folder, { recursive: true, force: true });
 });
 
@@ -32,19 +34,26 @@ describe('run', () => {
     expect((await run(process.execPath, ['-e', 'process.exit(0)'], { signal })).code).toBe(130);
   });
 
-  it('stops the program and its grandchild before it returns when the signal is aborted', async () => {
+  it('stops the program and a grandchild that ignores the request to stop before it returns when the signal is aborted', async () => {
     const folder = mkdtempSync(join(tmpdir(), 'dev-exec-'));
     folders.push(folder);
-    const pidFile = join(folder, 'pid');
-    const script = `const { spawn } = require('node:child_process'); const { writeFileSync } = require('node:fs'); process.on('SIGTERM', () => undefined); const grandchild = spawn(process.execPath, ['-e', 'process.on("SIGTERM", () => undefined); setInterval(() => undefined, 1000)'], { stdio: 'ignore' }); writeFileSync(${JSON.stringify(pidFile)}, String(grandchild.pid)); setInterval(() => undefined, 1000);`;
+    const readyFile = join(folder, 'grandchild-pid');
+    const grandchildCode = `process.on('SIGTERM', () => undefined); require('node:fs').writeFileSync(${JSON.stringify(readyFile)}, String(process.pid)); setInterval(() => undefined, 1000);`;
+    const parentCode = `require('node:child_process').spawn(process.execPath, ['-e', ${JSON.stringify(grandchildCode)}], { stdio: 'ignore' }); setInterval(() => undefined, 1000);`;
     const controller = new AbortController();
-    const running = run(process.execPath, ['-e', script], { signal: controller.signal });
+    const running = run(process.execPath, ['-e', parentCode], { signal: controller.signal, stopGraceMs: 400 });
+    cleanups.push(async () => {
+      controller.abort();
+      await running;
+      const leftover = Number(readFileSyncOr(readyFile));
+      if (leftover > 0 && alive(leftover)) process.kill(leftover, 'SIGKILL');
+    });
     const deadline = Date.now() + 10_000;
-    while (!readFileSyncOr(pidFile)) {
+    while (!readFileSyncOr(readyFile)) {
       if (Date.now() > deadline) throw new Error('the grandchild did not start');
       await new Promise((resolve) => setTimeout(resolve, 20));
     }
-    const grandchild = Number(readFileSyncOr(pidFile));
+    const grandchild = Number(readFileSyncOr(readyFile));
     expect(alive(grandchild)).toBe(true);
     controller.abort();
     expect((await running).code).toBe(130);

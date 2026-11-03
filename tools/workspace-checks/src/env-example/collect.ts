@@ -30,11 +30,22 @@ function bindingNames(name: ts.BindingName, into: string[]): void {
   for (const element of name.elements) if (!ts.isOmittedExpression(element)) bindingNames(element.name, into);
 }
 
-function isAssignmentTarget(access: ts.Node): boolean {
-  const parent = access.parent;
-  if (ts.isBinaryExpression(parent)) return parent.left === access && parent.operatorToken.kind >= ts.SyntaxKind.FirstAssignment && parent.operatorToken.kind <= ts.SyntaxKind.LastAssignment;
-  if (ts.isPrefixUnaryExpression(parent) || ts.isPostfixUnaryExpression(parent)) return parent.operator === ts.SyntaxKind.PlusPlusToken || parent.operator === ts.SyntaxKind.MinusMinusToken;
-  return ts.isDeleteExpression(parent);
+function isAssignmentOperator(kind: ts.SyntaxKind): boolean {
+  return kind >= ts.SyntaxKind.FirstAssignment && kind <= ts.SyntaxKind.LastAssignment;
+}
+
+/** True when the node is written to: assigned (also inside a destructuring pattern or parentheses), counted up or down, deleted, or the variable of a `for ... of` or `for ... in`. */
+function isWrittenTo(node: ts.Node): boolean {
+  let child = node;
+  for (let parent = node.parent; parent !== undefined; child = parent, parent = parent.parent) {
+    if (ts.isBinaryExpression(parent) && isAssignmentOperator(parent.operatorToken.kind)) return parent.left === child;
+    if (ts.isPrefixUnaryExpression(parent) || ts.isPostfixUnaryExpression(parent)) return parent.operator === ts.SyntaxKind.PlusPlusToken || parent.operator === ts.SyntaxKind.MinusMinusToken;
+    if (ts.isDeleteExpression(parent)) return true;
+    if ((ts.isForOfStatement(parent) || ts.isForInStatement(parent)) && parent.initializer === child) return true;
+    const pattern = ts.isParenthesizedExpression(parent) || ts.isArrayLiteralExpression(parent) || ts.isObjectLiteralExpression(parent) || ts.isPropertyAssignment(parent) || ts.isShorthandPropertyAssignment(parent) || ts.isSpreadElement(parent) || ts.isSpreadAssignment(parent) || ts.isAsExpression(parent) || ts.isNonNullExpression(parent);
+    if (!pattern) return false;
+  }
+  return false;
 }
 
 function isDeclarationOrMemberName(identifier: ts.Identifier): boolean {
@@ -50,7 +61,7 @@ function onlyReadFrom(source: ts.SourceFile, name: string): boolean {
   const visit = (node: ts.Node): void => {
     if (ts.isIdentifier(node) && node.text === name && !isDeclarationOrMemberName(node)) {
       const parent = node.parent;
-      const reads = (ts.isPropertyAccessExpression(parent) || ts.isElementAccessExpression(parent)) && parent.expression === node && !isAssignmentTarget(parent);
+      const reads = (ts.isPropertyAccessExpression(parent) || ts.isElementAccessExpression(parent)) && parent.expression === node && !isWrittenTo(parent);
       if (!reads) clean = false;
     }
     ts.forEachChild(node, visit);
@@ -88,12 +99,17 @@ function constantsOf(source: ts.SourceFile): Map<string, Constant> {
       if (text !== undefined) constants.set(declaration.name.text, text);
       else if (ts.isObjectLiteralExpression(initializer) && onlyReadFrom(source, declaration.name.text)) {
         const properties = new Map<string, string>();
+        let plain = true;
         for (const property of initializer.properties) {
-          if (!ts.isPropertyAssignment(property) || !(ts.isIdentifier(property.name) || ts.isStringLiteral(property.name))) continue;
+          if (!ts.isPropertyAssignment(property) || !(ts.isIdentifier(property.name) || ts.isStringLiteral(property.name))) {
+            plain = false;
+            break;
+          }
           const value = textOf(property.initializer);
-          if (value !== undefined) properties.set(property.name.text, value);
+          if (value === undefined) plain = false;
+          else properties.set(property.name.text, value);
         }
-        constants.set(declaration.name.text, properties);
+        if (plain) constants.set(declaration.name.text, properties);
       }
     }
   }

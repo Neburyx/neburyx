@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -33,7 +34,7 @@ describe('removing the project with real Docker Compose', () => {
       output.push(result.stdout, result.stderr);
       return result;
     };
-    await new Compose(capture, root, dockerEnvironment(process.env)).down();
+    await new Compose(capture, root, dockerEnvironment(process.env), undefined, `neburyx-dev-test-${randomBytes(4).toString('hex')}`).down();
     expect(output.join('\n')).not.toContain('SECRETVALUE');
   });
 });

@@ -42,10 +42,11 @@ export class Compose {
     private readonly root: string,
     private readonly environment: Environment,
     private readonly signal?: AbortSignal,
+    private readonly project = PROJECT,
   ) {}
 
   private args(rest: string[], envFile: boolean): string[] {
-    return ['compose', '-p', PROJECT, '--env-file', envFile ? join(this.root, '.env') : devNull, '-f', join(this.root, 'deploy/demo/compose.yaml'), '-f', join(this.root, 'deploy/demo/compose.dev.yaml'), ...rest];
+    return ['compose', '-p', this.project, '--env-file', envFile ? join(this.root, '.env') : devNull, '-f', join(this.root, 'deploy/demo/compose.yaml'), '-f', join(this.root, 'deploy/demo/compose.dev.yaml'), ...rest];
   }
 
   private checkStopped(): void {
