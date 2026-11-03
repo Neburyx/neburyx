@@ -1,4 +1,4 @@
-export const STATE_ERROR_CODES = ['UNKNOWN_ELEMENT', 'SOURCE_MISMATCH', 'NO_SOURCE_BOUND'] as const;
+export const STATE_ERROR_CODES = ['UNKNOWN_ELEMENT', 'SOURCE_MISMATCH', 'NO_SOURCE_BOUND', 'INVALID_TIME'] as const;
 
 export type StateErrorCode = (typeof STATE_ERROR_CODES)[number];
 

@@ -1,8 +1,10 @@
 import { Link, Outlet, type RouteObject } from 'react-router';
 import type { ApiClient } from './api/client.js';
 import { PageHeading } from './shell/page-heading.js';
+import { EXPLORE_PATH } from './shell/navigation.js';
 import { PageShell } from './shell/page-shell.js';
 import { createShellData, ShellDataProvider } from './shell/shell-data.js';
+import { WorkspaceShell } from './workspace/workspace-shell.js';
 
 const NOT_BUILT = 'This screen is not built yet.';
 
@@ -22,15 +24,6 @@ function NotFound() {
         <Link to="/">Back to Home</Link>
       </p>
     </section>
-  );
-}
-
-function BareExplore() {
-  return (
-    <main>
-      <h1>Explore</h1>
-      <p>{NOT_BUILT}</p>
-    </main>
   );
 }
 
@@ -68,7 +61,7 @@ export function appRoutes(client: ApiClient): RouteObject[] {
             { path: '*', element: <NotFound /> },
           ],
         },
-        { path: 'explore', element: <BareExplore /> },
+        { path: EXPLORE_PATH, element: <WorkspaceShell /> },
       ],
     },
   ];

@@ -68,4 +68,20 @@ describe('the fixture page', () => {
     expect((await screen.findByRole('alert')).textContent).toBe('NO_RELATIONSHIP_TYPES');
     expect(screen.getByText('0 entities · 0 relationships · loaded · exact')).toBeTruthy();
   });
+
+  it('opens Explore from a link after loading, with the loaded graph, the synthetic record and the stand-ins kept', async () => {
+    const { router } = renderPage();
+    const user = userEvent.setup();
+    expect(screen.queryByRole('link', { name: 'Open Explore' })).toBeNull();
+    await user.click(await screen.findByRole('button', { name: 'Source a' }));
+    await user.click(await screen.findByRole('button', { name: 'Load' }));
+    await user.click(await screen.findByRole('link', { name: 'Open Explore' }));
+    expect(router.state.location.pathname).toBe('/explore');
+    const scope = await screen.findByRole('group', { name: 'Graph scope' });
+    expect(scope.textContent).toContain('120 entities · 180 relationships · loaded · exact');
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Suspicious linked accounts');
+    expect(screen.getByRole('link', { name: 'Search' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Save' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Ask, locked' })).toBeTruthy();
+  });
 });

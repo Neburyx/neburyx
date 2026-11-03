@@ -1,13 +1,8 @@
 import { NavLink } from 'react-router';
 import { BrandMark } from './brand-mark.js';
 import { IdentityBlock } from './identity-block.js';
+import { NAVIGATION } from './navigation.js';
 import { SourceLine } from './source-line.js';
-
-const NAVIGATION = [
-  { to: '/', label: 'Home', icon: 'icon-home', end: true },
-  { to: '/investigations', label: 'Investigations', icon: 'icon-investigations', end: false },
-  { to: '/sources', label: 'Sources', icon: 'icon-sources', end: false },
-] as const;
 
 export function Sidebar() {
   return (

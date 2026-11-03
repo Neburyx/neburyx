@@ -46,7 +46,7 @@ describe('the stylesheets', () => {
     expect(tokens).toMatch(/--section-gap:\s*24px;/);
     expect(tokens).toMatch(/--content-padding-bottom:\s*32px;/);
     const base = readFileSync(join(DIRECTORY, 'base.css'), 'utf8');
-    expect(base).toMatch(/main \{[^}]*gap: var\(--section-gap\);[^}]*padding: var\(--content-padding\) var\(--content-padding\) var\(--content-padding-bottom\);/s);
+    expect(base).toMatch(/\.page-shell main \{[^}]*gap: var\(--section-gap\);[^}]*padding: var\(--content-padding\) var\(--content-padding\) var\(--content-padding-bottom\);/s);
   });
 
   it('draw the keyboard focus outline from the token, and mark the current page by more than colour', () => {
@@ -60,5 +60,35 @@ describe('the stylesheets', () => {
     expect(base).toMatch(/\.sidebar \{[^}]*overflow-wrap: anywhere;/s);
     expect(base).toMatch(/\.page-heading \{[^}]*overflow-wrap: anywhere;/s);
     expect(base).toMatch(/\.identity-name \{[^}]*font-weight: var\(--font-weight-semibold\);/s);
+  });
+
+  it('place the canvas regions by the frame offsets, from tokens: 16 px from the edges, 64 px from the top for the tool strip and the dock, a 320 px dock', () => {
+    const tokens = readFileSync(join(DIRECTORY, 'tokens.css'), 'utf8');
+    expect(tokens).toMatch(/--region-top:\s*64px;/);
+    expect(tokens).toMatch(/--dock-width:\s*320px;/);
+    const workspace = readFileSync(join(DIRECTORY, 'workspace.css'), 'utf8');
+    expect(workspace).toMatch(/\.region-tool-strip \{[^}]*top: var\(--region-top\);[^}]*left: var\(--space-16\);/s);
+    expect(workspace).toMatch(/\.region-toggles \{[^}]*bottom: var\(--space-16\);[^}]*left: var\(--space-16\);/s);
+    expect(workspace).toMatch(/\.region-zoom-controls \{[^}]*right: var\(--space-16\);[^}]*bottom: var\(--space-16\);/s);
+    expect(workspace).toMatch(/\.region-dock \{[^}]*top: var\(--region-top\);[^}]*right: var\(--space-16\);[^}]*width: var\(--dock-width\);/s);
+  });
+
+  it('place the graph scope lines 24 px from the canvas left and 16 px from its top, 12 px on a 17 px line, 3 px apart', () => {
+    const tokens = readFileSync(join(DIRECTORY, 'tokens.css'), 'utf8');
+    expect(tokens).toMatch(/--scope-left:\s*24px;/);
+    expect(tokens).toMatch(/--scope-top:\s*16px;/);
+    expect(tokens).toMatch(/--space-3:\s*3px;/);
+    expect(tokens).toMatch(/--line-height-workspace:\s*17px;/);
+    const workspace = readFileSync(join(DIRECTORY, 'workspace.css'), 'utf8');
+    expect(workspace).toMatch(/\.graph-scope \{[^}]*top: var\(--scope-top\);[^}]*left: var\(--scope-left\);[^}]*gap: var\(--space-3\);[^}]*font-size: var\(--font-size-small\);[^}]*line-height: var\(--line-height-workspace\);/s);
+  });
+
+  it('let the occupant of the floating layer take the pointer while the empty layer lets it through, and cap the source status so a long name is cut before any control is clipped', () => {
+    const workspace = readFileSync(join(DIRECTORY, 'workspace.css'), 'utf8');
+    expect(workspace).toMatch(/\.region-floating \{[^}]*pointer-events: none;/s);
+    expect(workspace).toMatch(/\.region-floating > \* \{[^}]*pointer-events: auto;/s);
+    expect(workspace).toMatch(/\.header-actions > \* \{[^}]*flex: none;/s);
+    expect(workspace).toMatch(/\.header-source \{[^}]*max-width: var\(--source-status-max-width\);[^}]*overflow: hidden;/s);
+    expect(workspace).toMatch(/\.header-source p \{[^}]*overflow: hidden;[^}]*text-overflow: ellipsis;/s);
   });
 });

@@ -108,7 +108,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 
 ## Icons and the Neburyx mark
 
-The navigation icons (house, folder-open, database) and the Neburyx mark (the Lucide "component" icon) come from the Lucide icon set.
+The navigation icons (house, folder-open, database, search, settings), the lock on the locked actions and the Neburyx mark (the Lucide "component" icon) come from the Lucide icon set.
 
 ```
 ISC License

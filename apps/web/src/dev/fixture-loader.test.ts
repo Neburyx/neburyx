@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createClientState } from '../state/client-state.js';
-import { loadFixture } from './fixture-loader.js';
+import { FIXTURE_RECORD, loadFixture } from './fixture-loader.js';
 import { testProfile } from './test-profile.js';
 
 describe('loadFixture', () => {
@@ -16,6 +16,14 @@ describe('loadFixture', () => {
     const graph = state.loadedGraph();
     expect(graph.entities).toMatchObject({ value: 120, quality: 'exact' });
     expect(graph.relationships).toMatchObject({ value: 180, quality: 'exact' });
+  });
+
+  it('fills the synthetic investigation record, and another source drops it before the loader fills it again', () => {
+    const state = createClientState();
+    loadFixture(state, testProfile(), 'principal-1', 1);
+    expect(state.investigation.getState().record).toEqual({ ...FIXTURE_RECORD, save: { kind: 'saved', at: '2026-10-28T09:42:00.000Z' } });
+    loadFixture(state, testProfile('source-b', ['t1', 't2', 't3']), 'principal-1', 1);
+    expect(state.investigation.getState().record).toEqual({ ...FIXTURE_RECORD, save: { kind: 'saved', at: '2026-10-28T09:42:00.000Z' } });
   });
 
   it('loads the same graph again for the same seed, and another source replaces the first', () => {

@@ -1,6 +1,6 @@
 import type { EdgeRef, ElementRef } from '@neburyx/contracts';
 import { StateError } from './errors.js';
-import { createInvestigationStore, type InvestigationState } from './investigation-state.js';
+import { createInvestigationStore, type InvestigationRecord, type InvestigationState } from './investigation-state.js';
 import { createJobStore, type JobState } from './job-state.js';
 import { edgeKey, elementKey, type QueryKey } from './keys.js';
 import { deriveLoadedGraph, type LoadedGraph } from './loaded-graph.js';
@@ -14,6 +14,8 @@ export interface ClientState {
   readonly presentation: PresentationActions;
   readonly jobs: ReadableStore<JobState>;
   bindSource(sourceId: string): void;
+  /** Sets what the header shows of the investigation, or clears it; refused while no source is bound. */
+  describeInvestigation(record: InvestigationRecord | null): void;
   putResult(key: QueryKey, result: GraphResult): void;
   /** Replaces what the investigation holds with what the named results contain; selections, positions and pins of elements no longer held are dropped. */
   setLoaded(resultKeys: readonly QueryKey[], nodeRefs: readonly ElementRef[], edgeRefs: readonly EdgeRef[]): void;
@@ -43,6 +45,7 @@ export function createClientState(): ClientState {
       presentation.reset();
       investigation.bind(sourceId);
     },
+    describeInvestigation: (record) => investigation.describe(record),
     putResult(key, result) {
       const bound = investigation.view.getState().sourceId;
       if (bound === null) throw new StateError('NO_SOURCE_BOUND');

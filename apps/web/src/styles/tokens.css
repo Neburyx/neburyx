@@ -16,8 +16,17 @@
   --color-danger-surface: #fbecee;
   --color-danger: #992933;
   --color-focus: #ffb000;
+  --color-workspace-border: #e3e6ec;
+  --color-workspace-muted: #4a5261;
+  --color-avatar-surface: #e9ecf1;
+  --color-avatar-text: #5f6672;
+  --color-control-border: #e3e5ed;
 
+  --space-2: 2px;
+  --space-3: 3px;
   --space-4: 4px;
+  --space-5: 5px;
+  --space-6: 6px;
   --space-8: 8px;
   --space-10: 10px;
   --space-12: 12px;
@@ -28,6 +37,25 @@
   --space-40: 40px;
 
   --sidebar-width: 208px;
+  --rail-width: 56px;
+  --rail-item-size: 40px;
+  --header-height: 48px;
+  --avatar-size: 32px;
+  --region-top: 64px;
+  --source-status-max-width: 320px;
+  --lock-width: 10px;
+  --lock-height: 12px;
+  --scope-left: 24px;
+  --scope-top: 16px;
+  --dock-width: 320px;
+  --stand-in-tool-strip-width: 40px;
+  --stand-in-tool-strip-height: 268px;
+  --stand-in-control-height: 36px;
+  --stand-in-table-width: 86px;
+  --stand-in-legend-width: 186px;
+  --stand-in-zoom-width: 197px;
+  --stand-in-panel-height: 574px;
+  --stand-in-button-height: 32px;
   --full-height: 100vh;
   --content-padding: 40px;
   --content-padding-bottom: 32px;
@@ -40,6 +68,9 @@
   --focus-offset: 2px;
   --radius: 6px;
   --radius-badge: 5px;
+  --radius-small: 4px;
+  --radius-avatar: 10px;
+  --radius-panel: 8px;
 
   --font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
@@ -54,6 +85,8 @@
   --line-height: 1.45;
   --line-height-heading-1: 34px;
   --line-height-compact: 18px;
+  --line-height-workspace: 17px;
+  --line-height-pill: 16px;
   --badge-height: 22px;
 
   --focus-outline: var(--focus-width) solid var(--color-focus);

@@ -1,0 +1,82 @@
+.stand-in {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: var(--border-width) solid var(--color-control-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-workspace);
+}
+
+.stand-in-tool-strip {
+  width: var(--stand-in-tool-strip-width);
+  height: var(--stand-in-tool-strip-height);
+  border-radius: var(--radius-panel);
+}
+
+.stand-in-table {
+  width: var(--stand-in-table-width);
+  height: var(--stand-in-control-height);
+}
+
+.stand-in-legend {
+  width: var(--stand-in-legend-width);
+  height: var(--stand-in-control-height);
+}
+
+.stand-in-zoom {
+  width: var(--stand-in-zoom-width);
+  height: var(--stand-in-control-height);
+}
+
+.stand-in-dock {
+  width: 100%;
+  height: var(--stand-in-panel-height);
+  border-radius: var(--radius-panel);
+}
+
+.stand-in-header-action {
+  height: var(--stand-in-button-height);
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--font-size-small);
+  cursor: default;
+}
+
+.stand-in-save {
+  padding: 0 var(--space-12);
+  border: var(--border-width) solid var(--color-accent);
+  border-radius: var(--radius);
+  background: var(--color-accent);
+  color: var(--color-surface);
+  font-weight: var(--font-weight-medium);
+}
+
+.rail-stand-in {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--rail-item-size);
+  height: var(--rail-item-size);
+  padding: 0;
+  border: none;
+  border-radius: var(--radius);
+  background: none;
+}
+
+.rail-stand-in-gear {
+  height: var(--icon-size);
+}
+
+.icon-search {
+  --icon: url('../assets/search.svg');
+}
+
+.icon-settings {
+  --icon: url('../assets/settings.svg');
+}

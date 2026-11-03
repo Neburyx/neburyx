@@ -7,6 +7,7 @@ import { fakeClient } from './api/fake-client.js';
 import { App } from './app.js';
 import { appRoutes } from './routes.js';
 import { createClientState } from './state/client-state.js';
+import { createSlotRegistry } from './workspace/slots.js';
 import { clientWith, counted, me, source } from './test-utils.js';
 
 describe('the app under StrictMode', () => {
@@ -29,7 +30,7 @@ describe('the app under StrictMode', () => {
       expect(afterCreate).toBe(1);
       const { unmount } = render(
         <StrictMode>
-          <App router={router} state={createClientState()} />
+          <App router={router} state={createClientState()} slots={createSlotRegistry()} />
         </StrictMode>,
       );
       expect(added.filter((type) => type === 'popstate')).toHaveLength(afterCreate);
@@ -47,7 +48,7 @@ describe('the app under StrictMode', () => {
     const router = createMemoryRouter(appRoutes(client), { initialEntries: ['/'] });
     render(
       <StrictMode>
-        <App router={router} state={createClientState()} />
+        <App router={router} state={createClientState()} slots={createSlotRegistry()} />
       </StrictMode>,
     );
     await screen.findByText('Local workspace');

@@ -26,18 +26,10 @@ describe('routes and navigation', () => {
     ['/', 'Home'],
     ['/investigations', 'Investigations'],
     ['/sources', 'Sources'],
-    ['/explore', 'Explore'],
   ])('shows its own page at %s, saying that it is not built yet', (path, title) => {
     renderAt(path);
     expect(screen.getByRole('heading', { name: title, level: 1 })).toBeTruthy();
     expect(screen.getByText('This screen is not built yet.')).toBeTruthy();
-  });
-
-  it('shows Explore outside the page shell, with no sidebar and no navigation', () => {
-    renderAt('/explore');
-    expect(screen.getByRole('heading', { name: 'Explore', level: 1 })).toBeTruthy();
-    expect(screen.queryByRole('navigation')).toBeNull();
-    expect(screen.queryByRole('link')).toBeNull();
   });
 
   it('shows the three links in the navigation of every other page, in order', () => {

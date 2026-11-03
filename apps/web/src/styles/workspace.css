@@ -1,0 +1,311 @@
+.workspace {
+  display: grid;
+  grid-template-columns: var(--rail-width) minmax(0, 1fr);
+  height: var(--full-height);
+  overflow: hidden;
+}
+
+.rail {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 0;
+  padding: var(--space-16) var(--space-8);
+  box-shadow: inset calc(-1 * var(--border-width)) 0 0 var(--color-workspace-border);
+  background: var(--color-surface-muted);
+}
+
+.rail nav {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-24);
+}
+
+.rail-brand {
+  display: flex;
+  width: var(--logo-size);
+  height: var(--logo-size);
+}
+
+.rail nav a {
+  justify-content: center;
+  width: var(--rail-item-size);
+  padding: 0;
+}
+
+.rail nav a[aria-current='location'] {
+  background: var(--color-accent-surface);
+}
+
+.rail nav a[aria-current='location'] .icon {
+  background: var(--color-accent);
+}
+
+.rail-bottom {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-16);
+}
+
+.rail-bottom-enterprise {
+  align-self: flex-start;
+  width: var(--avatar-size);
+}
+
+.rail-caption {
+  margin: 0;
+  color: var(--color-workspace-muted);
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-workspace);
+  white-space: nowrap;
+  margin-top: var(--space-6);
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+}
+
+.rail-initials {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--avatar-size);
+  height: var(--avatar-size);
+  border-radius: var(--radius-avatar);
+  background: var(--color-avatar-surface);
+  color: var(--color-avatar-text);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-semibold);
+}
+
+.workspace-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.header-bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-16);
+  height: var(--header-height);
+  padding: 0 var(--space-16);
+  box-shadow: inset 0 calc(-1 * var(--border-width)) 0 var(--color-workspace-border);
+  background: var(--color-surface);
+}
+
+.header-identity {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: var(--space-12);
+  min-width: 0;
+  color: var(--color-workspace-muted);
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-workspace);
+  white-space: nowrap;
+}
+
+.header-identity nav {
+  display: block;
+  flex: none;
+}
+
+.header-identity nav a {
+  display: inline;
+  height: auto;
+  padding: 0;
+  border-radius: 0;
+  color: inherit;
+}
+
+.header-title {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text);
+  font-size: var(--font-size-title);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height);
+  text-overflow: ellipsis;
+}
+
+.header-reference {
+  flex: none;
+  font-family: var(--font-mono);
+}
+
+.pill {
+  flex: none;
+  padding: var(--space-4) var(--space-8);
+  border-radius: var(--radius-badge);
+  line-height: var(--line-height-pill);
+}
+
+.pill-success {
+  background: var(--color-success-surface);
+  color: var(--color-success-text);
+}
+
+.pill-neutral {
+  background: var(--color-neutral-surface);
+  color: var(--color-neutral-text);
+}
+
+.header-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-10);
+}
+
+.header-actions > * {
+  flex: none;
+}
+
+.header-source {
+  display: block;
+  max-width: var(--source-status-max-width);
+  overflow: hidden;
+  color: var(--color-workspace-muted);
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-workspace);
+  white-space: nowrap;
+}
+
+.header-source p {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.header-badge {
+  padding: var(--space-2) var(--space-8);
+  border-radius: var(--radius-small);
+  box-shadow: inset 0 0 0 var(--border-width) var(--color-workspace-border);
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-workspace);
+  white-space: nowrap;
+}
+
+.locked-control {
+  position: relative;
+  display: inline-flex;
+}
+
+.locked-button {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-workspace-muted);
+  font: inherit;
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-workspace);
+  cursor: default;
+}
+
+.locked-button .icon-lock {
+  background: var(--color-workspace-muted);
+}
+
+.icon-lock {
+  width: var(--lock-width);
+  height: var(--lock-height);
+  --icon: url('../assets/lock.svg');
+}
+
+.lock-tooltip {
+  position: absolute;
+  top: calc(100% + var(--space-10));
+  left: 0;
+  z-index: 1;
+  color: var(--color-workspace-muted);
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-workspace);
+  white-space: nowrap;
+}
+
+.notice-strip {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: var(--space-8) var(--space-16);
+  padding: var(--space-8) var(--space-16);
+  border-bottom: var(--border-width) solid var(--color-workspace-border);
+  background: var(--color-danger-surface);
+}
+
+.canvas-region {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.graph-scope {
+  position: absolute;
+  top: var(--scope-top);
+  left: var(--scope-left);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  color: var(--color-workspace-muted);
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-workspace);
+}
+
+.graph-scope p {
+  margin: 0;
+}
+
+.region {
+  position: absolute;
+}
+
+.region-tool-strip {
+  top: var(--region-top);
+  left: var(--space-16);
+}
+
+.region-toggles {
+  bottom: var(--space-16);
+  left: var(--space-16);
+  display: flex;
+  gap: var(--space-16);
+}
+
+.region-zoom-controls {
+  right: var(--space-16);
+  bottom: var(--space-16);
+}
+
+.region-dock {
+  top: var(--region-top);
+  right: var(--space-16);
+  bottom: var(--space-16);
+  width: var(--dock-width);
+  pointer-events: none;
+}
+
+.region-dock > * {
+  max-height: 100%;
+  pointer-events: auto;
+}
+
+.region-floating {
+  inset: 0;
+  pointer-events: none;
+}
+
+.region-floating > * {
+  pointer-events: auto;
+}

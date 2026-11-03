@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router';
 import type { SourceProfile } from '@neburyx/contracts';
 import type { ApiClient } from '../api/client.js';
 import { useClientState, useLoadedGraph } from '../state/context.js';
@@ -6,14 +7,18 @@ import { useStoreSelector } from '../state/store.js';
 import { FixtureError } from './fixture-graph.js';
 import { loadFixture } from './fixture-loader.js';
 import { FailureNotice } from '../failure-notice.js';
+import { EXPLORE_PATH } from '../shell/navigation.js';
 import { PageHeading } from '../shell/page-heading.js';
 import { answeredData, retainedFailure, useShellData } from '../shell/shell-data.js';
+import { useSlots } from '../workspace/slots.js';
+import { registerStandIns } from './stand-ins.js';
 import { SourcesPanel } from './sources-panel.js';
 
 const SEED = 1;
 
 function LoadFixture({ profile }: { readonly profile: SourceProfile }) {
   const state = useClientState();
+  const slots = useSlots();
   const graph = useLoadedGraph();
   const pinned = useStoreSelector(state.presentation.view, (current) => current.pins.size);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
@@ -25,6 +30,7 @@ function LoadFixture({ profile }: { readonly profile: SourceProfile }) {
     if (principalId === undefined) return;
     try {
       loadFixture(state, profile, principalId, SEED);
+      registerStandIns(slots);
       setRefusal(undefined);
     } catch (error) {
       if (!(error instanceof FixtureError)) throw error;
@@ -43,6 +49,7 @@ function LoadFixture({ profile }: { readonly profile: SourceProfile }) {
         {graph.entities.value} entities · {graph.relationships.value} relationships · loaded · exact
       </p>
       <p>{pinned} pinned</p>
+      {graph.entities.value === 0 ? null : <Link to={EXPLORE_PATH}>Open Explore</Link>}
     </div>
   );
 }
