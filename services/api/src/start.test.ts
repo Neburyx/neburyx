@@ -19,7 +19,8 @@ import { fileOf } from './testing/mapping.js';
 import { fittingSchemaAnswer, SERVER_ROW, serverExecutor } from './testing/source-tester.js';
 import { testSourceGate } from './testing/source-gate.js';
 import { SourceGateError } from './gate/allowlist.js';
-import type { SourceGate, SourceGateOptions } from './gate/source-gate.js';
+import type { CursorCodec } from './gate/cursor/codec.js';
+import { createSourceGate, type SourceGate, type SourceGateOptions } from './gate/source-gate.js';
 import { READINESS_LIMIT_MS } from './health/readiness.js';
 import { SHUTDOWN_TIMES } from './serve.js';
 import { createSourceTester } from './source-test/tester.js';
@@ -721,3 +722,65 @@ describe('the ping timer while the gate cannot grant a read', () => {
     await result.app.close();
   });
 });
+
+describe('the cursor key at start', () => {
+  const MARKER = 'MARKER-KEY-0123456789-ABCDEFGHIJ';
+  const KEY = Buffer.from(MARKER, 'utf8').toString('base64');
+  const binding = { source: null, principal: 'p', policyVersion: 'none', filterHash: 'f', sort: '', target: 'route', targetVersion: '1' };
+
+  function recorded() {
+    const lines: string[] = [];
+    const logger = pino({ level: 'info' }, { write: (line: string) => void lines.push(line) });
+    const cursors: (CursorCodec | undefined)[] = [];
+    const run = io({ logger, openSourceGate: (options) => (cursors.push(options.cursors), createSourceGate(options)) });
+    return { ...run, lines, cursors };
+  }
+
+  it('warns once, naming the variable and holding no key, when it is not set, and the API still starts', async () => {
+    const { io: run, lines, cursors } = recorded();
+    const result = await start({ ...DATABASE_ENV }, { ...run, portOverride: 0 });
+    expect(result.exitCode).toBe(0);
+    const warnings = lines.filter((line) => line.includes('cursor.key_not_set'));
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('NEBURYX_CURSOR_KEY');
+    expect(cursors[0]).toBeDefined();
+    if (result.exitCode === 0) await result.app.close();
+  });
+
+  it('does not warn when the key is set, and holds the key in no log line, no error and no readiness or health answer', async () => {
+    const { io: run, lines, errors } = recorded();
+    const result = await start({ ...DATABASE_ENV, NEBURYX_CURSOR_KEY: KEY }, { ...run, portOverride: 0 });
+    expect(result.exitCode).toBe(0);
+    expect(lines.some((line) => line.includes('cursor.key_not_set'))).toBe(false);
+    if (result.exitCode === 0) {
+      const answers = await Promise.all(['/healthz', '/readyz'].map((url) => result.app.inject({ method: 'GET', url })));
+      for (const text of [...lines, ...errors, ...answers.map((answer) => answer.body)]) for (const secret of [MARKER, KEY, KEY.replace(/=+$/, '')]) expect(text).not.toContain(secret);
+      await result.app.close();
+    }
+  });
+
+  it('gives two API copies that share the key cursors that each can read, and a restart without a key cursors the earlier process cannot', async () => {
+    const shared = recorded();
+    const first = await start({ ...DATABASE_ENV, NEBURYX_CURSOR_KEY: KEY }, { ...shared.io, portOverride: 0 });
+    const second = await start({ ...DATABASE_ENV, NEBURYX_CURSOR_KEY: KEY }, { ...shared.io, portOverride: 0 });
+    const [one, two] = shared.cursors;
+    expect(two?.verify(one?.mint(binding, { n: 1 }) ?? '', binding)).toEqual({ n: 1 });
+    for (const result of [first, second]) if (result.exitCode === 0) await result.app.close();
+
+    const loose = recorded();
+    const before = await start({ ...DATABASE_ENV }, { ...loose.io, portOverride: 0 });
+    const after = await start({ ...DATABASE_ENV }, { ...loose.io, portOverride: 0 });
+    const [earlier, later] = loose.cursors;
+    expect(() => later?.verify(earlier?.mint(binding, { n: 1 }) ?? '', binding)).toThrowError(expect.objectContaining({ code: 'CURSOR_INVALIDATED' }));
+    for (const result of [before, after]) if (result.exitCode === 0) await result.app.close();
+  });
+
+  it.each([[''], ['too short'], [Buffer.alloc(31, 1).toString('base64')]])('stops the start, naming only the variable, for the key %j', async (value) => {
+    const { io: run, errors, lines } = recorded();
+    const result = await start({ ...DATABASE_ENV, NEBURYX_CURSOR_KEY: value }, run);
+    expect(result.exitCode).toBe(1);
+    expect(errors.join('')).toBe('invalid configuration: NEBURYX_CURSOR_KEY\n');
+    if (value.length > 0) expect([...errors, ...lines].join('')).not.toContain(value);
+  });
+});
+

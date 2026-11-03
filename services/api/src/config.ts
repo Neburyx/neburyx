@@ -21,6 +21,7 @@ const keys = {
   webRoot: 'NEBURYX_WEB_ROOT',
   databaseUrl: 'DATABASE_URL',
   mappingPath: 'NEBURYX_CONFIG',
+  cursorKey: 'NEBURYX_CURSOR_KEY',
 } as const;
 
 function isPostgresUrl(value: string): boolean {
@@ -34,6 +35,18 @@ function isPostgresUrl(value: string): boolean {
   }
 }
 
+const MIN_CURSOR_KEY_BYTES = 32;
+
+/** Standard base64, padding optional, with no second spelling, that holds at least 32 bytes. */
+function decodeCursorKey(value: string): Buffer | undefined {
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(value)) return undefined;
+  const bytes = Buffer.from(value, 'base64');
+  const canonical = bytes.toString('base64');
+  // exactly the padded text of those bytes, or the same text with no padding at all
+  if (value !== canonical && value !== canonical.replace(/=+$/, '')) return undefined;
+  return bytes.length >= MIN_CURSOR_KEY_BYTES ? bytes : undefined;
+}
+
 const configSchema = z.object({
   host: z.string().min(1).refine(isValidHost),
   port: z
@@ -44,6 +57,15 @@ const configSchema = z.object({
   webRoot: z.string().min(1).transform((path) => resolve(path)),
   databaseUrl: z.string().refine(isPostgresUrl),
   mappingPath: z.string().min(1).transform((path) => resolve(path)).optional(),
+  /** The key that signs page cursors; absent, the API makes one of its own for the process. */
+  cursorKey: z
+    .string()
+    .transform((value, context) => {
+      const key = decodeCursorKey(value);
+      if (key === undefined) context.addIssue({ code: 'custom', message: 'not a cursor key' });
+      return key ?? Buffer.alloc(0);
+    })
+    .optional(),
 });
 
 export type Config = z.infer<typeof configSchema>;
@@ -67,12 +89,13 @@ export function parseConfig(
     webRoot: env[keys.webRoot] ?? defaults.webRoot,
     databaseUrl: env[keys.databaseUrl],
     mappingPath: env[keys.mappingPath],
+    cursorKey: env[keys.cursorKey],
   });
   if (result.success) return result.data;
 
   const failed = result.error.issues.flatMap((issue) => {
     const field = issue.path[0];
-    return field === 'host' || field === 'port' || field === 'webRoot' || field === 'databaseUrl' || field === 'mappingPath' ? [keys[field]] : [];
+    return field === 'host' || field === 'port' || field === 'webRoot' || field === 'databaseUrl' || field === 'mappingPath' || field === 'cursorKey' ? [keys[field]] : [];
   });
   throw new ConfigError([...new Set(failed)]);
 }

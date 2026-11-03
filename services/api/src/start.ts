@@ -1,9 +1,11 @@
+import { randomBytes } from 'node:crypto';
 import { accessSync, constants, existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { FastifyBaseLogger, FastifyInstance } from 'fastify';
 import { buildApp } from './app.js';
 import { ConfigError, parseConfig } from './config.js';
+import { createCursorCodec } from './gate/cursor/codec.js';
 import { isInContainer, warnIfExposed } from './exposure.js';
 import { IdentityStartError } from './identity/errors.js';
 import { MappingError } from './mapping/diagnostics.js';
@@ -137,7 +139,10 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
     for (const sourceId of await store.syncSources(mapping.sources)) {
       io.logger.warn({ event: 'source.identity_changed', sourceId }, 'source now points to a different database');
     }
-    sourceGate = (io.openSourceGate ?? createSourceGate)({ mapping, env, seams: communitySeams(), logger: io.logger, usability });
+    // a key that is not configured is made for this process only, so a page opened before a restart, or on another copy, says "Start again"
+    if (config.cursorKey === undefined) io.logger.warn({ event: 'cursor.key_not_set' }, 'NEBURYX_CURSOR_KEY is not set: page cursors do not survive a restart and are not valid across API copies');
+    const cursors = createCursorCodec({ key: config.cursorKey ?? randomBytes(32), clock: Date.now });
+    sourceGate = (io.openSourceGate ?? createSourceGate)({ mapping, env, seams: communitySeams(), logger: io.logger, usability, cursors });
     const gate = sourceGate;
     const results = await createStartupChecker({ system: gate.system, mapping, store: observingStore, logger: io.logger }).run();
     const reachability = createReachabilityCache(mapping.sources.map((source) => source.id));

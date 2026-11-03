@@ -36,6 +36,7 @@ function resolveContext(deps: GateDeps, request: GateRequest, system: boolean): 
     sourceId: request.sourceId,
     budgets,
     allowlist: deps.allowlistFor(request.sourceId),
+    policyVersion: deps.policyVersion(request.sourceId),
     model: deps.modelFor(request.sourceId),
     deadlineAt: deps.clock() + budgets.requestTimeoutMs,
   };
@@ -43,18 +44,23 @@ function resolveContext(deps: GateDeps, request: GateRequest, system: boolean): 
 
 async function runStages(deps: GateDeps, request: GateRequest, system: boolean, progress: Progress): Promise<GatePage> {
   const context = await inStage(deps, progress, 'resolve', () => resolveContext(deps, request, system));
-  const { template, rendered } = await inStage(deps, progress, 'validate', () => {
+  const { template, rendered, binding } = await inStage(deps, progress, 'validate', () => {
     const found = findTemplate(deps.catalog, request);
     progress.action = found.auditAction;
-    return validateRequest(deps.catalog, found, request, context);
+    return validateRequest(deps.catalog, found, request, context, deps.cursors);
   });
   await inStage(deps, progress, 'authorize', () => authorizeRequest(deps.seams.policy, deps.usability, context, template));
   const result = await inStage(deps, progress, 'execute', () =>
     executeRead({ coordinator: deps.seams.coordinator, executor: deps.executor, clock: deps.clock, logger: deps.logger }, context, template, rendered, request.limit),
   );
-  const items = await inStage(deps, progress, 'normalize', () => template.normalize(result.rows, result.plan, { sourceId: context.sourceId, hasMore: result.hasMore, model: context.model }));
-  const redacted = await inStage(deps, progress, 'redact', () => deps.redact(items, context));
-  return { items: redacted, hasMore: result.hasMore };
+  const normalized = await inStage(deps, progress, 'normalize', () => {
+    const items = template.normalize(result.rows, result.plan, { sourceId: context.sourceId, hasMore: result.hasMore, model: context.model });
+    // the page after this one, when there is one: the template says where it starts and the gate signs it for this request
+    const position = template.paged && result.hasMore ? template.nextPosition?.(result.rows, request.limit) : undefined;
+    return { items, nextCursor: position === undefined ? undefined : deps.cursors.mint(binding, position) };
+  });
+  const redacted = await inStage(deps, progress, 'redact', () => deps.redact(normalized.items, context));
+  return { items: redacted, hasMore: result.hasMore, ...(normalized.nextCursor === undefined ? {} : { nextCursor: normalized.nextCursor }) };
 }
 
 async function recordAudit(deps: GateDeps, request: GateRequest, progress: Progress, failure: AppError | undefined): Promise<void> {

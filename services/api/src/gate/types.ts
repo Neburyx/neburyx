@@ -1,5 +1,6 @@
 import type { ElementRef } from '@neburyx/contracts';
 import type { ZodType } from 'zod';
+import type { CursorPosition } from './cursor/codec.js';
 import type { NormalizeContext, NormalizeModel } from './normalize/model.js';
 import type { Principal } from '../seams/seams.js';
 
@@ -45,6 +46,10 @@ export interface Template {
   readonly auditSystemRuns?: boolean;
   /** True for a template whose Cypher starts with `PROFILE `: the executor returns the plan of the read and `normalize` gets it. */
   readonly profile?: boolean;
+  /** What a cursor of this template binds besides the source, the person, the template and its parameters: the order of its pages; empty when it has none. */
+  readonly sort?: string;
+  /** Where the page after this one starts, from the rows of this page; the gate signs it into the page's `nextCursor`. Only a paged template has one. */
+  nextPosition?(rows: readonly Row[], limit: number): CursorPosition | undefined;
   refsOf(params: Params): readonly ElementRef[];
   normalize(rows: readonly Row[], plan?: Plan, context?: NormalizeContext): readonly Item[];
 }
@@ -76,6 +81,8 @@ export interface GateRequest {
   readonly templateId: string;
   readonly params: unknown;
   readonly limit: number;
+  /** The `nextCursor` of an earlier page of the same read; only a paged template takes one. */
+  readonly cursor?: string;
 }
 
 export interface GateContext {
@@ -85,6 +92,8 @@ export interface GateContext {
   readonly sourceId: string;
   readonly budgets: Budgets;
   readonly allowlist: SourceAllowlist;
+  /** The version of the policy this request is judged under; a cursor is bound to it. */
+  readonly policyVersion: string;
   /** What the normalize stage needs of the source's mapping. */
   readonly model: NormalizeModel;
   readonly deadlineAt: number;
@@ -93,6 +102,8 @@ export interface GateContext {
 export interface GatePage {
   readonly items: readonly Item[];
   readonly hasMore: boolean;
+  /** Signed for this request; present only when the read found more than the page and the template says where the next one starts. */
+  readonly nextCursor?: string;
 }
 
 export interface GateObserver {

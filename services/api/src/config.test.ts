@@ -81,3 +81,46 @@ describe('parseConfig', () => {
     },
   );
 });
+
+describe('the cursor key', () => {
+  const key = Buffer.alloc(32, 5).toString('base64');
+
+  it('is absent by default', () => {
+    expect(parseConfig({ ...database }, defaults).cursorKey).toBeUndefined();
+  });
+
+  it.each([
+    ['32 bytes in base64', key],
+    ['32 bytes in base64 without padding', key.replace(/=+$/, '')],
+    ['64 bytes', Buffer.alloc(64, 6).toString('base64')],
+  ])('is accepted as %s, and held as bytes', (_name, value) => {
+    const parsed = parseConfig({ ...database, NEBURYX_CURSOR_KEY: value }, defaults).cursorKey;
+    expect(Buffer.isBuffer(parsed)).toBe(true);
+    expect((parsed?.length ?? 0) >= 32).toBe(true);
+  });
+
+  it.each([
+    ['empty', ''],
+    ['31 bytes', Buffer.alloc(31, 5).toString('base64')],
+    ['text that is not base64', 'this is not base64 at all, it has spaces and is long enough!'],
+    ['the url alphabet', Buffer.from([251, 255, 254, ...Array.from({ length: 29 }, () => 250)]).toString('base64url')],
+    ['hex that is too short', '00'.repeat(16)],
+    ['padding in the middle', `${key}=${key}`],
+    ['a second spelling of the last character', key.slice(0, -2) + 'B='],
+    ['32 bytes with one padding character too many', `${key}=`],
+    ['33 bytes with padding added that the text does not need', `${Buffer.alloc(33, 5).toString('base64')}==`],
+    ['padding where the bytes need none', `${Buffer.alloc(33, 5).toString('base64')}=`],
+    ['too much padding for the bytes', `${Buffer.alloc(34, 5).toString('base64')}=`],
+  ])('is refused when it is %s, naming only the variable and never the value', (_name, value) => {
+    const failure = (): unknown => parseConfig({ ...database, NEBURYX_CURSOR_KEY: value }, defaults);
+    expect(failure).toThrow(ConfigError);
+    expect(failure).toThrow('invalid configuration: NEBURYX_CURSOR_KEY');
+    try {
+      failure();
+    } catch (error) {
+      expect((error as Error).message).toBe('invalid configuration: NEBURYX_CURSOR_KEY');
+      if (value.length > 0) expect(JSON.stringify([error, String(error)])).not.toContain(value);
+    }
+  });
+});
+

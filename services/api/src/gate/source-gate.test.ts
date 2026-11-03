@@ -113,7 +113,7 @@ describe('allowlists and quoted interpolation', () => {
     const { gate, executor } = testSourceGate(two, { catalog });
     await gate.run(request({ kind: 'order_line', via: 'HAS LINE' }));
     expect(executor.calls[0]?.cypher).toBe('MATCH (n:`Order Line`)-[r:`HAS LINE`]->(m) RETURN n.id AS id LIMIT $limit + 1');
-    expect(executor.calls[0]?.parameters).toEqual({ limit: 5 });
+    expect(executor.calls[0]?.parameters).toEqual({ limit: 5, cursor: null });
   });
 
   it('lists several relationship types quoted and separated by |', async () => {
@@ -192,7 +192,7 @@ describe('the page limit', () => {
     const { gate, executor } = testSourceGate(mapping, { catalog });
     await gate.run(gateRequest({ sourceId: 'alpha', templateId: 'nodes-read', params: { kind: 'person' }, limit: 7 }));
     await gate.run(gateRequest({ sourceId: 'alpha', templateId: 'integer-read', params: { k: 3 }, limit: 9 }));
-    expect(executor.calls.map((call) => call.parameters)).toEqual([{ limit: 7 }, { k: 3, limit: 9 }]);
+    expect(executor.calls.map((call) => call.parameters)).toEqual([{ limit: 7, cursor: null }, { k: 3, limit: 9 }]);
     expect(executor.calls[1]?.integerParameters).toEqual(['k']);
   });
 

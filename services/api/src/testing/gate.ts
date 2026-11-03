@@ -21,8 +21,12 @@ import type {
   Template,
   TemplateCatalog,
 } from '../gate/types.js';
+import { createCursorCodec, type CursorCodec } from '../gate/cursor/codec.js';
 import { EMPTY_MODEL } from '../gate/normalize/model.js';
 import { LOCAL_IDENTITY } from './app-store.js';
+
+/** A fixed signing key for tests: 32 bytes. */
+export const TEST_CURSOR_KEY = Buffer.alloc(32, 7);
 
 export const SOURCE_A = 'source-a';
 export const SOURCE_B = 'source-b';
@@ -114,6 +118,8 @@ export interface HarnessOptions {
   readonly budgetsFor?: (sourceId: string) => Budgets;
   readonly allowlistFor?: (sourceId: string) => SourceAllowlist;
   readonly modelFor?: GateDeps['modelFor'];
+  readonly cursors?: CursorCodec;
+  readonly policyVersion?: GateDeps['policyVersion'];
   readonly redact?: GateDeps['redact'];
   readonly clock?: () => number;
   readonly usability?: GateDeps['usability'];
@@ -131,6 +137,8 @@ export function harness(options: HarnessOptions = {}): Harness {
     budgetsFor: options.budgetsFor ?? (() => DEFAULT_BUDGETS),
     allowlistFor: options.allowlistFor ?? (() => EMPTY_ALLOWLIST),
     modelFor: options.modelFor ?? (() => EMPTY_MODEL),
+    cursors: options.cursors ?? createCursorCodec({ key: TEST_CURSOR_KEY, clock: options.clock ?? (() => 1_000_000) }),
+    policyVersion: options.policyVersion ?? (() => 'none'),
     redact: options.redact ?? ((items) => items),
     usability: options.usability ?? ALWAYS_USABLE,
     clock: options.clock ?? (() => 1_000_000),

@@ -15,7 +15,10 @@ exports). Graph reads (search and expansion) have their own page shapes and budg
 - The response is `{ items: [...], nextCursor: string | null }`. `nextCursor` is null on the last page. There is no total
   unless the endpoint returns a count with its quality label (`exact`, `estimated`, `lowerBound` or `unknown`).
 - A cursor is opaque, signed, expiring, and bound to the user, the route, the sort, the filters, the source when the list is
-  scoped to one, and the policy version.
+  scoped to one, and the policy version. It is the text `v1.<payload>.<mac>` (base64url, HMAC-SHA256 under the key
+  `NEBURYX_CURSOR_KEY`) and is valid for 30 minutes after it is given. A client must treat it as opaque: any change to it, an
+  expired cursor, or one used for another user, route, source, policy version, sort or filter is `CURSOR_INVALIDATED`, with no
+  detail about which, and the client starts the list again. A smaller `limit` may be sent with a cursor; the limit is not bound.
 - `GET /v1/sources` is the one exception: it returns every configured source in one response, ordered by id, with `nextCursor` always `null`. The configuration file defines the list and it is small, so it is not paged, and it takes no query parameters (any is `INVALID_REQUEST`).
 - A limit above 100 is refused with `QUERY_BUDGET_EXCEEDED` (and the maximum in `details.maxPage`), never clamped. A limit that
   is not a positive integer is `INVALID_REQUEST`. A cursor that is invalid, altered, expired, or whose binding (user, route,

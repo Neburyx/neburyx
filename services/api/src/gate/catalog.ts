@@ -11,7 +11,8 @@ export class CatalogError extends Error {
   }
 }
 
-const RESERVED = 'limit';
+/** Parameters the gate fills in for every template, which a template may not declare: the page limit and the verified cursor position. */
+const RESERVED = ['limit', 'cursor'] as const;
 
 const article = (kind: string): string => (kind === 'entity' ? 'an' : 'a');
 /** The server-side page bound a paged template must carry, as in `LIMIT $limit + 1`. */
@@ -77,7 +78,7 @@ function checkProfile(definition: TemplateDefinition): void {
 
 function build(definition: TemplateDefinition): Template {
   const shape = shapeOf(definition);
-  if (shape.properties.has(RESERVED)) throw new CatalogError(definition.id, 'declares the reserved parameter limit');
+  for (const name of RESERVED) if (shape.properties.has(name)) throw new CatalogError(definition.id, `declares the reserved parameter ${name}`);
   if (definition.paged && !PAGED_LIMIT.test(definition.cypher)) throw new CatalogError(definition.id, 'is paged and its Cypher has no LIMIT $limit + 1');
   checkProfile(definition);
   checkMarkers(definition, shape);

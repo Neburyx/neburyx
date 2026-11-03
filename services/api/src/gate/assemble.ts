@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { AppError } from '../errors.js';
 import type { MappingModel, SourceModel } from '../mapping/model.js';
 import type { Seams } from '../seams/seams.js';
@@ -7,6 +8,7 @@ import { DEFAULT_BUDGETS } from './budgets.js';
 import { createTemplateCatalog } from './catalog.js';
 import type { ReadExecutor } from './executor.js';
 import { createGates } from './gate.js';
+import { createCursorCodec, type CursorCodec } from './cursor/codec.js';
 import { normalizeModelOf } from './normalize/model.js';
 import { capabilitiesTemplate } from './templates/capabilities.js';
 import { connectivityTemplate } from './templates/connectivity.js';
@@ -28,6 +30,10 @@ export interface AssembleOptions {
   readonly redact?: (items: readonly Item[], context: GateContext) => readonly Item[];
   /** Whether a data read may go to a source. */
   readonly usability: SourceUsability;
+  /** Signs and checks page cursors; absent, the gate signs with a key of its own that no other process has. */
+  readonly cursors?: CursorCodec;
+  /** The version of the policy a cursor is bound to; Community has none. */
+  readonly policyVersion?: (sourceId: string) => string;
 }
 
 export function defaultCatalog(): TemplateCatalog {
@@ -51,6 +57,8 @@ export function assembleGate(options: AssembleOptions): { readonly gate: Gate; r
       if (found === undefined) throw new AppError('NOT_FOUND');
       return found;
     },
+    cursors: options.cursors ?? createCursorCodec({ key: randomBytes(32), clock: options.clock ?? Date.now }),
+    policyVersion: options.policyVersion ?? (() => 'none'),
     modelFor: (sourceId) => {
       const found = models.get(sourceId);
       if (found === undefined) throw new AppError('NOT_FOUND');

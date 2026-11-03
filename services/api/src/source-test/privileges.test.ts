@@ -83,7 +83,7 @@ describe('a server that cannot list the privileges', () => {
     await tester.run(request);
     const [query, ...others] = privilegeQueries(fake);
     expect(others).toEqual([]);
-    expect(Object.keys(query?.parameters ?? {})).toEqual(['limit']);
+    expect(Object.keys(query?.parameters ?? {})).toEqual(['limit', 'cursor']);
     // the adapter sends integers as the driver's Integer type
     expect(String(query?.parameters['limit'])).toBe('5');
   });

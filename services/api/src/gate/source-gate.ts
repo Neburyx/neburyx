@@ -3,6 +3,7 @@ import type { Seams } from '../seams/seams.js';
 import type { SourceUsability } from '../source-test/usability.js';
 import { createNeo4jExecutor } from '../sources/executor.js';
 import { assembleGate } from './assemble.js';
+import type { CursorCodec } from './cursor/codec.js';
 import type { Clock, Gate, GateLogger, GateObserver, SystemRunner } from './types.js';
 
 export interface SourceGateOptions {
@@ -14,6 +15,8 @@ export interface SourceGateOptions {
   readonly observer?: GateObserver;
   /** Whether a data read may go to a source: the record of the running server, or one in which every source is unchecked for a process that runs system-scope templates only. */
   readonly usability: SourceUsability;
+  /** Signs and checks page cursors; absent, the gate signs with a key of its own. */
+  readonly cursors?: CursorCodec;
 }
 
 export interface SourceGate {
@@ -37,6 +40,7 @@ export function createSourceGate(options: SourceGateOptions): SourceGate {
       executor,
       logger: options.logger,
       usability: options.usability,
+      ...(options.cursors === undefined ? {} : { cursors: options.cursors }),
       ...(options.clock === undefined ? {} : { clock: options.clock }),
       ...(options.observer === undefined ? {} : { observer: options.observer }),
     });

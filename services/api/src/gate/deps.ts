@@ -1,6 +1,7 @@
 import type { Seams } from '../seams/seams.js';
 import type { SourceUsability } from '../source-test/usability.js';
 import type { ReadExecutor } from './executor.js';
+import type { CursorCodec } from './cursor/codec.js';
 import type { NormalizeModel } from './normalize/model.js';
 import type { Budgets, Clock, GateContext, GateLogger, GateObserver, Item, SourceAllowlist, TemplateCatalog } from './types.js';
 
@@ -11,6 +12,8 @@ export interface GateDeps {
   readonly budgetsFor: (sourceId: string) => Budgets;
   readonly allowlistFor: (sourceId: string) => SourceAllowlist;
   readonly modelFor: (sourceId: string) => NormalizeModel;
+  readonly cursors: CursorCodec;
+  readonly policyVersion: (sourceId: string) => string;
   readonly redact: (items: readonly Item[], context: GateContext) => readonly Item[];
   readonly clock: Clock;
   readonly logger: GateLogger;
