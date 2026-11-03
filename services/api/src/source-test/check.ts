@@ -10,9 +10,11 @@ import type { SourceModel } from '../mapping/model.js';
 import { identityHashOf } from '../registry/identity-hash.js';
 import type { WriteProbe } from './probe.js';
 import { failureReasonOf, isReadNotVerified } from './reasons.js';
+import { checkDegrees, NOT_RUN_DEGREES } from './degree-stage.js';
 import { checkMapping } from './mapping-stage.js';
 import { NOT_RUN } from './mapping-checks.js';
 import { reportFromFailure, reportFromServer } from './report.js';
+import { serverVersionText } from './server-version.js';
 import { loginCanWrite } from './write-verdict.js';
 
 /** What a check needs of the application database. */
@@ -97,15 +99,17 @@ async function verdictFor(source: SourceModel, run: CheckRun, traceId: string, d
   const privileges = await inspectPrivileges(source, run, traceId, deps.logger);
   // a version outside the matrix is not read for its schema: the commands were verified on the supported versions only
   const mapping = server.versionSupported ? await checkMapping(source, run, traceId, { clock, logger: deps.logger }) : NOT_RUN;
+  // the degree probes run on a source whose mapping fits it, or whose fit was not verified
+  const degrees = server.versionSupported && mapping.status !== 'fail' ? await checkDegrees(source, run, traceId, serverVersionText(server), { clock, logger: deps.logger }) : NOT_RUN_DEGREES;
   const checkedAt = new Date(clock()).toISOString();
   // the probe writes, and was verified to roll back on the supported versions only
   const probed = deps.probe !== undefined && server.versionSupported ? await deps.probe(source, traceId) : 'inconclusive';
-  if (probed === 'can-write') return reportFromServer(source, server, true, checkedAt, { probed: true, mapping });
+  if (probed === 'can-write') return reportFromServer(source, server, true, checkedAt, { probed: true, mapping, degrees });
   // a refused CREATE does not show that the login cannot write where logins have privilege roles: there it speaks only when the privileges said false,
   // and on Community, which has none, the refusal concerns the whole login or database and is the only signal; privileges that show a write right or could not be settled stand
   const refusalCounts = privileges.canWrite === false || (privileges.canWrite === null && server.edition.toLowerCase() === 'community');
-  if (probed === 'cannot-write' && refusalCounts) return reportFromServer(source, server, false, checkedAt, { probed: true, mapping });
-  return reportFromServer(source, server, privileges.canWrite, checkedAt, { unreadable: privileges.unreadable, mapping });
+  if (probed === 'cannot-write' && refusalCounts) return reportFromServer(source, server, false, checkedAt, { probed: true, mapping, degrees });
+  return reportFromServer(source, server, privileges.canWrite, checkedAt, { unreadable: privileges.unreadable, mapping, degrees });
 }
 
 /** Tests one source, stores the verdict and returns it; anything that is not a verdict about the source is thrown and stores nothing. */

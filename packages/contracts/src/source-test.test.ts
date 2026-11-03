@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { sourceTestReportSchema } from './source-test.js';
+import { DEGREE_BASIS_RESULT, sourceTestReportSchema } from './source-test.js';
 
 const pass = {
   schemaVersion: 1,
@@ -14,6 +14,7 @@ const pass = {
   readOnlyCheck: 'not-verified',
   loginCanWrite: null,
   mappingChecks: { status: 'pass', findings: [] },
+  degreeChecks: { status: 'pass', foundOn: 'Neo4j 5.26.32', types: [{ entityType: 'gadget', result: 'cheap', basis: 'degree-operator', relationshipTypes: ['MADE_BY'] }], warnings: [] },
   mappingSummary: { entityTypes: 2, relationshipTypes: 1, derivedRules: 0 },
 };
 
@@ -95,3 +96,56 @@ describe('mappingChecks in the report', () => {
   });
 });
 
+describe('degreeChecks in the report', () => {
+  const cheap = (entityType: string) => ({ entityType, result: 'cheap', basis: 'degree-operator', relationshipTypes: ['MADE_BY'] });
+  const expand = { entityType: 'person', result: 'not-cheap', basis: 'expand', relationshipTypes: ['MADE_BY'] };
+  const unclear = { entityType: 'person', result: 'could-not-tell', basis: 'timeout', relationshipTypes: ['MADE_BY'] };
+  const NOT_RUN = { status: 'not-run', foundOn: null, types: [], warnings: [] };
+  const withDegrees = (degreeChecks: unknown) => ({ ...pass, degreeChecks });
+  const accepts = (degreeChecks: unknown) => sourceTestReportSchema.safeParse(withDegrees(degreeChecks)).success;
+
+  it.each([
+    ['not-run with nothing', NOT_RUN],
+    ['pass with cheap types and no warning', { status: 'pass', foundOn: 'Neo4j 5.26.32', types: [cheap('gadget'), cheap('person')], warnings: [] }],
+    ['warn with an expanding type and its one warning', { status: 'warn', foundOn: 'Neo4j 5.26.32', types: [cheap('gadget'), expand], warnings: ['w'] }],
+    ['warn with a type that could not be told and its one warning', { status: 'warn', foundOn: 'Neo4j 2026.10.1', types: [unclear], warnings: ['w'] }],
+  ])('accepts %s', (_name, degreeChecks) => {
+    expect(accepts(degreeChecks)).toBe(true);
+  });
+
+  it.each([
+    ['no degreeChecks', undefined],
+    ['an unknown status', { ...NOT_RUN, status: 'fail' }],
+    ['not-run with a found-on version', { ...NOT_RUN, foundOn: 'Neo4j 5.26.32' }],
+    ['pass without a found-on version', { status: 'pass', foundOn: null, types: [cheap('gadget')], warnings: [] }],
+    ['not-run with a type', { ...NOT_RUN, types: [cheap('gadget')] }],
+    ['not-run with a warning', { ...NOT_RUN, warnings: ['w'] }],
+    ['pass with no type', { status: 'pass', foundOn: 'Neo4j 5.26.32', types: [], warnings: [] }],
+    ['pass with a type that is not cheap', { status: 'pass', foundOn: 'Neo4j 5.26.32', types: [expand], warnings: [] }],
+    ['pass with a warning', { status: 'pass', foundOn: 'Neo4j 5.26.32', types: [cheap('gadget')], warnings: ['w'] }],
+    ['warn with every type cheap', { status: 'warn', foundOn: 'Neo4j 5.26.32', types: [cheap('gadget')], warnings: [] }],
+    ['warn with fewer warnings than types that are not cheap', { status: 'warn', foundOn: 'Neo4j 5.26.32', types: [expand, { ...unclear, entityType: 'gadget' }], warnings: ['w'] }],
+    ['warn with more warnings than types that are not cheap', { status: 'warn', foundOn: 'Neo4j 5.26.32', types: [cheap('gadget'), expand], warnings: ['w', 'x'] }],
+    ['a result that its basis cannot give', { status: 'warn', foundOn: 'Neo4j 5.26.32', types: [{ ...expand, result: 'cheap' }], warnings: ['w'] }],
+    ['a result that its basis cannot give (cheap with a timeout)', { status: 'pass', foundOn: 'Neo4j 5.26.32', types: [{ ...cheap('gadget'), basis: 'timeout' }], warnings: [] }],
+    ['a basis outside the eight', { status: 'warn', foundOn: 'Neo4j 5.26.32', types: [{ ...unclear, basis: 'guessed' }], warnings: ['w'] }],
+    ['a type with no relationship type', { status: 'pass', foundOn: 'Neo4j 5.26.32', types: [{ ...cheap('gadget'), relationshipTypes: [] }], warnings: [] }],
+    ['an unknown key in a type', { status: 'pass', foundOn: 'Neo4j 5.26.32', types: [{ ...cheap('gadget'), dbHits: 3 }], warnings: [] }],
+    ['an unknown key', { ...NOT_RUN, plan: [] }],
+  ])('refuses %s', (_name, degreeChecks) => {
+    expect(accepts(degreeChecks)).toBe(false);
+  });
+
+  it('knows the eight bases and the one result each gives', () => {
+    expect(DEGREE_BASIS_RESULT).toEqual({
+      'degree-operator': 'cheap',
+      expand: 'not-cheap',
+      'unrecognized-plan': 'could-not-tell',
+      'no-plan': 'could-not-tell',
+      unreadable: 'could-not-tell',
+      timeout: 'could-not-tell',
+      refused: 'could-not-tell',
+      skipped: 'could-not-tell',
+    });
+  });
+});

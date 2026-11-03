@@ -1,7 +1,8 @@
-import { UNVERIFIED_CHECKS, type MappingChecks, type SourceTestReport } from '@neburyx/contracts';
+import { UNVERIFIED_CHECKS, type DegreeChecks, type MappingChecks, type SourceTestReport } from '@neburyx/contracts';
 import type { CapabilitiesItem } from '../gate/templates/capabilities.js';
 import type { SourceModel } from '../mapping/model.js';
 import { mappingSummaryOf } from '../registry/summary.js';
+import { NOT_RUN_DEGREES } from './degree-stage.js';
 import { NOT_RUN } from './mapping-checks.js';
 import { FAILURE_SENTENCES, FIX_THE_SOURCE, LOGIN_CAN_WRITE_REASON, PRIVILEGES_UNREADABLE_REASON, UNSUPPORTED_VERSION_REASON, type FailureReason } from './reasons.js';
 
@@ -11,6 +12,8 @@ export interface ReadOnlyFound {
   readonly unreadable?: boolean;
   /** What the mapping checks found; absent, they were not run. */
   readonly mapping?: MappingChecks;
+  /** What the degree probes found; absent, they were not run. */
+  readonly degrees?: DegreeChecks;
 }
 
 /** The reason a mapping check puts on the state: the first failing message and how many more there are, then what to do. */
@@ -47,6 +50,7 @@ export function reportFromServer(source: SourceModel, server: CapabilitiesItem, 
     readOnlyCheck: loginCanWrite === null ? 'not-verified' : found.probed === true ? 'write-probe' : 'privileges-inspected',
     loginCanWrite,
     mappingChecks: mapping,
+    degreeChecks: found.degrees ?? NOT_RUN_DEGREES,
     mappingSummary: mappingSummaryOf(source),
   };
 }
@@ -66,6 +70,7 @@ export function reportFromFailure(source: SourceModel, reason: FailureReason, ch
     readOnlyCheck: 'not-verified',
     loginCanWrite: null,
     mappingChecks: NOT_RUN,
+    degreeChecks: NOT_RUN_DEGREES,
     mappingSummary: mappingSummaryOf(source),
   };
 }

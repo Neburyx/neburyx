@@ -121,3 +121,23 @@ describe('the stable id marker', () => {
     );
   });
 });
+
+describe('profiled templates', () => {
+  const profiled = { cypher: 'PROFILE MATCH (n:@entity(kind)) RETURN n.id AS id LIMIT 1', paged: false, scope: 'system', profile: true } as const;
+
+  it('are accepted when the flag, the PROFILE prefix and the system scope agree', () => {
+    expect(createTemplateCatalog({ templates: [variant(profiled)] }).find('nodes-read')?.profile).toBe(true);
+  });
+
+  it('are refused when the flag is set and the Cypher does not start with PROFILE', () => {
+    expect(failure(variant({ ...profiled, cypher: 'MATCH (n:@entity(kind)) RETURN n.id AS id LIMIT 1' }))).toBe('the template nodes-read is profiled and its Cypher does not start with PROFILE');
+  });
+
+  it('are refused when the Cypher starts with PROFILE and the flag is not set', () => {
+    expect(failure(variant({ ...profiled, profile: undefined }))).toBe('the template nodes-read has Cypher that starts with PROFILE and is not declared profiled');
+  });
+
+  it('are refused for a user-scope template', () => {
+    expect(failure(variant({ ...profiled, scope: 'user' }))).toBe('the template nodes-read is profiled and not a system template');
+  });
+});

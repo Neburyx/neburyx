@@ -16,6 +16,16 @@ export type Item = Readonly<Record<string, unknown>>;
 
 export type TemplateScope = 'system' | 'user';
 
+/** One operator of the plan that a profiled read returns: its name, the server's description of it and the db hits it made. */
+export interface PlanOperator {
+  readonly name: string;
+  readonly details: string | null;
+  readonly dbHits: number;
+}
+
+/** The plan of a profiled read: null when the read did not complete, the server sent no profile, or the plan is too large to keep. */
+export type Plan = readonly PlanOperator[] | null;
+
 /** The parameters the gate fills in from the source's allowlist; a request cannot give them. */
 export const GATE_PARAMETERS = ['mappedLabels', 'mappedTypes', 'mappedProperties'] as const;
 export type GateParameter = (typeof GATE_PARAMETERS)[number];
@@ -35,8 +45,10 @@ export interface Template {
   readonly gateParameters?: readonly GateParameter[];
   /** False for a template whose runs through the system runner write no audit event (the scheduled ping); absent means they do. */
   readonly auditSystemRuns?: boolean;
+  /** True for a template whose Cypher starts with `PROFILE `: the executor returns the plan of the read and `normalize` gets it. */
+  readonly profile?: boolean;
   refsOf(params: Params): readonly ElementRef[];
-  normalize(rows: readonly Row[]): readonly Item[];
+  normalize(rows: readonly Row[], plan?: Plan): readonly Item[];
 }
 
 export interface SourceAllowlist {

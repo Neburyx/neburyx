@@ -65,10 +65,21 @@ function checkMarkers(definition: TemplateDefinition, shape: Shape): void {
   }
 }
 
+const PROFILE_PREFIX = 'PROFILE ';
+
+/** A profiled template starts with `PROFILE ` and the flag says so, and only a system template profiles. */
+function checkProfile(definition: TemplateDefinition): void {
+  const starts = definition.cypher.startsWith(PROFILE_PREFIX);
+  if (definition.profile === true && !starts) throw new CatalogError(definition.id, 'is profiled and its Cypher does not start with PROFILE');
+  if (definition.profile !== true && starts) throw new CatalogError(definition.id, 'has Cypher that starts with PROFILE and is not declared profiled');
+  if (definition.profile === true && definition.scope !== 'system') throw new CatalogError(definition.id, 'is profiled and not a system template');
+}
+
 function build(definition: TemplateDefinition): Template {
   const shape = shapeOf(definition);
   if (shape.properties.has(RESERVED)) throw new CatalogError(definition.id, 'declares the reserved parameter limit');
   if (definition.paged && !PAGED_LIMIT.test(definition.cypher)) throw new CatalogError(definition.id, 'is paged and its Cypher has no LIMIT $limit + 1');
+  checkProfile(definition);
   checkMarkers(definition, shape);
   checkGateParameters(definition, shape);
   const integerParameters = [...shape.properties].flatMap(([name, type]) => (type === 'integer' ? [name] : []));

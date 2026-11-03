@@ -43,7 +43,7 @@ describe('the check on first contact', () => {
     expect(record.verdictOf('alpha')).toBe('usable');
     expect(record.verdictOf('beta')).toBe('unchecked');
     expect(store.checks.map((check) => [check.report.sourceId, check.triggeredBy, check.report.mappingChecks.status])).toEqual([['alpha', null, 'pass']]);
-    expect(executor.calls.map((call) => call.templateId)).toEqual(['capabilities', 'privileges', 'schema-tokens', 'schema-indexes']);
+    expect(executor.calls.map((call) => call.templateId)).toEqual(['capabilities', 'privileges', 'schema-tokens', 'schema-indexes', 'degree-probe', 'degree-probe', 'degree-probe']);
     expect(await states(store)).toEqual([['alpha', 'connected'], ['beta', 'unknown']]);
   });
 

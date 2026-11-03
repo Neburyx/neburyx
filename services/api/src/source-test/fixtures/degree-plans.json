@@ -1,0 +1,318 @@
+{
+  "5.26.32": {
+    "cheap": [
+      {
+        "name": "ProduceResults",
+        "details": "outgoing, incoming",
+        "dbHits": 0
+      },
+      {
+        "name": "Projection",
+        "details": "getDegree((n)-[:LINKED]->()) AS outgoing, getDegree((n)<-[:LINKED]-()) AS incoming",
+        "dbHits": 2
+      },
+      {
+        "name": "Limit",
+        "details": "1",
+        "dbHits": 0
+      },
+      {
+        "name": "NodeByLabelScan",
+        "details": "n:Item",
+        "dbHits": 2
+      }
+    ],
+    "endpointLabel": [
+      {
+        "name": "ProduceResults",
+        "details": "outgoing, incoming",
+        "dbHits": 0
+      },
+      {
+        "name": "Apply",
+        "details": null,
+        "dbHits": 0
+      },
+      {
+        "name": "Apply",
+        "details": null,
+        "dbHits": 0
+      },
+      {
+        "name": "Limit",
+        "details": "1",
+        "dbHits": 0
+      },
+      {
+        "name": "NodeByLabelScan",
+        "details": "n:Item",
+        "dbHits": 2
+      },
+      {
+        "name": "EagerAggregation",
+        "details": "count(*) AS outgoing",
+        "dbHits": 0
+      },
+      {
+        "name": "Filter",
+        "details": "anon_1:Item",
+        "dbHits": 30
+      },
+      {
+        "name": "Expand(All)",
+        "details": "(n)-[anon_0:LINKED]->(anon_1)",
+        "dbHits": 31
+      },
+      {
+        "name": "Argument",
+        "details": "n",
+        "dbHits": 0
+      },
+      {
+        "name": "EagerAggregation",
+        "details": "count(*) AS incoming",
+        "dbHits": 0
+      },
+      {
+        "name": "Filter",
+        "details": "anon_3:Item",
+        "dbHits": 0
+      },
+      {
+        "name": "Expand(All)",
+        "details": "(n)<-[anon_2:LINKED]-(anon_3)",
+        "dbHits": 31
+      },
+      {
+        "name": "Argument",
+        "details": "n",
+        "dbHits": 0
+      }
+    ],
+    "relationshipPredicate": [
+      {
+        "name": "ProduceResults",
+        "details": "outgoing, incoming",
+        "dbHits": 0
+      },
+      {
+        "name": "Apply",
+        "details": null,
+        "dbHits": 0
+      },
+      {
+        "name": "Apply",
+        "details": null,
+        "dbHits": 0
+      },
+      {
+        "name": "Limit",
+        "details": "1",
+        "dbHits": 0
+      },
+      {
+        "name": "NodeByLabelScan",
+        "details": "n:Item",
+        "dbHits": 2
+      },
+      {
+        "name": "EagerAggregation",
+        "details": "count(*) AS outgoing",
+        "dbHits": 0
+      },
+      {
+        "name": "Filter",
+        "details": "r.x = $autoint_0",
+        "dbHits": 30
+      },
+      {
+        "name": "Expand(All)",
+        "details": "(n)-[r:LINKED]->(anon_0)",
+        "dbHits": 31
+      },
+      {
+        "name": "Argument",
+        "details": "n",
+        "dbHits": 0
+      },
+      {
+        "name": "EagerAggregation",
+        "details": "count(*) AS incoming",
+        "dbHits": 0
+      },
+      {
+        "name": "Filter",
+        "details": "r.x = $autoint_1",
+        "dbHits": 0
+      },
+      {
+        "name": "Expand(All)",
+        "details": "(n)<-[r:LINKED]-(anon_1)",
+        "dbHits": 31
+      },
+      {
+        "name": "Argument",
+        "details": "n",
+        "dbHits": 0
+      }
+    ]
+  },
+  "2026.10.1": {
+    "cheap": [
+      {
+        "name": "ProduceResults",
+        "details": "outgoing, incoming",
+        "dbHits": 0
+      },
+      {
+        "name": "Projection",
+        "details": "getDegree((n)-[:LINKED]->()) AS outgoing, getDegree((n)<-[:LINKED]-()) AS incoming",
+        "dbHits": 2
+      },
+      {
+        "name": "Limit",
+        "details": "1",
+        "dbHits": 0
+      },
+      {
+        "name": "NodeByLabelScan",
+        "details": "n:Item",
+        "dbHits": 2
+      }
+    ],
+    "endpointLabel": [
+      {
+        "name": "ProduceResults",
+        "details": "outgoing, incoming",
+        "dbHits": 0
+      },
+      {
+        "name": "Apply",
+        "details": null,
+        "dbHits": 0
+      },
+      {
+        "name": "Apply",
+        "details": null,
+        "dbHits": 0
+      },
+      {
+        "name": "Limit",
+        "details": "1",
+        "dbHits": 0
+      },
+      {
+        "name": "NodeByLabelScan",
+        "details": "n:Item",
+        "dbHits": 2
+      },
+      {
+        "name": "EagerAggregation",
+        "details": "count(*) AS outgoing",
+        "dbHits": 0
+      },
+      {
+        "name": "Filter",
+        "details": "anon_1:Item",
+        "dbHits": 30
+      },
+      {
+        "name": "Expand(All)",
+        "details": "(n)-[:LINKED]->(anon_1)",
+        "dbHits": 31
+      },
+      {
+        "name": "Argument",
+        "details": "n",
+        "dbHits": 0
+      },
+      {
+        "name": "EagerAggregation",
+        "details": "count(*) AS incoming",
+        "dbHits": 0
+      },
+      {
+        "name": "Filter",
+        "details": "anon_3:Item",
+        "dbHits": 0
+      },
+      {
+        "name": "Expand(All)",
+        "details": "(n)<-[:LINKED]-(anon_3)",
+        "dbHits": 31
+      },
+      {
+        "name": "Argument",
+        "details": "n",
+        "dbHits": 0
+      }
+    ],
+    "relationshipPredicate": [
+      {
+        "name": "ProduceResults",
+        "details": "outgoing, incoming",
+        "dbHits": 0
+      },
+      {
+        "name": "Apply",
+        "details": null,
+        "dbHits": 0
+      },
+      {
+        "name": "Apply",
+        "details": null,
+        "dbHits": 0
+      },
+      {
+        "name": "Limit",
+        "details": "1",
+        "dbHits": 0
+      },
+      {
+        "name": "NodeByLabelScan",
+        "details": "n:Item",
+        "dbHits": 2
+      },
+      {
+        "name": "EagerAggregation",
+        "details": "count(*) AS outgoing",
+        "dbHits": 0
+      },
+      {
+        "name": "Filter",
+        "details": "r.x = $autoint_0",
+        "dbHits": 30
+      },
+      {
+        "name": "Expand(All)",
+        "details": "(n)-[r:LINKED]->()",
+        "dbHits": 31
+      },
+      {
+        "name": "Argument",
+        "details": "n",
+        "dbHits": 0
+      },
+      {
+        "name": "EagerAggregation",
+        "details": "count(*) AS incoming",
+        "dbHits": 0
+      },
+      {
+        "name": "Filter",
+        "details": "r.x = $autoint_1",
+        "dbHits": 0
+      },
+      {
+        "name": "Expand(All)",
+        "details": "(n)<-[r:LINKED]-()",
+        "dbHits": 31
+      },
+      {
+        "name": "Argument",
+        "details": "n",
+        "dbHits": 0
+      }
+    ]
+  }
+}

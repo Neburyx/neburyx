@@ -30,6 +30,8 @@ Every source read goes through the gate. Until the adapter exists, the check rea
   imports (`import('…')` in a type, also `typeof import('…')`), `import x = require('…')`, `export … from`, and `import()`
   and `require()` with a literal specifier. A query or fragment on a relative specifier is ignored.
 
+A profiled template (its Cypher starts with `PROFILE`, declared with `profile` and only for system templates) is a read like any other: it runs in a read transaction through the same executor, so the zones above are unchanged, and the plan comes back in the executor's outcome to the template's `normalize`.
+
 When a new place must build the gate with the adapter, change the zones in `adapter.ts`, so the change is visible in review.
 
 ## The system principal and the system runner

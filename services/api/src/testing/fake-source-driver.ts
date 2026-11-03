@@ -1,5 +1,5 @@
-import type { Params, Row } from '../gate/types.js';
-import { fittingIndexes, fittingTokens, NO_DUPLICATES } from './fitting-schema.js';
+import type { Params, Plan, Row } from '../gate/types.js';
+import { CHEAP_PLAN, fittingIndexes, fittingTokens, NO_DUPLICATES } from './fitting-schema.js';
 import type { DriverFactory, DriverSettings, RowObserver, SessionConfig, TransactionConfig } from '../sources/driver.js';
 
 export type CloseBehaviour = 'ok' | 'hang' | 'reject';
@@ -17,6 +17,8 @@ export interface FakeBehaviour {
   /** Fails a schema read with this error, whichever of the three it is, when set for it: `tokens`, `indexes` or `scan`. */
   readonly schemaError?: { readonly read: 'tokens' | 'indexes' | 'scan'; readonly error: unknown };
   readonly schemaHang?: 'tokens' | 'indexes' | 'scan';
+  /** The answer of the degree probe (a profiled statement); absent, the plan is the cheap one. */
+  readonly degree?: { readonly rows?: readonly Row[]; readonly plan?: Plan; readonly error?: unknown; readonly hang?: boolean };
   readonly endless?: boolean;
   readonly streamError?: unknown;
   readonly manual?: boolean;
@@ -117,6 +119,17 @@ export function fakeDrivers(initial: FakeBehaviour = {}): FakeDrivers {
                           const given = { tokens: fake.behaviour.schemaTokens, indexes: fake.behaviour.schemaIndexes, scan: fake.behaviour.scans }[schemaRead];
                           for (const row of given ?? [{ tokens: fittingTokens(parameters), indexes: fittingIndexes(parameters), scan: NO_DUPLICATES }[schemaRead]]) observer.onNext(row);
                           observer.onCompleted();
+                          return;
+                        }
+                        if (cypher.startsWith('PROFILE ')) {
+                          const degree = fake.behaviour.degree;
+                          if (degree?.hang === true) return;
+                          if (degree?.error !== undefined) {
+                            observer.onError(degree.error);
+                            return;
+                          }
+                          for (const row of degree?.rows ?? [{ outgoing: 0, incoming: 0 }]) observer.onNext(row);
+                          observer.onCompleted(degree?.plan === undefined ? CHEAP_PLAN : degree.plan);
                           return;
                         }
                         if (isPrivileges(cypher)) {

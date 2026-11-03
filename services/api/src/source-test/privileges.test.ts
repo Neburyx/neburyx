@@ -219,8 +219,8 @@ describe('a server that lists the privileges', () => {
     const { tester, fake } = rig({ privileges: [] });
     await tester.run(request);
     const sessions = fake.drivers.flatMap((driver) => driver.sessions);
-    expect(sessions).toHaveLength(4);
-    expect(sessions.map((session) => session.config.defaultAccessMode)).toEqual(['READ', 'READ', 'READ', 'READ']);
+    expect(sessions).toHaveLength(7);
+    expect(sessions.map((session) => session.config.defaultAccessMode)).toEqual(Array.from({ length: 7 }, () => 'READ'));
     expect(fake.forbidden).toEqual([]);
   });
 });

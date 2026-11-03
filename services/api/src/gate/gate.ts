@@ -51,7 +51,7 @@ async function runStages(deps: GateDeps, request: GateRequest, system: boolean, 
   const result = await inStage(deps, progress, 'execute', () =>
     executeRead({ coordinator: deps.seams.coordinator, executor: deps.executor, clock: deps.clock, logger: deps.logger }, context, template, rendered, request.limit),
   );
-  const items = await inStage(deps, progress, 'normalize', () => template.normalize(result.rows));
+  const items = await inStage(deps, progress, 'normalize', () => template.normalize(result.rows, result.plan));
   const redacted = await inStage(deps, progress, 'redact', () => deps.redact(items, context));
   return { items: redacted, hasMore: result.hasMore };
 }

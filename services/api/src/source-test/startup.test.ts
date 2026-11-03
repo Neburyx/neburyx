@@ -56,6 +56,12 @@ describe('the startup check', () => {
       [SYSTEM_ID, null, 'source.schema_tokens'],
       [SYSTEM_ID, null, 'source.schema_indexes'],
       [SYSTEM_ID, null, 'source.schema_indexes'],
+      [SYSTEM_ID, null, 'source.degree_probe'],
+      [SYSTEM_ID, null, 'source.degree_probe'],
+      [SYSTEM_ID, null, 'source.degree_probe'],
+      [SYSTEM_ID, null, 'source.degree_probe'],
+      [SYSTEM_ID, null, 'source.degree_probe'],
+      [SYSTEM_ID, null, 'source.degree_probe'],
     ]);
   });
 

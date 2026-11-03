@@ -79,6 +79,18 @@ describe.each(PACKS)(`the %s pack against ${image}`, (pack) => {
     expect(found).toMatchObject({ outcome: 'pass', state: 'connected', stateReason: null });
   });
 
+  it('answers every count of neighbors from the degree, supernodes included: each type is cheap, none timed out or was skipped, and the version is the image\'s', async () => {
+    const found = await report(pack);
+    const mapped = sourceOf(pack);
+    const withRelationship = new Set(mapped.relationships.flatMap((relationship) => [relationship.from, relationship.to]));
+    expect(found.degreeChecks.status).toBe('pass');
+    expect(found.degreeChecks.warnings).toEqual([]);
+    expect(found.degreeChecks.types.map((entry) => entry.entityType).sort()).toEqual([...withRelationship].sort());
+    expect(found.degreeChecks.types.every((entry) => entry.result === 'cheap' && entry.basis === 'degree-operator')).toBe(true);
+    expect(found.degreeChecks.foundOn).toBe(`Neo4j ${found.server?.version}`);
+    expect(found).toMatchObject({ outcome: 'pass', state: 'connected' });
+  });
+
   it('no longer fits once a constraint or an index that the tool made is dropped: the matching finding appears, and restoring it brings the pass back', async () => {
     const server = servers.get(pack);
     if (server === undefined) throw new Error('no server');

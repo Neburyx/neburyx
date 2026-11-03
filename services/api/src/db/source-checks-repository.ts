@@ -1,3 +1,4 @@
+import { serverVersionText } from '../source-test/server-version.js';
 import { sourceTestReportSchema, type SourceTestReport } from '@neburyx/contracts';
 import { readStoredReport } from '../source-test/stored-report.js';
 import { NOT_CHECKED_SINCE_START } from '../source-test/reasons.js';
@@ -18,9 +19,7 @@ export interface SourceCheck {
 
 /** The text kept in `server_version`: `Neo4j <version>` for the Neo4j kernel and `<product> <version>` for any other product. */
 export function serverVersionOf(report: SourceTestReport): string | null {
-  if (report.server === null) return null;
-  const product = report.server.product === 'Neo4j Kernel' ? 'Neo4j' : report.server.product;
-  return `${product} ${report.server.version}`;
+  return report.server === null ? null : serverVersionText(report.server);
 }
 
 export async function hasActiveSource(db: pg.Pool, sourceId: string): Promise<boolean> {

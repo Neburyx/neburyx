@@ -25,8 +25,12 @@ describe('reading a stored report', () => {
     expect(readStoredReport({ ...stored, readOnlyCheck: 'privileges-inspected', loginCanWrite: false })).toMatchObject({ loginCanWrite: false, mappingChecks: { status: 'not-run' } });
   });
 
+  it('reads a report from before the degree checks as not run', () => {
+    expect(readStoredReport({ ...stored, loginCanWrite: null, mappingChecks: { status: 'pass', findings: [] } })).toMatchObject({ degreeChecks: { status: 'not-run', foundOn: null, types: [], warnings: [] } });
+  });
+
   it('reads a report of this version as it is', () => {
-    const current = { ...stored, loginCanWrite: null, mappingChecks: { status: 'warn', findings: [{ severity: 'warn', check: 'sort-index', message: 'a warning' }] }, outcome: 'warn', state: 'degraded', stateReason: 'x' };
+    const current = { ...stored, loginCanWrite: null, degreeChecks: { status: 'not-run', foundOn: null, types: [], warnings: [] }, mappingChecks: { status: 'warn', findings: [{ severity: 'warn', check: 'sort-index', message: 'a warning' }] }, outcome: 'warn', state: 'degraded', stateReason: 'x' };
     expect(readStoredReport(current)).toEqual(current);
   });
 

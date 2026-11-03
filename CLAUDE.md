@@ -82,7 +82,7 @@ To run the API with the built web app (after `pnpm build` and `neburyx migrate`;
 DATABASE_URL=… NEBURYX_WEB_ROOT=apps/web/dist node services/api/dist/main.js
 ```
 
-To test a configured source (after `pnpm build`, `neburyx migrate` and one start of the API; it prints the server version, a mapping summary, whether the login can write and whether the mapping fits the source (labels, relationship types, indexes, stable ids), and exits `0` for pass and warn, `1` for fail, `2` for a usage error): `DATABASE_URL=… NEBURYX_CONFIG=… node services/api/dist/cli.js test-source --name <source>`. `--write-probe` also tries one write in a transaction it rolls back, to confirm that a login cannot write; use it in a test environment, never against a source you cannot afford to touch.
+To test a configured source (after `pnpm build`, `neburyx migrate` and one start of the API; it prints the server version, a mapping summary, whether the login can write, whether the mapping fits the source (labels, relationship types, indexes, stable ids) and how the server counts the neighbors of each entity type (cheap, not cheap or could not tell), and exits `0` for pass and warn, `1` for fail, `2` for a usage error): `DATABASE_URL=… NEBURYX_CONFIG=… node services/api/dist/cli.js test-source --name <source>`. `--write-probe` also tries one write in a transaction it rolls back, to confirm that a login cannot write; use it in a test environment, never against a source you cannot afford to touch.
 
 To create or upgrade the database (after `pnpm build`): `DATABASE_MIGRATION_URL=… DATABASE_APP_ROLE=… node services/api/dist/cli.js migrate`.
 

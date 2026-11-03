@@ -31,6 +31,25 @@ export type MappingCheck = keyof typeof MAPPING_CHECK_SEVERITY;
 /** The checks that say a part of the mapping could not be read against the source. */
 export const UNVERIFIED_CHECKS: readonly MappingCheck[] = ['schema-refused', 'schema-unreadable', 'stable-id-unverified'];
 
+export const DEGREE_STATUSES = ['pass', 'warn', 'not-run'] as const;
+
+/** What the plan of the degree probe showed for an entity type. */
+export const DEGREE_RESULTS = ['cheap', 'not-cheap', 'could-not-tell'] as const;
+
+/** Every basis of a degree result, with the result it always gives. */
+export const DEGREE_BASIS_RESULT = {
+  'degree-operator': 'cheap',
+  expand: 'not-cheap',
+  'unrecognized-plan': 'could-not-tell',
+  'no-plan': 'could-not-tell',
+  unreadable: 'could-not-tell',
+  timeout: 'could-not-tell',
+  refused: 'could-not-tell',
+  skipped: 'could-not-tell',
+} as const;
+
+export type DegreeBasis = keyof typeof DEGREE_BASIS_RESULT;
+
 export const testOutcomeSchema = z.enum(TEST_OUTCOMES);
 export const readOnlyCheckSchema = z.enum(READ_ONLY_CHECKS);
 
@@ -87,6 +106,45 @@ export const mappingChecksSchema = z
     { message: 'the status is the strongest of the findings', path: ['status'] },
   );
 
+const degreeBases = Object.keys(DEGREE_BASIS_RESULT) as [DegreeBasis, ...DegreeBasis[]];
+
+export const degreeTypeSchema = z.strictObject({
+  entityType: text,
+  result: z.enum(DEGREE_RESULTS),
+  basis: z.enum(degreeBases),
+  relationshipTypes: z.array(text).min(1),
+});
+
+/** How the server answers a count of neighbors, per entity type that has a mapped relationship; `not-run` when the source was not probed. */
+export const degreeChecksSchema = z
+  .strictObject({
+    status: z.enum(DEGREE_STATUSES),
+    foundOn: text.nullable(),
+    types: z.array(degreeTypeSchema),
+    warnings: z.array(text),
+  })
+  .refine(({ status, foundOn }) => (foundOn === null) === (status === 'not-run'), { message: 'foundOn is null if and only if the status is not-run', path: ['foundOn'] })
+  .refine(({ types }) => types.every((entry) => DEGREE_BASIS_RESULT[entry.basis] === entry.result), { message: 'a basis always gives the same result', path: ['types'] })
+  .refine(
+    ({ status, types, warnings }) => {
+      const notCheap = types.filter((entry) => entry.result !== 'cheap').length;
+      switch (status) {
+        case 'not-run':
+          return types.length === 0 && warnings.length === 0;
+        case 'pass':
+          return types.length > 0 && notCheap === 0 && warnings.length === 0;
+        case 'warn':
+          return notCheap > 0 && warnings.length === notCheap;
+        default:
+          return false;
+      }
+    },
+    { message: 'the status and the warnings follow from the types', path: ['status'] },
+  );
+
+export type DegreeChecks = z.infer<typeof degreeChecksSchema>;
+export type DegreeType = z.infer<typeof degreeTypeSchema>;
+
 export type MappingChecks = z.infer<typeof mappingChecksSchema>;
 export type MappingFinding = z.infer<typeof mappingFindingSchema>;
 
@@ -104,6 +162,7 @@ export const sourceTestReportSchema = z
     readOnlyCheck: readOnlyCheckSchema,
     loginCanWrite: z.boolean().nullable(),
     mappingChecks: mappingChecksSchema,
+    degreeChecks: degreeChecksSchema,
     mappingSummary: mappingSummarySchema,
   })
   .refine((report) => (report.loginCanWrite === null) === (report.readOnlyCheck === 'not-verified'), {

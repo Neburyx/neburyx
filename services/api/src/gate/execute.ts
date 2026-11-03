@@ -3,7 +3,7 @@ import type { Coordinator, ReadLease } from '../seams/seams.js';
 import { exhaustive } from './exhaustive.js';
 import type { ReadExecutor } from './executor.js';
 import type { Rendered } from './render.js';
-import type { Clock, GateContext, GateLogger, Row, Template } from './types.js';
+import type { Clock, GateContext, GateLogger, Plan, Row, Template } from './types.js';
 
 export interface ExecuteDeps {
   readonly coordinator: Coordinator;
@@ -15,6 +15,8 @@ export interface ExecuteDeps {
 export interface ExecuteResult {
   readonly rows: readonly Row[];
   readonly hasMore: boolean;
+  /** The plan of a profiled read; absent for a read that is not profiled. */
+  readonly plan?: Plan;
 }
 
 async function releaseLease(lease: ReadLease, logger: GateLogger): Promise<void> {
@@ -55,6 +57,7 @@ export async function executeRead(
       cypher: rendered.cypher,
       parameters: rendered.parameters,
       integerParameters: template.integerParameters,
+      ...(template.profile === true ? { profile: true } : {}),
       accessMode: 'READ',
       timeoutMs: context.budgets.timeoutMs,
       rowLimit: limit + 1,
@@ -70,7 +73,7 @@ export async function executeRead(
     case 'unavailable':
       throw new AppError('SOURCE_UNAVAILABLE', undefined, outcome.reason);
     case 'rows':
-      return { rows: outcome.rows.slice(0, limit), hasMore: outcome.rows.length > limit };
+      return { rows: outcome.rows.slice(0, limit), hasMore: outcome.rows.length > limit, ...(template.profile === true ? { plan: outcome.plan ?? null } : {}) };
     default:
       return exhaustive(outcome);
   }

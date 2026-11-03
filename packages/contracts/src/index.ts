@@ -19,12 +19,17 @@ export type { SourceState, SourceSummary, SourcesResponse } from './sources.js';
 export { BIND_KEYS, derivedRuleProfileSchema, entityTypeProfileSchema, presetProfileSchema, relationshipTypeProfileSchema, sourceProfileSchema } from './profile.js';
 export type { SourceProfile } from './profile.js';
 export {
+  DEGREE_BASIS_RESULT,
+  DEGREE_RESULTS,
+  DEGREE_STATUSES,
   MAPPING_CHECK_SEVERITY,
   MAPPING_CHECK_STATUSES,
   OPERATION_STATUSES,
   READ_ONLY_CHECKS,
   TEST_OUTCOMES,
   UNVERIFIED_CHECKS,
+  degreeChecksSchema,
+  degreeTypeSchema,
   mappingChecksSchema,
   mappingFindingSchema,
   operationSchema,
@@ -33,4 +38,4 @@ export {
   sourceTestReportSchema,
   testOutcomeSchema,
 } from './source-test.js';
-export type { MappingCheck, MappingChecks, MappingFinding, SourceTestReport, TestOutcome } from './source-test.js';
+export type { DegreeBasis, DegreeChecks, DegreeType, MappingCheck, MappingChecks, MappingFinding, SourceTestReport, TestOutcome } from './source-test.js';

@@ -19,6 +19,8 @@ import { runTestSourceCommand, type CommandStore, type TestSourceIo } from './co
 const folder = mkdtempSync(join(tmpdir(), 'test-source-'));
 afterAll(() => rmSync(folder, { recursive: true, force: true }));
 
+const DEGREE_PASS = 'Degree counts: pass\n  person: cheap (KNOWS, HAS LINE)\n  order_line: cheap (HAS LINE)\n  found on Neo4j 5.26.32\n';
+
 const DATABASE_URL = 'postgres://app_user:MARKER_DB_PASSWORD@db.example.test:5432/neburyx';
 const AUTH = { kind: 'basic', username_env: 'MARKER_USER_VAR', password_env: 'MARKER_PASS_VAR' };
 const SOURCE_ENV = { MARKER_USER_VAR: 'MARKER_USER_VALUE', MARKER_PASS_VAR: 'MARKER_PASS_VALUE' };
@@ -104,11 +106,11 @@ describe('a source that answers', () => {
     expect(result.out).toContain('Outcome: warn\nState: degraded\nReason: The server version is not on the support matrix.\n');
   });
 
-  it('sees four read transactions in read mode, one for each of the capabilities, the privileges, the labels and types and the indexes, and nothing else', async () => {
+  it('sees seven read transactions in read mode, one for each of the capabilities, the privileges, the labels and types, the indexes and the three degree probes, and nothing else', async () => {
     const result = await run(['--name', 'alpha'], env());
     expect(result.fake.drivers).toHaveLength(1);
     const sessions = result.fake.drivers[0]?.sessions ?? [];
-    expect(sessions).toHaveLength(4);
+    expect(sessions).toHaveLength(7);
     for (const session of sessions) {
       expect(session.config.defaultAccessMode).toBe('READ');
       expect(session.begins).toHaveLength(1);
@@ -118,6 +120,9 @@ describe('a source that answers', () => {
       "SHOW USER PRIVILEGES YIELD access, action, resource, graph, segment WHERE NOT action IN ['access', 'traverse', 'read', 'match', 'execute', 'execute_function', 'load', 'show_index', 'show_constraint'] RETURN DISTINCT access, action, resource, graph, segment LIMIT $limit + 1",
       'CALL { CALL db.labels() YIELD label RETURN collect(label) AS labels } CALL { CALL db.relationshipTypes() YIELD relationshipType RETURN collect(relationshipType) AS types } RETURN [l IN $mappedLabels WHERE l IN labels] AS labels, [t IN $mappedTypes WHERE t IN types] AS types',
       "SHOW INDEXES YIELD type, entityType, labelsOrTypes, properties, state, owningConstraint WHERE type IN ['RANGE', 'TEXT'] AND labelsOrTypes[0] IN ($mappedLabels + $mappedTypes) AND properties[0] IN $mappedProperties RETURN collect({type: type, entityType: entityType, name: labelsOrTypes[0], property: properties[0], single: size(properties) = 1, state: state, constrained: owningConstraint IS NOT NULL})[..500] AS indexes, count(*) > 500 AS truncated",
+      'PROFILE MATCH (n:`Person`) WITH n LIMIT 1 RETURN COUNT { (n)-[:`KNOWS`]->() } AS outgoing, COUNT { (n)<-[:`KNOWS`]-() } AS incoming',
+      'PROFILE MATCH (n:`Person`) WITH n LIMIT 1 RETURN COUNT { (n)-[:`HAS LINE`]->() } AS outgoing, COUNT { (n)<-[:`HAS LINE`]-() } AS incoming',
+      'PROFILE MATCH (n:`Order Line`) WITH n LIMIT 1 RETURN COUNT { (n)-[:`HAS LINE`]->() } AS outgoing, COUNT { (n)<-[:`HAS LINE`]-() } AS incoming',
     ]);
     expect(result.fake.forbidden).toEqual([]);
   });
@@ -166,6 +171,40 @@ describe('the mapping checks in the output', () => {
   });
 });
 
+describe('the degree results', () => {
+  it('prints a line for each entity type, the version they were found on and no warning, when every count is answered from the degree', async () => {
+    const result = await run(['--name', 'alpha'], env());
+    expect(result.code).toBe(0);
+    expect(result.out).toContain(`Checked at: 2026-11-02T10:00:00.000Z\n${DEGREE_PASS}`);
+    expect(result.out.endsWith(DEGREE_PASS)).toBe(true);
+  });
+
+  it('prints each type with its words and each warning on a line of its own, and the outcome and the exit code are those of the other checks', async () => {
+    const expand = { rows: [SERVER_ROW], degree: { plan: [{ name: 'Expand(All)', details: '(n)-[:T]->()', dbHits: 99 }] } };
+    const result = await run(['--name', 'alpha'], env(), expand);
+    expect(result.code).toBe(0);
+    expect(result.out).toContain('Outcome: pass\nState: connected\n');
+    expect(result.out).toContain(
+      'Degree counts: warn\n  person: not cheap (KNOWS, HAS LINE)\n  order_line: not cheap (HAS LINE)\n  found on Neo4j 5.26.32\n' +
+        '  warn: Degree counts are estimated for person: no cheap per-type degree index\n  warn: Degree counts are estimated for order_line: no cheap per-type degree index\n',
+    );
+    expect(result.out).not.toMatch(/Expand|dbHits|99/);
+  });
+
+  it('prints that the type could not be told when the plan is not recognised', async () => {
+    const result = await run(['--name', 'alpha'], env(), { rows: [SERVER_ROW], degree: { plan: [{ name: 'Projection', details: 'other', dbHits: 1 }] } });
+    expect(result.out).toContain('  person: could not tell (KNOWS, HAS LINE)\n');
+    expect(result.out).toContain("  warn: Degree counts could not be checked for person: the server's plan was not one this check recognizes\n");
+  });
+
+  it('prints that the counts were not checked, and nothing about types, when the probes did not run', async () => {
+    const result = await run(['--name', 'alpha'], env(), { rows: [{ ...SERVER_ROW, version: '4.4.0' }] });
+    expect(result.out.endsWith('Checked at: 2026-11-02T10:00:00.000Z\nDegree counts: not checked\n')).toBe(true);
+    const down = await run(['--name', 'alpha'], env(), { beginError: neo4jError('ServiceUnavailable') });
+    expect(down.out.endsWith('Degree counts: not checked\n')).toBe(true);
+  });
+});
+
 describe('the write probe flag', () => {
   const READ_ONLY = { rows: [SERVER_ROW], privileges: [] };
   const probeRun = (args: readonly string[], probe: FakeProbeBehaviour = {}, behaviour: FakeBehaviour = READ_ONLY) => {
@@ -194,21 +233,21 @@ describe('the write probe flag', () => {
     const result = await probeRun(['--name', 'alpha', '--write-probe']);
     expect(result.code).toBe(0);
     expect(result.out).toContain('Outcome: warn\nState: degraded\nReason: The login can write to the source; give Neburyx a login that can only read.\n');
-    expect(result.out).toContain('Read-only: write probe\nLogin can write: yes\nMapping checks: pass\nChecked at: 2026-11-02T10:00:00.000Z\nWrite probe: login can write\n');
+    expect(result.out).toContain('Read-only: write probe\nLogin can write: yes\nMapping checks: pass\nChecked at: 2026-11-02T10:00:00.000Z\n' + DEGREE_PASS + 'Write probe: login can write\n');
     expect(result.store.checks[0]?.report).toMatchObject({ readOnlyCheck: 'write-probe', loginCanWrite: true, outcome: 'warn' });
   });
 
   it('prints that the server refused to create a node, and that the login cannot write, when the privileges showed no write right', async () => {
     const result = await probeRun(['--name', 'alpha', '--write-probe'], { runError: neo4jError('Neo.ClientError.Security.Forbidden') });
     expect(result.out).toContain('Outcome: pass\nState: connected\n');
-    expect(result.out).toContain('Read-only: write probe\nLogin can write: no\nMapping checks: pass\nChecked at: 2026-11-02T10:00:00.000Z\nWrite probe: the server refused to create a node\n');
+    expect(result.out).toContain('Read-only: write probe\nLogin can write: no\nMapping checks: pass\nChecked at: 2026-11-02T10:00:00.000Z\n' + DEGREE_PASS + 'Write probe: the server refused to create a node\n');
     expect(result.store.checks[0]?.report).toMatchObject({ readOnlyCheck: 'write-probe', loginCanWrite: false });
   });
 
   it('keeps a write right that the privileges show when the server refuses to create a node, since that refusal does not show that the login cannot write', async () => {
     const result = await probeRun(['--name', 'alpha', '--write-probe'], { runError: neo4jError('Neo.ClientError.Security.Forbidden') }, { rows: [SERVER_ROW], privileges: [{ access: 'GRANTED', action: 'set_property', resource: 'property(note)', graph: '*', segment: 'NODE(*)' }] });
     expect(result.out).toContain('Outcome: warn\nState: degraded\nReason: The login can write to the source; give Neburyx a login that can only read.\n');
-    expect(result.out).toContain('Read-only: privileges inspected\nLogin can write: yes\nMapping checks: pass\nChecked at: 2026-11-02T10:00:00.000Z\nWrite probe: the server refused to create a node\n');
+    expect(result.out).toContain('Read-only: privileges inspected\nLogin can write: yes\nMapping checks: pass\nChecked at: 2026-11-02T10:00:00.000Z\n' + DEGREE_PASS + 'Write probe: the server refused to create a node\n');
     expect(result.store.checks[0]?.report).toMatchObject({ readOnlyCheck: 'privileges-inspected', loginCanWrite: true, outcome: 'warn' });
   });
 
@@ -218,7 +257,7 @@ describe('the write probe flag', () => {
   ] as const)('keeps the result of the privileges for %s when the probe is inconclusive, and prints that it could not be completed', async (_name, behaviour, lines, canWrite, check) => {
     const result = await probeRun(['--name', 'alpha', '--write-probe'], { runError: neo4jError('Neo.TransientError.General.DatabaseUnavailable') }, behaviour);
     expect(result.code).toBe(0);
-    expect(result.out).toContain(`${lines}\nChecked at: 2026-11-02T10:00:00.000Z\nWrite probe: could not be completed\n`);
+    expect(result.out).toContain(`${lines}\nChecked at: 2026-11-02T10:00:00.000Z\n${DEGREE_PASS}Write probe: could not be completed\n`);
     expect(result.store.checks[0]?.report).toMatchObject({ readOnlyCheck: check, loginCanWrite: canWrite });
   });
 

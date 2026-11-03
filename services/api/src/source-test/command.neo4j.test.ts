@@ -80,6 +80,9 @@ describe(`neburyx test-source against ${neo4jImageFrom(process.env)}`, () => {
     expect(result.out).toContain(`Operations: ${report.operations.map((operation) => `${operation.name} (${operation.status})`).join(', ')}\n`);
     expect(result.out).toContain(`Mapping: ${report.mappingSummary.entityTypes} entity types, ${report.mappingSummary.relationshipTypes} relationship types, ${report.mappingSummary.derivedRules} derived rules\n`);
 
+    expect(report.degreeChecks.status).toBe('pass');
+    expect(result.out).toContain(`Degree counts: pass\n${report.degreeChecks.types.map((entry) => `  ${entry.entityType}: cheap (${entry.relationshipTypes.join(', ')})\n`).join('')}  found on ${report.degreeChecks.foundOn}\n`);
+
     const user = (await store.current()).principal.id;
     const checks = await rows(database.ownerUrl, `SELECT triggered_by, outcome FROM source_checks WHERE source_id = 'alpha' ORDER BY checked_at`);
     expect(checks).toEqual([{ triggered_by: user, outcome: 'pass' }, { triggered_by: user, outcome: 'pass' }]);

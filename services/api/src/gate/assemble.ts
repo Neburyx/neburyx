@@ -9,6 +9,7 @@ import type { ReadExecutor } from './executor.js';
 import { createGates } from './gate.js';
 import { capabilitiesTemplate } from './templates/capabilities.js';
 import { connectivityTemplate } from './templates/connectivity.js';
+import { degreeProbeTemplate } from './templates/degree-probe.js';
 import { privilegesTemplate } from './templates/privileges.js';
 import { schemaIndexesTemplate } from './templates/schema-indexes.js';
 import { schemaTokensTemplate } from './templates/schema-tokens.js';
@@ -29,7 +30,7 @@ export interface AssembleOptions {
 }
 
 export function defaultCatalog(): TemplateCatalog {
-  return createTemplateCatalog({ templates: [connectivityTemplate, capabilitiesTemplate, privilegesTemplate, schemaTokensTemplate, schemaIndexesTemplate, stableIdDuplicatesTemplate] });
+  return createTemplateCatalog({ templates: [connectivityTemplate, capabilitiesTemplate, privilegesTemplate, schemaTokensTemplate, schemaIndexesTemplate, stableIdDuplicatesTemplate, degreeProbeTemplate] });
 }
 
 function budgetsFrom(source: SourceModel): Budgets {

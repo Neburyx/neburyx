@@ -92,6 +92,23 @@ const MAPPING_WORDS: Readonly<Record<SourceTestReport['mappingChecks']['status']
   'not-verified': 'not verified',
 };
 
+const DEGREE_WORDS: Readonly<Record<SourceTestReport['degreeChecks']['types'][number]['result'], string>> = {
+  cheap: 'cheap',
+  'not-cheap': 'not cheap',
+  'could-not-tell': 'could not tell',
+};
+
+/** The degree results: a line for each entity type, the version they were found on and each warning; nothing but the fact when the probes did not run. */
+function degreeLines(degrees: SourceTestReport['degreeChecks']): string[] {
+  if (degrees.status === 'not-run') return ['Degree counts: not checked'];
+  return [
+    `Degree counts: ${degrees.status}`,
+    ...degrees.types.map((entry) => `  ${entry.entityType}: ${DEGREE_WORDS[entry.result]} (${entry.relationshipTypes.join(', ')})`),
+    `  found on ${degrees.foundOn ?? 'an unknown server'}`,
+    ...degrees.warnings.map((warning) => `  warn: ${warning}`),
+  ];
+}
+
 function lines(report: SourceTestReport): string {
   const server = report.server === null ? 'not reached' : `${report.server.product} ${report.server.version} (${report.server.edition})`;
   const supported = report.versionSupported === null ? 'unknown' : report.versionSupported ? 'yes' : 'no';
@@ -111,6 +128,7 @@ function lines(report: SourceTestReport): string {
     `Mapping checks: ${MAPPING_WORDS[report.mappingChecks.status]}`,
     ...report.mappingChecks.findings.map((finding) => `  ${finding.severity}: ${finding.message}`),
     `Checked at: ${report.checkedAt}`,
+    ...degreeLines(report.degreeChecks),
     '',
   ].join('\n');
 }

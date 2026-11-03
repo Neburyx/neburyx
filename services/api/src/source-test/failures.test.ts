@@ -128,6 +128,13 @@ describe('the gate answer for a read that the server refuses', () => {
   });
 });
 
+/** A source whose coordinator admits the first reads (capabilities, privileges, the two schema reads) and finds it busy at the next. */
+function busyAfter(admitted: number) {
+  const defaults = communitySeams();
+  let reads = 0;
+  return rig({ rows: [SERVER_ROW] }, ENV, { coordinator: { acquireRead: (read) => (++reads > admitted ? Promise.resolve({ status: 'busy' }) : defaults.coordinator.acquireRead(read)) } });
+}
+
 describe('POST /v1/sources/{id}/test for each failure', () => {
   async function respond(parts: ReturnType<typeof rig>) {
     const app = await buildApp({ webRoot, logger: pino({ level: 'silent' }), store: memoryAppStore(), mapping, sourceTester: parts.tester });
@@ -160,6 +167,17 @@ describe('POST /v1/sources/{id}/test for each failure', () => {
     ['an error of a schema read the executor does not know', { read: 'indexes', error: neo4jError('Neo.ClientError.Statement.SyntaxError', message) } as const, 500, 'INTERNAL_ERROR'],
   ])('answers the shared error body, not a report, for %s after the capabilities read answered', async (_name, schemaError, status, code) => {
     const response = await respond(rig({ rows: [SERVER_ROW], schemaError }));
+    expect(response.statusCode).toBe(status);
+    expect(response.json()).toMatchObject({ error: { code } });
+    expect(JSON.stringify(response.json())).not.toContain('MARKER');
+  });
+
+  it.each([
+    ['a lost connection during a degree probe', () => rig({ rows: [SERVER_ROW], degree: { error: neo4jError('ServiceUnavailable', message) } }), 503, 'SOURCE_UNAVAILABLE'],
+    ['an error of a degree probe the executor does not know', () => rig({ rows: [SERVER_ROW], degree: { error: neo4jError('Neo.ClientError.Statement.SyntaxError', message) } }), 500, 'INTERNAL_ERROR'],
+    ['a busy source at the first degree probe', () => busyAfter(4), 503, 'SOURCE_BUSY'],
+  ])('answers the shared error body, not a report, for %s after the schema reads answered', async (_name, make, status, code) => {
+    const response = await respond(make());
     expect(response.statusCode).toBe(status);
     expect(response.json()).toMatchObject({ error: { code } });
     expect(JSON.stringify(response.json())).not.toContain('MARKER');

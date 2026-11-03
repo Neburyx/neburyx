@@ -1,5 +1,5 @@
 import type { IndexEntry } from '../gate/templates/schema-indexes.js';
-import type { Params } from '../gate/types.js';
+import type { Params, Plan } from '../gate/types.js';
 
 const listOf = (params: Params, name: string): string[] => {
   const value = params[name];
@@ -21,6 +21,14 @@ export function fittingIndexes(params: Params): { indexes: IndexEntry[]; truncat
   const relationships = listOf(params, 'mappedTypes').flatMap((name) => properties.map((property): IndexEntry => ({ type: 'RANGE', entityType: 'RELATIONSHIP', name, property, single: true, state: 'ONLINE', constrained: false })));
   return { indexes: [...nodes, ...relationships], truncated: false };
 }
+
+/** The plan of a degree probe that the server answers from the degree of the node, as both supported images show it. */
+export const CHEAP_PLAN: Plan = [
+  { name: 'ProduceResults', details: 'outgoing, incoming', dbHits: 0 },
+  { name: 'Projection', details: 'getDegree((n)-[:T]->()) AS outgoing, getDegree((n)<-[:T]-()) AS incoming', dbHits: 2 },
+  { name: 'Limit', details: '1', dbHits: 0 },
+  { name: 'NodeByLabelScan', details: 'n:L', dbHits: 2 },
+];
 
 /** The answer of the duplicate scan for a source with no duplicate. */
 export const NO_DUPLICATES = { duplicated: 0 };

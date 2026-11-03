@@ -6,7 +6,7 @@ import { memoryAppStore } from '../testing/app-store.js';
 import { fittingIndexes, fittingTokens } from '../testing/fitting-schema.js';
 import { mappingOf, sourceWith } from '../testing/gate-fixtures.js';
 import { LOCAL_PRINCIPAL } from '../testing/gate.js';
-import { SERVER_ROW, serverExecutor } from '../testing/source-tester.js';
+import { fittingSchemaAnswer, SERVER_ROW, serverExecutor } from '../testing/source-tester.js';
 import { testSourceGate } from '../testing/source-gate.js';
 import { STAGE_START_WINDOW_MS } from './mapping-stage.js';
 import { createSourceTester } from './tester.js';
@@ -43,6 +43,7 @@ function rig(schema: Schema = {}, options: { readonly capabilities?: ExecuteOutc
     options.onCall?.(call);
     if (call.templateId === 'schema-tokens') return schema.tokens ?? rows(fittingTokens(call.parameters));
     if (call.templateId === 'schema-indexes') return schema.indexes ?? rows({ indexes: FITTING, truncated: false });
+    if (call.templateId === 'degree-probe') return fittingSchemaAnswer(call);
     const scan = schema.scan ?? rows({ duplicated: 0 });
     return typeof scan === 'function' ? scan(call) : scan;
   });
@@ -61,7 +62,7 @@ describe('a mapping that fits the source', () => {
     const { tester, calls } = rig();
     const report = sourceTestReportSchema.parse(await tester.run(request));
     expect(report).toMatchObject({ outcome: 'pass', state: 'connected', stateReason: null, mappingChecks: { status: 'pass', findings: [] } });
-    expect(calls()).toEqual(['capabilities', 'privileges', 'schema-tokens', 'schema-indexes']);
+    expect(calls()).toEqual(['capabilities', 'privileges', 'schema-tokens', 'schema-indexes', 'degree-probe', 'degree-probe']);
   });
 });
 

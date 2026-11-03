@@ -117,9 +117,9 @@ export function createNeo4jExecutor(options: Neo4jExecutorOptions): Neo4jExecuto
               onNext: (row) => {
                 if (settled) return;
                 rows.push(row);
-                if (rows.length >= call.rowLimit) settle(() => resolve({ status: 'rows', rows }));
+                if (rows.length >= call.rowLimit) settle(() => resolve(call.profile === true ? { status: 'rows', rows, plan: null } : { status: 'rows', rows }));
               },
-              onCompleted: () => settle(() => resolve({ status: 'rows', rows })),
+              onCompleted: (plan) => settle(() => resolve(call.profile === true ? { status: 'rows', rows, plan: plan ?? null } : { status: 'rows', rows })),
               onError: fail,
             });
           })

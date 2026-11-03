@@ -128,3 +128,56 @@ describe('a driver that cannot be created', () => {
     await executor.close();
   });
 });
+
+describe('a profiled read', () => {
+  const PLAN = [{ name: 'Projection', details: 'getDegree((n)-[:T]->()) AS c', dbHits: 1 }];
+
+  it('answers the plan of the profile with the rows when the stream completes', async () => {
+    useClock();
+    const { executor, fake } = rig({ manual: true });
+    const answer = executor.execute(callFor({ profile: true, rowLimit: 2 }));
+    await vi.advanceTimersByTimeAsync(0);
+    const observer = fake.drivers[0]?.sessions[0]?.observer;
+    observer?.onNext({ c: 1 });
+    observer?.onCompleted(PLAN);
+    expect(await answer).toEqual({ status: 'rows', rows: [{ c: 1 }], plan: PLAN });
+  });
+
+  it('answers no plan for a read that is not profiled, also when the server sent one', async () => {
+    useClock();
+    const { executor, fake } = rig({ manual: true });
+    const answer = executor.execute(callFor({ rowLimit: 2 }));
+    await vi.advanceTimersByTimeAsync(0);
+    const observer = fake.drivers[0]?.sessions[0]?.observer;
+    observer?.onNext({ c: 1 });
+    observer?.onCompleted(PLAN);
+    expect(await answer).toEqual({ status: 'rows', rows: [{ c: 1 }] });
+  });
+
+  it('answers a null plan when the server sent no profile', async () => {
+    useClock();
+    const { executor, fake } = rig({ manual: true });
+    const answer = executor.execute(callFor({ profile: true, rowLimit: 2 }));
+    await vi.advanceTimersByTimeAsync(0);
+    fake.drivers[0]?.sessions[0]?.observer?.onCompleted();
+    expect(await answer).toEqual({ status: 'rows', rows: [], plan: null });
+  });
+
+  it('answers a null plan when the stream ended on the row limit before it completed', async () => {
+    useClock();
+    const { executor, fake } = rig({ manual: true });
+    const answer = executor.execute(callFor({ profile: true, rowLimit: 1 }));
+    await vi.advanceTimersByTimeAsync(0);
+    const observer = fake.drivers[0]?.sessions[0]?.observer;
+    observer?.onNext({ c: 1 });
+    observer?.onCompleted(PLAN);
+    expect(await answer).toEqual({ status: 'rows', rows: [{ c: 1 }], plan: null });
+  });
+
+  it('still runs in a read transaction', async () => {
+    useClock();
+    const { executor, fake } = rig({ rows: [] });
+    await executor.execute(callFor({ profile: true, cypher: 'PROFILE MATCH (n) RETURN n' }));
+    expect(fake.drivers[0]?.sessions[0]?.config.defaultAccessMode).toBe('READ');
+  });
+});
