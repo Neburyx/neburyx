@@ -1,14 +1,12 @@
+import type { ElementRef } from '@neburyx/contracts';
 import type { ZodType } from 'zod';
+import type { NormalizeContext, NormalizeModel } from './normalize/model.js';
 import type { Principal } from '../seams/seams.js';
 
 export const GATE_STAGES = ['resolve', 'validate', 'authorize', 'execute', 'normalize', 'redact', 'audit'] as const;
 export type GateStage = (typeof GATE_STAGES)[number];
 
-export interface ElementRef {
-  readonly sourceId: string;
-  readonly entityType: string;
-  readonly stableId: string;
-}
+export type { ElementRef };
 
 export type Params = Readonly<Record<string, unknown>>;
 export type Row = Readonly<Record<string, unknown>>;
@@ -48,7 +46,7 @@ export interface Template {
   /** True for a template whose Cypher starts with `PROFILE `: the executor returns the plan of the read and `normalize` gets it. */
   readonly profile?: boolean;
   refsOf(params: Params): readonly ElementRef[];
-  normalize(rows: readonly Row[], plan?: Plan): readonly Item[];
+  normalize(rows: readonly Row[], plan?: Plan, context?: NormalizeContext): readonly Item[];
 }
 
 export interface SourceAllowlist {
@@ -87,6 +85,8 @@ export interface GateContext {
   readonly sourceId: string;
   readonly budgets: Budgets;
   readonly allowlist: SourceAllowlist;
+  /** What the normalize stage needs of the source's mapping. */
+  readonly model: NormalizeModel;
   readonly deadlineAt: number;
 }
 

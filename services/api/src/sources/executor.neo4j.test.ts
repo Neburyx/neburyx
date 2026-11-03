@@ -10,8 +10,8 @@ let executor: Neo4jExecutor;
 let sequence = 0;
 
 function numberOf(value: unknown): number {
-  if (!neo4j.isInt(value)) throw new Error('expected a driver integer');
-  return value.toNumber();
+  if (typeof value !== 'number') throw new Error('expected a plain number');
+  return value;
 }
 
 function call(cypher: string, overrides: Partial<ExecuteCall> = {}): ExecuteCall {
@@ -87,18 +87,21 @@ describe('rows from a Neo4j container', () => {
     expect(await rowsOf('MATCH (t:Thing) RETURN count(t) AS things')).toHaveLength(1);
   });
 
-  it('holds the driver values, unconverted: 64-bit integers, date and time, node, relationship and path', async () => {
+  it('hands over plain values: 64-bit integers, date and time, node, relationship and path are tagged, JSON-safe objects, never driver objects', async () => {
     const [row] = await rowsOf(
       "MATCH p = (a:Thing)-[r:LINKS]->(b:Thing) RETURN 9007199254740993 AS big, datetime('2026-01-02T03:04:05Z') AS at, date('2026-01-02') AS day, duration('P1DT2H') AS span, a, r, p",
     );
-    expect(neo4j.isInt(row?.['big'])).toBe(true);
-    expect(String(row?.['big'])).toBe('9007199254740993');
-    expect(neo4j.isDateTime(row?.['at'])).toBe(true);
-    expect(neo4j.isDate(row?.['day'])).toBe(true);
-    expect(neo4j.isDuration(row?.['span'])).toBe(true);
-    expect(neo4j.isNode(row?.['a'])).toBe(true);
-    expect(neo4j.isRelationship(row?.['r'])).toBe(true);
-    expect(neo4j.isPath(row?.['p'])).toBe(true);
+    expect(row?.['big']).toEqual({ $type: 'integer', value: '9007199254740993' });
+    expect(row?.['at']).toMatchObject({ $type: 'dateTime' });
+    expect(row?.['day']).toEqual({ $type: 'date', value: '2026-01-02' });
+    expect(row?.['span']).toEqual({ $type: 'duration', value: 'P1DT2H' });
+    expect(row?.['a']).toMatchObject({ $type: 'node', labels: ['Thing'] });
+    expect(row?.['r']).toMatchObject({ $type: 'relationship', type: 'LINKS' });
+    expect(row?.['p']).toMatchObject({ $type: 'path' });
+    expect(JSON.parse(JSON.stringify(row))).toEqual(row);
+    for (const value of Object.values(row ?? {})) {
+      expect(neo4j.isInt(value) || neo4j.isDateTime(value) || neo4j.isDate(value) || neo4j.isDuration(value) || neo4j.isNode(value) || neo4j.isRelationship(value) || neo4j.isPath(value)).toBe(false);
+    }
   });
 
   it('reads the database the mapping names for each source', async () => {

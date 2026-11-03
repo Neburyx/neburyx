@@ -36,6 +36,7 @@ function resolveContext(deps: GateDeps, request: GateRequest, system: boolean): 
     sourceId: request.sourceId,
     budgets,
     allowlist: deps.allowlistFor(request.sourceId),
+    model: deps.modelFor(request.sourceId),
     deadlineAt: deps.clock() + budgets.requestTimeoutMs,
   };
 }
@@ -51,7 +52,7 @@ async function runStages(deps: GateDeps, request: GateRequest, system: boolean, 
   const result = await inStage(deps, progress, 'execute', () =>
     executeRead({ coordinator: deps.seams.coordinator, executor: deps.executor, clock: deps.clock, logger: deps.logger }, context, template, rendered, request.limit),
   );
-  const items = await inStage(deps, progress, 'normalize', () => template.normalize(result.rows, result.plan));
+  const items = await inStage(deps, progress, 'normalize', () => template.normalize(result.rows, result.plan, { sourceId: context.sourceId, hasMore: result.hasMore, model: context.model }));
   const redacted = await inStage(deps, progress, 'redact', () => deps.redact(items, context));
   return { items: redacted, hasMore: result.hasMore };
 }

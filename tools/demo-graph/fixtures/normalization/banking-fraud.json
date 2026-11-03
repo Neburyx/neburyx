@@ -1,0 +1,578 @@
+{
+  "node": [
+    {
+      "n": {
+        "$type": "node",
+        "elementId": "eid-1",
+        "labels": [
+          "Account"
+        ],
+        "properties": {
+          "accountId": "AC-0000000",
+          "holderName": "Ivo Lowe",
+          "phone": "+1-555-8945",
+          "openedOn": {
+            "$type": "date",
+            "value": "2015-01-14"
+          },
+          "accountKind": "business",
+          "status": "active"
+        }
+      }
+    }
+  ],
+  "values": [
+    {
+      "bigInteger": {
+        "$type": "integer",
+        "value": "9223372036854775807"
+      },
+      "smallInteger": 7,
+      "safeLimit": -9007199254740991,
+      "decimal": 1.5,
+      "flag": true,
+      "words": "text",
+      "nothing": null,
+      "aDate": {
+        "$type": "date",
+        "value": "2026-01-02"
+      },
+      "aDateTime": {
+        "$type": "dateTime",
+        "value": "2026-01-02T03:04:05.123456789+02:00"
+      },
+      "aLocalDateTime": {
+        "$type": "localDateTime",
+        "value": "2026-01-02T03:04:05"
+      },
+      "aTime": {
+        "$type": "time",
+        "value": "10:11:12Z"
+      },
+      "aLocalTime": {
+        "$type": "localTime",
+        "value": "10:11:12"
+      },
+      "aDuration": {
+        "$type": "duration",
+        "value": "P1Y2M3DT4H5M6S"
+      },
+      "aPoint": {
+        "$type": "point",
+        "srid": 7203,
+        "x": 1.5,
+        "y": 2.5
+      },
+      "aList": [
+        1,
+        "a",
+        null,
+        {
+          "$type": "integer",
+          "value": "9223372036854775807"
+        }
+      ],
+      "aMap": {
+        "k": 1,
+        "nested": [
+          {
+            "$type": "date",
+            "value": "2026-01-02"
+          }
+        ]
+      }
+    }
+  ],
+  "relationship": [
+    {
+      "a": {
+        "$type": "node",
+        "elementId": "eid-2",
+        "labels": [
+          "Customer"
+        ],
+        "properties": {
+          "phone": "+1-555-9622",
+          "segment": "small-business",
+          "customerId": "CU-0000000",
+          "fullName": "Gus Cedar",
+          "dateOfBirth": {
+            "$type": "date",
+            "value": "1988-10-21"
+          },
+          "authId": "AUTH-0000000"
+        }
+      },
+      "r": {
+        "$type": "relationship",
+        "elementId": "eid-3",
+        "type": "HOLDS_ACCOUNT",
+        "startElementId": "eid-2",
+        "endElementId": "eid-4",
+        "properties": {}
+      },
+      "b": {
+        "$type": "node",
+        "elementId": "eid-4",
+        "labels": [
+          "Account"
+        ],
+        "properties": {
+          "accountId": "AC-0009152",
+          "holderName": "Kira Fenn",
+          "phone": "+1-555-3665",
+          "openedOn": {
+            "$type": "date",
+            "value": "2024-09-20"
+          },
+          "accountKind": "checking",
+          "status": "active"
+        }
+      },
+      "p": {
+        "$type": "path",
+        "start": {
+          "$type": "node",
+          "elementId": "eid-2",
+          "labels": [
+            "Customer"
+          ],
+          "properties": {
+            "phone": "+1-555-9622",
+            "segment": "small-business",
+            "customerId": "CU-0000000",
+            "fullName": "Gus Cedar",
+            "dateOfBirth": {
+              "$type": "date",
+              "value": "1988-10-21"
+            },
+            "authId": "AUTH-0000000"
+          }
+        },
+        "segments": [
+          {
+            "relationship": {
+              "$type": "relationship",
+              "elementId": "eid-3",
+              "type": "HOLDS_ACCOUNT",
+              "startElementId": "eid-2",
+              "endElementId": "eid-4",
+              "properties": {}
+            },
+            "end": {
+              "$type": "node",
+              "elementId": "eid-4",
+              "labels": [
+                "Account"
+              ],
+              "properties": {
+                "accountId": "AC-0009152",
+                "holderName": "Kira Fenn",
+                "phone": "+1-555-3665",
+                "openedOn": {
+                  "$type": "date",
+                  "value": "2024-09-20"
+                },
+                "accountKind": "checking",
+                "status": "active"
+              }
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "path": [
+    {
+      "p": {
+        "$type": "path",
+        "start": {
+          "$type": "node",
+          "elementId": "eid-2",
+          "labels": [
+            "Customer"
+          ],
+          "properties": {
+            "phone": "+1-555-9622",
+            "segment": "small-business",
+            "customerId": "CU-0000000",
+            "fullName": "Gus Cedar",
+            "dateOfBirth": {
+              "$type": "date",
+              "value": "1988-10-21"
+            },
+            "authId": "AUTH-0000000"
+          }
+        },
+        "segments": [
+          {
+            "relationship": {
+              "$type": "relationship",
+              "elementId": "eid-3",
+              "type": "HOLDS_ACCOUNT",
+              "startElementId": "eid-2",
+              "endElementId": "eid-4",
+              "properties": {}
+            },
+            "end": {
+              "$type": "node",
+              "elementId": "eid-4",
+              "labels": [
+                "Account"
+              ],
+              "properties": {
+                "accountId": "AC-0009152",
+                "holderName": "Kira Fenn",
+                "phone": "+1-555-3665",
+                "openedOn": {
+                  "$type": "date",
+                  "value": "2024-09-20"
+                },
+                "accountKind": "checking",
+                "status": "active"
+              }
+            }
+          },
+          {
+            "relationship": {
+              "$type": "relationship",
+              "elementId": "eid-5",
+              "type": "USES_DEVICE",
+              "startElementId": "eid-4",
+              "endElementId": "eid-6",
+              "properties": {
+                "sourceRecordId": "SRC-UD-0013052",
+                "eventId": "UD-0013052",
+                "channel": "branch"
+              }
+            },
+            "end": {
+              "$type": "node",
+              "elementId": "eid-6",
+              "labels": [
+                "Device"
+              ],
+              "properties": {
+                "firstSeen": {
+                  "$type": "dateTime",
+                  "value": "2021-02-26T21:55:37Z"
+                },
+                "fingerprint": "DV-002273",
+                "isShared": false,
+                "platform": "ios"
+              }
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "supports": [
+    {
+      "a": {
+        "$type": "node",
+        "elementId": "eid-1",
+        "labels": [
+          "Account"
+        ],
+        "properties": {
+          "accountId": "AC-0000000",
+          "holderName": "Ivo Lowe",
+          "phone": "+1-555-8945",
+          "openedOn": {
+            "$type": "date",
+            "value": "2015-01-14"
+          },
+          "accountKind": "business",
+          "status": "active"
+        }
+      },
+      "r1": {
+        "$type": "relationship",
+        "elementId": "eid-7",
+        "type": "USES_DEVICE",
+        "startElementId": "eid-1",
+        "endElementId": "eid-8",
+        "properties": {
+          "sourceRecordId": "SRC-UD-0000000",
+          "eventId": "UD-0000000",
+          "lastSeen": {
+            "$type": "dateTime",
+            "value": "2025-09-29T00:55:31Z"
+          },
+          "channel": "branch"
+        }
+      },
+      "m": {
+        "$type": "node",
+        "elementId": "eid-8",
+        "labels": [
+          "Device"
+        ],
+        "properties": {
+          "firstSeen": {
+            "$type": "dateTime",
+            "value": "2023-11-08T00:45:41Z"
+          },
+          "fingerprint": "DV-000000",
+          "platform": "windows",
+          "isShared": true
+        }
+      },
+      "r2": {
+        "$type": "relationship",
+        "elementId": "eid-9",
+        "type": "USES_DEVICE",
+        "startElementId": "eid-10",
+        "endElementId": "eid-8",
+        "properties": {
+          "sourceRecordId": "SRC-UD-0000001",
+          "eventId": "UD-0000001",
+          "lastSeen": {
+            "$type": "dateTime",
+            "value": "2025-12-12T08:05:12Z"
+          },
+          "channel": "branch"
+        }
+      },
+      "b": {
+        "$type": "node",
+        "elementId": "eid-10",
+        "labels": [
+          "Account"
+        ],
+        "properties": {
+          "accountId": "AC-0000001",
+          "holderName": "Pia Dunn",
+          "phone": "+1-555-4256",
+          "openedOn": {
+            "$type": "date",
+            "value": "2018-02-02"
+          },
+          "accountKind": "checking",
+          "status": "active"
+        }
+      }
+    }
+  ],
+  "stored": [
+    {
+      "a": {
+        "$type": "node",
+        "elementId": "eid-1",
+        "labels": [
+          "Account"
+        ],
+        "properties": {
+          "accountId": "AC-0000000",
+          "holderName": "Ivo Lowe",
+          "phone": "+1-555-8945",
+          "openedOn": {
+            "$type": "date",
+            "value": "2015-01-14"
+          },
+          "accountKind": "business",
+          "status": "active"
+        }
+      },
+      "r": {
+        "$type": "relationship",
+        "elementId": "eid-7",
+        "type": "USES_DEVICE",
+        "startElementId": "eid-1",
+        "endElementId": "eid-8",
+        "properties": {
+          "sourceRecordId": "SRC-UD-0000000",
+          "eventId": "UD-0000000",
+          "lastSeen": {
+            "$type": "dateTime",
+            "value": "2025-09-29T00:55:31Z"
+          },
+          "channel": "branch"
+        }
+      },
+      "b": {
+        "$type": "node",
+        "elementId": "eid-8",
+        "labels": [
+          "Device"
+        ],
+        "properties": {
+          "firstSeen": {
+            "$type": "dateTime",
+            "value": "2023-11-08T00:45:41Z"
+          },
+          "fingerprint": "DV-000000",
+          "platform": "windows",
+          "isShared": true
+        }
+      },
+      "p": {
+        "$type": "path",
+        "start": {
+          "$type": "node",
+          "elementId": "eid-1",
+          "labels": [
+            "Account"
+          ],
+          "properties": {
+            "accountId": "AC-0000000",
+            "holderName": "Ivo Lowe",
+            "phone": "+1-555-8945",
+            "openedOn": {
+              "$type": "date",
+              "value": "2015-01-14"
+            },
+            "accountKind": "business",
+            "status": "active"
+          }
+        },
+        "segments": [
+          {
+            "relationship": {
+              "$type": "relationship",
+              "elementId": "eid-7",
+              "type": "USES_DEVICE",
+              "startElementId": "eid-1",
+              "endElementId": "eid-8",
+              "properties": {
+                "sourceRecordId": "SRC-UD-0000000",
+                "eventId": "UD-0000000",
+                "lastSeen": {
+                  "$type": "dateTime",
+                  "value": "2025-09-29T00:55:31Z"
+                },
+                "channel": "branch"
+              }
+            },
+            "end": {
+              "$type": "node",
+              "elementId": "eid-8",
+              "labels": [
+                "Device"
+              ],
+              "properties": {
+                "firstSeen": {
+                  "$type": "dateTime",
+                  "value": "2023-11-08T00:45:41Z"
+                },
+                "fingerprint": "DV-000000",
+                "platform": "windows",
+                "isShared": true
+              }
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "made": [
+    {
+      "n": {
+        "$type": "node",
+        "elementId": "eid-11",
+        "labels": [
+          "Account"
+        ],
+        "properties": {
+          "zzMarker": "m1"
+        }
+      }
+    },
+    {
+      "n": {
+        "$type": "node",
+        "elementId": "eid-12",
+        "labels": [
+          "Claim"
+        ],
+        "properties": {
+          "zzMarker": "m2"
+        }
+      }
+    },
+    {
+      "n": {
+        "$type": "node",
+        "elementId": "eid-13",
+        "labels": [
+          "Account"
+        ],
+        "properties": {
+          "accountId": "ZZ-NORM-3",
+          "zzMarker": "m3"
+        }
+      }
+    }
+  ],
+  "members": [
+    {
+      "a": {
+        "$type": "node",
+        "elementId": "eid-14",
+        "labels": [
+          "Customer"
+        ],
+        "properties": {
+          "zzMarker": "ma",
+          "customerId": "ZZ-NORM-A"
+        }
+      },
+      "r": {
+        "$type": "relationship",
+        "elementId": "eid-15",
+        "type": "HOLDS_ACCOUNT",
+        "startElementId": "eid-14",
+        "endElementId": "eid-16",
+        "properties": {
+          "zzMarker": "r1"
+        }
+      },
+      "b": {
+        "$type": "node",
+        "elementId": "eid-16",
+        "labels": [
+          "Account"
+        ],
+        "properties": {
+          "accountId": "ZZ-NORM-B",
+          "zzMarker": "mb"
+        }
+      }
+    },
+    {
+      "a": {
+        "$type": "node",
+        "elementId": "eid-14",
+        "labels": [
+          "Customer"
+        ],
+        "properties": {
+          "zzMarker": "ma",
+          "customerId": "ZZ-NORM-A"
+        }
+      },
+      "r": {
+        "$type": "relationship",
+        "elementId": "eid-17",
+        "type": "HOLDS_ACCOUNT",
+        "startElementId": "eid-14",
+        "endElementId": "eid-16",
+        "properties": {
+          "zzMarker": "r2"
+        }
+      },
+      "b": {
+        "$type": "node",
+        "elementId": "eid-16",
+        "labels": [
+          "Account"
+        ],
+        "properties": {
+          "accountId": "ZZ-NORM-B",
+          "zzMarker": "mb"
+        }
+      }
+    }
+  ]
+}

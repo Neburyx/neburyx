@@ -21,6 +21,7 @@ import type {
   Template,
   TemplateCatalog,
 } from '../gate/types.js';
+import { EMPTY_MODEL } from '../gate/normalize/model.js';
 import { LOCAL_IDENTITY } from './app-store.js';
 
 export const SOURCE_A = 'source-a';
@@ -112,6 +113,7 @@ export interface HarnessOptions {
   readonly executor?: TestExecutor;
   readonly budgetsFor?: (sourceId: string) => Budgets;
   readonly allowlistFor?: (sourceId: string) => SourceAllowlist;
+  readonly modelFor?: GateDeps['modelFor'];
   readonly redact?: GateDeps['redact'];
   readonly clock?: () => number;
   readonly usability?: GateDeps['usability'];
@@ -128,6 +130,7 @@ export function harness(options: HarnessOptions = {}): Harness {
     executor,
     budgetsFor: options.budgetsFor ?? (() => DEFAULT_BUDGETS),
     allowlistFor: options.allowlistFor ?? (() => EMPTY_ALLOWLIST),
+    modelFor: options.modelFor ?? (() => EMPTY_MODEL),
     redact: options.redact ?? ((items) => items),
     usability: options.usability ?? ALWAYS_USABLE,
     clock: options.clock ?? (() => 1_000_000),

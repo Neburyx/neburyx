@@ -178,3 +178,32 @@ describe('a request that succeeds', () => {
     expect(executor.calls[0]?.deadlineAt).toBe(5000 + 10_000);
   });
 });
+
+describe('the context a template is normalized with', () => {
+  const model = { entitiesByLabel: new Map(), relationships: [], derived: [] };
+
+  it('holds the source of the request, whether the page was cut and the model of that source', async () => {
+    const seen: unknown[] = [];
+    const template = testTemplate({
+      normalize: (rows, _plan, context) => {
+        seen.push(context);
+        return rows.map((row) => ({ title: String(row['title']) }));
+      },
+    });
+    const { gate } = harness({ catalog: testCatalog([template]), modelFor: () => model, executor: new TestExecutor(() => Promise.resolve(rowsOf(3))) });
+    await gate.run(gateRequest({ limit: 2 }));
+    await gate.run(gateRequest({ limit: 5 }));
+    expect(seen).toEqual([
+      { sourceId: SOURCE_A, hasMore: true, model },
+      { sourceId: SOURCE_A, hasMore: false, model },
+    ]);
+  });
+
+  it('is built for the source of the request, so that another source gets its own model', async () => {
+    const asked: string[] = [];
+    const { gate } = harness({ modelFor: (sourceId) => (asked.push(sourceId), model) });
+    await gate.run(gateRequest());
+    expect(asked).toEqual([SOURCE_A]);
+  });
+});
+

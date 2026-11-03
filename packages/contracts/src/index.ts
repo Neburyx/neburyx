@@ -39,3 +39,5 @@ export {
   testOutcomeSchema,
 } from './source-test.js';
 export type { DegreeBasis, DegreeChecks, DegreeType, MappingCheck, MappingChecks, MappingFinding, SourceTestReport, TestOutcome } from './source-test.js';
+export { COUNT_QUALITIES, DATA_CLASSES, countSchema, edgeRefSchema, edgeSchema, elementRefSchema, nodeSchema, propertySchema } from './graph.js';
+export type { Count, DataClass, EdgeRef, ElementRef, GraphEdge, GraphNode, GraphProperty } from './graph.js';

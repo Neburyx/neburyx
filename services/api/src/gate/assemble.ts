@@ -7,6 +7,7 @@ import { DEFAULT_BUDGETS } from './budgets.js';
 import { createTemplateCatalog } from './catalog.js';
 import type { ReadExecutor } from './executor.js';
 import { createGates } from './gate.js';
+import { normalizeModelOf } from './normalize/model.js';
 import { capabilitiesTemplate } from './templates/capabilities.js';
 import { connectivityTemplate } from './templates/connectivity.js';
 import { degreeProbeTemplate } from './templates/degree-probe.js';
@@ -40,12 +41,18 @@ function budgetsFrom(source: SourceModel): Budgets {
 export function assembleGate(options: AssembleOptions): { readonly gate: Gate; readonly system: SystemRunner } {
   const budgets = new Map(options.mapping.sources.map((source) => [source.id, budgetsFrom(source)]));
   const allowlists = new Map<string, SourceAllowlist>(options.mapping.sources.map((source) => [source.id, allowlistFromMapping(source)]));
+  const models = new Map(options.mapping.sources.map((source) => [source.id, normalizeModelOf(source)]));
   return createGates({
     seams: options.seams,
     catalog: options.catalog ?? defaultCatalog(),
     executor: options.executor,
     budgetsFor: (sourceId) => {
       const found = budgets.get(sourceId);
+      if (found === undefined) throw new AppError('NOT_FOUND');
+      return found;
+    },
+    modelFor: (sourceId) => {
+      const found = models.get(sourceId);
       if (found === undefined) throw new AppError('NOT_FOUND');
       return found;
     },

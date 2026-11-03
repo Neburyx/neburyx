@@ -1,5 +1,6 @@
 import neo4j from 'neo4j-driver';
 import type { Params, Plan, Row } from '../gate/types.js';
+import { plainRow } from './plain-values.js';
 
 export interface RowObserver {
   onNext(row: Row): void;
@@ -90,7 +91,7 @@ export const neo4jDriverFactory: DriverFactory = (settings) => {
             run: (cypher, parameters) => ({
               subscribe: (observer) => {
                 open.run(cypher, { ...parameters }).subscribe({
-                  onNext: (record) => observer.onNext(record.toObject()),
+                  onNext: (record) => observer.onNext(plainRow(record.toObject())),
                   onCompleted: (summary) => observer.onCompleted(planOf(summary.profile)),
                   onError: (error) => observer.onError(error),
                 });

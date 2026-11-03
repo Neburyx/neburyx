@@ -1,0 +1,526 @@
+{
+  "node": [
+    {
+      "n": {
+        "$type": "node",
+        "elementId": "eid-1",
+        "labels": [
+          "Claim"
+        ],
+        "properties": {
+          "lossType": "fire",
+          "claimNumber": "CL-000000",
+          "filedOn": {
+            "$type": "date",
+            "value": "2023-08-28"
+          },
+          "status": "review"
+        }
+      }
+    }
+  ],
+  "values": [
+    {
+      "bigInteger": {
+        "$type": "integer",
+        "value": "9223372036854775807"
+      },
+      "smallInteger": 7,
+      "safeLimit": -9007199254740991,
+      "decimal": 1.5,
+      "flag": true,
+      "words": "text",
+      "nothing": null,
+      "aDate": {
+        "$type": "date",
+        "value": "2026-01-02"
+      },
+      "aDateTime": {
+        "$type": "dateTime",
+        "value": "2026-01-02T03:04:05.123456789+02:00"
+      },
+      "aLocalDateTime": {
+        "$type": "localDateTime",
+        "value": "2026-01-02T03:04:05"
+      },
+      "aTime": {
+        "$type": "time",
+        "value": "10:11:12Z"
+      },
+      "aLocalTime": {
+        "$type": "localTime",
+        "value": "10:11:12"
+      },
+      "aDuration": {
+        "$type": "duration",
+        "value": "P1Y2M3DT4H5M6S"
+      },
+      "aPoint": {
+        "$type": "point",
+        "srid": 7203,
+        "x": 1.5,
+        "y": 2.5
+      },
+      "aList": [
+        1,
+        "a",
+        null,
+        {
+          "$type": "integer",
+          "value": "9223372036854775807"
+        }
+      ],
+      "aMap": {
+        "k": 1,
+        "nested": [
+          {
+            "$type": "date",
+            "value": "2026-01-02"
+          }
+        ]
+      }
+    }
+  ],
+  "relationship": [
+    {
+      "a": {
+        "$type": "node",
+        "elementId": "eid-1",
+        "labels": [
+          "Claim"
+        ],
+        "properties": {
+          "lossType": "fire",
+          "claimNumber": "CL-000000",
+          "filedOn": {
+            "$type": "date",
+            "value": "2023-08-28"
+          },
+          "status": "review"
+        }
+      },
+      "r": {
+        "$type": "relationship",
+        "elementId": "eid-2",
+        "type": "UNDER_POLICY",
+        "startElementId": "eid-1",
+        "endElementId": "eid-3",
+        "properties": {}
+      },
+      "b": {
+        "$type": "node",
+        "elementId": "eid-3",
+        "labels": [
+          "Policy"
+        ],
+        "properties": {
+          "cover": "basic",
+          "policyNumber": "PO-001467",
+          "startedOn": {
+            "$type": "date",
+            "value": "2024-03-01"
+          }
+        }
+      },
+      "p": {
+        "$type": "path",
+        "start": {
+          "$type": "node",
+          "elementId": "eid-1",
+          "labels": [
+            "Claim"
+          ],
+          "properties": {
+            "lossType": "fire",
+            "claimNumber": "CL-000000",
+            "filedOn": {
+              "$type": "date",
+              "value": "2023-08-28"
+            },
+            "status": "review"
+          }
+        },
+        "segments": [
+          {
+            "relationship": {
+              "$type": "relationship",
+              "elementId": "eid-2",
+              "type": "UNDER_POLICY",
+              "startElementId": "eid-1",
+              "endElementId": "eid-3",
+              "properties": {}
+            },
+            "end": {
+              "$type": "node",
+              "elementId": "eid-3",
+              "labels": [
+                "Policy"
+              ],
+              "properties": {
+                "cover": "basic",
+                "policyNumber": "PO-001467",
+                "startedOn": {
+                  "$type": "date",
+                  "value": "2024-03-01"
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "path": [
+    {
+      "p": {
+        "$type": "path",
+        "start": {
+          "$type": "node",
+          "elementId": "eid-1",
+          "labels": [
+            "Claim"
+          ],
+          "properties": {
+            "lossType": "fire",
+            "claimNumber": "CL-000000",
+            "filedOn": {
+              "$type": "date",
+              "value": "2023-08-28"
+            },
+            "status": "review"
+          }
+        },
+        "segments": [
+          {
+            "relationship": {
+              "$type": "relationship",
+              "elementId": "eid-4",
+              "type": "FILED_BY",
+              "startElementId": "eid-1",
+              "endElementId": "eid-5",
+              "properties": {
+                "sourceRecordId": "SRC-FB-000000",
+                "eventId": "FB-000000",
+                "filedAt": {
+                  "$type": "dateTime",
+                  "value": "2023-11-05T03:13:17Z"
+                }
+              }
+            },
+            "end": {
+              "$type": "node",
+              "elementId": "eid-5",
+              "labels": [
+                "Claimant"
+              ],
+              "properties": {
+                "claimantId": "CT-00996",
+                "fullName": "Dara Gale",
+                "dateOfBirth": {
+                  "$type": "date",
+                  "value": "1994-04-30"
+                }
+              }
+            }
+          },
+          {
+            "relationship": {
+              "$type": "relationship",
+              "elementId": "eid-6",
+              "type": "LIVES_AT",
+              "startElementId": "eid-5",
+              "endElementId": "eid-7",
+              "properties": {}
+            },
+            "end": {
+              "$type": "node",
+              "elementId": "eid-7",
+              "labels": [
+                "Address"
+              ],
+              "properties": {
+                "city": "Westbury",
+                "line1": "2305 Example Lane",
+                "addressId": "AD-01305"
+              }
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "supports": [
+    {
+      "a": {
+        "$type": "node",
+        "elementId": "eid-8",
+        "labels": [
+          "Claimant"
+        ],
+        "properties": {
+          "claimantId": "CT-00000",
+          "fullName": "Bram Ives",
+          "dateOfBirth": {
+            "$type": "date",
+            "value": "1981-08-23"
+          }
+        }
+      },
+      "r1": {
+        "$type": "relationship",
+        "elementId": "eid-9",
+        "type": "REACHED_AT",
+        "startElementId": "eid-8",
+        "endElementId": "eid-10",
+        "properties": {}
+      },
+      "m": {
+        "$type": "node",
+        "elementId": "eid-10",
+        "labels": [
+          "Phone"
+        ],
+        "properties": {
+          "owner": "Ada Gale",
+          "number": "+1-555-000000",
+          "isShared": true
+        }
+      },
+      "r2": {
+        "$type": "relationship",
+        "elementId": "eid-11",
+        "type": "REACHED_AT",
+        "startElementId": "eid-12",
+        "endElementId": "eid-10",
+        "properties": {}
+      },
+      "b": {
+        "$type": "node",
+        "elementId": "eid-12",
+        "labels": [
+          "Claimant"
+        ],
+        "properties": {
+          "claimantId": "CT-00001",
+          "fullName": "Mara Park",
+          "dateOfBirth": {
+            "$type": "date",
+            "value": "1984-11-20"
+          }
+        }
+      }
+    }
+  ],
+  "stored": [
+    {
+      "a": {
+        "$type": "node",
+        "elementId": "eid-1",
+        "labels": [
+          "Claim"
+        ],
+        "properties": {
+          "lossType": "fire",
+          "claimNumber": "CL-000000",
+          "filedOn": {
+            "$type": "date",
+            "value": "2023-08-28"
+          },
+          "status": "review"
+        }
+      },
+      "r": {
+        "$type": "relationship",
+        "elementId": "eid-4",
+        "type": "FILED_BY",
+        "startElementId": "eid-1",
+        "endElementId": "eid-5",
+        "properties": {
+          "sourceRecordId": "SRC-FB-000000",
+          "eventId": "FB-000000",
+          "filedAt": {
+            "$type": "dateTime",
+            "value": "2023-11-05T03:13:17Z"
+          }
+        }
+      },
+      "b": {
+        "$type": "node",
+        "elementId": "eid-5",
+        "labels": [
+          "Claimant"
+        ],
+        "properties": {
+          "claimantId": "CT-00996",
+          "fullName": "Dara Gale",
+          "dateOfBirth": {
+            "$type": "date",
+            "value": "1994-04-30"
+          }
+        }
+      },
+      "p": {
+        "$type": "path",
+        "start": {
+          "$type": "node",
+          "elementId": "eid-1",
+          "labels": [
+            "Claim"
+          ],
+          "properties": {
+            "lossType": "fire",
+            "claimNumber": "CL-000000",
+            "filedOn": {
+              "$type": "date",
+              "value": "2023-08-28"
+            },
+            "status": "review"
+          }
+        },
+        "segments": [
+          {
+            "relationship": {
+              "$type": "relationship",
+              "elementId": "eid-4",
+              "type": "FILED_BY",
+              "startElementId": "eid-1",
+              "endElementId": "eid-5",
+              "properties": {
+                "sourceRecordId": "SRC-FB-000000",
+                "eventId": "FB-000000",
+                "filedAt": {
+                  "$type": "dateTime",
+                  "value": "2023-11-05T03:13:17Z"
+                }
+              }
+            },
+            "end": {
+              "$type": "node",
+              "elementId": "eid-5",
+              "labels": [
+                "Claimant"
+              ],
+              "properties": {
+                "claimantId": "CT-00996",
+                "fullName": "Dara Gale",
+                "dateOfBirth": {
+                  "$type": "date",
+                  "value": "1994-04-30"
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "made": [
+    {
+      "n": {
+        "$type": "node",
+        "elementId": "eid-13",
+        "labels": [
+          "Claim"
+        ],
+        "properties": {
+          "zzMarker": "m1"
+        }
+      }
+    },
+    {
+      "n": {
+        "$type": "node",
+        "elementId": "eid-14",
+        "labels": [
+          "Account"
+        ],
+        "properties": {
+          "zzMarker": "m2"
+        }
+      }
+    },
+    {
+      "n": {
+        "$type": "node",
+        "elementId": "eid-15",
+        "labels": [
+          "Claim"
+        ],
+        "properties": {
+          "zzMarker": "m3",
+          "claimNumber": "ZZ-NORM-3"
+        }
+      }
+    }
+  ],
+  "members": [
+    {
+      "a": {
+        "$type": "node",
+        "elementId": "eid-16",
+        "labels": [
+          "Claim"
+        ],
+        "properties": {
+          "zzMarker": "ma",
+          "claimNumber": "ZZ-NORM-A"
+        }
+      },
+      "r": {
+        "$type": "relationship",
+        "elementId": "eid-17",
+        "type": "UNDER_POLICY",
+        "startElementId": "eid-16",
+        "endElementId": "eid-18",
+        "properties": {
+          "zzMarker": "r1"
+        }
+      },
+      "b": {
+        "$type": "node",
+        "elementId": "eid-18",
+        "labels": [
+          "Policy"
+        ],
+        "properties": {
+          "zzMarker": "mb",
+          "policyNumber": "ZZ-NORM-B"
+        }
+      }
+    },
+    {
+      "a": {
+        "$type": "node",
+        "elementId": "eid-16",
+        "labels": [
+          "Claim"
+        ],
+        "properties": {
+          "zzMarker": "ma",
+          "claimNumber": "ZZ-NORM-A"
+        }
+      },
+      "r": {
+        "$type": "relationship",
+        "elementId": "eid-19",
+        "type": "UNDER_POLICY",
+        "startElementId": "eid-16",
+        "endElementId": "eid-18",
+        "properties": {
+          "zzMarker": "r2"
+        }
+      },
+      "b": {
+        "$type": "node",
+        "elementId": "eid-18",
+        "labels": [
+          "Policy"
+        ],
+        "properties": {
+          "zzMarker": "mb",
+          "policyNumber": "ZZ-NORM-B"
+        }
+      }
+    }
+  ]
+}
