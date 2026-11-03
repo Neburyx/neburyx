@@ -20,7 +20,8 @@ const TAG = `neburyx-image-test:${randomBytes(4).toString('hex')}`;
 const HOST_ALIAS = 'host.docker.internal';
 const STOP_WITHIN_MS = 5000;
 const SENTINEL = `sentinel-${randomBytes(8).toString('hex')}`;
-const SENTINEL_FILES = ['.env', 'neburyx.yaml'].map((name) => join(repository, name));
+const SENTINEL_FOLDER = join(repository, '.image-test-sentinel');
+const SENTINEL_FILES = ['.env', 'neburyx.yaml'].map((name) => join(SENTINEL_FOLDER, name));
 const execute = promisify(execFile);
 
 let postgres: TestPostgres;
@@ -29,14 +30,13 @@ const scratch: string[] = [];
 
 beforeAll(async () => {
   postgres = await startPostgres();
-  for (const file of SENTINEL_FILES) {
-    if (existsSync(file)) throw new Error(`${file} exists; the image test will not overwrite it`);
-  }
+  if (existsSync(SENTINEL_FOLDER)) throw new Error(`${SENTINEL_FOLDER} exists; the image test will not overwrite it`);
   try {
+    mkdirSync(SENTINEL_FOLDER);
     for (const file of SENTINEL_FILES) writeFileSync(file, `SECRET=${SENTINEL}\n`);
     await dockerStream(['build', '-f', dockerfile, '-t', TAG, '.'], repository);
   } finally {
-    for (const file of SENTINEL_FILES) rmSync(file, { force: true });
+    rmSync(SENTINEL_FOLDER, { recursive: true, force: true });
   }
 });
 
