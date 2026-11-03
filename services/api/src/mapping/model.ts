@@ -1,4 +1,4 @@
-import type { IconKey, PresetTemplate } from '@neburyx/contracts';
+import type { IconKey, PiiClass, PresetTemplate } from '@neburyx/contracts';
 
 export type LinkKind = 'entity' | 'evidence';
 
@@ -18,6 +18,8 @@ export interface EntityModel {
   readonly search: readonly string[];
   readonly reference: readonly string[];
   readonly pii: readonly string[];
+  /** The class the mapping gives a `pii` field, which picks the shape of its mask; a field without one is masked fully. */
+  readonly piiClasses?: Readonly<Record<string, PiiClass>>;
   readonly filterable: readonly string[];
   readonly link?: LinkTemplate;
   readonly display: {

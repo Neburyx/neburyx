@@ -37,6 +37,7 @@ function resolveContext(deps: GateDeps, request: GateRequest, system: boolean): 
     budgets,
     allowlist: deps.allowlistFor(request.sourceId),
     policyVersion: deps.policyVersion(request.sourceId),
+    mask: !system && request.mask === true,
     model: deps.modelFor(request.sourceId),
     deadlineAt: deps.clock() + budgets.requestTimeoutMs,
   };

@@ -1,4 +1,4 @@
-import { iconKeySchema, presetTemplateSchema } from '@neburyx/contracts';
+import { iconKeySchema, PII_CLASSES, presetTemplateSchema, type PiiClass } from '@neburyx/contracts';
 import { z } from 'zod';
 import { budgetsSchema } from './budgets.js';
 
@@ -11,6 +11,26 @@ const property = z.string().min(1).regex(/^[^{}]*$/);
 const propertyList = z.array(property);
 
 const envName = z.string().regex(ENV_NAME);
+
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
+
+/** A `pii` entry: a property name, or `{ property, class }` where the class (`name`, `email`, `phone`, `date` or `text`) picks the shape of its mask. */
+const piiEntry = z.unknown().transform((value, context): { readonly property: string; readonly class?: PiiClass } => {
+  const problem = (message: string) => {
+    context.addIssue({ code: 'custom', message });
+    return z.NEVER;
+  };
+  if (typeof value === 'string') return property.safeParse(value).success ? { property: value } : problem('has an invalid format');
+  if (!isRecord(value)) return problem('must be a property name or { property, class }');
+  const unknownKey = Object.keys(value).find((key) => key !== 'property' && key !== 'class');
+  if (unknownKey !== undefined) return problem(`has the key ${unknownKey}, which is not property or class`);
+  const named = value['property'];
+  const given = value['class'];
+  if (typeof named !== 'string' || !property.safeParse(named).success) return problem('has no property name');
+  if (given === undefined) return { property: named };
+  const piiClass = PII_CLASSES.find((candidate) => candidate === given);
+  return piiClass === undefined ? problem(`has a class that is not ${PII_CLASSES.join(', ')}`) : { property: named, class: piiClass };
+});
 
 function isPlainData(root: unknown): boolean {
   const pending: unknown[] = [root];
@@ -70,7 +90,7 @@ const entitySchema = z.strictObject({
   title: name.optional(),
   search: propertyList.optional(),
   reference: propertyList.optional(),
-  pii: propertyList.optional(),
+  pii: z.array(piiEntry).optional(),
   filterable: propertyList.optional(),
   link: z.string().optional(),
   display: displaySchema.optional(),

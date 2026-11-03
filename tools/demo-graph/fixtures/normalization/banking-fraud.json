@@ -182,6 +182,48 @@
       }
     }
   ],
+  "piiNodes": [
+    {
+      "n": {
+        "$type": "node",
+        "elementId": "eid-1",
+        "labels": [
+          "Account"
+        ],
+        "properties": {
+          "accountId": "AC-0000000",
+          "holderName": "Ivo Lowe",
+          "phone": "+1-555-8945",
+          "openedOn": {
+            "$type": "date",
+            "value": "2015-01-14"
+          },
+          "accountKind": "business",
+          "status": "active"
+        }
+      }
+    },
+    {
+      "n": {
+        "$type": "node",
+        "elementId": "eid-2",
+        "labels": [
+          "Customer"
+        ],
+        "properties": {
+          "phone": "+1-555-9622",
+          "segment": "small-business",
+          "customerId": "CU-0000000",
+          "fullName": "Gus Cedar",
+          "dateOfBirth": {
+            "$type": "date",
+            "value": "1988-10-21"
+          },
+          "authId": "AUTH-0000000"
+        }
+      }
+    }
+  ],
   "path": [
     {
       "p": {

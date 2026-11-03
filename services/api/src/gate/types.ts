@@ -48,6 +48,8 @@ export interface Template {
   readonly profile?: boolean;
   /** What a cursor of this template binds besides the source, the person, the template and its parameters: the order of its pages; empty when it has none. */
   readonly sort?: string;
+  /** The properties of entity types that a request searches, filters or sorts by; a request that asks for masking may not use a `pii` one. A template without it uses none. */
+  usedProperties?(params: Params): readonly { readonly entityType: string; readonly property: string }[];
   /** Where the page after this one starts, from the rows of this page; the gate signs it into the page's `nextCursor`. Only a paged template has one. */
   nextPosition?(rows: readonly Row[], limit: number): CursorPosition | undefined;
   refsOf(params: Params): readonly ElementRef[];
@@ -83,6 +85,8 @@ export interface GateRequest {
   readonly limit: number;
   /** The `nextCursor` of an earlier page of the same read; only a paged template takes one. */
   readonly cursor?: string;
+  /** Asks for the `pii` fields of the result to be masked; absent means no. */
+  readonly mask?: boolean;
 }
 
 export interface GateContext {
@@ -94,6 +98,8 @@ export interface GateContext {
   readonly allowlist: SourceAllowlist;
   /** The version of the policy this request is judged under; a cursor is bound to it. */
   readonly policyVersion: string;
+  /** True when the request asks for the `pii` fields to be masked; the system runner never asks. */
+  readonly mask: boolean;
   /** What the normalize stage needs of the source's mapping. */
   readonly model: NormalizeModel;
   readonly deadlineAt: number;

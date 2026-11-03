@@ -180,7 +180,7 @@ describe('a request that succeeds', () => {
 });
 
 describe('the context a template is normalized with', () => {
-  const model = { entitiesByLabel: new Map(), relationships: [], derived: [] };
+  const model = { entitiesByLabel: new Map(), entitiesByType: new Map(), relationships: [], derived: [] };
 
   it('holds the source of the request, whether the page was cut and the model of that source', async () => {
     const seen: unknown[] = [];

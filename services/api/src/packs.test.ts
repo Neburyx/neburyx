@@ -49,6 +49,13 @@ function onlySource<T>(sources: readonly T[]): T {
   return source;
 }
 const modelOf = (pack: string): SourceModel => onlySource(parseMapping(textOf(pack), MAPPING_FILE).sources);
+/** Adds a bare name to the `pii` list of an entity of the raw file, the way a person editing the YAML would. */
+function markPii(entity: object, property: string): void {
+  // the raw file's `pii` list now has a typed output shape, and this adds the bare form a person would write, so the entity is read as the raw list
+  const target = entity as { pii?: unknown[] };
+  target.pii = [...(target.pii ?? []), property];
+}
+
 const sourceOf = (file: RawMappingFile): RawSource => onlySource(file.sources);
 
 const webRoot = makeWebRoot();
@@ -298,7 +305,7 @@ const mistakes: readonly Mistake[] = [
     name: 'a link template whose placeholder is marked pii',
     mutate: (file) => {
       const entity = sourceOf(file).entities[linkedIndex(file)];
-      if (entity !== undefined) entity.pii = [...(entity.pii ?? []), entity.stable_id];
+      if (entity !== undefined) markPii(entity, entity.stable_id);
     },
     path: (file) => `sources[0].entities[${linkedIndex(file)}].link`,
     reason: 'which is marked pii',
@@ -307,7 +314,7 @@ const mistakes: readonly Mistake[] = [
     name: 'a stable ID marked pii',
     mutate: (file) => {
       const entity = sourceOf(file).entities[0];
-      if (entity !== undefined) entity.pii = [...(entity.pii ?? []), entity.stable_id];
+      if (entity !== undefined) markPii(entity, entity.stable_id);
     },
     path: () => 'sources[0].entities[0].pii',
     reason: 'which is the stable ID of',

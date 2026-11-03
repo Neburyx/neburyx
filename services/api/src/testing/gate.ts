@@ -22,6 +22,7 @@ import type {
   TemplateCatalog,
 } from '../gate/types.js';
 import { createCursorCodec, type CursorCodec } from '../gate/cursor/codec.js';
+import { redactItems } from '../gate/redact/index.js';
 import { EMPTY_MODEL } from '../gate/normalize/model.js';
 import { LOCAL_IDENTITY } from './app-store.js';
 
@@ -139,7 +140,7 @@ export function harness(options: HarnessOptions = {}): Harness {
     modelFor: options.modelFor ?? (() => EMPTY_MODEL),
     cursors: options.cursors ?? createCursorCodec({ key: TEST_CURSOR_KEY, clock: options.clock ?? (() => 1_000_000) }),
     policyVersion: options.policyVersion ?? (() => 'none'),
-    redact: options.redact ?? ((items) => items),
+    redact: options.redact ?? redactItems,
     usability: options.usability ?? ALWAYS_USABLE,
     clock: options.clock ?? (() => 1_000_000),
     logger: { warn: (fields, message) => void logs.push({ fields, message }) },

@@ -15,7 +15,7 @@ sources:
         stable_id: e_stable
         title: "Marker title text {e_title_prop} and {e_title_other}"
         search: [e_search]
-        pii: [e_pii]
+        pii: [e_pii, { property: e_pii_classed, class: name }]
         filterable: [e_filter]
         reference: [e_reference]
         link: "https://marker.example.test/{e_stable}"
@@ -69,7 +69,7 @@ describe('the identifiers of a pack', () => {
     expect(named('label')).toEqual(['e_label']);
     expect(named('relationship type')).toEqual(['r_type']);
     expect(named('property key')).toEqual(
-      ['d_stop', 'e_filter', 'e_key_only', 'e_pii', 'e_reference', 'e_search', 'e_stable', 'e_state', 'e_title_other', 'e_title_prop', 'r_evidence', 'r_filter', 'r_observed', 'r_stable'].sort(),
+      ['d_stop', 'e_filter', 'e_key_only', 'e_pii', 'e_pii_classed', 'e_reference', 'e_search', 'e_stable', 'e_state', 'e_title_other', 'e_title_prop', 'r_evidence', 'r_filter', 'r_observed', 'r_stable'].sort(),
     );
   });
 

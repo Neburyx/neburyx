@@ -26,6 +26,11 @@ async function captureAll(target: PackServer): Promise<Fixture> {
     relationship: await itemsOf(target, 'capture-relationship', { entityType: relationship.from, otherType: relationship.to, relationshipType: relationship.type }),
   };
   // what the demo graph does not hold is made for the capture and removed after it, also when the capture fails
+  // one node of each entity type that marks pii fields, for the redaction suite
+  const marked = target.source.entities.filter((candidate) => candidate.pii.length > 0);
+  const piiNodes: Record<string, unknown>[] = [];
+  for (const candidate of marked) piiNodes.push(...(await itemsOf(target, 'capture-node', { entityType: candidate.type })));
+  captured['piiNodes'] = piiNodes;
   const keyed = target.source.relationships.find((candidate) => candidate.stableId !== undefined);
   if (keyed === undefined) throw new Error('the pack maps no relationship with a stable ID');
   // the first two relationship rows of the mapping that chain: the second starts where the first ends

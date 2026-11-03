@@ -24,6 +24,12 @@ export function validateRequest(catalog: TemplateCatalog, template: Template, re
   if (!parsed.success) throw new AppError('INVALID_REQUEST');
   if (!Number.isInteger(request.limit) || request.limit < 1) throw new AppError('INVALID_REQUEST');
   if (request.limit > context.budgets.maxPage) throw new AppError('QUERY_BUDGET_EXCEEDED', { maxPage: context.budgets.maxPage });
+  // a masked field is not an oracle: while masking is asked, a request cannot search, filter or sort by a pii field
+  if (context.mask) {
+    for (const used of template.usedProperties?.(parsed.data) ?? []) {
+      if (context.model.entitiesByType.get(used.entityType)?.pii.includes(used.property) === true) throw new AppError('INVALID_REQUEST');
+    }
+  }
   const refs = template.refsOf(parsed.data);
   if (refs.some((ref) => ref.sourceId !== context.sourceId)) throw new AppError('SOURCE_MISMATCH');
   if (refs.some((ref) => !context.allowlist.entityLabels.has(ref.entityType))) throw new AppError('INVALID_REQUEST');

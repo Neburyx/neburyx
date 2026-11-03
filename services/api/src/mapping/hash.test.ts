@@ -194,3 +194,16 @@ describe('fixed hash vectors', () => {
     expect(hashOf(baseSource())).toBe('7f64d76ec7da1d267bcd7e31efdbfbebc0169b61472d7db802e5e503b979acba');
   });
 });
+
+describe('the mapping hash and the class of a pii field', () => {
+  it('differs when the class of a pii field changes, and when a class is added or removed', () => {
+    const classed = (pii: unknown[]): Json => withEntity({ pii });
+    expect(hashOf(classed([{ property: 'name', class: 'name' }]))).not.toBe(hashOf(classed([{ property: 'name', class: 'email' }])));
+    expect(hashOf(classed([{ property: 'name', class: 'name' }]))).not.toBe(hashOf(classed(['name'])));
+  });
+
+  it('is the same for a classed entry written in another key order', () => {
+    const classed = (entry: unknown): Json => withEntity({ pii: [entry] });
+    expect(hashOf(classed({ property: 'name', class: 'name' }))).toBe(hashOf(classed({ class: 'name', property: 'name' })));
+  });
+});

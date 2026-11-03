@@ -419,3 +419,25 @@ describe('unknown and malformed requests', () => {
     await app.close();
   });
 });
+
+describe('the profile and the excerpt of a source whose pii fields have classes', () => {
+  const classed = fullSource('demo', {
+    entities: [{ type: 'node_a', label: 'NodeA', stable_id: 'id', title: 'Item {code}', search: ['code'], pii: ['plain', { property: 'phone', class: 'phone' }, { property: 'name', class: 'name' }] }],
+    relationships: [],
+    derived: [],
+    patterns: [],
+  });
+
+  it('lists the names of the pii fields, bare and classed alike, and nothing of the classes', async () => {
+    const { body, text } = await profileOf(await appFor(mappingOf(classed)));
+    expect(body.entityTypes[0]?.pii).toEqual(['plain', 'phone', 'name']);
+    expect(text).not.toMatch(/"class"|piiClass/);
+  });
+
+  it('writes the pii names of the excerpt as bare names, with no class, and the excerpt loads back to the same names', async () => {
+    const { body } = await profileOf(await appFor(mappingOf(classed)));
+    const excerpt = parse(body.mappingExcerpt) as { entities: { pii?: unknown[] }[] };
+    expect(excerpt.entities[0]?.pii).toEqual(['plain', 'phone', 'name']);
+    expect(body.mappingExcerpt).not.toMatch(/class/);
+  });
+});

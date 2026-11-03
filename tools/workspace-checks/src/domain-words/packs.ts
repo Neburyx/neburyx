@@ -19,6 +19,8 @@ const TITLE_PLACEHOLDER = /\{([^{}]*)\}/g;
 
 const name = z.string().min(1);
 const names = z.array(name).optional();
+/** A `pii` entry is a property name, or `{ property, class }`; the check needs the property name only. */
+const piiEntries = z.array(z.union([name, z.object({ property: name, class: z.string() })])).optional();
 
 const packFileSchema = z.object({
   sources: z.array(
@@ -30,7 +32,7 @@ const packFileSchema = z.object({
           stable_id: name,
           title: z.string().optional(),
           search: names,
-          pii: names,
+          pii: piiEntries,
           filterable: names,
           reference: names,
           display: z.object({ key_properties: names, state_property: name.optional() }).optional(),
@@ -83,7 +85,7 @@ function identifiersOf(pack: string, file: PackFile): Identifier[] {
       const keys = propertiesOf(
         [entity.stable_id, entity.display?.state_property],
         entity.search,
-        entity.pii,
+        entity.pii?.map((entry) => (typeof entry === 'string' ? entry : entry.property)),
         entity.filterable,
         entity.reference,
         entity.display?.key_properties,

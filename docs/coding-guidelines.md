@@ -22,6 +22,7 @@ These shape code directly. Breaking one is a bug, whatever the tests say.
 - **Read-only.** No write query reaches the customer's Neo4j. No helper, option or flag makes that
   possible, except the one named path: the opt-in write probe of `test-source --write-probe`, which rolls its
   transaction back, is reached only by that command, and is confined by an architecture check.
+- **Masking is done in the gate.** The redact stage (`services/api/src/gate/redact/`) masks the `pii` fields of a normalized result when the request asks, and `maskValue` is the one function that builds a mask. A template works on the original values inside the gate (its `normalize` runs before the redact stage); a route, the web client and any caller receive only the redacted output, and none builds a mask of its own.
 - **One gate.** Every source read goes through the gate: resolve context, validate, authorize,
   execute, normalize, redact, audit. Nothing calls the adapter or the driver around it. Routes and
   services call the gate; an architecture test fails if anything calls the adapter outside it.

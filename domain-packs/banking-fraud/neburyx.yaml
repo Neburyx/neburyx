@@ -12,7 +12,7 @@ sources:
         stable_id: accountId
         title: "Account {accountId}"
         search: [accountId, holderName]
-        pii: [holderName, phone]
+        pii: [{ property: holderName, class: name }, { property: phone, class: phone }]
         filterable: [status, accountKind]
         display: { icon: money, key_properties: [accountKind, status, openedOn], state_property: status }
       - type: customer
@@ -20,7 +20,7 @@ sources:
         stable_id: customerId
         title: "{fullName}"
         search: [customerId, fullName]
-        pii: [fullName, dateOfBirth, phone]
+        pii: [{ property: fullName, class: name }, { property: dateOfBirth, class: date }, { property: phone, class: phone }]
         reference: [authId]
         link: "https://records.example.test/customers/{customerId}"
         display: { icon: person, key_properties: [customerId, segment] }

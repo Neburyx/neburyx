@@ -6,6 +6,8 @@ export class MappingError extends Error {}
 
 const names = z.array(z.string().min(1)).optional();
 const name = z.string().min(1);
+/** A `pii` entry is a property name, or `{ property, class }`; the tool needs the property only. */
+const piiEntries = z.array(z.union([name, z.object({ property: name, class: z.string() })])).optional();
 
 const mappingFileSchema = z.object({
   sources: z.array(
@@ -22,7 +24,7 @@ const mappingFileSchema = z.object({
           stable_id: name,
           title: z.string().optional(),
           search: names,
-          pii: names,
+          pii: piiEntries,
           filterable: names,
           reference: names,
           display: z.object({ key_properties: names, state_property: name.optional() }).optional(),
@@ -84,7 +86,7 @@ function entityOf(raw: z.infer<typeof mappingFileSchema>['sources'][number]['ent
     raw.stable_id,
     ...placeholders,
     ...(raw.search ?? []),
-    ...(raw.pii ?? []),
+    ...(raw.pii ?? []).map((entry) => (typeof entry === 'string' ? entry : entry.property)),
     ...(raw.filterable ?? []),
     ...(raw.reference ?? []),
     ...(raw.display?.key_properties ?? []),

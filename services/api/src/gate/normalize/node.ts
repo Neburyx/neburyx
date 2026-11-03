@@ -60,13 +60,13 @@ export function stableIdText(value: unknown): string | undefined {
 }
 
 /** The text a title placeholder is filled with; nothing for an absent value or one that is not plain text. */
-function placeholderText(value: unknown): string | undefined {
+export function placeholderText(value: unknown): string | undefined {
   const described = describeValue(value);
   if (described.dataClass === 'unknown' || described.dataClass === 'list' || described.dataClass === 'other' || described.dataClass === 'point') return undefined;
   return described.value === undefined ? undefined : String(described.value);
 }
 
-const PLACEHOLDER = /\{([^{}]*)\}/g;
+export const PLACEHOLDER = /\{([^{}]*)\}/g;
 
 type Resolved = { readonly entity: EntityNormalizer } | { readonly dropped: DropReason };
 

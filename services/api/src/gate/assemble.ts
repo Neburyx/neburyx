@@ -8,6 +8,7 @@ import { DEFAULT_BUDGETS } from './budgets.js';
 import { createTemplateCatalog } from './catalog.js';
 import type { ReadExecutor } from './executor.js';
 import { createGates } from './gate.js';
+import { redactItems } from './redact/index.js';
 import { createCursorCodec, type CursorCodec } from './cursor/codec.js';
 import { normalizeModelOf } from './normalize/model.js';
 import { capabilitiesTemplate } from './templates/capabilities.js';
@@ -69,7 +70,7 @@ export function assembleGate(options: AssembleOptions): { readonly gate: Gate; r
       if (found === undefined) throw new AppError('NOT_FOUND');
       return found;
     },
-    redact: options.redact ?? ((items) => items),
+    redact: options.redact ?? redactItems,
     clock: options.clock ?? Date.now,
     logger: options.logger,
     observer: options.observer,

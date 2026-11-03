@@ -65,8 +65,13 @@ function parseTitle(title: string): { readonly properties: string[] } | { readon
 function buildEntity(raw: RawEntity, path: readonly (string | number)[], report: Report): EntityModel {
   const search = raw.search ?? [];
   const reference = raw.reference ?? [];
-  const pii = raw.pii ?? [];
+  const piiEntries = raw.pii ?? [];
+  const pii = piiEntries.map((entry) => entry.property);
+  const piiClasses = Object.fromEntries(piiEntries.flatMap((entry) => (entry.class === undefined ? [] : [[entry.property, entry.class] as const])));
   const filterable = raw.filterable ?? [];
+  pii.forEach((property, index) => {
+    if (pii.indexOf(property) !== index) report([...path, 'pii', index], `lists ${property} more than once`);
+  });
   if (pii.includes(raw.stable_id)) report([...path, 'pii'], `lists ${raw.stable_id}, which is the stable ID of ${raw.type}`);
 
   const title = raw.title ?? `{${raw.stable_id}}`;
@@ -85,6 +90,7 @@ function buildEntity(raw: RawEntity, path: readonly (string | number)[], report:
     search,
     reference,
     pii,
+    ...(Object.keys(piiClasses).length === 0 ? {} : { piiClasses }),
     filterable,
     ...linkOf(raw, path, report),
     display: {
@@ -101,7 +107,7 @@ function linkOf(raw: RawEntity, path: readonly (string | number)[], report: Repo
     kind: 'entity',
     allowed: [raw.stable_id],
     allowedDescription: 'the stable ID property',
-    piiProperties: raw.pii ?? [],
+    piiProperties: (raw.pii ?? []).map((entry) => entry.property),
   });
   if (check.status === 'valid') return { link: check.link };
   for (const reason of check.reasons) report([...path, 'link'], reason);

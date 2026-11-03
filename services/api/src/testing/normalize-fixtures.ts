@@ -1,6 +1,8 @@
-import type { SourceModel } from '../mapping/model.js';
 import { mappingOf, sourceWith } from './gate-fixtures.js';
-import { normalizeModelOf, type NormalizeContext } from '../gate/normalize/model.js';
+import { normalizeModelOf, type NormalizeContext, type NormalizeModel } from '../gate/normalize/model.js';
+import { DEFAULT_BUDGETS } from '../gate/budgets.js';
+import type { GateContext } from '../gate/types.js';
+import { EMPTY_ALLOWLIST, LOCAL_PRINCIPAL } from './gate.js';
 
 /** A source with two entity types and one relationship, and the context a template is normalized with, for the rules that need records the packs do not hold. */
 export const source = mappingOf(
@@ -16,7 +18,7 @@ export const source = mappingOf(
     ],
     derived: [{ id: 'shared-maker', from: 'gadget', to: 'gadget', via: ['MADE_BY', 'person', 'MADE_BY'], rule_version: 3, stop_list_property: 'sharedFlag' }],
   }),
-).sources[0] as SourceModel;
+).sources[0] ?? failNoSource();
 
 export const context = (overrides: Partial<NormalizeContext> = {}): NormalizeContext => ({ sourceId: 'request-source', hasMore: false, model: normalizeModelOf(source), ...overrides });
 
@@ -43,4 +45,22 @@ export const twinSource = mappingOf(
     ],
     relationships: [],
   }),
-).sources[0] as SourceModel;
+).sources[0] ?? failNoSource();
+
+/** The part of a gate context the redact stage reads: the source's model and whether the request asks for masking. */
+export const redactContext = (model: NormalizeModel, mask: boolean): GateContext => ({
+  traceId: 'tr-test',
+  principal: LOCAL_PRINCIPAL,
+  system: false,
+  sourceId: 'alpha',
+  budgets: DEFAULT_BUDGETS,
+  allowlist: EMPTY_ALLOWLIST,
+  policyVersion: 'none',
+  mask,
+  model,
+  deadlineAt: 0,
+});
+
+function failNoSource(): never {
+  throw new Error('the mapping holds no source');
+}

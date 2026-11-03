@@ -27,7 +27,7 @@ sources:
         stable_id: claimantId
         title: "{fullName}"
         search: [claimantId, fullName]
-        pii: [fullName, dateOfBirth]
+        pii: [{ property: fullName, class: name }, { property: dateOfBirth, class: date }]
         display: { icon: person }
       - type: vehicle
         label: Vehicle
@@ -50,7 +50,7 @@ sources:
         label: Phone
         stable_id: number
         search: [number]
-        pii: [owner]
+        pii: [{ property: owner, class: name }]
         display: { icon: telephone }
 
     relationships:

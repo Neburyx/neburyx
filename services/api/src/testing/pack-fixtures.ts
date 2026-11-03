@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { z } from 'zod';
 import { parseMapping } from '../mapping/load.js';
 import type { SourceModel } from '../mapping/model.js';
 
@@ -56,4 +57,11 @@ export function updating(): boolean {
 export function writeFixture(pack: Pack, fixture: Fixture): void {
   if (!existsSync(FIXTURES_DIR)) mkdirSync(FIXTURES_DIR, { recursive: true });
   writeFileSync(fixturePath(pack), `${JSON.stringify(fixture, null, 2)}\n`);
+}
+
+const rowsSchema = z.array(z.record(z.string(), z.unknown()));
+
+/** The rows of one named capture of a pack, as the adapter handed them over. */
+export function fixtureRows(pack: Pack, name: string): Record<string, unknown>[] {
+  return rowsSchema.parse(readFixture(pack)[name]);
 }

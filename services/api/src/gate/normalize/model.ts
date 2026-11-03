@@ -1,3 +1,4 @@
+import type { PiiClass } from '@neburyx/contracts';
 import type { SourceModel } from '../../mapping/model.js';
 
 /** What the normalizer needs to know of one entity type of a source: how to recognise it, name it, and which properties of it are shown. */
@@ -11,6 +12,9 @@ export interface EntityNormalizer {
   readonly projection: readonly string[];
   /** The projected properties a node should have, so that one it lacks is reported as missing: the title placeholders and the key properties. */
   readonly expected: readonly string[];
+  /** The properties the mapping marks `pii`, and the class of those that have one. */
+  readonly pii: readonly string[];
+  readonly piiClasses: Readonly<Record<string, PiiClass>>;
 }
 
 /** One relationship row of the mapping: a type between two entity types, with the properties of it that are shown. */
@@ -38,11 +42,12 @@ export interface DerivedNormalizer {
 export interface NormalizeModel {
   /** The entity types of the source that a label maps to; two types may share a label. */
   readonly entitiesByLabel: ReadonlyMap<string, readonly EntityNormalizer[]>;
+  readonly entitiesByType: ReadonlyMap<string, EntityNormalizer>;
   readonly relationships: readonly RelationshipNormalizer[];
   readonly derived: readonly DerivedNormalizer[];
 }
 
-export const EMPTY_MODEL: NormalizeModel = { entitiesByLabel: new Map(), relationships: [], derived: [] };
+export const EMPTY_MODEL: NormalizeModel = { entitiesByLabel: new Map(), entitiesByType: new Map(), relationships: [], derived: [] };
 
 /** What a template's `normalize` is given besides the rows: the source of the request, whether the page was cut, and the source's model. */
 export interface NormalizeContext {
@@ -56,6 +61,7 @@ const unique = (values: readonly string[]): string[] => [...new Set(values)];
 
 export function normalizeModelOf(source: SourceModel): NormalizeModel {
   const entitiesByLabel = new Map<string, EntityNormalizer[]>();
+  const entitiesByType = new Map<string, EntityNormalizer>();
   for (const entity of source.entities) {
     const normalizer: EntityNormalizer = {
       type: entity.type,
@@ -74,8 +80,11 @@ export function normalizeModelOf(source: SourceModel): NormalizeModel {
         ...(entity.display.stateProperty === undefined ? [] : [entity.display.stateProperty]),
       ]),
       expected: unique([...entity.titleProperties, ...entity.display.keyProperties]),
+      pii: entity.pii,
+      piiClasses: entity.piiClasses ?? {},
     };
     entitiesByLabel.set(entity.label, [...(entitiesByLabel.get(entity.label) ?? []), normalizer]);
+    entitiesByType.set(entity.type, normalizer);
   }
   const relationships = source.relationships.map(
     (relationship): RelationshipNormalizer => ({
@@ -89,5 +98,5 @@ export function normalizeModelOf(source: SourceModel): NormalizeModel {
     }),
   );
   const derived = source.derived.map((rule): DerivedNormalizer => ({ id: rule.id, from: rule.from, to: rule.to, via: rule.via, version: rule.ruleVersion }));
-  return { entitiesByLabel, relationships, derived };
+  return { entitiesByLabel, entitiesByType, relationships, derived };
 }

@@ -13,8 +13,8 @@ export const countSchema = z
 
 export const elementRefSchema = z.strictObject({ sourceId: z.string().min(1), entityType: z.string().min(1), stableId: z.string().min(1) });
 
-/** What a property value is: the kind of its type, not the class of a masked field (the Redact stage replaces it for `pii` fields). */
-export const DATA_CLASSES = ['text', 'number', 'boolean', 'date', 'dateTime', 'localDateTime', 'time', 'localTime', 'duration', 'point', 'list', 'other', 'unknown'] as const;
+/** What a property value is: the kind of its type; for a `pii` field that is masked, the class the mapping gives it (`name`, `email`, `phone`, `date` or `text`). */
+export const DATA_CLASSES = ['text', 'number', 'boolean', 'date', 'dateTime', 'localDateTime', 'time', 'localTime', 'duration', 'point', 'list', 'other', 'unknown', 'name', 'email', 'phone'] as const;
 
 export const propertySchema = z.strictObject({
   key: z.string().min(1),

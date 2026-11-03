@@ -241,3 +241,46 @@ describe('pii and projection rules', () => {
     expectRefused(baseSource({ relationships: [{ type: 'LINKS', from: 'node_a', to: 'node_b', ...extra }] }), path, reason);
   });
 });
+
+describe('pii entries with a class', () => {
+  const entity = (pii: unknown[]) => ({ type: 'node_c', label: 'NodeC', stable_id: 'id', pii });
+  const loaded = (pii: unknown[]) => firstSource(load(baseSource({ entities: [entity(pii)], relationships: undefined }))).entities[0];
+
+  it('loads the object form beside the bare form: pii lists the names, and only the classed ones have a class', () => {
+    const found = loaded(['plain', { property: 'phone', class: 'phone' }, { property: 'holder', class: 'name' }, { property: 'born', class: 'date' }, { property: 'note', class: 'text' }, { property: 'mail', class: 'email' }]);
+    expect(found?.pii).toEqual(['plain', 'phone', 'holder', 'born', 'note', 'mail']);
+    expect(found?.piiClasses).toEqual({ phone: 'phone', holder: 'name', born: 'date', note: 'text', mail: 'email' });
+  });
+
+  it('has no classes at all for a mapping that writes bare names only, so that such a mapping keeps its hash', () => {
+    const found = loaded(['plain', 'other']);
+    expect(found?.pii).toEqual(['plain', 'other']);
+    expect(found && 'piiClasses' in found).toBe(false);
+  });
+
+  it.each([
+    ['a class outside the five', { property: 'x', class: 'region' }, 'sources[0].entities[0].pii[0]', 'has a class that is not name, email, phone, date, text'],
+    ['a key that is neither property nor class', { property: 'x', class: 'name', note: 'y' }, 'sources[0].entities[0].pii[0]', 'has the key note, which is not property or class'],
+    ['an entry without a property', { class: 'name' }, 'sources[0].entities[0].pii[0]', 'has no property name'],
+    ['a property with a brace', { property: 'a{', class: 'name' }, 'sources[0].entities[0].pii[0]', 'has no property name'],
+    ['an entry that is a number', 4, 'sources[0].entities[0].pii[0]', 'must be a property name or { property, class }'],
+    ['an entry that is a list', ['x'], 'sources[0].entities[0].pii[0]', 'must be a property name or { property, class }'],
+    ['a class that is not text', { property: 'x', class: 4 }, 'sources[0].entities[0].pii[0]', 'has a class that is not'],
+  ])('refuses %s, naming the place', (_name, entry, path, reason) => {
+    expectRefused(baseSource({ entities: [entity([entry])], relationships: undefined }), path, reason);
+  });
+
+  it.each([
+    ['a bare name twice', ['x', 'x'], 1],
+    ['a bare name and a classed one', ['x', { property: 'x', class: 'name' }], 1],
+    ['a property classed twice', [{ property: 'x', class: 'name' }, { property: 'x', class: 'email' }], 1],
+  ])('refuses %s, naming the second entry', (_name, pii, index) => {
+    expectRefused(baseSource({ entities: [entity(pii)], relationships: undefined }), `sources[0].entities[0].pii[${index}]`, 'lists x more than once');
+  });
+
+  it('still refuses a stable ID that is pii when it is written with a class, and a link placeholder that is pii', () => {
+    expectRefused(baseSource({ entities: [{ ...entity([{ property: 'id', class: 'name' }]) }], relationships: undefined }), 'sources[0].entities[0].pii', 'lists id, which is the stable ID of node_c');
+    const linked = { type: 'node_c', label: 'NodeC', stable_id: 'id', pii: [{ property: 'id', class: 'text' }], link: 'https://records.example.test/{id}' };
+    expectRefused(baseSource({ entities: [linked], relationships: undefined }), 'sources[0].entities[0].link', 'which is marked pii');
+  });
+});

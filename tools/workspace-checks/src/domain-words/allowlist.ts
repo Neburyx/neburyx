@@ -10,4 +10,5 @@ export const ALLOWLIST: readonly AllowlistEntry[] = [
   { word: 'model', reason: 'the key under which the mapping builder returns a loaded model' },
   { word: 'policy', reason: 'the policy seam of the gate, which decides authorization' },
   { word: 'network', reason: 'a key of the product\'s fixed icon set' },
+  { word: 'phone', reason: 'one of the fixed classes of a pii field (name, email, phone, date, text), which picks the shape of its mask' },
 ];
