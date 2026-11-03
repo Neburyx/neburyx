@@ -5,7 +5,7 @@ import type { ApiClient } from '../api/client.js';
 import { useClientState, useLoadedGraph } from '../state/context.js';
 import { useStoreSelector } from '../state/store.js';
 import { FixtureError } from './fixture-graph.js';
-import { loadFixture } from './fixture-loader.js';
+import { loadFixture, type LoaderOptions } from './fixture-loader.js';
 import { FailureNotice } from '../failure-notice.js';
 import { EXPLORE_PATH } from '../shell/navigation.js';
 import { PageHeading } from '../shell/page-heading.js';
@@ -15,6 +15,7 @@ import { registerStandIns } from './stand-ins.js';
 import { SourcesPanel } from './sources-panel.js';
 
 const SEED = 1;
+const LEFT_OUT_ENTITIES = 2;
 
 function LoadFixture({ profile }: { readonly profile: SourceProfile }) {
   const state = useClientState();
@@ -26,10 +27,10 @@ function LoadFixture({ profile }: { readonly profile: SourceProfile }) {
   const principalId = answeredData(me)?.principal.id;
   const meFailure = retainedFailure(me);
 
-  const onLoad = (): void => {
+  const onLoad = (options?: LoaderOptions): void => {
     if (principalId === undefined) return;
     try {
-      loadFixture(state, profile, principalId, SEED);
+      loadFixture(state, profile, principalId, SEED, options);
       registerStandIns(slots);
       setRefusal(undefined);
     } catch (error) {
@@ -40,8 +41,11 @@ function LoadFixture({ profile }: { readonly profile: SourceProfile }) {
 
   return (
     <div>
-      <button type="button" onClick={onLoad} disabled={principalId === undefined}>
+      <button type="button" onClick={() => onLoad()} disabled={principalId === undefined}>
         Load
+      </button>
+      <button type="button" onClick={() => onLoad({ withoutEntities: LEFT_OUT_ENTITIES })} disabled={principalId === undefined}>
+        Load with entities left out
       </button>
       {meFailure === undefined ? null : <FailureNotice failure={meFailure} />}
       {refusal === undefined ? null : <p role="alert">{refusal}</p>}

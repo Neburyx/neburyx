@@ -143,9 +143,9 @@ describe('the relationships the Cytoscape renderer draws', () => {
     expect(edge).toMatchObject({ width: 1.4, color: rgb('#8c96a8'), lineStyle: 'solid', arrow: 'chevron', label: '', labelOutline: 0 });
   });
 
-  it('draws a derived relationship as a dashed 1.4 px accent line with an arrow and its label', () => {
+  it('draws a derived relationship as a dashed 1.4 px accent line with no arrow and its label', () => {
     const edge = drawn([{ id: 'd', look: look(false, 'derived', 'T · derived') }]).get('d');
-    expect(edge).toMatchObject({ width: 1.4, color: rgb('#5264a7'), lineStyle: 'dashed', arrow: 'chevron', label: 'T · derived', labelOutline: 0 });
+    expect(edge).toMatchObject({ width: 1.4, color: rgb('#5264a7'), lineStyle: 'dashed', arrow: 'none', label: 'T · derived', labelOutline: 0 });
   });
 
   it('draws an aggregate as a 3.5 px line with an arrow and a pill outlined 1.5 px', () => {
@@ -159,8 +159,8 @@ describe('the relationships the Cytoscape renderer draws', () => {
     expect(edges.get('ug')).toMatchObject({ width: 3.5, lineStyle: 'dotted', label: 'T · 42 · origin unknown', labelOutline: 1.5 });
   });
 
-  it('draws a derived aggregate dashed in the accent colour with the aggregate width', () => {
-    expect(drawn([{ id: 'dg', look: look(true, 'derived', 'T · 42 · derived') }]).get('dg')).toMatchObject({ width: 3.5, color: rgb('#5264a7'), lineStyle: 'dashed', labelOutline: 1.5 });
+  it('draws a derived aggregate dashed in the accent colour with the aggregate width and no arrow', () => {
+    expect(drawn([{ id: 'dg', look: look(true, 'derived', 'T · 42 · derived') }]).get('dg')).toMatchObject({ width: 3.5, color: rgb('#5264a7'), lineStyle: 'dashed', arrow: 'none', labelOutline: 1.5 });
   });
 
   it('tells the four kinds apart by line style, width and label without colour', () => {

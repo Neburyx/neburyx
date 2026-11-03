@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createClientState } from '../state/client-state.js';
+import { partitionEdges } from '../state/loaded-graph.js';
 import { FIXTURE_RECORD, loadFixture } from './fixture-loader.js';
 import { testProfile } from './test-profile.js';
 
@@ -16,6 +17,22 @@ describe('loadFixture', () => {
     const graph = state.loadedGraph();
     expect(graph.entities).toMatchObject({ value: 120, quality: 'exact' });
     expect(graph.relationships).toMatchObject({ value: 180, quality: 'exact' });
+  });
+
+  it('leaves the asked number of connected entities out of the loaded refs, so their relationships are loaded but not drawable', () => {
+    const state = createClientState();
+    loadFixture(state, testProfile(), 'principal-1', 1, { withoutEntities: 2 });
+    const graph = state.loadedGraph();
+    expect(graph.entities).toMatchObject({ value: 118, quality: 'exact' });
+    expect(graph.relationships).toMatchObject({ value: 180, quality: 'exact' });
+    expect(partitionEdges(graph).notDrawable.length).toBeGreaterThan(0);
+    expect(state.presentation.view.getState().pins.size).toBeLessThanOrEqual(10);
+  });
+
+  it('loads every entity when none is asked to be left out', () => {
+    const state = createClientState();
+    loadFixture(state, testProfile(), 'principal-1', 1, { withoutEntities: 0 });
+    expect(partitionEdges(state.loadedGraph()).notDrawable).toHaveLength(0);
   });
 
   it('fills the synthetic investigation record, and another source drops it before the loader fills it again', () => {

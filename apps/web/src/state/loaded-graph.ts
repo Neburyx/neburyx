@@ -36,3 +36,17 @@ export function deriveLoadedGraph(server: ServerState, investigation: Investigat
   }
   return { nodes: [...nodes.values()], edges: [...edges.values()], entities: exact(nodes.size), relationships: exact(edges.size) };
 }
+
+export interface EdgePartition {
+  readonly drawable: readonly GraphEdge[];
+  readonly notDrawable: readonly GraphEdge[];
+}
+
+/** A relationship can be drawn only between two loaded entities; the others are loaded but not drawable. */
+export function partitionEdges(graph: LoadedGraph): EdgePartition {
+  const loaded = new Set(graph.nodes.map((node) => elementKey(node.ref)));
+  const drawable: GraphEdge[] = [];
+  const notDrawable: GraphEdge[] = [];
+  for (const edge of graph.edges) (loaded.has(elementKey(edge.from)) && loaded.has(elementKey(edge.to)) ? drawable : notDrawable).push(edge);
+  return { drawable, notDrawable };
+}

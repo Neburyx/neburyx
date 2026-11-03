@@ -64,3 +64,9 @@ export function remainderLine(shown: number, remainder: Count): string {
   if (number === undefined) return `${formatNumber(shown)} shown · more not yet retrieved`;
   return `${formatNumber(shown)} shown · ${number} not yet retrieved (${qualityWord(remainder.quality)})`;
 }
+
+/** The relationships that are loaded but cannot be drawn, as an exact count the client holds; nothing when there are none. */
+export function notDrawnLine(count: number): string | undefined {
+  if (count === 0) return undefined;
+  return `${formatNumber(count)} ${count === 1 ? 'relationship' : 'relationships'} not drawn (entity not loaded)`;
+}

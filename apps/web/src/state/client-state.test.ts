@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { partitionEdges } from './loaded-graph.js';
 import { createClientState } from './client-state.js';
 import { elementKey } from './keys.js';
 import { edge, edgeRef, key, node, ref, result } from './test-data.js';
@@ -92,6 +93,18 @@ describe('the loaded graph', () => {
     state.putResult(key('source-a', 'second'), result('source-a', ['n1', 'n2']));
     state.setLoaded([key('source-a'), key('source-a', 'second')], [ref('source-a', 'type-a', 'n1'), ref('source-a', 'type-a', 'n2')], [edgeRef('source-a', 'e1')]);
     expect(state.loadedGraph().entities.value).toBe(2);
+  });
+});
+
+describe('the relationships a loaded graph can draw', () => {
+  it('splits relationships into those between two loaded entities and those with an entity that is not loaded, from either end', () => {
+    const state = createClientState();
+    state.bindSource('source-a');
+    state.putResult(key('source-a'), result('source-a', ['n1', 'n2'], [['e1', 'n1', 'n2'], ['e2', 'n1', 'n9'], ['e3', 'n9', 'n2']]));
+    state.setLoaded([key('source-a')], [ref('source-a', 'type-a', 'n1'), ref('source-a', 'type-a', 'n2')], [edgeRef('source-a', 'e1'), edgeRef('source-a', 'e2'), edgeRef('source-a', 'e3')]);
+    const { drawable, notDrawable } = partitionEdges(state.loadedGraph());
+    expect(drawable.map((edge) => 'stableId' in edge.ref && edge.ref.stableId)).toEqual(['e1']);
+    expect(notDrawable.map((edge) => 'stableId' in edge.ref && edge.ref.stableId)).toEqual(['e2', 'e3']);
   });
 });
 

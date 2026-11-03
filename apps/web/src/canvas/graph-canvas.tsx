@@ -2,7 +2,7 @@ import type { SourceProfile } from '@neburyx/contracts';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useClientState, useLoadedGraph } from '../state/context.js';
 import { useStoreSelector } from '../state/store.js';
-import { formatNumber } from '../workspace/scope-text.js';
+import { formatNumber, notDrawnLine } from '../workspace/scope-text.js';
 import { buildScene } from './build-scene.js';
 import { captionFontsReady, loadCaptionFonts } from './fonts.js';
 import { useCreateRenderer } from './renderer-context.js';
@@ -68,7 +68,7 @@ export function GraphCanvas({ profile, view = 'fit' }: { readonly profile?: Sour
       <div ref={container} className="graph-canvas" role="img" aria-label="Graph canvas" aria-describedby={descriptionId} />
       <p id={descriptionId} className="visually-hidden">
         {counted(graph.nodes.length, 'entity', 'entities')} and {counted(graph.edges.length, 'relationship', 'relationships')} loaded
-        {scene.omitted === 0 ? '' : `; ${counted(scene.omitted, 'relationship is', 'relationships are')} not drawn because an entity ${scene.omitted === 1 ? 'it joins' : 'they join'} is not loaded`}
+        {scene.omitted === 0 ? '' : `; ${notDrawnLine(scene.omitted)}`}
       </p>
       {failed ? (
         <p role="alert" className="canvas-notice">

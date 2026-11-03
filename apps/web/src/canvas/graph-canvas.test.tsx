@@ -165,7 +165,7 @@ describe('the graph canvas when the renderer fails', () => {
 });
 
 describe('the graph canvas description', () => {
-  it('says how many relationships are not drawn because an entity they join is not loaded', () => {
+  it('says how many relationships are not drawn, in the words of the scope line', () => {
     const state = createClientState();
     state.bindSource('a');
     state.putResult(key('a'), result('a', ['n1', 'n2'], [['e1', 'n1', 'n2']]));
@@ -173,7 +173,7 @@ describe('the graph canvas description', () => {
     view(state, stubFactory().create);
     const canvas = screen.getByRole('img', { name: 'Graph canvas' });
     const text = document.getElementById(canvas.getAttribute('aria-describedby') ?? '')?.textContent;
-    expect(text).toBe('1 entity and 1 relationship loaded; 1 relationship is not drawn because an entity it joins is not loaded');
+    expect(text).toBe('1 entity and 1 relationship loaded; 1 relationship not drawn (entity not loaded)');
   });
 
   it('uses the plural when several relationships are not drawn', () => {
@@ -184,7 +184,7 @@ describe('the graph canvas description', () => {
     view(state, stubFactory().create);
     const canvas = screen.getByRole('img', { name: 'Graph canvas' });
     const text = document.getElementById(canvas.getAttribute('aria-describedby') ?? '')?.textContent;
-    expect(text).toBe('1 entity and 2 relationships loaded; 2 relationships are not drawn because an entity they join is not loaded');
+    expect(text).toBe('1 entity and 2 relationships loaded; 2 relationships not drawn (entity not loaded)');
   });
 
   it('says nothing about omissions when every relationship is drawn', () => {

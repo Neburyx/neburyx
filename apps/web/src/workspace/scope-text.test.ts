@@ -1,7 +1,7 @@
 import type { Count } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
 import type { LoadedGraph } from '../state/loaded-graph.js';
-import { formatNumber, loadedLine, remainderLine, UNKNOWN_REMAINDER } from './scope-text.js';
+import { formatNumber, loadedLine, notDrawnLine, remainderLine, UNKNOWN_REMAINDER } from './scope-text.js';
 
 const exact = (value: number): Count => ({ value, quality: 'exact', scope: 'loaded in this view' });
 const graph = (entities: Count, relationships: Count): LoadedGraph => ({ nodes: [], edges: [], entities, relationships });
@@ -54,5 +54,16 @@ describe('formatNumber', () => {
     [1234567, '1,234,567'],
   ])('writes %d as %s', (value, text) => {
     expect(formatNumber(value)).toBe(text);
+  });
+});
+
+describe('the not drawn line', () => {
+  it('is absent for none', () => {
+    expect(notDrawnLine(0)).toBeUndefined();
+  });
+
+  it('uses the singular for one and the plural, with a thousands separator, for many', () => {
+    expect(notDrawnLine(1)).toBe('1 relationship not drawn (entity not loaded)');
+    expect(notDrawnLine(1200)).toBe('1,200 relationships not drawn (entity not loaded)');
   });
 });

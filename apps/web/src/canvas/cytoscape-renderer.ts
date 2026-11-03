@@ -61,7 +61,7 @@ const STYLE: StylesheetJson = [
   },
   {
     selector: 'edge[origin = "derived"]',
-    style: { 'line-color': DERIVED_COLOR, 'target-arrow-color': DERIVED_COLOR, 'line-style': 'dashed', 'line-dash-pattern': DASH_PATTERN },
+    style: { 'line-color': DERIVED_COLOR, 'line-style': 'dashed', 'line-dash-pattern': DASH_PATTERN, 'target-arrow-shape': 'none' },
   },
   { selector: 'edge[origin = "unknown"]', style: { 'line-style': 'dotted', 'line-dash-pattern': DOT_PATTERN } },
   {

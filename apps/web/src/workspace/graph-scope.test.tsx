@@ -53,4 +53,31 @@ describe('the graph scope lines', () => {
     expect(scope().getByText(/loaded/).textContent).toBe('4 entities · 2 relationships · loaded · exact');
     expect(scope().getByText(/shown/).textContent).toBe('4 shown · more not yet retrieved');
   });
+
+  it('show no line about relationships that are not drawn when every relationship has both its entities', () => {
+    const state = createClientState();
+    load(state, 10, 13);
+    renderApp('/explore', client, state);
+    expect(scope().queryByText(/not drawn/)).toBeNull();
+  });
+
+  it('say on the loaded line, after "exact", that one relationship is not drawn because its entity is not loaded', () => {
+    const state = createClientState();
+    state.bindSource('a');
+    state.putResult(key('a'), result('a', ['n1', 'n2'], [['e1', 'n1', 'n2'], ['e2', 'n1', 'n9']]));
+    state.setLoaded([key('a')], [ref('a', 'type-a', 'n1'), ref('a', 'type-a', 'n2')], [edgeRef('a', 'e1'), edgeRef('a', 'e2')]);
+    renderApp('/explore', client, state);
+    expect(scope().getAllByText(/./).map((line) => line.textContent)).toEqual(['2 entities · 2 relationships · loaded · exact · 1 relationship not drawn (entity not loaded)', '2 shown · more not yet retrieved']);
+  });
+
+  it('count several relationships that are not drawn, exactly, and drop the line again when the graph is replaced', () => {
+    const state = createClientState();
+    state.bindSource('a');
+    state.putResult(key('a'), result('a', ['n1'], [['e1', 'n1', 'n8'], ['e2', 'n9', 'n1'], ['e3', 'n8', 'n9']]));
+    state.setLoaded([key('a')], [ref('a', 'type-a', 'n1')], [edgeRef('a', 'e1'), edgeRef('a', 'e2'), edgeRef('a', 'e3')]);
+    renderApp('/explore', client, state);
+    expect(scope().getByText(/not drawn/).textContent).toBe('1 entity · 3 relationships · loaded · exact · 3 relationships not drawn (entity not loaded)');
+    act(() => load(state, 3, 2, 'seed-2'));
+    expect(scope().queryByText(/not drawn/)).toBeNull();
+  });
 });

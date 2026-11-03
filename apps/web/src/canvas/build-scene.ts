@@ -1,5 +1,5 @@
 import type { SourceProfile } from '@neburyx/contracts';
-import type { LoadedGraph } from '../state/loaded-graph.js';
+import { partitionEdges, type LoadedGraph } from '../state/loaded-graph.js';
 import { edgeKey, elementKey } from '../state/keys.js';
 import type { Position } from '../state/presentation-state.js';
 import { entityLook } from './entity-look.js';
@@ -12,9 +12,7 @@ export function buildScene(graph: LoadedGraph, positions: ReadonlyMap<string, Po
     const id = elementKey(node.ref);
     return { id, position: positions.get(id), look: entityLook(node, profile) };
   });
-  const drawn = new Set(entities.map((entity) => entity.id));
-  const relationships = graph.edges
-    .map((edge) => ({ id: edgeKey(edge.ref), from: elementKey(edge.from), to: elementKey(edge.to), look: relationshipLook(edge) }))
-    .filter((relationship) => drawn.has(relationship.from) && drawn.has(relationship.to));
-  return { entities, relationships, profile, omitted: graph.edges.length - relationships.length, view };
+  const { drawable, notDrawable } = partitionEdges(graph);
+  const relationships = drawable.map((edge) => ({ id: edgeKey(edge.ref), from: elementKey(edge.from), to: elementKey(edge.to), look: relationshipLook(edge) }));
+  return { entities, relationships, profile, omitted: notDrawable.length, view };
 }
