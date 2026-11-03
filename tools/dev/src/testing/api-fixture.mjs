@@ -1,4 +1,3 @@
-// A stand-in for the API: records each start and its process ID, listens after START_DELAY_MS and exits by itself EXIT_AFTER_MS after that.
 import { appendFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 

@@ -194,7 +194,7 @@ describe('the demo stack', () => {
     expect(mounts.find((mount) => mount.Destination === '/config')?.RW).toBe(false);
     const written = (await stack.compose(['exec', '-T', 'api', 'cat', '/config/neburyx.yaml'])).stdout;
     expect(parse(written)).toEqual({ sources: DEMO_PACKS.map((name) => packSource(name)) });
-    expect(readdirSync(join(repository, 'deploy/demo')).filter((name) => name.endsWith('.yaml') && name !== 'compose.yaml')).toEqual([]);
+    expect(readdirSync(join(repository, 'deploy/demo')).filter((name) => name.endsWith('.yaml') && !['compose.yaml', 'compose.dev.yaml'].includes(name))).toEqual([]);
   });
 
   function testSource(name: string) {

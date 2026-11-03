@@ -16,7 +16,6 @@ export class IncompleteExternalDatabase extends Error {
   }
 }
 
-/** None of the three variables set: the local database. All three: the external one. Some: a refusal naming the missing ones, never a value. */
 export function externalDatabase(env: Readonly<Record<string, string | undefined>>): ExternalDatabase | undefined {
   const [appUrl, migrationUrl, appRole] = EXTERNAL_VARIABLES.map((name) => env[name]);
   const present = [appUrl, migrationUrl, appRole].filter((value) => value !== undefined && value !== '');

@@ -6,8 +6,9 @@ import { collectEnvReads, type EnvRead } from './collect.js';
 export const ENV_SCAN_ROOT = 'services/api/src';
 /** Test support code that reads the developer's environment; it is not the API. */
 export const ENV_SCAN_EXCLUDED: readonly string[] = ['services/api/src/testing', 'services/api/src/image', 'services/api/src/compose'];
-/** The one file that reads the variable names a mapping gives for a source's login; its reads cannot be resolved by a scan, by design. */
+/** The one file, and the two reads in it, that take the variable names a mapping gives for a source's login; a scan cannot resolve them, by design. */
 export const CREDENTIAL_RESOLVER = 'services/api/src/sources/credentials.ts';
+export const CREDENTIAL_KEYS: readonly string[] = ['source.auth.usernameEnv', 'source.auth.passwordEnv'];
 export const SECRET_VARIABLES: readonly string[] = ['DATABASE_URL', 'DATABASE_MIGRATION_URL', 'NEBURYX_CURSOR_KEY'];
 
 export interface EnvViolation {
@@ -35,14 +36,13 @@ function listedVariables(root: string): { name: string; value: string; described
   });
 }
 
-/** The environment variables the API reads against the root `.env.example`, in both directions. */
 export function checkEnvExample(root: string): EnvViolation[] {
   const violations: EnvViolation[] = [];
   const reads = readsOf(root);
   const read = new Set<string>();
   for (const entry of reads) {
     if (entry.name !== undefined) read.add(entry.name);
-    else if (entry.file !== CREDENTIAL_RESOLVER) violations.push({ kind: 'unresolved', file: entry.file, line: entry.line });
+    else if (entry.file !== CREDENTIAL_RESOLVER || !CREDENTIAL_KEYS.includes(entry.key)) violations.push({ kind: 'unresolved', file: entry.file, line: entry.line });
   }
   const listed = listedVariables(root);
   const names = new Set(listed.map((entry) => entry.name));

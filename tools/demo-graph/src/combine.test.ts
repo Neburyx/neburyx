@@ -110,6 +110,8 @@ describe('setting the addresses', () => {
   it.each([
     ['a source that is not in the packs', 'zzz=bolt://127.0.0.1:55001', 'the source zzz is not in the packs'],
     ['an address that is not a bolt address', 'a=http://127.0.0.1:55001', 'the address for the source a is not a bolt address on a loopback host'],
+    ['an address with a port above 65535', 'a=bolt://127.0.0.1:99999', 'the address for the source a is not a bolt address on a loopback host'],
+    ['an address with port 0', 'a=bolt://127.0.0.1:0', 'the address for the source a is not a bolt address on a loopback host'],
     ['an address on a host that is not loopback', 'a=bolt://db.example.test:7687', 'the address for the source a is not a bolt address on a loopback host'],
   ])('refuses %s, naming the source, and writes nothing', async (_name, addresses, message) => {
     const folder = two();

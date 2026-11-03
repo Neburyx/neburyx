@@ -1,4 +1,5 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, watch, writeFileSync } from 'node:fs';
+import { createServer as createHttpServer } from 'node:http';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -8,7 +9,10 @@ import { API_READY_TIMEOUT_MS, supervise, type ApiSpec, type ChildSpec } from '.
 
 const fixtures = join(dirname(fileURLToPath(import.meta.url)), 'testing');
 const folders: string[] = [];
-afterEach(() => {
+const cleanups: (() => Promise<void>)[] = [];
+
+afterEach(async () => {
+  for (const cleanup of cleanups.splice(0)) await cleanup();
   for (const folder of folders.splice(0)) rmSync(folder, { recursive: true, force: true });
 });
 
@@ -24,14 +28,54 @@ function freePort(): Promise<number> {
   });
 }
 
-async function scene(apiEnv: Record<string, string>, options: { readyTimeoutMs?: number; childEnv?: Record<string, string> } = {}) {
+const alive = (pid: number): boolean => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+async function waitUntil(condition: () => boolean, ms = 10_000, describeState: () => string = () => ''): Promise<void> {
+  const deadline = Date.now() + ms;
+  while (!condition()) {
+    if (Date.now() > deadline) throw new Error(`condition not met; ${describeState()}`);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+}
+
+/** Returns once the file system has reported a file written in the folder, so the creation of the folder itself can no longer be reported as a change to a watcher started afterwards. */
+async function settle(folder: string): Promise<void> {
+  let seen = false;
+  const watcher = watch(folder, { recursive: true }, () => {
+    seen = true;
+  });
+  writeFileSync(join(folder, '.settled'), '');
+  await waitUntil(() => seen);
+  watcher.close();
+}
+
+interface Scene {
+  readonly messages: string[];
+  readonly stop: () => void;
+  readonly done: Promise<number>;
+  readonly watched: string;
+  readonly lines: (prefix: string) => string[];
+  readonly apiLines: () => string[];
+  readonly pidOf: (line: string | undefined) => number;
+  readonly waitFor: (condition: () => boolean) => Promise<void>;
+}
+
+async function scene(apiEnv: Record<string, string>, options: { readyTimeoutMs?: number; childEnv?: Record<string, string>; stopGraceMs?: number; apiPort?: number; onPids?: (pids: readonly number[]) => void } = {}): Promise<Scene> {
   const folder = mkdtempSync(join(tmpdir(), 'dev-supervisor-'));
   folders.push(folder);
   const log = join(folder, 'log.txt');
   const watched = join(folder, 'dist');
   mkdirSync(watched);
   writeFileSync(log, '');
-  const port = await freePort();
+  await settle(watched);
+  const port = options.apiPort ?? (await freePort());
   const base = { PATH: process.env['PATH'] ?? '', LOG_FILE: log };
   const api: ApiSpec = {
     name: 'the API',
@@ -51,26 +95,26 @@ async function scene(apiEnv: Record<string, string>, options: { readyTimeoutMs?:
     stop = resolve;
   });
   const lines = (prefix: string): string[] => readFileSync(log, 'utf8').split('\n').filter((line) => line.startsWith(prefix));
-  const waitFor = async (condition: () => boolean, ms = 10_000): Promise<void> => {
-    const deadline = Date.now() + ms;
-    while (!condition()) {
-      if (Date.now() > deadline) throw new Error(`condition not met; messages: ${messages.join(' | ')}`);
-      await new Promise((resolve) => setTimeout(resolve, 50));
+  const done = supervise({ children: [child], api, out: (text) => void messages.push(text), stopRequested, stopGraceMs: options.stopGraceMs ?? 300, ...(options.onPids === undefined ? {} : { onPids: options.onPids }) });
+  cleanups.push(async () => {
+    stop();
+    await done.catch(() => undefined);
+    for (const line of readFileSync(log, 'utf8').split('\n').filter(Boolean)) {
+      const pid = Number(line.split(' ')[1]);
+      if (alive(pid)) process.kill(pid, 'SIGKILL');
     }
+  });
+  return {
+    messages,
+    stop,
+    done,
+    watched,
+    lines,
+    apiLines: () => lines('start'),
+    pidOf: (line) => Number(line?.split(' ')[1]),
+    waitFor: (condition) => waitUntil(condition, 10_000, () => `messages: ${messages.join(' | ')}`),
   };
-  await new Promise((resolve) => setTimeout(resolve, 400));
-  const done = supervise({ children: [child], api, out: (text) => void messages.push(text), stopRequested });
-  return { messages, stop, done, lines, waitFor, watched, apiLines: () => lines('start') };
 }
-
-const alive = (pid: number): boolean => {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-};
 
 describe('the API supervisor', () => {
   it('uses a startup limit of seven gate deadlines of 10 s plus 50 s', () => {
@@ -82,22 +126,19 @@ describe('the API supervisor', () => {
     await run.waitFor(() => run.messages.includes('the API is ready'));
     run.stop();
     expect(await run.done).toBe(0);
-    const [api] = run.apiLines();
-    const pid = Number(api?.split(' ')[1]);
-    await run.waitFor(() => !alive(pid));
+    expect(alive(run.pidOf(run.apiLines()[0]))).toBe(false);
   }, 30_000);
 
   it('stops every child and exits 1 naming the API when it does not become ready within the limit', async () => {
     const run = await scene({ NEVER_LISTEN: '1' }, { readyTimeoutMs: 1500 });
     expect(await run.done).toBe(1);
     expect(run.messages.join('\n')).toContain('the API did not become ready');
-    const pid = Number(run.lines('compiler')[0]?.split(' ')[1]);
-    await run.waitFor(() => !alive(pid));
+    expect(alive(run.pidOf(run.lines('compiler')[0]))).toBe(false);
   }, 30_000);
 
   it('still exits 1 for an API that never becomes ready when a file changes during its first start (the compiler writing its output)', async () => {
     const run = await scene({ NEVER_LISTEN: '1' }, { readyTimeoutMs: 2500 });
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    await run.waitFor(() => run.apiLines().length === 1);
     writeFileSync(join(run.watched, 'main.js'), 'first output');
     expect(await run.done).toBe(1);
     expect(run.messages.join('\n')).toContain('the API did not become ready');
@@ -110,6 +151,18 @@ describe('the API supervisor', () => {
     expect(await run.done).toBe(1);
     expect(Date.now() - started).toBeLessThan(8000);
     expect(run.messages.join('\n')).toContain('the API did not become ready');
+  }, 30_000);
+
+  it('does not call an API ready because something else answered on its port after the API itself had exited', async () => {
+    const port = await freePort();
+    const stub = createHttpServer((_request, response) => {
+      setTimeout(() => response.end('ok'), 700);
+    });
+    await new Promise<void>((resolve) => stub.listen(port, '127.0.0.1', resolve));
+    cleanups.push(() => new Promise<void>((resolve) => void stub.close(() => resolve())));
+    const run = await scene({ FAIL_AT_START: '1' }, { apiPort: port, readyTimeoutMs: 5000 });
+    expect(await run.done).toBe(1);
+    expect(run.messages).not.toContain('the API is ready');
   }, 30_000);
 
   it('tells an API that exits by itself after it was ready from a startup failure: it waits for the next change and restarts then', async () => {
@@ -127,11 +180,11 @@ describe('the API supervisor', () => {
   it('restarts a running API when a watched file changes and it becomes ready again', async () => {
     const run = await scene({});
     await run.waitFor(() => run.messages.includes('the API is ready'));
-    const firstPid = Number(run.apiLines()[0]?.split(' ')[1]);
+    const firstPid = run.pidOf(run.apiLines()[0]);
     writeFileSync(join(run.watched, 'main.js'), 'changed');
     await run.waitFor(() => run.apiLines().length === 2);
     await run.waitFor(() => run.messages.filter((message) => message === 'the API is ready').length === 2);
-    await run.waitFor(() => !alive(firstPid));
+    expect(alive(firstPid)).toBe(false);
     run.stop();
     expect(await run.done).toBe(0);
   }, 30_000);
@@ -140,7 +193,33 @@ describe('the API supervisor', () => {
     const run = await scene({}, { childEnv: { EXIT_AFTER_MS: '800' } });
     expect(await run.done).toBe(1);
     expect(run.messages.join('\n')).toContain('a compiler stopped by itself (exit code 2)');
-    const pid = Number(run.apiLines()[0]?.split(' ')[1]);
-    await run.waitFor(() => !alive(pid));
+    expect(alive(run.pidOf(run.apiLines()[0]))).toBe(false);
+  }, 30_000);
+});
+
+describe('stopping', () => {
+  it('stops the grandchildren of a child as well, and a child that ignores the request to stop, before it returns', async () => {
+    const run = await scene({}, { childEnv: { GRANDCHILD: '1', IGNORE_TERM: '1' } });
+    await run.waitFor(() => run.messages.includes('the API is ready') && run.lines('grandchild').length === 1);
+    const compiler = run.pidOf(run.lines('compiler')[0]);
+    const grandchild = run.pidOf(run.lines('grandchild')[0]);
+    expect(alive(compiler) && alive(grandchild)).toBe(true);
+    run.stop();
+    expect(await run.done).toBe(0);
+    expect(alive(compiler)).toBe(false);
+    expect(alive(grandchild)).toBe(false);
+  }, 30_000);
+
+  it('stops what it started when the setup itself fails, and rejects with that failure', async () => {
+    const started: number[] = [];
+    const run = await scene({}, {
+      onPids: (pids) => {
+        started.push(...pids);
+        throw new Error('the setup failed');
+      },
+    });
+    await expect(run.done).rejects.toThrow('the setup failed');
+    expect(started).toHaveLength(1);
+    expect(started.some((pid) => alive(pid))).toBe(false);
   }, 30_000);
 });

@@ -84,6 +84,22 @@ describe('the forms of a read', () => {
   });
 });
 
+describe('a key that looks like a constant but is not trusted', () => {
+  const listed = (files: Record<string, string>) => checkEnvExample(root('# One.\nLISTED=', { 'services/api/src/a.ts': "export const x = process.env['LISTED'];\n", ...files }));
+
+  it('is unresolved when the constant is shadowed by a parameter of the same name', () => {
+    const violations = listed({ 'services/api/src/b.ts': "const KEY = 'LISTED';\nexport const f = (KEY: string) => process.env[KEY];\nexport const g = KEY;\n" });
+    expect(violations).toEqual([{ kind: 'unresolved', file: 'services/api/src/b.ts', line: 2 }]);
+  });
+
+  it('is unresolved when it is a let that can change, or is declared twice', () => {
+    const mutable = listed({ 'services/api/src/b.ts': "let KEY = 'LISTED';\nKEY = process.argv[2] ?? KEY;\nexport const f = process.env[KEY];\n" });
+    expect(mutable).toEqual([{ kind: 'unresolved', file: 'services/api/src/b.ts', line: 3 }]);
+    const twice = listed({ 'services/api/src/b.ts': "const KEY = 'LISTED';\nexport function h() { const KEY = 'OTHER'; return process.env[KEY]; }\n" });
+    expect(twice).toEqual([{ kind: 'unresolved', file: 'services/api/src/b.ts', line: 2 }]);
+  });
+});
+
 describe('the credential resolver', () => {
   const resolver = 'export const read = (source: { auth: { usernameEnv: string } }, env: Record<string, string | undefined>) => env[source.auth.usernameEnv];\n';
 
@@ -92,5 +108,11 @@ describe('the credential resolver', () => {
     expect(allowed).toEqual([]);
     const second = checkEnvExample(root('# One.\nALPHA=', { 'services/api/src/sources/credentials.ts': resolver, 'services/api/src/elsewhere.ts': resolver, 'services/api/src/a.ts': "export const x = process.env['ALPHA'];\n" }));
     expect(second).toEqual([{ kind: 'unresolved', file: 'services/api/src/elsewhere.ts', line: 1 }]);
+  });
+
+  it('allows only the two reads of the mapping\'s login names, not another computed read in the same file', () => {
+    const another = `${resolver}export const other = (name: string, env: Record<string, string | undefined>) => env[name];\n`;
+    const violations = checkEnvExample(root('# One.\nALPHA=', { 'services/api/src/sources/credentials.ts': another, 'services/api/src/a.ts': "export const x = process.env['ALPHA'];\n" }));
+    expect(violations).toEqual([{ kind: 'unresolved', file: 'services/api/src/sources/credentials.ts', line: 2 }]);
   });
 });

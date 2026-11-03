@@ -51,7 +51,6 @@ function isCursorKey(value: string): boolean {
   return (value === canonical || value === canonical.replace(/=+$/, '')) && bytes.length >= CURSOR_KEY_BYTES;
 }
 
-/** The keys of the five settings that are missing or not usable; never a value. */
 export function invalidKeys(values: ReadonlyMap<string, string>): SettingKey[] {
   return SETTING_KEYS.filter((key) => {
     const value = values.get(key);

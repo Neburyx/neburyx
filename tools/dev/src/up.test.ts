@@ -229,6 +229,8 @@ describe('the lock', () => {
 });
 
 describe('pnpm dev down', () => {
+  const settingValues = (call: Call): string[] => Object.entries(call.options.env ?? {}).filter(([key]) => /PASSWORD|CURSOR/.test(key)).map(([, value]) => value);
+
   it('removes the containers and volumes of the project and .dev, and keeps .env', async () => {
     const { deps, calls, removed, state } = rig({ files: { [join(ROOT, '.env')]: formatSettings(generateSettings()) } });
     expect(await down(deps)).toBe(0);
@@ -237,11 +239,16 @@ describe('pnpm dev down', () => {
     expect(state.has(join(ROOT, '.env'))).toBe(true);
   });
 
-  it('exits 0 and runs no Docker command when there is no .env, so nothing was ever started', async () => {
-    const { deps, calls, removed } = rig();
-    expect(await down(deps)).toBe(0);
-    expect(calls).toEqual([]);
-    expect(removed).toEqual([join(ROOT, '.dev')]);
+  it('removes the project whatever .env says: with no .env, or a damaged one, it does not read it and still runs the removal', async () => {
+    for (const files of [{}, { [join(ROOT, '.env')]: 'NEBURYX_CURSOR_KEY=\nbroken' }]) {
+      const { deps, calls, removed } = rig({ files });
+      expect(await down(deps)).toBe(0);
+      const [call] = calls;
+      expect(call?.args).not.toContain('--env-file');
+      expect(call?.args.slice(-3)).toEqual(['down', '-v', '--remove-orphans']);
+      expect(settingValues(call ?? { command: '', args: [], options: {} }).every((value) => value === 'not-used')).toBe(true);
+      expect(removed).toEqual([join(ROOT, '.dev')]);
+    }
   });
 
   it('opens no connection to an external database', async () => {
@@ -249,5 +256,68 @@ describe('pnpm dev down', () => {
     await down(deps);
     expect(calls.every((call) => call.command === 'docker' && call.args.includes('down'))).toBe(true);
     expect(JSON.stringify(calls)).not.toContain('elsewhere');
+  });
+});
+
+describe('stopping the command while it starts', () => {
+  it('stops the step in flight, runs no later step, releases the lock and returns 0', async () => {
+    let stopNow: () => void = () => undefined;
+    const stopRequested = new Promise<void>((resolve) => {
+      stopNow = resolve;
+    });
+    const seen: { signal?: AbortSignal }[] = [];
+    const first = rig();
+    const slowRun: Run = async (command, args, options = {}) => {
+      seen.push(options.signal === undefined ? {} : { signal: options.signal });
+      await first.deps.run(command, args, options);
+      await new Promise<void>((resolve) => options.signal?.addEventListener('abort', () => resolve(), { once: true }));
+      return { code: 130, stdout: '', stderr: '' };
+    };
+    const running = up({ ...first.deps, run: slowRun, stopRequested });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    stopNow();
+    expect(await running).toBe(0);
+    expect(first.calls).toHaveLength(1);
+    expect(seen[0]?.signal?.aborted).toBe(true);
+    expect(await up({ ...first.deps, lock: first.deps.lock })).toBe(0);
+  });
+});
+
+describe('the lock at the level of the commands', () => {
+  function blocking() {
+    const first = rig({ files: { [join(ROOT, '.env')]: formatSettings(generateSettings()) } });
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const run: Run = async (command, args, options) => {
+      await held;
+      return first.deps.run(command, args, options);
+    };
+    return { first, run, release };
+  }
+
+  it('refuses an up while a down is running, and a second down while one is running', async () => {
+    const { first, run, release } = blocking();
+    const folder = first.deps.lock.folder;
+    const lock = { folder, alive: () => true };
+    const running = down({ ...first.deps, run, lock });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const other = rig();
+    await expect(up({ ...other.deps, lock })).rejects.toBeInstanceOf(LockHeld);
+    await expect(down({ ...other.deps, lock })).rejects.toBeInstanceOf(LockHeld);
+    expect(other.calls).toEqual([]);
+    release();
+    expect(await running).toBe(0);
+    expect(await down({ ...other.deps, lock: { folder } })).toBe(0);
+  });
+});
+
+describe('the root scripts', () => {
+  it('build only the tool before the command, which checks .env before it builds anything else', async () => {
+    const { readFileSync } = await import('node:fs');
+    const root: { scripts: Record<string, string> } = JSON.parse(readFileSync(join(import.meta.dirname, '..', '..', '..', 'package.json'), 'utf8'));
+    expect(root.scripts['dev']).toBe('pnpm --filter @neburyx/dev build && node tools/dev/dist/main.js up');
+    expect(root.scripts['dev:down']).toBe('pnpm --filter @neburyx/dev build && node tools/dev/dist/main.js down');
   });
 });

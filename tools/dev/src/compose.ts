@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import type { Environment } from './environments.js';
 import type { Run, RunResult } from './exec.js';
+import { SETTING_KEYS } from './settings.js';
 
 export const PROJECT = 'neburyx-dev';
 const WAIT_SECONDS = 600;
@@ -16,6 +17,13 @@ export const DEMO_GRAPHS: readonly GraphService[] = [
   { service: 'demo-insurance-graph', loader: 'load-insurance', sourceId: 'insurance-demo' },
 ];
 
+export class Stopped extends Error {
+  constructor() {
+    super('stopped by the developer');
+    this.name = 'Stopped';
+  }
+}
+
 export class StepFailed extends Error {
   constructor(step: string, detail = '') {
     super(`${step} failed${detail === '' ? '' : `: ${detail}`}`);
@@ -23,6 +31,8 @@ export class StepFailed extends Error {
   }
 }
 
+/** The compose file requires every setting to be non-empty, but removing a project needs none of their values. */
+const NOT_USED = 'not-used';
 const LOOPBACK_PORT = /^127\.0\.0\.1:(\d{1,5})$/;
 
 export class Compose {
@@ -30,14 +40,23 @@ export class Compose {
     private readonly run: Run,
     private readonly root: string,
     private readonly environment: Environment,
+    private readonly signal?: AbortSignal,
   ) {}
 
-  private args(...rest: string[]): string[] {
-    return ['compose', '-p', PROJECT, '--env-file', join(this.root, '.env'), '-f', join(this.root, 'deploy/demo/compose.yaml'), '-f', join(this.root, 'deploy/demo/compose.dev.yaml'), ...rest];
+  private args(rest: string[], envFile: boolean): string[] {
+    return ['compose', '-p', PROJECT, ...(envFile ? ['--env-file', join(this.root, '.env')] : []), '-f', join(this.root, 'deploy/demo/compose.yaml'), '-f', join(this.root, 'deploy/demo/compose.dev.yaml'), ...rest];
   }
 
-  private docker(rest: string[], show = false): Promise<RunResult> {
-    return this.run('docker', this.args(...rest), { cwd: this.root, env: this.environment, show });
+  private checkStopped(): void {
+    if (this.signal?.aborted === true) throw new Stopped();
+  }
+
+  private async docker(rest: string[], show = false, envFile = true): Promise<RunResult> {
+    this.checkStopped();
+    const environment = envFile ? this.environment : { ...this.environment, ...Object.fromEntries(SETTING_KEYS.map((key) => [key, NOT_USED])) };
+    const result = await this.run('docker', this.args(rest, envFile), { cwd: this.root, env: environment, show, ...(this.signal === undefined ? {} : { signal: this.signal }) });
+    this.checkStopped();
+    return result;
   }
 
   async build(service: string): Promise<void> {
@@ -55,7 +74,6 @@ export class Compose {
     if (result.code !== 0) throw new StepFailed(`the loader ${loader}`, `exit code ${result.code}`);
   }
 
-  /** The host port that Docker chose for a published port, which must be on 127.0.0.1. */
   async port(service: string, containerPort: number): Promise<number> {
     const result = await this.docker(['port', service, String(containerPort)]);
     const match = LOOPBACK_PORT.exec(result.stdout.trim());
@@ -64,7 +82,7 @@ export class Compose {
   }
 
   async down(): Promise<void> {
-    const result = await this.docker(['down', '-v', '--remove-orphans'], true);
+    const result = await this.docker(['down', '-v', '--remove-orphans'], true, false);
     if (result.code !== 0) throw new StepFailed('removing the containers and volumes');
   }
 }

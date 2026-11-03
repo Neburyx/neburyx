@@ -1,13 +1,15 @@
-// A separate process that tries to take the lock and says whether it did. It waits for a start file so that contenders begin together.
 import { existsSync } from 'node:fs';
 import { Lock, LockHeld } from '../lock.ts';
 
-const [folder, repository, startFile, holdMs] = process.argv.slice(2);
+const [folder, repository, startFile, releaseFile] = process.argv.slice(2);
+process.stdout.write('ready\n');
 while (!existsSync(startFile)) await new Promise((resolve) => setTimeout(resolve, 1));
+let outcome = 'refused';
 try {
   Lock.acquire({ folder, repository });
-  process.stdout.write('acquired\n');
-  await new Promise((resolve) => setTimeout(resolve, Number(holdMs)));
+  outcome = 'acquired';
 } catch (error) {
-  process.stdout.write(error instanceof LockHeld ? 'refused\n' : `failed ${String(error)}\n`);
+  outcome = error instanceof LockHeld ? 'refused' : `failed ${String(error)}`;
 }
+process.stdout.write(`${outcome}\n`);
+while (!existsSync(releaseFile)) await new Promise((resolve) => setTimeout(resolve, 5));

@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { Compose, DEMO_GRAPHS, StepFailed } from './compose.js';
+import { Compose, DEMO_GRAPHS, StepFailed, Stopped } from './compose.js';
 import { apiEnvironment, baseEnvironment, dockerEnvironment, migrationEnvironment, webEnvironment } from './environments.js';
 import type { Run } from './exec.js';
 import { externalDatabase } from './external.js';
@@ -70,18 +70,22 @@ function lockOptions(deps: Dependencies) {
 
 export async function up(deps: Dependencies): Promise<number> {
   const lock = Lock.acquire(lockOptions(deps));
+  const stopping = new AbortController();
+  void deps.stopRequested.then(() => stopping.abort());
   try {
     const external = externalDatabase(deps.env);
     const settings = loadSettings(deps);
     const base = baseEnvironment(deps.env);
     const step = async (name: string, command: string, args: readonly string[], env = base, cwd = deps.root): Promise<void> => {
-      const result = await deps.run(command, args, { cwd, env, show: true });
+      if (stopping.signal.aborted) throw new Stopped();
+      const result = await deps.run(command, args, { cwd, env, show: true, signal: stopping.signal });
+      if (stopping.signal.aborted) throw new Stopped();
       if (result.code !== 0) throw new StepFailed(name, `exit code ${result.code}`);
     };
 
     for (const build of BUILDS) await step(`building ${build.name}`, 'pnpm', ['--filter', build.filter, 'build']);
 
-    const compose = new Compose(deps.run, deps.root, dockerEnvironment(deps.env));
+    const compose = new Compose(deps.run, deps.root, dockerEnvironment(deps.env), stopping.signal);
     const [firstGraph] = DEMO_GRAPHS;
     if (firstGraph === undefined) throw new Error('no demo graph');
     await compose.build(firstGraph.loader);
@@ -127,6 +131,12 @@ export async function up(deps: Dependencies): Promise<number> {
       onPids: (pids) => lock.setChildren(pids),
       stopRequested: deps.stopRequested,
     });
+  } catch (error) {
+    if (error instanceof Stopped) {
+      deps.out('stopped; the containers keep running');
+      return 0;
+    }
+    throw error;
   } finally {
     lock.release();
   }
@@ -135,7 +145,7 @@ export async function up(deps: Dependencies): Promise<number> {
 export async function down(deps: Dependencies): Promise<number> {
   const lock = Lock.acquire(lockOptions(deps));
   try {
-    if (deps.files.exists(join(deps.root, '.env'))) await new Compose(deps.run, deps.root, dockerEnvironment(deps.env)).down();
+    await new Compose(deps.run, deps.root, dockerEnvironment(deps.env)).down();
     deps.files.remove(join(deps.root, '.dev'));
     deps.out('the development containers and volumes are removed; .env is kept');
     return 0;

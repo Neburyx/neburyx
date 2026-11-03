@@ -5,8 +5,8 @@ import type { SourceFile } from '../architecture/tree.js';
 export interface EnvRead {
   readonly file: string;
   readonly line: number;
-  /** The variable name, or undefined for a read through a key the scan cannot resolve. */
   readonly name: string | undefined;
+  readonly key: string;
 }
 
 type Constant = string | ReadonlyMap<string, string>;
@@ -22,13 +22,41 @@ function textOf(node: ts.Expression): string | undefined {
   return ts.isStringLiteral(inner) || ts.isNoSubstitutionTemplateLiteral(inner) ? inner.text : undefined;
 }
 
-function constantsOf(source: ts.SourceFile): Map<string, Constant> {
-  const constants = new Map<string, Constant>();
+function bindingNames(name: ts.BindingName, into: string[]): void {
+  if (ts.isIdentifier(name)) {
+    into.push(name.text);
+    return;
+  }
+  for (const element of name.elements) if (!ts.isOmittedExpression(element)) bindingNames(element.name, into);
+}
+
+/** How many times each name is declared anywhere in the file (variables, parameters, functions, classes, imports), so a name that is shadowed or redeclared is not trusted. */
+function declarationCounts(source: ts.SourceFile): Map<string, number> {
+  const counts = new Map<string, number>();
+  const add = (name: string): void => void counts.set(name, (counts.get(name) ?? 0) + 1);
   const visit = (node: ts.Node): void => {
-    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer !== undefined) {
-      const text = textOf(node.initializer);
-      const initializer = unwrap(node.initializer);
-      if (text !== undefined) constants.set(node.name.text, text);
+    const names: string[] = [];
+    if (ts.isVariableDeclaration(node) || ts.isParameter(node)) bindingNames(node.name, names);
+    else if ((ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node)) && node.name !== undefined) names.push(node.name.text);
+    else if (ts.isImportSpecifier(node) || ts.isNamespaceImport(node)) names.push(node.name.text);
+    else if (ts.isImportClause(node) && node.name !== undefined) names.push(node.name.text);
+    names.forEach(add);
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return counts;
+}
+
+function constantsOf(source: ts.SourceFile): Map<string, Constant> {
+  const counts = declarationCounts(source);
+  const constants = new Map<string, Constant>();
+  for (const statement of source.statements) {
+    if (!ts.isVariableStatement(statement) || (statement.declarationList.flags & ts.NodeFlags.Const) === 0) continue;
+    for (const declaration of statement.declarationList.declarations) {
+      if (!ts.isIdentifier(declaration.name) || declaration.initializer === undefined || counts.get(declaration.name.text) !== 1) continue;
+      const text = textOf(declaration.initializer);
+      const initializer = unwrap(declaration.initializer);
+      if (text !== undefined) constants.set(declaration.name.text, text);
       else if (ts.isObjectLiteralExpression(initializer)) {
         const properties = new Map<string, string>();
         for (const property of initializer.properties) {
@@ -36,12 +64,10 @@ function constantsOf(source: ts.SourceFile): Map<string, Constant> {
           const value = textOf(property.initializer);
           if (value !== undefined) properties.set(property.name.text, value);
         }
-        constants.set(node.name.text, properties);
+        constants.set(declaration.name.text, properties);
       }
     }
-    ts.forEachChild(node, visit);
-  };
-  visit(source);
+  }
   return constants;
 }
 
@@ -64,7 +90,6 @@ function resolve(key: ts.Expression, constants: ReadonlyMap<string, Constant>): 
   return undefined;
 }
 
-/** Every read of an environment variable in a file: `env[key]`, `env.NAME`, `process.env.NAME` and `process.env[key]`. */
 export function collectEnvReads(file: SourceFile): EnvRead[] {
   const source = ts.createSourceFile(file.path, file.text, ts.ScriptTarget.Latest, true, scriptKindOf(file.path));
   const constants = constantsOf(source);
@@ -72,9 +97,9 @@ export function collectEnvReads(file: SourceFile): EnvRead[] {
   const lineOf = (node: ts.Node): number => source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
   const visit = (node: ts.Node): void => {
     if (ts.isElementAccessExpression(node) && isEnvironment(unwrap(node.expression))) {
-      reads.push({ file: file.path, line: lineOf(node), name: resolve(node.argumentExpression, constants) });
+      reads.push({ file: file.path, line: lineOf(node), name: resolve(node.argumentExpression, constants), key: node.argumentExpression.getText(source) });
     } else if (ts.isPropertyAccessExpression(node) && isEnvironment(unwrap(node.expression))) {
-      reads.push({ file: file.path, line: lineOf(node), name: node.name.text });
+      reads.push({ file: file.path, line: lineOf(node), name: node.name.text, key: node.name.text });
     }
     ts.forEachChild(node, visit);
   };

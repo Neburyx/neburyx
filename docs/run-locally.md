@@ -53,7 +53,7 @@ The database and the two logins must exist first. [`tools/dev/external-postgres.
 psql -v ON_ERROR_STOP=1 -v migration_password=… -v app_password=… -f tools/dev/external-postgres.sql
 ```
 
-It needs Postgres 16 with the `pg_trgm` extension available, and a login that may create roles and databases to run it; the product itself needs no superuser. `pnpm dev:down` never connects to your server.
+It needs Postgres 16 with the `pg_trgm` extension available, and a login to run it that is a superuser or has the `CREATEROLE` and `CREATEDB` attributes (the file grants that login the right to set the role of the new migration login, which Postgres 16 requires to give it the database); the product itself needs no superuser. `pnpm dev:down` never connects to your server.
 
 ## Checks that go with it
 

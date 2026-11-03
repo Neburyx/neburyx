@@ -15,7 +15,6 @@ function pick(source: Source, names: readonly string[]): Record<string, string> 
   return picked;
 }
 
-/** What every child gets: a short list of the developer's own variables, never the settings. */
 export function baseEnvironment(source: Source): Environment {
   return pick(source, PASS_THROUGH);
 }

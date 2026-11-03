@@ -34,7 +34,13 @@ function sourcesOf(pack: string, folder: string): { readonly id: string; readonl
   return { id, entry: entry.data };
 }
 
-const LOOPBACK_BOLT = /^bolt:\/\/(?:localhost|127\.0\.0\.1|\[::1\]):\d{1,5}$/;
+const LOOPBACK_BOLT = /^bolt:\/\/(?:localhost|127\.0\.0\.1|\[::1\]):(\d{1,5})$/;
+const MAX_PORT = 65535;
+
+function isLoopbackBolt(address: string): boolean {
+  const port = Number(LOOPBACK_BOLT.exec(address)?.[1]);
+  return port >= 1 && port <= MAX_PORT;
+}
 
 export function combinePacks(packs: readonly string[], out: string, folder = PACKS_FOLDER, addresses: ReadonlyMap<string, string> = new Map()): void {
   if (packs.length === 0) throw new CombineError('name at least one pack');
@@ -46,7 +52,7 @@ export function combinePacks(packs: readonly string[], out: string, folder = PAC
   }
   for (const [id, address] of addresses) {
     if (!found.some((entry) => entry.id === id)) throw new CombineError(`the source ${id} is not in the packs`);
-    if (!LOOPBACK_BOLT.test(address)) throw new CombineError(`the address for the source ${id} is not a bolt address on a loopback host`);
+    if (!isLoopbackBolt(address)) throw new CombineError(`the address for the source ${id} is not a bolt address on a loopback host`);
   }
   const sources = found.map((entry) => {
     const address = addresses.get(entry.id);

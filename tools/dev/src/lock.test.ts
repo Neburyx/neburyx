@@ -108,21 +108,33 @@ describe('the machine-wide lock', () => {
 describe('real processes racing for the lock', () => {
   const contender = join(dirname(fileURLToPath(import.meta.url)), 'testing', 'lock-contender.mjs');
 
+  /** Starts the contenders, waits until every one is ready, lets them go together, and holds them until every outcome has arrived. */
   async function race(where: string, count: number): Promise<string[]> {
     const startFile = join(where, 'go');
-    const runs = Array.from({ length: count }, (_unused, index) =>
-      new Promise<string>((resolve) => {
-        const child = spawn(process.execPath, [contender, where, `/work/${index}`, startFile, '1500'], { stdio: ['ignore', 'pipe', 'ignore'] });
-        let output = '';
-        child.stdout.on('data', (chunk: Buffer) => {
-          output += chunk.toString();
-        });
-        child.once('close', () => resolve(output.trim()));
-      }),
+    const releaseFile = join(where, 'release');
+    const lines: string[][] = Array.from({ length: count }, () => []);
+    const closed = lines.map(
+      (collected, index) =>
+        new Promise<void>((resolve) => {
+          const child = spawn(process.execPath, [contender, where, `/work/${index}`, startFile, releaseFile], { stdio: ['ignore', 'pipe', 'ignore'] });
+          child.stdout.on('data', (chunk: Buffer) => collected.push(...chunk.toString().split('\n').filter(Boolean)));
+          child.once('close', () => resolve());
+        }),
     );
-    await new Promise((resolve) => setTimeout(resolve, 600));
+    await waitUntil(() => lines.every((collected) => collected.includes('ready')));
     writeFileSync(startFile, '');
-    return Promise.all(runs);
+    await waitUntil(() => lines.every((collected) => collected.length === 2));
+    writeFileSync(releaseFile, '');
+    await Promise.all(closed);
+    return lines.map((collected) => collected[1] ?? '');
+  }
+
+  async function waitUntil(condition: () => boolean): Promise<void> {
+    const deadline = Date.now() + 20_000;
+    while (!condition()) {
+      if (Date.now() > deadline) throw new Error('the contenders did not reach the expected state');
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
   }
 
   it('lets exactly one of three runs take a stale lock', async () => {
@@ -136,6 +148,6 @@ describe('real processes racing for the lock', () => {
 
   it('lets exactly one of two runs take a lock that is not there (an up and a down, or two downs)', async () => {
     const outcomes = await race(folder(), 2);
-    expect(outcomes.sort()).toEqual(['acquired', 'refused']);
+    expect([...outcomes].sort()).toEqual(['acquired', 'refused']);
   }, 30_000);
 });
