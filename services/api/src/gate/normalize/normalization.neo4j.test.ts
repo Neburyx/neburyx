@@ -43,8 +43,11 @@ async function captureAll(target: PackServer): Promise<Fixture> {
   const [firstType, middleType, secondType] = rule.via;
   captured['supports'] = await itemsOf(target, 'capture-supports', { entityType: rule.from, middleType: middleType ?? '', lastType: rule.to, firstType: firstType ?? '', secondType: secondType ?? '' });
   captured['stored'] = await itemsOf(target, 'capture-relationship', { entityType: keyed.from, otherType: keyed.to, relationshipType: keyed.type });
-  captured['made'] = await withMadeRecords(target, () => itemsOf(target, 'capture-made', {}));
-  captured['members'] = await withMadeRecords(target, () => itemsOf(target, 'capture-members', {}));
+  // one set of made records for both reads: a server may give the element ID of a deleted record to a new one, and the capture names element IDs by their string
+  await withMadeRecords(target, async () => {
+    captured['made'] = await itemsOf(target, 'capture-made', {});
+    captured['members'] = await itemsOf(target, 'capture-members', {});
+  });
   return canonicalise(captured);
 }
 
