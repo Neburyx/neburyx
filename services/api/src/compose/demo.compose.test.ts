@@ -12,6 +12,14 @@ import { demoComposeFile, repository, serviceOf, Stack, type EventRecorder } fro
 const IMAGE = 'neburyx-demo-test';
 const TAG = `d-${randomBytes(3).toString('hex')}`;
 const LOADER_IMAGE = `neburyx-demo-loader-test:${TAG}`;
+/**
+ * Time allowed to a test that starts a demo stack. Measured: one full start (databases, migration, both graph loads,
+ * api healthy) takes 38 s on this machine with every container pinned to 2 CPUs. On the CI runner it is inferred, not
+ * measured directly: run 41593551817 took 1,508 s for this file, three tests that each started their own stack timed
+ * out at 300 s, and the two starts that finished account for the rest, about 220 s each. 600 s leaves more than two
+ * and a half times that figure.
+ */
+const STACK_TEST_TIMEOUT_MS = 600_000;
 const stacks: Stack[] = [];
 const folders: string[] = [];
 
@@ -56,6 +64,17 @@ async function release(stack: Stack, recorder?: EventRecorder): Promise<void> {
   if (position >= 0) stacks.splice(position, 1);
 }
 
+const API_WITHOUT_GRAPHS = `services:
+  api:
+    depends_on: !override
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      config:
+        condition: service_completed_successfully
+`;
+
 function overrideFile(text: string): string {
   const folder = mkdtempSync(join(tmpdir(), 'demo-override-'));
   folders.push(folder);
@@ -75,6 +94,31 @@ const composeModel = z.object({
   volumes: z.record(z.string(), z.unknown()),
 });
 
+const packMappingSchema = z.object({
+  sources: z.tuple([
+    z.object({
+      id: z.string(),
+      entities: z.array(z.object({ type: z.string(), label: z.string(), stable_id: z.string() })),
+      relationships: z.array(z.object({ type: z.string(), from: z.string(), to: z.string() })),
+    }),
+  ]),
+});
+
+function packSource(name: string): unknown {
+  const whole: unknown = parse(readFileSync(join(repository, 'domain-packs', name, 'neburyx.yaml'), 'utf8'));
+  const sources = z.object({ sources: z.array(z.unknown()).length(1) }).parse(whole).sources;
+  return sources[0];
+}
+
+function packOf(name: string) {
+  const [source] = packMappingSchema.parse(parse(readFileSync(join(repository, 'domain-packs', name, 'neburyx.yaml'), 'utf8'))).sources;
+  return source;
+}
+
+const DEMO_PACKS = ['banking-fraud', 'insurance-claims'] as const;
+const GRAPH_OF: Record<(typeof DEMO_PACKS)[number], string> = { 'banking-fraud': 'demo-banking-graph', 'insurance-claims': 'demo-insurance-graph' };
+
+
 describe('the demo stack', () => {
   let stack: Stack;
   let recorder: EventRecorder;
@@ -92,7 +136,7 @@ describe('the demo stack', () => {
     await release(stack, recorder);
   });
 
-  it('shows both demo sources as connected and synthetic', async () => {
+  async function sourcesAreConnected(): Promise<void> {
     await vi.waitFor(
       async () => {
         const body = sourcesResponseSchema.parse(await (await fetch(`${stack.url}/v1/sources`)).json());
@@ -103,7 +147,9 @@ describe('the demo stack', () => {
       },
       { timeout: 60_000, interval: 2000 },
     );
-  });
+  }
+
+  it('shows both demo sources as connected and synthetic', sourcesAreConnected);
 
   it('finishes the config container and both loaders with exit code 0 before the api container starts', async () => {
     await recorder.sync();
@@ -146,138 +192,6 @@ describe('the demo stack', () => {
     const written = (await stack.compose(['exec', '-T', 'api', 'cat', '/config/neburyx.yaml'])).stdout;
     expect(parse(written)).toEqual({ sources: DEMO_PACKS.map((name) => packSource(name)) });
     expect(readdirSync(join(repository, 'deploy/demo')).filter((name) => name.endsWith('.yaml') && name !== 'compose.yaml')).toEqual([]);
-  });
-});
-
-describe('a demo stack with a step that fails', () => {
-  it('starts no api container when the config step fails over an older mapping in the volume, or a loader is refused', async () => {
-    const override = overrideFile('services: {}\n');
-    const stack = await demoStack({ overrides: [override] });
-    const recorder = await stack.record();
-    try {
-      const first = await stack.up();
-      expect(first.code, first.stderr).toBe(0);
-      expect((await stack.compose(['down', '--timeout', '5'])).code).toBe(0);
-
-      writeFileSync(override, 'services:\n  config:\n    command: ["combine", "--packs", "no-such-pack", "--out", "/config/neburyx.yaml"]\n');
-      let since = Date.now() * 1e6;
-      const brokenConfig = await stack.up();
-      expect(brokenConfig.code).not.toBe(0);
-      expect(brokenConfig.stderr).toContain('config');
-      expect(await startsOf(recorder, since, 'api')).toBe(0);
-      expect((await stack.compose(['down', '--timeout', '5'])).code).toBe(0);
-
-      writeFileSync(override, 'services:\n  load-banking:\n    environment:\n      DEMO_NEO4J_PASSWORD: not-the-password-of-the-graph\n');
-      since = Date.now() * 1e6;
-      const refused = await stack.up();
-      expect(refused.code).not.toBe(0);
-      expect(refused.stderr).toContain('load-banking');
-      expect(await startsOf(recorder, since, 'api')).toBe(0);
-    } finally {
-      await release(stack, recorder);
-    }
-  });
-});
-
-describe('a demo stack with a setting that is missing or wrong', () => {
-  const REQUIRED = ['NEBURYX_DB_ADMIN_PASSWORD', 'NEBURYX_DB_MIGRATION_PASSWORD', 'NEBURYX_DB_APP_PASSWORD', 'DEMO_NEO4J_PASSWORD', 'NEBURYX_CURSOR_KEY'];
-
-  it.each(REQUIRED.flatMap((name) => [[name, 'missing'] as const, [name, 'empty'] as const]))('stops docker compose up before any container exists, naming %s when it is %s', async (name, how) => {
-    const stack = await demoStack({ ...(how === 'missing' ? { omit: [name] } : { settings: { ...settings(), [name]: '' } }) });
-    onTestFinished(() => release(stack));
-    const result = await stack.compose(['up', '--no-start']);
-    expect(result.code).not.toBe(0);
-    expect(result.stderr).toContain(name);
-    expect(await dockerOk(['ps', '-aq', '--filter', `label=com.docker.compose.project=${stack.project}`])).toBe('');
-  });
-
-  it('stops the api with exit code 1 and a message that names the variable and does not repeat its value, for a cursor key that is not a key', async () => {
-    const bad = 'this-is-not-a-cursor-key-value';
-    const stack = await demoStack({ settings: { ...settings(), NEBURYX_CURSOR_KEY: bad } });
-    const recorder = await stack.record();
-    onTestFinished(() => release(stack, recorder));
-    const since = Date.now() * 1e6;
-    const result = await stack.compose(['up', '-d']);
-    expect(result.code, result.stderr).toBe(0);
-    await vi.waitFor(
-      async () => {
-        const died = recorder.since(since).find((event) => serviceOf(event) === 'api' && event.Action === 'die');
-        expect(died?.Actor.Attributes['exitCode']).toBe('1');
-      },
-      { timeout: 120_000, interval: 3000 },
-    );
-    const logs = (await stack.compose(['logs', '--no-log-prefix', 'api'])).stdout;
-    expect(logs).toContain('invalid configuration');
-    expect(logs).toContain('NEBURYX_CURSOR_KEY');
-    expect(logs).not.toContain(bad);
-  });
-});
-
-describe('a demo stack that was stopped', () => {
-  it('loads both graphs again and shows both sources connected when it is started again', async () => {
-    const stack = await demoStack();
-    const recorder = await stack.record();
-    onTestFinished(() => release(stack, recorder));
-    expect((await stack.up()).code).toBe(0);
-    expect((await stack.compose(['stop'])).code).toBe(0);
-    const since = Date.now() * 1e6;
-    const again = await stack.up();
-    expect(again.code, again.stderr).toBe(0);
-    await recorder.sync();
-    const events = recorder.since(since);
-    for (const service of ['load-banking', 'load-insurance']) {
-      expect(events.find((event) => serviceOf(event) === service && event.Action === 'die')?.Actor.Attributes['exitCode'], service).toBe('0');
-    }
-    await vi.waitFor(
-      async () => {
-        const body = sourcesResponseSchema.parse(await (await fetch(`${stack.url}/v1/sources`)).json());
-        expect(body.items.map((item) => [item.id, item.state, item.synthetic]).sort()).toEqual([
-          ['banking-demo', 'connected', true],
-          ['insurance-demo', 'connected', true],
-        ]);
-      },
-      { timeout: 60_000, interval: 2000 },
-    );
-  });
-});
-
-const packMappingSchema = z.object({
-  sources: z.tuple([
-    z.object({
-      id: z.string(),
-      entities: z.array(z.object({ type: z.string(), label: z.string(), stable_id: z.string() })),
-      relationships: z.array(z.object({ type: z.string(), from: z.string(), to: z.string() })),
-    }),
-  ]),
-});
-
-function packSource(name: string): unknown {
-  const whole: unknown = parse(readFileSync(join(repository, 'domain-packs', name, 'neburyx.yaml'), 'utf8'));
-  const sources = z.object({ sources: z.array(z.unknown()).length(1) }).parse(whole).sources;
-  return sources[0];
-}
-
-function packOf(name: string) {
-  const [source] = packMappingSchema.parse(parse(readFileSync(join(repository, 'domain-packs', name, 'neburyx.yaml'), 'utf8'))).sources;
-  return source;
-}
-
-const DEMO_PACKS = ['banking-fraud', 'insurance-claims'] as const;
-const GRAPH_OF: Record<(typeof DEMO_PACKS)[number], string> = { 'banking-fraud': 'demo-banking-graph', 'insurance-claims': 'demo-insurance-graph' };
-
-describe('test-source on the demo stack', () => {
-  let stack: Stack;
-  let recorder: EventRecorder;
-
-  beforeAll(async () => {
-    stack = await demoStack();
-    recorder = await stack.record();
-    const result = await stack.up();
-    expect(result.code, result.stderr).toBe(0);
-  });
-
-  afterAll(async () => {
-    await release(stack, recorder);
   });
 
   function testSource(name: string) {
@@ -347,5 +261,97 @@ describe('test-source on the demo stack', () => {
     expect(result.code).toBe(2);
     expect(await loaderStartsSince(since)).toBe(0);
     expect(await counts()).toEqual(before);
+  });
+
+  it('loads both graphs again and shows both sources connected when it is stopped and started again', { timeout: STACK_TEST_TIMEOUT_MS }, async () => {
+    expect((await stack.compose(['stop'])).code).toBe(0);
+    const since = Date.now() * 1e6;
+    const again = await stack.up();
+    expect(again.code, again.stderr).toBe(0);
+    await recorder.sync();
+    const events = recorder.since(since);
+    for (const service of ['load-banking', 'load-insurance']) {
+      expect(events.find((event) => serviceOf(event) === service && event.Action === 'die')?.Actor.Attributes['exitCode'], service).toBe('0');
+    }
+    await sourcesAreConnected();
+  });
+});
+
+describe('a demo stack with a step that fails', () => {
+  it('starts no api container when the config step fails over an older mapping in the volume', { timeout: STACK_TEST_TIMEOUT_MS }, async () => {
+    const override = overrideFile(API_WITHOUT_GRAPHS);
+    const stack = await demoStack({ overrides: [override] });
+    const recorder = await stack.record();
+    onTestFinished(() => release(stack, recorder));
+    const readMapping = () => stack.compose(['run', '-T', '--rm', '--no-deps', '--entrypoint', 'cat', 'config', '/config/neburyx.yaml']);
+    const seeded = await stack.compose(['run', '-T', '--rm', '--no-deps', 'config']);
+    expect(seeded.code, seeded.stderr).toBe(0);
+    const older = await readMapping();
+    expect(parse(older.stdout)).toEqual({ sources: DEMO_PACKS.map((name) => packSource(name)) });
+
+    writeFileSync(override, `${API_WITHOUT_GRAPHS}  config:\n    command: ["combine", "--packs", "no-such-pack", "--out", "/config/neburyx.yaml"]\n`);
+    const since = Date.now() * 1e6;
+    const broken = await stack.compose(['up', '-d', 'api']);
+    expect(broken.code).not.toBe(0);
+    await recorder.sync();
+    const events = recorder.since(since);
+    expect(events.find((event) => serviceOf(event) === 'config' && event.Action === 'die')?.Actor.Attributes['exitCode']).toBe('2');
+    expect(events.find((event) => serviceOf(event) === 'migrate' && event.Action === 'die')?.Actor.Attributes['exitCode']).toBe('0');
+    expect((await stack.compose(['logs', '--no-log-prefix', 'config'])).stdout).toContain('there is no such pack');
+    expect(await startsOf(recorder, since, 'api')).toBe(0);
+    expect((await readMapping()).stdout).toBe(older.stdout);
+  });
+
+  it('starts no api container when a loader is refused by its graph', { timeout: STACK_TEST_TIMEOUT_MS }, async () => {
+    const override = overrideFile(
+      'services:\n  load-banking:\n    environment:\n      DEMO_NEO4J_PASSWORD: not-the-password-of-the-graph\n  load-insurance:\n    command: ["generate", "--pack", "insurance-claims", "--out", "/tmp/unused"]\n',
+    );
+    const stack = await demoStack({ overrides: [override] });
+    const recorder = await stack.record();
+    onTestFinished(() => release(stack, recorder));
+    const since = Date.now() * 1e6;
+    const refused = await stack.up();
+    expect(refused.code).not.toBe(0);
+    await recorder.sync();
+    const events = recorder.since(since);
+    expect(events.find((event) => serviceOf(event) === 'load-banking' && event.Action === 'die')?.Actor.Attributes['exitCode']).toBe('1');
+    expect(events.find((event) => serviceOf(event) === 'load-insurance' && event.Action === 'die')?.Actor.Attributes['exitCode']).toBe('0');
+    expect(await dockerOk(['inspect', '--format', '{{.State.Health.Status}}', await stack.containerId('demo-banking-graph')])).toBe('healthy');
+    expect((await stack.compose(['logs', '--no-log-prefix', 'load-banking'])).stdout).toContain('Unauthorized');
+    expect(await startsOf(recorder, since, 'api')).toBe(0);
+  });
+});
+
+describe('a demo stack with a setting that is missing or wrong', () => {
+  const REQUIRED = ['NEBURYX_DB_ADMIN_PASSWORD', 'NEBURYX_DB_MIGRATION_PASSWORD', 'NEBURYX_DB_APP_PASSWORD', 'DEMO_NEO4J_PASSWORD', 'NEBURYX_CURSOR_KEY'];
+
+  it.each(REQUIRED.flatMap((name) => [[name, 'missing'] as const, [name, 'empty'] as const]))('stops docker compose up before any container exists, naming %s when it is %s', async (name, how) => {
+    const stack = await demoStack({ ...(how === 'missing' ? { omit: [name] } : { settings: { ...settings(), [name]: '' } }) });
+    onTestFinished(() => release(stack));
+    const result = await stack.compose(['up', '--no-start']);
+    expect(result.code).not.toBe(0);
+    expect(result.stderr).toContain(name);
+    expect(await dockerOk(['ps', '-aq', '--filter', `label=com.docker.compose.project=${stack.project}`])).toBe('');
+  });
+
+  it('stops the api with exit code 1 and a message that names the variable and does not repeat its value, for a cursor key that is not a key', { timeout: STACK_TEST_TIMEOUT_MS }, async () => {
+    const bad = 'this-is-not-a-cursor-key-value';
+    const stack = await demoStack({ settings: { ...settings(), NEBURYX_CURSOR_KEY: bad }, overrides: [overrideFile(API_WITHOUT_GRAPHS)] });
+    const recorder = await stack.record();
+    onTestFinished(() => release(stack, recorder));
+    const since = Date.now() * 1e6;
+    const result = await stack.compose(['up', '-d', 'api']);
+    expect(result.code, result.stderr).toBe(0);
+    await vi.waitFor(
+      async () => {
+        const died = recorder.since(since).find((event) => serviceOf(event) === 'api' && event.Action === 'die');
+        expect(died?.Actor.Attributes['exitCode']).toBe('1');
+      },
+      { timeout: 120_000, interval: 3000 },
+    );
+    const logs = (await stack.compose(['logs', '--no-log-prefix', 'api'])).stdout;
+    expect(logs).toContain('invalid configuration');
+    expect(logs).toContain('NEBURYX_CURSOR_KEY');
+    expect(logs).not.toContain(bad);
   });
 });
