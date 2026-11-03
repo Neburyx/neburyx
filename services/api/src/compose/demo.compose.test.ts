@@ -264,6 +264,20 @@ describe('the demo stack', () => {
   });
 
   it('loads both graphs again and shows both sources connected when it is stopped and started again', { timeout: STACK_TEST_TIMEOUT_MS }, async () => {
+    const nodeCounts = async (): Promise<number[]> =>
+      Promise.all(
+        Object.values(GRAPH_OF).map(async (graph) => {
+          const result = await cypherShell(stack, graph, 'MATCH (n) RETURN count(n)');
+          expect(result.code, result.stderr).toBe(0);
+          return Number(result.stdout.trim().split('\n').at(-1));
+        }),
+      );
+    for (const pack of DEMO_PACKS) {
+      const before = await testSource(packOf(pack).id);
+      expect(before.code, `${pack} must pass test-source before the restart: ${before.stdout}`).toBe(0);
+    }
+    const countsBefore = await nodeCounts();
+    expect(countsBefore.every((count) => Number.isInteger(count) && count > 0), String(countsBefore)).toBe(true);
     expect((await stack.compose(['stop'])).code).toBe(0);
     const since = Date.now() * 1e6;
     const again = await stack.up();
@@ -274,6 +288,11 @@ describe('the demo stack', () => {
       expect(events.find((event) => serviceOf(event) === service && event.Action === 'die')?.Actor.Attributes['exitCode'], service).toBe('0');
     }
     await sourcesAreConnected();
+    expect(await nodeCounts()).toEqual(countsBefore);
+    for (const pack of DEMO_PACKS) {
+      const after = await testSource(packOf(pack).id);
+      expect(after.code, `${pack} must pass test-source after the restart: ${after.stdout}`).toBe(0);
+    }
   });
 });
 
@@ -302,7 +321,7 @@ describe('a demo stack with a step that fails', () => {
     expect((await readMapping()).stdout).toBe(older.stdout);
   });
 
-  it('starts no api container when a loader is refused by its graph', { timeout: STACK_TEST_TIMEOUT_MS }, async () => {
+  it('starts no api container when the banking loader is refused by its graph', { timeout: STACK_TEST_TIMEOUT_MS }, async () => {
     const override = overrideFile(
       'services:\n  load-banking:\n    environment:\n      DEMO_NEO4J_PASSWORD: not-the-password-of-the-graph\n  load-insurance:\n    command: ["generate", "--pack", "insurance-claims", "--out", "/tmp/unused"]\n',
     );
