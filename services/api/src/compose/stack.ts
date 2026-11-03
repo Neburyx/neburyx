@@ -257,6 +257,19 @@ export class EventRecorder {
   }
 }
 
+/** Removes every stack even when one cannot be removed, and then reports all the failures together. */
+export async function destroyAll(stacks: readonly { destroy(): Promise<void> }[]): Promise<void> {
+  const failures: unknown[] = [];
+  for (const stack of stacks) {
+    try {
+      await stack.destroy();
+    } catch (error) {
+      failures.push(error);
+    }
+  }
+  if (failures.length > 0) throw new AggregateError(failures, `${failures.length} of ${stacks.length} stacks could not be removed`);
+}
+
 export function serviceOf(event: ContainerEvent): string | undefined {
   return event.Actor.Attributes['com.docker.compose.service'];
 }

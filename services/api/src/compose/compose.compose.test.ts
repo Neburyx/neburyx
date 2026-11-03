@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { docker, dockerOk, dockerStream } from '../image/docker.js';
-import { buildDerivedImage, repository, serviceOf, Stack } from './stack.js';
+import { buildDerivedImage, destroyAll, repository, serviceOf, Stack } from './stack.js';
 
 const IMAGE = 'neburyx-compose-test';
 const TAG_A = `a-${randomBytes(3).toString('hex')}`;
@@ -29,8 +29,11 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  for (const stack of stacks) await stack.destroy();
-  for (const tag of [TAG_C, TAG_B, TAG_A]) await docker(['rmi', '-f', `${IMAGE}:${tag}`]);
+  try {
+    await destroyAll(stacks);
+  } finally {
+    for (const tag of [TAG_C, TAG_B, TAG_A]) await docker(['rmi', '-f', `${IMAGE}:${tag}`]);
+  }
 });
 
 async function newStack(extra: { readonly omit?: readonly string[]; readonly overrides?: readonly string[] } = {}): Promise<Stack> {

@@ -7,7 +7,7 @@ import { afterAll, beforeAll, describe, expect, it, onTestFinished, vi } from 'v
 import { parse } from 'yaml';
 import { z } from 'zod';
 import { docker, dockerOk, dockerStream } from '../image/docker.js';
-import { DEMO_WAIT_SECONDS, demoComposeFile, repository, serviceOf, Stack, type EventRecorder } from './stack.js';
+import { DEMO_WAIT_SECONDS, demoComposeFile, destroyAll, repository, serviceOf, Stack, type EventRecorder } from './stack.js';
 
 const IMAGE = 'neburyx-demo-test';
 const TAG = `d-${randomBytes(3).toString('hex')}`;
@@ -29,10 +29,13 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  for (const stack of stacks) await stack.destroy();
-  for (const folder of folders) rmSync(folder, { recursive: true, force: true });
-  await docker(['rmi', '-f', `${IMAGE}:${TAG}`]);
-  await docker(['rmi', '-f', LOADER_IMAGE]);
+  try {
+    await destroyAll(stacks);
+  } finally {
+    for (const folder of folders) rmSync(folder, { recursive: true, force: true });
+    await docker(['rmi', '-f', `${IMAGE}:${TAG}`]);
+    await docker(['rmi', '-f', LOADER_IMAGE]);
+  }
 });
 
 function settings(): Record<string, string> {
@@ -335,6 +338,7 @@ describe('a demo stack with a step that fails', () => {
     expect(refused.stderr).toContain('load-banking-1: exited, exit code 1');
     expect(refused.stderr).toContain('demo-banking-graph-1: running, exit code 0, health healthy');
     expect(refused.stderr).not.toContain(values['DEMO_NEO4J_PASSWORD']);
+    expect(refused.stderr).not.toContain(values['NEBURYX_CURSOR_KEY']);
     expect(refused.stderr).not.toContain(stack.passwords.NEBURYX_DB_APP_PASSWORD);
     await recorder.sync();
     const events = recorder.since(since);
