@@ -13,6 +13,27 @@ function check(path: string, text: string) {
   return checkWebClient([file], CONTRACTS);
 }
 
+describe('the renderer import', () => {
+  it.each([
+    ["import cytoscape from 'cytoscape';", 'apps/web/src/Panel.tsx'],
+    ["import cytoscape from 'cytoscape';", 'apps/web/src/canvas/graph-canvas.tsx'],
+    ["import { x } from 'cytoscape/dist/cytoscape.esm.mjs';", 'apps/web/src/canvas/helpers.ts'],
+    ["export { default } from 'cytoscape';", 'apps/web/src/canvas/index.ts'],
+    ["const cy = await import('cytoscape');", 'apps/web/src/canvas/lazy.ts'],
+    ["const cy = require('cytoscape');", 'apps/web/src/a.ts'],
+    ["type Cy = import('cytoscape').Core;", 'apps/web/src/canvas/types.ts'],
+    ["import cy = require('cytoscape');", 'apps/web/src/canvas/legacy.ts'],
+    ["import cytoscape from 'cytoscape';", 'apps/web/src/canvas/cytoscape-renderer.test.ts'],
+  ])('is reported outside the adapter module: %s in %s', (text, path) => {
+    expect(check(path, text)).toMatchObject([{ rule: 'web-renderer-import', file: path }]);
+  });
+
+  it('is allowed in the adapter module, and a name that only starts like it is not reported', () => {
+    expect(check('apps/web/src/canvas/cytoscape-renderer.ts', "import cytoscape from 'cytoscape';")).toEqual([]);
+    expect(check('apps/web/src/a.ts', "import x from 'cytoscape-like'; import y from './cytoscape.js';")).toEqual([]);
+  });
+});
+
 describe('a web client file that imports from ee/', () => {
   it('is reported, in a .tsx file too', () => {
     const file: SourceFile = { path: 'apps/web/src/Panel.tsx', text: "import { x } from '../../../ee/policy/index.js';\nexport const y = x;" };

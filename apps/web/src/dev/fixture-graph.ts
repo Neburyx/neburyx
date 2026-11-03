@@ -9,6 +9,7 @@ export const FIXTURE_PINS = 10;
 const NODE_SHARE = 0.4;
 const DERIVED_SHARE = 0.12;
 const ATTEMPTS = 40;
+const SYNTHETIC_STATES = ['Open', 'Review required', 'Closed'] as const;
 
 export const FIXTURE_ERROR_CODES = ['NO_ENTITY_TYPES', 'NO_RELATIONSHIP_TYPES', 'PROFILE_TOO_SMALL'] as const;
 
@@ -29,12 +30,13 @@ export interface FixtureGraph {
   readonly pins: readonly ElementRef[];
 }
 
-function nodeAt(profile: SourceProfile, type: string, label: string, index: number): GraphNode {
+function nodeAt(profile: SourceProfile, type: string, label: string, stateProperty: string | null, index: number): GraphNode {
   const stableId = `fixture-${String(index).padStart(4, '0')}`;
+  const state = SYNTHETIC_STATES[Math.floor(index / Math.max(1, profile.entityTypes.length)) % SYNTHETIC_STATES.length];
   return {
     ref: { sourceId: profile.sourceId, entityType: type, stableId },
     display: { title: `${label} ${stableId}`, type },
-    properties: [],
+    properties: stateProperty === null || state === undefined ? [] : [{ key: stateProperty, value: state, dataClass: 'text', masked: false }],
     qualityFlags: [],
     provenanceRefs: [GENERATOR_MARKER],
     authorization: { canInspect: true, canExport: true },
@@ -54,7 +56,7 @@ export function generateFixtureGraph(profile: SourceProfile, seed: number): Fixt
   const nodes: GraphNode[] = [];
   for (let index = 0; index < nodeTotal; index += 1) {
     const entityType = profile.entityTypes[index % profile.entityTypes.length];
-    if (entityType !== undefined) nodes.push(nodeAt(profile, entityType.type, entityType.label, index));
+    if (entityType !== undefined) nodes.push(nodeAt(profile, entityType.type, entityType.label, entityType.stateProperty, index));
   }
   const ofType = (type: string): readonly GraphNode[] => nodes.filter((node) => node.ref.entityType === type);
   const usable = (from: string, to: string): boolean => ofType(from).length > 0 && ofType(to).length > 0 && (from !== to || ofType(from).length > 1);

@@ -1,0 +1,24 @@
+export const NODE_OUTER_DIAMETER = 36;
+export const NODE_OUTLINE_WIDTH = 1;
+/** Cytoscape draws the outline centred on the disc's edge, so the disc is one outline narrower than the 36 px the design measures across its outline. */
+export const NODE_DIAMETER = NODE_OUTER_DIAMETER - NODE_OUTLINE_WIDTH;
+export const NODE_OUTLINE = '#cad0da';
+export const NODE_FILL = '#ffffff';
+export const EDGE_COLOR = '#8c96a8';
+export const EDGE_WIDTH = 1.4;
+export const FIT_PADDING = 48;
+export const GLYPH_COLOR = '#747a85';
+export const GLYPH_SIZE = 18;
+export const CAPTION_COLOR = '#4a5261';
+export const CAPTION_KNOCKOUT = '#fafbfc';
+export const CAPTION_HALO = 'rgba(250, 251, 252, 0.92)';
+export const DERIVED_COLOR = '#5264a7';
+export const AGGREGATE_WIDTH = 3.5;
+export const DASH_PATTERN = [6, 5];
+export const DOT_PATTERN = [1.4, 4];
+export const ARROW_SHAPE = 'chevron';
+export const ARROW_GAP = 2;
+export const LABEL_FILL = '#fafbfc';
+export const PILL_FILL = '#ffffff';
+export const PILL_OUTLINE_WIDTH = 1.5;
+export const LABEL_FONT_SIZE = 12;

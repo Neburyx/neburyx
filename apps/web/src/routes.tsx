@@ -1,9 +1,12 @@
 import { Link, Outlet, type RouteObject } from 'react-router';
 import type { ApiClient } from './api/client.js';
+import { ProfileProvider } from './canvas/profile-context.js';
+import { createProfileStore } from './canvas/profile-store.js';
 import { PageHeading } from './shell/page-heading.js';
 import { EXPLORE_PATH } from './shell/navigation.js';
 import { PageShell } from './shell/page-shell.js';
 import { createShellData, ShellDataProvider } from './shell/shell-data.js';
+import type { ClientState } from './state/client-state.js';
 import { WorkspaceShell } from './workspace/workspace-shell.js';
 
 const NOT_BUILT = 'This screen is not built yet.';
@@ -40,14 +43,30 @@ function developmentRoutes(client: ApiClient): RouteObject[] {
   ];
 }
 
-export function appRoutes(client: ApiClient): RouteObject[] {
+function workspaceDevelopmentRoutes(): RouteObject[] {
+  if (!__DEV_TOOLS__) return [];
+  return [
+    {
+      path: 'dev/frame-sample',
+      lazy: async () => {
+        const { FrameSamplePage } = await import('./dev/frame-sample-page.js');
+        return { element: <FrameSamplePage /> };
+      },
+    },
+  ];
+}
+
+export function appRoutes(client: ApiClient, state: ClientState): RouteObject[] {
   const shellData = createShellData(client);
+  const profile = createProfileStore(client, state.investigation);
   return [
     {
       path: '/',
       element: (
         <ShellDataProvider store={shellData}>
-          <Outlet />
+          <ProfileProvider store={profile}>
+            <Outlet />
+          </ProfileProvider>
         </ShellDataProvider>
       ),
       children: [
@@ -62,6 +81,7 @@ export function appRoutes(client: ApiClient): RouteObject[] {
           ],
         },
         { path: EXPLORE_PATH, element: <WorkspaceShell /> },
+        ...workspaceDevelopmentRoutes(),
       ],
     },
   ];

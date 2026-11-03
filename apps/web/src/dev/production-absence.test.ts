@@ -4,7 +4,7 @@ import { build } from 'vite';
 import { describe, expect, it } from 'vitest';
 
 interface Piece {
-  readonly name: 'generator' | 'loader' | 'route' | 'stand-ins';
+  readonly name: 'generator' | 'loader' | 'route' | 'stand-ins' | 'frame-sample';
   readonly module: string;
   readonly marker: string;
 }
@@ -14,6 +14,7 @@ const PIECES: readonly Piece[] = [
   { name: 'loader', module: '/src/dev/fixture-loader', marker: 'neburyx-dev-fixture-loader' },
   { name: 'route', module: '/src/dev/fixture-page', marker: 'neburyx-dev-fixture-route' },
   { name: 'stand-ins', module: '/src/dev/stand-ins', marker: 'neburyx-dev-stand-ins' },
+  { name: 'frame-sample', module: '/src/dev/frame-sample', marker: 'neburyx-dev-frame-sample' },
 ];
 
 const ROOT = join(import.meta.dirname, '..', '..');
@@ -45,14 +46,14 @@ function piecesIn(output: Built): string[] {
 }
 
 describe('a production build of the web app', () => {
-  it('holds none of the fixture loader, the fixture generator, the fixture route and the slot stand-ins: no module of theirs and no marker in any emitted file', async () => {
+  it('holds none of the fixture loader, the fixture generator, the fixture route, the slot stand-ins and the frame sample: no module of theirs and no marker in any emitted file', async () => {
     const production = await built({ mode: 'production' });
     expect(production.moduleIds.length).toBeGreaterThan(0);
     expect(piecesIn(production)).toEqual([]);
   }, 120_000);
 
-  it('does hold all four in a development build, so the check has something to find', async () => {
-    expect(piecesIn(await built({ mode: 'development' })).sort()).toEqual(['generator', 'loader', 'route', 'stand-ins']);
+  it('does hold all five in a development build, so the check has something to find', async () => {
+    expect(piecesIn(await built({ mode: 'development' })).sort()).toEqual(['frame-sample', 'generator', 'loader', 'route', 'stand-ins']);
   }, 120_000);
 
   it.each([
@@ -60,6 +61,7 @@ describe('a production build of the web app', () => {
     ['loader', 'src/dev/controls/loader.ts', ['generator', 'loader']],
     ['route', 'src/dev/controls/route.ts', ['generator', 'loader', 'route', 'stand-ins']],
     ['stand-ins', 'src/dev/controls/stand-ins.ts', ['stand-ins']],
+    ['frame-sample', 'src/dev/controls/frame-sample.ts', ['frame-sample', 'loader', 'stand-ins']],
   ] as const)('is caught by the same check when a production-optimized build includes the %s (and what it imports)', async (_name, entry, expected) => {
     const control = await built({ mode: 'production', entry });
     expect(piecesIn(control).sort()).toEqual([...expected].sort());

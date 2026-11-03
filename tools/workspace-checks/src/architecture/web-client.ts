@@ -6,7 +6,9 @@ import type { SourceFile } from './tree.js';
 export const WEB_SOURCE_ROOT = 'apps/web/src';
 export const WEB_API_FOLDER = 'apps/web/src/api';
 
-export type WebRule = 'web-fetch' | 'web-wire-type' | 'web-query-text' | 'web-database-dependency';
+export const WEB_RENDERER_MODULE = 'apps/web/src/canvas/cytoscape-renderer.ts';
+
+export type WebRule = 'web-fetch' | 'web-wire-type' | 'web-query-text' | 'web-database-dependency' | 'web-renderer-import';
 
 export interface WebViolation {
   readonly rule: WebRule;
@@ -18,6 +20,7 @@ export interface WebViolation {
 const WIRE_NAME_SUFFIX = /(?:Response|Request|Payload|Body|Dto)$/;
 const CYPHER = /\b(?:OPTIONAL MATCH|MATCH|MERGE|CREATE|RETURN|WITH|UNWIND|SET|REMOVE|DETACH|DELETE|CALL|LOAD CSV)[ \t]+(?:[(\[{]|[A-Za-z_]|\d)/;
 const DATABASE_PACKAGE = /neo4j|cypher|bolt|^pg$|postgres|kysely|mongodb|mysql|sqlite|redis|valkey/i;
+const RENDERER_PACKAGE = /^cytoscape(?:\/|$)/;
 const DEPENDENCY_FIELDS = ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies'] as const;
 
 function isTestFile(path: string): boolean {
@@ -39,6 +42,18 @@ function isFetchOfApi(node: ts.CallExpression): boolean {
   if (!isFetch || first === undefined) return false;
   const text = ts.isStringLiteralLike(first) ? first.text : ts.isTemplateExpression(first) ? first.head.text : undefined;
   return text !== undefined && /^\/v1(?:\/|$|\?)/.test(text);
+}
+
+function importedModule(node: ts.Node): string | undefined {
+  if (ts.isImportTypeNode(node) && ts.isLiteralTypeNode(node.argument) && ts.isStringLiteralLike(node.argument.literal)) return node.argument.literal.text;
+  if (ts.isImportEqualsDeclaration(node) && ts.isExternalModuleReference(node.moduleReference) && ts.isStringLiteralLike(node.moduleReference.expression)) return node.moduleReference.expression.text;
+  if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier !== undefined && ts.isStringLiteralLike(node.moduleSpecifier)) return node.moduleSpecifier.text;
+  if (ts.isCallExpression(node)) {
+    const [first] = node.arguments;
+    const loads = node.expression.kind === ts.SyntaxKind.ImportKeyword || (ts.isIdentifier(node.expression) && node.expression.text === 'require');
+    if (loads && first !== undefined && ts.isStringLiteralLike(first)) return first.text;
+  }
+  return undefined;
 }
 
 function isObjectShaped(node: ts.TypeNode): boolean {
@@ -66,6 +81,10 @@ export function checkWebClient(files: readonly SourceFile[], contracts: Readonly
     const file = ts.createSourceFile(source.path, source.text, ts.ScriptTarget.Latest, true, kindOf(source.path));
     const insideClient = source.path.startsWith(`${WEB_API_FOLDER}/`);
     const visit = (node: ts.Node): void => {
+      const imported = importedModule(node);
+      if (imported !== undefined && RENDERER_PACKAGE.test(imported) && source.path !== WEB_RENDERER_MODULE) {
+        violations.push({ rule: 'web-renderer-import', file: source.path, line: lineOf(file, node), reason: `the renderer '${imported}' is imported only by ${WEB_RENDERER_MODULE}, so the canvas can swap it` });
+      }
       if (!tests && !insideClient && ts.isCallExpression(node) && isFetchOfApi(node)) {
         violations.push({ rule: 'web-fetch', file: source.path, line: lineOf(file, node), reason: 'the web client reads the API only through the API client folder' });
       }

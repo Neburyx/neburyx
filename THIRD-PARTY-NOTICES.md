@@ -110,6 +110,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 
 The navigation icons (house, folder-open, database, search, settings), the lock on the locked actions and the Neburyx mark (the Lucide "component" icon) come from the Lucide icon set.
 
+The glyphs drawn for entity types on the graph canvas (`apps/web/src/assets/lucide/`: building-2, car, circle-dot, file-text, folder, globe, house, landmark, monitor, phone, shield, store, user, wrench) are copied unchanged from release 1.67.0 of the `lucide-static` package (https://www.npmjs.com/package/lucide-static/v/1.67.0, built from https://github.com/lucide-icons/lucide), ISC licence, the same licence text as below.
+
 ```
 ISC License
 
@@ -146,6 +148,32 @@ The above copyright notice and this permission notice shall be included in all
 copies or substantial portions of the Software.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+## Graph renderer
+
+Cytoscape.js, version 3.34.4 of the `cytoscape` package (MIT licence, https://js.cytoscape.org).
+
+```
+Copyright (c) 2016-2026, The Cytoscape Consortium.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the “Software”), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+of the Software, and to permit persons to whom the Software is furnished to do
+so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER

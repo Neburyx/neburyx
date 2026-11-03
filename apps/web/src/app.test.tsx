@@ -8,7 +8,7 @@ import { App } from './app.js';
 import { appRoutes } from './routes.js';
 import { createClientState } from './state/client-state.js';
 import { createSlotRegistry } from './workspace/slots.js';
-import { clientWith, counted, me, source } from './test-utils.js';
+import { clientWith, counted, me, source, stubFactory } from './test-utils.js';
 
 describe('the app under StrictMode', () => {
   it('adds no history listener of its own, and leaves only the one the router it was given owns', () => {
@@ -25,12 +25,13 @@ describe('the app under StrictMode', () => {
       remove(type, listener, options);
     };
     try {
-      const router = createBrowserRouter(appRoutes(fakeClient({ getMe: () => new Promise(() => undefined) })));
+      const state = createClientState();
+      const router = createBrowserRouter(appRoutes(fakeClient({ getMe: () => new Promise(() => undefined) }), state));
       const afterCreate = added.filter((type) => type === 'popstate').length;
       expect(afterCreate).toBe(1);
       const { unmount } = render(
         <StrictMode>
-          <App router={router} state={createClientState()} slots={createSlotRegistry()} />
+          <App router={router} state={state} slots={createSlotRegistry()} createRenderer={stubFactory().create} />
         </StrictMode>,
       );
       expect(added.filter((type) => type === 'popstate')).toHaveLength(afterCreate);
@@ -45,10 +46,11 @@ describe('the app under StrictMode', () => {
 
   it('asks for the principal and the sources once when the app starts, and not again when the person moves between pages', async () => {
     const { client, calls } = counted(clientWith({ me: me(), sources: [source('a')] }));
-    const router = createMemoryRouter(appRoutes(client), { initialEntries: ['/'] });
+    const state = createClientState();
+    const router = createMemoryRouter(appRoutes(client, state), { initialEntries: ['/'] });
     render(
       <StrictMode>
-        <App router={router} state={createClientState()} slots={createSlotRegistry()} />
+        <App router={router} state={state} slots={createSlotRegistry()} createRenderer={stubFactory().create} />
       </StrictMode>,
     );
     await screen.findByText('Local workspace');

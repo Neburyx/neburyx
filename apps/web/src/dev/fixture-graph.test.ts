@@ -111,4 +111,16 @@ describe('the size of the fixture graph', () => {
     const profile: SourceProfile = { ...testProfile('s', types), relationshipTypes: [{ type: 'only-aggregate', from: 'kind-0', to: 'kind-1', aggregate: true, observedAt: null, filterable: [], evidence: [] }], derivedRules: [] };
     expect(() => generateFixtureGraph(profile, 1)).toThrowError(expect.objectContaining({ code: 'PROFILE_TOO_SMALL' }));
   });
+
+  it('gives an entity of a type with a state property a synthetic state, and one of a type without none', () => {
+    const profile = testProfile('source-a');
+    const [first, ...rest] = profile.entityTypes;
+    if (first === undefined) throw new Error('the test profile has no entity type');
+    const graph = generateFixtureGraph({ ...profile, entityTypes: [{ ...first, stateProperty: 'status' }, ...rest] }, 1);
+    const withState = graph.nodes.filter((node) => node.ref.entityType === first.type);
+    expect(withState.length).toBeGreaterThan(0);
+    expect(withState.every((node) => node.properties.length === 1 && node.properties[0]?.key === 'status')).toBe(true);
+    expect(new Set(withState.map((node) => node.properties[0]?.value)).size).toBeGreaterThan(1);
+    expect(graph.nodes.filter((node) => node.ref.entityType !== first.type).every((node) => node.properties.length === 0)).toBe(true);
+  });
 });

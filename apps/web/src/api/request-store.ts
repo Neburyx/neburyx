@@ -5,6 +5,8 @@ import { reduceRequest, UNEXPECTED, type RequestState } from './use-request.js';
 export interface RequestStore<T> extends Store<RequestState<T>> {
   /** Asks again; an answer to an older ask is ignored. */
   readonly reload: () => void;
+  /** Stops waiting: an answer still on its way is ignored and what was answered stays. */
+  readonly cancel: () => void;
 }
 
 /** A request that is made when the store is created and lives outside React, so rendering twice (StrictMode) never asks twice. */
@@ -31,6 +33,12 @@ export function createRequestStore<T>(load: (signal: AbortSignal) => Promise<Api
     void settle();
   };
 
+  const cancel = (): void => {
+    newest?.abort();
+    newest = undefined;
+    store.setState(reduceRequest(store.getState(), { type: 'cancel' }));
+  };
+
   reload();
-  return { ...store, reload };
+  return { ...store, reload, cancel };
 }

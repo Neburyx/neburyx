@@ -1,0 +1,58 @@
+import type { Count, GraphEdge } from '@neburyx/contracts';
+import { describe, expect, it } from 'vitest';
+import { edge, ref } from '../state/test-data.js';
+import { memberCountText, relationshipLook } from './relationship-look.js';
+
+const from = ref('a', 'type-a', 'n1');
+const to = ref('a', 'type-a', 'n2');
+const stored = (type: string): GraphEdge => ({ ...edge('a', 'e1', 'n1', 'n2'), type });
+const derived = (type: string): GraphEdge => ({ ...stored(type), ref: { sourceId: 'a', derived: { ruleId: 'rule-1', from, to } }, semantics: 'derived', derivation: { ruleId: 'rule-1', ruleVersion: 1, supportingEdgeRefs: [] } });
+const aggregate = (type: string, memberCount: Count, semantics: GraphEdge['semantics'] = 'stored'): GraphEdge => ({
+  ...stored(type),
+  ref: { sourceId: 'a', aggregate: { type, from, to } },
+  memberCount,
+  semantics,
+  ...(semantics === 'derived' ? { derivation: { ruleId: 'rule-1', ruleVersion: 1, supportingEdgeRefs: [] } } : {}),
+});
+const count = (value: number | undefined, quality: Count['quality']): Count => (value === undefined ? { quality, scope: 'x' } : { value, quality, scope: 'x' });
+
+describe('the look of a relationship', () => {
+  it('has no label for a stored relationship that is not an aggregate, until it is selected', () => {
+    expect(relationshipLook(stored('USES'))).toEqual({ aggregate: false, origin: 'stored', label: undefined });
+  });
+
+  it('labels a derived relationship with its type and "derived"', () => {
+    expect(relationshipLook(derived('SHARES'))).toEqual({ aggregate: false, origin: 'derived', label: 'SHARES · derived' });
+  });
+
+  it('labels a relationship of unknown origin with its type and "origin unknown", and never as stored', () => {
+    const look = relationshipLook({ ...stored('USES'), semantics: 'unknown' });
+    expect(look).toEqual({ aggregate: false, origin: 'unknown', label: 'USES · origin unknown' });
+  });
+
+  it.each<[string, Count, string]>([
+    ['exact', count(42, 'exact'), 'USES · 42'],
+    ['estimated', count(42, 'estimated'), 'USES · ~42 (estimated)'],
+    ['lower bound', count(3281, 'lowerBound'), 'USES · ≥ 3,281 (lower bound)'],
+    ['unknown', count(undefined, 'unknown'), 'USES'],
+  ])('labels a stored aggregate with a %s count', (_name, memberCount, label) => {
+    expect(relationshipLook(aggregate('USES', memberCount))).toEqual({ aggregate: true, origin: 'stored', label });
+  });
+
+  it('adds the origin after the count for an aggregate of derived or unknown origin, keeping the count\'s quality words', () => {
+    expect(relationshipLook(aggregate('USES', count(42, 'exact'), 'derived')).label).toBe('USES · 42 · derived');
+    expect(relationshipLook(aggregate('USES', count(42, 'estimated'), 'unknown')).label).toBe('USES · ~42 (estimated) · origin unknown');
+    expect(relationshipLook(aggregate('USES', count(undefined, 'unknown'), 'unknown')).label).toBe('USES · origin unknown');
+  });
+
+  it('prints no number for a count that has a quality but no value', () => {
+    expect(memberCountText(count(undefined, 'exact'))).toBeUndefined();
+    expect(memberCountText(count(undefined, 'lowerBound'))).toBeUndefined();
+  });
+
+  it('gives each kind a different line, width and label, so none relies on colour', () => {
+    const kinds = [stored('T'), derived('T'), aggregate('T', count(1, 'exact')), { ...stored('T'), semantics: 'unknown' as const }].map(relationshipLook);
+    const signature = (look: ReturnType<typeof relationshipLook>) => `${look.origin}|${look.aggregate}|${look.label ?? '-'}`;
+    expect(new Set(kinds.map(signature)).size).toBe(4);
+  });
+});
