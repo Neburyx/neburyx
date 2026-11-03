@@ -1,0 +1,101 @@
+name: neburyx-demo
+
+x-loader: &loader
+  build:
+    context: ../..
+    dockerfile: deploy/demo/loader.Dockerfile
+  image: ${NEBURYX_DEMO_LOADER_IMAGE:-neburyx-demo-loader}
+  restart: "no"
+
+x-graph-password: &graph-password ${DEMO_NEO4J_PASSWORD:?set DEMO_NEO4J_PASSWORD in the .env file}
+
+services:
+  db:
+    extends:
+      file: ../compose/compose.yaml
+      service: db
+
+  migrate:
+    extends:
+      file: ../compose/compose.yaml
+      service: migrate
+    depends_on:
+      db:
+        condition: service_healthy
+
+  demo-banking-graph:
+    image: ${NEBURYX_DEMO_NEO4J_IMAGE:-neo4j:5.26}
+    restart: unless-stopped
+    environment:
+      NEO4J_AUTH: neo4j/${DEMO_NEO4J_PASSWORD:?set DEMO_NEO4J_PASSWORD in the .env file}
+      DEMO_NEO4J_PASSWORD: *graph-password
+    healthcheck:
+      test: ["CMD-SHELL", "cypher-shell -u neo4j -p \"$$DEMO_NEO4J_PASSWORD\" 'RETURN 1'"]
+      interval: 3s
+      timeout: 5s
+      retries: 40
+
+  demo-insurance-graph:
+    image: ${NEBURYX_DEMO_NEO4J_IMAGE:-neo4j:5.26}
+    restart: unless-stopped
+    environment:
+      NEO4J_AUTH: neo4j/${DEMO_NEO4J_PASSWORD:?set DEMO_NEO4J_PASSWORD in the .env file}
+      DEMO_NEO4J_PASSWORD: *graph-password
+    healthcheck:
+      test: ["CMD-SHELL", "cypher-shell -u neo4j -p \"$$DEMO_NEO4J_PASSWORD\" 'RETURN 1'"]
+      interval: 3s
+      timeout: 5s
+      retries: 40
+
+  load-banking:
+    <<: *loader
+    command: ["build", "--pack", "banking-fraud", "--reset"]
+    environment:
+      DEMO_NEO4J_USER: neo4j
+      DEMO_NEO4J_PASSWORD: *graph-password
+    depends_on:
+      demo-banking-graph:
+        condition: service_healthy
+
+  load-insurance:
+    <<: *loader
+    command: ["build", "--pack", "insurance-claims", "--reset"]
+    environment:
+      DEMO_NEO4J_USER: neo4j
+      DEMO_NEO4J_PASSWORD: *graph-password
+    depends_on:
+      demo-insurance-graph:
+        condition: service_healthy
+
+  config:
+    <<: *loader
+    command: ["combine", "--packs", "banking-fraud,insurance-claims", "--out", "/config/neburyx.yaml"]
+    volumes:
+      - demo-config:/config
+
+  api:
+    extends:
+      file: ../compose/compose.yaml
+      service: api
+    environment:
+      NEBURYX_CONFIG: /config/neburyx.yaml
+      NEBURYX_CURSOR_KEY: ${NEBURYX_CURSOR_KEY:?set NEBURYX_CURSOR_KEY in the .env file}
+      DEMO_NEO4J_USER: neo4j
+      DEMO_NEO4J_PASSWORD: *graph-password
+    volumes:
+      - demo-config:/config:ro
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      config:
+        condition: service_completed_successfully
+      load-banking:
+        condition: service_completed_successfully
+      load-insurance:
+        condition: service_completed_successfully
+
+volumes:
+  neburyx-db:
+  demo-config:

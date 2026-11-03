@@ -4,6 +4,7 @@
 **/dist
 **/.env*
 **/neburyx.yaml
+!domain-packs/*/neburyx.yaml
 **/*.pem
 **/*.key
 **/.DS_Store

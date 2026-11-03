@@ -1,0 +1,318 @@
+import { randomBytes } from 'node:crypto';
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { sourcesResponseSchema } from '@neburyx/contracts';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { parse } from 'yaml';
+import { z } from 'zod';
+import { docker, dockerOk, dockerStream } from '../image/docker.js';
+import { demoComposeFile, repository, serviceOf, Stack } from './stack.js';
+
+const IMAGE = 'neburyx-demo-test';
+const TAG = `d-${randomBytes(3).toString('hex')}`;
+const LOADER_IMAGE = `neburyx-demo-loader-test:${TAG}`;
+const stacks: Stack[] = [];
+const folders: string[] = [];
+
+beforeAll(async () => {
+  await dockerStream(['build', '-f', 'deploy/docker/Dockerfile', '-t', `${IMAGE}:${TAG}`, '.'], repository);
+  await dockerStream(['build', '-f', 'deploy/demo/loader.Dockerfile', '-t', LOADER_IMAGE, '.'], repository);
+});
+
+afterAll(async () => {
+  for (const stack of stacks) await stack.destroy();
+  for (const folder of folders) rmSync(folder, { recursive: true, force: true });
+  await docker(['rmi', '-f', `${IMAGE}:${TAG}`]);
+  await docker(['rmi', '-f', LOADER_IMAGE]);
+});
+
+function settings(): Record<string, string> {
+  return { DEMO_NEO4J_PASSWORD: randomBytes(12).toString('hex'), NEBURYX_CURSOR_KEY: randomBytes(32).toString('base64'), NEBURYX_DEMO_LOADER_IMAGE: LOADER_IMAGE };
+}
+
+async function demoStack(extra: { readonly omit?: readonly string[]; readonly overrides?: readonly string[]; readonly settings?: Record<string, string> } = {}): Promise<Stack> {
+  const stack = await Stack.create({ image: IMAGE, tag: TAG, file: demoComposeFile, settings: extra.settings ?? settings(), ...(extra.omit === undefined ? {} : { omit: extra.omit }), ...(extra.overrides === undefined ? {} : { overrides: extra.overrides }) });
+  stacks.push(stack);
+  return stack;
+}
+
+function quoteIdentifier(name: string): string {
+  return `\`${name.replaceAll('`', '``')}\``;
+}
+
+function quoteLiteral(value: string): string {
+  return `'${value.replaceAll('\\', '\\\\').replaceAll("'", "\\'")}'`;
+}
+
+function cypherShell(stack: Stack, graph: string, statement: string) {
+  return stack.compose(['exec', '-T', graph, 'sh', '-c', 'cypher-shell -u neo4j -p "$DEMO_NEO4J_PASSWORD" --format plain "$1"', 'sh', statement]);
+}
+
+function overrideFile(text: string): string {
+  const folder = mkdtempSync(join(tmpdir(), 'demo-override-'));
+  folders.push(folder);
+  const file = join(folder, 'override.yaml');
+  writeFileSync(file, text);
+  return file;
+}
+
+async function startsOf(stack: Stack, sinceNano: number, service: string): Promise<number> {
+  return (await stack.events(sinceNano)).filter((event) => serviceOf(event) === service && event.Action === 'start').length;
+}
+
+const bindings = z.record(z.string(), z.array(z.object({ HostIp: z.string(), HostPort: z.string() })).nullable());
+const composeModel = z.object({
+  services: z.record(z.string(), z.object({ ports: z.array(z.object({ host_ip: z.string().optional(), published: z.union([z.string(), z.number()]).optional() })).optional(), volumes: z.array(z.object({ type: z.string(), source: z.string().optional() })).optional() })),
+  volumes: z.record(z.string(), z.unknown()),
+});
+
+describe('the demo stack', () => {
+  let stack: Stack;
+  let startedAt: number;
+
+  beforeAll(async () => {
+    stack = await demoStack();
+    startedAt = Date.now() * 1e6;
+    const result = await stack.up();
+    expect(result.code, result.stderr).toBe(0);
+  });
+
+  it('shows both demo sources as connected and synthetic', async () => {
+    await vi.waitFor(
+      async () => {
+        const body = sourcesResponseSchema.parse(await (await fetch(`${stack.url}/v1/sources`)).json());
+        expect(body.items.map((item) => [item.id, item.state, item.synthetic]).sort()).toEqual([
+          ['banking-demo', 'connected', true],
+          ['insurance-demo', 'connected', true],
+        ]);
+      },
+      { timeout: 60_000, interval: 2000 },
+    );
+  });
+
+  it('finishes the config container and both loaders with exit code 0 before the api container starts', async () => {
+    const events = await stack.events(startedAt);
+    const serving = events.find((event) => serviceOf(event) === 'api' && event.Action === 'start');
+    expect(serving).toBeDefined();
+    for (const service of ['config', 'load-banking', 'load-insurance']) {
+      const finished = events.find((event) => serviceOf(event) === service && event.Action === 'die');
+      expect(finished?.Actor.Attributes['exitCode'], service).toBe('0');
+      expect(finished?.timeNano, service).toBeLessThan(serving?.timeNano ?? 0);
+    }
+  });
+
+  it('publishes the api port on 127.0.0.1 and nothing else', async () => {
+    for (const service of ['db', 'migrate', 'demo-banking-graph', 'demo-insurance-graph', 'load-banking', 'load-insurance', 'config']) {
+      const raw = await dockerOk(['inspect', '--format', '{{json .HostConfig.PortBindings}}', await stack.containerId(service)]);
+      expect(Object.values(bindings.parse(JSON.parse(raw))).flatMap((list) => list ?? []), service).toEqual([]);
+    }
+    const raw = await dockerOk(['inspect', '--format', '{{json .HostConfig.PortBindings}}', await stack.containerId('api')]);
+    expect(Object.values(bindings.parse(JSON.parse(raw))).flatMap((list) => list ?? [])).toEqual([{ HostIp: '127.0.0.1', HostPort: String(stack.port) }]);
+  });
+
+  it('reads the database initialisation folder of the Community file and declares the volumes it uses', async () => {
+    const model = composeModel.parse(JSON.parse((await stack.compose(['config', '--format', 'json'])).stdout));
+    const sources = model.services['db']?.volumes?.map((volume) => volume.source) ?? [];
+    expect(sources.some((source) => source?.endsWith('/deploy/compose/initdb'))).toBe(true);
+    expect(Object.keys(model.volumes).sort()).toEqual(['demo-config', 'neburyx-db']);
+    for (const [name, service] of Object.entries(model.services)) {
+      const published = (service.ports ?? []).map((port) => port.host_ip);
+      expect(published, name).toEqual(name === 'api' ? ['127.0.0.1'] : []);
+    }
+  });
+
+  it('serves the api from the mapping file the config container wrote, equal to the packs, mounted read-only, and no mapping file is committed in the demo folder', async () => {
+    const apiId = await stack.containerId('api');
+    const environment = z.array(z.string()).parse(JSON.parse(await dockerOk(['inspect', '--format', '{{json .Config.Env}}', apiId])));
+    expect(environment).toContain('NEBURYX_CONFIG=/config/neburyx.yaml');
+    const mounts = z.array(z.object({ Destination: z.string(), RW: z.boolean() })).parse(JSON.parse(await dockerOk(['inspect', '--format', '{{json .Mounts}}', apiId])));
+    expect(mounts.find((mount) => mount.Destination === '/config')?.RW).toBe(false);
+    const written = (await stack.compose(['exec', '-T', 'api', 'cat', '/config/neburyx.yaml'])).stdout;
+    expect(parse(written)).toEqual({ sources: DEMO_PACKS.map((name) => packSource(name)) });
+    expect(readdirSync(join(repository, 'deploy/demo')).filter((name) => name.endsWith('.yaml') && name !== 'compose.yaml')).toEqual([]);
+  });
+});
+
+describe('a demo stack with a step that fails', () => {
+  it('starts no api container when the config step fails over an older mapping in the volume, or a loader is refused', async () => {
+    const override = overrideFile('services: {}\n');
+    const stack = await demoStack({ overrides: [override] });
+    const first = await stack.up();
+    expect(first.code, first.stderr).toBe(0);
+    expect((await stack.compose(['down', '--timeout', '5'])).code).toBe(0);
+
+    writeFileSync(override, 'services:\n  config:\n    command: ["combine", "--packs", "no-such-pack", "--out", "/config/neburyx.yaml"]\n');
+    let since = Date.now() * 1e6;
+    const brokenConfig = await stack.up();
+    expect(brokenConfig.code).not.toBe(0);
+    expect(brokenConfig.stderr).toContain('config');
+    expect(await startsOf(stack, since, 'api')).toBe(0);
+    expect((await stack.compose(['down', '--timeout', '5'])).code).toBe(0);
+
+    writeFileSync(override, 'services:\n  load-banking:\n    environment:\n      DEMO_NEO4J_PASSWORD: not-the-password-of-the-graph\n');
+    since = Date.now() * 1e6;
+    const refused = await stack.up();
+    expect(refused.code).not.toBe(0);
+    expect(refused.stderr).toContain('load-banking');
+    expect(await startsOf(stack, since, 'api')).toBe(0);
+  });
+});
+
+describe('a demo stack with a setting that is missing or wrong', () => {
+  const REQUIRED = ['NEBURYX_DB_ADMIN_PASSWORD', 'NEBURYX_DB_MIGRATION_PASSWORD', 'NEBURYX_DB_APP_PASSWORD', 'DEMO_NEO4J_PASSWORD', 'NEBURYX_CURSOR_KEY'];
+
+  it.each(REQUIRED.flatMap((name) => [[name, 'missing'] as const, [name, 'empty'] as const]))('stops docker compose up before any container exists, naming %s when it is %s', async (name, how) => {
+    const stack = await demoStack({ ...(how === 'missing' ? { omit: [name] } : { settings: { ...settings(), [name]: '' } }) });
+    const result = await stack.compose(['up', '--no-start']);
+    expect(result.code).not.toBe(0);
+    expect(result.stderr).toContain(name);
+    expect(await dockerOk(['ps', '-aq', '--filter', `label=com.docker.compose.project=${stack.project}`])).toBe('');
+  });
+
+  it('stops the api with exit code 1 and a message that names the variable and does not repeat its value, for a cursor key that is not a key', async () => {
+    const bad = 'this-is-not-a-cursor-key-value';
+    const stack = await demoStack({ settings: { ...settings(), NEBURYX_CURSOR_KEY: bad } });
+    const since = Date.now() * 1e6;
+    const result = await stack.compose(['up', '-d']);
+    expect(result.code, result.stderr).toBe(0);
+    await vi.waitFor(
+      async () => {
+        const died = (await stack.events(since)).find((event) => serviceOf(event) === 'api' && event.Action === 'die');
+        expect(died?.Actor.Attributes['exitCode']).toBe('1');
+      },
+      { timeout: 120_000, interval: 3000 },
+    );
+    const logs = (await stack.compose(['logs', '--no-log-prefix', 'api'])).stdout;
+    expect(logs).toContain('invalid configuration');
+    expect(logs).toContain('NEBURYX_CURSOR_KEY');
+    expect(logs).not.toContain(bad);
+  });
+});
+
+describe('a demo stack that was stopped', () => {
+  it('loads both graphs again and shows both sources connected when it is started again', async () => {
+    const stack = await demoStack();
+    expect((await stack.up()).code).toBe(0);
+    expect((await stack.compose(['stop'])).code).toBe(0);
+    const since = Date.now() * 1e6;
+    const again = await stack.up();
+    expect(again.code, again.stderr).toBe(0);
+    const events = await stack.events(since);
+    for (const service of ['load-banking', 'load-insurance']) {
+      expect(events.find((event) => serviceOf(event) === service && event.Action === 'die')?.Actor.Attributes['exitCode'], service).toBe('0');
+    }
+    await vi.waitFor(
+      async () => {
+        const body = sourcesResponseSchema.parse(await (await fetch(`${stack.url}/v1/sources`)).json());
+        expect(body.items.map((item) => [item.id, item.state, item.synthetic]).sort()).toEqual([
+          ['banking-demo', 'connected', true],
+          ['insurance-demo', 'connected', true],
+        ]);
+      },
+      { timeout: 60_000, interval: 2000 },
+    );
+  });
+});
+
+const packMappingSchema = z.object({
+  sources: z.tuple([
+    z.object({
+      id: z.string(),
+      entities: z.array(z.object({ type: z.string(), label: z.string(), stable_id: z.string() })),
+      relationships: z.array(z.object({ type: z.string(), from: z.string(), to: z.string() })),
+    }),
+  ]),
+});
+
+function packSource(name: string): unknown {
+  const whole: unknown = parse(readFileSync(join(repository, 'domain-packs', name, 'neburyx.yaml'), 'utf8'));
+  const sources = z.object({ sources: z.array(z.unknown()).length(1) }).parse(whole).sources;
+  return sources[0];
+}
+
+function packOf(name: string) {
+  const [source] = packMappingSchema.parse(parse(readFileSync(join(repository, 'domain-packs', name, 'neburyx.yaml'), 'utf8'))).sources;
+  return source;
+}
+
+const DEMO_PACKS = ['banking-fraud', 'insurance-claims'] as const;
+const GRAPH_OF: Record<(typeof DEMO_PACKS)[number], string> = { 'banking-fraud': 'demo-banking-graph', 'insurance-claims': 'demo-insurance-graph' };
+
+describe('test-source on the demo stack', () => {
+  let stack: Stack;
+
+  beforeAll(async () => {
+    stack = await demoStack();
+    const result = await stack.up();
+    expect(result.code, result.stderr).toBe(0);
+  });
+
+  function testSource(name: string) {
+    return stack.compose(['run', '-T', '--no-deps', '--rm', 'api', 'test-source', '--name', name]);
+  }
+
+  async function loaderStartsSince(since: number): Promise<number> {
+    const events = await stack.events(since);
+    return events.filter((event) => ['load-banking', 'load-insurance', 'config'].includes(serviceOf(event) ?? '') && event.Action === 'start').length;
+  }
+
+  describe.each(DEMO_PACKS)('the %s pack', (name) => {
+    const source = packOf(name);
+    const first = source.entities[0];
+
+    it('passes, prints the read-only line as not verified, the mapping summary and the degree lines, and starts no loader', async () => {
+      const since = Date.now() * 1e6;
+      const result = await testSource(source.id);
+      expect(result.code, result.stdout + result.stderr).toBe(0);
+      expect(result.stdout).toContain(`Source: ${source.id}`);
+      expect(result.stdout).toContain('Read-only: not verified');
+      expect(result.stdout).toContain(`Mapping: ${source.entities.length} entity types, ${source.relationships.length} relationship types`);
+      const withRelationships = new Set(source.relationships.flatMap((relationship) => [relationship.from, relationship.to]));
+      for (const entity of source.entities.filter((candidate) => withRelationships.has(candidate.type))) {
+        expect(result.stdout).toMatch(new RegExp(`^  ${entity.type}: (cheap|not cheap|could not tell) \\(`, 'm'));
+      }
+      expect(await loaderStartsSince(since)).toBe(0);
+    });
+
+    it('fails and names the entity type and its stable ID property when the stable ID constraint is dropped, and passes again when it is recreated', async () => {
+      if (first === undefined) throw new Error('the pack has no entity type');
+      const graph = GRAPH_OF[name];
+      const label = quoteIdentifier(first.label);
+      const property = quoteIdentifier(first.stable_id);
+      const found = await cypherShell(stack, graph, `SHOW CONSTRAINTS YIELD name, labelsOrTypes, properties WHERE labelsOrTypes = [${quoteLiteral(first.label)}] AND properties = [${quoteLiteral(first.stable_id)}] RETURN name`);
+      const constraint = /"([^"]+)"/.exec(found.stdout)?.[1];
+      expect(constraint, found.stdout + found.stderr).toBeDefined();
+      try {
+        expect((await cypherShell(stack, graph, `DROP CONSTRAINT ${quoteIdentifier(constraint ?? '')}`)).code).toBe(0);
+        const broken = await testSource(source.id);
+        expect(broken.code, broken.stdout).toBe(1);
+        expect(broken.stdout).toContain(first.type);
+        expect(broken.stdout).toContain(first.stable_id);
+      } finally {
+        expect((await cypherShell(stack, graph, `CREATE CONSTRAINT IF NOT EXISTS FOR (n:${label}) REQUIRE n.${property} IS UNIQUE`)).code).toBe(0);
+      }
+      const restored = await testSource(source.id);
+      expect(restored.code, restored.stdout).toBe(0);
+    });
+  });
+
+  it('exits 2 for a source name that is not configured, starts no loader and leaves the graphs as they were', async () => {
+    const counts = async (): Promise<number[]> =>
+      Promise.all(
+        Object.values(GRAPH_OF).map(async (graph) => {
+          const result = await cypherShell(stack, graph, 'MATCH (n) RETURN count(n)');
+          expect(result.code, result.stderr).toBe(0);
+          const count = Number(result.stdout.trim().split('\n').at(-1));
+          expect(Number.isInteger(count) && count > 0, result.stdout).toBe(true);
+          return count;
+        }),
+      );
+    const before = await counts();
+    const since = Date.now() * 1e6;
+    const result = await testSource('no-such-source');
+    expect(result.code).toBe(2);
+    expect(await loaderStartsSince(since)).toBe(0);
+    expect(await counts()).toEqual(before);
+  });
+});

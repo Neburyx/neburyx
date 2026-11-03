@@ -1,6 +1,7 @@
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { CombineError, combinePacks } from './combine.js';
 import { DefinitionError, readDefinition } from './definition.js';
 import { ExportExistsError, writeExport } from './export.js';
 import { generate } from './generate.js';
@@ -14,31 +15,36 @@ import { ExportError } from './validate.js';
 export const USAGE = `usage:
   demo-graph generate (--pack <name> | --mapping <file> --definition <file>) [--source <id>] [--seed <n>] --out <dir>
   demo-graph load     (--pack <name> | --mapping <file>) [--source <id>] --dir <dir> [--uri <address>] [--reset]
-  demo-graph build    (--pack <name> | --mapping <file> --definition <file>) [--source <id>] [--seed <n>] [--out <dir>] [--uri <address>] [--reset]`;
+  demo-graph build    (--pack <name> | --mapping <file> --definition <file>) [--source <id>] [--seed <n>] [--out <dir>] [--uri <address>] [--reset]
+  demo-graph combine  --packs <name>,<name>... --out <file>`;
 
 export interface CliIo {
   readonly out: (text: string) => void;
   readonly err: (text: string) => void;
   readonly env: Readonly<Record<string, string | undefined>>;
   readonly createDriver?: LoaderDriverFactory;
+  readonly packsFolder?: string;
 }
 
 interface Arguments {
-  readonly command: 'generate' | 'load' | 'build';
+  readonly command: 'generate' | 'load' | 'build' | 'combine';
   readonly values: ReadonlyMap<string, string>;
   readonly reset: boolean;
 }
 
-const ALLOWED: Readonly<Record<'generate' | 'load' | 'build', ReadonlySet<string>>> = {
+type Command = Arguments['command'];
+
+const ALLOWED: Readonly<Record<Command, ReadonlySet<string>>> = {
   generate: new Set(['pack', 'mapping', 'definition', 'source', 'seed', 'out']),
   load: new Set(['pack', 'mapping', 'source', 'dir', 'uri', 'reset']),
   build: new Set(['pack', 'mapping', 'definition', 'source', 'seed', 'out', 'uri', 'reset']),
+  combine: new Set(['packs', 'out']),
 };
-const REQUIRED: Readonly<Record<'generate' | 'load' | 'build', string>> = { generate: 'out', load: 'dir', build: '' };
+const REQUIRED: Readonly<Record<Command, readonly string[]>> = { generate: ['out'], load: ['dir'], build: [], combine: ['packs', 'out'] };
 
 export function parseArguments(argv: readonly string[]): Arguments | undefined {
   const [command, ...rest] = argv;
-  if (command !== 'generate' && command !== 'load' && command !== 'build') return undefined;
+  if (command !== 'generate' && command !== 'load' && command !== 'build' && command !== 'combine') return undefined;
   const allowed = ALLOWED[command];
   const values = new Map<string, string>();
   let reset = false;
@@ -54,8 +60,7 @@ export function parseArguments(argv: readonly string[]): Arguments | undefined {
     values.set(name, value);
     index += 1;
   }
-  const required = REQUIRED[command];
-  if (required !== '' && !values.has(required)) return undefined;
+  if (REQUIRED[command].some((required) => !values.has(required))) return undefined;
   return { command, values, reset };
 }
 
@@ -76,6 +81,17 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
   const parsed = parseArguments(argv);
   const needsDefinition = parsed?.command !== 'load';
   try {
+    if (parsed?.command === 'combine') {
+      const packs = (parsed.values.get('packs') ?? '').split(',');
+      const out = parsed.values.get('out') ?? '';
+      if (packs.some((pack) => pack === '') || new Set(packs).size !== packs.length) {
+        io.err(USAGE);
+        return 2;
+      }
+      combinePacks(packs, out, io.packsFolder);
+      io.out(`wrote ${out} with the sources of ${packs.length} packs`);
+      return 0;
+    }
     const files = parsed === undefined ? undefined : sourceFiles(parsed.values, needsDefinition);
     if (parsed === undefined || files === undefined) {
       io.err(USAGE);
@@ -117,7 +133,7 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
       io.err(`${error.message}\n${USAGE}`);
       return 2;
     }
-    const known = [DefinitionError, ExportError, ExportExistsError, LoadError, MappingError, SafetyError, SchemaError].some((type) => error instanceof type);
+    const known = [CombineError, DefinitionError, ExportError, ExportExistsError, LoadError, MappingError, SafetyError, SchemaError].some((type) => error instanceof type);
     io.err(known && error instanceof Error ? error.message : 'the command failed');
     return 1;
   }

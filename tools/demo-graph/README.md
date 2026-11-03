@@ -17,3 +17,5 @@ The loader writes only to a demo database. It refuses, before connecting, a sour
 `pnpm test` runs the unit tests; `pnpm test:neo4j` loads the shipped packs into Neo4j containers (Docker needed; image `neo4j:5.26` unless `NEBURYX_NEO4J_IMAGE` says otherwise).
 
 A pack's `cases.yaml` holds its scripted cases and its preset investigation. Each case lists expectations about named nodes: the stable IDs or the number of the distinct neighbors along one relationship type in one direction, or the value of a property. The answers are written for the default seed of the pack's `demo.yaml`. The tool reads the file with the pack's mapping and demo definition and refuses a name that either does not have; the tests check that every named node is in the export and that the loaded graph gives each answer by a count query.
+
+`pnpm demo-graph combine --packs banking-fraud,insurance-claims --out <file>` writes one mapping file holding the source of each pack, read from the packs' own mapping files (a pack must hold exactly one source, and two packs may not repeat a source ID). The demo compose file uses it to give the API one mapping file without keeping a copy of any pack.

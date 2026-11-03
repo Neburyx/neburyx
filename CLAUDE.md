@@ -20,7 +20,7 @@ safe on very high-degree nodes. The repo is **pre-release**: the build tooling, 
 | `domain-packs` | Ready-made mapping files, one directory per domain; YAML and Markdown only, no code (see its README) |
 | `deploy/docker` | Container image build (`Dockerfile`; see its README) |
 | `deploy/compose` | Community install: image + Postgres, loopback only (see its README) |
-| `deploy/demo` | Demo environment on a synthetic graph |
+| `deploy/demo` | Demo environment: the product and two synthetic demo graphs, loopback only (see its README) |
 | `tools/demo-graph` | Synthetic demo graph generator |
 | `tools/driver-check` | By-hand check of how `neo4j-driver` and Neo4j behave on a transaction timeout and on a close mid-query (see its README) |
 | `docs/` | Public technical documentation |
@@ -72,7 +72,8 @@ Node 24 LTS (`.nvmrc`; with nvm, `nvm use`) and pnpm through Corepack, at the ve
 | Neo4j tests, the adapter's and the demo graph tool's (Neo4j containers; need Docker; the image is `neo4j:5.26` unless `NEBURYX_NEO4J_IMAGE` names another) | `pnpm test:neo4j` |
 | Build a pack's demo graph into a demo Neo4j (see `tools/demo-graph/README.md`) | `pnpm demo-graph build --pack banking-fraud --uri bolt://localhost:7687` |
 | Image tests (builds the image and runs it; needs Docker, takes minutes) | `pnpm test:image` |
-| Compose tests (brings the Community stack up, upgrades it; needs Docker, takes minutes) | `pnpm test:compose` |
+| Compose tests (brings the Community stack up and upgrades it, and brings the demo stack up; need Docker, take minutes) | `pnpm test:compose` |
+| Run the demo (the product and two synthetic demo graphs; see `deploy/demo/README.md`) | `cd deploy/demo && cp .env.example .env`, fill it in, then `docker compose up --wait` |
 | Driver timeout check (starts Neo4j containers; needs Docker, takes about ten minutes; not in CI) | `pnpm check:driver` |
 | Regenerate `packages/contracts/openapi.json` | `pnpm --filter @neburyx/contracts generate` |
 
@@ -89,8 +90,8 @@ To create or upgrade the database (after `pnpm build`): `DATABASE_MIGRATION_URL=
 The API listens on `127.0.0.1:8080` unless `NEBURYX_HOST` and `NEBURYX_PORT` say otherwise, and logs a
 warning if started outside a container on a non-loopback address.
 
-CI runs lint, type-check, unit tests, the contract test, the integration tests, the Neo4j tests (on Neo4j 5.26 and 2026), the build, the image build (both platforms) and the compose test as separate jobs (`.github/workflows/ci.yml`). There is no demo
-environment yet. Add its commands here when it exists.
+CI runs lint, type-check, unit tests, the contract test, the integration tests, the Neo4j tests (on Neo4j 5.26 and 2026), the build, the image build (both platforms) and the compose test as separate jobs (`.github/workflows/ci.yml`). The demo
+environment is in `deploy/demo`.
 
 ## Conventions
 

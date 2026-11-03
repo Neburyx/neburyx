@@ -9,6 +9,7 @@ import { docker, dockerOk, type DockerResult } from '../image/docker.js';
 
 export const repository = fileURLToPath(new URL('../../../../', import.meta.url));
 export const composeFile = join(repository, 'deploy/compose/compose.yaml');
+export const demoComposeFile = join(repository, 'deploy/demo/compose.yaml');
 const WAIT_SECONDS = 150;
 
 const eventSchema = z.object({
@@ -23,6 +24,8 @@ export interface StackOptions {
   readonly tag: string;
   readonly omit?: readonly string[];
   readonly overrides?: readonly string[];
+  readonly file?: string;
+  readonly settings?: Readonly<Record<string, string>>;
 }
 
 export class Stack {
@@ -59,7 +62,7 @@ export class Stack {
   }
 
   private writeSettings(): void {
-    const values: Record<string, string> = { ...this.passwords, NEBURYX_IMAGE: this.options.image, NEBURYX_TAG: this.tag, NEBURYX_PORT: String(this.port) };
+    const values: Record<string, string> = { ...this.passwords, ...this.options.settings, NEBURYX_IMAGE: this.options.image, NEBURYX_TAG: this.tag, NEBURYX_PORT: String(this.port) };
     for (const name of this.options.omit ?? []) delete values[name];
     mkdirSync(this.folder, { recursive: true });
     writeFileSync(this.envFile, Object.entries(values).map(([key, value]) => `${key}=${value}`).join('\n') + '\n');
@@ -67,7 +70,7 @@ export class Stack {
 
   compose(args: readonly string[]): Promise<DockerResult> {
     this.commands.push([...args]);
-    const files = [composeFile, ...(this.options.overrides ?? [])].flatMap((file) => ['-f', file]);
+    const files = [this.options.file ?? composeFile, ...(this.options.overrides ?? [])].flatMap((file) => ['-f', file]);
     return docker(['compose', '-p', this.project, ...files, '--env-file', this.envFile, ...args]);
   }
 
