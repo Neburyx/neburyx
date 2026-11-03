@@ -17,7 +17,9 @@
     "demo-graph": "pnpm --filter @neburyx/demo-graph run cli",
     "test:image": "pnpm --filter @neburyx/api test:image",
     "test:compose": "pnpm --filter @neburyx/contracts build && pnpm --filter @neburyx/api test:compose",
-    "check:driver": "pnpm --filter @neburyx/driver-check check"
+    "check:driver": "pnpm --filter @neburyx/driver-check check",
+    "dev": "pnpm --filter @neburyx/dev build && node tools/dev/dist/main.js up",
+    "dev:down": "pnpm --filter @neburyx/dev build && node tools/dev/dist/main.js down"
   },
   "devDependencies": {
     "eslint": "10.14.0",

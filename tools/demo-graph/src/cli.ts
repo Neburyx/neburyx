@@ -16,7 +16,7 @@ export const USAGE = `usage:
   demo-graph generate (--pack <name> | --mapping <file> --definition <file>) [--source <id>] [--seed <n>] --out <dir>
   demo-graph load     (--pack <name> | --mapping <file>) [--source <id>] --dir <dir> [--uri <address>] [--reset]
   demo-graph build    (--pack <name> | --mapping <file> --definition <file>) [--source <id>] [--seed <n>] [--out <dir>] [--uri <address>] [--reset]
-  demo-graph combine  --packs <name>,<name>... --out <file>`;
+  demo-graph combine  --packs <name>,<name>... [--addresses <source-id>=<bolt-address>,...] --out <file>`;
 
 export interface CliIo {
   readonly out: (text: string) => void;
@@ -38,7 +38,7 @@ const ALLOWED: Readonly<Record<Command, ReadonlySet<string>>> = {
   generate: new Set(['pack', 'mapping', 'definition', 'source', 'seed', 'out']),
   load: new Set(['pack', 'mapping', 'source', 'dir', 'uri', 'reset']),
   build: new Set(['pack', 'mapping', 'definition', 'source', 'seed', 'out', 'uri', 'reset']),
-  combine: new Set(['packs', 'out']),
+  combine: new Set(['packs', 'addresses', 'out']),
 };
 const REQUIRED: Readonly<Record<Command, readonly string[]>> = { generate: ['out'], load: ['dir'], build: [], combine: ['packs', 'out'] };
 
@@ -88,7 +88,17 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
         io.err(USAGE);
         return 2;
       }
-      combinePacks(packs, out, io.packsFolder);
+      const addresses = new Map<string, string>();
+      for (const pair of (parsed.values.get('addresses') ?? '').split(',').filter((entry) => entry !== '')) {
+        const at = pair.indexOf('=');
+        const id = pair.slice(0, at);
+        if (at < 1 || addresses.has(id)) {
+          io.err(USAGE);
+          return 2;
+        }
+        addresses.set(id, pair.slice(at + 1));
+      }
+      combinePacks(packs, out, io.packsFolder, addresses);
       io.out(`wrote ${out} with the sources of ${packs.length} packs`);
       return 0;
     }

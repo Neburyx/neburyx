@@ -1,0 +1,10 @@
+services:
+  db:
+    ports:
+      - "127.0.0.1::5432"
+  demo-banking-graph:
+    ports:
+      - "127.0.0.1::7687"
+  demo-insurance-graph:
+    ports:
+      - "127.0.0.1::7687"

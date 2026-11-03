@@ -16,6 +16,7 @@ build/
 !.env.example
 *.pem
 *.key
+.dev/
 
 # documents and backups that must never be committed here
 *.docx

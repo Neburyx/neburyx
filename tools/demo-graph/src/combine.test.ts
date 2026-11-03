@@ -86,6 +86,46 @@ describe('refusing to combine', () => {
   });
 });
 
+describe('setting the addresses', () => {
+  function two(): string {
+    const folder = scratch();
+    pack(folder, 'one', source('a'));
+    pack(folder, 'two', source('b'));
+    return folder;
+  }
+
+  it('sets the uri of the named sources to their loopback addresses, and only those', async () => {
+    const folder = two();
+    const out = join(folder, 'combined.yaml');
+    const result = await run(['combine', '--packs', 'one,two', '--addresses', 'a=bolt://127.0.0.1:55001', '--out', out], folder);
+    expect(result.code, result.err.join()).toBe(0);
+    expect(parse(readFileSync(out, 'utf8'))).toEqual({
+      sources: [
+        { id: 'a', uri: 'bolt://127.0.0.1:55001', synthetic: true },
+        { id: 'b', uri: 'bolt://b-graph:7687', synthetic: true },
+      ],
+    });
+  });
+
+  it.each([
+    ['a source that is not in the packs', 'zzz=bolt://127.0.0.1:55001', 'the source zzz is not in the packs'],
+    ['an address that is not a bolt address', 'a=http://127.0.0.1:55001', 'the address for the source a is not a bolt address on a loopback host'],
+    ['an address on a host that is not loopback', 'a=bolt://db.example.test:7687', 'the address for the source a is not a bolt address on a loopback host'],
+  ])('refuses %s, naming the source, and writes nothing', async (_name, addresses, message) => {
+    const folder = two();
+    const out = join(folder, 'combined.yaml');
+    const result = await run(['combine', '--packs', 'one,two', '--addresses', addresses, '--out', out], folder);
+    expect(result.code).toBe(1);
+    expect(result.err.join('\n')).toContain(message);
+    expect(existsSync(out)).toBe(false);
+  });
+
+  it.each([['a'], ['=bolt://127.0.0.1:1'], ['a=bolt://127.0.0.1:1,a=bolt://127.0.0.1:2']])('prints the usage and exits 2 for the addresses %s', async (addresses) => {
+    const result = await run(['combine', '--packs', 'one,two', '--addresses', addresses, '--out', 'x'], two());
+    expect(result.code).toBe(2);
+  });
+});
+
 describe('combining the shipped packs', () => {
   it('writes exactly their source entries, read from the packs, and can run again over the file', async () => {
     expect(listPacks()).toEqual(expect.arrayContaining(SHIPPED));
