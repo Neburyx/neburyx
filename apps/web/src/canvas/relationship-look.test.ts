@@ -21,6 +21,16 @@ describe('the look of a relationship', () => {
     expect(relationshipLook(stored('USES'))).toEqual({ aggregate: false, origin: 'stored', label: undefined });
   });
 
+  it('carries its type as the label when an entity it joins is selected, and nothing else changes', () => {
+    expect(relationshipLook(stored('USES'), true)).toEqual({ aggregate: false, origin: 'stored', label: 'USES' });
+    expect(relationshipLook(stored('USES'), false)).toEqual({ aggregate: false, origin: 'stored', label: undefined });
+  });
+
+  it('keeps the label of a derived, an unknown-origin and an aggregate relationship whether or not an entity it joins is selected', () => {
+    const unknown: GraphEdge = { ...stored('USES'), semantics: 'unknown' };
+    for (const edgeOf of [derived('SHARES'), unknown, aggregate('OWNS', count(42, 'exact'))]) expect(relationshipLook(edgeOf, true)).toEqual(relationshipLook(edgeOf, false));
+  });
+
   it('labels a derived relationship with its type and "derived"', () => {
     expect(relationshipLook(derived('SHARES'))).toEqual({ aggregate: false, origin: 'derived', label: 'SHARES · derived' });
   });
@@ -51,7 +61,7 @@ describe('the look of a relationship', () => {
   });
 
   it('gives each kind a different line, width and label, so none relies on colour', () => {
-    const kinds = [stored('T'), derived('T'), aggregate('T', count(1, 'exact')), { ...stored('T'), semantics: 'unknown' as const }].map(relationshipLook);
+    const kinds = [stored('T'), derived('T'), aggregate('T', count(1, 'exact')), { ...stored('T'), semantics: 'unknown' as const }].map((item) => relationshipLook(item));
     const signature = (look: ReturnType<typeof relationshipLook>) => `${look.origin}|${look.aggregate}|${look.label ?? '-'}`;
     expect(new Set(kinds.map(signature)).size).toBe(4);
   });

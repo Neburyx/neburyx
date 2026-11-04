@@ -10,8 +10,9 @@ import { FailureNotice } from '../failure-notice.js';
 import { EXPLORE_PATH } from '../shell/navigation.js';
 import { PageHeading } from '../shell/page-heading.js';
 import { answeredData, retainedFailure, useShellData } from '../shell/shell-data.js';
+import { useSelectionActionRegistry } from '../workspace/selection-actions.js';
 import { useSlots } from '../workspace/slots.js';
-import { registerStandIns } from './stand-ins.js';
+import { registerStandInActions, registerStandIns } from './stand-ins.js';
 import { SourcesPanel } from './sources-panel.js';
 
 const SEED = 1;
@@ -20,6 +21,7 @@ const LEFT_OUT_ENTITIES = 2;
 function LoadFixture({ profile }: { readonly profile: SourceProfile }) {
   const state = useClientState();
   const slots = useSlots();
+  const actions = useSelectionActionRegistry();
   const graph = useLoadedGraph();
   const pinned = useStoreSelector(state.presentation.view, (current) => current.pins.size);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
@@ -32,6 +34,7 @@ function LoadFixture({ profile }: { readonly profile: SourceProfile }) {
     try {
       loadFixture(state, profile, principalId, SEED, options);
       registerStandIns(slots);
+      registerStandInActions(actions);
       setRefusal(undefined);
     } catch (error) {
       if (!(error instanceof FixtureError)) throw error;

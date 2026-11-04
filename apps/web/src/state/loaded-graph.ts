@@ -50,3 +50,8 @@ export function partitionEdges(graph: LoadedGraph): EdgePartition {
   for (const edge of graph.edges) (loaded.has(elementKey(edge.from)) && loaded.has(elementKey(edge.to)) ? drawable : notDrawable).push(edge);
   return { drawable, notDrawable };
 }
+
+/** The keys of every element the canvas draws: each loaded entity and each relationship between two loaded entities. */
+export function drawnKeys(graph: LoadedGraph): ReadonlySet<string> {
+  return new Set([...graph.nodes.map((node) => elementKey(node.ref)), ...partitionEdges(graph).drawable.map((edge) => edgeKey(edge.ref))]);
+}

@@ -96,6 +96,38 @@ describe('the loaded graph', () => {
   });
 });
 
+describe('the pointer tool and the viewport', () => {
+  it('has the select tool at first, changes it by one command, and keeps it when another source is bound', () => {
+    const state = createClientState();
+    expect(state.presentation.view.getState().tool).toBe('select');
+    state.bindSource('source-a');
+    state.presentation.setTool('pan');
+    expect(state.presentation.view.getState().tool).toBe('pan');
+    state.bindSource('source-b');
+    expect(state.presentation.view.getState().tool).toBe('pan');
+  });
+
+  it('has no viewport until one is set, keeps one that equals the identity view, and loses it when another source is bound', () => {
+    const state = createClientState();
+    state.bindSource('source-a');
+    expect(state.presentation.view.getState().viewport).toBeUndefined();
+    state.presentation.setViewport({ zoom: 1, x: 0, y: 0 });
+    expect(state.presentation.view.getState().viewport).toEqual({ zoom: 1, x: 0, y: 0 });
+    state.bindSource('source-b');
+    expect(state.presentation.view.getState().viewport).toBeUndefined();
+  });
+
+  it('refuses a viewport with a number that is not finite, with INVALID_VIEWPORT, and changes nothing', () => {
+    const state = createClientState();
+    state.presentation.setViewport({ zoom: 2, x: 3, y: 4 });
+    const before = state.presentation.view.getState();
+    for (const viewport of [{ zoom: Number.NaN, x: 0, y: 0 }, { zoom: 1, x: Number.POSITIVE_INFINITY, y: 0 }, { zoom: 1, x: 0, y: Number.NEGATIVE_INFINITY }]) {
+      expect(() => state.presentation.setViewport(viewport)).toThrow(expect.objectContaining({ code: 'INVALID_VIEWPORT' }));
+    }
+    expect(state.presentation.view.getState()).toBe(before);
+  });
+});
+
 describe('the relationships a loaded graph can draw', () => {
   it('splits relationships into those between two loaded entities and those with an entity that is not loaded, from either end', () => {
     const state = createClientState();

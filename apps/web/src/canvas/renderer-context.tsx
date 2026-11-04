@@ -1,10 +1,15 @@
 import { createContext, useContext, type ReactNode } from 'react';
+import { CanvasCommandsProvider } from './canvas-commands.js';
 import type { CreateRenderer } from './scene.js';
 
 const RendererContext = createContext<CreateRenderer | undefined>(undefined);
 
 export function RendererProvider({ createRenderer, children }: { readonly createRenderer: CreateRenderer; readonly children: ReactNode }) {
-  return <RendererContext.Provider value={createRenderer}>{children}</RendererContext.Provider>;
+  return (
+    <RendererContext.Provider value={createRenderer}>
+      <CanvasCommandsProvider>{children}</CanvasCommandsProvider>
+    </RendererContext.Provider>
+  );
 }
 
 export function useCreateRenderer(): CreateRenderer {

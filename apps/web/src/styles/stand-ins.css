@@ -11,9 +11,29 @@
 }
 
 .stand-in-tool-strip {
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: var(--space-4);
+  padding-top: var(--space-4);
   width: var(--stand-in-tool-strip-width);
   height: var(--stand-in-tool-strip-height);
   border-radius: var(--radius-panel);
+}
+
+.stand-in-mode {
+  width: var(--stand-in-mode-size);
+  height: var(--stand-in-mode-size);
+  border: none;
+  border-radius: var(--radius);
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.stand-in-mode[aria-pressed='true'] {
+  background: var(--color-accent-surface);
+  color: var(--color-accent);
 }
 
 .stand-in-table {
@@ -79,4 +99,24 @@
 
 .icon-settings {
   --icon: url('../assets/settings.svg');
+}
+
+.icon-stand-in-expand {
+  --icon: url('../assets/lucide/maximize-2.svg');
+}
+
+.icon-stand-in-paths {
+  --icon: url('../assets/lucide/route.svg');
+}
+
+.icon-stand-in-group {
+  --icon: url('../assets/lucide/group.svg');
+}
+
+.icon-stand-in-pin {
+  --icon: url('../assets/lucide/pin.svg');
+}
+
+.icon-stand-in-hide {
+  --icon: url('../assets/lucide/eye-off.svg');
 }

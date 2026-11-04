@@ -12,8 +12,9 @@ import { ClientStateProvider } from './state/context.js';
 import { ProfileProvider } from './canvas/profile-context.js';
 import { createProfileStore, type ProfileStore } from './canvas/profile-store.js';
 import { RendererProvider } from './canvas/renderer-context.js';
-import type { CanvasRenderer, CreateRenderer, Scene } from './canvas/scene.js';
-import type { Position } from './state/presentation-state.js';
+import type { CanvasEvents, CanvasRenderer, CreateRenderer, Scene } from './canvas/scene.js';
+import type { Position, Viewport } from './state/presentation-state.js';
+import { createSelectionActionRegistry, SelectionActionsProvider, type SelectionActionRegistry } from './workspace/selection-actions.js';
 import { createSlotRegistry, SlotsProvider, type SlotRegistry } from './workspace/slots.js';
 import { WorkspaceShell } from './workspace/workspace-shell.js';
 
@@ -78,7 +79,11 @@ export function counted(client: ApiClient): Counted {
 
 export interface StubRenderer extends CanvasRenderer {
   readonly mounts: Array<HTMLElement | undefined>;
+  readonly events: CanvasEvents[];
+  readonly startViewports: Array<Viewport | undefined>;
   readonly scenes: Scene[];
+  readonly zooms: number[];
+  fits: number;
   disposed: number;
 }
 
@@ -87,6 +92,8 @@ export interface StubOptions {
   /** With `failOn: 'draw'`, the number of draws that fail before the renderer draws again. */
   readonly failDraws?: number;
   readonly failCreate?: boolean;
+  /** Makes `fit` and `zoomBy` throw. */
+  readonly failCommands?: boolean;
   readonly placeAt?: (index: number) => Position;
 }
 
@@ -97,11 +104,17 @@ export function stubRenderer(options: StubOptions = {}): StubRenderer {
   let failures = options.failDraws ?? Number.POSITIVE_INFINITY;
   const stub: StubRenderer = {
     mounts: [],
+    events: [],
+    startViewports: [],
     scenes: [],
+    zooms: [],
+    fits: 0,
     disposed: 0,
-    mount(container) {
+    mount(container, events, viewport) {
       if (options.failOn === 'mount') throw new Error('no drawing surface');
       stub.mounts.push(container);
+      stub.events.push(events);
+      stub.startViewports.push(viewport);
     },
     draw(scene) {
       if (options.failOn === 'draw' && failures > 0) {
@@ -112,8 +125,16 @@ export function stubRenderer(options: StubOptions = {}): StubRenderer {
       drawn = scene;
       return new Map(scene.entities.filter((entity) => entity.position === undefined).map((entity, index) => [entity.id, placeAt(index)] as const));
     },
+    fit() {
+      if (options.failCommands === true) throw new Error('cannot fit');
+      stub.fits += 1;
+    },
+    zoomBy(factor) {
+      if (options.failCommands === true) throw new Error('cannot zoom');
+      stub.zooms.push(factor);
+    },
     describe: () => ({ entities: drawn?.entities.length ?? 0, relationships: drawn?.relationships.length ?? 0 }),
-    inspect: () => ({ fits: 0, interaction: { panning: false, zooming: false, boxSelecting: false, nodesGrabbable: false, nodesSelectable: false }, nodes: [], edges: [] }),
+    inspect: () => ({ fits: 0, viewport: { zoom: 1, x: 0, y: 0 }, zoomLimits: { min: 0.1, max: 4 }, boundingBox: undefined, interaction: { panning: false, zooming: false, boxSelecting: false, nodesGrabbable: false, nodesSelectable: false }, nodes: [], edges: [] }),
     dispose() {
       stub.disposed += 1;
     },
@@ -134,14 +155,16 @@ export function stubFactory(options: StubOptions = {}): { readonly create: Creat
   };
 }
 
-export function renderApp(path: string, client: ApiClient, state: ClientState = createClientState(), slots: SlotRegistry = createSlotRegistry(), createRenderer: CreateRenderer = stubFactory().create): { readonly router: ReturnType<typeof createMemoryRouter>; readonly state: ClientState; readonly slots: SlotRegistry; readonly container: HTMLElement; readonly unmount: () => void } {
+export function renderApp(path: string, client: ApiClient, state: ClientState = createClientState(), slots: SlotRegistry = createSlotRegistry(), createRenderer: CreateRenderer = stubFactory().create, selectionActions: SelectionActionRegistry = createSelectionActionRegistry()): { readonly router: ReturnType<typeof createMemoryRouter>; readonly state: ClientState; readonly slots: SlotRegistry; readonly container: HTMLElement; readonly unmount: () => void } {
   const router = createMemoryRouter(appRoutes(client, state), { initialEntries: [path] });
   const view = render(
     <ClientStateProvider state={state}>
       <SlotsProvider registry={slots}>
-        <RendererProvider createRenderer={createRenderer}>
-          <RouterProvider router={router} />
-        </RendererProvider>
+        <SelectionActionsProvider registry={selectionActions}>
+          <RendererProvider createRenderer={createRenderer}>
+            <RouterProvider router={router} />
+          </RendererProvider>
+        </SelectionActionsProvider>
       </SlotsProvider>
     </ClientStateProvider>,
   );
@@ -159,20 +182,23 @@ export function WorkspaceHarness({ client, state, profile: injected, createRende
   const store = useMemo(() => createShellData(client), [client]);
   const profile = useMemo(() => injected ?? createProfileStore(client, clientState.investigation), [injected, client, clientState]);
   const slots = useMemo(() => createSlotRegistry(), []);
+  const selectionActions = useMemo(() => createSelectionActionRegistry(), []);
   const createRenderer = useMemo(() => injectedRenderer ?? stubFactory().create, [injectedRenderer]);
   return (
     <ClientStateProvider state={clientState}>
       <SlotsProvider registry={slots}>
-        <RendererProvider createRenderer={createRenderer}>
-          <ShellDataProvider store={store}>
-            <ProfileProvider store={profile}>
-              <MemoryRouter initialEntries={['/explore']}>
-                <Reloader />
-                <WorkspaceShell />
-              </MemoryRouter>
-            </ProfileProvider>
-          </ShellDataProvider>
-        </RendererProvider>
+        <SelectionActionsProvider registry={selectionActions}>
+          <RendererProvider createRenderer={createRenderer}>
+            <ShellDataProvider store={store}>
+              <ProfileProvider store={profile}>
+                <MemoryRouter initialEntries={['/explore']}>
+                  <Reloader />
+                  <WorkspaceShell />
+                </MemoryRouter>
+              </ProfileProvider>
+            </ShellDataProvider>
+          </RendererProvider>
+        </SelectionActionsProvider>
       </SlotsProvider>
     </ClientStateProvider>
   );

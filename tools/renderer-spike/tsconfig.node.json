@@ -8,6 +8,6 @@
     "rootDir": "src",
     "declaration": false
   },
-  "include": ["src/runner", "src/measure", "src/adapter.ts", "src/adapters/names.ts", "src/page/handle.ts"],
+  "include": ["src/runner", "src/product", "src/measure", "src/adapter.ts", "src/adapters/names.ts", "src/page/handle.ts"],
   "exclude": ["src/**/*.test.ts"]
 }

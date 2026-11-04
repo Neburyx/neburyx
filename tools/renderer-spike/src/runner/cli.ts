@@ -3,6 +3,7 @@ import { AdapterError } from '../adapter.js';
 import { FixtureError } from '../fixture/errors.js';
 import { MeasureError } from '../measure/errors.js';
 import { RunnerError } from './errors.js';
+import { runProductBenchmark, type ProductDeps } from '../product/run.js';
 import { runSpike, type RunnerDeps } from './run.js';
 
 export interface CliIo {
@@ -24,9 +25,23 @@ export function describeFailure(error: unknown): string {
   return 'UNEXPECTED_ERROR';
 }
 
+async function runProduct(args: readonly string[], deps: ProductDeps | undefined, io: CliIo): Promise<number> {
+  const url = readOption(args, '--url');
+  const out = readOption(args, '--out');
+  if (deps === undefined || url === undefined || out === undefined) throw new RunnerError('USAGE', 'run with --target product --url <app address> --out <report.json> [--cpu-throttle <n>]');
+  const throttle = readOption(args, '--cpu-throttle');
+  const report = await runProductBenchmark({ url, out: resolve(out), ...(throttle === undefined ? {} : { cpuThrottle: Number(throttle) }) }, deps);
+  io.out(`the product canvas, ${report.app.drawnEntities} entities and ${report.app.drawnRelationships} relationships drawn, at ${report.protocol.cpuThrottle}x CPU: ${report.runs.map((run) => `${run.medianFps.toFixed(1)} fps median, ${run.p5Fps.toFixed(1)} fps p5`).join('; ')}\n`);
+  io.out(`target (at ${report.goal.cpuThrottle}x: median at least ${report.goal.medianFps} fps, 5th percentile at least ${report.goal.p5Fps} fps): ${report.verdict}\n`);
+  return 0;
+}
+
 /** Returns the exit code: 0 when a complete report was written, 1 otherwise. */
-export async function runCli(args: readonly string[], deps: RunnerDeps, io: CliIo): Promise<number> {
+export async function runCli(args: readonly string[], deps: RunnerDeps, io: CliIo, productDeps?: ProductDeps): Promise<number> {
   try {
+    const target = readOption(args, '--target');
+    if (target === 'product') return await runProduct(args, productDeps, io);
+    if (target !== undefined) throw new RunnerError('USAGE', `--target takes product, not ${target}`);
     const adapter = readOption(args, '--adapter');
     const out = readOption(args, '--out');
     if (adapter === undefined || out === undefined) throw new RunnerError('USAGE', 'run with --adapter <name> --out <report.json> [--screenshots <dir>] [--cpu-throttle <n>]');

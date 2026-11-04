@@ -105,3 +105,20 @@ describe('describeFailure', () => {
     expect(describeFailure(new Error('secret detail'))).toBe('UNEXPECTED_ERROR');
   });
 });
+
+describe('runCli with --target product', () => {
+  const sink = () => io();
+
+  it('explains the usage when the address or the report path is missing, without starting anything', async () => {
+    const { err, sink: streams } = sink();
+    expect(await runCli(['--target', 'product', '--out', join(directory, 'r.json')], deps(page()), streams)).toBe(1);
+    expect(await runCli(['--target', 'product', '--url', 'http://127.0.0.1:1'], deps(page()), streams)).toBe(1);
+    expect(err.join('')).toContain('--target product --url');
+  });
+
+  it('refuses a target it does not know', async () => {
+    const { err, sink: streams } = sink();
+    expect(await runCli(['--target', 'sigma', '--out', 'x.json'], deps(page()), streams)).toBe(1);
+    expect(err.join('')).toContain('--target takes product');
+  });
+});

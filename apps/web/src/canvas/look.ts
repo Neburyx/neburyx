@@ -22,3 +22,11 @@ export const LABEL_FILL = '#fafbfc';
 export const PILL_FILL = '#ffffff';
 export const PILL_OUTLINE_WIDTH = 1.5;
 export const LABEL_FONT_SIZE = 12;
+export const SELECTED_COLOR = DERIVED_COLOR;
+export const SELECTED_OUTLINE_WIDTH = 1.8;
+export const SELECTED_HALO_COLOR = DERIVED_COLOR;
+export const SELECTED_HALO_OPACITY = 0.0941;
+export const SELECTED_HALO_DIAMETER = 48;
+export const SELECTED_LINE_EXTRA = 1;
+/** The library measures the halo's padding from the disc without its outline, so the halo is the design's diameter when the padding is this. */
+export const SELECTED_HALO_PADDING = (SELECTED_HALO_DIAMETER - (NODE_OUTER_DIAMETER - SELECTED_OUTLINE_WIDTH)) / 2;

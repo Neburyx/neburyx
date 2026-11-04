@@ -3,6 +3,7 @@
   --color-surface-muted: #f7f8fa;
   --color-text: #252932;
   --color-text-muted: #525b6a;
+  --color-text-strong: #262933;
   --color-border: #e6e8ec;
   --color-icon: #777e8a;
   --color-accent: #5264a7;
@@ -31,6 +32,7 @@
   --space-8: 8px;
   --space-10: 10px;
   --space-12: 12px;
+  --space-14: 14px;
   --space-16: 16px;
   --space-20: 20px;
   --space-24: 24px;
@@ -51,10 +53,21 @@
   --dock-width: 320px;
   --stand-in-tool-strip-width: 40px;
   --stand-in-tool-strip-height: 268px;
+  --stand-in-mode-size: 32px;
   --stand-in-control-height: 36px;
   --stand-in-table-width: 86px;
   --stand-in-legend-width: 186px;
   --stand-in-zoom-width: 197px;
+  --selection-box-fill: rgba(82, 99, 166, 0.07);
+  --selection-box-color: #5263a6;
+  --selection-bar-top: 22px;
+  --radius-bar: 12px;
+  --shadow-floating: 0 4px 10px rgba(38, 49, 73, 0.07);
+  --selection-icon-size: 15px;
+  --selection-separator-height: 18px;
+  --selection-box-border-width: 1.2px;
+  --zoom-gap: 12px;
+  --zoom-icon-size: 14px;
   --stand-in-panel-height: 574px;
   --stand-in-button-height: 32px;
   --full-height: 100vh;
@@ -89,6 +102,7 @@
   --font-size-brand: 20px;
   --font-size-heading-2: 20px;
   --font-size-heading-1: 28px;
+  --font-size-count: 13px;
   --font-weight-medium: 500;
   --font-weight-semibold: 600;
   --line-height: 1.45;

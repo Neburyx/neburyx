@@ -1,23 +1,52 @@
 import type { SourceProfile } from '@neburyx/contracts';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import type { ClientState } from '../state/client-state.js';
 import { useClientState, useLoadedGraph } from '../state/context.js';
+import { writeReadout } from '../dev/canvas-readout.js';
+import { StateError } from '../state/errors.js';
 import { useStoreSelector } from '../state/store.js';
 import { formatNumber, notDrawnLine } from '../workspace/scope-text.js';
 import { buildScene } from './build-scene.js';
+import { useCanvasCommandsHandle } from './canvas-commands.js';
 import { captionFontsReady, loadCaptionFonts } from './fonts.js';
 import { useCreateRenderer } from './renderer-context.js';
-import type { CanvasRenderer, Scene } from './scene.js';
+import { selectionAfterBox, type BoxSelection } from './box-selection.js';
+import { selectionAfterClick, type Click } from './selection-gestures.js';
+import type { CanvasEvents, CanvasRenderer, Scene } from './scene.js';
 
 export const RENDERER_UNAVAILABLE = 'RENDERER_UNAVAILABLE';
 
 const counted = (value: number, one: string, many: string): string => `${formatNumber(value)} ${value === 1 ? one : many}`;
 
+function applyClick(state: ClientState, click: Click): void {
+  const { tool, selection } = state.presentation.view.getState();
+  replaceSelection(state, selectionAfterClick(tool, selection, click));
+}
+
+function applyBox(state: ClientState, box: BoxSelection): void {
+  replaceSelection(state, selectionAfterBox(state.presentation.view.getState().selection, box));
+}
+
+function replaceSelection(state: ClientState, next: readonly string[] | undefined): void {
+  if (next === undefined) return;
+  try {
+    state.presentation.select(next);
+  } catch (error) {
+    // a click can arrive for an item the investigation no longer holds; that is stale and changes nothing
+    if (!(error instanceof StateError) || error.code !== 'UNKNOWN_ELEMENT') throw error;
+  }
+}
+
 export function GraphCanvas({ profile, view = 'fit' }: { readonly profile?: SourceProfile | undefined; readonly view?: Scene['view'] }) {
   const createRenderer = useCreateRenderer();
+  const commands = useCanvasCommandsHandle();
   const state = useClientState();
   const graph = useLoadedGraph();
   const positions = useStoreSelector(state.presentation.view, (current) => current.positions);
-  const scene = useMemo(() => buildScene(graph, positions, profile, view), [graph, positions, profile, view]);
+  const selection = useStoreSelector(state.presentation.view, (current) => current.selection);
+  const tool = useStoreSelector(state.presentation.view, (current) => current.tool);
+  const source = useStoreSelector(state.investigation, (current) => current.sourceId);
+  const scene = useMemo(() => buildScene(graph, positions, profile, selection, tool, source, view), [graph, positions, profile, selection, tool, source, view]);
   const container = useRef<HTMLDivElement>(null);
   const [renderer, setRenderer] = useState<CanvasRenderer | undefined>(undefined);
   const [failed, setFailed] = useState(false);
@@ -27,7 +56,16 @@ export function GraphCanvas({ profile, view = 'fit' }: { readonly profile?: Sour
     let created: CanvasRenderer | undefined;
     try {
       created = createRenderer();
-      created.mount(container.current ?? undefined);
+      const reported = created;
+      const events: CanvasEvents = {
+        viewport: (viewport) => {
+          state.presentation.setViewport(viewport);
+          if (__DEV_TOOLS__ && container.current !== null) writeReadout(container.current, { ...reported.describe(), viewport });
+        },
+        click: (click) => applyClick(state, click),
+        box: (box) => applyBox(state, box),
+      };
+      created.mount(container.current ?? undefined, events, state.presentation.view.getState().viewport);
     } catch {
       // the notice names the stable code; the library's own message is not shown
       created?.dispose();
@@ -43,6 +81,8 @@ export function GraphCanvas({ profile, view = 'fit' }: { readonly profile?: Sour
     };
   }, [createRenderer]);
 
+  useEffect(() => (renderer === undefined || failed ? undefined : commands.attach(renderer, () => setFailed(true))), [renderer, failed, commands]);
+
   useEffect(() => {
     if (renderer === undefined) return undefined;
     let current = true;
@@ -50,6 +90,7 @@ export function GraphCanvas({ profile, view = 'fit' }: { readonly profile?: Sour
       if (!current) return;
       try {
         for (const [id, position] of renderer.draw(scene)) state.presentation.setPosition(id, position);
+        if (__DEV_TOOLS__ && container.current !== null) writeReadout(container.current, { ...renderer.describe(), viewport: renderer.inspect().viewport });
         setFailed(false);
       } catch {
         // the notice names the stable code; the library's own message is not shown
@@ -69,6 +110,7 @@ export function GraphCanvas({ profile, view = 'fit' }: { readonly profile?: Sour
       <p id={descriptionId} className="visually-hidden">
         {counted(graph.nodes.length, 'entity', 'entities')} and {counted(graph.edges.length, 'relationship', 'relationships')} loaded
         {scene.omitted === 0 ? '' : `; ${notDrawnLine(scene.omitted)}`}
+        {scene.selection.size === 0 ? '' : `; ${formatNumber(scene.selection.size)} selected`}
       </p>
       {failed ? (
         <p role="alert" className="canvas-notice">

@@ -4,11 +4,13 @@ import { describe, expect, it } from 'vitest';
 import { testProfile } from '../dev/test-profile.js';
 import { createClientState, type ClientState } from '../state/client-state.js';
 import { ClientStateProvider } from '../state/context.js';
-import { elementKey } from '../state/keys.js';
+import { edgeKey, elementKey } from '../state/keys.js';
 import { edgeRef, key, ref, result } from '../state/test-data.js';
 import { clientWith, me, renderApp, source, stubFactory, type StubOptions } from '../test-utils.js';
+import { useCanvasCommands } from './canvas-commands.js';
 import { GraphCanvas, RENDERER_UNAVAILABLE } from './graph-canvas.js';
 import { RendererProvider } from './renderer-context.js';
+import { runSelectionCommand } from './selection-commands.js';
 import type { CreateRenderer } from './scene.js';
 import type { SourceProfile } from '@neburyx/contracts';
 
@@ -161,6 +163,257 @@ describe('the graph canvas when the renderer fails', () => {
     expect(screen.queryByRole('alert')).not.toBeNull();
     act(() => load(state, 3, 2, 'seed-2'));
     expect(screen.queryByRole('alert')).toBeNull();
+  });
+});
+
+describe('the viewport of the graph canvas', () => {
+  it('is stored in presentation state when the renderer reports it', () => {
+    const state = createClientState();
+    load(state, 2, 1);
+    const factory = stubFactory();
+    view(state, factory.create);
+    factory.made[0]?.events[0]?.viewport({ zoom: 2, x: 30, y: -4 });
+    expect(state.presentation.view.getState().viewport).toEqual({ zoom: 2, x: 30, y: -4 });
+  });
+
+  it('is given back to a canvas that is mounted again, including the identity view, and a canvas with no stored view is given none', () => {
+    const state = createClientState();
+    load(state, 2, 1);
+    const factory = stubFactory();
+    const first = view(state, factory.create);
+    expect(factory.made[0]?.startViewports).toEqual([undefined]);
+    factory.made[0]?.events[0]?.viewport({ zoom: 1, x: 0, y: 0 });
+    first.unmount();
+    view(state, factory.create);
+    expect(factory.made[1]?.startViewports).toEqual([{ zoom: 1, x: 0, y: 0 }]);
+  });
+
+  it('changing the pointer mode neither throws nor shows more than the notice when the renderer cannot start', () => {
+    const state = createClientState();
+    load(state, 2, 1);
+    view(state, stubFactory({ failOn: 'mount' }).create);
+    expect(() => act(() => state.presentation.setTool('pan'))).not.toThrow();
+    expect(screen.getByRole('alert').textContent).toBe(RENDERER_UNAVAILABLE);
+  });
+});
+
+describe('the development read-out of the graph canvas', () => {
+  it('carries what the renderer drew and where it looks, after a draw and after a viewport change', () => {
+    const state = createClientState();
+    load(state, 3, 2);
+    const factory = stubFactory();
+    view(state, factory.create);
+    const canvas = screen.getByRole('img', { name: 'Graph canvas' });
+    expect([canvas.dataset['drawnEntities'], canvas.dataset['drawnRelationships'], canvas.dataset['zoom']]).toEqual(['3', '2', '1']);
+    act(() => factory.made[0]?.events[0]?.viewport({ zoom: 2.5, x: 12, y: -3 }));
+    expect([canvas.dataset['zoom'], canvas.dataset['panX'], canvas.dataset['panY']]).toEqual(['2.5', '12', '-3']);
+  });
+});
+
+describe('the commands of the graph canvas', () => {
+  function viewWithProbe(state: ClientState, create: CreateRenderer, result: { available: boolean }) {
+    let commands: ReturnType<typeof useCanvasCommands>;
+    function Capture() {
+      commands = useCanvasCommands();
+      result.available = commands !== undefined;
+      return null;
+    }
+    render(
+      <ClientStateProvider state={state}>
+        <RendererProvider createRenderer={create}>
+          <GraphCanvas profile={undefined} />
+          <Capture />
+        </RendererProvider>
+      </ClientStateProvider>,
+    );
+    return () => commands;
+  }
+
+  it('are not available when the renderer cannot start, and nothing throws', () => {
+    const state = createClientState();
+    load(state, 2, 1);
+    const result = { available: true };
+    viewWithProbe(state, stubFactory({ failOn: 'mount' }).create, result);
+    expect(result.available).toBe(false);
+  });
+
+  it('are withdrawn when a draw fails, and come back when a later draw succeeds', () => {
+    const state = createClientState();
+    load(state, 2, 1);
+    const result = { available: true };
+    viewWithProbe(state, stubFactory({ failOn: 'draw', failDraws: 1 }).create, result);
+    expect(result.available).toBe(false);
+    act(() => load(state, 3, 2, 'seed-2'));
+    expect(result.available).toBe(true);
+  });
+
+  it('show the notice and are withdrawn when a command itself fails, without throwing', () => {
+    const state = createClientState();
+    load(state, 2, 1);
+    const result = { available: false };
+    const commands = viewWithProbe(state, stubFactory({ failCommands: true }).create, result);
+    expect(result.available).toBe(true);
+    expect(() => act(() => commands()?.fit())).not.toThrow();
+    expect(screen.getByRole('alert').textContent).toBe(RENDERER_UNAVAILABLE);
+    expect(result.available).toBe(false);
+  });
+
+  it('reach the renderer while it runs and are withdrawn when it is disposed', () => {
+    const state = createClientState();
+    load(state, 2, 1);
+    const factory = stubFactory();
+    const result = { available: false };
+    const commands = viewWithProbe(state, factory.create, result);
+    expect(result.available).toBe(true);
+    act(() => commands()?.fit());
+    act(() => commands()?.zoomBy(1.25));
+    expect(factory.made[0]?.fits).toBe(1);
+    expect(factory.made[0]?.zooms).toEqual([1.25]);
+  });
+});
+
+describe('the selection on the graph canvas', () => {
+  const edgeKeyOf = (id: string) => edgeKey(edgeRef('a', id));
+
+  it('follows the clicks the renderer reports, by the matrix of the pointer mode', () => {
+    const state = createClientState();
+    load(state, 3, 0);
+    const factory = stubFactory();
+    view(state, factory.create);
+    const click = factory.made[0]?.events[0]?.click;
+    expect(click).toBeDefined();
+    act(() => click?.({ target: nodeKey('n0'), shift: false }));
+    expect([...state.presentation.view.getState().selection]).toEqual([nodeKey('n0')]);
+    act(() => click?.({ target: nodeKey('n1'), shift: true }));
+    expect([...state.presentation.view.getState().selection]).toEqual([nodeKey('n0'), nodeKey('n1')]);
+    act(() => click?.({ target: nodeKey('n0'), shift: true }));
+    expect([...state.presentation.view.getState().selection]).toEqual([nodeKey('n1')]);
+    act(() => click?.({ target: undefined, shift: false }));
+    expect(state.presentation.view.getState().selection.size).toBe(0);
+    act(() => state.presentation.setTool('pan'));
+    act(() => click?.({ target: nodeKey('n2'), shift: false }));
+    expect(state.presentation.view.getState().selection.size).toBe(0);
+  });
+
+  it('ignores a click on an item the investigation does not hold, and changes nothing', () => {
+    const state = createClientState();
+    load(state, 2, 0);
+    const factory = stubFactory();
+    view(state, factory.create);
+    act(() => factory.made[0]?.events[0]?.click({ target: nodeKey('n0'), shift: false }));
+    const before = state.presentation.view.getState();
+    expect(() => act(() => factory.made[0]?.events[0]?.click({ target: nodeKey('ghost'), shift: false }))).not.toThrow();
+    expect(state.presentation.view.getState()).toBe(before);
+  });
+
+  it('hands the renderer the selected items that are drawn, and keeps only the ones still in the loaded graph when it changes', () => {
+    const state = createClientState();
+    load(state, 3, 2);
+    const factory = stubFactory();
+    view(state, factory.create);
+    act(() => state.presentation.select([nodeKey('n0'), nodeKey('n1'), edgeKeyOf('e0')]));
+    expect([...(factory.made[0]?.scenes.at(-1)?.selection ?? [])].sort()).toEqual([nodeKey('n0'), nodeKey('n1'), edgeKeyOf('e0')].sort());
+    act(() => load(state, 1, 0, 'seed-2'));
+    expect([...state.presentation.view.getState().selection]).toEqual([nodeKey('n0')]);
+    expect([...(factory.made[0]?.scenes.at(-1)?.selection ?? [])]).toEqual([nodeKey('n0')]);
+  });
+
+  it('is empty after another source is bound', () => {
+    const state = createClientState();
+    load(state, 2, 0);
+    view(state, stubFactory().create);
+    act(() => state.presentation.select([nodeKey('n0')]));
+    act(() => state.bindSource('b'));
+    expect(state.presentation.view.getState().selection.size).toBe(0);
+  });
+
+  it('is named by number in the canvas description, and not at all when nothing is selected', () => {
+    const state = createClientState();
+    load(state, 3, 0);
+    view(state, stubFactory().create);
+    const canvas = screen.getByRole('img', { name: 'Graph canvas' });
+    const text = () => document.getElementById(canvas.getAttribute('aria-describedby') ?? '')?.textContent;
+    expect(text()).toBe('3 entities and 0 relationships loaded');
+    act(() => state.presentation.select([nodeKey('n0'), nodeKey('n2')]));
+    expect(text()).toBe('3 entities and 0 relationships loaded; 2 selected');
+  });
+});
+
+describe('the labels of stored relationships on the graph canvas', () => {
+  it('reach the renderer while an entity they join is selected, and go when the selection is cleared', () => {
+    const state = createClientState();
+    load(state, 3, 1);
+    const factory = stubFactory();
+    view(state, factory.create);
+    const labels = () => factory.made[0]?.scenes.at(-1)?.relationships.map((relationship) => relationship.look.label);
+    expect(labels()).toEqual([undefined]);
+    act(() => state.presentation.select([nodeKey('n0')]));
+    expect(labels()).toEqual(['rel-a']);
+    act(() => state.presentation.select([nodeKey('n2')]));
+    expect(labels()).toEqual([undefined]);
+    act(() => state.presentation.select([nodeKey('n1')]));
+    act(() => runSelectionCommand(state, 'clear-selection'));
+    expect(labels()).toEqual([undefined]);
+  });
+});
+
+describe('the selection commands on the graph canvas', () => {
+  it('reach the canvas: select all shows in the description and the scene, clear takes it away', () => {
+    const state = createClientState();
+    load(state, 3, 1);
+    const factory = stubFactory();
+    view(state, factory.create);
+    const canvas = screen.getByRole('img', { name: 'Graph canvas' });
+    const text = () => document.getElementById(canvas.getAttribute('aria-describedby') ?? '')?.textContent;
+    act(() => runSelectionCommand(state, 'select-all'));
+    expect(text()).toBe('3 entities and 1 relationship loaded; 3 selected');
+    expect(factory.made[0]?.scenes.at(-1)?.selection.size).toBe(3);
+    act(() => runSelectionCommand(state, 'invert-selection'));
+    expect(text()).toBe('3 entities and 1 relationship loaded');
+    act(() => runSelectionCommand(state, 'select-all'));
+    act(() => runSelectionCommand(state, 'clear-selection'));
+    expect(factory.made[0]?.scenes.at(-1)?.selection.size).toBe(0);
+  });
+});
+
+describe('the box on the graph canvas', () => {
+  it('replaces the selection with the entities inside without Shift, clears it for an empty box, and adds with Shift', () => {
+    const state = createClientState();
+    load(state, 4, 0);
+    const factory = stubFactory();
+    view(state, factory.create);
+    const box = factory.made[0]?.events[0]?.box;
+    act(() => box?.({ ids: [nodeKey('n0'), nodeKey('n1')], shift: false }));
+    expect([...state.presentation.view.getState().selection]).toEqual([nodeKey('n0'), nodeKey('n1')]);
+    act(() => box?.({ ids: [nodeKey('n2')], shift: true }));
+    expect([...state.presentation.view.getState().selection]).toEqual([nodeKey('n0'), nodeKey('n1'), nodeKey('n2')]);
+    act(() => box?.({ ids: [], shift: true }));
+    expect(state.presentation.view.getState().selection.size).toBe(3);
+    act(() => box?.({ ids: [], shift: false }));
+    expect(state.presentation.view.getState().selection.size).toBe(0);
+  });
+
+  it('ignores a box that names an entity the investigation does not hold', () => {
+    const state = createClientState();
+    load(state, 2, 0);
+    const factory = stubFactory();
+    view(state, factory.create);
+    expect(() => act(() => factory.made[0]?.events[0]?.box({ ids: [nodeKey('ghost')], shift: false }))).not.toThrow();
+    expect(state.presentation.view.getState().selection.size).toBe(0);
+  });
+
+  it('hands the renderer the pointer mode, and a click behaves as in select when the mode is box', () => {
+    const state = createClientState();
+    load(state, 2, 0);
+    const factory = stubFactory();
+    view(state, factory.create);
+    expect(factory.made[0]?.scenes.at(-1)?.tool).toBe('select');
+    act(() => state.presentation.setTool('box'));
+    expect(factory.made[0]?.scenes.at(-1)?.tool).toBe('box');
+    act(() => factory.made[0]?.events[0]?.click({ target: nodeKey('n0'), shift: false }));
+    expect([...state.presentation.view.getState().selection]).toEqual([nodeKey('n0')]);
+    act(() => factory.made[0]?.events[0]?.click({ target: undefined, shift: false }));
+    expect(state.presentation.view.getState().selection.size).toBe(0);
   });
 });
 

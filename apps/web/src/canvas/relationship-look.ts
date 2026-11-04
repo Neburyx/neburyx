@@ -44,10 +44,11 @@ function originWord(origin: Origin): string | undefined {
   }
 }
 
-/** The line style follows the origin and the width follows whether it is an aggregate; the label is the type, then the count of an aggregate, then the origin when it is not stored. A stored relationship that is not an aggregate carries no label until it is selected. */
-export function relationshipLook(edge: GraphEdge): RelationshipLook {
+/** The line style follows the origin and the width follows whether it is an aggregate; the label is the type, then the count of an aggregate, then the origin when it is not stored. A stored relationship that is not an aggregate carries its type as a label only while an entity it joins is selected. */
+export function relationshipLook(edge: GraphEdge, touchesSelection = false): RelationshipLook {
   const aggregate = 'aggregate' in edge.ref;
   const parts = [edge.type, aggregate && edge.memberCount !== undefined ? memberCountText(edge.memberCount) : undefined, originWord(edge.semantics)].filter((part) => part !== undefined);
-  const label = aggregate || edge.semantics !== 'stored' ? parts.join(' · ') : undefined;
+  const always = aggregate || edge.semantics !== 'stored';
+  const label = always ? parts.join(' · ') : touchesSelection ? edge.type : undefined;
   return { aggregate, origin: edge.semantics, label };
 }

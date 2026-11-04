@@ -5,6 +5,7 @@ import { GraphScope } from './graph-scope.js';
 import { HeaderBar } from './header-bar.js';
 import { NavigationRail } from './navigation-rail.js';
 import { NoticeStrip } from './notice-strip.js';
+import { SelectionBar } from './selection-bar.js';
 
 export function WorkspaceShell({ canvasView }: { readonly canvasView?: 'fit' | 'as-drawn' }) {
   const profile = useProfile();
@@ -17,6 +18,7 @@ export function WorkspaceShell({ canvasView }: { readonly canvasView?: 'fit' | '
         <main className="canvas-region">
           <GraphCanvas profile={profile} view={canvasView} />
           <GraphScope />
+          <SelectionBar />
           <CanvasRegions />
         </main>
       </div>

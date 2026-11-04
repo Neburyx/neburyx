@@ -257,6 +257,14 @@
   background: var(--color-canvas);
 }
 
+.graph-canvas .selection-box {
+  position: absolute;
+  border: var(--selection-box-border-width) dashed var(--selection-box-color);
+  border-radius: var(--radius);
+  background: var(--selection-box-fill);
+  pointer-events: none;
+}
+
 .canvas-notice {
   position: absolute;
   top: var(--space-16);
@@ -311,6 +319,124 @@
 .region-zoom-controls {
   right: var(--space-16);
   bottom: var(--space-16);
+}
+
+.selection-bar {
+  position: absolute;
+  top: var(--selection-bar-top);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  width: max-content;
+  max-width: calc(100% - var(--space-32));
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-6) var(--space-8) var(--space-6) var(--space-14);
+  border: var(--border-width) solid var(--color-workspace-border);
+  border-radius: var(--radius-bar);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-floating);
+  color: var(--color-text-strong);
+  font-size: var(--font-size-small);
+  line-height: normal;
+}
+
+.selection-count {
+  font-size: var(--font-size-count);
+  font-weight: var(--font-weight-semibold);
+}
+
+.selection-separator {
+  flex: none;
+  width: var(--border-width);
+  height: var(--selection-separator-height);
+  background: var(--color-control-border);
+}
+
+.selection-action {
+  display: flex;
+  flex: none;
+  white-space: nowrap;
+  align-items: center;
+  gap: var(--space-6);
+  padding: var(--space-6) var(--space-8);
+  border: none;
+  border-radius: var(--radius);
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+}
+
+.selection-action .icon {
+  width: var(--selection-icon-size);
+  height: var(--selection-icon-size);
+}
+
+.selection-clear {
+  padding: var(--space-6);
+  margin: calc(var(--space-6) * -1);
+}
+
+.selection-status {
+  padding-left: var(--space-8);
+  color: var(--color-workspace-muted);
+}
+
+.zoom-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--zoom-gap);
+  height: var(--stand-in-control-height);
+  padding: 0 var(--space-12);
+  border: var(--border-width) solid var(--color-control-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-workspace);
+}
+
+.zoom-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6) var(--space-8);
+  margin: calc(var(--space-6) * -1) calc(var(--space-8) * -1);
+  border: none;
+  border-radius: var(--radius-small);
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.zoom-button-fit {
+  padding: var(--space-6) var(--space-5);
+  margin: calc(var(--space-6) * -1) calc(var(--space-5) * -1);
+}
+
+.zoom-button:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.zoom-button .icon {
+  width: var(--zoom-icon-size);
+  height: var(--zoom-icon-size);
+}
+
+.icon-copy {
+  --icon: url('../assets/lucide/copy.svg');
+}
+
+.icon-clear {
+  --icon: url('../assets/lucide/x.svg');
+}
+
+.icon-fit {
+  --icon: url('../assets/lucide/maximize.svg');
 }
 
 .region-dock {

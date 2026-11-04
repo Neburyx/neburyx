@@ -24,14 +24,12 @@ export const reportSchema = z.strictObject({
 
 export type Report = z.infer<typeof reportSchema>;
 
-/** Writes the report only if it is complete; the file appears all at once or not at all. */
-export function writeReport(path: string, report: unknown): Report {
-  const parsed = reportSchema.safeParse(report);
-  if (!parsed.success) throw new MeasureError('REPORT_INVALID');
+/** Writes the text to a temporary file and moves it into place, so the file appears all at once or not at all. */
+export function writeFileOnce(path: string, text: string): void {
   const temporary = `${path}.partial`;
   try {
     mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(temporary, `${JSON.stringify(parsed.data, null, 2)}\n`);
+    writeFileSync(temporary, text);
     renameSync(temporary, path);
   } catch {
     try {
@@ -41,5 +39,12 @@ export function writeReport(path: string, report: unknown): Report {
     }
     throw new MeasureError('REPORT_WRITE_FAILED');
   }
+}
+
+/** Writes the report only if it is complete. */
+export function writeReport(path: string, report: unknown): Report {
+  const parsed = reportSchema.safeParse(report);
+  if (!parsed.success) throw new MeasureError('REPORT_INVALID');
+  writeFileOnce(path, `${JSON.stringify(parsed.data, null, 2)}\n`);
   return parsed.data;
 }
