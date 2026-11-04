@@ -39,6 +39,8 @@ export interface PresentationState {
   readonly positions: ReadonlyMap<string, Position>;
   readonly pins: ReadonlySet<string>;
   readonly panelSizes: ReadonlyMap<string, number>;
+  /** A panel is collapsed under the registration number it was collapsed with, so a panel taken out and registered again opens expanded. Not saved with a view. */
+  readonly collapsedPanels: ReadonlyMap<string, number>;
   /** Undefined until a view was set, so that a view that was never set differs from a stored one at zoom 1. */
   readonly viewport: Viewport | undefined;
   /** The tool whose flyout is open, if any. Not saved with a view. */
@@ -52,6 +54,7 @@ export const INITIAL_PRESENTATION: PresentationState = {
   positions: new Map(),
   pins: new Set(),
   panelSizes: new Map(),
+  collapsedPanels: new Map(),
   viewport: undefined,
   openTool: undefined,
   openMenu: undefined,
@@ -73,6 +76,10 @@ export interface PresentationActions {
   setPositions(positions: ReadonlyMap<string, Position>): void;
   pin(keys: readonly string[]): void;
   setPanelSize(panel: string, size: number): void;
+  clearPanelSize(panel: string): void;
+  setPanelCollapsed(panel: string, registration: number, collapsed: boolean): void;
+  /** Lets go of a panel's collapsed state when that registration is taken out; the state of a newer registration of the same ID stays. */
+  clearPanelCollapsed(panel: string, registration: number): void;
   setViewport(viewport: Viewport): void;
 }
 
@@ -120,7 +127,26 @@ export function createPresentationStore(known: KnownElements): PresentationStore
       store.setState({ ...store.getState(), pins: new Set(keys) });
     },
     setPanelSize(panel, size) {
-      store.setState({ ...store.getState(), panelSizes: new Map(store.getState().panelSizes).set(panel, size) });
+      if (!Number.isFinite(size) || size <= 0) throw new StateError('INVALID_PANEL_SIZE');
+      store.setState({ ...store.getState(), panelSizes: new Map(store.getState().panelSizes).set(panel, Math.max(1, Math.round(size))) });
+    },
+    clearPanelCollapsed(panel, registration) {
+      if (store.getState().collapsedPanels.get(panel) !== registration) return;
+      const collapsedPanels = new Map(store.getState().collapsedPanels);
+      collapsedPanels.delete(panel);
+      store.setState({ ...store.getState(), collapsedPanels });
+    },
+    clearPanelSize(panel) {
+      if (!store.getState().panelSizes.has(panel)) return;
+      const panelSizes = new Map(store.getState().panelSizes);
+      panelSizes.delete(panel);
+      store.setState({ ...store.getState(), panelSizes });
+    },
+    setPanelCollapsed(panel, registration, collapsed) {
+      const collapsedPanels = new Map(store.getState().collapsedPanels);
+      if (collapsed) collapsedPanels.set(panel, registration);
+      else collapsedPanels.delete(panel);
+      store.setState({ ...store.getState(), collapsedPanels });
     },
     setViewport(viewport) {
       if (![viewport.zoom, viewport.x, viewport.y].every(Number.isFinite)) throw new StateError('INVALID_VIEWPORT');
@@ -135,7 +161,8 @@ export function createPresentationStore(known: KnownElements): PresentationStore
       store.setState({ ...current, selection: new Set(selection), positions: new Map(positions), pins: new Set(pins) });
     },
     reset() {
-      store.setState({ ...INITIAL_PRESENTATION, tool: store.getState().tool });
+      const { tool, panelSizes, collapsedPanels } = store.getState();
+      store.setState({ ...INITIAL_PRESENTATION, tool, panelSizes, collapsedPanels });
     },
   };
 }

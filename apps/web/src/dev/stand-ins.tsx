@@ -1,7 +1,8 @@
-import type { ComponentType } from 'react';
+import { useState, type ComponentType } from 'react';
 import { Link } from 'react-router';
 import { EXPLORE_PATH } from '../shell/navigation.js';
 import type { SelectionAction, SelectionActionRegistry } from '../workspace/selection-actions.js';
+import type { PanelEntry, PanelRegistry } from '../workspace/panel-registry.js';
 import type { SlotName, SlotRegistry } from '../workspace/slots.js';
 import { edgeKey } from '../state/keys.js';
 import { MENU_GROUP, MENU_ORDER, type MenuContext, type MenuItem, type MenuItemState, type MenuRegistry, type MenuTargetKind } from '../workspace/menu-registry.js';
@@ -25,7 +26,6 @@ const STAND_INS: readonly (readonly [SlotName, ComponentType])[] = [
     ),
   ],
   ['zoom-controls', () => <div className="stand-in stand-in-zoom" data-dev-tool={STAND_IN_MARKER}>Zoom</div>],
-  ['dock', () => <div className="stand-in stand-in-dock" data-dev-tool={STAND_IN_MARKER}>Dock</div>],
   ['floating', () => null],
   [
     'search',
@@ -48,6 +48,45 @@ const STAND_INS: readonly (readonly [SlotName, ComponentType])[] = [
 /** Puts a stand-in in every slot that is free, leaves occupied slots as they are, and returns the function that takes out what it put in. */
 export function registerStandIns(registry: SlotRegistry): () => void {
   const removals = STAND_INS.filter(([slot]) => !registry.view.getState().has(slot)).map(([slot, occupant]) => registry.register(slot, occupant));
+  return () => {
+    for (const remove of removals) remove();
+  };
+}
+
+const TEST_PANEL_ROWS = 40;
+
+function testPanel(heading: string, text: string): ComponentType {
+  return function TestPanel() {
+    const [tall, setTall] = useState(false);
+    return (
+      <div className="stand-in-panel" data-dev-tool={STAND_IN_MARKER}>
+        <p className="stand-in-panel-heading">{heading}</p>
+        <p>{text}</p>
+        <button type="button" aria-pressed={tall} onClick={() => setTall((current) => !current)}>
+          Tall content
+        </button>
+        {tall ? Array.from({ length: TEST_PANEL_ROWS }, (_, row) => <p key={row}>Row {row + 1}</p>) : null}
+      </div>
+    );
+  };
+}
+
+const FLOATING_TOP = 64;
+
+export interface StandInPanelOptions {
+  /** The side the floating test panel is on, or false for none; the dock test panel is always there. */
+  readonly floating?: 'left' | 'right' | false;
+}
+
+/** Puts a test panel in the dock and one over the canvas, leaving a place or an ID that a panel already holds alone, and returns the function that takes out what it put in. */
+export function registerStandInPanels(registry: PanelRegistry, options: StandInPanelOptions = {}): () => void {
+  const { floating = 'right' } = options;
+  const wanted: readonly PanelEntry[] = [
+    { id: 'dev-dock-test', title: 'Dock test panel', placement: { kind: 'dock' }, content: testPanel('Dock test panel', 'A panel in the dock, beside the canvas.') },
+    ...(floating === false ? [] : [{ id: 'dev-floating-test', title: 'Floating test panel', placement: { kind: 'floating', side: floating, top: FLOATING_TOP } as const, content: testPanel('Floating test panel', 'A panel over the canvas.') }]),
+  ];
+  const taken = registry.view.getState();
+  const removals = wanted.filter((panel) => !taken.some((other) => other.id === panel.id || (panel.placement.kind === 'dock' && other.placement.kind === 'dock'))).map((panel) => registry.register(panel));
   return () => {
     for (const remove of removals) remove();
   };

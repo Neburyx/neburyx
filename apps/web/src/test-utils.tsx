@@ -1,5 +1,6 @@
 import { render } from '@testing-library/react';
 import { useMemo } from 'react';
+import { vi } from 'vitest';
 import type { MeResponse, SourceProfile, SourceSummary, SourceTestReport } from '@neburyx/contracts';
 import { MemoryRouter, RouterProvider, createMemoryRouter } from 'react-router';
 import type { ApiClient } from './api/client.js';
@@ -17,6 +18,7 @@ import type { CanvasEvents, CanvasRenderer, CreateRenderer, Scene } from './canv
 import type { Position, Viewport } from './state/presentation-state.js';
 import { createMenuRegistry, MenuProvider, type MenuRegistry } from './workspace/menu-registry.js';
 import { createSelectionActionRegistry, SelectionActionsProvider, type SelectionActionRegistry } from './workspace/selection-actions.js';
+import { createPanelRegistryFor, PanelsProvider, type PanelRegistry } from './workspace/panel-registry.js';
 import { createSlotRegistry, SlotsProvider, type SlotRegistry } from './workspace/slots.js';
 import { createToolRegistry, ToolsProvider, type ToolRegistry } from './workspace/tool-registry.js';
 import { WorkspaceShell } from './workspace/workspace-shell.js';
@@ -169,7 +171,7 @@ export function stubFactory(options: StubOptions = {}): { readonly create: Creat
   };
 }
 
-export function renderApp(path: string, client: ApiClient, state: ClientState = createClientState(), slots: SlotRegistry = createSlotRegistry(), createRenderer: CreateRenderer = stubFactory().create, selectionActions: SelectionActionRegistry = createSelectionActionRegistry(), tools: ToolRegistry = createToolRegistry(), menus: MenuRegistry = createMenuRegistry()): { readonly router: ReturnType<typeof createMemoryRouter>; readonly state: ClientState; readonly slots: SlotRegistry; readonly tools: ToolRegistry; readonly container: HTMLElement; readonly unmount: () => void } {
+export function renderApp(path: string, client: ApiClient, state: ClientState = createClientState(), slots: SlotRegistry = createSlotRegistry(), createRenderer: CreateRenderer = stubFactory().create, selectionActions: SelectionActionRegistry = createSelectionActionRegistry(), tools: ToolRegistry = createToolRegistry(), menus: MenuRegistry = createMenuRegistry(), panels: PanelRegistry = createPanelRegistryFor(state)): { readonly router: ReturnType<typeof createMemoryRouter>; readonly state: ClientState; readonly slots: SlotRegistry; readonly tools: ToolRegistry; readonly panels: PanelRegistry; readonly container: HTMLElement; readonly unmount: () => void } {
   const router = createMemoryRouter(appRoutes(client, state), { initialEntries: [path] });
   const view = render(
     <ClientStateProvider state={state}>
@@ -177,16 +179,18 @@ export function renderApp(path: string, client: ApiClient, state: ClientState = 
         <SelectionActionsProvider registry={selectionActions}>
           <ToolsProvider registry={tools}>
             <MenuProvider registry={menus}>
-              <RendererProvider createRenderer={createRenderer}>
-                <RouterProvider router={router} />
-              </RendererProvider>
+              <PanelsProvider registry={panels}>
+                <RendererProvider createRenderer={createRenderer}>
+                  <RouterProvider router={router} />
+                </RendererProvider>
+              </PanelsProvider>
             </MenuProvider>
           </ToolsProvider>
         </SelectionActionsProvider>
       </SlotsProvider>
     </ClientStateProvider>,
   );
-  return { router, state, slots, tools, container: view.container, unmount: view.unmount };
+  return { router, state, slots, tools, panels, container: view.container, unmount: view.unmount };
 }
 
 function Reloader() {
@@ -203,6 +207,7 @@ export function WorkspaceHarness({ client, state, profile: injected, createRende
   const selectionActions = useMemo(() => createSelectionActionRegistry(), []);
   const tools = useMemo(() => createToolRegistry(), []);
   const menus = useMemo(() => createMenuRegistry(), []);
+  const panels = useMemo(() => createPanelRegistryFor(clientState), [clientState]);
   const createRenderer = useMemo(() => injectedRenderer ?? stubFactory().create, [injectedRenderer]);
   return (
     <ClientStateProvider state={clientState}>
@@ -210,20 +215,88 @@ export function WorkspaceHarness({ client, state, profile: injected, createRende
         <SelectionActionsProvider registry={selectionActions}>
           <ToolsProvider registry={tools}>
             <MenuProvider registry={menus}>
-              <RendererProvider createRenderer={createRenderer}>
-                <ShellDataProvider store={store}>
-                  <ProfileProvider store={profile}>
-                    <MemoryRouter initialEntries={['/explore']}>
-                      <Reloader />
-                      <WorkspaceShell />
-                    </MemoryRouter>
-                  </ProfileProvider>
-                </ShellDataProvider>
-              </RendererProvider>
+              <PanelsProvider registry={panels}>
+                <RendererProvider createRenderer={createRenderer}>
+                  <ShellDataProvider store={store}>
+                    <ProfileProvider store={profile}>
+                      <MemoryRouter initialEntries={['/explore']}>
+                        <Reloader />
+                        <WorkspaceShell />
+                      </MemoryRouter>
+                    </ProfileProvider>
+                  </ShellDataProvider>
+                </RendererProvider>
+              </PanelsProvider>
             </MenuProvider>
           </ToolsProvider>
         </SelectionActionsProvider>
       </SlotsProvider>
     </ClientStateProvider>
   );
+}
+
+/** The element a query found; a test that needs it fails by name when it is not there. */
+export function need<T extends Element>(found: T | null | undefined, what = 'the element'): T {
+  if (found === null || found === undefined) throw new Error(`${what} is not in the page`);
+  return found;
+}
+
+function rectOf(width: number, height: number): DOMRectReadOnly {
+  return { x: 0, y: 0, top: 0, left: 0, width, height, right: width, bottom: height, toJSON: () => ({}) };
+}
+
+/** Stands in for the browser's size observer, which jsdom does not have: `resize` tells every observer of an element that its size is now `width` by `height`, and the element's own measured size is that from then on. */
+export function stubSizeObserver(): { readonly resize: (element: Element, width: number, height?: number) => void; readonly observed: () => readonly Element[]; readonly restore: () => void } {
+  const watchers = new Set<{ readonly element: Element; readonly callback: ResizeObserverCallback; readonly observer: ResizeObserver }>();
+  const sizes = new Map<Element, { readonly width: number; readonly height: number }>();
+  const original = globalThis.ResizeObserver;
+  const originalRect = Element.prototype.getBoundingClientRect;
+  Element.prototype.getBoundingClientRect = function (this: Element): DOMRect {
+    const size = sizes.get(this);
+    return { ...originalRect.call(this), width: size?.width ?? 0, height: size?.height ?? 0 };
+  };
+  globalThis.ResizeObserver = class implements ResizeObserver {
+    constructor(private readonly callback: ResizeObserverCallback) {}
+
+    observe(element: Element): void {
+      watchers.add({ element, callback: this.callback, observer: this });
+    }
+
+    unobserve(element: Element): void {
+      for (const watcher of watchers) if (watcher.observer === this && watcher.element === element) watchers.delete(watcher);
+    }
+
+    disconnect(): void {
+      for (const watcher of watchers) if (watcher.observer === this) watchers.delete(watcher);
+    }
+  };
+  return {
+    resize(element, width, height = 0) {
+      sizes.set(element, { width, height });
+      const entry: ResizeObserverEntry = { target: element, contentRect: rectOf(width, height), borderBoxSize: [], contentBoxSize: [], devicePixelContentBoxSize: [] };
+      for (const watcher of [...watchers]) if (watcher.element === element) watcher.callback([entry], watcher.observer);
+    },
+    observed: () => [...watchers].map((watcher) => watcher.element),
+    restore() {
+      globalThis.ResizeObserver = original;
+      Element.prototype.getBoundingClientRect = originalRect;
+    },
+  };
+}
+
+/** Makes every canvas answer drawing calls with nothing, so the renderer can mount on a real element in jsdom, which has no canvas; returns the function that puts the canvases back. The assertion is the one place a stand-in is told it is a drawing context: a proxy cannot be built to satisfy the interface. */
+export function stubCanvasContext(): () => void {
+  const context = new Proxy(
+    {},
+    {
+      get: (_target, key) => {
+        if (key === 'measureText') return () => ({ width: 0 });
+        if (key === 'createLinearGradient' || key === 'createPattern') return () => ({ addColorStop: () => undefined });
+        return key === 'canvas' ? document.createElement('canvas') : () => undefined;
+      },
+      set: () => true,
+    },
+  );
+  const spy = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(context as CanvasRenderingContext2D);
+  return () => spy.mockRestore();
 }

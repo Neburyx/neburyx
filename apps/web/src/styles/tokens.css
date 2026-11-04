@@ -57,7 +57,10 @@
   --lock-height: 12px;
   --scope-left: 24px;
   --scope-top: 16px;
-  --dock-width: 320px;
+  --panel-handle-width: 8px;
+  --panel-handle-line: 2px;
+  --panel-toggle-size: 24px;
+  --panel-toggle-icon-size: 14px;
   --layer-menu: 10;
   --tool-button-size: 32px;
   --tool-icon-size: 16px;
@@ -81,6 +84,7 @@
   --selection-bar-top: 22px;
   --radius-bar: 12px;
   --shadow-floating: 0 4px 10px rgba(38, 49, 73, 0.07);
+  --shadow-dock-panel: 0 4px 20px rgba(38, 49, 73, 0.07);
   --selection-icon-size: 15px;
   --selection-separator-height: 18px;
   --selection-box-border-width: 1.2px;
@@ -113,6 +117,7 @@
   --radius-small: 4px;
   --radius-avatar: 10px;
   --radius-panel: 8px;
+  --radius-host-panel: 10px;
 
   --font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;

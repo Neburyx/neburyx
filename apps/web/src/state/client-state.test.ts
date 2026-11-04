@@ -283,6 +283,95 @@ describe('every embedded ref is checked, and the stores cannot be written around
   });
 });
 
+describe('panel sizes', () => {
+  it.each([Number.NaN, Infinity, -Infinity, 0, -1])('refuses %s with INVALID_PANEL_SIZE and leaves the state as it was', (size) => {
+    const state = createClientState();
+    state.presentation.setPanelSize('inspector', 300);
+    const before = state.presentation.view.getState();
+    expect(() => state.presentation.setPanelSize('inspector', size)).toThrowError(expect.objectContaining({ code: 'INVALID_PANEL_SIZE' }));
+    expect(state.presentation.view.getState()).toBe(before);
+  });
+
+  it('stores a finite size above zero under the panel\'s ID and clears it again, leaving the others', () => {
+    const state = createClientState();
+    state.presentation.setPanelSize('a', 300);
+    state.presentation.setPanelSize('b', 280);
+    state.presentation.clearPanelSize('a');
+    expect([...state.presentation.view.getState().panelSizes]).toEqual([['b', 280]]);
+  });
+
+  it.each([
+    [320.4, 320],
+    [320.5, 321],
+    [319.6, 320],
+    [0.2, 1],
+  ])('stores %s as the whole number of pixels %i, and never zero', (size, stored) => {
+    const state = createClientState();
+    state.presentation.setPanelSize('a', size);
+    expect(state.presentation.view.getState().panelSizes.get('a')).toBe(stored);
+  });
+
+  it('clears a size that was never stored without notifying anybody', () => {
+    const state = createClientState();
+    const listener = vi.fn();
+    state.presentation.view.subscribe(listener);
+    state.presentation.clearPanelSize('nothing');
+    expect(listener).not.toHaveBeenCalled();
+  });
+});
+
+describe('the collapsed state of panels', () => {
+  it('holds a panel collapsed under a registration number, and lets it go again, notifying only presentation state', () => {
+    const state = createClientState();
+    const listener = vi.fn();
+    state.server.subscribe(listener);
+    state.presentation.setPanelCollapsed('inspector', 3, true);
+    expect(state.presentation.view.getState().collapsedPanels.get('inspector')).toBe(3);
+    state.presentation.setPanelCollapsed('inspector', 3, false);
+    expect(state.presentation.view.getState().collapsedPanels.has('inspector')).toBe(false);
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('lets go of a collapsed state only for the registration it was held for, and notifies nobody when there is nothing to let go', () => {
+    const state = createClientState();
+    state.presentation.setPanelCollapsed('a', 2, true);
+    state.presentation.setPanelCollapsed('b', 5, true);
+    const listener = vi.fn();
+    state.presentation.view.subscribe(listener);
+    state.presentation.clearPanelCollapsed('a', 1);
+    state.presentation.clearPanelCollapsed('c', 1);
+    expect(listener).not.toHaveBeenCalled();
+    state.presentation.clearPanelCollapsed('a', 2);
+    expect([...state.presentation.view.getState().collapsedPanels]).toEqual([['b', 5]]);
+  });
+
+  it('allows an ID that is not registered, and keeps the other panels as they are', () => {
+    const state = createClientState();
+    state.presentation.setPanelCollapsed('a', 1, true);
+    state.presentation.setPanelCollapsed('b', 2, true);
+    state.presentation.setPanelCollapsed('a', 1, false);
+    expect([...state.presentation.view.getState().collapsedPanels]).toEqual([['b', 2]]);
+  });
+
+  it('is kept with the sizes when another source is bound, so the viewer\'s layout is not the investigation\'s', () => {
+    const state = createClientState();
+    state.bindSource('source-a');
+    state.presentation.setPanelCollapsed('inspector', 1, true);
+    state.presentation.setPanelSize('inspector', 400);
+    state.bindSource('source-b');
+    expect(state.presentation.view.getState().collapsedPanels.get('inspector')).toBe(1);
+    expect(state.presentation.view.getState().panelSizes.get('inspector')).toBe(400);
+  });
+
+  it('is kept when the same source is bound again, which changes nothing', () => {
+    const state = createClientState();
+    state.bindSource('source-a');
+    state.presentation.setPanelCollapsed('inspector', 1, true);
+    state.bindSource('source-a');
+    expect(state.presentation.view.getState().collapsedPanels.size).toBe(1);
+  });
+});
+
 describe('what the loaded graph reads', () => {
   it('is only the results the investigation names: a result cached for another principal is never used, even for the same records', () => {
     const state = createClientState();

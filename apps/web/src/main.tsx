@@ -11,6 +11,7 @@ import { registerBuiltInSlots } from './workspace/built-in-slots.js';
 import { registerBuiltInTools } from './workspace/built-in-tools.js';
 import { createMenuRegistry } from './workspace/menu-registry.js';
 import { createSelectionActionRegistry } from './workspace/selection-actions.js';
+import { createPanelRegistryFor } from './workspace/panel-registry.js';
 import { createSlotRegistry } from './workspace/slots.js';
 import { createToolRegistry } from './workspace/tool-registry.js';
 import '@fontsource/inter/latin-400.css';
@@ -40,6 +41,6 @@ registerBuiltInMenuItems(menus);
 const router = createBrowserRouter(appRoutes(createApiClient(), state));
 createRoot(root).render(
   <StrictMode>
-    <App router={router} state={state} slots={slots} selectionActions={createSelectionActionRegistry()} tools={tools} menus={menus} createRenderer={createCytoscapeRenderer} />
+    <App router={router} state={state} slots={slots} selectionActions={createSelectionActionRegistry()} tools={tools} menus={menus} panels={createPanelRegistryFor(state)} createRenderer={createCytoscapeRenderer} />
   </StrictMode>,
 );

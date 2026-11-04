@@ -11,7 +11,8 @@ import { ToolStrip } from '../workspace/tool-strip.js';
 import { registerBuiltInMenuItems } from '../workspace/built-in-menu-items.js';
 import { createMenuRegistry, type MenuRegistry, type MenuTargetKind } from '../workspace/menu-registry.js';
 import { createClientState } from '../state/client-state.js';
-import { registerFixtureControls, registerStandInActions, registerStandInMenuItems, registerStandInTools, registerStandIns, STAND_IN_MARKER } from './stand-ins.js';
+import { createPanelRegistry } from '../workspace/panel-registry.js';
+import { registerFixtureControls, registerStandInActions, registerStandInMenuItems, registerStandInPanels, registerStandInTools, registerStandIns, STAND_IN_MARKER } from './stand-ins.js';
 
 const BUILT_LATER: readonly SlotName[] = SLOT_NAMES.filter((name) => name !== 'ask' && name !== 'summarize' && name !== 'tool-strip');
 
@@ -232,5 +233,69 @@ describe('the controls that stand in for an expand and a drag', () => {
     const registry = createSlotRegistry();
     registerFixtureControls(registry, []);
     expect(() => registerFixtureControls(registry, [])).toThrowError(expect.objectContaining({ code: 'SLOT_TAKEN' }));
+  });
+});
+
+describe('the panel stand-ins', () => {
+  it('put a test panel in the dock and one floating on the right, 64 px from the top, with the development marker on their content', () => {
+    const registry = createPanelRegistry();
+    registerStandInPanels(registry);
+    const panels = registry.view.getState();
+    expect(panels.map((panel) => [panel.id, panel.placement])).toEqual([
+      ['dev-dock-test', { kind: 'dock' }],
+      ['dev-floating-test', { kind: 'floating', side: 'right', top: 64 }],
+    ]);
+    const { container } = render(<>{panels.map((panel) => <panel.content key={panel.id} />)}</>);
+    expect(container.querySelectorAll(`[data-dev-tool="${STAND_IN_MARKER}"]`)).toHaveLength(2);
+  });
+
+  it('put the floating test panel on the left when asked, and leave it out when asked', () => {
+    const left = createPanelRegistry();
+    registerStandInPanels(left, { floating: 'left' });
+    expect(left.view.getState().map((panel) => panel.placement)).toEqual([{ kind: 'dock' }, { kind: 'floating', side: 'left', top: 64 }]);
+    const none = createPanelRegistry();
+    registerStandInPanels(none, { floating: false });
+    expect(none.view.getState().map((panel) => panel.id)).toEqual(['dev-dock-test']);
+  });
+
+  it('leave a dock that a real panel holds alone, fill the floating place, and do not throw', () => {
+    const registry = createPanelRegistry();
+    const content = () => null;
+    registry.register({ id: 'inspector', title: 'Inspector', placement: { kind: 'dock' }, content });
+    expect(() => registerStandInPanels(registry)).not.toThrow();
+    expect(registry.view.getState().map((panel) => panel.id)).toEqual(['inspector', 'dev-floating-test']);
+  });
+
+  it('leave a floating panel with their own ID alone, and do not throw', () => {
+    const registry = createPanelRegistry();
+    registry.register({ id: 'dev-floating-test', title: 'Mine', placement: { kind: 'floating', side: 'left', top: 10 }, content: () => null });
+    expect(() => registerStandInPanels(registry)).not.toThrow();
+    expect(registry.view.getState().map((panel) => panel.title)).toEqual(['Mine', 'Dock test panel']);
+  });
+
+  it('take out only what they put in, and leave a real panel registered after them', () => {
+    const registry = createPanelRegistry();
+    const remove = registerStandInPanels(registry);
+    registry.register({ id: 'legend', title: 'Legend', placement: { kind: 'floating', side: 'right', top: 64 }, content: () => null });
+    remove();
+    expect(registry.view.getState().map((panel) => panel.id)).toEqual(['legend']);
+  });
+
+  it('add nothing twice when asked again', () => {
+    const registry = createPanelRegistry();
+    registerStandInPanels(registry);
+    registerStandInPanels(registry);
+    expect(registry.view.getState()).toHaveLength(2);
+  });
+
+  it('show tall content on request, to try a panel whose content is taller than the space', async () => {
+    const registry = createPanelRegistry();
+    registerStandInPanels(registry);
+    const [panel] = registry.view.getState();
+    const Content = panel?.content ?? (() => null);
+    render(<Content />);
+    expect(screen.queryByText('Row 40')).toBeNull();
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Tall content' }));
+    expect(screen.getByText('Row 40')).toBeTruthy();
   });
 });

@@ -62,15 +62,34 @@ describe('the stylesheets', () => {
     expect(base).toMatch(/\.identity-name \{[^}]*font-weight: var\(--font-weight-semibold\);/s);
   });
 
-  it('place the canvas regions by the frame offsets, from tokens: 16 px from the edges, 64 px from the top for the tool strip and the dock, a 320 px dock', () => {
+  it('place the canvas regions by the frame offsets, from tokens: 16 px from the edges, 64 px from the top for the tool strip and the dock column', () => {
     const tokens = readFileSync(join(DIRECTORY, 'tokens.css'), 'utf8');
     expect(tokens).toMatch(/--region-top:\s*64px;/);
-    expect(tokens).toMatch(/--dock-width:\s*320px;/);
     const workspace = readFileSync(join(DIRECTORY, 'workspace.css'), 'utf8');
     expect(workspace).toMatch(/\.region-tool-strip \{[^}]*top: var\(--region-top\);[^}]*left: var\(--space-16\);/s);
     expect(workspace).toMatch(/\.region-toggles \{[^}]*bottom: var\(--space-16\);[^}]*left: var\(--space-16\);/s);
     expect(workspace).toMatch(/\.region-zoom-controls \{[^}]*right: var\(--space-16\);[^}]*bottom: var\(--space-16\);/s);
-    expect(workspace).toMatch(/\.region-dock \{[^}]*top: var\(--region-top\);[^}]*right: var\(--space-16\);[^}]*width: var\(--dock-width\);/s);
+    expect(workspace).toMatch(/\.panel-dock \{[^}]*padding: var\(--region-top\) var\(--space-16\) var\(--space-16\);/s);
+  });
+
+  it('draw the panel handle as an 8 px strip with the column-resize cursor and the collapse button 24 px, from tokens, with the handle on the other edge for a left-anchored panel', () => {
+    const tokens = readFileSync(join(DIRECTORY, 'tokens.css'), 'utf8');
+    expect(tokens).toMatch(/--panel-handle-width:\s*8px;/);
+    expect(tokens).toMatch(/--panel-toggle-size:\s*24px;/);
+    const workspace = readFileSync(join(DIRECTORY, 'workspace.css'), 'utf8');
+    expect(workspace).toMatch(/\.panel-handle \{[^}]*left: calc\(-0\.5 \* var\(--panel-handle-width\)\);[^}]*width: var\(--panel-handle-width\);[^}]*cursor: col-resize;/s);
+    expect(workspace).toMatch(/\.panel-frame-left \.panel-handle \{[^}]*right: calc\(-0\.5 \* var\(--panel-handle-width\)\);/s);
+    expect(workspace).toMatch(/\.panel-toggle \{[^}]*width: var\(--panel-toggle-size\);[^}]*height: var\(--panel-toggle-size\);/s);
+  });
+
+  it('draw the panel box as the frames do: a 1 px border of the workspace colour, a 10 px radius, the dock panel\'s 4 20 shadow and the floating panel\'s 4 10 shadow, on white', () => {
+    const tokens = readFileSync(join(DIRECTORY, 'tokens.css'), 'utf8');
+    expect(tokens).toMatch(/--radius-host-panel:\s*10px;/);
+    expect(tokens).toMatch(/--shadow-dock-panel:\s*0 4px 20px rgba\(38, 49, 73, 0\.07\);/);
+    expect(tokens).toMatch(/--shadow-floating:\s*0 4px 10px rgba\(38, 49, 73, 0\.07\);/);
+    const workspace = readFileSync(join(DIRECTORY, 'workspace.css'), 'utf8');
+    expect(workspace).toMatch(/\.panel \{[^}]*border: var\(--border-width\) solid var\(--color-workspace-border\);[^}]*border-radius: var\(--radius-host-panel\);[^}]*background: var\(--color-surface\);[^}]*box-shadow: var\(--shadow-floating\);/s);
+    expect(workspace).toMatch(/\.panel-dock \.panel \{[^}]*box-shadow: var\(--shadow-dock-panel\);/s);
   });
 
   it('place the graph scope lines 24 px from the canvas left and 16 px from its top, 12 px on a 17 px line, 3 px apart', () => {

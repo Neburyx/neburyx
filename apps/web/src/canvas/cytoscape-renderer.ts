@@ -9,6 +9,7 @@ import type { RelationshipLook } from './relationship-look.js';
 import { createBoxGesture, type BoxOverlay } from './box-gesture.js';
 import { createBoxOverlay } from './box-overlay.js';
 import { fitViewport, type Size } from './fit.js';
+import { followSize } from './follow-size.js';
 import { suppressNativeMenu } from './native-menu.js';
 import { ZOOM_MAX, ZOOM_MIN } from './zoom.js';
 import type { CanvasRenderer, DrawnCounts, Inspection, Scene } from './scene.js';
@@ -345,10 +346,14 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
       const restoreNativeMenu = container === undefined ? undefined : suppressNativeMenu(container);
       container?.addEventListener('pointercancel', cancelBox);
       container?.addEventListener('pointercancel', cancelDrag);
+      const stopFollowing = container === undefined ? undefined : followSize(container, () => {
+        if (core === created) created.resize();
+      });
       window.addEventListener('blur', cancelBox);
       window.addEventListener('blur', cancelDrag);
       teardown = () => {
         restoreNativeMenu?.();
+        stopFollowing?.();
         container?.removeEventListener('pointercancel', cancelBox);
         container?.removeEventListener('pointercancel', cancelDrag);
         window.removeEventListener('blur', cancelBox);

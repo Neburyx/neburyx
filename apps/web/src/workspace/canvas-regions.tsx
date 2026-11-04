@@ -4,7 +4,6 @@ const REGIONS: readonly { readonly slot: SlotName; readonly className: string }[
   { slot: 'tool-strip', className: 'region-tool-strip' },
   { slot: 'toggles', className: 'region-toggles' },
   { slot: 'zoom-controls', className: 'region-zoom-controls' },
-  { slot: 'dock', className: 'region-dock' },
   { slot: 'floating', className: 'region-floating' },
 ];
 

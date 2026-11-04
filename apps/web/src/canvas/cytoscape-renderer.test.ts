@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createCytoscapeRenderer, type RendererCore as Core } from './cytoscape-renderer.js';
 import { glyphUri } from './glyphs.js';
 import { FIT_PADDING, GLYPH_COLOR } from './look.js';
@@ -7,6 +7,7 @@ import type { CanvasEvents, RightClick, Scene } from './scene.js';
 import type { BoxSelection } from './box-selection.js';
 import type { Click } from './selection-gestures.js';
 import type { Viewport } from '../state/presentation-state.js';
+import { stubCanvasContext, stubSizeObserver } from '../test-utils.js';
 
 function scene(entities: ReadonlyArray<readonly [string, { x: number; y: number }]>, relationships: ReadonlyArray<readonly [string, string, string]> = []): Scene {
   return {
@@ -1009,5 +1010,70 @@ describe('the right-click of the Cytoscape renderer', () => {
     const { requests, core } = withMenus();
     core().emit('cxttap');
     expect(requests).toEqual([]);
+  });
+});
+
+describe('the Cytoscape renderer in a container whose size changes', () => {
+  let restoreCanvas: () => void;
+  let sizes: ReturnType<typeof stubSizeObserver>;
+  const made: Array<{ readonly dispose: () => void }> = [];
+
+  beforeEach(() => {
+    restoreCanvas = stubCanvasContext();
+    sizes = stubSizeObserver();
+  });
+
+  afterEach(() => {
+    for (const renderer of made.splice(0)) renderer.dispose();
+    sizes.restore();
+    restoreCanvas();
+  });
+
+  function inContainer() {
+    let core: Core | undefined;
+    const renderer = createCytoscapeRenderer({ nextFrame: () => undefined, onCore: (made) => void (core = made) });
+    const container = document.createElement('div');
+    document.body.append(container);
+    sizes.resize(container, 1000, 800);
+    made.push(renderer);
+    renderer.mount(container, NO_EVENTS, { zoom: 1.5, x: -20, y: 30 });
+    if (core === undefined) throw new Error('the renderer made no core');
+    return { renderer, container, core };
+  }
+
+  it('tells the library to measure again each time the container changes size, and not before', () => {
+    const { container, core } = inContainer();
+    const resized = vi.spyOn(core, 'resize');
+    expect(resized).not.toHaveBeenCalled();
+    sizes.resize(container, 700, 800);
+    sizes.resize(container, 900, 800);
+    expect(resized).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps the zoom and the pan and does not fit the graph again', () => {
+    const { renderer, container, core } = inContainer();
+    renderer.draw(scene([['a', { x: 0, y: 0 }], ['b', { x: 400, y: 300 }]]));
+    const before = renderer.viewport();
+    const set = vi.spyOn(core, 'viewport');
+    sizes.resize(container, 600, 800);
+    sizes.resize(container, 1100, 800);
+    expect(renderer.viewport()).toEqual(before);
+    expect(set).not.toHaveBeenCalled();
+  });
+
+  it('stops following the container when disposed, and a change after that reaches nothing', () => {
+    const { renderer, container, core } = inContainer();
+    const resized = vi.spyOn(core, 'resize');
+    expect(sizes.observed()).toContain(container);
+    renderer.dispose();
+    expect(sizes.observed()).not.toContain(container);
+    sizes.resize(container, 500, 800);
+    expect(resized).not.toHaveBeenCalled();
+  });
+
+  it('watches nothing when mounted without a container', () => {
+    const renderer = createCytoscapeRenderer({ nextFrame: () => undefined });
+    renderer.mount(undefined, NO_EVENTS, undefined);
+    expect(sizes.observed()).toEqual([]);
   });
 });

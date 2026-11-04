@@ -2,6 +2,7 @@ import { GraphCanvas } from '../canvas/graph-canvas.js';
 import { useProfile } from '../canvas/profile-context.js';
 import { CanvasRegions } from './canvas-regions.js';
 import { ContextMenu } from './context-menu.js';
+import { DockColumn, FloatingPanels } from './panel-host.js';
 import { GraphScope } from './graph-scope.js';
 import { HeaderBar } from './header-bar.js';
 import { NavigationRail } from './navigation-rail.js';
@@ -16,13 +17,17 @@ export function WorkspaceShell({ canvasView }: { readonly canvasView?: 'fit' | '
       <div className="workspace-body">
         <HeaderBar />
         <NoticeStrip />
-        <main className="canvas-region">
-          <GraphCanvas profile={profile} view={canvasView} />
-          <GraphScope />
-          <SelectionBar />
-          <ContextMenu />
-          <CanvasRegions />
-        </main>
+        <div className="workspace-stage">
+          <main className="canvas-region">
+            <GraphCanvas profile={profile} view={canvasView} />
+            <GraphScope />
+            <SelectionBar />
+            <ContextMenu />
+            <CanvasRegions />
+            <FloatingPanels />
+          </main>
+          <DockColumn />
+        </div>
       </div>
     </div>
   );

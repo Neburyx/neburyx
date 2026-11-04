@@ -10,10 +10,10 @@ describe('the slot registry', () => {
   it('puts a component in a slot, and takes it out again with the function it returns', () => {
     const registry = createSlotRegistry();
     const occupant = () => null;
-    const remove = registry.register('dock', occupant);
-    expect(registry.view.getState().get('dock')).toBe(occupant);
+    const remove = registry.register('toggles', occupant);
+    expect(registry.view.getState().get('toggles')).toBe(occupant);
     remove();
-    expect(registry.view.getState().has('dock')).toBe(false);
+    expect(registry.view.getState().has('toggles')).toBe(false);
   });
 
   it('refuses a second registration of a name with the named error, and keeps the first', () => {
@@ -41,7 +41,6 @@ const REGIONS: readonly (readonly [SlotName, string, string])[] = [
   ['tool-strip', 'Tools', 'region-tool-strip'],
   ['toggles', 'Toggles', 'region-toggles'],
   ['zoom-controls', 'Zoom', 'region-zoom-controls'],
-  ['dock', 'Dock', 'region-dock'],
 ];
 
 describe('Explore with nothing registered', () => {
@@ -91,15 +90,15 @@ describe('Explore with occupants registered', () => {
   it('shows a slot registered while Explore is shown, and removes it again, without touching the other regions', async () => {
     const { slots } = renderApp('/explore', client);
     await screen.findByText('Local workspace');
-    let removeDock: () => void = () => undefined;
+    let removeToggles: () => void = () => undefined;
     act(() => {
       slots.register('tool-strip', () => <p>Tools</p>);
-      removeDock = slots.register('dock', () => <p>Dock</p>);
+      removeToggles = slots.register('toggles', () => <p>Toggles</p>);
     });
     const tools = screen.getByText('Tools');
-    expect(screen.getByText('Dock')).toBeTruthy();
-    act(() => removeDock());
-    expect(screen.queryByText('Dock')).toBeNull();
+    expect(screen.getByText('Toggles')).toBeTruthy();
+    act(() => removeToggles());
+    expect(screen.queryByText('Toggles')).toBeNull();
     expect(screen.getByText('Tools')).toBe(tools);
   });
 });
