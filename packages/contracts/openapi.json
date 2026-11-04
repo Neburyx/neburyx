@@ -250,7 +250,7 @@
       "get": {
         "operationId": "listSources",
         "summary": "The configured sources, with their state and a summary of their mapping",
-        "description": "Returns every configured source in one response, ordered by id, with nextCursor always null: the configuration file defines the list and it is small, so it is not paged (an exception to the pagination convention). mappingSummary holds exact counts of configured definitions, not of graph data. The list takes no query parameters.",
+        "description": "Returns every configured source in one response, ordered by id, with nextCursor always null: the configuration file defines the list and it is small, so it is not paged (an exception to the pagination convention). mappingSummary holds exact counts of configured definitions, not of graph data. lastTest summarizes the newest stored test made for the current connection and mapping of the source (null when there is none): when it ran, its outcome, the server product and version, the read-only check, and the degree status and warnings; it holds no address, credential or query text. It is read from the stored record of the product, not from the source. The list takes no query parameters.",
         "responses": {
           "200": {
             "description": "The configured sources",
@@ -1716,6 +1716,101 @@
                     }
                   ]
                 },
+                "lastTest": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "checkedAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        },
+                        "outcome": {
+                          "type": "string",
+                          "enum": [
+                            "pass",
+                            "warn",
+                            "fail"
+                          ]
+                        },
+                        "server": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "product": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "version": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "product",
+                                "version"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "versionSupported": {
+                          "type": [
+                            "boolean",
+                            "null"
+                          ]
+                        },
+                        "readOnlyCheck": {
+                          "type": "string",
+                          "enum": [
+                            "privileges-inspected",
+                            "write-probe",
+                            "not-verified"
+                          ]
+                        },
+                        "loginCanWrite": {
+                          "type": [
+                            "boolean",
+                            "null"
+                          ]
+                        },
+                        "degreeStatus": {
+                          "type": "string",
+                          "enum": [
+                            "pass",
+                            "warn",
+                            "not-run"
+                          ]
+                        },
+                        "degreeWarnings": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        }
+                      },
+                      "required": [
+                        "checkedAt",
+                        "outcome",
+                        "server",
+                        "versionSupported",
+                        "readOnlyCheck",
+                        "loginCanWrite",
+                        "degreeStatus",
+                        "degreeWarnings"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
                 "mappingSummary": {
                   "type": "object",
                   "properties": {
@@ -1751,6 +1846,7 @@
                 "readOnly",
                 "synthetic",
                 "lastTestAt",
+                "lastTest",
                 "mappingSummary"
               ],
               "additionalProperties": false

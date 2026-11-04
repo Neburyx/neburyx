@@ -37,6 +37,7 @@ describe('GET /v1/sources', () => {
         readOnly: true,
         synthetic: false,
         lastTestAt: null,
+        lastTest: null,
         mappingSummary: { entityTypes: 2, relationshipTypes: 1, derivedRules: 0 },
       })),
       nextCursor: null,

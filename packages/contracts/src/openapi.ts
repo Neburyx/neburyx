@@ -116,7 +116,7 @@ export function buildOpenApiDocument(
           operationId: 'listSources',
           summary: 'The configured sources, with their state and a summary of their mapping',
           description:
-            'Returns every configured source in one response, ordered by id, with nextCursor always null: the configuration file defines the list and it is small, so it is not paged (an exception to the pagination convention). mappingSummary holds exact counts of configured definitions, not of graph data. The list takes no query parameters.',
+            'Returns every configured source in one response, ordered by id, with nextCursor always null: the configuration file defines the list and it is small, so it is not paged (an exception to the pagination convention). mappingSummary holds exact counts of configured definitions, not of graph data. lastTest summarizes the newest stored test made for the current connection and mapping of the source (null when there is none): when it ran, its outcome, the server product and version, the read-only check, and the degree status and warnings; it holds no address, credential or query text. It is read from the stored record of the product, not from the source. The list takes no query parameters.',
           responses: {
             '200': { description: 'The configured sources', content: jsonBody('SourcesResponse') },
             '400': { description: 'A query parameter was sent', content: jsonBody('ErrorResponse') },

@@ -195,6 +195,8 @@ describe('the tester and the route over the real database', () => {
     const report = sourceTestReportSchema.parse((await app.inject({ method: 'POST', url: '/v1/sources/alpha/test' })).json());
     const after = sourcesResponseSchema.parse((await app.inject({ method: 'GET', url: '/v1/sources' })).json());
     expect(after.items.map((item) => [item.id, item.state, item.lastTestAt])).toEqual([['alpha', 'connected', report.checkedAt], ['beta', 'unknown', null]]);
+    expect(after.items.map((item) => item.lastTest?.checkedAt ?? null)).toEqual([report.checkedAt, null]);
+    expect(after.items[0]?.lastTest).toMatchObject({ outcome: 'pass', server: { product: 'Neo4j Kernel', version: '5.26.32' }, readOnlyCheck: 'not-verified' });
     await app.close();
   });
 
@@ -218,5 +220,71 @@ describe('the in-memory tester used by the other suites', () => {
     const parts = fakeSourceTester(mapping);
     const report = await parts.tester.run({ traceId: 'tr-test', principal: (await parts.store.current()).principal, sourceId: 'alpha' });
     expect(parts.store.checks.map((check) => check.report)).toEqual([report]);
+  });
+});
+
+describe('the newest check made for the connection and the mapping a source has now', () => {
+  const checked = (source: typeof alpha) => ({ id: source.id, identityHash: identityHashOf(source), configHash: source.configHash });
+  const oneOf = async (store: AppStore, onUnreadable?: (sourceId: string) => void) => (await store.latestChecksFor([checked(alpha), checked(beta)], onUnreadable)).map((check) => [check.sourceId, check.checkedAt]);
+
+  it('is the newest by time, and by id when two share a time', async () => {
+    const { store } = await openStore();
+    await store.recordSourceCheck(checkOf(uuidv7(), pass('alpha', at(1)), null));
+    await store.recordSourceCheck(checkOf(uuidv7(), pass('alpha', at(3)), null));
+    await store.recordSourceCheck(checkOf(uuidv7(), pass('alpha', at(2)), null));
+    expect(await oneOf(store)).toEqual([['alpha', at(3)]]);
+    const tied = pass('alpha', at(4));
+    const first = uuidv7();
+    const second = uuidv7();
+    await store.recordSourceCheck(checkOf(second, { ...tied, outcome: 'warn' }, null));
+    await store.recordSourceCheck(checkOf(first, tied, null));
+    expect((await store.latestChecksFor([checked(alpha)]))[0]?.report.outcome).toBe(second > first ? 'warn' : 'pass');
+  });
+
+  it('is none for a source never tested, and for a source whose tests were made for another connection, another mapping or before hashes were stored', async () => {
+    const { database, store } = await openStore();
+    expect(await oneOf(store)).toEqual([]);
+    await store.recordSourceCheck({ ...checkOf(uuidv7(), pass('alpha', at(1)), null), identityHash: 'another-connection' });
+    await store.recordSourceCheck({ ...checkOf(uuidv7(), pass('alpha', at(2)), null), configHash: 'another-mapping' });
+    await rows(database.ownerUrl, `INSERT INTO source_checks (id, source_id, checked_at, outcome, read_only_check, report) VALUES ($1, 'alpha', $2, 'pass', 'not-verified', $3)`, [uuidv7(), at(3), JSON.stringify(pass('alpha', at(3)))]);
+    expect(await oneOf(store)).toEqual([]);
+    expect((await store.listSources()).find((row) => row.id === 'alpha')?.lastTestAt).toBe(at(3));
+  });
+
+  it('is the older matching check when a newer one does not match', async () => {
+    const { store } = await openStore();
+    await store.recordSourceCheck(checkOf(uuidv7(), pass('alpha', at(1)), null));
+    await store.recordSourceCheck({ ...checkOf(uuidv7(), pass('alpha', at(5)), null), configHash: 'another-mapping' });
+    expect(await oneOf(store)).toEqual([['alpha', at(1)]]);
+    expect((await store.listSources()).find((row) => row.id === 'alpha')?.lastTestAt).toBe(at(5));
+  });
+
+  it('includes a check of a source that did not answer', async () => {
+    const { store } = await openStore();
+    await store.recordSourceCheck(checkOf(uuidv7(), failed(at(1)), null));
+    expect((await store.latestChecksFor([checked(alpha)]))[0]?.report.server).toBeNull();
+  });
+
+  it('reads a report stored before the mapping and degree checks existed as not run', async () => {
+    const { database, store } = await openStore();
+    const { mappingChecks: _mapping, degreeChecks: _degrees, loginCanWrite: _login, ...legacy } = pass('alpha', at(1));
+    await rows(database.ownerUrl, `INSERT INTO source_checks (id, source_id, checked_at, outcome, read_only_check, report, identity_hash, config_hash) VALUES ($1, 'alpha', $2, 'pass', 'not-verified', $3, $4, $5)`, [uuidv7(), at(1), JSON.stringify(legacy), identityHashOf(alpha), alpha.configHash]);
+    const found = (await store.latestChecksFor([checked(alpha)]))[0]?.report;
+    expect(found?.degreeChecks.status).toBe('not-run');
+    expect(found?.loginCanWrite).toBeNull();
+  });
+
+  it('leaves out a report this version cannot read and says which source, without holding back the others', async () => {
+    const { database, store } = await openStore();
+    await rows(database.ownerUrl, `INSERT INTO source_checks (id, source_id, checked_at, outcome, read_only_check, report, identity_hash, config_hash) VALUES ($1, 'alpha', $2, 'pass', 'not-verified', '{"schemaVersion": 2}', $3, $4)`, [uuidv7(), at(1), identityHashOf(alpha), alpha.configHash]);
+    await store.recordSourceCheck(checkOf(uuidv7(), pass('beta', at(2)), null));
+    const unreadable: string[] = [];
+    expect(await oneOf(store, (sourceId) => unreadable.push(sourceId))).toEqual([['beta', at(2)]]);
+    expect(unreadable).toEqual(['alpha']);
+  });
+
+  it('is not asked for when no source is configured', async () => {
+    const { store } = await openStore();
+    expect(await store.latestChecksFor([])).toEqual([]);
   });
 });

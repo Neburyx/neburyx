@@ -1,16 +1,22 @@
 import { z } from 'zod';
+import { mappingSummarySchema, sourceStateSchema } from './source-basics.js';
+import { DEGREE_STATUSES, readOnlyCheckSchema, serverInfoSchema, testOutcomeSchema } from './source-test.js';
 
-export const SOURCE_STATES = ['connected', 'degraded', 'unavailable', 'unknown'] as const;
+export { SOURCE_STATES, mappingSummarySchema, sourceStateSchema } from './source-basics.js';
 
-export const sourceStateSchema = z.enum(SOURCE_STATES);
-
-const definitionCount = z.number().int().nonnegative();
-
-export const mappingSummarySchema = z.strictObject({
-  entityTypes: definitionCount,
-  relationshipTypes: definitionCount,
-  derivedRules: definitionCount,
-});
+/** What the newest stored test of a source, made for its current connection and mapping, found. */
+export const lastTestSchema = z
+  .strictObject({
+    checkedAt: z.iso.datetime(),
+    outcome: testOutcomeSchema,
+    server: serverInfoSchema.pick({ product: true, version: true }).nullable(),
+    versionSupported: z.boolean().nullable(),
+    readOnlyCheck: readOnlyCheckSchema,
+    loginCanWrite: z.boolean().nullable(),
+    degreeStatus: z.enum(DEGREE_STATUSES),
+    degreeWarnings: z.array(z.string().min(1)),
+  })
+  .refine((test) => test.server !== null || test.versionSupported === null, { message: 'versionSupported is null when the server did not answer', path: ['versionSupported'] });
 
 export const sourceSummarySchema = z.strictObject({
   id: z.string().min(1),
@@ -20,6 +26,7 @@ export const sourceSummarySchema = z.strictObject({
   readOnly: z.literal(true),
   synthetic: z.boolean(),
   lastTestAt: z.iso.datetime().nullable(),
+  lastTest: lastTestSchema.nullable(),
   mappingSummary: mappingSummarySchema,
 });
 
@@ -30,4 +37,5 @@ export const sourcesResponseSchema = z.strictObject({
 
 export type SourceState = z.infer<typeof sourceStateSchema>;
 export type SourceSummary = z.infer<typeof sourceSummarySchema>;
+export type LastTest = z.infer<typeof lastTestSchema>;
 export type SourcesResponse = z.infer<typeof sourcesResponseSchema>;

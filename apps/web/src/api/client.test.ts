@@ -134,3 +134,55 @@ describe('the API client, reading sources and a profile', () => {
     expect(await client.getProfile('a')).toEqual({ ok: false, failure: { code: 'SCHEMA_MISMATCH' } });
   });
 });
+
+describe('the API client, testing a source', () => {
+  const report = {
+    schemaVersion: 1,
+    sourceId: 'source-a',
+    checkedAt: '2026-11-02T10:00:00.000Z',
+    outcome: 'pass',
+    state: 'connected',
+    stateReason: null,
+    server: { product: 'Neo4j Kernel', version: '5.26.32', edition: 'community' },
+    versionSupported: true,
+    operations: [],
+    readOnlyCheck: 'privileges-inspected',
+    loginCanWrite: false,
+    mappingChecks: { status: 'pass', findings: [] },
+    degreeChecks: { status: 'not-run', foundOn: null, types: [], warnings: [] },
+    mappingSummary: { entityTypes: 1, relationshipTypes: 1, derivedRules: 0 },
+  };
+
+  it('posts to the test path of the source with its id encoded, no body and no query, and returns the report', async () => {
+    const calls: Array<{ readonly input: string; readonly init: unknown }> = [];
+    const client = createApiClient(async (input, init) => {
+      calls.push({ input, init });
+      return new Response(JSON.stringify({ ...report, sourceId: 'a b/c' }));
+    });
+    const result = await client.testSource('a b/c');
+    expect(result.ok).toBe(true);
+    expect(calls).toEqual([{ input: '/v1/sources/a%20b%2Fc/test', init: { method: 'POST' } }]);
+    expect(calls[0]?.input).not.toContain('?');
+  });
+
+  it('gives a schema mismatch for an answer that is not a report, and for a report naming another source', async () => {
+    expect(await createApiClient(respondWith({ sourceId: 'source-a' })).testSource('source-a')).toEqual({ ok: false, failure: { code: 'SCHEMA_MISMATCH' } });
+    expect(await createApiClient(respondWith({ ...report, sourceId: 'source-b' })).testSource('source-a')).toEqual({ ok: false, failure: { code: 'SCHEMA_MISMATCH' } });
+  });
+
+  it('keeps the code and trace ID of an error the route answers with, including a busy source', async () => {
+    const body = { error: { code: 'SOURCE_BUSY', message: ERROR_TABLE.SOURCE_BUSY.message, retryable: ERROR_TABLE.SOURCE_BUSY.retryable, traceId: 'trace-9' } };
+    const result = await createApiClient(async () => new Response(JSON.stringify(body), { status: 503 })).testSource('source-a');
+    expect(result).toMatchObject({ ok: false, failure: { code: 'SOURCE_BUSY', traceId: 'trace-9' } });
+  });
+
+  it('gives a network failure when the request cannot be made, and ABORTED after an abort', async () => {
+    const down = createApiClient(async () => {
+      throw new TypeError('failed to fetch');
+    });
+    expect(await down.testSource('source-a')).toEqual({ ok: false, failure: { code: 'NETWORK_UNAVAILABLE' } });
+    const controller = new AbortController();
+    controller.abort();
+    expect(await createApiClient(respondWith(report)).testSource('source-a', controller.signal)).toEqual({ ok: false, failure: { code: 'ABORTED' } });
+  });
+});

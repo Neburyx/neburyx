@@ -19,7 +19,7 @@ exports). Graph reads (search and expansion) have their own page shapes and budg
   `NEBURYX_CURSOR_KEY`) and is valid for 30 minutes after it is given. A client must treat it as opaque: any change to it, an
   expired cursor, or one used for another user, route, source, policy version, sort or filter is `CURSOR_INVALIDATED`, with no
   detail about which, and the client starts the list again. A smaller `limit` may be sent with a cursor; the limit is not bound.
-- `GET /v1/sources` is the one exception: it returns every configured source in one response, ordered by id, with `nextCursor` always `null`. The configuration file defines the list and it is small, so it is not paged, and it takes no query parameters (any is `INVALID_REQUEST`).
+- `GET /v1/sources` is the one exception: it returns every configured source in one response, ordered by id, with `nextCursor` always `null`. The configuration file defines the list and it is small, so it is not paged, and it takes no query parameters (any is `INVALID_REQUEST`). Each item carries `lastTest`, a summary of the newest stored test made for the source's current connection and mapping, or `null`; it is read from the product's own record and never from the source.
 - A limit above 100 is refused with `QUERY_BUDGET_EXCEEDED` (and the maximum in `details.maxPage`), never clamped. A limit that
   is not a positive integer is `INVALID_REQUEST`. A cursor that is invalid, altered, expired, or whose binding (user, route,
   source, policy version, sort or filters) does not match the request is `CURSOR_INVALIDATED`.

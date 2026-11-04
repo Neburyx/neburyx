@@ -16,6 +16,7 @@ import type { JobRunner } from './jobs/runner.js';
 import type { MappingModel } from './mapping/model.js';
 import { buildSourceProfile } from './registry/profile.js';
 import { matchesEntityTag } from './registry/etag.js';
+import { identityHashOf } from './registry/identity-hash.js';
 import { summariesOf } from './registry/summary.js';
 import { readinessResponse } from './health/readiness.js';
 import { communitySeams } from './seams/community-seams.js';
@@ -253,7 +254,9 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
   app.get('/v1/sources', { exposeHeadRoute: false, config: { permission: 'principal' } }, async (request) => {
     if (!noQuerySchema.safeParse(request.query).success) throw new AppError('INVALID_REQUEST');
     const rows = await options.store.listSources();
-    return sourcesResponseSchema.parse({ items: summariesOf(rows, mapping), nextCursor: null });
+    const checked = mapping.sources.map((source) => ({ id: source.id, identityHash: identityHashOf(source), configHash: source.configHash }));
+    const latest = await options.store.latestChecksFor(checked, (sourceId) => options.logger.warn({ event: 'source.check_unreadable', sourceId }, 'a stored check could not be read'));
+    return sourcesResponseSchema.parse({ items: summariesOf(rows, mapping, new Map(latest.map((check) => [check.sourceId, check.report]))), nextCursor: null });
   });
 
   app.get('/v1/sources/:id/profile', { exposeHeadRoute: false, config: { permission: 'principal' } }, async (request, reply) => {

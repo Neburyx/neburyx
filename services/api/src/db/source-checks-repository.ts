@@ -108,6 +108,30 @@ export async function latestQualifyingChecks(db: pg.Pool, sources: readonly Chec
   });
 }
 
+/**
+ * The newest check of each source made for the connection and the mapping it has now, whether or not it reached the source and whenever it was stored.
+ * One query for all sources; it reads Postgres only. A row this version cannot read is left out and reported.
+ */
+export async function latestChecksFor(db: pg.Pool, sources: readonly CheckedSource[], onUnreadable?: (sourceId: string) => void): Promise<QualifyingCheck[]> {
+  if (sources.length === 0) return [];
+  const result = await db.query<{ source_id: string; checked_at: Date; report: unknown }>(
+    `SELECT DISTINCT ON (c.source_id) c.source_id, c.checked_at, c.report
+       FROM source_checks c
+       JOIN unnest($1::text[], $2::text[], $3::text[]) AS s(id, identity_hash, config_hash)
+         ON s.id = c.source_id AND c.identity_hash = s.identity_hash AND c.config_hash = s.config_hash
+      ORDER BY c.source_id, c.checked_at DESC, c.id DESC`,
+    [sources.map((source) => source.id), sources.map((source) => source.identityHash), sources.map((source) => source.configHash)],
+  );
+  return result.rows.flatMap((row) => {
+    try {
+      return [{ sourceId: row.source_id, checkedAt: row.checked_at.toISOString(), report: readStoredReport(row.report) }];
+    } catch {
+      onUnreadable?.(row.source_id);
+      return [];
+    }
+  });
+}
+
 export interface PingStateChange {
   readonly sourceId: string;
   /** True when the ping reached the source. */

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { mappingSummarySchema, sourceStateSchema } from './sources.js';
+import { mappingSummarySchema, sourceStateSchema } from './source-basics.js';
 
 export const TEST_OUTCOMES = ['pass', 'warn', 'fail'] as const;
 export const READ_ONLY_CHECKS = ['privileges-inspected', 'write-probe', 'not-verified'] as const;

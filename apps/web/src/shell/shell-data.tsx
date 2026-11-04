@@ -8,8 +8,8 @@ import { createStore, useStoreSelector, type ReadableStore } from '../state/stor
 export interface ShellData {
   readonly me: RequestState<MeResponse>;
   readonly sources: RequestState<SourcesResponse>;
-  /** Reads both again; the only way the shell asks twice. */
   readonly reload: () => void;
+  readonly reloadSources: () => void;
 }
 
 /** Reads the principal and the configured sources once, when it is created, outside React; every part of the shell reads these answers. */
@@ -20,7 +20,7 @@ export function createShellData(client: ApiClient): ReadableStore<ShellData> {
     me.reload();
     sources.reload();
   };
-  const combine = (): ShellData => ({ me: me.getState(), sources: sources.getState(), reload });
+  const combine = (): ShellData => ({ me: me.getState(), sources: sources.getState(), reload, reloadSources: sources.reload });
   const store = createStore(combine());
   me.subscribe(() => store.setState(combine()));
   sources.subscribe(() => store.setState(combine()));

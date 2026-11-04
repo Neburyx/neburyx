@@ -14,8 +14,8 @@ export { databaseCheckSchema, migrationsCheckSchema, readyResponseSchema, source
 export type { ReadyChecks, ReadyResponse, SourceReachability } from './ready.js';
 export { ICON_KEYS, PII_CLASSES, PRESET_TEMPLATES, iconKeySchema, piiClassSchema, presetTemplateSchema } from './mapping.js';
 export type { IconKey, PiiClass, PresetTemplate } from './mapping.js';
-export { SOURCE_STATES, mappingSummarySchema, sourceStateSchema, sourceSummarySchema, sourcesResponseSchema } from './sources.js';
-export type { SourceState, SourceSummary, SourcesResponse } from './sources.js';
+export { SOURCE_STATES, lastTestSchema, mappingSummarySchema, sourceStateSchema, sourceSummarySchema, sourcesResponseSchema } from './sources.js';
+export type { LastTest, SourceState, SourceSummary, SourcesResponse } from './sources.js';
 export { BIND_KEYS, derivedRuleProfileSchema, entityTypeProfileSchema, presetProfileSchema, relationshipTypeProfileSchema, sourceProfileSchema } from './profile.js';
 export type { SourceProfile } from './profile.js';
 export {

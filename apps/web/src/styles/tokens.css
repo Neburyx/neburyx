@@ -58,6 +58,14 @@
   --stand-in-panel-height: 574px;
   --stand-in-button-height: 32px;
   --full-height: 100vh;
+  --sources-list-width: 264px;
+  --border-width-current: 2px;
+  --radius-tag: 3px;
+  --facts-label-width: 126px;
+  --button-height: 34px;
+  --warning-icon-size: 16px;
+  --spinner-size: 12px;
+  --excerpt-max-height: 480px;
   --content-padding: 40px;
   --content-padding-bottom: 32px;
   --section-gap: 24px;

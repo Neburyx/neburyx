@@ -14,6 +14,7 @@ const SUMMARY = {
   readOnly: true,
   synthetic: true,
   lastTestAt: null,
+  lastTest: null,
   mappingSummary: { entityTypes: 2, relationshipTypes: 1, derivedRules: 0 },
 } as const;
 

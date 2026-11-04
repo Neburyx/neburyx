@@ -25,7 +25,6 @@ describe('routes and navigation', () => {
   it.each([
     ['/', 'Home'],
     ['/investigations', 'Investigations'],
-    ['/sources', 'Sources'],
   ])('shows its own page at %s, saying that it is not built yet', (path, title) => {
     renderAt(path);
     expect(screen.getByRole('heading', { name: title, level: 1 })).toBeTruthy();

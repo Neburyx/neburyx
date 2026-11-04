@@ -1,7 +1,7 @@
-import { errorBodySchema, errorResponseSchema, meResponseSchema, sourceProfileSchema, sourcesResponseSchema, type ErrorResponse, type MeResponse, type SourceProfile, type SourcesResponse } from '@neburyx/contracts';
+import { errorBodySchema, errorResponseSchema, meResponseSchema, sourceProfileSchema, sourcesResponseSchema, sourceTestReportSchema, type ErrorResponse, type MeResponse, type SourceProfile, type SourcesResponse, type SourceTestReport } from '@neburyx/contracts';
 import type { z } from 'zod';
 
-export type Fetcher = (input: string, init?: { readonly signal?: AbortSignal }) => Promise<Response>;
+export type Fetcher = (input: string, init?: { readonly signal?: AbortSignal; readonly method?: 'POST' }) => Promise<Response>;
 
 export type ServerFailure = ErrorResponse['error'];
 
@@ -17,6 +17,7 @@ export interface ApiClient {
   getMe(signal?: AbortSignal): Promise<ApiResult<MeResponse>>;
   getSources(signal?: AbortSignal): Promise<ApiResult<SourcesResponse>>;
   getProfile(sourceId: string, signal?: AbortSignal): Promise<ApiResult<SourceProfile>>;
+  testSource(sourceId: string, signal?: AbortSignal): Promise<ApiResult<SourceTestReport>>;
 }
 
 const GATEWAY_STATUSES: ReadonlySet<number> = new Set([502, 503, 504]);
@@ -42,12 +43,12 @@ function isEnvelope(value: unknown): boolean {
   return typeof value === 'object' && value !== null && !Array.isArray(value) && 'error' in value;
 }
 
-async function request<T>(fetcher: Fetcher, path: string, schema: z.ZodType<T>, signal: AbortSignal | undefined): Promise<ApiResult<T>> {
+async function request<T>(fetcher: Fetcher, path: string, schema: z.ZodType<T>, signal: AbortSignal | undefined, method?: 'POST'): Promise<ApiResult<T>> {
   if (wasAborted(signal)) return failed('ABORTED');
   let text: string;
   let response: Response;
   try {
-    response = await fetcher(path, signal === undefined ? undefined : { signal });
+    response = await fetcher(path, signal === undefined && method === undefined ? undefined : { ...(signal === undefined ? {} : { signal }), ...(method === undefined ? {} : { method }) });
     text = await response.text();
   } catch {
     return failed(wasAborted(signal) ? 'ABORTED' : 'NETWORK_UNAVAILABLE');
@@ -73,5 +74,9 @@ export function createApiClient(fetcher: Fetcher = (input, init) => fetch(input,
     getMe: (signal) => request(fetcher, '/v1/me', meResponseSchema, signal),
     getSources: (signal) => request(fetcher, '/v1/sources', sourcesResponseSchema, signal),
     getProfile: (sourceId, signal) => request(fetcher, `/v1/sources/${encodeURIComponent(sourceId)}/profile`, sourceProfileSchema, signal),
+    testSource: async (sourceId, signal) => {
+      const result = await request(fetcher, `/v1/sources/${encodeURIComponent(sourceId)}/test`, sourceTestReportSchema, signal, 'POST');
+      return result.ok && result.value.sourceId !== sourceId ? failed('SCHEMA_MISMATCH') : result;
+    },
   };
 }

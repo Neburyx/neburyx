@@ -1,9 +1,10 @@
 import { render } from '@testing-library/react';
 import { useMemo } from 'react';
-import type { MeResponse, SourceSummary } from '@neburyx/contracts';
+import type { MeResponse, SourceSummary, SourceTestReport } from '@neburyx/contracts';
 import { MemoryRouter, RouterProvider, createMemoryRouter } from 'react-router';
 import type { ApiClient } from './api/client.js';
 import { fakeClient } from './api/fake-client.js';
+import { testProfile } from './dev/test-profile.js';
 import { appRoutes } from './routes.js';
 import { createShellData, ShellDataProvider, useShellData } from './shell/shell-data.js';
 import { createClientState, type ClientState } from './state/client-state.js';
@@ -21,11 +22,32 @@ export function me(overrides: Partial<MeResponse> = {}): MeResponse {
 }
 
 export function source(id: string, overrides: Partial<SourceSummary> = {}): SourceSummary {
-  return { id, alias: `Source ${id}`, state: 'connected', stateReason: null, readOnly: true, synthetic: true, lastTestAt: null, mappingSummary: { entityTypes: 1, relationshipTypes: 1, derivedRules: 0 }, ...overrides };
+  return { id, alias: `Source ${id}`, state: 'connected', stateReason: null, readOnly: true, synthetic: true, lastTestAt: null, lastTest: null, mappingSummary: { entityTypes: 1, relationshipTypes: 1, derivedRules: 0 }, ...overrides };
+}
+
+export function testReport(sourceId: string, overrides: Partial<SourceTestReport> = {}): SourceTestReport {
+  return {
+    schemaVersion: 1,
+    sourceId,
+    checkedAt: '2026-11-02T10:00:00.000Z',
+    outcome: 'pass',
+    state: 'connected',
+    stateReason: null,
+    server: { product: 'Neo4j Kernel', version: '5.26.32', edition: 'community' },
+    versionSupported: true,
+    operations: [],
+    readOnlyCheck: 'privileges-inspected',
+    loginCanWrite: false,
+    mappingChecks: { status: 'pass', findings: [] },
+    degreeChecks: { status: 'pass', foundOn: 'neo4j', types: [{ entityType: 'thing', result: 'cheap', basis: 'degree-operator', relationshipTypes: ['LINKS'] }], warnings: [] },
+    mappingSummary: { entityTypes: 1, relationshipTypes: 1, derivedRules: 0 },
+    ...overrides,
+  };
 }
 
 export function clientWith(parts: { readonly me?: MeResponse; readonly sources?: readonly SourceSummary[] }): ApiClient {
   return fakeClient({
+    getProfile: async (sourceId) => ({ ok: true, value: testProfile(sourceId) }),
     getMe: async () => (parts.me === undefined ? { ok: false, failure: { code: 'NETWORK_UNAVAILABLE' } } : { ok: true, value: parts.me }),
     getSources: async () => (parts.sources === undefined ? { ok: false, failure: { code: 'NETWORK_UNAVAILABLE' } } : { ok: true, value: { items: [...parts.sources], nextCursor: null } }),
   });

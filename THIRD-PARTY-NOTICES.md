@@ -110,7 +110,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 
 The navigation icons (house, folder-open, database, search, settings), the lock on the locked actions and the Neburyx mark (the Lucide "component" icon) come from the Lucide icon set.
 
-The glyphs drawn for entity types on the graph canvas (`apps/web/src/assets/lucide/`: building-2, car, circle-dot, file-text, folder, globe, house, landmark, monitor, phone, shield, store, user, wrench) are copied unchanged from release 1.67.0 of the `lucide-static` package (https://www.npmjs.com/package/lucide-static/v/1.67.0, built from https://github.com/lucide-icons/lucide), ISC licence, the same licence text as below.
+The glyphs drawn for entity types on the graph canvas and the warning triangle of the Sources page (`apps/web/src/assets/lucide/`: building-2, car, circle-dot, file-text, folder, globe, house, landmark, monitor, phone, shield, store, triangle-alert, user, wrench) are copied unchanged from release 1.67.0 of the `lucide-static` package (https://www.npmjs.com/package/lucide-static/v/1.67.0, built from https://github.com/lucide-icons/lucide), ISC licence, the same licence text as below.
 
 ```
 ISC License

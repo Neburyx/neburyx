@@ -5,6 +5,11 @@ import { createProfileStore } from './canvas/profile-store.js';
 import { PageHeading } from './shell/page-heading.js';
 import { EXPLORE_PATH } from './shell/navigation.js';
 import { PageShell } from './shell/page-shell.js';
+import { SourcesPage } from './sources/sources-page.js';
+import { createExcerpts } from './sources/excerpts.js';
+import { ExcerptsProvider } from './sources/excerpts-context.js';
+import { createTestRuns } from './sources/test-runs.js';
+import { TestRunsProvider } from './sources/test-runs-context.js';
 import { createShellData, ShellDataProvider } from './shell/shell-data.js';
 import type { ClientState } from './state/client-state.js';
 import { WorkspaceShell } from './workspace/workspace-shell.js';
@@ -58,6 +63,8 @@ function workspaceDevelopmentRoutes(): RouteObject[] {
 
 export function appRoutes(client: ApiClient, state: ClientState): RouteObject[] {
   const shellData = createShellData(client);
+  const testRuns = createTestRuns(client, shellData);
+  const excerpts = createExcerpts(client);
   const profile = createProfileStore(client, state.investigation);
   return [
     {
@@ -65,7 +72,11 @@ export function appRoutes(client: ApiClient, state: ClientState): RouteObject[] 
       element: (
         <ShellDataProvider store={shellData}>
           <ProfileProvider store={profile}>
-            <Outlet />
+            <TestRunsProvider runs={testRuns}>
+              <ExcerptsProvider excerpts={excerpts}>
+                <Outlet />
+              </ExcerptsProvider>
+            </TestRunsProvider>
           </ProfileProvider>
         </ShellDataProvider>
       ),
@@ -75,7 +86,7 @@ export function appRoutes(client: ApiClient, state: ClientState): RouteObject[] 
           children: [
             { index: true, element: <NotBuiltYet title="Home" /> },
             { path: 'investigations', element: <NotBuiltYet title="Investigations" /> },
-            { path: 'sources', element: <NotBuiltYet title="Sources" /> },
+            { path: 'sources', element: <SourcesPage /> },
             ...developmentRoutes(client),
             { path: '*', element: <NotFound /> },
           ],

@@ -20,6 +20,7 @@ import '@fontsource/ibm-plex-mono/latin-ext-500.css';
 import './styles/tokens.css';
 import './styles/base.css';
 import './styles/workspace.css';
+import './styles/sources.css';
 
 const root = document.getElementById('root');
 if (root === null) throw new Error('the page has no #root element');

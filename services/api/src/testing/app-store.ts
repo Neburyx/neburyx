@@ -17,6 +17,7 @@ export interface MemoryAppStoreOptions {
   readonly inactiveSources?: readonly string[];
   readonly failRecording?: boolean;
   readonly failPingState?: boolean;
+  readonly failChecks?: boolean;
 }
 
 export interface MemoryAppStore extends AppStore {
@@ -55,6 +56,15 @@ export function memoryStoreWith(options: MemoryAppStoreOptions): MemoryAppStore 
           const found = [...checks]
             .reverse()
             .find((check) => check.report.sourceId === source.id && check.identityHash === source.identityHash && check.configHash === source.configHash && check.report.checkedAt >= since && check.report.server !== null);
+          return found === undefined ? [] : [{ sourceId: source.id, checkedAt: found.report.checkedAt, report: found.report }];
+        }),
+      ),
+    latestChecksFor: (sources) =>
+      options.failChecks === true
+        ? Promise.reject(new Error('the checks could not be read'))
+        : Promise.resolve(
+        sources.flatMap((source) => {
+          const found = [...checks].reverse().find((check) => check.report.sourceId === source.id && check.identityHash === source.identityHash && check.configHash === source.configHash);
           return found === undefined ? [] : [{ sourceId: source.id, checkedAt: found.report.checkedAt, report: found.report }];
         }),
       ),

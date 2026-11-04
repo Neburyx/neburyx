@@ -18,7 +18,7 @@ const badge = () => header().queryByText('Synthetic data');
 const enterprise = () => header().queryByText('Enterprise');
 const sourceName = (text: string) => header().queryByText(text);
 /** Both reads have answered (or failed): the sidebar shows no loading state any more. */
-const answered = () => waitFor(() => expect(screen.queryAllByRole('status')).toHaveLength(0));
+const answered = () => waitFor(() => expect(screen.queryAllByRole('status').filter((status) => status.textContent !== '')).toHaveLength(0));
 
 describe('the page heading', () => {
   it.each([
