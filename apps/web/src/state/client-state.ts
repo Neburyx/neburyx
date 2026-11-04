@@ -32,11 +32,11 @@ export function createClientState(): ClientState {
     isNode: (key) => nodeKeys().has(key),
     isElement: (key) => nodeKeys().has(key) || edgeKeys().has(key),
   });
-  const { view, setTool, setOpenTool, select, setPosition, pin, setPanelSize, setViewport } = presentation;
+  const { view, setTool, setOpenTool, setOpenMenu, select, setPosition, pin, setPanelSize, setViewport } = presentation;
   return {
     server: { ...server.view, get: server.get },
     investigation: investigation.view,
-    presentation: { view, setTool, setOpenTool, select, setPosition, pin, setPanelSize, setViewport },
+    presentation: { view, setTool, setOpenTool, setOpenMenu, select, setPosition, pin, setPanelSize, setViewport },
     jobs: createJobStore(),
     bindSource(sourceId) {
       const previous = investigation.view.getState().sourceId;

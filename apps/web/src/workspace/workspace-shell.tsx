@@ -1,6 +1,7 @@
 import { GraphCanvas } from '../canvas/graph-canvas.js';
 import { useProfile } from '../canvas/profile-context.js';
 import { CanvasRegions } from './canvas-regions.js';
+import { ContextMenu } from './context-menu.js';
 import { GraphScope } from './graph-scope.js';
 import { HeaderBar } from './header-bar.js';
 import { NavigationRail } from './navigation-rail.js';
@@ -19,6 +20,7 @@ export function WorkspaceShell({ canvasView }: { readonly canvasView?: 'fit' | '
           <GraphCanvas profile={profile} view={canvasView} />
           <GraphScope />
           <SelectionBar />
+          <ContextMenu />
           <CanvasRegions />
         </main>
       </div>

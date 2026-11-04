@@ -28,7 +28,7 @@ const item = (name: string): HTMLElement => within(menu()).getByRole(['Select', 
 const focused = (): string | null => document.activeElement?.getAttribute('aria-label') ?? document.activeElement?.textContent ?? null;
 const focusedItem = (): string => {
   const rows = [...within(menu()).getAllByRole('menuitemradio'), ...within(menu()).getAllByRole('menuitem')];
-  return rows.find((row) => row === document.activeElement)?.querySelector('.tool-flyout-label')?.textContent ?? 'none';
+  return rows.find((row) => row === document.activeElement)?.querySelector('.menu-label')?.textContent ?? 'none';
 };
 
 describe('the tool strip from the keyboard', () => {
@@ -132,7 +132,7 @@ describe('the tool strip from the keyboard', () => {
     const radios = within(menu()).getAllByRole('menuitemradio');
     expect(radios.map((row) => [row.getAttribute('aria-label') ?? row.textContent, row.getAttribute('aria-checked')])).toEqual([['SelectV', 'true'], ['PanH', 'false'], ['Box selectB', 'false']]);
     expect(within(menu()).getByRole('menuitemradio', { name: 'Select' })).toBe(radios[0]);
-    expect(within(menu()).getAllByRole('menuitem').map((row) => row.querySelector('.tool-flyout-label')?.textContent)).toEqual(['Select all', 'Invert selection', 'Clear selection']);
+    expect(within(menu()).getAllByRole('menuitem').map((row) => row.querySelector('.menu-label')?.textContent)).toEqual(['Select all', 'Invert selection', 'Clear selection']);
     expect(within(menu()).getAllByRole('separator')).toHaveLength(1);
     for (const hint of ['V', 'H', 'B', '⌘A', '⇧⌘I', 'Esc']) expect(within(menu()).queryByRole('menuitem', { name: new RegExp(`${hint}$`) })).toBeNull();
   });

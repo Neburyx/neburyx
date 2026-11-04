@@ -3,7 +3,7 @@ import { createCytoscapeRenderer, type RendererCore as Core } from './cytoscape-
 import { glyphUri } from './glyphs.js';
 import { FIT_PADDING, GLYPH_COLOR } from './look.js';
 import { ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from './zoom.js';
-import type { CanvasEvents, Scene } from './scene.js';
+import type { CanvasEvents, ContextMenuRequest, Scene } from './scene.js';
 import type { BoxSelection } from './box-selection.js';
 import type { Click } from './selection-gestures.js';
 import type { Viewport } from '../state/presentation-state.js';
@@ -18,7 +18,7 @@ function scene(entities: ReadonlyArray<readonly [string, { x: number; y: number 
   };
 }
 
-const NO_EVENTS: CanvasEvents = { viewport: () => undefined, click: () => undefined, box: () => undefined };
+const NO_EVENTS: CanvasEvents = { viewport: () => undefined, click: () => undefined, box: () => undefined, contextMenu: () => undefined };
 
 function mounted(events: CanvasEvents = NO_EVENTS) {
   const renderer = createCytoscapeRenderer({ nextFrame: (callback) => callback() });
@@ -250,7 +250,7 @@ describe('the viewport the Cytoscape renderer reports', () => {
     const frames: Array<() => void> = [];
     const reports: Viewport[] = [];
     const renderer = createCytoscapeRenderer({ nextFrame: (callback) => void frames.push(callback), canvasSize: () => ({ width: 800, height: 600 }) });
-    renderer.mount(undefined, { viewport: (viewport) => void reports.push(viewport), click: () => undefined, box: () => undefined }, undefined);
+    renderer.mount(undefined, { viewport: (viewport) => void reports.push(viewport), click: () => undefined, box: () => undefined, contextMenu: () => undefined }, undefined);
     renderer.draw(scene([['a', { x: 0, y: 0 }], ['b', { x: 100, y: 50 }]]));
     renderer.draw(scene([['a', { x: 0, y: 0 }], ['b', { x: 100, y: 50 }], ['c', { x: 5, y: 5 }]]));
     expect(reports).toHaveLength(0);
@@ -264,7 +264,7 @@ describe('the viewport the Cytoscape renderer reports', () => {
     const frames: Array<() => void> = [];
     const reports: Viewport[] = [];
     const renderer = createCytoscapeRenderer({ nextFrame: (callback) => void frames.push(callback), canvasSize: () => ({ width: 800, height: 600 }) });
-    renderer.mount(undefined, { viewport: (viewport) => void reports.push(viewport), click: () => undefined, box: () => undefined }, undefined);
+    renderer.mount(undefined, { viewport: (viewport) => void reports.push(viewport), click: () => undefined, box: () => undefined, contextMenu: () => undefined }, undefined);
     renderer.draw(scene([['a', { x: 0, y: 0 }], ['b', { x: 100, y: 0 }]]));
     expect(reports).toHaveLength(0);
     renderer.dispose();
@@ -277,7 +277,7 @@ describe('the viewport the Cytoscape renderer reports', () => {
     const frames: Array<() => void> = [];
     const reports: Viewport[] = [];
     const renderer = createCytoscapeRenderer({ nextFrame: (callback) => void frames.push(callback), canvasSize: () => ({ width: 800, height: 600 }) });
-    renderer.mount(undefined, { viewport: (viewport) => void reports.push(viewport), click: () => undefined, box: () => undefined }, undefined);
+    renderer.mount(undefined, { viewport: (viewport) => void reports.push(viewport), click: () => undefined, box: () => undefined, contextMenu: () => undefined }, undefined);
     const of = (source: string, ids: readonly string[]): Scene => ({ ...scene(ids.map((id, index) => [id, { x: index * 400, y: 0 }] as const)), source });
     renderer.draw(of('one', ['a', 'b']));
     renderer.draw(of('two', []));
@@ -291,7 +291,7 @@ describe('the viewport the Cytoscape renderer reports', () => {
     const frames: Array<() => void> = [];
     const reports: Viewport[] = [];
     const renderer = createCytoscapeRenderer({ nextFrame: (callback) => void frames.push(callback), canvasSize: () => ({ width: 800, height: 600 }) });
-    renderer.mount(undefined, { viewport: (viewport) => void reports.push(viewport), click: () => undefined, box: () => undefined }, undefined);
+    renderer.mount(undefined, { viewport: (viewport) => void reports.push(viewport), click: () => undefined, box: () => undefined, contextMenu: () => undefined }, undefined);
     renderer.draw({ ...scene([['a', { x: 0, y: 0 }], ['b', { x: 400, y: 0 }]]), source: 'one' });
     renderer.draw({ ...scene([]), source: 'two' });
     renderer.dispose();
@@ -457,7 +457,7 @@ describe('the clicks and the selected look of the Cytoscape renderer', () => {
     const clicks: Click[] = [];
     let core: Core | undefined;
     const renderer = createCytoscapeRenderer({ nextFrame: (callback) => callback(), onCore: (made) => void (core = made) });
-    renderer.mount(undefined, { viewport: () => undefined, click: (click) => void clicks.push(click), box: () => undefined }, undefined);
+    renderer.mount(undefined, { viewport: () => undefined, click: (click) => void clicks.push(click), box: () => undefined, contextMenu: () => undefined }, undefined);
     return {
       renderer,
       clicks,
@@ -533,7 +533,7 @@ describe('the box a drag draws in the Cytoscape renderer', () => {
     const clicks: Click[] = [];
     let core: Core | undefined;
     const renderer = createCytoscapeRenderer({ nextFrame: (callback) => callback(), onCore: (made) => void (core = made), canvasSize: () => ({ width: 1000, height: 800 }) });
-    renderer.mount(undefined, { viewport: () => undefined, click: (click) => void clicks.push(click), box: (box) => void boxes.push(box) }, { zoom: 1, x: 0, y: 0 });
+    renderer.mount(undefined, { viewport: () => undefined, click: (click) => void clicks.push(click), box: (box) => void boxes.push(box), contextMenu: () => undefined }, { zoom: 1, x: 0, y: 0 });
     const drawn = (tool: 'select' | 'pan' | 'box'): void => {
       renderer.draw({ ...scene([['a', { x: 0, y: 0 }], ['b', { x: 100, y: 0 }], ['c', { x: 300, y: 300 }]]), tool, view: 'as-drawn' });
     };
@@ -652,12 +652,69 @@ describe('the box a drag draws in the Cytoscape renderer', () => {
 describe('the label of a stored relationship in the Cytoscape renderer', () => {
   it('appears on the line when the scene gives it one and is gone in the same redraw when the scene takes it away', () => {
     const renderer = createCytoscapeRenderer({ nextFrame: (callback) => callback() });
-    renderer.mount(undefined, { viewport: () => undefined, click: () => undefined, box: () => undefined }, undefined);
+    renderer.mount(undefined, { viewport: () => undefined, click: () => undefined, box: () => undefined, contextMenu: () => undefined }, undefined);
     const base: Scene = { ...scene([['a', { x: 0, y: 0 }], ['b', { x: 100, y: 0 }]], [['ab', 'a', 'b']]) };
     const labelled = { ...base, relationships: base.relationships.map((relationship) => ({ ...relationship, look: { ...relationship.look, label: 'USES' } })) };
     renderer.draw(labelled);
     expect(renderer.inspect().edges[0]?.label).toBe('USES');
     renderer.draw(base);
     expect(renderer.inspect().edges[0]?.label).toBe('');
+  });
+});
+
+describe('the right-click of the Cytoscape renderer', () => {
+  const withMenus = () => {
+    const requests: ContextMenuRequest[] = [];
+    let core: Core | undefined;
+    const renderer = createCytoscapeRenderer({ nextFrame: (callback) => callback(), onCore: (made) => void (core = made) });
+    renderer.mount(undefined, { viewport: () => undefined, click: () => undefined, box: () => undefined, contextMenu: (request) => void requests.push(request) }, undefined);
+    renderer.draw(scene([['a', { x: 0, y: 0 }], ['b', { x: 100, y: 0 }]], [['ab', 'a', 'b']]));
+    return {
+      renderer,
+      requests,
+      core: (): Core => {
+        if (core === undefined) throw new Error('no core');
+        return core;
+      },
+    };
+  };
+
+  // The library's typings take only an event name; the library itself takes an event object that carries the original browser event.
+  const rightClick = (target: Core | ReturnType<Core['getElementById']>, at: { readonly x: number; readonly y: number }): void => {
+    // @ts-expect-error the typings of `emit` do not allow an event object
+    target.emit({ type: 'cxttap', originalEvent: new MouseEvent('contextmenu', { clientX: at.x, clientY: at.y }) });
+  };
+
+  it('reports a right-click on an entity, on a relationship and on empty canvas, with the pointer position in the window', () => {
+    const { requests, core } = withMenus();
+    rightClick(core().getElementById('a'), { x: 11, y: 12 });
+    rightClick(core().getElementById('ab'), { x: 21, y: 22 });
+    rightClick(core(), { x: 31, y: 32 });
+    expect(requests).toEqual([
+      { target: { kind: 'node', key: 'a' }, x: 11, y: 12 },
+      { target: { kind: 'relationship', key: 'ab' }, x: 21, y: 22 },
+      { target: undefined, x: 31, y: 32 },
+    ]);
+  });
+
+  it('reports nothing while a box is being drawn, and reports again once it is finished', () => {
+    const { renderer, requests, core } = withMenus();
+    renderer.draw({ ...scene([['a', { x: 0, y: 0 }], ['b', { x: 100, y: 0 }]]), tool: 'box', view: 'as-drawn' });
+    const press = (type: string, at: { x: number; y: number }): void => {
+      // @ts-expect-error the typings of `emit` do not allow an event object
+      core().emit({ type, renderedPosition: at, originalEvent: new MouseEvent('mousedown') });
+    };
+    press('tapstart', { x: -10, y: -10 });
+    rightClick(core(), { x: 1, y: 2 });
+    expect(requests).toEqual([]);
+    press('tapend', { x: 120, y: 40 });
+    rightClick(core(), { x: 3, y: 4 });
+    expect(requests).toEqual([{ target: undefined, x: 3, y: 4 }]);
+  });
+
+  it('reports nothing for a right-click that carries no browser mouse event', () => {
+    const { requests, core } = withMenus();
+    core().emit('cxttap');
+    expect(requests).toEqual([]);
   });
 });

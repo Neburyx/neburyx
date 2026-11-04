@@ -8,6 +8,7 @@ import type { RelationshipLook } from './relationship-look.js';
 import { createBoxGesture, type BoxOverlay } from './box-gesture.js';
 import { createBoxOverlay } from './box-overlay.js';
 import { fitViewport, type Size } from './fit.js';
+import { suppressNativeMenu } from './native-menu.js';
 import { ZOOM_MAX, ZOOM_MIN } from './zoom.js';
 import type { CanvasRenderer, DrawnCounts, Inspection, Scene } from './scene.js';
 
@@ -255,9 +256,18 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
         gesture.end(event.renderedPosition);
         created.userPanningEnabled(true);
       });
+      created.on('cxttap', (event) => {
+        const { target, originalEvent } = event;
+        if (gesture.active || !(originalEvent instanceof MouseEvent)) return;
+        const at = { x: originalEvent.clientX, y: originalEvent.clientY };
+        if (target === created) events.contextMenu({ target: undefined, ...at });
+        else if ('isNode' in target) events.contextMenu({ target: { kind: target.isNode() ? 'node' : 'relationship', key: target.id() }, ...at });
+      });
+      const restoreNativeMenu = container === undefined ? undefined : suppressNativeMenu(container);
       container?.addEventListener('pointercancel', cancelBox);
       window.addEventListener('blur', cancelBox);
       teardown = () => {
+        restoreNativeMenu?.();
         container?.removeEventListener('pointercancel', cancelBox);
         window.removeEventListener('blur', cancelBox);
         gesture.cancel();

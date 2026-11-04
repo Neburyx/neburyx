@@ -6,8 +6,10 @@ import { createApiClient } from './api/client.js';
 import { appRoutes } from './routes.js';
 import { createClientState } from './state/client-state.js';
 import { createCytoscapeRenderer } from './canvas/cytoscape-renderer.js';
+import { registerBuiltInMenuItems } from './workspace/built-in-menu-items.js';
 import { registerBuiltInSlots } from './workspace/built-in-slots.js';
 import { registerBuiltInTools } from './workspace/built-in-tools.js';
+import { createMenuRegistry } from './workspace/menu-registry.js';
 import { createSelectionActionRegistry } from './workspace/selection-actions.js';
 import { createSlotRegistry } from './workspace/slots.js';
 import { createToolRegistry } from './workspace/tool-registry.js';
@@ -33,9 +35,11 @@ const slots = createSlotRegistry();
 registerBuiltInSlots(slots);
 const tools = createToolRegistry();
 registerBuiltInTools(tools);
+const menus = createMenuRegistry();
+registerBuiltInMenuItems(menus);
 const router = createBrowserRouter(appRoutes(createApiClient(), state));
 createRoot(root).render(
   <StrictMode>
-    <App router={router} state={state} slots={slots} selectionActions={createSelectionActionRegistry()} tools={tools} createRenderer={createCytoscapeRenderer} />
+    <App router={router} state={state} slots={slots} selectionActions={createSelectionActionRegistry()} tools={tools} menus={menus} createRenderer={createCytoscapeRenderer} />
   </StrictMode>,
 );

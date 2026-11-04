@@ -27,6 +27,8 @@
   --color-tool-icon: #747a85;
   --color-menu-icon: #525c6b;
   --color-chosen-mark: #5263a6;
+  --color-menu-locked: #525c6b;
+  --color-menu-tag-surface: #edf0f5;
   --color-row-chosen: #edf0f7;
 
   --space-2: 2px;
@@ -56,12 +58,20 @@
   --scope-left: 24px;
   --scope-top: 16px;
   --dock-width: 320px;
+  --layer-menu: 10;
   --tool-button-size: 32px;
   --tool-icon-size: 16px;
   --tool-check-size: 14px;
   --tool-flyout-width: 236px;
-  --tool-flyout-row-height: 30px;
+  --menu-row-height: 30px;
   --radius-flyout: 10px;
+  --radius-tag-pill: 9px;
+  --opacity-disabled: 0.5;
+  --menu-max-width: calc(100vw - 16px);
+  --menu-max-height: calc(100vh - 16px);
+  --menu-width-canvas: 260px;
+  --menu-width-node: 304px;
+  --menu-width-relationship: 300px;
   --stand-in-control-height: 36px;
   --stand-in-table-width: 86px;
   --stand-in-legend-width: 186px;
@@ -120,6 +130,7 @@
   --line-height-workspace: 17px;
   --line-height-pill: 16px;
   --line-height-caption: 13px;
+  --line-height-menu-title: 15px;
   --badge-height: 22px;
 
   --focus-outline: var(--focus-width) solid var(--color-focus);

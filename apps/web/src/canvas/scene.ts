@@ -52,6 +52,13 @@ export interface Inspection {
   readonly edges: readonly { readonly id: string; readonly source: string; readonly target: string; readonly width: number; readonly color: string; readonly lineStyle: string; readonly arrow: string; readonly label: string; readonly labelOutline: number }[];
 }
 
+/** A right-click: the drawn item it landed on, or none for empty canvas, and where the pointer was in the browser window. */
+export interface ContextMenuRequest {
+  readonly target: { readonly kind: 'node' | 'relationship'; readonly key: string } | undefined;
+  readonly x: number;
+  readonly y: number;
+}
+
 /** What the renderer tells the canvas about the viewer's own actions. */
 export interface CanvasEvents {
   /** A click on a drawn item (its key) or on empty canvas, with or without Shift; not a drag. */
@@ -60,6 +67,8 @@ export interface CanvasEvents {
   readonly box: (box: BoxSelection) => void;
   /** The pan and zoom after a change, at most once per animation frame; the last report is the final view. */
   readonly viewport: (viewport: Viewport) => void;
+  /** The right button was pressed and released on a drawn item or on empty canvas; the browser's own menu never opens on the canvas. */
+  readonly contextMenu: (request: ContextMenuRequest) => void;
 }
 
 export interface CanvasRenderer {

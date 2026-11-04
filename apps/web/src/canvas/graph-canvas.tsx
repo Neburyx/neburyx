@@ -4,6 +4,7 @@ import type { ClientState } from '../state/client-state.js';
 import { useClientState, useLoadedGraph } from '../state/context.js';
 import { writeReadout } from '../dev/canvas-readout.js';
 import { StateError } from '../state/errors.js';
+import { drawnKeys } from '../state/loaded-graph.js';
 import { useStoreSelector } from '../state/store.js';
 import { formatNumber, notDrawnLine } from '../workspace/scope-text.js';
 import { buildScene } from './build-scene.js';
@@ -12,7 +13,7 @@ import { captionFontsReady, loadCaptionFonts } from './fonts.js';
 import { useCreateRenderer } from './renderer-context.js';
 import { selectionAfterBox, type BoxSelection } from './box-selection.js';
 import { selectionAfterClick, type Click } from './selection-gestures.js';
-import type { CanvasEvents, CanvasRenderer, Scene } from './scene.js';
+import type { CanvasEvents, CanvasRenderer, ContextMenuRequest, Scene } from './scene.js';
 
 export const RENDERER_UNAVAILABLE = 'RENDERER_UNAVAILABLE';
 
@@ -21,6 +22,18 @@ const counted = (value: number, one: string, many: string): string => `${formatN
 function applyClick(state: ClientState, click: Click): void {
   const { tool, selection } = state.presentation.view.getState();
   replaceSelection(state, selectionAfterClick(tool, selection, click));
+}
+
+/** A right-click on an item that is not selected selects it first, on a selected item keeps the selection, on empty canvas leaves it; a click on something that is not drawn opens nothing. */
+function openContextMenu(state: ClientState, request: ContextMenuRequest): void {
+  const { target, x, y } = request;
+  if (target === undefined) {
+    state.presentation.setOpenMenu({ kind: 'canvas', key: undefined, x, y });
+    return;
+  }
+  if (!drawnKeys(state.loadedGraph()).has(target.key)) return;
+  if (!state.presentation.view.getState().selection.has(target.key)) state.presentation.select([target.key]);
+  state.presentation.setOpenMenu({ kind: target.kind, key: target.key, x, y });
 }
 
 function applyBox(state: ClientState, box: BoxSelection): void {
@@ -64,6 +77,7 @@ export function GraphCanvas({ profile, view = 'fit' }: { readonly profile?: Sour
         },
         click: (click) => applyClick(state, click),
         box: (box) => applyBox(state, box),
+        contextMenu: (request) => openContextMenu(state, request),
       };
       created.mount(container.current ?? undefined, events, state.presentation.view.getState().viewport);
     } catch {

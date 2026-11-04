@@ -118,3 +118,79 @@
 .icon-stand-in-tool-table {
   --icon: url('../assets/lucide/table-2.svg');
 }
+
+.icon-stand-in-menu-group {
+  --icon: url('../assets/lucide/group.svg');
+}
+
+.icon-stand-in-menu-ungroup {
+  --icon: url('../assets/lucide/ungroup.svg');
+}
+
+.icon-stand-in-menu-layout {
+  --icon: url('../assets/lucide/layout-template.svg');
+}
+
+.icon-stand-in-menu-legend {
+  --icon: url('../assets/lucide/list.svg');
+}
+
+.icon-stand-in-menu-download {
+  --icon: url('../assets/lucide/download.svg');
+}
+
+.icon-stand-in-menu-expand {
+  --icon: url('../assets/lucide/maximize-2.svg');
+}
+
+.icon-stand-in-menu-types {
+  --icon: url('../assets/lucide/list-filter.svg');
+}
+
+.icon-stand-in-menu-focus {
+  --icon: url('../assets/lucide/focus.svg');
+}
+
+.icon-stand-in-menu-route {
+  --icon: url('../assets/lucide/route.svg');
+}
+
+.icon-stand-in-menu-pattern {
+  --icon: url('../assets/lucide/layout-grid.svg');
+}
+
+.icon-stand-in-menu-select {
+  --icon: url('../assets/lucide/square-dashed.svg');
+}
+
+.icon-stand-in-menu-invert {
+  --icon: url('../assets/lucide/contrast.svg');
+}
+
+.icon-stand-in-menu-pin {
+  --icon: url('../assets/lucide/pin.svg');
+}
+
+.icon-stand-in-menu-hide {
+  --icon: url('../assets/lucide/eye-off.svg');
+}
+
+.icon-stand-in-menu-show {
+  --icon: url('../assets/lucide/eye.svg');
+}
+
+.icon-stand-in-menu-copy {
+  --icon: url('../assets/lucide/copy.svg');
+}
+
+.icon-stand-in-menu-external {
+  --icon: url('../assets/lucide/external-link.svg');
+}
+
+.icon-stand-in-menu-spark {
+  --icon: url('../assets/lucide/sparkles.svg');
+}
+
+.icon-stand-in-menu-why {
+  --icon: url('../assets/lucide/circle-help.svg');
+}

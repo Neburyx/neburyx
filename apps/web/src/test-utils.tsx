@@ -1,19 +1,21 @@
 import { render } from '@testing-library/react';
 import { useMemo } from 'react';
-import type { MeResponse, SourceSummary, SourceTestReport } from '@neburyx/contracts';
+import type { MeResponse, SourceProfile, SourceSummary, SourceTestReport } from '@neburyx/contracts';
 import { MemoryRouter, RouterProvider, createMemoryRouter } from 'react-router';
 import type { ApiClient } from './api/client.js';
 import { fakeClient } from './api/fake-client.js';
 import { testProfile } from './dev/test-profile.js';
 import { appRoutes } from './routes.js';
-import { createShellData, ShellDataProvider, useShellData } from './shell/shell-data.js';
+import { createShellData, ShellDataProvider, useShellData, type ShellData } from './shell/shell-data.js';
 import { createClientState, type ClientState } from './state/client-state.js';
+import { createStore, readable, type ReadableStore } from './state/store.js';
 import { ClientStateProvider } from './state/context.js';
 import { ProfileProvider } from './canvas/profile-context.js';
-import { createProfileStore, type ProfileStore } from './canvas/profile-store.js';
+import { createProfileStore, type ProfileState, type ProfileStore } from './canvas/profile-store.js';
 import { RendererProvider } from './canvas/renderer-context.js';
 import type { CanvasEvents, CanvasRenderer, CreateRenderer, Scene } from './canvas/scene.js';
 import type { Position, Viewport } from './state/presentation-state.js';
+import { createMenuRegistry, MenuProvider, type MenuRegistry } from './workspace/menu-registry.js';
 import { createSelectionActionRegistry, SelectionActionsProvider, type SelectionActionRegistry } from './workspace/selection-actions.js';
 import { createSlotRegistry, SlotsProvider, type SlotRegistry } from './workspace/slots.js';
 import { createToolRegistry, ToolsProvider, type ToolRegistry } from './workspace/tool-registry.js';
@@ -58,6 +60,18 @@ export function clientWith(parts: { readonly me?: MeResponse; readonly sources?:
 export interface Counted {
   readonly client: ApiClient;
   readonly calls: { me: number; sources: number };
+}
+
+/** A profile store that has already answered for `sourceId`, or has not answered when `profile` is undefined. */
+export function staticProfile(sourceId: string, profile: SourceProfile | undefined): ProfileStore {
+  const store = createStore<ProfileState>({ sourceId, request: profile === undefined ? { phase: 'idle' } : { phase: 'ready', data: profile } });
+  return { ...readable(store), reload: () => undefined };
+}
+
+/** Shell data that has already answered with the given edition, or has not answered when it is undefined. */
+export function staticShell(edition: 'community' | 'enterprise' | undefined): ReadableStore<ShellData> {
+  const reload = (): void => undefined;
+  return readable(createStore<ShellData>({ me: edition === undefined ? { phase: 'idle' } : { phase: 'ready', data: me({ edition }) }, sources: { phase: 'idle' }, reload, reloadSources: reload }));
 }
 
 export function counted(client: ApiClient): Counted {
@@ -156,16 +170,18 @@ export function stubFactory(options: StubOptions = {}): { readonly create: Creat
   };
 }
 
-export function renderApp(path: string, client: ApiClient, state: ClientState = createClientState(), slots: SlotRegistry = createSlotRegistry(), createRenderer: CreateRenderer = stubFactory().create, selectionActions: SelectionActionRegistry = createSelectionActionRegistry(), tools: ToolRegistry = createToolRegistry()): { readonly router: ReturnType<typeof createMemoryRouter>; readonly state: ClientState; readonly slots: SlotRegistry; readonly tools: ToolRegistry; readonly container: HTMLElement; readonly unmount: () => void } {
+export function renderApp(path: string, client: ApiClient, state: ClientState = createClientState(), slots: SlotRegistry = createSlotRegistry(), createRenderer: CreateRenderer = stubFactory().create, selectionActions: SelectionActionRegistry = createSelectionActionRegistry(), tools: ToolRegistry = createToolRegistry(), menus: MenuRegistry = createMenuRegistry()): { readonly router: ReturnType<typeof createMemoryRouter>; readonly state: ClientState; readonly slots: SlotRegistry; readonly tools: ToolRegistry; readonly container: HTMLElement; readonly unmount: () => void } {
   const router = createMemoryRouter(appRoutes(client, state), { initialEntries: [path] });
   const view = render(
     <ClientStateProvider state={state}>
       <SlotsProvider registry={slots}>
         <SelectionActionsProvider registry={selectionActions}>
           <ToolsProvider registry={tools}>
-            <RendererProvider createRenderer={createRenderer}>
-              <RouterProvider router={router} />
-            </RendererProvider>
+            <MenuProvider registry={menus}>
+              <RendererProvider createRenderer={createRenderer}>
+                <RouterProvider router={router} />
+              </RendererProvider>
+            </MenuProvider>
           </ToolsProvider>
         </SelectionActionsProvider>
       </SlotsProvider>
@@ -187,22 +203,25 @@ export function WorkspaceHarness({ client, state, profile: injected, createRende
   const slots = useMemo(() => createSlotRegistry(), []);
   const selectionActions = useMemo(() => createSelectionActionRegistry(), []);
   const tools = useMemo(() => createToolRegistry(), []);
+  const menus = useMemo(() => createMenuRegistry(), []);
   const createRenderer = useMemo(() => injectedRenderer ?? stubFactory().create, [injectedRenderer]);
   return (
     <ClientStateProvider state={clientState}>
       <SlotsProvider registry={slots}>
         <SelectionActionsProvider registry={selectionActions}>
           <ToolsProvider registry={tools}>
-            <RendererProvider createRenderer={createRenderer}>
-              <ShellDataProvider store={store}>
-                <ProfileProvider store={profile}>
-                  <MemoryRouter initialEntries={['/explore']}>
-                    <Reloader />
-                    <WorkspaceShell />
-                  </MemoryRouter>
-                </ProfileProvider>
-              </ShellDataProvider>
-            </RendererProvider>
+            <MenuProvider registry={menus}>
+              <RendererProvider createRenderer={createRenderer}>
+                <ShellDataProvider store={store}>
+                  <ProfileProvider store={profile}>
+                    <MemoryRouter initialEntries={['/explore']}>
+                      <Reloader />
+                      <WorkspaceShell />
+                    </MemoryRouter>
+                  </ProfileProvider>
+                </ShellDataProvider>
+              </RendererProvider>
+            </MenuProvider>
           </ToolsProvider>
         </SelectionActionsProvider>
       </SlotsProvider>

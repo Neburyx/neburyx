@@ -17,6 +17,16 @@ export const POINTER_TOOLS = ['select', 'pan', 'box'] as const;
 
 export type PointerTool = (typeof POINTER_TOOLS)[number];
 
+export type MenuTargetKind = 'node' | 'relationship' | 'canvas';
+
+/** The context menu that is open: what it is about, and the pointer's position in the browser window when it opened. Not saved with a view. */
+export interface OpenMenu {
+  readonly kind: MenuTargetKind;
+  readonly key: string | undefined;
+  readonly x: number;
+  readonly y: number;
+}
+
 /** A flyout is open for the registration of a tool, so a tool taken out and registered again does not bring back a flyout that was open before. */
 export interface OpenTool {
   readonly id: string;
@@ -33,6 +43,7 @@ export interface PresentationState {
   readonly viewport: Viewport | undefined;
   /** The tool whose flyout is open, if any. Not saved with a view. */
   readonly openTool: OpenTool | undefined;
+  readonly openMenu: OpenMenu | undefined;
 }
 
 export const INITIAL_PRESENTATION: PresentationState = {
@@ -43,6 +54,7 @@ export const INITIAL_PRESENTATION: PresentationState = {
   panelSizes: new Map(),
   viewport: undefined,
   openTool: undefined,
+  openMenu: undefined,
 };
 
 /** What the investigation holds: a node key, or a node or relationship key. */
@@ -55,6 +67,7 @@ export interface PresentationActions {
   readonly view: ReadableStore<PresentationState>;
   setTool(tool: PointerTool): void;
   setOpenTool(open: OpenTool | undefined): void;
+  setOpenMenu(open: OpenMenu | undefined): void;
   select(keys: readonly string[]): void;
   setPosition(key: string, position: Position): void;
   pin(keys: readonly string[]): void;
@@ -81,6 +94,9 @@ export function createPresentationStore(known: KnownElements): PresentationStore
     },
     setOpenTool(open) {
       store.setState({ ...store.getState(), openTool: open });
+    },
+    setOpenMenu(open) {
+      store.setState({ ...store.getState(), openMenu: open });
     },
     select(keys) {
       requireKnown(keys, known.isElement);

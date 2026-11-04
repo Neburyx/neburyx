@@ -42,8 +42,8 @@ export function ExploreFlyout({ close }: FlyoutProps) {
     menu.current?.querySelector<HTMLElement>('[aria-checked="true"]')?.focus();
   }, []);
   return (
-    <div className="tool-flyout" role="menu" aria-label="Explore" ref={menu} onKeyDown={moveFocus}>
-      <p className="tool-flyout-heading" aria-hidden="true">Explore</p>
+    <div className="menu-panel" role="menu" aria-label="Explore" ref={menu} onKeyDown={moveFocus}>
+      <p className="menu-heading" aria-hidden="true">Explore</p>
       {POINTER_TOOLS.map((mode) => {
         const row = MODE_ROWS[mode];
         const chosen = tool === mode;
@@ -54,35 +54,35 @@ export function ExploreFlyout({ close }: FlyoutProps) {
             role="menuitemradio"
             aria-checked={chosen}
             tabIndex={-1}
-            className="tool-flyout-row"
+            className="menu-row"
             onClick={() => {
               state.presentation.setTool(mode);
               close();
             }}
           >
             <span className={`icon ${row.icon}`} aria-hidden="true" />
-            <span className="tool-flyout-label">{row.name}</span>
+            <span className="menu-label">{row.name}</span>
             {chosen ? <span className="icon icon-check" aria-hidden="true" /> : null}
-            <span className="tool-flyout-hint" aria-hidden="true">{row.hint}</span>
+            <span className="menu-hint" aria-hidden="true">{row.hint}</span>
           </button>
         );
       })}
-      <div className="tool-flyout-divider" role="separator" />
+      <div className="menu-separator" role="separator" />
       {COMMAND_ROWS.map((row) => (
         <button
           key={row.id}
           type="button"
           role="menuitem"
           tabIndex={-1}
-          className="tool-flyout-row"
+          className="menu-row"
           onClick={() => {
             runSelectionCommand(state, row.id);
             close();
           }}
         >
           <span className={`icon ${row.icon}`} aria-hidden="true" />
-          <span className="tool-flyout-label">{row.name}</span>
-          <span className="tool-flyout-hint" aria-hidden="true">{row.hint}</span>
+          <span className="menu-label">{row.name}</span>
+          <span className="menu-hint" aria-hidden="true">{row.hint}</span>
         </button>
       ))}
     </div>

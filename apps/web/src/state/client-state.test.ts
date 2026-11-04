@@ -120,6 +120,21 @@ describe('the pointer tool and the viewport', () => {
     expect(state.presentation.view.getState().openTool).toBeUndefined();
   });
 
+  it('has no open context menu at first, opens and closes one, replaces an open one, and closes it when another source is bound', () => {
+    const state = createClientState();
+    expect(state.presentation.view.getState().openMenu).toBeUndefined();
+    state.bindSource('source-a');
+    state.presentation.setOpenMenu({ kind: 'canvas', key: undefined, x: 1, y: 2 });
+    expect(state.presentation.view.getState().openMenu).toEqual({ kind: 'canvas', key: undefined, x: 1, y: 2 });
+    state.presentation.setOpenMenu({ kind: 'node', key: 'k', x: 3, y: 4 });
+    expect(state.presentation.view.getState().openMenu).toEqual({ kind: 'node', key: 'k', x: 3, y: 4 });
+    state.presentation.setOpenMenu(undefined);
+    expect(state.presentation.view.getState().openMenu).toBeUndefined();
+    state.presentation.setOpenMenu({ kind: 'canvas', key: undefined, x: 1, y: 2 });
+    state.bindSource('source-b');
+    expect(state.presentation.view.getState().openMenu).toBeUndefined();
+  });
+
   it('has no viewport until one is set, keeps one that equals the identity view, and loses it when another source is bound', () => {
     const state = createClientState();
     state.bindSource('source-a');
