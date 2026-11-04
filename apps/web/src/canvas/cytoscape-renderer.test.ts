@@ -19,6 +19,10 @@ function scene(entities: ReadonlyArray<readonly [string, { x: number; y: number 
   };
 }
 
+// The painter stops a frame after 4 ms of the real clock, so a test that expects the captions of a frame to be painted would depend on how busy the machine is; the clock stands still unless a test moves it.
+beforeEach(() => void vi.spyOn(performance, 'now').mockReturnValue(0));
+afterEach(() => vi.restoreAllMocks());
+
 const NO_EVENTS: CanvasEvents = { viewport: () => undefined, click: () => undefined, box: () => undefined, contextMenu: () => undefined, move: () => undefined, failed: () => undefined };
 
 function mounted(events: CanvasEvents = NO_EVENTS) {
