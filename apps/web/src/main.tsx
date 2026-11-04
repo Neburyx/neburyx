@@ -7,8 +7,10 @@ import { appRoutes } from './routes.js';
 import { createClientState } from './state/client-state.js';
 import { createCytoscapeRenderer } from './canvas/cytoscape-renderer.js';
 import { registerBuiltInSlots } from './workspace/built-in-slots.js';
+import { registerBuiltInTools } from './workspace/built-in-tools.js';
 import { createSelectionActionRegistry } from './workspace/selection-actions.js';
 import { createSlotRegistry } from './workspace/slots.js';
+import { createToolRegistry } from './workspace/tool-registry.js';
 import '@fontsource/inter/latin-400.css';
 import '@fontsource/inter/latin-500.css';
 import '@fontsource/inter/latin-600.css';
@@ -29,9 +31,11 @@ if (root === null) throw new Error('the page has no #root element');
 const state = createClientState();
 const slots = createSlotRegistry();
 registerBuiltInSlots(slots);
+const tools = createToolRegistry();
+registerBuiltInTools(tools);
 const router = createBrowserRouter(appRoutes(createApiClient(), state));
 createRoot(root).render(
   <StrictMode>
-    <App router={router} state={state} slots={slots} selectionActions={createSelectionActionRegistry()} createRenderer={createCytoscapeRenderer} />
+    <App router={router} state={state} slots={slots} selectionActions={createSelectionActionRegistry()} tools={tools} createRenderer={createCytoscapeRenderer} />
   </StrictMode>,
 );

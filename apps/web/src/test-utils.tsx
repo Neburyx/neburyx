@@ -16,6 +16,7 @@ import type { CanvasEvents, CanvasRenderer, CreateRenderer, Scene } from './canv
 import type { Position, Viewport } from './state/presentation-state.js';
 import { createSelectionActionRegistry, SelectionActionsProvider, type SelectionActionRegistry } from './workspace/selection-actions.js';
 import { createSlotRegistry, SlotsProvider, type SlotRegistry } from './workspace/slots.js';
+import { createToolRegistry, ToolsProvider, type ToolRegistry } from './workspace/tool-registry.js';
 import { WorkspaceShell } from './workspace/workspace-shell.js';
 
 export function me(overrides: Partial<MeResponse> = {}): MeResponse {
@@ -155,20 +156,22 @@ export function stubFactory(options: StubOptions = {}): { readonly create: Creat
   };
 }
 
-export function renderApp(path: string, client: ApiClient, state: ClientState = createClientState(), slots: SlotRegistry = createSlotRegistry(), createRenderer: CreateRenderer = stubFactory().create, selectionActions: SelectionActionRegistry = createSelectionActionRegistry()): { readonly router: ReturnType<typeof createMemoryRouter>; readonly state: ClientState; readonly slots: SlotRegistry; readonly container: HTMLElement; readonly unmount: () => void } {
+export function renderApp(path: string, client: ApiClient, state: ClientState = createClientState(), slots: SlotRegistry = createSlotRegistry(), createRenderer: CreateRenderer = stubFactory().create, selectionActions: SelectionActionRegistry = createSelectionActionRegistry(), tools: ToolRegistry = createToolRegistry()): { readonly router: ReturnType<typeof createMemoryRouter>; readonly state: ClientState; readonly slots: SlotRegistry; readonly tools: ToolRegistry; readonly container: HTMLElement; readonly unmount: () => void } {
   const router = createMemoryRouter(appRoutes(client, state), { initialEntries: [path] });
   const view = render(
     <ClientStateProvider state={state}>
       <SlotsProvider registry={slots}>
         <SelectionActionsProvider registry={selectionActions}>
-          <RendererProvider createRenderer={createRenderer}>
-            <RouterProvider router={router} />
-          </RendererProvider>
+          <ToolsProvider registry={tools}>
+            <RendererProvider createRenderer={createRenderer}>
+              <RouterProvider router={router} />
+            </RendererProvider>
+          </ToolsProvider>
         </SelectionActionsProvider>
       </SlotsProvider>
     </ClientStateProvider>,
   );
-  return { router, state, slots, container: view.container, unmount: view.unmount };
+  return { router, state, slots, tools, container: view.container, unmount: view.unmount };
 }
 
 function Reloader() {
@@ -183,21 +186,24 @@ export function WorkspaceHarness({ client, state, profile: injected, createRende
   const profile = useMemo(() => injected ?? createProfileStore(client, clientState.investigation), [injected, client, clientState]);
   const slots = useMemo(() => createSlotRegistry(), []);
   const selectionActions = useMemo(() => createSelectionActionRegistry(), []);
+  const tools = useMemo(() => createToolRegistry(), []);
   const createRenderer = useMemo(() => injectedRenderer ?? stubFactory().create, [injectedRenderer]);
   return (
     <ClientStateProvider state={clientState}>
       <SlotsProvider registry={slots}>
         <SelectionActionsProvider registry={selectionActions}>
-          <RendererProvider createRenderer={createRenderer}>
-            <ShellDataProvider store={store}>
-              <ProfileProvider store={profile}>
-                <MemoryRouter initialEntries={['/explore']}>
-                  <Reloader />
-                  <WorkspaceShell />
-                </MemoryRouter>
-              </ProfileProvider>
-            </ShellDataProvider>
-          </RendererProvider>
+          <ToolsProvider registry={tools}>
+            <RendererProvider createRenderer={createRenderer}>
+              <ShellDataProvider store={store}>
+                <ProfileProvider store={profile}>
+                  <MemoryRouter initialEntries={['/explore']}>
+                    <Reloader />
+                    <WorkspaceShell />
+                  </MemoryRouter>
+                </ProfileProvider>
+              </ShellDataProvider>
+            </RendererProvider>
+          </ToolsProvider>
         </SelectionActionsProvider>
       </SlotsProvider>
     </ClientStateProvider>

@@ -17,6 +17,12 @@ export const POINTER_TOOLS = ['select', 'pan', 'box'] as const;
 
 export type PointerTool = (typeof POINTER_TOOLS)[number];
 
+/** A flyout is open for the registration of a tool, so a tool taken out and registered again does not bring back a flyout that was open before. */
+export interface OpenTool {
+  readonly id: string;
+  readonly registration: number;
+}
+
 export interface PresentationState {
   readonly tool: PointerTool;
   readonly selection: ReadonlySet<string>;
@@ -25,6 +31,8 @@ export interface PresentationState {
   readonly panelSizes: ReadonlyMap<string, number>;
   /** Undefined until a view was set, so that a view that was never set differs from a stored one at zoom 1. */
   readonly viewport: Viewport | undefined;
+  /** The tool whose flyout is open, if any. Not saved with a view. */
+  readonly openTool: OpenTool | undefined;
 }
 
 export const INITIAL_PRESENTATION: PresentationState = {
@@ -34,6 +42,7 @@ export const INITIAL_PRESENTATION: PresentationState = {
   pins: new Set(),
   panelSizes: new Map(),
   viewport: undefined,
+  openTool: undefined,
 };
 
 /** What the investigation holds: a node key, or a node or relationship key. */
@@ -45,6 +54,7 @@ export interface KnownElements {
 export interface PresentationActions {
   readonly view: ReadableStore<PresentationState>;
   setTool(tool: PointerTool): void;
+  setOpenTool(open: OpenTool | undefined): void;
   select(keys: readonly string[]): void;
   setPosition(key: string, position: Position): void;
   pin(keys: readonly string[]): void;
@@ -68,6 +78,9 @@ export function createPresentationStore(known: KnownElements): PresentationStore
     view: readable(store),
     setTool(tool) {
       store.setState({ ...store.getState(), tool });
+    },
+    setOpenTool(open) {
+      store.setState({ ...store.getState(), openTool: open });
     },
     select(keys) {
       requireKnown(keys, known.isElement);

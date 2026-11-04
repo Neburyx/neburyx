@@ -5,12 +5,14 @@ import { createClientState } from '../state/client-state.js';
 import { ClientStateProvider } from '../state/context.js';
 import { createSelectionActionRegistry } from '../workspace/selection-actions.js';
 import { createSlotRegistry, SLOT_NAMES, SlotsProvider, Slot, type SlotName } from '../workspace/slots.js';
-import { registerStandInActions, registerStandIns } from './stand-ins.js';
+import { createToolRegistry, ToolsProvider } from '../workspace/tool-registry.js';
+import { ToolStrip } from '../workspace/tool-strip.js';
+import { registerStandInActions, registerStandInTools, registerStandIns, STAND_IN_MARKER } from './stand-ins.js';
 
-const BUILT_LATER: readonly SlotName[] = SLOT_NAMES.filter((name) => name !== 'ask' && name !== 'summarize');
+const BUILT_LATER: readonly SlotName[] = SLOT_NAMES.filter((name) => name !== 'ask' && name !== 'summarize' && name !== 'tool-strip');
 
 describe('the slot stand-ins', () => {
-  it('fill every slot whose occupant is not built, and not Ask or Summarize', () => {
+  it('fill every slot whose occupant is not built, and not Ask, Summarize or the tool strip', () => {
     const registry = createSlotRegistry();
     registerStandIns(registry);
     expect([...registry.view.getState().keys()].sort()).toEqual([...BUILT_LATER].sort());
@@ -70,26 +72,47 @@ describe('the selection action stand-ins', () => {
   });
 });
 
-describe('the pointer mode stand-in', () => {
-  it('shows the three modes as pressed buttons and changes the mode when one is pressed', async () => {
-    const state = createClientState();
-    const registry = createSlotRegistry();
-    registerStandIns(registry);
+describe('the tool stand-ins', () => {
+  const ids = (registry: ReturnType<typeof createToolRegistry>) => registry.view.getState().map((tool) => tool.id);
+  const entry = (id: string, order: number) => ({ id, label: id, icon: null, order, kind: { type: 'action' as const, activate: () => undefined } });
+
+  it('fill the places of the tools that are not built yet, in the order of the reference sheet, named by tool', () => {
+    const registry = createToolRegistry();
+    registry.register(entry('explore', 10));
+    registerStandInTools(registry);
+    expect(ids(registry)).toEqual(['explore', 'filters', 'paths', 'patterns', 'search', 'group', 'table']);
+    expect(registry.view.getState().map((tool) => tool.label)).toEqual(['explore', 'Filters', 'Paths', 'Patterns', 'Search', 'Group', 'Table']);
+  });
+
+  it('carry the development marker on the icon of each of the six buttons', () => {
+    const registry = createToolRegistry();
+    registerStandInTools(registry);
     render(
-      <ClientStateProvider state={state}>
-        <SlotsProvider registry={registry}>
-          <Slot name="tool-strip" />
-        </SlotsProvider>
+      <ClientStateProvider state={createClientState()}>
+        <ToolsProvider registry={registry}>
+          <ToolStrip />
+        </ToolsProvider>
       </ClientStateProvider>,
     );
-    const mode = (name: string) => screen.getByRole('button', { name });
-    expect(mode('Select').getAttribute('aria-pressed')).toBe('true');
-    const user = userEvent.setup();
-    await user.click(mode('Box select'));
-    expect(state.presentation.view.getState().tool).toBe('box');
-    expect(mode('Box select').getAttribute('aria-pressed')).toBe('true');
-    expect(mode('Select').getAttribute('aria-pressed')).toBe('false');
-    act(() => state.presentation.setTool('pan'));
-    expect(mode('Pan').getAttribute('aria-pressed')).toBe('true');
+    const buttons = screen.getAllByRole('button');
+    expect(buttons).toHaveLength(6);
+    for (const button of buttons) expect(button.querySelector(`[data-dev-tool="${STAND_IN_MARKER}"]`)).not.toBeNull();
+  });
+
+  it('leave a place that is taken alone, add nothing twice and do not throw', () => {
+    const registry = createToolRegistry();
+    const real = entry('paths', 30);
+    registry.register(real);
+    expect(() => registerStandInTools(registry)).not.toThrow();
+    registerStandInTools(registry);
+    expect(ids(registry)).toEqual(['filters', 'paths', 'patterns', 'search', 'group', 'table']);
+    expect(registry.view.getState()[1]?.kind).toBe(real.kind);
+  });
+
+  it('are taken out by the function they return, and only what they put in', () => {
+    const registry = createToolRegistry();
+    registry.register(entry('paths', 30));
+    registerStandInTools(registry)();
+    expect(ids(registry)).toEqual(['paths']);
   });
 });

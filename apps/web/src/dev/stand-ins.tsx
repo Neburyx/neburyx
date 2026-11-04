@@ -1,42 +1,18 @@
 import type { ComponentType } from 'react';
-import { POINTER_TOOLS, type PointerTool } from '../state/presentation-state.js';
-import { useClientState } from '../state/context.js';
-import { useStoreSelector } from '../state/store.js';
 import { Link } from 'react-router';
 import { EXPLORE_PATH } from '../shell/navigation.js';
 import type { SelectionAction, SelectionActionRegistry } from '../workspace/selection-actions.js';
 import type { SlotName, SlotRegistry } from '../workspace/slots.js';
+import { TOOL_ORDER, type ToolEntry, type ToolRegistry } from '../workspace/tool-registry.js';
 import '../styles/stand-ins.css';
 
 export const STAND_IN_MARKER = 'neburyx-dev-stand-ins';
-
-const MODE_LABELS: Readonly<Record<PointerTool, { readonly name: string; readonly key: string }>> = {
-  select: { name: 'Select', key: 'V' },
-  pan: { name: 'Pan', key: 'H' },
-  box: { name: 'Box select', key: 'B' },
-};
-
-/** Buttons that choose the pointer mode, so the modes can be tried in a development build before a tool strip exists. */
-function PointerModes() {
-  const state = useClientState();
-  const tool = useStoreSelector(state.presentation.view, (current) => current.tool);
-  return (
-    <div className="stand-in stand-in-tool-strip" data-dev-tool={STAND_IN_MARKER} role="group" aria-label="Pointer mode">
-      {POINTER_TOOLS.map((mode) => (
-        <button key={mode} type="button" className="stand-in-mode" aria-label={MODE_LABELS[mode].name} aria-pressed={tool === mode} onClick={() => state.presentation.setTool(mode)}>
-          {MODE_LABELS[mode].key}
-        </button>
-      ))}
-    </div>
-  );
-}
 
 const STAND_INS: readonly (readonly [SlotName, ComponentType])[] = [
   ['investigation-menu', () => <button type="button" className="stand-in-header-action" aria-label="Investigation menu">···</button>],
   ['views', () => <button type="button" className="stand-in-header-action">Views ▾</button>],
   ['export', () => <button type="button" className="stand-in-header-action">Export</button>],
   ['save', () => <button type="button" className="stand-in-header-action stand-in-save">Save</button>],
-  ['tool-strip', PointerModes],
   [
     'toggles',
     () => (
@@ -89,6 +65,25 @@ const STAND_IN_ACTIONS: readonly SelectionAction[] = [
 export function registerStandInActions(registry: SelectionActionRegistry): () => void {
   const taken = new Set(registry.view.getState().map((action) => action.id));
   const removals = STAND_IN_ACTIONS.filter((action) => !taken.has(action.id)).map((action) => registry.register(action));
+  return () => {
+    for (const remove of removals) remove();
+  };
+}
+
+const toolIcon = (id: string) => <span className={`icon icon-stand-in-tool-${id}`} data-dev-tool={STAND_IN_MARKER} aria-hidden="true" />;
+
+const STAND_IN_TOOLS: readonly ToolEntry[] = (['filters', 'paths', 'patterns', 'search', 'group', 'table'] as const).map((id) => ({
+  id,
+  label: `${id.charAt(0).toUpperCase()}${id.slice(1)}`,
+  icon: toolIcon(id),
+  order: TOOL_ORDER[id],
+  kind: { type: 'action', activate: () => undefined },
+}));
+
+/** Puts a stand-in for each tool that is not built yet, leaves the places that are taken, and returns the function that takes out what it put in. */
+export function registerStandInTools(registry: ToolRegistry): () => void {
+  const taken = new Set(registry.view.getState().map((tool) => tool.id));
+  const removals = STAND_IN_TOOLS.filter((tool) => !taken.has(tool.id)).map((tool) => registry.register(tool));
   return () => {
     for (const remove of removals) remove();
   };

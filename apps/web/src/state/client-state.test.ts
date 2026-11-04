@@ -107,6 +107,19 @@ describe('the pointer tool and the viewport', () => {
     expect(state.presentation.view.getState().tool).toBe('pan');
   });
 
+  it('has no open tool flyout at first, opens and closes one by id, and closes it when another source is bound', () => {
+    const state = createClientState();
+    expect(state.presentation.view.getState().openTool).toBeUndefined();
+    state.bindSource('source-a');
+    state.presentation.setOpenTool({ id: 'explore', registration: 1 });
+    expect(state.presentation.view.getState().openTool).toEqual({ id: 'explore', registration: 1 });
+    state.presentation.setOpenTool(undefined);
+    expect(state.presentation.view.getState().openTool).toBeUndefined();
+    state.presentation.setOpenTool({ id: 'explore', registration: 1 });
+    state.bindSource('source-b');
+    expect(state.presentation.view.getState().openTool).toBeUndefined();
+  });
+
   it('has no viewport until one is set, keeps one that equals the identity view, and loses it when another source is bound', () => {
     const state = createClientState();
     state.bindSource('source-a');

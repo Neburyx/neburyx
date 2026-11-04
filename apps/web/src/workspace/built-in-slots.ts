@@ -1,6 +1,10 @@
+import { ToolStrip } from './tool-strip.js';
 import { ZoomControls } from './zoom-controls.js';
 import type { SlotRegistry } from './slots.js';
 
 export function registerBuiltInSlots(registry: SlotRegistry): () => void {
-  return registry.register('zoom-controls', ZoomControls);
+  const removals = [registry.register('tool-strip', ToolStrip), registry.register('zoom-controls', ZoomControls)];
+  return () => {
+    for (const remove of removals) remove();
+  };
 }

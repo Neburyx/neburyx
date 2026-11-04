@@ -4,11 +4,13 @@ import type { ProfileState, ProfileStore } from '../canvas/profile-store.js';
 import { ClientStateProvider } from '../state/context.js';
 import { createStore, readable } from '../state/store.js';
 import { registerBuiltInSlots } from '../workspace/built-in-slots.js';
+import { registerBuiltInTools } from '../workspace/built-in-tools.js';
 import { createSelectionActionRegistry, SelectionActionsProvider } from '../workspace/selection-actions.js';
 import { createSlotRegistry, SlotsProvider } from '../workspace/slots.js';
+import { createToolRegistry, ToolsProvider } from '../workspace/tool-registry.js';
 import { WorkspaceShell } from '../workspace/workspace-shell.js';
 import { createFrameSampleState, frameSampleProfile, FRAME_SAMPLE_SOURCE } from './frame-sample.js';
-import { registerStandInActions, registerStandIns } from './stand-ins.js';
+import { registerStandInActions, registerStandInTools, registerStandIns } from './stand-ins.js';
 
 function knownProfile(): ProfileStore {
   const store = createStore<ProfileState>({ sourceId: FRAME_SAMPLE_SOURCE, request: { phase: 'ready', data: frameSampleProfile() } });
@@ -30,13 +32,21 @@ export function FrameSamplePage() {
     registerStandIns(registry);
     return registry;
   });
+  const [tools] = useState(() => {
+    const registry = createToolRegistry();
+    registerBuiltInTools(registry);
+    registerStandInTools(registry);
+    return registry;
+  });
   return (
     <ClientStateProvider state={state}>
       <SlotsProvider registry={slots}>
         <SelectionActionsProvider registry={actions}>
-          <ProfileProvider store={profile}>
-            <WorkspaceShell canvasView="as-drawn" />
-          </ProfileProvider>
+          <ToolsProvider registry={tools}>
+            <ProfileProvider store={profile}>
+              <WorkspaceShell canvasView="as-drawn" />
+            </ProfileProvider>
+          </ToolsProvider>
         </SelectionActionsProvider>
       </SlotsProvider>
     </ClientStateProvider>

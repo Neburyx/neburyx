@@ -23,6 +23,11 @@
   --color-avatar-surface: #e9ecf1;
   --color-avatar-text: #5f6672;
   --color-control-border: #e3e5ed;
+  --color-flyout-hint: #8c96a8;
+  --color-tool-icon: #747a85;
+  --color-menu-icon: #525c6b;
+  --color-chosen-mark: #5263a6;
+  --color-row-chosen: #edf0f7;
 
   --space-2: 2px;
   --space-3: 3px;
@@ -51,9 +56,12 @@
   --scope-left: 24px;
   --scope-top: 16px;
   --dock-width: 320px;
-  --stand-in-tool-strip-width: 40px;
-  --stand-in-tool-strip-height: 268px;
-  --stand-in-mode-size: 32px;
+  --tool-button-size: 32px;
+  --tool-icon-size: 16px;
+  --tool-check-size: 14px;
+  --tool-flyout-width: 236px;
+  --tool-flyout-row-height: 30px;
+  --radius-flyout: 10px;
   --stand-in-control-height: 36px;
   --stand-in-table-width: 86px;
   --stand-in-legend-width: 186px;
@@ -96,6 +104,7 @@
 
   --font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --font-size-caption: 11px;
   --font-size-small: 12px;
   --font-size-body: 13px;
   --font-size-title: 14px;
@@ -110,6 +119,7 @@
   --line-height-compact: 18px;
   --line-height-workspace: 17px;
   --line-height-pill: 16px;
+  --line-height-caption: 13px;
   --badge-height: 22px;
 
   --focus-outline: var(--focus-width) solid var(--color-focus);

@@ -10,32 +10,6 @@
   line-height: var(--line-height-workspace);
 }
 
-.stand-in-tool-strip {
-  flex-direction: column;
-  justify-content: flex-start;
-  gap: var(--space-4);
-  padding-top: var(--space-4);
-  width: var(--stand-in-tool-strip-width);
-  height: var(--stand-in-tool-strip-height);
-  border-radius: var(--radius-panel);
-}
-
-.stand-in-mode {
-  width: var(--stand-in-mode-size);
-  height: var(--stand-in-mode-size);
-  border: none;
-  border-radius: var(--radius);
-  background: none;
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
-}
-
-.stand-in-mode[aria-pressed='true'] {
-  background: var(--color-accent-surface);
-  color: var(--color-accent);
-}
-
 .stand-in-table {
   width: var(--stand-in-table-width);
   height: var(--stand-in-control-height);
@@ -119,4 +93,28 @@
 
 .icon-stand-in-hide {
   --icon: url('../assets/lucide/eye-off.svg');
+}
+
+.icon-stand-in-tool-filters {
+  --icon: url('../assets/lucide/sliders-horizontal.svg');
+}
+
+.icon-stand-in-tool-paths {
+  --icon: url('../assets/lucide/route.svg');
+}
+
+.icon-stand-in-tool-patterns {
+  --icon: url('../assets/lucide/shapes.svg');
+}
+
+.icon-stand-in-tool-search {
+  --icon: url('../assets/lucide/search.svg');
+}
+
+.icon-stand-in-tool-group {
+  --icon: url('../assets/lucide/group.svg');
+}
+
+.icon-stand-in-tool-table {
+  --icon: url('../assets/lucide/table-2.svg');
 }
