@@ -3,7 +3,7 @@ import { createCytoscapeRenderer, type RendererCore as Core } from './cytoscape-
 import { glyphUri } from './glyphs.js';
 import { FIT_PADDING, GLYPH_COLOR } from './look.js';
 import { ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from './zoom.js';
-import type { CanvasEvents, ContextMenuRequest, Scene } from './scene.js';
+import type { CanvasEvents, RightClick, Scene } from './scene.js';
 import type { BoxSelection } from './box-selection.js';
 import type { Click } from './selection-gestures.js';
 import type { Viewport } from '../state/presentation-state.js';
@@ -664,7 +664,7 @@ describe('the label of a stored relationship in the Cytoscape renderer', () => {
 
 describe('the right-click of the Cytoscape renderer', () => {
   const withMenus = () => {
-    const requests: ContextMenuRequest[] = [];
+    const requests: RightClick[] = [];
     let core: Core | undefined;
     const renderer = createCytoscapeRenderer({ nextFrame: (callback) => callback(), onCore: (made) => void (core = made) });
     renderer.mount(undefined, { viewport: () => undefined, click: () => undefined, box: () => undefined, contextMenu: (request) => void requests.push(request) }, undefined);

@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { useLayoutEffect, type ComponentType, type ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RENDERER_UNAVAILABLE } from '../canvas/graph-canvas.js';
-import type { ContextMenuRequest } from '../canvas/scene.js';
+import type { RightClick } from '../canvas/scene.js';
 import { createClientState, type ClientState } from '../state/client-state.js';
 import { useLoadedGraph } from '../state/context.js';
 import { edgeKey, elementKey } from '../state/keys.js';
@@ -260,7 +260,7 @@ const derived: GraphEdge = { ...withEdgeRef('e-derived', { sourceId: 'a', derive
 const unknownOrigin: GraphEdge = { ...edge('a', 'e-unknown', 'n1', 'n2'), semantics: 'unknown' };
 const aggregate = (id: string, memberCount: Count | undefined, overrides: Partial<GraphEdge> = {}): GraphEdge => ({ ...withEdgeRef(id, { sourceId: 'a', aggregate: { type: 'rel-a', from: end('n1'), to: end('n2') } }), ...(memberCount === undefined ? {} : { memberCount }), ...overrides });
 
-const rightClickOn = (kind: 'node' | 'relationship', target: string, at = { x: 50, y: 60 }): ContextMenuRequest => ({ target: { kind, key: target }, ...at });
+const rightClickOn = (kind: 'node' | 'relationship', target: string, at = { x: 50, y: 60 }): RightClick => ({ target: { kind, key: target }, ...at });
 const headerOf = (name: string): { readonly title: string; readonly detail: string } => {
   const found = screen.getByRole('menu', { name });
   return { title: found.querySelector('.menu-header-title')?.textContent ?? '', detail: found.querySelector('.menu-header-detail')?.textContent ?? '' };

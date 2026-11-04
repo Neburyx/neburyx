@@ -4,7 +4,7 @@ import { vi, type Mock } from 'vitest';
 import { GraphCanvas } from '../canvas/graph-canvas.js';
 import { ProfileProvider } from '../canvas/profile-context.js';
 import { RendererProvider } from '../canvas/renderer-context.js';
-import type { ContextMenuRequest } from '../canvas/scene.js';
+import type { RightClick } from '../canvas/scene.js';
 import { testProfile } from '../dev/test-profile.js';
 import { ShellDataProvider } from '../shell/shell-data.js';
 import type { ClientState } from '../state/client-state.js';
@@ -30,7 +30,7 @@ export function load(state: ClientState, nodeIds: readonly string[] = ids): void
 export interface Shown {
   readonly factory: ReturnType<typeof stubFactory>;
   readonly outside: Mock<() => void>;
-  readonly rightClick: (request: ContextMenuRequest) => void;
+  readonly rightClick: (request: RightClick) => void;
 }
 
 export function show(state: ClientState, options: StubOptions = {}, menus: MenuRegistry = withBuiltIns(), edition: 'community' | 'enterprise' | undefined = 'community', extra: ReactNode = null): Shown {
@@ -55,7 +55,7 @@ export function show(state: ClientState, options: StubOptions = {}, menus: MenuR
       </ShellDataProvider>
     </ClientStateProvider>,
   );
-  const rightClick = (request: ContextMenuRequest): void => {
+  const rightClick = (request: RightClick): void => {
     const events = factory.made[0]?.events[0];
     if (events === undefined) throw new Error('the renderer was not mounted');
     act(() => events.contextMenu(request));
@@ -75,7 +75,7 @@ export function withBuiltIns(): MenuRegistry {
   return registry;
 }
 
-export const onCanvas = (x: number, y: number): ContextMenuRequest => ({ target: undefined, x, y });
+export const onCanvas = (x: number, y: number): RightClick => ({ target: undefined, x, y });
 export const menu = (): HTMLElement => screen.getByRole('menu', { name: 'Canvas' });
 export const item = (name: string): HTMLElement => within(menu()).getByRole('menuitem', { name });
 export const selection = (state: ClientState): string[] => [...state.presentation.view.getState().selection].sort();

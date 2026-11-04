@@ -13,7 +13,7 @@ import { captionFontsReady, loadCaptionFonts } from './fonts.js';
 import { useCreateRenderer } from './renderer-context.js';
 import { selectionAfterBox, type BoxSelection } from './box-selection.js';
 import { selectionAfterClick, type Click } from './selection-gestures.js';
-import type { CanvasEvents, CanvasRenderer, ContextMenuRequest, Scene } from './scene.js';
+import type { CanvasEvents, CanvasRenderer, RightClick, Scene } from './scene.js';
 
 export const RENDERER_UNAVAILABLE = 'RENDERER_UNAVAILABLE';
 
@@ -25,7 +25,7 @@ function applyClick(state: ClientState, click: Click): void {
 }
 
 /** A right-click on an item that is not selected selects it first, on a selected item keeps the selection, on empty canvas leaves it; a click on something that is not drawn opens nothing. */
-function openContextMenu(state: ClientState, request: ContextMenuRequest): void {
+function openContextMenu(state: ClientState, request: RightClick): void {
   const { target, x, y } = request;
   if (target === undefined) {
     state.presentation.setOpenMenu({ kind: 'canvas', key: undefined, x, y });

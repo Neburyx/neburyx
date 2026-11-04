@@ -53,7 +53,7 @@ export interface Inspection {
 }
 
 /** A right-click: the drawn item it landed on, or none for empty canvas, and where the pointer was in the browser window. */
-export interface ContextMenuRequest {
+export interface RightClick {
   readonly target: { readonly kind: 'node' | 'relationship'; readonly key: string } | undefined;
   readonly x: number;
   readonly y: number;
@@ -68,7 +68,7 @@ export interface CanvasEvents {
   /** The pan and zoom after a change, at most once per animation frame; the last report is the final view. */
   readonly viewport: (viewport: Viewport) => void;
   /** The right button was pressed and released on a drawn item or on empty canvas; the browser's own menu never opens on the canvas. */
-  readonly contextMenu: (request: ContextMenuRequest) => void;
+  readonly contextMenu: (request: RightClick) => void;
 }
 
 export interface CanvasRenderer {
