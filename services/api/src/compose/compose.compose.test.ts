@@ -114,6 +114,9 @@ describe('a fresh install', () => {
   });
 });
 
+/** What `compose port` prints for a port that is exposed but not published: the host part differs between Compose versions (`:0` on v2.38.2 and v5.6.0, `invalid IP:0` on v5.1.3); the host port is 0 or the line is empty. */
+const NO_HOST_PORT = /^(|.*:0)$/;
+
 describe('the published ports', () => {
   let stack: Stack;
 
@@ -141,7 +144,7 @@ describe('the published ports', () => {
     const raw = await dockerOk(['inspect', '--format', '{{json .HostConfig.PortBindings}}', await stack.containerId('db')]);
     expect(Object.values(bindings.parse(JSON.parse(raw))).flatMap((list) => list ?? [])).toEqual([]);
     const found = await stack.compose(['port', 'db', '5432']);
-    expect([':0', '']).toContain(found.stdout.trim());
+    expect(found.stdout.trim()).toMatch(NO_HOST_PORT);
   });
 });
 

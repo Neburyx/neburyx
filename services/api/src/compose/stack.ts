@@ -59,7 +59,7 @@ export function describeContainers(inspections: readonly string[], secrets: read
 const eventSchema = z.object({
   Action: z.string(),
   timeNano: z.number(),
-  Actor: z.object({ Attributes: z.record(z.string(), z.string()) }),
+  Actor: z.object({ ID: z.string(), Attributes: z.record(z.string(), z.string()) }),
 });
 export type ContainerEvent = z.infer<typeof eventSchema>;
 
@@ -241,6 +241,20 @@ export class EventRecorder {
     } finally {
       const removed = await docker(['rm', '-f', id]);
       if (removed.code !== 0) throw new Error(`the marker container ${id.slice(0, 12)} could not be removed: ${removed.stderr.slice(-300)}`);
+    }
+  }
+
+  /** Returns once every container of the service that started after `sinceNano` has a die event: Docker marks a container stopped before it publishes the event, so the state of the container does not show it. */
+  async finished(sinceNano: number, service: string, timeoutMs: number): Promise<void> {
+    const deadline = Date.now() + timeoutMs;
+    await this.sync();
+    for (;;) {
+      const events = this.since(sinceNano).filter((event) => serviceOf(event) === service);
+      const died = new Set(events.filter((event) => event.Action === 'die').map((event) => event.Actor.ID));
+      const running = events.filter((event) => event.Action === 'start' && !died.has(event.Actor.ID));
+      if (running.length === 0) return;
+      if (Date.now() > deadline) throw new Error(`${service} had not finished after ${timeoutMs} ms: ${running.length} started container(s) without a die event`);
+      await new Promise((resolve) => setTimeout(resolve, 200));
     }
   }
 

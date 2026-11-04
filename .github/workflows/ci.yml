@@ -7,9 +7,13 @@ on:
 permissions:
   contents: read
 
+# Every job names its runner image. `ubuntu-latest` moved from 24.04 to 26.04 and with it Docker (28.0.4 to 29.4.2) and
+# Compose (v2.38.2 to v5.1.3) changed under the compose tests; move the image on purpose. The Docker jobs print the
+# Docker versions first, so a change shows in the log.
+
 jobs:
   lint:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: actions/setup-node@v7.1.0
@@ -20,7 +24,7 @@ jobs:
       - run: pnpm lint
 
   typecheck:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: actions/setup-node@v7.1.0
@@ -31,7 +35,7 @@ jobs:
       - run: pnpm typecheck
 
   unit:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: actions/setup-node@v7.1.0
@@ -42,7 +46,7 @@ jobs:
       - run: pnpm test
 
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: actions/setup-node@v7.1.0
@@ -53,7 +57,7 @@ jobs:
       - run: pnpm build
 
   contract:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: actions/setup-node@v7.1.0
@@ -64,8 +68,11 @@ jobs:
       - run: pnpm test:contract
 
   integration:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
+      - run: |
+          docker version
+          docker compose version
       - uses: actions/checkout@v7.0.1
       - uses: actions/setup-node@v7.1.0
         with:
@@ -75,7 +82,7 @@ jobs:
       - run: pnpm test:integration
 
   neo4j:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 45
     strategy:
       fail-fast: false
@@ -84,6 +91,9 @@ jobs:
     env:
       NEBURYX_NEO4J_IMAGE: ${{ matrix.image }}
     steps:
+      - run: |
+          docker version
+          docker compose version
       - uses: actions/checkout@v7.0.1
       - uses: actions/setup-node@v7.1.0
         with:
@@ -93,9 +103,12 @@ jobs:
       - run: pnpm test:neo4j
 
   image:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 60
     steps:
+      - run: |
+          docker version
+          docker compose version
       - uses: actions/checkout@v7.0.1
       - uses: actions/setup-node@v7.1.0
         with:
@@ -109,9 +122,12 @@ jobs:
       - run: node deploy/docker/check-platforms.mjs ${{ runner.temp }}/neburyx.oci.tar
 
   compose:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 60
     steps:
+      - run: |
+          docker version
+          docker compose version
       - uses: actions/checkout@v7.0.1
       - uses: actions/setup-node@v7.1.0
         with:

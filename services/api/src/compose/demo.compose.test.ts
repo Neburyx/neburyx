@@ -20,6 +20,12 @@ const LOADER_IMAGE = `neburyx-demo-loader-test:${TAG}`;
  * may wait for it for the whole of `DEMO_WAIT_SECONDS` (600 s) and then run its own steps, so it gets 900 s.
  */
 const STACK_TEST_TIMEOUT_MS = 900_000;
+/**
+ * `up -d api` returns as soon as `config` fails; the migrate step it started keeps running (Compose v2.38.2 waited for it, v5.1.3 and v5.6.0 do not),
+ * so a test that reads its events straight after `up` depends on how long the step takes. The test slows it by this many seconds and waits for it, up to STEP_FINISH_MS (it takes a few seconds unslowed).
+ */
+const SLOWED_MIGRATE_SECONDS = 8;
+const STEP_FINISH_MS = 60_000;
 const stacks: Stack[] = [];
 const folders: string[] = [];
 
@@ -336,14 +342,15 @@ describe('a demo stack with a step that fails', () => {
     const older = await readMapping();
     expect(parse(older.stdout)).toEqual({ sources: DEMO_PACKS.map((name) => packSource(name)) });
 
-    writeFileSync(override, `${API_WITHOUT_GRAPHS}  config:\n    command: ["combine", "--packs", "no-such-pack", "--out", "/config/neburyx.yaml"]\n`);
+    writeFileSync(override, `${API_WITHOUT_GRAPHS}  config:\n    command: ["combine", "--packs", "no-such-pack", "--out", "/config/neburyx.yaml"]\n  migrate:\n    entrypoint: ["sh", "-c", "sleep ${SLOWED_MIGRATE_SECONDS}; exec node dist/cli.js \\"$$@\\"", "sh"]\n`);
     const since = Date.now() * 1e6;
     const broken = await stack.compose(['up', '-d', 'api']);
     expect(broken.code).not.toBe(0);
+    await recorder.finished(since, 'migrate', STEP_FINISH_MS);
     await recorder.sync();
     const events = recorder.since(since);
     expect(events.find((event) => serviceOf(event) === 'config' && event.Action === 'die')?.Actor.Attributes['exitCode']).toBe('2');
-    expect(events.find((event) => serviceOf(event) === 'migrate' && event.Action === 'die')?.Actor.Attributes['exitCode']).toBe('0');
+    expect(events.filter((event) => serviceOf(event) === 'migrate' && event.Action === 'die' && event.Actor.Attributes['exitCode'] !== '0')).toEqual([]);
     expect((await stack.compose(['logs', '--no-log-prefix', 'config'])).stdout).toContain('there is no such pack');
     expect(await startsOf(recorder, since, 'api')).toBe(0);
     expect((await readMapping()).stdout).toBe(older.stdout);
@@ -365,6 +372,7 @@ describe('a demo stack with a step that fails', () => {
     expect(refused.stderr).not.toContain(values['DEMO_NEO4J_PASSWORD']);
     expect(refused.stderr).not.toContain(values['NEBURYX_CURSOR_KEY']);
     expect(refused.stderr).not.toContain(stack.passwords.NEBURYX_DB_APP_PASSWORD);
+    await recorder.finished(since, 'load-insurance', STEP_FINISH_MS);
     await recorder.sync();
     const events = recorder.since(since);
     expect(events.find((event) => serviceOf(event) === 'load-banking' && event.Action === 'die')?.Actor.Attributes['exitCode']).toBe('1');

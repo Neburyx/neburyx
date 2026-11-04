@@ -11,6 +11,7 @@ const stepSchema = z.object({
   with: z.record(z.string(), z.string()).optional(),
 });
 const jobSchema = z.object({
+  'runs-on': z.string(),
   env: z.record(z.string(), z.string()).optional(),
   strategy: z.object({ 'fail-fast': z.boolean().optional(), matrix: z.record(z.string(), z.array(z.string())) }).optional(),
   steps: z.array(stepSchema),
@@ -26,6 +27,8 @@ const rootScripts = z
   .object({ scripts: z.record(z.string(), z.string()) })
   .parse(JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8'))).scripts;
 const pinnedAction = /^[\w-]+\/[\w-]+@v\d+\.\d+\.\d+$/;
+const RUNNER = 'ubuntu-26.04';
+const PRINT_DOCKER_VERSIONS = 'docker version\ndocker compose version\n';
 
 describe('CI workflow', () => {
   it('runs on push and pull request', () => {
@@ -42,23 +45,28 @@ describe('CI workflow', () => {
     expect(uses.filter((action) => !pinnedAction.test(action))).toEqual([]);
   });
 
+  it('names the runner image of every job, so a change of the default image is a decision', () => {
+    expect(Object.entries(workflow.jobs).filter(([, job]) => job['runs-on'] !== RUNNER).map(([name]) => name)).toEqual([]);
+  });
+
   it.each([
-    ['lint', 'lint'],
-    ['typecheck', 'typecheck'],
-    ['unit', 'test'],
-    ['build', 'build'],
-    ['contract', 'test:contract'],
-    ['integration', 'test:integration'],
-  ])('job %s installs frozen and ends with the root script %s', (job, script) => {
+    ['lint', 'lint', []],
+    ['typecheck', 'typecheck', []],
+    ['unit', 'test', []],
+    ['build', 'build', []],
+    ['contract', 'test:contract', []],
+    ['integration', 'test:integration', [PRINT_DOCKER_VERSIONS]],
+  ])('job %s installs frozen and ends with the root script %s', (job, script, first) => {
     const steps = workflow.jobs[job]?.steps ?? [];
     expect(steps.map((step) => step.uses?.split('@')[0] ?? step.run)).toEqual([
+      ...first,
       'actions/checkout',
       'actions/setup-node',
       'corepack enable',
       'pnpm install --frozen-lockfile',
       `pnpm ${script}`,
     ]);
-    expect(steps[1]?.with).toEqual({ 'node-version-file': '.nvmrc' });
+    expect(steps.find((step) => step.uses?.startsWith('actions/setup-node'))?.with).toEqual({ 'node-version-file': '.nvmrc' });
     expect(Object.keys(rootScripts)).toContain(script);
   });
 
@@ -71,13 +79,14 @@ describe('CI workflow', () => {
     expect(job?.strategy).toEqual({ 'fail-fast': false, matrix: { image: ['neo4j:5.26', 'neo4j:2026'] } });
     expect(job?.env).toEqual({ NEBURYX_NEO4J_IMAGE: '${{ matrix.image }}' });
     expect((job?.steps ?? []).map((step) => step.uses?.split('@')[0] ?? step.run)).toEqual([
+      PRINT_DOCKER_VERSIONS,
       'actions/checkout',
       'actions/setup-node',
       'corepack enable',
       'pnpm install --frozen-lockfile',
       'pnpm test:neo4j',
     ]);
-    expect(job?.steps[1]?.with).toEqual({ 'node-version-file': '.nvmrc' });
+    expect(job?.steps[2]?.with).toEqual({ 'node-version-file': '.nvmrc' });
     expect(Object.keys(rootScripts)).toContain('test:neo4j');
   });
 
@@ -89,6 +98,7 @@ describe('CI workflow', () => {
   it('installs frozen and ends with the compose test in the compose job', () => {
     const steps = workflow.jobs['compose']?.steps ?? [];
     expect(steps.map((step) => step.uses?.split('@')[0] ?? step.run)).toEqual([
+      PRINT_DOCKER_VERSIONS,
       'actions/checkout',
       'actions/setup-node',
       'corepack enable',
@@ -101,6 +111,7 @@ describe('CI workflow', () => {
   it('builds the image for both platforms and checks the result, after running the image test', () => {
     const steps = workflow.jobs['image']?.steps ?? [];
     expect(steps.map((step) => step.uses?.split('@')[0] ?? step.run?.split(' ').slice(0, 2).join(' '))).toEqual([
+      'docker version\ndocker',
       'actions/checkout',
       'actions/setup-node',
       'corepack enable',
