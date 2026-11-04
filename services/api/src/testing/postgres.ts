@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
+import { startWithRetry } from '@neburyx/test-containers';
 import pg from 'pg';
 
 export const POSTGRES_IMAGE = 'postgres:16.15';
@@ -24,7 +25,7 @@ function identifier(prefix: string): string {
 }
 
 export async function startPostgres(): Promise<TestPostgres> {
-  const container: StartedPostgreSqlContainer = await new PostgreSqlContainer(POSTGRES_IMAGE).start();
+  const container: StartedPostgreSqlContainer = await startWithRetry((labels) => new PostgreSqlContainer(POSTGRES_IMAGE).withLabels(labels).start());
   const host = container.getHost();
   const port = container.getPort();
   const adminUrl = container.getConnectionUri();

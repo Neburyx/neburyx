@@ -250,6 +250,18 @@ importers:
         specifier: 5.0.5
         version: 5.0.5(@types/node@24.19.2)(jsdom@30.1.3)(vite@8.3.5(@types/node@24.19.2)(yaml@2.9.1))
 
+  packages/test-containers:
+    devDependencies:
+      '@types/node':
+        specifier: 24.19.2
+        version: 24.19.2
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: 5.0.5
+        version: 5.0.5(@types/node@24.19.2)(jsdom@30.1.3)(vite@8.3.5(@types/node@24.19.2)(yaml@2.9.1))
+
   services/api:
     dependencies:
       '@fastify/static':
@@ -283,6 +295,9 @@ importers:
         specifier: 4.6.7
         version: 4.6.7
     devDependencies:
+      '@neburyx/test-containers':
+        specifier: workspace:*
+        version: link:../../packages/test-containers
       '@testcontainers/neo4j':
         specifier: 12.2.1
         version: 12.2.1(supports-color@7.2.0)
@@ -314,6 +329,9 @@ importers:
         specifier: 4.6.7
         version: 4.6.7
     devDependencies:
+      '@neburyx/test-containers':
+        specifier: workspace:*
+        version: link:../../packages/test-containers
       '@testcontainers/neo4j':
         specifier: 12.2.1
         version: 12.2.1(supports-color@7.2.0)
@@ -345,6 +363,9 @@ importers:
 
   tools/driver-check:
     dependencies:
+      '@neburyx/test-containers':
+        specifier: workspace:*
+        version: link:../../packages/test-containers
       '@testcontainers/neo4j':
         specifier: 12.2.1
         version: 12.2.1(supports-color@7.2.0)

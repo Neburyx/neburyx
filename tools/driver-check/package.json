@@ -9,6 +9,7 @@
     "check": "pnpm build && node dist/main.js"
   },
   "dependencies": {
+    "@neburyx/test-containers": "workspace:*",
     "@testcontainers/neo4j": "12.2.1",
     "neo4j-driver": "6.3.0"
   },

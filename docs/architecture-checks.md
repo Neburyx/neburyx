@@ -3,7 +3,7 @@
 Three checks run with the unit tests (`pnpm test`, and so in CI) and fail the build when code breaks a structural rule.
 The first two live in `tools/workspace-checks/src/architecture/` and each reports the file, line and import that breaks the
 rule. The third, [no domain words in code](#no-domain-words-in-code), lives in `tools/workspace-checks/src/domain-words/`
-and reports the file, line and word. The [web client rules](#the-web-client) are a fourth group, in the same folder as the first two.
+and reports the file, line and word. The [web client rules](#the-web-client) are a fourth group, in the same folder as the first two. A fifth, [test containers](#test-containers), reports a container started without the retry helper.
 
 ## No way around the gate
 
@@ -138,3 +138,12 @@ Rules for `apps/web/src`, checked in `tools/workspace-checks/src/architecture/we
 | No database client | a dependency of `apps/web` on a graph or database client (a package name that contains `neo4j`, `cypher`, `bolt`, `postgres`, `kysely`, `mongodb`, `mysql`, `sqlite`, `redis` or `valkey`, or is `pg`) |
 
 The checks are by name and shape, so a duplicate of a contracts type under an unrelated name, or query text assembled from fragments or written in lower case, is for review. Imports from `ee/` and domain words in `.tsx` files are covered by the checks above; ESLint's rules apply to `.tsx` files too.
+
+## Test containers
+
+Every container that a test or a tool starts with `testcontainers` is started inside `startWithRetry` of `packages/test-containers`
+(`tools/workspace-checks/src/architecture/containers.ts`). testcontainers waits a fixed 30 s for a container's host port to be
+bound and has no setting for it, so a stall of the Docker daemon fails a start; the helper starts again after exactly that
+error (three attempts in all) and removes the containers of a failed attempt first. The check reads every file under
+`services/`, `apps/`, `packages/`, `tools/` and `ee/`, tests included, and reports the file and line of a `.start()` call on
+`new …Container(…)` (or on a variable that holds one, found by its scope and by later assignments) that is not inside a `startWithRetry(…)` call.

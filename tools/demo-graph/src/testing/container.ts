@@ -1,28 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { Neo4jContainer } from '@testcontainers/neo4j';
+import { startWithRetry } from '@neburyx/test-containers';
 import neo4j, { type Driver } from 'neo4j-driver';
 
 export const DEFAULT_NEO4J_IMAGE = 'neo4j:5.26';
 const STARTUP_LIMIT_MS = 240_000;
-/**
- * testcontainers 12.2.1 waits a fixed 30 s for the host port to be bound and offers no setting for it, so
- * `withStartupTimeout` cannot cover that wait. Docker here binds a port in about 0.15 s, so a timeout is a rare
- * stall of the Docker daemon and a new attempt succeeds.
- */
-export const START_ATTEMPTS = 3;
-const PORT_BOUND_TIMEOUT = /Timed out after \d+ms while waiting for container ports to be bound/;
-
-/** Starts again only when the port-bound wait timed out, up to `attempts` in all; every other error is thrown at once. */
-export async function startWithRetry<T>(start: () => Promise<T>, attempts = START_ATTEMPTS): Promise<T> {
-  for (let attempt = 1; ; attempt += 1) {
-    try {
-      return await start();
-    } catch (error) {
-      if (attempt >= attempts || !(error instanceof Error) || !PORT_BOUND_TIMEOUT.test(error.message)) throw error;
-    }
-  }
-}
-
 export interface RunningNeo4j {
   readonly image: string;
   readonly boltUri: string;
@@ -41,7 +23,7 @@ export async function startNeo4j(image = imageFrom(process.env)): Promise<Runnin
   const password = randomUUID();
   let started;
   try {
-    started = await startWithRetry(() => new Neo4jContainer(image).withPassword(password).withStartupTimeout(STARTUP_LIMIT_MS).start());
+    started = await startWithRetry((labels) => new Neo4jContainer(image).withPassword(password).withStartupTimeout(STARTUP_LIMIT_MS).withLabels(labels).start());
   } catch (error) {
     throw new Error(`could not start the Neo4j image ${image}: ${error instanceof Error ? error.message : 'unknown error'}`);
   }

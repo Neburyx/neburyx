@@ -17,6 +17,7 @@ safe on very high-degree nodes. The repo is **pre-release**: the build tooling, 
 | `services/api` | Backend API |
 | `ee/` | Modules under a separate commercial licence (placeholder) |
 | `packages/contracts` | API contract and generated client types |
+| `packages/test-containers` | How tests and tools start a container (retries the port-binding timeout) |
 | `domain-packs` | Ready-made mapping files, one directory per domain; YAML and Markdown only, no code (see its README) |
 | `deploy/docker` | Container image build (`Dockerfile`; see its README) |
 | `deploy/compose` | Community install: image + Postgres, loopback only (see its README) |

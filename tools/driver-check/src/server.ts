@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Neo4jContainer } from '@testcontainers/neo4j';
+import { startWithRetry } from '@neburyx/test-containers';
 
 export interface Server {
   readonly image: string;
@@ -15,7 +16,7 @@ const STARTUP_LIMIT_MS = 240_000;
 
 export const startContainer: StartServer = async (image) => {
   const password = randomUUID();
-  const started = await new Neo4jContainer(image).withPassword(password).withStartupTimeout(STARTUP_LIMIT_MS).start();
+  const started = await startWithRetry((labels) => new Neo4jContainer(image).withPassword(password).withStartupTimeout(STARTUP_LIMIT_MS).withLabels(labels).start());
   return {
     image,
     boltUri: started.getBoltUri(),
