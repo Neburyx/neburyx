@@ -48,3 +48,15 @@ export function placeSubmenu(row: Rect, size: Size, viewport: Size): Placement {
   const start = after + width > viewport.width - VIEWPORT_MARGIN ? row.left - SUBMENU_GAP - width : after;
   return { left: Math.max(VIEWPORT_MARGIN, Math.min(start, viewport.width - VIEWPORT_MARGIN - width)), top: Math.max(VIEWPORT_MARGIN, Math.min(row.top, viewport.height - VIEWPORT_MARGIN - height)) };
 }
+
+export const ANCHOR_GAP = 6;
+
+/** Above the control with its right edge level with the control's, below it when it does not fit above and does fit below, then held at the margin; sized like a menu. */
+export function placeAbove(anchor: Rect, size: Size, viewport: Size): Placement {
+  const width = inside(size.width, viewport.width);
+  const height = inside(size.height, viewport.height);
+  const above = anchor.top - ANCHOR_GAP - height;
+  const below = anchor.bottom + ANCHOR_GAP;
+  const top = above >= VIEWPORT_MARGIN || below + height > viewport.height - VIEWPORT_MARGIN ? above : below;
+  return { left: Math.max(VIEWPORT_MARGIN, Math.min(anchor.right - width, viewport.width - VIEWPORT_MARGIN - width)), top: Math.max(VIEWPORT_MARGIN, Math.min(top, viewport.height - VIEWPORT_MARGIN - height)) };
+}

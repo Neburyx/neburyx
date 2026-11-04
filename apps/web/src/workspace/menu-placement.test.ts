@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { placeMenu, placeSubmenu, POINTER_OFFSET, SUBMENU_GAP, VIEWPORT_MARGIN } from './menu-placement.js';
+import { ANCHOR_GAP, placeAbove, placeMenu, placeSubmenu, POINTER_OFFSET, SUBMENU_GAP, VIEWPORT_MARGIN } from './menu-placement.js';
 
 const VIEWPORT = { width: 1000, height: 800 };
 const MENU = { width: 200, height: 100 };
@@ -99,5 +99,34 @@ describe('placing a submenu', () => {
         expect(place.top + 90).toBeLessThanOrEqual(small.height - VIEWPORT_MARGIN);
       }
     }
+  });
+});
+
+describe('placing a popup above its control', () => {
+  const control = { left: 800, top: 740, right: 960, bottom: 776 };
+
+  it('opens 6 px above the control with its right edge level with the control\'s', () => {
+    expect(placeAbove(control, MENU, VIEWPORT)).toEqual({ left: 960 - 200, top: 740 - ANCHOR_GAP - 100 });
+    expect(ANCHOR_GAP).toBe(6);
+  });
+
+  it('is held 8 px inside the viewport at the left edge when the control is near it, and at the right edge when the control is past it', () => {
+    expect(placeAbove({ left: 10, top: 740, right: 120, bottom: 776 }, MENU, VIEWPORT).left).toBe(VIEWPORT_MARGIN);
+    expect(placeAbove({ left: 900, top: 740, right: 1100, bottom: 776 }, MENU, VIEWPORT).left).toBe(1000 - VIEWPORT_MARGIN - 200);
+  });
+
+  it('opens below the control when it does not fit above and does fit below, and is held at the top margin when it fits neither way', () => {
+    expect(placeAbove({ left: 800, top: 40, right: 960, bottom: 76 }, MENU, VIEWPORT).top).toBe(76 + ANCHOR_GAP);
+    expect(placeAbove({ left: 800, top: 40, right: 960, bottom: 760 }, MENU, VIEWPORT).top).toBe(VIEWPORT_MARGIN);
+  });
+
+  it('keeps the exact boundary above: a popup that ends 8 px under the top still opens above', () => {
+    expect(placeAbove({ left: 800, top: 8 + ANCHOR_GAP + 100, right: 960, bottom: 200 }, MENU, VIEWPORT).top).toBe(VIEWPORT_MARGIN);
+    expect(placeAbove({ left: 800, top: 8 + ANCHOR_GAP + 99, right: 960, bottom: 200 }, MENU, VIEWPORT).top).toBeGreaterThanOrEqual(VIEWPORT_MARGIN);
+  });
+
+  it('sizes a popup larger than the viewport less its margins as if it were that size', () => {
+    const placed = placeAbove(control, { width: 5000, height: 5000 }, VIEWPORT);
+    expect(placed).toEqual({ left: VIEWPORT_MARGIN, top: VIEWPORT_MARGIN });
   });
 });

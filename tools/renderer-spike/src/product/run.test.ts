@@ -2,6 +2,8 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { writeAddReport } from './add.js';
+import { writeLayoutReport } from './layout.js';
 import { writeProductReport, productReportSchema } from './report.js';
 import { runProductBenchmark, type ProductBrowser, type ProductDeps, type ProductPage } from './run.js';
 import type { Readout } from './checks.js';
@@ -36,6 +38,12 @@ function workingPage(overrides: Partial<ProductPage> = {}): ProductPage {
     },
     viewport: async () => ({ width: 1280, height: 720, devicePixelRatio: 1 }),
     measurePanZoom: async () => ({ times: [0, 10, 20, 30, 40], motion: { zoomRatio: 1.5, panTravel: 400 } }),
+    measureAdd: async () => {
+      throw new Error('this page does not add');
+    },
+    measureLayout: async () => {
+      throw new Error('this page does not lay out');
+    },
     ...overrides,
   };
 }
@@ -62,6 +70,8 @@ function deps(calls: Calls, page: ProductPage = workingPage(), overrides: Partia
     machine: () => ({ os: { platform: 'test', release: '1', arch: 'x' }, cpu: { model: 'm', cores: 4 } }),
     now: () => new Date('2026-11-03T10:00:00.000Z'),
     writeReport: writeProductReport,
+    writeAddReport,
+    writeLayoutReport,
     ...overrides,
   };
 }

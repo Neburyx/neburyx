@@ -6,19 +6,20 @@ import type { CanvasRenderer } from './scene.js';
 export interface CanvasCommands {
   readonly fit: () => void;
   readonly zoomBy: (factor: number) => void;
+  readonly layout: () => void;
 }
 
 export interface CanvasCommandsHandle {
   readonly view: ReadableStore<CanvasCommands | undefined>;
   /** Makes the renderer's commands available and returns the function that withdraws them; a command that fails is reported to `onFailure` and not thrown. */
-  attach(renderer: CanvasRenderer, onFailure: () => void): () => void;
+  attach(renderer: CanvasRenderer, onFailure: () => void, layout: () => void): () => void;
 }
 
 export function createCanvasCommandsHandle(): CanvasCommandsHandle {
   const store = createStore<CanvasCommands | undefined>(undefined);
   return {
     view: readable(store),
-    attach(renderer, onFailure) {
+    attach(renderer, onFailure, layout) {
       const guarded = (command: () => void): void => {
         try {
           command();
@@ -27,7 +28,7 @@ export function createCanvasCommandsHandle(): CanvasCommandsHandle {
           onFailure();
         }
       };
-      const commands: CanvasCommands = { fit: () => guarded(() => renderer.fit()), zoomBy: (factor) => guarded(() => renderer.zoomBy(factor)) };
+      const commands: CanvasCommands = { fit: () => guarded(() => renderer.fit()), zoomBy: (factor) => guarded(() => renderer.zoomBy(factor)), layout: () => guarded(layout) };
       store.setState(commands);
       return () => {
         if (store.getState() === commands) store.setState(undefined);

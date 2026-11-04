@@ -10,8 +10,11 @@ import { clientWith, me, renderApp, source, stubFactory, type StubOptions } from
 import { useCanvasCommands } from './canvas-commands.js';
 import { GraphCanvas, RENDERER_UNAVAILABLE } from './graph-canvas.js';
 import { RendererProvider } from './renderer-context.js';
+import { layoutEntities } from './incremental-layout.js';
+import { partitionEdges } from '../state/loaded-graph.js';
+import { MARK_EVENT } from '../dev/canvas-readout.js';
 import { runSelectionCommand } from './selection-commands.js';
-import type { CreateRenderer } from './scene.js';
+import type { CanvasEvents, CreateRenderer } from './scene.js';
 import type { SourceProfile } from '@neburyx/contracts';
 
 function load(state: ClientState, nodes: number, edges: number, params = 'seed-1'): void {
@@ -52,16 +55,22 @@ describe('the graph canvas', () => {
     expect(scene?.profile).toBe(profile);
   });
 
-  it('writes the positions the renderer chose to presentation state once, and places nothing on the draw that follows', () => {
+  it('gives the renderer a position for every entity at its first draw, writes them to presentation state in one update, and places nothing on the draw that follows', () => {
     const state = createClientState();
     load(state, 3, 0);
+    let updates = 0;
+    state.presentation.view.subscribe(() => {
+      updates += 1;
+    });
     const factory = stubFactory();
     view(state, factory.create);
     const renderer = factory.made[0];
+    expect(renderer?.scenes[0]?.entities).toHaveLength(3);
+    expect(renderer?.scenes[0]?.entities.every((entity) => Number.isFinite(entity.position.x) && Number.isFinite(entity.position.y))).toBe(true);
     expect(state.presentation.view.getState().positions.size).toBe(3);
-    expect(renderer?.scenes[0]?.entities.every((entity) => entity.position === undefined)).toBe(true);
-    const last = renderer?.scenes.at(-1);
-    expect(last?.entities.every((entity) => entity.position !== undefined)).toBe(true);
+    expect(updates).toBe(1);
+    const stored = state.presentation.view.getState().positions;
+    expect(renderer?.scenes.at(-1)?.entities.map((entity) => entity.position)).toEqual(renderer?.scenes[0]?.entities.map((entity) => stored.get(entity.id)));
     expect(renderer?.scenes).toHaveLength(2);
   });
 
@@ -70,7 +79,7 @@ describe('the graph canvas', () => {
     load(state, 2, 0);
     state.presentation.setPosition(nodeKey('n0'), { x: 1, y: 1 });
     state.presentation.setPosition(nodeKey('n1'), { x: 2, y: 2 });
-    const factory = stubFactory({ placeAt: () => ({ x: 999, y: 999 }) });
+    const factory = stubFactory();
     view(state, factory.create);
     expect(factory.made[0]?.scenes).toHaveLength(1);
     expect([...state.presentation.view.getState().positions.values()]).toEqual([{ x: 1, y: 1 }, { x: 2, y: 2 }]);
@@ -85,6 +94,33 @@ describe('the graph canvas', () => {
     expect(factory.made).toHaveLength(1);
     expect(factory.made[0]?.describe()).toEqual({ entities: 5, relationships: 4 });
     expect(factory.made[0]?.disposed).toBe(0);
+  });
+
+  it('keeps every position when entities are added, places the added ones beside what they join, and keeps a pinned entity that was placed with the others', () => {
+    const state = createClientState();
+    load(state, 4, 3);
+    state.replacePins([nodeKey('n0')]);
+    const factory = stubFactory();
+    view(state, factory.create);
+    const before = new Map(state.presentation.view.getState().positions);
+    expect(before.size).toBe(4);
+    expect(before.has(nodeKey('n0'))).toBe(true);
+    act(() => load(state, 9, 8, 'seed-2'));
+    const after = state.presentation.view.getState().positions;
+    expect(after.size).toBe(9);
+    for (const [id, position] of before) expect(after.get(id), id).toEqual(position);
+    const scene = factory.made[0]?.scenes.at(-1);
+    expect(scene?.entities.map((entity) => entity.position)).toEqual(scene?.entities.map((entity) => after.get(entity.id)));
+  });
+
+  it('keeps the position a person gave an entity when more arrive', () => {
+    const state = createClientState();
+    load(state, 3, 2);
+    const factory = stubFactory();
+    view(state, factory.create);
+    act(() => state.presentation.setPosition(nodeKey('n1'), { x: 4321, y: -77 }));
+    act(() => load(state, 8, 6, 'seed-2'));
+    expect(state.presentation.view.getState().positions.get(nodeKey('n1'))).toEqual({ x: 4321, y: -77 });
   });
 
   it('disposes the renderer when the canvas goes away', () => {
@@ -210,6 +246,162 @@ describe('the development read-out of the graph canvas', () => {
   });
 });
 
+describe('the events of a renderer that is gone', () => {
+  it('change nothing after the canvas was taken away: no position, no selection, no menu, no notice', () => {
+    const state = createClientState();
+    load(state, 4, 2);
+    const factory = stubFactory();
+    const { unmount } = view(state, factory.create);
+    const events = factory.made[0]?.events[0];
+    const before = state.presentation.view.getState();
+    unmount();
+    act(() => {
+      events?.move({ id: nodeKey('n1'), position: { x: 999, y: 999 } });
+      events?.click({ target: nodeKey('n2'), shift: false });
+      events?.box({ ids: [nodeKey('n0')], shift: false });
+      events?.contextMenu({ target: undefined, x: 5, y: 5 });
+      events?.viewport({ zoom: 3, x: 1, y: 1 });
+      events?.failed();
+    });
+    expect(state.presentation.view.getState()).toBe(before);
+  });
+
+  it('change nothing for the renderer a remount replaced, while the new one still works', () => {
+    const state = createClientState();
+    load(state, 4, 2);
+    const factory = stubFactory();
+    view(state, factory.create, undefined, true);
+    expect(factory.made.length).toBeGreaterThan(1);
+    const stale = factory.made[0]?.events[0];
+    const live = factory.made.at(-1)?.events[0];
+    act(() => stale?.move({ id: nodeKey('n1'), position: { x: 999, y: 999 } }));
+    expect(state.presentation.view.getState().positions.get(nodeKey('n1'))).not.toEqual({ x: 999, y: 999 });
+    act(() => live?.move({ id: nodeKey('n1'), position: { x: 999, y: 999 } }));
+    expect(state.presentation.view.getState().positions.get(nodeKey('n1'))).toEqual({ x: 999, y: 999 });
+  });
+
+  it('keep the view a pan or zoom reported just before the canvas was taken away, which the renderer flushes as it is disposed, and show it again when the canvas is mounted again', () => {
+    const state = createClientState();
+    load(state, 3, 1);
+    const factory = stubFactory();
+    const flushing: CreateRenderer = () => {
+      const made = factory.create();
+      return {
+        ...made,
+        mount: (container, events, viewport) => {
+          made.mount(container, events, viewport);
+          pending = events;
+        },
+        dispose: () => {
+          pending?.viewport({ zoom: 2, x: 42, y: 17 });
+          made.dispose();
+        },
+      };
+    };
+    let pending: CanvasEvents | undefined;
+    const { unmount } = view(state, flushing);
+    unmount();
+    expect(state.presentation.view.getState().viewport).toEqual({ zoom: 2, x: 42, y: 17 });
+    act(() => pending?.viewport({ zoom: 9, x: 1, y: 1 }));
+    expect(state.presentation.view.getState().viewport).toEqual({ zoom: 2, x: 42, y: 17 });
+    view(state, factory.create);
+    expect(factory.made.at(-1)?.startViewports[0]).toEqual({ zoom: 2, x: 42, y: 17 });
+  });
+
+  it('show the notice when the renderer reports a failure of work after a draw, and keep the drawing', () => {
+    const state = createClientState();
+    load(state, 3, 1);
+    const factory = stubFactory();
+    view(state, factory.create);
+    act(() => factory.made[0]?.events[0]?.failed());
+    expect(screen.getByRole('alert').textContent).toBe(RENDERER_UNAVAILABLE);
+    expect(factory.made[0]?.describe()).toEqual({ entities: 3, relationships: 1 });
+  });
+});
+
+describe('the entities dragged on the graph canvas', () => {
+  const dragged = (state: ClientState, id: string, position: { x: number; y: number }) => {
+    const factory = stubFactory();
+    view(state, factory.create);
+    const events = factory.made[0]?.events[0];
+    return { factory, move: () => act(() => events?.move({ id: nodeKey(id), position })) };
+  };
+
+  it('stores where the entity was left, once, and leaves the selection and every other position as they were', () => {
+    const state = createClientState();
+    load(state, 4, 2);
+    state.presentation.select([nodeKey('n1'), nodeKey('n2')]);
+    const { move } = dragged(state, 'n2', { x: 12.5, y: -3 });
+    const before = new Map(state.presentation.view.getState().positions);
+    let updates = 0;
+    state.presentation.view.subscribe(() => {
+      updates += 1;
+    });
+    move();
+    const after = state.presentation.view.getState();
+    expect(after.positions.get(nodeKey('n2'))).toEqual({ x: 12.5, y: -3 });
+    for (const [id, position] of before) if (id !== nodeKey('n2')) expect(after.positions.get(id), id).toEqual(position);
+    expect([...after.selection].sort()).toEqual([nodeKey('n1'), nodeKey('n2')].sort());
+    expect(updates).toBe(1);
+  });
+
+  it('moves only the dragged entity when several are selected, and keeps a position it was dragged to when 25 entities are added', () => {
+    const state = createClientState();
+    load(state, 4, 2);
+    state.presentation.select([nodeKey('n0'), nodeKey('n1'), nodeKey('n2')]);
+    const { move } = dragged(state, 'n1', { x: -777, y: 555 });
+    const before = new Map(state.presentation.view.getState().positions);
+    move();
+    act(() => load(state, 29, 20, 'seed-2'));
+    const after = state.presentation.view.getState().positions;
+    expect(after.get(nodeKey('n1'))).toEqual({ x: -777, y: 555 });
+    for (const [id, position] of before) if (id !== nodeKey('n1')) expect(after.get(id), id).toEqual(position);
+    expect(after.size).toBe(29);
+  });
+
+  it('ignores a drag of an entity the investigation no longer holds, and of one that is pinned, and nothing throws', () => {
+    const state = createClientState();
+    load(state, 3, 0);
+    state.replacePins([nodeKey('n0')]);
+    const factory = stubFactory();
+    view(state, factory.create);
+    const events = factory.made[0]?.events[0];
+    const before = state.presentation.view.getState().positions;
+    expect(() => act(() => events?.move({ id: nodeKey('n0'), position: { x: 1, y: 1 } }))).not.toThrow();
+    expect(() => act(() => events?.move({ id: nodeKey('stranger'), position: { x: 2, y: 2 } }))).not.toThrow();
+    expect(state.presentation.view.getState().positions).toBe(before);
+  });
+
+  it('tells the renderer which entities are pinned, and which of them are drawn', () => {
+    const state = createClientState();
+    load(state, 3, 0);
+    state.replacePins([nodeKey('n0'), nodeKey('n2')]);
+    const factory = stubFactory();
+    view(state, factory.create);
+    expect([...(factory.made[0]?.scenes.at(-1)?.pinned ?? [])].sort()).toEqual([nodeKey('n0'), nodeKey('n2')].sort());
+    act(() => state.replacePins([nodeKey('n1')]));
+    expect([...(factory.made[0]?.scenes.at(-1)?.pinned ?? [])]).toEqual([nodeKey('n1')]);
+  });
+});
+
+describe('the development mark of the graph canvas', () => {
+  it('counts, from the mark, the drawn entities that moved, the pinned ones apart, and keeps the counts through the redraws the move causes', () => {
+    const state = createClientState();
+    load(state, 4, 0);
+    state.replacePins([nodeKey('n0')]);
+    const factory = stubFactory();
+    view(state, factory.create);
+    const canvas = screen.getByRole('img', { name: 'Graph canvas' });
+    act(() => void canvas.dispatchEvent(new Event(MARK_EVENT)));
+    expect([canvas.dataset['markedEntities'], canvas.dataset['movedPinned'], canvas.dataset['movedUnpinned']]).toEqual(['4', '0', '0']);
+    act(() => state.presentation.setPosition(nodeKey('n2'), { x: 9000, y: 9000 }));
+    act(() => state.presentation.setPosition(nodeKey('n0'), { x: -9000, y: 9000 }));
+    expect([canvas.dataset['movedPinned'], canvas.dataset['movedUnpinned']]).toEqual(['1', '1']);
+    act(() => state.presentation.select([nodeKey('n1')]));
+    expect([canvas.dataset['movedPinned'], canvas.dataset['movedUnpinned']]).toEqual(['1', '1']);
+  });
+});
+
 describe('the commands of the graph canvas', () => {
   function viewWithProbe(state: ClientState, create: CreateRenderer, result: { available: boolean }) {
     let commands: ReturnType<typeof useCanvasCommands>;
@@ -228,6 +420,44 @@ describe('the commands of the graph canvas', () => {
     );
     return () => commands;
   }
+
+  it('lay out the unpinned entities again: a displaced one goes to the position the layout gives it, a pinned one stays, the view is not changed, and a second run changes nothing', () => {
+    const state = createClientState();
+    load(state, 12, 14);
+    state.replacePins([nodeKey('n0'), nodeKey('n1')]);
+    const result = { available: false };
+    const commands = viewWithProbe(state, stubFactory().create, result);
+    const arranged = new Map(state.presentation.view.getState().positions);
+    const displaced = nodeKey('n5');
+    act(() => state.presentation.setPosition(displaced, { x: 50_000, y: -50_000 }));
+    const viewportBefore = state.presentation.view.getState().viewport;
+    const stored = new Map(state.presentation.view.getState().positions);
+    const loaded = state.loadedGraph();
+    const expected = layoutEntities({ ids: loaded.nodes.map((node) => elementKey(node.ref)), links: partitionEdges(loaded).drawable.map((edge) => [elementKey(edge.from), elementKey(edge.to)] as const), positions: stored, pinned: state.presentation.view.getState().pins });
+    act(() => commands()?.layout());
+    const after = state.presentation.view.getState().positions;
+    expect(after.get(displaced)).toEqual(expected.get(displaced));
+    expect(after.get(displaced)).not.toEqual({ x: 50_000, y: -50_000 });
+    for (const pin of [nodeKey('n0'), nodeKey('n1')]) expect(after.get(pin), pin).toEqual(arranged.get(pin));
+    expect(state.presentation.view.getState().viewport).toBe(viewportBefore);
+    const once = new Map(after);
+    act(() => commands()?.layout());
+    for (const [id, position] of once) expect(Math.hypot((state.presentation.view.getState().positions.get(id)?.x ?? Infinity) - position.x, (state.presentation.view.getState().positions.get(id)?.y ?? Infinity) - position.y), id).toBeLessThan(0.02);
+  });
+
+  it('do nothing and do not throw to lay out when every entity is pinned, or when nothing is loaded', () => {
+    const state = createClientState();
+    load(state, 3, 2);
+    state.replacePins([nodeKey('n0'), nodeKey('n1'), nodeKey('n2')]);
+    const commands = viewWithProbe(state, stubFactory().create, { available: false });
+    const before = state.presentation.view.getState().positions;
+    expect(() => act(() => commands()?.layout())).not.toThrow();
+    expect(state.presentation.view.getState().positions).toBe(before);
+    const empty = createClientState();
+    load(empty, 0, 0);
+    const none = viewWithProbe(empty, stubFactory().create, { available: false });
+    expect(() => act(() => none()?.layout())).not.toThrow();
+  });
 
   it('are not available when the renderer cannot start, and nothing throws', () => {
     const state = createClientState();

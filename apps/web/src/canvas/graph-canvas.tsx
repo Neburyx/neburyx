@@ -1,19 +1,22 @@
 import type { SourceProfile } from '@neburyx/contracts';
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { ClientState } from '../state/client-state.js';
+import type { Position } from '../state/presentation-state.js';
 import { useClientState, useLoadedGraph } from '../state/context.js';
 import { writeReadout } from '../dev/canvas-readout.js';
 import { StateError } from '../state/errors.js';
-import { drawnKeys } from '../state/loaded-graph.js';
+import { drawnKeys, partitionEdges } from '../state/loaded-graph.js';
+import { elementKey } from '../state/keys.js';
 import { useStoreSelector } from '../state/store.js';
 import { formatNumber, notDrawnLine } from '../workspace/scope-text.js';
 import { buildScene } from './build-scene.js';
+import { layoutEntities, placeNewEntities } from './incremental-layout.js';
 import { useCanvasCommandsHandle } from './canvas-commands.js';
 import { captionFontsReady, loadCaptionFonts } from './fonts.js';
 import { useCreateRenderer } from './renderer-context.js';
 import { selectionAfterBox, type BoxSelection } from './box-selection.js';
 import { selectionAfterClick, type Click } from './selection-gestures.js';
-import type { CanvasEvents, CanvasRenderer, RightClick, Scene } from './scene.js';
+import type { CanvasEvents, CanvasRenderer, EntityMove, RightClick, Scene } from './scene.js';
 
 export const RENDERER_UNAVAILABLE = 'RENDERER_UNAVAILABLE';
 
@@ -34,6 +37,16 @@ function openContextMenu(state: ClientState, request: RightClick): void {
   if (!drawnKeys(state.loadedGraph()).has(target.key)) return;
   if (!state.presentation.view.getState().selection.has(target.key)) state.presentation.select([target.key]);
   state.presentation.setOpenMenu({ kind: target.kind, key: target.key, x, y });
+}
+
+/** A drag of an entity that is no longer held, or that was pinned meanwhile, is stale and changes nothing. */
+function applyMove(state: ClientState, move: EntityMove): void {
+  if (state.presentation.view.getState().pins.has(move.id)) return;
+  try {
+    state.presentation.setPosition(move.id, move.position);
+  } catch (error) {
+    if (!(error instanceof StateError) || error.code !== 'UNKNOWN_ELEMENT') throw error;
+  }
 }
 
 function applyBox(state: ClientState, box: BoxSelection): void {
@@ -57,9 +70,14 @@ export function GraphCanvas({ profile, view = 'fit' }: { readonly profile?: Sour
   const graph = useLoadedGraph();
   const positions = useStoreSelector(state.presentation.view, (current) => current.positions);
   const selection = useStoreSelector(state.presentation.view, (current) => current.selection);
+  const pins = useStoreSelector(state.presentation.view, (current) => current.pins);
   const tool = useStoreSelector(state.presentation.view, (current) => current.tool);
   const source = useStoreSelector(state.investigation, (current) => current.sourceId);
-  const scene = useMemo(() => buildScene(graph, positions, profile, selection, tool, source, view), [graph, positions, profile, selection, tool, source, view]);
+  const placed = useMemo(
+    () => placeNewEntities({ ids: graph.nodes.map((node) => elementKey(node.ref)), links: graph.edges.map((edge) => [elementKey(edge.from), elementKey(edge.to)] as const), positions }),
+    [graph, positions],
+  );
+  const scene = useMemo(() => buildScene(graph, placed.size === 0 ? positions : new Map([...positions, ...placed]), profile, selection, tool, source, view, pins), [graph, positions, placed, profile, selection, tool, source, view, pins]);
   const container = useRef<HTMLDivElement>(null);
   const [renderer, setRenderer] = useState<CanvasRenderer | undefined>(undefined);
   const [failed, setFailed] = useState(false);
@@ -67,21 +85,30 @@ export function GraphCanvas({ profile, view = 'fit' }: { readonly profile?: Sour
 
   useEffect(() => {
     let created: CanvasRenderer | undefined;
+    let current = true;
+    const whileMounted =
+      <Arguments extends unknown[]>(act: (...given: Arguments) => void) =>
+      (...given: Arguments): void => {
+        if (current) act(...given);
+      };
     try {
       created = createRenderer();
       const reported = created;
       const events: CanvasEvents = {
-        viewport: (viewport) => {
+        viewport: whileMounted((viewport) => {
           state.presentation.setViewport(viewport);
           if (__DEV_TOOLS__ && container.current !== null) writeReadout(container.current, { ...reported.describe(), viewport });
-        },
-        click: (click) => applyClick(state, click),
-        box: (box) => applyBox(state, box),
-        contextMenu: (request) => openContextMenu(state, request),
+        }),
+        click: whileMounted((click) => applyClick(state, click)),
+        box: whileMounted((box) => applyBox(state, box)),
+        contextMenu: whileMounted((request) => openContextMenu(state, request)),
+        move: whileMounted((move) => applyMove(state, move)),
+        failed: whileMounted(() => setFailed(true)),
       };
       created.mount(container.current ?? undefined, events, state.presentation.view.getState().viewport);
     } catch {
       // the notice names the stable code; the library's own message is not shown
+      current = false;
       created?.dispose();
       setFailed(true);
       return undefined;
@@ -91,11 +118,33 @@ export function GraphCanvas({ profile, view = 'fit' }: { readonly profile?: Sour
     setRenderer(mounted);
     return () => {
       mounted.dispose();
+      current = false;
       setRenderer(undefined);
     };
   }, [createRenderer]);
 
-  useEffect(() => (renderer === undefined || failed ? undefined : commands.attach(renderer, () => setFailed(true))), [renderer, failed, commands]);
+  // The positions the entities had before the last layout run, until the drawing of its result has succeeded: a drawing that fails puts them back.
+  const beforeLayout = useRef<ReadonlyMap<string, Position> | undefined>(undefined);
+  // After a layout whose drawing failed has been rolled back, the drawing of the restored positions must not clear the notice.
+  const keepNotice = useRef(false);
+  const layoutNow = useCallback((): void => {
+    const loaded = state.loadedGraph();
+    const { positions: stored, pins: held } = state.presentation.view.getState();
+    const next = layoutEntities({
+      ids: loaded.nodes.map((node) => elementKey(node.ref)),
+      links: partitionEdges(loaded).drawable.map((edge) => [elementKey(edge.from), elementKey(edge.to)] as const),
+      positions: stored,
+      pinned: held,
+    });
+    if (next.size === 0) return;
+    beforeLayout.current = new Map([...next.keys()].flatMap((id) => {
+      const position = stored.get(id);
+      return position === undefined ? [] : [[id, position] as const];
+    }));
+    state.presentation.setPositions(next);
+  }, [state]);
+
+  useEffect(() => (renderer === undefined || failed ? undefined : commands.attach(renderer, () => setFailed(true), layoutNow)), [renderer, failed, commands, layoutNow]);
 
   useEffect(() => {
     if (renderer === undefined) return undefined;
@@ -103,11 +152,20 @@ export function GraphCanvas({ profile, view = 'fit' }: { readonly profile?: Sour
     const draw = (): void => {
       if (!current) return;
       try {
-        for (const [id, position] of renderer.draw(scene)) state.presentation.setPosition(id, position);
-        if (__DEV_TOOLS__ && container.current !== null) writeReadout(container.current, { ...renderer.describe(), viewport: renderer.inspect().viewport });
-        setFailed(false);
+        renderer.draw(scene);
+        beforeLayout.current = undefined;
+        if (placed.size > 0) state.presentation.setPositions(placed);
+        if (__DEV_TOOLS__ && container.current !== null) writeReadout(container.current, { ...renderer.describe(), viewport: renderer.viewport(), drawn: { positions: renderer.positions(), pinned: state.presentation.view.getState().pins } });
+        if (keepNotice.current) keepNotice.current = false;
+        else setFailed(false);
       } catch {
         // the notice names the stable code; the library's own message is not shown
+        const previous = beforeLayout.current;
+        beforeLayout.current = undefined;
+        if (previous !== undefined) {
+          keepNotice.current = true;
+          state.presentation.setPositions(previous);
+        }
         setFailed(true);
       }
     };
@@ -116,7 +174,7 @@ export function GraphCanvas({ profile, view = 'fit' }: { readonly profile?: Sour
     return () => {
       current = false;
     };
-  }, [renderer, scene, state]);
+  }, [renderer, scene, placed, state]);
 
   return (
     <>

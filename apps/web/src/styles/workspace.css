@@ -702,6 +702,10 @@
   --icon: url('../assets/lucide/maximize.svg');
 }
 
+.icon-layout {
+  --icon: url('../assets/lucide/layout-template.svg');
+}
+
 .region-dock {
   top: var(--region-top);
   right: var(--space-16);
@@ -722,4 +726,36 @@
 
 .region-floating > * {
   pointer-events: auto;
+}
+
+.zoom-divider {
+  width: var(--zoom-divider-width);
+  color: var(--color-workspace-muted);
+  text-align: center;
+}
+
+.layout-popup {
+  position: fixed;
+  z-index: var(--layer-menu);
+  display: flex;
+  max-width: var(--menu-max-width);
+  max-height: var(--menu-max-height);
+}
+
+.layout-popup .menu-panel {
+  min-width: var(--layout-popup-min-width);
+  overflow-y: auto;
+}
+
+.layout-popup .menu-row:hover {
+  background: var(--color-row-chosen);
+}
+
+.layout-popup .menu-row-disabled:hover {
+  background: none;
+}
+
+.layout-list {
+  display: flex;
+  flex-direction: column;
 }

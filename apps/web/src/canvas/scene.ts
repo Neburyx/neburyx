@@ -7,7 +7,7 @@ import type { Click } from './selection-gestures.js';
 
 export interface SceneEntity {
   readonly id: string;
-  readonly position: Position | undefined;
+  readonly position: Position;
   readonly look: EntityLook;
 }
 
@@ -28,6 +28,8 @@ export interface Scene {
   readonly tool: PointerTool;
   /** The keys of the drawn entities and relationships that are selected. */
   readonly selection: ReadonlySet<string>;
+  /** The keys of the drawn entities that are pinned: they cannot be dragged. */
+  readonly pinned: ReadonlySet<string>;
   /** Relationships that are loaded but not drawn, because an entity they join is not loaded. */
   readonly omitted: number;
   /** Whether the viewport is set to show everything when a graph is first drawn, or left as the entities' own positions give it. */
@@ -59,6 +61,11 @@ export interface RightClick {
   readonly y: number;
 }
 
+export interface EntityMove {
+  readonly id: string;
+  readonly position: Position;
+}
+
 /** What the renderer tells the canvas about the viewer's own actions. */
 export interface CanvasEvents {
   /** A click on a drawn item (its key) or on empty canvas, with or without Shift; not a drag. */
@@ -69,18 +76,24 @@ export interface CanvasEvents {
   readonly viewport: (viewport: Viewport) => void;
   /** The right button was pressed and released on a drawn item or on empty canvas; the browser's own menu never opens on the canvas. */
   readonly contextMenu: (request: RightClick) => void;
+  /** An entity was dragged and released inside the canvas; a drag that was interrupted reports nothing. */
+  readonly move: (move: EntityMove) => void;
+  /** Work the renderer does after `draw` has returned (the captions) failed: the drawing stays as it is. */
+  readonly failed: () => void;
 }
 
 export interface CanvasRenderer {
   /** Shows `viewport` at once when given; with none, the first drawing that has entities is fitted (unless the scene says it is drawn as positioned). */
   mount(container: HTMLElement | undefined, events: CanvasEvents, viewport: Viewport | undefined): void;
-  /** Draws the scene and returns the positions it chose for the entities that came without one. */
-  draw(scene: Scene): ReadonlyMap<string, Position>;
+  /** Draws the scene: every entity where the scene puts it, never moved by the renderer on its own. */
+  draw(scene: Scene): void;
   /** Shows every drawn entity; does nothing when none is drawn. */
   fit(): void;
   /** Multiplies the zoom around the centre of the canvas, within the zoom limits. */
   zoomBy(factor: number): void;
   describe(): DrawnCounts;
+  positions(): ReadonlyMap<string, Position>;
+  viewport(): Viewport;
   inspect(): Inspection;
   dispose(): void;
 }

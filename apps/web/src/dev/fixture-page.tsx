@@ -5,17 +5,20 @@ import type { ApiClient } from '../api/client.js';
 import { useClientState, useLoadedGraph } from '../state/context.js';
 import { useStoreSelector } from '../state/store.js';
 import { FixtureError } from './fixture-graph.js';
-import { loadFixture, type LoaderOptions } from './fixture-loader.js';
+import { addFixtureEntities, ADDED_ENTITIES, displaceFixtureEntities, DISPLACED_ENTITIES, loadFixture, type LoaderOptions } from './fixture-loader.js';
 import { FailureNotice } from '../failure-notice.js';
 import { EXPLORE_PATH } from '../shell/navigation.js';
 import { PageHeading } from '../shell/page-heading.js';
 import { answeredData, retainedFailure, useShellData } from '../shell/shell-data.js';
 import { useSelectionActionRegistry } from '../workspace/selection-actions.js';
-import { useSlots } from '../workspace/slots.js';
+import { useSlots, type SlotRegistry } from '../workspace/slots.js';
 import { useMenuRegistry } from '../workspace/menu-registry.js';
 import { useToolRegistry } from '../workspace/tool-registry.js';
-import { registerStandInActions, registerStandInMenuItems, registerStandInTools, registerStandIns } from './stand-ins.js';
+import { registerFixtureControls, registerStandInActions, registerStandInMenuItems, registerStandInTools, registerStandIns } from './stand-ins.js';
 import { SourcesPanel } from './sources-panel.js';
+
+/** The controls a load put in the slots live as long as the slots do, not as long as this page, so a load after a visit to Explore takes out the earlier ones first. */
+const registrations = new WeakMap<SlotRegistry, () => void>();
 
 const SEED = 1;
 const LEFT_OUT_ENTITIES = 2;
@@ -37,6 +40,11 @@ function LoadFixture({ profile }: { readonly profile: SourceProfile }) {
     if (principalId === undefined) return;
     try {
       loadFixture(state, profile, principalId, SEED, options);
+      registrations.get(slots)?.();
+      registrations.set(slots, registerFixtureControls(slots, [
+        { label: `Add ${ADDED_ENTITIES} entities`, run: () => addFixtureEntities(state, profile, principalId) },
+        { label: `Displace ${DISPLACED_ENTITIES} entities`, run: () => displaceFixtureEntities(state) },
+      ]));
       registerStandIns(slots);
       registerStandInActions(actions);
       registerStandInTools(tools);

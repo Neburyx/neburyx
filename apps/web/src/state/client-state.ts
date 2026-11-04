@@ -26,17 +26,29 @@ export interface ClientState {
 export function createClientState(): ClientState {
   const server = createServerStore();
   const investigation = createInvestigationStore();
-  const nodeKeys = (): ReadonlySet<string> => new Set(investigation.view.getState().nodeRefs.map(elementKey));
-  const edgeKeys = (): ReadonlySet<string> => new Set(investigation.view.getState().edgeRefs.map(edgeKey));
+  const nodeKeySets = new WeakMap<InvestigationState, ReadonlySet<string>>();
+  const edgeKeySets = new WeakMap<InvestigationState, ReadonlySet<string>>();
+  const nodeKeys = (): ReadonlySet<string> => {
+    const held = investigation.view.getState();
+    const known = nodeKeySets.get(held) ?? new Set(held.nodeRefs.map(elementKey));
+    nodeKeySets.set(held, known);
+    return known;
+  };
+  const edgeKeys = (): ReadonlySet<string> => {
+    const held = investigation.view.getState();
+    const known = edgeKeySets.get(held) ?? new Set(held.edgeRefs.map(edgeKey));
+    edgeKeySets.set(held, known);
+    return known;
+  };
   const presentation = createPresentationStore({
     isNode: (key) => nodeKeys().has(key),
     isElement: (key) => nodeKeys().has(key) || edgeKeys().has(key),
   });
-  const { view, setTool, setOpenTool, setOpenMenu, select, setPosition, pin, setPanelSize, setViewport } = presentation;
+  const { view, setTool, setOpenTool, setOpenMenu, select, setPosition, setPositions, pin, setPanelSize, setViewport } = presentation;
   return {
     server: { ...server.view, get: server.get },
     investigation: investigation.view,
-    presentation: { view, setTool, setOpenTool, setOpenMenu, select, setPosition, pin, setPanelSize, setViewport },
+    presentation: { view, setTool, setOpenTool, setOpenMenu, select, setPosition, setPositions, pin, setPanelSize, setViewport },
     jobs: createJobStore(),
     bindSource(sourceId) {
       const previous = investigation.view.getState().sourceId;

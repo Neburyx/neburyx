@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { act, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { SourceSummary } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
@@ -58,6 +58,24 @@ describe('the fixture page', () => {
     await user.click(load);
     expect(await screen.findByText('120 entities · 180 relationships · loaded · exact')).toBeTruthy();
     expect(screen.getByText('10 pinned')).toBeTruthy();
+  });
+
+  it('loads again after a visit to Explore and back, taking out the controls the first load put on the canvas and putting them in once', async () => {
+    const { router, slots } = renderPage();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Source a' }));
+    await user.click(await screen.findByRole('button', { name: 'Load' }));
+    await user.click(await screen.findByRole('link', { name: 'Open Explore' }));
+    await screen.findByRole('img', { name: 'Graph canvas' });
+    expect(slots.view.getState().has('floating')).toBe(true);
+    await act(() => router.navigate('/dev/fixture'));
+    await user.click(await screen.findByRole('button', { name: 'Source a' }));
+    await user.click(await screen.findByRole('button', { name: 'Load' }));
+    expect(screen.queryByRole('alert')).toBeNull();
+    await user.click(await screen.findByRole('link', { name: 'Open Explore' }));
+    await screen.findByRole('img', { name: 'Graph canvas' });
+    expect(screen.getAllByRole('button', { name: 'Add 25 entities' })).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: 'Displace 10 entities' })).toHaveLength(1);
   });
 
   it('says why a profile is refused and keeps what was shown', async () => {

@@ -42,6 +42,29 @@ describe('presentation changes', () => {
   });
 });
 
+describe('several positions at once', () => {
+  it('are stored in one update and keep the positions of the others', () => {
+    const state = loaded();
+    const first = elementKey(ref('source-a', 'type-a', 'n1'));
+    const second = elementKey(ref('source-a', 'type-a', 'n2'));
+    state.presentation.setPosition(first, { x: 1, y: 1 });
+    const listener = vi.fn();
+    state.presentation.view.subscribe(listener);
+    state.presentation.setPositions(new Map([[second, { x: 2, y: 3 }]]));
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(state.presentation.view.getState().positions).toEqual(new Map([[first, { x: 1, y: 1 }], [second, { x: 2, y: 3 }]]));
+  });
+
+  it('are refused as a whole when one names an element the investigation does not hold', () => {
+    const state = loaded();
+    const first = elementKey(ref('source-a', 'type-a', 'n1'));
+    const stranger = elementKey(ref('source-a', 'type-a', 'n3'));
+    const before = state.presentation.view.getState();
+    expect(() => state.presentation.setPositions(new Map([[first, { x: 1, y: 1 }], [stranger, { x: 2, y: 2 }]]))).toThrowError(expect.objectContaining({ code: 'UNKNOWN_ELEMENT' }));
+    expect(state.presentation.view.getState()).toBe(before);
+  });
+});
+
 describe('the cached results', () => {
   it('are returned for the same key and for none that differs in any one of its five parts', () => {
     const state = createClientState();
@@ -86,6 +109,30 @@ describe('the loaded graph', () => {
     expect(JSON.stringify(state.investigation.getState())).not.toContain('display');
     expect(JSON.stringify(state.presentation.view.getState().selection)).not.toContain('display');
     expect(state.loadedGraph().entities.value).toBe(2);
+  });
+
+  it('is the same object while the records and the refs are the same, so everything that asks shares one derivation, and a new one when either changes', () => {
+    const state = loaded();
+    const first = state.loadedGraph();
+    expect(state.loadedGraph()).toBe(first);
+    state.presentation.setTool('pan');
+    expect(state.loadedGraph()).toBe(first);
+    state.putResult(key('source-a', 'second'), result('source-a', ['n1']));
+    const afterRecords = state.loadedGraph();
+    expect(afterRecords).not.toBe(first);
+    state.setLoaded([key('source-a'), key('source-a', 'second')], [ref('source-a', 'type-a', 'n1')], []);
+    const afterRefs = state.loadedGraph();
+    expect(afterRefs).not.toBe(afterRecords);
+    expect(afterRefs.entities.value).toBe(1);
+  });
+
+  it('keeps refusing an element that is no longer held after the refs change, though the sets of held keys are kept between calls', () => {
+    const state = loaded();
+    const second = elementKey(ref('source-a', 'type-a', 'n2'));
+    state.presentation.setPosition(second, { x: 1, y: 1 });
+    state.setLoaded([key('source-a')], [ref('source-a', 'type-a', 'n1')], []);
+    expect(() => state.presentation.setPosition(second, { x: 2, y: 2 })).toThrowError(expect.objectContaining({ code: 'UNKNOWN_ELEMENT' }));
+    expect(state.presentation.view.getState().positions.has(second)).toBe(false);
   });
 
   it('counts a record once when two cached results hold it', () => {

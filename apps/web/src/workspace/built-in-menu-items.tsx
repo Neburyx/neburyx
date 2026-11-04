@@ -1,5 +1,20 @@
 import { runSelectionCommand } from '../canvas/selection-commands.js';
-import { MENU_GROUP, MENU_ORDER, type MenuRegistry } from './menu-registry.js';
+import { LayoutList } from './layout-list.js';
+import { MENU_GROUP, MENU_ORDER, type MenuContext, type MenuRegistry, type SubmenuProps } from './menu-registry.js';
+
+const canLayOut = (context: MenuContext): boolean => context.canvas !== undefined && context.state.loadedGraph().nodes.length > 0;
+
+function LayoutSubmenu({ context, close }: SubmenuProps) {
+  return (
+    <LayoutList
+      disabled={!canLayOut(context)}
+      onChoose={() => {
+        context.canvas?.layout();
+        close();
+      }}
+    />
+  );
+}
 
 export function registerBuiltInMenuItems(registry: MenuRegistry): () => void {
   const removals = [
@@ -29,6 +44,15 @@ export function registerBuiltInMenuItems(registry: MenuRegistry): () => void {
       order: MENU_ORDER.canvas.invertSelection,
       shortcut: '⇧⌘I',
       run: (context) => runSelectionCommand(context.state, 'invert-selection'),
+    }),
+    registry.register('canvas', {
+      id: 'layout',
+      label: 'Layout',
+      icon: <span className="icon icon-layout" aria-hidden="true" />,
+      group: MENU_GROUP.canvas.layoutAndLegend,
+      order: MENU_ORDER.canvas.layout,
+      state: (context) => (canLayOut(context) ? 'enabled' : 'disabled'),
+      submenu: LayoutSubmenu,
     }),
   ];
   return () => {

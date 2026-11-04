@@ -70,6 +70,7 @@ export interface PresentationActions {
   setOpenMenu(open: OpenMenu | undefined): void;
   select(keys: readonly string[]): void;
   setPosition(key: string, position: Position): void;
+  setPositions(positions: ReadonlyMap<string, Position>): void;
   pin(keys: readonly string[]): void;
   setPanelSize(panel: string, size: number): void;
   setViewport(viewport: Viewport): void;
@@ -105,6 +106,10 @@ export function createPresentationStore(known: KnownElements): PresentationStore
     setPosition(key, position) {
       requireKnown([key], known.isNode);
       store.setState({ ...store.getState(), positions: new Map(store.getState().positions).set(key, position) });
+    },
+    setPositions(positions) {
+      requireKnown([...positions.keys()], known.isNode);
+      store.setState({ ...store.getState(), positions: new Map([...store.getState().positions, ...positions]) });
     },
     pin(keys) {
       requireKnown(keys, known.isNode);

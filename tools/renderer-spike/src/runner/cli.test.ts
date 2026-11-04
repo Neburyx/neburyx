@@ -9,6 +9,11 @@ import { writeReport } from '../measure/report.js';
 import { describeFailure, runCli } from './cli.js';
 import { RunnerError } from './errors.js';
 import type { PageHandle, RunnerDeps } from './run.js';
+import { writeAddReport } from '../product/add.js';
+import { writeLayoutReport } from '../product/layout.js';
+import { capture, layoutCapture } from '../product/add-fixtures.js';
+import { writeProductReport } from '../product/report.js';
+import type { ProductDeps, ProductPage } from '../product/run.js';
 
 let directory = '';
 beforeEach(() => {
@@ -120,5 +125,101 @@ describe('runCli with --target product', () => {
     const { err, sink: streams } = sink();
     expect(await runCli(['--target', 'sigma', '--out', 'x.json'], deps(page()), streams)).toBe(1);
     expect(err.join('')).toContain('--target takes product');
+  });
+});
+
+describe('runCli with --scenario', () => {
+  const productPage = (): ProductPage => ({
+    openFixture: async () => undefined,
+    readout: async () => ({ entities: 120, relationships: 180, zoom: 1, panX: 0, panY: 0 }),
+    notice: async () => undefined,
+    pixels: async () => ({ ink: 1, signature: 'a' }),
+    wheel: async () => undefined,
+    drag: async () => undefined,
+    measurePanZoom: async () => {
+      throw new Error('not used');
+    },
+    viewport: async () => ({ width: 1280, height: 720, devicePixelRatio: 1 }),
+    measureAdd: async () => capture(),
+    measureLayout: async () => layoutCapture(),
+  });
+  const productDeps: ProductDeps = {
+    launchBrowser: async () => ({ name: 'chromium', version: '1', openPage: async () => productPage(), close: async () => undefined }),
+    machine: () => ({ os: { platform: 't', release: '1', arch: 'x' }, cpu: { model: 'm', cores: 1 } }),
+    now: () => new Date('2026-11-03T10:00:00.000Z'),
+    writeReport: writeProductReport,
+    writeAddReport,
+    writeLayoutReport,
+  };
+
+  it('refuses a scenario it does not know, before starting a browser', async () => {
+    const { err, sink } = io();
+    expect(await runCli(['--target', 'product', '--url', 'http://127.0.0.1:1', '--out', join(directory, 'r.json'), '--scenario', 'spin'], deps(page()), sink, productDeps)).toBe(1);
+    expect(err.join('')).toContain('--scenario takes pan-zoom, add or layout');
+  });
+
+  it('runs the add scenario, prints one line for the runs and one for the target, and writes the report', async () => {
+    const { out, err, sink } = io();
+    const path = join(directory, 'add.json');
+    expect(await runCli(['--target', 'product', '--url', 'http://127.0.0.1:1', '--out', path, '--scenario', 'add', '--cpu-throttle', '4'], deps(page()), sink, productDeps)).toBe(0);
+    expect(err).toEqual([]);
+    expect(out.join('')).toMatch(/adding entities to the product canvas, 120 entities and 180 relationships drawn, at 4x CPU: \+25 entities, longest frame 40 ms/);
+    expect(out.join('')).toContain('target (at 4x: no frame longer than 100 ms');
+    expect(out.join('')).toMatch(/: met\n$/);
+  });
+
+  it('exits 1 and names the cause when an add fails its checks, and writes no report', async () => {
+    const { err, sink } = io();
+    const failing: ProductDeps = { ...productDeps, launchBrowser: async () => ({ name: 'chromium', version: '1', openPage: async () => ({ ...productPage(), measureAdd: async () => capture({ movedUnpinned: 2 }) }), close: async () => undefined }) };
+    expect(await runCli(['--target', 'product', '--url', 'http://127.0.0.1:1', '--out', join(directory, 'bad.json'), '--scenario', 'add'], deps(page()), sink, failing)).toBe(1);
+    expect(err.join('')).toContain('ENTITY_MOVED');
+  });
+});
+
+describe('runCli with --scenario layout', () => {
+  const productPage = (overrides: Partial<ProductPage> = {}): ProductPage => ({
+    openFixture: async () => undefined,
+    readout: async () => ({ entities: 120, relationships: 180, zoom: 1, panX: 0, panY: 0 }),
+    notice: async () => undefined,
+    pixels: async () => ({ ink: 1, signature: 'a' }),
+    wheel: async () => undefined,
+    drag: async () => undefined,
+    measurePanZoom: async () => {
+      throw new Error('not used');
+    },
+    viewport: async () => ({ width: 1280, height: 720, devicePixelRatio: 1 }),
+    measureAdd: async () => capture(),
+    measureLayout: async () => layoutCapture(),
+    ...overrides,
+  });
+  const productDeps = (given: ProductPage): ProductDeps => ({
+    launchBrowser: async () => ({ name: 'chromium', version: '1', openPage: async () => given, close: async () => undefined }),
+    machine: () => ({ os: { platform: 't', release: '1', arch: 'x' }, cpu: { model: 'm', cores: 1 } }),
+    now: () => new Date('2026-11-04T10:00:00.000Z'),
+    writeReport: writeProductReport,
+    writeAddReport,
+    writeLayoutReport,
+  });
+
+  it('runs the layout scenario, prints one line for the runs and one for the target, and writes the report', async () => {
+    const { out, err, sink } = io();
+    const path = join(directory, 'layout.json');
+    expect(await runCli(['--target', 'product', '--url', 'http://127.0.0.1:1', '--out', path, '--scenario', 'layout', '--cpu-throttle', '4'], deps(page()), sink, productDeps(productPage()))).toBe(0);
+    expect(err).toEqual([]);
+    expect(out.join('')).toMatch(/laying out the product canvas, 120 entities and 180 relationships drawn, at 4x CPU: 110 unpinned moved, the command took 12 ms, longest frame 40 ms/);
+    expect(out.join('')).toMatch(/: met\n$/);
+  });
+
+  it('exits 1 naming the cause when a pinned entity moved, and writes no report', async () => {
+    const { err, sink } = io();
+    const path = join(directory, 'bad.json');
+    expect(await runCli(['--target', 'product', '--url', 'http://127.0.0.1:1', '--out', path, '--scenario', 'layout'], deps(page()), sink, productDeps(productPage({ measureLayout: async () => layoutCapture({ movedPinned: 1 }) })))).toBe(1);
+    expect(err.join('')).toContain('PIN_MOVED');
+  });
+
+  it('names layout among the scenarios it takes', async () => {
+    const { err, sink } = io();
+    expect(await runCli(['--target', 'product', '--url', 'http://127.0.0.1:1', '--out', join(directory, 'r.json'), '--scenario', 'spin'], deps(page()), sink, productDeps(productPage()))).toBe(1);
+    expect(err.join('')).toContain('--scenario takes pan-zoom, add or layout');
   });
 });

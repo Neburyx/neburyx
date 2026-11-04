@@ -3,6 +3,8 @@ import { AdapterError } from '../adapter.js';
 import { FixtureError } from '../fixture/errors.js';
 import { MeasureError } from '../measure/errors.js';
 import { RunnerError } from './errors.js';
+import { runAddBenchmark } from '../product/add-run.js';
+import { runLayoutBenchmark } from '../product/layout-run.js';
 import { runProductBenchmark, type ProductDeps } from '../product/run.js';
 import { runSpike, type RunnerDeps } from './run.js';
 
@@ -28,8 +30,22 @@ export function describeFailure(error: unknown): string {
 async function runProduct(args: readonly string[], deps: ProductDeps | undefined, io: CliIo): Promise<number> {
   const url = readOption(args, '--url');
   const out = readOption(args, '--out');
-  if (deps === undefined || url === undefined || out === undefined) throw new RunnerError('USAGE', 'run with --target product --url <app address> --out <report.json> [--cpu-throttle <n>]');
+  if (deps === undefined || url === undefined || out === undefined) throw new RunnerError('USAGE', 'run with --target product --url <app address> --out <report.json> [--scenario pan-zoom|add|layout] [--cpu-throttle <n>]');
   const throttle = readOption(args, '--cpu-throttle');
+  const scenario = readOption(args, '--scenario') ?? 'pan-zoom';
+  if (scenario !== 'pan-zoom' && scenario !== 'add' && scenario !== 'layout') throw new RunnerError('USAGE', `--scenario takes pan-zoom, add or layout, not ${scenario}`);
+  if (scenario === 'layout') {
+    const laid = await runLayoutBenchmark({ url, out: resolve(out), ...(throttle === undefined ? {} : { cpuThrottle: Number(throttle) }) }, deps);
+    io.out(`laying out the product canvas, ${laid.app.drawnEntities} entities and ${laid.app.drawnRelationships} relationships drawn, at ${laid.protocol.cpuThrottle}x CPU: ${laid.runs.map((run) => `${run.movedUnpinned} unpinned moved, the command took ${run.commandMs.toFixed(0)} ms, longest frame ${run.longestFrameMs.toFixed(0)} ms, ${run.p5Fps.toFixed(1)} fps p5 over ${run.frames} frames`).join('; ')}\n`);
+    io.out(`target (at ${laid.goal.cpuThrottle}x: no frame longer than ${laid.goal.longestFrameMs} ms, 5th percentile at least ${laid.goal.p5Fps} fps over the next 30 frames): ${laid.verdict}\n`);
+    return 0;
+  }
+  if (scenario === 'add') {
+    const added = await runAddBenchmark({ url, out: resolve(out), ...(throttle === undefined ? {} : { cpuThrottle: Number(throttle) }) }, deps);
+    io.out(`adding entities to the product canvas, ${added.app.drawnEntities} entities and ${added.app.drawnRelationships} relationships drawn, at ${added.protocol.cpuThrottle}x CPU: ${added.runs.map((run) => `+${run.addedEntities} entities, longest frame ${run.longestFrameMs.toFixed(0)} ms, ${run.p5Fps.toFixed(1)} fps p5 over ${run.frames} frames, moved ${run.movedUnpinned + run.movedPinned}`).join('; ')}\n`);
+    io.out(`target (at ${added.goal.cpuThrottle}x: no frame longer than ${added.goal.longestFrameMs} ms, 5th percentile at least ${added.goal.p5Fps} fps over the next 30 frames): ${added.verdict}\n`);
+    return 0;
+  }
   const report = await runProductBenchmark({ url, out: resolve(out), ...(throttle === undefined ? {} : { cpuThrottle: Number(throttle) }) }, deps);
   io.out(`the product canvas, ${report.app.drawnEntities} entities and ${report.app.drawnRelationships} relationships drawn, at ${report.protocol.cpuThrottle}x CPU: ${report.runs.map((run) => `${run.medianFps.toFixed(1)} fps median, ${run.p5Fps.toFixed(1)} fps p5`).join('; ')}\n`);
   io.out(`target (at ${report.goal.cpuThrottle}x: median at least ${report.goal.medianFps} fps, 5th percentile at least ${report.goal.p5Fps} fps): ${report.verdict}\n`);

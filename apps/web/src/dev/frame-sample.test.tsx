@@ -11,6 +11,12 @@ import { stubFactory } from '../test-utils.js';
 import { createFrameSampleState, frameSampleProfile, FRAME_SAMPLE_SOURCE } from './frame-sample.js';
 
 describe('the frame sample', () => {
+  it('pins one entity, so that a drag of a pinned entity can be tried on it', () => {
+    const state = createFrameSampleState();
+    expect([...state.presentation.view.getState().pins]).toEqual([elementKey({ sourceId: FRAME_SAMPLE_SOURCE, entityType: 'gadget', stableId: 'gad-2' })]);
+  });
+
+
   it('holds the ten entities and thirteen relationships of the design, each entity placed, one relationship an aggregate of 42 and one derived', () => {
     const state = createFrameSampleState();
     const graph = state.loadedGraph();

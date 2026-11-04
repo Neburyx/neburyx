@@ -101,6 +101,8 @@ export function createFrameSampleState(): ClientState {
   state.putResult(key, { sourceId: FRAME_SAMPLE_SOURCE, nodes, edges });
   state.setLoaded([key], nodes.map((node) => node.ref), edges.map((edge): EdgeRef => edge.ref));
   for (const entity of ENTITIES) state.presentation.setPosition(elementKey(refOf(entity.id)), entity.at);
+  // the frames draw no mark for a pin, so this changes nothing in the picture; it lets a drag of a pinned entity be tried on the sample
+  state.replacePins([elementKey(refOf('gad-2'))]);
   state.describeInvestigation(FIXTURE_RECORD);
   return state;
 }

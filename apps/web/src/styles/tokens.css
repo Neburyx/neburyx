@@ -85,6 +85,8 @@
   --selection-separator-height: 18px;
   --selection-box-border-width: 1.2px;
   --zoom-gap: 12px;
+  --layout-popup-min-width: 120px;
+  --zoom-divider-width: 12px;
   --zoom-icon-size: 14px;
   --stand-in-panel-height: 574px;
   --stand-in-button-height: 32px;

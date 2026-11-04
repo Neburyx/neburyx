@@ -1,7 +1,7 @@
 import { edgeSchema, nodeSchema, type SourceProfile } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
 import { edgeKey, elementKey } from '../state/keys.js';
-import { FIXTURE_ELEMENTS, FIXTURE_PINS, FixtureError, generateFixtureGraph } from './fixture-graph.js';
+import { FIXTURE_ELEMENTS, FIXTURE_PINS, FixtureError, generateAddition, generateFixtureGraph } from './fixture-graph.js';
 import { testProfile } from './test-profile.js';
 
 describe('the fixture graph', () => {
@@ -122,5 +122,57 @@ describe('the size of the fixture graph', () => {
     expect(withState.every((node) => node.properties.length === 1 && node.properties[0]?.key === 'status')).toBe(true);
     expect(new Set(withState.map((node) => node.properties[0]?.value)).size).toBeGreaterThan(1);
     expect(graph.nodes.filter((node) => node.ref.entityType !== first.type).every((node) => node.properties.length === 0)).toBe(true);
+  });
+});
+
+describe('an addition to the fixture graph', () => {
+  const richProfile = (): SourceProfile => ({
+    ...testProfile('source-a', ['kind-a', 'kind-b', 'kind-c', 'kind-d']),
+    relationshipTypes: [
+      { type: 'link-ab', from: 'kind-a', to: 'kind-b', aggregate: false, observedAt: null, filterable: [], evidence: [] },
+      { type: 'link-bc', from: 'kind-b', to: 'kind-c', aggregate: false, observedAt: null, filterable: [], evidence: [] },
+      { type: 'link-cc', from: 'kind-c', to: 'kind-c', aggregate: false, observedAt: null, filterable: [], evidence: [] },
+      { type: 'link-ad', from: 'kind-a', to: 'kind-d', aggregate: true, observedAt: null, filterable: [], evidence: [] },
+    ],
+  });
+  const endpointsFit = (profile: SourceProfile, addition: ReturnType<typeof generateAddition>, existing: readonly { readonly ref: { readonly entityType: string; readonly stableId: string } }[]) => {
+    const types = new Map([...existing, ...addition.nodes].map((node) => [node.ref.stableId, node.ref.entityType] as const));
+    return addition.edges.every((edge) => {
+      const from = 'entityType' in edge.from ? types.get(edge.from.stableId) : undefined;
+      const to = 'entityType' in edge.to ? types.get(edge.to.stableId) : undefined;
+      return profile.relationshipTypes.some((relationship) => !relationship.aggregate && relationship.type === edge.type && relationship.from === from && relationship.to === to);
+    });
+  };
+
+  it.each([
+    ['the test profile', testProfile()],
+    ['a profile with four entity types, a relationship between an entity type and itself and an aggregate one', richProfile()],
+  ])('joins each added entity only by a stored relationship whose two ends are of the types of the two entities: %s', (_name, profile) => {
+    const base = generateFixtureGraph(profile, 1);
+    const addition = generateAddition(profile, base.nodes, 25, 0);
+    expect(addition.nodes).toHaveLength(25);
+    expect(addition.edges.length).toBeGreaterThan(0);
+    expect(endpointsFit(profile, addition, base.nodes)).toBe(true);
+    const again = generateAddition(profile, [...base.nodes, ...addition.nodes], 25, 1);
+    expect(endpointsFit(profile, again, [...base.nodes, ...addition.nodes])).toBe(true);
+  });
+
+  it('passes over an entity type that no stored relationship can join, and adds no entity of it', () => {
+    const base = generateFixtureGraph(testProfile(), 1);
+    const addition = generateAddition(testProfile(), base.nodes, 25, 0);
+    expect(addition.nodes.every((node) => node.ref.entityType !== 'kind-c')).toBe(true);
+  });
+
+  it('is refused, with nothing made, when no stored relationship can join any entity type to a loaded entity', () => {
+    const profile = { ...testProfile(), relationshipTypes: testProfile().relationshipTypes.map((relationship) => ({ ...relationship, aggregate: true })) };
+    const base = generateFixtureGraph(testProfile(), 1);
+    expect(() => generateAddition(profile, base.nodes, 5, 0)).toThrowError(expect.objectContaining({ code: 'NO_RELATIONSHIP_TYPES' }));
+    expect(() => generateAddition(richProfile(), [], 5, 0)).toThrowError(expect.objectContaining({ code: 'NO_RELATIONSHIP_TYPES' }));
+  });
+
+  it('is the same for the same profile, entities and round, and different for another round', () => {
+    const base = generateFixtureGraph(testProfile(), 1);
+    expect(generateAddition(testProfile(), base.nodes, 25, 0)).toEqual(generateAddition(testProfile(), base.nodes, 25, 0));
+    expect(generateAddition(testProfile(), base.nodes, 25, 0).edges).not.toEqual(generateAddition(testProfile(), base.nodes, 25, 1).edges);
   });
 });

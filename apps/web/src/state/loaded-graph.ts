@@ -16,8 +16,23 @@ function exact(value: number): Count {
   return { value, quality: 'exact', scope: LOADED_SCOPE };
 }
 
-/** The records of the results the investigation names that its refs name, once each; the counts are of these, and exact because they are what the client holds. A result cached for another principal, policy or filter is never read. */
+const derived = new WeakMap<ServerState, WeakMap<InvestigationState, LoadedGraph>>();
+
+/** The records of the results the investigation names that its refs name, once each; the counts are of these, and exact because they are what the client holds. A result cached for another principal, policy or filter is never read. The same two states give the same graph object, so every part of the page that asks shares one derivation. */
 export function deriveLoadedGraph(server: ServerState, investigation: InvestigationState): LoadedGraph {
+  let byInvestigation = derived.get(server);
+  if (byInvestigation === undefined) {
+    byInvestigation = new WeakMap();
+    derived.set(server, byInvestigation);
+  }
+  const known = byInvestigation.get(investigation);
+  if (known !== undefined) return known;
+  const graph = deriveFresh(server, investigation);
+  byInvestigation.set(investigation, graph);
+  return graph;
+}
+
+function deriveFresh(server: ServerState, investigation: InvestigationState): LoadedGraph {
   const wantedNodes = new Set(investigation.nodeRefs.map(elementKey));
   const wantedEdges = new Set(investigation.edgeRefs.map(edgeKey));
   const nodes = new Map<string, GraphNode>();

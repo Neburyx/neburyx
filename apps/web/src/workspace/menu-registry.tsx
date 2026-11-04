@@ -67,13 +67,17 @@ export interface MenuItemShape {
   readonly group: number;
   readonly order: number;
   readonly shortcut?: string;
-  /** Enabled when not given. A disabled or locked item is shown, does nothing and never opens a submenu. */
-  readonly state?: MenuItemState;
+  /** Enabled when not given; a function is asked each time the menu is drawn, with what the menu is about. A disabled or locked item is shown, does nothing and never opens a submenu. */
+  readonly state?: MenuItemState | ((context: MenuContext) => MenuItemState);
   /** Draws a lock after a locked item's tag. */
   readonly lock?: boolean;
 }
 
 export type MenuItem = MenuItemShape & MenuItemBehaviour;
+
+export function stateOf(item: MenuItemShape, context: MenuContext): MenuItemState {
+  return typeof item.state === 'function' ? item.state(context) : (item.state ?? 'enabled');
+}
 
 export type RegisteredMenuItem = MenuItem & {
   readonly kind: MenuTargetKind;

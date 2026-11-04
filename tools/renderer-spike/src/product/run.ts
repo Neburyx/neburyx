@@ -4,6 +4,8 @@ import { RunnerError } from '../runner/errors.js';
 import { checkDrag, checkDrawn, checkMotion, checkWheel, checkWheelReturn, type CanvasPixels, type Motion, type Readout } from './checks.js';
 import { writeProductReport, type ProductReport } from './report.js';
 import { evaluateTarget, TARGET } from './target.js';
+import type { AddCapture, AddReport } from './add.js';
+import type { LayoutCapture, LayoutReport } from './layout.js';
 
 export const WHEEL_STEP = -100;
 export const DRAG_STEP = { dx: 60, dy: 40 } as const;
@@ -26,6 +28,10 @@ export interface ProductPage {
   /** Runs the harness's scripted pan and zoom with wheel and drag events on the canvas and returns the frame times and what the run did to the view. */
   measurePanZoom(durationMs: number, wheelStep: number): Promise<{ readonly times: number[]; readonly motion: Motion }>;
   viewport(): Promise<{ readonly width: number; readonly height: number; readonly devicePixelRatio: number }>;
+  /** Marks where every entity is drawn, records frame times from just before pressing the app's development control that adds entities, and returns them with the read-outs before and after, once the add is drawn and the frames after it have passed. */
+  measureAdd(framesAfter: number): Promise<AddCapture>;
+  /** Displaces ten unpinned entities with the app's development control, marks where every entity is drawn, records frame times from just before the layout control is pressed and Force chosen, and returns them with the read-outs before and after, once the run is drawn and the frames after it have passed. */
+  measureLayout(framesAfter: number): Promise<LayoutCapture>;
 }
 
 export interface ProductBrowser {
@@ -40,6 +46,8 @@ export interface ProductDeps {
   machine(): Pick<ProductReport, 'os' | 'cpu'>;
   now(): Date;
   writeReport(path: string, report: unknown): ProductReport;
+  writeAddReport(path: string, report: unknown): AddReport;
+  writeLayoutReport(path: string, report: unknown): LayoutReport;
 }
 
 export interface ProductOptions {
@@ -49,7 +57,7 @@ export interface ProductOptions {
   readonly deadlines?: { readonly readyMs?: number; readonly stepMs?: number; readonly runMs?: number; readonly cleanupMs?: number };
 }
 
-function withDeadline<T>(action: Promise<T>, deadlineMs: number): Promise<T> {
+export function withDeadline<T>(action: Promise<T>, deadlineMs: number): Promise<T> {
   let timer: NodeJS.Timeout | undefined;
   const expired = new Promise<never>((_resolve, reject) => {
     timer = setTimeout(() => reject(new RunnerError('MEASUREMENT_FAILED', 'DEADLINE')), deadlineMs);
@@ -57,7 +65,7 @@ function withDeadline<T>(action: Promise<T>, deadlineMs: number): Promise<T> {
   return Promise.race([action, expired]).finally(() => clearTimeout(timer));
 }
 
-async function step<T>(action: () => Promise<T>, deadlineMs: number): Promise<T> {
+export async function step<T>(action: () => Promise<T>, deadlineMs: number): Promise<T> {
   try {
     return await withDeadline(action(), deadlineMs);
   } catch (error) {
@@ -67,7 +75,7 @@ async function step<T>(action: () => Promise<T>, deadlineMs: number): Promise<T>
 }
 
 /** A browser that arrives after its deadline has no owner, so it is closed when it does. */
-async function launch(deps: ProductDeps, deadlineMs: number): Promise<ProductBrowser> {
+export async function launch(deps: ProductDeps, deadlineMs: number): Promise<ProductBrowser> {
   const attempt = deps.launchBrowser();
   let expired = false;
   attempt.then(
@@ -82,7 +90,7 @@ async function launch(deps: ProductDeps, deadlineMs: number): Promise<ProductBro
   }
 }
 
-function parseUrl(url: string): URL {
+export function parseUrl(url: string): URL {
   try {
     const parsed = new URL(url);
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') throw new Error('not http');

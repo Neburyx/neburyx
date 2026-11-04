@@ -1,3 +1,4 @@
+import type { IconKey } from '@neburyx/contracts';
 import cytoscape, { type Core, type StylesheetJson } from 'cytoscape';
 import type { PointerTool, Position } from '../state/presentation-state.js';
 import { CAPTION_HEIGHT, CAPTION_TOP, CAPTION_WIDTH } from './caption-layout.js';
@@ -12,17 +13,25 @@ import { suppressNativeMenu } from './native-menu.js';
 import { ZOOM_MAX, ZOOM_MIN } from './zoom.js';
 import type { CanvasRenderer, DrawnCounts, Inspection, Scene } from './scene.js';
 
-// Entities are neither dragged nor selected by the library: clicks and boxes are reported and decided by the caller.
-const POINTER = { userPanningEnabled: true, userZoomingEnabled: true, boxSelectionEnabled: false, autoungrabify: true, autounselectify: true };
+// Entities are not selected by the library: clicks and boxes are reported and decided by the caller. An entity is grabbed only while the scene says it may be dragged.
+const POINTER = { userPanningEnabled: true, userZoomingEnabled: true, boxSelectionEnabled: false, autoungrabify: false, autounselectify: true };
+
+const CAPTION_BUDGET_MS = 4;
+
+const sameKeys = (a: ReadonlySet<string>, b: ReadonlySet<string>): boolean => a.size === b.size && [...a].every((key) => b.has(key));
+
+interface CaptionJob {
+  readonly id: string;
+  readonly key: string;
+  readonly iconKey: IconKey;
+  readonly line1: string;
+  readonly line2: string;
+}
 
 const edgeData = (look: RelationshipLook) => ({ aggregate: look.aggregate, origin: look.origin, label: look.label ?? '' });
 
 
 // Cytoscape keeps the object it is given as the node's position and writes to it, so every position is copied in.
-const ORIGIN: Position = { x: 0, y: 0 };
-const SPIRAL_STEP = 40;
-const GOLDEN_ANGLE = 2.399963;
-
 const STYLE: StylesheetJson = [
   {
     selector: 'node',
@@ -129,6 +138,10 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
   let surfaced = false;
   let flushViewport: (() => void) | undefined;
   let lastSource: string | null | undefined;
+  // The entity being dragged, where it was at the grab, and whether the drag was interrupted: a cancelled drag keeps putting the entity back until the library sees the release.
+  let dragging: { readonly id: string; readonly start: Position; readonly tool: PointerTool; readonly pinned: ReadonlySet<string>; cancelled: boolean } | undefined;
+  let drawnPinned: ReadonlySet<string> = new Set();
+  let reportFailure: () => void = () => undefined;
   // The ticket of the one viewport report that waits for its frame; a source change drops it, and only the frame that holds the current ticket reports.
   let pendingReport: number | undefined;
   let tickets = 0;
@@ -140,6 +153,51 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
     const painted = painter(line1, line2);
     captions.set(key, painted);
     return painted;
+  };
+
+  const glyphs = new Map<string, string>();
+  const glyphFor = (key: IconKey): string => {
+    const known = glyphs.get(key);
+    if (known !== undefined) return known;
+    const made = glyphUri(key, GLYPH_COLOR);
+    glyphs.set(key, made);
+    return made;
+  };
+  // A caption is painted and encoded on a canvas of its own, which costs a millisecond or more, so an entity is drawn at once with its glyph and the captions follow in the next frames, a few at a time; the frame that adds many entities then stays short.
+  let captionQueue: CaptionJob[] = [];
+  let captionsScheduled = false;
+  const paintQueuedCaptions = (): void => {
+    captionsScheduled = false;
+    const cy = core;
+    if (cy === undefined) {
+      captionQueue = [];
+      return;
+    }
+    const started = performance.now();
+    try {
+      while (captionQueue.length > 0 && performance.now() - started < CAPTION_BUDGET_MS) {
+        const job = captionQueue.shift();
+        const node = job === undefined ? undefined : cy.getElementById(job.id);
+        if (job === undefined || node === undefined || node.empty() || node.data('lookKey') !== job.key) continue;
+        node.style('background-image', [glyphFor(job.iconKey), captionFor(job.line1, job.line2)]);
+      }
+    } catch {
+      captionQueue = [];
+      reportFailure();
+      return;
+    }
+    if (captionQueue.length > 0) scheduleCaptions();
+  };
+  const scheduleCaptions = (): void => {
+    if (captionsScheduled) return;
+    captionsScheduled = true;
+    nextFrame(paintQueuedCaptions);
+  };
+
+  const cancelDrag = (): void => {
+    if (core === undefined || dragging === undefined || dragging.cancelled) return;
+    dragging.cancelled = true;
+    core.getElementById(dragging.id).position({ ...dragging.start });
   };
 
   const requireCore = (): Core => {
@@ -256,6 +314,27 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
         gesture.end(event.renderedPosition);
         created.userPanningEnabled(true);
       });
+      created.on('grab', (event) => {
+        const node = event.target;
+        dragging = { id: node.id(), start: { x: node.position('x'), y: node.position('y') }, tool, pinned: drawnPinned, cancelled: false };
+      });
+      created.on('drag', () => {
+        if (dragging?.cancelled === true) created.getElementById(dragging.id).position({ ...dragging.start });
+      });
+      created.on('dragfree', (event) => {
+        const drag = dragging;
+        dragging = undefined;
+        if (drag === undefined || drag.cancelled || event.target.id() !== drag.id) return;
+        if (!insideCanvas(event.renderedPosition)) {
+          event.target.position({ ...drag.start });
+          return;
+        }
+        const position = { x: event.target.position('x'), y: event.target.position('y') };
+        if (position.x !== drag.start.x || position.y !== drag.start.y) events.move({ id: drag.id, position });
+      });
+      created.on('free', () => {
+        if (dragging?.cancelled === true) dragging = undefined;
+      });
       created.on('cxttap', (event) => {
         const { target, originalEvent } = event;
         if (gesture.active || !(originalEvent instanceof MouseEvent)) return;
@@ -265,14 +344,20 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
       });
       const restoreNativeMenu = container === undefined ? undefined : suppressNativeMenu(container);
       container?.addEventListener('pointercancel', cancelBox);
+      container?.addEventListener('pointercancel', cancelDrag);
       window.addEventListener('blur', cancelBox);
+      window.addEventListener('blur', cancelDrag);
       teardown = () => {
         restoreNativeMenu?.();
         container?.removeEventListener('pointercancel', cancelBox);
+        container?.removeEventListener('pointercancel', cancelDrag);
         window.removeEventListener('blur', cancelBox);
+        window.removeEventListener('blur', cancelDrag);
+        dragging = undefined;
         gesture.cancel();
         overlay?.dispose();
       };
+      reportFailure = events.failed;
       options.onCore?.(created);
       core = created;
       if (viewport !== undefined) {
@@ -288,6 +373,7 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
       const cy = requireCore();
       tool = scene.tool;
       if (scene.source !== lastSource) {
+        cancelDrag();
         if (lastSource !== undefined) {
           fitted = false;
           pendingReport = undefined;
@@ -296,7 +382,8 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
       }
       const wantedEntities = new Set(scene.entities.map((entity) => entity.id));
       const wantedRelationships = new Set(scene.relationships.map((relationship) => relationship.id));
-      const unplaced: string[] = [];
+      if (dragging !== undefined && (scene.tool !== dragging.tool || !sameKeys(scene.pinned, dragging.pinned) || !wantedEntities.has(dragging.id))) cancelDrag();
+      drawnPinned = scene.pinned;
       let retained = 0;
       const hadEntities = cy.nodes().nonempty();
       cy.batch(() => {
@@ -305,14 +392,21 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
         for (const entity of scene.entities) {
           const existing = cy.getElementById(entity.id);
           if (!existing.empty()) retained += 1;
-          if (existing.empty()) cy.add({ group: 'nodes', data: { id: entity.id }, position: { ...(entity.position ?? ORIGIN) } });
-          else if (entity.position !== undefined && (existing.position('x') !== entity.position.x || existing.position('y') !== entity.position.y)) existing.position(entity.position);
-          if (entity.position === undefined) unplaced.push(entity.id);
+          if (existing.empty()) cy.add({ group: 'nodes', data: { id: entity.id }, position: { ...entity.position } });
+          else if ((dragging === undefined || dragging.cancelled || dragging.id !== entity.id) && (existing.position('x') !== entity.position.x || existing.position('y') !== entity.position.y)) existing.position({ ...entity.position });
           const node = cy.getElementById(entity.id);
+          const grabbable = scene.tool !== 'pan' && !scene.pinned.has(entity.id);
+          if (node.grabbable() !== grabbable) {
+            if (grabbable) node.grabify();
+            else node.ungrabify();
+          }
           const lookKey = `${entity.look.iconKey}\u0000${entity.look.line1}\u0000${entity.look.line2}`;
           if (node.data('lookKey') !== lookKey) {
             node.data({ lookKey, caption: `${entity.look.line1}\n${entity.look.line2}` });
-            if (paints) node.style('background-image', [glyphUri(entity.look.iconKey, GLYPH_COLOR), captionFor(entity.look.line1, entity.look.line2)]);
+            if (paints) {
+              node.style('background-image', [glyphFor(entity.look.iconKey)]);
+              captionQueue.push({ id: entity.id, key: lookKey, iconKey: entity.look.iconKey, line1: entity.look.line1, line2: entity.look.line2 });
+            }
           }
         }
         for (const relationship of scene.relationships) {
@@ -324,6 +418,7 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
           }
         }
       });
+      if (captionQueue.length > 0) scheduleCaptions();
       cy.batch(() => {
         for (const item of [...scene.entities, ...scene.relationships]) {
           const element = cy.getElementById(item.id);
@@ -331,28 +426,12 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
           if (element.data('selected') !== selected) element.data('selected', selected);
         }
       });
-      const placed = new Map<string, Position>();
-      if (unplaced.length > 0) {
-        const held = cy.nodes().filter((node) => !unplaced.includes(node.id()));
-        unplaced.forEach((id, index) => {
-          const radius = SPIRAL_STEP * Math.sqrt(index + 1);
-          cy.getElementById(id).position({ x: radius * Math.cos(index * GOLDEN_ANGLE), y: radius * Math.sin(index * GOLDEN_ANGLE) });
-        });
-        held.lock();
-        cy.layout({ name: 'cose', animate: false, randomize: false, fit: false }).run();
-        held.unlock();
-        for (const id of unplaced) {
-          const { x, y } = cy.getElementById(id).position();
-          placed.set(id, { x, y });
-        }
-      }
       const replaced = hadEntities && scene.entities.length > 0 && retained === 0;
       if (scene.view === 'fit' && scene.entities.length > 0 && (!fitted || replaced)) {
         fitEntities(cy);
         fits += 1;
       }
       if (scene.entities.length > 0) fitted = true;
-      return placed;
     },
     fit() {
       const cy = requireCore();
@@ -370,7 +449,7 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
         viewport: { zoom: cy.zoom(), x: cy.pan().x, y: cy.pan().y },
         zoomLimits: { min: cy.minZoom(), max: cy.maxZoom() },
         boundingBox: cy.nodes().empty() ? undefined : cy.nodes().renderedBoundingBox({}),
-        interaction: { panning: cy.userPanningEnabled(), zooming: cy.userZoomingEnabled(), boxSelecting: cy.boxSelectionEnabled(), nodesGrabbable: !cy.autoungrabify(), nodesSelectable: !cy.autounselectify() },
+        interaction: { panning: cy.userPanningEnabled(), zooming: cy.userZoomingEnabled(), boxSelecting: cy.boxSelectionEnabled(), nodesGrabbable: cy.nodes().map((node) => node.grabbable()).includes(true), nodesSelectable: !cy.autounselectify() },
         nodes: cy.nodes().map((node) => {
           const image = node.style('background-image');
           return { id: node.id(), diameter: parseFloat(node.style('width')), outline: node.style('border-color'), outlineWidth: parseFloat(node.style('border-width')), halo: parseFloat(node.style('underlay-opacity')) > 0, images: image === 'none' ? [] : image.split(' '), caption: String(node.data('caption') ?? '') };
@@ -392,7 +471,16 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
       const cy = requireCore();
       return { entities: cy.nodes().length, relationships: cy.edges().length };
     },
+    viewport() {
+      const cy = requireCore();
+      return { zoom: cy.zoom(), x: cy.pan().x, y: cy.pan().y };
+    },
+    positions() {
+      return new Map(requireCore().nodes().map((node) => [node.id(), { x: node.position('x'), y: node.position('y') }]));
+    },
     dispose() {
+      captionQueue = [];
+      reportFailure = () => undefined;
       flushViewport?.();
       flushViewport = undefined;
       teardown?.();

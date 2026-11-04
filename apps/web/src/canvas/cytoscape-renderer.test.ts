@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createCytoscapeRenderer, type RendererCore as Core } from './cytoscape-renderer.js';
 import { glyphUri } from './glyphs.js';
 import { FIT_PADDING, GLYPH_COLOR } from './look.js';
@@ -8,17 +8,17 @@ import type { BoxSelection } from './box-selection.js';
 import type { Click } from './selection-gestures.js';
 import type { Viewport } from '../state/presentation-state.js';
 
-function scene(entities: ReadonlyArray<readonly [string, { x: number; y: number } | undefined]>, relationships: ReadonlyArray<readonly [string, string, string]> = []): Scene {
+function scene(entities: ReadonlyArray<readonly [string, { x: number; y: number }]>, relationships: ReadonlyArray<readonly [string, string, string]> = []): Scene {
   return {
     entities: entities.map(([id, position]) => ({ id, position, look: { iconKey: 'generic' as const, line1: id, line2: 'Type' } })),
     relationships: relationships.map(([id, from, to]) => ({ id, from, to, look: { aggregate: false, origin: 'stored' as const, label: undefined } })),
     profile: undefined,
-    omitted: 0, selection: new Set<string>(), tool: 'select' as const, source: null,
+    omitted: 0, selection: new Set<string>(), pinned: new Set<string>(), tool: 'select' as const, source: null,
     view: 'fit' as const,
   };
 }
 
-const NO_EVENTS: CanvasEvents = { viewport: () => undefined, click: () => undefined, box: () => undefined, contextMenu: () => undefined };
+const NO_EVENTS: CanvasEvents = { viewport: () => undefined, click: () => undefined, box: () => undefined, contextMenu: () => undefined, move: () => undefined, failed: () => undefined };
 
 function mounted(events: CanvasEvents = NO_EVENTS) {
   const renderer = createCytoscapeRenderer({ nextFrame: (callback) => callback() });
@@ -39,13 +39,41 @@ describe('the Cytoscape renderer', () => {
     expect(renderer.describe().relationships).toBe(3);
   });
 
-  it('places only the entities that have no position, and leaves the others where they were', () => {
-    const renderer = mounted();
-    const placed = renderer.draw(scene([['a', { x: 10, y: 20 }], ['b', undefined], ['c', undefined]], [['ab', 'a', 'b'], ['ac', 'a', 'c']]));
-    expect([...placed.keys()].sort()).toEqual(['b', 'c']);
-    expect(placed.get('b')).not.toEqual(placed.get('c'));
-    const again = renderer.draw(scene([['a', { x: 10, y: 20 }], ['b', placed.get('b')], ['c', placed.get('c')]], [['ab', 'a', 'b'], ['ac', 'a', 'c']]));
-    expect(again.size).toBe(0);
+  it('draws every entity exactly where the scene puts it, and never moves one on its own', () => {
+    let core: Core | undefined;
+    const renderer = createCytoscapeRenderer({ nextFrame: (callback) => callback(), onCore: (made) => void (core = made) });
+    renderer.mount(undefined, NO_EVENTS, undefined);
+    const entities: ReadonlyArray<readonly [string, { x: number; y: number }]> = [['a', { x: 10, y: 20 }], ['b', { x: -300, y: 7.5 }], ['c', { x: 0, y: 0 }]];
+    const links: ReadonlyArray<readonly [string, string, string]> = [['ab', 'a', 'b'], ['ac', 'a', 'c']];
+    const at = () => Object.fromEntries(entities.map(([id]) => [id, core?.getElementById(id).position()]));
+    renderer.draw(scene(entities, links));
+    expect(at()).toEqual({ a: { x: 10, y: 20 }, b: { x: -300, y: 7.5 }, c: { x: 0, y: 0 } });
+    renderer.draw(scene(entities, links));
+    renderer.draw(scene([...entities, ['d', { x: 500, y: 500 }]], [...links, ['ad', 'a', 'd']]));
+    expect(at()).toEqual({ a: { x: 10, y: 20 }, b: { x: -300, y: 7.5 }, c: { x: 0, y: 0 } });
+    expect(core?.getElementById('d').position()).toEqual({ x: 500, y: 500 });
+  });
+
+  it('draws a position that differs from the one it drew before', () => {
+    let core: Core | undefined;
+    const renderer = createCytoscapeRenderer({ nextFrame: (callback) => callback(), onCore: (made) => void (core = made) });
+    renderer.mount(undefined, NO_EVENTS, undefined);
+    renderer.draw(scene([['a', { x: 0, y: 0 }], ['b', { x: 40, y: 0 }]]));
+    renderer.draw(scene([['a', { x: 0, y: 0 }], ['b', { x: -70, y: 33 }]]));
+    expect(core?.getElementById('a').position()).toEqual({ x: 0, y: 0 });
+    expect(core?.getElementById('b').position()).toEqual({ x: -70, y: 33 });
+  });
+
+  it('runs no layout of its own: the library is never asked for one', () => {
+    let core: Core | undefined;
+    const renderer = createCytoscapeRenderer({ nextFrame: (callback) => callback(), onCore: (made) => void (core = made) });
+    renderer.mount(undefined, NO_EVENTS, undefined);
+    let layouts = 0;
+    const original = core?.layout.bind(core);
+    if (core !== undefined && original !== undefined) core.layout = (...given: Parameters<Core['layout']>) => { layouts += 1; return original(...given); };
+    renderer.draw(scene([['a', { x: 0, y: 0 }], ['b', { x: 100, y: 0 }], ['c', { x: 0, y: 100 }]], [['ab', 'a', 'b'], ['bc', 'b', 'c']]));
+    renderer.draw(scene([['a', { x: 0, y: 0 }], ['b', { x: 100, y: 0 }], ['c', { x: 0, y: 100 }], ['d', { x: 9, y: 9 }]], [['ab', 'a', 'b'], ['bc', 'b', 'c'], ['cd', 'c', 'd']]));
+    expect(layouts).toBe(0);
   });
 
   it('keeps one instance across draws, adds what is new and removes what is gone with its relationships', () => {
@@ -58,8 +86,7 @@ describe('the Cytoscape renderer', () => {
   it('moves an entity whose position changed', () => {
     const renderer = mounted();
     renderer.draw(scene([['a', { x: 0, y: 0 }]]));
-    const placed = renderer.draw(scene([['a', { x: 5, y: 6 }]]));
-    expect(placed.size).toBe(0);
+    renderer.draw(scene([['a', { x: 5, y: 6 }]]));
     expect(renderer.describe().entities).toBe(1);
   });
 
@@ -77,11 +104,11 @@ describe('the Cytoscape renderer', () => {
 
 describe('the entities the Cytoscape renderer draws', () => {
   const look = (iconKey: 'generic' | 'money', line1: string, line2: string) => ({ iconKey, line1, line2 });
-  const one = (position: { x: number; y: number } | undefined, entityLook = look('money', 'ACC-1', 'Alpha · Open')): Scene => ({ entities: [{ id: 'a', position, look: entityLook }], relationships: [], profile: undefined, omitted: 0, selection: new Set<string>(), tool: 'select' as const, source: null, view: 'fit' as const });
+  const one = (position: { x: number; y: number }, entityLook = look('money', 'ACC-1', 'Alpha · Open')): Scene => ({ entities: [{ id: 'a', position, look: entityLook }], relationships: [], profile: undefined, omitted: 0, selection: new Set<string>(), pinned: new Set<string>(), tool: 'select' as const, source: null, view: 'fit' as const });
 
   it('draws a disc 36 px across its 1 px outline, the glyph of its icon key and the caption its look names', () => {
     const painted: string[] = [];
-    const renderer = createCytoscapeRenderer({ paintCaption: (line1, line2) => { painted.push(`${line1}|${line2}`); return 'data:image/png;base64,AAAA'; } });
+    const renderer = createCytoscapeRenderer({ nextFrame: (callback) => callback(), paintCaption: (line1, line2) => { painted.push(`${line1}|${line2}`); return 'data:image/png;base64,AAAA'; } });
     renderer.mount(undefined, NO_EVENTS, undefined);
     renderer.draw(one({ x: 0, y: 0 }));
     const [node] = renderer.inspect().nodes;
@@ -94,18 +121,18 @@ describe('the entities the Cytoscape renderer draws', () => {
 
   it('paints a caption once however often it is drawn, and again only for another text', () => {
     let paints = 0;
-    const renderer = createCytoscapeRenderer({ paintCaption: () => { paints += 1; return 'data:image/png;base64,AAAA'; } });
+    const renderer = createCytoscapeRenderer({ nextFrame: (callback) => callback(), paintCaption: () => { paints += 1; return 'data:image/png;base64,AAAA'; } });
     renderer.mount(undefined, NO_EVENTS, undefined);
     renderer.draw(one({ x: 0, y: 0 }));
     renderer.draw(one({ x: 0, y: 0 }));
-    renderer.draw({ entities: [{ id: 'a', position: { x: 0, y: 0 }, look: look('money', 'ACC-1', 'Alpha · Open') }, { id: 'b', position: { x: 90, y: 0 }, look: look('money', 'ACC-1', 'Alpha · Open') }], relationships: [], profile: undefined, omitted: 0, selection: new Set<string>(), tool: 'select' as const, source: null, view: 'fit' as const });
+    renderer.draw({ entities: [{ id: 'a', position: { x: 0, y: 0 }, look: look('money', 'ACC-1', 'Alpha · Open') }, { id: 'b', position: { x: 90, y: 0 }, look: look('money', 'ACC-1', 'Alpha · Open') }], relationships: [], profile: undefined, omitted: 0, selection: new Set<string>(), pinned: new Set<string>(), tool: 'select' as const, source: null, view: 'fit' as const });
     expect(paints).toBe(1);
     renderer.draw(one({ x: 0, y: 0 }, look('generic', 'ACC-1', 'Alpha · Closed')));
     expect(paints).toBe(2);
   });
 
   it('changes the glyph and the caption when the look changes, without moving the entity', () => {
-    const renderer = createCytoscapeRenderer({ paintCaption: (line1) => `data:image/png;base64,${btoa(line1)}` });
+    const renderer = createCytoscapeRenderer({ nextFrame: (callback) => callback(), paintCaption: (line1) => `data:image/png;base64,${btoa(line1)}` });
     renderer.mount(undefined, NO_EVENTS, undefined);
     renderer.draw(one({ x: 11, y: 22 }, look('generic', 'ACC-1', 'type-a')));
     const first = renderer.inspect().nodes[0];
@@ -114,7 +141,69 @@ describe('the entities the Cytoscape renderer draws', () => {
     expect(first?.images[0]).toBe(glyphUri('generic', GLYPH_COLOR));
     expect(second?.images[0]).toBe(glyphUri('money', GLYPH_COLOR));
     expect(second?.caption).toBe('ACC-1\nAlpha');
-    expect(renderer.draw(one({ x: 11, y: 22 }, look('money', 'ACC-1', 'Alpha'))).size).toBe(0);
+  });
+
+  describe('whose captions are painted in the frames that follow', () => {
+    const many = (count: number): Scene => ({ entities: Array.from({ length: count }, (_unused, index) => ({ id: `e${index}`, position: { x: index * 200, y: 0 }, look: look('generic', `ID-${index}`, 'Type') })), relationships: [], profile: undefined, omitted: 0, selection: new Set<string>(), pinned: new Set<string>(), tool: 'select' as const, source: null, view: 'fit' as const });
+
+    function frames() {
+      const waiting: Array<() => void> = [];
+      return { nextFrame: (callback: () => void) => void waiting.push(callback), run: () => waiting.splice(0).forEach((callback) => callback()), pending: () => waiting.length };
+    }
+
+    it('draws each entity at once with its glyph and no caption, and paints the captions when the frames come', () => {
+      const loop = frames();
+      const renderer = createCytoscapeRenderer({ nextFrame: loop.nextFrame, paintCaption: (line1) => `data:image/png;base64,${btoa(line1)}` });
+      renderer.mount(undefined, NO_EVENTS, undefined);
+      renderer.draw(many(3));
+      expect(renderer.inspect().nodes.map((node) => node.images)).toEqual(Array(3).fill([glyphUri('generic', GLYPH_COLOR)]));
+      loop.run();
+      expect(renderer.inspect().nodes.map((node) => node.images[1])).toEqual([0, 1, 2].map((index) => `data:image/png;base64,${btoa(`ID-${index}`)}`));
+      expect(loop.pending()).toBe(0);
+    });
+
+    it('paints only as many captions in a frame as the budget of 4 ms allows, and the rest in the frames after', () => {
+      const loop = frames();
+      let clock = 0;
+      const now = vi.spyOn(performance, 'now').mockImplementation(() => clock);
+      try {
+        const renderer = createCytoscapeRenderer({ nextFrame: loop.nextFrame, paintCaption: (line1) => { clock += 3; return `data:image/png;base64,${btoa(line1)}`; } });
+        renderer.mount(undefined, NO_EVENTS, undefined);
+        renderer.draw(many(10));
+        const painted = () => renderer.inspect().nodes.filter((node) => node.images.length === 2).length;
+        loop.run();
+        expect(painted()).toBe(2);
+        loop.run();
+        expect(painted()).toBe(4);
+        while (loop.pending() > 0) loop.run();
+        expect(painted()).toBe(10);
+      } finally {
+        now.mockRestore();
+      }
+    });
+
+    it('paints nothing for an entity that was taken out or whose look changed before its turn, and paints the new look', () => {
+      const loop = frames();
+      const painted: string[] = [];
+      const renderer = createCytoscapeRenderer({ nextFrame: loop.nextFrame, paintCaption: (line1) => { painted.push(line1); return 'data:image/png;base64,AAAA'; } });
+      renderer.mount(undefined, NO_EVENTS, undefined);
+      renderer.draw(many(3));
+      renderer.draw({ ...many(3), entities: [{ id: 'e0', position: { x: 0, y: 0 }, look: look('generic', 'ID-0', 'Changed') }, { id: 'e2', position: { x: 400, y: 0 }, look: look('generic', 'ID-2', 'Type') }] });
+      loop.run();
+      expect(painted.sort()).toEqual(['ID-0', 'ID-2']);
+      expect(renderer.describe().entities).toBe(2);
+    });
+
+    it('does nothing when the frame comes after the renderer was disposed', () => {
+      const loop = frames();
+      const painted: string[] = [];
+      const renderer = createCytoscapeRenderer({ nextFrame: loop.nextFrame, paintCaption: (line1) => { painted.push(line1); return 'data:image/png;base64,AAAA'; } });
+      renderer.mount(undefined, NO_EVENTS, undefined);
+      renderer.draw(many(3));
+      renderer.dispose();
+      expect(() => loop.run()).not.toThrow();
+      expect(painted).toEqual([]);
+    });
   });
 
   it('draws no images when there is no drawing surface and no painter', () => {
@@ -135,7 +224,7 @@ describe('the relationships the Cytoscape renderer draws', () => {
     ],
     relationships: relationships.map((relationship) => ({ id: relationship.id, from: 'a', to: 'b', look: relationship.look })),
     profile: undefined,
-    omitted: 0, selection: new Set<string>(), tool: 'select' as const, source: null,
+    omitted: 0, selection: new Set<string>(), pinned: new Set<string>(), tool: 'select' as const, source: null,
     view: 'fit' as const,
   });
   const drawn = (relationships: ReadonlyArray<{ id: string; look: ReturnType<typeof look> }>) => {
@@ -189,17 +278,221 @@ describe('the relationships the Cytoscape renderer draws', () => {
 });
 
 describe('what the Cytoscape renderer lets the pointer do', () => {
-  it('lets it pan and zoom and nothing else (not box-select, select or move) until the features that own those are built', () => {
+  it('lets it pan and zoom, and grab an entity that the scene lets be dragged, and select nothing itself', () => {
     const renderer = mounted();
-    renderer.draw(scene([['a', { x: 0, y: 0 }]]));
     expect(renderer.inspect().interaction).toEqual({ panning: true, zooming: true, boxSelecting: false, nodesGrabbable: false, nodesSelectable: false });
+    renderer.draw(scene([['a', { x: 0, y: 0 }]]));
+    expect(renderer.inspect().interaction).toEqual({ panning: true, zooming: true, boxSelecting: false, nodesGrabbable: true, nodesSelectable: false });
+  });
+});
+
+type LibraryElement = ReturnType<Core['getElementById']>;
+
+// The library's typings take only an event name; the library itself takes an event object with the pointer's position.
+function emitAt(element: LibraryElement, type: string, at: { x: number; y: number }): void {
+  // @ts-expect-error the typings of `emit` do not allow an event object
+  element.emit({ type, renderedPosition: at });
+}
+
+describe('the entity drags of the Cytoscape renderer', () => {
+  function rig(options: { readonly canvas?: { readonly width: number; readonly height: number } } = {}) {
+    const moves: Array<{ readonly id: string; readonly position: { readonly x: number; readonly y: number } }> = [];
+    let core: Core | undefined;
+    const renderer = createCytoscapeRenderer({ nextFrame: (callback) => callback(), onCore: (made) => void (core = made), canvasSize: () => options.canvas ?? { width: 1000, height: 800 } });
+    renderer.mount(undefined, { ...NO_EVENTS, move: (move) => void moves.push(move) }, undefined);
+    const library = (): Core => {
+      if (core === undefined) throw new Error('no core');
+      return core;
+    };
+    const entity = (id: string) => library().getElementById(id);
+    const grab = (id: string) => entity(id).emit('grab');
+    const dragTo = (id: string, x: number, y: number) => {
+      entity(id).position({ x, y });
+      entity(id).emit('drag');
+    };
+    const release = (id: string, at = { x: 500, y: 400 }) => {
+      emitAt(entity(id), 'dragfree', at);
+      entity(id).emit('free');
+    };
+    return { renderer, moves, entity, grab, dragTo, release, library };
+  }
+  const withTool = (base: Scene, tool: Scene['tool']): Scene => ({ ...base, tool });
+  const withPins = (base: Scene, pinned: readonly string[]): Scene => ({ ...base, pinned: new Set(pinned) });
+  const two = (): Scene => scene([['a', { x: 0, y: 0 }], ['b', { x: 300, y: 0 }]], [['ab', 'a', 'b']]);
+
+  it('lets an entity be grabbed in the modes select and box select, and not in pan, and never when it is pinned, whichever mode', () => {
+    const { renderer, entity } = rig();
+    for (const [tool, pinned, expected] of [['select', [], [true, true]], ['box', [], [true, true]], ['pan', [], [false, false]], ['select', ['a'], [false, true]], ['box', ['a', 'b'], [false, false]], ['pan', ['a'], [false, false]]] as const) {
+      renderer.draw(withPins(withTool(two(), tool), pinned));
+      expect([entity('a').grabbable(), entity('b').grabbable()], `${tool} with ${pinned.join(',')} pinned`).toEqual(expected);
+    }
+  });
+
+  it('reports the entity and where it was left, once, when it is released inside the canvas, and nothing for a grab alone', () => {
+    const { renderer, moves, grab, dragTo, release } = rig();
+    renderer.draw(two());
+    grab('a');
+    release('a');
+    expect(moves).toEqual([]);
+    grab('a');
+    dragTo('a', 120.5, -40);
+    dragTo('a', 130, -45);
+    release('a');
+    expect(moves).toEqual([{ id: 'a', position: { x: 130, y: -45 } }]);
+  });
+
+  it('does not move the entity back on a redraw while it is dragged, and keeps the other entities where the scene puts them', () => {
+    const { renderer, grab, dragTo, entity, release, moves } = rig();
+    renderer.draw(two());
+    grab('a');
+    dragTo('a', 77, 88);
+    renderer.draw(withTool(two(), 'select'));
+    expect(entity('a').position()).toEqual({ x: 77, y: 88 });
+    expect(entity('b').position()).toEqual({ x: 300, y: 0 });
+    release('a');
+    expect(moves).toEqual([{ id: 'a', position: { x: 77, y: 88 } }]);
+  });
+
+  it('puts the entity back and reports nothing when it is released outside the canvas', () => {
+    const { renderer, grab, dragTo, entity, release, moves } = rig({ canvas: { width: 1000, height: 800 } });
+    renderer.draw(two());
+    grab('a');
+    dragTo('a', 500, 500);
+    release('a', { x: 1500, y: 400 });
+    expect(entity('a').position()).toEqual({ x: 0, y: 0 });
+    expect(moves).toEqual([]);
+  });
+
+  it('puts the entity back, reports nothing and keeps it there while the pointer moves on, when the window loses focus', () => {
+    const { renderer, grab, dragTo, entity, release, moves } = rig();
+    renderer.draw(two());
+    grab('a');
+    dragTo('a', 50, 60);
+    window.dispatchEvent(new Event('blur'));
+    expect(entity('a').position()).toEqual({ x: 0, y: 0 });
+    dragTo('a', 400, 400);
+    expect(entity('a').position()).toEqual({ x: 0, y: 0 });
+    release('a');
+    expect(moves).toEqual([]);
+  });
+
+  it.each([
+    ['the mode becomes pan', (scene: Scene) => withTool(scene, 'pan')],
+    ['the mode becomes box select', (scene: Scene) => withTool(scene, 'box')],
+    ['the entity becomes pinned', (scene: Scene) => withPins(scene, ['a'])],
+    ['another entity becomes pinned', (scene: Scene) => withPins(scene, ['b'])],
+    ['the source is replaced', (scene: Scene) => ({ ...scene, source: 'another' })],
+  ])('puts the entity back and reports nothing when %s during the drag', (_name, change) => {
+    const { renderer, grab, dragTo, entity, release, moves } = rig();
+    renderer.draw(two());
+    grab('a');
+    dragTo('a', 90, 90);
+    renderer.draw(change(two()));
+    expect(entity('a').position()).toEqual({ x: 0, y: 0 });
+    dragTo('a', 200, 200);
+    release('a');
+    expect(moves).toEqual([]);
+    expect(entity('a').position()).toEqual({ x: 0, y: 0 });
+  });
+
+  it('reports nothing when the entity was taken out during the drag, and nothing throws', () => {
+    const { renderer, grab, dragTo, library, moves } = rig();
+    renderer.draw(two());
+    grab('a');
+    dragTo('a', 90, 90);
+    renderer.draw(scene([['b', { x: 300, y: 0 }]]));
+    expect(() => emitAt(library().getElementById('a'), 'dragfree', { x: 500, y: 400 })).not.toThrow();
+    expect(moves).toEqual([]);
+  });
+
+  it('reports nothing for a drag that was open when the renderer was disposed, and starts afresh when it is mounted again', () => {
+    let core: Core | undefined;
+    const moves: string[] = [];
+    const renderer = createCytoscapeRenderer({ nextFrame: (callback) => callback(), onCore: (made) => void (core = made), canvasSize: () => ({ width: 1000, height: 800 }) });
+    const events = { ...NO_EVENTS, move: (move: { readonly id: string }) => void moves.push(move.id) };
+    renderer.mount(undefined, events, undefined);
+    renderer.draw(two());
+    core?.getElementById('a').emit('grab');
+    renderer.dispose();
+    renderer.mount(undefined, events, undefined);
+    renderer.draw(two());
+    if (core !== undefined) emitAt(core.getElementById('a'), 'dragfree', { x: 500, y: 400 });
+    expect(moves).toEqual([]);
+    core?.getElementById('a').emit('grab');
+    core?.getElementById('a').position({ x: 5, y: 6 });
+    if (core !== undefined) emitAt(core.getElementById('a'), 'dragfree', { x: 500, y: 400 });
+    expect(moves).toEqual(['a']);
+  });
+
+  it('keeps a drag that cancelled for a change of mode cancelled when the mode changes back, until the release', () => {
+    const { renderer, grab, dragTo, entity, release, moves } = rig();
+    renderer.draw(two());
+    grab('a');
+    dragTo('a', 90, 90);
+    renderer.draw(withTool(two(), 'box'));
+    renderer.draw(withTool(two(), 'select'));
+    dragTo('a', 200, 200);
+    release('a');
+    expect(moves).toEqual([]);
+    expect(entity('a').position()).toEqual({ x: 0, y: 0 });
+  });
+
+  it('reports no click for a drag, and leaves the view where it was', () => {
+    const clicks: Click[] = [];
+    let core: Core | undefined;
+    const renderer = createCytoscapeRenderer({ nextFrame: (callback) => callback(), onCore: (made) => void (core = made), canvasSize: () => ({ width: 1000, height: 800 }) });
+    renderer.mount(undefined, { ...NO_EVENTS, click: (click) => void clicks.push(click) }, undefined);
+    renderer.draw(two());
+    const before = renderer.inspect().viewport;
+    const node = core?.getElementById('a');
+    node?.emit('grab');
+    node?.position({ x: 40, y: 40 });
+    if (node !== undefined) emitAt(node, 'dragfree', { x: 500, y: 400 });
+    expect(clicks).toEqual([]);
+    expect(renderer.inspect().viewport).toEqual(before);
+  });
+});
+
+describe('the captions the Cytoscape renderer paints in later frames', () => {
+  const many = (count: number): Scene => ({ entities: Array.from({ length: count }, (_unused, index) => ({ id: `e${index}`, position: { x: index * 200, y: 0 }, look: { iconKey: 'generic' as const, line1: `ID-${index}`, line2: 'Type' } })), relationships: [], profile: undefined, omitted: 0, selection: new Set<string>(), pinned: new Set<string>(), tool: 'select' as const, source: null, view: 'fit' as const });
+
+  it('report a failure of the painter after draw has returned, once, keep what is drawn, and paint no more', () => {
+    const waiting: Array<() => void> = [];
+    let failures = 0;
+    let painted = 0;
+    const renderer = createCytoscapeRenderer({
+      nextFrame: (callback) => void waiting.push(callback),
+      paintCaption: (line1) => {
+        painted += 1;
+        if (line1 === 'ID-1') throw new Error('cannot paint');
+        return 'data:image/png;base64,AAAA';
+      },
+    });
+    renderer.mount(undefined, { ...NO_EVENTS, failed: () => void (failures += 1) }, undefined);
+    renderer.draw(many(4));
+    expect(() => waiting.splice(0).forEach((callback) => callback())).not.toThrow();
+    expect(failures).toBe(1);
+    expect(waiting).toEqual([]);
+    expect(painted).toBe(2);
+    expect(renderer.describe().entities).toBe(4);
+  });
+
+  it('report nothing when the renderer was disposed before the failure', () => {
+    const waiting: Array<() => void> = [];
+    let failures = 0;
+    const renderer = createCytoscapeRenderer({ nextFrame: (callback) => void waiting.push(callback), paintCaption: () => { throw new Error('cannot paint'); } });
+    renderer.mount(undefined, { ...NO_EVENTS, failed: () => void (failures += 1) }, undefined);
+    renderer.draw(many(2));
+    renderer.dispose();
+    waiting.splice(0).forEach((callback) => callback());
+    expect(failures).toBe(0);
   });
 });
 
 describe('the endpoints of a relationship the Cytoscape renderer draws again', () => {
   it('follow the scene: a relationship with the same ID that now joins other entities is moved', () => {
     const renderer = mounted();
-    const entities: Array<readonly [string, { x: number; y: number } | undefined]> = [['a', { x: 0, y: 0 }], ['b', { x: 50, y: 0 }], ['c', { x: 0, y: 50 }]];
+    const entities: Array<readonly [string, { x: number; y: number }]> = [['a', { x: 0, y: 0 }], ['b', { x: 50, y: 0 }], ['c', { x: 0, y: 50 }]];
     renderer.draw(scene(entities, [['r', 'a', 'b']]));
     renderer.draw(scene(entities, [['r', 'a', 'c']]));
     const [edge] = renderer.inspect().edges;
@@ -209,37 +502,37 @@ describe('the endpoints of a relationship the Cytoscape renderer draws again', (
 });
 
 describe('the initial view of the Cytoscape renderer', () => {
-  const view = (entities: ReturnType<typeof scene>['entities'], mode: 'fit' | 'as-drawn'): Scene => ({ entities, relationships: [], profile: undefined, omitted: 0, selection: new Set<string>(), tool: 'select' as const, source: null, view: mode });
-  const placed = (ids: readonly string[], at: boolean) => ids.map((id, index) => ({ id, position: at ? { x: index * 100, y: 0 } : undefined, look: { iconKey: 'generic' as const, line1: id, line2: 'T' } }));
+  const view = (entities: ReturnType<typeof scene>['entities'], mode: 'fit' | 'as-drawn'): Scene => ({ entities, relationships: [], profile: undefined, omitted: 0, selection: new Set<string>(), pinned: new Set<string>(), tool: 'select' as const, source: null, view: mode });
+  const placed = (ids: readonly string[], offset = 0) => ids.map((id, index) => ({ id, position: { x: offset + index * 100, y: 0 }, look: { iconKey: 'generic' as const, line1: id, line2: 'T' } }));
 
   it('fits once when it first draws a graph whose entities are all positioned, and not again on a redraw', () => {
     const renderer = mounted();
-    renderer.draw(view(placed(['a', 'b'], true), 'fit'));
-    renderer.draw(view(placed(['a', 'b'], true), 'fit'));
+    renderer.draw(view(placed(['a', 'b']), 'fit'));
+    renderer.draw(view(placed(['a', 'b']), 'fit'));
     expect(renderer.inspect().fits).toBe(1);
   });
 
   it('fits again when the graph is replaced as a whole (a new source), and not when one entity is added', () => {
     const renderer = mounted();
-    renderer.draw(view(placed(['a', 'b'], true), 'fit'));
-    renderer.draw(view([...placed(['a', 'b'], true), ...placed(['c'], false)], 'fit'));
+    renderer.draw(view(placed(['a', 'b']), 'fit'));
+    renderer.draw(view([...placed(['a', 'b']), ...placed(['c'], 300)], 'fit'));
     expect(renderer.inspect().fits).toBe(1);
-    renderer.draw(view(placed(['x', 'y'], false), 'fit'));
+    renderer.draw(view(placed(['x', 'y']), 'fit'));
     expect(renderer.inspect().fits).toBe(2);
   });
 
   it('fits again when the graph is replaced by one whose entities are all positioned', () => {
     const renderer = mounted();
-    renderer.draw(view(placed(['a', 'b'], true), 'fit'));
-    renderer.draw(view(placed(['x', 'y'], true), 'fit'));
+    renderer.draw(view(placed(['a', 'b']), 'fit'));
+    renderer.draw(view(placed(['x', 'y']), 'fit'));
     expect(renderer.inspect().fits).toBe(2);
-    renderer.draw(view(placed(['x', 'y', 'z'], true), 'fit'));
+    renderer.draw(view(placed(['x', 'y', 'z']), 'fit'));
     expect(renderer.inspect().fits).toBe(2);
   });
 
   it('leaves the viewport as the positions give it when the scene says as-drawn, and when nothing is drawn', () => {
     const renderer = mounted();
-    renderer.draw(view(placed(['a'], true), 'as-drawn'));
+    renderer.draw(view(placed(['a']), 'as-drawn'));
     renderer.draw(view([], 'fit'));
     expect(renderer.inspect().fits).toBe(0);
   });
@@ -250,7 +543,7 @@ describe('the viewport the Cytoscape renderer reports', () => {
     const frames: Array<() => void> = [];
     const reports: Viewport[] = [];
     const renderer = createCytoscapeRenderer({ nextFrame: (callback) => void frames.push(callback), canvasSize: () => ({ width: 800, height: 600 }) });
-    renderer.mount(undefined, { viewport: (viewport) => void reports.push(viewport), click: () => undefined, box: () => undefined, contextMenu: () => undefined }, undefined);
+    renderer.mount(undefined, { viewport: (viewport) => void reports.push(viewport), click: () => undefined, box: () => undefined, contextMenu: () => undefined, move: () => undefined, failed: () => undefined }, undefined);
     renderer.draw(scene([['a', { x: 0, y: 0 }], ['b', { x: 100, y: 50 }]]));
     renderer.draw(scene([['a', { x: 0, y: 0 }], ['b', { x: 100, y: 50 }], ['c', { x: 5, y: 5 }]]));
     expect(reports).toHaveLength(0);
@@ -264,7 +557,7 @@ describe('the viewport the Cytoscape renderer reports', () => {
     const frames: Array<() => void> = [];
     const reports: Viewport[] = [];
     const renderer = createCytoscapeRenderer({ nextFrame: (callback) => void frames.push(callback), canvasSize: () => ({ width: 800, height: 600 }) });
-    renderer.mount(undefined, { viewport: (viewport) => void reports.push(viewport), click: () => undefined, box: () => undefined, contextMenu: () => undefined }, undefined);
+    renderer.mount(undefined, { viewport: (viewport) => void reports.push(viewport), click: () => undefined, box: () => undefined, contextMenu: () => undefined, move: () => undefined, failed: () => undefined }, undefined);
     renderer.draw(scene([['a', { x: 0, y: 0 }], ['b', { x: 100, y: 0 }]]));
     expect(reports).toHaveLength(0);
     renderer.dispose();
@@ -277,7 +570,7 @@ describe('the viewport the Cytoscape renderer reports', () => {
     const frames: Array<() => void> = [];
     const reports: Viewport[] = [];
     const renderer = createCytoscapeRenderer({ nextFrame: (callback) => void frames.push(callback), canvasSize: () => ({ width: 800, height: 600 }) });
-    renderer.mount(undefined, { viewport: (viewport) => void reports.push(viewport), click: () => undefined, box: () => undefined, contextMenu: () => undefined }, undefined);
+    renderer.mount(undefined, { viewport: (viewport) => void reports.push(viewport), click: () => undefined, box: () => undefined, contextMenu: () => undefined, move: () => undefined, failed: () => undefined }, undefined);
     const of = (source: string, ids: readonly string[]): Scene => ({ ...scene(ids.map((id, index) => [id, { x: index * 400, y: 0 }] as const)), source });
     renderer.draw(of('one', ['a', 'b']));
     renderer.draw(of('two', []));
@@ -291,7 +584,7 @@ describe('the viewport the Cytoscape renderer reports', () => {
     const frames: Array<() => void> = [];
     const reports: Viewport[] = [];
     const renderer = createCytoscapeRenderer({ nextFrame: (callback) => void frames.push(callback), canvasSize: () => ({ width: 800, height: 600 }) });
-    renderer.mount(undefined, { viewport: (viewport) => void reports.push(viewport), click: () => undefined, box: () => undefined, contextMenu: () => undefined }, undefined);
+    renderer.mount(undefined, { viewport: (viewport) => void reports.push(viewport), click: () => undefined, box: () => undefined, contextMenu: () => undefined, move: () => undefined, failed: () => undefined }, undefined);
     renderer.draw({ ...scene([['a', { x: 0, y: 0 }], ['b', { x: 400, y: 0 }]]), source: 'one' });
     renderer.draw({ ...scene([]), source: 'two' });
     renderer.dispose();
@@ -457,7 +750,7 @@ describe('the clicks and the selected look of the Cytoscape renderer', () => {
     const clicks: Click[] = [];
     let core: Core | undefined;
     const renderer = createCytoscapeRenderer({ nextFrame: (callback) => callback(), onCore: (made) => void (core = made) });
-    renderer.mount(undefined, { viewport: () => undefined, click: (click) => void clicks.push(click), box: () => undefined, contextMenu: () => undefined }, undefined);
+    renderer.mount(undefined, { viewport: () => undefined, click: (click) => void clicks.push(click), box: () => undefined, contextMenu: () => undefined, move: () => undefined, failed: () => undefined }, undefined);
     return {
       renderer,
       clicks,
@@ -533,7 +826,7 @@ describe('the box a drag draws in the Cytoscape renderer', () => {
     const clicks: Click[] = [];
     let core: Core | undefined;
     const renderer = createCytoscapeRenderer({ nextFrame: (callback) => callback(), onCore: (made) => void (core = made), canvasSize: () => ({ width: 1000, height: 800 }) });
-    renderer.mount(undefined, { viewport: () => undefined, click: (click) => void clicks.push(click), box: (box) => void boxes.push(box), contextMenu: () => undefined }, { zoom: 1, x: 0, y: 0 });
+    renderer.mount(undefined, { viewport: () => undefined, click: (click) => void clicks.push(click), box: (box) => void boxes.push(box), contextMenu: () => undefined, move: () => undefined, failed: () => undefined }, { zoom: 1, x: 0, y: 0 });
     const drawn = (tool: 'select' | 'pan' | 'box'): void => {
       renderer.draw({ ...scene([['a', { x: 0, y: 0 }], ['b', { x: 100, y: 0 }], ['c', { x: 300, y: 300 }]]), tool, view: 'as-drawn' });
     };
@@ -652,7 +945,7 @@ describe('the box a drag draws in the Cytoscape renderer', () => {
 describe('the label of a stored relationship in the Cytoscape renderer', () => {
   it('appears on the line when the scene gives it one and is gone in the same redraw when the scene takes it away', () => {
     const renderer = createCytoscapeRenderer({ nextFrame: (callback) => callback() });
-    renderer.mount(undefined, { viewport: () => undefined, click: () => undefined, box: () => undefined, contextMenu: () => undefined }, undefined);
+    renderer.mount(undefined, { viewport: () => undefined, click: () => undefined, box: () => undefined, contextMenu: () => undefined, move: () => undefined, failed: () => undefined }, undefined);
     const base: Scene = { ...scene([['a', { x: 0, y: 0 }], ['b', { x: 100, y: 0 }]], [['ab', 'a', 'b']]) };
     const labelled = { ...base, relationships: base.relationships.map((relationship) => ({ ...relationship, look: { ...relationship.look, label: 'USES' } })) };
     renderer.draw(labelled);
@@ -667,7 +960,7 @@ describe('the right-click of the Cytoscape renderer', () => {
     const requests: RightClick[] = [];
     let core: Core | undefined;
     const renderer = createCytoscapeRenderer({ nextFrame: (callback) => callback(), onCore: (made) => void (core = made) });
-    renderer.mount(undefined, { viewport: () => undefined, click: () => undefined, box: () => undefined, contextMenu: (request) => void requests.push(request) }, undefined);
+    renderer.mount(undefined, { viewport: () => undefined, click: () => undefined, box: () => undefined, contextMenu: (request) => void requests.push(request), move: () => undefined, failed: () => undefined }, undefined);
     renderer.draw(scene([['a', { x: 0, y: 0 }], ['b', { x: 100, y: 0 }]], [['ab', 'a', 'b']]));
     return {
       renderer,

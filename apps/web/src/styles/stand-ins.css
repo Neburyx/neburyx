@@ -194,3 +194,23 @@
 .icon-stand-in-menu-why {
   --icon: url('../assets/lucide/circle-help.svg');
 }
+
+.stand-in-fixture-controls {
+  position: absolute;
+  top: var(--space-16);
+  left: 50%;
+  display: flex;
+  gap: var(--space-8);
+  transform: translateX(-50%);
+}
+
+.stand-in-fixture-control {
+  height: var(--stand-in-button-height);
+  padding: 0 var(--space-12);
+  border: var(--border-width) solid var(--color-control-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--font-size-small);
+}

@@ -4,8 +4,10 @@ import type { LoadedGraph } from '../state/loaded-graph.js';
 /** No loaded node carries a degree preview yet, so what is still out there is not known. */
 export const UNKNOWN_REMAINDER: Count = { quality: 'unknown', scope: 'not yet retrieved' };
 
+const NUMBER_FORMAT = new Intl.NumberFormat('en-US');
+
 export function formatNumber(value: number): string {
-  return value.toLocaleString('en-US');
+  return NUMBER_FORMAT.format(value);
 }
 
 function qualityWord(quality: Count['quality']): string {

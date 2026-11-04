@@ -113,3 +113,46 @@ export function generateFixtureGraph(profile: SourceProfile, seed: number): Fixt
   }
   return { sourceId: profile.sourceId, nodes, edges, pins };
 }
+
+export interface FixtureAddition {
+  readonly nodes: readonly GraphNode[];
+  readonly edges: readonly GraphEdge[];
+}
+
+/** `count` more entities, each joined by one stored relationship to an entity that is already there (or, every fifth, to the one before it when its type fits), the relationship being one of the profile's whose two ends are of the types the two entities are; an entity type that no stored relationship can join to a loaded entity is passed over, and none that can is a refusal before anything is made. The same profile, number and entities give the same addition. */
+export function generateAddition(profile: SourceProfile, existing: readonly GraphNode[], count: number, round: number): FixtureAddition {
+  if (profile.entityTypes.length === 0) throw new FixtureError('NO_ENTITY_TYPES');
+  const random = createRandom(round * 7919 + 1);
+  const stored = profile.relationshipTypes.filter((relationship) => !relationship.aggregate);
+  const nodes: GraphNode[] = [];
+  const edges: GraphEdge[] = [];
+  const holding = (type: string, except: string): readonly GraphNode[] => [...existing, ...nodes].filter((node) => node.ref.entityType === type && node.ref.stableId !== except);
+  const optionsFor = (type: string, except: string) =>
+    stored.flatMap((relationship) => [
+      ...(relationship.from === type ? [{ relationship, forward: true, partnerType: relationship.to }] : []),
+      ...(relationship.to === type ? [{ relationship, forward: false, partnerType: relationship.from }] : []),
+    ]).flatMap((option) => {
+      const partners = holding(option.partnerType, except);
+      return partners.length === 0 ? [] : [{ ...option, partners }];
+    });
+  for (let index = 0; index < count; index += 1) {
+    const number = existing.length + round * count + index;
+    const candidates = profile.entityTypes.map((_unused, step) => profile.entityTypes[(index + step) % profile.entityTypes.length]);
+    const chosen = candidates.flatMap((entityType) => {
+      if (entityType === undefined) return [];
+      const added = nodeAt(profile, entityType.type, entityType.label, entityType.stateProperty, number);
+      const options = optionsFor(entityType.type, added.ref.stableId);
+      return options.length === 0 ? [] : [{ entityType, added, options }];
+    })[0];
+    if (chosen === undefined) throw new FixtureError('NO_RELATIONSHIP_TYPES');
+    const option = pick(chosen.options, random);
+    const previous = nodes[nodes.length - 1];
+    const partner = option !== undefined && index % 5 === 4 && previous !== undefined && previous.ref.entityType === option.partnerType ? previous : option === undefined ? undefined : pick(option.partners, random);
+    nodes.push(chosen.added);
+    if (option === undefined || partner === undefined) continue;
+    const from = option.forward ? chosen.added : partner;
+    const to = option.forward ? partner : chosen.added;
+    edges.push({ direction: 'from-to', properties: [], evidenceRefs: [], qualityFlags: [], ref: { sourceId: profile.sourceId, stableId: `fixture-r-add-${round}-${index}` }, from: from.ref, to: to.ref, type: option.relationship.type, semantics: 'stored' });
+  }
+  return { nodes, edges };
+}

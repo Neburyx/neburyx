@@ -9,7 +9,7 @@ import { useStoreSelector } from '../state/store.js';
 import { LOCK_TOOLTIP } from './locked-control.js';
 import { menuHeader } from './menu-header.js';
 import { placeMenu, type Placement } from './menu-placement.js';
-import { useMenuItems, type MenuContext, type RegisteredMenuItem } from './menu-registry.js';
+import { stateOf, useMenuItems, type MenuContext, type RegisteredMenuItem } from './menu-registry.js';
 import { Submenu } from './menu-submenu.js';
 
 const CANVAS_MENU_NAME = 'Canvas';
@@ -40,7 +40,8 @@ export function ContextMenu() {
   const [placement, setPlacement] = useState<Placement | undefined>(undefined);
   const [, remeasure] = useState(0);
   const [submenuOpen, setSubmenuOpen] = useState<SubmenuOpen | undefined>(undefined);
-  const parent = submenuOpen === undefined || submenuOpen.menu !== shown ? undefined : items.find((item) => item.id === submenuOpen.id && item.registration === submenuOpen.registration && item.submenu !== undefined && (item.state ?? 'enabled') === 'enabled');
+  const contextFor = (menu: OpenMenu): MenuContext => ({ kind: menu.kind, key: menu.key, selection: [...state.presentation.view.getState().selection], state, canvas });
+  const parent = submenuOpen === undefined || submenuOpen.menu !== shown ? undefined : items.find((item) => item.id === submenuOpen.id && item.registration === submenuOpen.registration && item.submenu !== undefined && stateOf(item, contextFor(submenuOpen.menu)) === 'enabled');
   const activeSubmenu = parent === undefined || submenuOpen === undefined ? undefined : { item: parent, row: submenuOpen.row, takeFocus: submenuOpen.takeFocus };
   const activeNow = useRef(activeSubmenu);
   activeNow.current = activeSubmenu;
@@ -156,7 +157,7 @@ export function ContextMenu() {
 
   if (shown === undefined) return null;
   const header = menuHeader(shown, graph, profile);
-  const contextNow = (): MenuContext => ({ kind: shown.kind, key: shown.key, selection: [...state.presentation.view.getState().selection], state, canvas });
+  const contextNow = (): MenuContext => contextFor(shown);
   const labelOf = (item: RegisteredMenuItem): string => (typeof item.label === 'function' ? item.label(contextNow()) : item.label);
   const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>): void => {
     const target = event.target;
@@ -207,7 +208,7 @@ export function ContextMenu() {
           </div>
         )}
         {items.map((item, at) => {
-          const status = item.state ?? 'enabled';
+          const status = stateOf(item, contextNow());
           const inert = status !== 'enabled';
           const opensSubmenu = item.submenu !== undefined;
           return (

@@ -53,6 +53,24 @@ export function registerStandIns(registry: SlotRegistry): () => void {
   };
 }
 
+export interface FixtureControl {
+  readonly label: string;
+  readonly run: () => void;
+}
+
+/** Buttons on the canvas that stand in for what is not built yet (an expand that loads more entities, a drag that displaces some): they take the slot for floating panels, so they are registered before the other stand-ins and are taken out by the function this returns. */
+export function registerFixtureControls(registry: SlotRegistry, controls: readonly FixtureControl[]): () => void {
+  return registry.register('floating', () => (
+    <div className="stand-in-fixture-controls" data-dev-tool={STAND_IN_MARKER}>
+      {controls.map((control) => (
+        <button key={control.label} type="button" className="stand-in-fixture-control" onClick={control.run}>
+          {control.label}
+        </button>
+      ))}
+    </div>
+  ));
+}
+
 const icon = (name: string) => <span className={`icon icon-stand-in-${name}`} aria-hidden="true" />;
 
 const STAND_IN_ACTIONS: readonly SelectionAction[] = [
@@ -129,7 +147,6 @@ const RELATIONSHIP_ORDER = MENU_ORDER.relationship;
 const STAND_IN_MENU_ITEMS: readonly (readonly [MenuTargetKind, MenuItem])[] = [
   ['canvas', parent('stand-in-group-all', 'Group all by type', 'group', MENU_GROUP.canvas.grouping, MENU_ORDER.canvas.groupAll)],
   ['canvas', command('stand-in-ungroup-all', 'Ungroup all', 'ungroup', MENU_GROUP.canvas.grouping, MENU_ORDER.canvas.ungroupAll)],
-  ['canvas', parent('stand-in-layout', 'Layout', 'layout', MENU_GROUP.canvas.layoutAndLegend, MENU_ORDER.canvas.layout)],
   ['canvas', command('stand-in-show-legend', 'Show legend', 'legend', MENU_GROUP.canvas.layoutAndLegend, MENU_ORDER.canvas.showLegend, { shortcut: 'L' })],
   ['canvas', command('stand-in-export-view', 'Export view…', 'download', MENU_GROUP.canvas.export, MENU_ORDER.canvas.exportView, { shortcut: '⌘E' })],
   ['node', command('stand-in-expand-neighbors', 'Expand neighbors', 'expand', NODE_GROUP.expand, NODE_ORDER.expandNeighbors, { shortcut: 'E' })],

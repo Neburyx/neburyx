@@ -109,12 +109,10 @@ export interface StubOptions {
   readonly failCreate?: boolean;
   /** Makes `fit` and `zoomBy` throw. */
   readonly failCommands?: boolean;
-  readonly placeAt?: (index: number) => Position;
 }
 
-/** A renderer that draws nothing and records what it was given; it places each unpositioned entity at `placeAt`. */
+/** A renderer that draws nothing and records what it was given. */
 export function stubRenderer(options: StubOptions = {}): StubRenderer {
-  const placeAt = options.placeAt ?? ((index: number) => ({ x: index * 10, y: index * 5 }));
   let drawn: Scene | undefined;
   let failures = options.failDraws ?? Number.POSITIVE_INFINITY;
   const stub: StubRenderer = {
@@ -138,7 +136,6 @@ export function stubRenderer(options: StubOptions = {}): StubRenderer {
       }
       stub.scenes.push(scene);
       drawn = scene;
-      return new Map(scene.entities.filter((entity) => entity.position === undefined).map((entity, index) => [entity.id, placeAt(index)] as const));
     },
     fit() {
       if (options.failCommands === true) throw new Error('cannot fit');
@@ -149,6 +146,8 @@ export function stubRenderer(options: StubOptions = {}): StubRenderer {
       stub.zooms.push(factor);
     },
     describe: () => ({ entities: drawn?.entities.length ?? 0, relationships: drawn?.relationships.length ?? 0 }),
+    viewport: () => ({ zoom: 1, x: 0, y: 0 }),
+    positions: () => new Map((drawn?.entities ?? []).map((entity) => [entity.id, entity.position])),
     inspect: () => ({ fits: 0, viewport: { zoom: 1, x: 0, y: 0 }, zoomLimits: { min: 0.1, max: 4 }, boundingBox: undefined, interaction: { panning: false, zooming: false, boxSelecting: false, nodesGrabbable: false, nodesSelectable: false }, nodes: [], edges: [] }),
     dispose() {
       stub.disposed += 1;

@@ -11,7 +11,7 @@ import { ToolStrip } from '../workspace/tool-strip.js';
 import { registerBuiltInMenuItems } from '../workspace/built-in-menu-items.js';
 import { createMenuRegistry, type MenuRegistry, type MenuTargetKind } from '../workspace/menu-registry.js';
 import { createClientState } from '../state/client-state.js';
-import { registerStandInActions, registerStandInMenuItems, registerStandInTools, registerStandIns, STAND_IN_MARKER } from './stand-ins.js';
+import { registerFixtureControls, registerStandInActions, registerStandInMenuItems, registerStandInTools, registerStandIns, STAND_IN_MARKER } from './stand-ins.js';
 
 const BUILT_LATER: readonly SlotName[] = SLOT_NAMES.filter((name) => name !== 'ask' && name !== 'summarize' && name !== 'tool-strip');
 
@@ -125,10 +125,10 @@ describe('the menu item stand-ins', () => {
   const idsOf = (registry: MenuRegistry, kind: MenuTargetKind): string[] => (registry.view.getState().get(kind) ?? []).map((item) => item.id);
   const labelsOf = (registry: MenuRegistry, kind: MenuTargetKind): string[] => (registry.view.getState().get(kind) ?? []).map((item) => (typeof item.label === 'string' ? item.label : '(from the target)'));
 
-  it('leave the menus of production as they are before they are installed: the canvas menu holds its three items, the entity and relationship menus none', () => {
+  it('leave the menus of production as they are before they are installed: the canvas menu holds its four items, the entity and relationship menus none', () => {
     const registry = createMenuRegistry();
     registerBuiltInMenuItems(registry);
-    expect(idsOf(registry, 'canvas')).toEqual(['fit-to-view', 'select-all', 'invert-selection']);
+    expect(idsOf(registry, 'canvas')).toEqual(['fit-to-view', 'select-all', 'invert-selection', 'layout']);
     expect(idsOf(registry, 'node')).toEqual([]);
     expect(idsOf(registry, 'relationship')).toEqual([]);
   });
@@ -176,26 +176,61 @@ describe('the menu item stand-ins', () => {
     expect(by('relationship', 'stand-in-ask-relationship')).toMatchObject({ state: 'locked', lock: true });
     const parents: readonly (readonly [MenuTargetKind, string])[] = [
       ['canvas', 'stand-in-group-all'],
-      ['canvas', 'stand-in-layout'],
       ['node', 'stand-in-expand-by-type'],
       ['node', 'stand-in-run-pattern'],
       ['node', 'stand-in-group-by-type'],
     ];
-    expect(parents.map(([kind, id]) => by(kind, id)?.submenu !== undefined)).toEqual([true, true, true, true, true]);
+    expect(parents.map(([kind, id]) => by(kind, id)?.submenu !== undefined)).toEqual([true, true, true, true]);
   });
 
   it('leave a place that is taken alone for the same kind, keep every real registration, add nothing twice and take out only what they added', () => {
     const registry = createMenuRegistry();
-    const real = { id: 'stand-in-layout', label: 'Real layout', icon: null, group: 30, order: 10, run: () => undefined };
+    const real = { id: 'stand-in-show-legend', label: 'Real legend', icon: null, group: 30, order: 20, run: () => undefined };
     registry.register('canvas', real);
     registerBuiltInMenuItems(registry);
     const remove = registerStandInMenuItems(registry);
     registerStandInMenuItems(registry);
-    expect(labelsOf(registry, 'canvas').filter((label) => label === 'Real layout')).toHaveLength(1);
-    expect(idsOf(registry, 'canvas').filter((id) => id === 'stand-in-layout')).toHaveLength(1);
-    expect(registry.view.getState().get('canvas')?.find((item) => item.id === 'stand-in-layout')?.label).toBe('Real layout');
+    expect(labelsOf(registry, 'canvas').filter((label) => label === 'Real legend')).toHaveLength(1);
+    expect(idsOf(registry, 'canvas').filter((id) => id === 'stand-in-show-legend')).toHaveLength(1);
+    expect(registry.view.getState().get('canvas')?.find((item) => item.id === 'stand-in-show-legend')?.label).toBe('Real legend');
     remove();
-    expect(idsOf(registry, 'canvas')).toEqual(['fit-to-view', 'select-all', 'invert-selection', 'stand-in-layout']);
+    expect(idsOf(registry, 'canvas')).toEqual(['fit-to-view', 'select-all', 'invert-selection', 'layout', 'stand-in-show-legend']);
     expect(idsOf(registry, 'node')).toEqual([]);
+  });
+});
+
+describe('the controls that stand in for an expand and a drag', () => {
+  it('show a button in the floating slot for each control, marked as development stand-ins, that call what they were given', async () => {
+    const registry = createSlotRegistry();
+    const calls: string[] = [];
+    registerFixtureControls(registry, [{ label: 'Add 25 entities', run: () => void calls.push('add') }, { label: 'Displace 10 entities', run: () => void calls.push('displace') }]);
+    render(
+      <SlotsProvider registry={registry}>
+        <Slot name="floating" />
+      </SlotsProvider>,
+    );
+    const add = screen.getByRole('button', { name: 'Add 25 entities' });
+    const displace = screen.getByRole('button', { name: 'Displace 10 entities' });
+    expect(add.closest('[data-dev-tool]')?.getAttribute('data-dev-tool')).toBe(STAND_IN_MARKER);
+    await userEvent.click(add);
+    await userEvent.click(displace);
+    await userEvent.click(add);
+    expect(calls).toEqual(['add', 'displace', 'add']);
+  });
+
+  it('are left in place by the other stand-ins, and taken out by the function they return', () => {
+    const registry = createSlotRegistry();
+    const remove = registerFixtureControls(registry, [{ label: 'Add 25 entities', run: () => undefined }]);
+    const occupant = registry.view.getState().get('floating');
+    registerStandIns(registry);
+    expect(registry.view.getState().get('floating')).toBe(occupant);
+    remove();
+    expect(registry.view.getState().has('floating')).toBe(false);
+  });
+
+  it('are refused when the floating slot is taken, so the fixture page takes its earlier ones out first', () => {
+    const registry = createSlotRegistry();
+    registerFixtureControls(registry, []);
+    expect(() => registerFixtureControls(registry, [])).toThrowError(expect.objectContaining({ code: 'SLOT_TAKEN' }));
   });
 });

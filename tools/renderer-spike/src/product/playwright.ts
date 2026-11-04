@@ -2,7 +2,10 @@ import { chromium, type Page } from 'playwright';
 import { viewAt } from '../measure/pan-zoom.js';
 import { machine } from '../runner/environment.js';
 import { parseReadout, type CanvasPixels } from './checks.js';
+import { writeAddReport, type AddCapture } from './add.js';
 import { writeProductReport } from './report.js';
+import { ADD_BUTTON, DISPLACE_BUTTON, FORCE_ROW, LAYOUT_CONTROL, MARK_EVENT } from './page-constants.js';
+import { parseIds, writeLayoutReport, type LayoutCapture } from './layout.js';
 import type { ProductBrowser, ProductDeps, ProductPage } from './run.js';
 
 const VIEWPORT = { width: 1280, height: 720 };
@@ -78,6 +81,131 @@ function productPage(page: Page): ProductPage {
       await page.mouse.move(start.x + dx, start.y + dy, { steps: 5 });
       await page.mouse.up();
       await settle(page);
+    },
+    async measureAdd(framesAfter): Promise<AddCapture> {
+      const captured = await page.evaluate(
+        async ({ after, markEvent, button }) => {
+          const element = document.querySelector('.graph-canvas');
+          const control = [...document.querySelectorAll('button')].find((candidate) => candidate.textContent === button);
+          if (!(element instanceof HTMLElement)) throw new Error('CANVAS_MISSING');
+          if (control === undefined) throw new Error('CONTROL_MISSING');
+          const read = (): Record<string, string | undefined> => {
+            const { drawnEntities, drawnRelationships, zoom, panX, panY, markedEntities, movedPinned, movedUnpinned } = element.dataset;
+            return { entities: drawnEntities, relationships: drawnRelationships, zoom, panX, panY, markedEntities, movedPinned, movedUnpinned };
+          };
+          const frame = (): Promise<void> => new Promise((resolve) => requestAnimationFrame(() => resolve()));
+          let before: Record<string, string | undefined> | undefined;
+          const times: number[] = [];
+          let drawnAt: number | undefined;
+          let recording = true;
+          const record = async (): Promise<void> => {
+            while (recording) {
+              times.push(await new Promise<number>((resolve) => requestAnimationFrame(resolve)));
+              if (drawnAt === undefined && before !== undefined && read()['entities'] !== before['entities']) drawnAt = times.length - 1;
+              if (drawnAt !== undefined && times.length >= drawnAt + 1 + after) recording = false;
+            }
+          };
+          const recorded = record();
+          await frame();
+          await frame();
+          before = read();
+          element.dispatchEvent(new Event(markEvent));
+          const startAt = times.length - 1;
+          control.click();
+          let guard = 0;
+          while (recording && guard < 600) {
+            await frame();
+            guard += 1;
+          }
+          recording = false;
+          await recorded;
+          if (drawnAt === undefined) throw new Error('NOT_DRAWN');
+          return { times: times.slice(startAt, drawnAt + 1 + after), drawnAt: drawnAt - startAt, before, after: read(), notice: document.querySelector('.canvas-notice')?.textContent ?? undefined };
+        },
+        { after: framesAfter, markEvent: MARK_EVENT, button: ADD_BUTTON },
+      );
+      const finished = captured.after;
+      return {
+        times: captured.times,
+        drawnAt: captured.drawnAt,
+        before: parseReadout(captured.before),
+        after: parseReadout(finished),
+        marked: finished['markedEntities'] === undefined ? undefined : Number(finished['markedEntities']),
+        movedPinned: finished['movedPinned'] === undefined ? undefined : Number(finished['movedPinned']),
+        movedUnpinned: finished['movedUnpinned'] === undefined ? undefined : Number(finished['movedUnpinned']),
+        notice: captured.notice,
+      };
+    },
+    async measureLayout(framesAfter): Promise<LayoutCapture> {
+      const captured = await page.evaluate(
+        async ({ after, markEvent, displaceButton, controlLabel, forceRow }) => {
+          const element = document.querySelector('.graph-canvas');
+          if (!(element instanceof HTMLElement)) throw new Error('CANVAS_MISSING');
+          const displace = [...document.querySelectorAll('button')].find((candidate) => candidate.textContent === displaceButton);
+          const control = [...document.querySelectorAll('button')].find((candidate) => candidate.getAttribute('aria-label') === controlLabel);
+          if (displace === undefined || control === undefined) throw new Error('CONTROL_MISSING');
+          const read = (): Record<string, string | undefined> => {
+            const { drawnEntities, drawnRelationships, zoom, panX, panY, markedEntities, movedPinned, movedUnpinned, movedIds } = element.dataset;
+            return { entities: drawnEntities, relationships: drawnRelationships, zoom, panX, panY, markedEntities, movedPinned, movedUnpinned, movedIds };
+          };
+          const frame = (): Promise<void> => new Promise((resolve) => requestAnimationFrame(() => resolve()));
+          element.dispatchEvent(new Event(markEvent));
+          displace.click();
+          for (let count = 0; count < 4; count += 1) await frame();
+          const displaced = read();
+          const times: number[] = [];
+          let drawnAt: number | undefined;
+          let armed = false;
+          let recording = true;
+          const record = async (): Promise<void> => {
+            while (recording) {
+              times.push(await new Promise<number>((resolve) => requestAnimationFrame(resolve)));
+              if (drawnAt === undefined && armed && Number(read()['movedUnpinned'] ?? '0') > 0) drawnAt = times.length - 1;
+              if (drawnAt !== undefined && times.length >= drawnAt + 1 + after) recording = false;
+            }
+          };
+          const recorded = record();
+          await frame();
+          await frame();
+          element.dispatchEvent(new Event(markEvent));
+          const before = read();
+          const startAt = times.length - 1;
+          armed = true;
+          control.click();
+          const rowNow = (): Element | undefined => [...document.querySelectorAll('[role="menuitem"]')].find((candidate) => candidate.textContent === forceRow);
+          for (let count = 0; count < 20 && rowNow() === undefined; count += 1) await frame();
+          const row = rowNow();
+          if (!(row instanceof HTMLElement)) throw new Error('CONTROL_MISSING');
+          const pressed = performance.now();
+          row.click();
+          const commandMs = performance.now() - pressed;
+          let guard = 0;
+          while (recording && guard < 600) {
+            await frame();
+            guard += 1;
+          }
+          recording = false;
+          await recorded;
+          if (drawnAt === undefined) throw new Error('NOT_DRAWN');
+          return { times: times.slice(startAt, drawnAt + 1 + after), drawnAt: drawnAt - startAt, displaced, before, after: read(), commandMs, notice: document.querySelector('.canvas-notice')?.textContent ?? undefined };
+        },
+        { after: framesAfter, markEvent: MARK_EVENT, displaceButton: DISPLACE_BUTTON, controlLabel: LAYOUT_CONTROL, forceRow: FORCE_ROW },
+      );
+      const finished = captured.after;
+      const number = (value: string | undefined): number | undefined => (value === undefined ? undefined : Number(value));
+      return {
+        times: captured.times,
+        drawnAt: captured.drawnAt,
+        before: parseReadout(captured.before),
+        after: parseReadout(finished),
+        displaced: { movedPinned: number(captured.displaced['movedPinned']), movedUnpinned: number(captured.displaced['movedUnpinned']), ids: parseIds(captured.displaced['movedIds']) },
+        marked: number(finished['markedEntities']),
+        movedPinned: number(finished['movedPinned']),
+        movedUnpinned: number(finished['movedUnpinned']),
+        movedIds: parseIds(finished['movedIds']),
+        commandMs: captured.commandMs,
+        notice: captured.notice,
+      };
     },
     viewport: () => page.evaluate(() => ({ width: window.innerWidth, height: window.innerHeight, devicePixelRatio: window.devicePixelRatio })),
     measurePanZoom(durationMs, wheelStep) {
@@ -199,5 +327,7 @@ export function createProductDeps(): ProductDeps {
     machine,
     now: () => new Date(),
     writeReport: writeProductReport,
+    writeAddReport,
+    writeLayoutReport,
   };
 }

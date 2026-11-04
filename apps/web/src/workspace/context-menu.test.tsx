@@ -29,15 +29,15 @@ describe('the canvas menu', () => {
     expect(within(menu()).queryByRole('heading')).toBeNull();
   });
 
-  it('lists Fit to view, Select all and Invert selection with their hints, in one group with no separator', () => {
+  it('lists Fit to view, Select all and Invert selection with their hints in one group, then Layout in the next, with one separator between'  , () => {
     const state = createClientState();
     load(state);
     const { rightClick } = show(state);
     rightClick(onCanvas(10, 10));
     const rows = within(menu()).getAllByRole('menuitem');
-    expect(rows.map((row) => row.textContent)).toEqual(['Fit to view⌘0', 'Select all⌘A', 'Invert selection⇧⌘I']);
-    expect(rows.map((row) => row.querySelector('.menu-label')?.textContent)).toEqual(['Fit to view', 'Select all', 'Invert selection']);
-    expect(within(menu()).queryAllByRole('separator')).toHaveLength(0);
+    expect(rows.map((row) => row.textContent)).toEqual(['Fit to view⌘0', 'Select all⌘A', 'Invert selection⇧⌘I', 'Layout']);
+    expect(rows.map((row) => row.querySelector('.menu-label')?.textContent)).toEqual(['Fit to view', 'Select all', 'Invert selection', 'Layout']);
+    expect(within(menu()).queryAllByRole('separator')).toHaveLength(1);
     expect(item('Fit to view')).toBe(rows[0]);
   });
 
@@ -166,7 +166,7 @@ describe('the canvas menu', () => {
     menus.register('canvas', extra);
     const { rightClick } = show(state, {}, menus);
     rightClick(onCanvas(10, 10));
-    expect(within(menu()).getAllByRole('separator')).toHaveLength(1);
+    expect(within(menu()).getAllByRole('separator')).toHaveLength(2);
     await userEvent.setup().click(item('Acts on canvas'));
     expect(run).toHaveBeenCalledTimes(1);
     expect(run.mock.calls[0]?.[0]).toMatchObject({ kind: 'canvas', key: undefined, selection: [] });
@@ -290,7 +290,7 @@ describe('the menu of an entity', () => {
     rightClick(rightClickOn('relationship', edgeKey(stored.ref)));
     expect(within(screen.getByRole('menu')).queryAllByRole('menuitem')).toEqual([]);
     rightClick(onCanvas(5, 5));
-    expect(within(menu()).getAllByRole('menuitem').map((row) => row.querySelector('.menu-label')?.textContent)).toEqual(['Fit to view', 'Select all', 'Invert selection']);
+    expect(within(menu()).getAllByRole('menuitem').map((row) => row.querySelector('.menu-label')?.textContent)).toEqual(['Fit to view', 'Select all', 'Invert selection', 'Layout']);
   });
 
   it('shows only the header of an entity menu when nothing is registered at all', () => {
