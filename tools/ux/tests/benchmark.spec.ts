@@ -8,11 +8,20 @@ import { shortfalls, type Threshold } from '../src/rates.ts';
 import { CAPTION_LIMIT } from './support/workspace.ts';
 
 /**
- * The lowest frame rates the guard accepts, at 4x CPU throttle, 300 elements (120 entities, 180 relationships), 1280 × 720.
- * These are the target's floor (median 55 fps, 5th percentile 30 fps) until a CI run has measured this runner; the figures
- * of that run and the threshold chosen from them are written here when it has.
+ * The lowest frame rates the guard accepts, at 4x CPU throttle, 300 elements (120 entities, 180 relationships), 1280 × 720, drawn below the caption limit.
+ * Outside CI these are the target's floor: median 55 fps, 5th percentile 30 fps. In CI the median is the same and the 5th percentile is 25 fps, chosen from
+ * five runs of the ux job on the GitHub runner, 15 benchmark runs:
+ *   medians                 59.9 in all 15 runs
+ *   5th percentiles         59.5 or 59.9 in 14 runs, and 30.1 in one (the slowest job of the five: the 5 per cent slowest frames took 33 ms, two frames, not one)
+ * Frame rates come in steps (60, 30, 20 fps for one, two and three frames per draw), so 30 as the runner's limit would pass 30.1 by a hair, and a second slow
+ * run would fail a healthy build. 25 sits between the two- and the three-frame steps: it lets a run have up to 5 per cent of its frames at two frames, which is what
+ * the one slow run had, and it fails a run where that share takes three or more frames, which is a stutter, and any run whose median falls under 55 fps (the runner
+ * holds 59.9). It does not catch a drop of the median from 60 to 56, or a stutter of 2 frames in more than 5 per cent of frames. `pnpm --filter @neburyx/ux-tests mutate benchmark` shows it
+ * fails with a 25 ms stall at every pan and zoom.
  */
-const THRESHOLD: Threshold = { medianFps: 55, p5Fps: 30 };
+const PRODUCT_THRESHOLD: Threshold = { medianFps: 55, p5Fps: 30 };
+const RUNNER_THRESHOLD: Threshold = { medianFps: 55, p5Fps: 25 };
+const THRESHOLD: Threshold = process.env['CI'] === undefined ? PRODUCT_THRESHOLD : RUNNER_THRESHOLD;
 const APP = 'http://127.0.0.1:4173';
 
 test.setTimeout(240_000);

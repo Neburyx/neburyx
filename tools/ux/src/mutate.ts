@@ -5,12 +5,56 @@ import { isStopping, runTracked, stopTracked } from './children.ts';
 import { restoreOnInterrupt } from './interrupt.ts';
 import { checkBrokenBinding, type TestRun } from './mutation.ts';
 
-const SOURCE = fileURLToPath(new URL('../../../apps/web/src/workspace/built-in-key-bindings.ts', import.meta.url));
 const PACKAGE = fileURLToPath(new URL('..', import.meta.url));
 const ROOT = fileURLToPath(new URL('../../..', import.meta.url));
-const TEST = 'choose the tools, open and close the legend, and fit the view, with the platform modifier';
-const BINDING = "keys: ['l']";
-const BROKEN = "keys: ['y']";
+const WEB = (path: string): string => fileURLToPath(new URL(`../../../apps/web/src/${path}`, import.meta.url));
+
+/** One thing to break in the app, and the browser test that has to notice. */
+interface Mutation {
+  readonly name: string;
+  readonly source: string;
+  readonly binding: string;
+  readonly broken: string;
+  /** What the broken app is, for the line that reports the check. */
+  readonly what: string;
+  readonly test: { readonly file: string; readonly title: string; readonly project: string; readonly env: Readonly<Record<string, string>>; readonly extraArgs: readonly string[] };
+  readonly assertion: RegExp;
+}
+
+/** Stops the page for this long, by the clock and not by the CPU, so the throttle of the test cannot hide it. */
+const stall = (ms: number): string => `{ const until = performance.now() + ${ms}; while (performance.now() < until) { /* the mutation: a stall */ } }`;
+
+const MUTATIONS: readonly Mutation[] = [
+  {
+    name: 'keyboard',
+    source: WEB('workspace/built-in-key-bindings.ts'),
+    binding: "keys: ['l']",
+    broken: "keys: ['y']",
+    what: 'with the Legend binding broken',
+    test: { file: 'tests/keyboard-workspace.spec.ts', title: 'choose the tools, open and close the legend, and fit the view, with the platform modifier', project: 'laptop-1440', env: {}, extraArgs: [] },
+    assertion: /toBe\(expected\)|Expected: true/,
+  },
+  {
+    // the crossing of the caption limit given a 400 ms stall, against the runner's limit of 300 ms (CI=true selects it)
+    name: 'crossing',
+    source: WEB('canvas/cytoscape-renderer.ts'),
+    binding: '    if (farQueue.length === 0) return;\n    if (immediate) classifyFar',
+    broken: `    ${stall(400)}\n    if (farQueue.length === 0) return;\n    if (immediate) classifyFar`,
+    what: 'with a 400 ms stall in every pass of the far-view switch, held to the runner limit',
+    test: { file: 'tests/zoomed-out.spec.ts', title: 'switches without a frame longer than', project: 'laptop-1440', env: { CI: 'true' }, extraArgs: [] },
+    assertion: /toBeLessThanOrEqual/,
+  },
+  {
+    // the pan and zoom of the 300-element canvas given a 25 ms stall at every pan, zoom and grab
+    name: 'benchmark',
+    source: WEB('canvas/cytoscape-renderer.ts'),
+    binding: "created.on('pan zoom grab', dropTip);",
+    broken: `created.on('pan zoom grab', () => ${stall(25)});\n      created.on('pan zoom grab', dropTip);`,
+    what: 'with a 25 ms stall at every pan and zoom, held to the runner threshold',
+    test: { file: 'tests/benchmark.spec.ts', title: 'holds the threshold', project: 'benchmark', env: { CI: 'true' }, extraArgs: ['--no-deps'] },
+    assertion: /toEqual\(expected\)/,
+  },
+];
 const ANSI = /\u001b\[[0-9;]*m/g;
 
 interface Spec {
@@ -57,44 +101,58 @@ export function readRun(stdout: string, code: number | null, signal: NodeJS.Sign
   return { failures, errors, passed };
 }
 
-async function runKeyboardTest(): Promise<TestRun> {
-  const { stdout, stderr, code, signal } = await runTracked('pnpm', ['exec', 'playwright', 'test', 'tests/keyboard-workspace.spec.ts', '-g', TEST, '--project=laptop-1440', '--reporter=json'], PACKAGE);
+async function runTest(mutation: Mutation): Promise<TestRun> {
+  const { file, title, project, env, extraArgs } = mutation.test;
+  const { stdout, stderr, code, signal } = await runTracked('pnpm', ['exec', 'playwright', 'test', file, '-g', title, `--project=${project}`, ...extraArgs, '--reporter=json'], PACKAGE, env);
   const run = readRun(stdout, code, signal);
   return run.errors.length > 0 && stderr.trim() !== '' ? { ...run, errors: [...run.errors, `its error output ended: ${stderr.trim().slice(-300)}`] } : run;
 }
 
 const buildSync = (): void => void execFileSync('pnpm', ['--filter', '@neburyx/web', 'build:ux'], { cwd: ROOT, stdio: 'ignore' });
 
+/** The mutation being checked and what the source was before it, so that an interrupt can put it back. */
+let current: { readonly source: string; readonly original: string } | undefined;
+
+async function check(mutation: Mutation): Promise<void> {
+  const original = readFileSync(mutation.source, 'utf8');
+  if (!original.includes(mutation.binding)) throw new Error(`MUTATION_BINDING_NOT_FOUND: ${mutation.name}`);
+  current = { source: mutation.source, original };
+  try {
+    const outcome = await checkBrokenBinding({
+      run: () => runTest(mutation),
+      breakBinding: async () => {
+        writeFileSync(mutation.source, original.replace(mutation.binding, mutation.broken));
+        buildSync();
+      },
+      restore: async () => {
+        writeFileSync(mutation.source, original);
+        buildSync();
+      },
+      expected: { title: mutation.test.title, assertion: mutation.assertion },
+    });
+    process.stdout.write(`The ${mutation.name} test passed, failed on its assertion ${mutation.what} ("${outcome.broken.failures[0]?.message.split('\n')[0] ?? ''}"), and passed again once it was restored.\n`);
+  } catch (error) {
+    writeFileSync(mutation.source, original);
+    // an interrupt is being handled: it restores, builds and leaves with its own code, so the check does not leave first with an error of a run it stopped
+    if (isStopping()) await new Promise<never>(() => undefined);
+    throw error;
+  } finally {
+    current = undefined;
+  }
+}
+
 async function main(): Promise<void> {
-  const original = readFileSync(SOURCE, 'utf8');
-  if (!original.includes(BINDING)) throw new Error('MUTATION_BINDING_NOT_FOUND');
+  const wanted = process.argv.slice(2);
+  const chosen = wanted.length === 0 ? MUTATIONS : MUTATIONS.filter((mutation) => wanted.includes(mutation.name));
+  if (chosen.length === 0) throw new Error(`MUTATION_UNKNOWN: ${wanted.join(', ')}; the checks are ${MUTATIONS.map((mutation) => mutation.name).join(', ')}`);
   restoreOnInterrupt(process, {
     stopChildren: stopTracked,
-    restoreSource: () => writeFileSync(SOURCE, original),
+    restoreSource: () => (current === undefined ? undefined : writeFileSync(current.source, current.original)),
     rebuild: buildSync,
     exit: (code) => process.exit(code),
     report: (error) => void process.stderr.write(`interrupt: ${error instanceof Error ? error.message : String(error)}\n`),
   });
-  try {
-    const outcome = await checkBrokenBinding({
-      run: runKeyboardTest,
-      breakBinding: async () => {
-        writeFileSync(SOURCE, original.replace(BINDING, BROKEN));
-        buildSync();
-      },
-      restore: async () => {
-        writeFileSync(SOURCE, original);
-        buildSync();
-      },
-      expected: { title: TEST, assertion: /toBe\(expected\)|Expected: true/ },
-    });
-    process.stdout.write(`The keyboard test passed, failed on its assertion with the Legend binding broken ("${outcome.broken.failures[0]?.message.split('\n')[0] ?? ''}"), and passed again once it was restored.\n`);
-  } catch (error) {
-    writeFileSync(SOURCE, original);
-    // an interrupt is being handled: it restores, builds and leaves with its own code, so the check does not leave first with an error of a run it stopped
-    if (isStopping()) await new Promise<never>(() => undefined);
-    throw error;
-  }
+  for (const mutation of chosen) await check(mutation);
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) await main();

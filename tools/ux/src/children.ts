@@ -24,13 +24,13 @@ export function resumeTracked(): void {
 }
 
 /** Runs a command to its end and gives its output and how it ended. Both outputs are read as they come, so a command that writes a lot to either never waits on this one. */
-export function runTracked(command: string, args: readonly string[], cwd: string): Promise<Finished> {
+export function runTracked(command: string, args: readonly string[], cwd: string, env: Readonly<Record<string, string>> = {}): Promise<Finished> {
   return new Promise((resolve, reject) => {
     if (stopping) {
       reject(new Error('COMMANDS_STOPPED'));
       return;
     }
-    const child = spawn(command, [...args], { cwd, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
+    const child = spawn(command, [...args], { cwd, stdio: ['ignore', 'pipe', 'pipe'], detached: true, env: { ...process.env, ...env } });
     const pid = child.pid;
     const out: Buffer[] = [];
     let stderr = '';
