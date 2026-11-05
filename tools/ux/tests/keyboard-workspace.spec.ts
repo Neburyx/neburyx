@@ -31,27 +31,46 @@ test.describe('typing in a text field', () => {
     await page.keyboard.press('Enter');
     await page.keyboard.press('Space');
     await page.keyboard.press('Escape');
-    const before = { tool: await currentTool(page), zoom: await zoomOf(page), selection: await description(page) };
     await page.evaluate(() => {
       const field = document.createElement('input');
       field.id = 'probe-field';
       field.setAttribute('aria-label', 'Probe field');
       document.querySelector('.workspace')?.append(field);
     });
-    await page.locator('#probe-field').focus();
-    const movedBefore = JSON.stringify(await positions(page));
-    for (const key of ['h', 'b', 'l', 'v', 'Escape', 'ArrowLeft', 'ArrowDown', `${mod}+0`, `${mod}+a`, `${mod}+Shift+i`, `${mod}+/`]) {
-      await page.keyboard.press(key);
-      expect(await legendOpen(page), `the legend after ${key}`).toBe(false);
-      await expect(page.getByRole('dialog'), `the sheet after ${key}`).toHaveCount(0);
-      expect(await zoomOf(page), `the zoom after ${key}`).toBe(before.zoom);
-      expect(await description(page), `the selection after ${key}`).toBe(before.selection);
-      expect(JSON.stringify(await positions(page)), `the positions after ${key}`).toBe(movedBefore);
+    const field = page.locator('#probe-field');
+    // from each of two starting tools, so that a key that sets the tool it is already in is caught too
+    for (const [start, startTool] of [['h', 'Pan'], ['v', 'Select']] as const) {
+      await focusCanvas(page);
+      await page.keyboard.press(start);
+      const before = { tool: await currentTool(page), zoom: await zoomOf(page), selection: await description(page), moved: JSON.stringify(await positions(page)) };
+      expect(before.tool, `the starting tool after ${start}`).toBe(startTool);
+      await field.focus();
+      await field.fill('');
+      let typed = '';
+      const unchanged = async (after: string): Promise<void> => {
+        expect(await legendOpen(page), `the legend after ${after}`).toBe(false);
+        await expect(page.getByRole('dialog'), `the sheet after ${after}`).toHaveCount(0);
+        expect(await zoomOf(page), `the zoom after ${after}`).toBe(before.zoom);
+        expect(await description(page), `the selection after ${after}`).toBe(before.selection);
+        expect(JSON.stringify(await positions(page)), `the positions after ${after}`).toBe(before.moved);
+      };
+      for (const key of ['h', 'b', 'l', 'v', 'h']) {
+        await page.keyboard.press(key);
+        typed += key;
+        expect(await field.inputValue(), `the text after ${key}, starting from ${startTool}`).toBe(typed);
+        await unchanged(`${key} typed from ${startTool}`);
+      }
+      expect(await currentTool(page), `the tool after typing from ${startTool}`).toBe(before.tool);
+      await field.focus();
+      for (const key of ['Escape', 'ArrowLeft', 'ArrowDown', `${mod}+0`, `${mod}+a`, `${mod}+Shift+i`, `${mod}+/`]) {
+        await page.keyboard.press(key);
+        await unchanged(`${key} from ${startTool}`);
+      }
+      expect(await field.inputValue(), 'the text after the other keys').toBe(typed);
+      await page.keyboard.press('Backspace');
+      expect(await field.inputValue(), 'the select-all key selected the text of the field, which Backspace then took').toBe('');
+      expect(await currentTool(page), `the tool at the end from ${startTool}`).toBe(before.tool);
     }
-    await page.keyboard.type('hbl');
-    // the select-all key selected the field's own text, which the typing then replaced: if the page had taken it, the selection above would differ
-    expect(await page.locator('#probe-field').inputValue()).toBe('hbl');
-    expect(await currentTool(page), 'the tool').toBe(before.tool);
   });
 });
 
@@ -181,8 +200,8 @@ test.describe('the sheet of shortcuts', () => {
       row('Select', 'v'), row('Pan', 'h'), row('Box select', 'b'), row('Search', 'mod+k'), row('Legend', 'l'),
       row('Select all', 'mod+a'), row('Invert selection', 'mod+shift+i'), row('Clear', 'escape'), row('Expand', 'e'), row('Focus', 'f'),
       'Move selected entities ←↑↓→', `Move by 50 ${mac ? '⇧←↑↓→' : 'Shift+←↑↓→'}`, row('Select the element', 'enter', 'space'), row('Add to the selection', 'shift+enter', 'shift+space'),
-      row('Pin position', 'p'), row('Hide', 'delete'), row('Copy ID', 'mod+c'), row('Find paths', 'shift+p'), row('Export view', 'mod+e'), row('Copy properties', 'mod+shift+c'), row('Open context menu', 'contextmenu', 'shift+f10'),
-      row('Fit to view', 'mod+0'), row('Keyboard shortcuts', 'mod+/'), row('Walk the canvas', 'enter', 'space'), row('Next element', 'tab'), row('Previous element', 'shift+tab'), row('Leave the walk', 'escape'),
+      row('Pin position', 'p'), row('Hide', 'delete'), row('Copy ID', 'mod+c'), row('Find paths', 'shift+p'), row('Export view', 'mod+e'), row('Copy properties', 'mod+shift+c'),
+      row('Fit to view', 'mod+0'), row('Keyboard shortcuts', 'mod+/'), row('Walk the canvas', 'enter', 'space'), row('Next element', 'tab'), row('Previous element', 'shift+tab'), row('Leave the walk', 'escape'), row('Open context menu', 'contextmenu', 'shift+f10'),
     ]);
     for (const direction of ['Tab', 'Shift+Tab']) {
       for (let press = 0; press < 4; press += 1) {

@@ -23,6 +23,10 @@ for (const [name, path] of PAGES) {
       await expectEachContained('a navigation item', page.locator('aside.sidebar nav a'), page.locator('aside.sidebar'));
       await expectContained('the identity block', page.locator('.sidebar-bottom'), page.locator('aside.sidebar'));
       await expectContained('the heading', page.locator('h1'), page.locator('main'));
+      const heading = await page.locator('h1').evaluate((element) => ({ scrollHeight: element.scrollHeight, clientHeight: element.clientHeight, scrollWidth: element.scrollWidth, clientWidth: element.clientWidth, fontSize: parseFloat(getComputedStyle(element).fontSize) }));
+      expect(heading.scrollHeight, 'the heading text is taller than its box').toBeLessThanOrEqual(heading.clientHeight + 1);
+      expect(heading.scrollWidth, 'the heading text is wider than its box').toBeLessThanOrEqual(heading.clientWidth + 1);
+      expect(heading.clientHeight, 'the heading box is shorter than its text').toBeGreaterThanOrEqual(heading.fontSize);
     });
 
     test('has the sidebar, brand and navigation of the frames', async ({ page }) => {

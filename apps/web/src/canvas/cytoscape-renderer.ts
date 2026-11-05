@@ -655,6 +655,7 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
           label: edge.style('label'),
           labelOutline: parseFloat(edge.style('text-border-width')),
           labelShown: edge.style('label') !== '',
+          lineShown: edge.style('display') !== 'none' && edge.style('visibility') === 'visible' && parseFloat(edge.style('opacity')) > 0 && parseFloat(edge.style('line-opacity')) > 0 && parseFloat(edge.style('width')) > 0,
           focused: parseFloat(edge.style('underlay-opacity')) > 0,
         })),
       };

@@ -50,7 +50,14 @@ test.describe('the canvas as a tab stop', () => {
     await expect(canvas).toHaveAttribute('tabindex', '0');
     await focusCanvas(page);
     expect(await canvas.evaluate((element) => element.matches(':focus-visible')), 'the keyboard ring').toBe(true);
-    expect(await canvas.evaluate((element) => getComputedStyle(element).outlineStyle), 'the ring is drawn').toBe('solid');
+    const ring = await canvas.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return { style: style.outlineStyle, width: parseFloat(style.outlineWidth), color: style.outlineColor };
+    });
+    expect(ring.style, 'the ring is drawn').toBe('solid');
+    expect(ring.width, 'the ring has a width').toBeGreaterThan(0);
+    const channels = (ring.color.match(/[\d.]+/g) ?? []).map(Number);
+    expect(channels.length === 3 || (channels.length === 4 && (channels[3] ?? 0) > 0), `the ring colour ${ring.color} is not transparent`).toBe(true);
     await page.keyboard.press('Tab');
     expect(await canvas.evaluate((element) => element === document.activeElement), 'Tab left the canvas').toBe(false);
     await page.keyboard.press('Shift+Tab');

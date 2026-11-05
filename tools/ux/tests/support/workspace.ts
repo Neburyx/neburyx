@@ -113,6 +113,7 @@ export interface DrawingNode {
 export interface DrawingEdge {
   readonly id: string;
   readonly labelShown: boolean;
+  readonly lineShown: boolean;
   readonly label: string;
   readonly width: number;
   readonly focused: boolean;

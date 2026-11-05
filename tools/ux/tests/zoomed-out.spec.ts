@@ -38,7 +38,7 @@ test.describe('below the caption limit', () => {
     expect(now.nodes.every((node) => node.glyphShown), 'every glyph is drawn').toBe(true);
     expect(now.nodes.filter((node) => node.badgeShown), 'the pinned entity, and only it, keeps its badge').toHaveLength(1);
     expect(now.edges, 'every relationship is still drawn').toHaveLength(13);
-    expect(now.edges.every((edge) => edge.width > 0), 'every line has a width').toBe(true);
+    expect(now.edges.every((edge) => edge.width > 0 && edge.lineShown), 'every line is drawn: a width, and neither hidden nor transparent').toBe(true);
     const labelled = now.edges.filter((edge) => labelledIds.includes(edge.id));
     expect(labelled, 'the same two relationships are still drawn').toHaveLength(2);
     expect(labelled.some((edge) => edge.labelShown), 'a label is drawn').toBe(false);
@@ -118,17 +118,18 @@ test.describe('below the caption limit', () => {
     await page.waitForTimeout(300);
     await hover('holder');
     await expect(tip(page), 'it comes back with the next entity the pointer enters').toHaveCount(1);
-    const beforePan = await view();
+    // a drag starts only on the empty canvas (an entity under the pointer is grabbed or, pinned, not draggable), so the pointer has left the entity before the pan starts; that the pan itself takes the tip away with the pointer still on the entity is proved in cytoscape-renderer.test.ts ("goes with a pan, a zoom, a grab")
+    await page.mouse.move(5, 5);
     const empty = await canvas.boundingBox();
-    const x = (empty?.x ?? 0) + (empty?.width ?? 0) - 60;
-    const y = (empty?.y ?? 0) + 120;
-    await page.mouse.move(x, y);
+    const emptyX = (empty?.x ?? 0) + (empty?.width ?? 0) - 60;
+    const emptyY = (empty?.y ?? 0) + 120;
+    const beforeEmpty = await view();
+    await page.mouse.move(emptyX, emptyY);
     await page.mouse.down();
-    await page.mouse.move(x - 60, y + 40, { steps: 4 });
-    await page.mouse.up();
+    await page.mouse.move(emptyX - 60, emptyY + 40, { steps: 4 });
+    await expect.poll(view, { message: 'a drag of the empty canvas pans the view' }).not.toBe(beforeEmpty);
     await expect(tip(page), 'a pan of the empty canvas').toHaveCount(0);
-    await expect.poll(view, { message: 'the drag panned the view' }).not.toBe(beforePan);
-    await page.waitForTimeout(300);
+    await page.mouse.up();
     await hover('holder');
     await expect(tip(page)).toHaveCount(1);
     const before = (await positions(page));
