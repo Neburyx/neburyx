@@ -4,6 +4,8 @@ export const READOUT_MARKER = 'neburyx-dev-canvas-readout';
 export const MARK_EVENT = 'neburyx-dev-mark';
 /** The name of the function a development canvas element gets for reading where each entity is drawn, so a recorded browser run can read a stored position back. */
 export const READ_POSITIONS = 'readDrawnPositions';
+/** The name of the function a development canvas element gets for reading what the renderer has drawn (each entity's caption shown or not, each relationship's label), so a recorded browser run can see the zoomed-out view. */
+export const INSPECT_DRAWING = 'inspectDrawing';
 
 export interface Readout {
   readonly entities: number;

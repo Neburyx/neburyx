@@ -3,7 +3,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { ClientState } from '../state/client-state.js';
 import type { Position } from '../state/presentation-state.js';
 import { useClientState, useLoadedGraph } from '../state/context.js';
-import { writeReadout } from '../dev/canvas-readout.js';
+import { INSPECT_DRAWING, writeReadout } from '../dev/canvas-readout.js';
 import { StateError } from '../state/errors.js';
 import { drawnKeys, partitionEdges } from '../state/loaded-graph.js';
 import { elementKey } from '../state/keys.js';
@@ -96,6 +96,7 @@ export function GraphCanvas({ profile, view = 'fit' }: { readonly profile?: Sour
         failed: whileMounted(() => setFailed(true)),
       };
       created.mount(container.current ?? undefined, events, state.presentation.view.getState().viewport);
+      if (__DEV_TOOLS__ && container.current !== null) Reflect.set(container.current, INSPECT_DRAWING, () => reported.inspect());
     } catch {
       // the notice names the stable code; the library's own message is not shown
       current = false;

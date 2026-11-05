@@ -6,16 +6,17 @@ import { describe, expect, it } from 'vitest';
 interface Piece {
   readonly name: 'generator' | 'loader' | 'route' | 'stand-ins' | 'frame-sample' | 'canvas-readout';
   readonly module: string;
-  readonly marker: string;
+  /** What a build that holds the piece carries: the marker the piece names itself by, and the names of the hooks it gives the page. */
+  readonly markers: readonly string[];
 }
 
 const PIECES: readonly Piece[] = [
-  { name: 'generator', module: '/src/dev/fixture-graph', marker: 'neburyx-dev-fixture-generator' },
-  { name: 'loader', module: '/src/dev/fixture-loader', marker: 'neburyx-dev-fixture-loader' },
-  { name: 'route', module: '/src/dev/fixture-page', marker: 'neburyx-dev-fixture-route' },
-  { name: 'stand-ins', module: '/src/dev/stand-ins', marker: 'neburyx-dev-stand-ins' },
-  { name: 'frame-sample', module: '/src/dev/frame-sample', marker: 'neburyx-dev-frame-sample' },
-  { name: 'canvas-readout', module: '/src/dev/canvas-readout', marker: 'neburyx-dev-canvas-readout' },
+  { name: 'generator', module: '/src/dev/fixture-graph', markers: ['neburyx-dev-fixture-generator'] },
+  { name: 'loader', module: '/src/dev/fixture-loader', markers: ['neburyx-dev-fixture-loader'] },
+  { name: 'route', module: '/src/dev/fixture-page', markers: ['neburyx-dev-fixture-route'] },
+  { name: 'stand-ins', module: '/src/dev/stand-ins', markers: ['neburyx-dev-stand-ins', 'lastStandInKey'] },
+  { name: 'frame-sample', module: '/src/dev/frame-sample', markers: ['neburyx-dev-frame-sample'] },
+  { name: 'canvas-readout', module: '/src/dev/canvas-readout', markers: ['neburyx-dev-canvas-readout', 'readDrawnPositions', 'inspectDrawing', 'neburyx-dev-mark', 'focusedElement'] },
 ];
 
 const ROOT = join(import.meta.dirname, '..', '..');
@@ -43,7 +44,7 @@ async function built(options: { readonly mode: string; readonly entry?: string }
 }
 
 function piecesIn(output: Built): string[] {
-  return PIECES.filter((piece) => output.moduleIds.some((id) => id.includes(piece.module)) || output.text.includes(piece.marker)).map((piece) => piece.name);
+  return PIECES.filter((piece) => output.moduleIds.some((id) => id.includes(piece.module)) || piece.markers.some((marker) => output.text.includes(marker))).map((piece) => piece.name);
 }
 
 describe('a production build of the web app', () => {

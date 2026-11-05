@@ -12,7 +12,7 @@ import { GraphCanvas, RENDERER_UNAVAILABLE, WALK_SENTENCE } from './graph-canvas
 import { RendererProvider } from './renderer-context.js';
 import { layoutEntities } from './incremental-layout.js';
 import { partitionEdges } from '../state/loaded-graph.js';
-import { MARK_EVENT, READ_POSITIONS } from '../dev/canvas-readout.js';
+import { INSPECT_DRAWING, MARK_EVENT, READ_POSITIONS } from '../dev/canvas-readout.js';
 import { runSelectionCommand } from './selection-commands.js';
 import type { CanvasEvents, CreateRenderer } from './scene.js';
 import type { SourceProfile } from '@neburyx/contracts';
@@ -256,6 +256,16 @@ describe('the development read-out of the graph canvas', () => {
     await waitFor(() => expect(canvas.dataset['focusedElement']).toBe(nodeKey('n1')));
     act(() => state.presentation.endWalk());
     await waitFor(() => expect(canvas.dataset['focusedElement']).toBeUndefined());
+  });
+
+  it('gives a function that reads what the renderer has drawn, for a recorded browser run', () => {
+    const state = createClientState();
+    load(state, 2, 1);
+    view(state, stubFactory().create);
+    const canvas = screen.getByRole('application', { name: 'Graph canvas' });
+    const inspect = Reflect.get(canvas, INSPECT_DRAWING);
+    expect(typeof inspect).toBe('function');
+    expect(inspect()).toHaveProperty('nodes');
   });
 
   it('gives a function that reads back where each entity is drawn, for a recorded browser run', () => {

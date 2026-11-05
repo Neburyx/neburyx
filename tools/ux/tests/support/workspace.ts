@@ -80,3 +80,69 @@ export const menuOf = (page: Page): Locator => page.getByRole('menu');
 export async function menuItems(page: Page): Promise<string[]> {
   return menuOf(page).first().locator('[role="menuitem"] .menu-label').allTextContents();
 }
+
+/** The development fixture of 120 entities and 180 relationships with 10 pinned, loaded through the page's own controls and opened in Explore. */
+export async function openFixture(page: Page): Promise<void> {
+  await page.goto('/dev/fixture');
+  await page.getByRole('button', { name: /^banking-demo/ }).first().click();
+  await page.getByRole('button', { name: 'Load', exact: true }).click();
+  await page.getByRole('link', { name: 'Open Explore' }).click();
+  await expect(canvasOf(page)).toHaveAttribute('data-drawn-entities', '120');
+  await expect(canvasOf(page)).toHaveAttribute('data-drawn-relationships', '180');
+}
+
+/** Marks where every entity is now, so the page can say how many have moved since. */
+export async function markPositions(page: Page): Promise<void> {
+  await canvasOf(page).evaluate((element) => element.dispatchEvent(new Event('neburyx-dev-mark')));
+}
+
+export async function movedSinceMark(page: Page): Promise<{ readonly unpinned: number; readonly pinned: number; readonly marked: number }> {
+  const data = await canvasOf(page).evaluate((element) => ({ unpinned: element.dataset['movedUnpinned'], pinned: element.dataset['movedPinned'], marked: element.dataset['markedEntities'] }));
+  return { unpinned: Number(data.unpinned), pinned: Number(data.pinned), marked: Number(data.marked) };
+}
+
+export interface DrawingNode {
+  readonly id: string;
+  readonly captionShown: boolean;
+  readonly images: readonly string[];
+  readonly focused: boolean;
+}
+
+export interface DrawingEdge {
+  readonly id: string;
+  readonly labelShown: boolean;
+  readonly label: string;
+  readonly width: number;
+}
+
+/** What the renderer has drawn, read from the development canvas. */
+export async function drawing(page: Page): Promise<{ readonly nodes: readonly DrawingNode[]; readonly edges: readonly DrawingEdge[] }> {
+  return canvasOf(page).evaluate((element) => {
+    const inspect: unknown = Reflect.get(element, 'inspectDrawing');
+    if (typeof inspect !== 'function') throw new Error('NO_INSPECTION');
+    return inspect.call(element);
+  });
+}
+
+export const zoomOf = (page: Page): Promise<number> => canvasOf(page).evaluate((element) => Number(element.dataset['zoom']));
+
+/** The zoom below which captions and labels are not drawn: a caption of 12 px is then 7 px on the screen. */
+export const CAPTION_LIMIT = 7 / 12;
+
+/** Presses Zoom out until the zoom is under the limit (or Zoom in until it is over it), then waits for the page's read-out to settle. */
+export async function zoomPast(page: Page, direction: 'below' | 'above'): Promise<void> {
+  const button = page.getByRole('button', { name: direction === 'below' ? 'Zoom out' : 'Zoom in' });
+  for (let press = 0; press < 30; press += 1) {
+    const zoom = await zoomOf(page);
+    if (direction === 'below' ? zoom < CAPTION_LIMIT * 0.9 : zoom > CAPTION_LIMIT * 1.2) break;
+    await button.click();
+    await page.waitForTimeout(80);
+  }
+  let last = -1;
+  await expect.poll(async () => {
+    const now = await zoomOf(page);
+    const settled = now === last;
+    last = now;
+    return settled;
+  }).toBe(true);
+}
