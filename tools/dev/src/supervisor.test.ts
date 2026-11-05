@@ -1,10 +1,10 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer as createHttpServer } from 'node:http';
-import { createServer } from 'node:net';
+import { createServer, Socket } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { API_READY_TIMEOUT_MS, supervise, type ApiSpec, type ChildSpec } from './supervisor.js';
 import { settle } from './testing/settle.js';
 
@@ -13,6 +13,7 @@ const folders: string[] = [];
 const cleanups: (() => Promise<void>)[] = [];
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   for (const cleanup of cleanups.splice(0)) await cleanup();
   for (const folder of folders.splice(0)) rmSync(folder, { recursive: true, force: true });
 });
@@ -117,6 +118,24 @@ describe('the API supervisor', () => {
     run.stop();
     expect(await run.done).toBe(0);
     expect(alive(run.pidOf(run.apiLines()[0]))).toBe(false);
+  }, 30_000);
+
+  it('still sees the API become ready when every socket refuses its type-of-service option, which would end the command if the readiness probe used the built-in fetch', async () => {
+    const refused: Error[] = [];
+    const onUncaught = (error: Error): void => void refused.push(error);
+    process.on('uncaughtException', onUncaught);
+    vi.spyOn(Socket.prototype, 'setTypeOfService').mockImplementation(() => {
+      throw Object.assign(new Error('setTypeOfService EINVAL'), { code: 'EINVAL', syscall: 'setTypeOfService' });
+    });
+    try {
+      const run = await scene({ START_DELAY_MS: '300' });
+      await run.waitFor(() => run.messages.includes('the API is ready'));
+      run.stop();
+      expect(await run.done).toBe(0);
+      expect(refused).toEqual([]);
+    } finally {
+      process.off('uncaughtException', onUncaught);
+    }
   }, 30_000);
 
   it('stops every child and exits 1 naming the API when it does not become ready within the limit', async () => {

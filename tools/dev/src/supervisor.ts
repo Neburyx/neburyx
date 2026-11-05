@@ -1,5 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, watch, type FSWatcher } from 'node:fs';
+import { probeStatus } from './http-probe.js';
 import { terminateGroup } from './processes.js';
 
 /** The API checks every source before it listens: up to seven gate deadlines of 10 s, plus the database connection and the migration check. 7 x 10 s + 50 s. */
@@ -66,12 +67,8 @@ class Running {
 async function becomesReady(url: string, running: Running, timeoutMs: number): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;
   while (!running.hasExited() && Date.now() < deadline) {
-    try {
-      const response = await fetch(url, { signal: AbortSignal.timeout(HEALTH_REQUEST_TIMEOUT_MS) });
-      if (response.ok) return !running.hasExited();
-    } catch {
-      // not listening yet
-    }
+    const status = await probeStatus(url, HEALTH_REQUEST_TIMEOUT_MS);
+    if (status !== undefined && status >= 200 && status < 300) return !running.hasExited();
     await new Promise((resolve) => setTimeout(resolve, HEALTH_POLL_INTERVAL_MS));
   }
   return false;

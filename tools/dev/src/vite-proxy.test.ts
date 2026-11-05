@@ -5,6 +5,7 @@ import { networkInterfaces } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
+import { probeBody, probeStatus } from './http-probe.js';
 import { terminateGroup } from './processes.js';
 
 const web = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'apps', 'web');
@@ -51,11 +52,7 @@ async function startVite(webPort: number, apiUrl: string): Promise<() => string>
   });
   const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
-    try {
-      if ((await fetch(`http://127.0.0.1:${webPort}/`)).ok) return () => output;
-    } catch {
-      // not listening yet
-    }
+    if ((await probeStatus(`http://127.0.0.1:${webPort}/`, 2000)) === 200) return () => output;
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
   throw new Error('the web dev server did not start');
@@ -67,11 +64,11 @@ describe('the web dev server', () => {
     const webPort = await freePort();
     await stubApi(apiPort);
     await startVite(webPort, `http://127.0.0.1:${apiPort}`);
-    expect((await fetch(`http://127.0.0.1:${webPort}/`)).status).toBe(200);
+    expect(await probeStatus(`http://127.0.0.1:${webPort}/`, 5000)).toBe(200);
     for (const path of ['/v1/sources', '/healthz', '/readyz']) {
-      const response = await fetch(`http://127.0.0.1:${webPort}${path}`);
-      expect(response.status, path).toBe(200);
-      expect(await response.json(), path).toEqual({ from: 'the stub api', path });
+      const response = await probeBody(`http://127.0.0.1:${webPort}${path}`, 5000);
+      expect(response?.status, path).toBe(200);
+      expect(JSON.parse(response?.body ?? 'null'), path).toEqual({ from: 'the stub api', path });
     }
   }, 60_000);
 
@@ -84,6 +81,6 @@ describe('the web dev server', () => {
       .flatMap((list) => list ?? [])
       .find((entry) => entry.family === 'IPv4' && !entry.internal);
     if (external === undefined) return;
-    await expect(fetch(`http://${external.address}:${webPort}/`, { signal: AbortSignal.timeout(5000) })).rejects.toThrow();
+    expect(await probeStatus(`http://${external.address}:${webPort}/`, 5000)).toBeUndefined();
   }, 60_000);
 });
