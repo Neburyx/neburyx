@@ -6,7 +6,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run --passWithNoTests",
     "check:profile": "node scripts/check-profile.mjs",
-    "test:ux": "playwright test"
+    "test:ux": "playwright test",
+    "mutate": "node src/mutate.ts"
   },
   "dependencies": {
     "@neburyx/contracts": "workspace:*",
