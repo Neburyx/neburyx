@@ -183,6 +183,7 @@ export function GraphCanvas({ profile, view = 'fit' }: { readonly profile?: Sour
         {counted(graph.nodes.length, 'entity', 'entities')} and {counted(graph.edges.length, 'relationship', 'relationships')} loaded
         {scene.omitted === 0 ? '' : `; ${notDrawnLine(scene.omitted)}`}
         {scene.selection.size === 0 ? '' : `; ${formatNumber(scene.selection.size)} selected`}
+        {scene.pinned.size === 0 ? '' : `; ${formatNumber(scene.pinned.size)} pinned`}
       </p>
       {failed ? (
         <p role="alert" className="canvas-notice">

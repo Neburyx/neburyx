@@ -30,3 +30,6 @@ export const SELECTED_HALO_DIAMETER = 48;
 export const SELECTED_LINE_EXTRA = 1;
 /** The library measures the halo's padding from the disc without its outline, so the halo is the design's diameter when the padding is this. */
 export const SELECTED_HALO_PADDING = (SELECTED_HALO_DIAMETER - (NODE_OUTER_DIAMETER - SELECTED_OUTLINE_WIDTH)) / 2;
+export const PIN_BADGE_SIZE = 16;
+export const PIN_BADGE_COLOR = DERIVED_COLOR;
+export const PIN_BADGE_FILL = NODE_FILL;

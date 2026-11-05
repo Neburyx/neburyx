@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createCytoscapeRenderer, type RendererCore as Core } from './cytoscape-renderer.js';
+import { pinBadgeUri } from './pin-badge.js';
 import { glyphUri } from './glyphs.js';
 import { FIT_PADDING, GLYPH_COLOR } from './look.js';
 import { ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from './zoom.js';
@@ -122,6 +123,39 @@ describe('the entities the Cytoscape renderer draws', () => {
     expect(node?.images).toEqual([glyphUri('money', GLYPH_COLOR), 'data:image/png;base64,AAAA']);
     expect(node?.caption).toBe('ACC-1\nAlpha · Open');
     expect(painted).toEqual(['ACC-1|Alpha · Open']);
+  });
+
+  it('adds the pin badge as the last image of a pinned entity, after the glyph and the caption, and none to an unpinned one', () => {
+    const renderer = createCytoscapeRenderer({ nextFrame: (callback) => callback(), paintCaption: () => 'data:image/png;base64,AAAA' });
+    renderer.mount(undefined, NO_EVENTS, undefined);
+    const both: Scene = { ...one({ x: 0, y: 0 }), entities: [{ id: 'a', position: { x: 0, y: 0 }, look: look('money', 'ACC-1', 'Alpha · Open') }, { id: 'b', position: { x: 90, y: 0 }, look: look('money', 'ACC-2', 'Alpha · Open') }], pinned: new Set(['a']) };
+    renderer.draw(both);
+    const [pinned, plain] = renderer.inspect().nodes;
+    expect(pinned?.images).toEqual([glyphUri('money', GLYPH_COLOR), 'data:image/png;base64,AAAA', pinBadgeUri()]);
+    expect(plain?.images).toEqual([glyphUri('money', GLYPH_COLOR), 'data:image/png;base64,AAAA']);
+  });
+
+  it('keeps the badge in its own place in the image list while the caption is not painted yet, and puts none in an unpinned entity\'s list', () => {
+    const renderer = createCytoscapeRenderer({ nextFrame: () => undefined, paintCaption: () => 'data:image/png;base64,AAAA' });
+    renderer.mount(undefined, NO_EVENTS, undefined);
+    renderer.draw({ ...one({ x: 0, y: 0 }), entities: [{ id: 'a', position: { x: 0, y: 0 }, look: look('money', 'ACC-1', 'Alpha · Open') }, { id: 'b', position: { x: 90, y: 0 }, look: look('money', 'ACC-2', 'Alpha · Open') }], pinned: new Set(['a']) });
+    const [pinned, plain] = renderer.inspect().nodes;
+    expect(pinned?.images).toHaveLength(3);
+    expect(pinned?.images[2]).toBe(pinBadgeUri());
+    expect(pinned?.images[1]).not.toBe(pinBadgeUri());
+    expect(plain?.images).toEqual([glyphUri('money', GLYPH_COLOR)]);
+  });
+
+  it('adds and takes away the badge when the pin changes, keeping the painted caption and painting nothing again', () => {
+    let paints = 0;
+    const renderer = createCytoscapeRenderer({ nextFrame: (callback) => callback(), paintCaption: () => { paints += 1; return 'data:image/png;base64,AAAA'; } });
+    renderer.mount(undefined, NO_EVENTS, undefined);
+    renderer.draw(one({ x: 0, y: 0 }));
+    renderer.draw({ ...one({ x: 0, y: 0 }), pinned: new Set(['a']) });
+    expect(renderer.inspect().nodes[0]?.images).toEqual([glyphUri('money', GLYPH_COLOR), 'data:image/png;base64,AAAA', pinBadgeUri()]);
+    renderer.draw(one({ x: 0, y: 0 }));
+    expect(renderer.inspect().nodes[0]?.images).toEqual([glyphUri('money', GLYPH_COLOR), 'data:image/png;base64,AAAA']);
+    expect(paints).toBe(1);
   });
 
   it('paints a caption once however often it is drawn, and again only for another text', () => {
@@ -1044,6 +1078,53 @@ describe('the Cytoscape renderer in a container whose size changes', () => {
     if (core === undefined) throw new Error('the renderer made no core');
     return { renderer, container, core };
   }
+
+  it('shows a not-allowed cursor over a pinned entity while a drag would move others, and no cursor of its own anywhere else', () => {
+    const { renderer, container, core } = inContainer();
+    const pinned = new Set(['a']);
+    renderer.draw({ ...scene([['a', { x: 0, y: 0 }], ['b', { x: 100, y: 0 }]]), pinned });
+    core.getElementById('a').emit('mouseover');
+    expect(container.style.cursor).toBe('not-allowed');
+    core.getElementById('a').emit('mouseout');
+    expect(container.style.cursor).toBe('');
+    core.getElementById('b').emit('mouseover');
+    expect(container.style.cursor).toBe('');
+    renderer.draw({ ...scene([['a', { x: 0, y: 0 }], ['b', { x: 100, y: 0 }]]), pinned, tool: 'pan' });
+    core.getElementById('a').emit('mouseover');
+    expect(container.style.cursor).toBe('');
+    renderer.draw({ ...scene([['a', { x: 0, y: 0 }], ['b', { x: 100, y: 0 }]]), pinned, tool: 'box' });
+    core.getElementById('a').emit('mouseover');
+    expect(container.style.cursor).toBe('not-allowed');
+  });
+
+  it('follows a change of tool, of pin or of drawing under a pointer that does not move, and forgets the entity that was hovered when it is removed', () => {
+    const { renderer, container, core } = inContainer();
+    const two = (extra: object): Scene => ({ ...scene([['a', { x: 0, y: 0 }], ['b', { x: 100, y: 0 }]]), ...extra });
+    renderer.draw(two({ pinned: new Set(['a']) }));
+    core.getElementById('a').emit('mouseover');
+    expect(container.style.cursor).toBe('not-allowed');
+    renderer.draw(two({ pinned: new Set(['a']), tool: 'pan' }));
+    expect(container.style.cursor).toBe('');
+    renderer.draw(two({ pinned: new Set(['a']), tool: 'select' }));
+    expect(container.style.cursor).toBe('not-allowed');
+    renderer.draw(two({ pinned: new Set<string>() }));
+    expect(container.style.cursor).toBe('');
+    renderer.draw(two({ pinned: new Set(['a']) }));
+    expect(container.style.cursor).toBe('not-allowed');
+    renderer.draw({ ...scene([['b', { x: 100, y: 0 }]]), pinned: new Set(['a']) });
+    expect(container.style.cursor).toBe('');
+    renderer.draw(two({ pinned: new Set(['a']) }));
+    expect(container.style.cursor).toBe('');
+  });
+
+  it('leaves no cursor on the container when the renderer is disposed over a pinned entity', () => {
+    const { renderer, container, core } = inContainer();
+    renderer.draw({ ...scene([['a', { x: 0, y: 0 }]]), pinned: new Set(['a']) });
+    core.getElementById('a').emit('mouseover');
+    expect(container.style.cursor).toBe('not-allowed');
+    renderer.dispose();
+    expect(container.style.cursor).toBe('');
+  });
 
   it('tells the library to measure again each time the container changes size, and not before', () => {
     const { container, core } = inContainer();

@@ -4,7 +4,8 @@ import type { PointerTool, Position } from '../state/presentation-state.js';
 import { CAPTION_HEIGHT, CAPTION_TOP, CAPTION_WIDTH } from './caption-layout.js';
 import { paintCaption, type CaptionPainter } from './caption-painter.js';
 import { glyphUri } from './glyphs.js';
-import { AGGREGATE_WIDTH, ARROW_GAP, ARROW_SHAPE, DASH_PATTERN, DERIVED_COLOR, DOT_PATTERN, EDGE_COLOR, EDGE_WIDTH, FIT_PADDING, GLYPH_COLOR, GLYPH_SIZE, LABEL_FILL, LABEL_FONT_SIZE, NODE_DIAMETER, NODE_FILL, NODE_OUTER_DIAMETER, NODE_OUTLINE, NODE_OUTLINE_WIDTH, PILL_FILL, PILL_OUTLINE_WIDTH, SELECTED_COLOR, SELECTED_HALO_COLOR, SELECTED_HALO_OPACITY, SELECTED_HALO_PADDING, SELECTED_LINE_EXTRA, SELECTED_OUTLINE_WIDTH } from './look.js';
+import { pinBadgeUri } from './pin-badge.js';
+import { AGGREGATE_WIDTH, ARROW_GAP, ARROW_SHAPE, DASH_PATTERN, DERIVED_COLOR, DOT_PATTERN, EDGE_COLOR, EDGE_WIDTH, FIT_PADDING, GLYPH_COLOR, GLYPH_SIZE, LABEL_FILL, LABEL_FONT_SIZE, NODE_DIAMETER, NODE_FILL, NODE_OUTER_DIAMETER, NODE_OUTLINE, NODE_OUTLINE_WIDTH, PIN_BADGE_SIZE, PILL_FILL, PILL_OUTLINE_WIDTH, SELECTED_COLOR, SELECTED_HALO_COLOR, SELECTED_HALO_OPACITY, SELECTED_HALO_PADDING, SELECTED_LINE_EXTRA, SELECTED_OUTLINE_WIDTH } from './look.js';
 import type { RelationshipLook } from './relationship-look.js';
 import { createBoxGesture, type BoxOverlay } from './box-gesture.js';
 import { createBoxOverlay } from './box-overlay.js';
@@ -27,12 +28,20 @@ interface CaptionJob {
   readonly iconKey: IconKey;
   readonly line1: string;
   readonly line2: string;
+  readonly pinned: boolean;
 }
 
 const edgeData = (look: RelationshipLook) => ({ aggregate: look.aggregate, origin: look.origin, label: look.label ?? '' });
 
 
 // Cytoscape keeps the object it is given as the node's position and writes to it, so every position is copied in.
+/** A clear image that holds the caption's place in the list until the caption is painted, so the pin badge keeps its own place and size. */
+const NO_CAPTION = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+
+// The pin badge sits on the disc's edge, at 45 degrees to the upper right of the centre.
+const PIN_BADGE_X = NODE_DIAMETER / 2 + (Math.SQRT1_2 * NODE_OUTER_DIAMETER) / 2 - PIN_BADGE_SIZE / 2;
+const PIN_BADGE_Y = NODE_DIAMETER / 2 - (Math.SQRT1_2 * NODE_OUTER_DIAMETER) / 2 - PIN_BADGE_SIZE / 2;
+
 export const STYLE: StylesheetJson = [
   {
     selector: 'node',
@@ -43,14 +52,14 @@ export const STYLE: StylesheetJson = [
       'border-width': NODE_OUTLINE_WIDTH,
       'border-color': NODE_OUTLINE,
       // the glyph sits inside the disc and the caption hangs below it, so the second image is drawn over the node, not clipped to it
-      'background-width': [`${GLYPH_SIZE}px`, `${CAPTION_WIDTH}px`],
-      'background-height': [`${GLYPH_SIZE}px`, `${CAPTION_HEIGHT}px`],
-      'background-position-x': ['50%', '50%'],
-      'background-position-y': ['50%', `${CAPTION_TOP}px`],
-      'background-fit': ['none', 'none'],
-      'background-repeat': ['no-repeat', 'no-repeat'],
-      'background-image-containment': ['inside', 'over'],
-      'background-clip': ['node', 'none'],
+      'background-width': [`${GLYPH_SIZE}px`, `${CAPTION_WIDTH}px`, `${PIN_BADGE_SIZE}px`],
+      'background-height': [`${GLYPH_SIZE}px`, `${CAPTION_HEIGHT}px`, `${PIN_BADGE_SIZE}px`],
+      'background-position-x': ['50%', '50%', `${PIN_BADGE_X}px`],
+      'background-position-y': ['50%', `${CAPTION_TOP}px`, `${PIN_BADGE_Y}px`],
+      'background-fit': ['none', 'none', 'none'],
+      'background-repeat': ['no-repeat', 'no-repeat', 'no-repeat'],
+      'background-image-containment': ['inside', 'over', 'over'],
+      'background-clip': ['node', 'none', 'none'],
       'bounds-expansion': CAPTION_WIDTH / 2,
       'overlay-opacity': 0,
     },
@@ -144,13 +153,20 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
   // The entity being dragged, where it was at the grab, and whether the drag was interrupted: a cancelled drag keeps putting the entity back until the library sees the release.
   let dragging: { readonly id: string; readonly start: Position; readonly tool: PointerTool; readonly pinned: ReadonlySet<string>; cancelled: boolean } | undefined;
   let drawnPinned: ReadonlySet<string> = new Set();
+  // The element the pointer is over and the element the canvas draws in, so the cursor follows a change of tool or pin under a pointer that does not move.
+  let surface: HTMLElement | undefined;
+  let hovered: string | undefined;
+  const showCursor = (): void => {
+    if (surface !== undefined) surface.style.cursor = hovered !== undefined && tool !== 'pan' && drawnPinned.has(hovered) ? 'not-allowed' : '';
+  };
   let reportFailure: () => void = () => undefined;
   // The ticket of the one viewport report that waits for its frame; a source change drops it, and only the frame that holds the current ticket reports.
   let pendingReport: number | undefined;
   let tickets = 0;
   const captions = new Map<string, string>();
+  const captionKey = (line1: string, line2: string): string => `${line1}\u0000${line2}`;
   const captionFor = (line1: string, line2: string): string => {
-    const key = `${line1}\u0000${line2}`;
+    const key = captionKey(line1, line2);
     const known = captions.get(key);
     if (known !== undefined) return known;
     const painted = painter(line1, line2);
@@ -166,6 +182,8 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
     glyphs.set(key, made);
     return made;
   };
+  const badge = pinBadgeUri();
+  const imagesFor = (iconKey: IconKey, pinned: boolean, caption?: string): string[] => [glyphFor(iconKey), ...(caption === undefined ? (pinned ? [NO_CAPTION] : []) : [caption]), ...(pinned ? [badge] : [])];
   // A caption is painted and encoded on a canvas of its own, which costs a millisecond or more, so an entity is drawn at once with its glyph and the captions follow in the next frames, a few at a time; the frame that adds many entities then stays short.
   let captionQueue: CaptionJob[] = [];
   let captionsScheduled = false;
@@ -182,7 +200,7 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
         const job = captionQueue.shift();
         const node = job === undefined ? undefined : cy.getElementById(job.id);
         if (job === undefined || node === undefined || node.empty() || node.data('lookKey') !== job.key) continue;
-        node.style('background-image', [glyphFor(job.iconKey), captionFor(job.line1, job.line2)]);
+        node.style('background-image', imagesFor(job.iconKey, job.pinned, captionFor(job.line1, job.line2)));
       }
     } catch {
       captionQueue = [];
@@ -243,6 +261,15 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
         pendingReport = undefined;
         report();
       };
+      surface = container;
+      created.on('mouseover', 'node', (event) => {
+        hovered = event.target.id();
+        showCursor();
+      });
+      created.on('mouseout', 'node', () => {
+        hovered = undefined;
+        showCursor();
+      });
       let ignoreTap = false;
       created.on('tap', (event) => {
         if (ignoreTap) {
@@ -363,6 +390,9 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
         dragging = undefined;
         gesture.cancel();
         overlay?.dispose();
+        hovered = undefined;
+        showCursor();
+        surface = undefined;
       };
       reportFailure = events.failed;
       options.onCore?.(created);
@@ -407,12 +437,14 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
             if (grabbable) node.grabify();
             else node.ungrabify();
           }
-          const lookKey = `${entity.look.iconKey}\u0000${entity.look.line1}\u0000${entity.look.line2}`;
+          const pinned = scene.pinned.has(entity.id);
+          const lookKey = `${entity.look.iconKey}\u0000${entity.look.line1}\u0000${entity.look.line2}\u0000${pinned}`;
           if (node.data('lookKey') !== lookKey) {
             node.data({ lookKey, caption: `${entity.look.line1}\n${entity.look.line2}` });
             if (paints) {
-              node.style('background-image', [glyphFor(entity.look.iconKey)]);
-              captionQueue.push({ id: entity.id, key: lookKey, iconKey: entity.look.iconKey, line1: entity.look.line1, line2: entity.look.line2 });
+              const known = captions.get(captionKey(entity.look.line1, entity.look.line2));
+              node.style('background-image', imagesFor(entity.look.iconKey, pinned, known));
+              if (known === undefined) captionQueue.push({ id: entity.id, key: lookKey, iconKey: entity.look.iconKey, line1: entity.look.line1, line2: entity.look.line2, pinned });
             }
           }
         }
@@ -433,6 +465,8 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
           if (element.data('selected') !== selected) element.data('selected', selected);
         }
       });
+      if (hovered !== undefined && !wantedEntities.has(hovered)) hovered = undefined;
+      showCursor();
       const replaced = hadEntities && scene.entities.length > 0 && retained === 0;
       if (scene.view === 'fit' && scene.entities.length > 0 && (!fitted || replaced)) {
         fitEntities(cy);

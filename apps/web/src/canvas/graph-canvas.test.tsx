@@ -569,6 +569,21 @@ describe('the selection on the graph canvas', () => {
   });
 });
 
+describe('the pinned entities in the canvas description', () => {
+  it('are counted after the selection, and not at all when none is pinned', () => {
+    const state = createClientState();
+    load(state, 3, 0);
+    view(state, stubFactory().create);
+    const canvas = screen.getByRole('img', { name: 'Graph canvas' });
+    const text = () => document.getElementById(canvas.getAttribute('aria-describedby') ?? '')?.textContent;
+    expect(text()).toBe('3 entities and 0 relationships loaded');
+    act(() => state.presentation.pin([nodeKey('n0'), nodeKey('n1')]));
+    expect(text()).toBe('3 entities and 0 relationships loaded; 2 pinned');
+    act(() => state.presentation.select([nodeKey('n2')]));
+    expect(text()).toBe('3 entities and 0 relationships loaded; 1 selected; 2 pinned');
+  });
+});
+
 describe('the labels of stored relationships on the graph canvas', () => {
   it('reach the renderer while an entity they join is selected, and go when the selection is cleared', () => {
     const state = createClientState();
