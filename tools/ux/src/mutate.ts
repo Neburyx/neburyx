@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { runTracked, stopTracked } from './children.ts';
+import { isStopping, runTracked, stopTracked } from './children.ts';
 import { restoreOnInterrupt } from './interrupt.ts';
 import { checkBrokenBinding, type TestRun } from './mutation.ts';
 
@@ -91,6 +91,8 @@ async function main(): Promise<void> {
     process.stdout.write(`The keyboard test passed, failed on its assertion with the Legend binding broken ("${outcome.broken.failures[0]?.message.split('\n')[0] ?? ''}"), and passed again once it was restored.\n`);
   } catch (error) {
     writeFileSync(SOURCE, original);
+    // an interrupt is being handled: it restores, builds and leaves with its own code, so the check does not leave first with an error of a run it stopped
+    if (isStopping()) await new Promise<never>(() => undefined);
     throw error;
   }
 }
