@@ -1147,7 +1147,7 @@ describe('the Cytoscape renderer in a container whose size changes', () => {
       expect(shown(renderer)).toEqual({ captions: [true, true], labels: [true] });
     });
 
-    it('keeps the caption and label of a selected entity and a selected relationship, and of the one under the pointer', () => {
+    it('keeps the caption and label of a selected entity and a selected relationship, and not of the one under the pointer, which the tip tells', () => {
       const { renderer, core } = inContainer((callback) => callback());
       renderer.draw(labelled({ selection: new Set(['a', 'ab']) }));
       core.zoom(CAPTION_MIN_ZOOM * 0.5);
@@ -1155,12 +1155,85 @@ describe('the Cytoscape renderer in a container whose size changes', () => {
       renderer.draw(labelled());
       expect(shown(renderer)).toEqual({ captions: [false, false], labels: [false] });
       core.getElementById('b').emit('mouseover');
-      expect(shown(renderer)).toEqual({ captions: [false, true], labels: [false] });
-      core.getElementById('b').emit('mouseout');
-      core.getElementById('ab').emit('mouseover');
-      expect(shown(renderer)).toEqual({ captions: [false, false], labels: [true] });
-      core.getElementById('ab').emit('mouseout');
       expect(shown(renderer)).toEqual({ captions: [false, false], labels: [false] });
+    });
+
+    describe('the readable caption of the element under the pointer', () => {
+      const tipOf = (container: HTMLElement): string[] | undefined => {
+        const tip = container.querySelector('.canvas-tip');
+        return tip === null ? undefined : [...tip.querySelectorAll('p')].map((line) => line.textContent ?? '');
+      };
+
+      it('shows an entity as its title and its type line, and a relationship as its label, below the limit, none for an entity at a zoom where captions are read, and none for a relationship without a label', () => {
+        const { renderer, container, core } = inContainer((callback) => callback());
+        renderer.draw(labelled());
+        const [first] = renderer.inspect().nodes;
+        core.zoom(CAPTION_MIN_ZOOM * 1.5);
+        core.getElementById('a').emit('mouseover');
+        expect(tipOf(container)).toBeUndefined();
+        core.getElementById('a').emit('mouseout');
+        core.zoom(CAPTION_MIN_ZOOM * 0.5);
+        core.getElementById('a').emit('mouseover');
+        expect(tipOf(container)).toEqual(first?.caption.split('\n'));
+        core.getElementById('a').emit('mouseout');
+        expect(tipOf(container)).toBeUndefined();
+        core.getElementById('ab').emit('mouseover');
+        expect(tipOf(container)).toEqual(['USES']);
+        core.getElementById('ab').emit('mouseout');
+        renderer.draw(two());
+        core.getElementById('ab').emit('mouseover');
+        expect(tipOf(container)).toBeUndefined();
+      });
+
+      it('keeps the title and the type line as they are, also when the title holds a line break, and hides when the canvas is resized', () => {
+        const { renderer, container, core } = inContainer((callback) => callback());
+        renderer.draw({ ...labelled(), entities: [{ id: 'a', position: { x: 0, y: 0 }, look: { iconKey: 'generic', line1: 'ACC\n1', line2: 'Alpha · Open' } }], relationships: [] });
+        core.zoom(CAPTION_MIN_ZOOM * 0.5);
+        core.getElementById('a').emit('mouseover');
+        expect(tipOf(container)).toEqual(['ACC\n1', 'Alpha · Open']);
+        sizes.resize(container, 500, 400);
+        expect(tipOf(container)).toBeUndefined();
+      });
+
+      it('is one at a time, whatever is selected, and is the page\'s own text, not drawn by the library, and not announced', () => {
+        const { renderer, container, core } = inContainer((callback) => callback());
+        renderer.draw(labelled({ selection: new Set(['a', 'b', 'ab']) }));
+        core.zoom(CAPTION_MIN_ZOOM * 0.5);
+        expect(container.querySelectorAll('.canvas-tip')).toHaveLength(0);
+        core.getElementById('a').emit('mouseover');
+        core.getElementById('b').emit('mouseover');
+        expect(container.querySelectorAll('.canvas-tip')).toHaveLength(1);
+        expect(container.querySelector('.canvas-tip')?.getAttribute('aria-hidden')).toBe('true');
+      });
+
+      it('goes with a pan, a zoom, a grab, the pointer leaving the canvas, the element being removed and the renderer being disposed, and comes back with the next element the pointer enters', () => {
+        const { renderer, container, core } = inContainer((callback) => callback());
+        renderer.draw(labelled());
+        core.zoom(CAPTION_MIN_ZOOM * 0.5);
+        for (const away of [() => core.panBy({ x: 5, y: 5 }), () => core.zoom(CAPTION_MIN_ZOOM * 0.4), () => core.getElementById('a').emit('grab'), () => core.emit('mouseout')]) {
+          core.getElementById('a').emit('mouseover');
+          expect(tipOf(container)).toBeDefined();
+          away();
+          expect(tipOf(container)).toBeUndefined();
+        }
+        core.getElementById('b').emit('mouseover');
+        expect(tipOf(container)).toBeDefined();
+        renderer.draw({ ...labelled(), entities: labelled().entities.filter((entity) => entity.id !== 'b'), relationships: [] });
+        expect(tipOf(container)).toBeUndefined();
+        core.getElementById('a').emit('mouseover');
+        expect(tipOf(container)).toBeDefined();
+        renderer.dispose();
+        expect(container.querySelector('.canvas-tip')).toBeNull();
+      });
+
+      it('is gone when the zoom comes back to where captions are read', () => {
+        const { renderer, container, core } = inContainer((callback) => callback());
+        renderer.draw(labelled());
+        core.zoom(CAPTION_MIN_ZOOM * 0.5);
+        core.getElementById('a').emit('mouseover');
+        core.zoom(CAPTION_MIN_ZOOM * 1.5);
+        expect(tipOf(container)).toBeUndefined();
+      });
     });
 
     it('hides the caption of an entity drawn while zoomed out, and shows it again when the zoom comes back', () => {
@@ -1173,15 +1246,15 @@ describe('the Cytoscape renderer in a container whose size changes', () => {
       expect(shown(renderer).captions).toEqual([true, true, true]);
     });
 
-    it('forgets the element under the pointer when the pointer leaves the canvas from it, so its caption does not stay out of the canvas', () => {
+    it('forgets the element under the pointer when the pointer leaves the canvas from it, so its tip does not stay out of the canvas', () => {
       const { renderer, container, core } = inContainer((callback) => callback());
       renderer.draw(labelled({ pinned: new Set(['a']) }));
       core.zoom(CAPTION_MIN_ZOOM * 0.5);
       core.getElementById('a').emit('mouseover');
-      expect(shown(renderer).captions[0]).toBe(true);
+      expect(container.querySelector('.canvas-tip')).not.toBeNull();
       expect(container.style.cursor).toBe('not-allowed');
       core.emit('mouseout');
-      expect(shown(renderer)).toEqual({ captions: [false, false], labels: [false] });
+      expect(container.querySelector('.canvas-tip')).toBeNull();
       expect(container.style.cursor).toBe('');
     });
 
@@ -1189,20 +1262,21 @@ describe('the Cytoscape renderer in a container whose size changes', () => {
       const { renderer, container, core } = inContainer((callback) => callback());
       renderer.draw(labelled({ pinned: new Set(['a']) }));
       core.zoom(CAPTION_MIN_ZOOM * 0.5);
+      const tips = () => container.querySelectorAll('.canvas-tip').length;
       core.getElementById('a').emit('mouseover');
       core.emit('mouseout');
-      expect(shown(renderer).captions).toEqual([false, false]);
+      expect(tips()).toBe(0);
       core.emit('mouseover');
-      expect(shown(renderer).captions).toEqual([true, false]);
+      expect(tips()).toBe(1);
       expect(container.style.cursor).toBe('not-allowed');
       core.getElementById('a').emit('mouseout');
       core.emit('mouseout');
       core.emit('mouseover');
-      expect(shown(renderer).captions).toEqual([false, false]);
+      expect(tips()).toBe(0);
       core.getElementById('ab').emit('mouseover');
       core.emit('mouseout');
       core.emit('mouseover');
-      expect(shown(renderer).labels).toEqual([true]);
+      expect(container.querySelector('.canvas-tip-title')?.textContent).toBe('USES');
     });
 
     it('forgets the element it would have taken up again when that element is removed or the renderer is disposed', () => {

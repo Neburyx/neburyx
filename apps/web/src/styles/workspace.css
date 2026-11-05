@@ -262,7 +262,44 @@
 .graph-canvas {
   position: absolute;
   inset: 0;
+  overflow: hidden;
   background: var(--color-canvas);
+}
+
+.canvas-tip {
+  position: absolute;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-6) var(--space-8);
+  box-sizing: border-box;
+  max-width: calc(100% - var(--space-8));
+  border: var(--border-width) solid var(--color-workspace-border);
+  border-radius: var(--radius-flyout);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-floating);
+  pointer-events: none;
+}
+
+.canvas-tip p {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvas-tip-title {
+  line-height: var(--line-height-menu-title);
+  color: var(--color-text-strong);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-semibold);
+}
+
+.canvas-tip-detail {
+  line-height: var(--line-height-caption);
+  color: var(--color-flyout-hint);
+  font-size: var(--font-size-caption);
 }
 
 .graph-canvas .selection-box {

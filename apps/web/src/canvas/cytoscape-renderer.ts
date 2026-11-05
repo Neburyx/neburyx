@@ -5,7 +5,8 @@ import { CAPTION_HEIGHT, CAPTION_TOP, CAPTION_WIDTH } from './caption-layout.js'
 import { paintCaption, type CaptionPainter } from './caption-painter.js';
 import { glyphUri } from './glyphs.js';
 import { pinBadgeUri } from './pin-badge.js';
-import { AGGREGATE_WIDTH, ARROW_GAP, CAPTION_MIN_ZOOM, ARROW_SHAPE, DASH_PATTERN, DERIVED_COLOR, DOT_PATTERN, EDGE_COLOR, EDGE_WIDTH, FIT_PADDING, GLYPH_COLOR, GLYPH_SIZE, LABEL_FILL, LABEL_FONT_SIZE, NODE_DIAMETER, NODE_FILL, NODE_OUTER_DIAMETER, NODE_OUTLINE, NODE_OUTLINE_WIDTH, PIN_BADGE_SIZE, PILL_FILL, PILL_OUTLINE_WIDTH, SELECTED_COLOR, SELECTED_HALO_COLOR, SELECTED_HALO_OPACITY, SELECTED_HALO_PADDING, SELECTED_LINE_EXTRA, SELECTED_OUTLINE_WIDTH } from './look.js';
+import { createHoverTip, type HoverTip } from './hover-tip.js';
+import { AGGREGATE_WIDTH, ARROW_GAP, CAPTION_MIN_ZOOM, ARROW_SHAPE, DASH_PATTERN, DERIVED_COLOR, DOT_PATTERN, EDGE_COLOR, EDGE_WIDTH, FIT_PADDING, GLYPH_COLOR, GLYPH_SIZE, LABEL_FILL, LABEL_FONT_SIZE, NODE_DIAMETER, NODE_FILL, NODE_OUTER_DIAMETER, NODE_OUTLINE, NODE_OUTLINE_WIDTH, PIN_BADGE_SIZE, PILL_FILL, PILL_OUTLINE_WIDTH, SELECTED_COLOR, SELECTED_HALO_COLOR, SELECTED_HALO_OPACITY, SELECTED_HALO_PADDING, SELECTED_LINE_EXTRA, SELECTED_OUTLINE_WIDTH, TIP_GAP } from './look.js';
 import type { RelationshipLook } from './relationship-look.js';
 import { createBoxGesture, type BoxOverlay } from './box-gesture.js';
 import { createBoxOverlay } from './box-overlay.js';
@@ -119,11 +120,11 @@ export const STYLE: StylesheetJson = [
       'text-border-opacity': 1,
     },
   },
-  // Below the zoom where captions are read an entity is drawn with its glyph and badge only, and a relationship without its label, except a selected one and the one under the pointer.
+  // Below the zoom where captions are read an entity is drawn with its glyph and badge only, and a relationship without its label, except a selected one; the one under the pointer is told in the page's own text (the hover tip).
   { selector: 'node.far', style: { 'background-image-opacity': [1, 0, 1] } },
-  { selector: 'node.far[?selected], node.far.hovered', style: { 'background-image-opacity': [1, 1, 1] } },
+  { selector: 'node.far[?selected]', style: { 'background-image-opacity': [1, 1, 1] } },
   { selector: 'edge.far', style: { label: '' } },
-  { selector: 'edge.far[?selected], edge.far.hovered', style: { label: 'data(label)' } },
+  { selector: 'edge.far[?selected]', style: { label: 'data(label)' } },
   { selector: 'edge[?selected]', style: { 'line-color': SELECTED_COLOR, 'target-arrow-color': SELECTED_COLOR, width: EDGE_WIDTH + SELECTED_LINE_EXTRA } },
   { selector: 'edge[?selected][?aggregate]', style: { width: AGGREGATE_WIDTH + SELECTED_LINE_EXTRA } },
 ];
@@ -165,6 +166,9 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
   let hovered: string | undefined;
   let remembered: string | undefined;
   let far = false;
+  let tip: HoverTip | undefined;
+  let tipHidden = false;
+  let syncTipNow: (() => void) | undefined;
   let farQueue: string[] = [];
   let farScheduled = false;
   const classifyFar = (cy: Core, count: number): void => {
@@ -308,17 +312,45 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
         report();
       };
       surface = container;
+      tip = container === undefined ? undefined : createHoverTip(container);
+      // Where the readable caption of the element under the pointer hangs, shown only below the zoom where the drawn captions are left out; it goes with a pan, a zoom or a grab, and comes back with the next element the pointer enters.
+      const syncTip = (): void => {
+        const element = created.elements('.hovered').first();
+        if (tip === undefined || tipHidden || !far || element.empty()) {
+          tip?.hide();
+          return;
+        }
+        if (element.isNode()) {
+          const title = String(element.data('title') ?? '');
+          const at = element.renderedPosition();
+          if (title === '') tip.hide();
+          else tip.show({ title, detail: String(element.data('detail') ?? '') }, { x: at.x, y: at.y + element.renderedHeight() / 2 + TIP_GAP });
+          return;
+        }
+        const label = String(element.data('label') ?? '');
+        const at = element.renderedMidpoint();
+        if (label === '') tip.hide();
+        else tip.show({ title: label, detail: undefined }, { x: at.x, y: at.y + TIP_GAP });
+      };
       const enter = (element: EdgeSingular | NodeSingular): void => {
         remembered = element.id();
         element.addClass('hovered');
         hovered = element.isNode() ? element.id() : undefined;
+        tipHidden = false;
+        syncTip();
         showCursor();
       };
+      const dropTip = (): void => {
+        tipHidden = true;
+        tip?.hide();
+      };
+      created.on('pan zoom grab', dropTip);
       created.on('mouseover', 'node, edge', (event) => enter(event.target));
       created.on('mouseout', 'node, edge', (event) => {
         event.target.removeClass('hovered');
         remembered = undefined;
         hovered = undefined;
+        syncTip();
         showCursor();
       });
       // The library tells an element it was left only when another one is entered, so the pointer leaving the canvas clears what shows, and the pointer coming back takes it up again.
@@ -326,6 +358,7 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
         if (event.target !== created) return;
         created.elements('.hovered').removeClass('hovered');
         hovered = undefined;
+        syncTip();
         showCursor();
       });
       created.on('mouseover', (event) => {
@@ -335,6 +368,7 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
         else remembered = undefined;
       });
       created.on('zoom', () => syncFar(created));
+      syncTipNow = syncTip;
       let ignoreTap = false;
       created.on('tap', (event) => {
         if (ignoreTap) {
@@ -441,7 +475,10 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
       container?.addEventListener('pointercancel', cancelBox);
       container?.addEventListener('pointercancel', cancelDrag);
       const stopFollowing = container === undefined ? undefined : followSize(container, () => {
-        if (core === created) created.resize();
+        if (core === created) {
+          created.resize();
+          dropTip();
+        }
       });
       window.addEventListener('blur', cancelBox);
       window.addEventListener('blur', cancelDrag);
@@ -455,6 +492,9 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
         dragging = undefined;
         gesture.cancel();
         overlay?.dispose();
+        tip?.dispose();
+        tip = undefined;
+        syncTipNow = undefined;
         hovered = undefined;
         remembered = undefined;
         showCursor();
@@ -506,7 +546,7 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
           const pinned = scene.pinned.has(entity.id);
           const lookKey = `${entity.look.iconKey}\u0000${entity.look.line1}\u0000${entity.look.line2}\u0000${pinned}`;
           if (node.data('lookKey') !== lookKey) {
-            node.data({ lookKey, caption: `${entity.look.line1}\n${entity.look.line2}` });
+            node.data({ lookKey, caption: `${entity.look.line1}\n${entity.look.line2}`, title: entity.look.line1, detail: entity.look.line2 });
             if (paints) {
               const known = captions.get(captionKey(entity.look.line1, entity.look.line2));
               node.style('background-image', imagesFor(entity.look.iconKey, pinned, known));
@@ -533,6 +573,7 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
         }
       });
       if (hovered !== undefined && !wantedEntities.has(hovered)) hovered = undefined;
+      syncTipNow?.();
       if (remembered !== undefined && cy.getElementById(remembered).empty()) remembered = undefined;
       showCursor();
       syncFar(cy, true);

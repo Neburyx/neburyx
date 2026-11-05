@@ -49,14 +49,14 @@ describe('the zoomed-out view', () => {
     return rule === undefined || !('style' in rule) ? undefined : Object.fromEntries(Object.getOwnPropertyNames(rule.style).map((name) => [name, Reflect.get(rule.style, name)]));
   };
 
-  it('hides the second image of an entity, its caption, below the limit, and shows it for a selected or hovered one, keeping the glyph and the badge', () => {
+  it('hides the second image of an entity, its caption, below the limit, and shows it for a selected one only, keeping the glyph and the badge', () => {
     expect(styleOf('node.far')).toEqual({ 'background-image-opacity': [1, 0, 1] });
-    expect(styleOf('node.far[?selected], node.far.hovered')).toEqual({ 'background-image-opacity': [1, 1, 1] });
+    expect(styleOf('node.far[?selected]')).toEqual({ 'background-image-opacity': [1, 1, 1] });
   });
 
-  it('leaves a relationship without its label below the limit, with a class and not the library\'s own size limit (which counts a rounded texture scale including the display\'s pixel ratio), and not for a selected or hovered one', () => {
+  it('leaves a relationship without its label below the limit, with a class and not the library\'s own size limit (which counts a rounded texture scale including the display\'s pixel ratio), and not for a selected one', () => {
     expect(styleOf('edge.far')).toEqual({ label: '' });
-    expect(styleOf('edge.far[?selected], edge.far.hovered')).toEqual({ label: 'data(label)' });
+    expect(styleOf('edge.far[?selected]')).toEqual({ label: 'data(label)' });
     expect(styleOf('edge')?.['min-zoomed-font-size']).toBeUndefined();
     expect(STYLE.some((rule) => 'style' in rule && Reflect.get(rule.style, 'min-zoomed-font-size') !== undefined)).toBe(false);
   });

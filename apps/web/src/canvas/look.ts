@@ -36,4 +36,6 @@ export const PIN_BADGE_FILL = NODE_FILL;
 export const CAPTION_FONT_SIZE = 12;
 /** The smallest size, in screen pixels, at which caption text is read; below it the captions and labels are left out. */
 export const MIN_LEGIBLE_FONT_SIZE = 7;
+/** How far under the disc or the middle of a line the readable caption of a hovered element hangs, in screen pixels. */
+export const TIP_GAP = 8;
 export const CAPTION_MIN_ZOOM = MIN_LEGIBLE_FONT_SIZE / CAPTION_FONT_SIZE;

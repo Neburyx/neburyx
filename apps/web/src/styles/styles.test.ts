@@ -49,6 +49,12 @@ describe('the stylesheets', () => {
     expect(base).toMatch(/\.page-shell main \{[^}]*gap: var\(--section-gap\);[^}]*padding: var\(--content-padding\) var\(--content-padding\) var\(--content-padding-bottom\);/s);
   });
 
+  it('bound the hover tip to the canvas and cut a long line with an ellipsis, so the tip never runs off the canvas element', () => {
+    const workspace = readFileSync(join(DIRECTORY, 'workspace.css'), 'utf8');
+    expect(workspace).toMatch(/\.canvas-tip \{[^}]*box-sizing: border-box;[^}]*max-width: calc\(100% - var\(--space-8\)\);/s);
+    expect(workspace).toMatch(/\.canvas-tip p \{[^}]*overflow: hidden;[^}]*text-overflow: ellipsis;[^}]*white-space: nowrap;/s);
+  });
+
   it('draw the keyboard focus outline from the token, and mark the current page by more than colour', () => {
     const base = readFileSync(join(DIRECTORY, 'base.css'), 'utf8');
     expect(base).toMatch(/:focus-visible \{[^}]*outline: var\(--focus-outline\);/s);
