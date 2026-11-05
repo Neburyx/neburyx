@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import ts from 'typescript';
+import { mayNameTarget } from './imports.js';
 import type { SourceFile } from './tree.js';
 
 export const WEB_SOURCE_ROOT = 'apps/web/src';
@@ -73,11 +74,37 @@ export function contractsExports(entryText: string): ReadonlySet<string> {
   return names;
 }
 
+/** A name that ends in one of the wire suffixes, found in text. */
+const WIRE_SUFFIX_IN_TEXT = /(?:Response|Request|Payload|Body|Dto)(?![\w$])/;
+const NAMES_THE_RENDERER = /cytoscape/;
+const NAMES_A_FETCH = /fetch/;
+const DECLARES_A_TYPE = /\b(?:interface|type)\b/;
+// a file can hold query text only if it holds one of the words a query starts with, in capitals; no word boundary, because a control escape in front of the word (`'\nMATCH (n)'`) leaves a letter beside it in the text, and LOAD alone, because the space of LOAD CSV can be an escape
+const NAMES_A_QUERY_WORD = /MATCH|MERGE|CREATE|RETURN|WITH|UNWIND|SET|REMOVE|DETACH|DELETE|CALL|LOAD/;
+
+function namePattern(names: ReadonlySet<string>): RegExp {
+  const escaped = [...names].map((name) => name.replace(/[$\\^.*+?()[\]{}|/-]/g, '\\$&'));
+  return new RegExp(`${WIRE_SUFFIX_IN_TEXT.source}|(?<![\\w$])(?:${escaped.join('|')})(?![\\w$])`);
+}
+
+/** The rules a file can break, by what its text holds; a file whose text holds none of the words a rule looks for (or an escape that could spell one) is not parsed for it, so it is not parsed at all. Reads the same files, with the same findings, as a full parse. */
+function rulesFor(text: string, tests: boolean, wireNames: RegExp): { readonly renderer: boolean; readonly fetch: boolean; readonly wire: boolean; readonly query: boolean } {
+  return {
+    renderer: mayNameTarget(text, NAMES_THE_RENDERER),
+    fetch: !tests && mayNameTarget(text, NAMES_A_FETCH),
+    wire: !tests && mayNameTarget(text, DECLARES_A_TYPE) && mayNameTarget(text, wireNames),
+    query: !tests && mayNameTarget(text, NAMES_A_QUERY_WORD),
+  };
+}
+
 export function checkWebClient(files: readonly SourceFile[], contracts: ReadonlySet<string>): WebViolation[] {
   const violations: WebViolation[] = [];
+  const wireNames = namePattern(contracts);
   for (const source of files) {
     if (!source.path.startsWith(`${WEB_SOURCE_ROOT}/`)) continue;
     const tests = isTestFile(source.path);
+    const may = rulesFor(source.text, tests, wireNames);
+    if (!may.renderer && !may.fetch && !may.wire && !may.query) continue;
     const file = ts.createSourceFile(source.path, source.text, ts.ScriptTarget.Latest, true, kindOf(source.path));
     const insideClient = source.path.startsWith(`${WEB_API_FOLDER}/`);
     const visit = (node: ts.Node): void => {

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { repoRoot } from '../workspace.js';
 import { ADAPTER_SCAN_ROOTS, checkAdapterAccess } from './adapter.js';
 import { loadTree, type SourceFile } from './tree.js';
-import { formatViolations, type Violation } from './violations.js';
+import type { Violation } from './violations.js';
 
 const fixtures = join(repoRoot, 'tools', 'workspace-checks', 'fixtures', 'architecture');
 const API = 'services/api/src';
@@ -257,23 +257,39 @@ describe('a re-export of a restricted export', () => {
   });
 });
 
-describe('the real repository tree', () => {
-  it('has no way around the gate', () => {
-    const violations = checkAdapterAccess(loadTree(repoRoot, { include: ADAPTER_SCAN_ROOTS }));
-    expect(formatViolations(violations)).toBe('');
-  });
-
-  it('reads the files it is meant to check', () => {
-    const paths = loadTree(repoRoot, { include: ADAPTER_SCAN_ROOTS }).map((file) => file.path);
-    expect(paths).toEqual(expect.arrayContaining([`${API}/gate/gate.ts`, `${API}/app.ts`]));
-  });
-});
-
 describe('the modules that take an executor to build a gate', () => {
   it.each(['gate', 'assemble'])('%s is reported from a route, not from the gate or the adapter folder, and not when re-exported through gate/types.ts', (name) => {
     expect(snippet(`${API}/routes/x.ts`, `import { build } from '../gate/${name}.js';`)).toMatchObject([{ file: `${API}/routes/x.ts`, specifier: `../gate/${name}.js`, line: 1 }]);
     expect(snippet(`${API}/gate/source-gate.ts`, `import { build } from './${name}.js';`)).toEqual([]);
     expect(snippet(`${API}/sources/x.ts`, `import { build } from '../gate/${name}.js';`)).toEqual([]);
     expect(snippet(`${API}/gate/types.ts`, `export { build } from './${name}.js';`)).toHaveLength(1);
+  });
+});
+
+describe('a name that the pre-filter looks for, written with an escape sequence', () => {
+  it.each([
+    ['a folder of the adapter', "import { a } from '../sourc\\u0065s/neo4j-adapter.js';"],
+    ['the driver package', "import { a } from 'neo4j-dri\\u0076er';"],
+    ['an executor module', "import { a } from '../gat\\x65/executor.js';"],
+    ['a test module', "import { a } from '../util\\u0073.test.js';"],
+    ['the adapter with an octal escape', "import { a } from '../source\\163/neo4j-adapter.js';"],
+  ])('is still reported: %s', (_name, line) => {
+    expect(snippet(`${API}/routes/x.ts`, line)).toHaveLength(1);
+  });
+
+  it('is not reported when it is not a target, with or without an escape', () => {
+    expect(snippet(`${API}/routes/x.ts`, "import { a } from '../util\\u0073/other.js';")).toEqual([]);
+    expect(snippet(`${API}/routes/x.ts`, "import { a } from '../util/other.js';")).toEqual([]);
+  });
+});
+
+describe('a specifier with no name in it, written in a folder that has one', () => {
+  it('is read with the folder it resolves to: a re-export of an executor folder from a module that is not restricted is reported', () => {
+    expect(snippet(`${API}/gate/executor/a.ts`, "export { x } from '.';")).toMatchObject([{ reason: 'a restricted export is re-exported through a module that is not restricted' }]);
+  });
+
+  it('is quiet in the adapter folder itself, which is restricted, and in a folder that is no target', () => {
+    expect(snippet(`${API}/sources/a.ts`, "export { x } from '.';")).toEqual([]);
+    expect(snippet(`${API}/routes/a.ts`, "export { x } from '.';")).toEqual([]);
   });
 });

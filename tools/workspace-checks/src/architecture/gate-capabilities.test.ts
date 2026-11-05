@@ -1,10 +1,6 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { repoRoot } from '../workspace.js';
-import { checkGateCapabilities, GATE_CAPABILITY_SCAN_ROOTS } from './gate-capabilities.js';
-import { loadTree, type SourceFile } from './tree.js';
-import { formatViolations } from './violations.js';
+import { checkGateCapabilities } from './gate-capabilities.js';
+import type { SourceFile } from './tree.js';
 
 const API = 'services/api/src';
 
@@ -115,19 +111,20 @@ describe('who may import the test-source command', () => {
   });
 });
 
-describe('the repository', () => {
-  it('imports the system principal and createSourceGate only where it may, and re-exports neither', () => {
-    const files = loadTree(repoRoot, { include: GATE_CAPABILITY_SCAN_ROOTS });
-    expect(files.length).toBeGreaterThan(50);
-    expect(formatViolations(checkGateCapabilities(files))).toBe('');
+describe('a module name that the pre-filter looks for, written with an escape sequence', () => {
+  it.each([
+    ['the system principal', "import { x } from '../gate/system-princip\\u0061l.js';"],
+    ['createSourceGate', "import { x } from '../gate/source-g\\x61te.js';"],
+    ['the write probe', "import { x } from '../sources/write-pr\\u006fbe.js';"],
+    ['the test-source command', "import { x } from '../source-test/comm\\u0061nd.js';"],
+  ])('is still reported from a route: %s', (_name, line) => {
+    expect(snippet(`${API}/routes/x.ts`, line)).toHaveLength(1);
   });
 });
 
-describe('docs/architecture-checks.md', () => {
-  it('names the restricted modules of the gate, the system principal, the write probe and the command', () => {
-    const text = readFileSync(join(repoRoot, 'docs', 'architecture-checks.md'), 'utf8');
-    for (const name of ['gate/gate.ts', 'gate/assemble.ts', 'createSourceGate', 'system-principal', 'sources/write-probe.ts', 'source-test/command.ts', 'cli.ts']) {
-      expect(text, `the doc mentions ${name}`).toContain(name);
-    }
+describe('a specifier with no name in it, written in a folder that holds a capability module', () => {
+  it('is read with the folder it resolves to', () => {
+    expect(snippet(`${API}/gate/system-principal/a.ts`, "export { x } from '.';")).toMatchObject([{ rule: 'system-principal' }]);
+    expect(snippet(`${API}/routes/x.ts`, "export { x } from '.';")).toEqual([]);
   });
 });

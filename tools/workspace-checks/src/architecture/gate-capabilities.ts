@@ -1,5 +1,5 @@
 import { ADAPTER_SCAN_ROOTS } from './adapter.js';
-import { readImports } from './imports.js';
+import { mayNameTarget, readImports } from './imports.js';
 import { isFileModule, isInside, resolveRelative } from './resolve.js';
 import type { SourceFile } from './tree.js';
 import type { Rule, Violation } from './violations.js';
@@ -25,6 +25,9 @@ export const CAPABILITIES: readonly Capability[] = [
   { rule: 'test-source-command', module: `${API_SRC}/source-test/command`, allowedFolders: [], allowedFiles: [`${API_SRC}/cli.ts`], what: 'the test-source command, which holds the write probe,' },
 ];
 
+/** A specifier that reaches one of the modules above holds one of these words unless an escape spells it, and a specifier that holds none (`'.'`) reaches the folder it is written in, so the importer's own path counts too; a file with none of them is not parsed. */
+const NAMES_A_CAPABILITY = /system-principal|source-gate|write-probe|source-test|command/;
+
 function isTestCode(path: string): boolean {
   return TEST_FILE.test(path) || isInside(path, `${API_SRC}/testing`);
 }
@@ -34,11 +37,11 @@ function mayImport(capability: Capability, path: string): boolean {
 }
 
 /** The modules that hold the system principal, the system runner and the write probe are imported only where the table says, and never re-exported. */
-export function checkGateCapabilities(files: readonly SourceFile[]): Violation[] {
+export function checkGateCapabilities(files: readonly SourceFile[], read: typeof readImports = readImports): Violation[] {
   const violations: Violation[] = [];
   for (const file of files) {
-    if (isTestCode(file.path)) continue;
-    for (const ref of readImports(file.path, file.text)) {
+    if (isTestCode(file.path) || !(NAMES_A_CAPABILITY.test(file.path) || mayNameTarget(file.text, NAMES_A_CAPABILITY))) continue;
+    for (const ref of read(file.path, file.text)) {
       const resolved = resolveRelative(file.path, ref.specifier);
       if (resolved === undefined) continue;
       for (const capability of CAPABILITIES) {

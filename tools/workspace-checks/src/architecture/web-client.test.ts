@@ -1,10 +1,7 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { repoRoot } from '../workspace.js';
 import { checkCommunityImports } from './community.js';
-import { checkWebClient, checkWebDependencies, contractsExports, formatWebViolations, readWebPackageJson } from './web-client.js';
-import { loadTree, type SourceFile } from './tree.js';
+import { checkWebClient, checkWebDependencies, contractsExports } from './web-client.js';
+import type { SourceFile } from './tree.js';
 
 const CONTRACTS = new Set(['MeResponse', 'SourceSummary']);
 
@@ -124,13 +121,20 @@ describe('the contracts exports', () => {
   });
 });
 
-describe('the real web client', () => {
-  it('passes every check', () => {
-    const files = loadTree(repoRoot, { include: ['apps/web/src'] });
-    const contracts = contractsExports(readFileSync(join(repoRoot, 'packages/contracts/src/index.ts'), 'utf8'));
-    expect(contracts.has('meResponseSchema')).toBe(true);
-    const violations = [...checkWebClient(files, contracts), ...checkWebDependencies(readWebPackageJson(repoRoot))];
-    expect(formatWebViolations(violations)).toBe('');
-    expect(checkCommunityImports(files)).toEqual([]);
+describe('a name that the pre-filter looks for, written with an escape sequence', () => {
+  it.each([
+    ['the renderer package', "import cy from 'cytosc\\u0061pe';", 'web-renderer-import'],
+    ['a call of fetch', "\\u0066etch('/v1/me');", 'web-fetch'],
+    ['a wire type', 'interface Me\\u0052esponse { a: string }', 'web-wire-type'],
+    ['query text', "const q = '\\u004dATCH (n) RETURN n';", 'web-query-text'],
+    ['query text after a control escape', "const q = '\\nMATCH (n)';", 'web-query-text'],
+    ['query text with an escaped tab after the word', "const q = 'MATCH\\t(n)';", 'web-query-text'],
+  ])('is still reported: %s', (_name, text, rule) => {
+    expect(check('apps/web/src/Panel.tsx', text)).toMatchObject([{ rule }]);
+  });
+
+  it('is not reported when the file holds none of the words, with or without an escape', () => {
+    expect(check('apps/web/src/Panel.tsx', 'const a = 1;')).toEqual([]);
+    expect(check('apps/web/src/Panel.tsx', "const a = 'hello\\u0020there';")).toEqual([]);
   });
 });

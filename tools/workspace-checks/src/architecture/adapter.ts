@@ -1,4 +1,4 @@
-import { readImports, type ImportRef } from './imports.js';
+import { mayNameTarget, readImports, type ImportRef } from './imports.js';
 import { isFileModule, isInside, isInsideDirectory, resolveRelative, withoutExtension } from './resolve.js';
 import type { SourceFile } from './tree.js';
 import type { Violation } from './violations.js';
@@ -16,6 +16,9 @@ const EXECUTOR_MODULES: readonly string[] = [`${GATE_ZONE}/executor`, `${GATE_ZO
 const DRIVER_PACKAGE = /^neo4j-driver(?:\/|$)/;
 const TEST_FILE = /\.test\.[cm]?[jt]sx?$/;
 const TEST_MODULE = /\.test$/;
+
+/** A specifier that reaches a target holds one of these words (the driver package, a folder or module of the table above, a test module) unless an escape spells it, and a specifier that holds none (`'.'`, `'..'`) reaches the folder it is written in, so the importer's own path counts too; a file with none of them is not parsed. */
+const NAMES_A_TARGET = /neo4j-driver|sources|testing|\.test|executor|execute|deps|gate|assemble|write-probe/;
 
 type Target = 'driver' | 'sources' | 'executor' | 'test-code' | 'write-probe';
 
@@ -56,11 +59,11 @@ function reasonFor(file: string, ref: ImportRef, target: Target): string | undef
   return undefined;
 }
 
-export function checkAdapterAccess(files: readonly SourceFile[]): Violation[] {
+export function checkAdapterAccess(files: readonly SourceFile[], read: typeof readImports = readImports): Violation[] {
   const violations: Violation[] = [];
   for (const file of files) {
-    if (isTestCode(file.path)) continue;
-    for (const ref of readImports(file.path, file.text)) {
+    if (isTestCode(file.path) || !(NAMES_A_TARGET.test(file.path) || mayNameTarget(file.text, NAMES_A_TARGET))) continue;
+    for (const ref of read(file.path, file.text)) {
       const target = targetOf(file.path, ref.specifier);
       if (target === undefined) continue;
       const reason = reasonFor(file.path, ref, target);

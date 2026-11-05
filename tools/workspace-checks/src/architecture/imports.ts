@@ -219,6 +219,19 @@ export function mayNameTarget(text: string, name: RegExp): boolean {
   return name.test(text) || NAME_SPELLING_ESCAPE.test(text);
 }
 
+/** A reader of imports that parses a file once however many checks ask for it, for a run of several checks over one tree. */
+export function createImportReader(): typeof readImports {
+  const parsed = new Map<string, ImportRef[]>();
+  return (fileName, text) => {
+    const key = `${fileName}\0${text}`;
+    const known = parsed.get(key);
+    if (known !== undefined) return known;
+    const refs = readImports(fileName, text);
+    parsed.set(key, refs);
+    return refs;
+  };
+}
+
 export function readImports(fileName: string, text: string): ImportRef[] {
   const source = ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, true, scriptKindOf(fileName));
   const declared = declaredNames(source);
