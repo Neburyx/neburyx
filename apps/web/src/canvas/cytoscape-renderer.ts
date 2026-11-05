@@ -33,7 +33,7 @@ const edgeData = (look: RelationshipLook) => ({ aggregate: look.aggregate, origi
 
 
 // Cytoscape keeps the object it is given as the node's position and writes to it, so every position is copied in.
-const STYLE: StylesheetJson = [
+export const STYLE: StylesheetJson = [
   {
     selector: 'node',
     style: {
@@ -52,6 +52,7 @@ const STYLE: StylesheetJson = [
       'background-image-containment': ['inside', 'over'],
       'background-clip': ['node', 'none'],
       'bounds-expansion': CAPTION_WIDTH / 2,
+      'overlay-opacity': 0,
     },
   },
   {
@@ -73,6 +74,7 @@ const STYLE: StylesheetJson = [
       'text-background-color': LABEL_FILL,
       'text-background-opacity': 1,
       'text-background-padding': '3px',
+      'overlay-opacity': 0,
     },
   },
   {

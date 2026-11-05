@@ -1,5 +1,5 @@
 import type { Position } from '../state/presentation-state.js';
-import { BOX_HEIGHT, BOX_WIDTH, FORCE_STEPS, IDEAL_LENGTH, NEIGHBOUR_REACH, SEARCH_STEP, SEED_OFFSET, SPIRAL_STEP } from './layout-constants.js';
+import { BOX_HEIGHT, BOX_WIDTH, FORCE_STEPS, IDEAL_LENGTH, NEIGHBOUR_REACH, REPULSION_REACH, SEARCH_STEP, SEED_OFFSET, SPIRAL_STEP } from './layout-constants.js';
 
 export interface PlacementInput {
   readonly ids: readonly string[];
@@ -135,7 +135,7 @@ function seeds(steps: readonly Step[], known: ReadonlyMap<string, Position>, nei
   return current;
 }
 
-function relax(ids: readonly string[], movable: readonly string[], known: ReadonlyMap<string, Position>, neighbours: ReadonlyMap<string, readonly string[]>, current: Map<string, Position>): void {
+function relax(ids: readonly string[], movable: readonly string[], known: ReadonlyMap<string, Position>, neighbours: ReadonlyMap<string, readonly string[]>, current: Map<string, Position>, pushReach: number): void {
   const index = new Map(ids.map((id, at) => [id, at]));
   const xs = new Float64Array(ids.length);
   const ys = new Float64Array(ids.length);
@@ -160,7 +160,9 @@ function relax(ids: readonly string[], movable: readonly string[], known: Readon
         if (other === at) continue;
         const gapX = hereX - (xs[other] ?? 0);
         const gapY = hereY - (ys[other] ?? 0);
-        const push = squared / Math.max(gapX * gapX + gapY * gapY, 1);
+        const apart = gapX * gapX + gapY * gapY;
+        if (apart > pushReach * pushReach) continue;
+        const push = squared / Math.max(apart, 1);
         dx += gapX * push;
         dy += gapY * push;
       }
@@ -185,6 +187,28 @@ function relax(ids: readonly string[], movable: readonly string[], known: Readon
     });
   }
   for (const at of moving) current.set(ids[at] ?? '', { x: xs[at] ?? 0, y: ys[at] ?? 0 });
+}
+
+/** The cells of the block of isolated entities are a box apart and a hair more, so that a sum that comes out a hair short never reads as an overlap. */
+const CELL_WIDTH = BOX_WIDTH + 0.01;
+const CELL_HEIGHT = BOX_HEIGHT + 0.01;
+
+const isolatedAmong = (ids: readonly string[], neighbours: ReadonlyMap<string, readonly string[]>): Set<string> => new Set(ids.filter((id) => (neighbours.get(id) ?? []).length === 0));
+
+/** A compact block, roughly square in model units, to the right of the connected part and level with its top, one box per cell and in the loaded order, filled column by column; a cell another box holds goes to the nearest free spot to its right. */
+function blockRight(grid: BoxGrid, isolated: readonly string[], among: readonly Position[]): Map<string, Position> {
+  const placed = new Map<string, Position>();
+  if (isolated.length === 0) return placed;
+  const rows = Math.ceil(Math.sqrt((isolated.length * BOX_WIDTH) / BOX_HEIGHT));
+  const left = among.length === 0 ? 0 : among.reduce((edge, point) => Math.max(edge, point.x), -Infinity) + CELL_WIDTH;
+  const top = among.length === 0 ? 0 : among.reduce((edge, point) => Math.min(edge, point.y), Infinity);
+  isolated.forEach((id, index) => {
+    const wanted = { x: left + Math.floor(index / rows) * CELL_WIDTH, y: top + (index % rows) * CELL_HEIGHT };
+    const spot = grid.free(wanted) ? wanted : (nearestFree(grid, wanted, (candidate) => candidate.x >= left, SEARCH_LIMIT) ?? wanted);
+    grid.add(spot);
+    placed.set(id, spot);
+  });
+  return placed;
 }
 
 const spiral = (index: number): Position => ({ x: SPIRAL_STEP * Math.sqrt(index + 1) * Math.cos(index * GOLDEN_ANGLE), y: SPIRAL_STEP * Math.sqrt(index + 1) * Math.sin(index * GOLDEN_ANGLE) });
@@ -228,13 +252,14 @@ export function placeNewEntities({ ids, links, positions }: PlacementInput): Map
   const placed = new Map<string, Position>();
   if (free.length === 0) return placed;
   const neighbours = neighboursOf(ids, links);
-  const steps = sequenceOf(free, known, neighbours);
   const anchored = known.size > 0;
+  const isolated = anchored ? new Set<string>() : isolatedAmong(free, neighbours);
+  const steps = sequenceOf(free.filter((id) => !isolated.has(id)), known, neighbours);
   const bounds = anchored ? boundsOf([...known.values()]) : undefined;
   const rowStart = bounds === undefined ? 0 : bounds.maxX + BOX_WIDTH;
   const row = (index: number): Position => (bounds === undefined ? spiral(index) : { x: rowStart + index * BOX_WIDTH, y: bounds.minY });
   const current = seeds(steps, known, neighbours, row);
-  relax(ids, steps.filter(({ kind }) => kind !== 'loner' || !anchored).map(({ id }) => id), known, neighbours, current);
+  relax(ids.filter((id) => !isolated.has(id)), steps.filter(({ kind }) => kind !== 'loner' || !anchored).map(({ id }) => id), known, neighbours, current, Infinity);
   const grid = new BoxGrid();
   for (const position of known.values()) grid.add(position);
   let rightEdge = bounds?.maxX ?? 0;
@@ -253,6 +278,7 @@ export function placeNewEntities({ ids, links, positions }: PlacementInput): Map
     placed.set(id, spot);
     rightEdge = Math.max(rightEdge, spot.x);
   }
+  for (const [id, spot] of blockRight(grid, free.filter((id) => isolated.has(id)), [...placed.values()])) placed.set(id, spot);
   return new Map(free.map((id) => [id, placed.get(id) ?? { x: 0, y: 0 }]));
 }
 
@@ -274,19 +300,23 @@ export function layoutEntities({ ids, links, positions, pinned }: LayoutInput): 
   const free = ids.filter((id) => !fixed.has(id));
   if (free.length === 0) return new Map();
   const neighbours = neighboursOf(ids, links);
-  const steps = sequenceOf(free, fixed, neighbours);
+  const isolatedAll = isolatedAmong(ids, neighbours);
+  const isolated = new Set(free.filter((id) => isolatedAll.has(id)));
+  const movers = free.filter((id) => !isolated.has(id));
+  const steps = sequenceOf(movers, fixed, neighbours);
   const current = seeds(steps, fixed, neighbours, spiral);
-  relax(ids, free, fixed, neighbours, current);
-  const before = free.flatMap((id) => positions.get(id) ?? []);
+  relax(ids.filter((id) => !isolatedAll.has(id)), movers, fixed, neighbours, current, REPULSION_REACH);
+  const connectedFixed = [...fixed].filter(([id]) => !isolatedAll.has(id)).map(([, position]) => position);
   const centreShift = (): Position => {
-    if (before.length === 0) return { x: 0, y: 0 };
-    const was = centroid(before);
-    const now = centroid(free.map((id) => current.get(id) ?? { x: 0, y: 0 }));
+    const was = centroid(free.flatMap((id) => positions.get(id) ?? []));
+    const connected = [...movers.map((id) => current.get(id) ?? { x: 0, y: 0 }), ...connectedFixed];
+    const block = blockRight(new BoxGrid(), [...isolated], connected);
+    const now = centroid([...movers.map((id) => current.get(id) ?? { x: 0, y: 0 }), ...block.values()]);
     return { x: was.x - now.x, y: was.y - now.y };
   };
-  if (fixed.size > 0) {
+  if (fixed.size > 0 && movers.length > 0 && free.some((id) => positions.has(id))) {
     const by = centreShift();
-    for (const id of free) current.set(id, shifted(current.get(id) ?? { x: 0, y: 0 }, by));
+    for (const id of movers) current.set(id, shifted(current.get(id) ?? { x: 0, y: 0 }, by));
   }
   const grid = new BoxGrid();
   for (const position of fixed.values()) grid.add(position);
@@ -297,10 +327,13 @@ export function layoutEntities({ ids, links, positions, pinned }: LayoutInput): 
     grid.add(spot);
     cleared.set(id, spot);
   }
+  const among = [...cleared.values(), ...[...fixed].filter(([id]) => (neighbours.get(id) ?? []).length > 0).map(([, position]) => position)];
+  for (const [id, spot] of blockRight(grid, free.filter((id) => isolated.has(id)), among)) cleared.set(id, spot);
   if (fixed.size === 0) {
-    const was = before.length === 0 ? undefined : centroid(before);
+    const was = free.flatMap((id) => positions.get(id) ?? []);
+    const wasCentroid = was.length === 0 ? undefined : centroid(was);
     const now = centroid([...cleared.values()]);
-    const by = was === undefined ? { x: 0, y: 0 } : { x: was.x - now.x, y: was.y - now.y };
+    const by = wasCentroid === undefined ? { x: 0, y: 0 } : { x: wasCentroid.x - now.x, y: wasCentroid.y - now.y };
     for (const [id, position] of cleared) cleared.set(id, shifted(position, by));
   }
   return new Map(free.map((id) => [id, cleared.get(id) ?? { x: 0, y: 0 }]));

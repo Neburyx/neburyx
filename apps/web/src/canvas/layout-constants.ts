@@ -1,6 +1,8 @@
 export const BOX_WIDTH = 160;
 export const BOX_HEIGHT = 94;
 export const NEIGHBOUR_REACH = 400;
+/** Entities further apart than this do not push each other in a layout run, so a spread-out graph does not keep growing: the push follows the same reach as a neighbour's placement. */
+export const REPULSION_REACH = 400;
 export const IDEAL_LENGTH = 220;
 export const FORCE_STEPS = 60;
 export const SEARCH_STEP = 20;

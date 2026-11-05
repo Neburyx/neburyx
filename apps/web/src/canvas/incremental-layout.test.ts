@@ -342,3 +342,140 @@ describe('laying the unpinned entities out again', () => {
     expectNoOverlap(laid, ids.slice(10));
   });
 });
+
+describe('entities joined to nothing', () => {
+  const connectedAndIsolated = (isolatedCount: number) => {
+    const connected = graph(40, 70, 3);
+    const joined = new Set(connected.links.flat());
+    const reached = connected.ids.filter((id) => joined.has(id));
+    const isolated = Array.from({ length: isolatedCount }, (_unused, index) => `solo${index}`);
+    return { ids: [...reached, ...isolated], links: connected.links.filter(([from, to]) => from !== to), reached, isolated };
+  };
+  const box = (positions: ReadonlyMap<string, Position>, ids: readonly string[]) => {
+    const points = ids.flatMap((id) => positions.get(id) ?? []);
+    return { x1: Math.min(...points.map((p) => p.x)), x2: Math.max(...points.map((p) => p.x)), y1: Math.min(...points.map((p) => p.y)), y2: Math.max(...points.map((p) => p.y)) };
+  };
+  const expectBlockRightOf = (positions: ReadonlyMap<string, Position>, reached: readonly string[], isolated: readonly string[]): void => {
+    const connected = box(positions, reached);
+    const block = box(positions, isolated);
+    expect(block.x1, 'the block starts a box width right of the connected part').toBeGreaterThanOrEqual(connected.x2 + BOX_WIDTH - 1e-6);
+    expect(block.y1, 'level with the top of the connected part').toBeCloseTo(connected.y1, 6);
+    const rows = Math.ceil(Math.sqrt((isolated.length * BOX_WIDTH) / BOX_HEIGHT));
+    expect(block.y2 - block.y1).toBeLessThanOrEqual((rows - 1) * BOX_HEIGHT + 1);
+    expect(block.x2 - block.x1).toBeLessThanOrEqual((Math.ceil(isolated.length / rows) - 1) * BOX_WIDTH + 1);
+  };
+
+  it('puts them, in a layout run, in a compact block to the right of the connected entities and level with their top, and no box on another', () => {
+    const { ids, links, reached, isolated } = connectedAndIsolated(27);
+    const start = placedAll({ ids, links, positions: new Map() });
+    const laid = new Map([...start, ...layoutEntities({ ids, links, positions: start, pinned: new Set() })]);
+    expectBlockRightOf(laid, reached, isolated);
+    expectNoOverlap(laid, ids);
+  });
+
+  it('puts them, in the first placement of a graph, in the same block, where it used to scatter them in a ring around the others', () => {
+    const { ids, links, reached, isolated } = connectedAndIsolated(27);
+    const placed = placeNewEntities({ ids, links, positions: new Map() });
+    expectBlockRightOf(placed, reached, isolated);
+    expectNoOverlap(placed, ids);
+  });
+
+  it('does not let them widen the picture: the whole is the connected part and the block, and the picture is no wider than the two side by side', () => {
+    const { ids, links, reached, isolated } = connectedAndIsolated(27);
+    const start = placedAll({ ids, links, positions: new Map() });
+    const laid = new Map([...start, ...layoutEntities({ ids, links, positions: start, pinned: new Set() })]);
+    const whole = box(laid, ids);
+    const connected = box(laid, reached);
+    const rows = Math.ceil(Math.sqrt((isolated.length * BOX_WIDTH) / BOX_HEIGHT));
+    const columns = Math.ceil(isolated.length / rows);
+    expect(whole.x2 - whole.x1).toBeLessThanOrEqual(connected.x2 - connected.x1 + BOX_WIDTH + (columns - 1) * BOX_WIDTH + 1);
+    expect(whole.y2 - whole.y1).toBeLessThanOrEqual(Math.max(connected.y2 - connected.y1, (rows - 1) * BOX_HEIGHT) + 1);
+  });
+
+  it('leaves a pinned isolated entity where it is, keeps it out of the connected part\'s box, and puts no block box on it', () => {
+    const { ids, links, reached, isolated } = connectedAndIsolated(9);
+    const start = placedAll({ ids, links, positions: new Map() });
+    const pinnedId = isolated[0] ?? '';
+    const held = { x: 5000, y: -4000 };
+    const positions = new Map(start).set(pinnedId, held);
+    const laid = new Map([...positions, ...layoutEntities({ ids, links, positions, pinned: new Set([pinnedId]) })]);
+    expect(laid.get(pinnedId)).toEqual(held);
+    expectBlockRightOf(laid, reached, isolated.filter((id) => id !== pinnedId));
+    expectNoOverlap(laid, ids.filter((id) => id !== pinnedId), laid);
+  });
+
+  it('keeps the connected part where its pinned entities are and still puts the block to its right', () => {
+    const { ids, links, reached, isolated } = connectedAndIsolated(12);
+    const start = placedAll({ ids, links, positions: new Map() });
+    const pinned = new Set(reached.slice(0, 5));
+    const laid = new Map([...start, ...layoutEntities({ ids, links, positions: start, pinned })]);
+    for (const id of pinned) expect(laid.get(id)).toEqual(start.get(id));
+    const connected = box(laid, reached);
+    expect(box(laid, isolated).x1).toBeGreaterThanOrEqual(connected.x2 + BOX_WIDTH - 1e-6);
+    expectNoOverlap(laid, ids.filter((id) => !pinned.has(id)));
+  });
+
+  it('lays out a graph of nothing but isolated entities as the block alone, from the origin', () => {
+    const isolated = Array.from({ length: 10 }, (_unused, index) => `solo${index}`);
+    const laid = layoutEntities({ ids: isolated, links: [], positions: new Map(), pinned: new Set() });
+    expectNoOverlap(laid, isolated);
+    const spread = box(laid, isolated);
+    const rows = Math.ceil(Math.sqrt((isolated.length * BOX_WIDTH) / BOX_HEIGHT));
+    expect(spread.y2 - spread.y1).toBeLessThanOrEqual((rows - 1) * BOX_HEIGHT + 1);
+    expect(laid.size).toBe(10);
+  });
+
+  it('gives the same block for the same input, whatever positions the isolated entities had', () => {
+    const { ids, links, isolated } = connectedAndIsolated(15);
+    const start = placedAll({ ids, links, positions: new Map() });
+    const scattered = new Map(start);
+    isolated.forEach((id, index) => scattered.set(id, { x: index * 1000, y: -index * 700 }));
+    const first = layoutEntities({ ids, links, positions: start, pinned: new Set() });
+    const second = layoutEntities({ ids, links, positions: scattered, pinned: new Set() });
+    const anchor = isolated[0] ?? '';
+    const relative = (laid: ReadonlyMap<string, Position>, id: string) => ({ x: (laid.get(id)?.x ?? NaN) - (laid.get(anchor)?.x ?? NaN), y: (laid.get(id)?.y ?? NaN) - (laid.get(anchor)?.y ?? NaN) });
+    for (const id of isolated) {
+      expect(relative(second, id).x).toBeCloseTo(relative(first, id).x, 4);
+      expect(relative(second, id).y).toBeCloseTo(relative(first, id).y, 4);
+    }
+  });
+
+  it('gives the same picture when only the positions of the isolated entities change, with a pinned entity: the centre follows all the unpinned entities, not the connected ones', () => {
+    const ids = ['p', 'a', 'b', 's'];
+    const links: Link[] = [['p', 'a'], ['a', 'b']];
+    const first = new Map<string, Position>([['p', { x: 0, y: 0 }], ['a', { x: 200, y: 0 }], ['b', { x: 400, y: 0 }], ['s', { x: 2000, y: 0 }]]);
+    const swapped = new Map(first).set('a', { x: 2000, y: 0 }).set('s', { x: 200, y: 0 });
+    const pinned = new Set(['p']);
+    const one = layoutEntities({ ids, links, positions: first, pinned });
+    const two = layoutEntities({ ids, links, positions: swapped, pinned });
+    for (const id of ['a', 'b', 's']) {
+      expect(two.get(id)?.x, id).toBeCloseTo(one.get(id)?.x ?? NaN, 6);
+      expect(two.get(id)?.y, id).toBeCloseTo(one.get(id)?.y ?? NaN, 6);
+    }
+  });
+
+  it('does not let a pinned isolated entity push the connected ones, while it stays an obstacle they are cleared from', () => {
+    const ids = ['a', 'b', 'p'];
+    const links: Link[] = [['a', 'b']];
+    const old = new Map<string, Position>([['a', { x: -110, y: 0 }], ['b', { x: 110, y: 0 }], ['p', { x: 0, y: 350 }]]);
+    const without = layoutEntities({ ids: ['a', 'b'], links, positions: old, pinned: new Set() });
+    const withPinned = layoutEntities({ ids, links, positions: old, pinned: new Set(['p']) });
+    for (const id of ['a', 'b']) {
+      expect(withPinned.get(id)?.x, id).toBeCloseTo(without.get(id)?.x ?? NaN, 6);
+      expect(withPinned.get(id)?.y, id).toBeCloseTo(without.get(id)?.y ?? NaN, 6);
+    }
+    for (const id of ['a', 'b']) expect(overlaps(withPinned.get(id) ?? { x: NaN, y: NaN }, { x: 0, y: 350 }), id).toBe(false);
+  });
+
+  it('keeps linked entities close: the median length of a relationship after a layout run is within the reach a new entity is placed at', () => {
+    const { ids, links } = graph(120, 180, 1);
+    const start = placedAll({ ids, links, positions: new Map() });
+    const laid = new Map([...start, ...layoutEntities({ ids, links, positions: start, pinned: new Set() })]);
+    const lengths = links.filter(([from, to]) => from !== to).map(([from, to]) => {
+      const a = laid.get(from);
+      const b = laid.get(to);
+      return a === undefined || b === undefined ? 0 : Math.hypot(a.x - b.x, a.y - b.y);
+    }).sort((a, b) => a - b);
+    expect(lengths[Math.floor(lengths.length / 2)]).toBeLessThanOrEqual(NEIGHBOUR_REACH);
+  });
+});
