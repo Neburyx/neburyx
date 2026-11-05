@@ -159,13 +159,14 @@ test.describe('below the caption limit', () => {
 
 /**
  * The longest frame allowed while the drawing crosses the caption limit at 4x CPU. With the laptop profile (the default) it is 100 ms, the product figure on the recorded laptop, where a crossing
- * takes about 50 ms here. With the runner profile (`NEBURYX_UX_PROFILE=runner`, set by the ux job) it is 300 ms, chosen from five runs of the ux job on the GitHub runner (2 vCPU), 20 measurements of the longest frame, which land on
+ * takes about 50 ms here. With the runner profile (`NEBURYX_UX_PROFILE=runner`, set by the ux job) it is 300 ms, chosen from seven runs of the ux job on the GitHub runner (2 vCPU), 28 measurements of the longest frame (the first 20 are listed), which land on
  * steps of 16.7 ms:
  *   1440 by the zoom controls  150, 133.4, 116.7, 183.3, 133.3
  *   1440 by the wheel          150.1, 183.3, 116.6, 166.7, 150
  *   1280 by the zoom controls  100, 116.6, 83.4, 133.4, 133.3
  *   1280 by the wheel          116.7, 116.8, 100, 166.6, 150.1
- * so the runner is 2 to 4 times slower than the laptop, and its worst frame was 183.3 ms. 300 ms is 18 frames: 1.6 times the worst of the 20, and the next step after
+ * and two more runs of the job, with the browser installed without the apt fonts: 149.9, 150.1, 133.3, 116.8 and 166.7, 166.6, 133.3, 116.7 (all within the range above), so the runner
+ * is 2 to 4 times slower than the laptop, and its worst frame in the 28 measurements was 183.3 ms. 300 ms is 18 frames: 1.6 times the worst of the 28, and the next step after
  * 283 ms. It stays clear of the noise seen, and it fails a crossing that takes about twice as long as the slowest crossing seen, or a laptop crossing of about 150 ms
  * (three times the 50 ms here), as `pnpm --filter @neburyx/ux-tests mutate crossing` shows with a 400 ms stall. It does not catch a crossing that gets slower by less than about 100 ms on the
  * runner; the laptop run with the 100 ms limit is the finer check, and the one that holds the product figure.

@@ -11,9 +11,9 @@ import { CAPTION_LIMIT } from './support/workspace.ts';
 /**
  * The lowest frame rates the guard accepts, at 4x CPU throttle, 300 elements (120 entities, 180 relationships), 1280 × 720, drawn below the caption limit.
  * With the laptop profile (the default) these are the target's floor: median 55 fps, 5th percentile 30 fps. With the runner profile (`NEBURYX_UX_PROFILE=runner`,
- * set by the ux job) the median is the same and the 5th percentile is 25 fps, chosen from five runs of the ux job on the GitHub runner, 15 benchmark runs:
- *   medians                 59.9 in all 15 runs
- *   5th percentiles         59.5 or 59.9 in 14 runs, and 30.1 in one (the slowest job of the five)
+ * set by the ux job) the median is the same and the 5th percentile is 25 fps, chosen from seven runs of the ux job on the GitHub runner, 21 benchmark runs:
+ *   medians                 59.9 in all 21 runs
+ *   5th percentiles         59.5 or 59.9 in 20 runs, and 30.1 in one (the slowest job of the first five)
  * Frame rates come in steps (60, 30 and 20 fps for one, two and three refreshes to a frame), and the 5th percentile is the rate that 5 per cent of the frames are at or
  * under, so 30.1 says that the frame at the 5th percentile took two refreshes, not that only 5 per cent did. With the laptop's 30 the runner's 30.1 passes by a hair, and a
  * second slow run would fail a healthy build, so the runner's limit is 25, between the two- and the three-refresh steps. What the two figures guarantee together: more than
