@@ -66,6 +66,9 @@ describe(`the server of the dev Neo4j server`, () => {
 });
 
 describe('rows from a Neo4j container', () => {
+  // This test and the one after it are the guard for the end of a cut-short read (see `endRead` in executor.ts): the first read of a process that the row limit cuts short, with the
+  // source still streaming, used to leave a connection whose next BEGIN was never answered, so the test after it timed out at its deadline. That happened at every try in a fresh
+  // process and never in a process that had already done it once, so the guard is these two tests in a file of their own process, in this order, first; do not put a read before them.
   it('answers exactly the row limit for a query that keeps producing, without waiting for it, and the transaction leaves the server', async () => {
     const traceId = `cap-${Date.now()}`;
     const started = Date.now();

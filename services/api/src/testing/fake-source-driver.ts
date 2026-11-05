@@ -29,6 +29,8 @@ export interface FakeBehaviour {
   readonly laterBeginHang?: boolean;
   readonly beginGate?: Promise<void>;
   readonly sessionClose?: CloseBehaviour;
+  /** What the rollback of a transaction does; absent, it answers. */
+  readonly rollback?: CloseBehaviour;
   readonly driverClose?: CloseBehaviour;
 }
 
@@ -37,6 +39,9 @@ export interface FakeSession {
   readonly begins: TransactionConfig[];
   readonly queries: { readonly cypher: string; readonly parameters: Params }[];
   closeCalls: number;
+  rollbackCalls: number;
+  /** What was done to the transaction and the session, in order: `rollback` and `close`. */
+  readonly events: string[];
   observer?: RowObserver;
 }
 
@@ -90,7 +95,7 @@ export function fakeDrivers(initial: FakeBehaviour = {}): FakeDrivers {
       fake.drivers.push(driver);
       return Object.assign({
         session: (config: SessionConfig) => {
-          const session: FakeSession = { config, begins: [], queries: [], closeCalls: 0 };
+          const session: FakeSession = { config, begins: [], queries: [], closeCalls: 0, rollbackCalls: 0, events: [] };
           driver.sessions.push(session);
           return Object.assign(
             {
@@ -104,6 +109,11 @@ export function fakeDrivers(initial: FakeBehaviour = {}): FakeDrivers {
                 if (fake.behaviour.beginGate !== undefined) await fake.behaviour.beginGate;
                 if (fake.behaviour.beginError !== undefined) throw fake.behaviour.beginError;
                 return {
+                  rollback: () => {
+                    session.rollbackCalls += 1;
+                    session.events.push('rollback');
+                    return settle(fake.behaviour.rollback);
+                  },
                   run: (cypher: string, parameters: Params) => {
                     session.queries.push({ cypher, parameters });
                     return {
@@ -151,6 +161,7 @@ export function fakeDrivers(initial: FakeBehaviour = {}): FakeDrivers {
               },
               close: () => {
                 session.closeCalls += 1;
+                session.events.push('close');
                 return settle(fake.behaviour.sessionClose);
               },
             },

@@ -3,7 +3,7 @@ import type { Clock, GateLogger, Row } from '../gate/types.js';
 import type { ExecuteCall, ExecuteOutcome, ReadExecutor } from '../gate/executor.js';
 import type { SourceModel } from '../mapping/model.js';
 import { credentialsOf, driverSettingsOf } from './credentials.js';
-import { neo4jDriverFactory, type DriverFactory, type SourceDriver, type SourceSession } from './driver.js';
+import { neo4jDriverFactory, type DriverFactory, type SourceDriver, type SourceSession, type SourceTransaction } from './driver.js';
 import { AdapterError, classify, serverCodeOf } from './errors.js';
 import { prepareParameters } from './parameters.js';
 import { OPERATIONS, type CancelResult } from './operations.js';
@@ -21,6 +21,12 @@ export interface Neo4jExecutor extends ReadExecutor {
   cancel(operationId: string): Promise<CancelResult>;
   close(): Promise<void>;
 }
+
+/**
+ * The longest the end of a read waits for the rollback of its transaction before it closes the session anyway. A rollback on a healthy source answers in a few milliseconds;
+ * one that has not answered by now never delays the answer to the caller (the answer is given before the cleanup starts), only the close of the session, which must happen.
+ */
+const ROLLBACK_WAIT_MS = 1000;
 
 const unavailable = (reason: UnavailableReason): ExecuteOutcome => ({ status: 'unavailable', reason });
 const TIMEOUT: ExecuteOutcome = { status: 'timeout' };
@@ -67,6 +73,30 @@ export function createNeo4jExecutor(options: Neo4jExecutorOptions): Neo4jExecuto
     return driver;
   }
 
+  /**
+   * Ends a read's session: rolls its transaction back first, so that the driver cancels a result that is still streaming, waiting at most `ROLLBACK_WAIT_MS` for the answer,
+   * and then closes the session, whatever the rollback did (an answer, a failure, nothing). A transaction that the server has already ended answers the rollback with a
+   * failure, which is the normal end of a read that failed and is not reported.
+   */
+  async function endRead(source: SourceModel, session: SourceSession, transaction: SourceTransaction | undefined): Promise<void> {
+    if (transaction !== undefined) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const waited = new Promise<'slow'>((resolve) => {
+        timer = setTimeout(() => resolve('slow'), ROLLBACK_WAIT_MS);
+      });
+      const rolledBack = Promise.resolve()
+        .then(() => transaction.rollback())
+        .then(
+          () => 'done' as const,
+          () => 'done' as const,
+        );
+      const result = await Promise.race([rolledBack, waited]);
+      clearTimeout(timer);
+      if (result === 'slow') options.logger.warn({ event: 'source.rollback_slow', sourceId: source.id }, 'source rollback is taking too long');
+    }
+    await session.close();
+  }
+
   function discard(source: SourceModel, driver: SourceDriver): void {
     if (drivers.get(source.id) === driver) drivers.delete(source.id);
     cleanUp(source, () => driver.close());
@@ -78,6 +108,7 @@ export function createNeo4jExecutor(options: Neo4jExecutorOptions): Neo4jExecuto
       let settled = false;
       let guard: ReturnType<typeof setTimeout> | undefined;
       let session: SourceSession | undefined;
+      let transaction: SourceTransaction | undefined;
 
       const settle = (finish: () => void): void => {
         if (settled) return;
@@ -85,7 +116,8 @@ export function createNeo4jExecutor(options: Neo4jExecutorOptions): Neo4jExecuto
         clearTimeout(guard);
         finish();
         const toClose = session;
-        if (toClose !== undefined) cleanUp(source, () => toClose.close());
+        const toRollBack = transaction;
+        if (toClose !== undefined) cleanUp(source, () => endRead(source, toClose, toRollBack));
       };
       const fail = (error: unknown): void => {
         settle(() => {
@@ -111,9 +143,10 @@ export function createNeo4jExecutor(options: Neo4jExecutorOptions): Neo4jExecuto
         const timeout = Math.max(1, Math.floor(Math.min(call.timeoutMs, remainingMs)));
         session
           .beginTransaction({ timeout, metadata: { traceId: call.traceId, templateId: call.templateId, templateVersion: call.templateVersion } })
-          .then((transaction) => {
+          .then((begun) => {
             if (settled) return;
-            transaction.run(call.cypher, prepareParameters(call.parameters, call.integerParameters ?? [])).subscribe({
+            transaction = begun;
+            begun.run(call.cypher, prepareParameters(call.parameters, call.integerParameters ?? [])).subscribe({
               onNext: (row) => {
                 if (settled) return;
                 rows.push(row);

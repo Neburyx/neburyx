@@ -11,6 +11,7 @@ describe('rows within the row limit', () => {
     useClock();
     const { executor, fake } = rig({ rows: ROWS, endless: true });
     expect(await executor.execute(callFor())).toEqual({ status: 'rows', rows: ROWS.slice(0, 3) });
+    await vi.advanceTimersByTimeAsync(0);
     expect(fake.drivers[0]?.sessions[0]?.closeCalls).toBe(1);
   });
 

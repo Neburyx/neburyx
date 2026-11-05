@@ -20,6 +20,11 @@ export interface TransactionConfig {
 
 export interface SourceTransaction {
   run(cypher: string, parameters: Params): RowStream;
+  /**
+   * Rolls the transaction back, and with it cancels the results that are still streaming. A session close does not: it sends a reset, but the driver has already asked for the next
+   * batch of such a result and goes on asking, so a reply that arrives after the reset reaches a connection that has gone back to the pool.
+   */
+  rollback(): Promise<void>;
 }
 
 export interface SessionConfig {
@@ -97,6 +102,7 @@ export const neo4jDriverFactory: DriverFactory = (settings) => {
                 });
               },
             }),
+            rollback: () => open.rollback(),
           };
         },
         close: () => session.close(),
