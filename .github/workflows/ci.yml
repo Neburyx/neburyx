@@ -114,3 +114,25 @@ jobs:
       - run: corepack enable
       - run: pnpm install --frozen-lockfile
       - run: pnpm test:compose
+
+  ux:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm --filter @neburyx/web build:ux
+      - run: pnpm --filter @neburyx/renderer-spike build:node
+      - run: pnpm --filter @neburyx/ux-tests check:profile
+      # The cache key names the Playwright version in package.json of tools/ux; change both together.
+      - uses: actions/cache@v4.2.3
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-1.64.1-${{ runner.os }}
+      - run: pnpm --filter @neburyx/ux-tests exec playwright install --with-deps chromium
+      - run: pnpm test:ux

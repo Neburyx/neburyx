@@ -8,7 +8,8 @@
     "test": "vitest run --passWithNoTests",
     "dev": "vite",
     "spike": "pnpm build && tsc -p tsconfig.node.json && node dist/node/runner/main.js",
-    "bundle-size": "tsc -p tsconfig.node.json && node dist/node/runner/bundle-size.js"
+    "bundle-size": "tsc -p tsconfig.node.json && node dist/node/runner/bundle-size.js",
+    "build:node": "tsc -p tsconfig.node.json"
   },
   "dependencies": {
     "@neburyx/contracts": "workspace:*",

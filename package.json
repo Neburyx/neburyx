@@ -19,7 +19,8 @@
     "test:compose": "pnpm --filter @neburyx/contracts --filter @neburyx/test-containers --filter @neburyx/test-neo4j build && pnpm --filter @neburyx/api test:compose && pnpm --filter @neburyx/dev test:compose",
     "check:driver": "pnpm --filter @neburyx/test-containers build && pnpm --filter @neburyx/driver-check check",
     "dev": "pnpm --filter @neburyx/dev build && node tools/dev/dist/main.js up",
-    "dev:down": "pnpm --filter @neburyx/dev build && node tools/dev/dist/main.js down"
+    "dev:down": "pnpm --filter @neburyx/dev build && node tools/dev/dist/main.js down",
+    "test:ux": "pnpm --filter @neburyx/ux-tests test:ux"
   },
   "devDependencies": {
     "eslint": "10.14.0",

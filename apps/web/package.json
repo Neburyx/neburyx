@@ -6,7 +6,8 @@
     "dev": "vite",
     "build": "tsc --noEmit -p tsconfig.json && vite build",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "build:ux": "tsc --noEmit -p tsconfig.json && vite build --mode ux --outDir dist-ux"
   },
   "devDependencies": {
     "@testing-library/dom": "10.4.2",

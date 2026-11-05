@@ -26,6 +26,7 @@ safe on very high-degree nodes. The repo is **pre-release**: the build tooling, 
 | `tools/demo-graph` | Synthetic demo graph generator |
 | `tools/dev` | The `pnpm dev` command: runs the app locally against the demo graphs (see `docs/run-locally.md`) |
 | `tools/renderer-spike` | Harness that draws one synthetic graph with two graph renderers and measures frame rate, node movement on incremental layout, grouping and keyboard access (see its README) |
+| `tools/ux` | Browser tests (Playwright, Chromium) of the web app on a built copy with a small synthetic API: shells, keyboard paths, canvas behaviour, a benchmark guard (see its README) |
 | `tools/driver-check` | By-hand check of how `neo4j-driver` and Neo4j behave on a transaction timeout and on a close mid-query (see its README) |
 | `docs/` | Public technical documentation |
 
@@ -79,6 +80,7 @@ Node 24 LTS (`.nvmrc`; with nvm, `nvm use`) and pnpm through Corepack, at the ve
 | Compose tests (brings the Community stack up and upgrades it, and brings the demo stack up; need Docker, take minutes) | `pnpm test:compose` |
 | Run the app locally against the demo graphs, with the API and web app in watch mode (needs Docker; `pnpm dev:down` removes what it started) | `pnpm dev` |
 | Run the demo (the product and two synthetic demo graphs; see `deploy/demo/README.md`) | `cd deploy/demo && cp .env.example .env`, fill it in, then `docker compose up --wait` |
+| Browser (UX) tests, after `pnpm build`, `pnpm --filter @neburyx/web build:ux` and `pnpm --filter @neburyx/renderer-spike build:node` (Chromium; `NEBURYX_UX_CHROME` may name an installed Chrome) | `pnpm test:ux` |
 | Driver timeout check (starts Neo4j containers; needs Docker, takes about ten minutes; not in CI) | `pnpm check:driver` |
 | Regenerate `packages/contracts/openapi.json` | `pnpm --filter @neburyx/contracts generate` |
 
@@ -95,7 +97,7 @@ To create or upgrade the database (after `pnpm build`): `DATABASE_MIGRATION_URL=
 The API listens on `127.0.0.1:8080` unless `NEBURYX_HOST` and `NEBURYX_PORT` say otherwise, and logs a
 warning if started outside a container on a non-loopback address.
 
-CI runs lint, type-check, unit tests, the contract test, the integration tests, the build, the image build (both platforms) and the compose test as separate jobs (`.github/workflows/ci.yml`). The demo
+CI runs lint, type-check, unit tests, the contract test, the integration tests, the build, the image build (both platforms), the compose test and the browser tests (`ux`) as separate jobs (`.github/workflows/ci.yml`). The demo
 environment is in `deploy/demo`.
 
 ## Conventions
