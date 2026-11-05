@@ -9,6 +9,7 @@ const stepSchema = z.object({
   uses: z.string().optional(),
   run: z.string().optional(),
   with: z.record(z.string(), z.string()).optional(),
+  'timeout-minutes': z.number().optional(),
 });
 const jobSchema = z.object({
   'runs-on': z.string(),
@@ -131,12 +132,18 @@ describe('CI workflow', () => {
       'pnpm --filter @neburyx/renderer-spike build:node',
       'pnpm --filter @neburyx/ux-tests check:profile',
       'actions/cache',
-      'pnpm --filter @neburyx/ux-tests exec playwright install --with-deps chromium',
+      'pnpm --filter @neburyx/ux-tests exec playwright install chromium',
       'pnpm test:ux',
       'actions/upload-artifact',
     ]);
     expect(steps.find((step) => step.uses?.startsWith('actions/cache'))?.with).toEqual({ path: '~/.cache/ms-playwright', key: `playwright-${playwrightVersion}-\${{ runner.os }}` });
     expect(Object.keys(rootScripts)).toContain('test:ux');
+  });
+
+  it('installs the browser without the system packages, whose apt download of fonts took ten minutes on a slow mirror, and gives the install a limit of its own', () => {
+    const install = (workflow.jobs['ux']?.steps ?? []).find((step) => step.run?.includes('playwright install'));
+    expect(install?.run).not.toContain('--with-deps');
+    expect(install?.['timeout-minutes']).toBe(10);
   });
 });
 

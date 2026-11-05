@@ -134,7 +134,9 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-1.64.1-${{ runner.os }}
-      - run: pnpm --filter @neburyx/ux-tests exec playwright install --with-deps chromium
+      # no --with-deps: the runner image has the libraries, and that option downloads fonts through apt on every run, which took ten minutes on a slow mirror; a missing library fails the browser start
+      - run: pnpm --filter @neburyx/ux-tests exec playwright install chromium
+        timeout-minutes: 10
       - run: pnpm test:ux
       # the figures of the benchmark guard are in the log of the previous step and in the attachments of its test
       - uses: actions/upload-artifact@v4.6.2
