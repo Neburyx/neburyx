@@ -18,6 +18,12 @@ describe('the allowlist of a source', () => {
     expect([...allowlist.properties].sort()).toEqual(['extRef', 'gadgetId', 'linkId', 'madeAt', 'personId', 'recordId', 'title']);
   });
 
+  it('keeps the label, not the display name, as the label the reads of the source name, and does not take the display name for a property', () => {
+    const allowlist = allowlistFromMapping(sourceWith({ entities: [{ type: 'gadget', label: 'Gadget', stable_id: 'gadgetId', display: { name: 'Fancy gadget `x`' } }], relationships: [] }));
+    expect([...allowlist.entityLabels]).toEqual([['gadget', 'Gadget']]);
+    expect([...allowlist.properties]).toEqual(['gadgetId']);
+  });
+
   it.each([
     ['a backtick', 'bad`id'],
     ['a backslash', 'bad\\id'],

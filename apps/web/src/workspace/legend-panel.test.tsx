@@ -29,6 +29,14 @@ const names = (types: number): string[] => Array.from({ length: types }, (_, ind
 const entries = (container: HTMLElement) => [...container.querySelectorAll('.legend-type')];
 
 describe('the legend\'s entity types', () => {
+  it('list each type by its display name, not by its label', () => {
+    const profile = testProfile('s', ['kind-a', 'kind-b']);
+    const [first, second] = profile.entityTypes;
+    if (first === undefined || second === undefined) throw new Error('the test profile has no entity types');
+    const { container } = renderPanel({ ...profile, entityTypes: [{ ...first, label: 'RawLabel', displayName: 'Shown name' }, second] });
+    expect(entries(container).map((entry) => entry.textContent)).toEqual(['Shown name', 'KIND-B']);
+  });
+
   it('are headed ENTITY TYPES under the panel\'s heading', () => {
     renderPanel(testProfile('s'));
     expect(screen.getByRole('heading', { name: 'Legend' })).toBeTruthy();
@@ -151,7 +159,7 @@ describe('the legend\'s entity types while the profile is read', () => {
     expect(entries(forty.container)).toHaveLength(40);
     forty.unmount();
     const base = types(['kind-a', 'kind-b']);
-    const same: SourceProfile = { ...base, entityTypes: base.entityTypes.map((type) => ({ ...type, label: 'SAME' })) };
+    const same: SourceProfile = { ...base, entityTypes: base.entityTypes.map((type) => ({ ...type, label: 'SAME', displayName: 'SAME' })) };
     const twice = controlled('s', { phase: 'ready', data: same });
     expect(rows(twice.container)).toEqual(['SAME', 'SAME']);
   });
@@ -159,7 +167,7 @@ describe('the legend\'s entity types while the profile is read', () => {
   it('puts a very long label in the entry as it is, for the stylesheet to wrap', () => {
     const base = types(['kind-a']);
     const long = 'W'.repeat(60);
-    const { container } = controlled('s', { phase: 'ready', data: { ...base, entityTypes: base.entityTypes.map((type) => ({ ...type, label: long })) } });
+    const { container } = controlled('s', { phase: 'ready', data: { ...base, entityTypes: base.entityTypes.map((type) => ({ ...type, label: long, displayName: long })) } });
     expect(rows(container)).toEqual([long]);
   });
 });

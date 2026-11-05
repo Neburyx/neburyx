@@ -70,6 +70,23 @@ describe('entity and relationship types as written', () => {
     expect(loaded).toMatchObject({ title: '{id}', display: { icon: 'generic', keyProperties: ['id', 'code', 'status'] } });
   });
 
+  it('keeps a display name beside the label: the name is what is shown, the label stays the one the nodes of the source carry', () => {
+    const entity = { type: 'node_c', label: 'NodeC', stable_id: 'id', display: { name: 'Node C' } };
+    const [loaded] = firstSource(load(baseSource({ entities: [entity], relationships: undefined }))).entities;
+    expect(loaded).toMatchObject({ label: 'NodeC', display: { name: 'Node C' } });
+  });
+
+  it('leaves the display name unset when the mapping gives none, and when it gives no display at all', () => {
+    const [bare, withDisplay] = firstSource(load(baseSource({ entities: [{ type: 'a', label: 'A', stable_id: 'id' }, { type: 'b', label: 'B', stable_id: 'id', display: { icon: 'document' } }], relationships: undefined }))).entities;
+    expect(bare?.display.name).toBeUndefined();
+    expect(withDisplay?.display.name).toBeUndefined();
+  });
+
+  it('refuses an empty display name, as it refuses an empty label', () => {
+    expectRefused(baseSource({ entities: [{ type: 'a', label: 'A', stable_id: 'id', display: { name: '' } }] }), 'sources[0].entities[0].display.name', 'must not be empty');
+    expectRefused(baseSource({ entities: [{ type: 'a', label: '', stable_id: 'id' }] }), 'sources[0].entities[0].label', 'must not be empty');
+  });
+
   it('caps the default key properties at three', () => {
     const entity = { type: 'node_c', label: 'NodeC', stable_id: 'id', search: ['a', 'b', 'c', 'd'] };
     const [loaded] = firstSource(load(baseSource({ entities: [entity], relationships: undefined }))).entities;

@@ -56,7 +56,7 @@ export function generateFixtureGraph(profile: SourceProfile, seed: number): Fixt
   const nodes: GraphNode[] = [];
   for (let index = 0; index < nodeTotal; index += 1) {
     const entityType = profile.entityTypes[index % profile.entityTypes.length];
-    if (entityType !== undefined) nodes.push(nodeAt(profile, entityType.type, entityType.label, entityType.stateProperty, index));
+    if (entityType !== undefined) nodes.push(nodeAt(profile, entityType.type, entityType.displayName, entityType.stateProperty, index));
   }
   const ofType = (type: string): readonly GraphNode[] => nodes.filter((node) => node.ref.entityType === type);
   const usable = (from: string, to: string): boolean => ofType(from).length > 0 && ofType(to).length > 0 && (from !== to || ofType(from).length > 1);
@@ -140,7 +140,7 @@ export function generateAddition(profile: SourceProfile, existing: readonly Grap
     const candidates = profile.entityTypes.map((_unused, step) => profile.entityTypes[(index + step) % profile.entityTypes.length]);
     const chosen = candidates.flatMap((entityType) => {
       if (entityType === undefined) return [];
-      const added = nodeAt(profile, entityType.type, entityType.label, entityType.stateProperty, number);
+      const added = nodeAt(profile, entityType.type, entityType.displayName, entityType.stateProperty, number);
       const options = optionsFor(entityType.type, added.ref.stableId);
       return options.length === 0 ? [] : [{ entityType, added, options }];
     })[0];

@@ -25,7 +25,7 @@ const fullEntities: Json[] = [
     pii: ['name'],
     filterable: ['status'],
     link: 'https://records.example.test/PRIVATE_LINK_PATH/{id}',
-    display: { icon: 'document', key_properties: ['status', 'size'], state_property: 'status' },
+    display: { name: 'Node A', icon: 'document', key_properties: ['status', 'size'], state_property: 'status' },
   },
   { type: 'node_b', label: 'NodeB', stable_id: 'key' },
 ];
@@ -83,6 +83,7 @@ describe('the profile of a configured source', () => {
     expect(body.entityTypes[0]).toEqual({
       type: 'node_a',
       label: 'NodeA',
+      displayName: 'Node A',
       icon: 'document',
       title: 'Item {name}',
       titleUsesPii: true,
@@ -99,6 +100,7 @@ describe('the profile of a configured source', () => {
     expect(body.entityTypes[1]).toEqual({
       type: 'node_b',
       label: 'NodeB',
+      displayName: 'NodeB',
       icon: 'generic',
       title: '{key}',
       titleUsesPii: false,
@@ -108,6 +110,15 @@ describe('the profile of a configured source', () => {
       filterable: [],
       pii: [],
     });
+  });
+
+  it('gives the display name of an entity type that has none the label, and keeps the label for the reads of the source', async () => {
+    const mapping = mappingOf(fullSource());
+    const model = mapping.sources[0]?.entities ?? [];
+    expect(model.map((entity) => entity.label)).toEqual(['NodeA', 'NodeB']);
+    expect(model.map((entity) => entity.display.name)).toEqual(['Node A', undefined]);
+    const { body } = await profileOf(await appFor(mapping));
+    expect(body.entityTypes.map((entity) => [entity.label, entity.displayName])).toEqual([['NodeA', 'Node A'], ['NodeB', 'NodeB']]);
   });
 
   it('marks a relationship type with a stable id as stored and one without as aggregate', async () => {

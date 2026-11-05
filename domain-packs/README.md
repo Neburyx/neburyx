@@ -22,7 +22,7 @@ Every pack here describes a **synthetic** graph (`synthetic: true`). The address
 
 1. Copy `neburyx.yaml` to a new file.
 2. Change the `id`, the `uri`, the `database` and the two credential variable names to match your graph, and remove `synthetic: true` (the flag shows the *Synthetic data* badge and belongs only to a graph made of synthetic data).
-3. Change the entity types, relationship types and property names to match your graph. Only `type`, `label` and `stable_id` are required for an entity type; everything else has a default.
+3. Change the entity types, relationship types and property names to match your graph. Only `type`, `label` and `stable_id` are required for an entity type; everything else has a default. `label` is the label the nodes carry in your graph and is what the product reads with. To show an entity type under another name, give it a display name: `display: { name: IP address }`. The display name is what the canvas, the legend and the menus show; without one the label is shown, exactly as written.
 4. Point `NEBURYX_CONFIG` at the file and start the server. A mistake is reported with its place in the file and never repeats an address, a credential or a link.
 
 A command that checks a mapping against a running graph (`neburyx test-source`) is planned; this page will describe it when it exists.

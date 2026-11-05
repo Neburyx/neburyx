@@ -1065,6 +1065,10 @@
                   "type": "string",
                   "minLength": 1
                 },
+                "displayName": {
+                  "type": "string",
+                  "minLength": 1
+                },
                 "icon": {
                   "type": "string",
                   "enum": [
@@ -1134,6 +1138,7 @@
               "required": [
                 "type",
                 "label",
+                "displayName",
                 "icon",
                 "title",
                 "titleUsesPii",

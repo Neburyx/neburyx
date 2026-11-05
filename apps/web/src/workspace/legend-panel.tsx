@@ -49,7 +49,7 @@ function EntityTypes() {
               <span className="legend-swatch">
                 <img src={legendGlyph(type.icon)} alt="" className="legend-glyph" />
               </span>
-              <span className="legend-type-label">{type.label}</span>
+              <span className="legend-type-label">{type.displayName}</span>
             </li>
           ))}
         </ul>

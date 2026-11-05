@@ -23,6 +23,7 @@ export interface EntityModel {
   readonly filterable: readonly string[];
   readonly link?: LinkTemplate;
   readonly display: {
+    readonly name?: string;
     readonly icon: IconKey;
     readonly keyProperties: readonly string[];
     readonly stateProperty?: string;

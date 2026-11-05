@@ -20,13 +20,13 @@ import { registerStandInActions, registerStandInMenuItems, registerStandInPanels
 const LONG_LABEL_LENGTH = 60;
 
 /** The sample's profile, with more neutral entity types when the address says `?legendTypes=40`, and the first type's label as one unbroken word of 60 characters when it says `?legendLabel=long`, to try the legend with a long list and a long label. */
-function sampleProfile(search: string): SourceProfile {
+export function sampleProfile(search: string): SourceProfile {
   const base = frameSampleProfile();
   const params = new URLSearchParams(search);
   const extra = Math.max(0, Number(params.get('legendTypes') ?? 0) - base.entityTypes.length);
   const template = base.entityTypes[0];
-  const more = template === undefined ? [] : Array.from({ length: extra }, (_unused, index) => ({ ...template, type: `kind-${index}`, label: `Kind ${index}` }));
-  const entityTypes = [...base.entityTypes, ...more].map((type, index) => (index === 0 && params.get('legendLabel') === 'long' ? { ...type, label: 'W'.repeat(LONG_LABEL_LENGTH) } : type));
+  const more = template === undefined ? [] : Array.from({ length: extra }, (_unused, index) => ({ ...template, type: `kind-${index}`, label: `Kind ${index}`, displayName: `Kind ${index}` }));
+  const entityTypes = [...base.entityTypes, ...more].map((type, index) => (index === 0 && params.get('legendLabel') === 'long' ? { ...type, label: 'W'.repeat(LONG_LABEL_LENGTH), displayName: 'W'.repeat(LONG_LABEL_LENGTH) } : type));
   return { ...base, entityTypes };
 }
 

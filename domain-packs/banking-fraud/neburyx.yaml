@@ -35,7 +35,7 @@ sources:
         stable_id: address
         search: [address]
         filterable: [network]
-        display: { icon: network, key_properties: [address, network] }
+        display: { name: IP address, icon: network, key_properties: [address, network] }
       - type: transaction
         label: Transaction
         stable_id: transactionId

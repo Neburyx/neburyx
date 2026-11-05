@@ -66,7 +66,7 @@ describe('the profile on Explore', () => {
     const before = factory.made[0]?.scenes.at(-1)?.entities[0];
     expect(before?.look).toEqual({ iconKey: 'generic', line1: 'n1', line2: 'type-a' });
     const profile = testProfile('a', ['type-a', 'type-b', 'type-c']);
-    await act(async () => replies[0]?.({ ok: true, value: { ...profile, entityTypes: profile.entityTypes.map((entry) => ({ ...entry, icon: 'person' as const, label: `Label ${entry.type}` })) } }));
+    await act(async () => replies[0]?.({ ok: true, value: { ...profile, entityTypes: profile.entityTypes.map((entry) => ({ ...entry, icon: 'person' as const, label: `Label ${entry.type}`, displayName: `Label ${entry.type}` })) } }));
     const after = factory.made[0]?.scenes.at(-1)?.entities[0];
     expect(after?.look).toEqual({ iconKey: 'person', line1: 'n1', line2: 'Label type-a' });
     expect(after?.position).toEqual(before?.position ?? after?.position);
@@ -86,7 +86,7 @@ describe('the profile on Explore', () => {
     const factory = stubFactory();
     render(<WorkspaceHarness client={client} state={state} profile={store} createRenderer={factory.create} />);
     const profile = testProfile('a', ['type-a', 'type-b', 'type-c']);
-    await act(async () => replies[0]?.({ ok: true, value: { ...profile, entityTypes: profile.entityTypes.map((entry) => ({ ...entry, icon: 'person' as const, label: `Label ${entry.type}` })) } }));
+    await act(async () => replies[0]?.({ ok: true, value: { ...profile, entityTypes: profile.entityTypes.map((entry) => ({ ...entry, icon: 'person' as const, label: `Label ${entry.type}`, displayName: `Label ${entry.type}` })) } }));
     const before = factory.made[0]?.scenes.at(-1);
     await act(async () => store.reload());
     await act(async () => replies[1]?.({ ok: false, failure }));

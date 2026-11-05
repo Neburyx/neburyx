@@ -22,7 +22,7 @@ function ProfileSummary({ client, sourceId, actions }: { readonly client: ApiCli
           </p>
           <ul>
             {profile.entityTypes.map((entityType) => (
-              <li key={entityType.type}>{entityType.label}</li>
+              <li key={entityType.type}>{entityType.displayName}</li>
             ))}
           </ul>
           {actions?.(profile)}

@@ -9,6 +9,7 @@ import { createClientState } from '../state/client-state.js';
 import { elementKey } from '../state/keys.js';
 import { stubFactory } from '../test-utils.js';
 import { createFrameSampleState, frameSampleProfile, FRAME_SAMPLE_SOURCE } from './frame-sample.js';
+import { sampleProfile } from './frame-sample-page.js';
 
 describe('the frame sample', () => {
   it('pins one entity, so that a drag of a pinned entity can be tried on it', () => {
@@ -52,5 +53,18 @@ describe('the frame sample', () => {
       const scene = factory.made.at(-1)?.scenes.at(-1);
       expect(scene?.entities.find((entity) => entity.look.line1 === 'LED-48291')?.look).toEqual({ iconKey: 'money', line1: 'LED-48291', line2: 'Ledger · Review required' });
     });
+  });
+
+  it('adds neutral types with names of their own when the address says ?legendTypes, and a long unbroken name when it says ?legendLabel=long', () => {
+    const types = sampleProfile('?legendTypes=12&legendLabel=long').entityTypes;
+    expect(types).toHaveLength(12);
+    expect(types[0]?.displayName).toBe('W'.repeat(60));
+    const added = types.slice(frameSampleProfile().entityTypes.length);
+    expect(added.map((type) => type.displayName)).toEqual(added.map((_type, index) => `Kind ${index}`));
+    expect(new Set(types.map((type) => type.displayName)).size).toBe(12);
+  });
+
+  it('leaves the sample\'s own profile alone when the address asks for nothing', () => {
+    expect(sampleProfile('')).toEqual(frameSampleProfile());
   });
 });

@@ -1,6 +1,6 @@
 import type { SourceProfile } from '@neburyx/contracts';
 
-const entity = (type: string) => ({ type, label: type.toUpperCase(), icon: 'generic' as const, title: 'name', titleUsesPii: false, keyProperties: [], stateProperty: null, searchable: [], filterable: [], pii: [] });
+const entity = (type: string) => ({ type, label: type.toUpperCase(), displayName: type.toUpperCase(), icon: 'generic' as const, title: 'name', titleUsesPii: false, keyProperties: [], stateProperty: null, searchable: [], filterable: [], pii: [] });
 
 export function testProfile(sourceId = 'source-a', types: readonly string[] = ['kind-a', 'kind-b', 'kind-c']): SourceProfile {
   const [first = 'kind-a', second = 'kind-b', third = 'kind-c'] = types;

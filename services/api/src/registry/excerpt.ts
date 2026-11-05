@@ -16,6 +16,7 @@ function nonEmpty(key: string, values: readonly string[]): Record<string, readon
 function displayOf(entity: EntityModel): Record<string, unknown> {
   const defaults = defaultKeyProperties(entity.stableId, entity.search, entity.filterable, entity.pii);
   return {
+    ...(entity.display.name === undefined ? {} : { name: entity.display.name }),
     ...(entity.display.icon === DEFAULT_ICON ? {} : { icon: entity.display.icon }),
     ...(sameList(entity.display.keyProperties, defaults) ? {} : { key_properties: entity.display.keyProperties }),
     ...(entity.display.stateProperty === undefined ? {} : { state_property: entity.display.stateProperty }),

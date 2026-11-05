@@ -27,7 +27,7 @@ function profile(sourceId: string, labels: readonly string[]): SourceProfile {
     sourceId,
     synthetic: true,
     vocabulary: { caseRef: null },
-    entityTypes: labels.map((label) => ({ type: label.toLowerCase(), label, icon: 'generic', title: 'name', titleUsesPii: false, keyProperties: [], stateProperty: null, searchable: [], filterable: [], pii: [] })),
+    entityTypes: labels.map((label) => ({ type: label.toLowerCase(), label, displayName: label, icon: 'generic', title: 'name', titleUsesPii: false, keyProperties: [], stateProperty: null, searchable: [], filterable: [], pii: [] })),
     relationshipTypes: [{ type: 'linked', from: labels[0]?.toLowerCase() ?? 'a', to: labels[1]?.toLowerCase() ?? 'b', aggregate: false, observedAt: null, filterable: [], evidence: [] }],
     derivedRules: [],
     presets: [],

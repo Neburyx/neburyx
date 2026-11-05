@@ -6,7 +6,7 @@ const profile = {
   synthetic: false,
   vocabulary: { caseRef: null },
   entityTypes: [
-    { type: 'node_a', label: 'NodeA', icon: 'generic', title: '{id}', titleUsesPii: false, keyProperties: ['id'], stateProperty: null, searchable: [], filterable: [], pii: [] },
+    { type: 'node_a', label: 'NodeA', displayName: 'Node A', icon: 'generic', title: '{id}', titleUsesPii: false, keyProperties: ['id'], stateProperty: null, searchable: [], filterable: [], pii: [] },
   ],
   relationshipTypes: [{ type: 'LINKS', from: 'node_a', to: 'node_a', aggregate: true, observedAt: null, filterable: [], evidence: [] }],
   derivedRules: [{ id: 'r', from: 'node_a', to: 'node_a', via: ['LINKS', 'node_a', 'LINKS'], ruleVersion: 1 }],
@@ -17,6 +17,12 @@ const profile = {
 describe('source profile contract', () => {
   it('accepts a full profile', () => {
     expect(sourceProfileSchema.safeParse(profile).success).toBe(true);
+  });
+
+  it('refuses a profile whose entity type has no display name or an empty one', () => {
+    const { displayName: _removed, ...bare } = profile.entityTypes[0] ?? {};
+    expect(sourceProfileSchema.safeParse({ ...profile, entityTypes: [bare] }).success).toBe(false);
+    expect(sourceProfileSchema.safeParse({ ...profile, entityTypes: [{ ...bare, displayName: '' }] }).success).toBe(false);
   });
 
   it('refuses an unknown field at the top and inside an item, such as an address', () => {

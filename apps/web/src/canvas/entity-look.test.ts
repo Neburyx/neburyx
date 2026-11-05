@@ -8,7 +8,7 @@ function profileWith(overrides: Partial<SourceProfile['entityTypes'][number]>): 
   const base = testProfile('source-a');
   const first = base.entityTypes[0];
   if (first === undefined) throw new Error('the test profile has no entity type');
-  return { ...base, entityTypes: [{ ...first, type: 'type-a', label: 'Alpha', icon: 'money', stateProperty: 'status', ...overrides }, ...base.entityTypes.slice(1)] };
+  return { ...base, entityTypes: [{ ...first, type: 'type-a', label: 'Alpha', displayName: 'Alpha', icon: 'money', stateProperty: 'status', ...overrides }, ...base.entityTypes.slice(1)] };
 }
 
 function entity(properties: GraphNode['properties'], title = 'ACC-48291'): GraphNode {
@@ -20,6 +20,11 @@ const status = (value: unknown) => ({ key: 'status', value, dataClass: 'text' as
 describe('the look of an entity', () => {
   it('shows the title on line 1 and "Type · state" on line 2, with the type name and the icon from the profile', () => {
     expect(entityLook(entity([status('Review required')]), profileWith({}))).toEqual({ iconKey: 'money', line1: 'ACC-48291', line2: 'Alpha · Review required' });
+  });
+
+  it('shows the display name of the type, not its label, on line 2 with and without a state', () => {
+    expect(entityLook(entity([status('Open')]), profileWith({ label: 'RawLabel', displayName: 'Shown name' })).line2).toBe('Shown name · Open');
+    expect(entityLook(entity([status('Open')]), profileWith({ label: 'RawLabel', displayName: 'Shown name', stateProperty: null })).line2).toBe('Shown name');
   });
 
   it('shows the type name alone when the type has no state property', () => {

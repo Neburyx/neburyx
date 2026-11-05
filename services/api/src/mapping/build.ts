@@ -94,6 +94,7 @@ function buildEntity(raw: RawEntity, path: readonly (string | number)[], report:
     filterable,
     ...linkOf(raw, path, report),
     display: {
+      ...(raw.display?.name === undefined ? {} : { name: raw.display.name }),
       icon: raw.display?.icon ?? 'generic',
       keyProperties: raw.display?.key_properties ?? defaultKeys,
       ...(raw.display?.state_property === undefined ? {} : { stateProperty: raw.display.state_property }),

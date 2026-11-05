@@ -11,6 +11,7 @@ export function buildSourceProfile(source: SourceModel): SourceProfile {
     entityTypes: source.entities.map((entity) => ({
       type: entity.type,
       label: entity.label,
+      displayName: entity.display.name ?? entity.label,
       icon: entity.display.icon,
       title: entity.title,
       titleUsesPii: entity.titleUsesPii,

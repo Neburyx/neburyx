@@ -78,6 +78,7 @@ const authSchema = z.strictObject({
 });
 
 const displaySchema = z.strictObject({
+  name: name.optional(),
   icon: iconKeySchema.optional(),
   key_properties: propertyList.optional(),
   state_property: property.optional(),
