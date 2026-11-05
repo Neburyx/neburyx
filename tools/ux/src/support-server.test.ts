@@ -1,9 +1,12 @@
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { meResponseSchema, sourceProfileSchema, sourcesResponseSchema } from '@neburyx/contracts';
 import { createSupportServer } from './support-server.ts';
+
+const committed: unknown = JSON.parse(readFileSync(new URL('../fixtures/profile.json', import.meta.url), 'utf8'));
 
 let folder = '';
 let closing: (() => Promise<void>) | undefined;
@@ -65,5 +68,17 @@ describe('the support server', () => {
     const base = await start();
     const reply = await fetch(`${base}/..%2f..%2fetc%2fhosts`);
     expect(reply.status).not.toBe(200);
+  });
+
+  it('answers bodies the web app accepts: the contracts parse them, and the profile is the committed one', async () => {
+    const profile = sourceProfileSchema.parse(committed);
+    const server = createSupportServer({ root: folder, profile });
+    await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
+    closing = () => new Promise<void>((done) => void server.close(() => done()));
+    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    expect(meResponseSchema.safeParse(await (await fetch(`${base}/v1/me`)).json()).success).toBe(true);
+    const sources = sourcesResponseSchema.parse(await (await fetch(`${base}/v1/sources`)).json());
+    expect(sources.items.map((item) => item.id)).toEqual([profile.sourceId]);
+    expect(sourceProfileSchema.parse(await (await fetch(`${base}/v1/sources/${profile.sourceId}/profile`)).json())).toEqual(profile);
   });
 });

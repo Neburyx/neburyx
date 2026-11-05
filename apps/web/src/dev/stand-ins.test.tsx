@@ -258,6 +258,15 @@ describe('the panel stand-ins', () => {
     expect(none.view.getState().map((panel) => panel.id)).toEqual(['dev-dock-test']);
   });
 
+  it('leave the dock test panel out when asked, and keep the floating one', () => {
+    const registry = createPanelRegistry();
+    registerStandInPanels(registry, { dock: false });
+    expect(registry.view.getState().map((panel) => panel.id)).toEqual(['dev-floating-test']);
+    const nothing = createPanelRegistry();
+    registerStandInPanels(nothing, { dock: false, floating: false });
+    expect(nothing.view.getState()).toEqual([]);
+  });
+
   it('leave a dock that a real panel holds alone, fill the floating place, and do not throw', () => {
     const registry = createPanelRegistry();
     const content = () => null;

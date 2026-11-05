@@ -67,15 +67,17 @@ function testPanel(heading: string, text: string): ComponentType {
 const FLOATING_TOP = 64;
 
 export interface StandInPanelOptions {
-  /** The side the floating test panel is on, or false for none; the dock test panel is always there. */
+  /** The side the floating test panel is on, or false for none. */
   readonly floating?: 'left' | 'right' | false;
+  /** Whether the dock test panel is put in; it is, unless this is false. */
+  readonly dock?: boolean;
 }
 
 /** Puts a test panel in the dock and one over the canvas, leaving a place or an ID that a panel already holds alone, and returns the function that takes out what it put in. */
 export function registerStandInPanels(registry: PanelRegistry, options: StandInPanelOptions = {}): () => void {
-  const { floating = 'right' } = options;
+  const { floating = 'right', dock = true } = options;
   const wanted: readonly PanelEntry[] = [
-    { id: 'dev-dock-test', title: 'Dock test panel', placement: { kind: 'dock' }, content: testPanel('Dock test panel', 'A panel in the dock, beside the canvas.') },
+    ...(dock ? [{ id: 'dev-dock-test', title: 'Dock test panel', placement: { kind: 'dock' } as const, content: testPanel('Dock test panel', 'A panel in the dock, beside the canvas.') }] : []),
     ...(floating === false ? [] : [{ id: 'dev-floating-test', title: 'Floating test panel', placement: { kind: 'floating', side: floating, top: FLOATING_TOP } as const, content: testPanel('Floating test panel', 'A panel over the canvas.') }]),
   ];
   const taken = registry.view.getState();

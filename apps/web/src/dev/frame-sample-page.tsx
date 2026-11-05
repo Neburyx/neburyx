@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ProfileProvider } from '../canvas/profile-context.js';
 import type { ProfileState, ProfileStore } from '../canvas/profile-store.js';
+import type { ClientState } from '../state/client-state.js';
 import { ClientStateProvider } from '../state/context.js';
 import { createStore, readable } from '../state/store.js';
 import { registerBuiltInMenuItems } from '../workspace/built-in-menu-items.js';
@@ -16,6 +17,7 @@ import { createSlotRegistry, SlotsProvider } from '../workspace/slots.js';
 import { createToolRegistry, ToolsProvider } from '../workspace/tool-registry.js';
 import { WorkspaceShell } from '../workspace/workspace-shell.js';
 import type { SourceProfile } from '@neburyx/contracts';
+import { FIXTURE_RECORD } from './fixture-loader.js';
 import { createFrameSampleState, frameSampleProfile, FRAME_SAMPLE_SOURCE } from './frame-sample.js';
 import { registerStandInActions, registerStandInKeyBindings, registerStandInMenuItems, registerStandInPanels, registerStandInTools, registerStandIns } from './stand-ins.js';
 
@@ -37,7 +39,15 @@ function knownProfile(): ProfileStore {
   return { ...readable(store), reload: () => undefined };
 }
 
-/** The floating test panel covers part of the graph, so this page leaves it out unless the address asks for it: `?floating` puts it on the right, `?floating=left` on the left. */
+/** The sample, with the investigation's title taken from the address (`?title=...`) to try a long one in the header. */
+export function titledSample(search: string): ClientState {
+  const state = createFrameSampleState();
+  const title = new URLSearchParams(search).get('title');
+  if (title !== null && title !== '') state.describeInvestigation({ ...FIXTURE_RECORD, title });
+  return state;
+}
+
+/** `?dock=none` leaves the dock test panel out, so the canvas has the whole width. The floating test panel covers part of the graph, so this page leaves it out unless the address asks for it: `?floating` puts it on the right, `?floating=left` on the left. */
 function floatingSide(search: string): 'left' | 'right' | false {
   const value = new URLSearchParams(search).get('floating');
   if (value === null) return false;
@@ -46,7 +56,7 @@ function floatingSide(search: string): 'left' | 'right' | false {
 
 /** The workspace with the Explore design's graph, drawn at the design's own positions, for putting the canvas beside the design. */
 export function FrameSamplePage() {
-  const [state] = useState(createFrameSampleState);
+  const [state] = useState(() => titledSample(window.location.search));
   const [profile] = useState(knownProfile);
   const [actions] = useState(() => {
     const registry = createSelectionActionRegistry();
@@ -74,7 +84,7 @@ export function FrameSamplePage() {
   const [panels] = useState(() => {
     const registry = createPanelRegistryFor(state);
     bindLegend(state, registry);
-    registerStandInPanels(registry, { floating: floatingSide(window.location.search) });
+    registerStandInPanels(registry, { floating: floatingSide(window.location.search), dock: new URLSearchParams(window.location.search).get('dock') !== 'none' });
     return registry;
   });
   const [keyBindings] = useState(() => {

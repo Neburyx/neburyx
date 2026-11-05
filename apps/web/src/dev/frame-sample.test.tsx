@@ -9,7 +9,16 @@ import { createClientState } from '../state/client-state.js';
 import { elementKey } from '../state/keys.js';
 import { stubFactory } from '../test-utils.js';
 import { createFrameSampleState, frameSampleProfile, FRAME_SAMPLE_SOURCE } from './frame-sample.js';
-import { sampleProfile } from './frame-sample-page.js';
+import { sampleProfile, titledSample } from './frame-sample-page.js';
+
+describe('the frame sample with a title from the address', () => {
+  it('keeps the investigation record, and takes the title from `?title=` when there is one', () => {
+    expect(titledSample('').investigation.getState().record?.title).toBe('Suspicious linked accounts');
+    expect(titledSample('?title=').investigation.getState().record?.title).toBe('Suspicious linked accounts');
+    const state = titledSample('?title=A%20long%20title');
+    expect(state.investigation.getState().record).toMatchObject({ title: 'A long title', caseRef: 'REF-2026-1048' });
+  });
+});
 
 describe('the frame sample', () => {
   it('pins one entity, so that a drag of a pinned entity can be tried on it', () => {
