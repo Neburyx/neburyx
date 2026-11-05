@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { announcement, canvasOf, focusCanvas, lastPrevented, menuItems, menuOf, openSample, recordPrevented, screenOf, tabTo } from './support/workspace.ts';
+import { announcement, canvasOf, drawing, focusCanvas, lastPrevented, menuItems, menuOf, openSample, positions, recordPrevented, screenOf, tabTo } from './support/workspace.ts';
 
 const description = async (page: import('@playwright/test').Page): Promise<string> => (await canvasOf(page).evaluate((element) => document.getElementById(element.getAttribute('aria-describedby') ?? '')?.textContent ?? '')) ?? '';
 
@@ -10,16 +10,25 @@ test.describe('keys that are not for the canvas', () => {
   });
 
   test('do nothing with the focus on the page body or on a button, and the browser keeps the key', async ({ page }) => {
+    // an entity is selected, so that a binding that was widened beyond the canvas would have something to move
+    await focusCanvas(page);
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Space');
+    await page.keyboard.press('Escape');
+    expect(await description(page)).toContain('1 selected');
+    const before = JSON.stringify(await positions(page));
     for (const place of ['body', 'button']) {
       await page.evaluate(() => (document.activeElement instanceof HTMLElement ? document.activeElement.blur() : undefined));
       if (place === 'button') await page.getByRole('button', { name: 'Zoom in' }).focus();
-      for (const key of ['ContextMenu', 'Shift+F10', 'ArrowRight', 'ArrowUp']) {
+      for (const key of ['ContextMenu', 'Shift+F10', 'ArrowRight', 'ArrowUp', 'Shift+ArrowLeft']) {
         await page.keyboard.press(key);
         expect(await lastPrevented(page), `${key} with the focus on the ${place}`).toBe(false);
         await expect(menuOf(page), `${key} with the focus on the ${place} opened a menu`).toHaveCount(0);
       }
       await expect(announcement(page)).toHaveText('');
     }
+    await page.waitForTimeout(200);
+    expect(JSON.stringify(await positions(page)), 'an arrow outside the canvas moved the selection').toBe(before);
   });
 
   test('leave Tab to the browser when the walk is off, and still run the workspace keys where the focus is not a text field', async ({ page }) => {
@@ -68,29 +77,57 @@ test.describe('the walk', () => {
     await focusCanvas(page);
   });
 
-  test('starts at the first entity with a ring and an announcement, visits entities then relationships and wraps, and selects as a click does', async ({ page }) => {
+  const ENTITY_ORDER = ['Jordan Lee, Holder', 'LED-48291, Ledger', 'LED-71825, Ledger', 'CAS-20348, Case file', 'TRN-99381, Transfer', 'SEL-231, Seller', 'GAD-884, Gadget', 'GAD-217, Gadget, pinned', '198.51.100.42, Network host', 'LIN-1042, Line'];
+  const RELATIONSHIP_ORDER = [
+    'HAS_LINE, from Jordan Lee to LIN-1042',
+    'HOLDS, from Jordan Lee to LED-48291',
+    'FILES, from Jordan Lee to CAS-20348',
+    'CONTESTS, from CAS-20348 to TRN-99381',
+    'SENDS, from LED-48291 to TRN-99381',
+    'PAYS, from TRN-99381 to SEL-231',
+    'USES_GADGET · 42, from LED-48291 to GAD-884',
+    'USES_GADGET, from LED-71825 to GAD-884',
+    'SEEN_AT, from GAD-884 to 198.51.100.42',
+    'SEEN_AT, from GAD-217 to 198.51.100.42',
+    'USES_GADGET, from LED-71825 to GAD-217',
+    'USES_GADGET, from LED-48291 to GAD-217',
+    'SHARED_GADGET · derived, from LED-48291 to LED-71825',
+  ];
+
+  test.describe.configure({ mode: 'serial' });
+
+  for (const entry of ['Enter', 'Space']) {
+    test(`starts with ${entry} at the first entity, visits each entity and then each relationship once in their order, wraps, and draws the ring on the element it announces`, async ({ page }) => {
+      const canvas = canvasOf(page);
+      await page.keyboard.press(entry);
+      const seen: string[] = [];
+      for (let step = 0; step < ENTITY_ORDER.length + RELATIONSHIP_ORDER.length; step += 1) {
+        const said = (await announcement(page).textContent()) ?? '';
+        seen.push(said);
+        const now = await drawing(page);
+        const ringed = [...now.nodes.filter((node) => node.focused).map((node) => node.id), ...now.edges.filter((edge) => edge.focused).map((edge) => edge.id)];
+        expect(ringed, `the ring after "${said}"`).toHaveLength(1);
+        await expect(canvas, `the element named in the read-out after "${said}"`).toHaveAttribute('data-focused-element', ringed[0] ?? '');
+        await page.keyboard.press('Tab');
+      }
+      expect(seen, 'the walk, in order, each element once').toEqual([...ENTITY_ORDER, ...RELATIONSHIP_ORDER]);
+      await expect(announcement(page), 'after the last relationship the walk wraps to the first entity').toHaveText(ENTITY_ORDER[0] ?? '');
+      await page.keyboard.press('Shift+Tab');
+      await expect(announcement(page), 'Shift+Tab wraps back to the last relationship').toHaveText(RELATIONSHIP_ORDER.at(-1) ?? '');
+    });
+  }
+
+  test('selects as a click does, adds with Shift, keeps the selection when Escape leaves the walk and clears it with the next Escape', async ({ page }) => {
     const canvas = canvasOf(page);
     await page.keyboard.press('Enter');
-    await expect(announcement(page)).toHaveText('Jordan Lee, Holder');
-    await expect(canvas).toHaveAttribute('data-focused-element', /holder/);
-    const visited = [await announcement(page).textContent()];
-    for (let step = 0; step < 22; step += 1) {
-      await page.keyboard.press('Tab');
-      visited.push(await announcement(page).textContent());
-    }
-    expect(visited.slice(0, 10).every((text) => !(text ?? '').includes(' from ')), 'the ten entities come first').toBe(true);
-    expect(visited.slice(10, 23).every((text) => (text ?? '').includes(' from ')), 'then the thirteen relationships').toBe(true);
-    expect(visited[23 - 1], 'wraps to the first entity after the last relationship').toBeDefined();
-    await page.keyboard.press('Tab');
-    await expect(announcement(page)).toHaveText('Jordan Lee, Holder');
-    await page.keyboard.press('Shift+Tab');
-    expect((await announcement(page).textContent()) ?? '', 'Shift+Tab wraps back to the last relationship').toContain(' from ');
-    await page.keyboard.press('Tab');
     await page.keyboard.press('Space');
     expect(await description(page)).toContain('1 selected');
     await page.keyboard.press('Tab');
     await page.keyboard.press('Shift+Space');
     expect(await description(page)).toContain('2 selected');
+    await page.keyboard.press('Shift+Enter');
+    expect(await description(page), 'Shift+Enter on a selected element takes it out').toContain('1 selected');
+    await page.keyboard.press('Shift+Space');
     await page.keyboard.press('Escape');
     await expect(canvas).not.toHaveAttribute('data-focused-element', /.+/);
     expect(await description(page), 'Escape left the walk and kept the selection').toContain('2 selected');

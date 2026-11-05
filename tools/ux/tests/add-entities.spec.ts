@@ -7,14 +7,19 @@ test.describe('adding entities in the page', () => {
   test.beforeEach(async ({ page }) => openFixture(page));
 
   test('keeps the positions that a displacement gave, when 25 more are added after it', async ({ page }) => {
+    const original = await positions(page);
     await page.getByRole('button', { name: 'Displace 10 entities' }).click();
-    await expect.poll(async () => Object.keys(await positions(page)).length).toBe(120);
-    await page.waitForTimeout(300);
+    const moved = async (): Promise<string[]> => {
+      const now = await positions(page);
+      return Object.keys(original).filter((id) => now[id]?.x !== original[id]?.x || now[id]?.y !== original[id]?.y);
+    };
+    await expect.poll(async () => (await moved()).length, { message: 'ten entities were displaced' }).toBe(10);
     const displaced = await positions(page);
     await page.getByRole('button', { name: `Add ${ADDED} entities` }).click();
     await expect(canvasOf(page)).toHaveAttribute('data-drawn-entities', String(120 + ADDED));
     const after = await positions(page);
     for (const [id, at] of Object.entries(displaced)) expect(after[id], `entity ${id} after the add`).toEqual(at);
+    expect((await moved()).length, 'the ten displaced entities are still where the displacement put them').toBe(10);
   });
 
   test('draws exactly 25 more entities and leaves every existing entity where it was, reporting how many moved', async ({ page }) => {

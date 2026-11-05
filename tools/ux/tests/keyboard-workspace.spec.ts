@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { announcement, canvasOf, focusCanvas, lastPrevented, modifier, openSample, positions, recordPrevented } from './support/workspace.ts';
+import { announcement, canvasOf, focusCanvas, lastPrevented, menuHints, menuOf, modifier, openSample, positions, recordPrevented, shownKey } from './support/workspace.ts';
 
 const description = (page: Page): Promise<string> => canvasOf(page).evaluate((element) => document.getElementById(element.getAttribute('aria-describedby') ?? '')?.textContent ?? '');
 const legendOpen = async (page: Page): Promise<boolean> => (await page.getByRole('button', { name: 'Close Legend' }).count()) > 0;
@@ -39,14 +39,18 @@ test.describe('typing in a text field', () => {
       document.querySelector('.workspace')?.append(field);
     });
     await page.locator('#probe-field').focus();
-    for (const key of ['h', 'b', 'l', 'v', 'Escape', 'ArrowLeft', `${mod}+0`, `${mod}+a`, `${mod}+/`]) await page.keyboard.press(key);
+    const movedBefore = JSON.stringify(await positions(page));
+    for (const key of ['h', 'b', 'l', 'v', 'Escape', 'ArrowLeft', 'ArrowDown', `${mod}+0`, `${mod}+a`, `${mod}+Shift+i`, `${mod}+/`]) {
+      await page.keyboard.press(key);
+      expect(await legendOpen(page), `the legend after ${key}`).toBe(false);
+      await expect(page.getByRole('dialog'), `the sheet after ${key}`).toHaveCount(0);
+      expect(await zoomOf(page), `the zoom after ${key}`).toBe(before.zoom);
+      expect(await description(page), `the selection after ${key}`).toBe(before.selection);
+      expect(JSON.stringify(await positions(page)), `the positions after ${key}`).toBe(movedBefore);
+    }
     await page.keyboard.type('hbl');
-    // the select-all key selected the field's own text, which the typing then replaced: if the page had taken it, the selection below would differ
+    // the select-all key selected the field's own text, which the typing then replaced: if the page had taken it, the selection above would differ
     expect(await page.locator('#probe-field').inputValue()).toBe('hbl');
-    expect(await legendOpen(page), 'the legend').toBe(false);
-    await expect(page.getByRole('dialog')).toHaveCount(0);
-    expect(await zoomOf(page), 'the zoom').toBe(before.zoom);
-    expect(await description(page), 'the selection').toBe(before.selection);
     expect(await currentTool(page), 'the tool').toBe(before.tool);
   });
 });
@@ -121,15 +125,21 @@ test.describe('the workspace keys', () => {
     await expect.poll(() => zoomOf(page), { message: 'the fit key brought the view back' }).toBeCloseTo(fitted, 2);
   });
 
-  test('select all and invert the selection, counted in the canvas description', async ({ page }) => {
+  test('select all and invert the selection, counted in the canvas description, and invert gives the complement of a partial selection', async ({ page }) => {
     const mod = await modifier(page);
     await focusCanvas(page);
     await page.keyboard.press(`${mod}+a`);
     expect(await description(page)).toContain('10 selected');
     await page.keyboard.press(`${mod}+Shift+i`);
     expect(await description(page)).not.toContain('selected');
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Space');
+    await page.keyboard.press('Escape');
+    expect(await description(page)).toContain('1 selected');
     await page.keyboard.press(`${mod}+Shift+i`);
-    expect(await description(page)).toContain('10 selected');
+    expect(await description(page), 'the complement of one selected entity').toContain('9 selected');
+    await page.keyboard.press(`${mod}+Shift+i`);
+    expect(await description(page), 'inverting again gives the entity back').toContain('1 selected');
   });
 
   test('collapse and expand the dock panel with Enter, and resize it with the handle keys', async ({ page }) => {
@@ -164,15 +174,7 @@ test.describe('the sheet of shortcuts', () => {
     const dialog = page.getByRole('dialog', { name: 'Keyboard shortcuts' });
     await expect(dialog).toBeVisible();
     const mac = mod === 'Meta';
-    const names: Record<string, string> = { escape: 'Esc', enter: 'Enter', space: 'Space', tab: 'Tab', delete: 'Del', contextmenu: 'Menu', arrowleft: '←', arrowup: '↑', arrowdown: '↓', arrowright: '→' };
-    // how the sheet shows a key on this platform: ⇧⌘I on macOS, Ctrl+Shift+I elsewhere
-    const shown = (spec: string): string => {
-      const parts = spec.split('+');
-      const last = parts.pop() ?? '';
-      const name = names[last] ?? last.toUpperCase();
-      const has = (word: string): boolean => parts.includes(word);
-      return mac ? `${has('shift') ? '⇧' : ''}${has('mod') ? '⌘' : ''}${name}` : [...(has('mod') ? ['Ctrl'] : []), ...(has('shift') ? ['Shift'] : []), name].join('+');
-    };
+    const shown = (spec: string): string => shownKey(mod, spec);
     const row = (label: string, ...specs: string[]): string => `${label} ${specs.map(shown).join(' ')}`;
     const rows = await dialog.locator('.sheet-row').evaluateAll((elements) => elements.map((element) => `${element.querySelector('.sheet-label')?.textContent ?? ''} ${[...element.querySelectorAll('.sheet-key')].map((chip) => chip.textContent ?? '').join(' ')}`));
     expect(rows).toEqual([
@@ -182,9 +184,11 @@ test.describe('the sheet of shortcuts', () => {
       row('Pin position', 'p'), row('Hide', 'delete'), row('Copy ID', 'mod+c'), row('Find paths', 'shift+p'), row('Export view', 'mod+e'), row('Copy properties', 'mod+shift+c'), row('Open context menu', 'contextmenu', 'shift+f10'),
       row('Fit to view', 'mod+0'), row('Keyboard shortcuts', 'mod+/'), row('Walk the canvas', 'enter', 'space'), row('Next element', 'tab'), row('Previous element', 'shift+tab'), row('Leave the walk', 'escape'),
     ]);
-    for (let press = 0; press < 4; press += 1) {
-      await page.keyboard.press('Tab');
-      expect(await dialog.evaluate((element) => element.contains(document.activeElement)), 'the focus stays inside the sheet').toBe(true);
+    for (const direction of ['Tab', 'Shift+Tab']) {
+      for (let press = 0; press < 4; press += 1) {
+        await page.keyboard.press(direction);
+        expect(await dialog.evaluate((element) => element.contains(document.activeElement)), `the focus stays inside the sheet with ${direction}`).toBe(true);
+      }
     }
     await page.keyboard.press('Escape');
     await expect(dialog).toHaveCount(0);
@@ -194,17 +198,29 @@ test.describe('the sheet of shortcuts', () => {
   test('has stand-in rows that work from their keys, and the keys in the menus equal the bound keys', async ({ page }) => {
     const mod = await modifier(page);
     const root = page.locator('html');
-    for (const [press, id] of [['e', 'expand'], ['f', 'focus'], ['p', 'pin'], ['Delete', 'hide'], [`${mod}+c`, 'copy-id'], ['Shift+p', 'find-paths'], [`${mod}+e`, 'export-view'], [`${mod}+Shift+c`, 'copy-properties']] as const) {
+    for (const [press, id] of [[`${mod}+k`, 'search'], ['e', 'expand'], ['f', 'focus'], ['p', 'pin'], ['Delete', 'hide'], [`${mod}+c`, 'copy-id'], ['Shift+p', 'find-paths'], [`${mod}+e`, 'export-view'], [`${mod}+Shift+c`, 'copy-properties']] as const) {
       await page.keyboard.press(press);
       await expect(root, `${press} reaches its stand-in`).toHaveAttribute('data-last-stand-in-key', id);
     }
+    const expected = (rows: ReadonlyArray<readonly [string, string]>): Array<readonly [string, string]> => rows.map(([label, spec]) => [label, spec === '' ? '' : shownKey(mod, spec)] as const);
+    await page.getByRole('button', { name: 'Explore' }).focus();
+    await page.keyboard.press('Enter');
+    expect(await menuHints(page), 'the hints of the Explore flyout').toEqual(expected([['Select', 'v'], ['Pan', 'h'], ['Box select', 'b'], ['Select all', 'mod+a'], ['Invert selection', 'mod+shift+i'], ['Clear selection', 'escape']]));
+    await page.keyboard.press('Escape');
     await focusCanvas(page);
+    await page.keyboard.press('ContextMenu');
+    expect(await menuHints(page), 'the hints of the canvas menu').toEqual(expected([['Fit to view', 'mod+0'], ['Select all', 'mod+a'], ['Invert selection', 'mod+shift+i'], ['Group all by type', ''], ['Ungroup all', ''], ['Layout', ''], ['Show legend', 'l'], ['Export view…', 'mod+e']]));
+    await page.keyboard.press('Escape');
     await page.keyboard.press('Enter');
     await page.keyboard.press('ContextMenu');
-    const hints = await page.getByRole('menu').first().locator('[role="menuitem"]').evaluateAll((items) => items.map((item) => ({ label: item.querySelector('.menu-label')?.textContent ?? '', hint: item.querySelector('.menu-hint, kbd')?.textContent ?? '' })));
-    const wanted = new Map([['Expand neighbors', 'E'], ['Focus neighborhood', 'F'], ['Pin position', 'P'], ['Hide from view', 'Del'], ['Invert selection', mod === 'Meta' ? '⇧⌘I' : 'Ctrl+Shift+I']]);
-    const shown = hints.filter(({ label }) => wanted.has(label));
-    expect(shown.length, 'the menu shows the hints that are bound').toBeGreaterThan(0);
-    for (const { label, hint } of shown) expect(hint, `the hint of ${label}`).toBe(wanted.get(label));
+    expect(await menuHints(page), 'the hints of the entity menu').toEqual(expected([['Expand neighbors', 'e'], ['Expand by type', ''], ['Focus neighborhood', 'f'], ['Find paths from here…', 'shift+p'], ['Find paths to…', ''], ['Run pattern', ''], ['Select neighbors', ''], ['Invert selection', 'mod+shift+i'], ['Group by type', ''], ['Pin position', 'p'], ['Hide from view', 'delete'], ['Copy ID', 'mod+c'], ['Copy properties', 'mod+shift+c'], ['Open source record', ''], ['Ask about this entity', ''], ['Summarize neighborhood', '']]));
+    await page.keyboard.press('Escape');
+    for (let step = 0; step < 40; step += 1) {
+      await page.keyboard.press('Tab');
+      if (((await announcement(page).textContent()) ?? '').startsWith('HAS_LINE')) break;
+    }
+    await page.keyboard.press('ContextMenu');
+    await expect(menuOf(page)).toHaveCount(1);
+    expect(await menuHints(page), 'the hints of the relationship menu').toEqual(expected([['Why is this relationship here?', ''], ['View supporting records', ''], ['Highlight endpoints', ''], ['Select both endpoints', ''], ['Find paths between endpoints', ''], ['Hide this relationship', 'delete'], ['Hide all HAS_LINE', ''], ['Show only HAS_LINE', ''], ['Copy relationship ID', 'mod+c'], ['Copy properties', 'mod+shift+c'], ['Open source record', ''], ['Ask about this relationship', '']]));
   });
 });

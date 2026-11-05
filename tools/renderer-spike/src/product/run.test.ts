@@ -94,6 +94,11 @@ describe('the product benchmark', () => {
     expect(existsSync(`${out}.partial`)).toBe(false);
   });
 
+  it('records the zoom the runs were measured at, which the zoomed-out view depends on', async () => {
+    const report = await runProductBenchmark({ url: URL_OF_APP, out: join(directory, 'zoom.json'), cpuThrottle: 4 }, deps(fresh()));
+    expect(report.app.zoom).toBe(DRAWN.zoom);
+  });
+
   it('records a browser without a window as not headed, and one that does not say as headed', async () => {
     const quiet = deps(fresh());
     const base = await quiet.launchBrowser();

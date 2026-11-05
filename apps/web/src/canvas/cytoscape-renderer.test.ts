@@ -1171,6 +1171,7 @@ describe('the Cytoscape renderer in a container whose size changes', () => {
       core.zoom(CAPTION_MIN_ZOOM * 0.5);
       expect(shown(renderer)).toEqual({ captions: [false, false], labels: [false] });
       expect(core.nodes().map((node) => String(node.style('background-image-opacity')))).toEqual(['1 0 1', '1 0 1']);
+      expect(renderer.inspect().nodes.map((node) => [node.glyphShown, node.captionShown, node.badgeShown])).toEqual([[true, false, true], [true, false, false]]);
       expect(renderer.describe()).toEqual({ entities: 2, relationships: 1 });
       core.zoom(CAPTION_MIN_ZOOM * 1.5);
       expect(shown(renderer)).toEqual({ captions: [true, true], labels: [true] });

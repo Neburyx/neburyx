@@ -104,6 +104,8 @@ export async function movedSinceMark(page: Page): Promise<{ readonly unpinned: n
 export interface DrawingNode {
   readonly id: string;
   readonly captionShown: boolean;
+  readonly glyphShown: boolean;
+  readonly badgeShown: boolean;
   readonly images: readonly string[];
   readonly focused: boolean;
 }
@@ -113,6 +115,7 @@ export interface DrawingEdge {
   readonly labelShown: boolean;
   readonly label: string;
   readonly width: number;
+  readonly focused: boolean;
 }
 
 /** What the renderer has drawn, read from the development canvas. */
@@ -145,4 +148,21 @@ export async function zoomPast(page: Page, direction: 'below' | 'above'): Promis
     last = now;
     return settled;
   }).toBe(true);
+}
+
+const KEY_NAMES: Readonly<Record<string, string>> = { escape: 'Esc', enter: 'Enter', space: 'Space', tab: 'Tab', delete: 'Del', contextmenu: 'Menu', arrowleft: '←', arrowup: '↑', arrowdown: '↓', arrowright: '→' };
+
+/** How the page shows a key on this platform: ⇧⌘I on macOS, Ctrl+Shift+I elsewhere. */
+export function shownKey(mod: 'Meta' | 'Control', spec: string): string {
+  const parts = spec.split('+');
+  const last = parts.pop() ?? '';
+  const name = KEY_NAMES[last] ?? last.toUpperCase();
+  const has = (word: string): boolean => parts.includes(word);
+  return mod === 'Meta' ? `${has('shift') ? '⇧' : ''}${has('mod') ? '⌘' : ''}${name}` : [...(has('mod') ? ['Ctrl'] : []), ...(has('shift') ? ['Shift'] : []), name].join('+');
+}
+
+/** Each row of the open menu with the key it shows, the empty text where it shows none. */
+export async function menuHints(page: Page): Promise<Array<readonly [string, string]>> {
+  const rows = await menuOf(page).first().locator('[role="menuitem"], [role="menuitemradio"]').evaluateAll((items) => items.map((item) => ({ label: item.querySelector('.menu-label')?.textContent ?? '', hint: item.querySelector('.menu-hint, kbd')?.textContent ?? '' })));
+  return rows.map(({ label, hint }) => [label, hint] as const);
 }

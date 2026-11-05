@@ -35,7 +35,7 @@ export async function fromBottom(page: Page, region: Locator, edge: 'top' | 'bot
 }
 
 /** The page does not scroll sideways, and none of the named regions reaches outside the viewport. */
-export async function expectInsideViewport(page: Page, regions: Readonly<Record<string, Locator>>): Promise<void> {
+export async function expectInsideViewport(page: Page, regions: Readonly<Record<string, Locator>>, options: { readonly bottom?: boolean } = {}): Promise<void> {
   const size = page.viewportSize();
   if (size === null) throw new Error('NO_VIEWPORT');
   const sideways = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
@@ -45,7 +45,24 @@ export async function expectInsideViewport(page: Page, regions: Readonly<Record<
     expect(box.x, `${name} starts left of the viewport`).toBeGreaterThanOrEqual(-EXACT);
     expect(box.x + box.width, `${name} ends right of the viewport`).toBeLessThanOrEqual(size.width + EXACT);
     expect(box.y, `${name} starts above the viewport`).toBeGreaterThanOrEqual(-EXACT);
+    if (options.bottom === true) expect(box.y + box.height, `${name} ends below the viewport`).toBeLessThanOrEqual(size.height + EXACT);
   }
+}
+
+/** A region lies inside the one that holds it, on every side. */
+export async function expectContained(name: string, inner: Locator, outer: Locator): Promise<void> {
+  const [box, holder] = [await boxOf(inner), await boxOf(outer)];
+  expect(box.x, `${name} starts left of its region`).toBeGreaterThanOrEqual(holder.x - EXACT);
+  expect(box.y, `${name} starts above its region`).toBeGreaterThanOrEqual(holder.y - EXACT);
+  expect(box.x + box.width, `${name} ends right of its region`).toBeLessThanOrEqual(holder.x + holder.width + EXACT);
+  expect(box.y + box.height, `${name} ends below its region`).toBeLessThanOrEqual(holder.y + holder.height + EXACT);
+}
+
+/** Every element a locator finds lies inside the region. */
+export async function expectEachContained(name: string, inner: Locator, outer: Locator): Promise<void> {
+  const count = await inner.count();
+  expect(count, `${name}: nothing was found, so nothing was checked`).toBeGreaterThan(0);
+  for (let index = 0; index < count; index += 1) await expectContained(`${name} ${index + 1}`, inner.nth(index), outer);
 }
 
 /** A region that must not scroll has as much content as room. */

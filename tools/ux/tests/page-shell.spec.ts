@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { APPROXIMATE, boxOf, expectBox, expectInsideViewport, expectNoScroll, fromBottom, styleOf } from './support/regions.ts';
+import { APPROXIMATE, boxOf, expectBox, expectContained, expectEachContained, expectInsideViewport, expectNoScroll, fromBottom, styleOf } from './support/regions.ts';
 
 const PAGES = [
   ['Home', '/'],
@@ -18,6 +18,11 @@ for (const [name, path] of PAGES) {
     test('has no sideways scroll and keeps its regions inside the viewport and the sidebar still', async ({ page }) => {
       await expectInsideViewport(page, { sidebar: page.locator('aside.sidebar'), heading: page.locator('h1'), content: page.locator('main') });
       await expectNoScroll('the sidebar', page.locator('aside.sidebar'));
+      await expectInsideViewport(page, { sidebar: page.locator('aside.sidebar') }, { bottom: true });
+      await expectContained('the brand', page.locator('.brand'), page.locator('aside.sidebar'));
+      await expectEachContained('a navigation item', page.locator('aside.sidebar nav a'), page.locator('aside.sidebar'));
+      await expectContained('the identity block', page.locator('.sidebar-bottom'), page.locator('aside.sidebar'));
+      await expectContained('the heading', page.locator('h1'), page.locator('main'));
     });
 
     test('has the sidebar, brand and navigation of the frames', async ({ page }) => {

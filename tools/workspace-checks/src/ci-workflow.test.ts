@@ -133,6 +133,7 @@ describe('CI workflow', () => {
       'actions/cache',
       'pnpm --filter @neburyx/ux-tests exec playwright install --with-deps chromium',
       'pnpm test:ux',
+      'actions/upload-artifact',
     ]);
     expect(steps.find((step) => step.uses?.startsWith('actions/cache'))?.with).toEqual({ path: '~/.cache/ms-playwright', key: `playwright-${playwrightVersion}-\${{ runner.os }}` });
     expect(Object.keys(rootScripts)).toContain('test:ux');

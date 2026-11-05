@@ -73,6 +73,13 @@ const fresh = (): Calls => ({ closed: 0, throttles: [], urls: [], adds: 0 });
 const URL_OF_APP = 'http://127.0.0.1:5174/some/path?token=secret';
 
 describe('the add benchmark', () => {
+  it('records a browser without a window as not headed in the add report too', async () => {
+    const quiet = deps(fresh(), () => addingPage());
+    const base = await quiet.launchBrowser();
+    const report = await runAddBenchmark({ url: URL_OF_APP, out: join(directory, 'headless.json'), cpuThrottle: 4 }, { ...quiet, launchBrowser: async () => ({ ...base, headed: false }) });
+    expect(report.browser.headed).toBe(false);
+  });
+
   it('writes one complete report: three runs on three loads of the page, the drawn counts before the add, the machine, the viewport, the throttle, the target and the verdict', async () => {
     const calls = fresh();
     const out = join(directory, 'report.json');

@@ -71,7 +71,7 @@ export async function runScenario<Run extends { readonly longestFrameMs: number;
       {
         measuredAt: deps.now().toISOString(),
         app: { origin: target.origin, drawnEntities: drawn.entities, drawnRelationships: drawn.relationships },
-        browser: { name: browser.name, version: browser.version, headed: true },
+        browser: { name: browser.name, version: browser.version, headed: browser.headed ?? true },
         ...deps.machine(),
         viewport,
         protocol: { runs: ADD_RUNS, framesAfter: ADD_TARGET.framesAfter, cpuThrottle },

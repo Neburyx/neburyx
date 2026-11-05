@@ -16,7 +16,7 @@ export const productReportSchema = z.strictObject({
   status: z.literal('complete'),
   target: z.literal('product'),
   measuredAt: z.iso.datetime(),
-  app: z.strictObject({ origin: z.string().min(1), drawnEntities: z.number().int().positive(), drawnRelationships: z.number().int().positive() }),
+  app: z.strictObject({ origin: z.string().min(1), drawnEntities: z.number().int().positive(), drawnRelationships: z.number().int().positive(), zoom: z.number().positive() }),
   browser: z.strictObject({ name: z.string().min(1), version: z.string().min(1), headed: z.boolean() }),
   os: z.strictObject({ platform: z.string().min(1), release: z.string().min(1), arch: z.string().min(1) }),
   cpu: z.strictObject({ model: z.string().min(1), cores: z.number().int().positive() }),

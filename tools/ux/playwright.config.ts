@@ -5,7 +5,8 @@ const PRODUCTION_PORT = 4174;
 const serve = (folder: string, port: number) => ({
   command: `node src/serve.ts ${folder} ${port}`,
   url: `http://127.0.0.1:${port}/healthz`,
-  reuseExistingServer: process.env['CI'] === undefined,
+  // a server already on the port could be another checkout's build, so the run owns its servers and fails when the port is taken
+  reuseExistingServer: false,
   timeout: 30_000,
 });
 

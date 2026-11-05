@@ -639,7 +639,10 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
         interaction: { panning: cy.userPanningEnabled(), zooming: cy.userZoomingEnabled(), boxSelecting: cy.boxSelectionEnabled(), nodesGrabbable: cy.nodes().map((node) => node.grabbable()).includes(true), nodesSelectable: !cy.autounselectify() },
         nodes: cy.nodes().map((node) => {
           const image = node.style('background-image');
-          return { id: node.id(), diameter: parseFloat(node.style('width')), outline: node.style('border-color'), outlineWidth: parseFloat(node.style('border-width')), halo: parseFloat(node.style('underlay-opacity')) > 0, images: image === 'none' ? [] : image.split(' '), caption: String(node.data('caption') ?? ''), captionShown: Number(String(node.style('background-image-opacity')).split(' ')[1] ?? 1) > 0, focused: parseFloat(node.style('outline-width')) > 0 };
+          const layers = image === 'none' ? [] : image.split(' ');
+          const opacities = String(node.style('background-image-opacity')).split(' ').map(Number);
+          const shownAt = (layer: number): boolean => (opacities[layer] ?? 1) > 0;
+          return { id: node.id(), diameter: parseFloat(node.style('width')), outline: node.style('border-color'), outlineWidth: parseFloat(node.style('border-width')), halo: parseFloat(node.style('underlay-opacity')) > 0, images: layers, caption: String(node.data('caption') ?? ''), captionShown: shownAt(1), glyphShown: shownAt(0), badgeShown: layers.length === 3 && shownAt(2), focused: parseFloat(node.style('outline-width')) > 0 };
         }),
         edges: cy.edges().map((edge) => ({
           id: edge.id(),

@@ -159,7 +159,8 @@ export async function runProductBenchmark(options: ProductOptions, deps: Product
       status: 'complete',
       target: 'product',
       measuredAt: deps.now().toISOString(),
-      app: { origin: target.origin, drawnEntities: drawn.entities, drawnRelationships: drawn.relationships },
+      /** `zoom` is the view the runs were measured at, so a record can say whether the captions were drawn. */
+      app: { origin: target.origin, drawnEntities: drawn.entities, drawnRelationships: drawn.relationships, zoom: drawn.zoom },
       browser: { name: browser.name, version: browser.version, headed: browser.headed ?? true },
       ...deps.machine(),
       viewport,
