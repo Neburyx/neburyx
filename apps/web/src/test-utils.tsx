@@ -18,6 +18,7 @@ import type { CanvasEvents, CanvasRenderer, CreateRenderer, Scene } from './canv
 import type { Position, Viewport } from './state/presentation-state.js';
 import { createMenuRegistry, MenuProvider, type MenuRegistry } from './workspace/menu-registry.js';
 import { createSelectionActionRegistry, SelectionActionsProvider, type SelectionActionRegistry } from './workspace/selection-actions.js';
+import { bindLegend } from './workspace/legend-binder.js';
 import { createPanelRegistryFor, PanelsProvider, type PanelRegistry } from './workspace/panel-registry.js';
 import { createSlotRegistry, SlotsProvider, type SlotRegistry } from './workspace/slots.js';
 import { createToolRegistry, ToolsProvider, type ToolRegistry } from './workspace/tool-registry.js';
@@ -190,7 +191,19 @@ export function renderApp(path: string, client: ApiClient, state: ClientState = 
       </SlotsProvider>
     </ClientStateProvider>,
   );
-  return { router, state, slots, tools, panels, container: view.container, unmount: view.unmount };
+  const unbind = bindLegend(state, panels);
+  return {
+    router,
+    state,
+    slots,
+    tools,
+    panels,
+    container: view.container,
+    unmount: () => {
+      unbind();
+      view.unmount();
+    },
+  };
 }
 
 function Reloader() {
@@ -207,7 +220,11 @@ export function WorkspaceHarness({ client, state, profile: injected, createRende
   const selectionActions = useMemo(() => createSelectionActionRegistry(), []);
   const tools = useMemo(() => createToolRegistry(), []);
   const menus = useMemo(() => createMenuRegistry(), []);
-  const panels = useMemo(() => createPanelRegistryFor(clientState), [clientState]);
+  const panels = useMemo(() => {
+    const registry = createPanelRegistryFor(clientState);
+    bindLegend(clientState, registry);
+    return registry;
+  }, [clientState]);
   const createRenderer = useMemo(() => injectedRenderer ?? stubFactory().create, [injectedRenderer]);
   return (
     <ClientStateProvider state={clientState}>

@@ -8,15 +8,30 @@ import { registerBuiltInSlots } from '../workspace/built-in-slots.js';
 import { registerBuiltInTools } from '../workspace/built-in-tools.js';
 import { createMenuRegistry, MenuProvider } from '../workspace/menu-registry.js';
 import { createSelectionActionRegistry, SelectionActionsProvider } from '../workspace/selection-actions.js';
+import { bindLegend } from '../workspace/legend-binder.js';
 import { createPanelRegistryFor, PanelsProvider } from '../workspace/panel-registry.js';
 import { createSlotRegistry, SlotsProvider } from '../workspace/slots.js';
 import { createToolRegistry, ToolsProvider } from '../workspace/tool-registry.js';
 import { WorkspaceShell } from '../workspace/workspace-shell.js';
+import type { SourceProfile } from '@neburyx/contracts';
 import { createFrameSampleState, frameSampleProfile, FRAME_SAMPLE_SOURCE } from './frame-sample.js';
 import { registerStandInActions, registerStandInMenuItems, registerStandInPanels, registerStandInTools, registerStandIns } from './stand-ins.js';
 
+const LONG_LABEL_LENGTH = 60;
+
+/** The sample's profile, with more neutral entity types when the address says `?legendTypes=40`, and the first type's label as one unbroken word of 60 characters when it says `?legendLabel=long`, to try the legend with a long list and a long label. */
+function sampleProfile(search: string): SourceProfile {
+  const base = frameSampleProfile();
+  const params = new URLSearchParams(search);
+  const extra = Math.max(0, Number(params.get('legendTypes') ?? 0) - base.entityTypes.length);
+  const template = base.entityTypes[0];
+  const more = template === undefined ? [] : Array.from({ length: extra }, (_unused, index) => ({ ...template, type: `kind-${index}`, label: `Kind ${index}` }));
+  const entityTypes = [...base.entityTypes, ...more].map((type, index) => (index === 0 && params.get('legendLabel') === 'long' ? { ...type, label: 'W'.repeat(LONG_LABEL_LENGTH) } : type));
+  return { ...base, entityTypes };
+}
+
 function knownProfile(): ProfileStore {
-  const store = createStore<ProfileState>({ sourceId: FRAME_SAMPLE_SOURCE, request: { phase: 'ready', data: frameSampleProfile() } });
+  const store = createStore<ProfileState>({ sourceId: FRAME_SAMPLE_SOURCE, request: { phase: 'ready', data: sampleProfile(window.location.search) } });
   return { ...readable(store), reload: () => undefined };
 }
 
@@ -56,6 +71,7 @@ export function FrameSamplePage() {
   });
   const [panels] = useState(() => {
     const registry = createPanelRegistryFor(state);
+    bindLegend(state, registry);
     registerStandInPanels(registry, { floating: floatingSide(window.location.search) });
     return registry;
   });

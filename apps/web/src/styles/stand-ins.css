@@ -15,11 +15,6 @@
   height: var(--stand-in-control-height);
 }
 
-.stand-in-legend {
-  width: var(--stand-in-legend-width);
-  height: var(--stand-in-control-height);
-}
-
 .stand-in-zoom {
   width: var(--stand-in-zoom-width);
   height: var(--stand-in-control-height);
@@ -123,10 +118,6 @@
 
 .icon-stand-in-menu-layout {
   --icon: url('../assets/lucide/layout-template.svg');
-}
-
-.icon-stand-in-menu-legend {
-  --icon: url('../assets/lucide/list.svg');
 }
 
 .icon-stand-in-menu-download {

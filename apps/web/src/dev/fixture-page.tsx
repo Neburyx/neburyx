@@ -51,7 +51,7 @@ function LoadFixture({ profile }: { readonly profile: SourceProfile }) {
       registerStandInActions(actions);
       registerStandInTools(tools);
       registerStandInMenuItems(menus);
-      registerStandInPanels(panels);
+      registerStandInPanels(panels, { floating: false });
       setRefusal(undefined);
     } catch (error) {
       if (!(error instanceof FixtureError)) throw error;

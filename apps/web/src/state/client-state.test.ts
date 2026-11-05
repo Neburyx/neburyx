@@ -283,6 +283,46 @@ describe('every embedded ref is checked, and the stores cannot be written around
   });
 });
 
+describe('the legend\'s open state', () => {
+  it('is closed to begin with, opens and closes, and notifies nobody when it is set to what it already is', () => {
+    const state = createClientState();
+    expect(state.presentation.view.getState().legendOpen).toBe(false);
+    const listener = vi.fn();
+    state.presentation.view.subscribe(listener);
+    state.presentation.setLegendOpen(false);
+    expect(listener).not.toHaveBeenCalled();
+    state.presentation.setLegendOpen(true);
+    expect(state.presentation.view.getState().legendOpen).toBe(true);
+    expect(listener).toHaveBeenCalledTimes(1);
+    state.presentation.setLegendOpen(true);
+    expect(listener).toHaveBeenCalledTimes(1);
+    state.presentation.setLegendOpen(false);
+    expect(state.presentation.view.getState().legendOpen).toBe(false);
+  });
+
+  it('changes nothing else: every other key of the presentation state keeps the same object', () => {
+    const state = createClientState();
+    state.presentation.setPanelSize('a', 300);
+    state.presentation.setPanelCollapsed('a', 1, true);
+    const before = state.presentation.view.getState();
+    state.presentation.setLegendOpen(true);
+    const after = state.presentation.view.getState();
+    const { legendOpen: openBefore, ...restBefore } = before;
+    const { legendOpen: openAfter, ...restAfter } = after;
+    expect([openBefore, openAfter]).toEqual([false, true]);
+    const afterByName = new Map(Object.entries(restAfter));
+    for (const [name, value] of Object.entries(restBefore)) expect(Object.is(value, afterByName.get(name)), name).toBe(true);
+  });
+
+  it('is kept when another source is bound, as the layout the viewer chose and not the investigation\'s', () => {
+    const state = createClientState();
+    state.bindSource('source-a');
+    state.presentation.setLegendOpen(true);
+    state.bindSource('source-b');
+    expect(state.presentation.view.getState().legendOpen).toBe(true);
+  });
+});
+
 describe('panel sizes', () => {
   it.each([Number.NaN, Infinity, -Infinity, 0, -1])('refuses %s with INVALID_PANEL_SIZE and leaves the state as it was', (size) => {
     const state = createClientState();

@@ -1,7 +1,7 @@
 import { createContext, useContext, type ComponentType, type ReactNode } from 'react';
 import { createStore, readable, useStoreSelector, type ReadableStore } from '../state/store.js';
 
-export const SLOT_NAMES = ['investigation-menu', 'ask', 'summarize', 'views', 'export', 'save', 'tool-strip', 'toggles', 'zoom-controls', 'floating', 'search', 'settings'] as const;
+export const SLOT_NAMES = ['investigation-menu', 'ask', 'summarize', 'views', 'export', 'save', 'tool-strip', 'toggles', 'table-toggle', 'zoom-controls', 'floating', 'search', 'settings'] as const;
 
 export type SlotName = (typeof SLOT_NAMES)[number];
 

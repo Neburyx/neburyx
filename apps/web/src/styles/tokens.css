@@ -77,7 +77,17 @@
   --menu-width-relationship: 300px;
   --stand-in-control-height: 36px;
   --stand-in-table-width: 86px;
-  --stand-in-legend-width: 186px;
+  --legend-toggle-width: 186px;
+  --legend-toggle-height: 36px;
+  --legend-swatch-size: 24px;
+  --legend-glyph-size: 14px;
+  --legend-close-size: 16px;
+  --legend-sample-width: 32px;
+  --legend-sample-height: 12px;
+  --legend-heading-size: 15px;
+  --legend-swatch-border-width: 1.5px;
+  --legend-column-min: 140px;
+  --color-legend-swatch-border: #c7cce5;
   --stand-in-zoom-width: 197px;
   --selection-box-fill: rgba(82, 99, 166, 0.07);
   --selection-box-color: #5263a6;
@@ -138,6 +148,7 @@
   --line-height-pill: 16px;
   --line-height-caption: 13px;
   --line-height-menu-title: 15px;
+  --line-height-legend: 15px;
   --badge-height: 22px;
 
   --focus-outline: var(--focus-width) solid var(--color-focus);

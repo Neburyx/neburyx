@@ -14,7 +14,7 @@ import { createClientState } from '../state/client-state.js';
 import { createPanelRegistry } from '../workspace/panel-registry.js';
 import { registerFixtureControls, registerStandInActions, registerStandInMenuItems, registerStandInPanels, registerStandInTools, registerStandIns, STAND_IN_MARKER } from './stand-ins.js';
 
-const BUILT_LATER: readonly SlotName[] = SLOT_NAMES.filter((name) => name !== 'ask' && name !== 'summarize' && name !== 'tool-strip');
+const BUILT_LATER: readonly SlotName[] = SLOT_NAMES.filter((name) => name !== 'ask' && name !== 'summarize' && name !== 'tool-strip' && name !== 'toggles');
 
 describe('the slot stand-ins', () => {
   it('fill every slot whose occupant is not built, and not Ask, Summarize or the tool strip', () => {
@@ -126,10 +126,10 @@ describe('the menu item stand-ins', () => {
   const idsOf = (registry: MenuRegistry, kind: MenuTargetKind): string[] => (registry.view.getState().get(kind) ?? []).map((item) => item.id);
   const labelsOf = (registry: MenuRegistry, kind: MenuTargetKind): string[] => (registry.view.getState().get(kind) ?? []).map((item) => (typeof item.label === 'string' ? item.label : '(from the target)'));
 
-  it('leave the menus of production as they are before they are installed: the canvas menu holds its four items, the entity and relationship menus none', () => {
+  it('leave the menus of production as they are before they are installed: the canvas menu holds its five items, the entity and relationship menus none', () => {
     const registry = createMenuRegistry();
     registerBuiltInMenuItems(registry);
-    expect(idsOf(registry, 'canvas')).toEqual(['fit-to-view', 'select-all', 'invert-selection', 'layout']);
+    expect(idsOf(registry, 'canvas')).toEqual(['fit-to-view', 'select-all', 'invert-selection', 'layout', 'show-legend']);
     expect(idsOf(registry, 'node')).toEqual([]);
     expect(idsOf(registry, 'relationship')).toEqual([]);
   });
@@ -138,7 +138,7 @@ describe('the menu item stand-ins', () => {
     const registry = createMenuRegistry();
     registerBuiltInMenuItems(registry);
     registerStandInMenuItems(registry);
-    expect(labelsOf(registry, 'canvas')).toEqual(['Fit to view', 'Select all', 'Invert selection', 'Group all by type', 'Ungroup all', 'Layout', 'Show legend', 'Export view…']);
+    expect(labelsOf(registry, 'canvas')).toEqual(['Fit to view', 'Select all', 'Invert selection', 'Group all by type', 'Ungroup all', 'Layout', '(from the target)', 'Export view…']);
     expect(labelsOf(registry, 'node')).toEqual([
       'Expand neighbors', 'Expand by type', 'Focus neighborhood', 'Find paths from here…', 'Find paths to…', 'Run pattern', 'Select neighbors', 'Invert selection', 'Group by type', 'Pin position', 'Hide from view', 'Copy ID', 'Copy properties', 'Open source record', 'Ask about this entity', 'Summarize neighborhood',
     ]);
@@ -186,16 +186,16 @@ describe('the menu item stand-ins', () => {
 
   it('leave a place that is taken alone for the same kind, keep every real registration, add nothing twice and take out only what they added', () => {
     const registry = createMenuRegistry();
-    const real = { id: 'stand-in-show-legend', label: 'Real legend', icon: null, group: 30, order: 20, run: () => undefined };
+    const real = { id: 'stand-in-export-view', label: 'Real export', icon: null, group: 30, order: 20, run: () => undefined };
     registry.register('canvas', real);
     registerBuiltInMenuItems(registry);
     const remove = registerStandInMenuItems(registry);
     registerStandInMenuItems(registry);
-    expect(labelsOf(registry, 'canvas').filter((label) => label === 'Real legend')).toHaveLength(1);
-    expect(idsOf(registry, 'canvas').filter((id) => id === 'stand-in-show-legend')).toHaveLength(1);
-    expect(registry.view.getState().get('canvas')?.find((item) => item.id === 'stand-in-show-legend')?.label).toBe('Real legend');
+    expect(labelsOf(registry, 'canvas').filter((label) => label === 'Real export')).toHaveLength(1);
+    expect(idsOf(registry, 'canvas').filter((id) => id === 'stand-in-export-view')).toHaveLength(1);
+    expect(registry.view.getState().get('canvas')?.find((item) => item.id === 'stand-in-export-view')?.label).toBe('Real export');
     remove();
-    expect(idsOf(registry, 'canvas')).toEqual(['fit-to-view', 'select-all', 'invert-selection', 'layout', 'stand-in-show-legend']);
+    expect(idsOf(registry, 'canvas')).toEqual(['fit-to-view', 'select-all', 'invert-selection', 'layout', 'stand-in-export-view', 'show-legend']);
     expect(idsOf(registry, 'node')).toEqual([]);
   });
 });

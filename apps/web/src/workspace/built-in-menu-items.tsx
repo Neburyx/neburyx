@@ -54,6 +54,15 @@ export function registerBuiltInMenuItems(registry: MenuRegistry): () => void {
       state: (context) => (canLayOut(context) ? 'enabled' : 'disabled'),
       submenu: LayoutSubmenu,
     }),
+    registry.register('canvas', {
+      id: 'show-legend',
+      label: (context) => (context.state.presentation.view.getState().legendOpen ? 'Hide legend' : 'Show legend'),
+      icon: <span className="icon icon-legend" aria-hidden="true" />,
+      group: MENU_GROUP.canvas.layoutAndLegend,
+      order: MENU_ORDER.canvas.showLegend,
+      shortcut: 'L',
+      run: (context) => context.state.presentation.setLegendOpen(!context.state.presentation.view.getState().legendOpen),
+    }),
   ];
   return () => {
     for (const remove of removals) remove();

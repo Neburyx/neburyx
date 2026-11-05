@@ -43,3 +43,15 @@ describe('the controls the workspace provides', () => {
     expect(screen.queryByRole('group', { name: 'Zoom' })).toBeNull();
   });
 });
+
+describe('the legend toggle the workspace provides', () => {
+  it('puts the toggles in their slot, so Explore shows the legend toggle, and takes them out again', () => {
+    const slots = createSlotRegistry();
+    const remove = registerBuiltInSlots(slots);
+    const { unmount } = renderApp('/explore', client, undefined, slots);
+    expect(screen.getByRole('button', { name: 'Legend' })).not.toBeNull();
+    unmount();
+    remove();
+    expect(slots.view.getState().has('toggles')).toBe(false);
+  });
+});

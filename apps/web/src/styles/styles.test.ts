@@ -92,6 +92,51 @@ describe('the stylesheets', () => {
     expect(workspace).toMatch(/\.panel-dock \.panel \{[^}]*box-shadow: var\(--shadow-dock-panel\);/s);
   });
 
+  it('draw the legend toggle as the frame\'s 186 by 36 strip, with the pressed look from the accent, and the legend as a grid of columns of at least 140 px with 24 px circular swatches', () => {
+    const tokens = readFileSync(join(DIRECTORY, 'tokens.css'), 'utf8');
+    expect(tokens).toMatch(/--legend-toggle-width:\s*186px;/);
+    expect(tokens).toMatch(/--legend-toggle-height:\s*36px;/);
+    expect(tokens).toMatch(/--legend-swatch-size:\s*24px;/);
+    expect(tokens).toMatch(/--legend-column-min:\s*140px;/);
+    expect(tokens).toMatch(/--color-legend-swatch-border:\s*#c7cce5;/);
+    const workspace = readFileSync(join(DIRECTORY, 'workspace.css'), 'utf8');
+    expect(workspace).toMatch(/\.legend-toggle \{[^}]*width: var\(--legend-toggle-width\);[^}]*height: var\(--legend-toggle-height\);[^}]*padding: 0 var\(--space-12\);[^}]*border: var\(--border-width\) solid var\(--color-control-border\);[^}]*border-radius: var\(--radius\);/s);
+    expect(workspace).toMatch(/\.legend-toggle\[aria-expanded='true'\] \{[^}]*border-color: var\(--color-accent\);/s);
+    expect(workspace).toMatch(/\.legend-types \{[^}]*grid-template-columns: repeat\(auto-fill, minmax\(var\(--legend-column-min\), 1fr\)\);[^}]*row-gap: var\(--space-10\);/s);
+    expect(workspace).toMatch(/\.legend-swatch \{[^}]*width: var\(--legend-swatch-size\);[^}]*height: var\(--legend-swatch-size\);[^}]*border-radius: 50%;/s);
+  });
+
+  it('lay out the legend\'s relationship rows as a 32 by 12 sample and a label that wraps inside the panel, 14 px apart', () => {
+    const tokens = readFileSync(join(DIRECTORY, 'tokens.css'), 'utf8');
+    expect(tokens).toMatch(/--legend-sample-width:\s*32px;/);
+    expect(tokens).toMatch(/--legend-sample-height:\s*12px;/);
+    const workspace = readFileSync(join(DIRECTORY, 'workspace.css'), 'utf8');
+    expect(workspace).toMatch(/\.legend-relationships \{[^}]*flex-direction: column;[^}]*gap: var\(--space-14\);/s);
+    expect(workspace).toMatch(/\.legend-relationship \{[^}]*display: flex;[^}]*gap: var\(--space-10\);/s);
+    expect(workspace).toMatch(/\.legend-sample \{[^}]*flex: none;[^}]*width: var\(--legend-sample-width\);[^}]*height: var\(--legend-sample-height\);/s);
+    expect(workspace).toMatch(/\.legend-relationship-label \{[^}]*min-width: 0;[^}]*overflow-wrap: anywhere;/s);
+    expect(workspace).toMatch(/\.legend-divider \{[^}]*height: var\(--border-width\);[^}]*background: var\(--color-control-border\);/s);
+  });
+
+  it('wrap the legend\'s labels inside their cells, top-aligned, with a long unbroken word breaking inside the cell', () => {
+    const workspace = readFileSync(join(DIRECTORY, 'workspace.css'), 'utf8');
+    expect(workspace).toMatch(/\.legend-type \{[^}]*min-width: 0;[^}]*align-items: flex-start;/s);
+    expect(workspace).toMatch(/\.legend-type-label \{[^}]*min-width: 0;[^}]*overflow-wrap: anywhere;/s);
+    expect(workspace).toMatch(/\.legend-swatch \{[^}]*flex: none;/s);
+  });
+
+  it('set the legend\'s lines to the frame\'s heights: 18 px for the heading, 13 px for the section labels, 15 px for the rows, and centre a one-line label on its swatch', () => {
+    const tokens = readFileSync(join(DIRECTORY, 'tokens.css'), 'utf8');
+    expect(tokens).toMatch(/--line-height-compact:\s*18px;/);
+    expect(tokens).toMatch(/--line-height-caption:\s*13px;/);
+    expect(tokens).toMatch(/--line-height-legend:\s*15px;/);
+    const workspace = readFileSync(join(DIRECTORY, 'workspace.css'), 'utf8');
+    expect(workspace).toMatch(/\.legend-panel \{[^}]*line-height: var\(--line-height-legend\);/s);
+    expect(workspace).toMatch(/\.legend-heading \{[^}]*line-height: var\(--line-height-compact\);/s);
+    expect(workspace).toMatch(/\.legend-label \{[^}]*line-height: var\(--line-height-caption\);/s);
+    expect(workspace).toMatch(/\.legend-type-label \{[^}]*margin-top: calc\(\(var\(--legend-swatch-size\) - var\(--line-height-legend\)\) \/ 2\);/s);
+  });
+
   it('place the graph scope lines 24 px from the canvas left and 16 px from its top, 12 px on a 17 px line, 3 px apart', () => {
     const tokens = readFileSync(join(DIRECTORY, 'tokens.css'), 'utf8');
     expect(tokens).toMatch(/--scope-left:\s*24px;/);

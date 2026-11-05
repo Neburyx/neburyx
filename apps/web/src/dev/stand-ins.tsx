@@ -16,15 +16,7 @@ const STAND_INS: readonly (readonly [SlotName, ComponentType])[] = [
   ['views', () => <button type="button" className="stand-in-header-action">Views ▾</button>],
   ['export', () => <button type="button" className="stand-in-header-action">Export</button>],
   ['save', () => <button type="button" className="stand-in-header-action stand-in-save">Save</button>],
-  [
-    'toggles',
-    () => (
-      <>
-        <div className="stand-in stand-in-table" data-dev-tool={STAND_IN_MARKER}>Table</div>
-        <div className="stand-in stand-in-legend" data-dev-tool={STAND_IN_MARKER}>Legend</div>
-      </>
-    ),
-  ],
+  ['table-toggle', () => <div className="stand-in stand-in-table" data-dev-tool={STAND_IN_MARKER}>Table</div>],
   ['zoom-controls', () => <div className="stand-in stand-in-zoom" data-dev-tool={STAND_IN_MARKER}>Zoom</div>],
   ['floating', () => null],
   [
@@ -186,7 +178,6 @@ const RELATIONSHIP_ORDER = MENU_ORDER.relationship;
 const STAND_IN_MENU_ITEMS: readonly (readonly [MenuTargetKind, MenuItem])[] = [
   ['canvas', parent('stand-in-group-all', 'Group all by type', 'group', MENU_GROUP.canvas.grouping, MENU_ORDER.canvas.groupAll)],
   ['canvas', command('stand-in-ungroup-all', 'Ungroup all', 'ungroup', MENU_GROUP.canvas.grouping, MENU_ORDER.canvas.ungroupAll)],
-  ['canvas', command('stand-in-show-legend', 'Show legend', 'legend', MENU_GROUP.canvas.layoutAndLegend, MENU_ORDER.canvas.showLegend, { shortcut: 'L' })],
   ['canvas', command('stand-in-export-view', 'Export view…', 'download', MENU_GROUP.canvas.export, MENU_ORDER.canvas.exportView, { shortcut: '⌘E' })],
   ['node', command('stand-in-expand-neighbors', 'Expand neighbors', 'expand', NODE_GROUP.expand, NODE_ORDER.expandNeighbors, { shortcut: 'E' })],
   ['node', parent('stand-in-expand-by-type', 'Expand by type', 'types', NODE_GROUP.expand, NODE_ORDER.expandByType)],

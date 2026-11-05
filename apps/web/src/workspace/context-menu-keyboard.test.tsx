@@ -57,7 +57,7 @@ describe('the menu from the keyboard', () => {
     const { rightClick } = open(registry);
     rightClick(onCanvas(10, 10));
     expect(screen.getByRole('menu', { name: 'Canvas' })).not.toBeNull();
-    expect(screen.getAllByRole('menuitem')).toHaveLength(5);
+    expect(screen.getAllByRole('menuitem')).toHaveLength(6);
     expect(screen.getAllByRole('separator')).toHaveLength(2);
     expect(focusedName()).toBe('Fit to view');
   });
@@ -85,19 +85,19 @@ describe('the menu from the keyboard', () => {
     rightClick(onCanvas(10, 10));
     const user = userEvent.setup();
     const down: (string | null)[] = [];
-    for (let step = 0; step < 3; step += 1) {
+    for (let step = 0; step < 4; step += 1) {
       await user.keyboard('{ArrowDown}');
       down.push(focusedName());
     }
-    expect(down).toEqual(['Select all', 'Invert selection', 'Layout']);
+    expect(down).toEqual(['Select all', 'Invert selection', 'Layout', 'Show legend']);
     await user.keyboard('{ArrowUp}');
-    expect(focusedName()).toBe('Invert selection');
+    expect(focusedName()).toBe('Layout');
     await user.keyboard('{Home}');
     expect(focusedName()).toBe('Fit to view');
     await user.keyboard('{End}');
-    expect(focusedName()).toBe('Layout');
+    expect(focusedName()).toBe('Show legend');
     await user.hover(row('Select all'));
-    expect(focusedName()).toBe('Layout');
+    expect(focusedName()).toBe('Show legend');
   });
 
   it('lets the focus reach a disabled or locked item, which does nothing', async () => {

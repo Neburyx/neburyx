@@ -29,14 +29,14 @@ describe('the canvas menu', () => {
     expect(within(menu()).queryByRole('heading')).toBeNull();
   });
 
-  it('lists Fit to view, Select all and Invert selection with their hints in one group, then Layout in the next, with one separator between'  , () => {
+  it('lists Fit to view, Select all and Invert selection with their hints in one group, then Layout and Show legend in the next, with one separator between', () => {
     const state = createClientState();
     load(state);
     const { rightClick } = show(state);
     rightClick(onCanvas(10, 10));
     const rows = within(menu()).getAllByRole('menuitem');
-    expect(rows.map((row) => row.textContent)).toEqual(['Fit to view⌘0', 'Select all⌘A', 'Invert selection⇧⌘I', 'Layout']);
-    expect(rows.map((row) => row.querySelector('.menu-label')?.textContent)).toEqual(['Fit to view', 'Select all', 'Invert selection', 'Layout']);
+    expect(rows.map((row) => row.textContent)).toEqual(['Fit to view⌘0', 'Select all⌘A', 'Invert selection⇧⌘I', 'Layout', 'Show legendL']);
+    expect(rows.map((row) => row.querySelector('.menu-label')?.textContent)).toEqual(['Fit to view', 'Select all', 'Invert selection', 'Layout', 'Show legend']);
     expect(within(menu()).queryAllByRole('separator')).toHaveLength(1);
     expect(item('Fit to view')).toBe(rows[0]);
   });
@@ -290,7 +290,7 @@ describe('the menu of an entity', () => {
     rightClick(rightClickOn('relationship', edgeKey(stored.ref)));
     expect(within(screen.getByRole('menu')).queryAllByRole('menuitem')).toEqual([]);
     rightClick(onCanvas(5, 5));
-    expect(within(menu()).getAllByRole('menuitem').map((row) => row.querySelector('.menu-label')?.textContent)).toEqual(['Fit to view', 'Select all', 'Invert selection', 'Layout']);
+    expect(within(menu()).getAllByRole('menuitem').map((row) => row.querySelector('.menu-label')?.textContent)).toEqual(['Fit to view', 'Select all', 'Invert selection', 'Layout', 'Show legend']);
   });
 
   it('shows only the header of an entity menu when nothing is registered at all', () => {
