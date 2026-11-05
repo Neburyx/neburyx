@@ -233,6 +233,11 @@ const STAND_IN_KEYS: readonly { readonly id: string; readonly keys: string; read
   { id: 'copy-properties', keys: 'mod+shift+c', label: 'Copy properties', group: 'actions', order: 60 },
 ];
 
+/** What the development pages do when a stand-in key is pressed: say which one on the page's root element, so a recorded browser run can see that the key reached it. */
+export function markStandInKey(id: string): void {
+  document.documentElement.dataset['lastStandInKey'] = id;
+}
+
 /** Puts a stand-in binding for each key the design shows that no feature has built yet; each runs `onRun` with its id, so that a test or a person can see that the key was bound. Returns the function that takes out what it put in. */
 export function registerStandInKeyBindings(registry: KeyBindingRegistry, onRun: (id: string) => void = nothing): () => void {
   const removals = STAND_IN_KEYS.flatMap(({ id, keys, label, group, order }) => {

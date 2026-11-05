@@ -19,7 +19,7 @@ import { WorkspaceShell } from '../workspace/workspace-shell.js';
 import type { SourceProfile } from '@neburyx/contracts';
 import { FIXTURE_RECORD } from './fixture-loader.js';
 import { createFrameSampleState, frameSampleProfile, FRAME_SAMPLE_SOURCE } from './frame-sample.js';
-import { registerStandInActions, registerStandInKeyBindings, registerStandInMenuItems, registerStandInPanels, registerStandInTools, registerStandIns } from './stand-ins.js';
+import { markStandInKey, registerStandInActions, registerStandInKeyBindings, registerStandInMenuItems, registerStandInPanels, registerStandInTools, registerStandIns } from './stand-ins.js';
 
 const LONG_LABEL_LENGTH = 60;
 
@@ -90,7 +90,7 @@ export function FrameSamplePage() {
   const [keyBindings] = useState(() => {
     const registry = createKeyBindingRegistry();
     registerBuiltInKeyBindings(registry);
-    registerStandInKeyBindings(registry);
+    registerStandInKeyBindings(registry, markStandInKey);
     return registry;
   });
   return (

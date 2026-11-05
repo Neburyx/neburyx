@@ -15,7 +15,7 @@ import { useSlots, type SlotRegistry } from '../workspace/slots.js';
 import { useMenuRegistry } from '../workspace/menu-registry.js';
 import { usePanelRegistry } from '../workspace/panel-registry.js';
 import { useToolRegistry } from '../workspace/tool-registry.js';
-import { registerFixtureControls, registerStandInActions, registerStandInKeyBindings, registerStandInMenuItems, registerStandInPanels, registerStandInTools, registerStandIns } from './stand-ins.js';
+import { markStandInKey, registerFixtureControls, registerStandInActions, registerStandInKeyBindings, registerStandInMenuItems, registerStandInPanels, registerStandInTools, registerStandIns } from './stand-ins.js';
 import { useKeyBindingRegistry, type KeyBindingRegistry } from '../workspace/key-binding-registry.js';
 import { SourcesPanel } from './sources-panel.js';
 
@@ -56,7 +56,7 @@ function LoadFixture({ profile }: { readonly profile: SourceProfile }) {
       registerStandInMenuItems(menus);
       registerStandInPanels(panels, { floating: false });
       keyRegistrations.get(keyBindings)?.();
-      keyRegistrations.set(keyBindings, registerStandInKeyBindings(keyBindings));
+      keyRegistrations.set(keyBindings, registerStandInKeyBindings(keyBindings, markStandInKey));
       setRefusal(undefined);
     } catch (error) {
       if (!(error instanceof FixtureError)) throw error;

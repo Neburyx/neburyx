@@ -10,7 +10,7 @@ export interface Readout {
   readonly relationships: number;
   readonly viewport: Viewport;
   /** Where the renderer drew each entity, and which entities are pinned; given with a draw, not with a viewport report. */
-  readonly drawn?: { readonly positions: ReadonlyMap<string, Position>; readonly pinned: ReadonlySet<string> };
+  readonly drawn?: { readonly positions: ReadonlyMap<string, Position>; readonly pinned: ReadonlySet<string>; readonly focused?: string | undefined };
 }
 
 export interface Moved {
@@ -74,6 +74,8 @@ export function writeReadout(element: HTMLElement, readout: Readout): void {
   element.dataset['panX'] = String(readout.viewport.x);
   element.dataset['panY'] = String(readout.viewport.y);
   if (readout.drawn === undefined) return;
+  if (readout.drawn.focused === undefined) delete element.dataset['focusedElement'];
+  else element.dataset['focusedElement'] = readout.drawn.focused;
   state.positions = readout.drawn.positions;
   state.pinned = readout.drawn.pinned;
   reportMoved(element, state);

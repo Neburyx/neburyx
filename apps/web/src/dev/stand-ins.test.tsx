@@ -12,7 +12,7 @@ import { registerBuiltInMenuItems } from '../workspace/built-in-menu-items.js';
 import { createMenuRegistry, type MenuRegistry, type MenuTargetKind } from '../workspace/menu-registry.js';
 import { createClientState } from '../state/client-state.js';
 import { createPanelRegistry } from '../workspace/panel-registry.js';
-import { registerFixtureControls, registerStandInActions, registerStandInMenuItems, registerStandInPanels, registerStandInTools, registerStandIns, STAND_IN_MARKER } from './stand-ins.js';
+import { markStandInKey, registerFixtureControls, registerStandInActions, registerStandInMenuItems, registerStandInPanels, registerStandInTools, registerStandIns, STAND_IN_MARKER } from './stand-ins.js';
 
 const BUILT_LATER: readonly SlotName[] = SLOT_NAMES.filter((name) => name !== 'ask' && name !== 'summarize' && name !== 'tool-strip' && name !== 'toggles');
 
@@ -306,5 +306,15 @@ describe('the panel stand-ins', () => {
     expect(screen.queryByText('Row 40')).toBeNull();
     await userEvent.setup().click(screen.getByRole('button', { name: 'Tall content' }));
     expect(screen.getByText('Row 40')).toBeTruthy();
+  });
+});
+
+describe('the mark of a stand-in key', () => {
+  it('names the stand-in on the page root, and a later one replaces it', () => {
+    markStandInKey('expand');
+    expect(document.documentElement.dataset['lastStandInKey']).toBe('expand');
+    markStandInKey('focus');
+    expect(document.documentElement.dataset['lastStandInKey']).toBe('focus');
+    delete document.documentElement.dataset['lastStandInKey'];
   });
 });

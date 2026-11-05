@@ -145,7 +145,7 @@ export function GraphCanvas({ profile, view = 'fit' }: { readonly profile?: Sour
         renderer.draw(scene);
         beforeLayout.current = undefined;
         if (placed.size > 0) state.presentation.setPositions(placed);
-        if (__DEV_TOOLS__ && container.current !== null) writeReadout(container.current, { ...renderer.describe(), viewport: renderer.viewport(), drawn: { positions: renderer.positions(), pinned: state.presentation.view.getState().pins } });
+        if (__DEV_TOOLS__ && container.current !== null) writeReadout(container.current, { ...renderer.describe(), viewport: renderer.viewport(), drawn: { positions: renderer.positions(), pinned: state.presentation.view.getState().pins, focused: scene.focused } });
         if (keepNotice.current) keepNotice.current = false;
         else setFailed(false);
       } catch {

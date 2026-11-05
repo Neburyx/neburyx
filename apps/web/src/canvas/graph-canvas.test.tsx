@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import { StrictMode } from 'react';
 import { describe, expect, it } from 'vitest';
 import { testProfile } from '../dev/test-profile.js';
@@ -243,6 +243,19 @@ describe('the development read-out of the graph canvas', () => {
     expect([canvas.dataset['drawnEntities'], canvas.dataset['drawnRelationships'], canvas.dataset['zoom']]).toEqual(['3', '2', '1']);
     act(() => factory.made[0]?.events[0]?.viewport({ zoom: 2.5, x: 12, y: -3 }));
     expect([canvas.dataset['zoom'], canvas.dataset['panX'], canvas.dataset['panY']]).toEqual(['2.5', '12', '-3']);
+  });
+
+  it('names the element the walk is at, while it is at one, for a recorded browser run', async () => {
+    const state = createClientState();
+    load(state, 2, 1);
+    view(state, stubFactory().create);
+    const canvas = screen.getByRole('application', { name: 'Graph canvas' });
+    expect(canvas.dataset['focusedElement']).toBeUndefined();
+    act(() => canvas.focus());
+    act(() => state.presentation.walkTo(nodeKey('n1')));
+    await waitFor(() => expect(canvas.dataset['focusedElement']).toBe(nodeKey('n1')));
+    act(() => state.presentation.endWalk());
+    await waitFor(() => expect(canvas.dataset['focusedElement']).toBeUndefined());
   });
 
   it('gives a function that reads back where each entity is drawn, for a recorded browser run', () => {
