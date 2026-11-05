@@ -94,7 +94,7 @@ export function registerBuiltInKeyBindings(registry: KeyBindingRegistry, schedul
       id: 'open-context-menu',
       keys: ['contextmenu', 'shift+f10'],
       label: 'Open context menu',
-      group: 'actions',
+      group: 'view',
       order: 70,
       scope: 'canvas',
       when: ({ state }) => state.presentation.view.getState().openMenu === undefined,

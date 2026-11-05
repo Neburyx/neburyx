@@ -51,8 +51,7 @@ describe('the sheet of keyboard shortcuts', () => {
     expect(columns()).toEqual({
       TOOLS: ['Select V', 'Pan H', 'Box select B', 'Legend L'],
       SELECTION: ['Select all ⌘A', 'Invert selection ⇧⌘I', 'Clear Esc', 'Move selected entities ←↑↓→', 'Move by 50 ⇧←↑↓→', 'Select the element Enter Space', 'Add to the selection ⇧Enter ⇧Space'],
-      ACTIONS: ['Open context menu Menu ⇧F10'],
-      VIEW: ['Fit to view ⌘0', 'Keyboard shortcuts ⌘/', 'Walk the canvas Enter Space', 'Next element Tab', 'Previous element ⇧Tab', 'Leave the walk Esc'],
+      VIEW: ['Fit to view ⌘0', 'Keyboard shortcuts ⌘/', 'Walk the canvas Enter Space', 'Next element Tab', 'Previous element ⇧Tab', 'Leave the walk Esc', 'Open context menu Menu ⇧F10'],
     });
   });
 
@@ -87,9 +86,9 @@ describe('the sheet of keyboard shortcuts', () => {
     act(() => {
       remove = keys.register({ id: 'extra', keys: ['x'], label: 'Extra', group: 'actions', order: 10, scope: 'workspace', run: () => undefined });
     });
-    expect(columns()['ACTIONS']).toEqual(['Extra X', 'Open context menu Menu ⇧F10']);
+    expect(columns()['ACTIONS']).toEqual(['Extra X']);
     act(() => remove());
-    expect(columns()['ACTIONS']).toEqual(['Open context menu Menu ⇧F10']);
+    expect(columns()['ACTIONS']).toBeUndefined();
   });
 
   it('keeps the Tab key inside, makes the page behind inert, runs no other binding, and takes the inert mark off when it closes', async () => {
@@ -127,8 +126,8 @@ describe('the sheet of keyboard shortcuts', () => {
     expect(columns()).toEqual({
       TOOLS: ['Select V', 'Pan H', 'Box select B', 'Search ⌘K', 'Legend L'],
       SELECTION: ['Select all ⌘A', 'Invert selection ⇧⌘I', 'Clear Esc', 'Expand E', 'Focus F', 'Move selected entities ←↑↓→', 'Move by 50 ⇧←↑↓→', 'Select the element Enter Space', 'Add to the selection ⇧Enter ⇧Space'],
-      ACTIONS: ['Pin position P', 'Hide Del', 'Copy ID ⌘C', 'Find paths ⇧P', 'Export view ⌘E', 'Copy properties ⇧⌘C', 'Open context menu Menu ⇧F10'],
-      VIEW: ['Fit to view ⌘0', 'Keyboard shortcuts ⌘/', 'Walk the canvas Enter Space', 'Next element Tab', 'Previous element ⇧Tab', 'Leave the walk Esc'],
+      ACTIONS: ['Pin position P', 'Hide Del', 'Copy ID ⌘C', 'Find paths ⇧P', 'Export view ⌘E', 'Copy properties ⇧⌘C'],
+      VIEW: ['Fit to view ⌘0', 'Keyboard shortcuts ⌘/', 'Walk the canvas Enter Space', 'Next element Tab', 'Previous element ⇧Tab', 'Leave the walk Esc', 'Open context menu Menu ⇧F10'],
     });
     press('Escape', {}, dialog());
     press('e');
@@ -143,7 +142,7 @@ describe('the sheet of keyboard shortcuts', () => {
     expect(log.sort()).toEqual(['copy-id', 'copy-properties', 'expand', 'export-view', 'find-paths', 'focus', 'hide', 'pin', 'search']);
     act(() => removeStandIns());
     opener();
-    expect(columns()['ACTIONS']).toEqual(['Open context menu Menu ⇧F10']);
+    expect(columns()['ACTIONS']).toBeUndefined();
   });
 
   it('lists the two bindings of a registry of two and no others, which no component writes into itself', () => {
