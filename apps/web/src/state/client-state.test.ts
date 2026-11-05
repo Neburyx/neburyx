@@ -63,6 +63,23 @@ describe('several positions at once', () => {
     expect(() => state.presentation.setPositions(new Map([[first, { x: 1, y: 1 }], [stranger, { x: 2, y: 2 }]]))).toThrowError(expect.objectContaining({ code: 'UNKNOWN_ELEMENT' }));
     expect(state.presentation.view.getState()).toBe(before);
   });
+
+  it('are refused with the same code by the one-entity setter and the many-entity setter, which share one check', () => {
+    const state = loaded();
+    const stranger = elementKey(ref('source-a', 'type-a', 'n3'));
+    const refusal = (run: () => void): unknown => {
+      try {
+        run();
+      } catch (error) {
+        return error;
+      }
+      return undefined;
+    };
+    const one = refusal(() => state.presentation.setPosition(stranger, { x: 1, y: 1 }));
+    const many = refusal(() => state.presentation.setPositions(new Map([[stranger, { x: 1, y: 1 }]])));
+    expect(one).toMatchObject({ name: 'StateError', code: 'UNKNOWN_ELEMENT' });
+    expect(many).toMatchObject({ name: 'StateError', code: 'UNKNOWN_ELEMENT' });
+  });
 });
 
 describe('the cached results', () => {
@@ -537,5 +554,65 @@ describe('the investigation record', () => {
     const state = loaded();
     state.describeInvestigation({ title: 'x', caseRef: null, save: { kind: 'saved', at: '2026-10-29T01:30:00+02:00' } });
     expect(state.investigation.getState().record?.save).toEqual({ kind: 'saved', at: '2026-10-28T23:30:00.000Z' });
+  });
+});
+
+describe('the sheet of keyboard shortcuts in presentation state', () => {
+  it('is closed at first, opens and closes through its setter without touching the other fields, and stays as it is when another source is bound', () => {
+    const state = createClientState();
+    expect(state.presentation.view.getState().sheetOpen).toBe(false);
+    const before = state.presentation.view.getState();
+    state.presentation.setSheetOpen(true);
+    const after = state.presentation.view.getState();
+    expect(after.sheetOpen).toBe(true);
+    for (const name of ['selection', 'positions', 'pins', 'viewport', 'panelSizes', 'collapsedPanels', 'tool', 'legendOpen'] as const) expect(Object.is(after[name], before[name]), name).toBe(true);
+    state.bindSource('a');
+    expect(state.presentation.view.getState().sheetOpen).toBe(true);
+    state.presentation.setSheetOpen(false);
+    expect(state.presentation.view.getState().sheetOpen).toBe(false);
+  });
+});
+
+describe('the walk in presentation state', () => {
+  const first = elementKey(ref('source-a', 'type-a', 'n1'));
+  const second = elementKey(ref('source-a', 'type-a', 'n2'));
+
+  it('refuses an element the investigation does not hold and changes nothing', () => {
+    const state = loaded();
+    const before = state.presentation.view.getState();
+    expect(() => state.presentation.walkTo(elementKey(ref('source-a', 'type-a', 'n3')))).toThrow();
+    expect(state.presentation.view.getState()).toBe(before);
+  });
+
+  it('is off at first, starts at an element, moves, and remembers the element when it ends, with one update for each change and none for a repeat', () => {
+    const state = loaded();
+    const listener = vi.fn();
+    expect(state.presentation.view.getState()).toMatchObject({ walking: false, focused: undefined });
+    state.presentation.view.subscribe(listener);
+    state.presentation.walkTo(first);
+    state.presentation.walkTo(first);
+    state.presentation.walkTo(second);
+    expect(state.presentation.view.getState()).toMatchObject({ walking: true, focused: second });
+    state.presentation.endWalk();
+    state.presentation.endWalk();
+    expect(state.presentation.view.getState()).toMatchObject({ walking: false, focused: second });
+    expect(listener).toHaveBeenCalledTimes(3);
+  });
+
+  it('forgets the element and keeps the walk when asked, and loses an element that is no longer held when the loaded set changes', () => {
+    const state = loaded();
+    state.presentation.walkTo(second);
+    state.presentation.forgetFocused();
+    expect(state.presentation.view.getState()).toMatchObject({ walking: true, focused: undefined });
+    state.presentation.walkTo(second);
+    state.setLoaded([key('source-a')], [ref('source-a', 'type-a', 'n1')], []);
+    expect(state.presentation.view.getState()).toMatchObject({ walking: true, focused: undefined });
+  });
+
+  it('is off again when another source is bound', () => {
+    const state = loaded();
+    state.presentation.walkTo(first);
+    state.bindSource('source-b');
+    expect(state.presentation.view.getState()).toMatchObject({ walking: false, focused: undefined });
   });
 });

@@ -3,7 +3,9 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { createClientState, type ClientState } from '../state/client-state.js';
 import { ClientStateProvider } from '../state/context.js';
+import { builtInKeyBindings } from '../test-utils.js';
 import { registerBuiltInTools } from './built-in-tools.js';
+import { KeyBindingsProvider } from './key-binding-registry.js';
 import { createToolRegistry, ToolsProvider } from './tool-registry.js';
 import { ToolStrip } from './tool-strip.js';
 
@@ -14,8 +16,10 @@ function show(state: ClientState = createClientState(), activate: () => void = (
   render(
     <ClientStateProvider state={state}>
       <ToolsProvider registry={tools}>
-        <ToolStrip />
-        <button type="button">After</button>
+        <KeyBindingsProvider registry={builtInKeyBindings()}>
+          <ToolStrip />
+          <button type="button">After</button>
+        </KeyBindingsProvider>
       </ToolsProvider>
     </ClientStateProvider>,
   );

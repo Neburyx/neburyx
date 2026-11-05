@@ -9,6 +9,8 @@ import { createCytoscapeRenderer } from './canvas/cytoscape-renderer.js';
 import { registerBuiltInMenuItems } from './workspace/built-in-menu-items.js';
 import { registerBuiltInSlots } from './workspace/built-in-slots.js';
 import { registerBuiltInTools } from './workspace/built-in-tools.js';
+import { registerBuiltInKeyBindings } from './workspace/built-in-key-bindings.js';
+import { createKeyBindingRegistry } from './workspace/key-binding-registry.js';
 import { createMenuRegistry } from './workspace/menu-registry.js';
 import { createSelectionActionRegistry } from './workspace/selection-actions.js';
 import { bindLegend } from './workspace/legend-binder.js';
@@ -41,9 +43,11 @@ const tools = createToolRegistry();
 registerBuiltInTools(tools);
 const menus = createMenuRegistry();
 registerBuiltInMenuItems(menus);
+const keyBindings = createKeyBindingRegistry();
+registerBuiltInKeyBindings(keyBindings);
 const router = createBrowserRouter(appRoutes(createApiClient(), state));
 createRoot(root).render(
   <StrictMode>
-    <App router={router} state={state} slots={slots} selectionActions={createSelectionActionRegistry()} tools={tools} menus={menus} panels={panels} createRenderer={createCytoscapeRenderer} />
+    <App router={router} state={state} slots={slots} selectionActions={createSelectionActionRegistry()} tools={tools} menus={menus} panels={panels} keyBindings={keyBindings} createRenderer={createCytoscapeRenderer} />
   </StrictMode>,
 );

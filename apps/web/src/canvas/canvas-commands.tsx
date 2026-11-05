@@ -7,6 +7,8 @@ export interface CanvasCommands {
   readonly fit: () => void;
   readonly zoomBy: (factor: number) => void;
   readonly layout: () => void;
+  /** Where an item is on the page; see `CanvasRenderer.anchorOf`. */
+  readonly anchorOf: (key: string | undefined) => { readonly x: number; readonly y: number } | undefined;
 }
 
 export interface CanvasCommandsHandle {
@@ -28,7 +30,7 @@ export function createCanvasCommandsHandle(): CanvasCommandsHandle {
           onFailure();
         }
       };
-      const commands: CanvasCommands = { fit: () => guarded(() => renderer.fit()), zoomBy: (factor) => guarded(() => renderer.zoomBy(factor)), layout: () => guarded(layout) };
+      const commands: CanvasCommands = { fit: () => guarded(() => renderer.fit()), zoomBy: (factor) => guarded(() => renderer.zoomBy(factor)), layout: () => guarded(layout), anchorOf: (key) => renderer.anchorOf(key) };
       store.setState(commands);
       return () => {
         if (store.getState() === commands) store.setState(undefined);

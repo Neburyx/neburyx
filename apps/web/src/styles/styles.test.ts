@@ -143,6 +143,21 @@ describe('the stylesheets', () => {
     expect(workspace).toMatch(/\.legend-type-label \{[^}]*margin-top: calc\(\(var\(--legend-swatch-size\) - var\(--line-height-legend\)\) \/ 2\);/s);
   });
 
+  it('draw the shortcut sheet as the frame does: 760 px wide, 250 px from the top, padded 24 by 28, 18 px between its parts, 12 px radius, with chips of 2 by 6 px and rows of a 130 px label', () => {
+    const tokens = readFileSync(join(DIRECTORY, 'tokens.css'), 'utf8');
+    for (const [name, value] of [['sheet-width', '760px'], ['sheet-top', '250px'], ['sheet-padding-block', '24px'], ['sheet-padding-inline', '28px'], ['sheet-gap', '18px'], ['sheet-columns-gap', '32px'], ['sheet-rows-gap', '8px'], ['sheet-label-width', '130px'], ['sheet-title-size', '18px'], ['sheet-key-padding-block', '2px'], ['sheet-key-padding-inline', '6px']] as const) expect(tokens, name).toMatch(new RegExp(`--${name}:\\s*${value};`));
+    for (const [name, value] of [['color-sheet-group', '#737d8f'], ['color-key-chip', '#f0f2f7'], ['color-key-text', '#525c6b']] as const) expect(tokens, name).toMatch(new RegExp(`--${name}:\\s*${value};`));
+    const workspace = readFileSync(join(DIRECTORY, 'workspace.css'), 'utf8');
+    expect(workspace).toMatch(/\.sheet \{[^}]*top: var\(--sheet-top\);[^}]*left: 50%;[^}]*gap: var\(--sheet-gap\);[^}]*padding: var\(--sheet-padding-block\) var\(--sheet-padding-inline\);[^}]*border: var\(--border-width\) solid var\(--color-workspace-border\);[^}]*border-radius: var\(--radius-bar\);[^}]*box-shadow: var\(--shadow-dock-panel\);/s);
+    expect(workspace).toMatch(/\.sheet-columns \{[^}]*grid-template-columns: repeat\(3, minmax\(0, 1fr\)\);[^}]*gap: var\(--space-24\) var\(--sheet-columns-gap\);/s);
+    expect(workspace).toMatch(/\.sheet-key \{[^}]*padding: var\(--sheet-key-padding-block\) var\(--sheet-key-padding-inline\);[^}]*border-radius: var\(--radius-small\);[^}]*font-family: var\(--font-mono\);/s);
+  });
+
+  it('keep the sheet inside the viewport: it is as wide as the viewport less its margins when that is narrower than 760 px, and scrolls inside when it is taller than what is left below its top', () => {
+    const workspace = readFileSync(join(DIRECTORY, 'workspace.css'), 'utf8');
+    expect(workspace).toMatch(/\.sheet \{[^}]*width: min\(var\(--sheet-width\), calc\(var\(--viewport-width\) - 2 \* var\(--sheet-margin\)\)\);[^}]*max-height: calc\(var\(--viewport-height\) - var\(--sheet-top\) - var\(--sheet-margin\)\);[^}]*overflow: auto;/s);
+  });
+
   it('place the graph scope lines 24 px from the canvas left and 16 px from its top, 12 px on a 17 px line, 3 px apart', () => {
     const tokens = readFileSync(join(DIRECTORY, 'tokens.css'), 'utf8');
     expect(tokens).toMatch(/--scope-left:\s*24px;/);

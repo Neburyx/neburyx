@@ -24,7 +24,7 @@ export function registerBuiltInMenuItems(registry: MenuRegistry): () => void {
       icon: <span className="icon icon-fit" aria-hidden="true" />,
       group: MENU_GROUP.canvas.view,
       order: MENU_ORDER.canvas.fit,
-      shortcut: '⌘0',
+      binding: 'fit',
       run: (context) => context.canvas?.fit(),
     }),
     registry.register('canvas', {
@@ -33,7 +33,7 @@ export function registerBuiltInMenuItems(registry: MenuRegistry): () => void {
       icon: <span className="icon icon-box-select" aria-hidden="true" />,
       group: MENU_GROUP.canvas.view,
       order: MENU_ORDER.canvas.selectAll,
-      shortcut: '⌘A',
+      binding: 'select-all',
       run: (context) => runSelectionCommand(context.state, 'select-all'),
     }),
     registry.register('canvas', {
@@ -42,7 +42,7 @@ export function registerBuiltInMenuItems(registry: MenuRegistry): () => void {
       icon: <span className="icon icon-invert" aria-hidden="true" />,
       group: MENU_GROUP.canvas.view,
       order: MENU_ORDER.canvas.invertSelection,
-      shortcut: '⇧⌘I',
+      binding: 'invert-selection',
       run: (context) => runSelectionCommand(context.state, 'invert-selection'),
     }),
     registry.register('canvas', {
@@ -60,7 +60,7 @@ export function registerBuiltInMenuItems(registry: MenuRegistry): () => void {
       icon: <span className="icon icon-legend" aria-hidden="true" />,
       group: MENU_GROUP.canvas.layoutAndLegend,
       order: MENU_ORDER.canvas.showLegend,
-      shortcut: 'L',
+      binding: 'legend',
       run: (context) => context.state.presentation.setLegendOpen(!context.state.presentation.view.getState().legendOpen),
     }),
   ];

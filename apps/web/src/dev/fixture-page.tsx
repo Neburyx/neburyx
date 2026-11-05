@@ -15,11 +15,13 @@ import { useSlots, type SlotRegistry } from '../workspace/slots.js';
 import { useMenuRegistry } from '../workspace/menu-registry.js';
 import { usePanelRegistry } from '../workspace/panel-registry.js';
 import { useToolRegistry } from '../workspace/tool-registry.js';
-import { registerFixtureControls, registerStandInActions, registerStandInMenuItems, registerStandInPanels, registerStandInTools, registerStandIns } from './stand-ins.js';
+import { registerFixtureControls, registerStandInActions, registerStandInKeyBindings, registerStandInMenuItems, registerStandInPanels, registerStandInTools, registerStandIns } from './stand-ins.js';
+import { useKeyBindingRegistry, type KeyBindingRegistry } from '../workspace/key-binding-registry.js';
 import { SourcesPanel } from './sources-panel.js';
 
 /** The controls a load put in the slots live as long as the slots do, not as long as this page, so a load after a visit to Explore takes out the earlier ones first. */
 const registrations = new WeakMap<SlotRegistry, () => void>();
+const keyRegistrations = new WeakMap<KeyBindingRegistry, () => void>();
 
 const SEED = 1;
 const LEFT_OUT_ENTITIES = 2;
@@ -31,6 +33,7 @@ function LoadFixture({ profile }: { readonly profile: SourceProfile }) {
   const tools = useToolRegistry();
   const menus = useMenuRegistry();
   const panels = usePanelRegistry();
+  const keyBindings = useKeyBindingRegistry();
   const graph = useLoadedGraph();
   const pinned = useStoreSelector(state.presentation.view, (current) => current.pins.size);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
@@ -52,6 +55,8 @@ function LoadFixture({ profile }: { readonly profile: SourceProfile }) {
       registerStandInTools(tools);
       registerStandInMenuItems(menus);
       registerStandInPanels(panels, { floating: false });
+      keyRegistrations.get(keyBindings)?.();
+      keyRegistrations.set(keyBindings, registerStandInKeyBindings(keyBindings));
       setRefusal(undefined);
     } catch (error) {
       if (!(error instanceof FixtureError)) throw error;

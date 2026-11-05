@@ -7,8 +7,9 @@ import { createClientState, type ClientState } from '../state/client-state.js';
 import { ClientStateProvider } from '../state/context.js';
 import { INITIAL_PRESENTATION } from '../state/presentation-state.js';
 import { key, ref, result } from '../state/test-data.js';
-import { stubFactory, type StubOptions } from '../test-utils.js';
+import { builtInKeyBindings, stubFactory, type StubOptions } from '../test-utils.js';
 import { registerBuiltInTools } from './built-in-tools.js';
+import { KeyBindingsProvider } from './key-binding-registry.js';
 import { createToolRegistry, EXPLORE_TOOL_ID, ToolsProvider, type ToolEntry, type ToolRegistry } from './tool-registry.js';
 import { ToolStrip } from './tool-strip.js';
 
@@ -23,11 +24,13 @@ function show(state: ClientState, registry: ToolRegistry, options: StubOptions =
   const view = render(
     <ClientStateProvider state={state}>
       <ToolsProvider registry={registry}>
-        <RendererProvider createRenderer={factory.create}>
-          <GraphCanvas />
-          <ToolStrip />
-          <button type="button" onClick={outside}>Outside</button>
-        </RendererProvider>
+        <KeyBindingsProvider registry={builtInKeyBindings()}>
+          <RendererProvider createRenderer={factory.create}>
+            <GraphCanvas />
+            <ToolStrip />
+            <button type="button" onClick={outside}>Outside</button>
+          </RendererProvider>
+        </KeyBindingsProvider>
       </ToolsProvider>
     </ClientStateProvider>,
   );

@@ -818,7 +818,7 @@ describe('the resize handle as a splitter', () => {
 
   it('does not swallow any other key, and changes nothing for it', () => {
     const { container, state } = shown();
-    for (const name of ['a', 'Enter', ' ', 'ArrowUp', 'ArrowDown', 'Tab', 'Escape', 'PageUp']) expect(key(container, name)).toBe(true);
+    for (const name of ['a', 'Enter', ' ', 'ArrowUp', 'ArrowDown', 'Tab', 'PageUp']) expect(key(container, name)).toBe(true);
     expect(sizeOf(state)).toBeUndefined();
     expect(key(container, 'ArrowLeft')).toBe(false);
   });

@@ -26,6 +26,11 @@ export function edgeKey(ref: EdgeRef): string {
   return JSON.stringify(['edge', ref.sourceId, 'derived', ref.derived.ruleId, elementKey(ref.derived.from), elementKey(ref.derived.to)]);
 }
 
+/** Whether a key names a relationship rather than an entity. */
+export function isEdgeKey(key: string): boolean {
+  return key.startsWith('["edge",');
+}
+
 /** Every source id a relationship ref names, its own and those of the entities nested in it. */
 export function sourcesOfEdgeRef(ref: EdgeRef): string[] {
   if ('stableId' in ref) return [ref.sourceId];

@@ -597,7 +597,7 @@ describe('the menu replaced, cleared and pressed outside', () => {
     });
     const { factory, rightClick } = show(state);
     rightClick(onCanvas(10, 10));
-    await userEvent.setup().pointer({ keys: '[MouseLeft>]', target: screen.getByRole('img', { name: 'Graph canvas' }) });
+    await userEvent.setup().pointer({ keys: '[MouseLeft>]', target: screen.getByRole('application', { name: 'Graph canvas' }) });
     expect(screen.queryByRole('menu')).toBeNull();
     expect(selection(state)).toEqual([nodeKey('n1')]);
     act(() => factory.made[0]?.events[0]?.click({ target: nodeKey('n2'), shift }));
@@ -634,7 +634,7 @@ describe('the menu replaced, cleared and pressed outside', () => {
     const state = createClientState();
     load(state);
     const { rightClick } = show(state);
-    const canvas = screen.getByRole('img', { name: 'Graph canvas' });
+    const canvas = screen.getByRole('application', { name: 'Graph canvas' });
     const outsider = document.createElement('button');
     document.body.append(outsider);
     act(() => outsider.focus());

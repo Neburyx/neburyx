@@ -7,6 +7,7 @@ import { drawnKeys } from '../state/loaded-graph.js';
 import type { OpenMenu } from '../state/presentation-state.js';
 import { useStoreSelector } from '../state/store.js';
 import { LOCK_TOOLTIP } from './locked-control.js';
+import { useKeyBindings } from './key-binding-registry.js';
 import { menuHeader } from './menu-header.js';
 import { placeMenu, type Placement } from './menu-placement.js';
 import { stateOf, useMenuItems, type MenuContext, type RegisteredMenuItem } from './menu-registry.js';
@@ -30,6 +31,7 @@ export function ContextMenu() {
   const items = useMenuItems(open?.kind);
   const graph = useLoadedGraph();
   const profile = useProfile();
+  const bindings = useKeyBindings();
   const headingId = useId();
   const edition = answeredData(useShellData().me)?.edition;
   const targetGone = open !== undefined && open.key !== undefined && !drawnKeys(graph).has(open.key);
@@ -157,6 +159,7 @@ export function ContextMenu() {
 
   if (shown === undefined) return null;
   const header = menuHeader(shown, graph, profile);
+  const hintOf = (id: string | undefined): string | undefined => (id === undefined ? undefined : bindings.find((candidate) => candidate.id === id)?.shown[0]);
   const contextNow = (): MenuContext => contextFor(shown);
   const labelOf = (item: RegisteredMenuItem): string => (typeof item.label === 'function' ? item.label(contextNow()) : item.label);
   const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>): void => {
@@ -240,9 +243,9 @@ export function ContextMenu() {
                 {status === 'locked' && edition === 'community' ? <span className="menu-tag">{LOCK_TOOLTIP}</span> : null}
                 {status === 'locked' && item.lock === true ? <span className="icon icon-lock" aria-hidden="true" /> : null}
                 {opensSubmenu ? <span className="icon icon-chevron" aria-hidden="true" /> : null}
-                {item.shortcut === undefined || opensSubmenu ? null : (
+                {hintOf(item.binding) === undefined || opensSubmenu ? null : (
                   <span className="menu-hint" aria-hidden="true">
-                    {item.shortcut}
+                    {hintOf(item.binding)}
                   </span>
                 )}
               </button>

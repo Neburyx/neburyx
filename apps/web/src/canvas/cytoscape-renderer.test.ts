@@ -1067,9 +1067,9 @@ describe('the Cytoscape renderer in a container whose size changes', () => {
     restoreCanvas();
   });
 
-  function inContainer(nextFrame: (callback: () => void) => void = () => undefined) {
+  function inContainer(nextFrame: (callback: () => void) => void = () => undefined, canvasSize?: () => { width: number; height: number }) {
     let core: Core | undefined;
-    const renderer = createCytoscapeRenderer({ nextFrame, onCore: (made) => void (core = made) });
+    const renderer = createCytoscapeRenderer({ nextFrame, onCore: (made) => void (core = made), ...(canvasSize === undefined ? {} : { canvasSize }) });
     const container = document.createElement('div');
     document.body.append(container);
     sizes.resize(container, 1000, 800);
@@ -1078,6 +1078,18 @@ describe('the Cytoscape renderer in a container whose size changes', () => {
     if (core === undefined) throw new Error('the renderer made no core');
     return { renderer, container, core };
   }
+
+  it('says where an entity, a relationship and the canvas are on the page, by the browser window, and nothing for an item that is not drawn', () => {
+    const { renderer, container, core } = inContainer();
+    container.getBoundingClientRect = () => new DOMRect(30, 40, 1000, 800);
+    renderer.draw(scene([['a', { x: 0, y: 0 }], ['b', { x: 200, y: 100 }]], [['ab', 'a', 'b']]));
+    const at = core.getElementById('a').renderedPosition();
+    expect(renderer.anchorOf('a')).toEqual({ x: 30 + at.x, y: 40 + at.y });
+    const middle = core.getElementById('ab').renderedMidpoint();
+    expect(renderer.anchorOf('ab')).toEqual({ x: 30 + middle.x, y: 40 + middle.y });
+    expect(renderer.anchorOf(undefined)).toEqual({ x: 530, y: 440 });
+    expect(renderer.anchorOf('gone')).toBeUndefined();
+  });
 
   it('shows a not-allowed cursor over a pinned entity while a drag would move others, and no cursor of its own anywhere else', () => {
     const { renderer, container, core } = inContainer();
@@ -1133,6 +1145,23 @@ describe('the Cytoscape renderer in a container whose size changes', () => {
       const base = two(extra);
       return { ...base, relationships: base.relationships.map((relationship) => ({ ...relationship, look: { ...relationship.look, label: 'USES' } })) };
     };
+
+    it('rings the entity or the relationship the scene says the walk is at, moves the ring, takes it away, and keeps the caption and label of the one it is at below the limit', () => {
+      const { renderer, core } = inContainer((callback) => callback());
+      const ringed = () => ({ nodes: renderer.inspect().nodes.map((node) => node.focused), edges: renderer.inspect().edges.map((edge) => edge.focused) });
+      renderer.draw(labelled());
+      expect(ringed()).toEqual({ nodes: [false, false], edges: [false] });
+      renderer.draw(labelled({ focused: 'b' }));
+      expect(ringed()).toEqual({ nodes: [false, true], edges: [false] });
+      renderer.draw(labelled({ focused: 'ab' }));
+      expect(ringed()).toEqual({ nodes: [false, false], edges: [true] });
+      core.zoom(CAPTION_MIN_ZOOM * 0.5);
+      expect(shown(renderer)).toEqual({ captions: [false, false], labels: [true] });
+      renderer.draw(labelled({ focused: 'a' }));
+      expect(shown(renderer)).toEqual({ captions: [true, false], labels: [false] });
+      renderer.draw(labelled());
+      expect(ringed()).toEqual({ nodes: [false, false], edges: [false] });
+    });
 
     it('shows every caption and label at a zoom where they are read, and hides all of them below it, keeping the glyphs and the badges', () => {
       const { renderer, core } = inContainer((callback) => callback());
@@ -1193,6 +1222,50 @@ describe('the Cytoscape renderer in a container whose size changes', () => {
         expect(tipOf(container)).toEqual(['ACC\n1', 'Alpha · Open']);
         sizes.resize(container, 500, 400);
         expect(tipOf(container)).toBeUndefined();
+      });
+
+      it('also tells the element the keyboard walk is at, and tells it again each time the walk moves, whatever the pointer does', () => {
+        const { renderer, container, core } = inContainer((callback) => callback());
+        renderer.draw(labelled());
+        core.zoom(CAPTION_MIN_ZOOM * 1.5);
+        renderer.draw(labelled({ focused: 'a' }));
+        expect(tipOf(container)).toBeUndefined();
+        core.zoom(CAPTION_MIN_ZOOM * 0.5);
+        expect(tipOf(container)).toBeUndefined();
+        renderer.draw(labelled());
+        renderer.draw(labelled({ focused: 'a' }));
+        expect(tipOf(container)).toEqual(renderer.inspect().nodes[0]?.caption.split('\n'));
+        core.panBy({ x: 5, y: 5 });
+        expect(tipOf(container)).toBeUndefined();
+        renderer.draw(labelled({ focused: 'ab' }));
+        expect(tipOf(container)).toEqual(['USES']);
+        core.getElementById('b').emit('mouseover');
+        expect(tipOf(container)?.[0]).toBe(renderer.inspect().nodes[1]?.caption.split('\n')[0]);
+        core.getElementById('b').emit('mouseout');
+        expect(tipOf(container)).toEqual(['USES']);
+        renderer.draw(labelled());
+        expect(tipOf(container)).toBeUndefined();
+      });
+
+      it('moves the view to the element the walk reaches when it is outside the canvas, and leaves the view alone when the element is inside or the walk stays where it is', () => {
+        const { renderer, core } = inContainer((callback) => callback(), () => ({ width: 1000, height: 800 }));
+        const spread = (extra: object = {}): Scene => ({ ...labelled(extra), view: 'as-drawn' as const, entities: [{ id: 'a', position: { x: 0, y: 0 }, look: { iconKey: 'generic', line1: 'a', line2: 'Type' } }, { id: 'b', position: { x: 5000, y: 3000 }, look: { iconKey: 'generic', line1: 'b', line2: 'Type' } }], relationships: [] });
+        const inView = (id: string): boolean => {
+          const at = core.getElementById(id).renderedPosition();
+          return at.x >= 48 && at.x <= 1000 - 48 && at.y >= 48 && at.y <= 800 - 48;
+        };
+        renderer.draw(spread());
+        expect(inView('b')).toBe(false);
+        renderer.draw(spread({ focused: 'b' }));
+        expect(inView('b')).toBe(true);
+        const pan = { ...core.pan() };
+        renderer.draw(spread({ focused: 'b', selection: new Set(['b']) }));
+        expect(core.pan()).toEqual(pan);
+        renderer.draw(spread({ focused: 'a' }));
+        expect(inView('a')).toBe(true);
+        const settled = { ...core.pan() };
+        renderer.draw(spread({}));
+        expect(core.pan()).toEqual(settled);
       });
 
       it('is one at a time, whatever is selected, and is the page\'s own text, not drawn by the library, and not announced', () => {

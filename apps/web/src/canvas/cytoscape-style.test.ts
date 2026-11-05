@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CAPTION_WIDTH } from './caption-layout.js';
 import { STYLE } from './cytoscape-renderer.js';
-import { CAPTION_FONT_SIZE, CAPTION_MIN_ZOOM, GLYPH_SIZE, MIN_LEGIBLE_FONT_SIZE, NODE_DIAMETER, PIN_BADGE_SIZE } from './look.js';
+import { CAPTION_FONT_SIZE, CAPTION_MIN_ZOOM, FOCUS_COLOR, FOCUS_RING_GAP, FOCUS_RING_WIDTH, GLYPH_SIZE, MIN_LEGIBLE_FONT_SIZE, NODE_DIAMETER, PIN_BADGE_SIZE } from './look.js';
 
 const overlayOf = (rule: (typeof STYLE)[number]): unknown => ('style' in rule ? Reflect.get(rule.style, 'overlay-opacity') : undefined);
 const forSelector = (selector: string): unknown => {
@@ -51,12 +51,12 @@ describe('the zoomed-out view', () => {
 
   it('hides the second image of an entity, its caption, below the limit, and shows it for a selected one only, keeping the glyph and the badge', () => {
     expect(styleOf('node.far')).toEqual({ 'background-image-opacity': [1, 0, 1] });
-    expect(styleOf('node.far[?selected]')).toEqual({ 'background-image-opacity': [1, 1, 1] });
+    expect(styleOf('node.far[?selected], node.far[?focused]')).toEqual({ 'background-image-opacity': [1, 1, 1] });
   });
 
   it('leaves a relationship without its label below the limit, with a class and not the library\'s own size limit (which counts a rounded texture scale including the display\'s pixel ratio), and not for a selected one', () => {
     expect(styleOf('edge.far')).toEqual({ label: '' });
-    expect(styleOf('edge.far[?selected]')).toEqual({ label: 'data(label)' });
+    expect(styleOf('edge.far[?selected], edge.far[?focused]')).toEqual({ label: 'data(label)' });
     expect(styleOf('edge')?.['min-zoomed-font-size']).toBeUndefined();
     expect(STYLE.some((rule) => 'style' in rule && Reflect.get(rule.style, 'min-zoomed-font-size') !== undefined)).toBe(false);
   });
@@ -64,5 +64,20 @@ describe('the zoomed-out view', () => {
   it('puts the limit where 12 px caption text is drawn at the smallest legible size', () => {
     expect(CAPTION_MIN_ZOOM * CAPTION_FONT_SIZE).toBeCloseTo(MIN_LEGIBLE_FONT_SIZE, 10);
     expect(MIN_LEGIBLE_FONT_SIZE).toBe(7);
+  });
+});
+
+describe('the ring of the keyboard walk', () => {
+  const rule = (selector: string): Record<string, unknown> | undefined => {
+    const found = STYLE.find((candidate) => candidate.selector === selector);
+    return found === undefined || !('style' in found) ? undefined : Object.fromEntries(Object.getOwnPropertyNames(found.style).map((name) => [name, Reflect.get(found.style, name)]));
+  };
+
+  it('is an outline around an entity and an underlay behind a relationship, in the focus colour, after the selected rules so it shows on a selected element', () => {
+    expect(rule('node[?focused]')).toEqual({ 'outline-width': FOCUS_RING_WIDTH, 'outline-color': FOCUS_COLOR, 'outline-style': 'solid', 'outline-offset': FOCUS_RING_GAP, 'outline-opacity': 1 });
+    expect(rule('edge[?focused]')).toEqual({ 'underlay-color': FOCUS_COLOR, 'underlay-opacity': 1, 'underlay-padding': FOCUS_RING_WIDTH });
+    const at = (selector: string): number => STYLE.findIndex((candidate) => candidate.selector === selector);
+    expect(at('node[?focused]')).toBeGreaterThan(at('node[?selected]'));
+    expect(at('edge[?focused]')).toBeGreaterThan(at('edge[?selected]'));
   });
 });

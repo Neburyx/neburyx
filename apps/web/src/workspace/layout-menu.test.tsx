@@ -145,7 +145,7 @@ describe('the state of the Layout item', () => {
     return found;
   };
   const contextOf = (state: ReturnType<typeof createClientState>, canvas: CanvasCommands | undefined): MenuContext => ({ kind: 'canvas', key: undefined, selection: [], state, canvas });
-  const commands: CanvasCommands = { fit: () => undefined, zoomBy: () => undefined, layout: () => undefined };
+  const commands: CanvasCommands = { fit: () => undefined, zoomBy: () => undefined, layout: () => undefined, anchorOf: () => undefined };
 
   it('is enabled when entities are loaded and the canvas commands are there, and disabled when none is loaded or the commands are not available', () => {
     const loaded = createClientState();

@@ -8,36 +8,22 @@ import { StateError } from '../state/errors.js';
 import { drawnKeys, partitionEdges } from '../state/loaded-graph.js';
 import { elementKey } from '../state/keys.js';
 import { useStoreSelector } from '../state/store.js';
+import { KEY_SCOPE_ATTRIBUTE } from '../workspace/key-binding-handler.js';
 import { formatNumber, notDrawnLine } from '../workspace/scope-text.js';
 import { buildScene } from './build-scene.js';
 import { layoutEntities, placeNewEntities } from './incremental-layout.js';
+import { describeWalked } from './walk.js';
 import { useCanvasCommandsHandle } from './canvas-commands.js';
 import { captionFontsReady, loadCaptionFonts } from './fonts.js';
 import { useCreateRenderer } from './renderer-context.js';
 import { selectionAfterBox, type BoxSelection } from './box-selection.js';
-import { selectionAfterClick, type Click } from './selection-gestures.js';
+import { applyClick, openContextMenu, replaceSelection } from './apply-click.js';
 import type { CanvasEvents, CanvasRenderer, EntityMove, RightClick, Scene } from './scene.js';
 
 export const RENDERER_UNAVAILABLE = 'RENDERER_UNAVAILABLE';
+export const WALK_SENTENCE = 'Press Enter or Space to walk the entities and relationships, Escape to leave the walk.';
 
 const counted = (value: number, one: string, many: string): string => `${formatNumber(value)} ${value === 1 ? one : many}`;
-
-function applyClick(state: ClientState, click: Click): void {
-  const { tool, selection } = state.presentation.view.getState();
-  replaceSelection(state, selectionAfterClick(tool, selection, click));
-}
-
-/** A right-click on an item that is not selected selects it first, on a selected item keeps the selection, on empty canvas leaves it; a click on something that is not drawn opens nothing. */
-function openContextMenu(state: ClientState, request: RightClick): void {
-  const { target, x, y } = request;
-  if (target === undefined) {
-    state.presentation.setOpenMenu({ kind: 'canvas', key: undefined, x, y });
-    return;
-  }
-  if (!drawnKeys(state.loadedGraph()).has(target.key)) return;
-  if (!state.presentation.view.getState().selection.has(target.key)) state.presentation.select([target.key]);
-  state.presentation.setOpenMenu({ kind: target.kind, key: target.key, x, y });
-}
 
 /** A drag of an entity that is no longer held, or that was pinned meanwhile, is stale and changes nothing. */
 function applyMove(state: ClientState, move: EntityMove): void {
@@ -53,16 +39,6 @@ function applyBox(state: ClientState, box: BoxSelection): void {
   replaceSelection(state, selectionAfterBox(state.presentation.view.getState().selection, box));
 }
 
-function replaceSelection(state: ClientState, next: readonly string[] | undefined): void {
-  if (next === undefined) return;
-  try {
-    state.presentation.select(next);
-  } catch (error) {
-    // a click can arrive for an item the investigation no longer holds; that is stale and changes nothing
-    if (!(error instanceof StateError) || error.code !== 'UNKNOWN_ELEMENT') throw error;
-  }
-}
-
 export function GraphCanvas({ profile, view = 'fit' }: { readonly profile?: SourceProfile | undefined; readonly view?: Scene['view'] }) {
   const createRenderer = useCreateRenderer();
   const commands = useCanvasCommandsHandle();
@@ -72,12 +48,26 @@ export function GraphCanvas({ profile, view = 'fit' }: { readonly profile?: Sour
   const selection = useStoreSelector(state.presentation.view, (current) => current.selection);
   const pins = useStoreSelector(state.presentation.view, (current) => current.pins);
   const tool = useStoreSelector(state.presentation.view, (current) => current.tool);
+  const walking = useStoreSelector(state.presentation.view, (current) => current.walking);
+  const focused = useStoreSelector(state.presentation.view, (current) => current.focused);
+  const moveNote = useStoreSelector(state.presentation.view, (current) => current.moveNote);
+  const menuOpen = useStoreSelector(state.presentation.view, (current) => current.openMenu !== undefined);
   const source = useStoreSelector(state.investigation, (current) => current.sourceId);
   const placed = useMemo(
     () => placeNewEntities({ ids: graph.nodes.map((node) => elementKey(node.ref)), links: graph.edges.map((edge) => [elementKey(edge.from), elementKey(edge.to)] as const), positions }),
     [graph, positions],
   );
-  const scene = useMemo(() => buildScene(graph, placed.size === 0 ? positions : new Map([...positions, ...placed]), profile, selection, tool, source, view, pins), [graph, positions, placed, profile, selection, tool, source, view, pins]);
+  const scene = useMemo(() => buildScene(graph, placed.size === 0 ? positions : new Map([...positions, ...placed]), profile, selection, tool, source, view, pins, walking ? focused : undefined), [graph, positions, placed, profile, selection, tool, source, view, pins, walking, focused]);
+  const announcement = walking && scene.focused !== undefined ? describeWalked(graph, profile, pins, scene.focused) : undefined;
+
+  useEffect(() => {
+    if (focused !== undefined && !drawnKeys(graph).has(focused)) state.presentation.forgetFocused();
+  }, [graph, focused, state]);
+
+  // A menu opened from the walk holds the focus for a while and gives it back; if it closes with the focus elsewhere the walk is over.
+  useEffect(() => {
+    if (walking && !menuOpen && document.activeElement !== container.current) state.presentation.endWalk();
+  }, [walking, menuOpen, state]);
   const container = useRef<HTMLDivElement>(null);
   const [renderer, setRenderer] = useState<CanvasRenderer | undefined>(undefined);
   const [failed, setFailed] = useState(false);
@@ -178,12 +168,30 @@ export function GraphCanvas({ profile, view = 'fit' }: { readonly profile?: Sour
 
   return (
     <>
-      <div ref={container} className="graph-canvas" role="img" aria-label="Graph canvas" aria-describedby={descriptionId} />
+      <div
+        ref={container}
+        className="graph-canvas"
+        role="application"
+        tabIndex={0}
+        aria-label="Graph canvas"
+        aria-describedby={descriptionId}
+        {...{ [KEY_SCOPE_ATTRIBUTE]: 'canvas' }}
+        onBlur={() => {
+          state.presentation.announceMove(undefined);
+          if (state.presentation.view.getState().openMenu === undefined) state.presentation.endWalk();
+        }}
+        // the renderer blurs the focused element on a mouse press, and a script focus would draw the keyboard ring unless it says it should not
+        onMouseUp={(event) => event.currentTarget.focus({ preventScroll: true, focusVisible: false })}
+      />
       <p id={descriptionId} className="visually-hidden">
         {counted(graph.nodes.length, 'entity', 'entities')} and {counted(graph.edges.length, 'relationship', 'relationships')} loaded
         {scene.omitted === 0 ? '' : `; ${notDrawnLine(scene.omitted)}`}
         {scene.selection.size === 0 ? '' : `; ${formatNumber(scene.selection.size)} selected`}
         {scene.pinned.size === 0 ? '' : `; ${formatNumber(scene.pinned.size)} pinned`}
+        . {WALK_SENTENCE}
+      </p>
+      <p role="status" aria-live="polite" className="visually-hidden">
+        {moveNote === undefined ? announcement : <span key={moveNote.serial}>{moveNote.text}</span>}
       </p>
       {failed ? (
         <p role="alert" className="canvas-notice">

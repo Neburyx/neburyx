@@ -1,3 +1,4 @@
+import { WALK_SENTENCE } from './canvas/graph-canvas.js';
 import { render } from '@testing-library/react';
 import { useMemo } from 'react';
 import { vi } from 'vitest';
@@ -16,6 +17,8 @@ import { createProfileStore, type ProfileState, type ProfileStore } from './canv
 import { RendererProvider } from './canvas/renderer-context.js';
 import type { CanvasEvents, CanvasRenderer, CreateRenderer, Scene } from './canvas/scene.js';
 import type { Position, Viewport } from './state/presentation-state.js';
+import { registerBuiltInKeyBindings } from './workspace/built-in-key-bindings.js';
+import { createKeyBindingRegistry, KeyBindingsProvider, type KeyBindingRegistry } from './workspace/key-binding-registry.js';
 import { createMenuRegistry, MenuProvider, type MenuRegistry } from './workspace/menu-registry.js';
 import { createSelectionActionRegistry, SelectionActionsProvider, type SelectionActionRegistry } from './workspace/selection-actions.js';
 import { bindLegend } from './workspace/legend-binder.js';
@@ -148,6 +151,13 @@ export function stubRenderer(options: StubOptions = {}): StubRenderer {
       if (options.failCommands === true) throw new Error('cannot zoom');
       stub.zooms.push(factor);
     },
+    anchorOf: (key) => {
+      if (drawn === undefined) return undefined;
+      if (key === undefined) return { x: 500, y: 400 };
+      const entity = drawn.entities.find((candidate) => candidate.id === key);
+      if (entity !== undefined) return { x: entity.position.x + 10, y: entity.position.y + 20 };
+      return drawn.relationships.some((candidate) => candidate.id === key) ? { x: 300, y: 350 } : undefined;
+    },
     describe: () => ({ entities: drawn?.entities.length ?? 0, relationships: drawn?.relationships.length ?? 0 }),
     viewport: () => ({ zoom: 1, x: 0, y: 0 }),
     positions: () => new Map((drawn?.entities ?? []).map((entity) => [entity.id, entity.position])),
@@ -172,7 +182,14 @@ export function stubFactory(options: StubOptions = {}): { readonly create: Creat
   };
 }
 
-export function renderApp(path: string, client: ApiClient, state: ClientState = createClientState(), slots: SlotRegistry = createSlotRegistry(), createRenderer: CreateRenderer = stubFactory().create, selectionActions: SelectionActionRegistry = createSelectionActionRegistry(), tools: ToolRegistry = createToolRegistry(), menus: MenuRegistry = createMenuRegistry(), panels: PanelRegistry = createPanelRegistryFor(state)): { readonly router: ReturnType<typeof createMemoryRouter>; readonly state: ClientState; readonly slots: SlotRegistry; readonly tools: ToolRegistry; readonly panels: PanelRegistry; readonly container: HTMLElement; readonly unmount: () => void } {
+/** A registry with the workspace's own bindings, on macOS (⌘, as the design shows its hints), so a test does not depend on the machine it runs on. */
+export function builtInKeyBindings(platform: 'mac' | 'other' = 'mac'): KeyBindingRegistry {
+  const registry = createKeyBindingRegistry(platform);
+  registerBuiltInKeyBindings(registry);
+  return registry;
+}
+
+export function renderApp(path: string, client: ApiClient, state: ClientState = createClientState(), slots: SlotRegistry = createSlotRegistry(), createRenderer: CreateRenderer = stubFactory().create, selectionActions: SelectionActionRegistry = createSelectionActionRegistry(), tools: ToolRegistry = createToolRegistry(), menus: MenuRegistry = createMenuRegistry(), panels: PanelRegistry = createPanelRegistryFor(state), keyBindings: KeyBindingRegistry = builtInKeyBindings()): { readonly router: ReturnType<typeof createMemoryRouter>; readonly state: ClientState; readonly slots: SlotRegistry; readonly tools: ToolRegistry; readonly panels: PanelRegistry; readonly keyBindings: KeyBindingRegistry; readonly container: HTMLElement; readonly unmount: () => void } {
   const router = createMemoryRouter(appRoutes(client, state), { initialEntries: [path] });
   const view = render(
     <ClientStateProvider state={state}>
@@ -181,9 +198,11 @@ export function renderApp(path: string, client: ApiClient, state: ClientState = 
           <ToolsProvider registry={tools}>
             <MenuProvider registry={menus}>
               <PanelsProvider registry={panels}>
-                <RendererProvider createRenderer={createRenderer}>
-                  <RouterProvider router={router} />
-                </RendererProvider>
+                <KeyBindingsProvider registry={keyBindings}>
+                  <RendererProvider createRenderer={createRenderer}>
+                    <RouterProvider router={router} />
+                  </RendererProvider>
+                </KeyBindingsProvider>
               </PanelsProvider>
             </MenuProvider>
           </ToolsProvider>
@@ -198,6 +217,7 @@ export function renderApp(path: string, client: ApiClient, state: ClientState = 
     slots,
     tools,
     panels,
+    keyBindings,
     container: view.container,
     unmount: () => {
       unbind();
@@ -225,6 +245,7 @@ export function WorkspaceHarness({ client, state, profile: injected, createRende
     bindLegend(clientState, registry);
     return registry;
   }, [clientState]);
+  const keyBindings = useMemo(() => builtInKeyBindings(), []);
   const createRenderer = useMemo(() => injectedRenderer ?? stubFactory().create, [injectedRenderer]);
   return (
     <ClientStateProvider state={clientState}>
@@ -233,16 +254,18 @@ export function WorkspaceHarness({ client, state, profile: injected, createRende
           <ToolsProvider registry={tools}>
             <MenuProvider registry={menus}>
               <PanelsProvider registry={panels}>
-                <RendererProvider createRenderer={createRenderer}>
-                  <ShellDataProvider store={store}>
-                    <ProfileProvider store={profile}>
-                      <MemoryRouter initialEntries={['/explore']}>
-                        <Reloader />
-                        <WorkspaceShell />
-                      </MemoryRouter>
-                    </ProfileProvider>
-                  </ShellDataProvider>
-                </RendererProvider>
+                <KeyBindingsProvider registry={keyBindings}>
+                  <RendererProvider createRenderer={createRenderer}>
+                    <ShellDataProvider store={store}>
+                      <ProfileProvider store={profile}>
+                        <MemoryRouter initialEntries={['/explore']}>
+                          <Reloader />
+                          <WorkspaceShell />
+                        </MemoryRouter>
+                      </ProfileProvider>
+                    </ShellDataProvider>
+                  </RendererProvider>
+                </KeyBindingsProvider>
               </PanelsProvider>
             </MenuProvider>
           </ToolsProvider>
@@ -316,4 +339,10 @@ export function stubCanvasContext(): () => void {
   );
   const spy = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(context as CanvasRenderingContext2D);
   return () => spy.mockRestore();
+}
+
+/** What a canvas says about the graph it holds, without the sentence on walking it. */
+export function canvasSummary(canvas: HTMLElement): string | undefined {
+  const text = document.getElementById(canvas.getAttribute('aria-describedby') ?? '')?.textContent;
+  return text?.replace(`. ${WALK_SENTENCE}`, '');
 }

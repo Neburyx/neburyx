@@ -43,6 +43,14 @@ export interface PresentationState {
   readonly collapsedPanels: ReadonlyMap<string, number>;
   /** The legend is open. Not saved with a view, and kept when another source is bound. */
   readonly legendOpen: boolean;
+  /** Whether the sheet of keyboard shortcuts is shown. */
+  readonly sheetOpen: boolean;
+  /** The canvas's element walk is on: the keys move a ring through the drawn elements. Not saved with a view. */
+  readonly walking: boolean;
+  /** The element the walk is at, or was at when it ended, until it is gone; the ring is drawn only while the walk is on. */
+  readonly focused: string | undefined;
+  /** What the last arrow-key move did, for screen readers, until the walk moves, the selection changes or the canvas loses the focus. */
+  readonly moveNote: { readonly text: string; readonly serial: number } | undefined;
   /** Undefined until a view was set, so that a view that was never set differs from a stored one at zoom 1. */
   readonly viewport: Viewport | undefined;
   /** The tool whose flyout is open, if any. Not saved with a view. */
@@ -58,6 +66,10 @@ export const INITIAL_PRESENTATION: PresentationState = {
   panelSizes: new Map(),
   collapsedPanels: new Map(),
   legendOpen: false,
+  sheetOpen: false,
+  walking: false,
+  focused: undefined,
+  moveNote: undefined,
   viewport: undefined,
   openTool: undefined,
   openMenu: undefined,
@@ -76,11 +88,21 @@ export interface PresentationActions {
   setOpenMenu(open: OpenMenu | undefined): void;
   select(keys: readonly string[]): void;
   setPosition(key: string, position: Position): void;
-  setPositions(positions: ReadonlyMap<string, Position>): void;
+  /** Stores the positions of several entities as one update; with `announcement` the update also carries what a screen reader is told, as a new announcement even when the text is the same as the last. */
+  setPositions(positions: ReadonlyMap<string, Position>, announcement?: string): void;
   pin(keys: readonly string[]): void;
   setPanelSize(panel: string, size: number): void;
   clearPanelSize(panel: string): void;
   setLegendOpen(open: boolean): void;
+  setSheetOpen(open: boolean): void;
+  /** Sets or clears what the last arrow-key move did. */
+  announceMove(text: string | undefined): void;
+  /** Starts the walk at an element, or moves it to another. */
+  walkTo(key: string): void;
+  /** Ends the walk, remembering where it was. */
+  endWalk(): void;
+  /** Forgets the element the walk was at, and keeps the walk going from the canvas itself. */
+  forgetFocused(): void;
   setPanelCollapsed(panel: string, registration: number, collapsed: boolean): void;
   /** Lets go of a panel's collapsed state when that registration is taken out; the state of a newer registration of the same ID stays. */
   clearPanelCollapsed(panel: string, registration: number): void;
@@ -112,15 +134,16 @@ export function createPresentationStore(known: KnownElements): PresentationStore
     },
     select(keys) {
       requireKnown(keys, known.isElement);
-      store.setState({ ...store.getState(), selection: new Set(keys) });
+      store.setState({ ...store.getState(), selection: new Set(keys), moveNote: undefined });
     },
     setPosition(key, position) {
       requireKnown([key], known.isNode);
       store.setState({ ...store.getState(), positions: new Map(store.getState().positions).set(key, position) });
     },
-    setPositions(positions) {
+    setPositions(positions, announcement) {
       requireKnown([...positions.keys()], known.isNode);
-      store.setState({ ...store.getState(), positions: new Map([...store.getState().positions, ...positions]) });
+      const current = store.getState();
+      store.setState({ ...current, positions: new Map([...current.positions, ...positions]), ...(announcement === undefined ? {} : { moveNote: { text: announcement, serial: (current.moveNote?.serial ?? 0) + 1 } }) });
     },
     pin(keys) {
       requireKnown(keys, known.isNode);
@@ -137,6 +160,29 @@ export function createPresentationStore(known: KnownElements): PresentationStore
     setLegendOpen(legendOpen) {
       if (store.getState().legendOpen === legendOpen) return;
       store.setState({ ...store.getState(), legendOpen });
+    },
+    setSheetOpen(sheetOpen) {
+      if (store.getState().sheetOpen === sheetOpen) return;
+      store.setState({ ...store.getState(), sheetOpen });
+    },
+    walkTo(key) {
+      requireKnown([key], known.isElement);
+      const current = store.getState();
+      if (current.walking && current.focused === key) return;
+      store.setState({ ...current, walking: true, focused: key, moveNote: undefined });
+    },
+    announceMove(text) {
+      const current = store.getState();
+      if (text === undefined && current.moveNote === undefined) return;
+      store.setState({ ...current, moveNote: text === undefined ? undefined : { text, serial: (current.moveNote?.serial ?? 0) + 1 } });
+    },
+    endWalk() {
+      if (!store.getState().walking) return;
+      store.setState({ ...store.getState(), walking: false });
+    },
+    forgetFocused() {
+      if (store.getState().focused === undefined) return;
+      store.setState({ ...store.getState(), focused: undefined });
     },
     clearPanelCollapsed(panel, registration) {
       if (store.getState().collapsedPanels.get(panel) !== registration) return;
@@ -165,12 +211,13 @@ export function createPresentationStore(known: KnownElements): PresentationStore
       const selection = [...current.selection].filter(known.isElement);
       const positions = [...current.positions].filter(([key]) => known.isNode(key));
       const pins = [...current.pins].filter(known.isNode);
-      if (selection.length === current.selection.size && positions.length === current.positions.size && pins.length === current.pins.size) return;
-      store.setState({ ...current, selection: new Set(selection), positions: new Map(positions), pins: new Set(pins) });
+      const focused = current.focused !== undefined && known.isElement(current.focused) ? current.focused : undefined;
+      if (selection.length === current.selection.size && positions.length === current.positions.size && pins.length === current.pins.size && focused === current.focused) return;
+      store.setState({ ...current, selection: new Set(selection), positions: new Map(positions), pins: new Set(pins), focused });
     },
     reset() {
-      const { tool, panelSizes, collapsedPanels, legendOpen } = store.getState();
-      store.setState({ ...INITIAL_PRESENTATION, tool, panelSizes, collapsedPanels, legendOpen });
+      const { tool, panelSizes, collapsedPanels, legendOpen, sheetOpen } = store.getState();
+      store.setState({ ...INITIAL_PRESENTATION, tool, panelSizes, collapsedPanels, legendOpen, sheetOpen });
     },
   };
 }

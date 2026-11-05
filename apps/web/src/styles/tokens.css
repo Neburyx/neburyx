@@ -131,6 +131,27 @@
 
   --font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --viewport-width: 100vw;
+  --viewport-height: 100vh;
+  --sheet-width: 760px;
+  --sheet-top: 250px;
+  --sheet-margin: 16px;
+  --sheet-padding-block: 24px;
+  --sheet-padding-inline: 28px;
+  --sheet-gap: 18px;
+  --sheet-columns-gap: 32px;
+  --sheet-rows-gap: 8px;
+  --sheet-label-width: 130px;
+  --sheet-title-size: 18px;
+  --line-height-sheet-title: 22px;
+  --line-height-sheet-text: 16px;
+  --line-height-sheet-note: 15px;
+  --sheet-key-padding-block: 2px;
+  --sheet-key-padding-inline: 6px;
+  --color-sheet-group: #737d8f;
+  --color-sheet-close: #737d8f;
+  --color-key-chip: #f0f2f7;
+  --color-key-text: #525c6b;
   --font-size-caption: 11px;
   --font-size-small: 12px;
   --font-size-body: 13px;

@@ -5,6 +5,7 @@ import type { SelectionAction, SelectionActionRegistry } from '../workspace/sele
 import type { PanelEntry, PanelRegistry } from '../workspace/panel-registry.js';
 import type { SlotName, SlotRegistry } from '../workspace/slots.js';
 import { edgeKey } from '../state/keys.js';
+import { KeyBindingError, type KeyBindingRegistry, type KeyGroup } from '../workspace/key-binding-registry.js';
 import { MENU_GROUP, MENU_ORDER, type MenuContext, type MenuItem, type MenuItemState, type MenuRegistry, type MenuTargetKind } from '../workspace/menu-registry.js';
 import { TOOL_ORDER, type ToolEntry, type ToolRegistry } from '../workspace/tool-registry.js';
 import '../styles/stand-ins.css';
@@ -159,14 +160,14 @@ const nothing = (): void => undefined;
 const typeOf = (context: MenuContext): string => context.state.loadedGraph().edges.find((edge) => edgeKey(edge.ref) === context.key)?.type ?? 'type';
 
 interface CommandOptions {
-  readonly shortcut?: string;
+  readonly binding?: string;
   readonly state?: MenuItemState;
   readonly lock?: boolean;
 }
 
 const command = (id: string, label: MenuItem['label'], icon: string, group: number, order: number, options: CommandOptions = {}): MenuItem => {
-  const { shortcut, state, lock } = options;
-  return { id, label, icon: menuIcon(icon), group, order, run: nothing, ...(shortcut === undefined ? {} : { shortcut }), ...(state === undefined ? {} : { state }), ...(lock === undefined ? {} : { lock }) };
+  const { binding, state, lock } = options;
+  return { id, label, icon: menuIcon(icon), group, order, run: nothing, ...(binding === undefined ? {} : { binding }), ...(state === undefined ? {} : { state }), ...(lock === undefined ? {} : { lock }) };
 };
 const parent = (id: string, label: string, icon: string, group: number, order: number): MenuItem => ({ id, label, icon: menuIcon(icon), group, order, submenu: StandInSubmenu });
 
@@ -178,33 +179,33 @@ const RELATIONSHIP_ORDER = MENU_ORDER.relationship;
 const STAND_IN_MENU_ITEMS: readonly (readonly [MenuTargetKind, MenuItem])[] = [
   ['canvas', parent('stand-in-group-all', 'Group all by type', 'group', MENU_GROUP.canvas.grouping, MENU_ORDER.canvas.groupAll)],
   ['canvas', command('stand-in-ungroup-all', 'Ungroup all', 'ungroup', MENU_GROUP.canvas.grouping, MENU_ORDER.canvas.ungroupAll)],
-  ['canvas', command('stand-in-export-view', 'Export view…', 'download', MENU_GROUP.canvas.export, MENU_ORDER.canvas.exportView, { shortcut: '⌘E' })],
-  ['node', command('stand-in-expand-neighbors', 'Expand neighbors', 'expand', NODE_GROUP.expand, NODE_ORDER.expandNeighbors, { shortcut: 'E' })],
+  ['canvas', command('stand-in-export-view', 'Export view…', 'download', MENU_GROUP.canvas.export, MENU_ORDER.canvas.exportView, { binding: 'export-view' })],
+  ['node', command('stand-in-expand-neighbors', 'Expand neighbors', 'expand', NODE_GROUP.expand, NODE_ORDER.expandNeighbors, { binding: 'expand' })],
   ['node', parent('stand-in-expand-by-type', 'Expand by type', 'types', NODE_GROUP.expand, NODE_ORDER.expandByType)],
-  ['node', command('stand-in-focus', 'Focus neighborhood', 'focus', NODE_GROUP.expand, NODE_ORDER.focusNeighborhood, { shortcut: 'F' })],
-  ['node', command('stand-in-paths-from', 'Find paths from here…', 'route', NODE_GROUP.paths, NODE_ORDER.findPathsFromHere, { shortcut: '⇧P' })],
+  ['node', command('stand-in-focus', 'Focus neighborhood', 'focus', NODE_GROUP.expand, NODE_ORDER.focusNeighborhood, { binding: 'focus' })],
+  ['node', command('stand-in-paths-from', 'Find paths from here…', 'route', NODE_GROUP.paths, NODE_ORDER.findPathsFromHere, { binding: 'find-paths' })],
   ['node', command('stand-in-paths-to', 'Find paths to…', 'route', NODE_GROUP.paths, NODE_ORDER.findPathsTo)],
   ['node', parent('stand-in-run-pattern', 'Run pattern', 'pattern', NODE_GROUP.paths, NODE_ORDER.runPattern)],
   ['node', command('stand-in-select-neighbors', 'Select neighbors', 'select', NODE_GROUP.selection, NODE_ORDER.selectNeighbors)],
-  ['node', command('stand-in-invert', 'Invert selection', 'invert', NODE_GROUP.selection, NODE_ORDER.invertSelection, { shortcut: '⇧⌘I' })],
+  ['node', command('stand-in-invert', 'Invert selection', 'invert', NODE_GROUP.selection, NODE_ORDER.invertSelection, { binding: 'invert-selection' })],
   ['node', parent('stand-in-group-by-type', 'Group by type', 'group', NODE_GROUP.selection, NODE_ORDER.groupByType)],
-  ['node', command('stand-in-pin', 'Pin position', 'pin', NODE_GROUP.selection, NODE_ORDER.pinPosition, { shortcut: 'P' })],
-  ['node', command('stand-in-hide', 'Hide from view', 'hide', NODE_GROUP.selection, NODE_ORDER.hideFromView, { shortcut: 'Del' })],
-  ['node', command('stand-in-copy-id', 'Copy ID', 'copy', NODE_GROUP.copy, NODE_ORDER.copyId, { shortcut: '⌘C' })],
-  ['node', command('stand-in-copy-properties', 'Copy properties', 'copy', NODE_GROUP.copy, NODE_ORDER.copyProperties, { shortcut: '⇧⌘C' })],
+  ['node', command('stand-in-pin', 'Pin position', 'pin', NODE_GROUP.selection, NODE_ORDER.pinPosition, { binding: 'pin' })],
+  ['node', command('stand-in-hide', 'Hide from view', 'hide', NODE_GROUP.selection, NODE_ORDER.hideFromView, { binding: 'hide' })],
+  ['node', command('stand-in-copy-id', 'Copy ID', 'copy', NODE_GROUP.copy, NODE_ORDER.copyId, { binding: 'copy-id' })],
+  ['node', command('stand-in-copy-properties', 'Copy properties', 'copy', NODE_GROUP.copy, NODE_ORDER.copyProperties, { binding: 'copy-properties' })],
   ['node', command('stand-in-open-record', 'Open source record', 'external', NODE_GROUP.copy, NODE_ORDER.openSourceRecord)],
   ['node', command('stand-in-ask', 'Ask about this entity', 'spark', NODE_GROUP.assist, NODE_ORDER.ask, { state: 'locked', lock: true })],
   ['node', command('stand-in-summarize', 'Summarize neighborhood', 'spark', NODE_GROUP.assist, NODE_ORDER.summarize, { state: 'locked' })],
-  ['relationship', command('stand-in-why', 'Why is this relationship here?', 'why', RELATIONSHIP_GROUP.explain, RELATIONSHIP_ORDER.explain, { shortcut: '↵' })],
+  ['relationship', command('stand-in-why', 'Why is this relationship here?', 'why', RELATIONSHIP_GROUP.explain, RELATIONSHIP_ORDER.explain)],
   ['relationship', command('stand-in-supporting', 'View supporting records', 'external', RELATIONSHIP_GROUP.explain, RELATIONSHIP_ORDER.viewSupportingRecords)],
   ['relationship', command('stand-in-highlight', 'Highlight endpoints', 'focus', RELATIONSHIP_GROUP.endpoints, RELATIONSHIP_ORDER.highlightEndpoints)],
   ['relationship', command('stand-in-select-endpoints', 'Select both endpoints', 'select', RELATIONSHIP_GROUP.endpoints, RELATIONSHIP_ORDER.selectBothEndpoints)],
   ['relationship', command('stand-in-paths-between', 'Find paths between endpoints', 'route', RELATIONSHIP_GROUP.endpoints, RELATIONSHIP_ORDER.findPathsBetween)],
-  ['relationship', command('stand-in-hide-this', 'Hide this relationship', 'hide', RELATIONSHIP_GROUP.visibility, RELATIONSHIP_ORDER.hideThis, { shortcut: 'Del' })],
+  ['relationship', command('stand-in-hide-this', 'Hide this relationship', 'hide', RELATIONSHIP_GROUP.visibility, RELATIONSHIP_ORDER.hideThis, { binding: 'hide' })],
   ['relationship', command('stand-in-hide-all', (context) => `Hide all ${typeOf(context)}`, 'hide', RELATIONSHIP_GROUP.visibility, RELATIONSHIP_ORDER.hideAllOfType)],
   ['relationship', command('stand-in-show-only', (context) => `Show only ${typeOf(context)}`, 'show', RELATIONSHIP_GROUP.visibility, RELATIONSHIP_ORDER.showOnlyType)],
-  ['relationship', command('stand-in-copy-relationship-id', 'Copy relationship ID', 'copy', RELATIONSHIP_GROUP.copy, RELATIONSHIP_ORDER.copyRelationshipId, { shortcut: '⌘C' })],
-  ['relationship', command('stand-in-copy-relationship-properties', 'Copy properties', 'copy', RELATIONSHIP_GROUP.copy, RELATIONSHIP_ORDER.copyProperties, { shortcut: '⇧⌘C' })],
+  ['relationship', command('stand-in-copy-relationship-id', 'Copy relationship ID', 'copy', RELATIONSHIP_GROUP.copy, RELATIONSHIP_ORDER.copyRelationshipId, { binding: 'copy-id' })],
+  ['relationship', command('stand-in-copy-relationship-properties', 'Copy properties', 'copy', RELATIONSHIP_GROUP.copy, RELATIONSHIP_ORDER.copyProperties, { binding: 'copy-properties' })],
   ['relationship', command('stand-in-open-relationship-record', 'Open source record', 'external', RELATIONSHIP_GROUP.copy, RELATIONSHIP_ORDER.openSourceRecord, { state: 'disabled' })],
   ['relationship', command('stand-in-ask-relationship', 'Ask about this relationship', 'spark', RELATIONSHIP_GROUP.assist, RELATIONSHIP_ORDER.ask, { state: 'locked', lock: true })],
 ];
@@ -213,6 +214,34 @@ const STAND_IN_MENU_ITEMS: readonly (readonly [MenuTargetKind, MenuItem])[] = [
 export function registerStandInMenuItems(registry: MenuRegistry): () => void {
   const taken = new Set([...registry.view.getState()].flatMap(([kind, items]) => items.map((item) => `${kind}/${item.id}`)));
   const removals = STAND_IN_MENU_ITEMS.filter(([kind, item]) => !taken.has(`${kind}/${item.id}`)).map(([kind, item]) => registry.register(kind, item));
+  return () => {
+    for (const remove of removals) remove();
+  };
+}
+
+const STAND_IN_KEYS: readonly { readonly id: string; readonly keys: string; readonly label: string; readonly group: KeyGroup; readonly order: number }[] = [
+  { id: 'search', keys: 'mod+k', label: 'Search', group: 'tools', order: 40 },
+  { id: 'expand', keys: 'e', label: 'Expand', group: 'selection', order: 40 },
+  { id: 'focus', keys: 'f', label: 'Focus', group: 'selection', order: 50 },
+  { id: 'pin', keys: 'p', label: 'Pin position', group: 'actions', order: 10 },
+  { id: 'hide', keys: 'delete', label: 'Hide', group: 'actions', order: 20 },
+  { id: 'copy-id', keys: 'mod+c', label: 'Copy ID', group: 'actions', order: 30 },
+  { id: 'find-paths', keys: 'shift+p', label: 'Find paths', group: 'actions', order: 40 },
+  { id: 'export-view', keys: 'mod+e', label: 'Export view', group: 'actions', order: 50 },
+  { id: 'copy-properties', keys: 'mod+shift+c', label: 'Copy properties', group: 'actions', order: 60 },
+];
+
+/** Puts a stand-in binding for each key the design shows that no feature has built yet; each runs `onRun` with its id, so that a test or a person can see that the key was bound. Returns the function that takes out what it put in. */
+export function registerStandInKeyBindings(registry: KeyBindingRegistry, onRun: (id: string) => void = nothing): () => void {
+  const removals = STAND_IN_KEYS.flatMap(({ id, keys, label, group, order }) => {
+    try {
+      return [registry.register({ id, keys: [keys], label, group, order, scope: 'workspace', run: () => onRun(id) })];
+    } catch (error) {
+      // a feature that has built the key by now keeps it
+      if (error instanceof KeyBindingError) return [];
+      throw error;
+    }
+  });
   return () => {
     for (const remove of removals) remove();
   };

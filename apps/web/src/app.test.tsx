@@ -8,6 +8,7 @@ import { App } from './app.js';
 import { appRoutes } from './routes.js';
 import { createClientState } from './state/client-state.js';
 import { createSelectionActionRegistry } from './workspace/selection-actions.js';
+import { createKeyBindingRegistry } from './workspace/key-binding-registry.js';
 import { createMenuRegistry } from './workspace/menu-registry.js';
 import { createPanelRegistry } from './workspace/panel-registry.js';
 import { createSlotRegistry } from './workspace/slots.js';
@@ -35,7 +36,7 @@ describe('the app under StrictMode', () => {
       expect(afterCreate).toBe(1);
       const { unmount } = render(
         <StrictMode>
-          <App router={router} state={state} slots={createSlotRegistry()} selectionActions={createSelectionActionRegistry()} tools={createToolRegistry()} menus={createMenuRegistry()} panels={createPanelRegistry()} createRenderer={stubFactory().create} />
+          <App router={router} state={state} slots={createSlotRegistry()} selectionActions={createSelectionActionRegistry()} tools={createToolRegistry()} menus={createMenuRegistry()} panels={createPanelRegistry()} keyBindings={createKeyBindingRegistry('other')} createRenderer={stubFactory().create} />
         </StrictMode>,
       );
       expect(added.filter((type) => type === 'popstate')).toHaveLength(afterCreate);
@@ -54,7 +55,7 @@ describe('the app under StrictMode', () => {
     const router = createMemoryRouter(appRoutes(client, state), { initialEntries: ['/'] });
     render(
       <StrictMode>
-        <App router={router} state={state} slots={createSlotRegistry()} selectionActions={createSelectionActionRegistry()} tools={createToolRegistry()} menus={createMenuRegistry()} panels={createPanelRegistry()} createRenderer={stubFactory().create} />
+        <App router={router} state={state} slots={createSlotRegistry()} selectionActions={createSelectionActionRegistry()} tools={createToolRegistry()} menus={createMenuRegistry()} panels={createPanelRegistry()} keyBindings={createKeyBindingRegistry('other')} createRenderer={stubFactory().create} />
       </StrictMode>,
     );
     await screen.findByText('Local workspace');

@@ -6,13 +6,13 @@ import { createClientState, type ClientState } from '../state/client-state.js';
 import { ClientStateProvider } from '../state/context.js';
 import { edgeKey, elementKey } from '../state/keys.js';
 import { edgeRef, key, ref, result } from '../state/test-data.js';
-import { clientWith, me, renderApp, source, stubFactory, type StubOptions } from '../test-utils.js';
+import { canvasSummary, clientWith, me, renderApp, source, stubFactory, type StubOptions } from '../test-utils.js';
 import { useCanvasCommands } from './canvas-commands.js';
-import { GraphCanvas, RENDERER_UNAVAILABLE } from './graph-canvas.js';
+import { GraphCanvas, RENDERER_UNAVAILABLE, WALK_SENTENCE } from './graph-canvas.js';
 import { RendererProvider } from './renderer-context.js';
 import { layoutEntities } from './incremental-layout.js';
 import { partitionEdges } from '../state/loaded-graph.js';
-import { MARK_EVENT } from '../dev/canvas-readout.js';
+import { MARK_EVENT, READ_POSITIONS } from '../dev/canvas-readout.js';
 import { runSelectionCommand } from './selection-commands.js';
 import type { CanvasEvents, CreateRenderer } from './scene.js';
 import type { SourceProfile } from '@neburyx/contracts';
@@ -160,16 +160,16 @@ describe('the graph canvas', () => {
     load(state, 2, 0);
     view(state, stubFactory(options).create);
     expect(screen.getByRole('alert').textContent).toBe(RENDERER_UNAVAILABLE);
-    expect(screen.getByRole('img', { name: 'Graph canvas' })).toBeTruthy();
+    expect(screen.getByRole('application', { name: 'Graph canvas' })).toBeTruthy();
   });
 
   it('is named "Graph canvas" and says how many entities and relationships are loaded', () => {
     const state = createClientState();
     load(state, 1200, 3);
     view(state, stubFactory().create);
-    const canvas = screen.getByRole('img', { name: 'Graph canvas' });
-    const description = document.getElementById(canvas.getAttribute('aria-describedby') ?? '');
-    expect(description?.textContent).toBe('1,200 entities and 3 relationships loaded');
+    const canvas = screen.getByRole('application', { name: 'Graph canvas' });
+    expect(canvasSummary(canvas)).toBe('1,200 entities and 3 relationships loaded');
+    expect(document.getElementById(canvas.getAttribute('aria-describedby') ?? '')?.textContent).toBe(`1,200 entities and 3 relationships loaded. ${WALK_SENTENCE}`);
   });
 });
 
@@ -188,7 +188,7 @@ describe('the graph canvas when the renderer fails', () => {
     load(state, 2, 0);
     view(state, stubFactory({ failCreate: true }).create);
     expect(screen.getByRole('alert').textContent).toBe(RENDERER_UNAVAILABLE);
-    expect(screen.getByRole('img', { name: 'Graph canvas' })).toBeTruthy();
+    expect(screen.getByRole('application', { name: 'Graph canvas' })).toBeTruthy();
   });
 
   it('takes the notice away when a later draw succeeds', () => {
@@ -239,10 +239,20 @@ describe('the development read-out of the graph canvas', () => {
     load(state, 3, 2);
     const factory = stubFactory();
     view(state, factory.create);
-    const canvas = screen.getByRole('img', { name: 'Graph canvas' });
+    const canvas = screen.getByRole('application', { name: 'Graph canvas' });
     expect([canvas.dataset['drawnEntities'], canvas.dataset['drawnRelationships'], canvas.dataset['zoom']]).toEqual(['3', '2', '1']);
     act(() => factory.made[0]?.events[0]?.viewport({ zoom: 2.5, x: 12, y: -3 }));
     expect([canvas.dataset['zoom'], canvas.dataset['panX'], canvas.dataset['panY']]).toEqual(['2.5', '12', '-3']);
+  });
+
+  it('gives a function that reads back where each entity is drawn, for a recorded browser run', () => {
+    const state = createClientState();
+    load(state, 2, 0);
+    view(state, stubFactory().create);
+    const canvas = screen.getByRole('application', { name: 'Graph canvas' });
+    const read = Reflect.get(canvas, READ_POSITIONS);
+    expect(typeof read).toBe('function');
+    expect(Object.keys(read())).toEqual([...state.presentation.view.getState().positions.keys()]);
   });
 });
 
@@ -391,7 +401,7 @@ describe('the development mark of the graph canvas', () => {
     state.replacePins([nodeKey('n0')]);
     const factory = stubFactory();
     view(state, factory.create);
-    const canvas = screen.getByRole('img', { name: 'Graph canvas' });
+    const canvas = screen.getByRole('application', { name: 'Graph canvas' });
     act(() => void canvas.dispatchEvent(new Event(MARK_EVENT)));
     expect([canvas.dataset['markedEntities'], canvas.dataset['movedPinned'], canvas.dataset['movedUnpinned']]).toEqual(['4', '0', '0']);
     act(() => state.presentation.setPosition(nodeKey('n2'), { x: 9000, y: 9000 }));
@@ -561,8 +571,8 @@ describe('the selection on the graph canvas', () => {
     const state = createClientState();
     load(state, 3, 0);
     view(state, stubFactory().create);
-    const canvas = screen.getByRole('img', { name: 'Graph canvas' });
-    const text = () => document.getElementById(canvas.getAttribute('aria-describedby') ?? '')?.textContent;
+    const canvas = screen.getByRole('application', { name: 'Graph canvas' });
+    const text = () => canvasSummary(canvas);
     expect(text()).toBe('3 entities and 0 relationships loaded');
     act(() => state.presentation.select([nodeKey('n0'), nodeKey('n2')]));
     expect(text()).toBe('3 entities and 0 relationships loaded; 2 selected');
@@ -574,8 +584,8 @@ describe('the pinned entities in the canvas description', () => {
     const state = createClientState();
     load(state, 3, 0);
     view(state, stubFactory().create);
-    const canvas = screen.getByRole('img', { name: 'Graph canvas' });
-    const text = () => document.getElementById(canvas.getAttribute('aria-describedby') ?? '')?.textContent;
+    const canvas = screen.getByRole('application', { name: 'Graph canvas' });
+    const text = () => canvasSummary(canvas);
     expect(text()).toBe('3 entities and 0 relationships loaded');
     act(() => state.presentation.pin([nodeKey('n0'), nodeKey('n1')]));
     expect(text()).toBe('3 entities and 0 relationships loaded; 2 pinned');
@@ -608,8 +618,8 @@ describe('the selection commands on the graph canvas', () => {
     load(state, 3, 1);
     const factory = stubFactory();
     view(state, factory.create);
-    const canvas = screen.getByRole('img', { name: 'Graph canvas' });
-    const text = () => document.getElementById(canvas.getAttribute('aria-describedby') ?? '')?.textContent;
+    const canvas = screen.getByRole('application', { name: 'Graph canvas' });
+    const text = () => canvasSummary(canvas);
     act(() => runSelectionCommand(state, 'select-all'));
     expect(text()).toBe('3 entities and 1 relationship loaded; 3 selected');
     expect(factory.made[0]?.scenes.at(-1)?.selection.size).toBe(3);
@@ -669,8 +679,8 @@ describe('the graph canvas description', () => {
     state.putResult(key('a'), result('a', ['n1', 'n2'], [['e1', 'n1', 'n2']]));
     state.setLoaded([key('a')], [ref('a', 'type-a', 'n1')], [edgeRef('a', 'e1')]);
     view(state, stubFactory().create);
-    const canvas = screen.getByRole('img', { name: 'Graph canvas' });
-    const text = document.getElementById(canvas.getAttribute('aria-describedby') ?? '')?.textContent;
+    const canvas = screen.getByRole('application', { name: 'Graph canvas' });
+    const text = canvasSummary(canvas);
     expect(text).toBe('1 entity and 1 relationship loaded; 1 relationship not drawn (entity not loaded)');
   });
 
@@ -680,8 +690,8 @@ describe('the graph canvas description', () => {
     state.putResult(key('a'), result('a', ['n1', 'n2'], [['e1', 'n1', 'n2'], ['e2', 'n2', 'n1']]));
     state.setLoaded([key('a')], [ref('a', 'type-a', 'n1')], [edgeRef('a', 'e1'), edgeRef('a', 'e2')]);
     view(state, stubFactory().create);
-    const canvas = screen.getByRole('img', { name: 'Graph canvas' });
-    const text = document.getElementById(canvas.getAttribute('aria-describedby') ?? '')?.textContent;
+    const canvas = screen.getByRole('application', { name: 'Graph canvas' });
+    const text = canvasSummary(canvas);
     expect(text).toBe('1 entity and 2 relationships loaded; 2 relationships not drawn (entity not loaded)');
   });
 
@@ -689,8 +699,8 @@ describe('the graph canvas description', () => {
     const state = createClientState();
     load(state, 2, 1);
     view(state, stubFactory().create);
-    const canvas = screen.getByRole('img', { name: 'Graph canvas' });
-    expect(document.getElementById(canvas.getAttribute('aria-describedby') ?? '')?.textContent).toBe('2 entities and 1 relationship loaded');
+    const canvas = screen.getByRole('application', { name: 'Graph canvas' });
+    expect(canvasSummary(canvas)).toBe('2 entities and 1 relationship loaded');
   });
 });
 

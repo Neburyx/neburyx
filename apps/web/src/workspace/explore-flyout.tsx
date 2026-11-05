@@ -3,24 +3,25 @@ import { runSelectionCommand, type SelectionCommandId } from '../canvas/selectio
 import { POINTER_TOOLS, type PointerTool } from '../state/presentation-state.js';
 import { useClientState } from '../state/context.js';
 import { useStoreSelector } from '../state/store.js';
+import { useKeyBindings } from './key-binding-registry.js';
 import type { FlyoutProps } from './tool-registry.js';
 
 interface Row {
   readonly name: string;
-  readonly hint: string;
+  readonly binding: string;
   readonly icon: string;
 }
 
 const MODE_ROWS: Readonly<Record<PointerTool, Row>> = {
-  select: { name: 'Select', hint: 'V', icon: 'icon-select' },
-  pan: { name: 'Pan', hint: 'H', icon: 'icon-pan' },
-  box: { name: 'Box select', hint: 'B', icon: 'icon-box-select' },
+  select: { name: 'Select', binding: 'tool-select', icon: 'icon-select' },
+  pan: { name: 'Pan', binding: 'tool-pan', icon: 'icon-pan' },
+  box: { name: 'Box select', binding: 'tool-box', icon: 'icon-box-select' },
 };
 
 const COMMAND_ROWS: readonly (Row & { readonly id: SelectionCommandId })[] = [
-  { id: 'select-all', name: 'Select all', hint: '⌘A', icon: 'icon-box-select' },
-  { id: 'invert-selection', name: 'Invert selection', hint: '⇧⌘I', icon: 'icon-invert' },
-  { id: 'clear-selection', name: 'Clear selection', hint: 'Esc', icon: 'icon-clear' },
+  { id: 'select-all', name: 'Select all', binding: 'select-all', icon: 'icon-box-select' },
+  { id: 'invert-selection', name: 'Invert selection', binding: 'invert-selection', icon: 'icon-invert' },
+  { id: 'clear-selection', name: 'Clear selection', binding: 'clear-selection', icon: 'icon-clear' },
 ];
 
 const ITEMS = '[role="menuitemradio"], [role="menuitem"]';
@@ -38,6 +39,8 @@ export function ExploreFlyout({ close }: FlyoutProps) {
   const state = useClientState();
   const tool = useStoreSelector(state.presentation.view, (current) => current.tool);
   const menu = useRef<HTMLDivElement>(null);
+  const bindings = useKeyBindings();
+  const hintOf = (id: string): string | undefined => bindings.find((candidate) => candidate.id === id)?.shown[0];
   useEffect(() => {
     menu.current?.querySelector<HTMLElement>('[aria-checked="true"]')?.focus();
   }, []);
@@ -63,7 +66,7 @@ export function ExploreFlyout({ close }: FlyoutProps) {
             <span className={`icon ${row.icon}`} aria-hidden="true" />
             <span className="menu-label">{row.name}</span>
             {chosen ? <span className="icon icon-check" aria-hidden="true" /> : null}
-            <span className="menu-hint" aria-hidden="true">{row.hint}</span>
+            {hintOf(row.binding) === undefined ? null : <span className="menu-hint" aria-hidden="true">{hintOf(row.binding)}</span>}
           </button>
         );
       })}
@@ -82,7 +85,7 @@ export function ExploreFlyout({ close }: FlyoutProps) {
         >
           <span className={`icon ${row.icon}`} aria-hidden="true" />
           <span className="menu-label">{row.name}</span>
-          <span className="menu-hint" aria-hidden="true">{row.hint}</span>
+          {hintOf(row.binding) === undefined ? null : <span className="menu-hint" aria-hidden="true">{hintOf(row.binding)}</span>}
         </button>
       ))}
     </div>

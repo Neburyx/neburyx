@@ -66,7 +66,8 @@ export interface MenuItemShape {
   readonly icon: ReactNode;
   readonly group: number;
   readonly order: number;
-  readonly shortcut?: string;
+  /** The id of the registered key binding whose keys the row shows as its hint: the hint is the binding's, so it cannot name a key that does nothing. */
+  readonly binding?: string;
   /** Enabled when not given; a function is asked each time the menu is drawn, with what the menu is about. A disabled or locked item is shown, does nothing and never opens a submenu. */
   readonly state?: MenuItemState | ((context: MenuContext) => MenuItemState);
   /** Draws a lock after a locked item's tag. */

@@ -48,7 +48,7 @@ describe('the frame sample', () => {
         </RendererProvider>
       </ClientStateProvider>,
     );
-    await screen.findByRole('img', { name: 'Graph canvas' });
+    await screen.findByRole('application', { name: 'Graph canvas' });
     await waitFor(() => {
       const scene = factory.made.at(-1)?.scenes.at(-1);
       expect(scene?.entities.find((entity) => entity.look.line1 === 'LED-48291')?.look).toEqual({ iconKey: 'money', line1: 'LED-48291', line2: 'Ledger · Review required' });

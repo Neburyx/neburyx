@@ -12,9 +12,10 @@ import { ClientStateProvider } from '../state/context.js';
 import type { GraphEdge, GraphNode } from '@neburyx/contracts';
 import { elementKey } from '../state/keys.js';
 import { key, ref, result } from '../state/test-data.js';
-import { staticProfile, staticShell, stubFactory, type StubOptions } from '../test-utils.js';
+import { builtInKeyBindings, staticProfile, staticShell, stubFactory, type StubOptions } from '../test-utils.js';
 import { registerBuiltInMenuItems } from './built-in-menu-items.js';
 import { ContextMenu } from './context-menu.js';
+import { KeyBindingsProvider } from './key-binding-registry.js';
 import { createMenuRegistry, MenuProvider, type MenuContext, type MenuItem, type MenuItemState, type MenuRegistry } from './menu-registry.js';
 import { ZoomControls } from './zoom-controls.js';
 
@@ -40,17 +41,19 @@ export function show(state: ClientState, options: StubOptions = {}, menus: MenuR
     <ClientStateProvider state={state}>
       <ShellDataProvider store={staticShell(edition)}>
         <MenuProvider registry={menus}>
-          <ProfileProvider store={staticProfile('a', testProfile('a', ['type-a']))}>
-            <RendererProvider createRenderer={factory.create}>
-              <GraphCanvas />
-              <ZoomControls />
-              <ContextMenu />
-              {extra}
-              <button type="button" onClick={outside}>
-                Outside
-              </button>
-            </RendererProvider>
-          </ProfileProvider>
+          <KeyBindingsProvider registry={builtInKeyBindings()}>
+            <ProfileProvider store={staticProfile('a', testProfile('a', ['type-a']))}>
+              <RendererProvider createRenderer={factory.create}>
+                <GraphCanvas />
+                <ZoomControls />
+                <ContextMenu />
+                {extra}
+                <button type="button" onClick={outside}>
+                  Outside
+                </button>
+              </RendererProvider>
+            </ProfileProvider>
+          </KeyBindingsProvider>
         </MenuProvider>
       </ShellDataProvider>
     </ClientStateProvider>,

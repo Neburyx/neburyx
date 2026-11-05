@@ -2,6 +2,8 @@ import type { Position, Viewport } from '../state/presentation-state.js';
 
 export const READOUT_MARKER = 'neburyx-dev-canvas-readout';
 export const MARK_EVENT = 'neburyx-dev-mark';
+/** The name of the function a development canvas element gets for reading where each entity is drawn, so a recorded browser run can read a stored position back. */
+export const READ_POSITIONS = 'readDrawnPositions';
 
 export interface Readout {
   readonly entities: number;
@@ -45,6 +47,7 @@ function listen(element: HTMLElement): Held {
   if (existing !== undefined) return existing;
   const created: Held = { positions: new Map(), pinned: new Set(), mark: undefined };
   held.set(element, created);
+  Reflect.set(element, READ_POSITIONS, () => Object.fromEntries(created.positions));
   element.addEventListener(MARK_EVENT, () => {
     created.mark = new Map(created.positions);
     reportMoved(element, created);

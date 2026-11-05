@@ -7,8 +7,9 @@ import { createClientState, type ClientState } from '../state/client-state.js';
 import { ClientStateProvider } from '../state/context.js';
 import { elementKey } from '../state/keys.js';
 import { key, ref, result } from '../state/test-data.js';
-import { stubFactory } from '../test-utils.js';
+import { builtInKeyBindings, canvasSummary, stubFactory } from '../test-utils.js';
 import { registerBuiltInTools } from './built-in-tools.js';
+import { KeyBindingsProvider } from './key-binding-registry.js';
 import { createSelectionActionRegistry, SelectionActionsProvider } from './selection-actions.js';
 import { SelectionBar } from './selection-bar.js';
 import { createToolRegistry, ToolsProvider } from './tool-registry.js';
@@ -30,11 +31,13 @@ function show(state: ClientState) {
     <ClientStateProvider state={state}>
       <ToolsProvider registry={tools}>
         <SelectionActionsProvider registry={createSelectionActionRegistry()}>
-          <RendererProvider createRenderer={stubFactory().create}>
-            <GraphCanvas />
-            <ToolStrip />
-            <SelectionBar />
-          </RendererProvider>
+          <KeyBindingsProvider registry={builtInKeyBindings()}>
+            <RendererProvider createRenderer={stubFactory().create}>
+              <GraphCanvas />
+              <ToolStrip />
+              <SelectionBar />
+            </RendererProvider>
+          </KeyBindingsProvider>
         </SelectionActionsProvider>
       </ToolsProvider>
     </ClientStateProvider>,
@@ -110,7 +113,7 @@ describe('the selection commands in the Explore flyout', () => {
     await userEvent.setup().click(row('Select all'));
     const bar = screen.getByRole('toolbar', { name: 'Selection actions' });
     expect(within(bar).getByText('3 selected')).not.toBeNull();
-    const canvas = screen.getByRole('img', { name: 'Graph canvas' });
-    expect(document.getElementById(canvas.getAttribute('aria-describedby') ?? '')?.textContent).toBe('3 entities and 0 relationships loaded; 3 selected');
+    const canvas = screen.getByRole('application', { name: 'Graph canvas' });
+    expect(canvasSummary(canvas)).toBe('3 entities and 0 relationships loaded; 3 selected');
   });
 });

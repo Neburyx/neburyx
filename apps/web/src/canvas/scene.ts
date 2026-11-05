@@ -30,6 +30,8 @@ export interface Scene {
   readonly selection: ReadonlySet<string>;
   /** The keys of the drawn entities that are pinned: they cannot be dragged. */
   readonly pinned: ReadonlySet<string>;
+  /** The key of the drawn element the walk is at, which the drawing rings; undefined when the walk is off. */
+  readonly focused?: string | undefined;
   /** Relationships that are loaded but not drawn, because an entity they join is not loaded. */
   readonly omitted: number;
   /** Whether the viewport is set to show everything when a graph is first drawn, or left as the entities' own positions give it. */
@@ -50,8 +52,8 @@ export interface Inspection {
   /** The box the entities cover on screen, caption space included as the fit counts it, or undefined when none is drawn. */
   readonly boundingBox: { readonly x1: number; readonly y1: number; readonly x2: number; readonly y2: number } | undefined;
   readonly interaction: { readonly panning: boolean; readonly zooming: boolean; readonly boxSelecting: boolean; readonly nodesGrabbable: boolean; readonly nodesSelectable: boolean };
-  readonly nodes: readonly { readonly id: string; readonly diameter: number; readonly outline: string; readonly outlineWidth: number; readonly halo: boolean; readonly images: readonly string[]; readonly caption: string; readonly captionShown: boolean }[];
-  readonly edges: readonly { readonly id: string; readonly source: string; readonly target: string; readonly width: number; readonly color: string; readonly lineStyle: string; readonly arrow: string; readonly label: string; readonly labelOutline: number; readonly labelShown: boolean }[];
+  readonly nodes: readonly { readonly id: string; readonly diameter: number; readonly outline: string; readonly outlineWidth: number; readonly halo: boolean; readonly images: readonly string[]; readonly caption: string; readonly captionShown: boolean; readonly focused: boolean }[];
+  readonly edges: readonly { readonly id: string; readonly source: string; readonly target: string; readonly width: number; readonly color: string; readonly lineStyle: string; readonly arrow: string; readonly label: string; readonly labelOutline: number; readonly labelShown: boolean; readonly focused: boolean }[];
 }
 
 /** A right-click: the drawn item it landed on, or none for empty canvas, and where the pointer was in the browser window. */
@@ -91,6 +93,8 @@ export interface CanvasRenderer {
   fit(): void;
   /** Multiplies the zoom around the centre of the canvas, within the zoom limits. */
   zoomBy(factor: number): void;
+  /** Where an item is on the page, as the browser's window counts it: an entity's centre, a relationship's midpoint, or with no key the centre of the canvas; undefined when the item is not drawn or nothing is mounted. */
+  anchorOf(key: string | undefined): { readonly x: number; readonly y: number } | undefined;
   describe(): DrawnCounts;
   positions(): ReadonlyMap<string, Position>;
   viewport(): Viewport;

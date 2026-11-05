@@ -66,14 +66,14 @@ describe('the fixture page', () => {
     await user.click(await screen.findByRole('button', { name: 'Source a' }));
     await user.click(await screen.findByRole('button', { name: 'Load' }));
     await user.click(await screen.findByRole('link', { name: 'Open Explore' }));
-    await screen.findByRole('img', { name: 'Graph canvas' });
+    await screen.findByRole('application', { name: 'Graph canvas' });
     expect(slots.view.getState().has('floating')).toBe(true);
     await act(() => router.navigate('/dev/fixture'));
     await user.click(await screen.findByRole('button', { name: 'Source a' }));
     await user.click(await screen.findByRole('button', { name: 'Load' }));
     expect(screen.queryByRole('alert')).toBeNull();
     await user.click(await screen.findByRole('link', { name: 'Open Explore' }));
-    await screen.findByRole('img', { name: 'Graph canvas' });
+    await screen.findByRole('application', { name: 'Graph canvas' });
     expect(screen.getAllByRole('button', { name: 'Add 25 entities' })).toHaveLength(1);
     expect(screen.getAllByRole('button', { name: 'Displace 10 entities' })).toHaveLength(1);
   });

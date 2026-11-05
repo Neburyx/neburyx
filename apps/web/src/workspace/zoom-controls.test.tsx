@@ -110,6 +110,8 @@ describe('the zoom controls', () => {
     const factory = view(state);
     const user = userEvent.setup();
     await user.tab();
+    expect(document.activeElement).toBe(screen.getByRole('application', { name: 'Graph canvas' }));
+    await user.tab();
     expect(document.activeElement).toBe(button('Zoom out'));
     await user.tab();
     expect(document.activeElement).toBe(button('Zoom in'));

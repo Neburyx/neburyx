@@ -6,6 +6,8 @@ import { createStore, readable } from '../state/store.js';
 import { registerBuiltInMenuItems } from '../workspace/built-in-menu-items.js';
 import { registerBuiltInSlots } from '../workspace/built-in-slots.js';
 import { registerBuiltInTools } from '../workspace/built-in-tools.js';
+import { registerBuiltInKeyBindings } from '../workspace/built-in-key-bindings.js';
+import { createKeyBindingRegistry, KeyBindingsProvider } from '../workspace/key-binding-registry.js';
 import { createMenuRegistry, MenuProvider } from '../workspace/menu-registry.js';
 import { createSelectionActionRegistry, SelectionActionsProvider } from '../workspace/selection-actions.js';
 import { bindLegend } from '../workspace/legend-binder.js';
@@ -15,7 +17,7 @@ import { createToolRegistry, ToolsProvider } from '../workspace/tool-registry.js
 import { WorkspaceShell } from '../workspace/workspace-shell.js';
 import type { SourceProfile } from '@neburyx/contracts';
 import { createFrameSampleState, frameSampleProfile, FRAME_SAMPLE_SOURCE } from './frame-sample.js';
-import { registerStandInActions, registerStandInMenuItems, registerStandInPanels, registerStandInTools, registerStandIns } from './stand-ins.js';
+import { registerStandInActions, registerStandInKeyBindings, registerStandInMenuItems, registerStandInPanels, registerStandInTools, registerStandIns } from './stand-ins.js';
 
 const LONG_LABEL_LENGTH = 60;
 
@@ -75,6 +77,12 @@ export function FrameSamplePage() {
     registerStandInPanels(registry, { floating: floatingSide(window.location.search) });
     return registry;
   });
+  const [keyBindings] = useState(() => {
+    const registry = createKeyBindingRegistry();
+    registerBuiltInKeyBindings(registry);
+    registerStandInKeyBindings(registry);
+    return registry;
+  });
   return (
     <ClientStateProvider state={state}>
       <SlotsProvider registry={slots}>
@@ -82,9 +90,11 @@ export function FrameSamplePage() {
           <ToolsProvider registry={tools}>
             <MenuProvider registry={menus}>
               <PanelsProvider registry={panels}>
-                <ProfileProvider store={profile}>
-                  <WorkspaceShell canvasView="as-drawn" />
-                </ProfileProvider>
+                <KeyBindingsProvider registry={keyBindings}>
+                  <ProfileProvider store={profile}>
+                    <WorkspaceShell canvasView="as-drawn" />
+                  </ProfileProvider>
+                </KeyBindingsProvider>
               </PanelsProvider>
             </MenuProvider>
           </ToolsProvider>

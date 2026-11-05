@@ -5,14 +5,17 @@ import { ContextMenu } from './context-menu.js';
 import { DockColumn, FloatingPanels } from './panel-host.js';
 import { GraphScope } from './graph-scope.js';
 import { HeaderBar } from './header-bar.js';
+import { KEY_SCOPE_ATTRIBUTE, useKeyHandler } from './key-binding-handler.js';
 import { NavigationRail } from './navigation-rail.js';
 import { NoticeStrip } from './notice-strip.js';
+import { ShortcutSheet } from './shortcut-sheet.js';
 import { SelectionBar } from './selection-bar.js';
 
 export function WorkspaceShell({ canvasView }: { readonly canvasView?: 'fit' | 'as-drawn' }) {
   const profile = useProfile();
+  useKeyHandler();
   return (
-    <div className="workspace">
+    <div className="workspace" {...{ [KEY_SCOPE_ATTRIBUTE]: 'workspace' }}>
       <NavigationRail />
       <div className="workspace-body">
         <HeaderBar />
@@ -29,6 +32,7 @@ export function WorkspaceShell({ canvasView }: { readonly canvasView?: 'fit' | '
           <DockColumn />
         </div>
       </div>
+      <ShortcutSheet />
     </div>
   );
 }

@@ -44,11 +44,11 @@ export function createClientState(): ClientState {
     isNode: (key) => nodeKeys().has(key),
     isElement: (key) => nodeKeys().has(key) || edgeKeys().has(key),
   });
-  const { view, setTool, setOpenTool, setOpenMenu, select, setPosition, setPositions, pin, setPanelSize, clearPanelSize, setPanelCollapsed, clearPanelCollapsed, setLegendOpen, setViewport } = presentation;
+  const { view, setTool, setOpenTool, setOpenMenu, select, setPosition, setPositions, pin, setPanelSize, clearPanelSize, setPanelCollapsed, clearPanelCollapsed, setLegendOpen, setSheetOpen, walkTo, endWalk, forgetFocused, announceMove, setViewport } = presentation;
   return {
     server: { ...server.view, get: server.get },
     investigation: investigation.view,
-    presentation: { view, setTool, setOpenTool, setOpenMenu, select, setPosition, setPositions, pin, setPanelSize, clearPanelSize, setPanelCollapsed, clearPanelCollapsed, setLegendOpen, setViewport },
+    presentation: { view, setTool, setOpenTool, setOpenMenu, select, setPosition, setPositions, pin, setPanelSize, clearPanelSize, setPanelCollapsed, clearPanelCollapsed, setLegendOpen, setSheetOpen, walkTo, endWalk, forgetFocused, announceMove, setViewport },
     jobs: createJobStore(),
     bindSource(sourceId) {
       const previous = investigation.view.getState().sourceId;
