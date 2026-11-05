@@ -33,3 +33,7 @@ export const SELECTED_HALO_PADDING = (SELECTED_HALO_DIAMETER - (NODE_OUTER_DIAME
 export const PIN_BADGE_SIZE = 16;
 export const PIN_BADGE_COLOR = DERIVED_COLOR;
 export const PIN_BADGE_FILL = NODE_FILL;
+export const CAPTION_FONT_SIZE = 12;
+/** The smallest size, in screen pixels, at which caption text is read; below it the captions and labels are left out. */
+export const MIN_LEGIBLE_FONT_SIZE = 7;
+export const CAPTION_MIN_ZOOM = MIN_LEGIBLE_FONT_SIZE / CAPTION_FONT_SIZE;

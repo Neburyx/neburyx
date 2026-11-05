@@ -50,8 +50,8 @@ export interface Inspection {
   /** The box the entities cover on screen, caption space included as the fit counts it, or undefined when none is drawn. */
   readonly boundingBox: { readonly x1: number; readonly y1: number; readonly x2: number; readonly y2: number } | undefined;
   readonly interaction: { readonly panning: boolean; readonly zooming: boolean; readonly boxSelecting: boolean; readonly nodesGrabbable: boolean; readonly nodesSelectable: boolean };
-  readonly nodes: readonly { readonly id: string; readonly diameter: number; readonly outline: string; readonly outlineWidth: number; readonly halo: boolean; readonly images: readonly string[]; readonly caption: string }[];
-  readonly edges: readonly { readonly id: string; readonly source: string; readonly target: string; readonly width: number; readonly color: string; readonly lineStyle: string; readonly arrow: string; readonly label: string; readonly labelOutline: number }[];
+  readonly nodes: readonly { readonly id: string; readonly diameter: number; readonly outline: string; readonly outlineWidth: number; readonly halo: boolean; readonly images: readonly string[]; readonly caption: string; readonly captionShown: boolean }[];
+  readonly edges: readonly { readonly id: string; readonly source: string; readonly target: string; readonly width: number; readonly color: string; readonly lineStyle: string; readonly arrow: string; readonly label: string; readonly labelOutline: number; readonly labelShown: boolean }[];
 }
 
 /** A right-click: the drawn item it landed on, or none for empty canvas, and where the pointer was in the browser window. */

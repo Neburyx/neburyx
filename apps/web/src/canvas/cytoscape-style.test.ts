@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CAPTION_WIDTH } from './caption-layout.js';
 import { STYLE } from './cytoscape-renderer.js';
-import { GLYPH_SIZE, NODE_DIAMETER, PIN_BADGE_SIZE } from './look.js';
+import { CAPTION_FONT_SIZE, CAPTION_MIN_ZOOM, GLYPH_SIZE, MIN_LEGIBLE_FONT_SIZE, NODE_DIAMETER, PIN_BADGE_SIZE } from './look.js';
 
 const overlayOf = (rule: (typeof STYLE)[number]): unknown => ('style' in rule ? Reflect.get(rule.style, 'overlay-opacity') : undefined);
 const forSelector = (selector: string): unknown => {
@@ -40,5 +40,29 @@ describe('the images of an entity', () => {
     const y = nodeStyle('background-position-y');
     expect(Array.isArray(x) && parseFloat(String(x[2])) > NODE_DIAMETER / 2).toBe(true);
     expect(Array.isArray(y) && parseFloat(String(y[2])) < NODE_DIAMETER / 2).toBe(true);
+  });
+});
+
+describe('the zoomed-out view', () => {
+  const styleOf = (selector: string): Record<string, unknown> | undefined => {
+    const rule = STYLE.find((candidate) => candidate.selector === selector);
+    return rule === undefined || !('style' in rule) ? undefined : Object.fromEntries(Object.getOwnPropertyNames(rule.style).map((name) => [name, Reflect.get(rule.style, name)]));
+  };
+
+  it('hides the second image of an entity, its caption, below the limit, and shows it for a selected or hovered one, keeping the glyph and the badge', () => {
+    expect(styleOf('node.far')).toEqual({ 'background-image-opacity': [1, 0, 1] });
+    expect(styleOf('node.far[?selected], node.far.hovered')).toEqual({ 'background-image-opacity': [1, 1, 1] });
+  });
+
+  it('leaves a relationship without its label below the limit, with a class and not the library\'s own size limit (which counts a rounded texture scale including the display\'s pixel ratio), and not for a selected or hovered one', () => {
+    expect(styleOf('edge.far')).toEqual({ label: '' });
+    expect(styleOf('edge.far[?selected], edge.far.hovered')).toEqual({ label: 'data(label)' });
+    expect(styleOf('edge')?.['min-zoomed-font-size']).toBeUndefined();
+    expect(STYLE.some((rule) => 'style' in rule && Reflect.get(rule.style, 'min-zoomed-font-size') !== undefined)).toBe(false);
+  });
+
+  it('puts the limit where 12 px caption text is drawn at the smallest legible size', () => {
+    expect(CAPTION_MIN_ZOOM * CAPTION_FONT_SIZE).toBeCloseTo(MIN_LEGIBLE_FONT_SIZE, 10);
+    expect(MIN_LEGIBLE_FONT_SIZE).toBe(7);
   });
 });

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createCytoscapeRenderer, type RendererCore as Core } from './cytoscape-renderer.js';
 import { pinBadgeUri } from './pin-badge.js';
 import { glyphUri } from './glyphs.js';
-import { FIT_PADDING, GLYPH_COLOR } from './look.js';
+import { CAPTION_MIN_ZOOM, FIT_PADDING, GLYPH_COLOR } from './look.js';
 import { ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from './zoom.js';
 import type { CanvasEvents, RightClick, Scene } from './scene.js';
 import type { BoxSelection } from './box-selection.js';
@@ -1067,9 +1067,9 @@ describe('the Cytoscape renderer in a container whose size changes', () => {
     restoreCanvas();
   });
 
-  function inContainer() {
+  function inContainer(nextFrame: (callback: () => void) => void = () => undefined) {
     let core: Core | undefined;
-    const renderer = createCytoscapeRenderer({ nextFrame: () => undefined, onCore: (made) => void (core = made) });
+    const renderer = createCytoscapeRenderer({ nextFrame, onCore: (made) => void (core = made) });
     const container = document.createElement('div');
     document.body.append(container);
     sizes.resize(container, 1000, 800);
@@ -1124,6 +1124,202 @@ describe('the Cytoscape renderer in a container whose size changes', () => {
     expect(container.style.cursor).toBe('not-allowed');
     renderer.dispose();
     expect(container.style.cursor).toBe('');
+  });
+
+  describe('zoomed out past where captions are read', () => {
+    const two = (extra: object = {}): Scene => ({ ...scene([['a', { x: 0, y: 0 }], ['b', { x: 200, y: 0 }]], [['ab', 'a', 'b']]), ...extra });
+    const shown = (renderer: ReturnType<typeof inContainer>['renderer']) => ({ captions: renderer.inspect().nodes.map((node) => node.captionShown), labels: renderer.inspect().edges.map((edge) => edge.labelShown) });
+    const labelled = (extra: object = {}): Scene => {
+      const base = two(extra);
+      return { ...base, relationships: base.relationships.map((relationship) => ({ ...relationship, look: { ...relationship.look, label: 'USES' } })) };
+    };
+
+    it('shows every caption and label at a zoom where they are read, and hides all of them below it, keeping the glyphs and the badges', () => {
+      const { renderer, core } = inContainer((callback) => callback());
+      renderer.draw(labelled({ pinned: new Set(['a']) }));
+      core.zoom(CAPTION_MIN_ZOOM * 1.5);
+      expect(shown(renderer)).toEqual({ captions: [true, true], labels: [true] });
+      core.zoom(CAPTION_MIN_ZOOM * 0.5);
+      expect(shown(renderer)).toEqual({ captions: [false, false], labels: [false] });
+      expect(core.nodes().map((node) => String(node.style('background-image-opacity')))).toEqual(['1 0 1', '1 0 1']);
+      expect(renderer.describe()).toEqual({ entities: 2, relationships: 1 });
+      core.zoom(CAPTION_MIN_ZOOM * 1.5);
+      expect(shown(renderer)).toEqual({ captions: [true, true], labels: [true] });
+    });
+
+    it('keeps the caption and label of a selected entity and a selected relationship, and of the one under the pointer', () => {
+      const { renderer, core } = inContainer((callback) => callback());
+      renderer.draw(labelled({ selection: new Set(['a', 'ab']) }));
+      core.zoom(CAPTION_MIN_ZOOM * 0.5);
+      expect(shown(renderer)).toEqual({ captions: [true, false], labels: [true] });
+      renderer.draw(labelled());
+      expect(shown(renderer)).toEqual({ captions: [false, false], labels: [false] });
+      core.getElementById('b').emit('mouseover');
+      expect(shown(renderer)).toEqual({ captions: [false, true], labels: [false] });
+      core.getElementById('b').emit('mouseout');
+      core.getElementById('ab').emit('mouseover');
+      expect(shown(renderer)).toEqual({ captions: [false, false], labels: [true] });
+      core.getElementById('ab').emit('mouseout');
+      expect(shown(renderer)).toEqual({ captions: [false, false], labels: [false] });
+    });
+
+    it('hides the caption of an entity drawn while zoomed out, and shows it again when the zoom comes back', () => {
+      const { renderer, core } = inContainer((callback) => callback());
+      renderer.draw(labelled());
+      core.zoom(CAPTION_MIN_ZOOM * 0.5);
+      renderer.draw({ ...labelled(), entities: [...labelled().entities, { id: 'c', position: { x: 400, y: 0 }, look: { iconKey: 'generic', line1: 'c', line2: 'Type' } }] });
+      expect(shown(renderer).captions).toEqual([false, false, false]);
+      core.zoom(1);
+      expect(shown(renderer).captions).toEqual([true, true, true]);
+    });
+
+    it('forgets the element under the pointer when the pointer leaves the canvas from it, so its caption does not stay out of the canvas', () => {
+      const { renderer, container, core } = inContainer((callback) => callback());
+      renderer.draw(labelled({ pinned: new Set(['a']) }));
+      core.zoom(CAPTION_MIN_ZOOM * 0.5);
+      core.getElementById('a').emit('mouseover');
+      expect(shown(renderer).captions[0]).toBe(true);
+      expect(container.style.cursor).toBe('not-allowed');
+      core.emit('mouseout');
+      expect(shown(renderer)).toEqual({ captions: [false, false], labels: [false] });
+      expect(container.style.cursor).toBe('');
+    });
+
+    it('takes the element under the pointer up again when the pointer comes back over it after leaving the canvas, which the library does not tell the element, and not when it comes back elsewhere', () => {
+      const { renderer, container, core } = inContainer((callback) => callback());
+      renderer.draw(labelled({ pinned: new Set(['a']) }));
+      core.zoom(CAPTION_MIN_ZOOM * 0.5);
+      core.getElementById('a').emit('mouseover');
+      core.emit('mouseout');
+      expect(shown(renderer).captions).toEqual([false, false]);
+      core.emit('mouseover');
+      expect(shown(renderer).captions).toEqual([true, false]);
+      expect(container.style.cursor).toBe('not-allowed');
+      core.getElementById('a').emit('mouseout');
+      core.emit('mouseout');
+      core.emit('mouseover');
+      expect(shown(renderer).captions).toEqual([false, false]);
+      core.getElementById('ab').emit('mouseover');
+      core.emit('mouseout');
+      core.emit('mouseover');
+      expect(shown(renderer).labels).toEqual([true]);
+    });
+
+    it('forgets the element it would have taken up again when that element is removed or the renderer is disposed', () => {
+      let latest: Core | undefined;
+      const renderer = createCytoscapeRenderer({ nextFrame: (callback) => callback(), onCore: (made) => void (latest = made) });
+      made.push(renderer);
+      const first = document.createElement('div');
+      document.body.append(first);
+      sizes.resize(first, 1000, 800);
+      renderer.mount(first, NO_EVENTS, { zoom: 1.5, x: -20, y: 30 });
+      const current = (): Core => {
+        if (latest === undefined) throw new Error('the renderer made no core');
+        return latest;
+      };
+      const core = current();
+      renderer.draw(labelled({ pinned: new Set(['a']) }));
+      core.zoom(CAPTION_MIN_ZOOM * 0.5);
+      core.getElementById('a').emit('mouseover');
+      core.emit('mouseout');
+      renderer.draw({ ...labelled(), entities: labelled().entities.filter((entity) => entity.id !== 'a'), relationships: [] });
+      renderer.draw(labelled());
+      core.emit('mouseover');
+      expect(core.elements('.hovered').length).toBe(0);
+      core.getElementById('a').emit('mouseover');
+      core.emit('mouseout');
+      renderer.dispose();
+      const again = document.createElement('div');
+      document.body.append(again);
+      sizes.resize(again, 1000, 800);
+      renderer.mount(again, NO_EVENTS, { zoom: 1.5, x: -20, y: 30 });
+      renderer.draw(labelled());
+      current().zoom(CAPTION_MIN_ZOOM * 0.5);
+      current().emit('mouseover');
+      expect(current().elements('.hovered').length).toBe(0);
+    });
+
+    it('draws a relationship whose label comes while zoomed out without it, and leaves one with no label alone', () => {
+      const { renderer, core } = inContainer((callback) => callback());
+      const plain = two();
+      renderer.draw(plain);
+      core.zoom(CAPTION_MIN_ZOOM * 0.5);
+      expect(core.edges('.far').length).toBe(0);
+      renderer.draw(labelled());
+      expect(shown(renderer).labels).toEqual([false]);
+      expect(core.edges('.far').length).toBe(1);
+      core.zoom(1);
+      expect(shown(renderer).labels).toEqual([true]);
+    });
+
+    it('hides the captions of many entities ten at a time over the next frames, not all in the frame of the zoom, and starts again from the other side when the zoom turns back', () => {
+      const frames: Array<() => void> = [];
+      let core: Core | undefined;
+      const renderer = createCytoscapeRenderer({ nextFrame: (callback) => void frames.push(callback), onCore: (made) => void (core = made), canvasSize: () => ({ width: 1000, height: 800 }), paintCaption: () => 'data:image/png;base64,AAAA' });
+      renderer.mount(undefined, NO_EVENTS, undefined);
+      const ids = Array.from({ length: 25 }, (_unused, index) => `e${index}`);
+      renderer.draw(scene(ids.map((id, index) => [id, { x: index * 10, y: 0 }] as const)));
+      const cy = core;
+      if (cy === undefined) throw new Error('no core');
+      const hidden = (): number => cy.nodes('.far').length;
+      frames.length = 0;
+      cy.zoom(CAPTION_MIN_ZOOM * 0.5);
+      expect(hidden()).toBe(0);
+      expect(frames).toHaveLength(1);
+      const counts: number[] = [];
+      while (frames.length > 0) {
+        frames.shift()?.();
+        counts.push(hidden());
+      }
+      expect(counts).toEqual([10, 20, 25]);
+      cy.zoom(CAPTION_MIN_ZOOM * 2);
+      frames.shift()?.();
+      expect(hidden()).toBe(15);
+      cy.zoom(CAPTION_MIN_ZOOM * 0.5);
+      while (frames.length > 0) frames.shift()?.();
+      expect(hidden()).toBe(25);
+    });
+
+    it('gives an entity drawn while zoomed out the class from the start, and finishes the others at once when a draw follows a fit', () => {
+      const frames: Array<() => void> = [];
+      let core: Core | undefined;
+      const renderer = createCytoscapeRenderer({ nextFrame: (callback) => void frames.push(callback), onCore: (made) => void (core = made), canvasSize: () => ({ width: 1000, height: 800 }), paintCaption: () => 'data:image/png;base64,AAAA' });
+      renderer.mount(undefined, NO_EVENTS, undefined);
+      const far = (count: number): Scene => scene(Array.from({ length: count }, (_unused, index) => [`e${index}`, { x: index * 5000, y: 0 }] as const));
+      renderer.draw(far(3));
+      const cy = core;
+      if (cy === undefined) throw new Error('no core');
+      expect(cy.zoom()).toBeLessThan(CAPTION_MIN_ZOOM);
+      expect(cy.nodes('.far').length).toBe(3);
+      renderer.draw(far(4));
+      expect(cy.nodes('.far').length).toBe(4);
+    });
+
+    it('does the work once when the zoom crosses the limit, and none at each zoom step on either side, and encodes no caption again', () => {
+      let paints = 0;
+      let core: Core | undefined;
+      const renderer = createCytoscapeRenderer({ nextFrame: (callback) => callback(), onCore: (made) => void (core = made), paintCaption: () => { paints += 1; return 'data:image/png;base64,AAAA'; }, canvasSize: () => ({ width: 1000, height: 800 }) });
+      renderer.mount(undefined, NO_EVENTS, undefined);
+      renderer.draw(labelled());
+      const cy = core;
+      if (cy === undefined) throw new Error('no core');
+      const painted = paints;
+      const batches: number[] = [];
+      const original = cy.batch.bind(cy);
+      cy.batch = (callback: () => void) => {
+        batches.push(1);
+        original(callback);
+      };
+      for (const level of [1, 0.95, 0.9, 0.85, 0.8, 0.75, 0.7]) cy.zoom(level);
+      expect(batches).toHaveLength(0);
+      cy.zoom(0.5);
+      expect(batches).toHaveLength(1);
+      for (const level of [0.45, 0.4, 0.35, 0.3, 0.25]) cy.zoom(level);
+      expect(batches).toHaveLength(1);
+      cy.zoom(1);
+      expect(batches).toHaveLength(2);
+      expect(paints).toBe(painted);
+    });
   });
 
   it('tells the library to measure again each time the container changes size, and not before', () => {

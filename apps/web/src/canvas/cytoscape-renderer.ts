@@ -1,11 +1,11 @@
 import type { IconKey } from '@neburyx/contracts';
-import cytoscape, { type Core, type StylesheetJson } from 'cytoscape';
+import cytoscape, { type Core, type EdgeSingular, type NodeSingular, type StylesheetJson } from 'cytoscape';
 import type { PointerTool, Position } from '../state/presentation-state.js';
 import { CAPTION_HEIGHT, CAPTION_TOP, CAPTION_WIDTH } from './caption-layout.js';
 import { paintCaption, type CaptionPainter } from './caption-painter.js';
 import { glyphUri } from './glyphs.js';
 import { pinBadgeUri } from './pin-badge.js';
-import { AGGREGATE_WIDTH, ARROW_GAP, ARROW_SHAPE, DASH_PATTERN, DERIVED_COLOR, DOT_PATTERN, EDGE_COLOR, EDGE_WIDTH, FIT_PADDING, GLYPH_COLOR, GLYPH_SIZE, LABEL_FILL, LABEL_FONT_SIZE, NODE_DIAMETER, NODE_FILL, NODE_OUTER_DIAMETER, NODE_OUTLINE, NODE_OUTLINE_WIDTH, PIN_BADGE_SIZE, PILL_FILL, PILL_OUTLINE_WIDTH, SELECTED_COLOR, SELECTED_HALO_COLOR, SELECTED_HALO_OPACITY, SELECTED_HALO_PADDING, SELECTED_LINE_EXTRA, SELECTED_OUTLINE_WIDTH } from './look.js';
+import { AGGREGATE_WIDTH, ARROW_GAP, CAPTION_MIN_ZOOM, ARROW_SHAPE, DASH_PATTERN, DERIVED_COLOR, DOT_PATTERN, EDGE_COLOR, EDGE_WIDTH, FIT_PADDING, GLYPH_COLOR, GLYPH_SIZE, LABEL_FILL, LABEL_FONT_SIZE, NODE_DIAMETER, NODE_FILL, NODE_OUTER_DIAMETER, NODE_OUTLINE, NODE_OUTLINE_WIDTH, PIN_BADGE_SIZE, PILL_FILL, PILL_OUTLINE_WIDTH, SELECTED_COLOR, SELECTED_HALO_COLOR, SELECTED_HALO_OPACITY, SELECTED_HALO_PADDING, SELECTED_LINE_EXTRA, SELECTED_OUTLINE_WIDTH } from './look.js';
 import type { RelationshipLook } from './relationship-look.js';
 import { createBoxGesture, type BoxOverlay } from './box-gesture.js';
 import { createBoxOverlay } from './box-overlay.js';
@@ -19,6 +19,8 @@ import type { CanvasRenderer, DrawnCounts, Inspection, Scene } from './scene.js'
 const POINTER = { userPanningEnabled: true, userZoomingEnabled: true, boxSelectionEnabled: false, autoungrabify: false, autounselectify: true };
 
 const CAPTION_BUDGET_MS = 4;
+/** Setting the class is cheap, but drawing an entity again after its style changed costs about half a millisecond, so hiding the captions of a few hundred entities in one frame would be a long frame (233 ms at 4x for 120 entities); it is done this many entities at a time over the next frames. */
+const FAR_ENTITIES_PER_FRAME = 10;
 
 const sameKeys = (a: ReadonlySet<string>, b: ReadonlySet<string>): boolean => a.size === b.size && [...a].every((key) => b.has(key));
 
@@ -117,6 +119,11 @@ export const STYLE: StylesheetJson = [
       'text-border-opacity': 1,
     },
   },
+  // Below the zoom where captions are read an entity is drawn with its glyph and badge only, and a relationship without its label, except a selected one and the one under the pointer.
+  { selector: 'node.far', style: { 'background-image-opacity': [1, 0, 1] } },
+  { selector: 'node.far[?selected], node.far.hovered', style: { 'background-image-opacity': [1, 1, 1] } },
+  { selector: 'edge.far', style: { label: '' } },
+  { selector: 'edge.far[?selected], edge.far.hovered', style: { label: 'data(label)' } },
   { selector: 'edge[?selected]', style: { 'line-color': SELECTED_COLOR, 'target-arrow-color': SELECTED_COLOR, width: EDGE_WIDTH + SELECTED_LINE_EXTRA } },
   { selector: 'edge[?selected][?aggregate]', style: { width: AGGREGATE_WIDTH + SELECTED_LINE_EXTRA } },
 ];
@@ -156,6 +163,45 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
   // The element the pointer is over and the element the canvas draws in, so the cursor follows a change of tool or pin under a pointer that does not move.
   let surface: HTMLElement | undefined;
   let hovered: string | undefined;
+  let remembered: string | undefined;
+  let far = false;
+  let farQueue: string[] = [];
+  let farScheduled = false;
+  const classifyFar = (cy: Core, count: number): void => {
+    cy.batch(() => {
+      for (let done = 0; farQueue.length > 0 && done < count; done += 1) {
+        const id = farQueue.shift();
+        const element = id === undefined ? undefined : cy.getElementById(id);
+        if (element === undefined || element.empty()) continue;
+        if (far) element.addClass('far');
+        else element.removeClass('far');
+      }
+    });
+  };
+  const runFarQueue = (): void => {
+    farScheduled = false;
+    if (core === undefined) {
+      farQueue = [];
+      return;
+    }
+    classifyFar(core, FAR_ENTITIES_PER_FRAME);
+    if (farQueue.length > 0) scheduleFar();
+  };
+  const scheduleFar = (): void => {
+    if (farScheduled) return;
+    farScheduled = true;
+    nextFrame(runFarQueue);
+  };
+  const syncFar = (cy: Core, immediate = false): void => {
+    const now = cy.zoom() < CAPTION_MIN_ZOOM;
+    if (now !== far) {
+      far = now;
+      farQueue = far ? [...cy.nodes().map((node) => node.id()), ...cy.edges().filter((edge) => edge.data('label') !== '').map((edge) => edge.id())] : cy.elements('.far').map((element) => element.id());
+    }
+    if (farQueue.length === 0) return;
+    if (immediate) classifyFar(cy, farQueue.length);
+    else scheduleFar();
+  };
   const showCursor = (): void => {
     if (surface !== undefined) surface.style.cursor = hovered !== undefined && tool !== 'pan' && drawnPinned.has(hovered) ? 'not-allowed' : '';
   };
@@ -262,14 +308,33 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
         report();
       };
       surface = container;
-      created.on('mouseover', 'node', (event) => {
-        hovered = event.target.id();
+      const enter = (element: EdgeSingular | NodeSingular): void => {
+        remembered = element.id();
+        element.addClass('hovered');
+        hovered = element.isNode() ? element.id() : undefined;
         showCursor();
-      });
-      created.on('mouseout', 'node', () => {
+      };
+      created.on('mouseover', 'node, edge', (event) => enter(event.target));
+      created.on('mouseout', 'node, edge', (event) => {
+        event.target.removeClass('hovered');
+        remembered = undefined;
         hovered = undefined;
         showCursor();
       });
+      // The library tells an element it was left only when another one is entered, so the pointer leaving the canvas clears what shows, and the pointer coming back takes it up again.
+      created.on('mouseout', (event) => {
+        if (event.target !== created) return;
+        created.elements('.hovered').removeClass('hovered');
+        hovered = undefined;
+        showCursor();
+      });
+      created.on('mouseover', (event) => {
+        if (event.target !== created || remembered === undefined) return;
+        const element = created.getElementById(remembered);
+        if (element.nonempty()) enter(element);
+        else remembered = undefined;
+      });
+      created.on('zoom', () => syncFar(created));
       let ignoreTap = false;
       created.on('tap', (event) => {
         if (ignoreTap) {
@@ -391,6 +456,7 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
         gesture.cancel();
         overlay?.dispose();
         hovered = undefined;
+        remembered = undefined;
         showCursor();
         surface = undefined;
       };
@@ -429,7 +495,7 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
         for (const entity of scene.entities) {
           const existing = cy.getElementById(entity.id);
           if (!existing.empty()) retained += 1;
-          if (existing.empty()) cy.add({ group: 'nodes', data: { id: entity.id }, position: { ...entity.position } });
+          if (existing.empty()) cy.add({ group: 'nodes', data: { id: entity.id }, position: { ...entity.position }, ...(far ? { classes: 'far' } : {}) });
           else if ((dragging === undefined || dragging.cancelled || dragging.id !== entity.id) && (existing.position('x') !== entity.position.x || existing.position('y') !== entity.position.y)) existing.position({ ...entity.position });
           const node = cy.getElementById(entity.id);
           const grabbable = scene.tool !== 'pan' && !scene.pinned.has(entity.id);
@@ -450,9 +516,10 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
         }
         for (const relationship of scene.relationships) {
           const existing = cy.getElementById(relationship.id);
-          if (existing.empty()) cy.add({ group: 'edges', data: { id: relationship.id, source: relationship.from, target: relationship.to, ...edgeData(relationship.look) } });
+          if (existing.empty()) cy.add({ group: 'edges', data: { id: relationship.id, source: relationship.from, target: relationship.to, ...edgeData(relationship.look) }, ...(far && relationship.look.label !== undefined ? { classes: 'far' } : {}) });
           else {
             existing.data(edgeData(relationship.look));
+            if (far && relationship.look.label !== undefined) existing.addClass('far');
             if (existing.source().id() !== relationship.from || existing.target().id() !== relationship.to) existing.move({ source: relationship.from, target: relationship.to });
           }
         }
@@ -466,11 +533,14 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
         }
       });
       if (hovered !== undefined && !wantedEntities.has(hovered)) hovered = undefined;
+      if (remembered !== undefined && cy.getElementById(remembered).empty()) remembered = undefined;
       showCursor();
+      syncFar(cy, true);
       const replaced = hadEntities && scene.entities.length > 0 && retained === 0;
       if (scene.view === 'fit' && scene.entities.length > 0 && (!fitted || replaced)) {
         fitEntities(cy);
         fits += 1;
+        syncFar(cy, true);
       }
       if (scene.entities.length > 0) fitted = true;
     },
@@ -493,7 +563,7 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
         interaction: { panning: cy.userPanningEnabled(), zooming: cy.userZoomingEnabled(), boxSelecting: cy.boxSelectionEnabled(), nodesGrabbable: cy.nodes().map((node) => node.grabbable()).includes(true), nodesSelectable: !cy.autounselectify() },
         nodes: cy.nodes().map((node) => {
           const image = node.style('background-image');
-          return { id: node.id(), diameter: parseFloat(node.style('width')), outline: node.style('border-color'), outlineWidth: parseFloat(node.style('border-width')), halo: parseFloat(node.style('underlay-opacity')) > 0, images: image === 'none' ? [] : image.split(' '), caption: String(node.data('caption') ?? '') };
+          return { id: node.id(), diameter: parseFloat(node.style('width')), outline: node.style('border-color'), outlineWidth: parseFloat(node.style('border-width')), halo: parseFloat(node.style('underlay-opacity')) > 0, images: image === 'none' ? [] : image.split(' '), caption: String(node.data('caption') ?? ''), captionShown: Number(String(node.style('background-image-opacity')).split(' ')[1] ?? 1) > 0 };
         }),
         edges: cy.edges().map((edge) => ({
           id: edge.id(),
@@ -505,6 +575,7 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
           arrow: edge.style('target-arrow-shape'),
           label: edge.style('label'),
           labelOutline: parseFloat(edge.style('text-border-width')),
+          labelShown: edge.style('label') !== '',
         })),
       };
     },
@@ -521,6 +592,7 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
     },
     dispose() {
       captionQueue = [];
+      farQueue = [];
       reportFailure = () => undefined;
       flushViewport?.();
       flushViewport = undefined;
