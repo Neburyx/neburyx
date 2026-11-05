@@ -1,45 +1,34 @@
-import { randomUUID } from 'node:crypto';
-import { Neo4jContainer } from '@testcontainers/neo4j';
-import { startWithRetry } from '@neburyx/test-containers';
-import neo4j, { type Driver } from 'neo4j-driver';
+import { forwardTo, startDevNeo4j, stopAllStarted, type DevNeo4j } from '@neburyx/test-neo4j';
+import neo4j from 'neo4j-driver';
+import { afterAll } from 'vitest';
 
-export const DEFAULT_NEO4J_IMAGE = 'neo4j:5.26';
-const STARTUP_LIMIT_MS = 240_000;
-export interface RunningNeo4j {
-  readonly image: string;
-  readonly boltUri: string;
-  readonly user: string;
-  readonly password: string;
-  readonly admin: Driver;
-  stop(): Promise<void>;
-}
+// whatever a hook started and did not stop (a start that failed while another succeeded) is stopped when the file ends
+afterAll(async () => {
+  await stopAllStarted();
+});
 
-export function imageFrom(env: Readonly<Record<string, string | undefined>>): string {
-  const image = env['NEBURYX_NEO4J_IMAGE'];
-  return image === undefined || image === '' ? DEFAULT_NEO4J_IMAGE : image;
-}
+/**
+ * The dev server with a database of this run (see packages/test-neo4j), reached through a forwarder on the loopback interface: the loader loads only to a loopback address or a
+ * one-word host name, and the dev server has neither. `boltUri` is the address of the forwarder; `database` is the one the loader and the queries use.
+ */
+export type RunningNeo4j = DevNeo4j;
 
-export async function startNeo4j(image = imageFrom(process.env)): Promise<RunningNeo4j> {
-  const password = randomUUID();
-  let started;
+export async function startNeo4j(): Promise<RunningNeo4j> {
+  const dev = await startDevNeo4j();
+  let forwarder;
   try {
-    started = await startWithRetry((labels) => new Neo4jContainer(image).withPassword(password).withStartupTimeout(STARTUP_LIMIT_MS).withLabels(labels).start());
+    forwarder = await forwardTo(dev.boltUri);
   } catch (error) {
-    throw new Error(`could not start the Neo4j image ${image}: ${error instanceof Error ? error.message : 'unknown error'}`);
+    await dev.stop().catch(() => undefined);
+    throw error;
   }
-  const admin = neo4j.driver(started.getBoltUri(), neo4j.auth.basic(started.getUsername(), password));
-  let stopped = false;
+  const reached = forwarder;
   return {
-    image,
-    boltUri: started.getBoltUri(),
-    user: started.getUsername(),
-    password,
-    admin,
-    stop: async () => {
-      if (stopped) return;
-      stopped = true;
+    ...dev,
+    boltUri: reached.uri,
+    async stop() {
       const failures: unknown[] = [];
-      for (const step of [() => admin.close(), () => started.stop()]) {
+      for (const step of [() => reached.close(), () => dev.stop()]) {
         try {
           await step();
         } catch (error) {
@@ -52,7 +41,7 @@ export async function startNeo4j(image = imageFrom(process.env)): Promise<Runnin
 }
 
 export async function query(server: RunningNeo4j, cypher: string, parameters: Record<string, unknown> = {}): Promise<readonly Record<string, unknown>[]> {
-  const session = server.admin.session();
+  const session = server.admin.session({ database: server.database });
   try {
     const result = await session.run(cypher, parameters);
     return result.records.map((record) => record.toObject());

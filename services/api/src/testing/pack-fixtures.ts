@@ -11,10 +11,20 @@ export const FIXTURES_DIR = join(repoRoot, 'tools', 'demo-graph', 'fixtures', 'n
 export const PACKS = ['banking-fraud', 'insurance-claims'] as const;
 export type Pack = (typeof PACKS)[number];
 
-/** The source of a pack, from its mapping file; `uri` replaces the address the file names. */
-export function packSource(pack: Pack, uri?: string): SourceModel {
-  const text = readFileSync(join(repoRoot, 'domain-packs', pack, 'neburyx.yaml'), 'utf8');
-  const [source] = parseMapping(uri === undefined ? text : text.replace(/uri: "[^"]+"/, `uri: "${uri}"`), 'neburyx.yaml').sources;
+/** The mapping file of a pack as text; `uri` replaces the address the file names and `database` the default database it names. */
+export function packMappingText(pack: Pack, uri?: string, database?: string): string {
+  let text = readFileSync(join(repoRoot, 'domain-packs', pack, 'neburyx.yaml'), 'utf8');
+  if (uri !== undefined) text = text.replace(/uri: "[^"]+"/, `uri: "${uri}"`);
+  if (database !== undefined) {
+    text = text.replace(/^(\s*database:\s*)neo4j\s*$/m, `$1${database}`);
+    if (!text.includes(`database: ${database}`)) throw new Error(`the ${pack} mapping does not name the default database`);
+  }
+  return text;
+}
+
+/** The source of a pack, from its mapping file; `uri` replaces the address the file names and `database` the database. */
+export function packSource(pack: Pack, uri?: string, database?: string): SourceModel {
+  const [source] = parseMapping(packMappingText(pack, uri, database), 'neburyx.yaml').sources;
   if (source === undefined) throw new Error(`the ${pack} pack has no source`);
   return source;
 }

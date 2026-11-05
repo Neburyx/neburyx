@@ -9,6 +9,9 @@ const API_SRC = 'services/api/src';
 const SOURCES_ZONE = `${API_SRC}/sources`;
 const GATE_ZONE = `${API_SRC}/gate`;
 const TESTING_ZONE = `${API_SRC}/testing`;
+/** The package the Neo4j tests use to reach the dev server: it opens its own driver to make and drop databases, and holds only test support. */
+const TEST_SUPPORT_ZONE = 'packages/test-neo4j';
+const TEST_SUPPORT_PACKAGE = /^@neburyx\/test-neo4j(?:\/|$)/;
 /** The one module outside gate/ and sources/ that may import a module under sources/, and the module it may import: the test-source command runs the write probe. */
 const PROBE_IMPORTER = `${API_SRC}/source-test/command.ts`;
 const PROBE_MODULE = `${SOURCES_ZONE}/write-probe`;
@@ -18,15 +21,16 @@ const TEST_FILE = /\.test\.[cm]?[jt]sx?$/;
 const TEST_MODULE = /\.test$/;
 
 /** A specifier that reaches a target holds one of these words (the driver package, a folder or module of the table above, a test module) unless an escape spells it, and a specifier that holds none (`'.'`, `'..'`) reaches the folder it is written in, so the importer's own path counts too; a file with none of them is not parsed. */
-const NAMES_A_TARGET = /neo4j-driver|sources|testing|\.test|executor|execute|deps|gate|assemble|write-probe/;
+const NAMES_A_TARGET = /neo4j-driver|sources|testing|test-neo4j|\.test|executor|execute|deps|gate|assemble|write-probe/;
 
 type Target = 'driver' | 'sources' | 'executor' | 'test-code' | 'write-probe';
 
 function targetOf(file: string, specifier: string): Target | undefined {
   if (DRIVER_PACKAGE.test(specifier)) return 'driver';
+  if (TEST_SUPPORT_PACKAGE.test(specifier)) return 'test-code';
   const resolved = resolveRelative(file, specifier);
   if (resolved === undefined) return undefined;
-  if (isInsideDirectory(resolved, TESTING_ZONE) || (resolved.kind !== 'index' && TEST_MODULE.test(resolved.path))) return 'test-code';
+  if (isInsideDirectory(resolved, TESTING_ZONE) || isInsideDirectory(resolved, TEST_SUPPORT_ZONE) || (resolved.kind !== 'index' && TEST_MODULE.test(resolved.path))) return 'test-code';
   if (isFileModule(resolved, PROBE_MODULE)) return 'write-probe';
   if (isInsideDirectory(resolved, SOURCES_ZONE)) return 'sources';
   if (EXECUTOR_MODULES.some((module) => isFileModule(resolved, module))) return 'executor';
@@ -34,7 +38,7 @@ function targetOf(file: string, specifier: string): Target | undefined {
 }
 
 function isTestCode(path: string): boolean {
-  return TEST_FILE.test(path) || isInside(path, TESTING_ZONE);
+  return TEST_FILE.test(path) || isInside(path, TESTING_ZONE) || isInside(path, TEST_SUPPORT_ZONE);
 }
 
 function isRestrictedModule(path: string): boolean {

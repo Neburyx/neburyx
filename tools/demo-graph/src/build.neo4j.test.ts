@@ -1,3 +1,4 @@
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import neo4j from 'neo4j-driver';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -11,6 +12,18 @@ import { miniDefinitionPath, miniMappingPath } from './testing/fixture.js';
 
 let server: RunningNeo4j;
 let env: Record<string, string>;
+let mappingPath: string | undefined;
+
+/** The mini mapping with the database of this run in place of the default one: the tool builds into the database the mapping names. */
+function mappingFile(): string {
+  if (mappingPath === undefined) {
+    const text = readFileSync(miniMappingPath, 'utf8').replace(/^(\s*database:\s*)neo4j\s*$/m, `$1${server.database}`);
+    if (!text.includes(`database: ${server.database}`)) throw new Error('the mini mapping does not name the default database');
+    mappingPath = join(scratch(), 'neburyx.yaml');
+    writeFileSync(mappingPath, text);
+  }
+  return mappingPath;
+}
 
 beforeAll(async () => {
   server = await startNeo4j();
@@ -23,7 +36,7 @@ afterAll(async () => {
 
 async function build(extra: string[], directory = join(scratch(), 'export')): Promise<{ code: number; err: string; directory: string }> {
   const err: string[] = [];
-  const code = await runCli(['build', '--mapping', miniMappingPath, '--definition', miniDefinitionPath, '--uri', server.boltUri, '--out', directory, ...extra], { out: () => undefined, err: (text) => err.push(text), env });
+  const code = await runCli(['build', '--mapping', mappingFile(), '--definition', miniDefinitionPath, '--uri', server.boltUri, '--out', directory, ...extra], { out: () => undefined, err: (text) => err.push(text), env });
   return { code, err: err.join('\n'), directory };
 }
 

@@ -27,7 +27,7 @@ beforeAll(async () => {
   writeExport(directory, generate(mapping, definition, definition.seed));
   data = readExport(directory);
   server = await startNeo4j();
-  report = await loadExport({ directory, source: mapping, override: server.boltUri, env: { [mapping.usernameEnv]: server.user, [mapping.passwordEnv]: server.password }, reset: false });
+  report = await loadExport({ directory, source: { ...mapping, database: server.database }, override: server.boltUri, env: { [mapping.usernameEnv]: server.user, [mapping.passwordEnv]: server.password }, reset: false });
 });
 
 afterAll(async () => {

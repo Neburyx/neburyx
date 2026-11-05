@@ -3,7 +3,7 @@ import { ALWAYS_USABLE } from '../testing/usability.js';
 import { AppError } from '../errors.js';
 import { auditing, integerTemplate, mappingOf, nodesTemplate, sourceWith } from '../testing/gate-fixtures.js';
 import { gateRequest, LOCAL_PRINCIPAL } from '../testing/gate.js';
-import { envFor, neo4jImageFrom, NEO4J_ENV_PASSWORD, NEO4J_ENV_USER, runAdmin, runAll, startNeo4j, type RunningNeo4j } from '../testing/neo4j-container.js';
+import { envFor, NEO4J_ENV_PASSWORD, NEO4J_ENV_USER, runAdmin, runAll, startNeo4j, type RunningNeo4j } from '../testing/neo4j-server.js';
 import { createNeo4jExecutor } from '../sources/executor.js';
 import { assembleGate } from './assemble.js';
 import { createTemplateCatalog } from './catalog.js';
@@ -17,7 +17,7 @@ const events = auditing();
 
 const sourceOptions = () => ({
   uri: server.boltUri,
-  database: 'neo4j',
+  database: server.database,
   auth: { kind: 'basic', username_env: NEO4J_ENV_USER, password_env: NEO4J_ENV_PASSWORD },
 });
 
@@ -49,7 +49,7 @@ afterAll(async () => {
   await runAll([() => server?.stop()]);
 });
 
-describe(`the connectivity template on ${neo4jImageFrom(process.env)}`, () => {
+describe(`the connectivity template on the dev Neo4j server`, () => {
   it('returns the server product, version and edition through the system runner, and writes no audit event for it', async () => {
     const parts = openGate();
     const before = events.events.length;

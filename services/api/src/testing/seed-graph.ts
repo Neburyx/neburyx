@@ -1,7 +1,7 @@
 import type { EntityModel, RelationshipModel, SourceModel } from '../mapping/model.js';
 import { mappingOf, sourceWith } from './gate-fixtures.js';
 import { firstSource } from './mapping.js';
-import { runAdmin, type RunningNeo4j } from './neo4j-container.js';
+import { runAdmin, type RunningNeo4j } from './neo4j-server.js';
 
 const quote = (name: string): string => `\`${name}\``;
 

@@ -46,7 +46,7 @@ describe('a server that accepts the statement', () => {
 });
 
 describe('a server that refuses the statement', () => {
-  it.each(['Neo.ClientError.Security.Forbidden', 'Neo.ClientError.General.ForbiddenOnReadOnlyDatabase'])('with %s is answered cannot-write, and the transaction is still rolled back', async (code) => {
+  it.each(['Neo.ClientError.Security.Forbidden', 'Neo.ClientError.General.ForbiddenOnReadOnlyDatabase', 'Neo.ClientError.General.WriteOnReadOnlyAccessDatabase'])('with %s is answered cannot-write, and the transaction is still rolled back', async (code) => {
     const { fake, run } = rig({ runError: neo4jError(code) });
     expect(await run()).toBe('cannot-write');
     expect(fake.sessions[0]?.rollbacks).toBe(1);

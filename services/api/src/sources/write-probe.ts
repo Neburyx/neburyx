@@ -13,7 +13,12 @@ import { serverCodeOf } from './errors.js';
 const PROBE_CYPHER = 'CREATE () RETURN 1 AS probe';
 
 /** The codes that prove the server refused the write for this login or database; any other answer proves nothing about the login. */
-const REFUSAL_CODES: ReadonlySet<string> = new Set(['Neo.ClientError.Security.Forbidden', 'Neo.ClientError.General.ForbiddenOnReadOnlyDatabase']);
+const REFUSAL_CODES: ReadonlySet<string> = new Set([
+  'Neo.ClientError.Security.Forbidden',
+  'Neo.ClientError.General.ForbiddenOnReadOnlyDatabase',
+  // what Neo4j 5.26 answers a write to a database that has been set to `ACCESS READ ONLY`, seen against the dev server
+  'Neo.ClientError.General.WriteOnReadOnlyAccessDatabase',
+]);
 
 /** What the probe uses of a transaction: one statement and a rollback. */
 export interface ProbeTransaction {

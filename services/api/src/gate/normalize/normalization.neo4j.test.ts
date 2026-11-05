@@ -1,9 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { neo4jImageFrom, runAll } from '../../testing/neo4j-container.js';
+import { NEO4J_SERIES, runAll } from '../../testing/neo4j-server.js';
 import { itemsOf, madeRecordCount, startPackServers, withMadeRecords, type PackServer } from '../../testing/normalization-capture.js';
 import { canonicalise, PACKS, readFixture, updating, writeFixture, type Fixture } from '../../testing/pack-fixtures.js';
 
-const image = neo4jImageFrom(process.env);
+const image = NEO4J_SERIES;
 let servers: PackServer[] = [];
 
 beforeAll(async () => {

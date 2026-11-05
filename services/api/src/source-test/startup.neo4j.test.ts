@@ -3,12 +3,13 @@ import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { forwardTo } from '@neburyx/test-neo4j';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { sourcesResponseSchema } from '@neburyx/contracts';
 import { rows, runInProcess } from '../testing/database.js';
 import { mappingOf, sourceWith } from '../testing/gate-fixtures.js';
 import { fileOf } from '../testing/mapping.js';
-import { envFor, neo4jImageFrom, NEO4J_ENV_PASSWORD, NEO4J_ENV_USER, runAdmin, runAll, startNeo4j, type RunningNeo4j } from '../testing/neo4j-container.js';
+import { envFor, NEO4J_ENV_PASSWORD, NEO4J_ENV_USER, runAdmin, runAll, startNeo4j, type RunningNeo4j } from '../testing/neo4j-server.js';
 import { startPostgres, type TestDatabase, type TestPostgres } from '../testing/postgres.js';
 import { constraintName, createSchema, dropConstraint, dropIndex, seedFixtureGraph } from '../testing/seed-graph.js';
 import { firstSource } from '../testing/mapping.js';
@@ -55,12 +56,12 @@ function mappingFile(...sources: Record<string, unknown>[]): string {
   return file;
 }
 
-describe(`the startup check against ${neo4jImageFrom(process.env)}`, () => {
+describe(`the startup check against the dev Neo4j server`, () => {
   it('leaves a reachable source connected with the version stored and a closed one unavailable, before the first request', async () => {
     const database = await migrated();
     const file = mappingFile(
-      sourceWith('alpha', { uri: neo4jServer.boltUri, database: 'neo4j', auth }),
-      sourceWith('beta', { uri: `bolt://127.0.0.1:${await freePort()}`, database: 'neo4j', auth }),
+      sourceWith('alpha', { uri: neo4jServer.boltUri, database: neo4jServer.database, auth }),
+      sourceWith('beta', { uri: `bolt://127.0.0.1:${await freePort()}`, database: neo4jServer.database, auth }),
     );
     const { result } = await startApi({ DATABASE_URL: database.appUrl, NEBURYX_CONFIG: file, ...envFor(neo4jServer) });
     if (result.exitCode !== 0) throw new Error('the API did not start');
@@ -86,18 +87,18 @@ describe(`the startup check against ${neo4jImageFrom(process.env)}`, () => {
 
   it('replaces the unknown state that an identity change leaves with the result of the new check', async () => {
     const database = await migrated();
-    const first = mappingFile(sourceWith('alpha', { uri: neo4jServer.boltUri, database: 'neo4j', auth }));
+    const first = mappingFile(sourceWith('alpha', { uri: neo4jServer.boltUri, database: neo4jServer.database, auth }));
     const started = await startApi({ DATABASE_URL: database.appUrl, NEBURYX_CONFIG: first, ...envFor(neo4jServer) });
     await stopApi(started.result);
     expect(await rows(database.ownerUrl, `SELECT state FROM sources WHERE id = 'alpha'`)).toEqual([{ state: 'connected' }]);
-    const second = mappingFile(sourceWith('alpha', { uri: `bolt://127.0.0.1:${await freePort()}`, database: 'neo4j', auth }));
+    const second = mappingFile(sourceWith('alpha', { uri: `bolt://127.0.0.1:${await freePort()}`, database: neo4jServer.database, auth }));
     const restarted = await startApi({ DATABASE_URL: database.appUrl, NEBURYX_CONFIG: second, ...envFor(neo4jServer) });
     await stopApi(restarted.result);
     expect(await rows(database.ownerUrl, `SELECT state, state_reason FROM sources WHERE id = 'alpha'`)).toEqual([{ state: 'unavailable', state_reason: 'The source could not be reached.' }]);
   });
 });
 
-describe(`the start with a mapping that does not fit the source, against ${neo4jImageFrom(process.env)}`, () => {
+describe(`the start with a mapping that does not fit the source, against the dev Neo4j server`, () => {
   const entities = [
     { type: 'node_a', label: 'Person', stable_id: 'id' },
     { type: 'node_b', label: 'Order Line', stable_id: 'id' },
@@ -107,7 +108,7 @@ describe(`the start with a mapping that does not fit the source, against ${neo4j
 
   async function startWith(overrides: Record<string, unknown>) {
     const database = await migrated();
-    const file = mappingFile(sourceWith('alpha', { uri: neo4jServer.boltUri, database: 'neo4j', auth, ...base, ...overrides }));
+    const file = mappingFile(sourceWith('alpha', { uri: neo4jServer.boltUri, database: neo4jServer.database, auth, ...base, ...overrides }));
     return { database, started: await startApi({ DATABASE_URL: database.appUrl, NEBURYX_CONFIG: file, ...envFor(neo4jServer) }) };
   }
 
@@ -153,22 +154,23 @@ describe(`the start with a mapping that does not fit the source, against ${neo4j
   });
 });
 
-describe(`first contact against ${neo4jImageFrom(process.env)}`, () => {
+describe(`first contact against the dev Neo4j server`, () => {
   it('goes from not reachable, to unusable with the reason of a wrong mapping, to connected once the index is made and the source is tested', async () => {
-    const port = await freePort();
-    const late = await startNeo4j(undefined, { hostPort: port });
+    const late = await startNeo4j();
+    const forwarder = await forwardTo(late.boltUri);
     try {
       await seedFixtureGraph(late);
-      await late.halt();
+      // the source is first reached at a closed port, the way a server that is not up yet is
+      await forwarder.stop();
       const database = await migrated();
       const wrongMapping = { entities: [{ type: 'node_a', label: 'Person', stable_id: 'id', search: ['nickname'] }], relationships: [] };
-      const file = mappingFile(sourceWith('alpha', { uri: `bolt://127.0.0.1:${port}`, database: 'neo4j', auth, ...wrongMapping }));
+      const file = mappingFile(sourceWith('alpha', { uri: forwarder.uri, database: late.database, auth, ...wrongMapping }));
       const { result } = await startApi({ DATABASE_URL: database.appUrl, NEBURYX_CONFIG: file, ...envFor(late) }, undefined, { pingIntervalMs: 300 });
       if (result.exitCode !== 0) throw new Error('the API did not start');
       try {
         const listed = async () => sourcesResponseSchema.parse((await result.app.inject({ method: 'GET', url: '/v1/sources' })).json()).items[0];
         expect(await listed()).toMatchObject({ state: 'unavailable', stateReason: 'The source could not be reached.' });
-        await late.resume();
+        await forwarder.resume();
         await vi.waitFor(
           async () =>
             expect(await listed()).toMatchObject({
@@ -190,7 +192,7 @@ describe(`first contact against ${neo4jImageFrom(process.env)}`, () => {
         await stopApi(result);
       }
     } finally {
-      await late.stop();
+      await runAll([() => forwarder.close(), () => late.stop()]);
     }
   });
 });

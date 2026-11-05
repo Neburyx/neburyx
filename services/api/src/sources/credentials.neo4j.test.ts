@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { ExecuteCall } from '../gate/executor.js';
 import { createNeo4jExecutor, type Neo4jExecutor } from './executor.js';
-import { envFor, NEO4J_ENV_PASSWORD, runAll, sourceFor, startNeo4j, type RunningNeo4j } from '../testing/neo4j-container.js';
+import { envFor, NEO4J_ENV_PASSWORD, runAll, sourceFor, startNeo4j, type RunningNeo4j } from '../testing/neo4j-server.js';
 
 let server: RunningNeo4j;
 let executor: Neo4jExecutor;

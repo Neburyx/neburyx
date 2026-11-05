@@ -28,7 +28,7 @@ describe('a node with 100,000 neighbors', () => {
     const definition = parseDefinition(String(document), miniMapping);
     const directory = join(scratch(), 'export');
     writeExport(directory, generate(miniMapping, definition, 3));
-    const report = await loadExport({ directory, source: miniMapping, override: server.boltUri, env: { MINI_USER: server.user, MINI_PASSWORD: server.password }, reset: false });
+    const report = await loadExport({ directory, source: { ...miniMapping, database: server.database }, override: server.boltUri, env: { MINI_USER: server.user, MINI_PASSWORD: server.password }, reset: false });
     const phases = report.phases.map((phase) => `${phase.name} ${(phase.milliseconds / 1000).toFixed(1)} s`).join(', ');
     await annotate(`${server.image}: ${NEIGHBORS} neighbors loaded in ${(report.totalMilliseconds / 1000).toFixed(1)} s (${phases})`);
     const rows = await query(server, 'MATCH (g:Gadget {gadgetId: "G000"})<-[:HAS]-(w) RETURN count(DISTINCT w) AS neighbors');

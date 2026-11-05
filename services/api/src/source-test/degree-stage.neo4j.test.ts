@@ -6,11 +6,11 @@ import { memoryAppStore } from '../testing/app-store.js';
 import { mappingOf, sourceWith } from '../testing/gate-fixtures.js';
 import { LOCAL_PRINCIPAL } from '../testing/gate.js';
 import { firstSource } from '../testing/mapping.js';
-import { envFor, neo4jImageFrom, NEO4J_ENV_PASSWORD, NEO4J_ENV_USER, runAdmin, runAll, startNeo4j, type RunningNeo4j } from '../testing/neo4j-container.js';
+import { envFor, NEO4J_SERIES, NEO4J_ENV_PASSWORD, NEO4J_ENV_USER, runAdmin, runAll, startNeo4j, type RunningNeo4j } from '../testing/neo4j-server.js';
 import { seedFittingGraph } from '../testing/seed-graph.js';
 import { createSourceTester } from './tester.js';
 
-const image = neo4jImageFrom(process.env);
+const image = NEO4J_SERIES;
 let server: RunningNeo4j;
 let schemaOnly: RunningNeo4j;
 const gates: SourceGate[] = [];
@@ -23,7 +23,7 @@ const entities = [
 ];
 const relationships = [{ type: 'MADE_BY', from: 'gadget', to: 'person', stable_id: 'linkId', observed_at: 'madeAt', evidence: ['recordId'] }];
 
-const mappingFor = (target: RunningNeo4j) => mappingOf(sourceWith('alpha', { uri: target.boltUri, database: 'neo4j', auth, entities, relationships }));
+const mappingFor = (target: RunningNeo4j) => mappingOf(sourceWith('alpha', { uri: target.boltUri, database: target.database, auth, entities, relationships }));
 
 beforeAll(async () => {
   [server, schemaOnly] = await Promise.all([startNeo4j(), startNeo4j()]);

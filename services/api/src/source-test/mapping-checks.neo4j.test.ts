@@ -5,12 +5,12 @@ import { communitySeams } from '../seams/community-seams.js';
 import { memoryAppStore } from '../testing/app-store.js';
 import { mappingOf, sourceWith } from '../testing/gate-fixtures.js';
 import { LOCAL_PRINCIPAL } from '../testing/gate.js';
-import { envFor, neo4jImageFrom, NEO4J_ENV_PASSWORD, NEO4J_ENV_USER, runAdmin, runAll, startNeo4j, type RunningNeo4j } from '../testing/neo4j-container.js';
+import { envFor, NEO4J_SERIES, NEO4J_ENV_PASSWORD, NEO4J_ENV_USER, runAdmin, runAll, startNeo4j, type RunningNeo4j } from '../testing/neo4j-server.js';
 import { constraintName, createSchema, dropConstraint, dropIndex, nodeIndexName, relationshipIndexName, seedFittingGraph } from '../testing/seed-graph.js';
 import { firstSource } from '../testing/mapping.js';
 import { createSourceTester } from './tester.js';
 
-const image = neo4jImageFrom(process.env);
+const image = NEO4J_SERIES;
 let server: RunningNeo4j;
 let empty: RunningNeo4j;
 let gates: SourceGate[] = [];
@@ -22,7 +22,7 @@ const entities = [
 ];
 const relationships = [{ type: 'MADE_BY', from: 'gadget', to: 'person', stable_id: 'linkId', observed_at: 'madeAt', evidence: ['recordId'] }];
 
-const mappingFor = (target: RunningNeo4j) => mappingOf(sourceWith('alpha', { uri: target.boltUri, database: 'neo4j', auth, entities, relationships }));
+const mappingFor = (target: RunningNeo4j) => mappingOf(sourceWith('alpha', { uri: target.boltUri, database: target.database, auth, entities, relationships }));
 const sourceOf = (target: RunningNeo4j) => firstSource(mappingFor(target));
 
 beforeAll(async () => {
@@ -61,7 +61,7 @@ describe(`the mapping checks against ${image}`, () => {
     const mapping = mappingOf(
       sourceWith('alpha', {
         uri: server.boltUri,
-        database: 'neo4j',
+        database: server.database,
         auth,
         entities: [...entities, { type: 'ghost', label: 'Ghost', stable_id: 'ghostId' }],
         relationships: [...relationships, { type: 'HAUNTS', from: 'ghost', to: 'person' }],
@@ -186,7 +186,7 @@ describe(`the stable ids against ${image}`, () => {
 
   it('is an index scan with an ordered aggregation: the plan of the Cypher the gate sends', async () => {
     await withoutConstraint('RANGE');
-    const session = server.admin.session({ database: 'neo4j' });
+    const session = server.admin.session({ database: server.database });
     try {
       const cypher = 'EXPLAIN MATCH (n:`Gadget`) USING INDEX n:`Gadget`(`gadgetId`) WHERE n.`gadgetId` IS NOT NULL WITH n.`gadgetId` AS value, count(*) AS c WHERE c > 1 RETURN toFloat(count(value)) AS duplicated';
       const { summary } = await session.run(cypher);

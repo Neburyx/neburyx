@@ -70,29 +70,16 @@ describe('CI workflow', () => {
     expect(Object.keys(rootScripts)).toContain(script);
   });
 
-  it('defines exactly the nine jobs', () => {
-    expect(Object.keys(workflow.jobs).sort()).toEqual(['build', 'compose', 'contract', 'image', 'integration', 'lint', 'neo4j', 'typecheck', 'unit']);
+  it('defines exactly the eight jobs, and none of them runs the Neo4j tests: those run against the developer\'s Neo4j server', () => {
+    expect(Object.keys(workflow.jobs).sort()).toEqual(['build', 'compose', 'contract', 'image', 'integration', 'lint', 'typecheck', 'unit']);
+    const runs = Object.values(workflow.jobs).flatMap((job) => job.steps.flatMap((step) => step.run ?? []));
+    expect(runs.filter((run) => run.includes('test:neo4j'))).toEqual([]);
   });
 
-  it('runs the Neo4j tests once for each of Neo4j 5.26 and 2026, with the image reaching the tests', () => {
-    const job = workflow.jobs['neo4j'];
-    expect(job?.strategy).toEqual({ 'fail-fast': false, matrix: { image: ['neo4j:5.26', 'neo4j:2026'] } });
-    expect(job?.env).toEqual({ NEBURYX_NEO4J_IMAGE: '${{ matrix.image }}' });
-    expect((job?.steps ?? []).map((step) => step.uses?.split('@')[0] ?? step.run)).toEqual([
-      PRINT_DOCKER_VERSIONS,
-      'actions/checkout',
-      'actions/setup-node',
-      'corepack enable',
-      'pnpm install --frozen-lockfile',
-      'pnpm test:neo4j',
-    ]);
-    expect(job?.steps[2]?.with).toEqual({ 'node-version-file': '.nvmrc' });
-    expect(Object.keys(rootScripts)).toContain('test:neo4j');
-  });
-
-  it('runs the Neo4j tests of the adapter and of the demo graph tool in the one root script', () => {
+  it('runs the Neo4j tests of the adapter and of the demo graph tool in the one root script, which builds the package that reaches the dev server', () => {
     expect(rootScripts['test:neo4j']).toContain('pnpm --filter @neburyx/api test:neo4j');
     expect(rootScripts['test:neo4j']).toContain('pnpm --filter @neburyx/demo-graph test:neo4j');
+    expect(rootScripts['test:neo4j']).toContain('--filter @neburyx/test-neo4j build');
   });
 
   it('installs frozen and ends with the compose test in the compose job', () => {

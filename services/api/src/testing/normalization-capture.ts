@@ -1,6 +1,9 @@
 import { execFile } from 'node:child_process';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
+import { forwardTo } from '@neburyx/test-neo4j';
 import { z } from 'zod';
 import { assembleGate } from '../gate/assemble.js';
 import { createTemplateCatalog, type TemplateDefinition } from '../gate/catalog.js';
@@ -8,8 +11,8 @@ import type { SystemRunner } from '../gate/types.js';
 import type { SourceModel } from '../mapping/model.js';
 import { communitySeams } from '../seams/community-seams.js';
 import { createNeo4jExecutor, type Neo4jExecutor } from '../sources/executor.js';
-import { envFor, runAdmin, startNeo4j, type RunningNeo4j } from './neo4j-container.js';
-import { PACKS, packSource, repoRoot, type Pack } from './pack-fixtures.js';
+import { envFor, runAdmin, startNeo4j, type RunningNeo4j } from './neo4j-server.js';
+import { PACKS, packMappingText, packSource, repoRoot, type Pack } from './pack-fixtures.js';
 import { ALWAYS_USABLE } from './usability.js';
 
 // The demo graph tool is a developer tool that the product may not import, so the graphs are built the way a person builds them: by running its command line.
@@ -79,21 +82,32 @@ export interface PackServer {
   close(): Promise<void>;
 }
 
-/** Starts a container for each pack, builds the pack's demo graph in it with the tool's command line, and opens a gate over it with the capture templates. */
+/** Makes a database on the dev server for each pack, builds the pack's demo graph in it with the tool's command line, and opens a gate over it with the capture templates. */
 export async function startPackServers(): Promise<PackServer[]> {
   await run('pnpm', ['--filter', '@neburyx/demo-graph', 'build'], { cwd: repoRoot });
   const started = await Promise.all(PACKS.map(async (pack) => ({ pack, server: await startNeo4j() })));
   const opened: PackServer[] = [];
   for (const { pack, server } of started) {
-    await run('node', [TOOL, 'build', '--pack', pack, '--uri', server.boltUri], { cwd: repoRoot, env: { ...process.env, DEMO_NEO4J_USER: server.user, DEMO_NEO4J_PASSWORD: server.password } });
+    // the tool loads only to a loopback address or a one-word host, so it reaches the dev server through a forwarder on the loopback,
+    // and it loads into the database of this run: the pack's mapping with that database in place of the default one
+    const forwarder = await forwardTo(server.boltUri);
+    const folder = mkdtempSync(join(tmpdir(), 'normalization-capture-'));
+    const mapping = join(folder, `${pack}.yaml`);
+    writeFileSync(mapping, packMappingText(pack, undefined, server.database));
+    try {
+      await run('node', [TOOL, 'build', '--mapping', mapping, '--definition', join(repoRoot, 'domain-packs', pack, 'demo.yaml'), '--uri', forwarder.uri], { cwd: repoRoot, env: { ...process.env, DEMO_NEO4J_USER: server.user, DEMO_NEO4J_PASSWORD: server.password } });
+    } finally {
+      await forwarder.close();
+      rmSync(folder, { recursive: true, force: true });
+    }
     await runAdmin(server, 'CALL db.awaitIndexes(120)');
-    const source = packSource(pack, server.boltUri);
-    const mapping = { sources: [source] };
-    const executor: Neo4jExecutor = createNeo4jExecutor({ sources: mapping.sources, env: { DEMO_NEO4J_USER: server.user, DEMO_NEO4J_PASSWORD: server.password, ...envFor(server) }, logger: { warn: () => undefined } });
+    const source = packSource(pack, server.boltUri, server.database);
+    const gateMapping = { sources: [source] };
+    const executor: Neo4jExecutor = createNeo4jExecutor({ sources: gateMapping.sources, env: { DEMO_NEO4J_USER: server.reader.user, DEMO_NEO4J_PASSWORD: server.reader.password, ...envFor(server) }, logger: { warn: () => undefined } });
     const defaults = communitySeams();
     const { system } = assembleGate({
       usability: ALWAYS_USABLE,
-      mapping,
+      mapping: gateMapping,
       seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit },
       executor,
       logger: { warn: () => undefined },
@@ -148,7 +162,7 @@ export async function withMadeRecords<T>(target: PackServer, work: () => Promise
 }
 
 export async function madeRecordCount(target: PackServer): Promise<number> {
-  const session = target.server.admin.session({ database: 'neo4j' });
+  const session = target.server.admin.session({ database: target.server.database });
   try {
     const result = await session.run('MATCH (n) WHERE n.zzMarker IS NOT NULL RETURN count(n) AS found');
     return Number(result.records[0]?.get('found'));

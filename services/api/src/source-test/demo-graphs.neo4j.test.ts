@@ -1,8 +1,10 @@
 import { execFile } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
+import { forwardTo, type Forwarder } from '@neburyx/test-neo4j';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createSourceGate, type SourceGate } from '../gate/source-gate.js';
 import { parseMapping } from '../mapping/load.js';
@@ -11,39 +13,55 @@ import { communitySeams } from '../seams/community-seams.js';
 import { memoryAppStore } from '../testing/app-store.js';
 import { ALWAYS_USABLE } from '../testing/usability.js';
 import { LOCAL_PRINCIPAL } from '../testing/gate.js';
-import { neo4jImageFrom, runAdmin, runAll, startNeo4j, type RunningNeo4j } from '../testing/neo4j-container.js';
+import { NEO4J_SERIES, runAdmin, runAll, startNeo4j, type RunningNeo4j } from '../testing/neo4j-server.js';
 import { createSourceTester } from './tester.js';
 
 // The demo graph tool is a developer tool that the product may not import (a workspace check forbids it, tests included),
 // so the graphs are built the way a person builds them: by running its command line as a child process.
 const run = promisify(execFile);
 const repoRoot = fileURLToPath(new URL('../../../../', import.meta.url));
-const image = neo4jImageFrom(process.env);
+const image = NEO4J_SERIES;
 const TOOL = join(repoRoot, 'tools', 'demo-graph', 'dist', 'main.js');
 const PACKS = ['banking-fraud', 'insurance-claims'] as const;
 const servers = new Map<string, RunningNeo4j>();
+const forwarders: Forwarder[] = [];
+const folder = mkdtempSync(join(tmpdir(), 'demo-graphs-neo4j-'));
 const gates: SourceGate[] = [];
 
 const quote = (name: string): string => `\`${name}\``;
+
+/** The mapping of a pack with the database of this run in place of the default one, written where the tool can read it; the packs themselves are not changed. */
+function mappingOf(pack: string, server: RunningNeo4j): string {
+  const text = readFileSync(join(repoRoot, 'domain-packs', pack, 'neburyx.yaml'), 'utf8').replace(/^(\s*database:\s*)neo4j\s*$/m, `$1${server.database}`);
+  if (!text.includes(`database: ${server.database}`)) throw new Error(`the ${pack} mapping does not name the default database`);
+  const file = join(folder, `${pack}.yaml`);
+  writeFileSync(file, text);
+  return file;
+}
 
 beforeAll(async () => {
   await run('pnpm', ['--filter', '@neburyx/demo-graph', 'build'], { cwd: repoRoot });
   const started = await Promise.all(PACKS.map(async (pack) => [pack, await startNeo4j()] as const));
   for (const [pack, server] of started) servers.set(pack, server);
   for (const [pack, server] of started) {
-    await run('node', [TOOL, 'build', '--pack', pack, '--uri', server.boltUri], { cwd: repoRoot, env: { ...process.env, DEMO_NEO4J_USER: server.user, DEMO_NEO4J_PASSWORD: server.password } });
+    // the tool loads only to a loopback address or a one-word host, so it reaches the dev server through a forwarder on the loopback
+    const forwarder = await forwardTo(server.boltUri);
+    forwarders.push(forwarder);
+    const definition = join(repoRoot, 'domain-packs', pack, 'demo.yaml');
+    await run('node', [TOOL, 'build', '--mapping', mappingOf(pack, server), '--definition', definition, '--uri', forwarder.uri], { cwd: repoRoot, env: { ...process.env, DEMO_NEO4J_USER: server.user, DEMO_NEO4J_PASSWORD: server.password } });
     await runAdmin(server, 'CALL db.awaitIndexes(120)');
   }
 }, 600_000);
 
 afterAll(async () => {
-  await runAll([...gates.map((gate) => () => gate.close()), ...[...servers.values()].map((server) => () => server.stop())]);
+  await runAll([...gates.map((gate) => () => gate.close()), ...forwarders.map((forwarder) => () => forwarder.close()), ...[...servers.values()].map((server) => () => server.stop())]);
+  rmSync(folder, { recursive: true, force: true });
 });
 
 function sourceOf(pack: string): SourceModel {
   const server = servers.get(pack);
   if (server === undefined) throw new Error(`no server for ${pack}`);
-  const text = readFileSync(join(repoRoot, 'domain-packs', pack, 'neburyx.yaml'), 'utf8').replace(/uri: "[^"]+"/, `uri: "${server.boltUri}"`);
+  const text = readFileSync(mappingOf(pack, server), 'utf8').replace(/uri: "[^"]+"/, `uri: "${server.boltUri}"`);
   const [source] = parseMapping(text, 'neburyx.yaml').sources;
   if (source === undefined) throw new Error(`the ${pack} pack has no source`);
   return source;
@@ -54,14 +72,14 @@ async function report(pack: string) {
   const source = sourceOf(pack);
   if (server === undefined) throw new Error(`no server for ${pack}`);
   const mapping = { sources: [source] };
-  const gate = createSourceGate({ mapping, env: { DEMO_NEO4J_USER: server.user, DEMO_NEO4J_PASSWORD: server.password }, seams: communitySeams(), logger: { warn: () => undefined }, usability: ALWAYS_USABLE });
+  const gate = createSourceGate({ mapping, env: { DEMO_NEO4J_USER: server.reader.user, DEMO_NEO4J_PASSWORD: server.reader.password }, seams: communitySeams(), logger: { warn: () => undefined }, usability: ALWAYS_USABLE });
   gates.push(gate);
   return createSourceTester({ gate: gate.gate, mapping, store: memoryAppStore() }).run({ traceId: 'tr-demo', principal: LOCAL_PRINCIPAL, sourceId: source.id });
 }
 
 /** The name of the index or constraint that the tool made on a label (or relationship type) and a property. */
 async function schemaNameOf(server: RunningNeo4j, kind: 'NODE' | 'RELATIONSHIP', name: string, property: string): Promise<{ index: string; constraint: string | null }> {
-  const session = server.admin.session({ database: 'neo4j' });
+  const session = server.admin.session({ database: server.database });
   try {
     const indexes = await session.run('SHOW INDEXES YIELD name, entityType, labelsOrTypes, properties, owningConstraint WHERE entityType = $kind AND labelsOrTypes = [$name] AND properties = [$property] RETURN name, owningConstraint', { kind, name, property });
     const row = indexes.records[0];

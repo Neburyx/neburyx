@@ -154,8 +154,8 @@ for a fixture or an odd assertion.
 ## Tests
 
 - **Tests ship with the code.** A change is not done without them.
-- **Two levels.** Unit and contract tests run fast with no containers. Integration tests (real Neo4j,
-  Postgres, and Valkey where used, via testcontainers) cover the gate, adapters, migrations and
+- **Two levels.** Unit and contract tests run fast with no containers. Integration tests (Postgres, and Valkey
+  where used, via testcontainers; real Neo4j on a server you own, see `packages/test-neo4j`) cover the gate, adapters, migrations and
   coordination.
 - **Failure paths first.** Cover bad input, tampered or expired cursors, oversized pages, timeouts,
   cancellation, busy and rate-limited states, and a source that is down, before the happy path.

@@ -6,11 +6,11 @@ import type { SystemRunner } from '../gate/types.js';
 import { communitySeams } from '../seams/community-seams.js';
 import { createNeo4jExecutor, type Neo4jExecutor } from '../sources/executor.js';
 import { mappingOf, sourceWith } from '../testing/gate-fixtures.js';
-import { envFor, neo4jImageFrom, NEO4J_ENV_PASSWORD, NEO4J_ENV_USER, runAdmin, runAll, startNeo4j, type RunningNeo4j } from '../testing/neo4j-container.js';
+import { envFor, NEO4J_SERIES, NEO4J_ENV_PASSWORD, NEO4J_ENV_USER, runAdmin, runAll, startNeo4j, type RunningNeo4j } from '../testing/neo4j-server.js';
 import { ALWAYS_USABLE } from '../testing/usability.js';
 import { judgePlan } from './degree-judge.js';
 
-const image = neo4jImageFrom(process.env);
+const image = NEO4J_SERIES;
 let server: RunningNeo4j;
 let executor: Neo4jExecutor;
 let system: SystemRunner;
@@ -55,7 +55,7 @@ beforeAll(async () => {
   server = await startNeo4j();
   await runAdmin(server, `CREATE (:Hub {id: 'h'}) WITH 1 AS one UNWIND range(1, ${SUPERNODE}) AS i MATCH (h:Hub) CREATE (h)-[:LINKED]->(:Leaf {id: 'leaf' + i})`);
   await runAdmin(server, `CREATE (s:Small {id: 's'}) WITH s UNWIND range(1, 10) AS i MATCH (l:Leaf {id: 'leaf' + i}) CREATE (s)-[:LINKED]->(l)`);
-  const mapping = mappingOf(sourceWith('alpha', { uri: server.boltUri, database: 'neo4j', auth, entities, relationships }));
+  const mapping = mappingOf(sourceWith('alpha', { uri: server.boltUri, database: server.database, auth, entities, relationships }));
   executor = createNeo4jExecutor({ sources: mapping.sources, env: envFor(server), logger: { warn: () => undefined } });
   const defaults = communitySeams();
   const catalog = createTemplateCatalog({ templates: [...Object.values(shapes), ...[DEGREE_PROBE_ID].flatMap((id) => defaultCatalog().find(id) ?? [])] });

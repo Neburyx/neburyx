@@ -72,6 +72,8 @@ environment variables the mapping names. A call answers `rows` (never more than 
 mode and every read runs in an explicit read transaction; Neo4j does not promise to reject a write sent that way, so the
 source's own privileges and the fixed read templates matter too.
 
-**Neo4j tests.** `pnpm test:neo4j` runs the `*.neo4j.test.ts` files against a Neo4j container (Docker is needed). The server is
-`neo4j:5.26` unless `NEBURYX_NEO4J_IMAGE` names another image; CI runs both `neo4j:5.26` and `neo4j:2026`. A test that cannot
-start the server fails with the image's name and never skips.
+**Neo4j tests.** `pnpm test:neo4j` runs the `*.neo4j.test.ts` files against a Neo4j Enterprise 5.26 server that you own, not in CI
+(`packages/test-neo4j/README.md` has the three variables, the login it needs and what the tests create). Each file makes
+its own database and drops it. Sources are read with a login of the run that can only read that database, so a report
+says what it says for a read-only login. Without the variables the command fails and names them; it never skips. Neo4j
+2026 and the Community edition are not tested.

@@ -1,16 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { bounded, DEFAULT_NEO4J_IMAGE, neo4jImageFrom, pollUntil, runAll } from './neo4j-container.js';
-
-describe('the Neo4j image', () => {
-  it('is the one named by NEBURYX_NEO4J_IMAGE', () => {
-    expect(neo4jImageFrom({ NEBURYX_NEO4J_IMAGE: 'neo4j:2026' })).toBe('neo4j:2026');
-  });
-
-  it.each([{}, { NEBURYX_NEO4J_IMAGE: '' }])('is the default image when the variable is not set: %j', (env) => {
-    expect(neo4jImageFrom(env)).toBe(DEFAULT_NEO4J_IMAGE);
-    expect(DEFAULT_NEO4J_IMAGE).toBe('neo4j:5.26');
-  });
-});
+import { bounded, pollUntil, runAll } from './neo4j-server.js';
 
 afterEach(() => {
   vi.useRealTimers();

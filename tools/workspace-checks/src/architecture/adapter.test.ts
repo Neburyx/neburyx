@@ -78,6 +78,20 @@ describe('test code', () => {
     expect(snippet(`${API}/testing/x.ts`, imports)).toEqual([]);
   });
 
+  it('allows the driver in the test support package for the Neo4j tests and nowhere else under packages/', () => {
+    const imports = "import d from 'neo4j-driver';";
+    expect(snippet('packages/test-neo4j/src/server.ts', imports)).toEqual([]);
+    expect(snippet('packages/other/src/server.ts', imports)).toHaveLength(1);
+  });
+
+  it('is test code to production code that imports or re-exports it, by package name or by path', () => {
+    expect(snippet(`${API}/app.ts`, "import { startDevNeo4j } from '@neburyx/test-neo4j';")).toEqual([expect.objectContaining({ reason: 'production code reaches test code' })]);
+    expect(snippet(`${API}/app.ts`, "export * from '@neburyx/test-neo4j/dist/server.js';")).toHaveLength(1);
+    expect(snippet(`${API}/app.ts`, "import { x } from '../../../packages/test-neo4j/src/server.js';")).toHaveLength(1);
+    expect(snippet(`${API}/testing/neo4j-server.ts`, "import { startDevNeo4j } from '@neburyx/test-neo4j';")).toEqual([]);
+    expect(snippet(`${API}/x.test.ts`, "import { startDevNeo4j } from '@neburyx/test-neo4j';")).toEqual([]);
+  });
+
   it('is reported when production code imports or re-exports it, and not when a test does', () => {
     expect(fixture('production-imports-testing').map((v) => [v.file, v.reason])).toEqual([
       [`${API}/app.ts`, 'production code reaches test code'],

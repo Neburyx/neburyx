@@ -8,12 +8,13 @@ import { createSourceTester } from './tester.js';
 import { memoryAppStore } from '../testing/app-store.js';
 
 // A check by hand against a server you run yourself, for the part a container cannot show: an Enterprise server lists privileges. It reads only, creates nothing,
-// and is skipped unless the three variables are set. It is not part of any CI job.
+// and is skipped unless the three variables are set and NBX_EE_ALLOW_LIVE is `yes`, so that a run of the unit tests with the variables of the Neo4j tests in the
+// environment never reaches the server. It is not part of any CI job, and `pnpm test:neo4j` does not run it.
 const URI = process.env['NBX_EE_URI'];
 const USER = process.env['NBX_EE_USER'];
 const PASSWORD = process.env['NBX_EE_PASSWORD'];
 const DATABASE = process.env['NBX_EE_DATABASE'] ?? 'neo4j';
-const live = URI !== undefined && USER !== undefined && PASSWORD !== undefined;
+const live = URI !== undefined && USER !== undefined && PASSWORD !== undefined && process.env['NBX_EE_ALLOW_LIVE'] === 'yes';
 
 describe.skipIf(!live)('the privileges read against an Enterprise server', () => {
   it('lists the privileges of the login in a read transaction on the source database, and the report says they were inspected', async () => {

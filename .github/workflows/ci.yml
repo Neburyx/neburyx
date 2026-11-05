@@ -81,27 +81,6 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm test:integration
 
-  neo4j:
-    runs-on: ubuntu-26.04
-    timeout-minutes: 45
-    strategy:
-      fail-fast: false
-      matrix:
-        image: ['neo4j:5.26', 'neo4j:2026']
-    env:
-      NEBURYX_NEO4J_IMAGE: ${{ matrix.image }}
-    steps:
-      - run: |
-          docker version
-          docker compose version
-      - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-node@v7.1.0
-        with:
-          node-version-file: .nvmrc
-      - run: corepack enable
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm test:neo4j
-
   image:
     runs-on: ubuntu-26.04
     timeout-minutes: 60

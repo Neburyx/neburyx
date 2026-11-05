@@ -16,7 +16,7 @@ Every source read goes through the gate. Until the adapter exists, the check rea
 | a module under `services/api/src/sources/` | `services/api/src/gate/` and `services/api/src/sources/` |
 | the gate's executor modules: `gate/executor.ts`, `gate/execute.ts`, `gate/deps.ts`, and the two that take an executor to build a gate, `gate/gate.ts` and `gate/assemble.ts` | `services/api/src/gate/` and `services/api/src/sources/` |
 
-- Test files (`*.test.*` in any scanned extension) and `services/api/src/testing/` are exempt, because they fake or seed the
+- Test files (`*.test.*` in any scanned extension), `services/api/src/testing/` and `packages/test-neo4j/` (the package the Neo4j tests use to reach their server) are exempt, because they fake or seed the
   outside world. Production code may not import or re-export them.
 - A re-export of a restricted module is allowed only in a restricted module, so `gate/types.ts` cannot pass `executeRead`
   on. Re-exports read: `export … from`, `export *`, an import followed by `export { x }`, `export default x`, `export = x`, an

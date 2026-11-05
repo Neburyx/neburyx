@@ -13,7 +13,7 @@ import { communitySeams } from '../seams/community-seams.js';
 import { rows, runInProcess } from '../testing/database.js';
 import { mappingOf, sourceWith } from '../testing/gate-fixtures.js';
 import { fileOf } from '../testing/mapping.js';
-import { envFor, neo4jImageFrom, NEO4J_ENV_PASSWORD, NEO4J_ENV_USER, runAll, startNeo4j, type RunningNeo4j } from '../testing/neo4j-container.js';
+import { envFor, NEO4J_ENV_PASSWORD, NEO4J_ENV_USER, runAll, startNeo4j, type RunningNeo4j } from '../testing/neo4j-server.js';
 import { seedFixtureGraph } from '../testing/seed-graph.js';
 import { startPostgres, type TestDatabase, type TestPostgres } from '../testing/postgres.js';
 import { webRoot } from '../testing/start-api.js';
@@ -27,7 +27,7 @@ let postgres: TestPostgres;
 let database: TestDatabase;
 let store: AppStore;
 
-const options = () => ({ uri: neo4jServer.boltUri, database: 'neo4j', auth: { kind: 'basic', username_env: NEO4J_ENV_USER, password_env: NEO4J_ENV_PASSWORD } });
+const options = () => ({ uri: neo4jServer.boltUri, database: neo4jServer.database, auth: { kind: 'basic', username_env: NEO4J_ENV_USER, password_env: NEO4J_ENV_PASSWORD } });
 
 beforeAll(async () => {
   [neo4jServer, postgres] = await Promise.all([startNeo4j(), startPostgres()]);
@@ -56,7 +56,7 @@ async function command(args: readonly string[], file: string) {
   return { code, out, err };
 }
 
-describe(`neburyx test-source against ${neo4jImageFrom(process.env)}`, () => {
+describe(`neburyx test-source against the dev Neo4j server`, () => {
   it('prints the same facts as the route, stores the run for the local identity, and writes nothing to the sources table', async () => {
     const file = join(folder, 'only-alpha.yaml');
     writeFileSync(file, fileOf(sourceWith('alpha', options())));

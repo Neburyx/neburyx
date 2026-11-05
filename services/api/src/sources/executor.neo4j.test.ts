@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AdapterError } from './errors.js';
 import { createNeo4jExecutor, type Neo4jExecutor } from './executor.js';
 import type { ExecuteCall } from '../gate/executor.js';
-import { envFor, neo4jImageFrom, runAdmin, runAll, seedItems, SLOW_READ, sourceFor, startNeo4j, waitUntilNotListed, type RunningNeo4j } from '../testing/neo4j-container.js';
+import { envFor, runAdmin, runAll, seedItems, SLOW_READ, sourceFor, startNeo4j, waitUntilNotListed, type RunningNeo4j } from '../testing/neo4j-server.js';
 
 let server: RunningNeo4j;
 let executor: Neo4jExecutor;
@@ -43,7 +43,7 @@ beforeAll(async () => {
   await runAdmin(server, "CREATE (a:Thing {id: 1})-[:LINKS {since: date('2020-01-01')}]->(b:Thing {id: 2})");
   executor = createNeo4jExecutor({
     sources: [sourceFor(server), sourceFor(server, { id: 'system-db', database: 'system' })],
-    env: envFor(server),
+    env: envFor(server, server),
     logger: { warn: () => undefined },
   });
 });
@@ -52,7 +52,7 @@ afterAll(async () => {
   await runAll([() => executor?.close(), () => server?.stop()]);
 });
 
-describe(`the server of ${neo4jImageFrom(process.env)}`, () => {
+describe(`the server of the dev Neo4j server`, () => {
   it('is the version the image names', async ({ annotate }) => {
     const session = server.admin.session({ database: 'system' });
     const result = await session.run('CALL dbms.components() YIELD versions RETURN versions[0] AS version');
@@ -106,7 +106,7 @@ describe('rows from a Neo4j container', () => {
 
   it('reads the database the mapping names for each source', async () => {
     const named = 'CALL db.info() YIELD name RETURN name';
-    expect(await rowsOf(named)).toEqual([{ name: 'neo4j' }]);
+    expect(await rowsOf(named)).toEqual([{ name: server.database }]);
     const outcome = await executor.execute(call(named, { sourceId: 'system-db' }));
     expect(outcome).toEqual({ status: 'rows', rows: [{ name: 'system' }] });
   });
@@ -130,7 +130,7 @@ describe('a read that outlives its timeout', () => {
 describe('a query the server refuses', () => {
   it('is thrown as an AdapterError, and neither it nor the logs hold the query text, a parameter or a row', async () => {
     const logs: { fields: object; message: string }[] = [];
-    const local = createNeo4jExecutor({ sources: [sourceFor(server)], env: envFor(server), logger: { warn: (fields, message) => logs.push({ fields, message }) } });
+    const local = createNeo4jExecutor({ sources: [sourceFor(server)], env: envFor(server, server), logger: { warn: (fields, message) => logs.push({ fields, message }) } });
     try {
       const attempt = local.execute(call('RETURN MARKER_QUERY_TEXT + $p AS value', { parameters: { p: 'MARKER_PARAMETER' } }));
       await expect(attempt).rejects.toThrow(AdapterError);
