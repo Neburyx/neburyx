@@ -37,6 +37,8 @@ export interface ProductPage {
 export interface ProductBrowser {
   readonly name: string;
   readonly version: string;
+  /** Whether the browser has a window; headed when not said. */
+  readonly headed?: boolean;
   openPage(url: string, options: { readonly cpuThrottle: number }): Promise<ProductPage>;
   close(): Promise<void>;
 }
@@ -158,7 +160,7 @@ export async function runProductBenchmark(options: ProductOptions, deps: Product
       target: 'product',
       measuredAt: deps.now().toISOString(),
       app: { origin: target.origin, drawnEntities: drawn.entities, drawnRelationships: drawn.relationships },
-      browser: { name: browser.name, version: browser.version, headed: true },
+      browser: { name: browser.name, version: browser.version, headed: browser.headed ?? true },
       ...deps.machine(),
       viewport,
       protocol: { runDurationMs: RUN_DURATION_MS, runs: RUNS, cpuThrottle },

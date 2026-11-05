@@ -305,13 +305,22 @@ function productPage(page: Page): ProductPage {
   };
 }
 
-export function createProductDeps(): ProductDeps {
+export interface ProductBrowserOptions {
+  /** Without a window; the benchmark of the command line is headed, a test run in CI has no display. */
+  readonly headless?: boolean;
+  /** An installed browser to use instead of the one Playwright installs. */
+  readonly executablePath?: string;
+}
+
+export function createProductDeps(options: ProductBrowserOptions = {}): ProductDeps {
+  const headless = options.headless ?? false;
   return {
     async launchBrowser(): Promise<ProductBrowser> {
-      const browser = await chromium.launch({ headless: false });
+      const browser = await chromium.launch({ headless, ...(options.executablePath === undefined ? {} : { executablePath: options.executablePath }) });
       return {
         name: 'chromium',
         version: browser.version(),
+        headed: !headless,
         async openPage(url, options) {
           const page = await browser.newPage({ viewport: VIEWPORT });
           if (options.cpuThrottle > 1) {

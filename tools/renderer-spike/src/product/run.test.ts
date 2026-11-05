@@ -94,6 +94,13 @@ describe('the product benchmark', () => {
     expect(existsSync(`${out}.partial`)).toBe(false);
   });
 
+  it('records a browser without a window as not headed, and one that does not say as headed', async () => {
+    const quiet = deps(fresh());
+    const base = await quiet.launchBrowser();
+    const report = await runProductBenchmark({ url: URL_OF_APP, out: join(directory, 'headless.json'), cpuThrottle: 4 }, { ...quiet, launchBrowser: async () => ({ ...base, headed: false }) });
+    expect(report.browser.headed).toBe(false);
+  });
+
   it('records a run with less throttle than the target is defined for and gives no verdict', async () => {
     const report = await runProductBenchmark({ url: URL_OF_APP, out: join(directory, 'r.json') }, deps(fresh()));
     expect(report.verdict).toBe('not-applicable');
