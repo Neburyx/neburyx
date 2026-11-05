@@ -26,6 +26,10 @@ const workflow = workflowSchema.parse(parse(readFileSync(join(repoRoot, '.github
 const rootScripts = z
   .object({ scripts: z.record(z.string(), z.string()) })
   .parse(JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8'))).scripts;
+/** The browser cache of the ux job is keyed by this version, so a new version of the test runner is a new cache. */
+const playwrightVersion = z
+  .object({ devDependencies: z.record(z.string(), z.string()) })
+  .parse(JSON.parse(readFileSync(join(repoRoot, 'tools', 'ux', 'package.json'), 'utf8'))).devDependencies['@playwright/test'];
 const pinnedAction = /^[\w-]+\/[\w-]+@v\d+\.\d+\.\d+$/;
 const RUNNER = 'ubuntu-26.04';
 const PRINT_DOCKER_VERSIONS = 'docker version\ndocker compose version\n';
@@ -70,8 +74,8 @@ describe('CI workflow', () => {
     expect(Object.keys(rootScripts)).toContain(script);
   });
 
-  it('defines exactly the eight jobs, and none of them runs the Neo4j tests: those run against the developer\'s Neo4j server', () => {
-    expect(Object.keys(workflow.jobs).sort()).toEqual(['build', 'compose', 'contract', 'image', 'integration', 'lint', 'typecheck', 'unit']);
+  it('defines exactly the nine jobs, and none of them runs the Neo4j tests: those run against the developer\'s Neo4j server', () => {
+    expect(Object.keys(workflow.jobs).sort()).toEqual(['build', 'compose', 'contract', 'image', 'integration', 'lint', 'typecheck', 'unit', 'ux']);
     const runs = Object.values(workflow.jobs).flatMap((job) => job.steps.flatMap((step) => step.run ?? []));
     expect(runs.filter((run) => run.includes('test:neo4j'))).toEqual([]);
   });
@@ -114,4 +118,24 @@ describe('CI workflow', () => {
     expect(build).toContain('-f deploy/docker/Dockerfile');
     expect(Object.keys(rootScripts)).toContain('test:image');
   });
+
+  it('builds the app twice, the spike for the benchmark, caches the browser by its version and ends with the browser tests in the ux job', () => {
+    const steps = workflow.jobs['ux']?.steps ?? [];
+    expect(steps.map((step) => step.uses?.split('@')[0] ?? step.run)).toEqual([
+      'actions/checkout',
+      'actions/setup-node',
+      'corepack enable',
+      'pnpm install --frozen-lockfile',
+      'pnpm build',
+      'pnpm --filter @neburyx/web build:ux',
+      'pnpm --filter @neburyx/renderer-spike build:node',
+      'pnpm --filter @neburyx/ux-tests check:profile',
+      'actions/cache',
+      'pnpm --filter @neburyx/ux-tests exec playwright install --with-deps chromium',
+      'pnpm test:ux',
+    ]);
+    expect(steps.find((step) => step.uses?.startsWith('actions/cache'))?.with).toEqual({ path: '~/.cache/ms-playwright', key: `playwright-${playwrightVersion}-\${{ runner.os }}` });
+    expect(Object.keys(rootScripts)).toContain('test:ux');
+  });
 });
+
