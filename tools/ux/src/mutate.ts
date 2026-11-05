@@ -35,13 +35,13 @@ const MUTATIONS: readonly Mutation[] = [
     assertion: /toBe\(expected\)|Expected: true/,
   },
   {
-    // the crossing of the caption limit given a 400 ms stall, against the runner's limit of 300 ms (CI=true selects it)
+    // the crossing of the caption limit given a 400 ms stall, against the runner's limit of 300 ms (the runner profile selects it)
     name: 'crossing',
     source: WEB('canvas/cytoscape-renderer.ts'),
     binding: '    if (farQueue.length === 0) return;\n    if (immediate) classifyFar',
     broken: `    ${stall(400)}\n    if (farQueue.length === 0) return;\n    if (immediate) classifyFar`,
     what: 'with a 400 ms stall in every pass of the far-view switch, held to the runner limit',
-    test: { file: 'tests/zoomed-out.spec.ts', title: 'switches without a frame longer than', project: 'laptop-1440', env: { CI: 'true' }, extraArgs: [] },
+    test: { file: 'tests/zoomed-out.spec.ts', title: 'switches without a frame longer than', project: 'laptop-1440', env: { NEBURYX_UX_PROFILE: 'runner' }, extraArgs: [] },
     assertion: /toBeLessThanOrEqual/,
   },
   {
@@ -51,7 +51,7 @@ const MUTATIONS: readonly Mutation[] = [
     binding: "created.on('pan zoom grab', dropTip);",
     broken: `created.on('pan zoom grab', () => ${stall(25)});\n      created.on('pan zoom grab', dropTip);`,
     what: 'with a 25 ms stall at every pan and zoom, held to the runner threshold',
-    test: { file: 'tests/benchmark.spec.ts', title: 'holds the threshold', project: 'benchmark', env: { CI: 'true' }, extraArgs: ['--no-deps'] },
+    test: { file: 'tests/benchmark.spec.ts', title: 'holds the threshold', project: 'benchmark', env: { NEBURYX_UX_PROFILE: 'runner' }, extraArgs: ['--no-deps'] },
     assertion: /toEqual\(expected\)/,
   },
 ];

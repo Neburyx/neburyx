@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { profileFrom } from '../src/profile.ts';
 import { announcement, canvasOf, CAPTION_LIMIT, drawing, focusCanvas, modifier, openFixture, openSample, positions, screenOf, zoomOf, zoomPast } from './support/workspace.ts';
 
 const tip = (page: Page) => page.locator('.canvas-tip');
@@ -157,8 +158,8 @@ test.describe('below the caption limit', () => {
 });
 
 /**
- * The longest frame allowed while the drawing crosses the caption limit at 4x CPU. Outside CI it is 100 ms, the product figure on the recorded laptop, where a crossing
- * takes about 50 ms here. In CI it is 300 ms, chosen from five runs of the ux job on the GitHub runner (2 vCPU), 20 measurements of the longest frame, which land on
+ * The longest frame allowed while the drawing crosses the caption limit at 4x CPU. With the laptop profile (the default) it is 100 ms, the product figure on the recorded laptop, where a crossing
+ * takes about 50 ms here. With the runner profile (`NEBURYX_UX_PROFILE=runner`, set by the ux job) it is 300 ms, chosen from five runs of the ux job on the GitHub runner (2 vCPU), 20 measurements of the longest frame, which land on
  * steps of 16.7 ms:
  *   1440 by the zoom controls  150, 133.4, 116.7, 183.3, 133.3
  *   1440 by the wheel          150.1, 183.3, 116.6, 166.7, 150
@@ -171,7 +172,7 @@ test.describe('below the caption limit', () => {
  */
 const PRODUCT_LIMIT_MS = 100;
 const RUNNER_LIMIT_MS = 300;
-const LIMIT_MS = process.env['CI'] === undefined ? PRODUCT_LIMIT_MS : RUNNER_LIMIT_MS;
+const LIMIT_MS = profileFrom(process.env) === 'runner' ? RUNNER_LIMIT_MS : PRODUCT_LIMIT_MS;
 
 interface Phase {
   readonly longest: number;

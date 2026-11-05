@@ -140,6 +140,10 @@ describe('CI workflow', () => {
     expect(Object.keys(rootScripts)).toContain('test:ux');
   });
 
+  it('holds the browser tests of the ux job to the limits of the runner, selected by name and not by the CI variable', () => {
+    expect(workflow.jobs['ux']?.env).toEqual({ NEBURYX_UX_PROFILE: 'runner' });
+  });
+
   it('installs the browser without the system packages, whose apt download of fonts took ten minutes on a slow mirror, and gives the install a limit of its own', () => {
     const install = (workflow.jobs['ux']?.steps ?? []).find((step) => step.run?.includes('playwright install'));
     expect(install?.run).not.toContain('--with-deps');
