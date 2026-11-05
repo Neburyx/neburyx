@@ -77,7 +77,7 @@ this repository's `ee/`.
 
 The adapter check reads files under `services/`, `packages/`, `apps/` and `ee/`; the `ee/` check reads every file outside `ee/`.
 The adapter, gate-capabilities, community and web-client checks do not parse a file whose text cannot hold what they look for: each has a pattern of the words a violation needs (a folder or module name, `cytoscape`, `fetch`, a query keyword) and a file holding none of them, and no escape sequence that could spell one (`\u0065`, `\x65`, an octal escape), is skipped. The real-tree tests of the first two and of the web-client check run in one file (`src/architecture/real-tree.test.ts`) that reads the tree once and parses a file for both import checks once; the limit on those tests is set from measurements, with the figures, in that file.
-Both skip `node_modules/`, `dist/` and `.git/` folders and do not follow symbolic links (a scanned folder that is itself a
+Both skip `node_modules/`, `dist/`, `dist-ux/` (the build of the browser tests) and `.git/` folders and do not follow symbolic links (a scanned folder that is itself a
 link is skipped); the `ee/` check also skips the check's own fixture repositories. A requested folder the repository does not
 have is skipped; any other failure, such as a file or a parent folder that cannot be read, fails the check.
 
@@ -113,7 +113,7 @@ identifier, compared exactly and with the same case. A phrase that only contains
 Quoted object keys, element accesses such as `row['x']`, JSX attribute values and import specifiers are string literals and
 are matched; a JSX attribute value is read after its numeric and basic named character references (`&#100;`, `&amp;`) are decoded. Tests and fixtures are scanned too, so a test holds no pack name and reads names from the packs. The check reads
 `.ts`, `.tsx`, `.mts`, `.cts`, `.js`, `.jsx`, `.mjs` and `.cjs` files in the three directories, skips `node_modules/`,
-`dist/` and `.git/`, and does not follow symbolic links.
+`dist/`, `dist-ux/` and `.git/`, and does not follow symbolic links.
 
 **When it fails.** Each line gives the file and line, the word, and what the word is in which pack. Rename the literal, move
 the wording into a pack (and read it from there), or, for a word the product itself uses, add it to the allowlist with a reason.

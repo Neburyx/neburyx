@@ -24,10 +24,10 @@ describe('loadTree', () => {
     expect(loadTree(root, { include: ['services'] }).map((file) => file.path)).toEqual([`services/${name}`]);
   });
 
-  it('skips other files, node_modules, dist and the excluded paths', () => {
+  it('skips other files, node_modules, dist, dist-ux and the excluded paths', () => {
     const root = tempRepo();
-    for (const dir of ['services/node_modules', 'services/dist', 'services/skipped', 'services/kept']) mkdirSync(join(root, dir), { recursive: true });
-    for (const file of ['services/node_modules/a.ts', 'services/dist/a.ts', 'services/skipped/a.ts', 'services/kept/a.ts', 'services/readme.md']) {
+    for (const dir of ['services/node_modules', 'services/dist', 'services/dist-ux', 'services/skipped', 'services/kept']) mkdirSync(join(root, dir), { recursive: true });
+    for (const file of ['services/node_modules/a.ts', 'services/dist/a.ts', 'services/dist-ux/a.ts', 'services/skipped/a.ts', 'services/kept/a.ts', 'services/readme.md']) {
       writeFileSync(join(root, file), 'export {};');
     }
     expect(loadTree(root, { include: ['services'], exclude: ['services/skipped'] }).map((file) => file.path)).toEqual(['services/kept/a.ts']);

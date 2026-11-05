@@ -34,7 +34,7 @@ export function packagesDependingOnDemoGraph(root: string): string[] {
     for (const entry of readdirSync(join(root, relative), { withFileTypes: true })) {
       const path = relative === '' ? entry.name : `${relative}/${entry.name}`;
       if (entry.isDirectory()) {
-        if (entry.name !== 'node_modules' && entry.name !== 'dist' && entry.name !== '.git' && !isInside(path, TOOL_ZONE)) visit(path);
+        if (entry.name !== 'node_modules' && entry.name !== 'dist' && entry.name !== 'dist-ux' && entry.name !== '.git' && !isInside(path, TOOL_ZONE)) visit(path);
       } else if (entry.isFile() && entry.name === 'package.json') {
         const parsed: unknown = JSON.parse(readFileSync(join(root, path), 'utf8'));
         const names = DEPENDENCY_FIELDS.flatMap((field) => {

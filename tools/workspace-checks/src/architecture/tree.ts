@@ -12,7 +12,7 @@ export interface LoadOptions {
 }
 
 const SOURCE_FILE = /\.(?:[cm]?[jt]sx?)$/;
-const SKIPPED_DIRECTORIES: ReadonlySet<string> = new Set(['node_modules', 'dist', '.git']);
+const SKIPPED_DIRECTORIES: ReadonlySet<string> = new Set(['node_modules', 'dist', 'dist-ux', '.git']);
 
 function walk(root: string, relative: string, exclude: readonly string[], out: SourceFile[]): void {
   for (const entry of readdirSync(join(root, relative), { withFileTypes: true })) {
