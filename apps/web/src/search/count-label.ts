@@ -13,4 +13,10 @@ export function matchesText(count: Count): string | undefined {
   return count.quality === 'exact' ? `${text} exact ${count.value === 1 ? 'match' : 'matches'}` : `≥ ${count.value} exact matches · lower bound`;
 }
 
+export function relatedText(count: Count): string | undefined {
+  const text = countText(count);
+  if (text === undefined) return undefined;
+  return count.quality === 'exact' ? `${text} related ${count.value === 1 ? 'record' : 'records'}` : `≥ ${count.value} related records · lower bound`;
+}
+
 export const secondsText = (elapsedMs: number): string => `${(elapsedMs / 1000).toFixed(2)} s`;

@@ -16,6 +16,7 @@ const result = {
   cap: 25,
   searchable: true,
   disabledTypes: [],
+  related: { hits: [], count: { value: 0, quality: 'exact', scope: 'search:related' }, searchable: true, disabledTypes: [] },
   failures: [],
   dropped: { 'not-mapped': 0, 'ambiguous-type': 0, 'no-stable-id': 0 },
   warnings: [],
@@ -61,6 +62,43 @@ describe('the search result', () => {
   it('refuses an unknown reason for a disabled type and an unknown field', () => {
     expect(searchResultSchema.safeParse({ ...result, disabledTypes: [{ entityType: 'widget', reason: 'because' }] }).success).toBe(false);
     expect(searchResultSchema.safeParse({ ...result, extra: true }).success).toBe(false);
+  });
+
+  it('accepts a related group with hits, and holds its count as exact or a lower bound only', () => {
+    const related = { hits: [{ node, matchedProperties: ['batchRef'] }], count: { value: 1, quality: 'exact', scope: 'search:related' }, searchable: true, disabledTypes: [{ entityType: 'widget', reason: 'index-unavailable' }] };
+    expect(searchResultSchema.safeParse({ ...result, related }).success).toBe(true);
+    expect(searchResultSchema.safeParse({ ...result, related: { ...related, count: { value: SEARCH_GROUP_CAP, quality: 'lowerBound', scope: 'search:related' } } }).success).toBe(true);
+    expect(searchResultSchema.safeParse({ ...result, related: { ...related, count: { value: 1, quality: 'estimated', scope: 'search:related' } } }).success).toBe(false);
+    expect(searchResultSchema.safeParse({ ...result, related: { ...related, count: { quality: 'unknown', scope: 'search:related' } } }).success).toBe(false);
+  });
+
+  it('refuses an answer with no related group, a related hit that is not a node and an unknown field of the group', () => {
+    const { related: _related, ...without } = result;
+    expect(searchResultSchema.safeParse(without).success).toBe(false);
+    expect(searchResultSchema.safeParse({ ...result, related: { ...result.related, hits: [{ node: { title: 'x' } }] } }).success).toBe(false);
+    expect(searchResultSchema.safeParse({ ...result, related: { ...result.related, extra: true } }).success).toBe(false);
+    expect(searchResultSchema.safeParse({ ...result, related: { ...result.related, hits: [{ node }] } }).success).toBe(false);
+    expect(searchResultSchema.safeParse({ ...result, related: { ...result.related, hits: [{ node, matchedProperties: [''] }] } }).success).toBe(false);
+    expect(searchResultSchema.safeParse({ ...result, related: { ...result.related, hits: [{ node, matchedProperties: [], via: 'OWNS' }] } }).success).toBe(false);
+  });
+
+  it('accepts a group whose read failed with an unknown count and no hits, and refuses an unknown count for a group that did not fail', () => {
+    const failedRelated = { ...result, related: { ...result.related, count: { quality: 'unknown', scope: 'search:related' } }, failures: [{ group: 'related', code: 'QUERY_TIMEOUT', timeoutMs: 5000 }] };
+    expect(searchResultSchema.safeParse(failedRelated).success).toBe(true);
+    const failedExact = { ...result, exact: [], counts: { exact: { quality: 'unknown', scope: 'search:exact' } }, failures: [{ group: 'exact', code: 'SOURCE_BUSY' }] };
+    expect(searchResultSchema.safeParse(failedExact).success).toBe(true);
+    expect(searchResultSchema.safeParse({ ...result, related: { ...result.related, count: { quality: 'unknown', scope: 'search:related' } } }).success).toBe(false);
+    expect(searchResultSchema.safeParse({ ...result, counts: { exact: { quality: 'unknown', scope: 'search:exact' } } }).success).toBe(false);
+  });
+
+  it('refuses a failed group that still has a number or hits, a group named twice, and a code that fails the whole search', () => {
+    const failedRelated = { ...result, related: { ...result.related, count: { quality: 'unknown', scope: 'search:related' } }, failures: [{ group: 'related', code: 'QUERY_TIMEOUT' }] };
+    expect(searchResultSchema.safeParse({ ...failedRelated, related: { ...failedRelated.related, count: { value: 0, quality: 'exact', scope: 'search:related' } } }).success).toBe(false);
+    expect(searchResultSchema.safeParse({ ...failedRelated, related: { ...failedRelated.related, hits: [{ node, matchedProperties: [] }] } }).success).toBe(false);
+    expect(searchResultSchema.safeParse({ ...failedRelated, failures: [...failedRelated.failures, ...failedRelated.failures] }).success).toBe(false);
+    expect(searchResultSchema.safeParse({ ...failedRelated, failures: [{ group: 'related', code: 'SOURCE_UNAVAILABLE' }] }).success).toBe(false);
+    expect(searchResultSchema.safeParse({ ...failedRelated, failures: [{ group: 'evidence', code: 'QUERY_TIMEOUT' }] }).success).toBe(false);
+    expect(searchResultSchema.safeParse({ ...failedRelated, failures: [{ group: 'related', code: 'QUERY_TIMEOUT', timeoutMs: 0 }] }).success).toBe(false);
   });
 
   it('holds the cap as a named constant of 25', () => {
@@ -121,9 +159,13 @@ describe('the failures of the search result', () => {
   const group = { nodes: [], count: { quality: 'unknown', scope: 'search:startsWith' }, dropped: { 'not-mapped': 0, 'ambiguous-type': 0, 'no-stable-id': 0 }, warnings: [] };
   const failedPrefix = { ...result, startsWith: group, failures: [{ group: 'startsWith', code: 'QUERY_TIMEOUT', timeoutMs: 5000 }] };
   const answeredGroup = { ...group, count: { value: 0, quality: 'exact', scope: 'search:startsWith' } };
+  const unread = { ...result.related, searchable: false };
   const failedExact = { ...result, exact: [], counts: { exact: { quality: 'unknown', scope: 'search:exact' } }, startsWith: answeredGroup, failures: [{ group: 'exact', code: 'SOURCE_BUSY' }] };
 
+  const failedRelated = { ...result, related: { ...result.related, count: { quality: 'unknown', scope: 'search:related' } }, failures: [{ group: 'related', code: 'QUERY_TIMEOUT', timeoutMs: 5000 }] };
+
   it.each([
+    ['a failed related group, unknown and empty, beside an answered exact group', failedRelated],
     ['a failed prefix group, unknown and empty', failedPrefix],
     ['a failed exact group, unknown and empty, beside an answered prefix group', failedExact],
   ])('accepts %s', (_name, body) => {
@@ -139,8 +181,12 @@ describe('the failures of the search result', () => {
     ['a group that fails twice', { ...failedPrefix, failures: [...failedPrefix.failures, ...failedPrefix.failures] }],
     ['a failure of the prefix group when there is no prefix group', { ...result, failures: [{ group: 'startsWith', code: 'QUERY_TIMEOUT' }] }],
     ['a failure code that belongs to the whole search', { ...failedPrefix, failures: [{ group: 'startsWith', code: 'SOURCE_UNAVAILABLE' }] }],
-    ['an exact failure with no prefix group to answer', { ...failedExact, startsWith: undefined }],
-    ['both groups failed', { ...failedPrefix, exact: [], counts: { exact: { quality: 'unknown', scope: 'search:exact' } }, failures: [...failedPrefix.failures, { group: 'exact', code: 'SOURCE_BUSY' }] }],
+    ['an exact failure with no other group to answer', { ...failedExact, startsWith: undefined, related: unread }],
+    ['both groups failed', { ...failedPrefix, related: unread, exact: [], counts: { exact: { quality: 'unknown', scope: 'search:exact' } }, failures: [...failedPrefix.failures, { group: 'exact', code: 'SOURCE_BUSY' }] }],
+    ['a failed related group whose count is not unknown', { ...failedRelated, related: { ...result.related } }],
+    ['a failed related group that holds hits', { ...failedRelated, related: { ...failedRelated.related, hits: [{ node, matchedProperties: [] }] } }],
+    ['an unknown related count with no failure', { ...failedRelated, failures: [] }],
+    ['an exact and a related group that both failed', { ...failedRelated, exact: [], counts: { exact: { quality: 'unknown', scope: 'search:exact' } }, failures: [...failedRelated.failures, { group: 'exact', code: 'SOURCE_BUSY' }] }],
     ['no list of failures', Object.fromEntries(Object.entries(result).filter(([key]) => key !== 'failures'))],
   ])('refuses %s', (_name, body) => {
     expect(searchResultSchema.safeParse(body).success).toBe(false);

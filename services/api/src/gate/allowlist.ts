@@ -15,6 +15,7 @@ export function allowlistFromMapping(source: SourceModel): SourceAllowlist {
   const stableIds = new Map<string, string>();
   const properties = new Set<string>();
   const searchProperties = new Map<string, readonly string[]>();
+  const referenceProperties = new Map<string, readonly string[]>();
   for (const entity of source.entities) {
     const problem = nameProblem(entity.label);
     if (problem !== undefined) throw new SourceGateError(source.id, `label of entity type ${entity.type}`, entity.label, problem);
@@ -28,6 +29,11 @@ export function allowlistFromMapping(source: SourceModel): SourceAllowlist {
       if (searchProblem !== undefined) throw new SourceGateError(source.id, `search property of entity type ${entity.type}`, property, searchProblem);
     }
     searchProperties.set(entity.type, [...entity.search]);
+    for (const property of entity.reference) {
+      const referenceProblem = nameProblem(property);
+      if (referenceProblem !== undefined) throw new SourceGateError(source.id, `reference property of entity type ${entity.type}`, property, referenceProblem);
+    }
+    referenceProperties.set(entity.type, [...entity.reference]);
     for (const property of [entity.stableId, ...entity.search, ...entity.reference]) properties.add(property);
   }
   const relationshipTypes = new Set<string>();
@@ -37,5 +43,5 @@ export function allowlistFromMapping(source: SourceModel): SourceAllowlist {
     relationshipTypes.add(relationship.type);
     for (const property of [...relationship.evidence, ...(relationship.observedAt === undefined ? [] : [relationship.observedAt]), ...(relationship.stableId === undefined ? [] : [relationship.stableId])]) properties.add(property);
   }
-  return { entityLabels, relationshipTypes, stableIds, searchProperties, properties };
+  return { entityLabels, relationshipTypes, stableIds, searchProperties, referenceProperties, properties };
 }

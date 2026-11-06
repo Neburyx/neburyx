@@ -25,7 +25,7 @@ describe('a ref from another source', () => {
   });
 
   it('is accepted when the ref names the bound source', async () => {
-    const { gate, executor } = harness({ allowlistFor: () => ({ entityLabels: new Map([['item', 'Item']]), relationshipTypes: new Set(), stableIds: new Map(), searchProperties: new Map(), properties: new Set() }) });
+    const { gate, executor } = harness({ allowlistFor: () => ({ entityLabels: new Map([['item', 'Item']]), relationshipTypes: new Set(), stableIds: new Map(), searchProperties: new Map(), referenceProperties: new Map(), properties: new Set() }) });
     await gate.run(gateRequest({ params: { key: 'k1', ref: { sourceId: SOURCE_A, entityType: 'item', stableId: '1' } } }));
     expect(executor.calls).toHaveLength(1);
   });

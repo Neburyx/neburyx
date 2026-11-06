@@ -1,7 +1,7 @@
 import { ICON_KEYS } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
 import { parseMapping } from './load.js';
-import { MAX_SEARCH_PROPERTIES } from './model.js';
+import { MAX_REFERENCE_PROPERTIES, MAX_SEARCH_PROPERTIES } from './model.js';
 import { baseSource, expectRefused, fileOf, firstSource, issuesOf, load, type Json } from '../testing/mapping.js';
 
 const fullEntity = {
@@ -110,6 +110,18 @@ describe('entity and relationship types as written', () => {
     const entities = (count: number) => [{ type: 'node_a', label: 'NodeA', stable_id: 'id', search: names(50) }, { type: 'node_b', label: 'NodeB', stable_id: 'id', search: names(count - 50) }];
     expect(() => load(baseSource({ entities: entities(MAX_SEARCH_PROPERTIES), relationships: undefined }))).not.toThrow();
     expectRefused(baseSource({ entities: entities(MAX_SEARCH_PROPERTIES + 1), relationships: undefined }), 'sources[0].entities', 'more than the 100 a search can read');
+  });
+
+  it('refuses a reference property that an entity type lists twice', () => {
+    const entity = { type: 'node_c', label: 'NodeC', stable_id: 'id', reference: ['ref', 'other', 'ref'] };
+    expectRefused(baseSource({ entities: [entity], relationships: undefined }), 'sources[0].entities[0].reference[2]', 'lists ref more than once');
+  });
+
+  it('refuses a source with more reference properties than a related lookup can read, and accepts one at the limit', () => {
+    const names = (count: number) => Array.from({ length: count }, (_, index) => `r${index}`);
+    const entities = (count: number) => [{ type: 'node_a', label: 'NodeA', stable_id: 'id', reference: names(50) }, { type: 'node_b', label: 'NodeB', stable_id: 'id', reference: names(count - 50) }];
+    expect(() => load(baseSource({ entities: entities(MAX_REFERENCE_PROPERTIES), relationships: undefined }))).not.toThrow();
+    expectRefused(baseSource({ entities: entities(MAX_REFERENCE_PROPERTIES + 1), relationships: undefined }), 'sources[0].entities', 'more than the 100 a search can read');
   });
 
   it('allows a pii property to be searchable', () => {

@@ -68,7 +68,8 @@ function checkMarkers(definition: TemplateDefinition, shape: Shape): void {
 
 /**
  * The search template's own declaration: it declares its search branches exactly when its Cypher uses the one `@searchBranches` marker for the list parameter its schema has; each branch text holds only the
- * two placeholders and its own `LIMIT $limit + 1`; the combined result is cut by an enclosing `LIMIT $limit + 1`; and `usedProperties` names every target, so a masked request is checked.
+ * two placeholders and its own `LIMIT $limit + 1`; the combined result is cut by an enclosing `LIMIT $limit + 1`; `usedProperties` names every target, so a masked request is checked; `indexNeeds`
+ * names the index of every target, so the gate can refuse a read whose index is gone; and the allowlist the targets are checked against is `search` or `reference`.
  */
 function checkSearchBranches(definition: TemplateDefinition, shape: Shape): void {
   const used = markersOf(definition.cypher).filter((marker) => marker.kind === 'searchBranches');
@@ -88,6 +89,8 @@ function checkSearchBranches(definition: TemplateDefinition, shape: Shape): void
   }
   if (!PAGED_LIMIT.test(definition.cypher)) throw new CatalogError(definition.id, 'has search branches and its Cypher has no enclosing LIMIT $limit + 1');
   if (definition.usedProperties === undefined) throw new CatalogError(definition.id, 'has search branches and does not name the properties it uses');
+  if (definition.indexNeeds === undefined) throw new CatalogError(definition.id, 'has search branches and does not name the indexes it needs');
+  if (branches.allowlist !== 'search' && branches.allowlist !== 'reference') throw new CatalogError(definition.id, 'has search branches and does not say which allowlist its targets are checked against');
 }
 
 const PROFILE_PREFIX = 'PROFILE ';

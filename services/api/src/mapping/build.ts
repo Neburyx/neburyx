@@ -3,6 +3,7 @@ import { resolveBudgets } from './budgets.js';
 import { hashSource } from './hash.js';
 import { checkLink } from './links.js';
 import {
+  MAX_REFERENCE_PROPERTIES,
   MAX_SEARCH_PROPERTIES,
   type DerivedRuleModel,
   type EntityModel,
@@ -69,6 +70,9 @@ function buildEntity(raw: RawEntity, path: readonly (string | number)[], report:
     if (search.indexOf(property) !== index) report([...path, 'search', index], `lists ${property} more than once`);
   });
   const reference = raw.reference ?? [];
+  reference.forEach((property, index) => {
+    if (reference.indexOf(property) !== index) report([...path, 'reference', index], `lists ${property} more than once`);
+  });
   const piiEntries = raw.pii ?? [];
   const pii = piiEntries.map((entry) => entry.property);
   const piiClasses = Object.fromEntries(piiEntries.flatMap((entry) => (entry.class === undefined ? [] : [[entry.property, entry.class] as const])));
@@ -233,6 +237,8 @@ function buildSource(raw: RawSource, index: number, report: Report): SourceModel
 
   const searchProperties = raw.entities.reduce((total, entity) => total + new Set(entity.search ?? []).size, 0);
   if (searchProperties > MAX_SEARCH_PROPERTIES) report([...base, 'entities'], `list ${searchProperties} search properties in all, more than the ${MAX_SEARCH_PROPERTIES} a search can read`);
+  const referenceProperties = raw.entities.reduce((total, entity) => total + new Set(entity.reference ?? []).size, 0);
+  if (referenceProperties > MAX_REFERENCE_PROPERTIES) report([...base, 'entities'], `list ${referenceProperties} reference properties in all, more than the ${MAX_REFERENCE_PROPERTIES} a search can read`);
 
   const budgets = resolveBudgets(raw.budgets);
   const defaultPage = raw.budgets?.default_page ?? Math.min(budgets.defaultPage, budgets.maxPage);

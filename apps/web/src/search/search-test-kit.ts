@@ -24,12 +24,21 @@ export function answerOf(sourceId: string, exact: readonly GraphNode[], override
     searchable: true,
     counts: { exact: { value: exact.length, quality: 'exact', scope: 'search:exact' } },
     disabledTypes: [],
+    related: { hits: [], count: { value: 0, quality: 'exact', scope: 'search:related' }, searchable: false, disabledTypes: [] },
     failures: [],
     dropped: { 'not-mapped': 0, 'ambiguous-type': 0, 'no-stable-id': 0 },
     warnings: [],
     elapsedMs: 180,
     ...overrides,
   };
+}
+
+export function relatedOf(nodes: readonly GraphNode[], count?: SearchResult['related']['count'], matched: Readonly<Record<string, readonly string[]>> = {}): SearchResult['related'] {
+  return { hits: nodes.map((node) => ({ node, matchedProperties: [...(matched[node.ref.stableId] ?? [])] })), count: count ?? { value: nodes.length, quality: 'exact', scope: 'search:related' }, searchable: true, disabledTypes: [] };
+}
+
+export function withRelated(sourceId: string, exact: readonly GraphNode[], related: readonly GraphNode[], count?: SearchResult['related']['count'], overrides: Partial<SearchResult> = {}): ApiResult<SearchResult> {
+  return { ok: true, value: answerOf(sourceId, exact, { related: relatedOf(related, count), ...overrides }) };
 }
 
 export function profiled(sourceId: string): SourceProfile {

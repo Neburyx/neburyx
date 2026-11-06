@@ -1,4 +1,4 @@
-import type { Count } from '@neburyx/contracts';
+import type { Count, SearchGroup } from '@neburyx/contracts';
 
 export const SEARCH_COPY = {
   title: 'Search results',
@@ -14,20 +14,36 @@ export const SEARCH_COPY = {
   couldNotReadProfile: 'The source could not be read.',
   tryAgain: 'Try again',
   groupTitle: 'Exact ID match',
+  relatedTitle: 'Related records · Referenced ID',
+  relatedNote: 'Related records reference the ID; they are not extra exact matches.',
   openInGraph: 'Open in graph',
   emptyTitle: 'No matching entities',
   emptyHint: 'Check the ID or try another indexed property.',
   disabledType: 'Search is disabled for this type',
+  relatedDisabledType: 'Related records are disabled for this type',
   openFailed: 'The entity could not be opened.',
 } as const;
 
 export const captionOf = (source: string): string => `Searches only configured, indexed properties in ${source}.`;
 export const unknownSourceText = (sourceId: string): string => `The source “${sourceId}” is not configured.`;
+export const REFERENCED_ID = 'Referenced ID';
+export const referencesLine = (text: string, properties: readonly string[]): string => (properties.length === 0 ? REFERENCED_ID : `References ${text} in ${properties.join(', ')}`);
 export const showingResultsFor = (text: string): string => `Showing results for “${text}”.`;
 
 export const TOO_LONG = 'Use at most 200 characters.';
 export const NOTHING_SEARCHABLE_MASKED = 'Nothing can be searched while personal data is masked.';
 export const NO_SEARCH_PROPERTIES = 'No property of this source is configured for search.';
+export const NO_RELATED_PROPERTIES = 'No property of this source is configured for related records.';
+export const EXACT_MASKED = 'Exact matches cannot be searched while personal data is masked.';
+export const RELATED_MASKED = 'Related records cannot be searched while personal data is masked.';
+const PAGE_GROUP_NAMES = { exact: 'Exact matches', related: 'Related records', startsWith: 'Matches that start with the text' } as const;
+const PAGE_GROUP_NOT_READ = { exact: 'exact matches not read', related: 'related records not read', startsWith: 'matches that start with the text not read' } as const;
+export const groupNotReadSummary = (group: SearchGroup): string => PAGE_GROUP_NOT_READ[group];
+export function groupFailedText(group: SearchGroup, code: string, timeoutMs: number | undefined): string {
+  const name = PAGE_GROUP_NAMES[group];
+  if (code === 'QUERY_TIMEOUT') return timeoutMs === undefined ? `${name} were not read: the source did not answer in time.` : `${name} were not read: the source did not answer within ${secondsOf(timeoutMs)} s.`;
+  return `${name} were not read (${code}).`;
+}
 export const RETRY = 'Retry';
 export const GRAPH_UNCHANGED = 'Your graph was not changed.';
 
@@ -80,7 +96,7 @@ export function startsWithText(count: Count): string | undefined {
 
 export const addedNote = (title: string): string => `Added ${title}.`;
 
-const GROUP_NAMES = { exact: 'exact ID matches', startsWith: 'matches that start with the text' } as const;
+const GROUP_NAMES = { exact: 'exact ID matches', related: 'related records', startsWith: 'matches that start with the text' } as const;
 
 export const groupNotRead = (group: keyof typeof GROUP_NAMES): string => `${GROUP_NAMES[group]} not read`;
 

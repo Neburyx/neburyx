@@ -55,7 +55,7 @@ export function SearchResults({ client, source, principalId, profile, text, mask
     <div ref={region} tabIndex={-1} className="search-results" aria-busy={state.phase === 'loading'}>
       {state.phase === 'loading' ? <p role="status">{SEARCH_COPY.searching}</p> : null}
       {failure === undefined ? null : <SearchFailure failure={failure} sourceId={source.id} onRetry={retry} />}
-      {shown === undefined ? null : <SearchAnswer result={shown.result} answeredText={shown.text} currentText={text} profile={profile} busy={busy} mask={mask} onOpen={onOpen} />}
+      {shown === undefined ? null : <SearchAnswer result={shown.result} answeredText={shown.text} currentText={text} profile={profile} busy={busy} mask={mask} onOpen={onOpen} onRetry={retry} />}
     </div>
   );
 }

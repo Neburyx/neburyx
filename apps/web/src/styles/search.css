@@ -25,6 +25,10 @@
   gap: var(--space-8);
 }
 
+.search-retry {
+  align-self: flex-start;
+}
+
 .search-failure p {
   margin: 0;
 }
@@ -36,6 +40,7 @@
 }
 
 .search-summary,
+.search-note,
 .search-labelled {
   margin: 0;
   color: var(--color-text-muted);
@@ -77,7 +82,8 @@
 }
 
 .search-hit-type,
-.search-hit-summary {
+.search-hit-summary,
+.search-hit-context {
   color: var(--color-text-muted);
   font-size: var(--font-size-small);
 }

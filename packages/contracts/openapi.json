@@ -615,7 +615,7 @@
             }
           }
         },
-        "description": "Matches the whole text, as stored and case-sensitive, against every configured, indexed search property of the source in one read through the gate, and as the integer too when the text is a canonical 64-bit integer. The answer holds at most cap entities in exact (25, or the source's max_page when lower); counts.exact is exact up to and including cap and a lowerBound of the hits held (cap, or fewer when normalization left rows out of a capped read) when the read found more; searchable is false when no property was left to search. The text is 1 to 200 characters. mask asks for the personal-data fields of the entities to be masked, and a personal-data property is then not searched. dropped and warnings are the normalize stage's: rows left out, by reason, and one sentence for each. disabledTypes names entity types that were not searched because their search index is not usable. With typeahead true the text is 2 to 200 characters and the answer also holds startsWith: the entities whose search property starts with the text, apart from the entities in exact, with its own count (exact up to and including cap, a lowerBound above it, never counted as exact matches), dropped and warnings; it is one more read and shares the one schema read. A group whose read failed with a code of its own while the other group answered is empty, has a count of quality unknown with no value, and is named in failures (always present, empty when every read answered); when every group that was read fails, or an error means the same for both groups, the search fails as a whole. The text is never logged and never part of an error.",
+        "description": "Matches the whole text, as stored and case-sensitive, against every configured, indexed search property of the source in one read through the gate, and as the integer too when the text is a canonical 64-bit integer. The answer holds at most cap entities in exact (25, or the source's max_page when lower); counts.exact is exact up to and including cap and a lowerBound of the hits held (cap, or fewer when normalization left rows out of a capped read) when the read found more; searchable is false when no property was left to search. The text is 1 to 200 characters. mask asks for the personal-data fields of the entities to be masked, and a personal-data property is then not searched. dropped and warnings are the normalize stage's: rows left out, by reason, and one sentence for each. disabledTypes names entity types that were not searched because their search index is not usable. related is the second group: the records whose reference properties (named by the mapping) hold the text, from one read of their own with its own limit, capped and counted like exact (counts in related.count, scope search:related); the related read adds nothing to exact or to its count: an entity is in exact only through its own exact match, and one that is both appears in both groups. related.searchable is false when no reference property was left to read (none configured, only personal-data ones while masked, or every type left out) and related.disabledTypes names types left out because their reference index is not usable. With typeahead true the text is 2 to 200 characters and the answer also holds startsWith: the entities whose search property starts with the text, apart from the entities in exact, with its own count (exact up to and including cap, a lowerBound above it, never counted as exact matches), dropped and warnings; it is one more read and shares the one schema read. A type-ahead request does not read the related group: related.searchable is false in its answer. A group whose read failed with a code of its own (QUERY_TIMEOUT with timeoutMs, SOURCE_BUSY, RATE_LIMITED or INTERNAL_ERROR) while another group answered is empty, has a count of quality unknown with no value, and is named in failures (always present, empty when every read answered); a retry repeats the whole search. When every group that was read fails, or an error means the same for every group, the search fails as a whole with the status and error of the read. The text is never logged and never part of an error.",
         "responses": {
           "200": {
             "description": "The exact matches and their count",
@@ -2977,6 +2977,251 @@
               "additionalProperties": false
             }
           },
+          "related": {
+            "type": "object",
+            "properties": {
+              "hits": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "node": {
+                      "type": "object",
+                      "properties": {
+                        "ref": {
+                          "type": "object",
+                          "properties": {
+                            "sourceId": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "entityType": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "stableId": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "required": [
+                            "sourceId",
+                            "entityType",
+                            "stableId"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "display": {
+                          "type": "object",
+                          "properties": {
+                            "title": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "badges": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "required": [
+                            "title",
+                            "type"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "properties": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "key": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "value": {},
+                              "dataClass": {
+                                "type": "string",
+                                "enum": [
+                                  "text",
+                                  "number",
+                                  "boolean",
+                                  "date",
+                                  "dateTime",
+                                  "localDateTime",
+                                  "time",
+                                  "localTime",
+                                  "duration",
+                                  "point",
+                                  "list",
+                                  "other",
+                                  "unknown",
+                                  "name",
+                                  "email",
+                                  "phone"
+                                ]
+                              },
+                              "masked": {
+                                "type": "boolean"
+                              },
+                              "maskedBy": {
+                                "type": "string",
+                                "enum": [
+                                  "policy",
+                                  "request"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "key",
+                              "dataClass",
+                              "masked"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "qualityFlags": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "provenanceRefs": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "authorization": {
+                          "type": "object",
+                          "properties": {
+                            "canInspect": {
+                              "type": "boolean"
+                            },
+                            "canExport": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "canInspect",
+                            "canExport"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "ref",
+                        "display",
+                        "properties",
+                        "qualityFlags",
+                        "provenanceRefs",
+                        "authorization"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "matchedProperties": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    }
+                  },
+                  "required": [
+                    "node",
+                    "matchedProperties"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "count": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "value": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "quality": {
+                        "type": "string",
+                        "enum": [
+                          "exact",
+                          "lowerBound"
+                        ]
+                      },
+                      "scope": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "value",
+                      "quality",
+                      "scope"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "quality": {
+                        "type": "string",
+                        "const": "unknown"
+                      },
+                      "scope": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "quality",
+                      "scope"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "searchable": {
+                "type": "boolean"
+              },
+              "disabledTypes": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "entityType": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "reason": {
+                      "type": "string",
+                      "enum": [
+                        "index-unavailable"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "entityType",
+                    "reason"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "hits",
+              "count",
+              "searchable",
+              "disabledTypes"
+            ],
+            "additionalProperties": false
+          },
           "failures": {
             "type": "array",
             "items": {
@@ -2986,6 +3231,7 @@
                   "type": "string",
                   "enum": [
                     "exact",
+                    "related",
                     "startsWith"
                   ]
                 },
@@ -3300,6 +3546,7 @@
           "searchable",
           "counts",
           "disabledTypes",
+          "related",
           "failures",
           "dropped",
           "warnings",

@@ -47,7 +47,8 @@ describe('buildOpenApiDocument', () => {
       additionalProperties: false,
       properties: {
         exact: { type: 'array' },
-        failures: { type: 'array', items: { properties: { group: { enum: ['exact', 'startsWith'] } } } },
+        failures: { type: 'array', items: { properties: { group: { enum: ['exact', 'related', 'startsWith'] } } } },
+        related: { type: 'object', additionalProperties: false, properties: { hits: { type: 'array' }, searchable: { type: 'boolean' }, disabledTypes: { type: 'array' } } },
         startsWith: {
           type: 'object',
           additionalProperties: false,

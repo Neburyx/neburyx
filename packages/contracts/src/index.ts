@@ -77,10 +77,12 @@ export {
   disabledTypeSchema,
   droppedSchema,
   groupFailureSchema,
+  relatedGroupSchema,
+  relatedHitSchema,
   searchRequestSchema,
   searchResultSchema,
   searchTextSchema,
   startsWithGroupSchema,
   typeaheadTextSchema,
 } from './search.js';
-export type { DisabledType, GroupFailure, SearchGroup, SearchRequest, SearchResult, StartsWithGroup } from './search.js';
+export type { DisabledType, GroupFailure, RelatedGroup, RelatedHit, SearchGroup, SearchRequest, SearchResult, StartsWithGroup } from './search.js';

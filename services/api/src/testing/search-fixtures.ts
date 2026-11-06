@@ -79,9 +79,9 @@ export function withSchema(indexes: () => ExecuteOutcome, data: (call: ExecuteCa
   return (call) => (call.templateId === 'schema-indexes' ? Promise.resolve(indexes()) : data(call));
 }
 
-/** Every index the mapping's reads need, online: a constraint on each stable ID and a RANGE index on each search property. */
+/** Every index the mapping's reads need, online: a constraint on each stable ID and a RANGE index on each search and reference property. */
 export function onlineIndexesOf(source: SourceModel): IndexRow[] {
-  return source.entities.flatMap((entity) => [rangeIndex(entity.label, entity.stableId, 'ONLINE', true), ...entity.search.filter((property) => property !== entity.stableId).map((property) => rangeIndex(entity.label, property))]);
+  return source.entities.flatMap((entity) => [rangeIndex(entity.label, entity.stableId, 'ONLINE', true), ...[...new Set([...entity.search, ...entity.reference])].filter((property) => property !== entity.stableId).map((property) => rangeIndex(entity.label, property))]);
 }
 
 /** A responder that answers the schema read with every index of the source online, and every other read with `data`. */

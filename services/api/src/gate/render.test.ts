@@ -15,6 +15,7 @@ const ALLOWLIST: SourceAllowlist = {
   relationshipTypes: new Set(['KNOWS', 'HAS LINE']),
   stableIds: new Map([['person', 'id']]),
   searchProperties: new Map([['person', ['id', 'name']]]),
+  referenceProperties: new Map(),
   properties: new Set(['id', 'name']),
 };
 

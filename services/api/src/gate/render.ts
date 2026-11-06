@@ -71,7 +71,7 @@ function branchesOf(template: Template, params: Params, allowlist: SourceAllowli
   return list.data
     .map((target) => {
       const label = allowlist.entityLabels.get(target.entityType);
-      if (label === undefined || allowlist.searchProperties.get(target.entityType)?.includes(target.property) !== true) throw new AppError('INVALID_REQUEST');
+      if (label === undefined || (branches.allowlist === 'search' ? allowlist.searchProperties : allowlist.referenceProperties).get(target.entityType)?.includes(target.property) !== true) throw new AppError('INVALID_REQUEST');
       const key = JSON.stringify([target.entityType, target.property]);
       if (seen.has(key)) throw new AppError('INVALID_REQUEST');
       seen.add(key);

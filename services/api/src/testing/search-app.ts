@@ -1,6 +1,7 @@
 import { rmSync } from 'node:fs';
 import { afterAll } from 'vitest';
 import { buildApp } from '../app.js';
+import type { AssembleOptions } from '../gate/assemble.js';
 import type { ExecuteCall, ExecuteOutcome } from '../gate/executor.js';
 import { createLogger } from '../logger.js';
 import { parseMapping } from '../mapping/load.js';
@@ -22,6 +23,12 @@ afterAll(() => rmSync(webRoot, { recursive: true, force: true }));
 export const SEARCH_ENTITIES = [
   { type: 'widget', label: 'Widget', stable_id: 'widgetId', search: ['widgetId', 'ownerName'], pii: [{ property: 'ownerName', class: 'name' }] },
   { type: 'gadget', label: 'Gadget', stable_id: 'gadgetId', search: ['gadgetId'] },
+];
+
+export const RELATED_ENTITIES = [
+  { type: 'widget', label: 'Widget', stable_id: 'widgetId', search: ['widgetId', 'ownerName'], reference: ['batchRef', 'ownerRef'], pii: [{ property: 'ownerName', class: 'name' }, { property: 'ownerRef', class: 'text' }] },
+  { type: 'gadget', label: 'Gadget', stable_id: 'gadgetId', search: ['gadgetId'], reference: ['widgetRef'] },
+  { type: 'part', label: 'Part', stable_id: 'partId', search: ['partId'] },
 ];
 
 /** A mapping of the source `demo`, with the entity types of `SEARCH_ENTITIES` unless the overrides give others. */
@@ -46,6 +53,8 @@ export interface SearchAppOptions {
   readonly coordinator?: Seams['coordinator'];
   readonly audit?: Seams['audit'];
   readonly usability?: SourceUsability;
+  readonly redact?: AssembleOptions['redact'];
+  readonly catalog?: AssembleOptions['catalog'];
 }
 
 export async function startSearchApp(options: SearchAppOptions = {}) {
@@ -62,6 +71,8 @@ export async function startSearchApp(options: SearchAppOptions = {}) {
     executor,
     seams,
     ...(options.usability === undefined ? {} : { usability: options.usability }),
+    ...(options.redact === undefined ? {} : { redact: options.redact }),
+    ...(options.catalog === undefined ? {} : { catalog: options.catalog }),
   });
   const store = memoryAppStore();
   const app = await buildApp({ webRoot, logger: createLogger({ write: (line: string) => void lines.push(line) }), store, mapping, seams: { ...defaults, ...seams }, gate: parts.gate, indexes: parts.indexes });
@@ -74,3 +85,4 @@ export const postSearch = (app: SearchApp['app'], payload: unknown) =>
   app.inject({ method: 'POST', url: '/v1/search/entities', payload: JSON.stringify(payload), headers: { 'content-type': 'application/json' } });
 
 export const searchCalls = (executor: TestExecutor) => executor.calls.filter((call) => call.templateId === 'entity-search');
+export const relatedCalls = (executor: TestExecutor) => executor.calls.filter((call) => call.templateId === 'entity-related');

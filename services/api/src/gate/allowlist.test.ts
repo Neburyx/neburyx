@@ -32,4 +32,20 @@ describe('the allowlist of a source', () => {
   ])('refuses a stable id with %s, because it is written into the Cypher as a quoted name', (_name, stableId) => {
     expect(() => allowlistFromMapping(sourceWith({ entities: [{ type: 'gadget', label: 'Gadget', stable_id: stableId }], relationships: [] }))).toThrow(SourceGateError);
   });
+
+  it('holds the reference properties of each entity type, by type', () => {
+    const allowlist = allowlistFromMapping(
+      sourceWith({ entities: [{ type: 'gadget', label: 'Gadget', stable_id: 'gadgetId', search: ['title'], reference: ['extRef', 'otherRef'] }, { type: 'person', label: 'Person', stable_id: 'personId' }], relationships: [] }),
+    );
+    expect([...allowlist.referenceProperties]).toEqual([['gadget', ['extRef', 'otherRef']], ['person', []]]);
+  });
+
+  it.each([
+    ['a backtick', 'bad`ref'],
+    ['a backslash', 'bad\\ref'],
+    ['a control character', 'bad\u0001ref'],
+    ['only whitespace', '   '],
+  ])('refuses a reference property with %s, because it is written into the Cypher as a quoted name', (_name, property) => {
+    expect(() => allowlistFromMapping(sourceWith({ entities: [{ type: 'gadget', label: 'Gadget', stable_id: 'gadgetId', reference: [property] }], relationships: [] }))).toThrow(SourceGateError);
+  });
 });

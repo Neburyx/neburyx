@@ -18,7 +18,7 @@ export const searchPrefixTemplate: TemplateDefinition = {
   version: '1',
   auditAction: 'entity.search',
   cypher: 'CALL { @searchBranches(targets) } WITH n LIMIT $limit + 1 RETURN n',
-  searchBranches: { param: 'targets', value: PREFIX_BRANCH, text: PREFIX_BRANCH },
+  searchBranches: { param: 'targets', allowlist: 'search', value: PREFIX_BRANCH, text: PREFIX_BRANCH },
   paramsSchema: z.strictObject({ text: typeaheadTextSchema, targets: targetsSchema }),
   scope: 'user',
   paged: false,

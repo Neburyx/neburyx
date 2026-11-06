@@ -73,9 +73,9 @@ export interface Template {
   /**
    * The search template's own declaration, for no other template: a statement with one branch for each target of a list parameter. The Cypher holds `@searchBranches(<param>)`,
    * and the gate writes in, for each target, the branch text of its match form (`value` or `text`) with `@label` and `@property` replaced by the quoted names, joined by `UNION`.
-   * Each target is checked against the source's search allowlist.
+   * Each target is checked against the source's allowlist of the kind the template names: its `search` or its `reference` properties.
    */
-  readonly searchBranches?: { readonly param: string; readonly value: string; readonly text: string };
+  readonly searchBranches?: { readonly param: string; readonly allowlist: 'search' | 'reference'; readonly value: string; readonly text: string };
   /** The indexes this read needs, so that the gate can find out before the data read that they are there; a template that names none is not guarded. */
   indexNeeds?(params: Params, allowlist: SourceAllowlist): readonly IndexNeed[];
   /** True for a request that has nothing to read, such as an empty list of targets: the gate runs every stage but the read, and the answer has no row. */
@@ -93,6 +93,8 @@ export interface SourceAllowlist {
   readonly stableIds: ReadonlyMap<string, string>;
   /** The `search` properties of each entity type, by type, in the mapping's order. */
   readonly searchProperties: ReadonlyMap<string, readonly string[]>;
+  /** The `reference` properties of each entity type, by type, in the mapping's order. */
+  readonly referenceProperties: ReadonlyMap<string, readonly string[]>;
   /** Every property name the mapping names: search, reference, evidence, sort and stable id properties. */
   readonly properties: ReadonlySet<string>;
 }

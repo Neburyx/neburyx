@@ -9,7 +9,7 @@ import { me, renderApp, source } from '../test-utils.js';
 import { answerOf, deferred, hit, profiled, TYPE, searchAt } from './search-test-kit.js';
 
 const main = () => screen.getByRole('main');
-const openButton = () => within(main()).getByRole('button', { name: 'Open in graph' });
+const openButton = () => within(main()).getByRole('button', { name: /^Open in graph/ });
 
 /** A client of two sources that answers each search with one hit of the searched source, and knows the investigations it is given. */
 function rig(known: Parameters<typeof knowing>[0], overrides: Partial<ApiClient> = {}) {
@@ -184,7 +184,7 @@ describe('opening a result in the graph', () => {
     await user.click(openButton());
     await waitFor(() => expect(view.state.investigation.getState().id).toBe(INVESTIGATION_A));
     await act(() => view.router.navigate({ pathname: '/search', search: '?source=other' }, { state: { q: 'AC-1' } }));
-    await user.click(await within(main()).findByRole('button', { name: 'Open in graph' }));
+    await user.click(await within(main()).findByRole('button', { name: /^Open in graph/ }));
     await waitFor(() => expect(view.state.investigation.getState().id).toBe(INVESTIGATION_B));
     expect(view.state.holds(INVESTIGATION_A, false)).toBe(true);
   });

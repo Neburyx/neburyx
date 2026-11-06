@@ -155,13 +155,30 @@ function createInvestigations(options: SupportServerOptions) {
 
 const SEARCH_TYPE = 'account';
 const MANY = /^many-(\d+)$/;
+const RELATED = /^rel-(\d+)$/;
 const STALLS_ONCE = 'stall';
 const STARTS_WITH_SUFFIXES = ['-1', '-2'];
 const TIMEOUT = { error: { code: 'QUERY_TIMEOUT', message: 'The source did not answer in time. Try again or refine your filters.', retryable: true, traceId: 'tr-support', details: { timeoutMs: 5000 } } };
+const NO_RELATED = { hits: [], count: { value: 0, quality: 'exact', scope: 'search:related' }, searchable: false, disabledTypes: [] };
+
+function relatedGroup(sourceId: string, text: string): unknown {
+  const matches = RELATED.exec(text);
+  if (matches !== null) {
+    const found = Number(matches[1]);
+    const shown = Math.min(found, SEARCH_GROUP_CAP);
+    const hits = Array.from({ length: shown }, (_, index) => ({ node: node(sourceId, SEARCH_TYPE, `${text}-r${String(index + 1).padStart(2, '0')}`), matchedProperties: ['batchRef'] }));
+    return { hits, count: { value: shown, quality: found > SEARCH_GROUP_CAP ? 'lowerBound' : 'exact', scope: 'search:related' }, searchable: true, disabledTypes: [] };
+  }
+  if (text.startsWith('relfail') || text.startsWith('exactfail')) return { ...NO_RELATED, searchable: true, count: { quality: 'unknown', scope: 'search:related' } };
+  if (text.startsWith('reldrop')) return { ...NO_RELATED, disabledTypes: [{ entityType: SEARCH_TYPE, reason: 'index-unavailable' }] };
+  return NO_RELATED;
+}
 
 /**
- * The synthetic stand-in for the search: a text `many-N` has N matches (25 at most are shown, and more than 25 is a lower bound), a text that starts with `stall` times out the first time that text is
- * searched and answers the next time, a text that starts with `missing` matches nothing, and any other text matches one entity of that ID; a type-ahead search also answers two entities whose ID starts with that text.
+ * The synthetic stand-in for the search: a text `many-N` has N matches (25 at most are shown, and more than 25 is a lower bound), a text `rel-N` has one exact match and N related records
+ * (shown and counted the same way), `relfail` has its related read fail while the exact group answers, `exactfail` the reverse (with two related records), `reldrop` has its related type left out,
+ * a text that starts with `stall` times out the first time that text is searched and answers the next time, a text that starts with `missing` matches nothing, and any other text matches one
+ * entity of that ID and has no related group; a type-ahead search also answers two entities whose ID starts with that text.
  */
 function createSearch(options: SupportServerOptions) {
   const stalled = new Set<string>();
@@ -180,16 +197,25 @@ function createSearch(options: SupportServerOptions) {
       const found = matches === null ? (text.startsWith('missing') ? 0 : 1) : Number(matches[1]);
       const shown = Math.min(found, SEARCH_GROUP_CAP);
       const ids = matches === null ? [text] : Array.from({ length: shown }, (_, index) => `${text}-${String(index + 1).padStart(2, '0')}`);
-      const nodes = ids.slice(0, found === 0 ? 0 : shown).map((id) => node(sourceId, SEARCH_TYPE, id));
+      const withRelated = parsed.data.typeahead !== true;
+      const exactFailed = withRelated && text.startsWith('exactfail');
+      const nodes = exactFailed ? [] : ids.slice(0, found === 0 ? 0 : shown).map((id) => node(sourceId, SEARCH_TYPE, id));
       const startsWith = parsed.data.typeahead === true && matches === null && found > 0 ? STARTS_WITH_SUFFIXES.map((suffix) => node(sourceId, SEARCH_TYPE, `${text}${suffix}`)) : [];
+      const related = !withRelated
+        ? { hits: [], count: { value: 0, quality: 'exact', scope: 'search:related' }, searchable: false, disabledTypes: [] }
+        : exactFailed
+        ? { hits: ['x1', 'x2'].map((id) => ({ node: node(sourceId, SEARCH_TYPE, `${text}-${id}`), matchedProperties: ['batchRef'] })), count: { value: 2, quality: 'exact', scope: 'search:related' }, searchable: true, disabledTypes: [] }
+        : relatedGroup(sourceId, text);
+      const failures = !withRelated ? [] : exactFailed ? [{ group: 'exact', code: 'QUERY_TIMEOUT', timeoutMs: 5000 }] : text.startsWith('relfail') ? [{ group: 'related', code: 'QUERY_TIMEOUT', timeoutMs: 5000 }] : [];
       const answer = searchResultSchema.parse({
         sourceId,
         exact: nodes,
         cap: SEARCH_GROUP_CAP,
         searchable: true,
-        counts: { exact: { value: nodes.length, quality: found > SEARCH_GROUP_CAP ? 'lowerBound' : 'exact', scope: 'search:exact' } },
+        counts: { exact: exactFailed ? { quality: 'unknown', scope: 'search:exact' } : { value: nodes.length, quality: found > SEARCH_GROUP_CAP ? 'lowerBound' : 'exact', scope: 'search:exact' } },
         disabledTypes: [],
-        failures: [],
+        related,
+        failures,
         dropped: { 'not-mapped': 0, 'ambiguous-type': 0, 'no-stable-id': 0 },
         warnings: [],
         elapsedMs: 180,

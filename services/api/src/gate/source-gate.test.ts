@@ -216,7 +216,7 @@ describe('a name that cannot be quoted when the render step meets it', () => {
   it.each(['', 'a`b', 'a\\b', 'a\nb', '  '])('answers INTERNAL_ERROR from the validate stage for the label %j, audited failed, and the executor is not called', async (label) => {
     const recording = auditing();
     const catalog = createTemplateCatalog({ templates: [nodesTemplate] });
-    const { gate, executor, observer } = harness({ catalog, seams: recording.seams, allowlistFor: () => ({ entityLabels: new Map([['person', label]]), relationshipTypes: new Set(), stableIds: new Map(), searchProperties: new Map(), properties: new Set() }) });
+    const { gate, executor, observer } = harness({ catalog, seams: recording.seams, allowlistFor: () => ({ entityLabels: new Map([['person', label]]), relationshipTypes: new Set(), stableIds: new Map(), searchProperties: new Map(), referenceProperties: new Map(), properties: new Set() }) });
     expect(await codeOf(gate.run(gateRequest({ templateId: 'nodes-read', params: { kind: 'person' }, limit: 3 })))).toBe('INTERNAL_ERROR');
     expect(executor.calls).toEqual([]);
     expect(recording.events.map((event) => event.result)).toEqual(['failed']);

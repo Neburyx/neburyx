@@ -21,7 +21,7 @@ test.describe('searching for an entity', () => {
     await expect(groupTitle(page, 'Exact ID match (1)')).toBeVisible();
     await expect(page.getByText('1 exact match · 0.18 s')).toBeVisible();
     await expect(page.getByText(`Searches only configured, indexed properties in ${SOURCE}.`)).toBeVisible();
-    await page.getByRole('button', { name: 'Open in graph' }).click();
+    await page.getByRole('button', { name: /^Open in graph/ }).click();
     await expect(page).toHaveURL(/\/explore\/[0-9a-f-]{36}$/);
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('account AC-1');
     await expect(page.getByText('1 entity · 0 relationships · loaded · exact')).toBeVisible();
@@ -67,6 +67,59 @@ test.describe('searching for an entity', () => {
   });
 });
 
+test.describe('related records', () => {
+  test('lists them after the exact match with the property that holds the ID, and opens one by keyboard in Explore with that one entity', async ({ page }) => {
+    await searchFor(page, 'rel-3');
+    await expect(groupTitle(page, 'Exact ID match (1)')).toBeVisible();
+    await expect(groupTitle(page, 'Related records · Referenced ID (3)')).toBeVisible();
+    await expect(page.getByText('1 exact match · 3 related records · 0.18 s')).toBeVisible();
+    await expect(page.getByText('Related records reference the ID; they are not extra exact matches.')).toBeVisible();
+    await expect(page.getByText('References rel-3 in batchRef')).toHaveCount(3);
+    const first = page.getByRole('region', { name: 'Related records · Referenced ID (3)' }).getByRole('button', { name: /^Open in graph/ }).first();
+    await first.focus();
+    await expect(first).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(/\/explore\/[0-9a-f-]{36}$/);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('account rel-3-r01');
+    await expect(page.getByText('1 entity · 0 relationships · loaded · exact')).toBeVisible();
+  });
+
+  test('reads 26 related records as "≥ 25 · lower bound" and shows 25 rows', async ({ page }) => {
+    await searchFor(page, 'rel-26');
+    await expect(groupTitle(page, 'Related records · Referenced ID (≥ 25 · lower bound)')).toBeVisible();
+    await expect(page.getByText('1 exact match · ≥ 25 related records · lower bound · 0.18 s')).toBeVisible();
+    await expect(page.getByRole('region', { name: /Related records/ }).getByRole('listitem')).toHaveCount(25);
+  });
+
+  test('names a type left out of the related group, and says why a group was not searched without reading "No matching entities" for it', async ({ page }) => {
+    await searchFor(page, 'reldrop-1');
+    await expect(page.getByText(/Related records are disabled for this type\./)).toBeVisible();
+    await expect(page.getByText('No property of this source is configured for related records.')).toHaveCount(0);
+    await searchFor(page, 'missing-1');
+    await expect(page.getByRole('heading', { level: 2, name: 'No matching entities' })).toBeVisible();
+    await expect(page.getByText('No property of this source is configured for related records.')).toBeVisible();
+  });
+
+  test('keeps the exact group and says that the related records were not read when their read fails, and Retry repeats the search', async ({ page }) => {
+    await searchFor(page, 'relfail-1');
+    await expect(groupTitle(page, 'Exact ID match (1)')).toBeVisible();
+    await expect(page.getByRole('alert')).toHaveText('Related records were not read: the source did not answer within 5 s.');
+    await expect(page.getByText('1 exact match · related records not read · 0.18 s')).toBeVisible();
+    await expect(page.getByRole('heading', { level: 2, name: 'No matching entities' })).toHaveCount(0);
+    await expect(page.getByText(/0 related/)).toHaveCount(0);
+    await page.getByRole('button', { name: 'Retry' }).click();
+    await expect(groupTitle(page, 'Exact ID match (1)')).toBeVisible();
+  });
+
+  test('keeps the related group and says that the exact matches were not read when that read fails', async ({ page }) => {
+    await searchFor(page, 'exactfail-1');
+    await expect(groupTitle(page, 'Related records · Referenced ID (2)')).toBeVisible();
+    await expect(page.getByRole('alert')).toHaveText('Exact matches were not read: the source did not answer within 5 s.');
+    await expect(page.getByText('exact matches not read · 2 related records · 0.18 s')).toBeVisible();
+    await expect(page.getByRole('heading', { level: 2, name: /Exact ID match/ })).toHaveCount(0);
+  });
+});
+
 test.describe('⌘K', () => {
   test('opens the search page from Home with the box focused', async ({ page }) => {
     await page.goto('/');
@@ -104,7 +157,7 @@ test.describe('two configured sources', () => {
       searched.push(body.sourceId);
       if (body.sourceId !== SECOND) return route.fallback();
       const node = { ref: { sourceId: SECOND, entityType: 'account', stableId: body.text }, display: { title: `second ${body.text}`, type: 'account' }, properties: [], qualityFlags: [], provenanceRefs: [], authorization: { canInspect: true, canExport: true } };
-      return route.fulfill({ json: { sourceId: SECOND, exact: [node], cap: 25, searchable: true, counts: { exact: { value: 1, quality: 'exact', scope: 'search:exact' } }, disabledTypes: [], failures: [], dropped: { 'not-mapped': 0, 'ambiguous-type': 0, 'no-stable-id': 0 }, warnings: [], elapsedMs: 120 } });
+      return route.fulfill({ json: { sourceId: SECOND, exact: [node], cap: 25, searchable: true, counts: { exact: { value: 1, quality: 'exact', scope: 'search:exact' } }, disabledTypes: [], related: { hits: [], count: { value: 0, quality: 'exact', scope: 'search:related' }, searchable: false, disabledTypes: [] }, failures: [], dropped: { 'not-mapped': 0, 'ambiguous-type': 0, 'no-stable-id': 0 }, warnings: [], elapsedMs: 120 } });
     });
     await searchFor(page, 'AC-1');
     const selector = page.getByRole('combobox', { name: 'Source' });
@@ -130,7 +183,7 @@ test.describe('an entity whose ID is made of dots', () => {
       });
       await searchFor(page, id);
       await expect(groupTitle(page, 'Exact ID match (1)')).toBeVisible();
-      await page.getByRole('button', { name: 'Open in graph' }).click();
+      await page.getByRole('button', { name: /^Open in graph/ }).click();
       await expect(page).toHaveURL(/\/explore\/[0-9a-f-]{36}$/);
       await expect(page.getByRole('heading', { level: 1 })).toHaveText(`account ${id}`);
       await page.reload();

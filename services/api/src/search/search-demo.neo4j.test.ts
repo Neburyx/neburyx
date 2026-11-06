@@ -162,6 +162,63 @@ describe.each(PACKS)(`the search of the %s pack on ${NEO4J_SERIES}`, (pack) => {
     });
   });
 
+  const referenceTargets = () => current().target.source.entities.flatMap((entity) => entity.reference.filter((property) => !entity.pii.includes(property)).map((property) => ({ entity, property })));
+
+  it('finds, for the record of every type that has a reference property, the node the Normalization suite builds from the same record, names the property, and finds nothing for a pack with none', async () => {
+    const targets = referenceTargets();
+    if (targets.length === 0) {
+      expect((await search('anything')).related).toMatchObject({ hits: [], searchable: false });
+      return;
+    }
+    for (const { entity, property } of targets) {
+      const [row] = await itemsOf(current().target, 'capture-node', { entityType: entity.type });
+      if (row === undefined) throw new Error(`the demo graph holds no ${entity.type}`);
+      const expected = expectedFrom(row);
+      const value = expected.properties.find((candidate) => candidate.key === property)?.value;
+      expect(typeof value === 'string' || typeof value === 'number', `${entity.type}.${property}`).toBe(true);
+      const answer = await search(String(value));
+      const found = answer.related.hits.find((hit) => hit.node.ref.entityType === entity.type && hit.node.ref.stableId === expected.ref.stableId);
+      expect(found?.node, entity.type).toEqual(expected);
+      expect(found?.matchedProperties, entity.type).toContain(property);
+      expect(answer.counts.exact.quality).toMatch(/exact|lowerBound/);
+    }
+  });
+
+  it('masks the personal-data fields of a related record in a masked search, and returns them in a search that is not masked', async () => {
+    const target = referenceTargets().find(({ entity }) => entity.pii.length > 0);
+    if (target === undefined) return;
+    const { entity, property } = target;
+    const [row] = await itemsOf(current().target, 'capture-node', { entityType: entity.type });
+    if (row === undefined) throw new Error(`the demo graph holds no ${entity.type}`);
+    const expected = expectedFrom(row);
+    const value = String(expected.properties.find((candidate) => candidate.key === property)?.value);
+    const personal = entity.pii.find((candidate) => expected.properties.some((item) => item.key === candidate && typeof item.value === 'string'));
+    if (personal === undefined) throw new Error('the record holds no personal-data text');
+    const original = String(expected.properties.find((item) => item.key === personal)?.value);
+    const masked = (await search(value, true)).related.hits.find((hit) => hit.node.ref.stableId === expected.ref.stableId);
+    expect(masked?.node.properties.find((item) => item.key === personal)).toMatchObject({ masked: true, maskedBy: 'request' });
+    expect(JSON.stringify(masked)).not.toContain(original);
+    const plain = (await search(value)).related.hits.find((hit) => hit.node.ref.stableId === expected.ref.stableId);
+    expect(plain?.node.properties.find((item) => item.key === personal)?.value).toBe(original);
+  });
+
+  it('shows 24 and 25 records that reference one value as exact and 26 as a lower bound of 25, in one audited read for the group', async () => {
+    const target = referenceTargets()[0];
+    if (target === undefined) return;
+    const { entity, property } = target;
+    for (const [size, quality] of [[24, 'exact'], [25, 'exact'], [26, 'lowerBound']] as const) {
+      const nodes = Array.from({ length: size }, (_, index) => made(entity.label, entity.stableId, `ZZ-REF-${size}-${index}`, property, `'zz-ref-${size}'`, `r${size}-${index}`));
+      await withMade(`CREATE ${nodes.join(', ')}`, async () => {
+        current().events.length = 0;
+        const answer = await search(`zz-ref-${size}`);
+        expect(answer.related.hits).toHaveLength(Math.min(size, 25));
+        expect(answer.related.count).toMatchObject({ value: Math.min(size, 25), quality });
+        expect(answer.exact).toEqual([]);
+        expect(current().events.filter((event) => event.action === 'entity.search_related')).toEqual([expect.objectContaining({ result: 'success' })]);
+      });
+    }
+  });
+
   it('leaves a personal-data search property out of a masked search and finds an entity through it when not masked, with the same result through the real adapter', async () => {
     const entity = current().target.source.entities.find((candidate) => candidate.search.some((property) => candidate.pii.includes(property)) && candidate.search.some((property) => !candidate.pii.includes(property)));
     if (entity === undefined) throw new Error('the pack has no entity type with a personal-data and a plain search property');

@@ -28,7 +28,7 @@ describe('the Search results page', () => {
     expect(within(row).getByText('KIND-A')).toBeDefined();
     expect(within(row).getByText('Title AC-1')).toBeDefined();
     expect(within(row).getByText('open · AC-1 · gold')).toBeDefined();
-    expect(within(row).getByRole('button', { name: 'Open in graph' })).toBeDefined();
+    expect(within(row).getByRole('button', { name: /^Open in graph/ })).toBeDefined();
   });
 
   it('names the searched source and its badge even while an investigation of another source is open', async () => {
