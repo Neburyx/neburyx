@@ -13,6 +13,7 @@ import { runCli } from '../testing/cli.js';
 import { rows } from '../testing/database.js';
 import { entityRows, plainNode } from '../testing/entity-fixtures.js';
 import { TestExecutor } from '../testing/gate.js';
+import { withOnlineIndexes } from '../testing/search-fixtures.js';
 import { baseSource, fileOf } from '../testing/mapping.js';
 import { startPostgres, type TestPostgres } from '../testing/postgres.js';
 import { testSourceGate } from '../testing/source-gate.js';
@@ -49,7 +50,7 @@ async function running() {
   let allowed = true;
   const defaults = communitySeams();
   const seams: Seams = { ...defaults, policy: { authorizeSource: async () => (allowed ? { allowed: true } : { allowed: false, reason: 'not permitted' }) } };
-  const executor = new TestExecutor(() => Promise.resolve(answer));
+  const executor = new TestExecutor(withOnlineIndexes(mapping.sources[0] ?? (() => { throw new Error('the mapping has no source'); })(), () => Promise.resolve(answer)));
   const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store, mapping, seams, gate: testSourceGate(mapping, { executor, seams }).gate });
   const post = (payload: object) => app.inject({ method: 'POST', url: '/v1/investigations', payload });
   const counts = async () => ({ investigations: Number((await rows(database.ownerUrl, 'SELECT count(*)::int AS n FROM investigations'))[0]?.['n']), drafts: Number((await rows(database.ownerUrl, 'SELECT count(*)::int AS n FROM saved_views'))[0]?.['n']) });
