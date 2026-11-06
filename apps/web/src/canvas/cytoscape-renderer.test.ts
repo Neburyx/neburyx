@@ -3,7 +3,7 @@ import { createCytoscapeRenderer, type RendererCore as Core } from './cytoscape-
 import { pinBadgeUri } from './pin-badge.js';
 import { glyphUri } from './glyphs.js';
 import { CAPTION_MIN_ZOOM, FIT_PADDING, GLYPH_COLOR } from './look.js';
-import { ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from './zoom.js';
+import { FIT_ZOOM_MAX, ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from './zoom.js';
 import type { CanvasEvents, RightClick, Scene } from './scene.js';
 import type { BoxSelection } from './box-selection.js';
 import type { Click } from './selection-gestures.js';
@@ -657,7 +657,7 @@ describe('zoom and fit in the Cytoscape renderer', () => {
     expect(renderer.inspect().viewport.zoom).toBeCloseTo(ZOOM_MIN, 10);
   });
 
-  it('centres every entity in the canvas with the margin, and never zooms a single entity beyond the maximum', () => {
+  it('centres every entity in the canvas with the margin, and never fits a single entity beyond 100%', () => {
     const renderer = sized();
     renderer.draw(spread(1000));
     const box = renderer.inspect().boundingBox;
@@ -671,9 +671,19 @@ describe('zoom and fit in the Cytoscape renderer', () => {
     expect(box.y2).toBeLessThanOrEqual(SIZE.height - FIT_PADDING + 0.001);
     const single = sized();
     single.draw(scene([['a', { x: 0, y: 0 }]]));
-    expect(single.inspect().viewport.zoom).toBeLessThanOrEqual(ZOOM_MAX);
+    expect(single.inspect().viewport.zoom).toBe(FIT_ZOOM_MAX);
     const lone = single.inspect().boundingBox;
     expect(((lone?.x1 ?? 0) + (lone?.x2 ?? 0)) / 2).toBeCloseTo(SIZE.width / 2, 3);
+  });
+
+  it('fits a lone entity at 100%, lets the hand zoom go on to the maximum, and brings the view back to 100% on the fit command', () => {
+    const renderer = sized();
+    renderer.draw(scene([['a', { x: 0, y: 0 }]]));
+    expect(renderer.inspect().viewport.zoom).toBe(FIT_ZOOM_MAX);
+    for (let step = 0; step < 100; step += 1) renderer.zoomBy(ZOOM_STEP);
+    expect(renderer.inspect().viewport.zoom).toBe(ZOOM_MAX);
+    renderer.fit();
+    expect(renderer.inspect().viewport.zoom).toBe(FIT_ZOOM_MAX);
   });
 
   it('fits a very spread drawing below the minimum zoom, then does not zoom out further and zooms in by the step up to the range', () => {

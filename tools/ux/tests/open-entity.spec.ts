@@ -14,8 +14,8 @@ test.describe('opening an entity from the development page', () => {
     await expect(page.getByText('Unsaved')).toBeVisible();
     await expect(page.getByText('1 entity · 0 relationships · loaded · exact')).toBeVisible();
     await expect(canvasOf(page)).toHaveAttribute('data-drawn-entities', '1');
-    expect(await zoomOf(page), 'a lone entity is fitted at a large zoom').toBeGreaterThan(2);
-    await expect.poll(async () => (await drawing(page)).nodes.map((node) => node.captionShown && node.glyphShown), { message: 'the caption and the glyph are drawn at that zoom' }).toEqual([true]);
+    expect(await zoomOf(page), 'a lone entity is fitted at 100%, not larger').toBeCloseTo(1, 5);
+    await expect.poll(async () => (await drawing(page)).nodes.map((node) => node.captionShown && node.glyphShown), { message: 'the caption and the glyph are drawn at 100%' }).toEqual([true]);
 
     const address = page.url();
     await page.reload();

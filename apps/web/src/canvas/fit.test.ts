@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { fitViewport } from './fit.js';
-import { ZOOM_MAX } from './zoom.js';
+import { FIT_ZOOM_MAX } from './zoom.js';
 
 const SIZE = { width: 800, height: 600 };
 
@@ -17,9 +17,23 @@ describe('the fit viewport', () => {
     expect(viewport?.y).toBeCloseTo(300 - 0.7 * 250, 5);
   });
 
-  it('is capped at the maximum zoom for a box that is small or has no area', () => {
-    expect(fitViewport({ x1: 0, y1: 0, x2: 10, y2: 10 }, SIZE, 24)?.zoom).toBe(ZOOM_MAX);
-    expect(fitViewport({ x1: 5, y1: 5, x2: 5, y2: 5 }, SIZE, 24)?.zoom).toBe(ZOOM_MAX);
+  it('is capped at 100% for a box that is small or has no area', () => {
+    expect(FIT_ZOOM_MAX).toBe(1);
+    expect(fitViewport({ x1: 0, y1: 0, x2: 10, y2: 10 }, SIZE, 24)?.zoom).toBe(1);
+    expect(fitViewport({ x1: 5, y1: 5, x2: 5, y2: 5 }, SIZE, 24)?.zoom).toBe(1);
+  });
+
+  it('centres a capped fit, so the box is in the middle of the canvas and not at the origin', () => {
+    const viewport = fitViewport({ x1: 100, y1: 100, x2: 110, y2: 110 }, SIZE, 24);
+    expect(viewport).toEqual({ zoom: 1, x: 400 - 105, y: 300 - 105 });
+  });
+
+  it('is exactly 100% where the fit reaches 100%, and unchanged just below and just above it', () => {
+    const boxOf = (zoom: number) => ({ x1: 0, y1: 0, x2: (800 - 48) / zoom, y2: 10 });
+    expect(fitViewport(boxOf(1), SIZE, 24)?.zoom).toBe(1);
+    expect(fitViewport(boxOf(0.99), SIZE, 24)?.zoom).toBeCloseTo(0.99, 12);
+    expect(fitViewport(boxOf(1.01), SIZE, 24)?.zoom).toBe(1);
+    expect(fitViewport(boxOf(0.1), SIZE, 24)?.zoom).toBeCloseTo(0.1, 12);
   });
 
   it('goes below the minimum zoom for a very spread box and still contains it, however large', () => {
