@@ -29,9 +29,15 @@ test.describe('the Search tool on the canvas', () => {
     await expect(onCanvasBox(page)).toBeFocused();
     await expect(page.getByRole('tab', { name: 'On canvas · 1' })).toBeVisible();
     expect(page.url()).toBe(address);
+    const tool = page.getByRole('button', { name: 'Search', exact: true });
+    const pointer = page.getByRole('button', { name: 'Explore', exact: true });
+    await expect(tool).toHaveAttribute('data-active', 'true');
+    await expect(pointer).not.toHaveAttribute('data-active', 'true');
     await page.keyboard.press('Escape');
     await expect(page.getByRole('heading', { level: 2, name: 'Search' })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Search', exact: true })).toBeFocused();
+    await expect(tool).toBeFocused();
+    await expect(tool).not.toHaveAttribute('data-active', 'true');
+    await expect(pointer).toHaveAttribute('data-active', 'true');
   });
 
   test('finds a loaded entity from part of its ID, selects it and brings it to the middle of the canvas, from where the person had panned it', async ({ page }) => {

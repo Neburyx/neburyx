@@ -15,6 +15,10 @@ export function registerSearchTool(registry: ToolRegistry, state: ClientState): 
     label: SEARCH_PANEL_COPY.title,
     icon: <span className="icon icon-find" aria-hidden="true" />,
     order: TOOL_ORDER.search,
-    kind: { type: 'action', activate: () => (state.presentation.view.getState().searchOpen ? state.presentation.setSearchOpen(false) : state.presentation.requestSearch()) },
+    kind: {
+      type: 'action',
+      activate: () => (state.presentation.view.getState().searchOpen ? state.presentation.setSearchOpen(false) : state.presentation.requestSearch()),
+      isActive: (presentation) => presentation.searchOpen,
+    },
   });
 }

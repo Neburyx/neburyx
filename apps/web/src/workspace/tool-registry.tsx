@@ -1,4 +1,5 @@
 import { createContext, useContext, type ComponentType, type ReactNode } from 'react';
+import type { PresentationState } from '../state/presentation-state.js';
 import { createStore, readable, useStoreSelector, type ReadableStore } from '../state/store.js';
 
 /** The order of the tools on the strip: a tool that ships later still lands in its place. */
@@ -14,7 +15,7 @@ export interface FlyoutProps {
 export type ToolKind =
   | { readonly type: 'flyout'; readonly content: ComponentType<FlyoutProps> }
   /** The feature that registers the tool owns whatever it opens. */
-  | { readonly type: 'action'; readonly activate: () => void };
+  | { readonly type: 'action'; readonly activate: () => void; /** True while what the tool opened is open: the button is drawn active and the pointer's is not. */ readonly isActive?: (presentation: PresentationState) => boolean };
 
 export interface ToolEntry {
   readonly id: string;

@@ -8,6 +8,9 @@ export function ToolStrip() {
   const state = useClientState();
   const tools = useTools();
   const openTool = useStoreSelector(state.presentation.view, (current) => current.openTool);
+  const activeActions = useStoreSelector(state.presentation.view, (current) =>
+    tools.filter((tool) => tool.kind.type === 'action' && tool.kind.isActive?.(current) === true).map((tool) => tool.id).join('\n'),
+  );
   const buttons = useRef(new Map<string, HTMLButtonElement>());
   const root = useRef<HTMLDivElement>(null);
   const open = tools.find((tool) => tool.id === openTool?.id && tool.registration === openTool.registration && tool.kind.type === 'flyout');
@@ -22,7 +25,8 @@ export function ToolStrip() {
     return () => document.removeEventListener('pointerdown', closeOnOutsidePress, true);
   }, [flyoutOpen, state]);
   if (tools.length === 0) return null;
-  const active = open?.id ?? (tools.some((tool) => tool.id === EXPLORE_TOOL_ID) ? EXPLORE_TOOL_ID : undefined);
+  const activeActionIds = activeActions === '' ? [] : activeActions.split('\n');
+  const active = open?.id ?? (activeActionIds.length === 0 && tools.some((tool) => tool.id === EXPLORE_TOOL_ID) ? EXPLORE_TOOL_ID : undefined);
   const Flyout = open?.kind.type === 'flyout' ? open.kind.content : undefined;
   return (
     <div className="tool-strip" ref={root}>
@@ -35,7 +39,8 @@ export function ToolStrip() {
             aria-label={tool.label}
             aria-haspopup={tool.kind.type === 'flyout' ? 'menu' : undefined}
             aria-expanded={tool.kind.type === 'flyout' ? tool.id === open?.id : undefined}
-            data-active={tool.id === active ? 'true' : undefined}
+            aria-pressed={tool.kind.type === 'action' && tool.kind.isActive !== undefined ? activeActionIds.includes(tool.id) : undefined}
+            data-active={tool.id === active || activeActionIds.includes(tool.id) ? 'true' : undefined}
             ref={(element) => {
               if (element === null) buttons.current.delete(tool.id);
               else buttons.current.set(tool.id, element);

@@ -110,6 +110,25 @@ describe('the tool strip', () => {
     expect(state.presentation.view.getState().openTool).toBeUndefined();
   });
 
+  it('highlights an action tool that says it is active, and not Explore, for as long as it says so, and marks it pressed; one that never says so is not marked', () => {
+    const registry = withExplore();
+    registry.register({ ...action('panel', undefined, 20), kind: { type: 'action', activate: () => undefined, isActive: (presentation) => presentation.legendOpen } });
+    registry.register(action('plain', undefined, 30));
+    const state = createClientState();
+    show(state, registry);
+    expect(isActive('panel')).toBe(false);
+    expect(isActive('Explore')).toBe(true);
+    expect(tool('panel').getAttribute('aria-pressed')).toBe('false');
+    expect(tool('plain').hasAttribute('aria-pressed')).toBe(false);
+    act(() => state.presentation.setLegendOpen(true));
+    expect(isActive('panel')).toBe(true);
+    expect(isActive('Explore')).toBe(false);
+    expect(tool('panel').getAttribute('aria-pressed')).toBe('true');
+    act(() => state.presentation.setLegendOpen(false));
+    expect(isActive('panel')).toBe(false);
+    expect(isActive('Explore')).toBe(true);
+  });
+
   it('highlights nothing when Explore is not registered and no flyout is open', () => {
     const registry = createToolRegistry();
     registry.register(action('panel'));

@@ -79,6 +79,58 @@ describe('the Search tool and its panel', () => {
     expect(document.activeElement).toBe(searchTool());
   });
 
+  const explore = (): HTMLElement => screen.getByRole('button', { name: 'Explore' });
+
+  it('draws the tool active, and the pointer tool not, exactly while the panel is open, as frame 04i does', async () => {
+    const { user } = await workspace();
+    expect(searchTool().dataset['active']).toBeUndefined();
+    expect(searchTool().getAttribute('aria-pressed')).toBe('false');
+    expect(explore().dataset['active']).toBe('true');
+    await user.click(searchTool());
+    expect(searchTool().dataset['active']).toBe('true');
+    expect(searchTool().getAttribute('aria-pressed')).toBe('true');
+    expect(explore().dataset['active']).toBeUndefined();
+    await user.click(screen.getByRole('button', { name: 'Close Search' }));
+    expect(searchTool().dataset['active']).toBeUndefined();
+    expect(searchTool().getAttribute('aria-pressed')).toBe('false');
+    expect(explore().dataset['active']).toBe('true');
+  });
+
+  it('draws the tool active when the key opens the panel, keeps it while the key asks again, and draws the pointer tool active again on Escape', async () => {
+    const { state, panels, user } = await workspace();
+    act(() => state.presentation.requestSearch());
+    expect(panelsOf(panels)).toEqual([SEARCH_PANEL_ID]);
+    expect(searchTool().dataset['active']).toBe('true');
+    expect(explore().dataset['active']).toBeUndefined();
+    act(() => state.presentation.requestSearch());
+    expect(searchTool().dataset['active']).toBe('true');
+    await user.keyboard('{Escape}');
+    expect(panelsOf(panels)).toEqual([]);
+    expect(searchTool().dataset['active']).toBeUndefined();
+    expect(explore().dataset['active']).toBe('true');
+  });
+
+  it('opens and closes the panel from the tool by the keyboard, with the tool active only while it is open', async () => {
+    const { panels, user } = await workspace();
+    searchTool().focus();
+    await user.keyboard('{Enter}');
+    expect(panelsOf(panels)).toEqual([SEARCH_PANEL_ID]);
+    expect(searchTool().dataset['active']).toBe('true');
+    searchTool().focus();
+    await user.keyboard(' ');
+    expect(panelsOf(panels)).toEqual([]);
+    expect(searchTool().dataset['active']).toBeUndefined();
+    expect(explore().dataset['active']).toBe('true');
+  });
+
+  it('keeps the tool active while the panel is collapsed to its bar, which is still open', async () => {
+    const { user } = await workspace();
+    await user.click(searchTool());
+    await user.click(screen.getByRole('button', { name: 'Collapse Search' }));
+    expect(searchTool().dataset['active']).toBe('true');
+    expect(explore().dataset['active']).toBeUndefined();
+  });
+
   it('focuses the box when the panel opens, and closes the panel on Escape inside it with the focus back on the tool', async () => {
     const { panels, user } = await workspace();
     await user.click(searchTool());
