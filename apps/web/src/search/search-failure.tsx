@@ -22,7 +22,7 @@ export function SearchFailure({ failure, sourceId, onRetry }: { readonly failure
           <p>{GRAPH_UNCHANGED}</p>
         </>
       )}
-      <button type="button" onClick={onRetry}>
+      <button type="button" className="link" onClick={onRetry}>
         {RETRY}
       </button>
     </div>

@@ -146,3 +146,21 @@
 .source-health-failure p {
   margin: 0;
 }
+
+.open-link form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-8) var(--space-12);
+  margin-bottom: var(--space-12);
+}
+
+.open-link label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.open-link [role='alert'] {
+  flex: 1 0 100%;
+}

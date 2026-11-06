@@ -91,7 +91,9 @@ export function SearchWorkspace({ client, source, sources, principalId, text }: 
           </select>
         )}
         <input ref={box} type="search" name="q" aria-label={SEARCH_COPY.searchLabel} defaultValue={text} autoComplete="off" />
-        <button type="submit">{SEARCH_COPY.searchButton}</button>
+        <button type="submit" className="primary">
+          {SEARCH_COPY.searchButton}
+        </button>
       </form>
       <p className="search-caption" aria-live="polite">
         {captionOf(source.alias)}
@@ -109,7 +111,7 @@ export function SearchWorkspace({ client, source, sources, principalId, text }: 
           <div className="search-failure">
             <p>{SEARCH_COPY.couldNotReadProfile}</p>
             <FailureNotice failure={profileFailure} />
-            <button type="button" onClick={profile.reload}>
+            <button type="button" className="secondary" onClick={profile.reload}>
               {SEARCH_COPY.tryAgain}
             </button>
           </div>

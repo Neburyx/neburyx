@@ -202,6 +202,7 @@ describe('the Sources page', () => {
     expect((await within(main()).findByRole('alert')).textContent).toBe('NETWORK_UNAVAILABLE');
     expect(within(main()).getByText('The sources could not be read.')).toBeTruthy();
     expect(within(main()).queryByRole('list', { name: 'Configured sources' })).toBeNull();
+    expect(within(main()).getByRole('button', { name: 'Try again' }).className).toBe('secondary');
     await userEvent.setup().click(within(main()).getByRole('button', { name: 'Try again' }));
     expect(await within(main()).findByRole('list', { name: 'Configured sources' })).toBeTruthy();
   });
@@ -698,7 +699,8 @@ describe('the Sources page', () => {
       const detail = await screen.findByRole('region', { name: 'alpha health' });
       expect((await within(detail).findByRole('alert')).textContent).toBe('INTERNAL_ERROR · trace trace-5');
       expect(screen.queryByRole('region', { name: 'Mapping example' })).toBeNull();
-      expect(within(detail).getByRole('button', { name: 'Test source' })).toBeTruthy();
+      expect(within(detail).getByRole('button', { name: 'Test source' }).className).toBe('primary');
+      expect(within(detail).getByRole('button', { name: 'Try again' }).className).toBe('secondary');
       await userEvent.setup().click(within(detail).getByRole('button', { name: 'Try again' }));
       await waitFor(() => expect(region().textContent).toBe('now'));
       expect(asked).toEqual(['a', 'a']);
@@ -753,6 +755,7 @@ describe('the Sources page', () => {
       const detail = await screen.findByRole('region', { name: 'alpha health' });
       const bundle = within(detail).getByRole('button', { name: 'Diagnostics bundle' });
       expect(bundle.hasAttribute('disabled')).toBe(true);
+      expect(bundle.className).toBe('secondary');
       const noteId = bundle.getAttribute('aria-describedby');
       expect(noteId === null ? null : document.getElementById(noteId)?.textContent).toBe('Coming later');
     });

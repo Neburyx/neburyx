@@ -45,7 +45,9 @@ function SearchForm({ sources }: { readonly sources: readonly SourceSummary[] })
         )}
         <input type="search" name="q" aria-label={SEARCH_COPY.searchLabel} placeholder={SEARCH_PLACEHOLDER} autoComplete="off" />
         {hint === undefined ? null : <kbd className="home-search-hint">{hint}</kbd>}
-        <button type="submit">{SEARCH_COPY.searchButton}</button>
+        <button type="submit" className="primary">
+          {SEARCH_COPY.searchButton}
+        </button>
       </form>
       <p className="search-caption" aria-live="polite">
         {captionOf(source.alias)}
@@ -66,7 +68,7 @@ export function HomeSearch() {
       <div className="search-failure">
         <p>{SEARCH_COPY.couldNotReadSources}</p>
         <FailureNotice failure={failure} />
-        <button type="button" onClick={sources === undefined ? shell.reloadSources : shell.reload}>
+        <button type="button" className="secondary" onClick={sources === undefined ? shell.reloadSources : shell.reload}>
           {SEARCH_COPY.tryAgain}
         </button>
       </div>

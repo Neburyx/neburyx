@@ -54,6 +54,16 @@ const MUTATIONS: readonly Mutation[] = [
     test: { file: 'tests/benchmark.spec.ts', title: 'holds the threshold', project: 'benchmark', env: { NEBURYX_UX_PROFILE: 'runner' }, extraArgs: ['--no-deps'] },
     assertion: /toEqual\(expected\)/,
   },
+  {
+    // the shared look of selectors and text fields taken out of the built CSS: the source selector and the search box fall back to the browser's look
+    name: 'default-look',
+    source: WEB('styles/controls.css'),
+    binding: "    select:not([class]),\n    select[class=''],\n    input:not([class]):is(:not([type]), [type='text'], [type='search']),\n    input[class='']:is(:not([type]), [type='text'], [type='search'])\n  ),\nbutton.primary,",
+    broken: "    button[class='']\n  ),\nbutton.primary,",
+    what: "with the shared look of selectors and text fields taken out, so the source selector and the search box have the browser's look",
+    test: { file: 'tests/default-look.spec.ts', title: "no product page or state has a control with the browser's default look", project: 'laptop-1440', env: {}, extraArgs: [] },
+    assertion: /toEqual\(expected\)/,
+  },
 ];
 const ANSI = /\u001b\[[0-9;]*m/g;
 

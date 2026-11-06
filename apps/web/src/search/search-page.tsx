@@ -26,7 +26,7 @@ function Failure({ failure, message, retry }: { readonly failure: Parameters<typ
       <div className="search-failure">
         <p>{message}</p>
         <FailureNotice failure={failure} />
-        <button type="button" onClick={retry}>
+        <button type="button" className="secondary" onClick={retry}>
           {SEARCH_COPY.tryAgain}
         </button>
       </div>

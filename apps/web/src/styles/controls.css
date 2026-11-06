@@ -1,0 +1,122 @@
+:where(
+    button:not([class]),
+    button[class=''],
+    select:not([class]),
+    select[class=''],
+    input:not([class]):is(:not([type]), [type='text'], [type='search']),
+    input[class='']:is(:not([type]), [type='text'], [type='search'])
+  ),
+button.primary,
+button.secondary,
+button.link {
+  height: var(--button-height);
+  padding: 0 var(--space-12);
+  border: var(--border-width) solid var(--color-control-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--font-size-small);
+}
+
+:where(button:not([class]), button[class='']),
+button.primary,
+button.secondary,
+button.link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+  cursor: pointer;
+}
+
+:where(select:not([class]), select[class='']) {
+  padding-right: calc(var(--space-12) + var(--tool-icon-size));
+  appearance: none;
+  background: var(--color-surface) url('../assets/select-chevron.svg') no-repeat right var(--space-10) center / var(--tool-icon-size);
+  cursor: pointer;
+}
+
+:where(input:not([class]):is(:not([type]), [type='text'], [type='search']), input[class='']:is(:not([type]), [type='text'], [type='search'])) {
+  padding: 0 var(--space-10);
+}
+
+:where(input:not([class]):is(:not([type]), [type='text'], [type='search']), input[class='']:is(:not([type]), [type='text'], [type='search']))::placeholder {
+  color: var(--color-text-muted);
+}
+
+:where(
+    button:not([class]):hover:not(:disabled, [aria-disabled='true'], [aria-busy='true']),
+    button[class='']:hover:not(:disabled, [aria-disabled='true'], [aria-busy='true'])
+  ),
+button.secondary:hover:not(:disabled, [aria-disabled='true'], [aria-busy='true']) {
+  background: var(--color-surface-muted);
+}
+
+:where(
+    select:not([class]):hover:not(:disabled, [aria-disabled='true'], [aria-busy='true']),
+    select[class='']:hover:not(:disabled, [aria-disabled='true'], [aria-busy='true'])
+  ) {
+  background-color: var(--color-surface-muted);
+}
+
+button.primary {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  color: var(--color-surface);
+}
+
+button.primary:hover:not(:disabled, [aria-disabled='true'], [aria-busy='true']) {
+  border-color: var(--color-accent-hover);
+  background: var(--color-accent-hover);
+}
+
+button.link {
+  height: auto;
+  padding: var(--space-2) 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-accent);
+}
+
+button.link:hover:not(:disabled, [aria-disabled='true'], [aria-busy='true']) {
+  background: transparent;
+  text-decoration: underline;
+}
+
+:where(
+    button:not([class]):is(:disabled, [aria-disabled='true']):not([aria-busy='true']),
+    button[class='']:is(:disabled, [aria-disabled='true']):not([aria-busy='true'])
+  ),
+button.primary:is(:disabled, [aria-disabled='true']):not([aria-busy='true']),
+button.secondary:is(:disabled, [aria-disabled='true']):not([aria-busy='true']) {
+  border-color: var(--color-workspace-border);
+  background: var(--color-surface-muted);
+  color: var(--color-text-muted);
+  cursor: default;
+}
+
+button.link:is(:disabled, [aria-disabled='true']):not([aria-busy='true']) {
+  color: var(--color-text-muted);
+  cursor: default;
+  text-decoration: none;
+}
+
+:where(select:not([class]):disabled, select[class='']:disabled) {
+  border-color: var(--color-workspace-border);
+  background-color: var(--color-surface-muted);
+  color: var(--color-text-muted);
+  cursor: default;
+}
+
+:where(input:not([class]):is(:not([type]), [type='text'], [type='search']):disabled, input[class='']:is(:not([type]), [type='text'], [type='search']):disabled) {
+  border-color: var(--color-workspace-border);
+  background: var(--color-surface-muted);
+  color: var(--color-text-muted);
+}
+
+:where(button:not([class])[aria-busy='true'], button[class=''][aria-busy='true']),
+button.primary[aria-busy='true'],
+button.secondary[aria-busy='true'],
+button.link[aria-busy='true'] {
+  cursor: progress;
+}

@@ -20,6 +20,14 @@ The specs that switch source, follow deep links or use Home run against a third 
 
 `fixtures/profile.json` is the synthetic source profile the pages read: the banking pack's, as the API's profile builder makes it. `pnpm --filter @neburyx/ux-tests check:profile` (after `pnpm build`) fails when it is out of date; `node tools/ux/scripts/make-profile.mjs` rewrites it.
 
+## The check of the browser's default look
+
+`tests/default-look.spec.ts` visits every product page and the states of it that hold controls (the list is `tests/support/product-pages.json`, and `tests/support/product-pages.ts` says how to reach each state), at both sizes, and fails when a visible button, selector or text field still has the browser's own look: its fill, border and radius are all equal to those of a fresh control of the same kind in an empty frame. A plain control gets the shared look from `apps/web/src/styles/controls.css` with nothing to do on the page's side; a control that has a class of its own and no look in that class is what the check finds, and its message says that a class used for layout only belongs on a wrapper. `class=""` counts as no class. The development pages (`dev/`) and checkboxes are not in the check.
+
+Its limit: it cannot see a state or panel that a page gains unless the list names it. A feature that adds a state with controls to an existing page adds it to the list in the same change (an entry in `product-pages.json` and its way to reach it in `product-pages.ts`). A unit test in `apps/web` (`src/product-pages.test.ts`) fails when a product route has no entry.
+
+`pnpm --filter @neburyx/ux-tests mutate default-look` removes the shared look of selectors and text fields from the built CSS and checks that the browser check fails on it.
+
 ## Checking that a test can fail
 
 `pnpm --filter @neburyx/ux-tests mutate [keyboard|crossing|benchmark]` breaks the built app on purpose and runs the browser test that has to notice, three times: as it is, with the app broken, and with the source put back; it fails unless the first and last runs pass and the middle one fails on the test's own assertion. `keyboard` breaks the Legend key binding, `crossing` puts a 400 ms stall in the switch of the zoomed-out view (held to the runner limit, `NEBURYX_UX_PROFILE=runner`), and `benchmark` puts a 25 ms stall at every pan and zoom (held to the runner threshold). Each rebuilds `dist-ux` and puts the source back, also when it is interrupted.

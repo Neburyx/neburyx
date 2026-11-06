@@ -26,7 +26,7 @@ export function OpenLinkEntry() {
 
   return (
     <div className="open-link">
-      <button ref={action} type="button" aria-expanded={open} aria-controls={open ? PANEL_ID : undefined} onClick={() => (open ? close() : setOpen(true))}>
+      <button ref={action} type="button" className="link" aria-expanded={open} aria-controls={open ? PANEL_ID : undefined} onClick={() => (open ? close() : setOpen(true))}>
         {OPEN_LINK_ACTION}
       </button>
       {open ? (

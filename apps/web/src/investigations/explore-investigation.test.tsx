@@ -89,6 +89,7 @@ describe('/explore/{id}', () => {
     expect(await screen.findByText('NETWORK_UNAVAILABLE')).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'kind-a A-1', level: 1 })).toBeTruthy();
     expect(state.investigation.getState().id).toBe(INVESTIGATION_A);
+    expect(screen.getByRole('button', { name: TRY_AGAIN }).className).toBe('secondary');
     up = true;
     await userEvent.setup().click(screen.getByRole('button', { name: TRY_AGAIN }));
     expect(await screen.findByRole('heading', { name: 'kind-a C-1', level: 1 })).toBeTruthy();

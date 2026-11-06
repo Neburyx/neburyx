@@ -6,10 +6,10 @@
 .search-form input {
   flex: 1 1 auto;
   min-width: 0;
-  padding: var(--space-6) var(--space-10);
-  border: var(--border-width) solid var(--color-border);
-  border-radius: var(--radius);
-  font: inherit;
+}
+
+.search-form :is(select, input, button) {
+  height: var(--search-height);
 }
 
 .search-caption {

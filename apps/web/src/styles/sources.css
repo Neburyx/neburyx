@@ -26,8 +26,10 @@
   align-items: flex-start;
   gap: var(--space-8);
   width: 100%;
+  height: auto;
   padding: var(--space-16) var(--space-16) calc(var(--space-16) - var(--border-width));
   border: 0;
+  border-radius: 0;
   border-bottom: var(--border-width) solid var(--color-workspace-border);
   background: var(--color-surface);
   color: var(--color-text);
@@ -182,26 +184,6 @@
   min-width: 0;
 }
 
-button.primary {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-8);
-  height: var(--button-height);
-  padding: 0 var(--space-12);
-  border: var(--border-width) solid var(--color-accent);
-  border-radius: var(--radius);
-  background: var(--color-accent);
-  color: var(--color-surface);
-  font: inherit;
-  font-size: var(--font-size-small);
-  cursor: pointer;
-}
-
-button.primary[aria-disabled='true'] {
-  cursor: progress;
-  opacity: 0.8;
-}
-
 .spinner {
   flex: none;
   width: var(--spinner-size);
@@ -308,18 +290,5 @@ button.primary[aria-disabled='true'] {
   align-items: center;
   gap: var(--space-12);
   color: var(--color-text-muted);
-  font-size: var(--font-size-small);
-}
-
-button.secondary {
-  display: inline-flex;
-  align-items: center;
-  height: var(--button-height);
-  padding: 0 var(--space-12);
-  border: var(--border-width) solid var(--color-workspace-border);
-  border-radius: var(--radius);
-  background: var(--color-surface-muted);
-  color: var(--color-text-muted);
-  font: inherit;
   font-size: var(--font-size-small);
 }

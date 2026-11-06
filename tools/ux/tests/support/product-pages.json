@@ -1,0 +1,25 @@
+{
+  "pages": [
+    { "name": "Home with Recent rows", "route": "" },
+    { "name": "Home with the prompt open", "route": "" },
+    { "name": "Home with the prompt's problem lines", "route": "" },
+    { "name": "Home with the list read failed", "route": "" },
+    { "name": "Home with the source read failed", "route": "" },
+    { "name": "Search results with results", "route": "search" },
+    { "name": "Search results with no match", "route": "search" },
+    { "name": "Search results with a failed search", "route": "search" },
+    { "name": "Search results with a timed-out search", "route": "search" },
+    { "name": "Search results with the sources read failed", "route": "search" },
+    { "name": "Search results with the profile read failed", "route": "search" },
+    { "name": "Sources with a source open", "route": "sources" },
+    { "name": "Sources with the sources read failed", "route": "sources" },
+    { "name": "Sources with the mapping example failed", "route": "sources" },
+    { "name": "Explore with an entity loaded", "route": "explore/:investigationId" },
+    { "name": "Explore with the legend and the shortcut sheet open", "route": "explore/:investigationId" },
+    { "name": "Explore with its read failed", "route": "explore/:investigationId" },
+    { "name": "Explore without an investigation", "route": "explore" },
+    { "name": "The deep-link page failed", "route": ":sourceId/entity/:entityType/:stableId" },
+    { "name": "Investigations", "route": "investigations" },
+    { "name": "The not-found page", "route": "*" }
+  ]
+}

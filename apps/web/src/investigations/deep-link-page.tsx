@@ -110,7 +110,7 @@ export function DeepLinkPage({ client }: { readonly client: ApiClient }) {
         <div role="group" aria-label="Opening failed">
           <FailureNotice failure={failure} />
           {status.kind === 'failed' && status.sourceId !== undefined ? <AttemptedSource sourceId={status.sourceId} /> : null}
-          <button type="button" onClick={retry}>
+          <button type="button" className="secondary" onClick={retry}>
             {TRY_AGAIN}
           </button>
           <p>

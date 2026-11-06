@@ -19,7 +19,7 @@ function Body({ opening }: { readonly opening: string }) {
       <div className="sources-failure">
         <p>{COPY.couldNotRead}</p>
         <FailureNotice failure={failure} />
-        <button type="button" onClick={reloadSources}>
+        <button type="button" className="secondary" onClick={reloadSources}>
           {COPY.tryAgain}
         </button>
       </div>

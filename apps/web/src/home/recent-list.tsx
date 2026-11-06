@@ -34,7 +34,7 @@ export function RecentList() {
           <div className="recent-failure">
             <p>{HOME_COPY.couldNotRead}</p>
             <FailureNotice failure={failure} />
-            <button type="button" onClick={recent.reload}>
+            <button type="button" className="secondary" onClick={recent.reload}>
               {HOME_COPY.tryAgain}
             </button>
           </div>
@@ -45,7 +45,7 @@ export function RecentList() {
           {failure === undefined ? null : (
             <div className="recent-failure">
               <FailureNotice failure={failure} />
-              <button type="button" onClick={recent.reload}>
+              <button type="button" className="secondary" onClick={recent.reload}>
                 {HOME_COPY.tryAgain}
               </button>
             </div>

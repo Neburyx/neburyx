@@ -70,7 +70,9 @@ export function OpenDeepLinkPrompt() {
           {PROMPT_LABELS.link}
           <input value={text} onChange={(event) => setText(event.target.value)} aria-describedby={linkProblem === undefined ? undefined : 'deep-link-text-problem'} aria-invalid={linkProblem !== undefined} />
         </label>
-        <button type="submit">{PROMPT_OPEN}</button>
+        <button type="submit" className="primary">
+          {PROMPT_OPEN}
+        </button>
         <Message id="deep-link-text-problem" text={linkProblem} />
       </form>
       <form aria-label={PROMPT_LABELS.partsForm} onSubmit={openParts}>
@@ -90,7 +92,9 @@ export function OpenDeepLinkPrompt() {
           {PROMPT_LABELS.caseRef}
           <input value={parts.caseRef} onChange={(event) => setPart('caseRef', event.target.value)} />
         </label>
-        <button type="submit">{PROMPT_OPEN}</button>
+        <button type="submit" className="primary">
+          {PROMPT_OPEN}
+        </button>
         <Message id="deep-link-parts-problem" text={partsProblem} />
       </form>
     </div>

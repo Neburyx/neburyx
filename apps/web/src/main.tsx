@@ -31,6 +31,7 @@ import '@fontsource/ibm-plex-mono/latin-500.css';
 import '@fontsource/ibm-plex-mono/latin-ext-500.css';
 import './styles/tokens.css';
 import './styles/base.css';
+import './styles/controls.css';
 import './styles/workspace.css';
 import './styles/sources.css';
 import './styles/search.css';

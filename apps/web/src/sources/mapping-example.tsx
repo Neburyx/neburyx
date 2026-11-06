@@ -19,7 +19,7 @@ export function MappingExample({ sourceId, opening }: { readonly sourceId: strin
         excerpt?.failure === undefined ? (
           <p>{COPY.loadingMapping}</p>
         ) : (
-          <button type="button" onClick={() => excerpts.retry(sourceId, opening)}>
+          <button type="button" className="secondary" onClick={() => excerpts.retry(sourceId, opening)}>
             {COPY.tryAgain}
           </button>
         )

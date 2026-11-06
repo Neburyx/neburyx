@@ -97,6 +97,7 @@ describe('a failure that can be tried again', () => {
     expect(notice.textContent).toContain('NETWORK_UNAVAILABLE');
     expect(notice.textContent).toContain('Could not open in Source source-a.');
     expect(screen.getByRole('link', { name: BACK_TO_HOME })).toBeTruthy();
+    expect(screen.getByRole('button', { name: TRY_AGAIN }).className).toBe('secondary');
     up = true;
     await userEvent.setup().click(screen.getByRole('button', { name: TRY_AGAIN }));
     expect(await screen.findByRole('heading', { name: 'kind-a A-1', level: 1 })).toBeTruthy();

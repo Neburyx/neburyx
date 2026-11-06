@@ -14,7 +14,7 @@ export function ResultRow({ node, type, busy, context, onOpen }: { readonly node
         {summary === '' ? null : <span className="search-hit-summary">{summary}</span>}
         {context === undefined ? null : <span className="search-hit-context">{context}</span>}
       </div>
-      <button type="button" aria-label={`${SEARCH_COPY.openInGraph}: ${node.display.title}`} aria-disabled={busy} onClick={() => onOpen(node)}>
+      <button type="button" className="link" aria-label={`${SEARCH_COPY.openInGraph}: ${node.display.title}`} aria-disabled={busy} onClick={() => onOpen(node)}>
         {SEARCH_COPY.openInGraph}
       </button>
     </li>
