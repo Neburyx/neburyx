@@ -9,8 +9,8 @@ export type { MenuTargetKind };
 /** The groups and orders of the items the design draws, so an item lands in its place whichever feature registers it first. */
 export const MENU_GROUP = {
   canvas: { view: 10, grouping: 20, layoutAndLegend: 30, export: 40 },
-  node: { expand: 10, paths: 20, selection: 30, copy: 40, assist: 50 },
-  relationship: { explain: 10, endpoints: 20, visibility: 30, copy: 40, assist: 50 },
+  node: { expand: 10, paths: 20, selection: 30, copy: 40 },
+  relationship: { explain: 10, endpoints: 20, visibility: 30, copy: 40 },
 } as const;
 
 export const MENU_ORDER = {
@@ -30,10 +30,8 @@ export const MENU_ORDER = {
     copyId: 10,
     copyProperties: 20,
     openSourceRecord: 30,
-    ask: 10,
-    summarize: 20,
   },
-  relationship: { explain: 10, viewSupportingRecords: 20, highlightEndpoints: 10, selectBothEndpoints: 20, findPathsBetween: 30, hideThis: 10, hideAllOfType: 20, showOnlyType: 30, copyRelationshipId: 10, copyProperties: 20, openSourceRecord: 30, ask: 10 },
+  relationship: { explain: 10, viewSupportingRecords: 20, highlightEndpoints: 10, selectBothEndpoints: 20, findPathsBetween: 30, hideThis: 10, hideAllOfType: 20, showOnlyType: 30, copyRelationshipId: 10, copyProperties: 20, openSourceRecord: 30 },
 } as const;
 
 /** What an item's command is given when it runs: what the menu is about, the selection at that moment, and what a command needs to act. */
@@ -47,7 +45,7 @@ export interface MenuContext {
   readonly canvas: CanvasCommands | undefined;
 }
 
-export type MenuItemState = 'enabled' | 'disabled' | 'locked';
+export type MenuItemState = 'enabled' | 'disabled';
 
 /** What a submenu's content is given: the menu context, and a function that closes the whole menu. */
 export interface SubmenuProps {
@@ -68,10 +66,8 @@ export interface MenuItemShape {
   readonly order: number;
   /** The id of the registered key binding whose keys the row shows as its hint: the hint is the binding's, so it cannot name a key that does nothing. */
   readonly binding?: string;
-  /** Enabled when not given; a function is asked each time the menu is drawn, with what the menu is about. A disabled or locked item is shown, does nothing and never opens a submenu. */
+  /** Enabled when not given; a function is asked each time the menu is drawn, with what the menu is about. A disabled item is shown, does nothing and never opens a submenu. */
   readonly state?: MenuItemState | ((context: MenuContext) => MenuItemState);
-  /** Draws a lock after a locked item's tag. */
-  readonly lock?: boolean;
 }
 
 export type MenuItem = MenuItemShape & MenuItemBehaviour;

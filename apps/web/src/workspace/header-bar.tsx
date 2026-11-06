@@ -1,6 +1,5 @@
 import { HeaderSource } from './header-source.js';
 import { InvestigationIdentity } from './investigation-identity.js';
-import { LockedControl } from './locked-control.js';
 import { Slot } from './slots.js';
 
 export function HeaderBar() {
@@ -9,8 +8,8 @@ export function HeaderBar() {
       <InvestigationIdentity />
       <div className="header-actions">
         <HeaderSource />
-        <Slot name="ask" fallback={<LockedControl name="Ask" />} />
-        <Slot name="summarize" fallback={<LockedControl name="Summarize" />} />
+        <Slot name="ask" />
+        <Slot name="summarize" />
         <Slot name="views" />
         <Slot name="export" />
         <Slot name="save" />

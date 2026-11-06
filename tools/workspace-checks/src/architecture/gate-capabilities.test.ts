@@ -30,8 +30,7 @@ describe.each([
     expect(snippet(`${API}/routes/a.ts`, `\n${write(specifierFrom('routes'))}`)).toMatchObject([{ rule, file: `${API}/routes/a.ts`, line: 2, specifier: specifierFrom('routes') }]);
   });
 
-  it('is reported from Enterprise code and from another service folder', () => {
-    expect(snippet('ee/policy/a.ts', `import { x } from '../../${API}/${folderName}/${moduleName}.js';`)).toHaveLength(1);
+  it('is reported from another service folder', () => {
     expect(snippet('services/other/src/a.ts', `import { x } from '../../api/src/${folderName}/${moduleName}.js';`)).toHaveLength(1);
   });
 
@@ -89,7 +88,6 @@ describe('who may import the write probe', () => {
     expect(snippet(`${API}/sources/index.ts`, "export { runWriteProbe } from './write-probe.js';")).toMatchObject([{ rule: 'write-probe' }]);
     expect(snippet(`${API}/start.ts`, "import { runWriteProbe } from './sources/write-probe.js';")).toHaveLength(1);
     expect(snippet(`${API}/routes/sources.ts`, "const m = await import('../sources/write-probe.js');")).toHaveLength(1);
-    expect(snippet('ee/policy/a.ts', `import { x } from '../../${API}/sources/write-probe.js';`)).toHaveLength(1);
   });
 
   it('is reported when the command re-exports it, and when the command passes it on', () => {

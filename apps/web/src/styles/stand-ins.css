@@ -172,10 +172,6 @@
   --icon: url('../assets/lucide/external-link.svg');
 }
 
-.icon-stand-in-menu-spark {
-  --icon: url('../assets/lucide/sparkles.svg');
-}
-
 .icon-stand-in-menu-why {
   --icon: url('../assets/lucide/circle-help.svg');
 }

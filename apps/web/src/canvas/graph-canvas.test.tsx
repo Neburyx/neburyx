@@ -741,7 +741,6 @@ describe('the graph canvas on Explore', () => {
     renderApp('/explore', clientWith({ me: me(), sources: [source('a')] }), createClientState(), undefined, stubFactory({ failOn: 'mount' }).create);
     expect(screen.getByRole('alert').textContent).toBe(RENDERER_UNAVAILABLE);
     expect(screen.getByRole('link', { name: 'Home' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Ask, locked' })).toBeTruthy();
     expect(await screen.findByText('Local workspace')).toBeTruthy();
   });
 });

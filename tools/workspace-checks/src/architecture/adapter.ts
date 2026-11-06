@@ -3,7 +3,7 @@ import { isFileModule, isInside, isInsideDirectory, resolveRelative, withoutExte
 import type { SourceFile } from './tree.js';
 import type { Violation } from './violations.js';
 
-export const ADAPTER_SCAN_ROOTS: readonly string[] = ['services', 'packages', 'apps', 'ee'];
+export const ADAPTER_SCAN_ROOTS: readonly string[] = ['services', 'packages', 'apps'];
 
 const API_SRC = 'services/api/src';
 const SOURCES_ZONE = `${API_SRC}/sources`;

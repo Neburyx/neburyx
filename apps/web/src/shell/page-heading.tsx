@@ -1,6 +1,5 @@
 import { useEffect, useRef } from 'react';
 import type { CurrentSource } from './current-source.js';
-import { answeredData, useShellData } from './shell-data.js';
 import { useCurrentSource } from './use-current-source.js';
 
 function sourceName(current: CurrentSource): string | undefined {
@@ -16,7 +15,6 @@ export function PageHeading({ title, description, source, focused = false }: { r
   useEffect(() => {
     if (focused) heading.current?.focus();
   }, [focused, title]);
-  const identity = answeredData(useShellData().me);
   const { current, showsSyntheticBadge } = useCurrentSource();
   const own = typeof source === 'object' && source !== null ? source : undefined;
   const synthetic = own !== undefined ? own.synthetic : source === undefined && showsSyntheticBadge;
@@ -28,7 +26,6 @@ export function PageHeading({ title, description, source, focused = false }: { r
         <h1 ref={heading} tabIndex={focused ? -1 : undefined}>
           {title}
         </h1>
-        {identity?.edition === 'enterprise' ? <span className="badge">Enterprise</span> : null}
       </div>
       {name === undefined && !synthetic ? null : (
         <div className="source-note">

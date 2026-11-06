@@ -6,8 +6,7 @@ to explain every link it shows.
 
 **Status: pre-release.** The workspace builds, type-checks, lints and tests, but there are no product features yet.
 
-**Licence:** Apache-2.0 (see [LICENSE](LICENSE) and [NOTICE](NOTICE)), except the `ee/` directory, which is
-not covered by it and is reserved for a separate commercial licence.
+**Licence:** Apache-2.0 (see [LICENSE](LICENSE) and [NOTICE](NOTICE)).
 
 ## Layout
 
@@ -15,7 +14,6 @@ not covered by it and is reserved for a separate commercial licence.
 |---|---|
 | `apps/web` | Web client |
 | `services/api` | Backend API |
-| `ee/` | Modules under a separate commercial licence (placeholder) |
 | `packages/contracts` | API contract and generated client types |
 | `packages/test-containers` | How tests and tools start a container (retries the port-binding timeout) |
 | `domain-packs` | Ready-made mapping files, one directory per domain |

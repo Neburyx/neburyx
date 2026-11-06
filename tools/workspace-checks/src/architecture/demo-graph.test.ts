@@ -18,7 +18,6 @@ describe('product code that imports the demo graph tool', () => {
     ["import { build } from '@neburyx/demo-graph/dist/load.js';", 'apps/web/src/a.ts'],
     ["import { build } from '../../../tools/demo-graph/src/load.js';", 'services/api/src/b.ts'],
     ["const tool = await import('../../../tools/demo-graph/src/cli.js');", 'packages/contracts/src/c.ts'],
-    ["const tool = require('@neburyx/demo-graph');", 'ee/policy/index.ts'],
     ["export * from '../../../tools/demo-graph/src/safety.js';", 'services/api/src/d.ts'],
   ])('is reported: %s', (text, path) => {
     expect(snippet(path, text)).toMatchObject([{ rule: 'demo-graph-isolated', file: path }]);

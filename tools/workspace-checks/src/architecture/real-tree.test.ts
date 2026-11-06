@@ -3,7 +3,6 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { repoRoot } from '../workspace.js';
 import { ADAPTER_SCAN_ROOTS, checkAdapterAccess } from './adapter.js';
-import { checkCommunityImports } from './community.js';
 import { checkGateCapabilities, GATE_CAPABILITY_SCAN_ROOTS } from './gate-capabilities.js';
 import { createImportReader, readImports } from './imports.js';
 import { loadTree } from './tree.js';
@@ -60,6 +59,5 @@ describe('the real web client', () => {
     expect(contracts.has('meResponseSchema')).toBe(true);
     const violations = [...checkWebClient(web, contracts), ...checkWebDependencies(readWebPackageJson(repoRoot))];
     expect(formatWebViolations(violations)).toBe('');
-    expect(checkCommunityImports(web)).toEqual([]);
   }, REAL_TREE_TIMEOUT_MS);
 });

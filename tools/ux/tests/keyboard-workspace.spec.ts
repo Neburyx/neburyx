@@ -232,7 +232,7 @@ test.describe('the sheet of shortcuts', () => {
     await page.keyboard.press('Escape');
     await page.keyboard.press('Enter');
     await page.keyboard.press('ContextMenu');
-    expect(await menuHints(page), 'the hints of the entity menu').toEqual(expected([['Expand neighbors', 'e'], ['Expand by type', ''], ['Focus neighborhood', 'f'], ['Find paths from here…', 'shift+p'], ['Find paths to…', ''], ['Run pattern', ''], ['Select neighbors', ''], ['Invert selection', 'mod+shift+i'], ['Group by type', ''], ['Pin position', 'p'], ['Hide from view', 'delete'], ['Copy ID', 'mod+c'], ['Copy properties', 'mod+shift+c'], ['Open source record', ''], ['Ask about this entity', ''], ['Summarize neighborhood', '']]));
+    expect(await menuHints(page), 'the hints of the entity menu').toEqual(expected([['Expand neighbors', 'e'], ['Expand by type', ''], ['Focus neighborhood', 'f'], ['Find paths from here…', 'shift+p'], ['Find paths to…', ''], ['Run pattern', ''], ['Select neighbors', ''], ['Invert selection', 'mod+shift+i'], ['Group by type', ''], ['Pin position', 'p'], ['Hide from view', 'delete'], ['Copy ID', 'mod+c'], ['Copy properties', 'mod+shift+c'], ['Open source record', '']]));
     await page.keyboard.press('Escape');
     for (let step = 0; step < 40; step += 1) {
       await page.keyboard.press('Tab');
@@ -240,6 +240,6 @@ test.describe('the sheet of shortcuts', () => {
     }
     await page.keyboard.press('ContextMenu');
     await expect(menuOf(page)).toHaveCount(1);
-    expect(await menuHints(page), 'the hints of the relationship menu').toEqual(expected([['Why is this relationship here?', ''], ['View supporting records', ''], ['Highlight endpoints', ''], ['Select both endpoints', ''], ['Find paths between endpoints', ''], ['Hide this relationship', 'delete'], ['Hide all HAS_LINE', ''], ['Show only HAS_LINE', ''], ['Copy relationship ID', 'mod+c'], ['Copy properties', 'mod+shift+c'], ['Open source record', ''], ['Ask about this relationship', '']]));
+    expect(await menuHints(page), 'the hints of the relationship menu').toEqual(expected([['Why is this relationship here?', ''], ['View supporting records', ''], ['Highlight endpoints', ''], ['Select both endpoints', ''], ['Find paths between endpoints', ''], ['Hide this relationship', 'delete'], ['Hide all HAS_LINE', ''], ['Show only HAS_LINE', ''], ['Copy relationship ID', 'mod+c'], ['Copy properties', 'mod+shift+c'], ['Open source record', '']]));
   });
 });

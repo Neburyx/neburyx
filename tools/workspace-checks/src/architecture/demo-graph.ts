@@ -5,7 +5,7 @@ import { isInside, isInsideDirectory, resolveRelative } from './resolve.js';
 import type { SourceFile } from './tree.js';
 import type { Violation } from './violations.js';
 
-export const DEMO_GRAPH_SCAN_ROOTS: readonly string[] = ['services', 'apps', 'packages', 'ee'];
+export const DEMO_GRAPH_SCAN_ROOTS: readonly string[] = ['services', 'apps', 'packages'];
 
 const TOOL_ZONE = 'tools/demo-graph';
 const TOOL_NAME = /demo-graph/;

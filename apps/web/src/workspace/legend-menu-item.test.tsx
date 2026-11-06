@@ -56,7 +56,7 @@ describe('the Show legend item of the canvas menu', () => {
   it('drives the same state the toggle shows: choosing it flips the toggle, and the toggle flips what the item reads', async () => {
     const state = createClientState();
     load(state);
-    const { rightClick } = show(state, {}, undefined, 'community', <LegendToggle />);
+    const { rightClick } = show(state, {}, undefined, <LegendToggle />);
     expect(toggle().getAttribute('aria-expanded')).toBe('false');
     rightClick(onCanvas(10, 10));
     await userEvent.setup().click(legendItem());

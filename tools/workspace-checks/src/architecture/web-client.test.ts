@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { checkCommunityImports } from './community.js';
 import { checkWebClient, checkWebDependencies, contractsExports } from './web-client.js';
 import type { SourceFile } from './tree.js';
 
@@ -28,13 +27,6 @@ describe('the renderer import', () => {
   it('is allowed in the adapter module, and a name that only starts like it is not reported', () => {
     expect(check('apps/web/src/canvas/cytoscape-renderer.ts', "import cytoscape from 'cytoscape';")).toEqual([]);
     expect(check('apps/web/src/a.ts', "import x from 'cytoscape-like'; import y from './cytoscape.js';")).toEqual([]);
-  });
-});
-
-describe('a web client file that imports from ee/', () => {
-  it('is reported, in a .tsx file too', () => {
-    const file: SourceFile = { path: 'apps/web/src/Panel.tsx', text: "import { x } from '../../../ee/policy/index.js';\nexport const y = x;" };
-    expect(checkCommunityImports([file])).toMatchObject([{ rule: 'community-imports-ee', file: 'apps/web/src/Panel.tsx' }]);
   });
 });
 

@@ -29,7 +29,7 @@ test.describe('the workspace shell without a dock panel', () => {
     await expectInsideViewport(page, { rail: page.locator('.rail'), header: page.locator('.header-bar'), 'canvas region': page.locator('.canvas-region') }, { bottom: true });
     await expectEachContained('a rail destination', page.locator('.rail a, .rail button'), page.locator('.rail'));
     await expectEachContained('a header control', page.locator('.header-bar button, .header-bar a'), page.locator('.header-bar'));
-    for (const name of ['Ask, locked', 'Summarize, locked', 'Views ▾', 'Export', 'Save']) await expectContained(name, page.getByRole('button', { name }), page.locator('.header-bar'));
+    for (const name of ['Views ▾', 'Export', 'Save']) await expectContained(name, page.getByRole('button', { name }), page.locator('.header-bar'));
   });
 
   test('places the scope lines, the tool strip and the toggles by the frame, from the canvas region', async ({ page }) => {

@@ -49,7 +49,7 @@ describe('Explore with nothing registered', () => {
     await screen.findByText('Local workspace');
     expect(container.querySelectorAll('.region')).toHaveLength(0);
     expect(within(screen.getByRole('navigation', { name: 'Workspace' })).getAllByRole('link')).toHaveLength(3);
-    expect(screen.getAllByRole('button').map((button) => button.getAttribute('aria-label'))).toEqual(['Ask, locked', 'Summarize, locked']);
+    expect(screen.queryAllByRole('button')).toHaveLength(0);
     for (const name of ['Views ▾', 'Export', 'Save', 'Investigation menu', 'Settings']) expect(screen.queryByRole('button', { name })).toBeNull();
     expect(screen.queryByRole('link', { name: 'Search' })).toBeNull();
   });

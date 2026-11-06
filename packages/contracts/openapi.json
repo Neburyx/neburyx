@@ -1959,16 +1959,13 @@
           "edition": {
             "type": "string",
             "enum": [
-              "community",
-              "enterprise"
+              "community"
             ]
           },
           "identityMode": {
             "type": "string",
             "enum": [
-              "none",
-              "sso",
-              "user_based"
+              "none"
             ]
           },
           "sources": {

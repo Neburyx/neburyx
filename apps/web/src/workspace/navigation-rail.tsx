@@ -2,7 +2,6 @@ import { Fragment } from 'react';
 import { Link, useLocation } from 'react-router';
 import { BrandMark } from '../shell/brand-mark.js';
 import { NAVIGATION, type NavigationItem } from '../shell/navigation.js';
-import { answeredData, useShellData } from '../shell/shell-data.js';
 import { RailIdentity } from './rail-identity.js';
 import { Slot, useOccupant, type SlotName } from './slots.js';
 
@@ -22,7 +21,6 @@ function RailSlot({ name }: { readonly name: SlotName }) {
 
 export function NavigationRail() {
   const { pathname } = useLocation();
-  const edition = answeredData(useShellData().me)?.edition;
   return (
     <div className="rail">
       <nav aria-label="Workspace">
@@ -42,7 +40,7 @@ export function NavigationRail() {
           ))}
         </ul>
       </nav>
-      <div className={edition === 'enterprise' ? 'rail-bottom rail-bottom-enterprise' : 'rail-bottom'}>
+      <div className="rail-bottom">
         <Slot name="settings" />
         <RailIdentity />
       </div>

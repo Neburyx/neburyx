@@ -176,7 +176,7 @@ describe('resolveRelative', () => {
     ['services/api/src/routes/search.ts', '../sources/neo4j-adapter.js', 'services/api/src/sources/neo4j-adapter'],
     ['services/api/src/gate/gate.ts', './execute.js', 'services/api/src/gate/execute'],
     ['services/api/src/app.ts', './sources/index.js', 'services/api/src/sources'],
-    ['services/api/src/routes/search.mts', '../../../../ee/x.mjs', 'ee/x'],
+    ['services/api/src/routes/search.mts', '../../../../tools/x/x.mjs', 'tools/x/x'],
   ])('%s importing %s points at %s', (file, specifier, expected) => {
     expect(resolveRelative(file, specifier)?.path).toBe(expected);
   });
@@ -192,9 +192,9 @@ describe('resolveRelative', () => {
   });
 
   it('tells a file from a directory', () => {
-    expect(resolveRelative('a/b.ts', './ee.js')).toEqual({ path: 'a/ee', kind: 'file' });
-    expect(resolveRelative('a/b.ts', './ee/index.js')).toEqual({ path: 'a/ee', kind: 'index' });
-    expect(resolveRelative('a/b.ts', './ee')).toEqual({ path: 'a/ee', kind: 'bare' });
+    expect(resolveRelative('a/b.ts', './lib.js')).toEqual({ path: 'a/lib', kind: 'file' });
+    expect(resolveRelative('a/b.ts', './lib/index.js')).toEqual({ path: 'a/lib', kind: 'index' });
+    expect(resolveRelative('a/b.ts', './lib')).toEqual({ path: 'a/lib', kind: 'bare' });
   });
 
   it('gives nothing for a package name', () => {
@@ -204,14 +204,14 @@ describe('resolveRelative', () => {
 
 describe('mayNameTarget', () => {
   it.each([
-    ["import { a } from '../ee/a.js';", true],
-    ["import { a } from '@neburyx/ee';", true],
-    ["import { a } from '../\\u0065e/a.js';", true],
-    ["import { a } from '../\\x65e/a.js';", true],
-    ["import { a } from '../\\145e/a.js';", true],
-    ["import { a } from '../\\e\\e/a.js';", true],
-    ["import { a } from '../e\\\ne/a.js';", true],
-    ["import { a } from '../..\\057ee/a.js';", true],
+    ["import { a } from '../zed/a.js';", true],
+    ["import { a } from '@neburyx/zed';", true],
+    ["import { a } from '../\\u007aed/a.js';", true],
+    ["import { a } from '../\\x7aed/a.js';", true],
+    ["import { a } from '../\\172ed/a.js';", true],
+    ["import { a } from '../\\z\\e\\d/a.js';", true],
+    ["import { a } from '../z\\\ned/a.js';", true],
+    ["import { a } from '../..\\057zed/a.js';", true],
     ["import { a } from '@neburyx/demo\\055graph';", true],
     ["import { a } from '@neburyx/demo\\-graph';", true],
     ["import { a } from '../a\\0.js';", true],
@@ -219,6 +219,6 @@ describe('mayNameTarget', () => {
     ["const need = 'a\\nb\\\\c';", false],
     ['const need = /a\\.b\\/c/;', false],
   ])('for %j says %s', (text, expected) => {
-    expect(mayNameTarget(text, /\bee\b/)).toBe(expected);
+    expect(mayNameTarget(text, /\bzed\b/)).toBe(expected);
   });
 });

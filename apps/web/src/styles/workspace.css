@@ -50,11 +50,6 @@
   gap: var(--space-16);
 }
 
-.rail-bottom-enterprise {
-  align-self: flex-start;
-  width: var(--avatar-size);
-}
-
 .rail-caption {
   margin: 0;
   color: var(--color-workspace-muted);
@@ -64,19 +59,6 @@
   margin-top: var(--space-6);
   writing-mode: vertical-rl;
   transform: rotate(180deg);
-}
-
-.rail-initials {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: var(--avatar-size);
-  height: var(--avatar-size);
-  border-radius: var(--radius-avatar);
-  background: var(--color-avatar-surface);
-  color: var(--color-avatar-text);
-  font-size: var(--font-size-small);
-  font-weight: var(--font-weight-semibold);
 }
 
 .workspace-body {
@@ -190,46 +172,6 @@
   color: var(--color-text);
   font-size: var(--font-size-small);
   font-weight: var(--font-weight-medium);
-  line-height: var(--line-height-workspace);
-  white-space: nowrap;
-}
-
-.locked-control {
-  position: relative;
-  display: inline-flex;
-}
-
-.locked-button {
-  display: flex;
-  align-items: center;
-  gap: var(--space-5);
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--color-workspace-muted);
-  font: inherit;
-  font-size: var(--font-size-small);
-  line-height: var(--line-height-workspace);
-  cursor: default;
-}
-
-.locked-button .icon-lock {
-  background: var(--color-workspace-muted);
-}
-
-.icon-lock {
-  width: var(--lock-width);
-  height: var(--lock-height);
-  --icon: url('../assets/lock.svg');
-}
-
-.lock-tooltip {
-  position: absolute;
-  top: calc(100% + var(--space-10));
-  left: 0;
-  z-index: 1;
-  color: var(--color-workspace-muted);
-  font-size: var(--font-size-small);
   line-height: var(--line-height-workspace);
   white-space: nowrap;
 }
@@ -557,15 +499,6 @@
   cursor: default;
 }
 
-.menu-row-locked {
-  color: var(--color-menu-locked);
-  cursor: default;
-}
-
-.menu-row-locked .icon {
-  background: var(--color-menu-locked);
-}
-
 .context-menu .menu-row:hover,
 .context-submenu .menu-row:hover,
 .context-menu .menu-row[aria-expanded='true'] {
@@ -573,24 +506,8 @@
 }
 
 .context-menu .menu-row-disabled:hover,
-.context-menu .menu-row-locked:hover,
-.context-submenu .menu-row-disabled:hover,
-.context-submenu .menu-row-locked:hover {
+.context-submenu .menu-row-disabled:hover {
   background: none;
-}
-
-.menu-tag {
-  padding: var(--space-2) var(--space-6);
-  line-height: var(--line-height-caption);
-  border-radius: var(--radius-tag-pill);
-  background: var(--color-menu-tag-surface);
-  color: var(--color-menu-locked);
-  font-size: var(--font-size-caption);
-}
-
-.menu-row .icon-lock {
-  width: var(--tool-check-size);
-  height: var(--tool-check-size);
 }
 
 .menu-row .icon-chevron {

@@ -67,7 +67,7 @@ describe('the three product directories', () => {
     const root = makeRoot({
       'domain-packs/sample/neburyx.yaml': PACK,
       'tools/x/src/a.ts': text,
-      'ee/x/a.ts': text,
+      'docs/x/a.ts': text,
       'services/api/node_modules/p/index.js': text,
       'services/api/dist/a.js': text,
       'apps/web/.git/hook.js': text,

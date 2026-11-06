@@ -78,12 +78,12 @@ describe('an API copy that starts while another transaction is writing the first
     const database = await migrated();
     const started = await startWhileHeld(
       database,
-      `INSERT INTO deployment (edition, identity_mode, initialized_at) VALUES ('enterprise', 'sso', '2020-01-01T00:00:00Z')`,
+      `INSERT INTO deployment (edition, identity_mode, initialized_at) VALUES ('community', 'none', '2020-01-01T00:00:00Z')`,
     );
     expect(started.result.exitCode).toBe(0);
     await stopApi(started.result);
     expect(await rows(database.ownerUrl, `SELECT edition, identity_mode, initialized_at::text AS at FROM deployment`)).toEqual([
-      { edition: 'enterprise', identity_mode: 'sso', at: '2020-01-01 00:00:00+00' },
+      { edition: 'community', identity_mode: 'none', at: '2020-01-01 00:00:00+00' },
     ]);
     expect(await rows(database.ownerUrl, 'SELECT count(*)::int AS n FROM users')).toEqual([{ n: 1 }]);
   });

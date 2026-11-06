@@ -100,8 +100,7 @@ app.get('/v1/me', { config: { permission: 'principal' } }, handler);
 - There is no default. A route with no declaration, or with another value, fails a unit test that reads every route the
   application registers (`services/api/src/permissions.test.ts`). The web build's files are public by construction and are
   not part of the check.
-- Nothing enforces the value at run time yet, because Community has one principal. Enterprise adds roles and capabilities as
-  further values when its policy exists.
+- Nothing enforces the value at run time yet, because Community has one principal.
 
 ## Testing a source
 

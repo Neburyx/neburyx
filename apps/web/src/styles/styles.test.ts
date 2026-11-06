@@ -61,11 +61,10 @@ describe('the stylesheets', () => {
     expect(base).toMatch(/a\[aria-current='page'\] \{[^}]*(font-weight|text-decoration)/s);
   });
 
-  it('let long unbroken values wrap in the sidebar and in the page heading, and set the Enterprise name in semibold', () => {
+  it('let long unbroken values wrap in the sidebar and in the page heading', () => {
     const base = readFileSync(join(DIRECTORY, 'base.css'), 'utf8');
     expect(base).toMatch(/\.sidebar \{[^}]*overflow-wrap: anywhere;/s);
     expect(base).toMatch(/\.page-heading \{[^}]*overflow-wrap: anywhere;/s);
-    expect(base).toMatch(/\.identity-name \{[^}]*font-weight: var\(--font-weight-semibold\);/s);
   });
 
   it('place the canvas regions by the frame offsets, from tokens: 16 px from the edges, 64 px from the top for the tool strip and the dock column', () => {

@@ -15,7 +15,6 @@ const header = () => {
   return within(found);
 };
 const badge = () => header().queryByText('Synthetic data');
-const enterprise = () => header().queryByText('Enterprise');
 const sourceName = (text: string) => header().queryByText(text);
 /** Both reads have answered (or failed): the sidebar shows no loading state any more. */
 const answered = () => waitFor(() => expect(screen.queryAllByRole('status').filter((status) => status.textContent !== '')).toHaveLength(0));
@@ -32,16 +31,6 @@ describe('the page heading', () => {
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
     expect(heading().textContent).toBe(title);
     expect(document.querySelector('.page-heading > p')?.textContent?.length).toBeGreaterThan(0);
-  });
-
-  it('names the edition beside the title for Enterprise only: Community shows none', async () => {
-    const community = renderApp('/', clientWith({ me: me(), sources: [] }));
-    await answered();
-    expect(enterprise()).toBeNull();
-    community.unmount();
-    renderApp('/', clientWith({ me: me({ edition: 'enterprise', identityMode: 'sso' }), sources: [] }));
-    expect(await screen.findByText('Enterprise')).toBeTruthy();
-    expect(enterprise()?.closest('.page-title')?.querySelector('h1')?.textContent).toBe('Home');
   });
 
   it('names the source in view under the title, with the Synthetic data badge, a text label, beside it when the data is synthetic', async () => {
@@ -99,25 +88,22 @@ describe('the page heading', () => {
   it('shows the title and the description alone while both reads are awaited, and when both have failed', async () => {
     const loading = renderApp('/', fakeClient({ getMe: () => new Promise(() => undefined), getSources: () => new Promise(() => undefined) }));
     expect(heading().textContent).toBe('Home');
-    expect(enterprise()).toBeNull();
     expect(badge()).toBeNull();
     loading.unmount();
     renderApp('/', fakeClient());
     await screen.findAllByRole('alert');
-    expect(enterprise()).toBeNull();
     expect(badge()).toBeNull();
     expect(document.querySelector('.source-note')).toBeNull();
     expect(heading().textContent).toBe('Home');
   });
 
-  it('keeps the edition when the sources fail, and the source and the badge when the principal fails', async () => {
-    const sourcesFail = renderApp('/', clientWith({ me: me({ edition: 'enterprise', identityMode: 'sso' }) }));
-    expect(await screen.findByText('Enterprise')).toBeTruthy();
+  it('shows no badge when the sources fail, and the source and the badge when the principal fails', async () => {
+    const sourcesFail = renderApp('/', clientWith({ me: me() }));
+    await screen.findAllByRole('alert');
     expect(badge()).toBeNull();
     sourcesFail.unmount();
     renderApp('/', clientWith({ sources: [source('a')] }));
     expect(await screen.findByText('Synthetic data')).toBeTruthy();
-    expect(enterprise()).toBeNull();
   });
 });
 
@@ -134,7 +120,7 @@ describe('the page heading after a later failure', () => {
     let reads = 0;
     const down = { ok: false, failure: { code: 'NETWORK_UNAVAILABLE' } } as const;
     const client = fakeClient({
-      getMe: async () => (meFails && reads > 0 ? down : { ok: true, value: me({ edition: 'enterprise', identityMode: 'sso' }) }),
+      getMe: async () => (meFails && reads > 0 ? down : { ok: true, value: me() }),
       getSources: async () => {
         const first = reads++ === 0;
         return !meFails && !first ? down : { ok: true, value: { items: [source('a')], nextCursor: null } };
@@ -152,16 +138,15 @@ describe('the page heading after a later failure', () => {
     await userEvent.setup().click(screen.getByRole('button', { name: 'Reload' }));
     await waitFor(() => expect(reads).toBe(2));
     await act(async () => undefined);
-    expect(screen.getByText('Enterprise'), failing).toBeTruthy();
     expect(screen.getByText('Synthetic data'), failing).toBeTruthy();
     expect(screen.getByText('Source a · read-only'), failing).toBeTruthy();
   });
 
-  it('keeps the edition, the source and the badge when both reads fail after they answered', async () => {
+  it('keeps the source and the badge when both reads fail after they answered', async () => {
     let reads = 0;
     const down = { ok: false, failure: { code: 'NETWORK_UNAVAILABLE' } } as const;
     const client = fakeClient({
-      getMe: async () => (reads === 0 ? { ok: true, value: me({ edition: 'enterprise', identityMode: 'sso' }) } : down),
+      getMe: async () => (reads === 0 ? { ok: true, value: me() } : down),
       getSources: async () => (reads++ === 0 ? { ok: true, value: { items: [source('a')], nextCursor: null } } : down),
     });
     render(
@@ -176,7 +161,6 @@ describe('the page heading after a later failure', () => {
     await userEvent.setup().click(screen.getByRole('button', { name: 'Reload' }));
     await waitFor(() => expect(reads).toBe(2));
     await act(async () => undefined);
-    expect(screen.getByText('Enterprise')).toBeTruthy();
     expect(screen.getByText('Synthetic data')).toBeTruthy();
     expect(screen.getByText('Source a · read-only')).toBeTruthy();
   });

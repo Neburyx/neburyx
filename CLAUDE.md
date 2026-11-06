@@ -15,7 +15,6 @@ safe on very high-degree nodes. The repo is **pre-release**: the build tooling, 
 |---|---|
 | `apps/web` | Web client |
 | `services/api` | Backend API |
-| `ee/` | Modules under a separate commercial licence (placeholder) |
 | `packages/contracts` | API contract and generated client types |
 | `packages/test-containers` | How tests and tools start a container (retries the port-binding timeout) |
 | `packages/test-neo4j` | How the Neo4j tests reach a Neo4j Enterprise server of their own: the connection, a database per test file, the sweep of leftovers (see its README) |
@@ -32,10 +31,7 @@ safe on very high-degree nodes. The repo is **pre-release**: the build tooling, 
 
 ## Licensing
 
-- Everything is Apache-2.0 (`LICENSE`, `NOTICE`) **except `ee/`**, which is reserved for a separate
-  commercial licence and has no code yet.
-- Never import `ee/` code from Community code. Community code must build and run without `ee/`.
-  Enterprise features plug in through interfaces defined in Community code.
+- Everything is Apache-2.0 (`LICENSE`, `NOTICE`).
 - Don't add third-party code or dependencies without checking their licence is compatible with Apache-2.0.
 
 ## Rules that hold for all code

@@ -4,14 +4,12 @@ import pino from 'pino';
 import { afterAll, describe, expect, it } from 'vitest';
 import { buildApp, seamsOf } from './app.js';
 import {
-  communityAskPlanner,
   communityAudit,
   communityCoordinator,
-  communityEvidenceStore,
   communityPolicy,
   communitySeams,
 } from './seams/community-seams.js';
-import type { AskPlanner, AuditEvent, AuditSink, Coordinator, EvidenceStore, PolicyProvider, Seams } from './seams/seams.js';
+import type { AuditEvent, AuditSink, Coordinator, PolicyProvider, Seams } from './seams/seams.js';
 import { APP_JS, INDEX_HTML, makeWebRoot, V1_FILE } from './testing/web-root.js';
 import { connect } from 'node:net';
 import { LOCAL_IDENTITY, memoryAppStore } from './testing/app-store.js';
@@ -178,27 +176,23 @@ describe('closing the app', () => {
   });
 });
 
-describe('the edition seams', () => {
+describe('the seams', () => {
   const denyingPolicy: PolicyProvider = {
     authorizeSource: () => Promise.resolve({ allowed: false, reason: 'no grant for this source' }),
   };
   const event: AuditEvent = { actorId: 'actor-1', actorRole: null, action: 'graph.expand', result: 'success', traceId: 'tr-1' };
   const busyCoordinator: Coordinator = { acquireRead: () => Promise.resolve({ status: 'busy' }) };
-  const availableAskPlanner: AskPlanner = { availability: () => ({ available: true }) };
-  const availableEvidenceStore: EvidenceStore = { availability: () => ({ available: true }) };
 
   async function appWith(seams?: Seams): ReturnType<typeof buildApp> {
     return buildApp({ webRoot, logger: pino({ level: 'silent' }), store: memoryAppStore(), seams });
   }
 
-  it('uses the five Community defaults when no seams are given, and still answers /v1/me', async () => {
+  it('uses the three Community defaults when no seams are given, and still answers /v1/me', async () => {
     const server = await app();
     expect(seamsOf(server)).toEqual({
       policy: communityPolicy,
       audit: communityAudit,
       coordinator: communityCoordinator,
-      askPlanner: communityAskPlanner,
-      evidenceStore: communityEvidenceStore,
     });
     const response = await server.inject({ method: 'GET', url: '/v1/me' });
     expect(response.statusCode).toBe(200);
@@ -237,17 +231,5 @@ describe('the edition seams', () => {
     const server = await appWith({ ...communitySeams(), coordinator: busyCoordinator });
     expect(seamsOf(server)).toEqual({ ...communitySeams(), coordinator: busyCoordinator });
     expect(await seamsOf(server).coordinator.acquireRead({ principal: LOCAL_IDENTITY.principal, sourceId: 'source-a' })).toEqual({ status: 'busy' });
-  });
-
-  it('hands out a stub Ask planner, which is available', async () => {
-    const server = await appWith({ ...communitySeams(), askPlanner: availableAskPlanner });
-    expect(seamsOf(server)).toEqual({ ...communitySeams(), askPlanner: availableAskPlanner });
-    expect(seamsOf(server).askPlanner.availability()).toEqual({ available: true });
-  });
-
-  it('hands out a stub evidence store, which is available', async () => {
-    const server = await appWith({ ...communitySeams(), evidenceStore: availableEvidenceStore });
-    expect(seamsOf(server)).toEqual({ ...communitySeams(), evidenceStore: availableEvidenceStore });
-    expect(seamsOf(server).evidenceStore.availability()).toEqual({ available: true });
   });
 });

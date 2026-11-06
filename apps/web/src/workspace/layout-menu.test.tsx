@@ -30,7 +30,7 @@ function open(options: { readonly pins?: readonly string[] } = {}) {
   load(state, ids);
   if (options.pins !== undefined) state.replacePins(options.pins.map(nodeKey));
   const commands: { current: CanvasCommands | undefined } = { current: undefined };
-  const shown = show(state, {}, undefined, 'community', <Capture into={commands} />);
+  const shown = show(state, {}, undefined, <Capture into={commands} />);
   return { state, commands, ...shown };
 }
 

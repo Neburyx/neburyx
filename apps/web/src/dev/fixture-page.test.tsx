@@ -100,6 +100,5 @@ describe('the fixture page', () => {
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Suspicious linked accounts');
     expect(screen.getByRole('link', { name: 'Search' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Save' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Ask, locked' })).toBeTruthy();
   });
 });

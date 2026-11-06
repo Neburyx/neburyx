@@ -6,13 +6,12 @@ import { ProfileProvider } from '../canvas/profile-context.js';
 import { RendererProvider } from '../canvas/renderer-context.js';
 import type { RightClick } from '../canvas/scene.js';
 import { testProfile } from '../dev/test-profile.js';
-import { ShellDataProvider } from '../shell/shell-data.js';
 import type { ClientState } from '../state/client-state.js';
 import { ClientStateProvider } from '../state/context.js';
 import type { GraphEdge, GraphNode } from '@neburyx/contracts';
 import { elementKey } from '../state/keys.js';
 import { key, ref, result } from '../state/test-data.js';
-import { builtInKeyBindings, staticProfile, staticShell, stubFactory, type StubOptions } from '../test-utils.js';
+import { builtInKeyBindings, staticProfile, stubFactory, type StubOptions } from '../test-utils.js';
 import { registerBuiltInMenuItems } from './built-in-menu-items.js';
 import { ContextMenu } from './context-menu.js';
 import { KeyBindingsProvider } from './key-binding-registry.js';
@@ -34,28 +33,26 @@ export interface Shown {
   readonly rightClick: (request: RightClick) => void;
 }
 
-export function show(state: ClientState, options: StubOptions = {}, menus: MenuRegistry = withBuiltIns(), edition: 'community' | 'enterprise' | undefined = 'community', extra: ReactNode = null): Shown {
+export function show(state: ClientState, options: StubOptions = {}, menus: MenuRegistry = withBuiltIns(), extra: ReactNode = null): Shown {
   const factory = stubFactory(options);
   const outside = vi.fn<() => void>();
   render(
     <ClientStateProvider state={state}>
-      <ShellDataProvider store={staticShell(edition)}>
-        <MenuProvider registry={menus}>
-          <KeyBindingsProvider registry={builtInKeyBindings()}>
-            <ProfileProvider store={staticProfile('a', testProfile('a', ['type-a']))}>
-              <RendererProvider createRenderer={factory.create}>
-                <GraphCanvas />
-                <ZoomControls />
-                <ContextMenu />
-                {extra}
-                <button type="button" onClick={outside}>
-                  Outside
-                </button>
-              </RendererProvider>
-            </ProfileProvider>
-          </KeyBindingsProvider>
-        </MenuProvider>
-      </ShellDataProvider>
+      <MenuProvider registry={menus}>
+        <KeyBindingsProvider registry={builtInKeyBindings()}>
+          <ProfileProvider store={staticProfile('a', testProfile('a', ['type-a']))}>
+            <RendererProvider createRenderer={factory.create}>
+              <GraphCanvas />
+              <ZoomControls />
+              <ContextMenu />
+              {extra}
+              <button type="button" onClick={outside}>
+                Outside
+              </button>
+            </RendererProvider>
+          </ProfileProvider>
+        </KeyBindingsProvider>
+      </MenuProvider>
     </ClientStateProvider>,
   );
   const rightClick = (request: RightClick): void => {
@@ -92,12 +89,11 @@ export interface CommandOptions {
   readonly group?: number;
   readonly order?: number;
   readonly state?: MenuItemState;
-  readonly lock?: boolean;
   readonly run?: (context: MenuContext) => void;
 }
 
 /** An item that runs a command, named by its ID; what is not given is the default of a plain enabled item. */
 export function commandItem(id: string, options: CommandOptions = {}): MenuItem {
-  const { group = 10, order = 10, state, lock, run = () => undefined } = options;
-  return { id, label: id, icon: null, group, order, run, ...(state === undefined ? {} : { state }), ...(lock === undefined ? {} : { lock }) };
+  const { group = 10, order = 10, state, run = () => undefined } = options;
+  return { id, label: id, icon: null, group, order, run, ...(state === undefined ? {} : { state }) };
 }

@@ -74,12 +74,6 @@ export function staticProfile(sourceId: string, profile: SourceProfile | undefin
   return { ...readable(store), reload: () => undefined };
 }
 
-/** Shell data that has already answered with the given edition, or has not answered when it is undefined. */
-export function staticShell(edition: 'community' | 'enterprise' | undefined): ReadableStore<ShellData> {
-  const reload = (): void => undefined;
-  return readable(createStore<ShellData>({ me: edition === undefined ? { phase: 'idle' } : { phase: 'ready', data: me({ edition }) }, sources: { phase: 'idle' }, reload, reloadSources: reload }));
-}
-
 export function counted(client: ApiClient): Counted {
   const calls = { me: 0, sources: 0 };
   return {

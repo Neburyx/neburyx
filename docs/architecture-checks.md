@@ -1,14 +1,14 @@
 # Architecture checks
 
-Three checks run with the unit tests (`pnpm test`, and so in CI) and fail the build when code breaks a structural rule.
-The first two live in `tools/workspace-checks/src/architecture/` and each reports the file, line and import that breaks the
-rule. The third, [no domain words in code](#no-domain-words-in-code), lives in `tools/workspace-checks/src/domain-words/`
-and reports the file, line and word. The [web client rules](#the-web-client) are a fourth group, in the same folder as the first two. A fifth, [test containers](#test-containers), reports a container started without the retry helper.
+Two checks run with the unit tests (`pnpm test`, and so in CI) and fail the build when code breaks a structural rule.
+The first lives in `tools/workspace-checks/src/architecture/` and reports the file, line and import that breaks the
+rule. The second, [no domain words in code](#no-domain-words-in-code), lives in `tools/workspace-checks/src/domain-words/`
+and reports the file, line and word. The [web client rules](#the-web-client) are a third group, in the same folder as the first. A fourth, [test containers](#test-containers), reports a container started without the retry helper.
 
 ## No way around the gate
 
 Every source read goes through the gate. Until the adapter exists, the check reads imports: a file in `services/`,
-`packages/`, `apps/` or `ee/` may import these only where the table says.
+`packages/` or `apps/` may import these only where the table says.
 
 | Import | Allowed in |
 |---|---|
@@ -49,7 +49,7 @@ keep the capabilities where they belong (`tools/workspace-checks/src/architectur
 
 Test files (`*.test.*`) and `services/api/src/testing/` are exempt, as above. A re-export of either module is never allowed, even from a file
 that may import it, so `gate/types.ts`, `start.ts` and `source-test/command.ts` cannot pass the system principal or the system runner on. Both rules read the same
-imports and re-exports as the adapter check, in the folders `services/`, `packages/`, `apps/` and `ee/`, and report the file, line and import.
+imports and re-exports as the adapter check, in the folders `services/`, `packages/` and `apps/`, and report the file, line and import.
 
 ## The write probe
 
@@ -73,18 +73,12 @@ A template's statement is fixed text with markers; the gate writes in only names
 
 The gate's index guard reads the schema through the system runner only, with the one fixed `schema-indexes` template, for a template that declares `indexNeeds`; the reader the gate hands out (`IndexReader`) runs nothing else, and only for a principal the policy allows on a usable source. The `Gate` itself has the one member `run`.
 
-## Community never imports `ee/`
-
-Any file outside `ee/` (including `tools/`) that imports a module under `ee/`, or the package names `ee` or `@neburyx/ee`
-(or a subpath of either), fails the check. Code under `ee/` may import Community code. Other scopes (`@other/ee`) are not
-this repository's `ee/`.
-
 ## What is scanned
 
-The adapter check reads files under `services/`, `packages/`, `apps/` and `ee/`; the `ee/` check reads every file outside `ee/`.
-The adapter, gate-capabilities, community and web-client checks do not parse a file whose text cannot hold what they look for: each has a pattern of the words a violation needs (a folder or module name, `cytoscape`, `fetch`, a query keyword) and a file holding none of them, and no escape sequence that could spell one (`\u0065`, `\x65`, an octal escape), is skipped. The real-tree tests of the first two and of the web-client check run in one file (`src/architecture/real-tree.test.ts`) that reads the tree once and parses a file for both import checks once; the limit on those tests is set from measurements, with the figures, in that file.
+The adapter check reads files under `services/`, `packages/` and `apps/`.
+The adapter, gate-capabilities and web-client checks do not parse a file whose text cannot hold what they look for: each has a pattern of the words a violation needs (a folder or module name, `cytoscape`, `fetch`, a query keyword) and a file holding none of them, and no escape sequence that could spell one (`\u0065`, `\x65`, an octal escape), is skipped. The real-tree tests of the first two and of the web-client check run in one file (`src/architecture/real-tree.test.ts`) that reads the tree once and parses a file for both import checks once; the limit on those tests is set from measurements, with the figures, in that file.
 Both skip `node_modules/`, `dist/`, `dist-ux/` (the build of the browser tests) and `.git/` folders and do not follow symbolic links (a scanned folder that is itself a
-link is skipped); the `ee/` check also skips the check's own fixture repositories. A requested folder the repository does not
+link is skipped). A requested folder the repository does not
 have is skipped; any other failure, such as a file or a parent folder that cannot be read, fails the check.
 
 ## What the checks cannot see
@@ -144,7 +138,7 @@ Rules for `apps/web/src`, checked in `tools/workspace-checks/src/architecture/we
 | No query text | an upper-case Cypher clause keyword (`MATCH`, `OPTIONAL MATCH`, `MERGE`, `CREATE`, `RETURN`, `WITH`, `UNWIND`, `SET`, `REMOVE`, `DETACH`, `DELETE`, `CALL`, `LOAD CSV`) followed by a space and a parenthesis, bracket, brace, identifier or number, in a string, a template or a JSX text |
 | No database client | a dependency of `apps/web` on a graph or database client (a package name that contains `neo4j`, `cypher`, `bolt`, `postgres`, `kysely`, `mongodb`, `mysql`, `sqlite`, `redis` or `valkey`, or is `pg`) |
 
-The checks are by name and shape, so a duplicate of a contracts type under an unrelated name, or query text assembled from fragments or written in lower case, is for review. Imports from `ee/` and domain words in `.tsx` files are covered by the checks above; ESLint's rules apply to `.tsx` files too.
+The checks are by name and shape, so a duplicate of a contracts type under an unrelated name, or query text assembled from fragments or written in lower case, is for review. Domain words in `.tsx` files are covered by the check above; ESLint's rules apply to `.tsx` files too.
 
 ## Test containers
 
@@ -152,5 +146,5 @@ Every container that a test or a tool starts with `testcontainers` is started in
 (`tools/workspace-checks/src/architecture/containers.ts`). testcontainers waits a fixed 30 s for a container's host port to be
 bound and has no setting for it, so a stall of the Docker daemon fails a start; the helper starts again after exactly that
 error (three attempts in all) and removes the containers of a failed attempt first. The check reads every file under
-`services/`, `apps/`, `packages/`, `tools/` and `ee/`, tests included, and reports the file and line of a `.start()` call on
+`services/`, `apps/`, `packages/` and `tools/`, tests included, and reports the file and line of a `.start()` call on
 `new …Container(…)` (or on a variable that holds one, found by its scope and by later assignments) that is not inside a `startWithRetry(…)` call.

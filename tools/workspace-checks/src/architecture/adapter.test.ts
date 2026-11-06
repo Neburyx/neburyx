@@ -28,7 +28,6 @@ describe('other code that reaches the adapter', () => {
   it.each([
     ['a module outside the gate', 'module-outside-gate', 'gate-composition'],
     ['a route that imports the execute stage', 'executor-outside-gate', 'gate-uses-executor'],
-    ['Enterprise code', 'enterprise-side-door', 'enterprise-via-gate'],
     ['a .mts file', 'mts-side-door', 'mts-in-sources'],
   ])('%s is reported, and its twin is not', (_name, failing, twin) => {
     expect(fixture(failing)).toHaveLength(1);
@@ -63,9 +62,8 @@ describe('the write probe', () => {
     ['another file in source-test/', `${API}/source-test/tester.ts`],
     ['a route', `${API}/routes/sources.ts`],
     ['the start module', `${API}/start.ts`],
-    ['Enterprise code', 'ee/policy/a.ts'],
   ])('is reported in %s', (_name, file) => {
-    const specifier = file.startsWith('ee/') ? `../../${API}/sources/write-probe.js` : `${'../'.repeat(file.split('/').length - API.split('/').length - 1)}sources/write-probe.js`;
+    const specifier = `${'../'.repeat(file.split('/').length - API.split('/').length - 1)}sources/write-probe.js`;
     expect(snippet(file, `import { runWriteProbe } from '${specifier.startsWith('.') ? specifier : `./${specifier}`}';`)).toHaveLength(1);
   });
 });

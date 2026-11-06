@@ -32,16 +32,6 @@ describe('the sidebar', () => {
     expect(within(identity()).getByText('Community edition')).toBeTruthy();
   });
 
-  it('shows the display name and the role for Enterprise, and no role line for a null role', async () => {
-    const view = renderApp('/', clientWith({ me: me({ edition: 'enterprise', identityMode: 'sso', principal: { id: '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d', displayName: 'Avery Quinn', role: 'viewer' } }), sources: [] }));
-    expect((await within(identity()).findByText('Avery Quinn')).className).toBe('identity-name');
-    expect(within(identity()).getByText('Viewer')).toBeTruthy();
-    view.unmount();
-    renderApp('/', clientWith({ me: me({ edition: 'enterprise', identityMode: 'sso', principal: { id: '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d', displayName: 'Break Glass', role: null } }), sources: [] }));
-    expect(await within(identity()).findByText('Break Glass')).toBeTruthy();
-    expect(within(identity()).queryByText('Viewer')).toBeNull();
-  });
-
   it('shows a loading state while the principal is awaited', () => {
     renderApp('/', fakeClient({ getMe: () => new Promise(() => undefined), getSources: () => new Promise(() => undefined) }));
     expect(within(identity()).getByRole('status').textContent).toBe('Loading');
@@ -122,10 +112,10 @@ describe('a later read of the shell data', () => {
     render(<Harness client={client} state={createClientState()} />);
     await userEvent.setup().click(screen.getByRole('button', { name: 'Reload' }));
     expect(pending).toHaveLength(2);
-    await act(async () => pending[1]?.({ ok: true, value: me({ edition: 'enterprise', identityMode: 'sso', principal: { id: '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d', displayName: 'Newer', role: null } }) }));
-    await act(async () => pending[0]?.({ ok: true, value: me({ edition: 'enterprise', identityMode: 'sso', principal: { id: '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d', displayName: 'Older', role: null } }) }));
-    expect(screen.getByText('Newer')).toBeTruthy();
-    expect(screen.queryByText('Older')).toBeNull();
+    await act(async () => pending[1]?.({ ok: true, value: me() }));
+    await act(async () => pending[0]?.({ ok: false, failure: { code: 'NETWORK_UNAVAILABLE' } }));
+    expect(screen.getByText('Local workspace')).toBeTruthy();
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 
   it('keeps the source line and shows the failure beside it when only the sources fail on a later read', async () => {

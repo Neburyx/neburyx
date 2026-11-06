@@ -1,13 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { LOCAL_IDENTITY } from '../testing/app-store.js';
-import {
-  communityAskPlanner,
-  communityAudit,
-  communityCoordinator,
-  communityEvidenceStore,
-  communityPolicy,
-  NOT_IN_THIS_EDITION,
-} from './community-seams.js';
+import { communityAudit, communityCoordinator, communityPolicy } from './community-seams.js';
 import type { AuditEvent } from './seams.js';
 
 describe('the Community policy provider', () => {
@@ -62,15 +55,5 @@ describe('the Community coordinator', () => {
     const admission = await communityCoordinator.acquireRead({ principal: LOCAL_IDENTITY.principal, sourceId: 'source-a' });
     if (admission.status !== 'granted') throw new Error('expected a granted read');
     await expect(admission.lease.release()).resolves.toBeUndefined();
-  });
-});
-
-describe('the Community Ask planner and evidence store', () => {
-  it.each([
-    ['Ask planner', communityAskPlanner],
-    ['evidence store', communityEvidenceStore],
-  ])('the %s says it is not available in this edition', (_name, seam) => {
-    expect(seam.availability()).toEqual({ available: false, reason: NOT_IN_THIS_EDITION });
-    expect(NOT_IN_THIS_EDITION).toBe('not_in_this_edition');
   });
 });

@@ -140,10 +140,10 @@ describe('the menu item stand-ins', () => {
     registerStandInMenuItems(registry);
     expect(labelsOf(registry, 'canvas')).toEqual(['Fit to view', 'Select all', 'Invert selection', 'Group all by type', 'Ungroup all', 'Layout', '(from the target)', 'Export view…']);
     expect(labelsOf(registry, 'node')).toEqual([
-      'Expand neighbors', 'Expand by type', 'Focus neighborhood', 'Find paths from here…', 'Find paths to…', 'Run pattern', 'Select neighbors', 'Invert selection', 'Group by type', 'Pin position', 'Hide from view', 'Copy ID', 'Copy properties', 'Open source record', 'Ask about this entity', 'Summarize neighborhood',
+      'Expand neighbors', 'Expand by type', 'Focus neighborhood', 'Find paths from here…', 'Find paths to…', 'Run pattern', 'Select neighbors', 'Invert selection', 'Group by type', 'Pin position', 'Hide from view', 'Copy ID', 'Copy properties', 'Open source record',
     ]);
     expect(labelsOf(registry, 'relationship')).toEqual([
-      'Why is this relationship here?', 'View supporting records', 'Highlight endpoints', 'Select both endpoints', 'Find paths between endpoints', 'Hide this relationship', '(from the target)', '(from the target)', 'Copy relationship ID', 'Copy properties', 'Open source record', 'Ask about this relationship',
+      'Why is this relationship here?', 'View supporting records', 'Highlight endpoints', 'Select both endpoints', 'Find paths between endpoints', 'Hide this relationship', '(from the target)', '(from the target)', 'Copy relationship ID', 'Copy properties', 'Open source record',
     ]);
   });
 
@@ -166,15 +166,11 @@ describe('the menu item stand-ins', () => {
     expect(label('stand-in-show-only')).toBe('Show only custom-type');
   });
 
-  it('draw the frame states: a locked Ask with a lock, a locked Summarize without one, a disabled relationship record, submenus on four rows of the entity and canvas menus', () => {
+  it('draw the frame states: a disabled relationship record, submenus on four rows of the entity and canvas menus', () => {
     const registry = createMenuRegistry();
     registerStandInMenuItems(registry);
     const by = (kind: MenuTargetKind, id: string) => registry.view.getState().get(kind)?.find((item) => item.id === id);
-    expect(by('node', 'stand-in-ask')).toMatchObject({ state: 'locked', lock: true });
-    expect(by('node', 'stand-in-summarize')?.state).toBe('locked');
-    expect(by('node', 'stand-in-summarize')?.lock).toBeUndefined();
     expect(by('relationship', 'stand-in-open-relationship-record')?.state).toBe('disabled');
-    expect(by('relationship', 'stand-in-ask-relationship')).toMatchObject({ state: 'locked', lock: true });
     const parents: readonly (readonly [MenuTargetKind, string])[] = [
       ['canvas', 'stand-in-group-all'],
       ['node', 'stand-in-expand-by-type'],

@@ -164,12 +164,11 @@ const typeOf = (context: MenuContext): string => context.state.loadedGraph().edg
 interface CommandOptions {
   readonly binding?: string;
   readonly state?: MenuItemState;
-  readonly lock?: boolean;
 }
 
 const command = (id: string, label: MenuItem['label'], icon: string, group: number, order: number, options: CommandOptions = {}): MenuItem => {
-  const { binding, state, lock } = options;
-  return { id, label, icon: menuIcon(icon), group, order, run: nothing, ...(binding === undefined ? {} : { binding }), ...(state === undefined ? {} : { state }), ...(lock === undefined ? {} : { lock }) };
+  const { binding, state } = options;
+  return { id, label, icon: menuIcon(icon), group, order, run: nothing, ...(binding === undefined ? {} : { binding }), ...(state === undefined ? {} : { state }) };
 };
 const parent = (id: string, label: string, icon: string, group: number, order: number): MenuItem => ({ id, label, icon: menuIcon(icon), group, order, submenu: StandInSubmenu });
 
@@ -196,8 +195,6 @@ const STAND_IN_MENU_ITEMS: readonly (readonly [MenuTargetKind, MenuItem])[] = [
   ['node', command('stand-in-copy-id', 'Copy ID', 'copy', NODE_GROUP.copy, NODE_ORDER.copyId, { binding: 'copy-id' })],
   ['node', command('stand-in-copy-properties', 'Copy properties', 'copy', NODE_GROUP.copy, NODE_ORDER.copyProperties, { binding: 'copy-properties' })],
   ['node', command('stand-in-open-record', 'Open source record', 'external', NODE_GROUP.copy, NODE_ORDER.openSourceRecord)],
-  ['node', command('stand-in-ask', 'Ask about this entity', 'spark', NODE_GROUP.assist, NODE_ORDER.ask, { state: 'locked', lock: true })],
-  ['node', command('stand-in-summarize', 'Summarize neighborhood', 'spark', NODE_GROUP.assist, NODE_ORDER.summarize, { state: 'locked' })],
   ['relationship', command('stand-in-why', 'Why is this relationship here?', 'why', RELATIONSHIP_GROUP.explain, RELATIONSHIP_ORDER.explain)],
   ['relationship', command('stand-in-supporting', 'View supporting records', 'external', RELATIONSHIP_GROUP.explain, RELATIONSHIP_ORDER.viewSupportingRecords)],
   ['relationship', command('stand-in-highlight', 'Highlight endpoints', 'focus', RELATIONSHIP_GROUP.endpoints, RELATIONSHIP_ORDER.highlightEndpoints)],
@@ -209,7 +206,6 @@ const STAND_IN_MENU_ITEMS: readonly (readonly [MenuTargetKind, MenuItem])[] = [
   ['relationship', command('stand-in-copy-relationship-id', 'Copy relationship ID', 'copy', RELATIONSHIP_GROUP.copy, RELATIONSHIP_ORDER.copyRelationshipId, { binding: 'copy-id' })],
   ['relationship', command('stand-in-copy-relationship-properties', 'Copy properties', 'copy', RELATIONSHIP_GROUP.copy, RELATIONSHIP_ORDER.copyProperties, { binding: 'copy-properties' })],
   ['relationship', command('stand-in-open-relationship-record', 'Open source record', 'external', RELATIONSHIP_GROUP.copy, RELATIONSHIP_ORDER.openSourceRecord, { state: 'disabled' })],
-  ['relationship', command('stand-in-ask-relationship', 'Ask about this relationship', 'spark', RELATIONSHIP_GROUP.assist, RELATIONSHIP_ORDER.ask, { state: 'locked', lock: true })],
 ];
 
 /** Puts a stand-in for each menu item that is not built yet, leaves the places that are taken, and returns the function that takes out what it put in. */

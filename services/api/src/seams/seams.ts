@@ -46,20 +46,8 @@ export interface Coordinator {
   acquireRead(request: ReadAccessRequest): Promise<ReadAdmission>;
 }
 
-export type Availability = { readonly available: true } | { readonly available: false; readonly reason: string };
-
-export interface AskPlanner {
-  availability(): Availability;
-}
-
-export interface EvidenceStore {
-  availability(): Availability;
-}
-
 export interface Seams {
   readonly policy: PolicyProvider;
   readonly audit: AuditSink;
   readonly coordinator: Coordinator;
-  readonly askPlanner: AskPlanner;
-  readonly evidenceStore: EvidenceStore;
 }

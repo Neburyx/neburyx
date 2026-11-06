@@ -11,7 +11,6 @@ import type { PointerTool } from '../state/presentation-state.js';
 import type { Count, EdgeRef, GraphEdge, GraphNode } from '@neburyx/contracts';
 import { edge, key, node, ref } from '../state/test-data.js';
 import { commandItem, ids, item, load, loadGraph, menu, nodeKey, onCanvas, placeOf, selection, show, withBuiltIns, type CommandOptions } from './context-menu-kit.js';
-import { LOCK_TOOLTIP } from './locked-control.js';
 import { createMenuRegistry, type MenuItem, type MenuRegistry, type MenuItemState, type SubmenuProps } from './menu-registry.js';
 
 afterEach(() => {
@@ -436,7 +435,7 @@ describe('what a right-click on an item does to the selection', () => {
   });
 });
 
-describe('submenus, disabled items and locked items', () => {
+describe('submenus and disabled items', () => {
   const ordinary = (id: string, extra: CommandOptions = {}): MenuItem => commandItem(id, extra);
   const parent = (id: string, content: ComponentType<SubmenuProps>, order: number, state?: MenuItemState): MenuItem => ({ id, label: id, icon: null, group: 10, order, submenu: content, ...(state === undefined ? {} : { state }) });
   const menusWith = (...items: MenuItem[]): MenuRegistry => {
@@ -452,10 +451,10 @@ describe('submenus, disabled items and locked items', () => {
       </button>
     </div>
   );
-  const openMenuWith = (registry: MenuRegistry, edition: 'community' | 'enterprise' | undefined = 'community') => {
+  const openMenuWith = (registry: MenuRegistry) => {
     const state = createClientState();
     load(state);
-    const view = show(state, {}, registry, edition);
+    const view = show(state, {}, registry);
     view.rightClick(onCanvas(10, 10));
     return { state, ...view };
   };
@@ -522,25 +521,8 @@ describe('submenus, disabled items and locked items', () => {
     expect(screen.queryByRole('menu')).not.toBeNull();
   });
 
-  it.each<['community' | 'enterprise', boolean]>([['community', true], ['enterprise', false]])('draws a locked item inert with the shared tag only in the edition that shows it (%s)', async (edition, tagged) => {
-    const run = vi.fn();
-    openMenuWith(menusWith(ordinary('Ask', { state: 'locked', lock: true, run })), edition);
-    const row = screen.getByRole('menuitem', { name: new RegExp(`^Ask`) });
-    expect(row.getAttribute('aria-disabled')).toBe('true');
-    expect(row.querySelector('.menu-tag')?.textContent ?? null).toBe(tagged ? LOCK_TOOLTIP : null);
-    expect(row.querySelector('.icon-lock')).not.toBeNull();
-    await userEvent.setup().click(row);
-    expect(run).not.toHaveBeenCalled();
-    expect(screen.queryByRole('menu')).not.toBeNull();
-  });
-
-  it('draws no lock on a locked item that did not ask for one', () => {
-    openMenuWith(menusWith(ordinary('Summarize', { state: 'locked' })));
-    expect(screen.getByRole('menuitem', { name: /Summarize/ }).querySelector('.icon-lock')).toBeNull();
-  });
-
-  it.each<MenuItemState>(['disabled', 'locked'])('never opens the content of a %s submenu item, by press or by pointer', async (state) => {
-    openMenuWith(menusWith(parent('Layout', Probe, 10, state)));
+  it('never opens the content of a disabled submenu item, by press or by pointer', async () => {
+    openMenuWith(menusWith(parent('Layout', Probe, 10, 'disabled')));
     const row = screen.getByRole('menuitem', { name: /Layout/ });
     const user = userEvent.setup();
     await user.hover(row);
@@ -576,7 +558,7 @@ describe('the menu replaced, cleared and pressed outside', () => {
       });
       return null;
     }
-    const { rightClick } = show(state, {}, withBuiltIns(), 'community', <Replacer />);
+    const { rightClick } = show(state, {}, withBuiltIns(), <Replacer />);
     rightClick({ target: { kind: 'node', key: nodeKey('n2') }, x: 5, y: 5 });
     act(() => state.setLoaded([key('a')], [ref('a', 'type-a', 'n1')], []));
     expect(screen.getByRole('menu', { name: 'Canvas' })).not.toBeNull();

@@ -88,10 +88,6 @@ nav ul {
   color: var(--color-text);
 }
 
-.sidebar .identity-name {
-  font-weight: var(--font-weight-semibold);
-}
-
 .sidebar section[aria-label='Source'] {
   color: var(--color-text-muted);
 }

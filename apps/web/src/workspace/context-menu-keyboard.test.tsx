@@ -34,10 +34,10 @@ const focusedName = (): string | null => {
   const active = document.activeElement;
   return active?.getAttribute('role') === 'menuitem' ? (active.querySelector('.menu-label')?.textContent ?? null) : (active?.textContent ?? null);
 };
-const open = (registry: MenuRegistry, edition: 'community' | 'enterprise' = 'community') => {
+const open = (registry: MenuRegistry) => {
   const state = createClientState();
   load(state);
-  const shown = show(state, {}, registry, edition);
+  const shown = show(state, {}, registry);
   return { state, ...shown };
 };
 const openFromOutside = async (registry: MenuRegistry) => {
@@ -67,7 +67,7 @@ describe('the menu from the keyboard', () => {
     first.rightClick(onCanvas(10, 10));
     expect(focusedName()).toBe('On');
     cleanup();
-    const second = open(registryOf(command('Off', 10, { state: 'disabled' }), command('Locked', 20, { state: 'locked' })));
+    const second = open(registryOf(command('Off', 10, { state: 'disabled' }), command('Also off', 20, { state: 'disabled' })));
     second.rightClick(onCanvas(10, 10));
     expect(focusedName()).toBe('Off');
     cleanup();
@@ -100,7 +100,7 @@ describe('the menu from the keyboard', () => {
     expect(focusedName()).toBe('Show legend');
   });
 
-  it('lets the focus reach a disabled or locked item, which does nothing', async () => {
+  it('lets the focus reach a disabled item, which does nothing', async () => {
     const run = vi.fn();
     const { rightClick } = open(registryOf(command('On', 10), command('Off', 20, { state: 'disabled', run })));
     rightClick(onCanvas(10, 10));
@@ -171,8 +171,8 @@ describe('the menu from the keyboard', () => {
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Outside' }));
   });
 
-  it.each<MenuItemState>(['disabled', 'locked'])('does nothing with Enter, Space or ArrowRight on a %s submenu item, keeps the menu open and the focus where it is', async (state) => {
-    const { rightClick } = open(registryOf(parent('More', Probe, 10, state), command('Other', 20)));
+  it('does nothing with Enter, Space or ArrowRight on a disabled submenu item, keeps the menu open and the focus where it is', async () => {
+    const { rightClick } = open(registryOf(parent('More', Probe, 10, 'disabled'), command('Other', 20)));
     rightClick(onCanvas(10, 10));
     const user = userEvent.setup();
     expect(focusedName()).toBe('Other');
@@ -206,12 +206,10 @@ describe('the menu from the keyboard', () => {
   it('keeps the shortcut hint out of an item name, and says an unavailable item is unavailable', () => {
     const registry = withBuiltIns();
     registry.register('canvas', command('Unavailable', 40, { group: 30, state: 'disabled' }));
-    registry.register('canvas', command('Locked', 50, { group: 30, state: 'locked' }));
     const { rightClick } = open(registry);
     rightClick(onCanvas(10, 10));
     for (const name of ['Fit to view', 'Select all', 'Invert selection']) expect(within(screen.getByRole('menu')).getByRole('menuitem', { name })).not.toBeNull();
     expect(row('Unavailable').getAttribute('aria-disabled')).toBe('true');
-    expect(row(/^Locked/).getAttribute('aria-disabled')).toBe('true');
     expect(row('Fit to view').getAttribute('aria-disabled')).toBeNull();
   });
 

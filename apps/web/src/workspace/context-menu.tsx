@@ -1,12 +1,10 @@
 import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { useCanvasCommands } from '../canvas/canvas-commands.js';
 import { useProfile } from '../canvas/profile-context.js';
-import { answeredData, useShellData } from '../shell/shell-data.js';
 import { useClientState, useLoadedGraph } from '../state/context.js';
 import { drawnKeys } from '../state/loaded-graph.js';
 import type { OpenMenu } from '../state/presentation-state.js';
 import { useStoreSelector } from '../state/store.js';
-import { LOCK_TOOLTIP } from './locked-control.js';
 import { useKeyBindings } from './key-binding-registry.js';
 import { menuHeader } from './menu-header.js';
 import { placeMenu, type Placement } from './menu-placement.js';
@@ -33,7 +31,6 @@ export function ContextMenu() {
   const profile = useProfile();
   const bindings = useKeyBindings();
   const headingId = useId();
-  const edition = answeredData(useShellData().me)?.edition;
   const targetGone = open !== undefined && open.key !== undefined && !drawnKeys(graph).has(open.key);
   const shown = targetGone ? undefined : open;
   const root = useRef<HTMLDivElement>(null);
@@ -240,8 +237,6 @@ export function ContextMenu() {
               >
                 {item.icon}
                 <span className="menu-label">{labelOf(item)}</span>
-                {status === 'locked' && edition === 'community' ? <span className="menu-tag">{LOCK_TOOLTIP}</span> : null}
-                {status === 'locked' && item.lock === true ? <span className="icon icon-lock" aria-hidden="true" /> : null}
                 {opensSubmenu ? <span className="icon icon-chevron" aria-hidden="true" /> : null}
                 {hintOf(item.binding) === undefined || opensSubmenu ? null : (
                   <span className="menu-hint" aria-hidden="true">

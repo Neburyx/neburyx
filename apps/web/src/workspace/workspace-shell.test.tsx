@@ -4,7 +4,6 @@ import { describe, expect, it } from 'vitest';
 import type { ApiClient, ApiResult } from '../api/client.js';
 import { fakeClient } from '../api/fake-client.js';
 import { clientWith, me, renderApp, source, WorkspaceHarness } from '../test-utils.js';
-import { initialsOf } from './initials.js';
 
 const rail = () => screen.getByRole('navigation', { name: 'Workspace' });
 
@@ -51,29 +50,6 @@ describe('the rail identity', () => {
   it('shows the caption "Local workspace" for Community', async () => {
     renderApp('/explore', clientWith({ me: me(), sources: [] }));
     expect(await screen.findByText('Local workspace')).toBeTruthy();
-  });
-
-  it('shows the initials of an Enterprise principal, named by the full name, and no caption', async () => {
-    renderApp('/explore', clientWith({ me: me({ edition: 'enterprise', identityMode: 'sso', principal: { id: '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d', displayName: 'Maya Chen', role: 'investigator' } }), sources: [] }));
-    const initials = await screen.findByRole('img', { name: 'Maya Chen' });
-    expect(initials.textContent).toBe('MC');
-    expect(screen.queryByText('Local workspace')).toBeNull();
-    expect(initials.parentElement?.className).toBe('rail-bottom rail-bottom-enterprise');
-  });
-
-  it('shows initials for an Enterprise principal with no role', async () => {
-    renderApp('/explore', clientWith({ me: me({ edition: 'enterprise', identityMode: 'sso', principal: { id: '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d', displayName: 'Avery Quinn', role: null } }), sources: [] }));
-    expect((await screen.findByRole('img', { name: 'Avery Quinn' })).textContent).toBe('AQ');
-  });
-
-  it.each([
-    ['Maya Chen', 'MC'],
-    ['maya', 'M'],
-    ['Maya Anne Chen', 'MC'],
-    ['  Maya   Chen ', 'MC'],
-    ['', ''],
-  ])('makes the initials of %j: %j', (name, expected) => {
-    expect(initialsOf(name)).toBe(expected);
   });
 });
 

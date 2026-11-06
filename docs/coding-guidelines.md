@@ -44,8 +44,6 @@ These shape code directly. Breaking one is a bug, whatever the tests say.
   Use the shared count type from `packages/contracts` (its value is absent when the quality is
   `unknown`), and never let a function return a bare number that a caller could show as exact.
 - **One investigation per source.** Nothing merges results from two sources.
-- **Community never imports `ee/`.** Enterprise plugs in through interfaces defined in Community code,
-  each with a working default.
 - **No domain words in code.** Entity and relationship names come from the mapping and the source
   profile. Code and UI components do not hard-code "account", "claim" or similar.
 - **Config-driven, no customer-specific code.** Behaviour differences are configuration.

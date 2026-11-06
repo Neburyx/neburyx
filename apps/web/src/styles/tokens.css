@@ -20,15 +20,11 @@
   --color-canvas: #fafbfc;
   --color-workspace-border: #e3e6ec;
   --color-workspace-muted: #4a5261;
-  --color-avatar-surface: #e9ecf1;
-  --color-avatar-text: #5f6672;
   --color-control-border: #e3e5ed;
   --color-flyout-hint: #8c96a8;
   --color-tool-icon: #747a85;
   --color-menu-icon: #525c6b;
   --color-chosen-mark: #5263a6;
-  --color-menu-locked: #525c6b;
-  --color-menu-tag-surface: #edf0f5;
   --color-row-chosen: #edf0f7;
 
   --space-2: 2px;
@@ -50,11 +46,8 @@
   --rail-width: 56px;
   --rail-item-size: 40px;
   --header-height: 48px;
-  --avatar-size: 32px;
   --region-top: 64px;
   --source-status-max-width: 320px;
-  --lock-width: 10px;
-  --lock-height: 12px;
   --scope-left: 24px;
   --scope-top: 16px;
   --panel-handle-width: 8px;
@@ -68,7 +61,6 @@
   --tool-flyout-width: 236px;
   --menu-row-height: 30px;
   --radius-flyout: 10px;
-  --radius-tag-pill: 9px;
   --opacity-disabled: 0.5;
   --menu-max-width: calc(100vw - 16px);
   --menu-max-height: calc(100vh - 16px);
@@ -125,7 +117,6 @@
   --radius: 6px;
   --radius-badge: 5px;
   --radius-small: 4px;
-  --radius-avatar: 10px;
   --radius-panel: 8px;
   --radius-host-panel: 10px;
 
