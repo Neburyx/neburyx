@@ -16,6 +16,8 @@ pnpm test:ux
 
 `pnpm build` makes the production build in `apps/web/dist`; `build:ux` makes a second build (`apps/web/dist-ux`, mode `ux`) that carries the development pages and the canvas read-out the tests read. With an installed Chrome, set `NEBURYX_UX_CHROME` to its executable instead of installing Chromium.
 
+The specs that switch source run against a third copy of the support server on port 4175, which lists a second source (`claims-demo`, the same profile under another ID) beside the first; the other two servers list one.
+
 `fixtures/profile.json` is the synthetic source profile the pages read: the banking pack's, as the API's profile builder makes it. `pnpm --filter @neburyx/ux-tests check:profile` (after `pnpm build`) fails when it is out of date; `node tools/ux/scripts/make-profile.mjs` rewrites it.
 
 ## Checking that a test can fail

@@ -4,12 +4,20 @@ import { randomUUID } from 'node:crypto';
 import { extname, join, normalize, sep } from 'node:path';
 import { openInvestigationRequestSchema, valueOfPathSegment } from '@neburyx/contracts';
 
+interface SupportProfile {
+  readonly sourceId: string;
+  readonly entityTypes?: readonly { readonly type: string }[];
+}
+
 export interface SupportServerOptions {
   /** The folder of a built web app. */
   readonly root: string;
-  /** The synthetic source profile the pages read; its `sourceId` names the one source the server lists, and its entity types are the ones an investigation can start from. */
-  readonly profile: { readonly sourceId: string; readonly entityTypes?: readonly { readonly type: string }[] };
+  /** The synthetic source profile the pages read; its `sourceId` names the source the server lists, and its entity types are the ones an investigation can start from. */
+  readonly profile: SupportProfile;
+  readonly otherProfiles?: readonly SupportProfile[];
 }
+
+const profilesOf = (options: SupportServerOptions): readonly SupportProfile[] => [options.profile, ...(options.otherProfiles ?? [])];
 
 const TYPES: Readonly<Record<string, string>> = {
   '.html': 'text/html; charset=utf-8',
@@ -29,12 +37,12 @@ function json(response: ServerResponse, status: number, body: unknown): void {
   response.end(JSON.stringify(body));
 }
 
-function me(sourceId: string): unknown {
+function me(sourceIds: readonly string[]): unknown {
   return {
     principal: { id: '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d', displayName: 'Local user', role: 'administrator' },
     edition: 'community',
     identityMode: 'none',
-    sources: [{ sourceId, viewSensitive: false, synthetic: true }],
+    sources: sourceIds.map((sourceId) => ({ sourceId, viewSensitive: false, synthetic: true })),
   };
 }
 
@@ -43,6 +51,7 @@ function source(sourceId: string): unknown {
 }
 
 const NOT_FOUND = { error: { code: 'NOT_FOUND', message: 'Not found.', retryable: false, traceId: 'tr-support' } };
+const MISMATCH = { error: { code: 'SOURCE_MISMATCH', message: 'The request mixes more than one source.', retryable: false, traceId: 'tr-support' } };
 const INVALID = { error: { code: 'INVALID_REQUEST', message: 'The request is not valid.', retryable: false, traceId: 'tr-support' } };
 
 interface StoredInvestigation {
@@ -96,12 +105,11 @@ function draftOf(stored: StoredInvestigation): unknown {
 /** The synthetic stand-in for the entity and investigation endpoints: it holds the investigations opened since it started, and an entity named `missing` does not exist. */
 function createInvestigations(options: SupportServerOptions) {
   const held = new Map<string, StoredInvestigation>();
-  const sourceId = options.profile.sourceId;
-  const types = new Set((options.profile.entityTypes ?? []).map((entry) => entry.type));
-  const exists = (entityType: string, stableId: string): boolean => types.has(entityType) && stableId !== 'missing';
+  const typesOf = new Map(profilesOf(options).map((profile) => [profile.sourceId, new Set((profile.entityTypes ?? []).map((entry) => entry.type))]));
+  const exists = (sourceId: string, entityType: string, stableId: string): boolean => typesOf.get(sourceId)?.has(entityType) === true && stableId !== 'missing';
   return {
-    entity(entityType: string, stableId: string, response: ServerResponse): void {
-      if (!exists(entityType, stableId)) return json(response, 404, NOT_FOUND);
+    entity(sourceId: string, entityType: string, stableId: string, response: ServerResponse): void {
+      if (!exists(sourceId, entityType, stableId)) return json(response, 404, NOT_FOUND);
       json(response, 200, node(sourceId, entityType, stableId));
     },
     read(id: string, response: ServerResponse): void {
@@ -114,9 +122,11 @@ function createInvestigations(options: SupportServerOptions) {
       if (!parsed.success) return json(response, 400, INVALID);
       const { entity, caseRef = null } = parsed.data;
       const { entityType, stableId } = entity;
-      if (parsed.data.sourceId !== sourceId || entity.sourceId !== sourceId) return json(response, 400, INVALID);
-      if (!exists(entityType, stableId)) return json(response, 404, NOT_FOUND);
-      const existing = caseRef === null ? undefined : [...held.values()].find((stored) => stored.caseRef === caseRef && stored.entityType === entityType && stored.stableId === stableId);
+      const { sourceId } = parsed.data;
+      if (entity.sourceId !== sourceId) return json(response, 400, MISMATCH);
+      if (!typesOf.has(sourceId)) return json(response, 400, INVALID);
+      if (!exists(sourceId, entityType, stableId)) return json(response, 404, NOT_FOUND);
+      const existing = caseRef === null ? undefined : [...held.values()].find((stored) => stored.sourceId === sourceId && stored.caseRef === caseRef && stored.entityType === entityType && stored.stableId === stableId);
       if (existing !== undefined) return json(response, 200, { investigation: shown(existing), created: false, ...(isRepointed(existing.caseRef) ? {} : { entity: node(sourceId, entityType, stableId) }) });
       const stored: StoredInvestigation = { id: randomUUID(), sourceId, title: `${entityType} ${stableId}`, caseRef, entityType, stableId, createdAt: new Date().toISOString() };
       held.set(stored.id, stored);
@@ -126,11 +136,12 @@ function createInvestigations(options: SupportServerOptions) {
 }
 
 function api(path: string, options: SupportServerOptions, response: ServerResponse): void {
-  const id = options.profile.sourceId;
+  const profiles = profilesOf(options);
   if (path === '/healthz' || path === '/readyz') return json(response, 200, { status: 'ok' });
-  if (path === '/v1/me') return json(response, 200, me(id));
-  if (path === '/v1/sources') return json(response, 200, { items: [source(id)], nextCursor: null });
-  if (path === `/v1/sources/${encodeURIComponent(id)}/profile`) return json(response, 200, options.profile);
+  if (path === '/v1/me') return json(response, 200, me(profiles.map((profile) => profile.sourceId)));
+  if (path === '/v1/sources') return json(response, 200, { items: profiles.map((profile) => source(profile.sourceId)), nextCursor: null });
+  const profile = profiles.find((candidate) => path === `/v1/sources/${encodeURIComponent(candidate.sourceId)}/profile`);
+  if (profile !== undefined) return json(response, 200, profile);
   json(response, 404, { error: { code: 'NOT_FOUND' } });
 }
 
@@ -165,10 +176,10 @@ export function createSupportServer(options: SupportServerOptions): Server {
       if (isApi) {
         const parts = path.split('/').map((part) => decodeURIComponent(part));
         const [, , kind, first, second, third] = parts;
-        if (kind === 'entities' && parts.length === 6 && first === options.profile.sourceId && second !== undefined && third !== undefined) {
+        if (kind === 'entities' && parts.length === 6 && first !== undefined && profilesOf(options).some((profile) => profile.sourceId === first) && second !== undefined && third !== undefined) {
           const entityType = valueOfPathSegment(second);
           const stableId = valueOfPathSegment(third);
-          return entityType === undefined || stableId === undefined ? json(response, 400, INVALID) : investigations.entity(entityType, stableId, response);
+          return entityType === undefined || stableId === undefined ? json(response, 400, INVALID) : investigations.entity(first, entityType, stableId, response);
         }
         if (kind === 'investigations' && parts.length === 4 && first !== undefined) return investigations.read(first, response);
         return api(path, options, response);

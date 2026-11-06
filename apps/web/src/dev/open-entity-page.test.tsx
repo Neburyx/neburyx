@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import { fakeClient } from '../api/fake-client.js';
 import { createClientState } from '../state/client-state.js';
+import { openById } from '../investigations/open-flow.js';
 import { INVESTIGATION_A, INVESTIGATION_B, investigationOf, knowing, nodeOf, openedOf } from '../investigations/test-data.js';
 import { me, renderApp, source } from '../test-utils.js';
 import { testProfile } from './test-profile.js';
@@ -119,6 +120,22 @@ describe('the open-entity page', () => {
     expect(screen.getByLabelText('Stable ID')).toHaveProperty('value', 'A-404');
     expect(screen.getByLabelText('Case reference (optional)')).toHaveProperty('value', 'CASE-9');
     expect(screen.getByRole('button', { name: 'Open' }).hasAttribute('disabled')).toBe(false);
+  });
+
+  it('shows SOURCE_MISMATCH from the API, keeps the form as typed and leaves the investigation on screen as it was', async () => {
+    const { client } = knowing([A], { openInvestigation: async () => ({ ok: false, failure: { code: 'SOURCE_MISMATCH', message: 'The request mixes more than one source.', retryable: false, traceId: 'tr-9' } }) });
+    const state = createClientState();
+    await openById(client, state, INVESTIGATION_A, { principalId: 'principal-1', mask: false });
+    const shown = state.investigation.getState();
+    renderApp('/dev/open-entity', client, state);
+    const user = userEvent.setup();
+    await chooseSource(user);
+    await user.type(screen.getByLabelText('Stable ID'), 'C-1');
+    await user.click(screen.getByRole('button', { name: 'Open' }));
+    const failure = await screen.findByRole('group', { name: 'Opening failed' });
+    expect(failure.textContent).toContain('SOURCE_MISMATCH');
+    expect(screen.getByLabelText('Stable ID')).toHaveProperty('value', 'C-1');
+    expect(state.investigation.getState()).toBe(shown);
   });
 
   it('sends the reference of the entity under the source twice, and a case reference only when one is typed', async () => {

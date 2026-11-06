@@ -134,6 +134,55 @@ describe('the investigations the support server holds', () => {
     expect(investigationResponseSchema.parse(await (await fetch(`${base}/v1/investigations/${opened.investigation.id}`)).json()).investigation.sourceState).toBe('repointed');
   });
 
+  describe('with a second source', () => {
+    const second = { sourceId: 'other', entityTypes: [{ type: 'thing' }, { type: 'extra' }] };
+    async function startTwo(): Promise<string> {
+      const server = createSupportServer({ root: folder, profile: { sourceId: 'demo', entityTypes: [{ type: 'thing' }] }, otherProfiles: [second] });
+      await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
+      closing = () => new Promise<void>((done) => void server.close(() => done()));
+      return baseOf(server);
+    }
+    const openIn = (base: string, sourceId: string, extra: Record<string, unknown> = {}, entityType = 'thing') => open(base, { sourceId, entity: { sourceId, entityType, stableId: 'T-1' }, ...extra });
+
+    it('lists both sources, answers each one\'s profile, and reads an entity under the source in its path only', async () => {
+      const base = await startTwo();
+      expect(sourcesResponseSchema.parse(await (await fetch(`${base}/v1/sources`)).json()).items.map((item) => item.id)).toEqual(['demo', 'other']);
+      expect(meResponseSchema.parse(await (await fetch(`${base}/v1/me`)).json()).sources.map((entry) => entry.sourceId)).toEqual(['demo', 'other']);
+      expect(await (await fetch(`${base}/v1/sources/other/profile`)).json()).toMatchObject({ sourceId: 'other' });
+      expect(await (await fetch(`${base}/v1/entities/other/thing/T-1`)).json()).toMatchObject({ ref: { sourceId: 'other', stableId: 'T-1' } });
+      expect(await (await fetch(`${base}/v1/entities/demo/thing/T-1`)).json()).toMatchObject({ ref: { sourceId: 'demo', stableId: 'T-1' } });
+    });
+
+    it('refuses the first source’s types under the second source and the second’s under the first', async () => {
+      const base = await startTwo();
+      expect((await openIn(base, 'demo', {}, 'extra')).status).toBe(404);
+      expect((await openIn(base, 'other', {}, 'extra')).status).toBe(201);
+      expect((await fetch(`${base}/v1/entities/demo/extra/T-1`)).status).toBe(404);
+      expect((await fetch(`${base}/v1/entities/nowhere/thing/T-1`)).status).toBe(404);
+    });
+
+    it('reuses an investigation by case reference within one source only, so the same reference, type and ID make two', async () => {
+      const base = await startTwo();
+      const first = openInvestigationResponseSchema.parse(await (await openIn(base, 'demo', { caseRef: 'CASE-1' })).json());
+      const other = await openIn(base, 'other', { caseRef: 'CASE-1' });
+      expect(other.status).toBe(201);
+      const created = openInvestigationResponseSchema.parse(await other.json());
+      expect(created.investigation).toMatchObject({ sourceId: 'other' });
+      expect(created.investigation.id).not.toBe(first.investigation.id);
+      const again = await openIn(base, 'demo', { caseRef: 'CASE-1' });
+      expect(again.status).toBe(200);
+      expect(await again.json()).toMatchObject({ created: false, investigation: { id: first.investigation.id, sourceId: 'demo' } });
+    });
+
+    it('refuses a request whose reference names the other source, with SOURCE_MISMATCH, and an unknown source', async () => {
+      const base = await startTwo();
+      const mismatch = await open(base, { sourceId: 'demo', entity: { sourceId: 'other', entityType: 'thing', stableId: 'T-1' } });
+      expect(mismatch.status).toBe(400);
+      expect(await mismatch.json()).toMatchObject({ error: { code: 'SOURCE_MISMATCH' } });
+      expect((await openIn(base, 'nowhere')).status).toBe(400);
+    });
+  });
+
   it('answers 404 for an entity named missing, an unknown type and an unknown investigation, and 400 for a request that names another source', async () => {
     const base = await startWithTypes();
     expect((await open(base, request({ entity: { sourceId: 'demo', entityType: 'thing', stableId: 'missing' } }))).status).toBe(404);

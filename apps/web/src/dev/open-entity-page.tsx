@@ -4,6 +4,7 @@ import type { SourceProfile } from '@neburyx/contracts';
 import type { ApiClient, ApiFailure } from '../api/client.js';
 import { FailureNotice } from '../failure-notice.js';
 import { NOT_MASKED, openEntity } from '../investigations/open-flow.js';
+import { AttemptedSource } from '../investigations/attempted-source.js';
 import { SOURCE_NOT_AVAILABLE_TEXT } from '../investigations/messages.js';
 import { EXPLORE_PATH } from '../shell/navigation.js';
 import { PageHeading } from '../shell/page-heading.js';
@@ -81,6 +82,7 @@ function OpenEntityForm({ client, profile }: { readonly client: ApiClient; reado
       {refusal === undefined ? null : (
         <div role="group" aria-label="Opening failed" tabIndex={-1} ref={message}>
           {refusal.kind === 'failure' ? <FailureNotice failure={refusal.failure} /> : <p role="alert">{SOURCE_NOT_AVAILABLE_TEXT}</p>}
+          <AttemptedSource sourceId={profile.sourceId} />
         </div>
       )}
     </form>

@@ -2,8 +2,9 @@ import { defineConfig } from '@playwright/test';
 
 const UX_PORT = 4173;
 const PRODUCTION_PORT = 4174;
-const serve = (folder: string, port: number) => ({
-  command: `node src/serve.ts ${folder} ${port}`,
+const TWO_SOURCES_PORT = 4175;
+const serve = (folder: string, port: number, mode = '') => ({
+  command: `node src/serve.ts ${folder} ${port} ${mode}`.trim(),
   url: `http://127.0.0.1:${port}/healthz`,
   // a server already on the port could be another checkout's build, so the run owns its servers and fails when the port is taken
   reuseExistingServer: false,
@@ -30,5 +31,5 @@ export default defineConfig({
     // alone and last, so nothing else runs while a measurement is taken
     { name: 'benchmark', testMatch: /benchmark/, dependencies: ['laptop-1440', 'laptop-1280'], use: { viewport: { width: 1280, height: 720 } } },
   ],
-  webServer: [serve('../../apps/web/dist-ux', UX_PORT), serve('../../apps/web/dist', PRODUCTION_PORT)],
+  webServer: [serve('../../apps/web/dist-ux', UX_PORT), serve('../../apps/web/dist', PRODUCTION_PORT), serve('../../apps/web/dist-ux', TWO_SOURCES_PORT, 'two-sources')],
 });

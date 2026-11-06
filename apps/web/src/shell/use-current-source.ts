@@ -1,6 +1,6 @@
 import { useClientState } from '../state/context.js';
 import { useStoreSelector } from '../state/store.js';
-import { currentSource, showsSyntheticBadge, type CurrentSource } from './current-source.js';
+import { currentSource, showsSyntheticBadge, sourceNameOf, type CurrentSource } from './current-source.js';
 import { answeredData, useShellData } from './shell-data.js';
 
 export interface CurrentSourceView {
@@ -15,4 +15,9 @@ export function useCurrentSource(): CurrentSourceView {
   if (answer === undefined) return { current: undefined, showsSyntheticBadge: false };
   const current = currentSource(answer.items, boundId);
   return { current, showsSyntheticBadge: showsSyntheticBadge(current, answer.items) };
+}
+
+export function useSourceName(sourceId: string): string {
+  const answer = answeredData(useShellData().sources);
+  return answer === undefined ? sourceId : sourceNameOf(answer.items, sourceId);
 }

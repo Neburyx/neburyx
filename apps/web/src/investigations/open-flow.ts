@@ -8,7 +8,7 @@ import type { Activation } from '../state/client-state.js';
 export type OpenOutcome =
   | { readonly kind: 'shown'; readonly id: string; readonly activation: Activation }
   | { readonly kind: 'source-unavailable'; readonly investigation: Investigation }
-  | { readonly kind: 'failed'; readonly failure: ApiFailure };
+  | { readonly kind: 'failed'; readonly failure: ApiFailure; readonly sourceId?: string };
 
 export interface OpenContext {
   readonly principalId: string;
@@ -18,7 +18,8 @@ export interface OpenContext {
 /** No screen asks for masking yet, so every read the workspace makes is plain. */
 export const NOT_MASKED = false;
 
-const MISMATCH: OpenOutcome = { kind: 'failed', failure: { code: 'SCHEMA_MISMATCH' } };
+const failedIn = (sourceId: string, failure: ApiFailure): OpenOutcome => ({ kind: 'failed', failure, sourceId });
+const mismatchIn = (sourceId: string): OpenOutcome => failedIn(sourceId, { code: 'SCHEMA_MISMATCH' });
 
 export function openedKey(sourceId: string, principalId: string, investigationId: string, mask: boolean): QueryKey {
   return { sourceId, principalId, policyVersion: DEFAULT_POLICY_VERSION, filterHash: DEFAULT_FILTER_HASH, params: `open:${investigationId}`, mask };
@@ -35,7 +36,7 @@ function show(state: ClientState, investigation: Investigation, node: GraphNode,
     );
     return { kind: 'shown', id: investigation.id, activation };
   } catch (error) {
-    if (error instanceof StateError) return MISMATCH;
+    if (error instanceof StateError) return mismatchIn(investigation.sourceId);
     throw error;
   }
 }
@@ -49,9 +50,10 @@ export async function openById(client: ApiClient, state: ClientState, id: string
   const { investigation } = read.value;
   if (investigation.sourceState !== 'available') return { kind: 'source-unavailable', investigation };
   const start = investigation.startingEntity;
-  if (start === null) return MISMATCH;
+  if (start === null) return mismatchIn(investigation.sourceId);
   const entity = await client.getEntity({ sourceId: investigation.sourceId, entityType: start.entityType, stableId: start.stableId }, { mask: context.mask }, signal);
-  if (!entity.ok) return { kind: 'failed', failure: entity.failure };
+  if (!entity.ok) return failedIn(investigation.sourceId, entity.failure);
+  if (entity.value.ref.sourceId !== investigation.sourceId) return mismatchIn(investigation.sourceId);
   return show(state, investigation, entity.value, context, signal);
 }
 
@@ -60,8 +62,10 @@ export type OpenEntityOutcome = OpenOutcome & { readonly created?: boolean };
 /** Opens an entity as an investigation: the entity the answer carries is shown, so the page that follows reads nothing. */
 export async function openEntity(client: ApiClient, state: ClientState, request: Omit<OpenInvestigationRequest, 'mask'>, context: OpenContext, signal?: AbortSignal): Promise<OpenEntityOutcome> {
   const answer = await client.openInvestigation({ ...request, mask: context.mask }, signal);
-  if (!answer.ok) return { kind: 'failed', failure: answer.failure };
+  if (!answer.ok) return failedIn(request.sourceId, answer.failure);
   const body = answer.value;
+  if (body.investigation.sourceId !== request.sourceId) return mismatchIn(request.sourceId);
+  if ('entity' in body && body.entity.ref.sourceId !== body.investigation.sourceId) return mismatchIn(request.sourceId);
   if (body.investigation.sourceState !== 'available' || !('entity' in body)) return { kind: 'source-unavailable', investigation: body.investigation };
   return { ...show(state, body.investigation, body.entity, context, signal), created: body.created };
 }

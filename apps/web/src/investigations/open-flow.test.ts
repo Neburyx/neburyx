@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { createClientState } from '../state/client-state.js';
+import { StateError } from '../state/errors.js';
+import { edge } from '../state/test-data.js';
 import { INVESTIGATION_A, INVESTIGATION_B, investigationOf, knowing, nodeOf, openedOf, type KnownInvestigation } from './test-data.js';
-import { openById, openEntity } from './open-flow.js';
+import { openById, openEntity, openedKey } from './open-flow.js';
 
 const CONTEXT = { principalId: 'principal-1', mask: false };
 const MASKED = { principalId: 'principal-1', mask: true };
@@ -108,6 +110,138 @@ describe('opening an entity', () => {
     const state = createClientState();
     expect(await openEntity(client, state, request, CONTEXT)).toMatchObject({ kind: 'failed', failure: { code: 'NOT_FOUND' } });
     expect(state.investigation.getState().id).toBeNull();
+  });
+});
+
+describe('an answer that names another source than the one asked for', () => {
+  const request = { sourceId: 'source-a', entity: { sourceId: 'source-a', entityType: 'kind-a', stableId: 'A-1' } };
+  const refused = { kind: 'failed', failure: { code: 'SCHEMA_MISMATCH' } };
+  const answering = (value: ReturnType<typeof openedOf>) => knowing([A, B], { openInvestigation: async () => ({ ok: true, value }) });
+
+  it('is refused when its investigation is of another source, and nothing on screen changes', async () => {
+    const { client } = answering(openedOf(B.investigation, B.node));
+    const state = createClientState();
+    await openById(knowing([A]).client, state, INVESTIGATION_A, CONTEXT);
+    const shown = state.investigation.getState();
+    const presentation = state.presentation.view.getState();
+    expect(await openEntity(client, state, request, CONTEXT)).toMatchObject(refused);
+    expect(state.investigation.getState()).toBe(shown);
+    expect(state.presentation.view.getState()).toBe(presentation);
+    expect(state.holds(INVESTIGATION_B, false)).toBe(false);
+  });
+
+  it('is refused when its investigation is of another source and says its source is not available', async () => {
+    const { client } = answering(openedOf({ ...B.investigation, sourceState: 'repointed' }, undefined, false));
+    const state = createClientState();
+    expect(await openEntity(client, state, request, CONTEXT)).toMatchObject(refused);
+    expect(state.investigation.getState().id).toBeNull();
+  });
+
+  it('is refused when its entity is of another source than its investigation, whether the investigation is new, shown or set aside', async () => {
+    const stranger = nodeOf('source-b', 'kind-a', 'A-1');
+    const { client } = answering(openedOf(A.investigation, stranger, false));
+    const state = createClientState();
+    expect(await openEntity(client, state, request, CONTEXT)).toMatchObject(refused);
+    expect(state.investigation.getState().id).toBeNull();
+
+    await openEntity(knowing([A]).client, state, request, CONTEXT);
+    const shown = state.investigation.getState();
+    expect(await openEntity(client, state, request, CONTEXT)).toMatchObject(refused);
+    expect(state.investigation.getState()).toBe(shown);
+
+    await openEntity(knowing([B]).client, state, { sourceId: 'source-b', entity: { sourceId: 'source-b', entityType: 'kind-a', stableId: 'C-1' } }, CONTEXT);
+    expect(state.holds(INVESTIGATION_A, false)).toBe(true);
+    const aside = state.investigation.getState();
+    expect(await openEntity(client, state, request, CONTEXT)).toMatchObject(refused);
+    expect(state.investigation.getState()).toBe(aside);
+    expect(state.resume(INVESTIGATION_A, false)).toBe('resumed');
+    expect(state.loadedGraph().nodes.map((node) => node.ref.sourceId)).toEqual(['source-a']);
+  });
+
+  it('is refused when the investigation read by its identifier is of one source and its entity of another, for a new one', async () => {
+    const { client } = knowing([A], { getEntity: async () => ({ ok: true, value: nodeOf('source-b', 'kind-a', 'A-1') }) });
+    const state = createClientState();
+    expect(await openById(client, state, INVESTIGATION_A, CONTEXT)).toMatchObject(refused);
+    expect(state.investigation.getState().id).toBeNull();
+  });
+
+  it('does not stop an answer for the right source that comes after a refused one', async () => {
+    const state = createClientState();
+    expect(await openEntity(answering(openedOf(B.investigation, B.node)).client, state, request, CONTEXT)).toMatchObject(refused);
+    expect(await openEntity(knowing([A]).client, state, request, CONTEXT)).toMatchObject({ kind: 'shown', id: INVESTIGATION_A });
+    expect(state.loadedGraph().nodes.map((node) => node.ref.sourceId)).toEqual(['source-a']);
+  });
+});
+
+describe('opening across two sources and back', () => {
+  const requestOf = (sourceId: string, stableId: string) => ({ sourceId, entity: { sourceId, entityType: 'kind-a', stableId } });
+  const wrong = knowing([A, B], { openInvestigation: async () => ({ ok: true, value: openedOf(A.investigation, nodeOf('source-b', 'kind-a', 'A-1'), false) }) }).client;
+  const added = nodeOf('source-a', 'kind-a', 'A-2');
+  const relationship = { ...edge('source-a', 'E-1', 'A-1', 'A-2'), from: A.node.ref, to: added.ref };
+  const foreign = { ...edge('source-a', 'E-2', 'A-1', 'A-2'), from: A.node.ref, to: nodeOf('source-b', 'kind-a', 'C-1').ref };
+
+  const idOf = (held: { readonly ref: object }): string => ('stableId' in held.ref && typeof held.ref.stableId === 'string' ? held.ref.stableId : 'other');
+
+  function withRelationship(state: ReturnType<typeof createClientState>): void {
+    const shown = state.investigation.getState();
+    const key = { ...openedKey('source-a', CONTEXT.principalId, INVESTIGATION_A, false), params: 'added' };
+    state.putResult(key, { sourceId: 'source-a', nodes: [added], edges: [relationship] });
+    state.setLoaded([...shown.resultKeys, key], [...shown.nodeRefs, added.ref], [relationship.ref]);
+  }
+
+  it('keeps every loaded node and relationship in the source on screen at every step, refused opens included, and never changes an investigation set aside', async () => {
+    const { client } = knowing([A, B]);
+    const state = createClientState();
+    const namesOnlyTheSourceOnScreen = (): void => {
+      const graph = state.loadedGraph();
+      const shown = state.investigation.getState().sourceId;
+      expect(graph.nodes.every((node) => node.ref.sourceId === shown)).toBe(true);
+      expect(graph.edges.every((held) => held.ref.sourceId === shown && held.from.sourceId === shown && held.to.sourceId === shown)).toBe(true);
+    };
+    const holding = (): string => `${state.investigation.getState().id}:${state.loadedGraph().nodes.map((node) => node.ref.stableId).join(',')}:${state.loadedGraph().edges.map(idOf).join(',')}`;
+    const steps: readonly (() => Promise<unknown> | void)[] = [
+      () => openEntity(client, state, requestOf('source-a', 'A-1'), CONTEXT),
+      () => withRelationship(state),
+      () => openEntity(client, state, requestOf('source-b', 'C-1'), CONTEXT),
+      () => openEntity(wrong, state, requestOf('source-b', 'C-1'), CONTEXT),
+      () => openById(client, state, INVESTIGATION_A, CONTEXT),
+      () => openEntity(wrong, state, requestOf('source-a', 'A-1'), CONTEXT),
+      () => openById(client, state, INVESTIGATION_B, CONTEXT),
+    ];
+    const seen: string[] = [];
+    for (const step of steps) {
+      await step();
+      namesOnlyTheSourceOnScreen();
+      seen.push(holding());
+    }
+    expect(seen).toEqual([
+      `${INVESTIGATION_A}:A-1:`,
+      `${INVESTIGATION_A}:A-1,A-2:E-1`,
+      `${INVESTIGATION_B}:C-1:`,
+      `${INVESTIGATION_B}:C-1:`,
+      `${INVESTIGATION_A}:A-1,A-2:E-1`,
+      `${INVESTIGATION_A}:A-1,A-2:E-1`,
+      `${INVESTIGATION_B}:C-1:`,
+    ]);
+    expect(state.resume(INVESTIGATION_A, false)).toBe('resumed');
+    expect(holding()).toBe(`${INVESTIGATION_A}:A-1,A-2:E-1`);
+  });
+
+  it('refuses a result whose relationship has an end in the other source while the first is on screen, and changes nothing', async () => {
+    const { client } = knowing([A, B]);
+    const state = createClientState();
+    await openEntity(client, state, requestOf('source-a', 'A-1'), CONTEXT);
+    withRelationship(state);
+    await openEntity(client, state, requestOf('source-b', 'C-1'), CONTEXT);
+    await openById(client, state, INVESTIGATION_A, CONTEXT);
+    const before = state.investigation.getState();
+    const key = { ...openedKey('source-a', CONTEXT.principalId, INVESTIGATION_A, false), params: 'mixed' };
+    expect(() => state.putResult(key, { sourceId: 'source-a', nodes: [], edges: [foreign] })).toThrow(StateError);
+    const nested = { sourceId: 'source-a', aggregate: { type: 'rel-a', from: A.node.ref, to: nodeOf('source-b', 'kind-a', 'C-1').ref } };
+    expect(() => state.setLoaded([...before.resultKeys, key], before.nodeRefs, [...before.edgeRefs, nested])).toThrow(StateError);
+    expect(state.investigation.getState()).toBe(before);
+    expect(state.loadedGraph().edges.map(idOf)).toEqual(['E-1']);
+    expect(state.holds(INVESTIGATION_B, false)).toBe(true);
   });
 });
 

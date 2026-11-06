@@ -36,3 +36,7 @@ export function showsSyntheticBadge(current: CurrentSource, items: readonly Sour
     }
   }
 }
+
+export function sourceNameOf(items: readonly SourceSummary[], sourceId: string): string {
+  return items.find((item) => item.id === sourceId)?.alias ?? sourceId;
+}

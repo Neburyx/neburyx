@@ -12,7 +12,7 @@ import { NoticeStrip } from './notice-strip.js';
 import { ShortcutSheet } from './shortcut-sheet.js';
 import { SelectionBar } from './selection-bar.js';
 
-export function WorkspaceShell({ canvasView, notice, status }: { readonly canvasView?: 'fit' | 'as-drawn'; readonly notice?: ReactNode; readonly status?: ReactNode }) {
+export function WorkspaceShell({ canvasView, notice, status, busy = false }: { readonly canvasView?: 'fit' | 'as-drawn'; readonly notice?: ReactNode; readonly status?: ReactNode; readonly busy?: boolean }) {
   const profile = useProfile();
   useKeyHandler();
   return (
@@ -23,7 +23,7 @@ export function WorkspaceShell({ canvasView, notice, status }: { readonly canvas
         <NoticeStrip extra={notice} />
         {status === undefined ? null : <div className="status-strip">{status}</div>}
         <div className="workspace-stage">
-          <main className="canvas-region">
+          <main className="canvas-region" aria-busy={busy ? true : undefined}>
             <GraphCanvas profile={profile} view={canvasView} />
             <GraphScope />
             <SelectionBar />
