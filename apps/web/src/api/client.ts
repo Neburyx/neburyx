@@ -6,6 +6,7 @@ import {
   nodeSchema,
   openInvestigationResponseSchema,
   pathSegmentOf,
+  searchResultSchema,
   sourceProfileSchema,
   sourcesResponseSchema,
   sourceTestReportSchema,
@@ -16,6 +17,8 @@ import {
   type MeResponse,
   type OpenInvestigationRequest,
   type OpenInvestigationResponse,
+  type SearchRequest,
+  type SearchResult,
   type SourceProfile,
   type SourcesResponse,
   type SourceTestReport,
@@ -51,6 +54,8 @@ export interface ApiClient {
   /** Opens an entity as an investigation: creates one, or resumes the caller's own for the same case reference. */
   openInvestigation(request: OpenInvestigationRequest, signal?: AbortSignal): Promise<ApiResult<OpenInvestigationResponse>>;
   getInvestigation(id: string, signal?: AbortSignal): Promise<ApiResult<InvestigationResponse>>;
+  /** The exact matches of a text in one source; every hit and the answer name the source that was asked, or the answer is refused. */
+  searchEntities(request: SearchRequest, signal?: AbortSignal): Promise<ApiResult<SearchResult>>;
 }
 
 function sameRef(left: ElementRef, right: ElementRef): boolean {
@@ -127,6 +132,11 @@ export function createApiClient(fetcher: Fetcher = (input, init) => fetch(input,
       const startsAt = investigation.startingEntity;
       const named = startsAt !== null && startsAt.entityType === open.entity.entityType && startsAt.stableId === open.entity.stableId;
       return investigation.sourceId !== open.sourceId || !named || ('entity' in result.value && !sameRef(result.value.entity.ref, open.entity)) ? failed('SCHEMA_MISMATCH') : result;
+    },
+    searchEntities: async (search, signal) => {
+      const result = await request(fetcher, '/v1/search/entities', searchResultSchema, signal, 'POST', search);
+      if (!result.ok) return result;
+      return result.value.sourceId !== search.sourceId || result.value.exact.some((node) => node.ref.sourceId !== search.sourceId) ? failed('SCHEMA_MISMATCH') : result;
     },
     getInvestigation: async (id, signal) => {
       const result = await request(fetcher, `/v1/investigations/${encodeURIComponent(id)}`, investigationResponseSchema, signal);

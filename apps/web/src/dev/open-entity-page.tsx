@@ -3,19 +3,20 @@ import { useNavigate } from 'react-router';
 import type { SourceProfile } from '@neburyx/contracts';
 import type { ApiClient, ApiFailure } from '../api/client.js';
 import { FailureNotice } from '../failure-notice.js';
-import { NOT_MASKED, openEntity } from '../investigations/open-flow.js';
+import { openEntity } from '../investigations/open-flow.js';
 import { AttemptedSource } from '../investigations/attempted-source.js';
 import { SOURCE_NOT_AVAILABLE_TEXT } from '../investigations/messages.js';
 import { EXPLORE_PATH } from '../shell/navigation.js';
 import { PageHeading } from '../shell/page-heading.js';
 import { answeredData, useShellData } from '../shell/shell-data.js';
-import { useClientState } from '../state/context.js';
+import { useClientState, useSessionMask } from '../state/context.js';
 import { SourcesPanel } from './sources-panel.js';
 
 type Refusal = { readonly kind: 'failure'; readonly failure: ApiFailure } | { readonly kind: 'source-unavailable' };
 
 function OpenEntityForm({ client, profile }: { readonly client: ApiClient; readonly profile: SourceProfile }) {
   const state = useClientState();
+  const mask = useSessionMask();
   const navigate = useNavigate();
   const principalId = answeredData(useShellData().me)?.principal.id;
   const [entityType, setEntityType] = useState(profile.entityTypes[0]?.type ?? '');
@@ -44,7 +45,7 @@ function OpenEntityForm({ client, profile }: { readonly client: ApiClient; reado
     const controller = new AbortController();
     attempt.current = controller;
     const request = { sourceId: profile.sourceId, entity: { sourceId: profile.sourceId, entityType, stableId }, ...(caseRef === '' ? {} : { caseRef }) };
-    void openEntity(client, state, request, { principalId, mask: NOT_MASKED }, controller.signal)
+    void openEntity(client, state, request, { principalId, mask }, controller.signal)
       .then((outcome) => {
         if (controller.signal.aborted) return;
         if (outcome.kind === 'shown') navigate(`${EXPLORE_PATH}/${outcome.id}`, { state: { resumed: outcome.created === false } });

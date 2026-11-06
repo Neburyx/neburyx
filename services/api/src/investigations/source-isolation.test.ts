@@ -8,6 +8,7 @@ import { parseMapping } from '../mapping/load.js';
 import { memoryAppStore } from '../testing/app-store.js';
 import { entityCalls, entityRows, plainNode } from '../testing/entity-fixtures.js';
 import { TestExecutor } from '../testing/gate.js';
+import { withOnlineIndexes } from '../testing/search-fixtures.js';
 import { baseSource, fileOf } from '../testing/mapping.js';
 import { testSourceGate } from '../testing/source-gate.js';
 import { makeWebRoot } from '../testing/web-root.js';
@@ -28,7 +29,7 @@ const request = (sourceId: string, overrides: Record<string, unknown> = {}) => (
 type Answer = (call: ExecuteCall) => ExecuteOutcome;
 
 async function started(answer: Answer = () => entityRows(WIDGET), appMapping = mapping, store = memoryAppStore()) {
-  const executor = new TestExecutor((call) => Promise.resolve(answer(call)));
+  const executor = new TestExecutor(withOnlineIndexes(mapping.sources[0] ?? (() => { throw new Error('the mapping has no source'); })(), (call) => Promise.resolve(answer(call))));
   const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store, mapping: appMapping, gate: testSourceGate(appMapping, { executor }).gate });
   const post = (payload: object) => app.inject({ method: 'POST', url: '/v1/investigations', payload });
   const get = (url: string) => app.inject({ method: 'GET', url });
@@ -126,7 +127,8 @@ describe('reading with another source configured', () => {
       const response = await get(`/v1/entities/${sourceId}/widget/W-1`);
       expect(response.statusCode).toBe(200);
       expect(response.json().ref).toEqual({ sourceId, entityType: 'widget', stableId: 'W-1' });
-      expect(executor.calls.map((call) => call.sourceId)).toEqual([sourceId]);
+      // the read of the entity and the read of the schema that guards it, both of the one source in the path
+      expect(executor.calls.map((call) => [call.templateId, call.sourceId])).toEqual([['schema-indexes', sourceId], ['entity-load', sourceId]]);
     }
     await app.close();
   });

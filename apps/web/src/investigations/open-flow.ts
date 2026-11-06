@@ -15,9 +15,6 @@ export interface OpenContext {
   readonly mask: boolean;
 }
 
-/** No screen asks for masking yet, so every read the workspace makes is plain. */
-export const NOT_MASKED = false;
-
 const failedIn = (sourceId: string, failure: ApiFailure): OpenOutcome => ({ kind: 'failed', failure, sourceId });
 const mismatchIn = (sourceId: string): OpenOutcome => failedIn(sourceId, { code: 'SCHEMA_MISMATCH' });
 

@@ -11,6 +11,7 @@ import { runCli } from '../testing/cli.js';
 import { rows } from '../testing/database.js';
 import { entityRows, plainNode } from '../testing/entity-fixtures.js';
 import { TestExecutor } from '../testing/gate.js';
+import { withOnlineIndexes } from '../testing/search-fixtures.js';
 import { baseSource, fileOf } from '../testing/mapping.js';
 import { startPostgres, type TestPostgres } from '../testing/postgres.js';
 import { testSourceGate } from '../testing/source-gate.js';
@@ -50,7 +51,7 @@ async function running(answer: (call: ExecuteCall) => ExecuteOutcome = () => ent
   stores.push(store);
   await store.initialize();
   await store.syncSources(mapping.sources);
-  const executor = new TestExecutor((call) => Promise.resolve(answer(call)));
+  const executor = new TestExecutor(withOnlineIndexes(mapping.sources[0] ?? (() => { throw new Error('the mapping has no source'); })(), (call) => Promise.resolve(answer(call))));
   const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store, mapping, gate: testSourceGate(mapping, { executor }).gate });
   const post = (payload: object) => app.inject({ method: 'POST', url: '/v1/investigations', payload });
   const stored = (sourceId: string) => rows(database.ownerUrl, 'SELECT * FROM investigations WHERE source_id = $1 ORDER BY id', [sourceId]);

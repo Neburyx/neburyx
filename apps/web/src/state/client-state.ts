@@ -6,7 +6,7 @@ import { edgeKey, elementKey, type QueryKey } from './keys.js';
 import { deriveLoadedGraph, type LoadedGraph } from './loaded-graph.js';
 import { createPresentationStore, type PresentationActions, type PresentationSnapshot } from './presentation-state.js';
 import { createServerStore, type GraphResult, type ServerState } from './server-state.js';
-import type { ReadableStore } from './store.js';
+import { createStore, readable, type ReadableStore } from './store.js';
 
 /** `current`: the investigation was already the one shown; `resumed`: it came back as it was left in this session; `fresh`: nothing was held of it. */
 export type Activation = 'current' | 'resumed' | 'fresh';
@@ -16,6 +16,9 @@ export interface ClientState {
   readonly investigation: ReadableStore<InvestigationState>;
   readonly presentation: PresentationActions;
   readonly jobs: ReadableStore<JobState>;
+  /** Whether the session asks for the personal-data fields to be masked; every read of the session carries it. */
+  readonly mask: ReadableStore<boolean>;
+  setMask(mask: boolean): void;
   bindSource(sourceId: string): void;
   /** Whether the session holds the investigation as read for this mask, as the one shown or as one set aside. */
   holds(id: string, mask: boolean): boolean;
@@ -42,6 +45,7 @@ interface SetAside {
 
 export function createClientState(): ClientState {
   const server = createServerStore();
+  const mask = createStore(false);
   const setAside = new Map<string, SetAside>();
   const investigation = createInvestigationStore();
   const nodeKeySets = new WeakMap<InvestigationState, ReadonlySet<string>>();
@@ -68,6 +72,8 @@ export function createClientState(): ClientState {
     investigation: investigation.view,
     presentation: { view, setTool, setOpenTool, setOpenMenu, select, setPosition, setPositions, pin, setPanelSize, clearPanelSize, setPanelCollapsed, clearPanelCollapsed, setLegendOpen, setSheetOpen, walkTo, endWalk, forgetFocused, announceMove, setViewport },
     jobs: createJobStore(),
+    mask: readable(mask),
+    setMask: (next) => mask.setState(next),
     bindSource(sourceId) {
       const previous = investigation.view.getState().sourceId;
       if (previous === sourceId) return;

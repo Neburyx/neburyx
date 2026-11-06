@@ -616,3 +616,16 @@ describe('the walk in presentation state', () => {
     expect(state.presentation.view.getState()).toMatchObject({ walking: false, focused: undefined });
   });
 });
+
+describe('the mask of the session', () => {
+  it('is off to begin with, is set and read from one place, and tells whoever listens', () => {
+    const state = createClientState();
+    const seen: boolean[] = [];
+    state.mask.subscribe(() => seen.push(state.mask.getState()));
+    expect(state.mask.getState()).toBe(false);
+    state.setMask(true);
+    state.setMask(true);
+    state.setMask(false);
+    expect(seen).toEqual([true, false]);
+  });
+});

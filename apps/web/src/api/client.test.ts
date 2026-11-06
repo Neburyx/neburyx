@@ -186,3 +186,43 @@ describe('the API client, testing a source', () => {
     expect(await createApiClient(respondWith(report)).testSource('source-a', controller.signal)).toEqual({ ok: false, failure: { code: 'ABORTED' } });
   });
 });
+
+describe('the API client, searching a source', () => {
+  const node = (sourceId: string) => ({ ref: { sourceId, entityType: 'kind-a', stableId: 'AC-1' }, display: { title: 'AC-1', type: 'kind-a' }, properties: [], qualityFlags: [], provenanceRefs: [], authorization: { canInspect: true, canExport: true } });
+  const answer = (sourceId: string, hits: readonly unknown[]) => ({
+    sourceId,
+    exact: hits,
+    cap: 25,
+    searchable: true,
+    counts: { exact: { value: hits.length, quality: 'exact', scope: 'search:exact' } },
+    disabledTypes: [],
+    dropped: { 'not-mapped': 0, 'ambiguous-type': 0, 'no-stable-id': 0 },
+    warnings: [],
+    elapsedMs: 12,
+  });
+
+  it('posts the request as JSON to /v1/search/entities and returns the parsed answer', async () => {
+    const seen: { input: string; init?: { method?: string; body?: string; headers?: Readonly<Record<string, string>> } }[] = [];
+    const client = createApiClient(async (input, init) => {
+      seen.push({ input, ...(init === undefined ? {} : { init }) });
+      return new Response(JSON.stringify(answer('demo', [node('demo')])));
+    });
+    const result = await client.searchEntities({ sourceId: 'demo', text: 'AC-1', mask: true });
+    expect(result).toMatchObject({ ok: true, value: { sourceId: 'demo' } });
+    expect(seen).toHaveLength(1);
+    expect(seen[0]?.input).toBe('/v1/search/entities');
+    expect(seen[0]?.init).toMatchObject({ method: 'POST', headers: { 'content-type': 'application/json' } });
+    expect(JSON.parse(seen[0]?.init?.body ?? '{}')).toEqual({ sourceId: 'demo', text: 'AC-1', mask: true });
+  });
+
+  it('refuses an answer for another source, and an answer with a hit of another source', async () => {
+    expect(await createApiClient(respondWith(answer('other', []))).searchEntities({ sourceId: 'demo', text: 'AC-1' })).toEqual({ ok: false, failure: { code: 'SCHEMA_MISMATCH' } });
+    expect(await createApiClient(respondWith(answer('demo', [node('other')]))).searchEntities({ sourceId: 'demo', text: 'AC-1' })).toEqual({ ok: false, failure: { code: 'SCHEMA_MISMATCH' } });
+  });
+
+  it('gives the error of the API as it came, with the timeout of a timed-out search', async () => {
+    const body = { error: { code: 'QUERY_TIMEOUT', message: ERROR_TABLE.QUERY_TIMEOUT.message, retryable: true, traceId: 'tr-1', details: { timeoutMs: 5000 } } };
+    const client = createApiClient(async () => new Response(JSON.stringify(body), { status: 504 }));
+    expect(await client.searchEntities({ sourceId: 'demo', text: 'AC-1' })).toEqual({ ok: false, failure: body.error });
+  });
+});

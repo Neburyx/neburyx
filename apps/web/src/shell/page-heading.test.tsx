@@ -181,3 +181,23 @@ describe('the page heading after a later failure', () => {
     expect(screen.getByText('Source a · read-only')).toBeTruthy();
   });
 });
+
+describe('the page heading of a page about a source that is not the one in view', () => {
+  const headed = (synthetic: boolean) => (
+    <ClientStateProvider state={createClientState()}>
+      <ShellDataProvider store={createShellData(clientWith({ me: me(), sources: [source('a', { synthetic: !synthetic })] }))}>
+        <PageHeading title="Search results" description="A page." source={{ alias: 'Own source', synthetic }} />
+      </ShellDataProvider>
+    </ClientStateProvider>
+  );
+
+  it('names the source it is given with its own badge, whatever the shell has in view', async () => {
+    const first = render(headed(true));
+    expect(await screen.findByText('Own source · read-only')).toBeDefined();
+    expect(badge()).not.toBeNull();
+    first.unmount();
+    render(headed(false));
+    expect(await screen.findByText('Own source · read-only')).toBeDefined();
+    expect(badge()).toBeNull();
+  });
+});

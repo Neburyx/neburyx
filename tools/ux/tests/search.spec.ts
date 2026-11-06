@@ -1,0 +1,160 @@
+import { expect, test, type Page } from '@playwright/test';
+
+const SOURCE = 'banking-demo';
+const SECOND = 'second-demo';
+
+const box = (page: Page) => page.getByRole('searchbox', { name: 'Search text' });
+const groupTitle = (page: Page, title: string) => page.getByRole('heading', { level: 2, name: title });
+
+/** Opens the search page of a source and searches a text the way a person does: typed into the box. The address never holds the text. */
+async function searchFor(page: Page, text: string, source = SOURCE): Promise<void> {
+  await page.goto(`/search?source=${source}`);
+  await box(page).fill(text);
+  await box(page).press('Enter');
+  expect(new URL(page.url()).search, 'the address holds the source and never the text').toBe(`?source=${source}`);
+}
+
+test.describe('searching for an entity', () => {
+  test('shows the exact match of an ID and opens it in Explore with that one entity', async ({ page }) => {
+    await searchFor(page, 'AC-1');
+    await expect(page.getByRole('heading', { level: 1, name: 'Search results' })).toBeVisible();
+    await expect(groupTitle(page, 'Exact ID match (1)')).toBeVisible();
+    await expect(page.getByText('1 exact match · 0.18 s')).toBeVisible();
+    await expect(page.getByText(`Searches only configured, indexed properties in ${SOURCE}.`)).toBeVisible();
+    await page.getByRole('button', { name: 'Open in graph' }).click();
+    await expect(page).toHaveURL(/\/explore\/[0-9a-f-]{36}$/);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('account AC-1');
+    await expect(page.getByText('1 entity · 0 relationships · loaded · exact')).toBeVisible();
+  });
+
+  test('says there is no match for an ID the source does not hold, and keeps the box and its text', async ({ page }) => {
+    await searchFor(page, 'missing-1');
+    await expect(page.getByRole('heading', { level: 2, name: 'No matching entities' })).toBeVisible();
+    await expect(page.getByText('Check the ID or try another indexed property.')).toBeVisible();
+    await expect(box(page)).toHaveValue('missing-1');
+  });
+
+  test('reads 25 matches as exact and 26 as "≥ 25 · lower bound"', async ({ page }) => {
+    await searchFor(page, 'many-25');
+    await expect(groupTitle(page, 'Exact ID match (25)')).toBeVisible();
+    await expect(page.getByRole('listitem').filter({ hasText: 'Open in graph' })).toHaveCount(25);
+    await searchFor(page, 'many-26');
+    await expect(groupTitle(page, 'Exact ID match (≥ 25 · lower bound)')).toBeVisible();
+    await expect(page.getByText('≥ 25 exact matches · lower bound · 0.18 s')).toBeVisible();
+    await expect(page.getByRole('listitem').filter({ hasText: 'Open in graph' })).toHaveCount(25);
+  });
+
+  test('shows the timed-out state when the source stalls, and Retry shows the results', async ({ page }, info) => {
+    await searchFor(page, `stall-${info.project.name}`);
+    await expect(page.getByRole('alert')).toContainText('Search timed out after 5 s');
+    await expect(page.getByRole('alert')).toContainText('Your graph was not changed.');
+    await expect(box(page)).toHaveValue(`stall-${info.project.name}`);
+    await page.getByRole('button', { name: 'Retry' }).click();
+    await expect(groupTitle(page, 'Exact ID match (1)')).toBeVisible();
+    await expect(page.getByRole('alert')).toHaveCount(0);
+  });
+
+  test('submits a new search from the box with Enter, and the back button shows the earlier one', async ({ page }) => {
+    await searchFor(page, 'AC-1');
+    await expect(page.getByText('account AC-1')).toBeVisible();
+    await box(page).fill('AC-2');
+    await box(page).press('Enter');
+    expect(new URL(page.url()).search).toBe(`?source=${SOURCE}`);
+    await expect(page.getByText('account AC-2')).toBeVisible();
+    await page.goBack();
+    await expect(box(page)).toHaveValue('AC-1');
+    await expect(page.getByText('account AC-1')).toBeVisible();
+  });
+});
+
+test.describe('⌘K', () => {
+  for (const [name, path] of [['Home', '/'], ['Explore', '/explore']] as const) {
+    test(`opens the search page from ${name} with the box focused`, async ({ page }) => {
+      await page.goto(path);
+      await page.keyboard.press('ControlOrMeta+k');
+      await expect(page).toHaveURL(/\/search/);
+      await expect(box(page)).toBeFocused();
+    });
+  }
+
+  test('focuses the box and selects its text on the search page', async ({ page }) => {
+    await searchFor(page, 'AC-1');
+    await expect(groupTitle(page, 'Exact ID match (1)')).toBeVisible();
+    await page.getByRole('button', { name: 'Search', exact: true }).focus();
+    await page.keyboard.press('ControlOrMeta+k');
+    await expect(box(page)).toBeFocused();
+    expect(await box(page).evaluate((input: HTMLInputElement) => input.value.slice(input.selectionStart ?? 0, input.selectionEnd ?? 0))).toBe('AC-1');
+  });
+});
+
+test.describe('two configured sources', () => {
+  test('show a selector, and a change searches the new source only', async ({ page }) => {
+    const searched: string[] = [];
+    const profile = await (await page.request.get(`/v1/sources/${SOURCE}/profile`)).json();
+    const sources = await (await page.request.get('/v1/sources')).json();
+    await page.route((url) => url.pathname === '/v1/sources', (route) => route.fulfill({ json: { items: [...sources.items, { ...sources.items[0], id: SECOND, alias: SECOND }], nextCursor: null } }));
+    await page.route((url) => url.pathname === `/v1/sources/${SECOND}/profile`, (route) => route.fulfill({ json: { ...profile, sourceId: SECOND } }));
+    await page.route((url) => url.pathname === '/v1/search/entities', async (route) => {
+      const body = route.request().postDataJSON();
+      searched.push(body.sourceId);
+      if (body.sourceId !== SECOND) return route.fallback();
+      const node = { ref: { sourceId: SECOND, entityType: 'account', stableId: body.text }, display: { title: `second ${body.text}`, type: 'account' }, properties: [], qualityFlags: [], provenanceRefs: [], authorization: { canInspect: true, canExport: true } };
+      return route.fulfill({ json: { sourceId: SECOND, exact: [node], cap: 25, searchable: true, counts: { exact: { value: 1, quality: 'exact', scope: 'search:exact' } }, disabledTypes: [], dropped: { 'not-mapped': 0, 'ambiguous-type': 0, 'no-stable-id': 0 }, warnings: [], elapsedMs: 120 } });
+    });
+    await searchFor(page, 'AC-1');
+    const selector = page.getByRole('combobox', { name: 'Source' });
+    await expect(selector).toHaveValue(SOURCE);
+    await expect(page.getByText('account AC-1')).toBeVisible();
+    await selector.focus();
+    await selector.selectOption(SECOND);
+    await expect(page).toHaveURL(new RegExp(`source=${SECOND}`));
+    await expect(page.getByText('second AC-1')).toBeVisible();
+    await expect(page.getByText('account AC-1')).toHaveCount(0);
+    await expect(page.getByText(`Searches only configured, indexed properties in ${SECOND}.`)).toBeVisible();
+    await expect(selector).toBeFocused();
+    expect(searched).toEqual([SOURCE, SECOND]);
+  });
+});
+
+test.describe('an entity whose ID is made of dots', () => {
+  for (const id of ['.', '..']) {
+    test(`finds "${id}", opens it in Explore, and draws it again from the address after a reload`, async ({ page }) => {
+      const requested: string[] = [];
+      page.on('request', (request) => {
+        if (request.url().includes('/v1/entities/')) requested.push(new URL(request.url()).pathname);
+      });
+      await searchFor(page, id);
+      await expect(groupTitle(page, 'Exact ID match (1)')).toBeVisible();
+      await page.getByRole('button', { name: 'Open in graph' }).click();
+      await expect(page).toHaveURL(/\/explore\/[0-9a-f-]{36}$/);
+      await expect(page.getByRole('heading', { level: 1 })).toHaveText(`account ${id}`);
+      await page.reload();
+      await expect(page.getByRole('heading', { level: 1 })).toHaveText(`account ${id}`);
+      expect(requested, 'the reload read the entity by a path no URL parser shortens').toContain(`/v1/entities/${SOURCE}/account/~${id}`);
+    });
+  }
+});
+
+test('sends a text of one character, and does not send an empty one', async ({ page }) => {
+  const searched: string[] = [];
+  page.on('request', (request) => {
+    if (request.url().includes('/v1/search/entities')) searched.push(request.postData() ?? '');
+  });
+  await page.goto(`/search?source=${SOURCE}`);
+  await box(page).press('Enter');
+  await expect(page.getByText('Type something to search.')).toBeVisible();
+  expect(searched).toEqual([]);
+  await box(page).fill('X');
+  await box(page).press('Enter');
+  await expect(groupTitle(page, 'Exact ID match (1)')).toBeVisible();
+  expect(searched).toHaveLength(1);
+});
+
+test('keeps the search through a reload and Back, from the history state, with the text never in the address', async ({ page }) => {
+  await searchFor(page, 'AC-1');
+  await expect(page.getByText('account AC-1')).toBeVisible();
+  await page.reload();
+  await expect(box(page)).toHaveValue('AC-1');
+  await expect(page.getByText('account AC-1')).toBeVisible();
+  expect(new URL(page.url()).search).toBe(`?source=${SOURCE}`);
+});

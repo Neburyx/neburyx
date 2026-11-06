@@ -2,7 +2,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { extname, join, normalize, sep } from 'node:path';
-import { openInvestigationRequestSchema, valueOfPathSegment } from '@neburyx/contracts';
+import { openInvestigationRequestSchema, SEARCH_GROUP_CAP, searchRequestSchema, searchResultSchema, valueOfPathSegment } from '@neburyx/contracts';
 
 interface SupportProfile {
   readonly sourceId: string;
@@ -140,6 +140,49 @@ function createInvestigations(options: SupportServerOptions) {
   };
 }
 
+const SEARCH_TYPE = 'account';
+const MANY = /^many-(\d+)$/;
+const STALLS_ONCE = 'stall';
+const TIMEOUT = { error: { code: 'QUERY_TIMEOUT', message: 'The source did not answer in time. Try again or refine your filters.', retryable: true, traceId: 'tr-support', details: { timeoutMs: 5000 } } };
+
+/**
+ * The synthetic stand-in for the search: a text `many-N` has N matches (25 at most are shown, and more than 25 is a lower bound), a text that starts with `stall` times out the first time that text is
+ * searched and answers the next time, a text that starts with `missing` matches nothing, and any other text matches one entity of that ID.
+ */
+function createSearch(options: SupportServerOptions) {
+  const stalled = new Set<string>();
+  const sourceId = options.profile.sourceId;
+  return {
+    run(body: unknown, response: ServerResponse): void {
+      const parsed = searchRequestSchema.safeParse(body);
+      if (!parsed.success) return json(response, 400, INVALID);
+      if (parsed.data.sourceId !== sourceId) return json(response, 404, NOT_FOUND);
+      const { text } = parsed.data;
+      if (text.startsWith(STALLS_ONCE) && !stalled.has(text)) {
+        stalled.add(text);
+        return json(response, 504, TIMEOUT);
+      }
+      const matches = MANY.exec(text);
+      const found = matches === null ? (text.startsWith('missing') ? 0 : 1) : Number(matches[1]);
+      const shown = Math.min(found, SEARCH_GROUP_CAP);
+      const ids = matches === null ? [text] : Array.from({ length: shown }, (_, index) => `${text}-${String(index + 1).padStart(2, '0')}`);
+      const nodes = ids.slice(0, found === 0 ? 0 : shown).map((id) => node(sourceId, SEARCH_TYPE, id));
+      const answer = searchResultSchema.parse({
+        sourceId,
+        exact: nodes,
+        cap: SEARCH_GROUP_CAP,
+        searchable: true,
+        counts: { exact: { value: nodes.length, quality: found > SEARCH_GROUP_CAP ? 'lowerBound' : 'exact', scope: 'search:exact' } },
+        disabledTypes: [],
+        dropped: { 'not-mapped': 0, 'ambiguous-type': 0, 'no-stable-id': 0 },
+        warnings: [],
+        elapsedMs: 180,
+      });
+      json(response, 200, answer);
+    },
+  };
+}
+
 function api(path: string, options: SupportServerOptions, response: ServerResponse): void {
   const profiles = profilesOf(options);
   if (path === '/healthz' || path === '/readyz') return json(response, 200, { status: 'ok' });
@@ -172,11 +215,13 @@ async function file(root: string, path: string): Promise<{ readonly body: Buffer
 export function createSupportServer(options: SupportServerOptions): Server {
   const root = normalize(options.root);
   const investigations = createInvestigations(options);
+  const search = createSearch(options);
   return createServer((request: IncomingMessage, response: ServerResponse) => {
     void (async () => {
       const path = new URL(request.url ?? '/', 'http://localhost').pathname;
       const isApi = path === API_PREFIX || path.startsWith(`${API_PREFIX}/`) || PROBE_PATHS.has(path);
       if (request.method === 'POST' && path === '/v1/investigations') return investigations.open(await bodyOf(request), response);
+      if (request.method === 'POST' && path === '/v1/search/entities') return search.run(await bodyOf(request), response);
       if (request.method !== 'GET' && request.method !== 'HEAD') return json(response, 405, { error: { code: 'METHOD_NOT_ALLOWED' } });
       if (isApi) {
         const parts = path.split('/').map((part) => decodeURIComponent(part));

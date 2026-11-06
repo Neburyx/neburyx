@@ -7,16 +7,21 @@ function sourceName(current: CurrentSource): string | undefined {
   return current.kind === 'bound' || current.kind === 'only' ? `${current.source.alias} · read-only` : undefined;
 }
 
+/** The source a page is about when it is not the one the shell has in view: a name to show with no badge, `null` for a page about no source the shell knows, or a source with its own badge. */
+export type HeadingSource = string | null | { readonly alias: string; readonly synthetic: boolean };
+
 /** `source` replaces the line about the source in view: a name to show in its place, or `null` for a page that is about no source the shell knows, so it shows none and no Synthetic data badge. */
-export function PageHeading({ title, description, source, focused = false }: { readonly title: string; readonly description: string; readonly source?: string | null; readonly focused?: boolean }) {
+export function PageHeading({ title, description, source, focused = false }: { readonly title: string; readonly description: string; readonly source?: HeadingSource; readonly focused?: boolean }) {
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     if (focused) heading.current?.focus();
   }, [focused, title]);
   const identity = answeredData(useShellData().me);
   const { current, showsSyntheticBadge } = useCurrentSource();
-  const synthetic = source === undefined && showsSyntheticBadge;
-  const name = source !== undefined ? (source ?? undefined) : current === undefined ? undefined : sourceName(current);
+  const own = typeof source === 'object' && source !== null ? source : undefined;
+  const synthetic = own !== undefined ? own.synthetic : source === undefined && showsSyntheticBadge;
+  const inView = current === undefined ? undefined : sourceName(current);
+  const name = own !== undefined ? `${own.alias} · read-only` : source === undefined ? inView : typeof source === 'string' ? source : undefined;
   return (
     <header className="page-heading">
       <div className="page-title">

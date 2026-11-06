@@ -6,8 +6,8 @@ import { detectPlatform, parseKeys, sameKeys, showKeys, type KeySpec, type Platf
 
 export type KeyGroup = 'tools' | 'selection' | 'actions' | 'view';
 
-/** `workspace` keys work with the focus anywhere in the workspace or on the page body; `canvas` keys only while the canvas holds the focus, and are passed through to the browser anywhere else. */
-export type KeyScope = 'workspace' | 'canvas';
+/** `workspace` keys work with the focus anywhere in the workspace or on the page body; `canvas` keys only while the canvas holds the focus, and are passed through to the browser anywhere else; `app` keys work on every page and in the workspace. */
+export type KeyScope = 'workspace' | 'canvas' | 'app';
 
 /** What a binding's command is given when its keys are pressed. */
 export interface KeyContext {

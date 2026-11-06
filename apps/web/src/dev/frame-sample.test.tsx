@@ -7,7 +7,8 @@ import { ClientStateProvider } from '../state/context.js';
 import { appRoutes } from '../routes.js';
 import { createClientState } from '../state/client-state.js';
 import { elementKey } from '../state/keys.js';
-import { stubFactory } from '../test-utils.js';
+import { builtInKeyBindings, stubFactory } from '../test-utils.js';
+import { KeyBindingsProvider } from '../workspace/key-binding-registry.js';
 import { createFrameSampleState, frameSampleProfile, FRAME_SAMPLE_SOURCE } from './frame-sample.js';
 import { sampleProfile, titledSample } from './frame-sample-page.js';
 
@@ -52,9 +53,11 @@ describe('the frame sample', () => {
     const router = createMemoryRouter(appRoutes(fakeClient(), state), { initialEntries: ['/dev/frame-sample'] });
     render(
       <ClientStateProvider state={state}>
-        <RendererProvider createRenderer={factory.create}>
-          <RouterProvider router={router} />
-        </RendererProvider>
+        <KeyBindingsProvider registry={builtInKeyBindings()}>
+          <RendererProvider createRenderer={factory.create}>
+            <RouterProvider router={router} />
+          </RendererProvider>
+        </KeyBindingsProvider>
       </ClientStateProvider>,
     );
     await screen.findByRole('application', { name: 'Graph canvas' });

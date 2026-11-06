@@ -15,6 +15,11 @@ export function useClientState(): ClientState {
   return state;
 }
 
+/** Whether the session asks for the personal-data fields to be masked. */
+export function useSessionMask(): boolean {
+  return useStoreSelector(useClientState().mask, (mask) => mask);
+}
+
 export function useLoadedGraph(): LoadedGraph {
   const state = useClientState();
   const server = useStoreSelector(state.server, (current) => current);

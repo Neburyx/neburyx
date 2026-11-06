@@ -5,6 +5,8 @@ import { createProfileStore } from './canvas/profile-store.js';
 import { PageHeading } from './shell/page-heading.js';
 import { EXPLORE_PATH } from './shell/navigation.js';
 import { PageShell } from './shell/page-shell.js';
+import { SearchPage } from './search/search-page.js';
+import { SearchShortcut } from './search/search-shortcut.js';
 import { SourcesPage } from './sources/sources-page.js';
 import { createExcerpts } from './sources/excerpts.js';
 import { ExcerptsProvider } from './sources/excerpts-context.js';
@@ -90,6 +92,7 @@ export function appRoutes(client: ApiClient, state: ClientState): RouteObject[] 
           <ProfileProvider store={profile}>
             <TestRunsProvider runs={testRuns}>
               <ExcerptsProvider excerpts={excerpts}>
+                <SearchShortcut />
                 <Outlet />
               </ExcerptsProvider>
             </TestRunsProvider>
@@ -102,6 +105,7 @@ export function appRoutes(client: ApiClient, state: ClientState): RouteObject[] 
           children: [
             { index: true, element: <NotBuiltYet title="Home" /> },
             { path: 'investigations', element: <NotBuiltYet title="Investigations" /> },
+            { path: 'search', element: <SearchPage client={client} /> },
             { path: 'sources', element: <SourcesPage /> },
             ...developmentRoutes(client),
             { path: ':sourceId/entity/:entityType/:stableId', element: <DeepLinkPage client={client} /> },

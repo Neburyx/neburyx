@@ -3,7 +3,7 @@ import type { Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { investigationResponseSchema, meResponseSchema, openInvestigationResponseSchema, sourceProfileSchema, sourcesResponseSchema } from '@neburyx/contracts';
+import { investigationResponseSchema, meResponseSchema, openInvestigationResponseSchema, searchResultSchema, sourceProfileSchema, sourcesResponseSchema } from '@neburyx/contracts';
 import { createSupportServer } from './support-server.ts';
 
 const committed: unknown = JSON.parse(readFileSync(new URL('../fixtures/profile.json', import.meta.url), 'utf8'));
@@ -218,5 +218,51 @@ describe('the page for an address that is not a file', () => {
     }
     for (const path of ['/v1/entity/a/b', '/v1']) expect((await fetch(base + path)).headers.get('content-type'), path).toContain('application/json');
     expect(await (await fetch(`${base}/assets/missing.js`)).text()).toBe('<!doctype html><title>app</title>');
+  });
+});
+
+describe('the support server, searching', () => {
+  const searchOf = async (base: string, body: unknown) =>
+    fetch(`${base}/v1/search/entities`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+
+  it('answers one match for a text, with an exact count, that the contract accepts', async () => {
+    const base = await start();
+    const reply = await searchOf(base, { sourceId: 'demo', text: 'AC-1' });
+    expect(reply.status).toBe(200);
+    const answer = searchResultSchema.parse(await reply.json());
+    expect(answer.exact.map((hit) => hit.ref)).toEqual([{ sourceId: 'demo', entityType: 'account', stableId: 'AC-1' }]);
+    expect(answer.counts.exact).toMatchObject({ value: 1, quality: 'exact' });
+    expect(answer).toMatchObject({ cap: 25, searchable: true });
+  });
+
+  it.each([
+    ['many-24', 24, 'exact'],
+    ['many-25', 25, 'exact'],
+    ['many-26', 25, 'lowerBound'],
+    ['many-40', 25, 'lowerBound'],
+    ['missing-1', 0, 'exact'],
+  ])('answers %s with %i hits and an %s count', async (text, shown, quality) => {
+    const base = await start();
+    const answer = searchResultSchema.parse(await (await searchOf(base, { sourceId: 'demo', text })).json());
+    expect(answer.exact).toHaveLength(shown);
+    expect(answer.counts.exact).toMatchObject({ value: shown, quality });
+  });
+
+  it('times out the first search of a text that starts with stall, with the timeout of the source, and answers the next, for each such text on its own', async () => {
+    const base = await start();
+    const first = await searchOf(base, { sourceId: 'demo', text: 'stall-a' });
+    expect(first.status).toBe(504);
+    expect(await first.json()).toMatchObject({ error: { code: 'QUERY_TIMEOUT', details: { timeoutMs: 5000 } } });
+    expect((await searchOf(base, { sourceId: 'demo', text: 'stall-a' })).status).toBe(200);
+    expect((await searchOf(base, { sourceId: 'demo', text: 'stall-b' })).status).toBe(504);
+  });
+
+  it('refuses a body the contract does not accept, and a source it does not list', async () => {
+    const base = await start();
+    expect((await searchOf(base, { sourceId: 'demo', text: '' })).status).toBe(400);
+    expect((await searchOf(base, { sourceId: 'demo', text: 'a'.repeat(201) })).status).toBe(400);
+    expect((await searchOf(base, { sourceId: 'demo', text: 'a' })).status).toBe(200);
+    expect((await searchOf(base, { sourceId: 'demo', text: 'ab', extra: 1 })).status).toBe(400);
+    expect((await searchOf(base, { sourceId: 'other', text: 'ab' })).status).toBe(404);
   });
 });

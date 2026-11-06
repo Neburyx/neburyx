@@ -5,12 +5,12 @@ import { FailureNotice } from '../failure-notice.js';
 import { PageFrame } from '../shell/page-shell.js';
 import { PageHeading } from '../shell/page-heading.js';
 import { answeredData, retainedFailure, useShellData } from '../shell/shell-data.js';
-import { useClientState } from '../state/context.js';
+import { useClientState, useSessionMask } from '../state/context.js';
 import { WorkspaceShell } from '../workspace/workspace-shell.js';
 import { AttemptedSource } from './attempted-source.js';
 import { useStoreSelector } from '../state/store.js';
 import { BACK_TO_HOME, NOT_FOUND_TEXT, NOT_FOUND_TITLE, OPENING, openingOver, RESUMED, SOURCE_NOT_AVAILABLE_TEXT, SOURCE_NOT_AVAILABLE_TITLE, TRY_AGAIN } from './messages.js';
-import { NOT_MASKED, openById } from './open-flow.js';
+import { openById } from './open-flow.js';
 
 type Status =
   | { readonly kind: 'loading' }
@@ -41,25 +41,26 @@ function arrivedByResuming(state: unknown): boolean {
 export function ExploreInvestigation({ client }: { readonly client: ApiClient }) {
   const { investigationId } = useParams();
   const state = useClientState();
+  const mask = useSessionMask();
   const shell = useShellData();
   const principalId = answeredData(shell.me)?.principal.id;
   const principalFailure = principalId === undefined ? retainedFailure(shell.me) : undefined;
   const resumed = arrivedByResuming(useLocation().state);
   const [attempt, setAttempt] = useState(0);
-  const [status, setStatus] = useState<Status>(() => (investigationId !== undefined && state.holds(investigationId, NOT_MASKED) ? { kind: 'ready' } : { kind: 'loading' }));
+  const [status, setStatus] = useState<Status>(() => (investigationId !== undefined && state.holds(investigationId, mask) ? { kind: 'ready' } : { kind: 'loading' }));
   const onScreen = useStoreSelector(state.investigation, (held) => held);
   const previousTitle = onScreen.id !== null && onScreen.id !== investigationId ? (onScreen.record?.title ?? null) : null;
 
   // A layout effect, so that a new address never paints the previous investigation before this page has marked it as loading.
   useLayoutEffect(() => {
     if (investigationId === undefined || principalId === undefined) return undefined;
-    if (state.resume(investigationId, NOT_MASKED) !== undefined) {
+    if (state.resume(investigationId, mask) !== undefined) {
       setStatus({ kind: 'ready' });
       return undefined;
     }
     const controller = new AbortController();
     setStatus({ kind: 'loading' });
-    void openById(client, state, investigationId, { principalId, mask: NOT_MASKED }, controller.signal).then((outcome) => {
+    void openById(client, state, investigationId, { principalId, mask }, controller.signal).then((outcome) => {
       if (controller.signal.aborted) return;
       if (outcome.kind === 'shown') setStatus({ kind: 'ready' });
       else if (outcome.kind === 'source-unavailable') setStatus({ kind: 'source-unavailable', sourceId: outcome.investigation.sourceId });
@@ -69,7 +70,7 @@ export function ExploreInvestigation({ client }: { readonly client: ApiClient })
       }
     });
     return () => controller.abort();
-  }, [client, state, investigationId, principalId, attempt]);
+  }, [client, state, investigationId, principalId, mask, attempt]);
 
   if (status.kind === 'not-found') return <Message title={NOT_FOUND_TITLE} text={NOT_FOUND_TEXT} source={null} attempted={status.sourceId} />;
   if (status.kind === 'source-unavailable') return <Message title={SOURCE_NOT_AVAILABLE_TITLE} text={SOURCE_NOT_AVAILABLE_TEXT} source={status.sourceId} />;

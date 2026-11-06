@@ -191,3 +191,17 @@ describe('the stand-ins for keys that features have built since', () => {
   });
 });
 
+describe('the hint of the Search key', () => {
+  it('on the sheet is the keys of the one registered Search binding, which has exactly that hint', async () => {
+    const keys = builtInKeyBindings('mac');
+    everything(keys);
+    await screen.findByRole('application', { name: 'Graph canvas' });
+    act(() => void document.body.dispatchEvent(new KeyboardEvent('keydown', { key: '/', metaKey: true, bubbles: true, cancelable: true })));
+    const sheet = await screen.findByRole('dialog', { name: 'Keyboard shortcuts' });
+    const rows = [...sheet.querySelectorAll('.sheet-row')].filter((row) => row.querySelector('.sheet-label')?.textContent === 'Search');
+    const bindings = keys.view.getState().filter((binding) => binding.label === 'Search');
+    expect(bindings).toHaveLength(1);
+    expect(rows).toHaveLength(1);
+    expect([...(rows[0]?.querySelectorAll('.sheet-key') ?? [])].map((key) => key.textContent)).toEqual(bindings[0]?.shown);
+  });
+});
