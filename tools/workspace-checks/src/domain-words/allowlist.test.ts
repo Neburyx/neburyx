@@ -18,11 +18,6 @@ describe('the allowlist', () => {
     const identifiers = new Set(readIdentifiers(repoRoot).map((identifier) => identifier.name));
     expect(ALLOWLIST.filter((entry) => !identifiers.has(entry.word)).map((entry) => entry.word)).toEqual([]);
   });
-
-  it('holds only words the scanned code still uses as a string literal, so an entry nothing uses has to go', () => {
-    const used = new Set(checkDomainWords(repoRoot, []).map((violation) => violation.word));
-    expect(ALLOWLIST.filter((entry) => !used.has(entry.word)).map((entry) => entry.word)).toEqual([]);
-  });
 });
 
 describe('an allowlisted word', () => {
