@@ -117,14 +117,14 @@ describe('the search key on Home', () => {
 describe('the Home search box while the sources and the identity are read', () => {
   it('says it is loading and offers no form while the sources are awaited', async () => {
     renderApp('/', searching({ getSources: () => new Promise(() => undefined) }).client);
-    expect(await screen.findByText('Loading sources…')).toBeTruthy();
+    expect(await screen.findAllByText('Loading sources…')).toHaveLength(2);
     expect(screen.queryByRole('search')).toBeNull();
   });
 
   it('shows the failure with its code and reads the sources again on Try again, which is not the empty list', async () => {
     let reads = 0;
     renderApp('/', searching({ getSources: async () => (++reads === 1 ? { ok: false, failure: { code: 'NETWORK_UNAVAILABLE' } } : { ok: true, value: { items: [source('source-a')], nextCursor: null } }) }).client);
-    expect(await screen.findByText('The sources could not be read.')).toBeTruthy();
+    expect(await screen.findAllByText('The sources could not be read.')).toHaveLength(2);
     expect(screen.getAllByRole('alert').some((alert) => alert.textContent?.includes('NETWORK_UNAVAILABLE') === true)).toBe(true);
     expect(screen.queryByText('No source is configured.')).toBeNull();
     await userEvent.setup().click(screen.getAllByRole('button', { name: 'Try again' })[0] ?? document.body);

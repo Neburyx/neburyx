@@ -2,7 +2,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { extname, join, normalize, sep } from 'node:path';
-import { DEFAULT_INVESTIGATION_LIST_LIMIT, investigationListQuerySchema, type Investigation, openInvestigationRequestSchema, SEARCH_GROUP_CAP, searchRequestSchema, searchResultSchema, valueOfPathSegment } from '@neburyx/contracts';
+import { DEFAULT_INVESTIGATION_LIST_LIMIT, investigationListQuerySchema, type Investigation, type LastTest, openInvestigationRequestSchema, SEARCH_GROUP_CAP, searchRequestSchema, searchResultSchema, type SourceSummary, sourceSummarySchema, type SourceTestReport, valueOfPathSegment } from '@neburyx/contracts';
 
 interface SupportProfile {
   readonly sourceId: string;
@@ -48,8 +48,99 @@ function me(sourceIds: readonly string[]): unknown {
   };
 }
 
-function source(sourceId: string): unknown {
-  return { id: sourceId, alias: sourceId, state: 'connected', stateReason: null, readOnly: true, synthetic: true, lastTestAt: null, lastTest: null, mappingSummary: { entityTypes: 4, relationshipTypes: 6, derivedRules: 2 } };
+const SOURCE_SUMMARY = { state: 'connected', stateReason: null, readOnly: true, synthetic: true, lastTestAt: null, lastTest: null, mappingSummary: { entityTypes: 4, relationshipTypes: 6, derivedRules: 2 } } as const;
+
+type SourceChange = Partial<Omit<SourceSummary, 'id'>>;
+
+function lastTestOf(report: SourceTestReport): LastTest {
+  return {
+    checkedAt: report.checkedAt,
+    outcome: report.outcome,
+    server: report.server === null ? null : { product: report.server.product, version: report.server.version },
+    versionSupported: report.versionSupported,
+    readOnlyCheck: report.readOnlyCheck,
+    loginCanWrite: report.loginCanWrite,
+    degreeStatus: report.degreeChecks.status,
+    degreeWarnings: [...report.degreeChecks.warnings],
+  };
+}
+
+function testReportOf(sourceId: string, summary: SourceSummary): SourceTestReport {
+  return {
+    schemaVersion: 1,
+    sourceId,
+    checkedAt: new Date().toISOString(),
+    outcome: 'pass',
+    state: 'connected',
+    stateReason: null,
+    server: { product: 'Neo4j Kernel', version: '5.26.32', edition: 'community' },
+    versionSupported: true,
+    operations: [],
+    readOnlyCheck: 'privileges-inspected',
+    loginCanWrite: false,
+    mappingChecks: { status: 'pass', findings: [] },
+    degreeChecks: { status: 'pass', foundOn: 'neo4j', types: [{ entityType: 'thing', result: 'cheap', basis: 'degree-operator', relationshipTypes: ['LINKS'] }], warnings: [] },
+    mappingSummary: summary.mappingSummary,
+  };
+}
+
+/**
+ * The sources the pages list. A source is connected and never tested until a spec changes it through `POST /__support/sources`
+ * (a map of source ID to the fields to change), runs its test through `POST /v1/sources/{id}/test`, which stores the report as the
+ * source's last test, or asks for the sources read that follows a test to wait (`POST /__support/hold-after-test`) until
+ * `POST /__support/release`. `POST /__support/reset` undoes all three.
+ */
+function createSources(options: SupportServerOptions) {
+  const known = profilesOf(options).map((profile) => profile.sourceId);
+  let changes = new Map<string, SourceChange>();
+  let holdAfterTest = false;
+  let holding = false;
+  let waiting: Array<() => void> = [];
+  const summaryOf = (sourceId: string): SourceSummary => ({ id: sourceId, alias: sourceId, ...SOURCE_SUMMARY, ...changes.get(sourceId) });
+  const release = (): void => {
+    holding = false;
+    for (const resume of waiting) resume();
+    waiting = [];
+  };
+  return {
+    async list(response: ServerResponse): Promise<void> {
+      if (holding) await new Promise<void>((resume) => waiting.push(resume));
+      json(response, 200, { items: known.map(summaryOf), nextCursor: null });
+    },
+    test(sourceId: string, response: ServerResponse): void {
+      if (!known.includes(sourceId)) return json(response, 404, NOT_FOUND);
+      const report = testReportOf(sourceId, summaryOf(sourceId));
+      const lastTest = lastTestOf(report);
+      changes.set(sourceId, { ...changes.get(sourceId), state: report.state, stateReason: report.stateReason, lastTest, lastTestAt: lastTest.checkedAt });
+      if (holdAfterTest) holding = true;
+      json(response, 200, report);
+    },
+    control(path: string, body: unknown, response: ServerResponse): void {
+      if (path === '/__support/reset') {
+        changes = new Map();
+        holdAfterTest = false;
+        release();
+        return json(response, 200, {});
+      }
+      if (path === '/__support/hold-after-test') {
+        holdAfterTest = true;
+        return json(response, 200, {});
+      }
+      if (path === '/__support/release') {
+        release();
+        return json(response, 200, {});
+      }
+      if (path !== '/__support/sources' || typeof body !== 'object' || body === null || Array.isArray(body)) return json(response, 404, NOT_FOUND);
+      const next = new Map<string, SourceChange>();
+      for (const [sourceId, change] of Object.entries(body)) {
+        const parsed = sourceSummarySchema.omit({ id: true }).partial().safeParse(change);
+        if (!known.includes(sourceId) || !parsed.success) return json(response, 400, INVALID);
+        next.set(sourceId, parsed.data);
+      }
+      changes = next;
+      json(response, 200, {});
+    },
+  };
 }
 
 const NOT_FOUND = { error: { code: 'NOT_FOUND', message: 'Not found.', retryable: false, traceId: 'tr-support' } };
@@ -230,7 +321,6 @@ function api(path: string, options: SupportServerOptions, response: ServerRespon
   const profiles = profilesOf(options);
   if (path === '/healthz' || path === '/readyz') return json(response, 200, { status: 'ok' });
   if (path === '/v1/me') return json(response, 200, me(profiles.map((profile) => profile.sourceId)));
-  if (path === '/v1/sources') return json(response, 200, { items: profiles.map((profile) => source(profile.sourceId)), nextCursor: null });
   const profile = profiles.find((candidate) => path === `/v1/sources/${encodeURIComponent(candidate.sourceId)}/profile`);
   if (profile !== undefined) return json(response, 200, profile);
   json(response, 404, { error: { code: 'NOT_FOUND' } });
@@ -259,12 +349,16 @@ export function createSupportServer(options: SupportServerOptions): Server {
   const root = normalize(options.root);
   const investigations = createInvestigations(options);
   const search = createSearch(options);
+  const sources = createSources(options);
   return createServer((request: IncomingMessage, response: ServerResponse) => {
     void (async () => {
       const path = new URL(request.url ?? '/', 'http://localhost').pathname;
       const isApi = path === API_PREFIX || path.startsWith(`${API_PREFIX}/`) || PROBE_PATHS.has(path);
       if (request.method === 'POST' && path === '/v1/investigations') return investigations.open(await bodyOf(request), response);
       if (request.method === 'POST' && path === '/v1/search/entities') return search.run(await bodyOf(request), response);
+      if (request.method === 'POST' && path.startsWith('/__support/')) return sources.control(path, await bodyOf(request), response);
+      const testing = /^\/v1\/sources\/([^/]+)\/test$/.exec(path);
+      if (request.method === 'POST' && testing?.[1] !== undefined) return sources.test(decodeURIComponent(testing[1]), response);
       if (request.method !== 'GET' && request.method !== 'HEAD') return json(response, 405, { error: { code: 'METHOD_NOT_ALLOWED' } });
       if (isApi) {
         const parts = path.split('/').map((part) => decodeURIComponent(part));
@@ -276,6 +370,7 @@ export function createSupportServer(options: SupportServerOptions): Server {
         }
         if (kind === 'investigations' && parts.length === 3) return investigations.list(new URL(request.url ?? '/', 'http://localhost').searchParams, response);
         if (kind === 'investigations' && parts.length === 4 && first !== undefined) return investigations.read(first, response);
+        if (kind === 'sources' && parts.length === 3) return sources.list(response);
         return api(path, options, response);
       }
       const found = (await file(root, path)) ?? (await file(root, 'index.html'));

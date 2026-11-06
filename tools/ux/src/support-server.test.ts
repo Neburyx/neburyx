@@ -3,7 +3,7 @@ import type { Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { investigationListResponseSchema, investigationResponseSchema, meResponseSchema, openInvestigationResponseSchema, searchResultSchema, sourceProfileSchema, sourcesResponseSchema } from '@neburyx/contracts';
+import { investigationListResponseSchema, investigationResponseSchema, meResponseSchema, openInvestigationResponseSchema, searchResultSchema, sourceProfileSchema, sourcesResponseSchema, sourceTestReportSchema } from '@neburyx/contracts';
 import { createSupportServer } from './support-server.ts';
 
 const committed: unknown = JSON.parse(readFileSync(new URL('../fixtures/profile.json', import.meta.url), 'utf8'));
@@ -292,5 +292,78 @@ describe('the support server, searching', () => {
     expect((await searchOf(base, { sourceId: 'demo', text: 'a' })).status).toBe(200);
     expect((await searchOf(base, { sourceId: 'demo', text: 'ab', extra: 1 })).status).toBe(400);
     expect((await searchOf(base, { sourceId: 'other', text: 'ab' })).status).toBe(404);
+  });
+});
+
+describe('the support server\'s source health', () => {
+  const post = (base: string, path: string, body: unknown = {}): Promise<Response> => fetch(base + path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  const sourcesOf = async (base: string) => sourcesResponseSchema.parse(await (await fetch(`${base}/v1/sources`)).json()).items;
+
+  async function startTwo(): Promise<string> {
+    const server = createSupportServer({ root: folder, profile: { sourceId: 'demo' }, otherProfiles: [{ sourceId: 'other' }] });
+    await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
+    closing = () => new Promise<void>((done) => void server.close(() => done()));
+    return baseOf(server);
+  }
+
+  it('lists every source connected and never tested until a spec changes one, and changes only the fields it names', async () => {
+    const base = await startTwo();
+    expect((await sourcesOf(base)).map((item) => [item.id, item.state, item.lastTest])).toEqual([['demo', 'connected', null], ['other', 'connected', null]]);
+    expect((await post(base, '/__support/sources', { other: { state: 'unavailable', stateReason: 'Connection refused' } })).status).toBe(200);
+    const [demo, other] = await sourcesOf(base);
+    expect([demo?.state, demo?.stateReason, other?.state, other?.stateReason, other?.mappingSummary]).toEqual(['connected', null, 'unavailable', 'Connection refused', { entityTypes: 4, relationshipTypes: 6, derivedRules: 2 }]);
+  });
+
+  it('refuses a change for an unknown source or an invalid field, and changes nothing', async () => {
+    const base = await startTwo();
+    expect((await post(base, '/__support/sources', { nowhere: { state: 'degraded' } })).status).toBe(400);
+    expect((await post(base, '/__support/sources', { demo: { state: 'sleeping' } })).status).toBe(400);
+    expect((await post(base, '/__support/sources', { demo: { surprise: true } })).status).toBe(400);
+    expect((await post(base, '/__support/nothing')).status).toBe(404);
+    expect((await sourcesOf(base)).map((item) => item.state)).toEqual(['connected', 'connected']);
+  });
+
+  it('answers a test with a report that parses as the contract\'s and stores it as the source\'s last test', async () => {
+    const base = await startTwo();
+    const reply = await post(base, '/v1/sources/other/test');
+    expect(reply.status).toBe(200);
+    const report = sourceTestReportSchema.parse(await reply.json());
+    expect(report.sourceId).toBe('other');
+    const [demo, other] = await sourcesOf(base);
+    expect(demo?.lastTest).toBeNull();
+    expect(other?.lastTestAt).toBe(report.checkedAt);
+    expect(other?.lastTest).toMatchObject({ checkedAt: report.checkedAt, readOnlyCheck: 'privileges-inspected', outcome: 'pass' });
+    expect((await post(base, '/v1/sources/nowhere/test')).status).toBe(404);
+  });
+
+  it('holds back the sources read that follows a test until it is released, and not before a test', async () => {
+    const base = await startTwo();
+    await post(base, '/__support/hold-after-test');
+    expect((await sourcesOf(base)).length).toBe(2);
+    await post(base, '/v1/sources/demo/test');
+    let answered = false;
+    const pending = sourcesOf(base).then((items) => {
+      answered = true;
+      return items;
+    });
+    await new Promise<void>((done) => setTimeout(done, 100));
+    expect(answered).toBe(false);
+    await post(base, '/__support/release');
+    expect((await pending)[0]?.lastTest).not.toBeNull();
+    expect(answered).toBe(true);
+  });
+
+  it('puts every source back, releases a held read and clears the hold on reset', async () => {
+    const base = await startTwo();
+    await post(base, '/__support/sources', { demo: { state: 'degraded', stateReason: 'Degree counts are estimated' } });
+    await post(base, '/__support/hold-after-test');
+    await post(base, '/v1/sources/other/test');
+    const pending = sourcesOf(base);
+    await post(base, '/__support/reset');
+    expect((await pending).length).toBe(2);
+    const after = await sourcesOf(base);
+    expect(after.map((item) => [item.state, item.lastTest])).toEqual([['connected', null], ['connected', null]]);
+    await post(base, '/v1/sources/demo/test');
+    expect((await sourcesOf(base)).length).toBe(2);
   });
 });

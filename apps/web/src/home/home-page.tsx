@@ -4,6 +4,7 @@ import { HOME_COPY } from './copy.js';
 import { HomeSearch } from './home-search.js';
 import { OpenLinkEntry } from './open-link-entry.js';
 import { RecentList } from './recent-list.js';
+import { SourceHealthCard } from './source-health-card.js';
 
 export function HomePage() {
   const sources = answeredData(useShellData().sources)?.items;
@@ -14,6 +15,7 @@ export function HomePage() {
       <HomeSearch />
       <OpenLinkEntry />
       <RecentList />
+      <SourceHealthCard />
     </section>
   );
 }

@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { canvasOf } from './support/workspace.ts';
 
 test.use({ baseURL: 'http://127.0.0.1:4175' });
@@ -145,5 +145,110 @@ test.describe('Home: the search box and the deep link in a browser', () => {
     await page.getByRole('form', { name: 'Open a link' }).getByLabel('Link').fill('/restricted-demo/entity/account/AC-1');
     await page.getByRole('form', { name: 'Open a link' }).getByRole('button', { name: 'Open' }).click();
     await expect(heading(page)).toHaveText('Nothing was found at this link');
+  });
+});
+
+const degradedTest = {
+  checkedAt: '2026-10-30T10:16:08.000Z',
+  outcome: 'warn',
+  server: { product: 'Neo4j Kernel', version: '5.26.32' },
+  versionSupported: true,
+  readOnlyCheck: 'privileges-inspected',
+  loginCanWrite: false,
+  degreeStatus: 'warn',
+  degreeWarnings: ['Degree counts are estimated for 1 entity type'],
+};
+const failedTest = { checkedAt: '2026-10-29T08:00:00.000Z', outcome: 'fail', server: null, versionSupported: null, readOnlyCheck: 'not-verified', loginCanWrite: null, degreeStatus: 'not-run', degreeWarnings: [] };
+
+const healthCard = (page: Page) => page.getByRole('region', { name: 'Source health' });
+const blockOf = (page: Page, alias: string) => healthCard(page).locator('li', { has: page.getByRole('heading', { name: alias, level: 3 }) });
+
+async function factsOf(scope: Locator): Promise<string[][]> {
+  const labels = await scope.locator('dt').allTextContents();
+  const values = await scope.locator('dd').allTextContents();
+  return labels.map((label, index): string[] => [label, values[index] ?? '']).filter(([label]) => label !== 'Connection');
+}
+
+async function onSourcesPage(page: Page, alias: string): Promise<{ readonly state: string; readonly reason: string | null; readonly facts: string[][] }> {
+  const row = page.getByRole('list', { name: 'Configured sources' }).getByRole('button', { name: new RegExp(alias) });
+  await row.click();
+  const reason = row.locator('.source-reason');
+  return { state: (await row.locator('.pill').textContent()) ?? '', reason: (await reason.count()) === 0 ? null : await reason.textContent(), facts: await factsOf(page.getByRole('region', { name: `${alias} health` })) };
+}
+
+async function onHome(page: Page, alias: string): Promise<{ readonly state: string; readonly reason: string | null; readonly facts: string[][] }> {
+  const block = blockOf(page, alias);
+  const reason = block.locator('.source-reason');
+  return { state: (await block.locator('.pill').textContent()) ?? '', reason: (await reason.count()) === 0 ? null : await reason.textContent(), facts: await factsOf(block) };
+}
+
+test.describe('Home: the Source health card in a browser', () => {
+  test.beforeEach(async ({ request }) => {
+    await request.post('/__support/reset');
+  });
+  test.afterEach(async ({ request }) => {
+    await request.post('/__support/reset');
+  });
+
+  test('shows a degraded and an unavailable source with the state, reason and facts the Sources page shows for them, with one read of the sources, no horizontal scroll, and the link to Sources by keyboard', async ({ page, request }) => {
+    await request.post('/__support/sources', {
+      data: {
+        'banking-demo': { state: 'degraded', stateReason: 'Degree counts are estimated', lastTest: degradedTest, lastTestAt: degradedTest.checkedAt },
+        'claims-demo': { state: 'unavailable', stateReason: 'Connection refused', lastTest: failedTest, lastTestAt: failedTest.checkedAt },
+      },
+    });
+    const sent = requests(page);
+    await page.goto('/');
+    await expect(healthCard(page)).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Recent', level: 2 })).toBeVisible();
+    await page.waitForLoadState('networkidle');
+    expect(sent.filter((line) => line === 'GET /v1/sources'), 'the one read of the sources is the shell\'s').toHaveLength(1);
+    expect(await noHorizontalScroll(page)).toBe(true);
+    const homeBlocks = new Map<string, Awaited<ReturnType<typeof onHome>>>();
+    for (const alias of ['banking-demo', 'claims-demo', 'restricted-demo']) homeBlocks.set(alias, await onHome(page, alias));
+    expect(homeBlocks.get('banking-demo')).toMatchObject({ state: 'Degraded', reason: 'Degree counts are estimated' });
+    expect(homeBlocks.get('claims-demo')).toMatchObject({ state: 'Unavailable', reason: 'Connection refused' });
+    expect(homeBlocks.get('restricted-demo')).toMatchObject({ state: 'Connected', reason: null });
+
+    const link = healthCard(page).getByRole('link', { name: 'View sources →' });
+    for (let presses = 0; presses < 40 && !(await link.evaluate((element) => element === document.activeElement)); presses += 1) await page.keyboard.press('Tab');
+    await expect(link).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(/\/sources$/);
+    await expect(page.getByRole('list', { name: 'Configured sources' }).getByRole('button')).toHaveCount(3);
+    for (const alias of ['banking-demo', 'claims-demo', 'restricted-demo']) expect(await onSourcesPage(page, alias), alias).toEqual(homeBlocks.get(alias));
+  });
+
+  test('shows the held report of a test run on the Sources page while the following sources read is held back, and the stored test after it is released', async ({ page, request }) => {
+    await request.post('/__support/hold-after-test');
+    let answered = 0;
+    page.on('response', (response) => {
+      if (new URL(response.url()).pathname === '/v1/sources') answered += 1;
+    });
+    await page.goto('/');
+    await expect(healthCard(page)).toBeVisible();
+    const answeredAtLoad = answered;
+    const before = await onHome(page, 'banking-demo');
+    expect(before.facts.map(([label, value]) => `${label}: ${value}`).slice(0, 2)).toEqual(['Last test: Never tested', 'Read-only verified: Not tested yet']);
+    await page.getByRole('link', { name: 'Sources', exact: true }).click();
+    await page.getByRole('region', { name: 'banking-demo health' }).getByRole('button', { name: 'Test source' }).click();
+    await expect(page.getByText('Test finished: connected')).toBeVisible();
+    await page.getByRole('link', { name: 'Home', exact: true }).click();
+    await expect(healthCard(page)).toBeVisible();
+    const held = await onHome(page, 'banking-demo');
+    expect(answered, 'the sources read that follows the test has not been answered').toBe(answeredAtLoad);
+    expect(held.facts[0]?.[1]).not.toBe('Never tested');
+    expect(held.facts[1]).toEqual(['Read-only verified', 'Privileges inspected']);
+    await page.getByRole('link', { name: 'Sources', exact: true }).click();
+    expect(await onSourcesPage(page, 'banking-demo')).toMatchObject({ facts: held.facts });
+    await page.getByRole('link', { name: 'Home', exact: true }).click();
+    const stored = page.waitForResponse((response) => new URL(response.url()).pathname === '/v1/sources');
+    await request.post('/__support/release');
+    await stored;
+    expect(answered).toBe(answeredAtLoad + 1);
+    await expect(healthCard(page)).toBeVisible();
+    expect(await onHome(page, 'banking-demo')).toMatchObject({ facts: held.facts });
+    await page.getByRole('link', { name: 'Sources', exact: true }).click();
+    expect(await onSourcesPage(page, 'banking-demo')).toMatchObject({ facts: held.facts });
   });
 });

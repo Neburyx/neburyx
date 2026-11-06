@@ -23,3 +23,8 @@ export const sourceStateNote = (state: string, reason: string | null): string =>
 export const SEARCH_PLACEHOLDER = 'Search an entity or ID';
 
 export const OPEN_LINK_ACTION = 'Open a deep link';
+
+export const HEALTH_COPY = {
+  title: 'Source health',
+  viewSources: 'View sources →',
+} as const;
