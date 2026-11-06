@@ -36,6 +36,14 @@ async function openPrompt(page: Page): Promise<void> {
   await expect(page.getByRole('form', { name: 'Open a link' })).toBeVisible();
 }
 
+async function openAddTab(page: Page): Promise<void> {
+  await openEntity(page, 'banking-demo', `PT-${unique()}`);
+  await expect(page.getByRole('application', { name: 'Graph canvas' })).toBeVisible();
+  await page.getByRole('button', { name: 'Search', exact: true }).click();
+  await page.getByRole('tab', { name: /Add from source/ }).click();
+  await expect(page.getByRole('searchbox', { name: 'Find in the source' })).toBeVisible();
+}
+
 async function abort(page: Page, matches: (url: URL) => boolean): Promise<void> {
   await page.route(matches, (route) => route.abort());
 }
@@ -123,6 +131,23 @@ export const REACH: Readonly<Record<string, (page: Page) => Promise<void>>> = {
     await page.getByRole('application', { name: 'Graph canvas' }).focus();
     await page.keyboard.press(`${await modifier(page)}+/`);
     await expect(page.getByRole('dialog', { name: 'Keyboard shortcuts' })).toBeVisible();
+  },
+  'Explore with the Search panel open': async (page) => {
+    await openEntity(page, 'banking-demo', `PS-${unique()}`);
+    await expect(page.getByRole('application', { name: 'Graph canvas' })).toBeVisible();
+    await page.getByRole('button', { name: 'Search', exact: true }).click();
+    await expect(page.getByRole('searchbox', { name: 'Find on canvas' })).toBeVisible();
+  },
+  "Explore with the Search panel's Add tab": async (page) => {
+    await openAddTab(page);
+    await page.getByRole('searchbox', { name: 'Find in the source' }).fill('AC-2');
+    await expect(page.getByRole('button', { name: /^Add / }).first()).toBeVisible();
+  },
+  "Explore with the Search panel's Add tab failed": async (page) => {
+    await abort(page, (url) => url.pathname === '/v1/search/entities');
+    await openAddTab(page);
+    await page.getByRole('searchbox', { name: 'Find in the source' }).fill('AC-2');
+    await expect(page.getByRole('button', { name: 'Retry' }).first()).toBeVisible();
   },
   'Explore with its read failed': async (page) => {
     await openEntity(page, 'banking-demo', `PZ-${unique()}`);

@@ -137,6 +137,26 @@ test.describe('the shared look of buttons, selectors and fields', () => {
     await expect(selector).toHaveValue('two');
   });
 
+  test('does not change the controls of the Search panel on the canvas, tabs, Add buttons and close included, idle and hovered', async ({ page }) => {
+    await page.goto(`/banking-demo/entity/account/CTL-${String(Date.now()).slice(-6)}`);
+    await expect(page).toHaveURL(/\/explore\/[0-9a-f-]{36}$/);
+    await page.getByRole('button', { name: 'Search', exact: true }).click();
+    await page.getByRole('tab', { name: /Add from source/ }).click();
+    await page.getByRole('searchbox', { name: 'Find in the source' }).fill('AC-2');
+    await expect(page.getByRole('button', { name: /^Add / }).first()).toBeVisible();
+    const controls = await allOf(page.locator('.search-panel').locator('button:visible, input:visible'));
+    expect(controls.length).toBeGreaterThanOrEqual(5);
+    for (const state of ['idle', 'hovered'] as const) {
+      for (const control of controls) {
+        if (state === 'hovered') await control.hover({ force: true });
+        else await page.mouse.move(0, 0);
+        const withDefaults = await lookOf(control);
+        const withoutDefaults = await withoutDefaultRules(page, () => lookOf(control));
+        expect(withDefaults, `${state}: ${await control.getAttribute('class') ?? 'plain'}`).toEqual(withoutDefaults);
+      }
+    }
+  });
+
   test('draws a plain control on the workspace page too', async ({ page }) => {
     await openSample(page);
     await addPlainControls(page);
