@@ -45,7 +45,11 @@ export function RecentRow({ item, now, source, profile }: { readonly item: Inves
           {relativeTime(item.createdAt, now)}
         </time>
       </span>
-      {note === undefined ? null : <span className="recent-note">{note}</span>}
+      {note === undefined ? null : (
+        <span className="recent-note" title={note}>
+          {note}
+        </span>
+      )}
     </li>
   );
 }
