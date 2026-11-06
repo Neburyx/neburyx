@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { z } from 'zod';
+import { investigationListQuerySchema } from './investigations.js';
 import { buildOpenApiDocument } from './openapi.js';
 
 describe('buildOpenApiDocument', () => {
@@ -7,7 +9,7 @@ describe('buildOpenApiDocument', () => {
     expect(document.openapi).toBe('3.1.0');
     expect(document.info.title).toBe('Neburyx API');
     expect(Object.keys(document.paths)).toEqual(['/healthz', '/readyz', '/v1/me', '/v1/sources/{id}/profile', '/v1/sources/{id}/test', '/v1/entities/{sourceId}/{entityType}/{stableId}', '/v1/investigations', '/v1/investigations/{id}', '/v1/search/entities', '/v1/sources']);
-    expect(Object.keys(document.components.schemas)).toEqual(['ErrorResponse', 'GraphNode', 'HealthResponse', 'InvestigationResponse', 'MeResponse', 'OpenInvestigationRequest', 'OpenInvestigationResponse', 'ReadyResponse', 'SearchRequest', 'SearchResult', 'SourceProfile', 'SourceTestReport', 'SourcesResponse']);
+    expect(Object.keys(document.components.schemas)).toEqual(['ErrorResponse', 'GraphNode', 'HealthResponse', 'InvestigationListResponse', 'InvestigationResponse', 'MeResponse', 'OpenInvestigationRequest', 'OpenInvestigationResponse', 'ReadyResponse', 'SearchRequest', 'SearchResult', 'SourceProfile', 'SourceTestReport', 'SourcesResponse']);
     expect(document.components.schemas.ErrorResponse).not.toHaveProperty('$schema');
     expect(document.components.schemas.MeResponse).not.toHaveProperty('$schema');
   });
@@ -41,5 +43,16 @@ describe('buildOpenApiDocument', () => {
       properties: { text: { type: 'string', minLength: 1, maxLength: 200 }, mask: { type: 'boolean' } },
     });
     expect(document.components.schemas.SearchResult).toMatchObject({ additionalProperties: false, properties: { exact: { type: 'array' }, counts: { properties: { exact: {} } } } });
+  });
+
+  it('describes the list of investigations with its query, its answers and no 403', () => {
+    const document = buildOpenApiDocument();
+    const { get: list } = z.object({ get: z.object({ parameters: z.array(z.object({ name: z.string(), schema: z.record(z.string(), z.unknown()) })), responses: z.record(z.string(), z.unknown()) }) }).parse(document.paths['/v1/investigations']);
+    expect(list.parameters.map((parameter) => parameter.name)).toEqual(['limit', 'sort']);
+    expect(Object.keys(list.responses)).toEqual(['200', '400', '500']);
+    const { minimum, maximum } = z.object({ minimum: z.number(), maximum: z.number() }).parse(list.parameters[0]?.schema);
+    const accepted = (limit: number): boolean => investigationListQuerySchema.safeParse({ limit: String(limit) }).success;
+    expect([accepted(minimum - 1), accepted(minimum), accepted(maximum), accepted(maximum + 1)], 'the documented bounds are the ones the route accepts').toEqual([false, true, true, false]);
+    expect(document.components.schemas.InvestigationListResponse).toMatchObject({ required: ['items', 'hasMore'], additionalProperties: false });
   });
 });

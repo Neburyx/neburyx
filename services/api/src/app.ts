@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Socket } from 'node:net';
 import fastifyStatic from '@fastify/static';
-import { type ErrorCode, entityPathSchema, entityQuerySchema, healthResponseSchema, investigationResponseSchema, meResponseSchema, nodeSchema, openInvestigationRequestSchema, openInvestigationResponseSchema, readyResponseSchema, searchRequestSchema, searchResultSchema, sourceProfileSchema, sourceTestReportSchema, sourcesResponseSchema } from '@neburyx/contracts';
+import { type ErrorCode, entityPathSchema, entityQuerySchema, healthResponseSchema, investigationListQuerySchema, investigationListResponseSchema, investigationResponseSchema, meResponseSchema, nodeSchema, openInvestigationRequestSchema, openInvestigationResponseSchema, readyResponseSchema, searchRequestSchema, searchResultSchema, sourceProfileSchema, sourceTestReportSchema, sourcesResponseSchema } from '@neburyx/contracts';
 import { z } from 'zod';
 import Fastify, {
   type FastifyBaseLogger,
@@ -321,6 +321,14 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
         .code(answer.created ? 201 : 200)
         .header('etag', `"${answer.body.investigation.version}"`)
         .send(openInvestigationResponseSchema.parse(answer.body));
+    });
+
+    app.get('/v1/investigations', { config: { permission: 'principal' } }, async (request) => {
+      const query = investigationListQuerySchema.safeParse(request.query);
+      if (!query.success) throw new AppError('INVALID_REQUEST');
+      const identity = await options.store.current();
+      const answer = await investigations.list({ principal: identity.principal, ...(query.data.limit === undefined ? {} : { limit: query.data.limit }) });
+      return investigationListResponseSchema.parse(answer);
     });
 
     app.get('/v1/investigations/:id', { exposeHeadRoute: false, config: { permission: 'principal' } }, async (request, reply) => {

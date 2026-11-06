@@ -1,6 +1,6 @@
-import { investigationResponseSchema, layoutDocumentSchema, MAX_TITLE_LENGTH, queryContextDocumentSchema, type GraphNode, type Investigation, type InvestigationResponse, type InvestigationSourceState, type OpenInvestigationRequest, type OpenInvestigationResponse } from '@neburyx/contracts';
+import { DEFAULT_INVESTIGATION_LIST_LIMIT, investigationResponseSchema, layoutDocumentSchema, MAX_TITLE_LENGTH, queryContextDocumentSchema, type GraphNode, type Investigation, type InvestigationListResponse, type InvestigationResponse, type InvestigationSourceState, type OpenInvestigationRequest, type OpenInvestigationResponse } from '@neburyx/contracts';
 import { AppError } from '../errors.js';
-import type { InvestigationRow, InvestigationStore } from '../db/investigations-repository.js';
+import type { InvestigationRow, InvestigationStore, ListedInvestigation } from '../db/investigations-repository.js';
 import type { EntityReader } from '../entities/entity-reader.js';
 import { uuidv7 } from '../identity/uuid.js';
 import type { EntityModel, MappingModel, SourceModel } from '../mapping/model.js';
@@ -25,6 +25,7 @@ export interface OpenAnswer {
 export interface InvestigationService {
   open(call: OpenCall): Promise<OpenAnswer>;
   read(call: { readonly id: string; readonly principal: Principal }): Promise<InvestigationResponse>;
+  list(call: { readonly principal: Principal; readonly limit?: number }): Promise<InvestigationListResponse>;
 }
 
 export interface InvestigationServiceDeps {
@@ -112,6 +113,12 @@ export function createInvestigationService(deps: InvestigationServiceDeps): Inve
       if (investigation.sourceState !== 'available') return { created: false, body: answerOf(investigation, false, undefined) };
       entityTypeOf(source, request);
       return { created: false, body: answerOf(investigation, false, await readEntity(call)) };
+    },
+    async list({ principal, limit = DEFAULT_INVESTIGATION_LIST_LIMIT }) {
+      const sourceIds = await deps.access.readable({ principal, sourceIds: await deps.store.listInvestigationSourceIds(principal.id) });
+      const found = await deps.store.listInvestigations({ ownerId: principal.id, sourceIds, limit: limit + 1 });
+      const items = found.slice(0, limit).map((row: ListedInvestigation) => ({ ...shown(deps.mapping, row), sourceAlias: row.sourceAlias, save: row.save }));
+      return { items, hasMore: found.length > limit };
     },
     async read({ id, principal }) {
       if (!UUID.test(id)) throw new AppError('NOT_FOUND');

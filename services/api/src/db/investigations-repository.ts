@@ -1,4 +1,4 @@
-import { layoutDocumentSchema, queryContextDocumentSchema, type LayoutDocument, type QueryContextDocument } from '@neburyx/contracts';
+import { layoutDocumentSchema, queryContextDocumentSchema, type InvestigationSave, type LayoutDocument, type QueryContextDocument } from '@neburyx/contracts';
 import type pg from 'pg';
 
 export interface InvestigationRow {
@@ -65,11 +65,24 @@ export interface StoredInvestigation {
   readonly draft: DraftRow;
 }
 
+export interface ListedInvestigation extends InvestigationRow {
+  readonly sourceAlias: string;
+  readonly save: InvestigationSave;
+}
+
+export interface ListQuery {
+  readonly ownerId: string;
+  readonly sourceIds: readonly string[];
+  readonly limit: number;
+}
+
 export interface InvestigationStore {
   /** Writes the investigation and its draft, or, when the input has a case reference and the owner already has an open investigation for it, returns that one and writes nothing. The two are decided in one step, so two calls at once make one investigation. */
   createInvestigation(input: NewInvestigation): Promise<CreatedInvestigation>;
   findReusableInvestigation(query: ReusableQuery): Promise<InvestigationRow | undefined>;
   readInvestigation(id: string, ownerId: string): Promise<StoredInvestigation | undefined>;
+  listInvestigationSourceIds(ownerId: string): Promise<string[]>;
+  listInvestigations(query: ListQuery): Promise<ListedInvestigation[]>;
 }
 
 interface InvestigationRecord {
@@ -188,4 +201,29 @@ export async function readInvestigation(db: pg.Pool, id: string, ownerId: string
   const [record] = result.rows;
   if (record === undefined) return undefined;
   return { investigation: rowOf(record), draft: { id: record.draft_id, version: record.draft_version, layout: record.layout, queryContext: record.query_context } };
+}
+
+interface ListedRecord extends InvestigationRecord {
+  readonly source_alias: string;
+  readonly saved_at: Date | null;
+}
+
+export async function listInvestigationSourceIds(db: pg.Pool, ownerId: string): Promise<string[]> {
+  const result = await db.query<{ source_id: string }>(`SELECT DISTINCT source_id FROM investigations WHERE owner_id = $1 AND status = 'open' AND deleted_at IS NULL`, [ownerId]);
+  return result.rows.map((record) => record.source_id);
+}
+
+export async function listInvestigations(db: pg.Pool, query: ListQuery): Promise<ListedInvestigation[]> {
+  const result = await db.query<ListedRecord>(
+    `SELECT ${QUALIFIED_COLUMNS}, s.alias AS source_alias, CASE WHEN named.content_hash = draft.content_hash THEN named.created_at END AS saved_at
+     FROM investigations i
+     JOIN sources s ON s.id = i.source_id
+     LEFT JOIN saved_views draft ON draft.investigation_id = i.id AND draft.kind = 'draft' AND draft.created_by = i.owner_id
+     LEFT JOIN saved_views named ON named.id = draft.based_on_view_id AND named.kind = 'named'
+     WHERE i.owner_id = $1 AND i.source_id = ANY($2::text[]) AND i.status = 'open' AND i.deleted_at IS NULL
+     ORDER BY i.last_edited_at DESC, i.id DESC
+     LIMIT $3`,
+    [query.ownerId, [...query.sourceIds], query.limit],
+  );
+  return result.rows.map((record) => ({ ...rowOf(record), sourceAlias: record.source_alias, save: record.saved_at === null ? { state: 'unsaved', savedAt: null } : { state: 'saved', savedAt: record.saved_at.toISOString() } }));
 }

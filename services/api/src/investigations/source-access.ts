@@ -17,6 +17,8 @@ export interface SourceAccessCall {
 /** Whether the person may read a source, asked before anything else about it is looked at. A source that is not configured and one the person may not read answer the same `NOT_FOUND`, so a link never tells them apart. The gate still authorizes the read. */
 export interface SourceAccess {
   require(call: SourceAccessCall): Promise<void>;
+  /** A source no longer in the configuration is kept: it is the person's own work and the policy cannot be asked about it. Nothing is audited, because nothing was read. */
+  readable(call: { readonly principal: Principal; readonly sourceIds: readonly string[] }): Promise<string[]>;
 }
 
 export function createSourceAccess(deps: { readonly mapping: MappingModel; readonly seams: Pick<Seams, 'policy' | 'audit'>; readonly logger: Pick<FastifyBaseLogger, 'warn'> }): SourceAccess {
@@ -36,6 +38,15 @@ export function createSourceAccess(deps: { readonly mapping: MappingModel; reado
       if (decision?.allowed === true) return;
       await recordDenied(call, configured);
       throw new AppError('NOT_FOUND');
+    },
+    async readable(call) {
+      const decided = await Promise.all(
+        call.sourceIds.map(async (sourceId) => {
+          if (!deps.mapping.sources.some((source) => source.id === sourceId)) return true;
+          return (await deps.seams.policy.authorizeSource({ principal: call.principal, sourceId })).allowed;
+        }),
+      );
+      return call.sourceIds.filter((_sourceId, index) => decided[index] === true);
     },
   };
 }

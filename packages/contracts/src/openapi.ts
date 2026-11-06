@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { errorResponseSchema } from './error-response.js';
 import { healthResponseSchema } from './health.js';
 import { nodeSchema } from './graph.js';
-import { investigationResponseSchema, openInvestigationRequestSchema, openInvestigationResponseSchema } from './investigations.js';
+import { DEFAULT_INVESTIGATION_LIST_LIMIT, INVESTIGATION_LIST_SORTS, investigationListResponseSchema, investigationResponseSchema, MAX_INVESTIGATION_LIST_LIMIT, openInvestigationRequestSchema, openInvestigationResponseSchema } from './investigations.js';
 import { meResponseSchema } from './me.js';
 import { readyResponseSchema } from './ready.js';
 import { sourceProfileSchema } from './profile.js';
@@ -17,7 +17,7 @@ export interface OpenApiDocument {
   readonly openapi: string;
   readonly info: { readonly title: string; readonly version: string };
   readonly paths: Readonly<Record<string, unknown>>;
-  readonly components: { readonly schemas: { readonly ErrorResponse: Record<string, unknown>; readonly GraphNode: Record<string, unknown>; readonly HealthResponse: Record<string, unknown>; readonly InvestigationResponse: Record<string, unknown>; readonly MeResponse: Record<string, unknown>; readonly OpenInvestigationRequest: Record<string, unknown>; readonly OpenInvestigationResponse: Record<string, unknown>; readonly ReadyResponse: Record<string, unknown>; readonly SearchRequest: Record<string, unknown>; readonly SearchResult: Record<string, unknown>; readonly SourceProfile: Record<string, unknown>; readonly SourceTestReport: Record<string, unknown>; readonly SourcesResponse: Record<string, unknown> } };
+  readonly components: { readonly schemas: { readonly ErrorResponse: Record<string, unknown>; readonly GraphNode: Record<string, unknown>; readonly HealthResponse: Record<string, unknown>; readonly InvestigationListResponse: Record<string, unknown>; readonly InvestigationResponse: Record<string, unknown>; readonly MeResponse: Record<string, unknown>; readonly OpenInvestigationRequest: Record<string, unknown>; readonly OpenInvestigationResponse: Record<string, unknown>; readonly ReadyResponse: Record<string, unknown>; readonly SearchRequest: Record<string, unknown>; readonly SearchResult: Record<string, unknown>; readonly SourceProfile: Record<string, unknown>; readonly SourceTestReport: Record<string, unknown>; readonly SourcesResponse: Record<string, unknown> } };
 }
 
 function schemaJson(schema: z.ZodType): Record<string, unknown> {
@@ -43,6 +43,7 @@ export function buildOpenApiDocument(
   openInvestigationRequest: z.ZodType = openInvestigationRequestSchema,
   searchRequest: z.ZodType = searchRequestSchema,
   searchResult: z.ZodType = searchResultSchema,
+  investigationList: z.ZodType = investigationListResponseSchema,
 ): OpenApiDocument {
   return {
     openapi: '3.1.0',
@@ -143,6 +144,21 @@ export function buildOpenApiDocument(
         },
       },
       '/v1/investigations': {
+        get: {
+          operationId: 'listInvestigations',
+          summary: 'The caller\'s recent investigations, across every source the caller may read',
+          description:
+            'Reads Postgres only; no source is read. Lists the caller\'s own open, undeleted investigations, the most recently edited first and, between equal times, the larger id first. Investigations of a configured source the policy does not let the caller read are left out without a record, and the order, limit and hasMore are those of the investigations that remain; investigations of a source no longer in the configuration are listed with sourceState removed. limit is a whole number from 1 to 25 (5 when left out) and sort is lastEdited, the only order; any other query parameter is refused. sourceAlias is the alias the product stored for the source. save is saved, with the time of the named view, when the caller\'s draft equals the named view it was last saved as, and unsaved otherwise. hasMore is true when more investigations than limit could be listed. There is no cursor and no filter.',
+          parameters: [
+            { name: 'limit', in: 'query', required: false, description: 'A whole number; 5 when left out', schema: { type: 'integer', minimum: 1, maximum: MAX_INVESTIGATION_LIST_LIMIT, default: DEFAULT_INVESTIGATION_LIST_LIMIT } },
+            { name: 'sort', in: 'query', required: false, description: 'lastEdited, the only order', schema: { type: 'string', enum: [...INVESTIGATION_LIST_SORTS] } },
+          ],
+          responses: {
+            '200': { description: 'The investigations', content: jsonBody('InvestigationListResponse') },
+            '400': { description: 'A query parameter other than limit and sort was sent, limit is not a whole number from 1 to 25, or sort is not lastEdited', content: jsonBody('ErrorResponse') },
+            '500': { description: 'The investigations could not be read', content: jsonBody('ErrorResponse') },
+          },
+        },
         post: {
           operationId: 'openInvestigation',
           summary: 'Open an entity as an investigation',
@@ -209,7 +225,7 @@ export function buildOpenApiDocument(
       },
     },
     components: {
-      schemas: { ErrorResponse: schemaJson(errorResponse), GraphNode: schemaJson(graphNode), HealthResponse: schemaJson(healthResponse), InvestigationResponse: schemaJson(investigationResponse), MeResponse: schemaJson(meResponse), OpenInvestigationRequest: schemaJson(openInvestigationRequest), OpenInvestigationResponse: schemaJson(openInvestigationResponse), ReadyResponse: schemaJson(readyResponse), SearchRequest: schemaJson(searchRequest), SearchResult: schemaJson(searchResult), SourceProfile: schemaJson(sourceProfile), SourceTestReport: schemaJson(sourceTestReport), SourcesResponse: schemaJson(sourcesResponse) },
+      schemas: { ErrorResponse: schemaJson(errorResponse), GraphNode: schemaJson(graphNode), HealthResponse: schemaJson(healthResponse), InvestigationListResponse: schemaJson(investigationList), InvestigationResponse: schemaJson(investigationResponse), MeResponse: schemaJson(meResponse), OpenInvestigationRequest: schemaJson(openInvestigationRequest), OpenInvestigationResponse: schemaJson(openInvestigationResponse), ReadyResponse: schemaJson(readyResponse), SearchRequest: schemaJson(searchRequest), SearchResult: schemaJson(searchResult), SourceProfile: schemaJson(sourceProfile), SourceTestReport: schemaJson(sourceTestReport), SourcesResponse: schemaJson(sourcesResponse) },
     },
   };
 }

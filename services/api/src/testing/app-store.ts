@@ -3,7 +3,7 @@ import { sourceTestReportSchema } from '@neburyx/contracts';
 import type { PingStateChange, SourceCheck } from '../db/source-checks-repository.js';
 import type { SourceRow } from '../db/sources-repository.js';
 import type { Identity } from '../identity/identity.js';
-import { validatedDraft, type CreatedInvestigation, type DraftRow, type InvestigationRow, type NewDraft, type NewInvestigation, type ReusableQuery, type StoredInvestigation } from '../db/investigations-repository.js';
+import { validatedDraft, type CreatedInvestigation, type DraftRow, type InvestigationRow, type ListedInvestigation, type NewDraft, type NewInvestigation, type ReusableQuery, type StoredInvestigation } from '../db/investigations-repository.js';
 import type { SourceModel } from '../mapping/model.js';
 
 export const LOCAL_IDENTITY: Identity = {
@@ -20,6 +20,7 @@ export interface MemoryAppStoreOptions {
   readonly failPingState?: boolean;
   readonly failChecks?: boolean;
   readonly failInvestigations?: boolean;
+  readonly failList?: boolean;
 }
 
 export interface MemoryAppStore extends AppStore {
@@ -125,6 +126,19 @@ export function memoryStoreWith(options: MemoryAppStoreOptions): MemoryAppStore 
       const investigation = investigations.find((row) => row.id === id && row.ownerId === ownerId);
       const draft = drafts.find((candidate) => candidate.investigationId === id);
       return Promise.resolve(investigation === undefined || draft === undefined ? undefined : { investigation, draft });
+    },
+    // The double has no named views: every draft is unsaved. The Postgres suite proves the saved rule.
+    listInvestigationSourceIds: (ownerId) => {
+      if (options.failList === true) return Promise.reject(new Error('the investigations could not be read'));
+      return Promise.resolve([...new Set(investigations.filter((row) => row.ownerId === ownerId && row.status === 'open').map((row) => row.sourceId))]);
+    },
+    listInvestigations: (query) => {
+      if (options.failList === true) return Promise.reject(new Error('the investigations could not be read'));
+      const listed: ListedInvestigation[] = investigations
+        .filter((row) => row.ownerId === query.ownerId && row.status === 'open' && query.sourceIds.includes(row.sourceId))
+        .map((row) => ({ ...row, sourceAlias: rows.find((source) => source.id === row.sourceId)?.alias ?? row.sourceId, save: { state: 'unsaved' as const, savedAt: null } }))
+        .sort((left, right) => (left.lastEditedAt < right.lastEditedAt ? 1 : left.lastEditedAt > right.lastEditedAt ? -1 : left.id < right.id ? 1 : -1));
+      return Promise.resolve(listed.slice(0, query.limit));
     },
     readiness: () => Promise.resolve({ database: 'ok', migrations: 'ok' }),
     close: () => Promise.resolve(),

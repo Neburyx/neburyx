@@ -31,6 +31,30 @@ export const investigationSchema = z.strictObject({
   version: z.number().int().min(1),
 });
 
+/** The most rows `GET /v1/investigations` returns, and how many it returns when `limit` is left out (a list policy of this product; no source sets it). */
+export const MAX_INVESTIGATION_LIST_LIMIT = 25;
+export const DEFAULT_INVESTIGATION_LIST_LIMIT = 5;
+
+export const INVESTIGATION_LIST_SORTS = ['lastEdited'] as const;
+
+export const investigationListQuerySchema = z.strictObject({
+  limit: z
+    .string()
+    .regex(/^[0-9]+$/)
+    .transform(Number)
+    .pipe(z.number().int().min(1).max(MAX_INVESTIGATION_LIST_LIMIT))
+    .optional(),
+  sort: z.enum(INVESTIGATION_LIST_SORTS).optional(),
+});
+
+/** `savedAt` is when the named view the draft equals was made. */
+export const investigationSaveSchema = z.discriminatedUnion('state', [z.strictObject({ state: z.literal('saved'), savedAt: z.iso.datetime() }), z.strictObject({ state: z.literal('unsaved'), savedAt: z.null() })]);
+
+/** `sourceAlias` is kept for a source taken out of the configuration. */
+export const investigationListItemSchema = investigationSchema.extend({ sourceAlias: text, save: investigationSaveSchema });
+
+export const investigationListResponseSchema = z.strictObject({ items: z.array(investigationListItemSchema), hasMore: z.boolean() });
+
 /** `POST /v1/investigations`: open an entity as an investigation. The entity names its own source so a reference to another source is refused, not read. */
 export const openInvestigationRequestSchema = z.strictObject({
   sourceId: text,
@@ -82,4 +106,7 @@ export type OpenInvestigationResponse = z.infer<typeof openInvestigationResponse
 export type LayoutDocument = z.infer<typeof layoutDocumentSchema>;
 export type QueryContextDocument = z.infer<typeof queryContextDocumentSchema>;
 export type InvestigationResponse = z.infer<typeof investigationResponseSchema>;
+export type InvestigationListItem = z.infer<typeof investigationListItemSchema>;
+export type InvestigationListResponse = z.infer<typeof investigationListResponseSchema>;
+export type InvestigationSave = z.infer<typeof investigationSaveSchema>;
 export type InvestigationSourceState = (typeof INVESTIGATION_SOURCE_STATES)[number];

@@ -44,13 +44,20 @@ export type { Count, DataClass, EdgeRef, ElementRef, GraphEdge, GraphNode, Graph
 export { MAX_STABLE_ID_LENGTH, entityPathSchema, entityQuerySchema, pathSegmentOf, stableIdSchema, valueOfPathSegment } from './entities.js';
 export type { EntityPath } from './entities.js';
 export {
+  DEFAULT_INVESTIGATION_LIST_LIMIT,
+  INVESTIGATION_LIST_SORTS,
   INVESTIGATION_SOURCE_STATES,
   INVESTIGATION_STATUSES,
   MAX_CASE_REF_LENGTH,
+  MAX_INVESTIGATION_LIST_LIMIT,
   MAX_TITLE_LENGTH,
   caseRefSchema,
   draftSchema,
+  investigationListItemSchema,
+  investigationListQuerySchema,
+  investigationListResponseSchema,
   investigationResponseSchema,
+  investigationSaveSchema,
   investigationSchema,
   layoutDocumentSchema,
   openInvestigationRequestSchema,
@@ -58,7 +65,7 @@ export {
   queryContextDocumentSchema,
   startingEntitySchema,
 } from './investigations.js';
-export type { Investigation, InvestigationResponse, InvestigationSourceState, LayoutDocument, OpenInvestigationRequest, OpenInvestigationResponse, QueryContextDocument } from './investigations.js';
+export type { Investigation, InvestigationListItem, InvestigationListResponse, InvestigationResponse, InvestigationSave, InvestigationSourceState, LayoutDocument, OpenInvestigationRequest, OpenInvestigationResponse, QueryContextDocument } from './investigations.js';
 export {
   MAX_SEARCH_TEXT_LENGTH,
   MIN_SEARCH_TEXT_LENGTH,
