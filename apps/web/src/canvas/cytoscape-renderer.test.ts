@@ -688,6 +688,50 @@ describe('zoom and fit in the Cytoscape renderer', () => {
   };
   const spread = (width: number): ReturnType<typeof scene> => scene([['a', { x: 0, y: 0 }], ['b', { x: width, y: 0 }], ['c', { x: 0, y: width / 2 }]]);
 
+  it('does nothing when it is asked to centre on a key that is not drawn, and does not throw', () => {
+    const renderer = sized();
+    renderer.draw(spread(400));
+    const before = renderer.inspect().viewport;
+    expect(() => renderer.centerOn('nothing')).not.toThrow();
+    expect(renderer.inspect().viewport).toEqual(before);
+  });
+
+  it('pans so an entity is at the centre of the canvas, with the zoom and every position as they were', () => {
+    let core: Core | undefined;
+    const renderer = createCytoscapeRenderer({ nextFrame: (callback) => callback(), canvasSize: () => SIZE, onCore: (made) => void (core = made) });
+    renderer.mount(undefined, NO_EVENTS, undefined);
+    renderer.draw(spread(400));
+    renderer.zoomBy(ZOOM_STEP);
+    const before = renderer.inspect().viewport;
+    const positions = new Map(renderer.positions());
+    renderer.centerOn('b');
+    const after = renderer.inspect().viewport;
+    expect(after.zoom).toBe(before.zoom);
+    expect(after.x !== before.x || after.y !== before.y).toBe(true);
+    expect(renderer.positions()).toEqual(positions);
+    const shown = core?.getElementById('b').renderedPosition();
+    expect(shown?.x).toBeCloseTo((core?.width() ?? 0) / 2, 3);
+    expect(shown?.y).toBeCloseTo((core?.height() ?? 0) / 2, 3);
+  });
+
+  it('pans so the middle of a relationship is at the centre of the canvas, with the zoom and every position as they were', () => {
+    let core: Core | undefined;
+    const renderer = createCytoscapeRenderer({ nextFrame: (callback) => callback(), canvasSize: () => SIZE, onCore: (made) => void (core = made) });
+    renderer.mount(undefined, NO_EVENTS, undefined);
+    renderer.draw({ ...spread(400), relationships: [{ id: 'ab', from: 'a', to: 'b', look: { aggregate: false, origin: 'stored' as const, label: undefined } }] });
+    renderer.zoomBy(ZOOM_STEP);
+    const zoom = renderer.inspect().viewport.zoom;
+    const positions = new Map(renderer.positions());
+    renderer.centerOn('ab');
+    const { zoom: after, x, y } = renderer.inspect().viewport;
+    expect(after).toBe(zoom);
+    expect(renderer.positions()).toEqual(positions);
+    const box = core?.getElementById('ab').boundingBox();
+    expect(box).toBeDefined();
+    expect(((box?.x1 ?? 0) + (box?.x2 ?? 0)) / 2 * after + x).toBeCloseTo((core?.width() ?? 0) / 2, 3);
+    expect(((box?.y1 ?? 0) + (box?.y2 ?? 0)) / 2 * after + y).toBeCloseTo((core?.height() ?? 0) / 2, 3);
+  });
+
   it('does nothing when it is asked to fit with nothing drawn', () => {
     const renderer = sized();
     const before = renderer.inspect().viewport;

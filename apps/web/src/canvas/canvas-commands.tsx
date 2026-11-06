@@ -7,6 +7,8 @@ export interface CanvasCommands {
   readonly fit: () => void;
   readonly zoomBy: (factor: number) => void;
   readonly layout: () => void;
+  /** Pans so an item is at the centre of the canvas; the zoom and every position stay. */
+  readonly centerOn: (key: string) => void;
   /** Where an item is on the page; see `CanvasRenderer.anchorOf`. */
   readonly anchorOf: (key: string | undefined) => { readonly x: number; readonly y: number } | undefined;
 }
@@ -30,7 +32,7 @@ export function createCanvasCommandsHandle(): CanvasCommandsHandle {
           onFailure();
         }
       };
-      const commands: CanvasCommands = { fit: () => guarded(() => renderer.fit()), zoomBy: (factor) => guarded(() => renderer.zoomBy(factor)), layout: () => guarded(layout), anchorOf: (key) => renderer.anchorOf(key) };
+      const commands: CanvasCommands = { fit: () => guarded(() => renderer.fit()), zoomBy: (factor) => guarded(() => renderer.zoomBy(factor)), layout: () => guarded(layout), centerOn: (key) => guarded(() => renderer.centerOn(key)), anchorOf: (key) => renderer.anchorOf(key) };
       store.setState(commands);
       return () => {
         if (store.getState() === commands) store.setState(undefined);

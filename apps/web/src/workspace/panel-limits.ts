@@ -22,8 +22,9 @@ export function dockLimits(workspaceWidth: number | undefined): WidthLimits {
   return limitsIn(workspaceWidth === undefined ? undefined : Math.floor(workspaceWidth / 2) - 2 * PANEL_GAP);
 }
 
-export function floatingLimits(canvasWidth: number | undefined): WidthLimits {
-  return limitsIn(canvasWidth === undefined ? undefined : canvasWidth - 2 * PANEL_GAP);
+/** The canvas less the distance from the side the panel hangs from and the gap on its other side. */
+export function floatingLimits(canvasWidth: number | undefined, inset: number = PANEL_GAP): WidthLimits {
+  return limitsIn(canvasWidth === undefined ? undefined : canvasWidth - inset - PANEL_GAP);
 }
 
 /** Where a floating panel starts and how high it may be: below its top offset and 16 px above the canvas's bottom, the offset yielding so that the collapsed bar still fits inside the canvas. Unmeasured, it puts no limit on the height. */

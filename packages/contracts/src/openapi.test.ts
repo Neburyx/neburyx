@@ -38,11 +38,32 @@ describe('buildOpenApiDocument', () => {
     const document = buildOpenApiDocument();
     expect(document.paths['/v1/search/entities']).toMatchObject({ post: { operationId: 'searchEntities', requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/SearchRequest' } } } } } });
     expect(document.components.schemas.SearchRequest).toMatchObject({
-      required: ['sourceId', 'text'],
-      additionalProperties: false,
-      properties: { text: { type: 'string', minLength: 1, maxLength: 200 }, mask: { type: 'boolean' } },
+      anyOf: [
+        { required: ['sourceId', 'text'], additionalProperties: false, properties: { text: { type: 'string', minLength: 1, maxLength: 200 }, mask: { type: 'boolean' }, typeahead: { const: false } } },
+        { required: ['sourceId', 'text', 'typeahead'], additionalProperties: false, properties: { text: { type: 'string', minLength: 2, maxLength: 200 }, typeahead: { const: true } } },
+      ],
     });
-    expect(document.components.schemas.SearchResult).toMatchObject({ additionalProperties: false, properties: { exact: { type: 'array' }, counts: { properties: { exact: {} } } } });
+    expect(document.components.schemas.SearchResult).toMatchObject({
+      additionalProperties: false,
+      properties: {
+        exact: { type: 'array' },
+        failures: { type: 'array', items: { properties: { group: { enum: ['exact', 'startsWith'] } } } },
+        startsWith: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            nodes: { type: 'array' },
+            warnings: { type: 'array' },
+            count: {
+              anyOf: [
+                { required: ['value', 'quality', 'scope'], properties: { quality: { enum: ['exact', 'lowerBound'] } } },
+                { required: ['quality', 'scope'], properties: { quality: { const: 'unknown' } }, additionalProperties: false },
+              ],
+            },
+          },
+        },
+      },
+    });
   });
 
   it('describes the list of investigations with its query, its answers and no 403', () => {

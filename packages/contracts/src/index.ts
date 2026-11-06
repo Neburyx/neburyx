@@ -69,12 +69,18 @@ export type { Investigation, InvestigationListItem, InvestigationListResponse, I
 export {
   MAX_SEARCH_TEXT_LENGTH,
   MIN_SEARCH_TEXT_LENGTH,
+  MIN_TYPEAHEAD_TEXT_LENGTH,
   SEARCH_DISABLED_REASONS,
+  SEARCH_GROUPS,
   SEARCH_GROUP_CAP,
+  SEARCH_GROUP_FAILURE_CODES,
   disabledTypeSchema,
   droppedSchema,
+  groupFailureSchema,
   searchRequestSchema,
   searchResultSchema,
   searchTextSchema,
+  startsWithGroupSchema,
+  typeaheadTextSchema,
 } from './search.js';
-export type { DisabledType, SearchRequest, SearchResult } from './search.js';
+export type { DisabledType, GroupFailure, SearchGroup, SearchRequest, SearchResult, StartsWithGroup } from './search.js';

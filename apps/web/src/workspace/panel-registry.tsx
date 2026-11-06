@@ -5,8 +5,8 @@ import { PANEL_INITIAL_WIDTH } from './panel-limits.js';
 
 export type PanelPlacement =
   | { readonly kind: 'dock' }
-  /** Shown over the canvas, `top` px below its top and the gap from the given side. */
-  | { readonly kind: 'floating'; readonly side: 'left' | 'right'; readonly top: number };
+  /** Shown over the canvas, `top` px below its top and `inset` px from the given side (the panel gap when none is given). */
+  | { readonly kind: 'floating'; readonly side: 'left' | 'right'; readonly top: number; readonly inset?: number };
 
 export interface PanelEntry {
   readonly id: string;

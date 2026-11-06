@@ -68,14 +68,19 @@ test.describe('searching for an entity', () => {
 });
 
 test.describe('⌘K', () => {
-  for (const [name, path] of [['Home', '/'], ['Explore', '/explore']] as const) {
-    test(`opens the search page from ${name} with the box focused`, async ({ page }) => {
-      await page.goto(path);
-      await page.keyboard.press('ControlOrMeta+k');
-      await expect(page).toHaveURL(/\/search/);
-      await expect(box(page)).toBeFocused();
-    });
-  }
+  test('opens the search page from Home with the box focused', async ({ page }) => {
+    await page.goto('/');
+    await page.keyboard.press('ControlOrMeta+k');
+    await expect(page).toHaveURL(/\/search/);
+    await expect(box(page)).toBeFocused();
+  });
+
+  test('opens the Search panel in Explore, and leaves the page where it is', async ({ page }) => {
+    await page.goto('/explore');
+    await page.keyboard.press('ControlOrMeta+k');
+    await expect(page).toHaveURL(/\/explore$/);
+    await expect(page.getByRole('searchbox', { name: 'Find on canvas' })).toBeFocused();
+  });
 
   test('focuses the box and selects its text on the search page', async ({ page }) => {
     await searchFor(page, 'AC-1');
@@ -99,7 +104,7 @@ test.describe('two configured sources', () => {
       searched.push(body.sourceId);
       if (body.sourceId !== SECOND) return route.fallback();
       const node = { ref: { sourceId: SECOND, entityType: 'account', stableId: body.text }, display: { title: `second ${body.text}`, type: 'account' }, properties: [], qualityFlags: [], provenanceRefs: [], authorization: { canInspect: true, canExport: true } };
-      return route.fulfill({ json: { sourceId: SECOND, exact: [node], cap: 25, searchable: true, counts: { exact: { value: 1, quality: 'exact', scope: 'search:exact' } }, disabledTypes: [], dropped: { 'not-mapped': 0, 'ambiguous-type': 0, 'no-stable-id': 0 }, warnings: [], elapsedMs: 120 } });
+      return route.fulfill({ json: { sourceId: SECOND, exact: [node], cap: 25, searchable: true, counts: { exact: { value: 1, quality: 'exact', scope: 'search:exact' } }, disabledTypes: [], failures: [], dropped: { 'not-mapped': 0, 'ambiguous-type': 0, 'no-stable-id': 0 }, warnings: [], elapsedMs: 120 } });
     });
     await searchFor(page, 'AC-1');
     const selector = page.getByRole('combobox', { name: 'Source' });

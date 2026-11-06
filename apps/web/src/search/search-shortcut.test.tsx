@@ -9,6 +9,7 @@ import { createSlotRegistry } from '../workspace/slots.js';
 import { registerBuiltInSlots } from '../workspace/built-in-slots.js';
 import { createToolRegistry } from '../workspace/tool-registry.js';
 import { registerBuiltInTools } from '../workspace/built-in-tools.js';
+import { inputOf } from './panel-test-kit.js';
 import { answerOf, hit, searchKit, searchAt } from './search-test-kit.js';
 
 const kit = () => searchKit(['demo'], async () => ({ ok: true, value: answerOf('demo', [hit('demo', 'AC-1')]) }));
@@ -55,19 +56,47 @@ describe('⌘K from every page', () => {
     expect(view.router.state.historyAction).toBe('REPLACE');
   });
 
-  it('opens the search page from the workspace and leaves the open investigation as it was, and going back returns to it', async () => {
+  it('opens the Search panel from the workspace with its box focused, and leaves the page, the open investigation and the loaded graph as they were', async () => {
     const state = createClientState();
     loadGraph(state, [node('a', 'n1')], []);
     const shown = state.investigation.getState();
     const view = workspace(state);
     await screen.findByRole('application', { name: 'Graph canvas' });
-    searchKey();
-    await waitFor(() => expect(view.router.state.location.pathname).toBe('/search'));
-    expect(state.investigation.getState()).toBe(shown);
-    await act(() => view.router.navigate(-1));
+    expect(searchKey().defaultPrevented).toBe(true);
+    expect(await screen.findByRole('searchbox', { name: 'Find on canvas' })).toBe(document.activeElement);
     expect(view.router.state.location.pathname).toBe('/explore');
     expect(state.investigation.getState()).toBe(shown);
     expect(state.loadedGraph().nodes).toHaveLength(1);
+  });
+
+  it('focuses the box of the open panel and selects its text, without opening a second panel', async () => {
+    const state = createClientState();
+    loadGraph(state, [node('a', 'n1')], []);
+    workspace(state);
+    await screen.findByRole('application', { name: 'Graph canvas' });
+    searchKey();
+    const input = await screen.findByRole('searchbox', { name: 'Find on canvas' });
+    const user = userEvent.setup();
+    await user.type(input, 'n1');
+    screen.getByRole('button', { name: 'Close Search' }).focus();
+    searchKey();
+    expect(document.activeElement).toBe(input);
+    expect(inputOf(input).selectionStart).toBe(0);
+    expect(inputOf(input).selectionEnd).toBe(2);
+    expect(screen.getAllByRole('searchbox', { name: 'Find on canvas' })).toHaveLength(1);
+  });
+
+  it('opens the box of the tab last used', async () => {
+    const state = createClientState();
+    loadGraph(state, [node('a', 'n1')], []);
+    workspace(state);
+    await screen.findByRole('application', { name: 'Graph canvas' });
+    searchKey();
+    await screen.findByRole('searchbox', { name: 'Find on canvas' });
+    await userEvent.setup().click(screen.getByRole('tab', { name: 'Add from source' }));
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Close Search' }));
+    searchKey();
+    expect(await screen.findByRole('searchbox', { name: 'Find in the source' })).toBe(document.activeElement);
   });
 });
 

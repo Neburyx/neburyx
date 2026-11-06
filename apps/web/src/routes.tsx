@@ -6,6 +6,8 @@ import { PageHeading } from './shell/page-heading.js';
 import { EXPLORE_PATH } from './shell/navigation.js';
 import { PageShell } from './shell/page-shell.js';
 import { SearchPage } from './search/search-page.js';
+import { ApiClientProvider } from './api/client-context.js';
+import { createWorkspacePresence, WorkspacePresenceProvider } from './workspace/workspace-presence.js';
 import { SearchShortcut } from './search/search-shortcut.js';
 import { SourcesPage } from './sources/sources-page.js';
 import { createExcerpts } from './sources/excerpts.js';
@@ -88,22 +90,27 @@ export function appRoutes(client: ApiClient, state: ClientState): RouteObject[] 
   const excerpts = createExcerpts(client);
   const profile = createProfileStore(client, state.investigation);
   const recent = createRecentInvestigations(client);
+  const presence = createWorkspacePresence();
   return [
     {
       path: '/',
       element: (
-        <ShellDataProvider store={shellData}>
-          <ProfileProvider store={profile}>
-            <TestRunsProvider runs={testRuns}>
-              <ExcerptsProvider excerpts={excerpts}>
-                <SearchShortcut />
-                <RecentProvider recent={recent}>
-                  <Outlet />
-                </RecentProvider>
-              </ExcerptsProvider>
-            </TestRunsProvider>
-          </ProfileProvider>
-        </ShellDataProvider>
+        <ApiClientProvider client={client}>
+          <WorkspacePresenceProvider presence={presence}>
+            <ShellDataProvider store={shellData}>
+              <ProfileProvider store={profile}>
+                <TestRunsProvider runs={testRuns}>
+                  <ExcerptsProvider excerpts={excerpts}>
+                    <SearchShortcut />
+                    <RecentProvider recent={recent}>
+                      <Outlet />
+                    </RecentProvider>
+                  </ExcerptsProvider>
+                </TestRunsProvider>
+              </ProfileProvider>
+            </ShellDataProvider>
+          </WorkspacePresenceProvider>
+        </ApiClientProvider>
       ),
       children: [
         {

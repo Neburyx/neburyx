@@ -96,14 +96,14 @@ export function DockColumn() {
   return dock === undefined ? null : <DockPanel key={dock.registration} panel={dock} />;
 }
 
-function FloatingPanel({ panel, side, top, canvas }: { readonly panel: RegisteredPanel; readonly side: PanelAnchor; readonly top: number; readonly canvas: { readonly width: number | undefined; readonly height: number | undefined } }) {
+function FloatingPanel({ panel, side, top, inset, canvas }: { readonly panel: RegisteredPanel; readonly side: PanelAnchor; readonly top: number; readonly inset: number; readonly canvas: { readonly width: number | undefined; readonly height: number | undefined } }) {
   const sizes = useStoreSelector(useClientState().presentation.view, (current) => current.panelSizes);
   const { collapsed, toggle } = useCollapsed(panel);
-  const limits = floatingLimits(canvas.width);
+  const limits = floatingLimits(canvas.width, inset);
   const width = drawnWidth(sizes.get(panel.id), panel.initialWidth, limits);
   const placement = floatingPlacement(top, canvas.height);
   return (
-    <aside className="floating-panel" aria-label={panel.title} style={{ top: placement.top, [side]: PANEL_GAP, width, ...(placement.maxHeight === undefined ? {} : { maxHeight: placement.maxHeight }) }}>
+    <aside className="floating-panel" aria-label={panel.title} style={{ top: placement.top, [side]: inset, width, ...(placement.maxHeight === undefined ? {} : { maxHeight: placement.maxHeight }) }}>
       <PanelBox panel={panel} anchor={side} width={width} limits={limits} collapsed={collapsed} form="bar" onToggle={toggle} />
     </aside>
   );
@@ -117,7 +117,7 @@ export function FloatingPanels() {
   if (floating.length === 0) return null;
   return (
     <div ref={setLayer} className="panel-layer">
-      {floating.map((panel) => (panel.placement.kind === 'floating' ? <FloatingPanel key={panel.registration} panel={panel} side={panel.placement.side} top={panel.placement.top} canvas={canvas} /> : null))}
+      {floating.map((panel) => (panel.placement.kind === 'floating' ? <FloatingPanel key={panel.registration} panel={panel} side={panel.placement.side} top={panel.placement.top} inset={panel.placement.inset ?? PANEL_GAP} canvas={canvas} /> : null))}
     </div>
   );
 }

@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 const SRC = join(import.meta.dirname, '..');
 const READS_SOURCE_OF_INVESTIGATION = /investigation\)?\s*,\s*\(\w+\)\s*=>\s*\w+\.sourceId|investigation\.getState\(\)\.sourceId/;
 const SHOWS_THE_SOURCE = 'shell/use-current-source.ts';
-const KEYS_BEHAVIOUR_TO_THE_SOURCE = ['canvas/profile-context.tsx', 'canvas/profile-store.ts', 'canvas/graph-canvas.tsx', 'workspace/legend-panel.tsx', 'workspace/panel-resize.ts'];
+const KEYS_BEHAVIOUR_TO_THE_SOURCE = ['canvas/profile-context.tsx', 'canvas/profile-store.ts', 'canvas/graph-canvas.tsx', 'workspace/legend-panel.tsx', 'workspace/panel-resize.ts', 'search/add-tab.tsx'];
 const CHOOSES_THE_SOURCE_OF_A_SEARCH_WITHOUT_ONE = ['search/search-page.tsx', 'home/home-search.tsx'];
 const ALLOWED = new Set([SHOWS_THE_SOURCE, ...CHOOSES_THE_SOURCE_OF_A_SEARCH_WITHOUT_ONE, ...KEYS_BEHAVIOUR_TO_THE_SOURCE]);
 

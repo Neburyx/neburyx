@@ -22,11 +22,12 @@ export interface StoredNode {
   readonly properties: Readonly<Record<string, unknown>>;
 }
 
-const BRANCH = /MATCH \(n:`([^`]+)`\) WHERE n\.`([^`]+)` (?:IN \[\$text, \$textInteger\]|= \$text) RETURN n LIMIT \$limit \+ 1/;
+const BRANCH = /MATCH \(n:`([^`]+)`\) WHERE n\.`([^`]+)` (?:IN \[\$text, \$textInteger\]|= \$text|STARTS WITH \$text AND n\.`[^`]+` <> \$text) RETURN n LIMIT \$limit \+ 1/;
 
 /**
- * A model of the server's answer to the statement of a search: each branch matches the label and property against the text or the integer, UNION keeps one row for a node,
- * and the limit of the statement cuts the combined result. The real server's behaviour is proved on the Neo4j server; this stands in for it where the gate's handling is the subject.
+ * A model of the server's answer to the statement of a search: each branch matches the label and property against the text or the integer (or, in a prefix branch, a longer value that
+ * starts with the text), UNION keeps one row for a node, and the limit of the statement cuts the combined result. The real server's behaviour is proved on the Neo4j server; this stands in
+ * for it where the gate's handling is the subject.
  */
 export function searchModelOf(stored: readonly StoredNode[], observeBranch: (rows: number) => void = () => undefined): (call: ExecuteCall) => Promise<ExecuteOutcome> {
   return (call) => {
@@ -38,10 +39,12 @@ export function searchModelOf(stored: readonly StoredNode[], observeBranch: (row
       const match = BRANCH.exec(branch);
       if (match === null) throw new Error('a branch is not the search branch');
       const [, label, property] = match;
+      const text = call.parameters['text'];
       const integer = call.parameters['textInteger'];
-      const wanted = branch.includes('IN [$text, $textInteger]') ? [call.parameters['text'], isTaggedInteger(integer) ? integer.value : undefined] : [call.parameters['text']];
+      const wanted = branch.includes('IN [$text, $textInteger]') ? [text, isTaggedInteger(integer) ? integer.value : undefined] : [text];
+      const matches = (value: unknown): boolean => (branch.includes('STARTS WITH') ? typeof value === 'string' && typeof text === 'string' && value.startsWith(text) && value !== text : wanted.includes(value));
       // a branch reads no more than its own limit, which is the row limit of the read
-      const read = stored.filter((node) => node.label === label && typeof node.properties[property ?? ''] === 'string' && wanted.includes(node.properties[property ?? ''])).slice(0, call.rowLimit);
+      const read = stored.filter((node) => node.label === label && typeof node.properties[property ?? ''] === 'string' && matches(node.properties[property ?? ''])).slice(0, call.rowLimit);
       observeBranch(read.length);
       for (const node of read) {
         if (seen.has(node.elementId)) continue;

@@ -16,14 +16,14 @@ export const searchTargetSchema = z.strictObject({ entityType: z.string().min(1)
 
 export type SearchTarget = z.infer<typeof searchTargetSchema>;
 
-const targetsSchema = z.array(searchTargetSchema).max(MAX_SEARCH_PROPERTIES);
+export const targetsSchema = z.array(searchTargetSchema).max(MAX_SEARCH_PROPERTIES);
 
-function targetsOf(params: Params): readonly SearchTarget[] {
+export function targetsOf(params: Params): readonly SearchTarget[] {
   const parsed = targetsSchema.safeParse(params['targets']);
   return parsed.success ? parsed.data : [];
 }
 
-function normalize(rows: readonly Row[], _plan?: Plan, context?: NormalizeContext): readonly Item[] {
+export function normalizeSearch(rows: readonly Row[], _plan?: Plan, context?: NormalizeContext): readonly Item[] {
   if (context === undefined) throw new Error('the search needs the normalize context');
   return [{ ...normalizeRows(context, rows) }];
 }
@@ -53,5 +53,5 @@ export const searchExactTemplate: TemplateDefinition = {
   indexNeeds: (params) => targetsOf(params).map((target) => ({ entityType: target.entityType, property: target.property, accepts: target.match === 'text' ? ('any' as const) : ('value' as const) })),
   readsNothing: (params) => targetsOf(params).length === 0,
   refsOf: () => [],
-  normalize,
+  normalize: normalizeSearch,
 };

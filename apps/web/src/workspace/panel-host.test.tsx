@@ -391,6 +391,17 @@ describe('floating panels', () => {
     expect(screen.getByRole('complementary', { name: 'legend' })).toBe(box(container, 'legend'));
   });
 
+  it('sit the distance from the side that their placement gives, and 16 px when it gives none', async () => {
+    const { container, panels } = renderApp('/explore', client);
+    await screen.findByText('Local workspace');
+    act(() => {
+      panels.register({ id: 'inset', title: 'inset', placement: { kind: 'floating', side: 'left', top: 64, inset: 72 }, content: () => <p>inset body</p> });
+      panels.register(floating('plain', 'left', 64));
+    });
+    expect(box(container, 'inset').style.left).toBe('72px');
+    expect(box(container, 'plain').style.left).toBe('16px');
+  });
+
   it('are drawn at the width of their registration within the limits, and sit in the canvas, left of an open dock', async () => {
     stub = stubSizeObserver();
     const { container, panels } = renderApp('/explore', client);
@@ -421,6 +432,20 @@ describe('floating panels', () => {
     act(() => stub?.resize(layer(container), 400, 700));
     expect(box(container, 'legend').style.width).toBe('368px');
     expect(state.presentation.view.getState().panelSizes.get('legend')).toBe(450);
+  });
+
+  it('keep a panel with an inset inside a narrow canvas: the width limit counts the inset and the gap on the other side', async () => {
+    stub = stubSizeObserver();
+    const { container, panels } = renderApp('/explore', client);
+    await screen.findByText('Local workspace');
+    act(() => {
+      panels.register({ id: 'inset', title: 'inset', placement: { kind: 'floating', side: 'left', top: 64, inset: 72 }, initialWidth: 400, content: () => <p>inset body</p> });
+    });
+    act(() => stub?.resize(layer(container), 1000, 700));
+    expect(box(container, 'inset').style.width).toBe('400px');
+    act(() => stub?.resize(layer(container), 400, 700));
+    expect(box(container, 'inset').style.width).toBe('312px');
+    expect(box(container, 'inset').style.left).toBe('72px');
   });
 
   it.each([

@@ -22,6 +22,7 @@ import { createKeyBindingRegistry, KeyBindingsProvider, type KeyBindingRegistry 
 import { createMenuRegistry, MenuProvider, type MenuRegistry } from './workspace/menu-registry.js';
 import { createSelectionActionRegistry, SelectionActionsProvider, type SelectionActionRegistry } from './workspace/selection-actions.js';
 import { bindLegend } from './workspace/legend-binder.js';
+import { bindSearchPanel } from './search/search-panel-binder.js';
 import { createPanelRegistryFor, PanelsProvider, type PanelRegistry } from './workspace/panel-registry.js';
 import { createSlotRegistry, SlotsProvider, type SlotRegistry } from './workspace/slots.js';
 import { createToolRegistry, ToolsProvider, type ToolRegistry } from './workspace/tool-registry.js';
@@ -99,6 +100,7 @@ export interface StubRenderer extends CanvasRenderer {
   readonly scenes: Scene[];
   readonly restores: Array<Viewport | undefined>;
   readonly zooms: number[];
+  readonly centered: string[];
   fits: number;
   disposed: number;
 }
@@ -108,7 +110,7 @@ export interface StubOptions {
   /** With `failOn: 'draw'`, the number of draws that fail before the renderer draws again. */
   readonly failDraws?: number;
   readonly failCreate?: boolean;
-  /** Makes `fit` and `zoomBy` throw. */
+  /** Makes `fit`, `zoomBy` and `centerOn` throw. */
   readonly failCommands?: boolean;
 }
 
@@ -123,6 +125,7 @@ export function stubRenderer(options: StubOptions = {}): StubRenderer {
     scenes: [],
     restores: [],
     zooms: [],
+    centered: [],
     fits: 0,
     disposed: 0,
     mount(container, events, viewport) {
@@ -143,6 +146,10 @@ export function stubRenderer(options: StubOptions = {}): StubRenderer {
     fit() {
       if (options.failCommands === true) throw new Error('cannot fit');
       stub.fits += 1;
+    },
+    centerOn(key) {
+      if (options.failCommands === true) throw new Error('cannot centre');
+      stub.centered.push(key);
     },
     zoomBy(factor) {
       if (options.failCommands === true) throw new Error('cannot zoom');
@@ -207,7 +214,8 @@ export function renderApp(path: string | { readonly pathname: string; readonly s
       </SlotsProvider>
     </ClientStateProvider>,
   );
-  const unbind = bindLegend(state, panels);
+  const unbindLegend = bindLegend(state, panels);
+  const unbindSearch = bindSearchPanel(state, panels);
   return {
     router,
     state,
@@ -217,7 +225,8 @@ export function renderApp(path: string | { readonly pathname: string; readonly s
     keyBindings,
     container: view.container,
     unmount: () => {
-      unbind();
+      unbindLegend();
+      unbindSearch();
       view.unmount();
     },
   };

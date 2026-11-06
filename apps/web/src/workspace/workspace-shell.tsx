@@ -9,12 +9,14 @@ import { HeaderBar } from './header-bar.js';
 import { KEY_SCOPE_ATTRIBUTE, useKeyHandler } from './key-binding-handler.js';
 import { NavigationRail } from './navigation-rail.js';
 import { NoticeStrip } from './notice-strip.js';
+import { useWorkspaceMark } from './workspace-presence.js';
 import { ShortcutSheet } from './shortcut-sheet.js';
 import { SelectionBar } from './selection-bar.js';
 
 export function WorkspaceShell({ canvasView, notice, status, busy = false }: { readonly canvasView?: 'fit' | 'as-drawn'; readonly notice?: ReactNode; readonly status?: ReactNode; readonly busy?: boolean }) {
   const profile = useProfile();
   useKeyHandler();
+  useWorkspaceMark();
   return (
     <div className="workspace" {...{ [KEY_SCOPE_ATTRIBUTE]: 'workspace' }}>
       <NavigationRail />

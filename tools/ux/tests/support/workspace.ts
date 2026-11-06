@@ -167,3 +167,13 @@ export async function menuHints(page: Page): Promise<Array<readonly [string, str
   const rows = await menuOf(page).first().locator('[role="menuitem"], [role="menuitemradio"]').evaluateAll((items) => items.map((item) => ({ label: item.querySelector('.menu-label')?.textContent ?? '', hint: item.querySelector('.menu-hint, kbd')?.textContent ?? '' })));
   return rows.map(({ label, hint }) => [label, hint] as const);
 }
+
+/** Opens Explore on one entity the way a person does: through the search page and its Open in graph button. */
+export async function openOneEntity(page: Page, source: string, id: string): Promise<void> {
+  await page.goto(`/search?source=${source}`);
+  await page.getByRole('searchbox', { name: 'Search text' }).fill(id);
+  await page.getByRole('searchbox', { name: 'Search text' }).press('Enter');
+  await page.getByRole('button', { name: 'Open in graph' }).click();
+  await expect(page).toHaveURL(/\/explore\/[0-9a-f-]{36}$/);
+  await expect(canvasOf(page)).toHaveAttribute('data-drawn-entities', '1');
+}

@@ -156,11 +156,12 @@ function createInvestigations(options: SupportServerOptions) {
 const SEARCH_TYPE = 'account';
 const MANY = /^many-(\d+)$/;
 const STALLS_ONCE = 'stall';
+const STARTS_WITH_SUFFIXES = ['-1', '-2'];
 const TIMEOUT = { error: { code: 'QUERY_TIMEOUT', message: 'The source did not answer in time. Try again or refine your filters.', retryable: true, traceId: 'tr-support', details: { timeoutMs: 5000 } } };
 
 /**
  * The synthetic stand-in for the search: a text `many-N` has N matches (25 at most are shown, and more than 25 is a lower bound), a text that starts with `stall` times out the first time that text is
- * searched and answers the next time, a text that starts with `missing` matches nothing, and any other text matches one entity of that ID.
+ * searched and answers the next time, a text that starts with `missing` matches nothing, and any other text matches one entity of that ID; a type-ahead search also answers two entities whose ID starts with that text.
  */
 function createSearch(options: SupportServerOptions) {
   const stalled = new Set<string>();
@@ -180,6 +181,7 @@ function createSearch(options: SupportServerOptions) {
       const shown = Math.min(found, SEARCH_GROUP_CAP);
       const ids = matches === null ? [text] : Array.from({ length: shown }, (_, index) => `${text}-${String(index + 1).padStart(2, '0')}`);
       const nodes = ids.slice(0, found === 0 ? 0 : shown).map((id) => node(sourceId, SEARCH_TYPE, id));
+      const startsWith = parsed.data.typeahead === true && matches === null && found > 0 ? STARTS_WITH_SUFFIXES.map((suffix) => node(sourceId, SEARCH_TYPE, `${text}${suffix}`)) : [];
       const answer = searchResultSchema.parse({
         sourceId,
         exact: nodes,
@@ -187,9 +189,11 @@ function createSearch(options: SupportServerOptions) {
         searchable: true,
         counts: { exact: { value: nodes.length, quality: found > SEARCH_GROUP_CAP ? 'lowerBound' : 'exact', scope: 'search:exact' } },
         disabledTypes: [],
+        failures: [],
         dropped: { 'not-mapped': 0, 'ambiguous-type': 0, 'no-stable-id': 0 },
         warnings: [],
         elapsedMs: 180,
+        ...(parsed.data.typeahead === true ? { startsWith: { nodes: startsWith, count: { value: startsWith.length, quality: 'exact', scope: 'search:startsWith' }, dropped: { 'not-mapped': 0, 'ambiguous-type': 0, 'no-stable-id': 0 }, warnings: [] } } : {}),
       });
       json(response, 200, answer);
     },

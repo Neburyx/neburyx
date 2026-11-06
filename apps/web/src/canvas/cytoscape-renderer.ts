@@ -630,6 +630,11 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
       const at = entity !== undefined ? entity.renderedPosition() : relationship?.renderedMidpoint();
       return at === undefined ? undefined : { x: rect.left + at.x, y: rect.top + at.y };
     },
+    centerOn(key) {
+      const cy = requireCore();
+      const element = cy.getElementById(key);
+      if (!element.empty()) cy.center(element);
+    },
     zoomBy(factor) {
       const cy = requireCore();
       cy.zoom({ level: cy.zoom() * factor, renderedPosition: { x: cy.width() / 2, y: cy.height() / 2 } });

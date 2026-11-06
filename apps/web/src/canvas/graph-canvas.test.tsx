@@ -521,6 +521,15 @@ describe('the commands of the graph canvas', () => {
     expect(result.available).toBe(false);
   });
 
+  it('show the notice when centring fails, without throwing', () => {
+    const state = createClientState();
+    load(state, 2, 1);
+    const result = { available: false };
+    const commands = viewWithProbe(state, stubFactory({ failCommands: true }).create, result);
+    expect(() => act(() => commands()?.centerOn('a'))).not.toThrow();
+    expect(screen.getByRole('alert').textContent).toBe(RENDERER_UNAVAILABLE);
+  });
+
   it('reach the renderer while it runs and are withdrawn when it is disposed', () => {
     const state = createClientState();
     load(state, 2, 1);
@@ -530,8 +539,10 @@ describe('the commands of the graph canvas', () => {
     expect(result.available).toBe(true);
     act(() => commands()?.fit());
     act(() => commands()?.zoomBy(1.25));
+    act(() => commands()?.centerOn('some-key'));
     expect(factory.made[0]?.fits).toBe(1);
     expect(factory.made[0]?.zooms).toEqual([1.25]);
+    expect(factory.made[0]?.centered).toEqual(['some-key']);
   });
 });
 

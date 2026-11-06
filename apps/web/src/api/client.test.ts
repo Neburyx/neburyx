@@ -196,6 +196,7 @@ describe('the API client, searching a source', () => {
     searchable: true,
     counts: { exact: { value: hits.length, quality: 'exact', scope: 'search:exact' } },
     disabledTypes: [],
+    failures: [],
     dropped: { 'not-mapped': 0, 'ambiguous-type': 0, 'no-stable-id': 0 },
     warnings: [],
     elapsedMs: 12,
@@ -218,6 +219,19 @@ describe('the API client, searching a source', () => {
   it('refuses an answer for another source, and an answer with a hit of another source', async () => {
     expect(await createApiClient(respondWith(answer('other', []))).searchEntities({ sourceId: 'demo', text: 'AC-1' })).toEqual({ ok: false, failure: { code: 'SCHEMA_MISMATCH' } });
     expect(await createApiClient(respondWith(answer('demo', [node('other')]))).searchEntities({ sourceId: 'demo', text: 'AC-1' })).toEqual({ ok: false, failure: { code: 'SCHEMA_MISMATCH' } });
+  });
+
+  it('sends the type-ahead flag, takes a startsWith group of the source asked, and refuses one with a hit of another source', async () => {
+    const group = (hits: readonly object[]) => ({ nodes: hits, count: { value: hits.length, quality: 'exact', scope: 'search:startsWith' }, dropped: { 'not-mapped': 0, 'ambiguous-type': 0, 'no-stable-id': 0 }, warnings: [] });
+    const seen: string[] = [];
+    const client = createApiClient(async (_input, init) => {
+      seen.push(init?.body ?? '');
+      return new Response(JSON.stringify({ ...answer('demo', []), startsWith: group([node('demo')]) }));
+    });
+    expect(await client.searchEntities({ sourceId: 'demo', text: 'AC', typeahead: true })).toMatchObject({ ok: true, value: { startsWith: { nodes: [{ ref: { sourceId: 'demo' } }] } } });
+    expect(JSON.parse(seen[0] ?? '{}')).toEqual({ sourceId: 'demo', text: 'AC', typeahead: true });
+    const foreign = respondWith({ ...answer('demo', [node('demo')]), startsWith: group([node('other')]) });
+    expect(await createApiClient(foreign).searchEntities({ sourceId: 'demo', text: 'AC', typeahead: true })).toEqual({ ok: false, failure: { code: 'SCHEMA_MISMATCH' } });
   });
 
   it('gives the error of the API as it came, with the timeout of a timed-out search', async () => {

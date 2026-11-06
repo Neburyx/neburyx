@@ -36,6 +36,9 @@ describe('the floating limits', () => {
     expect(floatingLimits(272)).toEqual({ min: 240, max: 240 });
     expect(floatingLimits(250)).toEqual({ min: 218, max: 218 });
     expect(floatingLimits(400.8)).toEqual({ min: 240, max: 368 });
+    expect(floatingLimits(400, 72)).toEqual({ min: 240, max: 312 });
+    expect(floatingLimits(300, 72)).toEqual({ min: 212, max: 212 });
+    expect(floatingLimits(1000, 72)).toEqual({ min: 240, max: 480 });
   });
 });
 

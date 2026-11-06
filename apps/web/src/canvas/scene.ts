@@ -93,6 +93,8 @@ export interface CanvasRenderer {
   fit(): void;
   /** Multiplies the zoom around the centre of the canvas, within the zoom limits. */
   zoomBy(factor: number): void;
+  /** Pans so the item is at the centre of the canvas, with the zoom and every position as they are; does nothing for a key that is not drawn. */
+  centerOn(key: string): void;
   /** Where an item is on the page, as the browser's window counts it: an entity's centre, a relationship's midpoint, or with no key the centre of the canvas; undefined when the item is not drawn or nothing is mounted. */
   anchorOf(key: string | undefined): { readonly x: number; readonly y: number } | undefined;
   describe(): DrawnCounts;

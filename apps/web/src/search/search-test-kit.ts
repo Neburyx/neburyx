@@ -24,6 +24,7 @@ export function answerOf(sourceId: string, exact: readonly GraphNode[], override
     searchable: true,
     counts: { exact: { value: exact.length, quality: 'exact', scope: 'search:exact' } },
     disabledTypes: [],
+    failures: [],
     dropped: { 'not-mapped': 0, 'ambiguous-type': 0, 'no-stable-id': 0 },
     warnings: [],
     elapsedMs: 180,

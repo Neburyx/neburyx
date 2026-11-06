@@ -33,6 +33,8 @@ export interface OpenTool {
   readonly registration: number;
 }
 
+export type SearchTab = 'canvas' | 'source';
+
 export interface PresentationState {
   readonly tool: PointerTool;
   readonly selection: ReadonlySet<string>;
@@ -43,6 +45,11 @@ export interface PresentationState {
   readonly collapsedPanels: ReadonlyMap<string, number>;
   /** The legend is open. Not saved with a view, and kept when another source is bound. */
   readonly legendOpen: boolean;
+  /** The Search panel is open, and which of its tabs was last used. Not saved with a view, and kept when another source is bound. */
+  readonly searchOpen: boolean;
+  readonly searchTab: SearchTab;
+  /** Counts how many times the box of the Search panel was asked for, so a key pressed while the panel is open focuses the box again. */
+  readonly searchFocus: number;
   /** Whether the sheet of keyboard shortcuts is shown. */
   readonly sheetOpen: boolean;
   /** The canvas's element walk is on: the keys move a ring through the drawn elements. Not saved with a view. */
@@ -66,6 +73,9 @@ export const INITIAL_PRESENTATION: PresentationState = {
   panelSizes: new Map(),
   collapsedPanels: new Map(),
   legendOpen: false,
+  searchOpen: false,
+  searchTab: 'canvas',
+  searchFocus: 0,
   sheetOpen: false,
   walking: false,
   focused: undefined,
@@ -94,6 +104,10 @@ export interface PresentationActions {
   setPanelSize(panel: string, size: number): void;
   clearPanelSize(panel: string): void;
   setLegendOpen(open: boolean): void;
+  setSearchOpen(open: boolean): void;
+  setSearchTab(tab: SearchTab): void;
+  /** Opens the Search panel, or asks an open one to focus its box again. */
+  requestSearch(): void;
   setSheetOpen(open: boolean): void;
   /** Sets or clears what the last arrow-key move did. */
   announceMove(text: string | undefined): void;
@@ -165,6 +179,18 @@ export function createPresentationStore(known: KnownElements): PresentationStore
       if (store.getState().legendOpen === legendOpen) return;
       store.setState({ ...store.getState(), legendOpen });
     },
+    setSearchOpen(searchOpen) {
+      if (store.getState().searchOpen === searchOpen) return;
+      store.setState({ ...store.getState(), searchOpen });
+    },
+    setSearchTab(searchTab) {
+      if (store.getState().searchTab === searchTab) return;
+      store.setState({ ...store.getState(), searchTab });
+    },
+    requestSearch() {
+      const current = store.getState();
+      store.setState({ ...current, searchOpen: true, searchFocus: current.searchFocus + 1 });
+    },
     setSheetOpen(sheetOpen) {
       if (store.getState().sheetOpen === sheetOpen) return;
       store.setState({ ...store.getState(), sheetOpen });
@@ -227,8 +253,8 @@ export function createPresentationStore(known: KnownElements): PresentationStore
       store.setState({ ...store.getState(), ...snapshot, walking: false, focused: undefined, moveNote: undefined, openMenu: undefined });
     },
     reset() {
-      const { tool, panelSizes, collapsedPanels, legendOpen, sheetOpen } = store.getState();
-      store.setState({ ...INITIAL_PRESENTATION, tool, panelSizes, collapsedPanels, legendOpen, sheetOpen });
+      const { tool, panelSizes, collapsedPanels, legendOpen, searchOpen, searchTab, searchFocus, sheetOpen } = store.getState();
+      store.setState({ ...INITIAL_PRESENTATION, tool, panelSizes, collapsedPanels, legendOpen, searchOpen, searchTab, searchFocus, sheetOpen });
     },
   };
 }

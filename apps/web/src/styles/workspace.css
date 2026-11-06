@@ -688,6 +688,14 @@
   --icon: url('../assets/lucide/layout-template.svg');
 }
 
+.icon-find {
+  --icon: url('../assets/lucide/search.svg');
+}
+
+.icon-plus {
+  --icon: url('../assets/lucide/plus.svg');
+}
+
 .panel-dock {
   display: flex;
   flex: none;

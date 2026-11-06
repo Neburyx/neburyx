@@ -307,7 +307,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       const body = searchRequestSchema.safeParse(request.body);
       if (!noQuerySchema.safeParse(request.query).success || !body.success) throw new AppError('INVALID_REQUEST');
       const identity = await options.store.current();
-      const result = await searching.search({ traceId: request.id, principal: identity.principal, sourceId: body.data.sourceId, text: body.data.text, mask: body.data.mask === true });
+      const result = await searching.search({ traceId: request.id, principal: identity.principal, sourceId: body.data.sourceId, text: body.data.text, mask: body.data.mask === true, typeahead: body.data.typeahead === true });
       return searchResultSchema.parse(result);
     });
 

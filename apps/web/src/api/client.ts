@@ -58,7 +58,7 @@ export interface ApiClient {
   getInvestigation(id: string, signal?: AbortSignal): Promise<ApiResult<InvestigationResponse>>;
   /** The caller's most recently edited open investigations, across every source they may read; Postgres only. */
   listInvestigations(limit: number, signal?: AbortSignal): Promise<ApiResult<InvestigationListResponse>>;
-  /** The exact matches of a text in one source; every hit and the answer name the source that was asked, or the answer is refused. */
+  /** The exact matches of a text in one source, and with `typeahead` the entities that start with it; every hit and the answer name the source that was asked, or the answer is refused. */
   searchEntities(request: SearchRequest, signal?: AbortSignal): Promise<ApiResult<SearchResult>>;
 }
 
@@ -140,7 +140,8 @@ export function createApiClient(fetcher: Fetcher = (input, init) => fetch(input,
     searchEntities: async (search, signal) => {
       const result = await request(fetcher, '/v1/search/entities', searchResultSchema, signal, 'POST', search);
       if (!result.ok) return result;
-      return result.value.sourceId !== search.sourceId || result.value.exact.some((node) => node.ref.sourceId !== search.sourceId) ? failed('SCHEMA_MISMATCH') : result;
+      const hits = [...result.value.exact, ...(result.value.startsWith?.nodes ?? [])];
+      return result.value.sourceId !== search.sourceId || hits.some((node) => node.ref.sourceId !== search.sourceId) ? failed('SCHEMA_MISMATCH') : result;
     },
     listInvestigations: (limit, signal) => request(fetcher, `/v1/investigations?limit=${limit}&sort=lastEdited`, investigationListResponseSchema, signal),
     getInvestigation: async (id, signal) => {

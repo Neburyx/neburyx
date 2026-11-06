@@ -1,8 +1,9 @@
-import { SEARCH_GROUP_CAP, type DisabledType, type GraphNode, type SearchResult } from '@neburyx/contracts';
-import { AppError } from '../errors.js';
+import { SEARCH_GROUP_CAP, SEARCH_GROUP_FAILURE_CODES, type DisabledType, type GraphNode, type GroupFailure, type SearchGroup, type SearchResult } from '@neburyx/contracts';
+import { AppError, detailsOf } from '../errors.js';
 import { onlineFormOf } from '../gate/index-guard.js';
 import type { Normalized } from '../gate/normalize/index.js';
 import { SEARCH_EXACT_ID, searchExactTemplate, type SearchTarget } from '../gate/templates/search-exact.js';
+import { SEARCH_PREFIX_ID } from '../gate/templates/search-prefix.js';
 import type { SourceAccess } from '../investigations/source-access.js';
 import type { Gate, GatePage, GateRequest, IndexReader, IndexReadFailure, IndexSnapshot } from '../gate/types.js';
 import type { MappingModel, SourceModel } from '../mapping/model.js';
@@ -14,6 +15,8 @@ export interface SearchRequest {
   readonly sourceId: string;
   readonly text: string;
   readonly mask: boolean;
+  /** Adds the `startsWith` group: a second read through the gate that shares the one schema read. */
+  readonly typeahead?: boolean;
 }
 
 export interface SearchService {
@@ -21,6 +24,8 @@ export interface SearchService {
 }
 
 const COUNT_SCOPE = 'search:exact';
+const STARTS_WITH_COUNT_SCOPE = 'search:startsWith';
+const NOTHING_DROPPED = { 'not-mapped': 0, 'ambiguous-type': 0, 'no-stable-id': 0 } as const;
 
 function isNormalized(item: unknown): item is Normalized {
   return typeof item === 'object' && item !== null && 'nodes' in item && Array.isArray(item.nodes);
@@ -82,6 +87,77 @@ async function runSearch(gate: Gate, request: GateRequest): Promise<GatePage> {
   }
 }
 
+/** What one group's read gave: its hits in order, how many there are, and what the normalize stage left out. */
+interface GroupResult {
+  readonly nodes: GraphNode[];
+  readonly count: SearchResult['counts']['exact'];
+  readonly dropped: SearchResult['dropped'];
+  readonly warnings: string[];
+}
+
+interface Reading {
+  readonly request: SearchRequest;
+  readonly gate: Gate;
+  readonly source: SourceModel;
+  readonly targets: readonly SearchTarget[];
+  readonly cap: number;
+  readonly snapshot: IndexSnapshot | 'unverified' | IndexReadFailure | undefined;
+}
+
+function readOf(reading: Reading, templateId: string, targets: readonly object[]): Promise<GatePage> {
+  const { request, snapshot } = reading;
+  return runSearch(reading.gate, {
+    traceId: request.traceId,
+    principal: request.principal,
+    sourceId: request.sourceId,
+    templateId,
+    params: { text: request.text, targets },
+    limit: reading.cap,
+    mask: request.mask,
+    ...(snapshot === undefined ? {} : { indexes: snapshot }),
+  });
+}
+
+function resultOf(page: GatePage, source: SourceModel, scope: string, without: ReadonlySet<string>): GroupResult {
+  const [item] = page.items;
+  if (!isNormalized(item)) throw new AppError('INTERNAL_ERROR');
+  const nodes = inOrder(source, item.nodes).filter((node) => !without.has(JSON.stringify([node.ref.entityType, node.ref.stableId])));
+  return { nodes, count: { value: nodes.length, quality: page.hasMore ? 'lowerBound' : 'exact', scope }, dropped: item.dropped, warnings: item.warnings };
+}
+
+async function exactOf(reading: Reading): Promise<GroupResult> {
+  return resultOf(await readOf(reading, SEARCH_EXACT_ID, reading.targets), reading.source, COUNT_SCOPE, new Set());
+}
+
+/** The prefix read for the same targets: nothing is read when no target is left, and a hit the exact group already holds is not repeated. */
+async function startsWithOf(reading: Reading, exact: readonly GraphNode[]): Promise<GroupResult> {
+  if (reading.targets.length === 0) return { nodes: [], count: { value: 0, quality: 'exact', scope: STARTS_WITH_COUNT_SCOPE }, dropped: { ...NOTHING_DROPPED }, warnings: [] };
+  const page = await readOf(reading, SEARCH_PREFIX_ID, reading.targets.map((target) => ({ ...target, match: 'value' as const })));
+  return resultOf(page, reading.source, STARTS_WITH_COUNT_SCOPE, new Set(exact.map((node) => JSON.stringify([node.ref.entityType, node.ref.stableId]))));
+}
+
+type Settled = { readonly group: GroupResult } | { readonly error: unknown };
+
+async function settled(work: () => Promise<GroupResult>): Promise<Settled> {
+  try {
+    return { group: await work() };
+  } catch (error) {
+    return { error };
+  }
+}
+
+const isGroupFailureCode = (code: string): code is GroupFailure['code'] => SEARCH_GROUP_FAILURE_CODES.some((candidate) => candidate === code);
+
+/** A failure that belongs to one group (a timeout, a busy or rate-limited source, an internal error of the read); every other failure means the same for both groups and fails the search. */
+function groupFailureOf(group: SearchGroup, error: unknown): GroupFailure | undefined {
+  if (!(error instanceof AppError) || !isGroupFailureCode(error.code)) return undefined;
+  const details = detailsOf(error);
+  const timeoutMs = typeof details === 'object' && details !== null && 'timeoutMs' in details && typeof details.timeoutMs === 'number' && Number.isInteger(details.timeoutMs) && details.timeoutMs > 0 ? details.timeoutMs : undefined;
+  return { group, code: error.code, ...(timeoutMs === undefined ? {} : { timeoutMs }) };
+}
+
+const unreadGroup = (scope: string): GroupResult => ({ nodes: [], count: { quality: 'unknown', scope }, dropped: { ...NOTHING_DROPPED }, warnings: [] });
+
 export function createSearchService(deps: { readonly gate: Gate; readonly mapping: MappingModel; readonly access: SourceAccess; readonly indexes?: IndexReader; readonly clock?: () => number }): SearchService {
   const clock = deps.clock ?? Date.now;
   return {
@@ -94,30 +170,28 @@ export function createSearchService(deps: { readonly gate: Gate; readonly mappin
       const reader = searchPropertiesOf(source, request.mask).length > 0 ? deps.indexes : undefined;
       const snapshot = await readOrFail(reader, request);
       const { targets, disabled } = planOf(source, request.mask, snapshot === undefined || snapshot === 'unverified' || 'failure' in snapshot ? undefined : snapshot);
-      const cap = Math.min(SEARCH_GROUP_CAP, source.budgets.maxPage);
-      const page = await runSearch(deps.gate, {
-        traceId: request.traceId,
-        principal: request.principal,
-        sourceId: request.sourceId,
-        templateId: SEARCH_EXACT_ID,
-        params: { text: request.text, targets },
-        limit: cap,
-        mask: request.mask,
-        ...(snapshot === undefined ? {} : { indexes: snapshot }),
-      });
-      const [item] = page.items;
-      if (!isNormalized(item)) throw new AppError('INTERNAL_ERROR');
-      const exact = inOrder(source, item.nodes);
+      const reading: Reading = { request, gate: deps.gate, source, targets, cap: Math.min(SEARCH_GROUP_CAP, source.budgets.maxPage), snapshot };
+      const exactRun = await settled(() => exactOf(reading));
+      const schemaFailed = snapshot !== undefined && snapshot !== 'unverified' && 'failure' in snapshot;
+      if ('error' in exactRun && (schemaFailed || groupFailureOf('exact', exactRun.error) === undefined)) throw exactRun.error;
+      const prefixRun = request.typeahead === true ? await settled(() => startsWithOf(reading, 'group' in exactRun ? exactRun.group.nodes : [])) : undefined;
+      if (prefixRun !== undefined && 'error' in prefixRun && groupFailureOf('startsWith', prefixRun.error) === undefined) throw prefixRun.error;
+      if ('error' in exactRun && (prefixRun === undefined || 'error' in prefixRun)) throw exactRun.error;
+      const exact = 'group' in exactRun ? exactRun.group : unreadGroup(COUNT_SCOPE);
+      const startsWith = prefixRun === undefined ? undefined : 'group' in prefixRun ? prefixRun.group : unreadGroup(STARTS_WITH_COUNT_SCOPE);
+      const failures = [...('error' in exactRun ? [groupFailureOf('exact', exactRun.error)] : []), ...(prefixRun !== undefined && 'error' in prefixRun ? [groupFailureOf('startsWith', prefixRun.error)] : [])].filter((failure): failure is GroupFailure => failure !== undefined);
       return {
         sourceId: request.sourceId,
-        exact,
-        cap,
+        exact: exact.nodes,
+        cap: reading.cap,
         searchable: targets.length > 0,
-        counts: { exact: { value: exact.length, quality: page.hasMore ? 'lowerBound' : 'exact', scope: COUNT_SCOPE } },
+        counts: { exact: exact.count },
         disabledTypes: disabled,
-        dropped: item.dropped,
-        warnings: item.warnings,
+        failures,
+        dropped: exact.dropped,
+        warnings: exact.warnings,
         elapsedMs: Math.max(0, Math.round(clock() - startedAt)),
+        ...(startsWith === undefined ? {} : { startsWith }),
       };
     },
   };
