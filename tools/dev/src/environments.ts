@@ -33,20 +33,25 @@ export interface ApiSettings {
   readonly port: number;
   readonly webRoot: string;
   readonly settings: Settings;
+  /** The logins the mapping's sources name: the demo login, or the values of the developer's own env file. */
+  readonly sourceLogins: Environment;
 }
 
-/** The API holds the app role's URL and the demo login, never the administrator or the migration password. */
+export function demoLogins(settings: Settings): Environment {
+  return { DEMO_NEO4J_USER: 'neo4j', DEMO_NEO4J_PASSWORD: settings.DEMO_NEO4J_PASSWORD };
+}
+
+/** The API holds the app role's URL and the source logins, never the administrator or the migration password. The fixed values come last, so no login can replace one. */
 export function apiEnvironment(base: Environment, api: ApiSettings): Environment {
   return {
     ...base,
+    ...api.sourceLogins,
     DATABASE_URL: api.databaseUrl,
     NEBURYX_CONFIG: api.mappingPath,
     NEBURYX_HOST: '127.0.0.1',
     NEBURYX_PORT: String(api.port),
     NEBURYX_WEB_ROOT: api.webRoot,
     NEBURYX_CURSOR_KEY: api.settings.NEBURYX_CURSOR_KEY,
-    DEMO_NEO4J_USER: 'neo4j',
-    DEMO_NEO4J_PASSWORD: api.settings.DEMO_NEO4J_PASSWORD,
   };
 }
 

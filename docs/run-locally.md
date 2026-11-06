@@ -57,6 +57,10 @@ It needs Postgres 16 with the `pg_trgm` extension available, and a login to run 
 
 Give the connection strings an address rather than a name that takes a while to resolve: the API's readiness check allows 2 seconds, and a `.local` name can take about 5 seconds to resolve on macOS, which makes `/readyz` report the database as unreachable even though it is not.
 
+## Use a mapping of your own
+
+To run the app against a Neo4j you can reach with a mapping you wrote, instead of the two demo graphs, set `NEBURYX_DEV_MAPPING` and `NEBURYX_DEV_MAPPING_ENV` (both or neither). What each does, and what the command refuses, is in [`tools/dev/README.md`](../tools/dev/README.md).
+
 ## Checks that go with it
 
 `pnpm test` includes a check that the root `.env.example` lists exactly the environment variables the API reads, each with a description. The tool itself is in `tools/dev`.

@@ -1,6 +1,7 @@
 import { StepFailed } from './compose.js';
 import { IncompleteExternalDatabase } from './external.js';
 import { LockHeld } from './lock.js';
+import { IncompleteMapping, MappingUnusable } from './mapping.js';
 import { SettingsInvalid, down, up, type Dependencies } from './up.js';
 
 export const USAGE = 'usage: dev (up | down)';
@@ -18,7 +19,7 @@ export async function main(argv: readonly string[], deps: CliDependencies): Prom
   try {
     return await (command === 'up' ? up(deps) : down(deps));
   } catch (error) {
-    if (error instanceof LockHeld || error instanceof SettingsInvalid || error instanceof IncompleteExternalDatabase || error instanceof StepFailed) {
+    if (error instanceof LockHeld || error instanceof SettingsInvalid || error instanceof IncompleteExternalDatabase || error instanceof IncompleteMapping || error instanceof MappingUnusable || error instanceof StepFailed) {
       deps.err(`dev: ${error.message}`);
       return 1;
     }

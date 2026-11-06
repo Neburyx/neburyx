@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { Run, RunOptions } from './exec.js';
 import { IncompleteExternalDatabase } from './external.js';
 import { LockHeld } from './lock.js';
+import { IncompleteMapping, MappingUnusable } from './mapping.js';
 import { formatSettings, generateSettings } from './settings.js';
 import type { Supervision } from './supervisor.js';
 import { BUILDS, down, SettingsInvalid, up, type Dependencies, type Files } from './up.js';
@@ -21,7 +22,7 @@ interface Call {
   readonly options: RunOptions;
 }
 
-function rig(options: { files?: Record<string, string>; env?: Record<string, string>; fail?: (call: Call) => boolean; ports?: Record<string, string> } = {}) {
+function rig(options: { files?: Record<string, string>; modes?: Record<string, number>; env?: Record<string, string>; fail?: (call: Call) => boolean; ports?: Record<string, string> } = {}) {
   const calls: Call[] = [];
   const written = new Map<string, { text: string; mode: number }>();
   const removed: string[] = [];
@@ -29,6 +30,7 @@ function rig(options: { files?: Record<string, string>; env?: Record<string, str
   const files: Files = {
     exists: (path) => state.has(path),
     read: (path) => state.get(path) ?? '',
+    mode: (path) => options.modes?.[path] ?? 0o600,
     write: (path, text, mode) => {
       if (state.has(path)) throw new Error('would overwrite');
       state.set(path, text);
@@ -203,6 +205,197 @@ describe('the external Postgres', () => {
     await up({ ...deps, out: (text) => void output.push(text) });
     const text = output.join('\n');
     for (const secret of ['APPPW', 'MIGPW', 'elsewhere.example.test']) expect(text).not.toContain(secret);
+  });
+});
+
+describe('a mapping of your own', () => {
+  const MAPPING = '/private/own-mapping.yaml';
+  const LOGINS = '/private/own-logins.env';
+  const own = { NEBURYX_DEV_MAPPING: MAPPING, NEBURYX_DEV_MAPPING_ENV: LOGINS };
+  const loginFile = 'OWN_USER=readerlogin\nOWN_PASSWORD=loginsecret\nOWN_URI=bolt://10.0.0.9:7687\n';
+  const ownFiles = { [MAPPING]: 'sources: []\n', [LOGINS]: loginFile };
+  const VALUES = ['readerlogin', 'loginsecret', '10.0.0.9'];
+  const externalDatabase = { NEBURYX_DEV_DATABASE_URL: 'postgres://app:APPPW@elsewhere.example.test/x', NEBURYX_DEV_DATABASE_MIGRATION_URL: 'postgres://mig:MIGPW@elsewhere.example.test/x', NEBURYX_DEV_DATABASE_APP_ROLE: 'x_app' };
+
+  it('starts and loads no demo graph, builds no demo graph tool and writes no mapping', async () => {
+    const { deps, calls } = rig({ env: own, files: ownFiles });
+    expect(await up(deps)).toBe(0);
+    const docker = dockerCalls(calls);
+    expect(JSON.stringify(docker)).not.toMatch(/demo-banking|demo-insurance|load-banking|load-insurance/);
+    expect(docker.filter((args) => args.includes('build') || args.includes('run'))).toEqual([]);
+    expect(docker.map((args) => args.slice(args.findIndex((arg) => ['up', 'port'].includes(arg))))).toEqual([['up', '-d', '--wait', '--wait-timeout', '600', 'db'], ['port', 'db', '5432']]);
+    expect(calls.some((call) => call.args.includes('combine'))).toBe(false);
+    expect(calls.filter((call) => call.command === 'pnpm').map((call) => call.args[1])).toEqual(BUILDS.map((build) => build.filter).filter((filter) => filter !== '@neburyx/demo-graph'));
+    expect(calls.some((call) => call.args.at(-1) === 'migrate')).toBe(true);
+  });
+
+  it('points the API at the mapping and gives it the logins and no demo login', async () => {
+    const { deps, supervision } = rig({ env: own, files: ownFiles });
+    await up(deps);
+    const api = supervision()?.api.env ?? {};
+    expect(api['NEBURYX_CONFIG']).toBe(MAPPING);
+    expect(api).toMatchObject({ OWN_USER: 'readerlogin', OWN_PASSWORD: 'loginsecret', OWN_URI: 'bolt://10.0.0.9:7687' });
+    expect(api).not.toHaveProperty('DEMO_NEO4J_USER');
+    expect(api).not.toHaveProperty('DEMO_NEO4J_PASSWORD');
+  });
+
+  it('gives the logins to the API and to no other process', async () => {
+    const { deps, calls, supervision } = rig({ env: own, files: ownFiles });
+    await up(deps);
+    const others = [...calls.map((call) => call.options.env ?? {}), ...(supervision()?.children.map((child) => child.env) ?? [])];
+    expect(others.length).toBeGreaterThan(5);
+    for (const env of others) for (const value of VALUES) expect(JSON.stringify(env)).not.toContain(value);
+    for (const call of calls) for (const value of VALUES) expect(JSON.stringify(call.args)).not.toContain(value);
+  });
+
+  it('prints and writes none of the login values', async () => {
+    const output: string[] = [];
+    const { deps, written } = rig({ env: own, files: ownFiles });
+    await up({ ...deps, out: (text) => void output.push(text) });
+    for (const value of VALUES) {
+      expect(output.join('\n')).not.toContain(value);
+      expect(JSON.stringify([...written])).not.toContain(value);
+    }
+  });
+
+  it('does not say that the sources are the demo sources', async () => {
+    const output: string[] = [];
+    const { deps } = rig({ env: own, files: ownFiles });
+    await up({ ...deps, out: (text) => void output.push(text) });
+    const line = output.join('\n').split('\n').find((text) => text.startsWith('sources:')) ?? '';
+    expect(line).toContain('/v1/sources');
+    expect(line).not.toMatch(/demo|synthetic|Community/);
+  });
+
+  it('does not tell you to remove containers when it started none', async () => {
+    const output: string[] = [];
+    const { deps } = rig({ env: { ...own, ...externalDatabase }, files: ownFiles });
+    await up({ ...deps, out: (text) => void output.push(text) });
+    expect(output.join('\n')).not.toContain('dev:down');
+    const local = rig({ env: own, files: ownFiles });
+    const localOutput: string[] = [];
+    await up({ ...local.deps, out: (text) => void localOutput.push(text) });
+    expect(localOutput.join('\n')).toContain('dev:down');
+  });
+
+  it('hands the runner no docker call at all when the Postgres is external too', async () => {
+    const { deps, calls, supervision } = rig({ env: { ...own, ...externalDatabase }, files: ownFiles });
+    await up(deps);
+    expect(calls.filter((call) => call.command === 'docker')).toEqual([]);
+    expect(calls.every((call) => ['pnpm', '/node'].includes(call.command))).toBe(true);
+    expect(supervision()?.api.env['DATABASE_URL']).toBe(externalDatabase.NEBURYX_DEV_DATABASE_URL);
+    expect(supervision()?.api.env['NEBURYX_CONFIG']).toBe(MAPPING);
+  });
+
+  it.each([
+    ['the env file setting', { NEBURYX_DEV_MAPPING: MAPPING }, 'NEBURYX_DEV_MAPPING_ENV'],
+    ['the mapping setting', { NEBURYX_DEV_MAPPING_ENV: LOGINS }, 'NEBURYX_DEV_MAPPING'],
+  ])('stops before anything starts when only one is set, naming %s as missing', async (_name, env, missing) => {
+    const { deps, calls, written } = rig({ env, files: ownFiles });
+    const error: unknown = await up(deps).then(() => undefined, (caught: unknown) => caught);
+    expect(error).toBeInstanceOf(IncompleteMapping);
+    expect(error instanceof Error ? error.message : '').toContain(`missing: ${missing}`);
+    expect(calls).toEqual([]);
+    expect(written.size).toBe(0);
+  });
+
+  it.each([0o640, 0o604, 0o644, 0o660, 0o620, 0o666, 0o770, 0o700, 0o500])('refuses an env file with mode %o wider than 0600, before anything starts and without showing it', async (mode) => {
+    const { deps, calls, written } = rig({ env: own, files: ownFiles, modes: { [LOGINS]: mode } });
+    const error: unknown = await up(deps).then(() => undefined, (caught: unknown) => caught);
+    expect(error).toBeInstanceOf(MappingUnusable);
+    const message = error instanceof Error ? error.message : '';
+    for (const value of VALUES) expect(message).not.toContain(value);
+    expect(calls).toEqual([]);
+    expect(written.size).toBe(0);
+  });
+
+  it('accepts an env file that only its owner can read', async () => {
+    for (const mode of [0o600, 0o400]) {
+      const { deps } = rig({ env: own, files: ownFiles, modes: { [LOGINS]: mode } });
+      expect(await up(deps)).toBe(0);
+    }
+  });
+
+  it.each([
+    ['a mapping file that does not exist', { [LOGINS]: loginFile }],
+    ['an env file that does not exist', { [MAPPING]: 'sources: []\n' }],
+    ['an env file with an empty value', { [MAPPING]: 'sources: []\n', [LOGINS]: 'OWN_USER=reader\nOWN_PASSWORD=\n' }],
+    ['an env file with no settings', { [MAPPING]: 'sources: []\n', [LOGINS]: '# nothing\n' }],
+    ['an env file that sets a variable the tool sets itself', { [MAPPING]: 'sources: []\n', [LOGINS]: 'OWN_PASSWORD=loginsecret\nDATABASE_URL=postgres://other\n' }],
+  ])('stops before anything starts for %s, without showing a value', async (_name, files) => {
+    const { deps, calls, written } = rig({ env: own, files });
+    const error: unknown = await up(deps).then(() => undefined, (caught: unknown) => caught);
+    expect(error).toBeInstanceOf(MappingUnusable);
+    for (const value of VALUES) expect(error instanceof Error ? error.message : '').not.toContain(value);
+    expect(calls).toEqual([]);
+    expect(written.size).toBe(0);
+  });
+
+  it('keeps the demo behaviour when neither setting is set, and puts no login in the API', async () => {
+    const { deps, calls, supervision } = rig();
+    await up(deps);
+    expect(dockerCalls(calls).some((args) => args.includes('load-banking'))).toBe(true);
+    expect(calls.some((call) => call.args.includes('combine'))).toBe(true);
+    expect(supervision()?.api.env['NEBURYX_CONFIG']).toBe(join(ROOT, '.dev/neburyx.yaml'));
+    expect(supervision()?.api.env).toHaveProperty('DEMO_NEO4J_PASSWORD');
+  });
+});
+
+describe('a mapping of your own with an external Postgres: stop and down', () => {
+  const noContainers = { NEBURYX_DEV_MAPPING: '/private/own-mapping.yaml', NEBURYX_DEV_MAPPING_ENV: '/private/own-logins.env', NEBURYX_DEV_DATABASE_URL: 'postgres://a:APPPW@elsewhere.example.test/x', NEBURYX_DEV_DATABASE_MIGRATION_URL: 'postgres://b:MIGPW@elsewhere.example.test/x', NEBURYX_DEV_DATABASE_APP_ROLE: 'x_app' };
+
+  it('removes nothing and runs no command on down, and says so', async () => {
+    const output: string[] = [];
+    const { deps, calls, removed } = rig({ env: noContainers, files: { [join(ROOT, '.env')]: formatSettings(generateSettings()) } });
+    expect(await down({ ...deps, out: (text) => void output.push(text) })).toBe(0);
+    expect(calls).toEqual([]);
+    expect(removed).toEqual([]);
+    expect(output.join('\n')).toContain('nothing to remove');
+    for (const secret of ['APPPW', 'MIGPW', 'elsewhere.example.test']) expect(output.join('\n')).not.toContain(secret);
+  });
+
+  it('still takes the lock on down', async () => {
+    const files = { [join(ROOT, '.env')]: formatSettings(generateSettings()), '/private/own-mapping.yaml': 'x', '/private/own-logins.env': 'A=b\n' };
+    const first = rig({ env: noContainers, files });
+    const lock = { folder: first.deps.lock.folder, alive: () => true };
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const running = up({ ...first.deps, supervise: async () => { await held; return 0; }, lock });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    await expect(down({ ...rig({ env: noContainers }).deps, lock })).rejects.toBeInstanceOf(LockHeld);
+    release();
+    await running;
+  });
+
+  it.each([
+    ['no mapping', { NEBURYX_DEV_MAPPING_ENV: '/private/own-logins.env' }],
+    ['no external database', { NEBURYX_DEV_MAPPING: '/private/own-mapping.yaml', NEBURYX_DEV_MAPPING_ENV: '/private/own-logins.env' }],
+    ['only part of the external database', { ...noContainers, NEBURYX_DEV_DATABASE_APP_ROLE: undefined }],
+  ])('keeps the removal of the demo containers on down with %s', async (_name, env) => {
+    const { deps, calls } = rig({ env: Object.fromEntries(Object.entries(env).filter(([, value]) => value !== undefined)) as Record<string, string> });
+    await down(deps);
+    expect(dockerCalls(calls).map((args) => args.slice(-3))).toEqual([['down', '-v', '--remove-orphans']]);
+  });
+
+  it('prints a plain stopped message, not one about containers that keep running, when stopped while starting', async () => {
+    let stopNow: () => void = () => undefined;
+    const stopRequested = new Promise<void>((resolve) => {
+      stopNow = resolve;
+    });
+    const output: string[] = [];
+    const first = rig({ env: noContainers, files: { '/private/own-mapping.yaml': 'x', '/private/own-logins.env': 'A=b\n' } });
+    const slowRun: Run = async (command, args, options = {}) => {
+      await first.deps.run(command, args, options);
+      await new Promise<void>((resolve) => options.signal?.addEventListener('abort', () => resolve(), { once: true }));
+      return { code: 130, stdout: '', stderr: '' };
+    };
+    const running = up({ ...first.deps, run: slowRun, stopRequested, out: (text) => void output.push(text) });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    stopNow();
+    expect(await running).toBe(0);
+    expect(output).toEqual(['stopped']);
   });
 });
 
