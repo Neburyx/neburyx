@@ -5,12 +5,12 @@ import { FailureNotice } from '../failure-notice.js';
 import { PageHeading } from '../shell/page-heading.js';
 import { answeredData, retainedFailure, useShellData } from '../shell/shell-data.js';
 import { useSourceName } from '../shell/use-current-source.js';
-import { useClientState } from '../state/context.js';
+import { useClientState, useSessionMask } from '../state/context.js';
 import { EXPLORE_PATH } from '../shell/navigation.js';
 import { AttemptedSource } from './attempted-source.js';
 import { deepLinkPath, readDeepLink } from './deep-link.js';
 import { BACK_TO_HOME, LINK_FAILED_TITLE, LINK_MALFORMED_TEXT, LINK_MALFORMED_TITLE, LINK_NOT_FOUND_TEXT, LINK_NOT_FOUND_TITLE, LINK_UNKNOWN_TYPE_TITLE, linkUnknownTypeText, OPENING_LINK, OPENING_LINK_TEXT, OPENING_LINK_TITLE, SOURCE_NOT_AVAILABLE_TEXT, SOURCE_NOT_AVAILABLE_TITLE, TRY_AGAIN } from './messages.js';
-import { NOT_MASKED, openEntity, type OpenEntityOutcome } from './open-flow.js';
+import { openEntity, type OpenEntityOutcome } from './open-flow.js';
 
 interface Flight {
   readonly key: string;
@@ -47,6 +47,7 @@ export function DeepLinkPage({ client }: { readonly client: ApiClient }) {
   const location = useLocation();
   const navigate = useNavigate();
   const state = useClientState();
+  const mask = useSessionMask();
   const shell = useShellData();
   const principalId = answeredData(shell.me)?.principal.id;
   const principalFailure = principalId === undefined ? retainedFailure(shell.me) : undefined;
@@ -68,7 +69,7 @@ export function DeepLinkPage({ client }: { readonly client: ApiClient }) {
       flight.current?.controller.abort();
       const controller = new AbortController();
       const request = { sourceId: link.sourceId, entity: { sourceId: link.sourceId, entityType: link.entityType, stableId: link.stableId }, ...(link.caseRef === undefined ? {} : { caseRef: link.caseRef }) };
-      flight.current = { key, controller, outcome: openEntity(client, state, request, { principalId, mask: NOT_MASKED }, controller.signal) };
+      flight.current = { key, controller, outcome: openEntity(client, state, request, { principalId, mask }, controller.signal) };
     }
     const { controller, outcome } = flight.current;
     setStatus(OPENING);
@@ -87,7 +88,7 @@ export function DeepLinkPage({ client }: { readonly client: ApiClient }) {
         if (runs.current === run) controller.abort();
       });
     };
-  }, [client, state, key, principalId, attempt]);
+  }, [client, state, key, principalId, mask, attempt]);
 
   const retry = (): void => {
     flight.current = undefined;

@@ -11,6 +11,7 @@ import { memoryAppStore, type MemoryAppStore } from '../testing/app-store.js';
 import { entityCalls, entityRows, plainNode } from '../testing/entity-fixtures.js';
 import { recordingObserver, TestExecutor } from '../testing/gate.js';
 import { baseSource, fileOf } from '../testing/mapping.js';
+import { withOnlineIndexes } from '../testing/search-fixtures.js';
 import { testSourceGate } from '../testing/source-gate.js';
 import { makeWebRoot } from '../testing/web-root.js';
 
@@ -62,7 +63,7 @@ async function started(rule: Rule = EXCEPT_SECRET, answer: ExecuteOutcome = enti
   const seams: Seams = { ...defaults, policy, audit: { record: async (event) => (options.failAudit === true ? Promise.reject(new Error('sink down')) : void events.push(event)) } };
   const used = options.mapping ?? mapping;
   const store = options.store ?? memoryAppStore();
-  const executor = new TestExecutor(() => Promise.resolve(answer));
+  const executor = new TestExecutor(withOnlineIndexes(used.sources[0] ?? (() => { throw new Error('the mapping has no source'); })(), () => Promise.resolve(answer)));
   const observer = recordingObserver();
   const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store, mapping: used, seams, gate: testSourceGate(used, { executor, seams, observer }).gate });
   return { app, store, executor, events, asks, auditStages: () => observer.events.filter((entry) => entry.stage === 'audit').length, ...injectors(app) };

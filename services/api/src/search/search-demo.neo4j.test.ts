@@ -9,6 +9,7 @@ import { LOCAL_PRINCIPAL } from '../testing/gate.js';
 import { NEO4J_SERIES, runAdmin, runAll } from '../testing/neo4j-server.js';
 import { itemsOf, removeMadeRecords, startPackServers, type PackServer } from '../testing/normalization-capture.js';
 import { PACKS } from '../testing/pack-fixtures.js';
+import { communityAccess } from '../testing/source-access.js';
 import { ALWAYS_USABLE } from '../testing/usability.js';
 import { createSearchService } from './search-service.js';
 
@@ -50,7 +51,7 @@ describe.each(PACKS)(`the search of the %s pack on ${NEO4J_SERIES}`, (pack) => {
     return found;
   }
   const search = (text: string, mask = false) =>
-    createSearchService({ gate: current().gate.gate, indexes: current().gate.indexes, mapping: { sources: [current().target.source] } }).search({ traceId: 'tr-search-demo', principal: LOCAL_PRINCIPAL, sourceId: current().target.source.id, text, mask });
+    createSearchService({ gate: current().gate.gate, indexes: current().gate.indexes, mapping: { sources: [current().target.source] }, access: communityAccess({ sources: [current().target.source] }) }).search({ traceId: 'tr-search-demo', principal: LOCAL_PRINCIPAL, sourceId: current().target.source.id, text, mask });
   const hitsOf = async (text: string, mask = false): Promise<GraphNode[]> => (await search(text, mask)).exact;
 
   function expectedFrom(row: Record<string, unknown>): GraphNode {

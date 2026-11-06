@@ -13,6 +13,7 @@ import { createNeo4jExecutor, type Neo4jExecutor } from '../sources/executor.js'
 import { prepareParameters } from '../sources/parameters.js';
 import { LOCAL_PRINCIPAL } from '../testing/gate.js';
 import { envFor, NEO4J_SERIES, runAdmin, runAll, sourceFor, startNeo4j, type RunningNeo4j } from '../testing/neo4j-server.js';
+import { communityAccess } from '../testing/source-access.js';
 import { ALWAYS_USABLE } from '../testing/usability.js';
 import { createSearchService } from './search-service.js';
 
@@ -71,7 +72,7 @@ afterAll(async () => {
   await runAll([() => profiling?.executor.close(), () => closing?.(), () => server?.stop()]);
 });
 
-const service = () => createSearchService({ gate, indexes, mapping: { sources: [source()] } });
+const service = () => createSearchService({ gate, indexes, mapping: { sources: [source()] }, access: communityAccess({ sources: [source()] }) });
 const search = (text: string, mask = false) => service().search({ traceId: 'tr-search-seek', principal: LOCAL_PRINCIPAL, sourceId: 'graph', text, mask });
 const stableIds = async (text: string, entityType?: string): Promise<string[]> => (await search(text)).exact.filter((node) => entityType === undefined || node.ref.entityType === entityType).map((node) => node.ref.stableId);
 const namingLabel = (label: string, from = 0): number => statements.slice(from).filter((statement) => statement.includes(`\`${label}\``)).length;
@@ -230,7 +231,7 @@ describe(`an index that is gone since the check, on ${NEO4J_SERIES}`, () => {
   it('refuses the entity read of a type whose stable-ID index is gone, with SOURCE_UNAVAILABLE, and no statement names its label', async () => {
     await runAdmin(server, 'DROP INDEX held_plain');
     const from = statements.length;
-    const failure = await createEntityReader({ gate, mapping: { sources: [source()] } })
+    const failure = await createEntityReader({ gate, mapping: { sources: [source()] }, access: communityAccess({ sources: [source()] }) })
       .read({ traceId: 'tr-entity-guard', principal: LOCAL_PRINCIPAL, sourceId: 'graph', entityType: 'held_by_index', stableId: '123', mask: false })
       .catch((error: unknown) => error);
     expect(failure).toBeInstanceOf(AppError);

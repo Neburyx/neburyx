@@ -86,8 +86,8 @@ describe('a masked search with no property left to search', () => {
   it('still refuses a principal the policy refuses', async () => {
     const { app, executor } = await startSearchApp({ mapping: onlyPersonal(), policy: { authorizeSource: () => Promise.resolve({ allowed: false, reason: 'denied' }) } });
     const response = await postSearch(app, { sourceId: 'demo', text: 'Ana Silva', mask: true });
-    expect(response.statusCode).toBe(403);
-    expect(response.json().error.code).toBe('ACCESS_DENIED');
+    expect(response.statusCode).toBe(404);
+    expect(response.json().error.code).toBe('NOT_FOUND');
     expect(executor.calls).toEqual([]);
     await app.close();
   });

@@ -188,10 +188,9 @@ export function buildOpenApiDocument(
           responses: {
             '200': { description: 'The exact matches and their count', content: jsonBody('SearchResult') },
             '400': { description: 'The body or the query is not valid, or the text is not 1 to 200 characters', content: jsonBody('ErrorResponse') },
-            '403': { description: 'The policy does not allow this principal to read the source', content: jsonBody('ErrorResponse') },
-            '404': { description: 'No configured source has this id', content: jsonBody('ErrorResponse') },
+            '404': { description: 'No configured source has this id, or the person may not read it (one answer for both)', content: jsonBody('ErrorResponse') },
             '415': { description: 'The body is not JSON', content: jsonBody('ErrorResponse') },
-                        '500': { description: 'The search could not run', content: jsonBody('ErrorResponse') },
+            '500': { description: 'The search could not run', content: jsonBody('ErrorResponse') },
             '503': { description: 'The source is not available, or is busy', content: jsonBody('ErrorResponse') },
             '504': { description: 'The source did not answer in time', content: jsonBody('ErrorResponse') },
           },

@@ -2,8 +2,9 @@ import { SEARCH_GROUP_CAP, type DisabledType, type GraphNode, type SearchResult 
 import { AppError } from '../errors.js';
 import { onlineFormOf } from '../gate/index-guard.js';
 import type { Normalized } from '../gate/normalize/index.js';
-import { SEARCH_EXACT_ID, type SearchTarget } from '../gate/templates/search-exact.js';
-import type { Gate, IndexReader, IndexReadFailure, IndexSnapshot } from '../gate/types.js';
+import { SEARCH_EXACT_ID, searchExactTemplate, type SearchTarget } from '../gate/templates/search-exact.js';
+import type { SourceAccess } from '../investigations/source-access.js';
+import type { Gate, GatePage, GateRequest, IndexReader, IndexReadFailure, IndexSnapshot } from '../gate/types.js';
 import type { MappingModel, SourceModel } from '../mapping/model.js';
 import type { Principal } from '../seams/seams.js';
 
@@ -71,10 +72,21 @@ function inOrder(source: SourceModel, nodes: readonly GraphNode[]): GraphNode[] 
   return [...nodes].sort((first, second) => rank(first) - rank(second) || (first.ref.stableId < second.ref.stableId ? -1 : first.ref.stableId > second.ref.stableId ? 1 : 0));
 }
 
-export function createSearchService(deps: { readonly gate: Gate; readonly mapping: MappingModel; readonly indexes?: IndexReader; readonly clock?: () => number }): SearchService {
+/** A read the gate refuses answers the same `NOT_FOUND` as a source the person may not read, so the two are never told apart; the gate has already recorded the denial. */
+async function runSearch(gate: Gate, request: GateRequest): Promise<GatePage> {
+  try {
+    return await gate.run(request);
+  } catch (error) {
+    if (error instanceof AppError && error.code === 'ACCESS_DENIED') throw new AppError('NOT_FOUND');
+    throw error;
+  }
+}
+
+export function createSearchService(deps: { readonly gate: Gate; readonly mapping: MappingModel; readonly access: SourceAccess; readonly indexes?: IndexReader; readonly clock?: () => number }): SearchService {
   const clock = deps.clock ?? Date.now;
   return {
     async search(request) {
+      await deps.access.require({ traceId: request.traceId, principal: request.principal, sourceId: request.sourceId, auditAction: searchExactTemplate.auditAction });
       const source = deps.mapping.sources.find((candidate) => candidate.id === request.sourceId);
       if (source === undefined) throw new AppError('NOT_FOUND');
       const startedAt = clock();
@@ -83,7 +95,7 @@ export function createSearchService(deps: { readonly gate: Gate; readonly mappin
       const snapshot = await readOrFail(reader, request);
       const { targets, disabled } = planOf(source, request.mask, snapshot === undefined || snapshot === 'unverified' || 'failure' in snapshot ? undefined : snapshot);
       const cap = Math.min(SEARCH_GROUP_CAP, source.budgets.maxPage);
-      const page = await deps.gate.run({
+      const page = await runSearch(deps.gate, {
         traceId: request.traceId,
         principal: request.principal,
         sourceId: request.sourceId,

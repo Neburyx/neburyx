@@ -145,7 +145,7 @@ describe('what the guard leaves to the other rules', () => {
 
 describe('the schema read follows the authorization of the request', () => {
   it.each([
-    ['a principal the policy refuses', { policy: { authorizeSource: () => Promise.resolve({ allowed: false as const, reason: 'denied' }) } }, 403],
+    ['a principal the policy refuses', { policy: { authorizeSource: () => Promise.resolve({ allowed: false as const, reason: 'denied' }) } }, 404],
     ['a source that is not usable', { usability: { isUsable: () => false } }, 503],
   ])('makes no statement at all for %s, not even the schema read', async (_name, options, status) => {
     const { app, executor } = await started(() => schemaAnswer(ALL_ONLINE), options);

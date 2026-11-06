@@ -11,7 +11,7 @@ const box = () => within(main()).getByRole('searchbox', { name: 'Search text' })
 const retryButton = () => within(main()).getByRole('button', { name: 'Retry' });
 
 const ok = (value: SearchResult): ApiResult<SearchResult> => ({ ok: true, value });
-const server = (code: 'QUERY_TIMEOUT' | 'SOURCE_BUSY' | 'SOURCE_UNAVAILABLE' | 'QUERY_BUDGET_EXCEEDED', details?: { readonly maxPage?: number; readonly timeoutMs?: number }): ApiResult<never> => ({
+const server = (code: 'QUERY_TIMEOUT' | 'NOT_FOUND' | 'SOURCE_BUSY' | 'SOURCE_UNAVAILABLE' | 'QUERY_BUDGET_EXCEEDED', details?: { readonly maxPage?: number; readonly timeoutMs?: number }): ApiResult<never> => ({
   ok: false,
   failure: { code, message: 'A fixed message.', retryable: true, traceId: 'tr-9', ...(details === undefined ? {} : { details }) },
 });
@@ -123,5 +123,17 @@ describe('the notice and Retry by keyboard', () => {
     expect(await screen.findByText('Title AC-1')).toBeDefined();
     expect(document.activeElement).not.toBe(document.body);
     expect(main().contains(document.activeElement)).toBe(true);
+  });
+});
+
+describe('a search of a source the server answers as not found', () => {
+  it('says that the source is not configured and nothing else of it: no code, no trace ID and no Retry', async () => {
+    const kit = searchKit(['demo'], async () => server('NOT_FOUND'));
+    renderApp(searchAt('demo', 'first'), kit.client);
+    const alert = await screen.findByRole('alert');
+    expect(within(alert).getByText('The source “demo” is not configured.')).toBeDefined();
+    expect(screen.queryByText('NOT_FOUND')).toBeNull();
+    expect(screen.queryByText(/tr-9/)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
   });
 });

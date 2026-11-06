@@ -44,13 +44,14 @@ describe('POST /v1/search/entities refuses a request before any read', () => {
     await app.close();
   });
 
-  it('answers NOT_FOUND for a source that is not configured, with no read and no audit event', async () => {
+  it('answers NOT_FOUND for a source that is not configured, with no read and one denied audit event that names no source', async () => {
     const { app, executor, events } = await started();
     const response = await post(app, { sourceId: 'nope', text: 'ab' });
     expect(response.statusCode).toBe(404);
     expect(response.json().error.code).toBe('NOT_FOUND');
     expect(executor.calls).toEqual([]);
-    expect(events).toEqual([]);
+    expect(events).toEqual([expect.objectContaining({ action: 'entity.search', result: 'denied' })]);
+    expect(events[0]).not.toHaveProperty('sourceId');
     await app.close();
   });
 

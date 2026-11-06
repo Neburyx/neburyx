@@ -16,7 +16,7 @@ const FAILURES: readonly (readonly [string, SearchAppOptions, number, string, st
   ['a source that is busy', { coordinator: busy }, 503, 'SOURCE_BUSY', 'failed'],
   ['a source that is down', { respond: () => Promise.resolve({ status: 'unavailable', reason: 'unreachable' }) }, 503, 'SOURCE_UNAVAILABLE', 'failed'],
   ['a source that is not usable', { usability: { isUsable: () => false } }, 503, 'SOURCE_UNAVAILABLE', 'refused'],
-  ['a principal the policy refuses', { policy: refusing }, 403, 'ACCESS_DENIED', 'denied'],
+  ['a principal the policy refuses (answered as a source that is not configured)', { policy: refusing }, 404, 'NOT_FOUND', 'denied'],
 ];
 
 describe('a search that fails', () => {
@@ -29,6 +29,31 @@ describe('a search that fails', () => {
     expect(events.filter((event) => event.action === 'entity.search')).toEqual([expect.objectContaining({ result, sourceId: 'demo' })]);
     expect(store.investigations).toEqual([]);
     expect(store.drafts).toEqual([]);
+    await app.close();
+  });
+
+  it('answers a source the person may not read exactly as a source that is not configured: one status, one body apart from the trace, and no read', async () => {
+    const unreadable = await startSearchApp({ policy: refusing });
+    const missing = await startSearchApp();
+    const first = await postSearch(unreadable.app, body);
+    const second = await postSearch(missing.app, { ...body, sourceId: 'absent' });
+    expect([first.statusCode, second.statusCode]).toEqual([404, 404]);
+    const withoutTrace = (response: typeof first) => ({ ...response.json(), error: { ...response.json().error, traceId: undefined } });
+    expect(withoutTrace(first)).toEqual(withoutTrace(second));
+    expect(unreadable.executor.calls).toEqual([]);
+    await unreadable.app.close();
+    await missing.app.close();
+  });
+
+  it('answers a refusal of the gate after the first check allowed the source as the same NOT_FOUND, with the gate\'s one denied event', async () => {
+    let asks = 0;
+    const later = { authorizeSource: () => Promise.resolve(++asks === 1 ? ({ allowed: true } as const) : ({ allowed: false, reason: 'denied' } as const)) };
+    const { app, events, executor } = await startSearchApp({ policy: later });
+    const response = await postSearch(app, body);
+    expect(response.statusCode).toBe(404);
+    expect(response.json().error.code).toBe('NOT_FOUND');
+    expect(events.filter((event) => event.action === 'entity.search')).toEqual([expect.objectContaining({ result: 'denied', sourceId: 'demo' })]);
+    expect(executor.calls).toEqual([]);
     await app.close();
   });
 

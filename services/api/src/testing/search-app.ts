@@ -57,13 +57,14 @@ export async function startSearchApp(options: SearchAppOptions = {}) {
   const events: AuditEvent[] = [];
   const defaults = communitySeams();
   const lines: string[] = [];
+  const seams = { policy: options.policy ?? defaults.policy, coordinator: options.coordinator ?? defaults.coordinator, audit: options.audit ?? { record: (event: AuditEvent) => Promise.resolve(void events.push(event)) } };
   const parts = testSourceGate(mapping, {
     executor,
-    seams: { policy: options.policy ?? defaults.policy, coordinator: options.coordinator ?? defaults.coordinator, audit: options.audit ?? { record: (event) => Promise.resolve(void events.push(event)) } },
+    seams,
     ...(options.usability === undefined ? {} : { usability: options.usability }),
   });
   const store = memoryAppStore();
-  const app = await buildApp({ webRoot, logger: createLogger({ write: (line: string) => void lines.push(line) }), store, mapping, gate: parts.gate, indexes: parts.indexes });
+  const app = await buildApp({ webRoot, logger: createLogger({ write: (line: string) => void lines.push(line) }), store, mapping, seams: { ...defaults, ...seams }, gate: parts.gate, indexes: parts.indexes });
   return { app, executor, events, lines, gate: parts.gate, mapping, store };
 }
 
