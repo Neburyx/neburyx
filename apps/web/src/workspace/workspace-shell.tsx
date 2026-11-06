@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { GraphCanvas } from '../canvas/graph-canvas.js';
 import { useProfile } from '../canvas/profile-context.js';
 import { CanvasRegions } from './canvas-regions.js';
@@ -11,7 +12,7 @@ import { NoticeStrip } from './notice-strip.js';
 import { ShortcutSheet } from './shortcut-sheet.js';
 import { SelectionBar } from './selection-bar.js';
 
-export function WorkspaceShell({ canvasView }: { readonly canvasView?: 'fit' | 'as-drawn' }) {
+export function WorkspaceShell({ canvasView, notice, status }: { readonly canvasView?: 'fit' | 'as-drawn'; readonly notice?: ReactNode; readonly status?: ReactNode }) {
   const profile = useProfile();
   useKeyHandler();
   return (
@@ -19,7 +20,8 @@ export function WorkspaceShell({ canvasView }: { readonly canvasView?: 'fit' | '
       <NavigationRail />
       <div className="workspace-body">
         <HeaderBar />
-        <NoticeStrip />
+        <NoticeStrip extra={notice} />
+        {status === undefined ? null : <div className="status-strip">{status}</div>}
         <div className="workspace-stage">
           <main className="canvas-region">
             <GraphCanvas profile={profile} view={canvasView} />

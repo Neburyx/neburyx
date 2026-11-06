@@ -14,6 +14,7 @@ import { normalizeModelOf } from './normalize/model.js';
 import { capabilitiesTemplate } from './templates/capabilities.js';
 import { connectivityTemplate } from './templates/connectivity.js';
 import { degreeProbeTemplate } from './templates/degree-probe.js';
+import { entityLoadTemplate } from './templates/entity-load.js';
 import { privilegesTemplate } from './templates/privileges.js';
 import { schemaIndexesTemplate } from './templates/schema-indexes.js';
 import { schemaTokensTemplate } from './templates/schema-tokens.js';
@@ -38,7 +39,7 @@ export interface AssembleOptions {
 }
 
 export function defaultCatalog(): TemplateCatalog {
-  return createTemplateCatalog({ templates: [connectivityTemplate, capabilitiesTemplate, privilegesTemplate, schemaTokensTemplate, schemaIndexesTemplate, stableIdDuplicatesTemplate, degreeProbeTemplate] });
+  return createTemplateCatalog({ templates: [connectivityTemplate, capabilitiesTemplate, privilegesTemplate, schemaTokensTemplate, schemaIndexesTemplate, stableIdDuplicatesTemplate, degreeProbeTemplate, entityLoadTemplate] });
 }
 
 function budgetsFrom(source: SourceModel): Budgets {

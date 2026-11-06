@@ -1,0 +1,8 @@
+export const OPENING = 'Opening the investigation…';
+export const RESUMED = 'An existing investigation for this case reference was opened.';
+export const NOT_FOUND_TITLE = 'Investigation not found';
+export const NOT_FOUND_TEXT = 'There is no investigation at this link among yours.';
+export const SOURCE_NOT_AVAILABLE_TITLE = 'This investigation’s source is not available as it was';
+export const SOURCE_NOT_AVAILABLE_TEXT = 'Its source is no longer configured, or it now points at another database. Nothing is read from it.';
+export const BACK_TO_HOME = 'Back to Home';
+export const TRY_AGAIN = 'Try again';

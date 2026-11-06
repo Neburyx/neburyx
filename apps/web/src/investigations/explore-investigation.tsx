@@ -1,0 +1,87 @@
+import { useEffect, useState } from 'react';
+import { Link, useLocation, useParams } from 'react-router';
+import type { ApiClient, ApiFailure } from '../api/client.js';
+import { FailureNotice } from '../failure-notice.js';
+import { PageFrame } from '../shell/page-shell.js';
+import { PageHeading } from '../shell/page-heading.js';
+import { answeredData, retainedFailure, useShellData } from '../shell/shell-data.js';
+import { useClientState } from '../state/context.js';
+import { WorkspaceShell } from '../workspace/workspace-shell.js';
+import { BACK_TO_HOME, NOT_FOUND_TEXT, NOT_FOUND_TITLE, OPENING, RESUMED, SOURCE_NOT_AVAILABLE_TEXT, SOURCE_NOT_AVAILABLE_TITLE, TRY_AGAIN } from './messages.js';
+import { NOT_MASKED, openById } from './open-flow.js';
+
+type Status =
+  | { readonly kind: 'loading' }
+  | { readonly kind: 'ready' }
+  | { readonly kind: 'not-found' }
+  | { readonly kind: 'source-unavailable'; readonly sourceId: string }
+  | { readonly kind: 'failed'; readonly failure: ApiFailure };
+
+function Message({ title, text, source }: { readonly title: string; readonly text: string; readonly source: string | null }) {
+  return (
+    <PageFrame>
+      <section>
+        <PageHeading title={title} description={text} source={source} />
+        <p>
+          <Link to="/">{BACK_TO_HOME}</Link>
+        </p>
+      </section>
+    </PageFrame>
+  );
+}
+
+function arrivedByResuming(state: unknown): boolean {
+  return typeof state === 'object' && state !== null && 'resumed' in state && state.resumed === true;
+}
+
+/** `/explore/{id}`: shows the investigation. The one that was on screen stays, identified as its own, until the new one is read; a failure leaves it there. */
+export function ExploreInvestigation({ client }: { readonly client: ApiClient }) {
+  const { investigationId } = useParams();
+  const state = useClientState();
+  const shell = useShellData();
+  const principalId = answeredData(shell.me)?.principal.id;
+  const principalFailure = principalId === undefined ? retainedFailure(shell.me) : undefined;
+  const resumed = arrivedByResuming(useLocation().state);
+  const [attempt, setAttempt] = useState(0);
+  const [status, setStatus] = useState<Status>(() => (investigationId !== undefined && state.holds(investigationId, NOT_MASKED) ? { kind: 'ready' } : { kind: 'loading' }));
+
+  useEffect(() => {
+    if (investigationId === undefined || principalId === undefined) return undefined;
+    if (state.resume(investigationId, NOT_MASKED) !== undefined) {
+      setStatus({ kind: 'ready' });
+      return undefined;
+    }
+    const controller = new AbortController();
+    setStatus({ kind: 'loading' });
+    void openById(client, state, investigationId, { principalId, mask: NOT_MASKED }, controller.signal).then((outcome) => {
+      if (controller.signal.aborted) return;
+      if (outcome.kind === 'shown') setStatus({ kind: 'ready' });
+      else if (outcome.kind === 'source-unavailable') setStatus({ kind: 'source-unavailable', sourceId: outcome.investigation.sourceId });
+      else setStatus(outcome.failure.code === 'NOT_FOUND' ? { kind: 'not-found' } : { kind: 'failed', failure: outcome.failure });
+    });
+    return () => controller.abort();
+  }, [client, state, investigationId, principalId, attempt]);
+
+  if (status.kind === 'not-found') return <Message title={NOT_FOUND_TITLE} text={NOT_FOUND_TEXT} source={null} />;
+  if (status.kind === 'source-unavailable') return <Message title={SOURCE_NOT_AVAILABLE_TITLE} text={SOURCE_NOT_AVAILABLE_TEXT} source={status.sourceId} />;
+  const failure = status.kind === 'failed' ? status.failure : status.kind === 'loading' ? principalFailure : undefined;
+  const retry = (): void => {
+    if (principalId === undefined) shell.reload();
+    setAttempt((count) => count + 1);
+  };
+  return (
+    <WorkspaceShell
+      notice={
+        failure !== undefined ? (
+          <div role="group" aria-label="Opening failed">
+            <FailureNotice failure={failure} />
+            <button type="button" onClick={retry}>
+              {TRY_AGAIN}
+            </button>
+          </div>
+        ) : undefined
+      }
+      status={status.kind === 'loading' && failure === undefined ? <p role="status">{OPENING}</p> : status.kind === 'ready' && resumed ? <p role="status">{RESUMED}</p> : undefined}
+    />
+  );
+}

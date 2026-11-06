@@ -41,3 +41,21 @@ export {
 export type { DegreeBasis, DegreeChecks, DegreeType, MappingCheck, MappingChecks, MappingFinding, SourceTestReport, TestOutcome } from './source-test.js';
 export { COUNT_QUALITIES, DATA_CLASSES, countSchema, edgeRefSchema, edgeSchema, elementRefSchema, nodeSchema, propertySchema } from './graph.js';
 export type { Count, DataClass, EdgeRef, ElementRef, GraphEdge, GraphNode, GraphProperty } from './graph.js';
+export { MAX_STABLE_ID_LENGTH, entityPathSchema, entityQuerySchema, pathSegmentOf, stableIdSchema, valueOfPathSegment } from './entities.js';
+export type { EntityPath } from './entities.js';
+export {
+  INVESTIGATION_SOURCE_STATES,
+  INVESTIGATION_STATUSES,
+  MAX_CASE_REF_LENGTH,
+  MAX_TITLE_LENGTH,
+  caseRefSchema,
+  draftSchema,
+  investigationResponseSchema,
+  investigationSchema,
+  layoutDocumentSchema,
+  openInvestigationRequestSchema,
+  openInvestigationResponseSchema,
+  queryContextDocumentSchema,
+  startingEntitySchema,
+} from './investigations.js';
+export type { Investigation, InvestigationResponse, InvestigationSourceState, LayoutDocument, OpenInvestigationRequest, OpenInvestigationResponse, QueryContextDocument } from './investigations.js';

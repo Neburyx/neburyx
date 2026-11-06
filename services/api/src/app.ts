@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Socket } from 'node:net';
 import fastifyStatic from '@fastify/static';
-import { type ErrorCode, healthResponseSchema, meResponseSchema, readyResponseSchema, sourceProfileSchema, sourceTestReportSchema, sourcesResponseSchema } from '@neburyx/contracts';
+import { type ErrorCode, entityPathSchema, entityQuerySchema, healthResponseSchema, investigationResponseSchema, meResponseSchema, nodeSchema, openInvestigationRequestSchema, openInvestigationResponseSchema, readyResponseSchema, sourceProfileSchema, sourceTestReportSchema, sourcesResponseSchema } from '@neburyx/contracts';
 import { z } from 'zod';
 import Fastify, {
   type FastifyBaseLogger,
@@ -12,6 +12,9 @@ import Fastify, {
 } from 'fastify';
 import { AppError, codeForFailure, detailsOf, errorResponse, errorStatus } from './errors.js';
 import type { AppStore } from './app-store.js';
+import { createEntityReader } from './entities/entity-reader.js';
+import { createInvestigationService } from './investigations/investigation-service.js';
+import type { Gate } from './gate/types.js';
 import type { JobRunner } from './jobs/runner.js';
 import type { MappingModel } from './mapping/model.js';
 import { buildSourceProfile } from './registry/profile.js';
@@ -33,6 +36,7 @@ export interface AppOptions {
   readonly seams?: Seams | undefined;
   readonly mapping?: MappingModel | undefined;
   readonly sourceTester?: SourceTester | undefined;
+  readonly gate?: Gate | undefined;
   readonly reachability?: ReachabilityView | undefined;
   readonly stopPing?: (() => void) | undefined;
   readonly drainPing?: (() => Promise<void>) | undefined;
@@ -40,6 +44,8 @@ export interface AppOptions {
 }
 
 const API_PREFIX = '/v1';
+/** The router answers a path parameter longer than its limit as an unknown route (404). No limit here leaves the length of a stable ID to its schema, which answers INVALID_REQUEST, and the length of the whole request line to the HTTP parser. */
+const NO_PATH_PARAMETER_LIMIT = Number.MAX_SAFE_INTEGER;
 const noQuerySchema = z.strictObject({});
 const profileParamsSchema = z.strictObject({ id: z.string() });
 const PROBE_PATHS: ReadonlySet<string> = new Set(['/healthz', '/readyz']);
@@ -156,6 +162,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
     loggerInstance: options.logger,
     logController: new LogController({ disableRequestLogging: true, requestIdLogLabel: 'traceId' }),
     genReqId: newTraceId,
+    routerOptions: { maxParamLength: NO_PATH_PARAMETER_LIMIT },
     requestIdHeader: false,
     frameworkErrors: (_error, request, reply) => {
       sendApiError(reply, request, 'INVALID_REQUEST');
@@ -279,6 +286,38 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
     const report = await options.sourceTester.run({ traceId: request.id, principal: identity.principal, sourceId: params.data.id });
     return sourceTestReportSchema.parse(report);
   });
+
+  if (options.gate !== undefined) {
+    const entities = createEntityReader({ gate: options.gate, mapping });
+    app.get('/v1/entities/:sourceId/:entityType/:stableId', { exposeHeadRoute: false, config: { permission: 'principal' } }, async (request) => {
+      const path = entityPathSchema.safeParse(request.params);
+      const query = entityQuerySchema.safeParse(request.query);
+      if (!path.success || !query.success) throw new AppError('INVALID_REQUEST');
+      const identity = await options.store.current();
+      const node = await entities.read({ traceId: request.id, principal: identity.principal, ...path.data, mask: query.data.mask === 'true' });
+      return nodeSchema.parse(node);
+    });
+
+    const investigations = createInvestigationService({ store: options.store, entities, mapping });
+    app.post('/v1/investigations', { config: { permission: 'principal' } }, async (request, reply) => {
+      const body = openInvestigationRequestSchema.safeParse(request.body);
+      if (!noQuerySchema.safeParse(request.query).success || !body.success) throw new AppError('INVALID_REQUEST');
+      const identity = await options.store.current();
+      const answer = await investigations.open({ traceId: request.id, principal: identity.principal, request: body.data });
+      return reply
+        .code(answer.created ? 201 : 200)
+        .header('etag', `"${answer.body.investigation.version}"`)
+        .send(openInvestigationResponseSchema.parse(answer.body));
+    });
+
+    app.get('/v1/investigations/:id', { exposeHeadRoute: false, config: { permission: 'principal' } }, async (request, reply) => {
+      const params = profileParamsSchema.safeParse(request.params);
+      if (!noQuerySchema.safeParse(request.query).success || !params.success) throw new AppError('INVALID_REQUEST');
+      const identity = await options.store.current();
+      const answer = await investigations.read({ id: params.data.id, principal: identity.principal });
+      return reply.header('etag', `"${answer.investigation.version}"`).send(investigationResponseSchema.parse(answer));
+    });
+  }
 
   appSeams.set(app, options.seams ?? communitySeams());
 

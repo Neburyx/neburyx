@@ -234,6 +234,18 @@
   white-space: nowrap;
 }
 
+.status-strip {
+  flex: none;
+  padding: var(--space-8) var(--space-16);
+  border-bottom: var(--border-width) solid var(--color-workspace-border);
+  background: var(--color-neutral-surface);
+  color: var(--color-neutral-text);
+}
+
+.status-strip p {
+  margin: 0;
+}
+
 .notice-strip {
   display: flex;
   flex: none;

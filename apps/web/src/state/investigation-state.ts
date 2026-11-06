@@ -14,8 +14,19 @@ export interface InvestigationRecord {
 }
 
 export interface InvestigationState {
+  /** The investigation the server knows, when this state holds one; the development fixture has none. */
+  readonly id: string | null;
   readonly sourceId: string | null;
   readonly record: InvestigationRecord | null;
+  readonly resultKeys: readonly QueryKey[];
+  readonly nodeRefs: readonly ElementRef[];
+  readonly edgeRefs: readonly EdgeRef[];
+}
+
+export interface LoadedInvestigation {
+  readonly id: string;
+  readonly sourceId: string;
+  readonly record: InvestigationRecord;
   readonly resultKeys: readonly QueryKey[];
   readonly nodeRefs: readonly ElementRef[];
   readonly edgeRefs: readonly EdgeRef[];
@@ -24,13 +35,16 @@ export interface InvestigationState {
 export interface InvestigationStore {
   readonly view: ReadableStore<InvestigationState>;
   bind(sourceId: string): void;
+  /** Replaces the whole state in one update with an investigation that is already read: its record and what it holds. Refused when anything named belongs to another source. */
+  load(state: LoadedInvestigation): void;
+  restore(state: InvestigationState): void;
   describe(record: InvestigationRecord | null): void;
   setLoaded(resultKeys: readonly QueryKey[], nodeRefs: readonly ElementRef[], edgeRefs: readonly EdgeRef[]): void;
 }
 
 const SAVED_AT = z.string().datetime({ offset: true });
 
-const UNBOUND: InvestigationState = { sourceId: null, record: null, resultKeys: [], nodeRefs: [], edgeRefs: [] };
+const UNBOUND: InvestigationState = { id: null, sourceId: null, record: null, resultKeys: [], nodeRefs: [], edgeRefs: [] };
 
 export function createInvestigationStore(): InvestigationStore {
   const store = createStore<InvestigationState>(UNBOUND);
@@ -39,6 +53,15 @@ export function createInvestigationStore(): InvestigationStore {
     bind(sourceId) {
       if (store.getState().sourceId === sourceId) return;
       store.setState({ ...UNBOUND, sourceId });
+    },
+    restore(state) {
+      store.setState(state);
+    },
+    load(state) {
+      const named = [...state.resultKeys.map((key) => key.sourceId), ...state.nodeRefs.map((ref) => ref.sourceId), ...state.edgeRefs.flatMap(sourcesOfEdgeRef)];
+      if (named.some((name) => name !== state.sourceId)) throw new StateError('SOURCE_MISMATCH');
+      if (state.record.save.kind === 'saved' && !SAVED_AT.safeParse(state.record.save.at).success) throw new StateError('INVALID_TIME');
+      store.setState({ ...state });
     },
     describe(record) {
       const current = store.getState();
@@ -56,7 +79,7 @@ export function createInvestigationStore(): InvestigationStore {
       if (sourceId === null) throw new StateError('NO_SOURCE_BOUND');
       const named = [...resultKeys.map((key) => key.sourceId), ...nodeRefs.map((ref) => ref.sourceId), ...edgeRefs.flatMap(sourcesOfEdgeRef)];
       if (named.some((name) => name !== sourceId)) throw new StateError('SOURCE_MISMATCH');
-      store.setState({ sourceId, record, resultKeys, nodeRefs, edgeRefs });
+      store.setState({ id: store.getState().id, sourceId, record, resultKeys, nodeRefs, edgeRefs });
     },
   };
 }

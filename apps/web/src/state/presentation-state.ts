@@ -109,8 +109,12 @@ export interface PresentationActions {
   setViewport(viewport: Viewport): void;
 }
 
+export type PresentationSnapshot = Pick<PresentationState, 'selection' | 'positions' | 'pins' | 'viewport'>;
+
 export interface PresentationStore extends PresentationActions {
   reset(): void;
+  snapshot(): PresentationSnapshot;
+  restore(snapshot: PresentationSnapshot): void;
   replacePins(keys: readonly string[]): void;
   prune(): void;
 }
@@ -214,6 +218,13 @@ export function createPresentationStore(known: KnownElements): PresentationStore
       const focused = current.focused !== undefined && known.isElement(current.focused) ? current.focused : undefined;
       if (selection.length === current.selection.size && positions.length === current.positions.size && pins.length === current.pins.size && focused === current.focused) return;
       store.setState({ ...current, selection: new Set(selection), positions: new Map(positions), pins: new Set(pins), focused });
+    },
+    snapshot() {
+      const { selection, positions, pins, viewport } = store.getState();
+      return { selection, positions, pins, viewport };
+    },
+    restore(snapshot) {
+      store.setState({ ...store.getState(), ...snapshot, walking: false, focused: undefined, moveNote: undefined, openMenu: undefined });
     },
     reset() {
       const { tool, panelSizes, collapsedPanels, legendOpen, sheetOpen } = store.getState();

@@ -96,7 +96,7 @@ export function createFrameSampleState(): ClientState {
     if (kind === 'derived') return { ...common, ref: { sourceId: FRAME_SAMPLE_SOURCE, derived: { ruleId: type, from: fromRef, to: toRef } }, semantics: 'derived' as const, derivation: { ruleId: type, ruleVersion: 1, supportingEdgeRefs: [] } };
     return { ...common, ref: { sourceId: FRAME_SAMPLE_SOURCE, stableId: `sample-r-${index}` }, semantics: 'stored' as const };
   });
-  const key = { sourceId: FRAME_SAMPLE_SOURCE, principalId: 'frame-sample', policyVersion: DEFAULT_POLICY_VERSION, filterHash: DEFAULT_FILTER_HASH, params: FRAME_SAMPLE_MARKER };
+  const key = { sourceId: FRAME_SAMPLE_SOURCE, principalId: 'frame-sample', policyVersion: DEFAULT_POLICY_VERSION, filterHash: DEFAULT_FILTER_HASH, params: FRAME_SAMPLE_MARKER, mask: false };
   state.bindSource(FRAME_SAMPLE_SOURCE);
   state.putResult(key, { sourceId: FRAME_SAMPLE_SOURCE, nodes, edges });
   state.setLoaded([key], nodes.map((node) => node.ref), edges.map((edge): EdgeRef => edge.ref));

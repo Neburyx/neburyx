@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { errorResponseSchema } from './error-response.js';
 import { healthResponseSchema } from './health.js';
+import { nodeSchema } from './graph.js';
+import { investigationResponseSchema, openInvestigationRequestSchema, openInvestigationResponseSchema } from './investigations.js';
 import { meResponseSchema } from './me.js';
 import { readyResponseSchema } from './ready.js';
 import { sourceProfileSchema } from './profile.js';
@@ -14,7 +16,7 @@ export interface OpenApiDocument {
   readonly openapi: string;
   readonly info: { readonly title: string; readonly version: string };
   readonly paths: Readonly<Record<string, unknown>>;
-  readonly components: { readonly schemas: { readonly ErrorResponse: Record<string, unknown>; readonly HealthResponse: Record<string, unknown>; readonly MeResponse: Record<string, unknown>; readonly ReadyResponse: Record<string, unknown>; readonly SourceProfile: Record<string, unknown>; readonly SourceTestReport: Record<string, unknown>; readonly SourcesResponse: Record<string, unknown> } };
+  readonly components: { readonly schemas: { readonly ErrorResponse: Record<string, unknown>; readonly GraphNode: Record<string, unknown>; readonly HealthResponse: Record<string, unknown>; readonly InvestigationResponse: Record<string, unknown>; readonly MeResponse: Record<string, unknown>; readonly OpenInvestigationRequest: Record<string, unknown>; readonly OpenInvestigationResponse: Record<string, unknown>; readonly ReadyResponse: Record<string, unknown>; readonly SourceProfile: Record<string, unknown>; readonly SourceTestReport: Record<string, unknown>; readonly SourcesResponse: Record<string, unknown> } };
 }
 
 function schemaJson(schema: z.ZodType): Record<string, unknown> {
@@ -34,6 +36,10 @@ export function buildOpenApiDocument(
   sourcesResponse: z.ZodType = sourcesResponseSchema,
   sourceProfile: z.ZodType = sourceProfileSchema,
   sourceTestReport: z.ZodType = sourceTestReportSchema,
+  graphNode: z.ZodType = nodeSchema,
+  investigationResponse: z.ZodType = investigationResponseSchema,
+  openInvestigationResponse: z.ZodType = openInvestigationResponseSchema,
+  openInvestigationRequest: z.ZodType = openInvestigationRequestSchema,
 ): OpenApiDocument {
   return {
     openapi: '3.1.0',
@@ -111,6 +117,64 @@ export function buildOpenApiDocument(
           },
         },
       },
+      '/v1/entities/{sourceId}/{entityType}/{stableId}': {
+        get: {
+          operationId: 'getEntity',
+          summary: 'Load one entity of a source, without its neighbors',
+          description:
+            'Reads the node of one entity type with one stable ID through the gate, as the calling principal. The reference travels as three percent-encoded path segments. A browser removes a segment of dots, however it is written, so an entity type or a stable ID made only of dots and tildes is sent with a tilde in front, and the server takes one tilde off such a segment; every other value is sent as it is. A segment that is a lone tilde stands for no value and is refused with INVALID_REQUEST. The node, the audit record and the stored investigation all hold the real value, never the form on the wire. The stable ID is matched as text and, when the text is a canonical 64-bit integer, as that integer too, so a source whose IDs are integers is found. mask=true masks the personal-data fields of the node and any title built from them. The node carries the quality flag duplicate-stable-id when the source holds more than one node with the ID; the node shown is then the first by element ID. The answer says nothing about whether the entity exists in another source.',
+          parameters: [
+            { name: 'sourceId', in: 'path', required: true, schema: { type: 'string' } },
+            { name: 'entityType', in: 'path', required: true, schema: { type: 'string' } },
+            { name: 'stableId', in: 'path', required: true, description: 'At most 200 characters', schema: { type: 'string', minLength: 1 } },
+            { name: 'mask', in: 'query', required: false, description: 'true to mask the personal-data fields', schema: { type: 'string', enum: ['true', 'false'] } },
+          ],
+          responses: {
+            '200': { description: 'The entity', content: jsonBody('GraphNode') },
+            '400': { description: 'A query parameter other than mask was sent, the stable ID is too long, or the entity type is not in the mapping', content: jsonBody('ErrorResponse') },
+            '403': { description: 'The policy does not allow this principal to read the source', content: jsonBody('ErrorResponse') },
+            '404': { description: 'No configured source has this id, or the source holds no such entity', content: jsonBody('ErrorResponse') },
+            '500': { description: 'The read could not be completed', content: jsonBody('ErrorResponse') },
+            '503': { description: 'The source is not available, or is busy', content: jsonBody('ErrorResponse') },
+            '504': { description: 'The source did not answer in time', content: jsonBody('ErrorResponse') },
+          },
+        },
+      },
+      '/v1/investigations': {
+        post: {
+          operationId: 'openInvestigation',
+          summary: 'Open an entity as an investigation',
+          requestBody: { required: true, content: jsonBody('OpenInvestigationRequest') },
+          description:
+            'Reads the starting entity through the gate, so an entity the source does not hold creates nothing, and creates an open investigation with its draft in one step. The body names the source twice, as sourceId and in the entity reference, and a reference to another source is refused before anything is read or written. The title is the display name of the entity type and the stable ID, never built from a personal-data property, and is cut at 200 characters with a final ellipsis when longer. With a caseRef, the caller\'s own open, undeleted investigation with the same source, case reference and starting entity is returned instead (200, created false); without one, every call creates an investigation. An investigation whose source now points at another database is returned without reading the source: sourceState is repointed and there is no entity. mask asks for the personal-data fields of the returned entity to be masked.',
+          responses: {
+            '200': { description: 'An existing investigation was resumed', headers: { ETag: { description: "The investigation's version as a strong tag", schema: { type: 'string' } } }, content: jsonBody('OpenInvestigationResponse') },
+            '201': { description: 'A new investigation and its draft', headers: { ETag: { description: "The investigation's version as a strong tag", schema: { type: 'string' } } }, content: jsonBody('OpenInvestigationResponse') },
+            '400': { description: 'The body or the query is not valid, the entity type is not in the mapping, or the entity names another source than the request', content: jsonBody('ErrorResponse') },
+            '403': { description: 'The policy does not allow this principal to read the source', content: jsonBody('ErrorResponse') },
+            '404': { description: 'No configured source has this id, or the source holds no such entity', content: jsonBody('ErrorResponse') },
+            '415': { description: 'The body is not JSON', content: jsonBody('ErrorResponse') },
+            '500': { description: 'The investigation could not be written', content: jsonBody('ErrorResponse') },
+            '503': { description: 'The source is not available, or is busy', content: jsonBody('ErrorResponse') },
+            '504': { description: 'The source did not answer in time', content: jsonBody('ErrorResponse') },
+          },
+        },
+      },
+      '/v1/investigations/{id}': {
+        get: {
+          operationId: 'getInvestigation',
+          summary: 'An investigation of the caller and the caller\'s draft of it',
+          description:
+            'Reads Postgres only; no source is read. sourceState says whether the source is available as it was, is no longer in the configuration (removed) or now points at another database (repointed). An identifier that does not exist, is not a UUID, belongs to another user or is deleted gives the same 404.',
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+          responses: {
+            '200': { description: 'The investigation and its draft', headers: { ETag: { description: "The investigation's version as a strong tag", schema: { type: 'string' } } }, content: jsonBody('InvestigationResponse') },
+            '400': { description: 'A query parameter was sent', content: jsonBody('ErrorResponse') },
+            '404': { description: 'No such investigation of this caller', content: jsonBody('ErrorResponse') },
+            '500': { description: 'The investigation could not be read', content: jsonBody('ErrorResponse') },
+          },
+        },
+      },
       '/v1/sources': {
         get: {
           operationId: 'listSources',
@@ -126,7 +190,7 @@ export function buildOpenApiDocument(
       },
     },
     components: {
-      schemas: { ErrorResponse: schemaJson(errorResponse), HealthResponse: schemaJson(healthResponse), MeResponse: schemaJson(meResponse), ReadyResponse: schemaJson(readyResponse), SourceProfile: schemaJson(sourceProfile), SourceTestReport: schemaJson(sourceTestReport), SourcesResponse: schemaJson(sourcesResponse) },
+      schemas: { ErrorResponse: schemaJson(errorResponse), GraphNode: schemaJson(graphNode), HealthResponse: schemaJson(healthResponse), InvestigationResponse: schemaJson(investigationResponse), MeResponse: schemaJson(meResponse), OpenInvestigationRequest: schemaJson(openInvestigationRequest), OpenInvestigationResponse: schemaJson(openInvestigationResponse), ReadyResponse: schemaJson(readyResponse), SourceProfile: schemaJson(sourceProfile), SourceTestReport: schemaJson(sourceTestReport), SourcesResponse: schemaJson(sourcesResponse) },
     },
   };
 }

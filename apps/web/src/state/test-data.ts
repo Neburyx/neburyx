@@ -26,7 +26,7 @@ export function edge(sourceId: string, stableId: string, from: string, to: strin
 }
 
 export function key(sourceId: string, params = 'seed-1'): QueryKey {
-  return { sourceId, principalId: 'principal-1', policyVersion: 'community', filterHash: 'none', params };
+  return { sourceId, principalId: 'principal-1', policyVersion: 'community', filterHash: 'none', params, mask: false };
 }
 
 export function result(sourceId: string, nodeIds: readonly string[], edges: ReadonlyArray<readonly [string, string, string]> = []): GraphResult {

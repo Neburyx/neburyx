@@ -8,6 +8,9 @@ import { registerErrorRoutes } from './testing/error-routes.js';
 import { makeWebRoot } from './testing/web-root.js';
 import { memoryAppStore } from './testing/app-store.js';
 import { fakeSourceTester } from './testing/source-tester.js';
+import { entityRows, plainNode } from './testing/entity-fixtures.js';
+import { TestExecutor } from './testing/gate.js';
+import { testSourceGate } from './testing/source-gate.js';
 import { parseMapping } from './mapping/load.js';
 import { baseSource, fileOf } from './testing/mapping.js';
 
@@ -17,6 +20,12 @@ afterAll(() => rmSync(webRoot, { recursive: true, force: true }));
 async function app(): ReturnType<typeof buildApp> {
   const mapping = parseMapping(fileOf(baseSource({ id: 'demo' })), 'neburyx.yaml');
   return buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store: memoryAppStore(), mapping, sourceTester: fakeSourceTester(mapping).tester });
+}
+
+async function productionApp(): ReturnType<typeof buildApp> {
+  const mapping = parseMapping(fileOf(baseSource({ id: 'demo' })), 'neburyx.yaml');
+  const executor = new TestExecutor(() => Promise.resolve(entityRows(plainNode(['NodeA'], { id: 'A-1' }))));
+  return buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store: memoryAppStore(), mapping, sourceTester: fakeSourceTester(mapping).tester, gate: testSourceGate(mapping, { executor }).gate });
 }
 
 const committed = loadCommittedDocument();
@@ -219,6 +228,17 @@ describe('a document the check cannot trust', () => {
     ]);
   });
 
+  it('validates a uuid format and reports a value that is not a UUID', async () => {
+    const server = await app();
+    server.get('/v1/test/thing', async () => ({ name: 'x' }));
+    server.get('/v1/test/ref', async () => ({ id: '0192f000-0000-7000-8000-000000000001' }));
+    server.get('/v1/test/stamp', async () => ({ id: 'not-a-uuid' }));
+    const identifier = { type: 'object', required: ['id'], properties: { id: { type: 'string', format: 'uuid' } }, additionalProperties: false };
+    const respond = (schema: unknown): Record<string, unknown> => ({ get: { responses: { '200': { content: { 'application/json': { schema } } } } } });
+    const document = fixtureDocument({ '/v1/test/ref': respond(identifier), '/v1/test/stamp': respond(identifier) });
+    expect(await checkOperations(server, document)).toEqual([{ route: 'GET /v1/test/stamp', problem: 'the response does not match the document' }]);
+  });
+
   it.each(['toString', 'constructor', '__proto__', 'hasOwnProperty', 'valueOf'])('still refuses the unsupported format named %s', async (format) => {
     const server = await app();
     server.get('/v1/test/thing', async () => ({ name: 'x' }));
@@ -402,6 +422,15 @@ describe('the running API against the committed openapi.json', () => {
   const productionCases: readonly ErrorCase[] = [
     { method: 'GET', url: '/v1/anything' },
     { method: 'GET', url: '/v1/entities/ACC-12345/%zz' },
+    { method: 'GET', url: '/v1/entities/nope/node_a/A-1' },
+    { method: 'GET', url: '/v1/entities/demo/node_a/A-1?limit=1' },
+    { method: 'GET', url: '/v1/entities/demo/not_a_type/A-1' },
+    { method: 'GET', url: '/v1/entities/demo/node_a/%zz' },
+    { method: 'POST', url: '/v1/investigations', payload: '{}', headers: { 'content-type': 'application/json' } },
+    { method: 'POST', url: '/v1/investigations', payload: JSON.stringify({ sourceId: 'demo', entity: { sourceId: 'other', entityType: 'node_a', stableId: 'A-1' } }), headers: { 'content-type': 'application/json' } },
+    { method: 'POST', url: '/v1/investigations', payload: 'x', headers: { 'content-type': 'application/x-unsupported' } },
+    { method: 'GET', url: '/v1/investigations/not-a-uuid' },
+    { method: 'GET', url: '/v1/investigations/0192f000-0000-7000-8000-000000000001?x=1' },
     { method: 'GET', url: '/v1/sources/nope/profile' },
     { method: 'GET', url: '/v1/sources/%ZZ/profile' },
     { method: 'GET', url: '/v1/sources/demo/profile?limit=1' },
@@ -414,7 +443,7 @@ describe('the running API against the committed openapi.json', () => {
   ];
 
   it('matches for the operations it documents and for the errors it produces', async () => {
-    expect(await checkContract(await app(), loadCommittedDocument(), productionCases)).toEqual([]);
+    expect(await checkContract(await productionApp(), loadCommittedDocument(), productionCases)).toEqual([]);
   });
 
   it('matches for every error case of the error model, including thrown errors and framework failures', async () => {

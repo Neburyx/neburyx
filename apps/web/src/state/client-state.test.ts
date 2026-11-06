@@ -251,7 +251,7 @@ describe('binding another source', () => {
     state.bindSource('source-b');
     expect(state.server.get(key('source-a'))).toBeUndefined();
     expect(state.server.getState().results.size).toBe(0);
-    expect(state.investigation.getState()).toEqual({ sourceId: 'source-b', record: null, resultKeys: [], nodeRefs: [], edgeRefs: [] });
+    expect(state.investigation.getState()).toEqual({ id: null, sourceId: 'source-b', record: null, resultKeys: [], nodeRefs: [], edgeRefs: [] });
     expect(state.presentation.view.getState().selection.size).toBe(0);
     expect(state.loadedGraph().entities.value).toBe(0);
   });

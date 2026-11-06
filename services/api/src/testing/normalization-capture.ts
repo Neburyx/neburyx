@@ -7,7 +7,8 @@ import { forwardTo } from '@neburyx/test-neo4j';
 import { z } from 'zod';
 import { assembleGate } from '../gate/assemble.js';
 import { createTemplateCatalog, type TemplateDefinition } from '../gate/catalog.js';
-import type { SystemRunner } from '../gate/types.js';
+import { entityLoadTemplate } from '../gate/templates/entity-load.js';
+import type { Gate, SystemRunner } from '../gate/types.js';
 import type { SourceModel } from '../mapping/model.js';
 import { communitySeams } from '../seams/community-seams.js';
 import { createNeo4jExecutor, type Neo4jExecutor } from '../sources/executor.js';
@@ -79,6 +80,8 @@ export interface PackServer {
   readonly server: RunningNeo4j;
   readonly source: SourceModel;
   readonly system: SystemRunner;
+  /** The user gate over the same source, with the capture templates and the entity read in its catalog. */
+  readonly gate: Gate;
   close(): Promise<void>;
 }
 
@@ -105,15 +108,15 @@ export async function startPackServers(): Promise<PackServer[]> {
     const gateMapping = { sources: [source] };
     const executor: Neo4jExecutor = createNeo4jExecutor({ sources: gateMapping.sources, env: { DEMO_NEO4J_USER: server.reader.user, DEMO_NEO4J_PASSWORD: server.reader.password, ...envFor(server) }, logger: { warn: () => undefined } });
     const defaults = communitySeams();
-    const { system } = assembleGate({
+    const { gate, system } = assembleGate({
       usability: ALWAYS_USABLE,
       mapping: gateMapping,
       seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit },
       executor,
       logger: { warn: () => undefined },
-      catalog: createTemplateCatalog({ templates: CAPTURE_TEMPLATES }),
+      catalog: createTemplateCatalog({ templates: [...CAPTURE_TEMPLATES, entityLoadTemplate] }),
     });
-    opened.push({ pack, server, source, system, close: () => executor.close() });
+    opened.push({ pack, server, source, system, gate, close: () => executor.close() });
   }
   return opened;
 }

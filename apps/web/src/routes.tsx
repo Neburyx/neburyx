@@ -12,6 +12,7 @@ import { createTestRuns } from './sources/test-runs.js';
 import { TestRunsProvider } from './sources/test-runs-context.js';
 import { createShellData, ShellDataProvider } from './shell/shell-data.js';
 import type { ClientState } from './state/client-state.js';
+import { ExploreInvestigation } from './investigations/explore-investigation.js';
 import { WorkspaceShell } from './workspace/workspace-shell.js';
 
 const NOT_BUILT = 'This screen is not built yet.';
@@ -43,6 +44,13 @@ function developmentRoutes(client: ApiClient): RouteObject[] {
       lazy: async () => {
         const { FixturePage } = await import('./dev/fixture-page.js');
         return { element: <FixturePage client={client} /> };
+      },
+    },
+    {
+      path: 'dev/open-entity',
+      lazy: async () => {
+        const { OpenEntityPage } = await import('./dev/open-entity-page.js');
+        return { element: <OpenEntityPage client={client} /> };
       },
     },
   ];
@@ -92,6 +100,7 @@ export function appRoutes(client: ApiClient, state: ClientState): RouteObject[] 
           ],
         },
         { path: EXPLORE_PATH, element: <WorkspaceShell /> },
+        { path: `${EXPLORE_PATH}/:investigationId`, element: <ExploreInvestigation client={client} /> },
         ...workspaceDevelopmentRoutes(),
       ],
     },

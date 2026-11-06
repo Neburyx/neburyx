@@ -1,12 +1,18 @@
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import type { AddressInfo } from 'node:net';
+import type { Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { meResponseSchema, sourceProfileSchema, sourcesResponseSchema } from '@neburyx/contracts';
+import { investigationResponseSchema, meResponseSchema, openInvestigationResponseSchema, sourceProfileSchema, sourcesResponseSchema } from '@neburyx/contracts';
 import { createSupportServer } from './support-server.ts';
 
 const committed: unknown = JSON.parse(readFileSync(new URL('../fixtures/profile.json', import.meta.url), 'utf8'));
+
+function baseOf(server: Server): string {
+  const address = server.address();
+  if (address === null || typeof address === 'string') throw new Error('the server is not listening on a port');
+  return `http://127.0.0.1:${address.port}`;
+}
 
 let folder = '';
 let closing: (() => Promise<void>) | undefined;
@@ -28,7 +34,7 @@ async function start(): Promise<string> {
   const server = createSupportServer({ root: folder, profile: { sourceId: 'demo' } });
   await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
   closing = () => new Promise<void>((done) => void server.close(() => done()));
-  return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  return baseOf(server);
 }
 
 describe('the support server', () => {
@@ -75,10 +81,68 @@ describe('the support server', () => {
     const server = createSupportServer({ root: folder, profile });
     await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
     closing = () => new Promise<void>((done) => void server.close(() => done()));
-    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    const base = baseOf(server);
     expect(meResponseSchema.safeParse(await (await fetch(`${base}/v1/me`)).json()).success).toBe(true);
     const sources = sourcesResponseSchema.parse(await (await fetch(`${base}/v1/sources`)).json());
     expect(sources.items.map((item) => item.id)).toEqual([profile.sourceId]);
     expect(sourceProfileSchema.parse(await (await fetch(`${base}/v1/sources/${profile.sourceId}/profile`)).json())).toEqual(profile);
+  });
+});
+
+describe('the investigations the support server holds', () => {
+  async function startWithTypes(): Promise<string> {
+    const server = createSupportServer({ root: folder, profile: { sourceId: 'demo', entityTypes: [{ type: 'thing' }] } });
+    await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
+    closing = () => new Promise<void>((done) => void server.close(() => done()));
+    return baseOf(server);
+  }
+  const open = (base: string, body: unknown) => fetch(`${base}/v1/investigations`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  const request = (extra: Record<string, unknown> = {}) => ({ sourceId: 'demo', entity: { sourceId: 'demo', entityType: 'thing', stableId: 'T-1' }, ...extra });
+
+  it('opens an investigation, reads it back, and reads the entity', async () => {
+    const base = await startWithTypes();
+    const reply = await open(base, request());
+    expect(reply.status).toBe(201);
+    const opened = openInvestigationResponseSchema.parse(await reply.json());
+    expect(opened).toMatchObject({ created: true, entity: { ref: { sourceId: 'demo', entityType: 'thing', stableId: 'T-1' } } });
+    expect(investigationResponseSchema.parse(await (await fetch(`${base}/v1/investigations/${opened.investigation.id}`)).json())).toMatchObject({ investigation: { id: opened.investigation.id, sourceState: 'available' } });
+    expect(await (await fetch(`${base}/v1/entities/demo/thing/T-1`)).json()).toMatchObject({ ref: { stableId: 'T-1' } });
+  });
+
+  it('resumes the investigation of the same case reference, and makes a new one without it', async () => {
+    const base = await startWithTypes();
+    const first = openInvestigationResponseSchema.parse(await (await open(base, request({ caseRef: 'CASE-1' }))).json());
+    const again = await open(base, request({ caseRef: 'CASE-1' }));
+    expect(again.status).toBe(200);
+    expect(await again.json()).toMatchObject({ created: false, investigation: { id: first.investigation.id } });
+    const a = openInvestigationResponseSchema.parse(await (await open(base, request())).json());
+    const b = openInvestigationResponseSchema.parse(await (await open(base, request())).json());
+    expect(a.investigation.id).not.toBe(b.investigation.id);
+  });
+
+  it('answers a new investigation with a case reference that marks it repointed as available with its entity, and the same one resumed and read back as repointed without an entity', async () => {
+    const base = await startWithTypes();
+    const created = await open(base, request({ caseRef: 'repointed-1' }));
+    expect(created.status).toBe(201);
+    const opened = openInvestigationResponseSchema.parse(await created.json());
+    expect(opened).toMatchObject({ created: true, investigation: { sourceState: 'available' }, entity: { ref: { stableId: 'T-1' } } });
+    const resumed = await open(base, request({ caseRef: 'repointed-1' }));
+    expect(resumed.status).toBe(200);
+    const again = openInvestigationResponseSchema.parse(await resumed.json());
+    expect(again).toMatchObject({ created: false, investigation: { sourceState: 'repointed' } });
+    expect(again).not.toHaveProperty('entity');
+    expect(investigationResponseSchema.parse(await (await fetch(`${base}/v1/investigations/${opened.investigation.id}`)).json()).investigation.sourceState).toBe('repointed');
+  });
+
+  it('answers 404 for an entity named missing, an unknown type and an unknown investigation, and 400 for a request that names another source', async () => {
+    const base = await startWithTypes();
+    expect((await open(base, request({ entity: { sourceId: 'demo', entityType: 'thing', stableId: 'missing' } }))).status).toBe(404);
+    expect((await open(base, request({ entity: { sourceId: 'demo', entityType: 'other', stableId: 'T-1' } }))).status).toBe(404);
+    expect((await open(base, request({ entity: { sourceId: 'elsewhere', entityType: 'thing', stableId: 'T-1' } }))).status).toBe(400);
+    expect((await open(base, 'not an object')).status).toBe(400);
+    expect((await fetch(`${base}/v1/investigations/0192f000-0000-7000-8000-0000000000ee`)).status).toBe(404);
+    expect((await fetch(`${base}/v1/entities/demo/thing/missing`)).status).toBe(404);
+    expect((await fetch(`${base}/v1/entities/demo/thing/~`)).status).toBe(400);
+    expect(await (await fetch(`${base}/v1/entities/demo/thing/~..`)).json()).toMatchObject({ ref: { stableId: '..' } });
   });
 });

@@ -6,10 +6,12 @@ function sourceName(current: CurrentSource): string | undefined {
   return current.kind === 'bound' || current.kind === 'only' ? `${current.source.alias} · read-only` : undefined;
 }
 
-export function PageHeading({ title, description }: { readonly title: string; readonly description: string }) {
+/** `source` replaces the line about the source in view: a name to show in its place, or `null` for a page that is about no source the shell knows, so it shows none and no Synthetic data badge. */
+export function PageHeading({ title, description, source }: { readonly title: string; readonly description: string; readonly source?: string | null }) {
   const identity = answeredData(useShellData().me);
-  const { current, showsSyntheticBadge: synthetic } = useCurrentSource();
-  const name = current === undefined ? undefined : sourceName(current);
+  const { current, showsSyntheticBadge } = useCurrentSource();
+  const synthetic = source === undefined && showsSyntheticBadge;
+  const name = source !== undefined ? (source ?? undefined) : current === undefined ? undefined : sourceName(current);
   return (
     <header className="page-heading">
       <div className="page-title">

@@ -9,10 +9,12 @@ export interface QueryKey {
   readonly policyVersion: string;
   readonly filterHash: string;
   readonly params: string;
+  /** Whether the read asked for the personal-data fields to be masked: a masked result is never read for an unmasked ask, nor the other way round. */
+  readonly mask: boolean;
 }
 
 export function queryKeyText(key: QueryKey): string {
-  return JSON.stringify([key.sourceId, key.principalId, key.policyVersion, key.filterHash, key.params]);
+  return JSON.stringify([key.sourceId, key.principalId, key.policyVersion, key.filterHash, key.params, key.mask]);
 }
 
 /** Node keys and relationship keys start with different tags, so one can never equal the other. */
