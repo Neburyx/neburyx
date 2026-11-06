@@ -14,6 +14,7 @@ import { baseSource, fileOf } from '../testing/mapping.js';
 import { testSourceGate } from '../testing/source-gate.js';
 import { makeWebRoot } from '../testing/web-root.js';
 import { initialDraftDocuments } from './draft.js';
+import { withOnlineIndexes } from '../testing/search-fixtures.js';
 
 const webRoot = makeWebRoot();
 afterAll(() => rmSync(webRoot, { recursive: true, force: true }));
@@ -49,7 +50,7 @@ function row(overrides: Partial<InvestigationRow> = {}): InvestigationRow {
 }
 
 async function started(answer: ExecuteOutcome = entityRows(WIDGET), store: MemoryAppStore = memoryAppStore(), appMapping = mapping) {
-  const executor = new TestExecutor(() => Promise.resolve(answer));
+  const executor = new TestExecutor(withOnlineIndexes(mapping.sources[0] ?? (() => { throw new Error('the mapping has no source'); })(), () => Promise.resolve(answer)));
   const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store, mapping: appMapping, gate: testSourceGate(appMapping, { executor }).gate });
   return { app, store, executor };
 }

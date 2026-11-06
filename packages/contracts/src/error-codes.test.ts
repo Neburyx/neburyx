@@ -49,4 +49,10 @@ describe('ErrorResponse', () => {
     expect(errorResponseSchema.safeParse({ error: { ...budget, details: { maxPage: 50 } } }).success).toBe(true);
     expect(errorResponseSchema.safeParse({ error: budget }).success).toBe(true);
   });
+
+  it('accepts the timeout in the details of a timed-out query and in no other code', () => {
+    const timeout = { code: 'QUERY_TIMEOUT', message: 'The source did not answer in time. Try again or refine your filters.', retryable: true, traceId: 'tr-1' };
+    expect(errorResponseSchema.safeParse({ error: { ...timeout, details: { timeoutMs: 5000 } } }).success).toBe(true);
+    expect(errorResponseSchema.safeParse({ error: { ...timeout, code: 'ACCESS_DENIED', details: { timeoutMs: 5000 } } }).success).toBe(false);
+  });
 });

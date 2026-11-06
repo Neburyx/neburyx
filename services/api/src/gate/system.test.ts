@@ -85,7 +85,8 @@ describe('a user running a system template', () => {
 describe('createSourceGate', () => {
   it('returns a Gate that has no member that runs as the system principal, a separate system runner, and a close', async () => {
     const parts = createSourceGate({ usability: ALWAYS_USABLE, mapping, env: {}, seams: auditing().seams, logger: { warn: () => undefined } });
-    expect(Object.keys(parts).sort()).toEqual(['close', 'gate', 'system']);
+    expect(Object.keys(parts).sort()).toEqual(['close', 'gate', 'indexes', 'system']);
+    expect(Object.keys(parts.indexes)).toEqual(['read']);
     expect(Object.keys(parts.gate)).toEqual(['run']);
     expect(Object.keys(parts.system)).toEqual(['run']);
     await parts.close();

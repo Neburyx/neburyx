@@ -3,11 +3,12 @@ import { AdapterError } from '../sources/errors.js';
 import type { AuditEvent } from '../seams/seams.js';
 import { auditResultFor, FALLBACK_AUDIT_ACTION } from './audit.js';
 import { authorizeRequest } from './authorize.js';
-import { executeRead } from './execute.js';
+import { executeRead, type ExecuteResult } from './execute.js';
+import { isMet, readIndexSnapshot } from './index-guard.js';
 import { exhaustive } from './exhaustive.js';
 import type { GateDeps } from './deps.js';
 import { SYSTEM_PRINCIPAL } from './system-principal.js';
-import type { Gate, GateContext, GatePage, GateRequest, GateStage, SystemRunner } from './types.js';
+import type { Gate, GateContext, IndexReader, GatePage, GateRequest, GateStage, Params, SystemRunner, Template } from './types.js';
 import { findTemplate, validateRequest } from './validate.js';
 
 interface Progress {
@@ -43,17 +44,31 @@ function resolveContext(deps: GateDeps, request: GateRequest, system: boolean): 
   };
 }
 
+/** Finds out, before the data read, that the indexes a template needs are online: from the snapshot the caller gave or from one fresh read of the schema; a refusal when one is not. */
+async function guardIndexes(deps: GateDeps, request: GateRequest, context: GateContext, template: Template, params: Params): Promise<void> {
+  const needs = template.indexNeeds?.(params, context.allowlist) ?? [];
+  if (needs.length === 0) return;
+  if (request.indexes === 'unverified') return;
+  if (request.indexes !== undefined && 'failure' in request.indexes) throw request.indexes.failure;
+  const given = request.indexes !== undefined && request.indexes.sourceId === request.sourceId ? request.indexes : undefined;
+  const snapshot = given ?? (await readIndexSnapshot((read) => runGate(deps, { ...read, principal: SYSTEM_PRINCIPAL }, true), { traceId: request.traceId, sourceId: request.sourceId }));
+  if (snapshot === 'unverified') return;
+  if (needs.some((need) => !isMet(snapshot, need, context.allowlist))) throw new AppError('SOURCE_UNAVAILABLE', undefined, 'index-unavailable');
+}
+
 async function runStages(deps: GateDeps, request: GateRequest, system: boolean, progress: Progress): Promise<GatePage> {
   const context = await inStage(deps, progress, 'resolve', () => resolveContext(deps, request, system));
-  const { template, rendered, binding } = await inStage(deps, progress, 'validate', () => {
+  const { template, params, rendered, binding } = await inStage(deps, progress, 'validate', () => {
     const found = findTemplate(deps.catalog, request);
     progress.action = found.auditAction;
     return validateRequest(deps.catalog, found, request, context, deps.cursors);
   });
   await inStage(deps, progress, 'authorize', () => authorizeRequest(deps.seams.policy, deps.usability, context, template));
-  const result = await inStage(deps, progress, 'execute', () =>
-    executeRead({ coordinator: deps.seams.coordinator, executor: deps.executor, clock: deps.clock, logger: deps.logger }, context, template, rendered, request.limit),
-  );
+  const result = await inStage(deps, progress, 'execute', async (): Promise<ExecuteResult> => {
+    if (template.readsNothing?.(params) === true) return { rows: [], hasMore: false };
+    if (!system) await guardIndexes(deps, request, context, template, params);
+    return executeRead({ coordinator: deps.seams.coordinator, executor: deps.executor, clock: deps.clock, logger: deps.logger }, context, template, rendered, request.limit);
+  });
   const normalized = await inStage(deps, progress, 'normalize', () => {
     const items = template.normalize(result.rows, result.plan, { sourceId: context.sourceId, hasMore: result.hasMore, model: context.model });
     // the page after this one, when there is one: the template says where it starts and the gate signs it for this request
@@ -117,9 +132,16 @@ async function runGate(deps: GateDeps, request: GateRequest, system: boolean): P
   }
 }
 
-export function createGates(deps: GateDeps): { readonly gate: Gate; readonly system: SystemRunner } {
+export function createGates(deps: GateDeps): { readonly gate: Gate; readonly system: SystemRunner; readonly indexes: IndexReader } {
   return {
     gate: { run: (request) => runGate(deps, request, false) },
+    indexes: {
+      async read(request) {
+        const decision = await deps.seams.policy.authorizeSource({ principal: request.principal, sourceId: request.sourceId });
+        if (!decision.allowed || !deps.usability.isUsable(request.sourceId)) return 'unverified';
+        return readIndexSnapshot((read) => runGate(deps, { ...read, principal: SYSTEM_PRINCIPAL }, true), request);
+      },
+    },
     system: {
       run: (request) =>
         runGate(deps, { traceId: request.traceId, principal: SYSTEM_PRINCIPAL, sourceId: request.sourceId, templateId: request.templateId, params: request.params, limit: request.limit }, true),

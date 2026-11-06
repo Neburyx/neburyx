@@ -14,6 +14,7 @@ import { testSourceGate } from '../testing/source-gate.js';
 import { makeWebRoot } from '../testing/web-root.js';
 import type { ExecuteOutcome } from '../gate/executor.js';
 import type { SourceUsability } from '../source-test/usability.js';
+import { withOnlineIndexes } from '../testing/search-fixtures.js';
 
 const webRoot = makeWebRoot();
 afterAll(() => rmSync(webRoot, { recursive: true, force: true }));
@@ -44,7 +45,7 @@ interface Options {
 
 async function started(options: Options = {}) {
   const mapping = options.mapping ?? mappingWith();
-  const executor = new TestExecutor(() => Promise.resolve(options.answer ?? entityRows()));
+  const executor = new TestExecutor(withOnlineIndexes(mapping.sources[0] ?? (() => { throw new Error('the mapping has no source'); })(), () => Promise.resolve(options.answer ?? entityRows())));
   const events: AuditEvent[] = [];
   const defaults = communitySeams();
   const parts = testSourceGate(mapping, {
@@ -74,8 +75,9 @@ describe('a read that cannot be answered', () => {
     const response = await app.inject({ method: 'GET', url: '/v1/entities/demo/widget/W-1' });
     expect(response.statusCode).toBe(status);
     expect(response.json().error).toMatchObject({ code, retryable: true });
-    expect(events).toHaveLength(1);
-    expect(events[0]).toMatchObject({ action: 'entity.load', result: 'failed' });
+    const loads = events.filter((event) => event.action === 'entity.load');
+    expect(loads).toHaveLength(1);
+    expect(loads[0]).toMatchObject({ result: 'failed' });
     await app.close();
   });
 

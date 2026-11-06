@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { hasStrayMarkerCharacter, markersOf } from './render.js';
+import { BRANCH_MARKER, hasStrayMarkerCharacter, markersOf } from './render.js';
 import { GATE_PARAMETERS, type Template, type TemplateCatalog } from './types.js';
 
 export type TemplateDefinition = Omit<Template, 'integerParameters'>;
@@ -51,7 +51,7 @@ function checkGateParameters(definition: TemplateDefinition, shape: Shape): void
 
 function checkMarkers(definition: TemplateDefinition, shape: Shape): void {
   if (hasStrayMarkerCharacter(definition.cypher)) throw new CatalogError(definition.id, 'has Cypher with an @ that is not a marker');
-  const used = markersOf(definition.cypher);
+  const used = markersOf(definition.cypher).filter((marker) => marker.kind !== 'searchBranches');
   for (const marker of used) {
     if (marker.kind === 'stableId' && !definition.entityParams.includes(marker.name)) throw new CatalogError(definition.id, 'has a stable id marker that no declared entity parameter backs');
   }
@@ -64,6 +64,30 @@ function checkMarkers(definition: TemplateDefinition, shape: Shape): void {
     if (!used.some((marker) => marker.kind === entry.kind && marker.name === entry.name)) throw new CatalogError(definition.id, `declares ${article(entry.kind)} ${entry.kind} marker its Cypher never uses`);
     if (!shape.properties.has(entry.name)) throw new CatalogError(definition.id, `declares a marker parameter its schema does not have`);
   }
+}
+
+/**
+ * The search template's own declaration: it declares its search branches exactly when its Cypher uses the one `@searchBranches` marker for the list parameter its schema has; each branch text holds only the
+ * two placeholders and its own `LIMIT $limit + 1`; the combined result is cut by an enclosing `LIMIT $limit + 1`; and `usedProperties` names every target, so a masked request is checked.
+ */
+function checkSearchBranches(definition: TemplateDefinition, shape: Shape): void {
+  const used = markersOf(definition.cypher).filter((marker) => marker.kind === 'searchBranches');
+  const branches = definition.searchBranches;
+  if (branches === undefined) {
+    if (used.length > 0) throw new CatalogError(definition.id, 'uses the search branch marker without declaring search branches');
+    return;
+  }
+  if (used.length !== 1 || used[0]?.name !== branches.param) throw new CatalogError(definition.id, 'declares search branches and does not use its branch marker exactly once');
+  if (shape.properties.get(branches.param) !== 'array') throw new CatalogError(definition.id, 'declares search branches for a parameter its schema does not have as a list');
+  for (const text of [branches.value, branches.text]) {
+    const placeholders = [...text.matchAll(BRANCH_MARKER)].map((match) => match[1]);
+    if (!placeholders.includes('label') || !placeholders.includes('property') || text.replace(BRANCH_MARKER, '').includes('@')) {
+      throw new CatalogError(definition.id, 'has a branch text that does not hold exactly the label and property placeholders');
+    }
+    if (!PAGED_LIMIT.test(text)) throw new CatalogError(definition.id, 'has a branch text with no LIMIT $limit + 1 of its own');
+  }
+  if (!PAGED_LIMIT.test(definition.cypher)) throw new CatalogError(definition.id, 'has search branches and its Cypher has no enclosing LIMIT $limit + 1');
+  if (definition.usedProperties === undefined) throw new CatalogError(definition.id, 'has search branches and does not name the properties it uses');
 }
 
 const PROFILE_PREFIX = 'PROFILE ';
@@ -82,6 +106,7 @@ function build(definition: TemplateDefinition): Template {
   if (definition.paged && !PAGED_LIMIT.test(definition.cypher)) throw new CatalogError(definition.id, 'is paged and its Cypher has no LIMIT $limit + 1');
   checkProfile(definition);
   checkMarkers(definition, shape);
+  checkSearchBranches(definition, shape);
   checkGateParameters(definition, shape);
   const integerParameters = [...shape.properties].flatMap(([name, type]) => (type === 'integer' ? [name] : []));
   return { ...definition, integerParameters };

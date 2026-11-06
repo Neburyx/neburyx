@@ -33,6 +33,10 @@ export const entityLoadTemplate: TemplateDefinition = {
   paged: false,
   entityParams: ['entityType'],
   relationshipParams: [],
+  indexNeeds: (params, allowlist) => {
+    const property = allowlist.stableIds.get(String(params['entityType']));
+    return property === undefined ? [] : [{ entityType: String(params['entityType']), property, accepts: 'value' }];
+  },
   refsOf: () => [],
   normalize,
 };

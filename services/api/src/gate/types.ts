@@ -1,7 +1,9 @@
 import type { ElementRef } from '@neburyx/contracts';
 import type { ZodType } from 'zod';
 import type { CursorPosition } from './cursor/codec.js';
+import type { IndexEntry } from './templates/schema-indexes.js';
 import type { NormalizeContext, NormalizeModel } from './normalize/model.js';
+import type { AppError } from '../errors.js';
 import type { Principal } from '../seams/seams.js';
 
 export const GATE_STAGES = ['resolve', 'validate', 'authorize', 'execute', 'normalize', 'redact', 'audit'] as const;
@@ -14,6 +16,24 @@ export type Row = Readonly<Record<string, unknown>>;
 export type Item = Readonly<Record<string, unknown>>;
 
 export type TemplateScope = 'system' | 'user';
+
+/** The failure of the caller's read of the schema (a timeout, a busy or unavailable source, an answer that cannot be read or is truncated), handed to the run so that the run fails with it and is audited. */
+export interface IndexReadFailure {
+  readonly failure: AppError;
+}
+
+/** The indexes of one source as one read of its schema found them. */
+export interface IndexSnapshot {
+  readonly sourceId: string;
+  readonly entries: readonly IndexEntry[];
+}
+
+/** An index a read needs: of an entity type's property, a RANGE index or constraint (`value`), or one of any kind (`any`, a TEXT index is enough). */
+export interface IndexNeed {
+  readonly entityType: string;
+  readonly property: string;
+  readonly accepts: 'value' | 'any';
+}
 
 /** One operator of the plan that a profiled read returns: its name, the server's description of it and the db hits it made. */
 export interface PlanOperator {
@@ -50,6 +70,16 @@ export interface Template {
   readonly sort?: string;
   /** The properties of entity types that a request searches, filters or sorts by; a request that asks for masking may not use a `pii` one. A template without it uses none. */
   usedProperties?(params: Params): readonly { readonly entityType: string; readonly property: string }[];
+  /**
+   * The search template's own declaration, for no other template: a statement with one branch for each target of a list parameter. The Cypher holds `@searchBranches(<param>)`,
+   * and the gate writes in, for each target, the branch text of its match form (`value` or `text`) with `@label` and `@property` replaced by the quoted names, joined by `UNION`.
+   * Each target is checked against the source's search allowlist.
+   */
+  readonly searchBranches?: { readonly param: string; readonly value: string; readonly text: string };
+  /** The indexes this read needs, so that the gate can find out before the data read that they are there; a template that names none is not guarded. */
+  indexNeeds?(params: Params, allowlist: SourceAllowlist): readonly IndexNeed[];
+  /** True for a request that has nothing to read, such as an empty list of targets: the gate runs every stage but the read, and the answer has no row. */
+  readsNothing?(params: Params): boolean;
   /** Where the page after this one starts, from the rows of this page; the gate signs it into the page's `nextCursor`. Only a paged template has one. */
   nextPosition?(rows: readonly Row[], limit: number): CursorPosition | undefined;
   refsOf(params: Params): readonly ElementRef[];
@@ -61,6 +91,8 @@ export interface SourceAllowlist {
   readonly relationshipTypes: ReadonlySet<string>;
   /** The `stable_id` property of each entity type, by type. */
   readonly stableIds: ReadonlyMap<string, string>;
+  /** The `search` properties of each entity type, by type, in the mapping's order. */
+  readonly searchProperties: ReadonlyMap<string, readonly string[]>;
   /** Every property name the mapping names: search, reference, evidence, sort and stable id properties. */
   readonly properties: ReadonlySet<string>;
 }
@@ -87,6 +119,8 @@ export interface GateRequest {
   readonly cursor?: string;
   /** Asks for the `pii` fields of the result to be masked; absent means no. */
   readonly mask?: boolean;
+  /** The indexes of the source as the caller read them for this request, so that a request that makes several runs reads the schema once; a snapshot of another source is not used; `'unverified'` says the caller tried and the read could not say, so the gate does not read again; an `IndexReadFailure` says the read failed, and the run fails with that same error inside its own audited stages, with no data statement. */
+  readonly indexes?: IndexSnapshot | 'unverified' | IndexReadFailure;
 }
 
 export interface GateContext {
@@ -124,6 +158,14 @@ export type Clock = () => number;
 
 export interface Gate {
   run(request: GateRequest): Promise<GatePage>;
+}
+
+/**
+ * Reads the indexes of a source as they are now, with the one fixed schema read of the gate's system runner; it runs nothing else, and only for a principal the policy allows on a source
+ * that is usable. `'unverified'` when no read is made (the principal is refused or the source is not usable, and the run that follows is refused by its own rules) or the login may not list indexes. Any other failure of the read is thrown.
+ */
+export interface IndexReader {
+  read(request: { readonly traceId: string; readonly principal: Principal; readonly sourceId: string }): Promise<IndexSnapshot | 'unverified'>;
 }
 
 export interface SystemRequest {

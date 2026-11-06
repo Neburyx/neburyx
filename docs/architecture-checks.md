@@ -67,6 +67,12 @@ one. Test files and `services/api/src/testing/` are exempt, as above, and static
 `services/api/src/sources/readonly.test.ts` adds a scan: no file of the adapter names a write access mode or a managed or one-shot query method, and `commit` is among
 those words; only the probe's module is exempt from the write access mode, and it is checked instead for the absence of `commit` and the managed and one-shot methods.
 
+## What a statement may contain
+
+A template's statement is fixed text with markers; the gate writes in only names from the source's allowlist, each quoted by the one helper (`quoteName`), and every other value is a parameter. The template catalog refuses, when it is built, a template whose declaration does not match its statement: a marker for an entity type, a relationship type or a stable ID that no declared parameter backs; a gate-filled parameter used and not declared; and, for a template that repeats a branch for each target of a list, a branch marker that is not used exactly once for that list, a branch text that holds anything but the label and property placeholders, a statement without an enclosing `LIMIT $limit + 1`, or no `usedProperties` naming the targets. A target that is not an allowlisted pair of entity type and property, or that appears twice, makes the request `INVALID_REQUEST` before any read.
+
+The gate's index guard reads the schema through the system runner only, with the one fixed `schema-indexes` template, for a template that declares `indexNeeds`; the reader the gate hands out (`IndexReader`) runs nothing else, and only for a principal the policy allows on a usable source. The `Gate` itself has the one member `run`.
+
 ## Community never imports `ee/`
 
 Any file outside `ee/` (including `tools/`) that imports a module under `ee/`, or the package names `ee` or `@neburyx/ee`

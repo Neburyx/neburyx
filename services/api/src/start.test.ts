@@ -235,7 +235,7 @@ describe('the source gate at start-up', () => {
     const opened: SourceGateOptions[] = [];
     const openSourceGate = (options: SourceGateOptions): SourceGate => {
       opened.push(options);
-      return { gate: unusedRunner, system: unusedRunner, close: () => (order.push('gate closed'), Promise.resolve()) };
+      return { gate: unusedRunner, system: unusedRunner, indexes: { read: () => Promise.reject(new Error('not used')) }, close: () => (order.push('gate closed'), Promise.resolve()) };
     };
     const openStore = (): AppStore => {
       const store = memoryAppStore();
@@ -308,7 +308,7 @@ describe('the startup check in start', () => {
       io: {
         logger,
         openStore: () => ({ ...store, close: () => (closed.push('store'), store.close()) }),
-        openSourceGate: (): SourceGate => ({ gate: parts.gate, system: parts.system, close: () => (closed.push('gate'), Promise.resolve()) }),
+        openSourceGate: (): SourceGate => ({ gate: parts.gate, system: parts.system, indexes: parts.indexes, close: () => (closed.push('gate'), Promise.resolve()) }),
         portOverride: 0,
       } satisfies Partial<StartIo>,
     };
@@ -591,7 +591,7 @@ describe('the ping timer in start', () => {
 
   function wired(executor: TestExecutor) {
     const parts = testSourceGate(mapping, { executor });
-    return { openSourceGate: (): SourceGate => ({ gate: parts.gate, system: parts.system, close: () => Promise.resolve() }) };
+    return { openSourceGate: (): SourceGate => ({ gate: parts.gate, system: parts.system, indexes: parts.indexes, close: () => Promise.resolve() }) };
   }
 
   it('pings every source on each tick after the server listens, and /readyz follows the answers', async () => {
@@ -676,7 +676,7 @@ describe('the startup check when the schema is behind', () => {
   it.each(['42P01', '42703'])('exits 1 with the migrate message when storing the check fails with %s', async (code) => {
     const parts = testSourceGate(mapping, { executor: serverExecutor() });
     const failing = { ...memoryAppStore(), recordSourceCheck: () => Promise.reject(Object.assign(new Error('relation or column is missing'), { code })) };
-    const run = io({ openStore: () => failing, openSourceGate: (): SourceGate => ({ gate: parts.gate, system: parts.system, close: () => Promise.resolve() }), portOverride: 0 });
+    const run = io({ openStore: () => failing, openSourceGate: (): SourceGate => ({ gate: parts.gate, system: parts.system, indexes: parts.indexes, close: () => Promise.resolve() }), portOverride: 0 });
     const result = await start({ ...DATABASE_ENV, NEBURYX_CONFIG: file }, run.io);
     expect(result.exitCode).toBe(1);
     expect(run.errors.join('')).toBe('the database schema is behind this version; run neburyx migrate\n');
@@ -697,7 +697,7 @@ describe('the ping timer while the gate cannot grant a read', () => {
     };
     const executor = serverExecutor();
     const parts = testSourceGate(mapping, { executor, seams: { ...communitySeams(), coordinator } });
-    const run = io({ openSourceGate: (): SourceGate => ({ gate: parts.gate, system: parts.system, close: () => Promise.resolve() }), portOverride: 0, pingIntervalMs: 20 });
+    const run = io({ openSourceGate: (): SourceGate => ({ gate: parts.gate, system: parts.system, indexes: parts.indexes, close: () => Promise.resolve() }), portOverride: 0, pingIntervalMs: 20 });
     const result = await start({ ...DATABASE_ENV, NEBURYX_CONFIG: file }, run.io);
     if (result.exitCode !== 0) throw new Error('the API did not start');
     const ready = async () => {

@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { assembleGate } from '../gate/assemble.js';
 import { createTemplateCatalog, type TemplateDefinition } from '../gate/catalog.js';
 import { entityLoadTemplate } from '../gate/templates/entity-load.js';
+import { schemaIndexesTemplate } from '../gate/templates/schema-indexes.js';
 import type { Gate, SystemRunner } from '../gate/types.js';
 import type { SourceModel } from '../mapping/model.js';
 import { communitySeams } from '../seams/community-seams.js';
@@ -114,7 +115,7 @@ export async function startPackServers(): Promise<PackServer[]> {
       seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit },
       executor,
       logger: { warn: () => undefined },
-      catalog: createTemplateCatalog({ templates: [...CAPTURE_TEMPLATES, entityLoadTemplate] }),
+      catalog: createTemplateCatalog({ templates: [...CAPTURE_TEMPLATES, entityLoadTemplate, schemaIndexesTemplate] }),
     });
     opened.push({ pack, server, source, system, gate, close: () => executor.close() });
   }

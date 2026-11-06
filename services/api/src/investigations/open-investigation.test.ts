@@ -15,6 +15,7 @@ import type { ExecuteOutcome } from '../gate/executor.js';
 import type { NewDraft } from '../db/investigations-repository.js';
 import { uuidv7 } from '../identity/uuid.js';
 import { contentHashOf, defaultTitle, initialDraftDocuments } from './draft.js';
+import { withOnlineIndexes } from '../testing/search-fixtures.js';
 
 const webRoot = makeWebRoot();
 afterAll(() => rmSync(webRoot, { recursive: true, force: true }));
@@ -39,7 +40,7 @@ const WIDGET = plainNode(['Widget'], { widgetId: 'W-1' });
 const body = (overrides: Record<string, unknown> = {}) => ({ sourceId: 'demo', entity: { sourceId: 'demo', entityType: 'widget', stableId: 'W-1' }, ...overrides });
 
 async function started(answer: ExecuteOutcome = entityRows(WIDGET), store: MemoryAppStore = memoryAppStore()) {
-  const executor = new TestExecutor(() => Promise.resolve(answer));
+  const executor = new TestExecutor(withOnlineIndexes(mapping.sources[0] ?? (() => { throw new Error('the mapping has no source'); })(), () => Promise.resolve(answer)));
   const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store, mapping, gate: testSourceGate(mapping, { executor }).gate });
   const post = (payload: object, url = '/v1/investigations') => app.inject({ method: 'POST', url, payload });
   return { app, store, executor, post };
@@ -125,7 +126,7 @@ describe('POST /v1/investigations', () => {
 
   it('leaves the rows that exist untouched when a later open fails', async () => {
     let answer: ExecuteOutcome = entityRows(WIDGET);
-    const executor = new TestExecutor(() => Promise.resolve(answer));
+    const executor = new TestExecutor(withOnlineIndexes(mapping.sources[0] ?? (() => { throw new Error('the mapping has no source'); })(), () => Promise.resolve(answer)));
     const store = memoryAppStore();
     const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store, mapping, gate: testSourceGate(mapping, { executor }).gate });
     await app.inject({ method: 'POST', url: '/v1/investigations', payload: body() });

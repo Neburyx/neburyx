@@ -15,6 +15,7 @@ import type {
   GateObserver,
   GateRequest,
   GateStage,
+  IndexReader,
   Item,
   Params,
   Row,
@@ -102,11 +103,12 @@ export function gateRequest(overrides: Partial<GateRequest> = {}): GateRequest {
   };
 }
 
-export const EMPTY_ALLOWLIST: SourceAllowlist = { entityLabels: new Map(), relationshipTypes: new Set(), stableIds: new Map(), properties: new Set() };
+export const EMPTY_ALLOWLIST: SourceAllowlist = { entityLabels: new Map(), relationshipTypes: new Set(), stableIds: new Map(), searchProperties: new Map(), properties: new Set() };
 
 export interface Harness {
   readonly gate: Gate;
   readonly system: SystemRunner;
+  readonly indexes: IndexReader;
   readonly executor: TestExecutor;
   readonly observer: ReturnType<typeof recordingObserver>;
   readonly logs: { fields: object; message: string }[];
@@ -131,7 +133,7 @@ export function harness(options: HarnessOptions = {}): Harness {
   const observer = recordingObserver();
   const logs: { fields: object; message: string }[] = [];
   const defaults = communitySeams();
-  const { gate, system } = createGates({
+  const { gate, system, indexes } = createGates({
     seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit, ...options.seams },
     catalog: options.catalog ?? testCatalog(),
     executor,
@@ -146,5 +148,5 @@ export function harness(options: HarnessOptions = {}): Harness {
     logger: { warn: (fields, message) => void logs.push({ fields, message }) },
     observer,
   });
-  return { gate, system, executor, observer, logs };
+  return { gate, system, indexes, executor, observer, logs };
 }

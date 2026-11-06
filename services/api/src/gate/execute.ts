@@ -28,6 +28,9 @@ async function releaseLease(lease: ReadLease, logger: GateLogger): Promise<void>
   }
 }
 
+/** The timeout is the source's server-side transaction timeout, which is what the person is told; it holds no address, query or value. */
+const timedOut = (context: GateContext): AppError => new AppError('QUERY_TIMEOUT', { timeoutMs: context.budgets.timeoutMs });
+
 export async function executeRead(
   deps: ExecuteDeps,
   context: GateContext,
@@ -35,7 +38,7 @@ export async function executeRead(
   rendered: Rendered,
   limit: number,
 ): Promise<ExecuteResult> {
-  if (deps.clock() >= context.deadlineAt) throw new AppError('QUERY_TIMEOUT');
+  if (deps.clock() >= context.deadlineAt) throw timedOut(context);
   const admission = await deps.coordinator.acquireRead({ principal: context.principal, sourceId: context.sourceId });
   switch (admission.status) {
     case 'busy':
@@ -49,7 +52,7 @@ export async function executeRead(
   }
   let outcome;
   try {
-    if (deps.clock() >= context.deadlineAt) throw new AppError('QUERY_TIMEOUT');
+    if (deps.clock() >= context.deadlineAt) throw timedOut(context);
     outcome = await deps.executor.execute({
       sourceId: context.sourceId,
       templateId: template.id,
@@ -69,7 +72,7 @@ export async function executeRead(
   }
   switch (outcome.status) {
     case 'timeout':
-      throw new AppError('QUERY_TIMEOUT');
+      throw timedOut(context);
     case 'unavailable':
       throw new AppError('SOURCE_UNAVAILABLE', undefined, outcome.reason);
     case 'rows':

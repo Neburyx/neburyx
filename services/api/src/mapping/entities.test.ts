@@ -1,6 +1,7 @@
 import { ICON_KEYS } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
 import { parseMapping } from './load.js';
+import { MAX_SEARCH_PROPERTIES } from './model.js';
 import { baseSource, expectRefused, fileOf, firstSource, issuesOf, load, type Json } from '../testing/mapping.js';
 
 const fullEntity = {
@@ -97,6 +98,18 @@ describe('entity and relationship types as written', () => {
     const [relationship] = firstSource(load(baseSource())).relationships;
     expect(relationship).toMatchObject({ aggregate: true, evidence: [], filterable: [] });
     expect(relationship?.stableId).toBeUndefined();
+  });
+
+  it('refuses a search property that an entity type lists twice', () => {
+    const entity = { type: 'node_c', label: 'NodeC', stable_id: 'id', search: ['name', 'code', 'name'] };
+    expectRefused(baseSource({ entities: [entity], relationships: undefined }), 'sources[0].entities[0].search[2]', 'lists name more than once');
+  });
+
+  it('refuses a source with more search properties than a search can read, and accepts one at the limit', () => {
+    const names = (count: number, from = 0) => Array.from({ length: count }, (_, index) => `p${from + index}`);
+    const entities = (count: number) => [{ type: 'node_a', label: 'NodeA', stable_id: 'id', search: names(50) }, { type: 'node_b', label: 'NodeB', stable_id: 'id', search: names(count - 50) }];
+    expect(() => load(baseSource({ entities: entities(MAX_SEARCH_PROPERTIES), relationships: undefined }))).not.toThrow();
+    expectRefused(baseSource({ entities: entities(MAX_SEARCH_PROPERTIES + 1), relationships: undefined }), 'sources[0].entities', 'more than the 100 a search can read');
   });
 
   it('allows a pii property to be searchable', () => {

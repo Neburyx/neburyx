@@ -2,13 +2,14 @@ import type { PresetTemplate } from '@neburyx/contracts';
 import { resolveBudgets } from './budgets.js';
 import { hashSource } from './hash.js';
 import { checkLink } from './links.js';
-import type {
-  DerivedRuleModel,
-  EntityModel,
-  MappingModel,
-  PresetModel,
-  RelationshipModel,
-  SourceModel,
+import {
+  MAX_SEARCH_PROPERTIES,
+  type DerivedRuleModel,
+  type EntityModel,
+  type MappingModel,
+  type PresetModel,
+  type RelationshipModel,
+  type SourceModel,
 } from './model.js';
 import type { RawDerivedRule, RawEntity, RawMappingFile, RawPreset, RawRelationship, RawSource } from './schema.js';
 
@@ -64,6 +65,9 @@ function parseTitle(title: string): { readonly properties: string[] } | { readon
 
 function buildEntity(raw: RawEntity, path: readonly (string | number)[], report: Report): EntityModel {
   const search = raw.search ?? [];
+  search.forEach((property, index) => {
+    if (search.indexOf(property) !== index) report([...path, 'search', index], `lists ${property} more than once`);
+  });
   const reference = raw.reference ?? [];
   const piiEntries = raw.pii ?? [];
   const pii = piiEntries.map((entry) => entry.property);
@@ -226,6 +230,9 @@ function buildSource(raw: RawSource, index: number, report: Report): SourceModel
   reportDuplicates(rawRelationships, (r) => [r.type, 'from', r.from, 'to', r.to], (i) => [...base, 'relationships', i, 'type'], 'relationship', report);
   reportDuplicates(rawDerived, (rule) => [rule.id], (i) => [...base, 'derived', i, 'id'], 'derived rule', report);
   reportDuplicates(rawPresets, (preset) => [preset.id], (i) => [...base, 'patterns', i, 'id'], 'pattern', report);
+
+  const searchProperties = raw.entities.reduce((total, entity) => total + new Set(entity.search ?? []).size, 0);
+  if (searchProperties > MAX_SEARCH_PROPERTIES) report([...base, 'entities'], `list ${searchProperties} search properties in all, more than the ${MAX_SEARCH_PROPERTIES} a search can read`);
 
   const budgets = resolveBudgets(raw.budgets);
   const defaultPage = raw.budgets?.default_page ?? Math.min(budgets.defaultPage, budgets.maxPage);

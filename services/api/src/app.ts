@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Socket } from 'node:net';
 import fastifyStatic from '@fastify/static';
-import { type ErrorCode, entityPathSchema, entityQuerySchema, healthResponseSchema, investigationResponseSchema, meResponseSchema, nodeSchema, openInvestigationRequestSchema, openInvestigationResponseSchema, readyResponseSchema, sourceProfileSchema, sourceTestReportSchema, sourcesResponseSchema } from '@neburyx/contracts';
+import { type ErrorCode, entityPathSchema, entityQuerySchema, healthResponseSchema, investigationResponseSchema, meResponseSchema, nodeSchema, openInvestigationRequestSchema, openInvestigationResponseSchema, readyResponseSchema, searchRequestSchema, searchResultSchema, sourceProfileSchema, sourceTestReportSchema, sourcesResponseSchema } from '@neburyx/contracts';
 import { z } from 'zod';
 import Fastify, {
   type FastifyBaseLogger,
@@ -13,9 +13,10 @@ import Fastify, {
 import { AppError, codeForFailure, detailsOf, errorResponse, errorStatus } from './errors.js';
 import type { AppStore } from './app-store.js';
 import { createEntityReader } from './entities/entity-reader.js';
+import { createSearchService } from './search/search-service.js';
 import { createInvestigationService } from './investigations/investigation-service.js';
 import { createSourceAccess } from './investigations/source-access.js';
-import type { Gate } from './gate/types.js';
+import type { Gate, IndexReader } from './gate/types.js';
 import type { JobRunner } from './jobs/runner.js';
 import type { MappingModel } from './mapping/model.js';
 import { buildSourceProfile } from './registry/profile.js';
@@ -38,6 +39,7 @@ export interface AppOptions {
   readonly mapping?: MappingModel | undefined;
   readonly sourceTester?: SourceTester | undefined;
   readonly gate?: Gate | undefined;
+  readonly indexes?: IndexReader | undefined;
   readonly reachability?: ReachabilityView | undefined;
   readonly stopPing?: (() => void) | undefined;
   readonly drainPing?: (() => Promise<void>) | undefined;
@@ -298,6 +300,15 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       const identity = await options.store.current();
       const node = await entities.read({ traceId: request.id, principal: identity.principal, ...path.data, mask: query.data.mask === 'true' });
       return nodeSchema.parse(node);
+    });
+
+    const searching = createSearchService({ gate: options.gate, mapping, access, ...(options.indexes === undefined ? {} : { indexes: options.indexes }) });
+    app.post('/v1/search/entities', { config: { permission: 'principal' } }, async (request) => {
+      const body = searchRequestSchema.safeParse(request.body);
+      if (!noQuerySchema.safeParse(request.query).success || !body.success) throw new AppError('INVALID_REQUEST');
+      const identity = await options.store.current();
+      const result = await searching.search({ traceId: request.id, principal: identity.principal, sourceId: body.data.sourceId, text: body.data.text, mask: body.data.mask === true });
+      return searchResultSchema.parse(result);
     });
 
     const investigations = createInvestigationService({ store: options.store, entities, mapping, access });

@@ -59,3 +59,15 @@ export {
   startingEntitySchema,
 } from './investigations.js';
 export type { Investigation, InvestigationResponse, InvestigationSourceState, LayoutDocument, OpenInvestigationRequest, OpenInvestigationResponse, QueryContextDocument } from './investigations.js';
+export {
+  MAX_SEARCH_TEXT_LENGTH,
+  MIN_SEARCH_TEXT_LENGTH,
+  SEARCH_DISABLED_REASONS,
+  SEARCH_GROUP_CAP,
+  disabledTypeSchema,
+  droppedSchema,
+  searchRequestSchema,
+  searchResultSchema,
+  searchTextSchema,
+} from './search.js';
+export type { DisabledType, SearchRequest, SearchResult } from './search.js';

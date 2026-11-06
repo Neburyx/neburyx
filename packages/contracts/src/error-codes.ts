@@ -29,6 +29,7 @@ export const errorCodeSchema = z.enum(ERROR_CODES);
 export const errorDetailsSchema = z.strictObject({
   maxPage: z.number().int().positive().optional(),
   retryAfterMs: z.number().int().nonnegative().optional(),
+  timeoutMs: z.number().int().positive().optional(),
 });
 
 export const errorBodySchema = z.object({

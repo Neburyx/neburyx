@@ -59,7 +59,7 @@ interface Boot {
 /** A gate whose sources never answer in a way that is a verdict, so the startup check does not settle and no check row is stored. */
 function unansweringGate(options: SourceGateOptions) {
   const parts = testSourceGate(options.mapping, { executor: new TestExecutor(() => Promise.resolve({ status: 'unavailable', reason: 'closed' })) });
-  return { gate: parts.gate, system: parts.system, close: () => Promise.resolve() };
+  return { gate: parts.gate, system: parts.system, indexes: parts.indexes, close: () => Promise.resolve() };
 }
 
 async function boot(database: TestDatabase, file: string | undefined, env: Record<string, string> = {}): Promise<Boot> {

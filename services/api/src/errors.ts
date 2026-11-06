@@ -3,8 +3,8 @@ import { allowedDetails, ERROR_TABLE, type ErrorCode, type ErrorResponse } from 
 /** Why a read could not reach a source; a fixed tag that is never sent in a response or written to a log. */
 export const UNAVAILABLE_REASONS = ['unreachable', 'authentication', 'credentials', 'database', 'refused', 'pool-full', 'closed'] as const;
 export type UnavailableReason = (typeof UNAVAILABLE_REASONS)[number];
-/** What an `AppError` may be tagged with: an unavailable reason, `read-failed` on the `INTERNAL_ERROR` of a read the adapter could not run, or `unusable` on the refusal of a data read for a source whose mapping did not pass the check. */
-export type ErrorReason = UnavailableReason | 'read-failed' | 'unusable';
+/** What an `AppError` may be tagged with: an unavailable reason, `read-failed` on the `INTERNAL_ERROR` of a read the adapter could not run, `unusable` on the refusal of a data read for a source whose mapping did not pass the check, or `index-unavailable` on the refusal of a read whose index is not online. */
+export type ErrorReason = UnavailableReason | 'read-failed' | 'unusable' | 'index-unavailable';
 
 export class AppError extends Error {
   readonly code: ErrorCode;

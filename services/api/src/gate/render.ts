@@ -1,11 +1,16 @@
+import { z } from 'zod';
 import { AppError } from '../errors.js';
+import { MAX_SEARCH_PROPERTIES } from '../mapping/model.js';
 import type { GateParameter, Params, SourceAllowlist, Template } from './types.js';
 
 /**
- * A marker in a template's Cypher, such as `@entity(kind)`, `@relationship(via)` or `@stableId(kind)`; the name in the brackets is a parameter name.
+ * A marker in a template's Cypher, such as `@entity(kind)`, `@relationship(via)`, `@stableId(kind)` or `@searchBranches(targets)`; the name in the brackets is a parameter name.
  * `@stableId(kind)` writes the `stable_id` property of the entity type that the parameter `kind` names.
+ * `@searchBranches(targets)` writes one branch for each target in the list parameter `targets`, from the template's branch text (see `Template.searchBranches`).
  */
-const MARKER = /@(entity|relationship|stableId)\(([A-Za-z][A-Za-z0-9]*)\)/g;
+const MARKER = /@(entity|relationship|stableId|searchBranches)\(([A-Za-z][A-Za-z0-9]*)\)/g;
+/** The two placeholders of a branch text: the label of the target's entity type and its property. */
+export const BRANCH_MARKER = /@(label|property)(?![A-Za-z0-9])/g;
 /** A name that cannot sit inside backticks: one with a backtick, a backslash or a control character, such as `a`b`. */
 const UNQUOTABLE = /[`\\\u0000-\u001f\u007f]/;
 
@@ -20,12 +25,12 @@ export function quoteName(name: string): string {
   return `\`${name}\``;
 }
 
-export type MarkerKind = 'entity' | 'relationship' | 'stableId';
+export type MarkerKind = 'entity' | 'relationship' | 'stableId' | 'searchBranches';
 
 export function markersOf(cypher: string): { readonly kind: MarkerKind; readonly name: string }[] {
   return [...cypher.matchAll(MARKER)].flatMap((match) => {
     const [, kind, name] = match;
-    return (kind === 'entity' || kind === 'relationship' || kind === 'stableId') && name !== undefined ? [{ kind, name }] : [];
+    return (kind === 'entity' || kind === 'relationship' || kind === 'stableId' || kind === 'searchBranches') && name !== undefined ? [{ kind, name }] : [];
   });
 }
 
@@ -50,6 +55,31 @@ function gateValuesOf(template: Template, allowlist: SourceAllowlist): [string, 
   return (template.gateParameters ?? []).map((name) => [name, values[name]]);
 }
 
+const targetSchema = z.strictObject({ entityType: z.string(), property: z.string(), match: z.enum(['value', 'text']) });
+
+/** The branches of a template that has them: one for each target, checked against the search allowlist, each name quoted by `quoteName`, joined by `UNION`; empty for a template without branches. */
+function branchesOf(template: Template, params: Params, allowlist: SourceAllowlist): string {
+  const branches = template.searchBranches;
+  if (branches === undefined) return '';
+  const list = z.array(targetSchema).max(MAX_SEARCH_PROPERTIES).safeParse(params[branches.param]);
+  if (!list.success) throw new AppError('INVALID_REQUEST');
+  if (list.data.length === 0) {
+    if (template.readsNothing?.(params) === true) return '';
+    throw new AppError('INVALID_REQUEST');
+  }
+  const seen = new Set<string>();
+  return list.data
+    .map((target) => {
+      const label = allowlist.entityLabels.get(target.entityType);
+      if (label === undefined || allowlist.searchProperties.get(target.entityType)?.includes(target.property) !== true) throw new AppError('INVALID_REQUEST');
+      const key = JSON.stringify([target.entityType, target.property]);
+      if (seen.has(key)) throw new AppError('INVALID_REQUEST');
+      seen.add(key);
+      return branches[target.match].replace(BRANCH_MARKER, (_whole, kind: string) => quoteName(kind === 'label' ? label : target.property));
+    })
+    .join(' UNION ');
+}
+
 export interface Rendered {
   readonly cypher: string;
   readonly parameters: Params;
@@ -69,11 +99,13 @@ export function renderTemplate(template: Template, params: Params, allowlist: So
   for (const name of template.relationshipParams) {
     replacements.set(`relationship:${name}`, relationshipTypesOf(params[name], allowlist.relationshipTypes).map((type) => quoteName(type)).join('|'));
   }
+  const branches = branchesOf(template, params, allowlist);
   const cypher = template.cypher.replace(MARKER, (_whole, kind: string, name: string) => {
+    if (kind === 'searchBranches') return branches;
     const replacement = replacements.get(`${kind}:${name}`) ?? '';
     return kind === 'relationship' ? replacement : quoteName(replacement);
   });
-  const markerNames = new Set([...template.entityParams, ...template.relationshipParams]);
+  const markerNames = new Set([...template.entityParams, ...template.relationshipParams, ...(template.searchBranches === undefined ? [] : [template.searchBranches.param])]);
   const kept = Object.entries(params).filter(([key]) => !markerNames.has(key));
   return { cypher, parameters: Object.fromEntries([...kept, ['limit', limit], ...gateValuesOf(template, allowlist)]) };
 }

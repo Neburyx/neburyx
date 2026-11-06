@@ -6,6 +6,7 @@ import { investigationResponseSchema, openInvestigationRequestSchema, openInvest
 import { meResponseSchema } from './me.js';
 import { readyResponseSchema } from './ready.js';
 import { sourceProfileSchema } from './profile.js';
+import { searchRequestSchema, searchResultSchema } from './search.js';
 import { sourceTestReportSchema } from './source-test.js';
 import { sourcesResponseSchema } from './sources.js';
 
@@ -16,7 +17,7 @@ export interface OpenApiDocument {
   readonly openapi: string;
   readonly info: { readonly title: string; readonly version: string };
   readonly paths: Readonly<Record<string, unknown>>;
-  readonly components: { readonly schemas: { readonly ErrorResponse: Record<string, unknown>; readonly GraphNode: Record<string, unknown>; readonly HealthResponse: Record<string, unknown>; readonly InvestigationResponse: Record<string, unknown>; readonly MeResponse: Record<string, unknown>; readonly OpenInvestigationRequest: Record<string, unknown>; readonly OpenInvestigationResponse: Record<string, unknown>; readonly ReadyResponse: Record<string, unknown>; readonly SourceProfile: Record<string, unknown>; readonly SourceTestReport: Record<string, unknown>; readonly SourcesResponse: Record<string, unknown> } };
+  readonly components: { readonly schemas: { readonly ErrorResponse: Record<string, unknown>; readonly GraphNode: Record<string, unknown>; readonly HealthResponse: Record<string, unknown>; readonly InvestigationResponse: Record<string, unknown>; readonly MeResponse: Record<string, unknown>; readonly OpenInvestigationRequest: Record<string, unknown>; readonly OpenInvestigationResponse: Record<string, unknown>; readonly ReadyResponse: Record<string, unknown>; readonly SearchRequest: Record<string, unknown>; readonly SearchResult: Record<string, unknown>; readonly SourceProfile: Record<string, unknown>; readonly SourceTestReport: Record<string, unknown>; readonly SourcesResponse: Record<string, unknown> } };
 }
 
 function schemaJson(schema: z.ZodType): Record<string, unknown> {
@@ -40,6 +41,8 @@ export function buildOpenApiDocument(
   investigationResponse: z.ZodType = investigationResponseSchema,
   openInvestigationResponse: z.ZodType = openInvestigationResponseSchema,
   openInvestigationRequest: z.ZodType = openInvestigationRequestSchema,
+  searchRequest: z.ZodType = searchRequestSchema,
+  searchResult: z.ZodType = searchResultSchema,
 ): OpenApiDocument {
   return {
     openapi: '3.1.0',
@@ -175,6 +178,25 @@ export function buildOpenApiDocument(
           },
         },
       },
+      '/v1/search/entities': {
+        post: {
+          operationId: 'searchEntities',
+          summary: 'Search a source for the entities whose search properties equal a text',
+          requestBody: { required: true, content: jsonBody('SearchRequest') },
+          description:
+            'Matches the whole text, as stored and case-sensitive, against every configured, indexed search property of the source in one read through the gate, and as the integer too when the text is a canonical 64-bit integer. The answer holds at most cap entities in exact (25, or the source\'s max_page when lower); counts.exact is exact up to and including cap and a lowerBound of the hits held (cap, or fewer when normalization left rows out of a capped read) when the read found more; searchable is false when no property was left to search. The text is 1 to 200 characters. mask asks for the personal-data fields of the entities to be masked, and a personal-data property is then not searched. dropped and warnings are the normalize stage\'s: rows left out, by reason, and one sentence for each. disabledTypes names entity types that were not searched because their search index is not usable. The text is never logged and never part of an error.',
+          responses: {
+            '200': { description: 'The exact matches and their count', content: jsonBody('SearchResult') },
+            '400': { description: 'The body or the query is not valid, or the text is not 1 to 200 characters', content: jsonBody('ErrorResponse') },
+            '403': { description: 'The policy does not allow this principal to read the source', content: jsonBody('ErrorResponse') },
+            '404': { description: 'No configured source has this id', content: jsonBody('ErrorResponse') },
+            '415': { description: 'The body is not JSON', content: jsonBody('ErrorResponse') },
+                        '500': { description: 'The search could not run', content: jsonBody('ErrorResponse') },
+            '503': { description: 'The source is not available, or is busy', content: jsonBody('ErrorResponse') },
+            '504': { description: 'The source did not answer in time', content: jsonBody('ErrorResponse') },
+          },
+        },
+      },
       '/v1/sources': {
         get: {
           operationId: 'listSources',
@@ -190,7 +212,7 @@ export function buildOpenApiDocument(
       },
     },
     components: {
-      schemas: { ErrorResponse: schemaJson(errorResponse), GraphNode: schemaJson(graphNode), HealthResponse: schemaJson(healthResponse), InvestigationResponse: schemaJson(investigationResponse), MeResponse: schemaJson(meResponse), OpenInvestigationRequest: schemaJson(openInvestigationRequest), OpenInvestigationResponse: schemaJson(openInvestigationResponse), ReadyResponse: schemaJson(readyResponse), SourceProfile: schemaJson(sourceProfile), SourceTestReport: schemaJson(sourceTestReport), SourcesResponse: schemaJson(sourcesResponse) },
+      schemas: { ErrorResponse: schemaJson(errorResponse), GraphNode: schemaJson(graphNode), HealthResponse: schemaJson(healthResponse), InvestigationResponse: schemaJson(investigationResponse), MeResponse: schemaJson(meResponse), OpenInvestigationRequest: schemaJson(openInvestigationRequest), OpenInvestigationResponse: schemaJson(openInvestigationResponse), ReadyResponse: schemaJson(readyResponse), SearchRequest: schemaJson(searchRequest), SearchResult: schemaJson(searchResult), SourceProfile: schemaJson(sourceProfile), SourceTestReport: schemaJson(sourceTestReport), SourcesResponse: schemaJson(sourcesResponse) },
     },
   };
 }

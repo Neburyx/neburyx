@@ -15,6 +15,13 @@ describe('allowedDetails', () => {
     expect(allowedDetails('RATE_LIMITED', { retryAfterMs: 2000, maxPage: 50 })).toEqual({ retryAfterMs: 2000 });
   });
 
+  it('keeps the timeout of a query that timed out and drops anything else', () => {
+    expect(allowedDetails('QUERY_TIMEOUT', { timeoutMs: 5000, maxPage: 50, query: 'MATCH (n)' })).toEqual({ timeoutMs: 5000 });
+    expect(allowedDetails('QUERY_TIMEOUT', { timeoutMs: 0 })).toBeUndefined();
+    expect(allowedDetails('QUERY_TIMEOUT', { timeoutMs: '5000' })).toBeUndefined();
+    expect(allowedDetails('QUERY_BUDGET_EXCEEDED', { timeoutMs: 5000 })).toBeUndefined();
+  });
+
   it('allows no field for a code that names none', () => {
     expect(allowedDetails('ACCESS_DENIED', { maxPage: 50 })).toBeUndefined();
   });

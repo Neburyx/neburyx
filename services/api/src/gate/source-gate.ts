@@ -4,7 +4,7 @@ import type { SourceUsability } from '../source-test/usability.js';
 import { createNeo4jExecutor } from '../sources/executor.js';
 import { assembleGate } from './assemble.js';
 import type { CursorCodec } from './cursor/codec.js';
-import type { Clock, Gate, GateLogger, GateObserver, SystemRunner } from './types.js';
+import type { Clock, Gate, GateLogger, GateObserver, IndexReader, SystemRunner } from './types.js';
 
 export interface SourceGateOptions {
   readonly mapping: MappingModel;
@@ -22,6 +22,7 @@ export interface SourceGateOptions {
 export interface SourceGate {
   readonly gate: Gate;
   readonly system: SystemRunner;
+  readonly indexes: IndexReader;
   close(): Promise<void>;
 }
 
@@ -34,7 +35,7 @@ export function createSourceGate(options: SourceGateOptions): SourceGate {
     ...(options.clock === undefined ? {} : { clock: options.clock }),
   });
   try {
-    const { gate, system } = assembleGate({
+    const { gate, system, indexes } = assembleGate({
       mapping: options.mapping,
       seams: options.seams,
       executor,
@@ -44,7 +45,7 @@ export function createSourceGate(options: SourceGateOptions): SourceGate {
       ...(options.clock === undefined ? {} : { clock: options.clock }),
       ...(options.observer === undefined ? {} : { observer: options.observer }),
     });
-    return { gate, system, close: () => executor.close() };
+    return { gate, system, indexes, close: () => executor.close() };
   } catch (error) {
     void executor.close();
     throw error;

@@ -6,8 +6,8 @@ describe('buildOpenApiDocument', () => {
     const document = buildOpenApiDocument();
     expect(document.openapi).toBe('3.1.0');
     expect(document.info.title).toBe('Neburyx API');
-    expect(Object.keys(document.paths)).toEqual(['/healthz', '/readyz', '/v1/me', '/v1/sources/{id}/profile', '/v1/sources/{id}/test', '/v1/entities/{sourceId}/{entityType}/{stableId}', '/v1/investigations', '/v1/investigations/{id}', '/v1/sources']);
-    expect(Object.keys(document.components.schemas)).toEqual(['ErrorResponse', 'GraphNode', 'HealthResponse', 'InvestigationResponse', 'MeResponse', 'OpenInvestigationRequest', 'OpenInvestigationResponse', 'ReadyResponse', 'SourceProfile', 'SourceTestReport', 'SourcesResponse']);
+    expect(Object.keys(document.paths)).toEqual(['/healthz', '/readyz', '/v1/me', '/v1/sources/{id}/profile', '/v1/sources/{id}/test', '/v1/entities/{sourceId}/{entityType}/{stableId}', '/v1/investigations', '/v1/investigations/{id}', '/v1/search/entities', '/v1/sources']);
+    expect(Object.keys(document.components.schemas)).toEqual(['ErrorResponse', 'GraphNode', 'HealthResponse', 'InvestigationResponse', 'MeResponse', 'OpenInvestigationRequest', 'OpenInvestigationResponse', 'ReadyResponse', 'SearchRequest', 'SearchResult', 'SourceProfile', 'SourceTestReport', 'SourcesResponse']);
     expect(document.components.schemas.ErrorResponse).not.toHaveProperty('$schema');
     expect(document.components.schemas.MeResponse).not.toHaveProperty('$schema');
   });
@@ -30,5 +30,16 @@ describe('buildOpenApiDocument', () => {
 
   it('gives byte-identical output on every run', () => {
     expect(JSON.stringify(buildOpenApiDocument())).toBe(JSON.stringify(buildOpenApiDocument()));
+  });
+
+  it('describes the body of the search request and its answer from their schemas, with the limits they enforce', () => {
+    const document = buildOpenApiDocument();
+    expect(document.paths['/v1/search/entities']).toMatchObject({ post: { operationId: 'searchEntities', requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/SearchRequest' } } } } } });
+    expect(document.components.schemas.SearchRequest).toMatchObject({
+      required: ['sourceId', 'text'],
+      additionalProperties: false,
+      properties: { text: { type: 'string', minLength: 1, maxLength: 200 }, mask: { type: 'boolean' } },
+    });
+    expect(document.components.schemas.SearchResult).toMatchObject({ additionalProperties: false, properties: { exact: { type: 'array' }, counts: { properties: { exact: {} } } } });
   });
 });

@@ -346,7 +346,7 @@ describe('the mapping excerpt', () => {
   }, 60_000);
 
   it('is complete and valid for a mapping close to the file size limit', async () => {
-    const many = Array.from({ length: 4000 }, (_unused, index) => ({ type: `type_${index}`, label: `Label ${index}`, stable_id: 'id', search: ['a'.repeat(120)] }));
+    const many = Array.from({ length: 4000 }, (_unused, index) => ({ type: `type_${index}`, label: `Label ${index}`, stable_id: 'id', reference: ['a'.repeat(120)] }));
     const text = fileOf(fullSource('demo', { entities: many, relationships: [], derived: [], patterns: [] }));
     expect(Buffer.byteLength(text)).toBeGreaterThan(700_000);
     expect(Buffer.byteLength(text)).toBeLessThan(1024 * 1024);

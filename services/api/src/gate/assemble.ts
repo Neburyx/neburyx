@@ -15,11 +15,12 @@ import { capabilitiesTemplate } from './templates/capabilities.js';
 import { connectivityTemplate } from './templates/connectivity.js';
 import { degreeProbeTemplate } from './templates/degree-probe.js';
 import { entityLoadTemplate } from './templates/entity-load.js';
+import { searchExactTemplate } from './templates/search-exact.js';
 import { privilegesTemplate } from './templates/privileges.js';
 import { schemaIndexesTemplate } from './templates/schema-indexes.js';
 import { schemaTokensTemplate } from './templates/schema-tokens.js';
 import { stableIdDuplicatesTemplate } from './templates/stable-id-duplicates.js';
-import type { Budgets, Clock, Gate, GateLogger, GateObserver, Item, SourceAllowlist, SystemRunner, TemplateCatalog, GateContext } from './types.js';
+import type { Budgets, Clock, Gate, GateLogger, IndexReader, GateObserver, Item, SourceAllowlist, SystemRunner, TemplateCatalog, GateContext } from './types.js';
 
 export interface AssembleOptions {
   readonly mapping: MappingModel;
@@ -39,14 +40,14 @@ export interface AssembleOptions {
 }
 
 export function defaultCatalog(): TemplateCatalog {
-  return createTemplateCatalog({ templates: [connectivityTemplate, capabilitiesTemplate, privilegesTemplate, schemaTokensTemplate, schemaIndexesTemplate, stableIdDuplicatesTemplate, degreeProbeTemplate, entityLoadTemplate] });
+  return createTemplateCatalog({ templates: [connectivityTemplate, capabilitiesTemplate, privilegesTemplate, schemaTokensTemplate, schemaIndexesTemplate, stableIdDuplicatesTemplate, degreeProbeTemplate, entityLoadTemplate, searchExactTemplate] });
 }
 
 function budgetsFrom(source: SourceModel): Budgets {
   return { timeoutMs: source.budgets.timeoutMs, maxPage: source.budgets.maxPage, requestTimeoutMs: DEFAULT_BUDGETS.requestTimeoutMs };
 }
 
-export function assembleGate(options: AssembleOptions): { readonly gate: Gate; readonly system: SystemRunner } {
+export function assembleGate(options: AssembleOptions): { readonly gate: Gate; readonly system: SystemRunner; readonly indexes: IndexReader } {
   const budgets = new Map(options.mapping.sources.map((source) => [source.id, budgetsFrom(source)]));
   const allowlists = new Map<string, SourceAllowlist>(options.mapping.sources.map((source) => [source.id, allowlistFromMapping(source)]));
   const models = new Map(options.mapping.sources.map((source) => [source.id, normalizeModelOf(source)]));

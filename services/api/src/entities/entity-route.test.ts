@@ -14,6 +14,7 @@ import { TestExecutor } from '../testing/gate.js';
 import { baseSource, fileOf } from '../testing/mapping.js';
 import { testSourceGate } from '../testing/source-gate.js';
 import { makeWebRoot } from '../testing/web-root.js';
+import { withOnlineIndexes } from '../testing/search-fixtures.js';
 
 const webRoot = makeWebRoot();
 afterAll(() => rmSync(webRoot, { recursive: true, force: true }));
@@ -51,7 +52,7 @@ function recordingSeams(): { readonly seams: Pick<Seams, 'policy' | 'coordinator
 }
 
 async function started(answer = entityRows(ACCOUNT)) {
-  const executor = new TestExecutor(() => Promise.resolve(answer));
+  const executor = new TestExecutor(withOnlineIndexes(mapping.sources[0] ?? (() => { throw new Error('the mapping has no source'); })(), () => Promise.resolve(answer)));
   const recorded = recordingSeams();
   const parts = testSourceGate(mapping, { executor, seams: recorded.seams });
   const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store: memoryAppStore(), mapping, gate: parts.gate });
@@ -72,7 +73,7 @@ describe('GET /v1/entities/{sourceId}/{entityType}/{stableId}', () => {
     expect(node.qualityFlags).toEqual([]);
     const [call] = entityCalls(executor.calls);
     expect(call).toMatchObject({ templateId: 'entity-load', accessMode: 'READ', rowLimit: 2 });
-    expect(events).toEqual([{ actorId: expect.any(String), actorRole: 'administrator', action: 'entity.load', result: 'success', sourceId: 'demo', traceId: expect.any(String) }]);
+    expect(events.filter((event) => event.action === 'entity.load')).toEqual([{ actorId: expect.any(String), actorRole: 'administrator', action: 'entity.load', result: 'success', sourceId: 'demo', traceId: expect.any(String) }]);
     await app.close();
   });
 

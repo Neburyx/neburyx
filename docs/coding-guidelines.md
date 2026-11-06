@@ -27,10 +27,16 @@ These shape code directly. Breaking one is a bug, whatever the tests say.
   execute, normalize, redact, audit. Nothing calls the adapter or the driver around it. Routes and
   services call the gate; an architecture test fails if anything calls the adapter outside it.
 - **No query text from input.** Queries come from fixed, parameterised templates. Values are always
-  parameters. The only interpolation allowed is a label or relationship-type name taken from the
-  validated mapping allowlist and backtick-quoted, done in one helper. A name from a request is
-  checked against the allowlist, never inserted as is. Never build Cypher or SQL by joining strings
-  in any other way.
+  parameters. The only interpolation allowed is a label, a relationship-type name or a property name
+  taken from the validated mapping allowlist and backtick-quoted, done in one helper. The search
+  template alone may repeat one fixed branch for each entry of a list of allowlisted targets (a label
+  and a property); the branch text is fixed, the gate writes in only the quoted names, and the
+  catalog checks the declaration. A name from a request is checked against the allowlist, never inserted as is. Never
+  build Cypher or SQL by joining strings in any other way.
+- **A read that needs an index finds out first.** A template names the indexes it needs; the gate reads
+  the source's indexes at the start of the request and refuses, or leaves out, what has no online
+  index before any data is read, because a database answers a missing index with a scan and not with
+  an error. A login that cannot list indexes cannot be protected this way, and that is said.
 - **Bounded fetches.** Never load a full neighborhood. Every read has a page size with a server-side
   maximum, a timeout and a budget. Limits come from config or a named constant, not a literal in the
   call.

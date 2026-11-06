@@ -9,6 +9,6 @@ const REFUSED_CODES: ReadonlySet<ErrorCode> = new Set<ErrorCode>(['INVALID_REQUE
 export function auditResultFor(failure: AppError | undefined): AuditResult {
   if (!failure) return 'success';
   if (failure.code === 'ACCESS_DENIED') return 'denied';
-  if (failure.reason === 'unusable') return 'refused';
+  if (failure.reason === 'unusable' || failure.reason === 'index-unavailable') return 'refused';
   return REFUSED_CODES.has(failure.code) ? 'refused' : 'failed';
 }

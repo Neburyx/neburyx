@@ -164,6 +164,7 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
       mapping,
       sourceTester: createSourceTester({ gate: gate.gate, mapping, store: observingStore, logger: io.logger }),
       gate: gate.gate,
+      indexes: gate.indexes,
       reachability,
       stopPing: () => {
         pingSchedule?.stop();
