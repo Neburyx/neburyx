@@ -78,7 +78,16 @@ export const REACH: Readonly<Record<string, (page: Page) => Promise<void>>> = {
   },
   'Search results with results': async (page) => {
     await searchFor(page, 'AC-1');
-    await expect(page.getByRole('button', { name: 'Open in graph' }).first()).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Open in graph/ }).first()).toBeVisible();
+  },
+  'Search results with related records': async (page) => {
+    await searchFor(page, 'rel-3');
+    await expect(page.getByRole('heading', { level: 2, name: /Related records/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Open in graph/ })).toHaveCount(4);
+  },
+  'Search results with one group failed': async (page) => {
+    await searchFor(page, 'relfail-1');
+    await expect(page.getByRole('button', { name: 'Retry' })).toBeVisible();
   },
   'Search results with no match': async (page) => {
     await searchFor(page, 'missing-1');

@@ -6,6 +6,8 @@
     { "name": "Home with the list read failed", "route": "" },
     { "name": "Home with the source read failed", "route": "" },
     { "name": "Search results with results", "route": "search" },
+    { "name": "Search results with related records", "route": "search" },
+    { "name": "Search results with one group failed", "route": "search" },
     { "name": "Search results with no match", "route": "search" },
     { "name": "Search results with a failed search", "route": "search" },
     { "name": "Search results with a timed-out search", "route": "search" },

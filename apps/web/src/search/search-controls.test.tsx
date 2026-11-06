@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import type { SearchResult } from '@neburyx/contracts';
 import type { ApiResult } from '../api/client.js';
 import { renderApp } from '../test-utils.js';
-import { answerOf, hit, searchAt, searchKit } from './search-test-kit.js';
+import { answerOf, hit, relatedOf, searchAt, searchKit } from './search-test-kit.js';
 
 const main = () => screen.getByRole('main');
 const ok = (value: SearchResult): ApiResult<SearchResult> => ({ ok: true, value });
@@ -16,7 +16,7 @@ describe('the buttons of the Search results page', () => {
     renderApp(searchAt('demo', 'AC'), kit.client);
     await screen.findByRole('heading', { level: 2, name: /Exact ID match/ });
     expect(within(main()).getByRole('button', { name: 'Search' }).className).toBe('primary');
-    const opens = within(main()).getAllByRole('button', { name: 'Open in graph' });
+    const opens = within(main()).getAllByRole('button', { name: /^Open in graph/ });
     expect(opens).toHaveLength(2);
     expect(opens.map((button) => button.className)).toEqual(['link', 'link']);
   });
@@ -32,6 +32,20 @@ describe('the buttons of the Search results page', () => {
     expect(calls).toBe(2);
   });
 
+  it('marks the Open in graph of a related row and the Retry of a group whose read failed link-style, like the other search buttons', async () => {
+    const answer = answerOf('demo', [], {
+      counts: { exact: { quality: 'unknown', scope: 'search:exact' } },
+      related: relatedOf([hit('demo', 'REF-1'), hit('demo', 'REF-2')]),
+      failures: [{ group: 'exact', code: 'SOURCE_BUSY' }],
+    });
+    renderApp(searchAt('demo', 'AC'), searchKit(['demo'], async () => ok(answer)).client);
+    await screen.findByRole('heading', { level: 2, name: /Related records/ });
+    expect(within(main()).getAllByRole('button', { name: /^Open in graph/ }).map((button) => button.className)).toEqual(['link', 'link']);
+    const retry = within(main()).getByRole('button', { name: 'Retry' });
+    expect(retry.classList.contains('link')).toBe(true);
+    expect(retry.classList.contains('search-retry')).toBe(true);
+  });
+
   it('marks the Try again of a failed sources read and of a failed profile read secondary', async () => {
     const kit = searchKit(['demo'], async () => ok(answerOf('demo', [])));
     const noSources = renderApp(searchAt('demo', 'AC'), { ...kit.client, getSources: async () => down });
@@ -45,7 +59,7 @@ describe('the buttons of the Search results page', () => {
     const kit = searchKit(['demo', 'other'], async () => ok(answerOf('demo', [hit('demo', 'AC-1')])));
     renderApp(searchAt('demo', 'AC'), kit.client);
     const selector = await screen.findByRole('combobox', { name: 'Source' });
-    await screen.findByRole('button', { name: 'Open in graph' });
+    await screen.findByRole('button', { name: /^Open in graph/ });
     selector.focus();
     const user = userEvent.setup();
     const stops = [selector.getAttribute('aria-label')];
@@ -54,6 +68,7 @@ describe('the buttons of the Search results page', () => {
       const active = document.activeElement;
       stops.push(active?.getAttribute('aria-label') ?? active?.textContent ?? '');
     }
-    expect(stops).toEqual(['Source', 'Search text', 'Search', 'Open in graph']);
+    expect(stops.slice(0, 3)).toEqual(['Source', 'Search text', 'Search']);
+    expect(stops[3]).toMatch(/^Open in graph/);
   });
 });

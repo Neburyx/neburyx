@@ -97,7 +97,7 @@ export function SearchAnswer({ result, answeredText, currentText, profile, busy,
         </section>
       )}
       {result.failures.length === 0 ? null : (
-        <button type="button" className="search-retry" onClick={onRetry}>
+        <button type="button" className="link search-retry" onClick={onRetry}>
           {RETRY}
         </button>
       )}
