@@ -49,6 +49,7 @@ test.describe('the controls of Sources and of the failure pages', () => {
     await page.route(isProfile, (route) => route.abort());
     await page.goto('/sources');
     await expectSecondary(page, 'Try again');
+    expect((await page.getByRole('button', { name: 'Try again' }).boundingBox())?.width ?? Infinity, 'the retry is as wide as its label, not the section').toBeLessThan(200);
     await page.unroute(isProfile);
   });
 

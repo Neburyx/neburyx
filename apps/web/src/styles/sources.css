@@ -267,6 +267,10 @@
   font-size: var(--font-size-small);
 }
 
+.mapping-example button {
+  align-self: flex-start;
+}
+
 .mapping-example p {
   margin: 0;
   color: var(--color-text-muted);
