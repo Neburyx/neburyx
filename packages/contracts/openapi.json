@@ -313,18 +313,8 @@
               }
             }
           },
-          "403": {
-            "description": "The policy does not allow this principal to read the source",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
           "404": {
-            "description": "No configured source has this id, or the source holds no such entity",
+            "description": "No configured source has this id, the person may not read it (one answer for these), or the source holds no such entity",
             "content": {
               "application/json": {
                 "schema": {
@@ -428,18 +418,8 @@
               }
             }
           },
-          "403": {
-            "description": "The policy does not allow this principal to read the source",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
           "404": {
-            "description": "No configured source has this id, or the source holds no such entity",
+            "description": "No configured source has this id, the person may not read it (one answer for these), or the source holds no such entity",
             "content": {
               "application/json": {
                 "schema": {
