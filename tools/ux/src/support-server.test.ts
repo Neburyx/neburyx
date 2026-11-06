@@ -67,13 +67,13 @@ describe('the support server', () => {
       expect(page.status, path).toBe(200);
       expect(await page.text()).toContain('<title>app</title>');
     }
-    expect((await fetch(`${base}/assets/missing.js`)).status).toBe(404);
+    expect(await (await fetch(`${base}/assets/missing.js`)).text()).toBe('<!doctype html><title>app</title>');
   });
 
   it('does not serve a file outside the folder', async () => {
     const base = await start();
     const reply = await fetch(`${base}/..%2f..%2fetc%2fhosts`);
-    expect(reply.status).not.toBe(200);
+    expect(await reply.text()).toBe('<!doctype html><title>app</title>');
   });
 
   it('answers bodies the web app accepts: the contracts parse them, and the profile is the committed one', async () => {
@@ -155,7 +155,7 @@ describe('the investigations the support server holds', () => {
 
     it('refuses the first source’s types under the second source and the second’s under the first', async () => {
       const base = await startTwo();
-      expect((await openIn(base, 'demo', {}, 'extra')).status).toBe(404);
+      expect((await openIn(base, 'demo', {}, 'extra')).status).toBe(400);
       expect((await openIn(base, 'other', {}, 'extra')).status).toBe(201);
       expect((await fetch(`${base}/v1/entities/demo/extra/T-1`)).status).toBe(404);
       expect((await fetch(`${base}/v1/entities/nowhere/thing/T-1`)).status).toBe(404);
@@ -179,19 +179,44 @@ describe('the investigations the support server holds', () => {
       const mismatch = await open(base, { sourceId: 'demo', entity: { sourceId: 'other', entityType: 'thing', stableId: 'T-1' } });
       expect(mismatch.status).toBe(400);
       expect(await mismatch.json()).toMatchObject({ error: { code: 'SOURCE_MISMATCH' } });
-      expect((await openIn(base, 'nowhere')).status).toBe(400);
+      expect((await openIn(base, 'nowhere')).status).toBe(404);
+    });
+
+    it('answers a source it lists but refuses, a source it does not list and a missing entity with the same 404 body, for an open and for an entity read', async () => {
+      const server = createSupportServer({ root: folder, profile: { sourceId: 'demo', entityTypes: [{ type: 'thing' }] }, otherProfiles: [{ sourceId: 'closed', entityTypes: [{ type: 'thing' }] }], refusedSources: ['closed'] });
+      await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
+      closing = () => new Promise<void>((done) => void server.close(() => done()));
+      const base = baseOf(server);
+      expect(sourcesResponseSchema.parse(await (await fetch(`${base}/v1/sources`)).json()).items.map((item) => item.id)).toEqual(['demo', 'closed']);
+      const answers = await Promise.all([openIn(base, 'closed'), openIn(base, 'nowhere'), openIn(base, 'demo', {}, 'thing').then(() => open(base, { sourceId: 'demo', entity: { sourceId: 'demo', entityType: 'thing', stableId: 'missing' } }))]);
+      for (const reply of answers) expect(reply.status).toBe(404);
+      expect(new Set(await Promise.all(answers.map((reply) => reply.text()))).size).toBe(1);
+      const reads = await Promise.all([fetch(`${base}/v1/entities/closed/thing/T-1`), fetch(`${base}/v1/entities/nowhere/thing/T-1`), fetch(`${base}/v1/entities/demo/thing/missing`)]);
+      expect(new Set(await Promise.all(reads.map((reply) => reply.text()))).size).toBe(1);
+      expect(reads.map((reply) => reply.status)).toEqual([404, 404, 404]);
     });
   });
 
-  it('answers 404 for an entity named missing, an unknown type and an unknown investigation, and 400 for a request that names another source', async () => {
+  it('answers 404 for an entity named missing and an unknown investigation, 400 for an unknown type, and 400 for a request that names another source', async () => {
     const base = await startWithTypes();
     expect((await open(base, request({ entity: { sourceId: 'demo', entityType: 'thing', stableId: 'missing' } }))).status).toBe(404);
-    expect((await open(base, request({ entity: { sourceId: 'demo', entityType: 'other', stableId: 'T-1' } }))).status).toBe(404);
+    expect((await open(base, request({ entity: { sourceId: 'demo', entityType: 'other', stableId: 'T-1' } }))).status).toBe(400);
     expect((await open(base, request({ entity: { sourceId: 'elsewhere', entityType: 'thing', stableId: 'T-1' } }))).status).toBe(400);
     expect((await open(base, 'not an object')).status).toBe(400);
     expect((await fetch(`${base}/v1/investigations/0192f000-0000-7000-8000-0000000000ee`)).status).toBe(404);
     expect((await fetch(`${base}/v1/entities/demo/thing/missing`)).status).toBe(404);
     expect((await fetch(`${base}/v1/entities/demo/thing/~`)).status).toBe(400);
     expect(await (await fetch(`${base}/v1/entities/demo/thing/~..`)).json()).toMatchObject({ ref: { stableId: '..' } });
+  });
+});
+
+describe('the page for an address that is not a file', () => {
+  it('serves the page for an address with a dot in it or ending in dots, for every first segment that does not collide with the API (the routes of the web app and the folder and files of the build included), for a probe path with more after it, and answers the API for /v1 and under it', async () => {
+    const base = await start();
+    for (const path of ['/s/entity/account/~..', '/s/entity/account/AC.1', '/s/entity/account/1.2.3', '/s/entity/account/x..', '/v10/entity/a/b', '/v1-other/entity/a/b', '/healthz/entity/a/b', '/readyz/entity/a/b', '/assets2/entity/a/b', '/assets/entity/a/b', '/explore/entity/a/b', '/investigations/entity/a/b', '/sources/entity/a/b', '/dev/entity/a/b', '/index.html/entity/a/b']) {
+      expect(await (await fetch(base + path)).text(), path).toBe('<!doctype html><title>app</title>');
+    }
+    for (const path of ['/v1/entity/a/b', '/v1']) expect((await fetch(base + path)).headers.get('content-type'), path).toContain('application/json');
+    expect(await (await fetch(`${base}/assets/missing.js`)).text()).toBe('<!doctype html><title>app</title>');
   });
 });

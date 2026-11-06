@@ -14,6 +14,7 @@ import { AppError, codeForFailure, detailsOf, errorResponse, errorStatus } from 
 import type { AppStore } from './app-store.js';
 import { createEntityReader } from './entities/entity-reader.js';
 import { createInvestigationService } from './investigations/investigation-service.js';
+import { createSourceAccess } from './investigations/source-access.js';
 import type { Gate } from './gate/types.js';
 import type { JobRunner } from './jobs/runner.js';
 import type { MappingModel } from './mapping/model.js';
@@ -288,7 +289,8 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
   });
 
   if (options.gate !== undefined) {
-    const entities = createEntityReader({ gate: options.gate, mapping });
+    const access = createSourceAccess({ mapping, seams: options.seams ?? communitySeams(), logger: options.logger });
+    const entities = createEntityReader({ gate: options.gate, mapping, access });
     app.get('/v1/entities/:sourceId/:entityType/:stableId', { exposeHeadRoute: false, config: { permission: 'principal' } }, async (request) => {
       const path = entityPathSchema.safeParse(request.params);
       const query = entityQuerySchema.safeParse(request.query);
@@ -298,7 +300,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       return nodeSchema.parse(node);
     });
 
-    const investigations = createInvestigationService({ store: options.store, entities, mapping });
+    const investigations = createInvestigationService({ store: options.store, entities, mapping, access });
     app.post('/v1/investigations', { config: { permission: 'principal' } }, async (request, reply) => {
       const body = openInvestigationRequestSchema.safeParse(request.body);
       if (!noQuerySchema.safeParse(request.query).success || !body.success) throw new AppError('INVALID_REQUEST');

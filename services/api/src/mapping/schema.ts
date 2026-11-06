@@ -1,3 +1,4 @@
+import { RESERVED_SOURCE_IDS } from './reserved-source-ids.js';
 import { iconKeySchema, PII_CLASSES, presetTemplateSchema, type PiiClass } from '@neburyx/contracts';
 import { z } from 'zod';
 import { budgetsSchema } from './budgets.js';
@@ -139,7 +140,7 @@ const presetSchema = z.strictObject({
 const vocabularySchema = z.strictObject({ case_ref: name.optional() });
 
 const sourceSchema = z.strictObject({
-  id: z.string().regex(SOURCE_ID),
+  id: z.string().regex(SOURCE_ID).refine((id) => !RESERVED_SOURCE_IDS.includes(id), { message: 'is the first segment of the paths the API answers, so a deep link to this source could not reach the app: use another ID' }),
   uri: uriSchema,
   database: name,
   auth: authSchema,

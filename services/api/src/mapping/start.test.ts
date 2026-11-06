@@ -125,3 +125,14 @@ describe('start-up refused for a mapping mistake', () => {
     for (const secret of ['hunter2', 'private-host', 'PRIVATE_USER_VAR', 'PRIVATE_PASSWORD_VAR']) expect(outcome.message).not.toContain(secret);
   });
 });
+
+describe('start-up with a source whose ID the API paths take', () => {
+  it('does not start, names the key and why, and does not open the store', async () => {
+    const result = await refused(fileOf(baseSource({ id: 'v1' })));
+    expect(result.exitCode).not.toBe(0);
+    expect(result.hasApp).toBe(false);
+    expect(result.message).toContain('sources[0].id');
+    expect(result.message).toContain('first segment of the paths the API answers');
+    expect(result.openStore).not.toHaveBeenCalled();
+  });
+});

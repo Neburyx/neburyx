@@ -6,6 +6,7 @@ import { uuidv7 } from '../identity/uuid.js';
 import type { EntityModel, MappingModel, SourceModel } from '../mapping/model.js';
 import { identityHashOf } from '../registry/identity-hash.js';
 import type { Principal } from '../seams/seams.js';
+import type { SourceAccess } from './source-access.js';
 import { COMMUNITY_POLICY_VERSION, contentHashOf, defaultTitle, initialDraftDocuments } from './draft.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -30,6 +31,7 @@ export interface InvestigationServiceDeps {
   readonly store: InvestigationStore;
   readonly entities: EntityReader;
   readonly mapping: MappingModel;
+  readonly access: SourceAccess;
 }
 
 function sourceStateOf(mapping: MappingModel, row: InvestigationRow): InvestigationSourceState {
@@ -101,6 +103,7 @@ export function createInvestigationService(deps: InvestigationServiceDeps): Inve
   return {
     async open(call) {
       const { request } = call;
+      await deps.access.require({ traceId: call.traceId, principal: call.principal, sourceId: request.sourceId });
       const source = sourceOf(deps.mapping, request);
       const existing = request.caseRef === undefined ? undefined : await deps.store.findReusableInvestigation({ ownerId: call.principal.id, sourceId: request.sourceId, caseRef: request.caseRef, entityType: request.entity.entityType, stableId: request.entity.stableId });
       if (existing === undefined) return create(call, source, entityTypeOf(source, request));

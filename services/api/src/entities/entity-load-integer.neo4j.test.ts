@@ -11,6 +11,7 @@ import { communitySeams } from '../seams/community-seams.js';
 import { LOCAL_PRINCIPAL } from '../testing/gate.js';
 import { envFor, NEO4J_SERIES, runAdmin, runAll, sourceFor, startNeo4j, type RunningNeo4j } from '../testing/neo4j-server.js';
 import { ALWAYS_USABLE } from '../testing/usability.js';
+import { communityAccess } from '../testing/source-access.js';
 import { createEntityReader } from './entity-reader.js';
 
 const IDS = ['123', '9007199254740993', '-42', '9223372036854775807', '-9223372036854775808'];
@@ -44,7 +45,8 @@ afterAll(async () => {
 });
 
 function read(entityType: string, stableId: string) {
-  return createEntityReader({ gate: parts.gate, mapping: { sources: [source()] } }).read({ traceId: 'tr-integer', principal: LOCAL_PRINCIPAL, sourceId: 'graph', entityType, stableId, mask: false });
+  const mapping = { sources: [source()] };
+  return createEntityReader({ gate: parts.gate, mapping, access: communityAccess(mapping) }).read({ traceId: 'tr-integer', principal: LOCAL_PRINCIPAL, sourceId: 'graph', entityType, stableId, mask: false });
 }
 
 async function notFound(entityType: string, stableId: string): Promise<boolean> {

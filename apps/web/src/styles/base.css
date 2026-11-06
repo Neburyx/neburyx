@@ -221,3 +221,8 @@ section {
   outline: var(--focus-outline);
   outline-offset: var(--focus-offset);
 }
+
+/* a heading is focused by the page so that a message is read first; it is not a control and draws no ring */
+h1[tabindex='-1']:focus-visible {
+  outline: none;
+}

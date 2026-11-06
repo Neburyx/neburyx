@@ -12,6 +12,7 @@ import { createTestRuns } from './sources/test-runs.js';
 import { TestRunsProvider } from './sources/test-runs-context.js';
 import { createShellData, ShellDataProvider } from './shell/shell-data.js';
 import type { ClientState } from './state/client-state.js';
+import { DeepLinkPage } from './investigations/deep-link-page.js';
 import { ExploreInvestigation } from './investigations/explore-investigation.js';
 import { WorkspaceShell } from './workspace/workspace-shell.js';
 
@@ -44,6 +45,13 @@ function developmentRoutes(client: ApiClient): RouteObject[] {
       lazy: async () => {
         const { FixturePage } = await import('./dev/fixture-page.js');
         return { element: <FixturePage client={client} /> };
+      },
+    },
+    {
+      path: 'dev/open-link',
+      lazy: async () => {
+        const { OpenLinkPage } = await import('./dev/open-link-page.js');
+        return { element: <OpenLinkPage /> };
       },
     },
     {
@@ -96,6 +104,7 @@ export function appRoutes(client: ApiClient, state: ClientState): RouteObject[] 
             { path: 'investigations', element: <NotBuiltYet title="Investigations" /> },
             { path: 'sources', element: <SourcesPage /> },
             ...developmentRoutes(client),
+            { path: ':sourceId/entity/:entityType/:stableId', element: <DeepLinkPage client={client} /> },
             { path: '*', element: <NotFound /> },
           ],
         },

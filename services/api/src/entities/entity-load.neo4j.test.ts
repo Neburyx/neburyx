@@ -6,6 +6,7 @@ import { NEO4J_SERIES, runAdmin, runAll } from '../testing/neo4j-server.js';
 import { itemsOf, madeRecordCount, removeMadeRecords, startPackServers, withMadeRecords, type PackServer } from '../testing/normalization-capture.js';
 import { PACKS } from '../testing/pack-fixtures.js';
 import { LOCAL_PRINCIPAL } from '../testing/gate.js';
+import { communityAccess } from '../testing/source-access.js';
 import { createEntityReader } from './entity-reader.js';
 
 let servers: PackServer[] = [];
@@ -19,7 +20,8 @@ afterAll(async () => {
 });
 
 function readerOf(target: PackServer) {
-  return createEntityReader({ gate: target.gate, mapping: { sources: [target.source] } });
+  const mapping = { sources: [target.source] };
+  return createEntityReader({ gate: target.gate, mapping, access: communityAccess(mapping) });
 }
 
 async function load(target: PackServer, entityType: string, stableId: string, mask = false) {
