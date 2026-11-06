@@ -87,8 +87,8 @@ export interface CanvasEvents {
 export interface CanvasRenderer {
   /** Shows `viewport` at once when given; with none, the first drawing that has entities is fitted (unless the scene says it is drawn as positioned). */
   mount(container: HTMLElement | undefined, events: CanvasEvents, viewport: Viewport | undefined): void;
-  /** Draws the scene: every entity where the scene puts it, never moved by the renderer on its own. */
-  draw(scene: Scene): void;
+  /** Draws the scene: every entity where the scene puts it, never moved by the renderer on its own. `restore` is the viewport an investigation had when it was set aside: a scene that starts a new drawing (another source, or every entity replaced) shows it instead of fitting. */
+  draw(scene: Scene, restore?: Viewport): void;
   /** Shows every drawn entity; does nothing when none is drawn. */
   fit(): void;
   /** Multiplies the zoom around the centre of the canvas, within the zoom limits. */

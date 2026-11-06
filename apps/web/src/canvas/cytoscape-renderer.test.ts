@@ -108,6 +108,53 @@ describe('the Cytoscape renderer', () => {
   });
 });
 
+describe('the drawing of an investigation that was set aside and comes back', () => {
+  const first = { ...scene([['a', { x: 0, y: 0 }], ['b', { x: 400, y: 300 }]]), source: 'one' };
+  const second = { ...scene([['c', { x: 50, y: 50 }]]), source: 'two' };
+  const held: Viewport = { zoom: 2.5, x: -120, y: 33 };
+  const started = () => {
+    const renderer = createCytoscapeRenderer({ nextFrame: (callback) => callback(), canvasSize: () => ({ width: 1000, height: 800 }) });
+    renderer.mount(undefined, NO_EVENTS, undefined);
+    return renderer;
+  };
+
+  it('shows the viewport it was left with, instead of fitting, when another source was drawn in between', () => {
+    const renderer = started();
+    renderer.draw(first);
+    renderer.draw(second);
+    const fitsBefore = renderer.inspect().fits;
+    renderer.draw(first, held);
+    expect(renderer.viewport()).toEqual(held);
+    expect(renderer.inspect().fits).toBe(fitsBefore);
+  });
+
+  it('shows the viewport it was left with when every entity of a drawing of the same source was replaced', () => {
+    const renderer = started();
+    renderer.draw({ ...first, source: 'same' });
+    renderer.draw({ ...second, source: 'same' });
+    renderer.draw({ ...first, source: 'same' }, held);
+    expect(renderer.viewport()).toEqual(held);
+  });
+
+  it('fits a drawing that has no viewport to come back to', () => {
+    const renderer = started();
+    renderer.draw(first);
+    renderer.draw(second);
+    const fitsBefore = renderer.inspect().fits;
+    renderer.draw(first, undefined);
+    expect(renderer.inspect().fits).toBe(fitsBefore + 1);
+    expect(renderer.viewport()).not.toEqual(held);
+  });
+
+  it('leaves the viewport alone on a draw that does not start a new drawing, whatever viewport it is given', () => {
+    const renderer = started();
+    renderer.draw(first);
+    const shown = renderer.viewport();
+    renderer.draw({ ...first, selection: new Set(['a']) }, held);
+    expect(renderer.viewport()).toEqual(shown);
+  });
+});
+
 describe('the entities the Cytoscape renderer draws', () => {
   const look = (iconKey: 'generic' | 'money', line1: string, line2: string) => ({ iconKey, line1, line2 });
   const one = (position: { x: number; y: number }, entityLook = look('money', 'ACC-1', 'Alpha · Open')): Scene => ({ entities: [{ id: 'a', position, look: entityLook }], relationships: [], profile: undefined, omitted: 0, selection: new Set<string>(), pinned: new Set<string>(), tool: 'select' as const, source: null, view: 'fit' as const });

@@ -1,6 +1,6 @@
 import type { IconKey } from '@neburyx/contracts';
 import cytoscape, { type Core, type EdgeSingular, type NodeSingular, type StylesheetJson } from 'cytoscape';
-import type { PointerTool, Position } from '../state/presentation-state.js';
+import type { PointerTool, Position, Viewport } from '../state/presentation-state.js';
 import { CAPTION_HEIGHT, CAPTION_TOP, CAPTION_WIDTH } from './caption-layout.js';
 import { paintCaption, type CaptionPainter } from './caption-painter.js';
 import { glyphUri } from './glyphs.js';
@@ -297,11 +297,14 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
   };
   const sizeOf = (cy: Core): Size => options.canvasSize?.() ?? (surfaced ? { width: cy.width(), height: cy.height() } : { width: 0, height: 0 });
 
-  const fitEntities = (cy: Core): void => {
-    const viewport = fitViewport(cy.nodes().boundingBox({}), sizeOf(cy), FIT_PADDING);
-    if (viewport === undefined) return;
+  const showViewport = (cy: Core, viewport: Viewport): void => {
     cy.minZoom(Math.min(ZOOM_MIN, viewport.zoom));
     cy.viewport({ zoom: viewport.zoom, pan: { x: viewport.x, y: viewport.y } });
+  };
+
+  const fitEntities = (cy: Core): void => {
+    const viewport = fitViewport(cy.nodes().boundingBox({}), sizeOf(cy), FIT_PADDING);
+    if (viewport !== undefined) showViewport(cy, viewport);
   };
 
   return {
@@ -521,23 +524,22 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
       reportFailure = events.failed;
       options.onCore?.(created);
       core = created;
-      if (viewport !== undefined) {
-        created.minZoom(Math.min(ZOOM_MIN, viewport.zoom));
-        created.viewport({ zoom: viewport.zoom, pan: { x: viewport.x, y: viewport.y } });
-      }
+      if (viewport !== undefined) showViewport(created, viewport);
       fitted = viewport !== undefined;
       fits = 0;
       paints = container !== undefined || options.paintCaption !== undefined;
       surfaced = container !== undefined;
     },
-    draw(scene: Scene) {
+    draw(scene: Scene, restore?: Viewport) {
       const cy = requireCore();
       tool = scene.tool;
+      let anotherSource = false;
       if (scene.source !== lastSource) {
         cancelDrag();
         if (lastSource !== undefined) {
           fitted = false;
           pendingReport = undefined;
+          anotherSource = true;
         }
         lastSource = scene.source;
       }
@@ -604,8 +606,11 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
       syncFar(cy, true);
       const replaced = hadEntities && scene.entities.length > 0 && retained === 0;
       if (scene.view === 'fit' && scene.entities.length > 0 && (!fitted || replaced)) {
-        fitEntities(cy);
-        fits += 1;
+        if (restore !== undefined && (anotherSource || replaced)) showViewport(cy, restore);
+        else {
+          fitEntities(cy);
+          fits += 1;
+        }
         syncFar(cy, true);
       }
       if (scene.entities.length > 0) fitted = true;

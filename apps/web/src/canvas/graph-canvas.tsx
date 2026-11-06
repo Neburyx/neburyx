@@ -143,7 +143,7 @@ export function GraphCanvas({ profile, view = 'fit' }: { readonly profile?: Sour
     const draw = (): void => {
       if (!current) return;
       try {
-        renderer.draw(scene);
+        renderer.draw(scene, state.presentation.view.getState().viewport);
         beforeLayout.current = undefined;
         if (placed.size > 0) state.presentation.setPositions(placed);
         if (__DEV_TOOLS__ && container.current !== null) writeReadout(container.current, { ...renderer.describe(), viewport: renderer.viewport(), drawn: { positions: renderer.positions(), pinned: state.presentation.view.getState().pins, focused: scene.focused } });

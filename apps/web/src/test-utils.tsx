@@ -103,6 +103,7 @@ export interface StubRenderer extends CanvasRenderer {
   readonly events: CanvasEvents[];
   readonly startViewports: Array<Viewport | undefined>;
   readonly scenes: Scene[];
+  readonly restores: Array<Viewport | undefined>;
   readonly zooms: number[];
   fits: number;
   disposed: number;
@@ -126,6 +127,7 @@ export function stubRenderer(options: StubOptions = {}): StubRenderer {
     events: [],
     startViewports: [],
     scenes: [],
+    restores: [],
     zooms: [],
     fits: 0,
     disposed: 0,
@@ -135,12 +137,13 @@ export function stubRenderer(options: StubOptions = {}): StubRenderer {
       stub.events.push(events);
       stub.startViewports.push(viewport);
     },
-    draw(scene) {
+    draw(scene, restore) {
       if (options.failOn === 'draw' && failures > 0) {
         failures -= 1;
         throw new Error('cannot draw');
       }
       stub.scenes.push(scene);
+      stub.restores.push(restore);
       drawn = scene;
     },
     fit() {
