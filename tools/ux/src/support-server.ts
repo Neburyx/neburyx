@@ -2,7 +2,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { extname, join, normalize, sep } from 'node:path';
-import { openInvestigationRequestSchema, SEARCH_GROUP_CAP, searchRequestSchema, searchResultSchema, valueOfPathSegment } from '@neburyx/contracts';
+import { DEFAULT_INVESTIGATION_LIST_LIMIT, investigationListQuerySchema, type Investigation, openInvestigationRequestSchema, SEARCH_GROUP_CAP, searchRequestSchema, searchResultSchema, valueOfPathSegment } from '@neburyx/contracts';
 
 interface SupportProfile {
   readonly sourceId: string;
@@ -81,7 +81,7 @@ function node(sourceId: string, entityType: string, stableId: string): unknown {
 const REPOINTED_CASE_REF = 'repointed';
 const isRepointed = (caseRef: string | null): boolean => caseRef?.startsWith(REPOINTED_CASE_REF) === true;
 
-function shown(stored: StoredInvestigation, isNew = false): unknown {
+function shown(stored: StoredInvestigation, isNew = false): Investigation {
   return {
     id: stored.id,
     sourceId: stored.sourceId,
@@ -120,6 +120,19 @@ function createInvestigations(options: SupportServerOptions) {
       const stored = held.get(id);
       if (stored === undefined) return json(response, 404, NOT_FOUND);
       json(response, 200, { investigation: shown(stored), draft: draftOf(stored) });
+    },
+    list(search: URLSearchParams, response: ServerResponse): void {
+      const entries = [...search.entries()];
+      const query = investigationListQuerySchema.safeParse(Object.fromEntries(entries));
+      if (!query.success || new Set(entries.map(([name]) => name)).size !== entries.length) return json(response, 400, INVALID);
+      const limit = query.data.limit ?? DEFAULT_INVESTIGATION_LIST_LIMIT;
+      const eligible = [...held.values()]
+        .filter((stored) => readable(stored.sourceId))
+        .sort((left, right) => (left.createdAt === right.createdAt ? (left.id < right.id ? 1 : -1) : left.createdAt < right.createdAt ? 1 : -1));
+      json(response, 200, {
+        items: eligible.slice(0, limit).map((stored) => ({ ...shown(stored), sourceAlias: stored.sourceId, save: { state: 'unsaved', savedAt: null } })),
+        hasMore: eligible.length > limit,
+      });
     },
     open(body: unknown, response: ServerResponse): void {
       const parsed = openInvestigationRequestSchema.safeParse(body);
@@ -231,6 +244,7 @@ export function createSupportServer(options: SupportServerOptions): Server {
           const stableId = valueOfPathSegment(third);
           return entityType === undefined || stableId === undefined ? json(response, 400, INVALID) : investigations.entity(first, entityType, stableId, response);
         }
+        if (kind === 'investigations' && parts.length === 3) return investigations.list(new URL(request.url ?? '/', 'http://localhost').searchParams, response);
         if (kind === 'investigations' && parts.length === 4 && first !== undefined) return investigations.read(first, response);
         return api(path, options, response);
       }

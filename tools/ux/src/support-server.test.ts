@@ -2,8 +2,8 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'nod
 import type { Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { investigationResponseSchema, meResponseSchema, openInvestigationResponseSchema, searchResultSchema, sourceProfileSchema, sourcesResponseSchema } from '@neburyx/contracts';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { investigationListResponseSchema, investigationResponseSchema, meResponseSchema, openInvestigationResponseSchema, searchResultSchema, sourceProfileSchema, sourcesResponseSchema } from '@neburyx/contracts';
 import { createSupportServer } from './support-server.ts';
 
 const committed: unknown = JSON.parse(readFileSync(new URL('../fixtures/profile.json', import.meta.url), 'utf8'));
@@ -25,6 +25,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+  vi.useRealTimers();
   await closing?.();
   closing = undefined;
   rmSync(folder, { recursive: true, force: true });
@@ -98,6 +99,33 @@ describe('the investigations the support server holds', () => {
   }
   const open = (base: string, body: unknown) => fetch(`${base}/v1/investigations`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
   const request = (extra: Record<string, unknown> = {}) => ({ sourceId: 'demo', entity: { sourceId: 'demo', entityType: 'thing', stableId: 'T-1' }, ...extra });
+
+  it('lists the investigations opened, the most recently created first, five unless asked, with whether more exist, and refuses a query that is not the contract\'s', async () => {
+    vi.useFakeTimers({ toFake: ['Date'], now: Date.parse('2026-11-05T12:00:00.000Z') });
+    const base = await startWithTypes();
+    const list = async (query = '') => investigationListResponseSchema.parse(await (await fetch(`${base}/v1/investigations${query}`)).json());
+    expect(await list()).toEqual({ items: [], hasMore: false });
+    for (const id of ['T-1', 'T-2', 'T-3', 'T-4', 'T-5', 'T-6']) {
+      vi.advanceTimersByTime(1000);
+      await open(base, request({ entity: { sourceId: 'demo', entityType: 'thing', stableId: id } }));
+    }
+    const first = await list('?limit=5&sort=lastEdited');
+    expect(first.items.map((item) => item.startingEntity?.stableId)).toEqual(['T-6', 'T-5', 'T-4', 'T-3', 'T-2']);
+    expect(first).toMatchObject({ hasMore: true });
+    expect(first.items[0]).toMatchObject({ sourceAlias: 'demo', save: { state: 'unsaved', savedAt: null }, sourceState: 'available' });
+    expect(await list()).toEqual(first);
+    expect((await list('?limit=25')).hasMore).toBe(false);
+    for (const query of ['?limit=0', '?limit=26', '?sort=name', '?other=1', '?limit=5&limit=6']) expect((await fetch(`${base}/v1/investigations${query}`)).status).toBe(400);
+  });
+
+  it('puts the larger id first between investigations created at the same time', async () => {
+    vi.useFakeTimers({ toFake: ['Date'], now: Date.parse('2026-11-05T12:00:00.000Z') });
+    const base = await startWithTypes();
+    const ids: string[] = [];
+    for (const stableId of ['T-1', 'T-2', 'T-3', 'T-4']) ids.push(openInvestigationResponseSchema.parse(await (await open(base, request({ entity: { sourceId: 'demo', entityType: 'thing', stableId } }))).json()).investigation.id);
+    const listed = investigationListResponseSchema.parse(await (await fetch(`${base}/v1/investigations`)).json());
+    expect(listed.items.map((item) => item.id)).toEqual([...ids].sort().reverse());
+  });
 
   it('opens an investigation, reads it back, and reads the entity', async () => {
     const base = await startWithTypes();
