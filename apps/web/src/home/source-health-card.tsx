@@ -33,7 +33,7 @@ function Failure({ failure, retry, headline }: { readonly failure: ApiFailure; r
     <div className="source-health-failure">
       {headline ? <p>{COPY.couldNotRead}</p> : null}
       <FailureNotice failure={failure} />
-      <button type="button" onClick={retry}>
+      <button type="button" className="secondary" onClick={retry}>
         {COPY.tryAgain}
       </button>
     </div>

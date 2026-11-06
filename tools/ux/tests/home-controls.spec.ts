@@ -75,5 +75,16 @@ test.describe('the controls of Home', () => {
     await expect(page.getByRole('search')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Open a deep link' })).toBeVisible();
   });
+  test('draws the Try again of the source health card, and of the search row, as secondary buttons when the sources could not be read', async ({ page }) => {
+    await page.route((url) => url.pathname === '/v1/sources', (route) => route.abort());
+    await page.goto('/');
+    const retries = page.getByRole('button', { name: 'Try again' });
+    await expect(retries.first()).toBeVisible();
+    const count = await retries.count();
+    expect(count).toBeGreaterThanOrEqual(2);
+    const [surface, border] = [await tokenColour(page, '--color-surface'), await tokenColour(page, '--color-control-border')];
+    for (let index = 0; index < count; index += 1) expect(await lookOf(retries.nth(index))).toMatchObject({ 'background-color': surface, 'border-top-color': border, height: '34px' });
+    await expect(page.getByRole('region', { name: /health/i }).getByRole('button', { name: 'Try again' })).toBeVisible();
+  });
 });
 

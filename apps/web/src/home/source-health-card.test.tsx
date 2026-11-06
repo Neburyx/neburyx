@@ -230,6 +230,7 @@ describe('Home: the Source health card while the sources are not read', () => {
     expect(await screen.findByText('No recent investigations.')).toBeTruthy();
     expect(within(region()).queryByRole('link', { name: 'View sources →' })).toBeNull();
     expect(parts.reads()).toBe(1);
+    expect(within(region()).getByRole('button', { name: 'Try again' }).className).toBe('secondary');
     await user.click(within(region()).getByRole('button', { name: 'Try again' }));
     expect(await within(region()).findByRole('heading', { name: 'alpha', level: 3 })).toBeTruthy();
     expect(parts.reads()).toBe(2);
