@@ -13,6 +13,7 @@ import { attempt, rows } from '../testing/database.js';
 import { entityRows, plainNode } from '../testing/entity-fixtures.js';
 import type { ExecuteOutcome } from '../gate/executor.js';
 import { TestExecutor } from '../testing/gate.js';
+import { withOnlineIndexes } from '../testing/search-fixtures.js';
 import { baseSource, fileOf } from '../testing/mapping.js';
 import { startPostgres, type TestDatabase, type TestPostgres } from '../testing/postgres.js';
 import { testSourceGate } from '../testing/source-gate.js';
@@ -50,7 +51,8 @@ function openStore(database: TestDatabase): AppStore {
 
 async function appOn(database: TestDatabase, appMapping = mapping, answer: ExecuteOutcome | (() => Promise<ExecuteOutcome>) = entityRows(WIDGET), wrap: (store: AppStore) => AppStore = (store) => store) {
   const store = wrap(openStore(database));
-  const executor = new TestExecutor(typeof answer === 'function' ? answer : () => Promise.resolve(answer));
+  const data = typeof answer === 'function' ? answer : () => Promise.resolve(answer);
+  const executor = new TestExecutor(withOnlineIndexes(mapping.sources[0] ?? (() => { throw new Error('the mapping has no source'); })(), data));
   const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store, mapping: appMapping, gate: testSourceGate(appMapping, { executor }).gate });
   return { app, store, executor };
 }
