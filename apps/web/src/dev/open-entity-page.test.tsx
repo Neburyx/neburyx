@@ -27,7 +27,7 @@ describe('the open-entity page', () => {
     await user.click(screen.getByRole('button', { name: 'Open' }));
     expect(await screen.findByRole('heading', { name: 'kind-a A-1', level: 1 })).toBeTruthy();
     expect(screen.getByText('CASE-1')).toBeTruthy();
-    expect(calls).toEqual({ openInvestigation: [1], getEntity: [], getInvestigation: [] });
+    expect(calls).toEqual({ openInvestigation: [1], getEntity: [], getInvestigation: [], listInvestigations: [] });
   });
 
   it('submits once however often Open is pressed while the request is in flight', async () => {

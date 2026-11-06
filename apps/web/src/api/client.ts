@@ -1,6 +1,7 @@
 import {
   errorBodySchema,
   errorResponseSchema,
+  investigationListResponseSchema,
   investigationResponseSchema,
   meResponseSchema,
   nodeSchema,
@@ -13,6 +14,7 @@ import {
   type ElementRef,
   type ErrorResponse,
   type GraphNode,
+  type InvestigationListResponse,
   type InvestigationResponse,
   type MeResponse,
   type OpenInvestigationRequest,
@@ -54,6 +56,8 @@ export interface ApiClient {
   /** Opens an entity as an investigation: creates one, or resumes the caller's own for the same case reference. */
   openInvestigation(request: OpenInvestigationRequest, signal?: AbortSignal): Promise<ApiResult<OpenInvestigationResponse>>;
   getInvestigation(id: string, signal?: AbortSignal): Promise<ApiResult<InvestigationResponse>>;
+  /** The caller's most recently edited open investigations, across every source they may read; Postgres only. */
+  listInvestigations(limit: number, signal?: AbortSignal): Promise<ApiResult<InvestigationListResponse>>;
   /** The exact matches of a text in one source; every hit and the answer name the source that was asked, or the answer is refused. */
   searchEntities(request: SearchRequest, signal?: AbortSignal): Promise<ApiResult<SearchResult>>;
 }
@@ -138,6 +142,7 @@ export function createApiClient(fetcher: Fetcher = (input, init) => fetch(input,
       if (!result.ok) return result;
       return result.value.sourceId !== search.sourceId || result.value.exact.some((node) => node.ref.sourceId !== search.sourceId) ? failed('SCHEMA_MISMATCH') : result;
     },
+    listInvestigations: (limit, signal) => request(fetcher, `/v1/investigations?limit=${limit}&sort=lastEdited`, investigationListResponseSchema, signal),
     getInvestigation: async (id, signal) => {
       const result = await request(fetcher, `/v1/investigations/${encodeURIComponent(id)}`, investigationResponseSchema, signal);
       return result.ok && result.value.investigation.id !== id ? failed('SCHEMA_MISMATCH') : result;

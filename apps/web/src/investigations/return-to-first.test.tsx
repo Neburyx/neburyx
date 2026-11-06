@@ -129,7 +129,7 @@ describe('returning to the first investigation after another source was opened',
     const state = createClientState();
     const view = renderApp(`/explore/${INVESTIGATION_B}`, client, state);
     await screen.findByRole('heading', { name: 'kind-a C-1', level: 1 });
-    expect(calls).toEqual({ getInvestigation: [INVESTIGATION_B], getEntity: [1], openInvestigation: [] });
+    expect(calls).toEqual({ getInvestigation: [INVESTIGATION_B], getEntity: [1], openInvestigation: [], listInvestigations: [] });
     await act(async () => view.router.navigate(`/explore/${INVESTIGATION_A}`));
     await screen.findByRole('heading', { name: 'kind-a A-1', level: 1 });
     expect(calls.getInvestigation).toEqual([INVESTIGATION_B, INVESTIGATION_A]);

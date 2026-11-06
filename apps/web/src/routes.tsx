@@ -14,6 +14,9 @@ import { createTestRuns } from './sources/test-runs.js';
 import { TestRunsProvider } from './sources/test-runs-context.js';
 import { createShellData, ShellDataProvider } from './shell/shell-data.js';
 import type { ClientState } from './state/client-state.js';
+import { HomePage } from './home/home-page.js';
+import { RecentProvider } from './home/recent-context.js';
+import { createRecentInvestigations } from './home/recent-store.js';
 import { DeepLinkPage } from './investigations/deep-link-page.js';
 import { ExploreInvestigation } from './investigations/explore-investigation.js';
 import { WorkspaceShell } from './workspace/workspace-shell.js';
@@ -84,6 +87,7 @@ export function appRoutes(client: ApiClient, state: ClientState): RouteObject[] 
   const testRuns = createTestRuns(client, shellData);
   const excerpts = createExcerpts(client);
   const profile = createProfileStore(client, state.investigation);
+  const recent = createRecentInvestigations(client);
   return [
     {
       path: '/',
@@ -93,7 +97,9 @@ export function appRoutes(client: ApiClient, state: ClientState): RouteObject[] 
             <TestRunsProvider runs={testRuns}>
               <ExcerptsProvider excerpts={excerpts}>
                 <SearchShortcut />
-                <Outlet />
+                <RecentProvider recent={recent}>
+                  <Outlet />
+                </RecentProvider>
               </ExcerptsProvider>
             </TestRunsProvider>
           </ProfileProvider>
@@ -103,7 +109,7 @@ export function appRoutes(client: ApiClient, state: ClientState): RouteObject[] 
         {
           element: <PageShell />,
           children: [
-            { index: true, element: <NotBuiltYet title="Home" /> },
+            { index: true, element: <HomePage /> },
             { path: 'investigations', element: <NotBuiltYet title="Investigations" /> },
             { path: 'search', element: <SearchPage client={client} /> },
             { path: 'sources', element: <SourcesPage /> },

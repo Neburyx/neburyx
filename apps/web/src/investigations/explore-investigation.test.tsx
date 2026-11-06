@@ -34,7 +34,7 @@ describe('/explore/{id}', () => {
     renderApp(`/explore/${INVESTIGATION_A}`, client, state);
     expect(await screen.findByRole('heading', { name: 'kind-a A-1', level: 1 })).toBeTruthy();
     expect(screen.queryByText(OPENING)).toBeNull();
-    expect(calls).toEqual({ getInvestigation: [], getEntity: [], openInvestigation: [] });
+    expect(calls).toEqual({ getInvestigation: [], getEntity: [], openInvestigation: [], listInvestigations: [] });
   });
 
   it('shows a not-found message with a link to Home, and loads nothing, for an investigation that is not the person’s', async () => {

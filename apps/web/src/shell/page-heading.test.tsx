@@ -21,7 +21,7 @@ const answered = () => waitFor(() => expect(screen.queryAllByRole('status').filt
 
 describe('the page heading', () => {
   it.each([
-    ['/', 'Home'],
+    ['/', 'Investigations'],
     ['/investigations', 'Investigations'],
     ['/sources', 'Sources'],
     ['/nowhere', 'Page not found'],
@@ -51,15 +51,15 @@ describe('the page heading', () => {
   });
 
   it('with several sources and none current, names none and shows the badge only when every one is synthetic: a mix, and an empty list, show none', async () => {
-    const all = renderApp('/', clientWith({ me: me(), sources: [source('a'), source('b')] }));
+    const all = renderApp('/sources', clientWith({ me: me(), sources: [source('a'), source('b')] }));
     expect(await screen.findByText('Synthetic data')).toBeTruthy();
     expect(header().queryByText(/read-only/)).toBeNull();
     all.unmount();
-    const mix = renderApp('/', clientWith({ me: me(), sources: [source('a'), source('b', { synthetic: false })] }));
+    const mix = renderApp('/sources', clientWith({ me: me(), sources: [source('a'), source('b', { synthetic: false })] }));
     await answered();
     expect(badge()).toBeNull();
     mix.unmount();
-    renderApp('/', clientWith({ me: me(), sources: [] }));
+    renderApp('/sources', clientWith({ me: me(), sources: [] }));
     await answered();
     expect(badge()).toBeNull();
     expect(document.querySelector('.source-note')).toBeNull();
@@ -68,33 +68,33 @@ describe('the page heading', () => {
   it('follows the bound source: a synthetic one shows the badge although another is real, and a real one hides it although another is synthetic', async () => {
     const synthetic = createClientState();
     synthetic.bindSource('fake');
-    const first = renderApp('/', clientWith({ me: me(), sources: [source('fake'), source('real', { synthetic: false })] }), synthetic);
+    const first = renderApp('/sources', clientWith({ me: me(), sources: [source('fake'), source('real', { synthetic: false })] }), synthetic);
     expect(await screen.findByText('Synthetic data')).toBeTruthy();
     first.unmount();
     const real = createClientState();
     real.bindSource('real');
-    const second = renderApp('/', clientWith({ me: me(), sources: [source('fake'), source('real', { synthetic: false })] }), real);
+    const second = renderApp('/sources', clientWith({ me: me(), sources: [source('fake'), source('real', { synthetic: false })] }), real);
     await answered();
     expect(badge()).toBeNull();
     expect(sourceName('Source real · read-only')).toBeTruthy();
     second.unmount();
     const missing = createClientState();
     missing.bindSource('missing');
-    renderApp('/', clientWith({ me: me(), sources: [source('fake')] }), missing);
+    renderApp('/sources', clientWith({ me: me(), sources: [source('fake')] }), missing);
     await answered();
     expect(badge()).toBeNull();
   });
 
   it('shows the title and the description alone while both reads are awaited, and when both have failed', async () => {
     const loading = renderApp('/', fakeClient({ getMe: () => new Promise(() => undefined), getSources: () => new Promise(() => undefined) }));
-    expect(heading().textContent).toBe('Home');
+    expect(heading().textContent).toBe('Investigations');
     expect(badge()).toBeNull();
     loading.unmount();
     renderApp('/', fakeClient());
     await screen.findAllByRole('alert');
     expect(badge()).toBeNull();
     expect(document.querySelector('.source-note')).toBeNull();
-    expect(heading().textContent).toBe('Home');
+    expect(heading().textContent).toBe('Investigations');
   });
 
   it('shows no badge when the sources fail, and the source and the badge when the principal fails', async () => {

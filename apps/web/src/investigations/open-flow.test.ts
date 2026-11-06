@@ -15,7 +15,7 @@ describe('opening an investigation by its identifier', () => {
     const { client, calls } = knowing([A]);
     const state = createClientState();
     expect(await openById(client, state, INVESTIGATION_A, CONTEXT)).toEqual({ kind: 'shown', id: INVESTIGATION_A, activation: 'fresh' });
-    expect(calls).toEqual({ getInvestigation: [INVESTIGATION_A], getEntity: [1], openInvestigation: [] });
+    expect(calls).toEqual({ getInvestigation: [INVESTIGATION_A], getEntity: [1], openInvestigation: [], listInvestigations: [] });
     expect(state.investigation.getState()).toMatchObject({ id: INVESTIGATION_A, sourceId: 'source-a', record: { title: 'kind-a A-1', caseRef: 'CASE-1', save: { kind: 'unsaved' } } });
     expect(state.loadedGraph().nodes.map((node) => node.ref.stableId)).toEqual(['A-1']);
   });
@@ -87,7 +87,7 @@ describe('opening an entity', () => {
     const state = createClientState();
     const outcome = await openEntity(client, state, request, CONTEXT);
     expect(outcome).toMatchObject({ kind: 'shown', id: INVESTIGATION_A, created: true });
-    expect(calls).toEqual({ openInvestigation: [1], getEntity: [], getInvestigation: [] });
+    expect(calls).toEqual({ openInvestigation: [1], getEntity: [], getInvestigation: [], listInvestigations: [] });
     expect(await openById(client, state, INVESTIGATION_A, CONTEXT)).toMatchObject({ kind: 'shown', activation: 'current' });
     expect(calls.getEntity).toEqual([]);
     expect(calls.getInvestigation).toEqual([]);

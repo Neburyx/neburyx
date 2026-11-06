@@ -22,13 +22,17 @@ describe('routes and navigation', () => {
     expect(screen.getByRole('link', { name: 'Home' }).getAttribute('aria-current')).toBeNull();
   });
 
-  it.each([
-    ['/', 'Home'],
-    ['/investigations', 'Investigations'],
-  ])('shows its own page at %s, saying that it is not built yet', (path, title) => {
-    renderAt(path);
-    expect(screen.getByRole('heading', { name: title, level: 1 })).toBeTruthy();
+  it('shows its own page at /investigations, saying that it is not built yet', () => {
+    renderAt('/investigations');
+    expect(screen.getByRole('heading', { name: 'Investigations', level: 1 })).toBeTruthy();
     expect(screen.getByText('This screen is not built yet.')).toBeTruthy();
+  });
+
+  it('shows Home at /, with its own heading and the Recent card', () => {
+    renderAt('/');
+    expect(screen.getByRole('heading', { name: 'Investigations', level: 1 })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Recent', level: 2 })).toBeTruthy();
+    expect(screen.queryByText('This screen is not built yet.')).toBeNull();
   });
 
   it('shows the three links in the navigation of every other page, in order', () => {
@@ -41,7 +45,7 @@ describe('routes and navigation', () => {
     expect(screen.getByRole('heading', { name: 'Page not found' })).toBeTruthy();
     const back = screen.getByRole('link', { name: 'Back to Home' });
     await userEvent.setup().click(back);
-    expect(screen.getByRole('heading', { name: 'Home', level: 1 })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Investigations', level: 1 })).toBeTruthy();
   });
 
   it('shows the not-found page for an unknown path below a known one', () => {

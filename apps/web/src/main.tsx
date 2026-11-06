@@ -32,6 +32,7 @@ import './styles/base.css';
 import './styles/workspace.css';
 import './styles/sources.css';
 import './styles/search.css';
+import './styles/home.css';
 
 const root = document.getElementById('root');
 if (root === null) throw new Error('the page has no #root element');

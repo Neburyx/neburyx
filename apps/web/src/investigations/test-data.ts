@@ -1,4 +1,4 @@
-import type { GraphNode, Investigation, InvestigationResponse, OpenInvestigationResponse } from '@neburyx/contracts';
+import type { GraphNode, Investigation, InvestigationListItem, InvestigationResponse, OpenInvestigationResponse } from '@neburyx/contracts';
 import type { ApiClient } from '../api/client.js';
 import { fakeClient } from '../api/fake-client.js';
 import { me, source } from '../test-utils.js';
@@ -27,6 +27,11 @@ export function investigationOf(id: string, sourceId: string, entityType: string
   };
 }
 
+/** The row of the list for an investigation, as the API answers it: the alias is the one the test sources have. */
+export function listItemOf(investigation: Investigation, overrides: Partial<InvestigationListItem> = {}): InvestigationListItem {
+  return { ...investigation, sourceAlias: `Source ${investigation.sourceId}`, save: { state: 'unsaved', savedAt: null }, ...overrides };
+}
+
 export function readOf(investigation: Investigation): InvestigationResponse {
   const documents = {
     layout: { schemaVersion: 1 as const, layout: 'force', nodes: [], edges: [], groups: [] },
@@ -46,6 +51,7 @@ export interface Calls {
   readonly getEntity: number[];
   readonly getInvestigation: string[];
   readonly openInvestigation: number[];
+  readonly listInvestigations: number[];
 }
 
 /** A client whose API knows the given investigations and entities, counting the reads it is asked for. */
@@ -57,11 +63,15 @@ export interface KnownInvestigation {
 }
 
 export function knowing(known: readonly KnownInvestigation[], overrides: Partial<ApiClient> = {}): { readonly client: ApiClient; readonly calls: Calls } {
-  const calls: Calls = { getEntity: [], getInvestigation: [], openInvestigation: [] };
+  const calls: Calls = { getEntity: [], getInvestigation: [], openInvestigation: [], listInvestigations: [] };
   const client = fakeClient({
     getMe: async () => ({ ok: true, value: me() }),
     getSources: async () => ({ ok: true, value: { items: [source('source-a'), source('source-b')], nextCursor: null } }),
     getProfile: async (sourceId) => ({ ok: true, value: testProfile(sourceId) }),
+    listInvestigations: async (limit) => {
+      calls.listInvestigations.push(limit);
+      return { ok: true, value: { items: known.slice(0, limit).map((entry) => listItemOf(entry.investigation)), hasMore: known.length > limit } };
+    },
     getInvestigation: async (id) => {
       calls.getInvestigation.push(id);
       const found = known.find((entry) => entry.investigation.id === id);
