@@ -1,5 +1,5 @@
 import { act, cleanup, render, screen, within } from '@testing-library/react';
-import { COVERAGE_MAX_ENTITIES, COVERAGE_SCOPE, type Count, type CoverageRequest, type CoverageResponse, type DegreePreview } from '@neburyx/contracts';
+import { COVERAGE_MAX_ENTITIES, COVERAGE_SCOPE, type Count, type CoverageRequest, type CoverageResponse, type DegreePreview, type GraphEdge } from '@neburyx/contracts';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { ApiFailure, ApiResult } from '../api/client.js';
 import { createCoverageStore } from '../api/coverage-store.js';
@@ -132,16 +132,50 @@ describe('the second scope line, as the loaded graph changes', () => {
     expect(asks).toHaveLength(1);
     expect(secondLine()).toBe('2 shown · 4 not yet retrieved (exact)');
   });
+});
 
-  it('sends a stored relationship once for each of its ends, a self-loop twice, and nothing for an aggregate or a derived one', () => {
+describe('the relationships loaded at each entity', () => {
+  const base = () => {
     const state = createClientState();
     load(state, ['n1', 'n2'], [['e1', 'n1', 'n2'], ['e2', 'n1', 'n1']]);
-    const graph = deriveLoadedGraph(state.server.getState(), state.investigation.getState());
-    expect(coverageEntitiesOf(graph).map((entity) => [entity.ref.stableId, entity.storedRelationships])).toEqual([['n1', 3], ['n2', 1]]);
-    const aggregate = { ...graph.edges[0], ref: { sourceId: 'a', aggregate: { type: 'rel-a', from: ref('a', 'type-a', 'n1'), to: ref('a', 'type-a', 'n2') } }, memberCount: counted(9, 'exact') };
-    const derived = { ...graph.edges[0], ref: { sourceId: 'a', derived: { ruleId: 'r', from: ref('a', 'type-a', 'n1'), to: ref('a', 'type-a', 'n2') } } };
-    const mixed = { ...graph, edges: [aggregate, derived, ...graph.edges.slice(1)] };
-    expect(coverageEntitiesOf(mixed as typeof graph).map((entity) => [entity.ref.stableId, entity.storedRelationships])).toEqual([['n1', 2], ['n2', 0]]);
+    return deriveLoadedGraph(state.server.getState(), state.investigation.getState());
+  };
+  const aggregateOf = (from: string, to: string, members: Count | undefined): GraphEdge => {
+    const [any] = base().edges;
+    if (any === undefined) throw new Error('no edge');
+    return { ...any, ref: { sourceId: 'a', aggregate: { type: 'rel-a', from: ref('a', 'type-a', from), to: ref('a', 'type-a', to) } }, from: ref('a', 'type-a', from), to: ref('a', 'type-a', to), ...(members === undefined ? {} : { memberCount: members }) };
+  };
+  const derivedOf = (from: string, to: string): GraphEdge => {
+    const [any] = base().edges;
+    if (any === undefined) throw new Error('no edge');
+    return { ...any, ref: { sourceId: 'a', derived: { ruleId: 'r', from: ref('a', 'type-a', from), to: ref('a', 'type-a', to) } }, from: ref('a', 'type-a', from), to: ref('a', 'type-a', to), semantics: 'derived', derivation: { ruleId: 'r', ruleVersion: 1, supportingEdgeRefs: [] } };
+  };
+  const entitiesOf = (edges: readonly GraphEdge[]) => {
+    const graph = base();
+    return coverageEntitiesOf({ ...graph, edges }).map((entity) => [entity.ref.stableId, entity.loadedRelationships, entity.loadedExact]);
+  };
+  const stored = () => base().edges;
+
+  it('counts a stored relationship once for each of its ends and a stored self-loop twice', () => {
+    expect(entitiesOf(stored())).toEqual([['n1', 3, true], ['n2', 1, true]]);
+  });
+
+  it('counts an aggregate by its exact member count at each end, and a self-loop aggregate twice', () => {
+    expect(entitiesOf([aggregateOf('n1', 'n2', counted(52, 'exact'))])).toEqual([['n1', 52, true], ['n2', 52, true]]);
+    expect(entitiesOf([aggregateOf('n1', 'n1', counted(5, 'exact'))])).toEqual([['n1', 10, true], ['n2', 0, true]]);
+  });
+
+  it('adds stored and aggregate relationships at the same entity', () => {
+    expect(entitiesOf([...stored(), aggregateOf('n1', 'n2', counted(10, 'exact'))])).toEqual([['n1', 13, true], ['n2', 11, true]]);
+  });
+
+  it.each([['estimated', counted(8, 'estimated')], ['lower bound', counted(8, 'lowerBound')], ['unknown', counted(undefined, 'unknown')]])('marks the ends of an aggregate whose member count is %s as not exact', (_name, members) => {
+    const [first] = entitiesOf([aggregateOf('n1', 'n2', members)]);
+    expect(first?.[2]).toBe(false);
+  });
+
+  it('counts a derived relationship as nothing', () => {
+    expect(entitiesOf([derivedOf('n1', 'n2')])).toEqual([['n1', 0, true], ['n2', 0, true]]);
   });
 });
 

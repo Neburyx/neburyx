@@ -5,7 +5,7 @@ import { notRetrievedOf, type CoveragePart } from './coverage-sum.js';
 const preview = (total: Count | undefined): DegreePreview | undefined =>
   total === undefined ? undefined : { ref: { sourceId: 'demo', entityType: 'widget', stableId: 'W' }, total, byType: [], byNeighborType: [], warnings: [], pageSize: 25 };
 const count = (value: number, quality: Exclude<Count['quality'], 'unknown'>): Count => ({ value, quality, scope: 'degree:total' });
-const part = (total: Count | undefined, storedRelationships = 0): CoveragePart => ({ preview: preview(total), storedRelationships });
+const part = (total: Count | undefined, loadedRelationships = 0, loadedExact = true): CoveragePart => ({ preview: preview(total), loadedRelationships, loadedExact });
 const answer = (value: number, quality: Count['quality']): Count => ({ value, quality, scope: COVERAGE_SCOPE });
 const unknown: Count = { quality: 'unknown', scope: COVERAGE_SCOPE };
 
@@ -26,6 +26,11 @@ describe('the not-yet-retrieved count', () => {
     ['an estimated preview older than the loads is clamped', [part(count(2, 'estimated'), 3), part(count(4, 'exact'), 1)], answer(3, 'estimated')],
     ['a lowerBound preview with more loaded than its value stays lowerBound, not estimated', [part(count(500, 'lowerBound'), 600)], answer(0, 'lowerBound')],
     ['a clamped exact remainder gives no floor beside a lowerBound part', [part(count(2, 'exact'), 3), part(count(500, 'lowerBound'), 100)], answer(400, 'lowerBound')],
+    ['aggregates loaded at the one entity with a remainder leave it exact', [part(count(184533, 'exact'), 52)], answer(184481, 'exact')],
+    ['a loaded count resting on an inexact member count makes the remainder estimated', [part(count(100, 'exact'), 10, false)], answer(90, 'estimated')],
+    ['an inexact loaded count is no floor beside an unknown part', [part(count(100, 'exact'), 10, false), part(undefined)], unknown],
+    ['an inexact loaded count on a lowerBound total gives no floor', [part(count(500, 'lowerBound'), 20, false), part(count(9, 'exact'), 1)], answer(8, 'lowerBound')],
+    ['an inexact part does not stop an exact part from being the floor beside an unknown part', [part(count(100, 'exact'), 10, false), part(count(9, 'exact'), 1), part(undefined)], answer(8, 'lowerBound')],
     ['an unknown part beside an exact remainder gives that remainder as a floor', [part(count(184533, 'exact'), 52), part(undefined), part(undefined)], answer(184481, 'lowerBound')],
     ['an unknown part beside a lowerBound remainder gives the largest remainder as a floor', [part(count(500, 'lowerBound'), 20), part(undefined), part(count(300, 'lowerBound'), 0)], answer(480, 'lowerBound')],
     ['an unknown part beside two exact remainders gives the larger, not the sum', [part(count(7, 'exact'), 2), part(count(4, 'exact'), 0), part(undefined)], answer(5, 'lowerBound')],

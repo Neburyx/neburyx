@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { COVERAGE_MAX_ENTITIES, COVERAGE_SCOPE, combineCoverage, coverageRequestSchema, coverageResponseSchema } from './coverage.js';
 import type { Count } from './graph.js';
 
-const entity = (id: string, storedRelationships = 0) => ({ ref: { sourceId: 'demo', entityType: 'widget', stableId: id }, storedRelationships });
+const entity = (id: string, loadedRelationships = 0) => ({ ref: { sourceId: 'demo', entityType: 'widget', stableId: id }, loadedRelationships, loadedExact: true });
 
 describe('the coverage request', () => {
   it('accepts one entity and as many as the limit', () => {

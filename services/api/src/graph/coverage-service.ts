@@ -47,7 +47,8 @@ export function createCoverageService(deps: CoverageDeps): CoverageService {
       if (cache !== undefined && !cache.usability.isUsable(call.sourceId)) throw new AppError('SOURCE_UNAVAILABLE');
       const revision = deps.verdicts.revisionOf(call.sourceId);
       const parts = call.entities.map((entity) => ({
-        storedRelationships: entity.storedRelationships,
+        loadedRelationships: entity.loadedRelationships,
+        loadedExact: entity.loadedExact,
         preview: sharesLabel(source, entity.ref.entityType)
           ? undefined
           : cache?.store.get({ sourceId: call.sourceId, configHash: source.configHash, principalId: call.principal.id, entityType: entity.ref.entityType, stableId: entity.ref.stableId, mask: call.mask, verdictRevision: revision }),

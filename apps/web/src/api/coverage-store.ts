@@ -24,7 +24,7 @@ function chunksOf(entities: readonly CoverageEntity[]): readonly (readonly Cover
 }
 
 const keyOf = (person: string, sourceId: string, input: CoverageInput): string =>
-  JSON.stringify([person, sourceId, input.mask, input.previewAnswers, input.entities.map((entity) => [entity.ref.entityType, entity.ref.stableId, entity.storedRelationships])]);
+  JSON.stringify([person, sourceId, input.mask, input.previewAnswers, input.entities.map((entity) => [entity.ref.entityType, entity.ref.stableId, entity.loadedRelationships, entity.loadedExact])]);
 
 /**
  * Asks for the count in chunks of at most `COVERAGE_MAX_ENTITIES`, one after another, and joins the answers. A chunk that fails fails the whole count, so a partial number is never shown. Only the request for the

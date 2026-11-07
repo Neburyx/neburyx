@@ -9,8 +9,11 @@ export const COVERAGE_SCOPE = 'not yet retrieved';
 /** The most loaded entities one coverage request names; a larger loaded graph is sent in chunks of this size. */
 export const COVERAGE_MAX_ENTITIES = 500;
 
-/** One loaded entity and how many stored relationships of it are loaded, counted once for each end that is at it (a self-loop counts 2). */
-export const coverageEntitySchema = z.strictObject({ ref: elementRefSchema, storedRelationships: z.number().int().nonnegative() });
+/**
+ * One loaded entity and how many relationships of it are loaded, counted once for each end that is at it (a self-loop counts 2): a stored relationship counts 1 and an aggregate its member count.
+ * `loadedExact` is false when the member count of an aggregate at it is not `exact`, so the count may be off.
+ */
+export const coverageEntitySchema = z.strictObject({ ref: elementRefSchema, loadedRelationships: z.number().int().nonnegative(), loadedExact: z.boolean() });
 
 /** `POST /v1/graph/coverage`: the loaded entities of one source, whose degree previews the server already holds; `mask` is the setting those previews were asked under. */
 export const coverageRequestSchema = z.strictObject({
