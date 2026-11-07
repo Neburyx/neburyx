@@ -49,6 +49,14 @@ test.describe('the neighbor types submenu', () => {
     expect(await outline(page, '.neighbor-types-row'), 'the row').not.toBe('none');
     expect(await outline(page, '.context-submenu .menu-panel'), 'the panel').toBe('none');
     expect(await outline(page, '.neighbor-types-body'), 'the body').toBe('none');
+    const inside = await rows.first().evaluate((element) => {
+      const style = getComputedStyle(element);
+      return { offset: parseFloat(style.outlineOffset), width: parseFloat(style.outlineWidth), radius: parseFloat(style.borderTopLeftRadius), background: style.backgroundColor };
+    });
+    expect(inside.offset, 'the ring sits inside the row').toBeLessThan(0);
+    expect(inside.width, 'the ring is light').toBeLessThanOrEqual(2);
+    expect(inside.radius, 'the ring follows the corners of the row').toBeGreaterThan(0);
+    expect(inside.background, 'the focused row takes the hover background').not.toBe('rgba(0, 0, 0, 0)');
   });
 
   test('opened by the keyboard before the answer, holds the focus without a ring on the panel and moves it to the first row when the answer comes', async ({ page }) => {

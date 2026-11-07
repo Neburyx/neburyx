@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { lookOf, tokenColour, tokenLength } from './support/controls.ts';
+import { lookOf, tokenColour, tokenLength, focusWidth } from './support/controls.ts';
 
 test.use({ baseURL: 'http://127.0.0.1:4175' });
 
@@ -32,7 +32,7 @@ test.describe('the controls of the Search results page', () => {
     await page.getByRole('complementary', { name: 'Filters' }).getByRole('checkbox').last().focus();
     await page.keyboard.press('Tab');
     await expect(open).toBeFocused();
-    expect(await lookOf(open, OUTLINE)).toEqual({ 'outline-style': 'solid', 'outline-width': '3px', 'outline-color': await tokenColour(page, '--color-focus') });
+    expect(await lookOf(open, OUTLINE)).toEqual({ 'outline-style': 'solid', 'outline-width': await focusWidth(page), 'outline-color': await tokenColour(page, '--color-focus') });
   });
 
   test('draws the Retry of a failed group and the Open in graph of a related row as accent text, like the other search buttons', async ({ page }) => {

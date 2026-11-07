@@ -32,7 +32,8 @@ export const SELECTED_LINE_EXTRA = 1;
 export const SELECTED_HALO_PADDING = (SELECTED_HALO_DIAMETER - (NODE_OUTER_DIAMETER - SELECTED_OUTLINE_WIDTH)) / 2;
 /** The accent, as the focus ring of the page is (`--color-focus`); it is told apart from the selection, which has the same colour, by shape: a ring with a gap round the disc, against an outline on it and a faint halo. */
 export const FOCUS_COLOR = DERIVED_COLOR;
-export const FOCUS_RING_WIDTH = 3;
+/** The width of the focus mark, as `--focus-width` is on the page. */
+export const FOCUS_RING_WIDTH = 1.5;
 export const FOCUS_RING_GAP = 2;
 export const PIN_BADGE_SIZE = 16;
 export const PIN_BADGE_COLOR = DERIVED_COLOR;

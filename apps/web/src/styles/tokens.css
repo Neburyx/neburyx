@@ -119,8 +119,8 @@
   --icon-size: 18px;
   --logo-size: 24px;
   --border-width: 1px;
-  --focus-width: 3px;
-  --focus-offset: 2px;
+  --focus-width: 1.5px;
+  --focus-offset: 1px;
   --radius: 6px;
   --radius-badge: 5px;
   --radius-small: 4px;

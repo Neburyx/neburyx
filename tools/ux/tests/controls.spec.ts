@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { addPlainControls, lookOf, tokenColour, tokenLength, withoutDefaultRules } from './support/controls.ts';
+import { addPlainControls, lookOf, tokenColour, tokenLength, withoutDefaultRules, focusWidth } from './support/controls.ts';
 import { openSample, tabTo } from './support/workspace.ts';
 
 const plain = (page: Page, name: string): Locator => page.locator('#plain-controls').getByRole('button', { name, exact: true });
@@ -113,7 +113,7 @@ test.describe('the shared look of buttons, selectors and fields', () => {
     const controls = [plain(page, 'Plain button'), plain(page, 'Primary'), plain(page, 'Secondary'), plain(page, 'Link'), page.getByRole('combobox', { name: 'Plain selector' }), page.getByRole('textbox', { name: 'Plain field' }), page.getByRole('searchbox', { name: 'Plain search' })];
     for (const control of controls) {
       await tabTo(page, control);
-      expect(await lookOf(control, ['outline-style', 'outline-width', 'outline-color']), await control.textContent() ?? '').toEqual({ 'outline-style': 'solid', 'outline-width': '3px', 'outline-color': focus });
+      expect(await lookOf(control, ['outline-style', 'outline-width', 'outline-color']), await control.textContent() ?? '').toEqual({ 'outline-style': 'solid', 'outline-width': await focusWidth(page), 'outline-color': focus });
     }
   });
 

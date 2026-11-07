@@ -459,6 +459,13 @@
   background: var(--color-surface-muted);
 }
 
+/* a row with the keyboard focus is marked as a selected row of a native menu is: the ring inside the row, with the row's own corners, on the hover background */
+.menu-row:focus-visible,
+.neighbor-types-row:focus-visible {
+  outline-offset: calc(-1 * var(--focus-width));
+  background: var(--color-surface-muted);
+}
+
 .menu-row[aria-checked='true'] {
   background: var(--color-row-chosen);
 }
@@ -499,14 +506,23 @@
   cursor: default;
 }
 
+.menu-row-disabled:focus-visible {
+  background: none;
+}
+
 .context-menu .menu-row:hover,
 .context-submenu .menu-row:hover,
+.context-menu .menu-row:focus-visible,
+.context-submenu .menu-row:focus-visible,
+.neighbor-types-row:focus-visible,
 .context-menu .menu-row[aria-expanded='true'] {
   background: var(--color-row-chosen);
 }
 
 .context-menu .menu-row-disabled:hover,
-.context-submenu .menu-row-disabled:hover {
+.context-submenu .menu-row-disabled:hover,
+.context-menu .menu-row-disabled:focus-visible,
+.context-submenu .menu-row-disabled:focus-visible {
   background: none;
 }
 
@@ -565,7 +581,7 @@
   flex-direction: column;
   gap: var(--space-8);
   min-width: var(--menu-width-canvas);
-  padding: var(--space-8) var(--space-12);
+  padding: var(--space-8) var(--space-4);
 }
 
 .neighbor-types-list {
@@ -582,6 +598,8 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-16);
+  padding: 0 var(--space-8);
+  border-radius: var(--radius);
 }
 
 .neighbor-types-count {
@@ -590,8 +608,13 @@
   white-space: nowrap;
 }
 
+.neighbor-types-body > [role='alert'] {
+  padding: 0 var(--space-8);
+}
+
 .neighbor-types-note {
   margin: 0;
+  padding: 0 var(--space-8);
   color: var(--color-text-muted);
   font-size: var(--font-size-small);
 }
@@ -961,11 +984,13 @@
   overflow-y: auto;
 }
 
-.layout-popup .menu-row:hover {
+.layout-popup .menu-row:hover,
+.layout-popup .menu-row:focus-visible {
   background: var(--color-row-chosen);
 }
 
-.layout-popup .menu-row-disabled:hover {
+.layout-popup .menu-row-disabled:hover,
+.layout-popup .menu-row-disabled:focus-visible {
   background: none;
 }
 

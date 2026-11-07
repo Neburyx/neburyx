@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { lookOf, tokenColour } from './support/controls.ts';
+import { lookOf, tokenColour, focusWidth } from './support/controls.ts';
 import { canvasOf } from './support/workspace.ts';
 
 test.use({ baseURL: 'http://127.0.0.1:4175' });
@@ -134,7 +134,7 @@ test.describe('First run in a browser', () => {
     for (const [index, control] of order.entries()) {
       if (index > 0) await page.keyboard.press('Tab');
       await expect(control, `stop ${index}`).toBeFocused();
-      expect(await lookOf(control, ['outline-style', 'outline-width', 'outline-color']), `stop ${index}`).toEqual({ 'outline-style': 'solid', 'outline-width': '3px', 'outline-color': focus });
+      expect(await lookOf(control, ['outline-style', 'outline-width', 'outline-color']), `stop ${index}`).toEqual({ 'outline-style': 'solid', 'outline-width': await focusWidth(page), 'outline-color': focus });
     }
   });
 });

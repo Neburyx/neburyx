@@ -29,6 +29,18 @@ export async function tokenLength(page: Page, token: string): Promise<string> {
   }, token);
 }
 
+/** The width of the focus outline as the browser draws it, which can be a whole number of device pixels, so that a test names the token and not the number. */
+export async function focusWidth(page: Page): Promise<string> {
+  return page.evaluate(() => {
+    const probe = document.createElement('span');
+    probe.style.outline = 'var(--focus-width) solid red';
+    document.body.append(probe);
+    const resolved = getComputedStyle(probe).outlineWidth;
+    probe.remove();
+    return resolved;
+  }, undefined);
+}
+
 export async function lookOf(control: Locator, properties: readonly string[] = LOOK_PROPERTIES): Promise<Record<string, string>> {
   return control.evaluate((element, names) => Object.fromEntries(names.map((name) => [name, getComputedStyle(element).getPropertyValue(name)])), properties);
 }

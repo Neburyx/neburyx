@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { lookOf, tokenColour } from './support/controls.ts';
+import { lookOf, tokenColour, focusWidth } from './support/controls.ts';
 
 test.use({ baseURL: 'http://127.0.0.1:4175' });
 
@@ -36,7 +36,7 @@ test.describe('the controls of Sources and of the failure pages', () => {
     for (const control of [items.nth(1), items.nth(2), test]) {
       await page.keyboard.press('Tab');
       await expect(control).toBeFocused();
-      expect(await lookOf(control, OUTLINE)).toEqual({ 'outline-style': 'solid', 'outline-width': '3px', 'outline-color': focus });
+      expect(await lookOf(control, OUTLINE)).toEqual({ 'outline-style': 'solid', 'outline-width': await focusWidth(page), 'outline-color': focus });
     }
   });
 

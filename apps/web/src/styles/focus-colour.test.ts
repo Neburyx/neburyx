@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { FOCUS_COLOR } from '../canvas/look.js';
+import { FOCUS_COLOR, FOCUS_RING_WIDTH } from '../canvas/look.js';
 
 const tokens = readFileSync(join(import.meta.dirname, 'tokens.css'), 'utf8');
 const token = (name: string): string => {
@@ -31,5 +31,10 @@ describe('the focus colour', () => {
     for (const surface of ['--color-surface', '--color-canvas', '--color-surface-muted', '--color-row-chosen', '--color-accent-surface', '--color-workspace-border']) {
       expect(contrast(FOCUS_COLOR, token(surface)), surface).toBeGreaterThanOrEqual(3);
     }
+  });
+
+  it('has one width, on the page and on the canvas, and it is a light one', () => {
+    expect(token('--focus-width')).toBe(`${FOCUS_RING_WIDTH}px`);
+    expect(FOCUS_RING_WIDTH).toBeLessThanOrEqual(1.5);
   });
 });

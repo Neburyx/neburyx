@@ -1,5 +1,5 @@
 import { expect, test, type Locator } from '@playwright/test';
-import { lookOf, tokenColour, tokenLength } from './support/controls.ts';
+import { lookOf, tokenColour, tokenLength, focusWidth } from './support/controls.ts';
 import { boxOf } from './support/regions.ts';
 import { tabTo } from './support/workspace.ts';
 
@@ -71,7 +71,7 @@ test.describe('the controls of Home', () => {
     for (const [index, control] of order.entries()) {
       if (index > 0) await page.keyboard.press('Tab');
       await expect(control, `stop ${index}`).toBeFocused();
-      expect(await lookOf(control, OUTLINE), `stop ${index}`).toEqual({ 'outline-style': 'solid', 'outline-width': '3px', 'outline-color': focus });
+      expect(await lookOf(control, OUTLINE), `stop ${index}`).toEqual({ 'outline-style': 'solid', 'outline-width': await focusWidth(page), 'outline-color': focus });
     }
   });
 
