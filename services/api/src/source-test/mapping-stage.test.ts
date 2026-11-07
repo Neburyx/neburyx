@@ -37,7 +37,8 @@ const FITTING: IndexEntry[] = [
 type Schema = { tokens?: ExecuteOutcome; indexes?: ExecuteOutcome; scan?: ExecuteOutcome | ((call: ExecuteCall) => ExecuteOutcome) };
 const rows = (...items: Record<string, unknown>[]): ExecuteOutcome => ({ status: 'rows', rows: items });
 
-function rig(schema: Schema = {}, options: { readonly capabilities?: ExecuteOutcome; readonly clock?: () => number; readonly onCall?: (call: ExecuteCall) => void } = {}) {
+function rig(schema: Schema = {}, options: { readonly capabilities?: ExecuteOutcome; readonly clock?: () => number; readonly onCall?: (call: ExecuteCall) => void; readonly mapping?: typeof mapping } = {}) {
+  const checked = options.mapping ?? mapping;
   const logs: { fields: Record<string, unknown>; message: string }[] = [];
   const executor = serverExecutor(options.capabilities, { status: 'unavailable', reason: 'refused' }, (call) => {
     options.onCall?.(call);
@@ -47,10 +48,10 @@ function rig(schema: Schema = {}, options: { readonly capabilities?: ExecuteOutc
     const scan = schema.scan ?? rows({ duplicated: 0 });
     return typeof scan === 'function' ? scan(call) : scan;
   });
-  const parts = testSourceGate(mapping, { executor });
+  const parts = testSourceGate(checked, { executor });
   const store = memoryAppStore();
   const logger = { warn: (fields: object, message: string) => void logs.push({ fields: { ...fields }, message }) };
-  const tester = createSourceTester({ gate: parts.gate, mapping, store, logger, clock: options.clock ?? (() => Date.UTC(2026, 10, 2, 10, 0, 0)) });
+  const tester = createSourceTester({ gate: parts.gate, mapping: checked, store, logger, clock: options.clock ?? (() => Date.UTC(2026, 10, 2, 10, 0, 0)) });
   const calls = () => executor.calls.map((call) => call.templateId);
   return { tester, store, logs, calls, executor };
 }
@@ -63,6 +64,24 @@ describe('a mapping that fits the source', () => {
     const report = sourceTestReportSchema.parse(await tester.run(request));
     expect(report).toMatchObject({ outcome: 'pass', state: 'connected', stateReason: null, mappingChecks: { status: 'pass', findings: [] } });
     expect(calls()).toEqual(['capabilities', 'privileges', 'schema-tokens', 'schema-indexes', 'degree-probe', 'degree-probe']);
+  });
+});
+
+describe('a mapping in which two entity types share a label', () => {
+  it('is built, and its check adds no finding and no refusal for the shared label', async () => {
+    const shared = mappingOf(
+      sourceWith('alpha', {
+        entities: [
+          { type: 'gadget', label: 'Gadget', stable_id: 'gadgetId', search: ['gadgetId', 'title'], reference: ['extRef'] },
+          { type: 'twin', label: 'Gadget', stable_id: 'twinId' },
+          { type: 'person', label: 'Person', stable_id: 'personId' },
+        ],
+        relationships: [{ type: 'MADE_BY', from: 'gadget', to: 'person', stable_id: 'linkId', observed_at: 'madeAt', evidence: ['recordId'] }],
+      }),
+    );
+    const { tester } = rig({ indexes: rows({ indexes: [...FITTING, node('Gadget', 'twinId', { constrained: true })], truncated: false }) }, { mapping: shared });
+    const report = sourceTestReportSchema.parse(await tester.run(request));
+    expect(report).toMatchObject({ outcome: 'pass', state: 'connected', mappingChecks: { status: 'pass', findings: [] } });
   });
 });
 

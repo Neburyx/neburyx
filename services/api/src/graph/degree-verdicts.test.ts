@@ -51,7 +51,7 @@ async function started(): Promise<Rig> {
   const record = createUsabilityRecord();
   const store = memoryAppStore();
   const observing = observingStoreOf(store, record);
-  const parts = testSourceGate(mapping, { executor, usability: record });
+  const parts = testSourceGate(mapping, { executor });
   const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store: memoryAppStore(), mapping, gate: parts.gate, degreeVerdicts: record });
   const tester = createSourceTester({ gate: parts.gate, mapping, store: observing, clock: () => CHECKED_AT });
   const checker = createStartupChecker({ system: parts.system, mapping, store: { ...observing, markSourceUnchecked: () => Promise.resolve() }, logger: { info: () => undefined, warn: () => undefined }, clock: () => CHECKED_AT });
@@ -77,12 +77,11 @@ const templatesRead = (rig: Rig) => rig.executor.calls.map((call) => call.templa
 const principal = async (rig: Rig) => (await rig.store.current()).principal;
 
 describe('which read a degree preview uses', () => {
-  it('refuses a source no check has reached, without reading', async () => {
+  it('reads a source no check has reached with the bounded read: unchecked is usable', async () => {
     const rig = await started();
     const response = await preview(rig);
-    expect(response.statusCode).toBe(503);
-    expect(response.json().error.code).toBe('SOURCE_UNAVAILABLE');
-    expect(templatesRead(rig)).toEqual([]);
+    expect(response.statusCode).toBe(200);
+    expect(templatesRead(rig)).toEqual([DEGREE_PREVIEW_BOUNDED_ID]);
     await rig.app.close();
   });
 

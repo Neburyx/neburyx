@@ -78,28 +78,27 @@ describe('the evidence group on the Search results page', () => {
 });
 
 describe('the evidence group when it is disabled or not searched', () => {
-  const disabled = (reason: 'index-unavailable' | 'no-stable-id', searchable = false): SearchResult['evidence'] => ({
+  const disabled = (reason: 'index-unavailable' | 'index-building' | 'index-failed', searchable = false): SearchResult['evidence'] => ({
     hits: [],
     count: { value: 0, quality: 'exact', scope: 'search:evidence' },
     searchable,
-    disabledRelationshipTypes: [{ relationshipType: 'MADE_FROM', from: 'kind-a', to: 'kind-a', reason }],
+    disabledRelationshipTypes: [{ relationshipType: 'MADE_FROM', from: 'kind-a', to: 'kind-a', property: 'recordId', reason }],
   });
   const withGroup = (exact: readonly string[], evidence: SearchResult['evidence'], overrides: Partial<SearchResult> = {}): ApiResult<SearchResult> =>
     withEvidence('demo', exact.map((id) => hit('demo', id)), [], undefined, { evidence, ...overrides });
 
-  it('names the relationship, by its type and the display names of its ends, when its index is not online, beside the exact group', async () => {
-    const kit = searchKit(['demo'], async () => withGroup(['AC-1'], disabled('index-unavailable')));
+  it.each([
+    ['index-unavailable', 'no online index'],
+    ['index-building', 'index is building'],
+    ['index-failed', 'index failed'],
+  ] as const)('names the property and its relationship, by its type and the display names of its ends, when its index is %s, beside the exact group', async (reason, text) => {
+    const kit = searchKit(['demo'], async () => withGroup(['AC-1'], disabled(reason)));
     renderApp(searchAt('demo', 'AC-1'), kit.client);
     await screen.findByRole('heading', { level: 2, name: 'Exact ID match (1)' });
-    expect(within(main()).getByText('MADE_FROM (KIND-A → KIND-A): Evidence records are disabled for this relationship.')).toBeDefined();
+    expect(within(main()).getByText(`Not searched: MADE_FROM (KIND-A → KIND-A) · recordId: ${text}`)).toBeDefined();
     expect(screen.queryByRole('heading', { level: 2, name: 'No matching entities' })).toBeNull();
   });
 
-  it('names a relationship row that has no stable ID with its own message', async () => {
-    const kit = searchKit(['demo'], async () => withGroup(['AC-1'], disabled('no-stable-id')));
-    renderApp(searchAt('demo', 'AC-1'), kit.client);
-    expect(await within(main()).findByText('MADE_FROM (KIND-A → KIND-A): Evidence records are not searched for this relationship because it has no stable ID.')).toBeDefined();
-  });
 
   it('says no relationship is configured for evidence beside "No matching entities" when the other group was searched and found nothing', async () => {
     const kit = searchKit(['demo'], async () => withGroup([], { hits: [], count: { value: 0, quality: 'exact', scope: 'search:evidence' }, searchable: false, disabledRelationshipTypes: [] }));
@@ -113,7 +112,7 @@ describe('the evidence group when it is disabled or not searched', () => {
     renderApp(searchAt('demo', 'AC-1'), kit.client);
     expect(await within(main()).findByText('No property of this source is configured for search.')).toBeDefined();
     expect(screen.queryByRole('heading', { level: 2, name: 'No matching entities' })).toBeNull();
-    expect(within(main()).getByText('MADE_FROM (KIND-A → KIND-A): Evidence records are disabled for this relationship.')).toBeDefined();
+    expect(within(main()).getByText('Not searched: MADE_FROM (KIND-A → KIND-A) · recordId: no online index')).toBeDefined();
   });
 });
 

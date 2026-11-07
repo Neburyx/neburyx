@@ -72,6 +72,21 @@
   border-radius: var(--radius);
 }
 
+.search-hit-unreferenced {
+  border-style: dashed;
+}
+
+.search-members {
+  flex: 1 0 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin: 0;
+  padding-left: var(--space-20);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-small);
+}
+
 .search-hit > button {
   flex: 0 0 auto;
   white-space: nowrap;

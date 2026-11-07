@@ -3,6 +3,8 @@ import { AppError } from '../errors.js';
 import { auditing, integerTemplate, markerTemplate, mappingOf, nodesTemplate, sourceWith } from '../testing/gate-fixtures.js';
 import { gateRequest, harness, LOCAL_PRINCIPAL, rowsOf, recordingObserver, TestExecutor } from '../testing/gate.js';
 import { testSourceGate } from '../testing/source-gate.js';
+import { entityRows, plainNode } from '../testing/entity-fixtures.js';
+import { rangeIndex, schemaAnswer } from '../testing/search-fixtures.js';
 import { createTemplateCatalog } from './catalog.js';
 import { isSystemId, SYSTEM_ID } from './system-principal.js';
 import { connectivityTemplate } from './templates/connectivity.js';
@@ -232,5 +234,26 @@ describe('the audit event of a read', () => {
     expect(recording.events[0]).toMatchObject({ actorId: LOCAL_PRINCIPAL.id, actorRole: LOCAL_PRINCIPAL.role, action: 'source.connectivity', result: 'success' });
     expect(isSystemId(LOCAL_PRINCIPAL.id)).toBe(false);
     expect(SYSTEM_ID).not.toBe(LOCAL_PRINCIPAL.id);
+  });
+});
+
+describe('a source no check has reached, or whose check failed', () => {
+  const person = (state: string) =>
+    new TestExecutor((call) => Promise.resolve(call.templateId === 'schema-indexes' ? schemaAnswer([rangeIndex('Person', 'id', state, true)]) : entityRows(plainNode(['Person'], { id: 'P-1' }))));
+  const load = gateRequest({ sourceId: 'alpha', templateId: 'entity-load', params: { entityType: 'person', stableId: 'P-1' }, limit: 1 });
+
+  it('has its index snapshot read and its user reads guarded by it: the gate holds no verdict of the checks', async () => {
+    const executor = person('ONLINE');
+    const parts = testSourceGate(mapping, { executor });
+    expect(await parts.indexes.read({ traceId: 'tr-unchecked', principal: LOCAL_PRINCIPAL, sourceId: 'alpha' })).toMatchObject({ sourceId: 'alpha' });
+    expect((await parts.gate.run(load)).items).toHaveLength(1);
+    expect(executor.calls.map((call) => call.templateId)).toEqual(['schema-indexes', 'schema-indexes', 'entity-load']);
+  });
+
+  it('refuses a read whose index is still building, with that reason and no data statement', async () => {
+    const executor = person('POPULATING');
+    const parts = testSourceGate(mapping, { executor });
+    await expect(parts.gate.run(load)).rejects.toMatchObject({ code: 'SOURCE_UNAVAILABLE', reason: 'index-building' });
+    expect(executor.calls.map((call) => call.templateId)).toEqual(['schema-indexes']);
   });
 });

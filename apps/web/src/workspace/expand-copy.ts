@@ -1,6 +1,8 @@
 export const EXPAND_HEADING = 'Expand by neighbor type';
 export const NO_STABLE_ID = 'This item cannot be expanded: no stable ID.';
 export const NO_RELATIONSHIPS = 'No relationships are mapped for this entity type.';
+export const NO_RELATIONSHIPS_FOUND = 'No relationships found for this item.';
+export const NO_LONGER_IN_SOURCE = 'This item is no longer in the source.';
 export const COUNTS_ARE_OF_RELATIONSHIPS = 'Counts are of relationships.';
 export const SEPARATE_READS = 'Pages come from separate reads, and the source may have changed between them.';
 export const DUPLICATE_IDS = 'Duplicate relationship IDs in the source.';

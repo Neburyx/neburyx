@@ -70,6 +70,14 @@ export interface Template {
   readonly paramsSchema: ZodType<Params>;
   readonly scope: TemplateScope;
   readonly paged: boolean;
+  /**
+   * What a template that is not paged returns, which it must declare: `one` for a read of a single aggregate row, `cutMeans: 'duplicate'` for a read whose row beyond the limit only says that another record has the
+   * same stable ID (the entity read, and the degree read anchored as it is), `cutMeans: 'lowerBound'` for a capped read whose cut means only that there are more matches than it returns (the type-ahead
+   * prefix read): it is answered with `hasMore` and no cursor, and its count is a lower bound of the rows held. A read of a template that declares none of them and returns more rows than its limit is
+   * refused, so a larger result is never cut silently.
+   */
+  readonly rows?: 'one';
+  readonly cutMeans?: 'duplicate' | 'lowerBound';
   readonly entityParams: readonly string[];
   readonly relationshipParams: readonly string[];
   readonly integerParameters: readonly string[];
@@ -87,15 +95,16 @@ export interface Template {
    * The search template's own declaration, for no other template: a statement with one branch for each target of a list parameter. The Cypher holds `@searchBranches(<param>)`,
    * and the gate writes in, for each target, the branch text of its match form (`value` or `text`) with the placeholders replaced by the quoted names, joined by `UNION`: `@label` and `@property` for a
    * target of an entity type, `@type`, `@fromLabel`, `@toLabel` and `@property` for a target of a relationship mapping row. Each target is checked against the source's allowlist of the kind the
-   * template names: its `search` or its `reference` properties, or the evidence properties of its relationship rows that have a `stable_id`.
+   * template names: its `search` or its `reference` properties, or the evidence properties of its relationship rows that have a `stable_id`. A search template is paged by keyset on the element ID of the
+   * row's node (`n`) or relationship (`r`): each branch and the enclosing statement read the rows after `$cursor.after` in `ORDER BY elementId(…)`, cut at `LIMIT $limit + 1`.
    */
   readonly searchBranches?: { readonly param: string; readonly allowlist: 'search' | 'reference' | 'evidence'; readonly value: string; readonly text: string };
   /**
    * The facet template's own declaration, for no other template: a statement of probes, each a capped count of the distinct nodes (or relationships) that its targets match. The Cypher is the one marker
    * `@facetProbes(<param>)`; the list parameter holds the probes, each a non-empty list of targets of one kind (entity targets of the `search` or `reference` lists, or evidence properties of a relationship row
-   * that has a `stable_id`), and the gate writes in, for each probe `i`, `CALL { CALL { <the probe's branches joined by UNION> } WITH n LIMIT $limit + 1 RETURN count(*) AS c<i> }` (the variable is `r` for
+   * that has a `stable_id`), and the gate writes in, for each probe `i`, `CALL { CALL { <the probe's branches joined by UNION> } WITH n LIMIT $countCap + 1 RETURN count(*) AS c<i> }` (the variable is `r` for
    * evidence), then one `RETURN c0, c1, …`: one row of integers. The branch texts are the template's, for the `value` and the `text` form of an entity target and of an evidence target, with the placeholders
-   * of the search branches; each carries its own `LIMIT $limit + 1`.
+   * of the search branches; each carries its own `LIMIT $countCap + 1`. The gate fills `$countCap` from the budgets, never from the request.
    */
   readonly facetProbes?: { readonly param: string; readonly node: { readonly value: string; readonly text: string }; readonly evidence: { readonly value: string; readonly text: string } };
   /**
@@ -127,6 +136,11 @@ export interface Template {
   readsNothing?(params: Params, allowlist: SourceAllowlist): boolean;
   /** Where the page after this one starts, from the rows of this page; the gate signs it into the page's `nextCursor`. Only a paged template has one. */
   nextPosition?(rows: readonly Row[], limit: number): CursorPosition | undefined;
+  /**
+   * For a paged template whose answer counts every hit of its pages so far: the hits one page holds, from its redacted items. The gate adds them to the count the cursor carried and signs the sum into
+   * the next cursor, so a later page answers the hits held so far without trusting a number from the caller.
+   */
+  heldOf?(items: readonly Item[]): number;
   refsOf(params: Params): readonly ElementRef[];
   normalize(rows: readonly Row[], plan?: Plan, context?: NormalizeContext): readonly Item[];
 }
@@ -140,7 +154,7 @@ export interface SourceAllowlist {
   readonly searchProperties: ReadonlyMap<string, readonly string[]>;
   /** The `reference` properties of each entity type, by type, in the mapping's order. */
   readonly referenceProperties: ReadonlyMap<string, readonly string[]>;
-  /** The evidence properties of each relationship mapping row that has a `stable_id`, in the mapping's order: the rows an evidence read may name. */
+  /** The evidence properties of each relationship mapping row that has any, with or without a `stable_id`, in the mapping's order: the rows an evidence read may name. */
   readonly evidenceRows: readonly { readonly type: string; readonly from: string; readonly to: string; readonly properties: readonly string[] }[];
   /** The relationship rows of the mapping, in its order: the pairs a degree read counts. */
   readonly relationshipRows: readonly { readonly type: string; readonly from: string; readonly to: string; readonly stableId?: string; readonly observedAt?: string }[];
@@ -157,7 +171,7 @@ export interface Budgets {
   readonly timeoutMs: number;
   readonly maxPage: number;
   readonly requestTimeoutMs: number;
-  /** The most relationships a bounded degree count reads for one relationship type and direction; the source's `heavy_op_threshold`, never the page limit. */
+  /** The most rows a bounded count reads: the relationships of one relationship type and direction of a degree count, or the matches of one facet probe; the source's `heavy_op_threshold`, never the page limit. */
   readonly countCap: number;
   /** The source's read slots: per person, for everyone, and the wait for both. */
   readonly userConcurrency: number;
@@ -201,6 +215,8 @@ export interface GatePage {
   readonly hasMore: boolean;
   /** Signed for this request; present only when the read found more than the page and the template says where the next one starts. */
   readonly nextCursor?: string;
+  /** For a template that counts its hits across pages (`heldOf`): the hits of the earlier pages, from the signed cursor, plus those of this page. */
+  readonly held?: number;
 }
 
 export interface GateObserver {
@@ -223,8 +239,8 @@ export interface Gate {
 }
 
 /**
- * Reads the indexes of a source as they are now, with the one fixed schema read of the gate's system runner; it runs nothing else, and only for a principal the policy allows on a source
- * that is usable. `'unverified'` when no read is made (the principal is refused or the source is not usable, and the run that follows is refused by its own rules) or the login may not list indexes. Any other failure of the read is thrown.
+ * Reads the indexes of a source as they are now, with the one fixed schema read of the gate's system runner; it runs nothing else, and only for a principal the policy allows on the
+ * source, whatever its checks showed. `'unverified'` when no read is made (the principal is refused, and the run that follows is refused by its own rules) or the login may not list indexes. Any other failure of the read is thrown.
  */
 export interface IndexReader {
   read(request: { readonly traceId: string; readonly principal: Principal; readonly sourceId: string }): Promise<IndexSnapshot | 'unverified'>;

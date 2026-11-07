@@ -25,11 +25,18 @@ export function withNotVisible(warnings: readonly string[], count: number): stri
   return [...warnings.filter((warning) => !HIDDEN_SENTENCE.test(warning)), ...hidden(count)];
 }
 
-/** One fixed sentence for each reason that occurred; a count and no value, label or ID. */
-export function warningsOf(dropped: Dropped): string[] {
+const listed = (count: number): string[] => (count === 0 ? [] : [`${count} ${count === 1 ? 'row has' : 'rows have'} no usable stable ID, so ${count === 1 ? 'it is' : 'they are'} listed and cannot be opened or added.`]);
+
+/**
+ * One fixed sentence for each reason that occurred; a count and no value, label or ID. `unreferenced` of the `no-stable-id` rows are not left out but listed as unreferenced hits, and have a sentence
+ * of their own.
+ */
+export function warningsOf(dropped: Dropped, unreferenced = 0): string[] {
   return DROP_REASONS.flatMap((reason) => {
-    const count = dropped[reason] ?? 0;
-    if (count === 0) return [];
+    const count = (dropped[reason] ?? 0) - (reason === 'no-stable-id' ? unreferenced : 0);
+    if (count <= 0) return [];
     return [`${count} ${count === 1 ? 'row was' : 'rows were'} left out ${REASON_TEXT[reason]}.`];
-  }).concat(hidden(dropped['not-visible'] ?? 0));
+  })
+    .concat(listed(unreferenced))
+    .concat(hidden(dropped['not-visible'] ?? 0));
 }

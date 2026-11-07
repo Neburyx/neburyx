@@ -14,6 +14,19 @@ export interface Validated {
   readonly rendered: Rendered;
   /** What a cursor of this read is bound to; the next page's cursor is signed for it. */
   readonly binding: CursorBinding;
+  /** For a template that counts its hits across pages: the hits of the pages before this one, as the signed cursor carried them; 0 on the first page. */
+  readonly held: number;
+}
+
+/** The field of a cursor position that carries the hits of the earlier pages, for a template that counts them (`heldOf`); the gate writes and reads it, the template never sees it. */
+export const HELD_FIELD = 'held';
+
+/** The verified position split into the template's own fields and the count of hits it carries; a template that counts hits refuses a position without a whole, non-negative count. */
+function splitHeld(template: Template, position: CursorPosition | null): { readonly position: CursorPosition | null; readonly held: number } {
+  if (template.heldOf === undefined || position === null) return { position, held: 0 };
+  const { [HELD_FIELD]: held, ...rest } = position;
+  if (typeof held !== 'number' || !Number.isSafeInteger(held) || held < 0) throw new AppError('CURSOR_INVALIDATED');
+  return { position: rest, held };
 }
 
 export function findTemplate(catalog: TemplateCatalog, request: Pick<GateRequest, 'templateId'>): Template {
@@ -68,8 +81,9 @@ export function validateRequest(catalog: TemplateCatalog, template: Template, re
   };
   if (request.cursor !== undefined && !template.paged) throw new AppError('INVALID_REQUEST');
   const rendered = renderTemplate(template, parsed.data, context.allowlist, request.limit, context.budgets.countCap);
-  if (!template.paged) return { template, params: parsed.data, rendered, binding };
+  if (!template.paged) return { template, params: parsed.data, rendered, binding, held: 0 };
   // the position is the one this gate signed for this request, or none; a template reads it as the parameter `cursor`
-  const position = request.cursor === undefined ? null : readPosition(template, cursors.verify(request.cursor, binding), context, references);
-  return { template, params: parsed.data, rendered: { ...rendered, parameters: { ...rendered.parameters, cursor: position } }, binding };
+  const verified = splitHeld(template, request.cursor === undefined ? null : cursors.verify(request.cursor, binding));
+  const position = verified.position === null ? null : readPosition(template, verified.position, context, references);
+  return { template, params: parsed.data, rendered: { ...rendered, parameters: { ...rendered.parameters, cursor: position } }, binding, held: verified.held };
 }

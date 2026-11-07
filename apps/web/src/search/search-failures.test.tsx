@@ -66,7 +66,7 @@ function user() {
 describe('a search that failed another way', () => {
   it.each([
     ['SOURCE_BUSY', server('SOURCE_BUSY'), 'SOURCE_BUSY · trace tr-9'],
-    ['SOURCE_UNAVAILABLE', server('SOURCE_UNAVAILABLE'), 'SOURCE_UNAVAILABLE · trace tr-9'],
+    ['SOURCE_UNAVAILABLE', server('SOURCE_UNAVAILABLE'), 'The source did not answer. Try again shortly. · trace tr-9'],
     ['QUERY_BUDGET_EXCEEDED', server('QUERY_BUDGET_EXCEEDED', { maxPage: 10 }), 'QUERY_BUDGET_EXCEEDED · trace tr-9'],
     ['a network failure', down, 'NETWORK_UNAVAILABLE'],
   ])('shows the code of %s, the trace ID only when the error carries one, and Retry, and keeps the earlier results', async (_name, failure, shown) => {
@@ -80,6 +80,28 @@ describe('a search that failed another way', () => {
     expect(within(main()).getByText('Your graph was not changed.')).toBeDefined();
     expect(retryButton()).toBeDefined();
     expect(screen.getByText('Title FIRST')).toBeDefined();
+  });
+
+  it.each([
+    ['index-unavailable', 'A needed index is not there, so the read was not run.'],
+    ['index-failed', 'A needed index failed, so the read was not run.'],
+    ['index-list-unreadable', "The source's indexes could not be listed, so the read was not run."],
+    ['authentication', 'The source refused the login. Ask an administrator.'],
+    ['refused', 'The source does not allow this read for the login.'],
+  ] as const)('shows the sentence of an unavailable source with the reason %s and no Retry, since a retry cannot help', async (reason, message) => {
+    const kit = searchKit(['demo'], async () => ({ ok: false, failure: { code: 'SOURCE_UNAVAILABLE', message, retryable: false, traceId: 'tr-9', details: { reason } } }));
+    renderApp(searchAt('demo', 'AC-1'), kit.client);
+    expect((await screen.findByRole('alert')).textContent).toBe(`${message} · trace tr-9`);
+    expect(within(main()).getByText('Your graph was not changed.')).toBeDefined();
+    expect(within(main()).queryByRole('button', { name: 'Retry' })).toBeNull();
+  });
+
+  it('shows the sentence of an index that is building, with Retry', async () => {
+    const message = 'A needed index is still building, so the read is slow. Try again later.';
+    const kit = searchKit(['demo'], async () => ({ ok: false, failure: { code: 'SOURCE_UNAVAILABLE', message, retryable: true, traceId: 'tr-9', details: { reason: 'index-building' } } }));
+    renderApp(searchAt('demo', 'AC-1'), kit.client);
+    expect((await screen.findByRole('alert')).textContent).toBe(`${message} · trace tr-9`);
+    expect(retryButton()).toBeDefined();
   });
 
   it('shows the failure of a first search with no results and the text in the box', async () => {

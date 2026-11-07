@@ -141,7 +141,7 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
     const referenceKeys = deriveReferenceKeys(await store.referenceKey());
     // one set of seams for the process: the gate's read slots are the app's
     const seams = communitySeams();
-    sourceGate = (io.openSourceGate ?? createSourceGate)({ mapping, env, seams, logger: io.logger, usability, cursors, referenceKeys });
+    sourceGate = (io.openSourceGate ?? createSourceGate)({ mapping, env, seams, logger: io.logger, cursors, referenceKeys });
     const gate = sourceGate;
     const results = await createStartupChecker({ system: gate.system, mapping, store: observingStore, logger: io.logger }).run();
     const reachability = createReachabilityCache(mapping.sources.map((source) => source.id));

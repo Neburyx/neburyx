@@ -13,7 +13,6 @@ import { communitySeams } from '../seams/community-seams.js';
 import { runWriteProbe, type ProbeDriverFactory } from '../sources/write-probe.js';
 import type { ProbeAnswer, WriteProbe } from './probe.js';
 import { createSourceTester } from './tester.js';
-import { ALL_UNCHECKED } from './usability.js';
 
 const SHIPPED_MIGRATIONS = fileURLToPath(new URL('../../migrations', import.meta.url));
 
@@ -179,7 +178,7 @@ export async function runTestSourceCommand(args: readonly string[], env: Readonl
   const store = (io.openStore ?? ((url, migrations) => createAppStore(url, () => undefined, { migrationsDirectory: migrations })))(config.databaseUrl, directory);
   let sourceGate: SourceGate | undefined;
   try {
-    sourceGate = (io.openSourceGate ?? createSourceGate)({ mapping, env, seams: communitySeams(), logger, usability: ALL_UNCHECKED, ...(io.clock === undefined ? {} : { clock: io.clock }) });
+    sourceGate = (io.openSourceGate ?? createSourceGate)({ mapping, env, seams: communitySeams(), logger, ...(io.clock === undefined ? {} : { clock: io.clock }) });
     const identity = await store.current().catch((error: unknown) => {
       throw new CommandFailure(databaseMessage(error) ?? IDENTITY_MESSAGE);
     });

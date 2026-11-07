@@ -2,16 +2,19 @@ import type { Count, DegreePreview, ElementRef, SourceProfile } from '@neburyx/c
 import { useEffect, useRef, useState } from 'react';
 import { cursorWasRefused, type TypeProgress } from '../api/expand-store.js';
 import { useProfile } from '../canvas/profile-context.js';
-import { FailureNotice } from '../failure-notice.js';
+import { canRetry, FailureNotice } from '../failure-notice.js';
 import { nodeRefOfKey } from '../state/keys.js';
 import { useLoadedGraph, useSessionMask } from '../state/context.js';
 import { useStoreSelector } from '../state/store.js';
 import { degreeCountText } from './degree-text.js';
-import { COUNTS_ARE_OF_RELATIONSHIPS, CLEAR, DUPLICATE_IDS, EXPAND_HEADING, INVERT_SELECTION, LOADING_NEIGHBORS, NO_RELATIONSHIPS, NO_STABLE_ID, RETRY, SELECT_ALL, SEPARATE_READS, START_OVER, PAGED_NOTE, expandLabel, loadMoreLabel, pageNote } from './expand-copy.js';
+import { COUNTS_ARE_OF_RELATIONSHIPS, CLEAR, DUPLICATE_IDS, EXPAND_HEADING, INVERT_SELECTION, LOADING_NEIGHBORS, NO_LONGER_IN_SOURCE, NO_RELATIONSHIPS, NO_RELATIONSHIPS_FOUND, NO_STABLE_ID, RETRY, SELECT_ALL, SEPARATE_READS, START_OVER, PAGED_NOTE, expandLabel, loadMoreLabel, pageNote } from './expand-copy.js';
 import { loadedCountText, loadedOf } from './node-counts.js';
 import { neighborTypesOf, useExpandStore } from './expand-context.js';
 import type { SubmenuProps } from './menu-registry.js';
 import { usePreviewStore } from './preview-context.js';
+
+/** Every mapped relationship type was counted exactly and none has a relationship: the node has no neighbor, which is not the same as a count that was not read. */
+const isEmptyNode = (preview: DegreePreview): boolean => preview.byType.length > 0 && preview.byType.every((entry) => entry.count.quality === 'exact' && entry.count.value === 0);
 
 const displayNameOf = (profile: SourceProfile | undefined, entityType: string): string => profile?.entityTypes.find((entry) => entry.type === entityType)?.displayName ?? entityType;
 
@@ -97,17 +100,26 @@ function ChecklistFor({ node, close }: { readonly node: ElementRef; readonly clo
   if (state.phase === 'ready' && types.length === 0) return <p className="neighbor-types-note">{NO_RELATIONSHIPS}</p>;
   return (
     <div className="neighbor-types-body" ref={body} tabIndex={-1}>
-      {state.phase === 'failed' ? (
+      {state.phase === 'failed' && state.failure.code === 'NOT_FOUND' ? (
+        // a node that is gone stays gone, so there is nothing to retry
+        <p className="neighbor-types-note" role="alert">
+          {NO_LONGER_IN_SOURCE}
+        </p>
+      ) : state.phase === 'failed' ? (
         <>
           <FailureNotice failure={state.failure} />
-          <button type="button" className="menu-row" ref={retry} onClick={request.reload}>
-            <span className="menu-label">{RETRY}</span>
-          </button>
+          {canRetry(state.failure) ? (
+            <button type="button" className="menu-row" ref={retry} onClick={request.reload}>
+              <span className="menu-label">{RETRY}</span>
+            </button>
+          ) : null}
         </>
       ) : state.phase !== 'ready' ? (
         <p className="neighbor-types-note" role="status">
           {LOADING_NEIGHBORS}
         </p>
+      ) : preview !== undefined && isEmptyNode(preview) ? (
+        <p className="neighbor-types-note">{NO_RELATIONSHIPS_FOUND}</p>
       ) : null}
       <ul className="neighbor-types-list" aria-label="Neighbor types">
         {types.map((type) => {
@@ -164,7 +176,7 @@ function ChecklistFor({ node, close }: { readonly node: ElementRef; readonly clo
       {expansion.status === 'failed' && expansion.failure !== undefined ? (
         <>
           <FailureNotice failure={expansion.failure} />
-          {cursorRefused ? null : (
+          {cursorRefused || !canRetry(expansion.failure) ? null : (
             <button type="button" className="menu-row" onClick={() => void expansions.retry(node)}>
               <span className="menu-label">{RETRY}</span>
             </button>

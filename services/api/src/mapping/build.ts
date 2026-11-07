@@ -250,8 +250,8 @@ function buildSource(raw: RawSource, index: number, report: Report): SourceModel
   const referenceProperties = raw.entities.reduce((total, entity) => total + new Set(entity.reference ?? []).size, 0);
   if (referenceProperties > MAX_REFERENCE_PROPERTIES) report([...base, 'entities'], `list ${referenceProperties} reference properties in all, more than the ${MAX_REFERENCE_PROPERTIES} a search can read`);
 
-  const evidenceProperties = rawRelationships.reduce((total, relationship) => total + (relationship.stable_id === undefined ? 0 : new Set(relationship.evidence ?? []).size), 0);
-  if (evidenceProperties > MAX_EVIDENCE_PROPERTIES) report([...base, 'relationships'], `list ${evidenceProperties} evidence properties in all on relationships with a stable_id, more than the ${MAX_EVIDENCE_PROPERTIES} a search can read`);
+  const evidenceProperties = rawRelationships.reduce((total, relationship) => total + new Set(relationship.evidence ?? []).size, 0);
+  if (evidenceProperties > MAX_EVIDENCE_PROPERTIES) report([...base, 'relationships'], `list ${evidenceProperties} evidence properties in all on relationships, more than the ${MAX_EVIDENCE_PROPERTIES} a search can read`);
 
   const searchedTypes = raw.entities.filter((entity) => (entity.search ?? []).length > 0 || (entity.reference ?? []).length > 0).length;
   const modes = (raw.entities.some((entity) => (entity.search ?? []).length > 0) ? 1 : 0) + (raw.entities.some((entity) => (entity.reference ?? []).length > 0) ? 1 : 0) + (evidenceProperties > 0 ? 1 : 0);

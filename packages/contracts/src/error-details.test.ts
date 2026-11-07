@@ -22,6 +22,13 @@ describe('allowedDetails', () => {
     expect(allowedDetails('QUERY_BUDGET_EXCEEDED', { timeoutMs: 5000 })).toBeUndefined();
   });
 
+  it('keeps the reason of an unavailable source when it is one of the closed set, and only for that code', () => {
+    expect(allowedDetails('SOURCE_UNAVAILABLE', { reason: 'index-building', timeoutMs: 5000 })).toEqual({ reason: 'index-building' });
+    expect(allowedDetails('SOURCE_UNAVAILABLE', { reason: 'unusable' })).toBeUndefined();
+    expect(allowedDetails('SOURCE_UNAVAILABLE', { reason: 'pool-full' })).toBeUndefined();
+    expect(allowedDetails('QUERY_TIMEOUT', { reason: 'unreachable' })).toBeUndefined();
+  });
+
   it('allows no field for a code that names none', () => {
     expect(allowedDetails('ACCESS_DENIED', { maxPage: 50 })).toBeUndefined();
   });

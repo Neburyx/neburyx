@@ -92,8 +92,6 @@ async function verdictFor(source: SourceModel, run: CheckRun, traceId: string, d
     if (reason === undefined) throw error;
     return reportFromFailure(source, reason, new Date(clock()).toISOString());
   }
-  // the read asks for one row more than the page: a second row means the server answered something this check does not understand
-  if (page.hasMore) throw new AppError('INTERNAL_ERROR');
   const server = capabilitiesItemSchema.parse(page.items[0]);
   deps.onAnswered?.();
   const privileges = await inspectPrivileges(source, run, traceId, deps.logger);

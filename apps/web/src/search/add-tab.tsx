@@ -11,6 +11,7 @@ import { AddResults } from './add-results.js';
 import { addedNote, SEARCH_PANEL_COPY, TOO_LONG } from './copy.js';
 import { useAddEntity } from './use-add-entity.js';
 import { useTypeahead } from './use-typeahead.js';
+import { useMorePages } from './use-more-pages.js';
 import type { GraphNode } from '@neburyx/contracts';
 
 interface TabProps {
@@ -29,6 +30,10 @@ function TypeaheadBox({ client, sourceId, mask, box }: { readonly client: ApiCli
   const shell = useShellData();
   const [text, setText] = useState('');
   const typeahead = useTypeahead(client, sourceId, mask, text);
+  // a page is kept only while the text typed, the source and the mask are those of the answer shown; the mask and the source remount this box
+  const identityOf = (typed: string): string => JSON.stringify(['typeahead', sourceId, mask, typed]);
+  const answered = typeahead.answered;
+  const pages = useMorePages(client, answered === undefined ? undefined : { identity: identityOf(answered.text), sourceId, text: answered.text, mask, entityTypes: [], result: answered.result }, identityOf(text));
   const principalId = answeredData(shell.me)?.principal.id;
   const adding = useAddEntity(client, state, sourceId, principalId, mask);
   const alias = answeredData(shell.sources)?.items.find((item) => item.id === sourceId)?.alias ?? sourceId;
@@ -44,7 +49,7 @@ function TypeaheadBox({ client, sourceId, mask, box }: { readonly client: ApiCli
           {TOO_LONG}
         </p>
       ) : null}
-      <AddResults sourceAlias={alias} text={text} typeahead={typeahead} env={{ sourceId, profile, loaded: new Set(graph.nodes.map((node) => elementKey(node.ref))), adding, mask, onFind: find }} />
+      <AddResults sourceAlias={alias} text={text} typeahead={typeahead} pages={pages} env={{ sourceId, profile, loaded: new Set(graph.nodes.map((node) => elementKey(node.ref))), adding, mask, onFind: find }} />
       <p role="status" className="search-panel-status">
         {adding.added === undefined ? '' : addedNote(adding.added)}
       </p>

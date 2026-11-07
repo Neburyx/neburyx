@@ -3,7 +3,8 @@ import { edgeSchema } from '@neburyx/contracts';
 import { PACKS, packSource, readFixture } from '../../testing/pack-fixtures.js';
 import { context, pairedSource, plainNode, plainRelationship } from '../../testing/normalize-fixtures.js';
 import { normalizeModelOf } from './model.js';
-import { normalizeRows } from './index.js';
+import { normalizeRows, normalizeWithEvidence } from './index.js';
+import { mappingOf, sourceWith } from '../../testing/gate-fixtures.js';
 
 const gadget = (id: string) => plainNode(['Gadget'], { gadgetId: id, title: id, kind: 'k', madeOn: '2026' });
 const person = (id: string) => plainNode(['Person'], { personId: id });
@@ -233,3 +234,74 @@ describe.each(PACKS)('relationships captured from the %s pack', (pack) => {
     expect(normalizeRows({ ...model, hasMore: true }, rows).edges[0]?.memberCount).toEqual({ value: 2, quality: 'lowerBound', scope: 'members' });
   });
 });
+
+describe('the evidence of each relationship, for the evidence search', () => {
+  const evidenceSource =
+    mappingOf(
+      sourceWith('alpha', {
+        entities: [
+          { type: 'gadget', label: 'Gadget', stable_id: 'gadgetId' },
+          { type: 'person', label: 'Person', stable_id: 'personId' },
+        ],
+        relationships: [
+          { type: 'MADE_BY', from: 'gadget', to: 'person', observed_at: 'madeAt', evidence: ['recordId', 'docId'] },
+          { type: 'KNOWS', from: 'person', to: 'person', stable_id: 'linkId', evidence: ['recordId', 'docId'] },
+        ],
+      }),
+    ).sources[0] ?? failNoSource();
+  const evidenceContext = context({ model: normalizeModelOf(evidenceSource) });
+  const a = gadget('g1');
+  const b = person('p1');
+
+  it('gives each member of an aggregate its element ID, its records and its time, in the order read, and leaves the aggregate edge as normalizeRows gives it', () => {
+    const rows = [row(a, plainRelationship('MADE_BY', a, b, { recordId: 'R-1', madeAt: '2026-01-02' }, 'm1'), b), row(a, plainRelationship('MADE_BY', a, b, { recordId: 'R-1', docId: 7 }, 'm2'), b)];
+    const result = normalizeWithEvidence(evidenceContext, rows);
+    const aggregate = { type: 'MADE_BY', from: ref('gadget', 'g1'), to: ref('person', 'p1') };
+    expect(result.evidence).toEqual([
+      { elementId: 'm1', of: { aggregate }, records: [{ sourceRecordId: 'R-1' }], observedAt: '2026-01-02' },
+      { elementId: 'm2', of: { aggregate }, records: [{ sourceRecordId: 'R-1' }, { sourceRecordId: '7' }] },
+    ]);
+    const plain = normalizeRows(evidenceContext, rows);
+    expect(result.edges).toEqual(plain.edges);
+    expect(plain.edges[0]?.evidenceRefs).toEqual([]);
+    expect('evidence' in plain).toBe(false);
+  });
+
+  it('gives a stored relationship its reference and records, once for the same relationship twice', () => {
+    const [p1, p2] = [person('p1'), person('p2')] as const;
+    const knows = plainRelationship('KNOWS', p1, p2, { linkId: 'L-1', recordId: 'R-1', docId: 'R-1' }, 's1');
+    const result = normalizeWithEvidence(evidenceContext, [row(p1, knows, p2), row(p1, { ...knows }, p2)]);
+    expect(result.evidence).toEqual([{ elementId: 's1', of: { stored: { sourceId: 'request-source', type: 'KNOWS', from: 'person', to: 'person', stableId: 'L-1' } }, records: [{ sourceRecordId: 'R-1' }] }]);
+  });
+
+  it.each([
+    ['a list', ['R-1', 'R-2']],
+    ['a boolean', true],
+    ['a point', { $type: 'point', srid: 7203, x: 1, y: 2 }],
+    ['a map', { nested: 'R-1' }],
+    ['a value the adapter could not convert', { $type: 'unsupported' }],
+  ])('keeps %s as an unreadable record with its property, and leaves the stored evidence refs as they were', (_name, value) => {
+    const [p1, p2] = [person('p1'), person('p2')] as const;
+    const knows = plainRelationship('KNOWS', p1, p2, { linkId: 'L-1', recordId: 'R-1', docId: value }, 's1');
+    const result = normalizeWithEvidence(evidenceContext, [row(p1, knows, p2)]);
+    expect(result.evidence[0]?.records).toEqual([{ sourceRecordId: 'R-1' }, { property: 'docId', unreadable: true }]);
+    expect(result.edges[0]?.evidenceRefs).toEqual(['R-1']);
+    const member = normalizeWithEvidence(evidenceContext, [row(a, plainRelationship('MADE_BY', a, b, { recordId: value }, 'm1'), b)]);
+    expect(member.evidence[0]?.records).toEqual([{ property: 'recordId', unreadable: true }]);
+  });
+
+  it('lists nothing for an evidence property that is absent, null or empty text', () => {
+    const result = normalizeWithEvidence(evidenceContext, [row(a, plainRelationship('MADE_BY', a, b, { recordId: '', docId: null }, 'm1'), b)]);
+    expect(result.evidence[0]?.records).toEqual([]);
+  });
+
+  it('gives no evidence for a relationship that is left out', () => {
+    const result = normalizeWithEvidence(evidenceContext, [row(a, plainRelationship('MADE_BY', a, plainNode(['Stranger'], { id: 'x' }), { recordId: 'R-1' }))]);
+    expect(result.evidence).toEqual([]);
+    expect(result.dropped['end-missing']).toBe(1);
+  });
+});
+
+function failNoSource(): never {
+  throw new Error('the mapping has no source');
+}

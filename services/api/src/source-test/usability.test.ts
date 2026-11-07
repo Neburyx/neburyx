@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { ALL_UNCHECKED, createUsabilityRecord, type VerdictCheck } from './usability.js';
+import { createUsabilityRecord, type VerdictCheck } from './usability.js';
 
 const reached = { product: 'Neo4j Kernel', version: '5.26.32', edition: 'community' };
 const check = (overrides: Partial<VerdictCheck> = {}): VerdictCheck => ({ sourceId: 'alpha', checkedAt: '2026-11-02T10:00:10.000Z', server: reached, mappingChecks: { status: 'pass', findings: [] }, ...overrides });
 const failed: VerdictCheck['mappingChecks'] = { status: 'fail', findings: [{ severity: 'fail', check: 'label', message: 'x' }] };
 
-describe('the record of what is usable', () => {
-  it('holds every source unchecked and unusable until a check that reached it', () => {
+describe('the record of what the checks showed', () => {
+  it('holds every source unchecked until a check that reached it', () => {
     const record = createUsabilityRecord();
-    expect([record.verdictOf('alpha'), record.isUsable('alpha')]).toEqual(['unchecked', false]);
+    expect(record.verdictOf('alpha')).toBe('unchecked');
     record.observe(check({ server: null }));
     expect(record.verdictOf('alpha')).toBe('unchecked');
   });
@@ -21,13 +21,13 @@ describe('the record of what is usable', () => {
   ] satisfies [string, VerdictCheck['mappingChecks']][])('makes a source usable after a %s', (_name, mappingChecks) => {
     const record = createUsabilityRecord();
     record.observe(check({ mappingChecks }));
-    expect([record.verdictOf('alpha'), record.isUsable('alpha')]).toEqual(['usable', true]);
+    expect(record.verdictOf('alpha')).toBe('usable');
   });
 
   it('makes a source unusable after a failed mapping check, and usable again after a newer pass', () => {
     const record = createUsabilityRecord();
     record.observe(check({ mappingChecks: failed }));
-    expect([record.verdictOf('alpha'), record.isUsable('alpha')]).toEqual(['unusable', false]);
+    expect(record.verdictOf('alpha')).toBe('unusable');
     record.observe(check({ checkedAt: '2026-11-02T10:00:20.000Z' }));
     expect(record.verdictOf('alpha')).toBe('usable');
   });
@@ -58,9 +58,5 @@ describe('the record of what is usable', () => {
     record.observe(check({ mappingChecks: failed }));
     record.observe(check());
     expect(record.verdictOf('alpha')).toBe('usable');
-  });
-
-  it('has a stand-in in which nothing is usable', () => {
-    expect(ALL_UNCHECKED.isUsable('alpha')).toBe(false);
   });
 });

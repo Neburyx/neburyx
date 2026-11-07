@@ -50,7 +50,7 @@ describe('the profile on Explore', () => {
     const factory = stubFactory();
     renderApp('/explore', client, state, undefined, factory.create);
     await act(async () => replies[0]?.({ ok: false, failure: { code: 'SOURCE_UNAVAILABLE', message: 'unavailable', retryable: true, traceId: 'trace-5' } }));
-    expect(within(screen.getByRole('group', { name: 'Notices' })).getByRole('alert').textContent).toBe('SOURCE_UNAVAILABLE · trace trace-5');
+    expect(within(screen.getByRole('group', { name: 'Notices' })).getByRole('alert').textContent).toBe('The source did not answer. Try again shortly. · trace trace-5');
     expect(factory.made[0]?.scenes.at(-1)?.profile).toBeUndefined();
   });
 
@@ -73,7 +73,7 @@ describe('the profile on Explore', () => {
   });
 
   it.each([
-    ['with a trace ID', { code: 'SOURCE_UNAVAILABLE', message: 'unavailable', retryable: true, traceId: 'trace-7' } as const, 'SOURCE_UNAVAILABLE · trace trace-7'],
+    ['with a trace ID', { code: 'SOURCE_UNAVAILABLE', message: 'unavailable', retryable: true, traceId: 'trace-7' } as const, 'The source did not answer. Try again shortly. · trace trace-7'],
     ['without one', { code: 'NETWORK_UNAVAILABLE' } as const, 'NETWORK_UNAVAILABLE'],
   ])('keeps the profile\'s look and every position when a later read of it fails %s, and names the failure in the strip', async (_name, failure, text) => {
     const replies: Array<(result: ApiResult<SourceProfile>) => void> = [];

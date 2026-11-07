@@ -1,5 +1,4 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { ALWAYS_USABLE } from '../testing/usability.js';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -161,7 +160,7 @@ describe('a source that was never tested, or tested against another connection',
       openSourceGate: (options: SourceGateOptions) => {
         const executor = createNeo4jExecutor({ sources: options.mapping.sources, env: options.env, logger: options.logger, createDriver: fake.factory });
         const defaults = communitySeams();
-        const parts = assembleGate({ usability: ALWAYS_USABLE, mapping: options.mapping, seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit }, executor, logger: options.logger });
+        const parts = assembleGate({ mapping: options.mapping, seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit }, executor, logger: options.logger });
         return { ...parts, close: () => executor.close() };
       },
     });

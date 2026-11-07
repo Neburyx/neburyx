@@ -13,7 +13,6 @@ import { prepareParameters } from '../sources/parameters.js';
 import { LOCAL_PRINCIPAL } from '../testing/gate.js';
 import { envFor, NEO4J_SERIES, runAdmin, runAll, sourceFor, startNeo4j, type RunningNeo4j } from '../testing/neo4j-server.js';
 import { communityAccess } from '../testing/source-access.js';
-import { ALWAYS_USABLE } from '../testing/usability.js';
 import { createSearchService } from './search-service.js';
 
 const COMMON_MATCHES = 3000;
@@ -44,7 +43,7 @@ function assembleOver(model: SourceModel): { readonly gate: Gate; readonly index
   const seams = { policy: defaults.policy, coordinator: defaults.coordinator, audit: { record: (event: AuditEvent) => Promise.resolve(void events.push(event)) } };
   const executor = createNeo4jExecutor({ sources: [model], env: envFor(server), logger: { warn: () => undefined } });
   const recording: Neo4jExecutor = { ...executor, execute: (call) => (statements.push(call.cypher), executor.execute(call)) };
-  const assembled = assembleGate({ usability: ALWAYS_USABLE, mapping: { sources: [model] }, seams, executor: recording, logger: { warn: () => undefined } });
+  const assembled = assembleGate({ mapping: { sources: [model] }, seams, executor: recording, logger: { warn: () => undefined } });
   return { gate: assembled.gate, indexes: assembled.indexes, executor };
 }
 
@@ -131,13 +130,16 @@ describe(`the prefix read of a type-ahead search, planned on ${NEO4J_SERIES}`, (
     expect(operators.some((operator) => SCANS.test(operator.name)), names).toBe(false);
   });
 
-  it('reads no more than the limit plus one in any branch and in all, when thousands of entities share the prefix, by the rows of the operators and with the database hits shown beside them', async () => {
+  it('reads no more than the limit plus one in any branch and in all, through the index seek and with no scan or sort, when thousands of entities share the prefix, by the rows of the operators and with the database hits shown beside them', async () => {
     const { operators, rows } = await planOf('common-text', [
       { entityType: 'common', property: 'code', match: 'value' },
       { entityType: 'common', property: 'alt', match: 'value' },
     ]);
     const names = operators.map((operator) => `${operator.name}(rows ${operator.rows}, hits ${operator.dbHits})`).join(' > ');
     expect(rows, names).toBe(26);
+    expect(operators.filter((operator) => SEEKS.test(operator.name)), names).toHaveLength(2);
+    expect(operators.some((operator) => SCANS.test(operator.name)), names).toBe(false);
+    expect(operators.some((operator) => /Sort|Top/.test(operator.name)), names).toBe(false);
     expect(operators.filter((operator) => operator.name === 'Limit').every((operator) => operator.rows <= 26), names).toBe(true);
     expect(operators.filter((operator) => SEEKS.test(operator.name)).every((operator) => operator.rows <= 27), names).toBe(true);
     expect(operators.reduce((sum, operator) => sum + operator.dbHits, 0), names).toBeLessThan(COMMON_MATCHES / 3);
@@ -204,14 +206,15 @@ describe(`masking in a type-ahead search on ${NEO4J_SERIES}`, () => {
 });
 
 describe(`an index that is gone since the check, in a type-ahead search on ${NEO4J_SERIES}`, () => {
-  it('is left out of both groups with its message, and no statement of the request names the label, so no label scan can have run', async () => {
+  it('leaves the property out of both groups with its reason, searches the type by its other property, and no statement of the request names the property, so no label scan can have run', async () => {
     expect(await prefixIds('pre24-', 'bulk')).toHaveLength(24);
     await runAdmin(server, 'DROP INDEX bulk_code');
     const from = statements.length;
     const result = await typeahead('pre24-');
-    expect(result.disabledTypes.map((disabled) => disabled.entityType)).toContain('bulk');
+    expect(result.disabledTypes.find((disabled) => disabled.entityType === 'bulk')).toEqual({ entityType: 'bulk', property: 'code', reason: 'index-unavailable', typeSearched: true });
     expect(result.startsWith?.nodes.filter((node) => node.ref.entityType === 'bulk')).toEqual([]);
-    expect(namingLabel('Bulk', from)).toBe(0);
+    expect(statements.slice(from).filter((statement) => statement.includes('MATCH (n:`Bulk`) WHERE n.`code`'))).toEqual([]);
+    expect(statements.slice(from).filter((statement) => statement.includes('MATCH (n:`Bulk`) WHERE n.`alt`')).length).toBeGreaterThan(0);
     await runAdmin(server, 'CREATE INDEX bulk_code FOR (n:Bulk) ON (n.code)');
     await runAdmin(server, 'CALL db.awaitIndexes(120)');
     expect(await prefixIds('pre24-', 'bulk')).toHaveLength(24);
@@ -225,6 +228,7 @@ describe(`an index that is gone since the check, in a type-ahead search on ${NEO
     const stillBuilding = during.disabledTypes.some((disabled) => disabled.entityType === 'slow');
     if (stillBuilding) expect(namingLabel('Slow', from)).toBe(0);
     expect(stillBuilding, 'the index of 200,000 nodes was online before the search ran').toBe(true);
+    expect(during.disabledTypes.find((disabled) => disabled.entityType === 'slow')).toMatchObject({ property: 'code', reason: 'index-building' });
     await runAdmin(server, 'CALL db.awaitIndexes(300)');
     expect((await prefixIds('77', 'slow')).length).toBeGreaterThan(0);
   }, 300_000);

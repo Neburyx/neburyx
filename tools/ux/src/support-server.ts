@@ -2,7 +2,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { extname, join, normalize, sep } from 'node:path';
-import { DEFAULT_INVESTIGATION_LIST_LIMIT, investigationListCountsSchema, investigationListQuerySchema, type Investigation, type LastTest, openInvestigationRequestSchema, SEARCH_GROUP_CAP, searchRequestSchema, searchResultSchema, type SourceSummary, sourceSummaryFieldsSchema, sourceSummarySchema, type SourceTestReport, valueOfPathSegment } from '@neburyx/contracts';
+import { DEFAULT_INVESTIGATION_LIST_LIMIT, investigationListCountsSchema, investigationListQuerySchema, type Investigation, type LastTest, openInvestigationRequestSchema, SEARCH_GROUP_CAP, searchMoreRequestSchema, searchMoreResultSchema, searchRequestSchema, searchResultSchema, type SourceSummary, sourceSummaryFieldsSchema, sourceSummarySchema, type SourceTestReport, valueOfPathSegment } from '@neburyx/contracts';
 
 interface SupportProfile {
   readonly sourceId: string;
@@ -274,13 +274,39 @@ const GHOST = /^ghost-(\d+)$/;
 const OTHER_TYPE = 'customer';
 const RELATED = /^rel-(\d+)$/;
 const EVIDENCE = /^ev-(\d+)$/;
+/** A text `agg-N` has one aggregate of N relationships with no stable ID that carry the record; the cursor of its next page holds the text and how many members came before. */
+const AGGREGATE = /^agg-(\d+)$/;
+const AGGREGATE_CURSOR = /^agg:(agg-\d+):(\d+)$/;
 const STALLS_ONCE = 'stall';
 const STARTS_WITH_SUFFIXES = ['-1', '-2'];
+const INVALIDATED = { error: { code: 'CURSOR_INVALIDATED', message: 'This page of results is no longer valid. Start again.', retryable: false, traceId: 'tr-support' } };
+/** The cursor of the next page of the exact group of a text `many-N`: the text and how many hits came before. */
+const MANY_CURSOR = /^many:(many-\d+):(\d+)$/;
 const TIMEOUT = { error: { code: 'QUERY_TIMEOUT', message: 'The source did not answer in time. Try again or refine your filters.', retryable: true, traceId: 'tr-support', details: { timeoutMs: 5000 } } };
 const NO_EVIDENCE = { hits: [], count: { value: 0, quality: 'exact', scope: 'search:evidence' }, searchable: false, disabledRelationshipTypes: [] };
 const NO_RELATED = { hits: [], count: { value: 0, quality: 'exact', scope: 'search:related' }, searchable: false, disabledTypes: [] };
 
+function aggregateOf(sourceId: string, text: string, from: number, to: number, more: boolean): unknown {
+  return {
+    aggregate: { type: 'SEEN_WITH', from: { sourceId, entityType: SEARCH_TYPE, stableId: `${text}-a` }, to: { sourceId, entityType: SEARCH_TYPE, stableId: `${text}-b` } },
+    members: Array.from({ length: to - from }, (_, index) => ({ elementId: `5:${text}:${String(from + index + 1).padStart(2, '0')}`, records: [{ sourceRecordId: `REC-${text}` }] })),
+    memberCount: { value: to - from, quality: more || from > 0 ? 'lowerBound' : 'exact', scope: 'members' },
+    rules: [],
+  };
+}
+
 function evidenceGroup(sourceId: string, text: string): unknown {
+  const aggregate = AGGREGATE.exec(text);
+  if (aggregate !== null) {
+    const found = Number(aggregate[1]);
+    const shown = Math.min(found, SEARCH_GROUP_CAP);
+    const more = found > SEARCH_GROUP_CAP;
+    return { hits: [aggregateOf(sourceId, text, 0, shown, more)], count: { value: shown, quality: more ? 'lowerBound' : 'exact', scope: 'search:evidence' }, searchable: true, disabledRelationshipTypes: [], ...(more ? { nextCursor: `agg:${text}:${shown}` } : {}) };
+  }
+  if (text.startsWith('evx')) {
+    const supports = { sourceId, type: 'LINKS', from: SEARCH_TYPE, to: SEARCH_TYPE, stableId: `${text}-l01` };
+    return { hits: [{ supports, records: [{ sourceRecordId: `REC-${text}` }, { property: 'docId', unreadable: true }], rules: [] }], count: { value: 1, quality: 'exact', scope: 'search:evidence' }, searchable: true, disabledRelationshipTypes: [] };
+  }
   const matches = EVIDENCE.exec(text);
   if (matches !== null) {
     const found = Number(matches[1]);
@@ -293,7 +319,7 @@ function evidenceGroup(sourceId: string, text: string): unknown {
     return { hits, count: { value: shown, quality: found > SEARCH_GROUP_CAP ? 'lowerBound' : 'exact', scope: 'search:evidence' }, searchable: true, disabledRelationshipTypes: [] };
   }
   if (text.startsWith('evfail')) return { ...NO_EVIDENCE, searchable: true, count: { quality: 'unknown', scope: 'search:evidence' } };
-  if (text.startsWith('evdrop')) return { ...NO_EVIDENCE, disabledRelationshipTypes: [{ relationshipType: 'LINKS', from: SEARCH_TYPE, to: SEARCH_TYPE, reason: 'index-unavailable' }] };
+  if (text.startsWith('evdrop')) return { ...NO_EVIDENCE, disabledRelationshipTypes: [{ relationshipType: 'LINKS', from: SEARCH_TYPE, to: SEARCH_TYPE, property: 'recordId', reason: 'index-unavailable' }] };
   return NO_EVIDENCE;
 }
 
@@ -306,7 +332,7 @@ function relatedGroup(sourceId: string, text: string): unknown {
     return { hits, count: { value: shown, quality: found > SEARCH_GROUP_CAP ? 'lowerBound' : 'exact', scope: 'search:related' }, searchable: true, disabledTypes: [] };
   }
   if (text.startsWith('relfail') || text.startsWith('exactfail')) return { ...NO_RELATED, searchable: true, count: { quality: 'unknown', scope: 'search:related' } };
-  if (text.startsWith('reldrop')) return { ...NO_RELATED, disabledTypes: [{ entityType: SEARCH_TYPE, reason: 'index-unavailable' }] };
+  if (text.startsWith('reldrop')) return { ...NO_RELATED, disabledTypes: [{ entityType: SEARCH_TYPE, property: 'batchRef', reason: 'index-building', typeSearched: false }] };
   return NO_RELATED;
 }
 
@@ -317,6 +343,8 @@ function relatedGroup(sourceId: string, text: string): unknown {
  * entity of that ID and has no related group; a type-ahead search also answers two entities whose ID starts with that text. For the Filters: every answer that is not a type-ahead answer counts the match
  * set (an entry for each of an account and a customer, the three match modes and the total, from the groups of the text), a text `mix-A-B` has A account and B customer exact matches, a text `ghost-N` counts N
  * matches and shows none, a text that starts with `facfail` has its facet read fail while one exact match answers, and the selection (`entityTypes`, `matchModes`) narrows the rows and hides the groups.
+ * The exact group of `many-N` with more than 25 matches has a cursor, and `POST /v1/search/entities/more` answers its next pages of 25, each counting the hits of every page so far, the last with an exact count; so does the evidence group of `agg-N`
+ * (one aggregate of N relationships with no stable ID); a text that starts with `evx` has one supporting relationship with a value that cannot be shown; any other cursor is CURSOR_INVALIDATED.
  */
 function createSearch(options: SupportServerOptions) {
   const stalled = new Set<string>();
@@ -366,7 +394,8 @@ function createSearch(options: SupportServerOptions) {
       const exactAll = ghost !== null ? Number(ghost[1]) : mixed !== null ? accounts + customers : exactFailed ? 0 : found;
       const accountsAll = ghost !== null ? Number(ghost[1]) : mixed !== null ? accounts : exactFailed ? 0 : found;
       const relatedAll = relatedFound === null ? 0 : Number(relatedFound[1]);
-      const evidenceAll = evidenceFound === null ? 0 : Number(evidenceFound[1]);
+      const aggregateFound = AGGREGATE.exec(text);
+      const evidenceAll = evidenceFound !== null ? Number(evidenceFound[1]) : aggregateFound !== null ? Number(aggregateFound[1]) : 0;
       const facets = text.startsWith('facfail')
         ? { searchable: true, total: { quality: 'unknown', scope: 'search:facet:total' }, entityType: [], matchMode: [] }
         : {
@@ -383,12 +412,14 @@ function createSearch(options: SupportServerOptions) {
             ],
           };
       const shownEvidence = !modeOn('evidence') ? NO_EVIDENCE : withRelated ? evidenceGroup(sourceId, text) : NO_EVIDENCE;
+      const paged = matches !== null && found > SEARCH_GROUP_CAP && modeOn('exact') && parsed.data.typeahead !== true;
       const answer = searchResultSchema.parse({
         sourceId,
         exact: nodes,
         cap: SEARCH_GROUP_CAP,
         searchable: modeOn('exact'),
         counts: { exact: modeOn('exact') ? exactCount : { value: 0, quality: 'exact', scope: 'search:exact' } },
+        ...(paged ? { exactNextCursor: `many:${text}:${SEARCH_GROUP_CAP}` } : {}),
         disabledTypes: [],
         related: relatedShown,
         evidence: shownEvidence,
@@ -400,6 +431,46 @@ function createSearch(options: SupportServerOptions) {
         ...(parsed.data.typeahead === true ? { startsWith: { nodes: startsWith, count: { value: startsWith.length, quality: 'exact', scope: 'search:startsWith' }, dropped: { 'not-mapped': 0, 'ambiguous-type': 0, 'no-stable-id': 0 }, warnings: [] } } : {}),
       });
       json(response, 200, answer);
+    },
+    more(body: unknown, response: ServerResponse): void {
+      const parsed = searchMoreRequestSchema.safeParse(body);
+      if (!parsed.success) return json(response, 400, INVALID);
+      if (parsed.data.sourceId !== sourceId) return json(response, 404, NOT_FOUND);
+      const members = AGGREGATE_CURSOR.exec(parsed.data.cursor);
+      const aggregateTotal = AGGREGATE.exec(parsed.data.text);
+      if (parsed.data.group === 'evidence' && members !== null && aggregateTotal !== null && members[1] === parsed.data.text) {
+        const from = Number(members[2]);
+        const found = Number(aggregateTotal[1]);
+        const to = Math.min(from + SEARCH_GROUP_CAP, found);
+        const more = to < found;
+        const page = searchMoreResultSchema.parse({
+          sourceId,
+          group: 'evidence',
+          hits: [aggregateOf(sourceId, parsed.data.text, from, to, more)],
+          count: { value: to, quality: more ? 'lowerBound' : 'exact', scope: 'search:evidence' },
+          ...(more ? { nextCursor: `agg:${parsed.data.text}:${to}` } : {}),
+          dropped: { 'not-mapped': 0, 'ambiguous-type': 0, 'no-stable-id': 0 },
+          warnings: [],
+        });
+        return json(response, 200, page);
+      }
+      const cursor = MANY_CURSOR.exec(parsed.data.cursor);
+      const total = MANY.exec(parsed.data.text);
+      if (parsed.data.group !== 'exact' || cursor === null || total === null || cursor[1] !== parsed.data.text) return json(response, 409, INVALIDATED);
+      const from = Number(cursor[2]);
+      const found = Number(total[1]);
+      const to = Math.min(from + SEARCH_GROUP_CAP, found);
+      const more = to < found;
+      const page = searchMoreResultSchema.parse({
+        sourceId,
+        group: 'exact',
+        nodes: Array.from({ length: to - from }, (_, index) => node(sourceId, SEARCH_TYPE, `${parsed.data.text}-${String(from + index + 1).padStart(2, '0')}`)),
+        count: { value: to, quality: more ? 'lowerBound' : 'exact', scope: 'search:exact' },
+        ...(more ? { nextCursor: `many:${parsed.data.text}:${to}` } : {}),
+        dropped: { 'not-mapped': 0, 'ambiguous-type': 0, 'no-stable-id': 0 },
+        warnings: [],
+      });
+      json(response, 200, page);
     },
   };
 }
@@ -443,6 +514,7 @@ export function createSupportServer(options: SupportServerOptions): Server {
       const isApi = path === API_PREFIX || path.startsWith(`${API_PREFIX}/`) || PROBE_PATHS.has(path);
       if (request.method === 'POST' && path === '/v1/investigations') return investigations.open(await bodyOf(request), response);
       if (request.method === 'POST' && path === '/v1/search/entities') return search.run(await bodyOf(request), response);
+      if (request.method === 'POST' && path === '/v1/search/entities/more') return search.more(await bodyOf(request), response);
       if (request.method === 'POST' && path === '/__support/named-views') return investigations.holdNamedViews(await bodyOf(request), response);
       if (request.method === 'POST' && path === '/__support/forget-investigations') {
         investigations.forgetInvestigations();

@@ -50,6 +50,38 @@ describe('ErrorResponse', () => {
     expect(errorResponseSchema.safeParse({ error: budget }).success).toBe(true);
   });
 
+  describe('an unavailable source', () => {
+    const unavailable = (reason: string, message: string, retryable: boolean) => ({ error: { code: 'SOURCE_UNAVAILABLE', message, retryable, traceId: 'tr-1', details: { reason } } });
+
+    it.each([
+      ['unreachable', 'The source did not answer. Try again shortly.', true],
+      ['authentication', 'The source refused the login. Ask an administrator.', false],
+      ['refused', 'The source does not allow this read for the login.', false],
+      ['index-unavailable', 'A needed index is not there, so the read was not run.', false],
+      ['index-building', 'A needed index is still building, so the read is slow. Try again later.', true],
+      ['index-failed', 'A needed index failed, so the read was not run.', false],
+      ['index-list-unreadable', "The source's indexes could not be listed, so the read was not run.", false],
+    ])('accepts the reason %s with its own sentence and retry flag, and no other', (reason, message, retryable) => {
+      expect(errorResponseSchema.safeParse(unavailable(reason, message, retryable)).success).toBe(true);
+      expect(errorResponseSchema.safeParse(unavailable(reason, message, !retryable)).success).toBe(false);
+      expect(errorResponseSchema.safeParse(unavailable(reason, 'The data source is not available. Try again shortly.', retryable)).success).toBe(false);
+    });
+
+    it.each([
+      ['no reason', { error: { code: 'SOURCE_UNAVAILABLE', message: 'The source did not answer. Try again shortly.', retryable: true, traceId: 'tr-1' } }],
+      ['the reason it no longer has, unusable', unavailable('unusable', 'The source did not answer. Try again shortly.', true)],
+      ["a reason of the adapter's own", unavailable('pool-full', 'The source did not answer. Try again shortly.', true)],
+      ['the sentence of another reason', unavailable('index-failed', 'A needed index is not there, so the read was not run.', false)],
+    ])('refuses %s', (_name, body) => {
+      expect(errorResponseSchema.safeParse(body).success).toBe(false);
+    });
+
+    it('allows a reason in the details of no other code', () => {
+      const budget = { code: 'QUERY_BUDGET_EXCEEDED', message: 'Refine your filters to continue.', retryable: true, traceId: 'tr-1' };
+      expect(errorResponseSchema.safeParse({ error: { ...budget, details: { reason: 'unreachable' } } }).success).toBe(false);
+    });
+  });
+
   it('accepts the timeout in the details of a timed-out query and in no other code', () => {
     const timeout = { code: 'QUERY_TIMEOUT', message: 'The source did not answer in time. Try again or refine your filters.', retryable: true, traceId: 'tr-1' };
     expect(errorResponseSchema.safeParse({ error: { ...timeout, details: { timeoutMs: 5000 } } }).success).toBe(true);

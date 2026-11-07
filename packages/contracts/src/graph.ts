@@ -47,9 +47,12 @@ const text = z.string().min(1);
  */
 export const storedEdgeRefSchema = z.strictObject({ sourceId: text, type: text, from: text, to: text, stableId: text });
 
+/** What names an aggregate: its relationship type and its two ends. */
+export const aggregateSchema = z.strictObject({ type: text, from: elementRefSchema, to: elementRefSchema });
+
 export const edgeRefSchema = z.union([
   storedEdgeRefSchema,
-  z.strictObject({ sourceId: text, aggregate: z.strictObject({ type: text, from: elementRefSchema, to: elementRefSchema }) }),
+  z.strictObject({ sourceId: text, aggregate: aggregateSchema }),
   z.strictObject({ sourceId: text, derived: z.strictObject({ ruleId: text, from: elementRefSchema, to: elementRefSchema }) }),
 ]);
 

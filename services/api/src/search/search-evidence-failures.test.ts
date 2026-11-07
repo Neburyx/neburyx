@@ -11,7 +11,7 @@ import { searchRelatedTemplate } from '../gate/templates/search-related.js';
 import type { AuditEvent } from '../seams/seams.js';
 import { entityRows, plainNode } from '../testing/entity-fixtures.js';
 import { postSearch, RELATED_ENTITIES, searchMappingOf, startSearchApp, type SearchAppOptions } from '../testing/search-app.js';
-import { searchModelOf, type StoredNode, type StoredRelationship } from '../testing/search-fixtures.js';
+import { searchModelOf, type StoredNode, type StoredRelationship, storedHits } from '../testing/search-fixtures.js';
 
 const TEXT = 'needle-9042';
 const RELATIONSHIPS = [{ type: 'MADE_FROM', from: 'widget', to: 'gadget', stable_id: 'linkId', evidence: ['recordId'] }];
@@ -196,7 +196,7 @@ describe('the reads after the exact read settle before the answer', () => {
     const answer = answerOf((await pending).json());
     expect(answered).toBe(true);
     expect(answer.failures).toEqual([{ group: 'related', code: 'QUERY_TIMEOUT', timeoutMs: 5000 }]);
-    expect(answer.evidence.hits.map((hit) => hit.supports.stableId)).toEqual(['L-1']);
+    expect(storedHits(answer.evidence.hits).map((hit) => hit.supports.stableId)).toEqual(['L-1']);
     expect(parts.executor.calls.filter((call) => call.templateId !== 'schema-indexes')).toHaveLength(4);
     expect(searchEvents(recorded)).toEqual(['entity.search success', 'entity.search_evidence success', 'entity.search_facets success', 'entity.search_related failed']);
     await parts.app.close();

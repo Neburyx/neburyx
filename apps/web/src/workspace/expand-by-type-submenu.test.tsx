@@ -232,6 +232,76 @@ describe('the Expand neighbors and Expand by neighbor type entries of the node m
     await user.click(within(submenu()).getByRole('button', { name: 'Retry' }));
     expect(expansions).toHaveLength(2);
   });
+
+  it('offers no Retry in the submenu when the expansion fails with an unavailable source that retrying cannot help', async () => {
+    const { previews, expansions, view, rightClick } = opened();
+    const user = userEvent.setup();
+    await user.click(byTypeRow());
+    await answerPreview(previews[0]);
+    await user.click(within(submenu()).getByRole('button', { name: 'Expand 3 neighbors' }));
+    await act(async () => expansions[0]?.answer({ ok: false, failure: { code: 'SOURCE_UNAVAILABLE', message: 'x', retryable: false, traceId: 'tr-9', details: { reason: 'index-failed' } } }));
+    view.rightClick(rightClick('n1'));
+    await user.click(byTypeRow());
+    expect(within(submenu()).getByRole('alert')).not.toBeNull();
+    expect(within(submenu()).queryByRole('button', { name: 'Retry' })).toBeNull();
+  });
+});
+
+describe('the states of the preview in Expand by type', () => {
+  const zeroOf = (direction: 'out' | 'in', neighbor: string) => ({ relationshipType: 'link-a', direction, count: count(0, 'exact'), neighborTypes: [neighbor] });
+
+  it('says the counts are zero when relationships are mapped and the node has none, and keeps the checklist', async () => {
+    const { previews } = opened();
+    await userEvent.setup().click(byTypeRow());
+    await answerPreview(previews[0], previewOf({ total: count(0, 'exact'), byType: [zeroOf('out', 'kind-b'), zeroOf('in', 'type-c')], byNeighborType: [{ entityType: 'kind-b', count: count(0, 'exact') }, { entityType: 'type-c', count: count(0, 'exact') }] }));
+    expect(within(submenu()).getByText('No relationships found for this item.')).not.toBeNull();
+    expect(within(submenu()).queryByText('No relationships are mapped for this entity type.')).toBeNull();
+    expect(within(submenu()).queryByRole('alert')).toBeNull();
+    expect(within(submenu()).getAllByRole('checkbox')).toHaveLength(2);
+  });
+
+  it('does not say the counts are zero when one count is unknown', async () => {
+    const { previews } = opened();
+    await userEvent.setup().click(byTypeRow());
+    await answerPreview(previews[0], previewOf({ byType: [zeroOf('out', 'kind-b'), { relationshipType: 'link-b', direction: 'out', count: count(undefined, 'unknown'), neighborTypes: ['type-c'] }] }));
+    expect(within(submenu()).queryByText('No relationships found for this item.')).toBeNull();
+  });
+
+  it('says the item is no longer in the source for a NOT_FOUND answer, with no Retry', async () => {
+    const { previews } = opened();
+    await userEvent.setup().click(byTypeRow());
+    await act(async () => previews[0]?.answer({ ok: false, failure: { code: 'NOT_FOUND', message: 'x', retryable: false, traceId: 'tr-4' } }));
+    expect(within(submenu()).getByRole('alert').textContent).toBe('This item is no longer in the source.');
+    expect(within(submenu()).queryByRole('button', { name: 'Retry' })).toBeNull();
+    expect(within(submenu()).queryByText(/No relationships/)).toBeNull();
+  });
+
+  it.each([
+    ['INTERNAL_ERROR', false, 'INTERNAL_ERROR'],
+    ['SOURCE_UNAVAILABLE', true, 'The source did not answer. Try again shortly.'],
+    ['SOURCE_BUSY', true, 'SOURCE_BUSY'],
+  ] as const)('names a %s failure of the preview in its notice and offers Retry, never an empty node', async (code, retryable, text) => {
+    const { previews } = opened();
+    const user = userEvent.setup();
+    await user.click(byTypeRow());
+    await act(async () => previews[0]?.answer({ ok: false, failure: { code, message: 'x', retryable, traceId: 'tr-5' } }));
+    expect(within(submenu()).getByRole('alert').textContent).toContain(text);
+    await user.click(within(submenu()).getByRole('button', { name: 'Retry' }));
+    expect(previews).toHaveLength(2);
+    expect(within(submenu()).queryByText(/No relationships/)).toBeNull();
+  });
+
+  it.each([
+    ['index-failed', 'A needed index failed, so the read was not run.'],
+    ['authentication', 'The source refused the login. Ask an administrator.'],
+  ] as const)('names an unavailable source by the sentence of its reason %s, with no Retry', async (reason, message) => {
+    const { previews } = opened();
+    await userEvent.setup().click(byTypeRow());
+    await act(async () => previews[0]?.answer({ ok: false, failure: { code: 'SOURCE_UNAVAILABLE', message, retryable: false, traceId: 'tr-6', details: { reason } } }));
+    expect(within(submenu()).getByRole('alert').textContent).toBe(`${message} · trace tr-6`);
+    expect(within(submenu()).queryByRole('button', { name: 'Retry' })).toBeNull();
+    expect(within(submenu()).queryByText(/No relationships/)).toBeNull();
+  });
 });
 
 describe('what an expansion does to the loaded graph', () => {

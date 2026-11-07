@@ -88,16 +88,16 @@ describe('the statement of a related lookup', () => {
   it('has one branch for each target, joined by UNION and cut by one limit over the combined result, with names from the mapping only, quoted', () => {
     const rendered = render('BT-1', [BATCH, WIDGET_REF]);
     expect(rendered.cypher).toBe(
-      'CALL { MATCH (n:`Widget`) WHERE n.`batchRef` IN [$text, $textInteger] RETURN n LIMIT $limit + 1 UNION ' +
-        'MATCH (n:`Gadget`) WHERE n.`widgetRef` IN [$text, $textInteger] RETURN n LIMIT $limit + 1 } WITH n LIMIT $limit + 1 RETURN n',
+      "CALL { MATCH (n:`Widget`) WHERE n.`batchRef` IN [$text, $textInteger] AND ($cursor IS NULL OR elementId(n) > $cursor.after) WITH n ORDER BY elementId(n) LIMIT $limit + 1 RETURN n, $branchEntityTypes[0] AS entityType UNION " +
+        "MATCH (n:`Gadget`) WHERE n.`widgetRef` IN [$text, $textInteger] AND ($cursor IS NULL OR elementId(n) > $cursor.after) WITH n ORDER BY elementId(n) LIMIT $limit + 1 RETURN n, $branchEntityTypes[1] AS entityType } WITH n, collect(DISTINCT entityType) AS entityTypes ORDER BY elementId(n) LIMIT $limit + 1 RETURN n, entityTypes",
     );
-    expect(rendered.parameters).toEqual({ text: 'BT-1', textInteger: null, limit: 25 });
+    expect(rendered.parameters).toEqual({ text: 'BT-1', textInteger: null, limit: 25, branchEntityTypes: ['widget', 'gadget'] });
   });
 
   it('writes the equality form for a TEXT-indexed target and cuts every branch at the limit plus one', () => {
     const { cypher } = render('7', [{ ...BATCH, match: 'text' }, WIDGET_REF]);
-    expect(cypher).toContain('MATCH (n:`Widget`) WHERE n.`batchRef` = $text RETURN n LIMIT $limit + 1');
-    expect(cypher.match(/RETURN n LIMIT \$limit \+ 1/g)).toHaveLength(2);
+    expect(cypher).toContain("MATCH (n:`Widget`) WHERE n.`batchRef` = $text AND ($cursor IS NULL OR elementId(n) > $cursor.after) WITH n ORDER BY elementId(n) LIMIT $limit + 1 RETURN n, $branchEntityTypes[0] AS entityType");
+    expect(cypher.match(/ORDER BY elementId\(n\) LIMIT \$limit \+ 1 RETURN n/g)).toHaveLength(3);
   });
 
   it('keeps the typed text out of the statement, whatever it holds', () => {
@@ -110,7 +110,7 @@ describe('the statement of a related lookup', () => {
     if (exact === undefined) throw new Error('the catalog has no exact template');
     const target = { entityType: 'widget', property: 'widgetId', match: 'value' };
     expect(renderTemplate(exact, exact.paramsSchema.parse({ text: 'W-1', targets: [target] }), allowlist, 25).cypher).toBe(
-      'CALL { MATCH (n:`Widget`) WHERE n.`widgetId` IN [$text, $textInteger] RETURN n LIMIT $limit + 1 } WITH n LIMIT $limit + 1 RETURN n',
+      "CALL { MATCH (n:`Widget`) WHERE n.`widgetId` IN [$text, $textInteger] AND ($cursor IS NULL OR elementId(n) > $cursor.after) WITH n ORDER BY elementId(n) LIMIT $limit + 1 RETURN n, $branchEntityTypes[0] AS entityType } WITH n, collect(DISTINCT entityType) AS entityTypes ORDER BY elementId(n) LIMIT $limit + 1 RETURN n, entityTypes",
     );
   });
 });
@@ -160,8 +160,8 @@ describe('the declaration of the two search templates', () => {
       return 'accepted';
     };
     expect(failure({})).toBe('accepted');
-    expect(failure({ searchBranches: { ...declared, value: 'MATCH (n:@label) WHERE n.@property IN [$text, $textInteger] RETURN n' } })).toBe('the template entity-related has a branch text with no LIMIT $limit + 1 of its own');
-    expect(failure({ cypher: 'CALL { @searchBranches(targets) } RETURN n' })).toBe('the template entity-related has search branches and its Cypher has no enclosing LIMIT $limit + 1');
+    expect(failure({ searchBranches: { ...declared, value: 'MATCH (n:@label) WHERE n.@property IN [$text, $textInteger] RETURN n, @entityType AS entityType' } })).toBe('the template entity-related has a branch text with no LIMIT $limit + 1 of its own');
+    expect(failure({ cypher: 'CALL { @searchBranches(targets) } RETURN n' })).toBe('the template entity-related is paged and its Cypher has no LIMIT $limit + 1');
     expect(failure({ usedProperties: undefined })).toBe('the template entity-related has search branches and does not name the properties it uses');
     expect(failure({ indexNeeds: undefined })).toBe('the template entity-related has search branches and does not name the indexes it needs');
     expect(failure({ searchBranches: Object.assign({}, declared, { allowlist: 'anything' }) })).toBe('the template entity-related has search branches and does not say which allowlist its targets are checked against');

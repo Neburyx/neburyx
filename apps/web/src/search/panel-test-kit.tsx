@@ -1,6 +1,6 @@
 import { act, fireEvent, screen } from '@testing-library/react';
 import { vi } from 'vitest';
-import type { GraphNode, SearchRequest, SearchResult } from '@neburyx/contracts';
+import type { GraphNode, SearchMoreRequest, SearchMoreResult, SearchRequest, SearchResult } from '@neburyx/contracts';
 import type { ApiClient, ApiFailure, ApiResult } from '../api/client.js';
 import { fakeClient } from '../api/fake-client.js';
 import { createClientState, type ClientState } from '../state/client-state.js';
@@ -24,6 +24,12 @@ export interface SentSearch {
   readonly answer: (result: ApiResult<SearchResult>) => void;
 }
 
+export interface SentMore {
+  readonly request: SearchMoreRequest;
+  readonly signal: AbortSignal | undefined;
+  readonly answer: (result: ApiResult<SearchMoreResult>) => void;
+}
+
 export interface SentLoad {
   readonly key: string;
   readonly mask: boolean | undefined;
@@ -40,18 +46,20 @@ export function searchAnswer(sourceId: string, exact: readonly GraphNode[] = [],
 
 export const TIMEOUT: ApiFailure = { code: 'QUERY_TIMEOUT', message: 'late', retryable: true, traceId: 'tr-1', details: { timeoutMs: 5000 } };
 
-/** A client whose searches and entity reads wait until the test answers them, so the order of the answers is the test's. */
-export function holding(): { readonly client: ApiClient; readonly searches: SentSearch[]; readonly loads: SentLoad[] } {
+/** A client whose searches, next pages and entity reads wait until the test answers them, so the order of the answers is the test's. */
+export function holding(): { readonly client: ApiClient; readonly searches: SentSearch[]; readonly pages: SentMore[]; readonly loads: SentLoad[] } {
   const searches: SentSearch[] = [];
+  const pages: SentMore[] = [];
   const loads: SentLoad[] = [];
   const client = fakeClient({
     getProfile: async (sourceId) => ({ ok: true, value: profiled(sourceId) }),
     getMe: async () => ({ ok: true, value: me() }),
     getSources: async () => ({ ok: true, value: { items: [source('a')], nextCursor: null } }),
     searchEntities: (request, signal) => new Promise<ApiResult<SearchResult>>((resolve) => void searches.push({ request, signal, answer: resolve })),
+    searchMore: (request, signal) => new Promise<ApiResult<SearchMoreResult>>((resolve) => void pages.push({ request, signal, answer: resolve })),
     getEntity: (ref, options, signal) => new Promise<ApiResult<GraphNode>>((resolve) => void loads.push({ key: `${ref.entityType}/${ref.stableId}`, mask: options?.mask, signal, answer: resolve })),
   });
-  return { client, searches, loads };
+  return { client, searches, pages, loads };
 }
 
 export const settle = (): Promise<void> => act(async () => void (await Promise.resolve()));
@@ -60,6 +68,7 @@ export const wait = (ms: number): Promise<void> => act(async () => void vi.advan
 export interface PanelWorkspace {
   readonly client: ApiClient;
   readonly searches: SentSearch[];
+  readonly pages: SentMore[];
   readonly loads: SentLoad[];
   readonly state: ClientState;
   readonly renderer: () => StubRenderer | undefined;
@@ -68,7 +77,7 @@ export interface PanelWorkspace {
 
 /** The workspace with the Search panel open on the Add from source tab, under fake timers; a graph is loaded unless `bound` is false. */
 export async function panelWorkspace(options: { readonly bound?: boolean; readonly mask?: boolean; readonly nodes?: readonly GraphNode[] } = {}): Promise<PanelWorkspace> {
-  const { client, searches, loads } = holding();
+  const { client, searches, pages, loads } = holding();
   const state = createClientState();
   if (options.bound !== false) loadGraph(state, [...(options.nodes ?? [node('a', 'ACC-1')])], []);
   if (options.mask === true) state.setMask(true);
@@ -82,7 +91,7 @@ export async function panelWorkspace(options: { readonly bound?: boolean; readon
   await settle();
   fireEvent.click(screen.getByRole('button', { name: 'Search' }));
   fireEvent.click(screen.getByRole('tab', { name: 'Add from source' }));
-  return { client, searches, loads, state, router: view.router, renderer: () => factory.made[0] };
+  return { client, searches, pages, loads, state, router: view.router, renderer: () => factory.made[0] };
 }
 
 export function inputOf(element: HTMLElement): HTMLInputElement {

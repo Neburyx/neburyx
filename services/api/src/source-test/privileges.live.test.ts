@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { ALWAYS_USABLE } from '../testing/usability.js';
 import { createSourceGate } from '../gate/source-gate.js';
 import { communitySeams } from '../seams/community-seams.js';
 import { mappingOf, sourceWith } from '../testing/gate-fixtures.js';
@@ -20,7 +19,7 @@ describe.skipIf(!live)('the privileges read against an Enterprise server', () =>
   it('lists the privileges of the login in a read transaction on the source database, and the report says they were inspected', async () => {
     const mapping = mappingOf(sourceWith('live', { uri: URI, database: DATABASE, budgets: { timeout_ms: 10000, queue_wait_ms: 5000 }, auth: { kind: 'basic', username_env: 'NBX_EE_USER', password_env: 'NBX_EE_PASSWORD' } }));
     const warnings: object[] = [];
-    const parts = createSourceGate({ usability: ALWAYS_USABLE, mapping, env: { NBX_EE_USER: USER, NBX_EE_PASSWORD: PASSWORD }, seams: communitySeams(), logger: { warn: (fields) => void warnings.push(fields) } });
+    const parts = createSourceGate({ mapping, env: { NBX_EE_USER: USER, NBX_EE_PASSWORD: PASSWORD }, seams: communitySeams(), logger: { warn: (fields) => void warnings.push(fields) } });
     try {
       const report = await createSourceTester({ gate: parts.gate, mapping, store: memoryAppStore() }).run({ traceId: 'tr-live', principal: LOCAL_PRINCIPAL, sourceId: 'live' });
       expect(report.server?.edition).toBe('enterprise');

@@ -1,5 +1,4 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { ALWAYS_USABLE } from '../testing/usability.js';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import neo4j from 'neo4j-driver';
@@ -137,7 +136,7 @@ describe(`a test run leaves the source as it was, on the dev Neo4j server`, () =
     const login = who === 'reader' ? reader : writer;
     const before = await snapshot(normal);
     const mapping = mappingOf(sourceWith('alpha', { uri: normal.boltUri, database: normal.database, auth: { kind: 'basic', username_env: NEO4J_ENV_USER, password_env: NEO4J_ENV_PASSWORD } }));
-    const parts = createSourceGate({ usability: ALWAYS_USABLE, mapping, env: envFor(normal, login), seams: communitySeams(), logger: { warn: () => undefined } });
+    const parts = createSourceGate({ mapping, env: envFor(normal, login), seams: communitySeams(), logger: { warn: () => undefined } });
     try {
       const store = memoryAppStore();
       const logger = { info: () => undefined, warn: () => undefined };

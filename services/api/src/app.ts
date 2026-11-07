@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import type { Socket } from 'node:net';
 import fastifyStatic from '@fastify/static';
-import { type ErrorCode, coverageRequestSchema, coverageResponseSchema, degreePreviewRequestSchema, entityLookupRequestSchema, degreePreviewSchema, entityPathSchema, entityQuerySchema, expandRequestSchema, expandResponseSchema, healthResponseSchema, investigationListQuerySchema, investigationListResponseSchema, investigationResponseSchema, meResponseSchema, nodeSchema, openInvestigationRequestSchema, openInvestigationResponseSchema, readyResponseSchema, searchRequestSchema, searchResultSchema, sourceProfileSchema, sourceTestReportSchema, sourcesResponseSchema } from '@neburyx/contracts';
+import { type ErrorCode, coverageRequestSchema, coverageResponseSchema, degreePreviewRequestSchema, entityLookupRequestSchema, degreePreviewSchema, entityPathSchema, entityQuerySchema, expandRequestSchema, expandResponseSchema, healthResponseSchema, investigationListQuerySchema, investigationListResponseSchema, investigationResponseSchema, meResponseSchema, nodeSchema, openInvestigationRequestSchema, openInvestigationResponseSchema, readyResponseSchema, searchMoreRequestSchema, searchMoreResultSchema, searchRequestSchema, searchResultSchema, sourceProfileSchema, sourceTestReportSchema, sourcesResponseSchema } from '@neburyx/contracts';
 import { z } from 'zod';
 import Fastify, {
   type FastifyBaseLogger,
@@ -18,7 +18,7 @@ import { createCoverageService } from './graph/coverage-service.js';
 import { createDegreePreviewService } from './graph/degree-preview-service.js';
 import { createExpandService } from './graph/expand-service.js';
 import { createDegreeCache, type DegreeCacheOptions } from './graph/degree-cache.js';
-import { NO_DEGREE_VERDICTS, type DegreeVerdicts, type SourceUsability } from './source-test/usability.js';
+import { NO_DEGREE_VERDICTS, type DegreeVerdicts } from './source-test/usability.js';
 import { createEntityReader } from './entities/entity-reader.js';
 import { createSearchService } from './search/search-service.js';
 import { createInvestigationService } from './investigations/investigation-service.js';
@@ -51,7 +51,7 @@ export interface AppOptions {
   /** The keys of the reference tokens of keyed entity types; the source summary carries a demo case's keyed starting entity as a token. */
   readonly referenceKeys?: ReferenceKeys | undefined;
   /** What the checks showed about how the source answers a count of neighbors; absent, every degree preview is bounded. */
-  readonly degreeVerdicts?: (DegreeVerdicts & SourceUsability) | undefined;
+  readonly degreeVerdicts?: DegreeVerdicts | undefined;
   /** Overrides the lifetime and size of the degree preview cache, which is only kept when the verdicts are given. */
   readonly degreeCache?: DegreeCacheOptions | undefined;
   readonly reachability?: ReachabilityView | undefined;
@@ -336,7 +336,16 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       return searchResultSchema.parse(result);
     });
 
-    const degreeCache = options.degreeVerdicts === undefined ? undefined : { store: createDegreeCache(options.degreeCache), usability: options.degreeVerdicts };
+    app.post('/v1/search/entities/more', { config: { permission: 'principal' } }, async (request) => {
+      const body = searchMoreRequestSchema.safeParse(request.body);
+      if (!noQuerySchema.safeParse(request.query).success || !body.success) throw new AppError('INVALID_REQUEST');
+      const identity = await options.store.current();
+      const { sourceId, text, group, cursor, entityTypes } = body.data;
+      const page = await searching.more({ traceId: request.id, principal: identity.principal, sourceId, text, group, cursor, mask: body.data.mask === true, ...(entityTypes === undefined ? {} : { entityTypes }) });
+      return searchMoreResultSchema.parse(page);
+    });
+
+    const degreeCache = options.degreeVerdicts === undefined ? undefined : { store: createDegreeCache(options.degreeCache) };
     const auditSink = (options.seams ?? communitySeams()).audit;
     const degrees = createDegreePreviewService({ gate: options.gate, mapping, access, entities, verdicts: options.degreeVerdicts ?? NO_DEGREE_VERDICTS, ...(degreeCache === undefined ? {} : { cache: { ...degreeCache, audit: auditSink, logger: options.logger } }) });
     app.post('/v1/graph/preview-expansion', { config: { permission: 'principal' } }, async (request) => {

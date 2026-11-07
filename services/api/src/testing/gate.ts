@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { ALWAYS_USABLE } from './usability.js';
 import { communitySeams } from '../seams/community-seams.js';
 import type { Principal, Seams } from '../seams/seams.js';
 import { DEFAULT_BUDGETS } from '../gate/budgets.js';
@@ -130,7 +129,6 @@ export interface HarnessOptions {
   readonly policyVersion?: GateDeps['policyVersion'];
   readonly redact?: GateDeps['redact'];
   readonly clock?: () => number;
-  readonly usability?: GateDeps['usability'];
 }
 
 export function harness(options: HarnessOptions = {}): Harness {
@@ -149,7 +147,6 @@ export function harness(options: HarnessOptions = {}): Harness {
     references: options.references ?? TEST_REFERENCE_KEYS,
     policyVersion: options.policyVersion ?? (() => 'none'),
     redact: options.redact ?? redactItems,
-    usability: options.usability ?? ALWAYS_USABLE,
     clock: options.clock ?? (() => 1_000_000),
     logger: { warn: (fields, message) => void logs.push({ fields, message }) },
     observer,

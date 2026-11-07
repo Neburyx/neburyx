@@ -28,12 +28,21 @@ describe('the panel while the preview is not there', () => {
     const { open, previews, expansions } = panelRig();
     await open();
     await act(async () => previews[0]?.answer(failure('SOURCE_UNAVAILABLE')));
-    expect(inPanel().getByRole('alert').textContent).toBe('SOURCE_UNAVAILABLE · trace tr-3');
+    expect(inPanel().getByRole('alert').textContent).toBe('The source did not answer. Try again shortly. · trace tr-3');
     expect(rows()).toEqual(['kind-b']);
     await userEvent.setup().click(button('Retry'));
     expect(previews).toHaveLength(2);
     await userEvent.setup().click(button('Load 25 per type'));
     expect(expansions).toHaveLength(1);
+  });
+
+  it('offers no Retry when the preview fails with an unavailable source that retrying cannot help, and asks no second preview', async () => {
+    const { open, previews } = panelRig();
+    await open();
+    await act(async () => previews[0]?.answer({ ok: false, failure: { code: 'SOURCE_UNAVAILABLE', message: 'x', retryable: false, traceId: 'tr-4', details: { reason: 'index-failed' } } } as never));
+    expect(inPanel().getByRole('alert').textContent).toBe('A needed index failed, so the read was not run. · trace tr-4');
+    expect(inPanel().queryByRole('button', { name: 'Retry' })).toBeNull();
+    expect(previews).toHaveLength(1);
   });
 });
 
@@ -160,11 +169,21 @@ describe('the failures of a load', () => {
     await answerPreview(previews[0]);
     const user = userEvent.setup();
     await user.click(button('Load 25 per type'));
-    await failExpand(expansions[0], 'SOURCE_UNAVAILABLE');
-    expect(within(inPanel().getByRole('alert').parentElement as HTMLElement).getByText('SOURCE_UNAVAILABLE · trace tr-9')).not.toBeNull();
+    await failExpand(expansions[0], 'SOURCE_BUSY');
+    expect(within(inPanel().getByRole('alert').parentElement as HTMLElement).getByText('SOURCE_BUSY · trace tr-9')).not.toBeNull();
     expect(state.loadedGraph().edges).toHaveLength(0);
     await user.click(button('Retry'));
     expect(expansions).toHaveLength(2);
+  });
+
+  it('offers no Retry when the load fails with an unavailable source that retrying cannot help', async () => {
+    const { open, previews, expansions } = panelRig();
+    await open();
+    await answerPreview(previews[0]);
+    await userEvent.setup().click(button('Load 25 per type'));
+    await failExpand(expansions[0], 'SOURCE_UNAVAILABLE', { reason: 'index-failed' });
+    expect(inPanel().getByRole('alert')).not.toBeNull();
+    expect(inPanel().queryByRole('button', { name: 'Retry' })).toBeNull();
   });
 
   it('offers Start over for a type whose cursor was refused, and no Retry', async () => {

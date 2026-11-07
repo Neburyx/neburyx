@@ -10,7 +10,6 @@ import { createNeo4jExecutor, type Neo4jExecutor } from '../sources/executor.js'
 import { communitySeams } from '../seams/community-seams.js';
 import { LOCAL_PRINCIPAL } from '../testing/gate.js';
 import { envFor, NEO4J_SERIES, runAdmin, runAll, sourceFor, startNeo4j, type RunningNeo4j } from '../testing/neo4j-server.js';
-import { ALWAYS_USABLE } from '../testing/usability.js';
 import { communityAccess } from '../testing/source-access.js';
 import { createEntityReader } from './entity-reader.js';
 
@@ -37,7 +36,7 @@ beforeAll(async () => {
   await runAdmin(server, 'CALL db.awaitIndexes(120)');
   const mapping = { sources: [source()] };
   const defaults = communitySeams();
-  parts = createSourceGate({ mapping, env: envFor(server), seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit }, logger: { warn: () => undefined }, usability: ALWAYS_USABLE });
+  parts = createSourceGate({ mapping, env: envFor(server), seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit }, logger: { warn: () => undefined } });
 }, 600_000);
 
 afterAll(async () => {
@@ -106,7 +105,7 @@ describe(`the statement of the entity read, profiled through the gate on ${NEO4J
     const mapping = { sources: [source()] };
     const defaults = communitySeams();
     const executor = createNeo4jExecutor({ sources: mapping.sources, env: envFor(server), logger: { warn: () => undefined } });
-    const { system } = assembleGate({ usability: ALWAYS_USABLE, mapping, seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit }, executor, logger: { warn: () => undefined }, catalog: createTemplateCatalog({ templates: [profiledEntityLoad] }) });
+    const { system } = assembleGate({ mapping, seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit }, executor, logger: { warn: () => undefined }, catalog: createTemplateCatalog({ templates: [profiledEntityLoad] }) });
     profiling = { system, executor };
   });
 

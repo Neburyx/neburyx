@@ -68,6 +68,7 @@ export const degreePreviewBoundedTemplate: TemplateDefinition = {
   paramsSchema,
   scope: 'user',
   paged: false,
+  cutMeans: 'duplicate',
   entityParams: ['entityType'],
   referenceParams: { entityType: 'entityType', stableId: 'stableId' },
   relationshipParams: [],

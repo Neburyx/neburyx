@@ -1,6 +1,12 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { NEO4J_SERIES, runAll } from '../../testing/neo4j-server.js';
-import { itemsOf, madeRecordCount, startPackServers, withMadeRecords, type PackServer } from '../../testing/normalization-capture.js';
+import { isKeyed } from '../../mapping/model.js';
+import { NEO4J_SERIES, runAdmin, runAll } from '../../testing/neo4j-server.js';
+import { gateRequest } from '../../testing/gate.js';
+import { itemsOf, madeRecordCount, removeMadeRecords, startPackServers, withMadeRecords, type PackServer } from '../../testing/normalization-capture.js';
+import { ENTITY_LOAD_ID } from '../templates/entity-load.js';
+import { normalizeModelOf } from './model.js';
+import { normalizeRows } from './index.js';
+import { normalizedOf } from '../../testing/search-fixtures.js';
 import { canonicalise, PACKS, readFixture, updating, writeFixture, type Fixture } from '../../testing/pack-fixtures.js';
 
 const image = NEO4J_SERIES;
@@ -112,3 +118,78 @@ describe(`the records the capture makes on ${image}`, () => {
   });
 });
 
+
+/** Two entity types of the pack whose stable IDs are not keyed, so the entity read takes the value itself. */
+function twoPlainTypes(target: PackServer) {
+  const [first, second] = target.source.entities.filter((entity) => !isKeyed(entity));
+  if (first === undefined || second === undefined) throw new Error('the pack has fewer than two entity types that are not keyed');
+  return { first, second };
+}
+
+const quoted = (name: string): string => `\`${name}\``;
+
+
+describe(`a node of two mapped labels, read through the real adapter and the gate on ${image}`, () => {
+  it('is the type the entity read names, for each of the two types, and is left out as ambiguous by a read that names no type', async () => {
+    const [target] = servers;
+    if (target === undefined) throw new Error('no server');
+    const { first, second } = twoPlainTypes(target);
+    await runAdmin(target.server, `CREATE (:${quoted(first.label)}:${quoted(second.label)} {zzMarker: 'two-labels', ${quoted(first.stableId)}: 'ZZ-TWO-1', ${quoted(second.stableId)}: 'ZZ-TWO-2'})`);
+    try {
+      const asFirst = await target.gate.run(gateRequest({ sourceId: target.source.id, templateId: ENTITY_LOAD_ID, params: { entityType: first.type, stableId: 'ZZ-TWO-1' }, limit: 1 }));
+      expect(normalizedOf(asFirst).nodes.map((node) => node.ref)).toEqual([{ sourceId: target.source.id, entityType: first.type, stableId: 'ZZ-TWO-1' }]);
+      const asSecond = await target.gate.run(gateRequest({ sourceId: target.source.id, templateId: ENTITY_LOAD_ID, params: { entityType: second.type, stableId: 'ZZ-TWO-2' }, limit: 1 }));
+      expect(normalizedOf(asSecond).nodes.map((node) => node.ref)).toEqual([{ sourceId: target.source.id, entityType: second.type, stableId: 'ZZ-TWO-2' }]);
+      const rows = await itemsOf(target, 'capture-marked', { marker: 'two-labels' });
+      const unasked = normalizeRows({ sourceId: target.source.id, hasMore: false, model: normalizeModelOf(target.source) }, rows);
+      expect(unasked.nodes).toEqual([]);
+      expect(unasked.dropped['ambiguous-type']).toBe(1);
+    } finally {
+      await removeMadeRecords(target);
+    }
+  });
+});
+
+describe(`a node whose stable ID is a float, read through the real adapter and the gate on ${image}`, () => {
+  it('is an unreferenced record when the float has a fraction, with no element ID in it, and the entity read finds no row for its text', async () => {
+    const [target] = servers;
+    if (target === undefined) throw new Error('no server');
+    const { first } = twoPlainTypes(target);
+    await runAdmin(target.server, `CREATE (:${quoted(first.label)} {zzMarker: 'float-id', ${quoted(first.stableId)}: 7.5})`);
+    try {
+      const rows = await itemsOf(target, 'capture-marked', { marker: 'float-id' });
+      const normalized = normalizeRows({ sourceId: target.source.id, hasMore: false, model: normalizeModelOf(target.source) }, rows);
+      expect(normalized.nodes).toEqual([]);
+      expect(normalized.unreferenced).toEqual([expect.objectContaining({ entityType: first.type, reason: 'no-stable-id' })]);
+      expect(normalized.unreferenced[0]?.properties.find((property) => property.key === first.stableId)).toMatchObject({ value: 7.5, dataClass: 'number' });
+      const plain = rows[0]?.['n'];
+      const elementId = typeof plain === 'object' && plain !== null && 'elementId' in plain ? String(plain.elementId) : '';
+      expect(elementId).not.toBe('');
+      expect(JSON.stringify(normalized.unreferenced)).not.toContain(elementId);
+      expect(normalized.dropped['no-stable-id']).toBe(1);
+      const failure = await target.gate.run(gateRequest({ sourceId: target.source.id, templateId: ENTITY_LOAD_ID, params: { entityType: first.type, stableId: '7.5' }, limit: 1 })).then(
+        (page) => normalizedOf(page).nodes,
+        (error: unknown) => error,
+      );
+      expect(failure).toEqual([]);
+    } finally {
+      await removeMadeRecords(target);
+    }
+  });
+
+  it('reads a whole-number float as the integer it equals, which the entity read finds again by that integer', async () => {
+    const [target] = servers;
+    if (target === undefined) throw new Error('no server');
+    const { first } = twoPlainTypes(target);
+    await runAdmin(target.server, `CREATE (:${quoted(first.label)} {zzMarker: 'whole-float-id', ${quoted(first.stableId)}: 7.0})`);
+    try {
+      const rows = await itemsOf(target, 'capture-marked', { marker: 'whole-float-id' });
+      const normalized = normalizeRows({ sourceId: target.source.id, hasMore: false, model: normalizeModelOf(target.source) }, rows);
+      expect(normalized.nodes.map((node) => node.ref.stableId)).toEqual(['7']);
+      const page = await target.gate.run(gateRequest({ sourceId: target.source.id, templateId: ENTITY_LOAD_ID, params: { entityType: first.type, stableId: '7' }, limit: 1 }));
+      expect(normalizedOf(page).nodes.map((node) => node.ref)).toEqual([{ sourceId: target.source.id, entityType: first.type, stableId: '7' }]);
+    } finally {
+      await removeMadeRecords(target);
+    }
+  });
+});

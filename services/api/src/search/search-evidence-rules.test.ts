@@ -1,21 +1,22 @@
 import { searchResultSchema } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
 import { evidenceCalls, postSearch, RELATED_ENTITIES, searchMappingOf, startSearchApp } from '../testing/search-app.js';
-import { searchModelOf, type StoredNode, type StoredRelationship } from '../testing/search-fixtures.js';
+import { aggregateHits, searchModelOf, type StoredNode, type StoredRelationship, storedHits } from '../testing/search-fixtures.js';
 
 const row = (type: string, from: string, to: string) => ({ type, from, to, stable_id: 'linkId', evidence: ['recordId'] });
-const RELATIONSHIPS = [row('ONE', 'widget', 'gadget'), row('TWO', 'widget', 'gadget'), row('NONE', 'widget', 'gadget'), row('gadget', 'gadget', 'widget')];
+const RELATIONSHIPS = [row('ONE', 'widget', 'gadget'), row('TWO', 'widget', 'gadget'), row('NONE', 'widget', 'gadget'), row('gadget', 'gadget', 'widget'), { type: 'BULK', from: 'widget', to: 'gadget', evidence: ['recordId'] }];
 const RULES = [
   { id: 'first', from: 'widget', to: 'widget', via: ['ONE', 'gadget', 'ONE'], rule_version: 1 },
   { id: 'second', from: 'widget', to: 'widget', via: ['TWO', 'gadget', 'TWO'], rule_version: 2 },
   { id: 'third', from: 'widget', to: 'widget', via: ['TWO', 'gadget', 'TWO'], rule_version: 3 },
+  { id: 'fourth', from: 'widget', to: 'widget', via: ['BULK', 'gadget', 'BULK'], rule_version: 4 },
 ];
 const mapping = searchMappingOf({ entities: RELATED_ENTITIES, relationships: RELATIONSHIPS, derived: RULES });
 
 const widgetNode: StoredNode = { elementId: '4:s:1', label: 'Widget', properties: { widgetId: 'W-1' } };
 const gadgetNode: StoredNode = { elementId: '4:s:2', label: 'Gadget', properties: { gadgetId: 'GT-1' } };
 const link = (type: string, from: StoredNode, to: StoredNode): StoredRelationship => ({ elementId: `5:r:${type}`, type, from, to, properties: { linkId: `L-${type}`, recordId: 'REC-1' } });
-const relationships = [link('ONE', widgetNode, gadgetNode), link('TWO', widgetNode, gadgetNode), link('NONE', widgetNode, gadgetNode), link('gadget', gadgetNode, widgetNode)];
+const relationships = [link('ONE', widgetNode, gadgetNode), link('TWO', widgetNode, gadgetNode), link('NONE', widgetNode, gadgetNode), link('gadget', gadgetNode, widgetNode), { ...link('BULK', widgetNode, gadgetNode), properties: { recordId: 'REC-1' } }];
 
 async function answer() {
   const { app, executor } = await startSearchApp({ mapping, respond: searchModelOf([widgetNode, gadgetNode], () => undefined, relationships) });
@@ -25,7 +26,7 @@ async function answer() {
   return { result, executor };
 }
 
-const rulesOf = (result: Awaited<ReturnType<typeof answer>>['result'], type: string) => result.evidence.hits.find((hit) => hit.supports.type === type)?.rules;
+const rulesOf = (result: Awaited<ReturnType<typeof answer>>['result'], type: string) => storedHits(result.evidence.hits).find((hit) => hit.supports.type === type)?.rules;
 
 describe('the configured rules of an evidence hit', () => {
   it('is empty for a relationship type that no rule uses', async () => {
@@ -42,6 +43,10 @@ describe('the configured rules of an evidence hit', () => {
 
   it('does not list a rule whose entity-type place holds the name of the relationship type', async () => {
     expect(rulesOf((await answer()).result, 'gadget')).toEqual([]);
+  });
+
+  it('holds the rules that use the type of an aggregate hit, as for a stored one', async () => {
+    expect(aggregateHits((await answer()).result.evidence.hits).map((hit) => [hit.aggregate.type, hit.rules])).toEqual([['BULK', [{ ruleId: 'fourth', ruleVersion: 4 }]]]);
   });
 
   it('builds the rules from the mapping alone, with one evidence read and no read made for them', async () => {

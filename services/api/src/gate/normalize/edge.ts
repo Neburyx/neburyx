@@ -1,4 +1,4 @@
-import type { ElementRef, GraphEdge, GraphProperty } from '@neburyx/contracts';
+import type { ElementRef, EvidenceRecord, GraphEdge, GraphProperty, StoredEdgeRef } from '@neburyx/contracts';
 import { countOf, MEMBERS } from './count.js';
 import type { DropReason } from './drops.js';
 import type { NormalizeContext, RelationshipNormalizer } from './model.js';
@@ -21,6 +21,17 @@ export function isPlainRelationship(value: unknown): value is PlainRelationship 
   return isObject(value) && value['$type'] === 'relationship' && typeof value['type'] === 'string' && typeof value['startElementId'] === 'string' && typeof value['endElementId'] === 'string' && isObject(value['properties']);
 }
 
+/**
+ * The evidence of one relationship of the edges, for the evidence search: the edge it is (a stored one by its reference, or a member of the aggregate of its type and ends), its element ID, the value
+ * of each of its evidence properties and its time. The element ID is held as text for a member to be listed by; it is never a reference.
+ */
+export interface RelationshipEvidence {
+  readonly elementId: string;
+  readonly of: { readonly stored: StoredEdgeRef } | { readonly aggregate: { readonly type: string; readonly from: ElementRef; readonly to: ElementRef } };
+  readonly records: readonly EvidenceRecord[];
+  readonly observedAt?: string;
+}
+
 /** What became of the node at an element ID: its ref, or the reason it was left out. */
 export type NodeOutcome = { readonly ref: ElementRef } | { readonly dropped: DropReason };
 
@@ -36,6 +47,30 @@ function observedText(value: unknown): string | undefined {
   return described.value === undefined || typeof described.value !== 'string' || described.value === '' ? undefined : described.value;
 }
 
+const observedAtOf = (row: RelationshipNormalizer, relationship: PlainRelationship): string | undefined => (row.observedAt === undefined ? undefined : observedText(ownValue(relationship.properties, row.observedAt)));
+
+/** The text of an evidence value: text as it is, a temporal value as its text, a number as its digits; nothing for a value with no text to show. */
+function evidenceText(value: unknown): string | undefined {
+  return observedText(value) ?? (typeof value === 'number' ? String(value) : undefined);
+}
+
+/**
+ * The value of each evidence property a relationship holds, in the mapping's order, the same text once. A value that is neither text nor a number (a list, a boolean, a point, a value the adapter
+ * could not convert) is kept as unreadable with its property, so a relationship the read found is never left out for its value; an absent or empty one holds nothing to show and is not listed.
+ */
+function evidenceRecordsOf(row: RelationshipNormalizer, relationship: PlainRelationship): EvidenceRecord[] {
+  const seen = new Set<string>();
+  return row.evidence.flatMap((property): EvidenceRecord[] => {
+    const value = ownValue(relationship.properties, property);
+    if (value === undefined || value === null || value === '') return [];
+    const text = evidenceText(value);
+    if (text === undefined) return [{ property, unreadable: true }];
+    if (seen.has(text)) return [];
+    seen.add(text);
+    return [{ sourceRecordId: text }];
+  });
+}
+
 function storedEdge(context: NormalizeContext, row: RelationshipNormalizer, relationship: PlainRelationship, stableId: string, from: ElementRef, to: ElementRef, direction: EdgeDirection): GraphEdge {
   const properties: GraphProperty[] = [];
   for (const key of row.projection) {
@@ -44,10 +79,9 @@ function storedEdge(context: NormalizeContext, row: RelationshipNormalizer, rela
     const described = describeValue(value);
     properties.push({ key, ...(described.value === undefined ? {} : { value: described.value }), dataClass: described.dataClass, masked: false });
   }
-  const observedAt = row.observedAt === undefined ? undefined : observedText(ownValue(relationship.properties, row.observedAt));
+  const observedAt = observedAtOf(row, relationship);
   const evidenceRefs = row.evidence.flatMap((key) => {
-    const value = ownValue(relationship.properties, key);
-    const text = observedText(value) ?? (typeof value === 'number' ? String(value) : undefined);
+    const text = evidenceText(ownValue(relationship.properties, key));
     return text === undefined ? [] : [text];
   });
   return {
@@ -107,9 +141,19 @@ export function summarizedAggregate(context: NormalizeContext, summary: { readon
  * aggregate for its type and pair. A relationship is left out, and counted, when an end was left out or is not in the rows, when the type is not mapped between the
  * entity types of its ends in that direction, or when a stored one has no stable ID. The same relationship twice is one.
  */
-export function normalizeEdges(context: NormalizeContext, relationships: readonly PlainRelationship[], outcomes: ReadonlyMap<string, NodeOutcome>, directionOf: (relationship: PlainRelationship) => EdgeDirection = () => 'from-to'): { readonly edges: GraphEdge[]; /** For each edge, the element ID of the first relationship it stands for. */ readonly firstElementIds: string[]; readonly dropped: DropReason[] } {
+export function normalizeEdges(
+  context: NormalizeContext,
+  relationships: readonly PlainRelationship[],
+  outcomes: ReadonlyMap<string, NodeOutcome>,
+  directionOf: (relationship: PlainRelationship) => EdgeDirection = () => 'from-to',
+): { readonly edges: GraphEdge[]; /** For each edge, the element ID of the first relationship it stands for. */ readonly firstElementIds: string[]; readonly dropped: DropReason[]; readonly evidence: RelationshipEvidence[] } {
   const slots = new Map<string, Slot>();
   const dropped: DropReason[] = [];
+  const evidence: RelationshipEvidence[] = [];
+  const timeOf = (row: RelationshipNormalizer, relationship: PlainRelationship): { readonly observedAt?: string } => {
+    const observedAt = observedAtOf(row, relationship);
+    return observedAt === undefined ? {} : { observedAt };
+  };
   for (const relationship of relationships) {
     const start = outcomes.get(relationship.startElementId);
     const end = outcomes.get(relationship.endElementId);
@@ -130,7 +174,11 @@ export function normalizeEdges(context: NormalizeContext, relationships: readonl
     if (row.stableId !== undefined && stableId !== undefined) {
       const key = JSON.stringify(['stored', row.type, start.ref.entityType, end.ref.entityType, stableId]);
       const known = slots.get(key);
-      if (known === undefined) slots.set(key, { kind: 'stored', first: relationship.elementId, edge: storedEdge(context, row, relationship, stableId, start.ref, end.ref, directionOf(relationship)) });
+      if (known === undefined) {
+        const edge = storedEdge(context, row, relationship, stableId, start.ref, end.ref, directionOf(relationship));
+        slots.set(key, { kind: 'stored', first: relationship.elementId, edge });
+        if ('stableId' in edge.ref) evidence.push({ elementId: relationship.elementId, of: { stored: edge.ref }, records: evidenceRecordsOf(row, relationship), ...timeOf(row, relationship) });
+      }
       // a different relationship with the same type, ends and stable ID is not hidden: the first edge stays and says so
       else if (known.kind === 'stored' && !known.edge.qualityFlags.includes('conflicting-duplicate')) slots.set(key, { kind: 'stored', first: known.first, edge: { ...known.edge, qualityFlags: [...known.edge.qualityFlags, 'conflicting-duplicate'] } });
       continue;
@@ -142,9 +190,10 @@ export function normalizeEdges(context: NormalizeContext, relationships: readonl
     if (!slot.members.has(relationship.elementId)) {
       slot.members.add(relationship.elementId);
       if (row.observedAt !== undefined) slot.times.push(ownValue(relationship.properties, row.observedAt));
+      evidence.push({ elementId: relationship.elementId, of: { aggregate: { type: row.type, from: start.ref, to: end.ref } }, records: evidenceRecordsOf(row, relationship), ...timeOf(row, relationship) });
     }
     slots.set(key, slot);
   }
   const kept = [...slots.values()];
-  return { edges: kept.map((slot) => (slot.kind === 'stored' ? slot.edge : aggregateEdge(context, slot, 'from-to'))), firstElementIds: kept.map((slot) => (slot.kind === 'stored' ? slot.first : [...slot.members][0] ?? '')), dropped };
+  return { edges: kept.map((slot) => (slot.kind === 'stored' ? slot.edge : aggregateEdge(context, slot, 'from-to'))), firstElementIds: kept.map((slot) => (slot.kind === 'stored' ? slot.first : [...slot.members][0] ?? '')), dropped, evidence };
 }

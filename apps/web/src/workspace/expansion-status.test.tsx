@@ -45,6 +45,17 @@ describe('what shows of an expansion started outside the submenu', () => {
     expect(screen.getByRole('status').textContent).toBe('Expanding 1 item');
   });
 
+  it('offers no Retry for an unavailable source that retrying cannot help, and offers it when it can', async () => {
+    const { asked, store } = rig();
+    act(() => void store.expand(ref('a', 'type-a', 'n1'), ['type-b']));
+    await act(async () => asked[0]?.answer({ ok: false, failure: { code: 'SOURCE_UNAVAILABLE', message: 'x', retryable: false, traceId: 'tr-3', details: { reason: 'index-unavailable' } } }));
+    expect(screen.getByRole('alert')).not.toBeNull();
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+    act(() => void store.expand(ref('a', 'type-a', 'n2'), ['type-b']));
+    await act(async () => asked[1]?.answer({ ok: false, failure: { code: 'SOURCE_UNAVAILABLE', message: 'x', retryable: true, traceId: 'tr-4', details: { reason: 'index-building' } } }));
+    expect(screen.getAllByRole('button', { name: 'Retry' })).toHaveLength(1);
+  });
+
   it('says so when the item has no mapped neighbor types, and clears it when another expansion is asked', () => {
     const { store, state } = rig();
     const controls = expansionControlsOf(store, undefined);

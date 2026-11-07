@@ -2,7 +2,7 @@ import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import type { SearchResult } from '@neburyx/contracts';
-import { FILTERS_COPY, NO_RELATED_PROPERTIES } from './copy.js';
+import { FILTERS_COPY, NO_RELATED_PROPERTIES, NO_SEARCH_PROPERTIES } from './copy.js';
 import { renderApp } from '../test-utils.js';
 import { statesOf } from './states.js';
 import { answerOf, FACETS_FAILURE, FAILED_FACETS, facetsOf, hit, searchAt, searchKit } from './search-test-kit.js';
@@ -50,6 +50,12 @@ describe('what the page says when no group has a row, in order of precedence', (
     const states = statesOf(answer(none), false);
     expect(states.message).toBe('none');
     expect(states.reasons).toContain(NO_RELATED_PROPERTIES);
+  });
+
+  it('gives no reason line for a group whose only types were not searched for their indexes: the page names each type and property instead', () => {
+    const disabledTypes = [{ entityType: 'kind-a', property: 'code', reason: 'index-building' as const, typeSearched: false }];
+    const states = statesOf(answer({ searchable: false, disabledTypes, facets: ZERO }), false);
+    expect(states.reasons).not.toContain(NO_SEARCH_PROPERTIES);
   });
 
   it('does not count a group the selection hides as searched, and names it as hidden', () => {

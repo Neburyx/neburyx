@@ -1,13 +1,14 @@
 import { evidenceHitsOf, evidenceRowsOf, planEvidence } from './evidence-group.js';
 import { FAILED_FACETS, facetsOf, planFacets } from './facets-group.js';
-import { SEARCH_GROUP_CAP, SEARCH_GROUP_FAILURE_CODES, SEARCH_MATCH_MODES, type DisabledType, type ErrorCode, type Facets, type GraphNode, type GroupFailure, type SearchFailureGroup, type SearchGroup, type SearchMatchMode, type SearchResult, type StartsWithGroup } from '@neburyx/contracts';
+import { SEARCH_GROUP_CAP, SEARCH_GROUP_FAILURE_CODES, SEARCH_MATCH_MODES, SEARCH_PAGED_GROUPS, type DisabledType, type ErrorCode, type Facets, type GraphNode, type GroupFailure, type SearchFailureGroup, type SearchGroup, type SearchMatchMode, type SearchMoreResult, type SearchPagedGroup, type SearchResult, type StartsWithGroup, type UnreferencedHit, relationshipsOf } from '@neburyx/contracts';
 import { AppError } from '../errors.js';
-import { onlineFormOf } from '../gate/index-guard.js';
+import { exhaustive } from '../gate/exhaustive.js';
+import { propertyIndexOf } from '../gate/index-guard.js';
 import { matchedPropertiesOf } from './matched-properties.js';
 import { DROP_REASONS, warningsOf, type Dropped } from '../gate/normalize/drops.js';
-import type { Normalized } from '../gate/normalize/index.js';
+import { isNormalizedEvidence, type Normalized, type RelationshipEvidence } from '../gate/normalize/index.js';
 import { SEARCH_EXACT_ID, searchExactTemplate, type SearchTarget } from '../gate/templates/search-exact.js';
-import { SEARCH_EVIDENCE_ID } from '../gate/templates/search-evidence.js';
+import { SEARCH_EVIDENCE_ID, type EvidenceTarget } from '../gate/templates/search-evidence.js';
 import { SEARCH_FACETS_ID } from '../gate/templates/search-facets.js';
 import { SEARCH_PREFIX_ID } from '../gate/templates/search-prefix.js';
 import { SEARCH_RELATED_ID } from '../gate/templates/search-related.js';
@@ -30,8 +31,21 @@ export interface SearchRequest {
   readonly matchModes?: readonly SearchMatchMode[];
 }
 
+/** The next page of one group of a search, from the cursor that group's last page gave; the text, the mask and the entity types are those of that search. */
+export interface SearchMoreRequest {
+  readonly traceId: string;
+  readonly principal: Principal;
+  readonly sourceId: string;
+  readonly text: string;
+  readonly mask: boolean;
+  readonly group: SearchGroup;
+  readonly cursor: string;
+  readonly entityTypes?: readonly string[];
+}
+
 export interface SearchService {
   search(request: SearchRequest): Promise<SearchResult>;
+  more(request: SearchMoreRequest): Promise<SearchMoreResult>;
 }
 
 const EXACT_SCOPE = 'search:exact';
@@ -63,7 +77,7 @@ function candidatesOf(source: SourceModel, group: Group, mask: boolean): Candida
  * The indexes of the request, or the failure of the read: the failure is not thrown here but handed to the gate run, which fails with that same error inside its audited stages
  * (after authorization) and makes no data statement, so the one failure is the one the search answers.
  */
-async function readOrFail(reader: IndexReader | undefined, request: SearchRequest): Promise<IndexSnapshot | 'unverified' | IndexReadFailure | undefined> {
+async function readOrFail(reader: IndexReader | undefined, request: Pick<SearchRequest, 'traceId' | 'principal' | 'sourceId'>): Promise<IndexSnapshot | 'unverified' | IndexReadFailure | undefined> {
   try {
     return await reader?.read({ traceId: request.traceId, principal: request.principal, sourceId: request.sourceId });
   } catch (error) {
@@ -73,19 +87,19 @@ async function readOrFail(reader: IndexReader | undefined, request: SearchReques
 }
 
 /**
- * What is searched: every property of a type whose indexes are all online, in the form its index serves (`value` for a RANGE index or a constraint, `text` for a TEXT index
- * only); a type with a property that has no online index is left out whole and named. With no snapshot (the login cannot list indexes) every property is searched as a `value`.
+ * What is searched: every property that has an online index, in the form its index serves (`value` for a RANGE index or a constraint, `text` for a TEXT index only); each property that has
+ * none is named with its type and why, and the type is marked as not searched when none of its properties is. With no snapshot (the login cannot list indexes) every property is searched as a `value`.
  */
 function planOf(candidates: readonly Candidate[], snapshot: IndexSnapshot | undefined): { readonly targets: readonly SearchTarget[]; readonly disabled: DisabledType[] } {
   const targets: SearchTarget[] = [];
   const disabled: DisabledType[] = [];
   for (const entity of candidates) {
-    const forms = entity.properties.map((property) => (snapshot === undefined ? ('value' as const) : onlineFormOf(snapshot, entity.label, property)));
-    if (forms.some((form) => form === undefined)) {
-      disabled.push({ entityType: entity.type, reason: 'index-unavailable' });
-      continue;
+    const indexes = entity.properties.map((property) => ({ property, index: snapshot === undefined ? { form: 'value' as const } : propertyIndexOf(snapshot, entity.label, property) }));
+    const searched = indexes.flatMap(({ property, index }) => ('form' in index ? [{ entityType: entity.type, property, match: index.form }] : []));
+    targets.push(...searched);
+    for (const { property, index } of indexes) {
+      if ('gap' in index) disabled.push({ entityType: entity.type, property, reason: index.gap, typeSearched: searched.length > 0 });
     }
-    entity.properties.forEach((property, index) => targets.push({ entityType: entity.type, property, match: forms[index] === 'text' ? 'text' : 'value' }));
   }
   return { targets, disabled };
 }
@@ -137,7 +151,7 @@ function failureOf(group: SearchFailureGroup, error: unknown): GroupFailure | un
 }
 
 /**
- * The groups whose read failed while another group's was answered. A failure that means the same for every group (an unusable or unreadable source, a bad request) fails the whole search,
+ * The groups whose read failed while another group's was answered. A failure that means the same for every group (an unavailable or unreadable source, a bad request) fails the whole search,
  * whichever group's read it came from and whatever the other reads gave; so does the failure of every group that was read, with the error of the first of the exact, related and evidence
  * groups that was read when more than one failed.
  */
@@ -168,6 +182,11 @@ function timeoutOf(details: unknown): number | undefined {
   return typeof details.timeoutMs === 'number' && Number.isInteger(details.timeoutMs) && details.timeoutMs > 0 ? details.timeoutMs : undefined;
 }
 
+function evidenceOf(item: Normalized): readonly RelationshipEvidence[] {
+  if (!isNormalizedEvidence(item)) throw new AppError('INTERNAL_ERROR');
+  return item.evidence;
+}
+
 function normalizedOf(page: GatePage): Normalized {
   const [item] = page.items;
   if (!isNormalized(item)) throw new AppError('INTERNAL_ERROR');
@@ -176,12 +195,50 @@ function normalizedOf(page: GatePage): Normalized {
 
 const entityKey = (node: GraphNode): string => JSON.stringify([node.ref.entityType, node.ref.stableId]);
 
-/** The `startsWith` group: the prefix hits in order, without those the exact group already holds; empty with an unknown count when its read failed, and empty and exact when nothing was read. */
+/** The cursor of a page's next page, as a field of its group: absent when the read found no more. */
+const nextOf = (page: GatePage | undefined): { readonly nextCursor?: string } => (page?.nextCursor === undefined ? {} : { nextCursor: page.nextCursor });
+
+type FacetCount<Scope extends string> = { readonly value: number; readonly quality: 'exact' | 'lowerBound'; readonly scope: Scope } | { readonly quality: 'unknown'; readonly scope: Scope };
+
+function raise<Scope extends string>(count: FacetCount<Scope>, shown: number): FacetCount<Scope> {
+  return count.quality !== 'unknown' && count.value < shown ? { value: shown, quality: 'lowerBound', scope: count.scope } : count;
+}
+
+/**
+ * The facets made consistent with the groups of the same answer: a count is read in its own read, so it can be lower than the hits a group holds when the source changed between the two reads, or when
+ * the group holds more than one page; such a count is then a lower bound of the hits held, never a number below what is shown.
+ */
+function atLeastHeld(
+  facets: Facets,
+  held: { readonly exact: readonly GraphNode[]; readonly related: readonly GraphNode[]; readonly unreferenced: { readonly exact: readonly UnreferencedHit[]; readonly related: readonly UnreferencedHit[] }; readonly evidence: number },
+): Facets {
+  if (!facets.searchable) return facets;
+  const entities = [...held.exact, ...held.related];
+  // an unreferenced hit has no key to tell it from another, so the group's unreferenced hits of a type are counted as the larger of the two groups' numbers
+  const unreferencedOfType = (type?: string): number => Math.max(...[held.unreferenced.exact, held.unreferenced.related].map((hits) => hits.filter((hit) => type === undefined || hit.entityType === type).length));
+  const distinct = (nodes: readonly GraphNode[]): number => new Set(nodes.map(entityKey)).size;
+  const byMode = { exact: distinct(held.exact) + held.unreferenced.exact.length, related: distinct(held.related) + held.unreferenced.related.length, evidence: held.evidence };
+  return {
+    ...facets,
+    total: raise(facets.total, distinct(entities) + unreferencedOfType()),
+    entityType: facets.entityType.map((entry) => ({ ...entry, count: raise(entry.count, distinct(entities.filter((node) => node.ref.entityType === entry.entityType)) + unreferencedOfType(entry.entityType)) })),
+    matchMode: facets.matchMode.map((entry) => ({ ...entry, count: raise(entry.count, byMode[entry.mode]) })),
+  };
+}
+
+/** The unreferenced hits of a group as the answer holds them: absent when there is none. */
+const unreferencedField = (hits: readonly UnreferencedHit[]): { readonly unreferenced?: UnreferencedHit[] } => (hits.length === 0 ? {} : { unreferenced: [...hits] });
+
+/**
+ * The `startsWith` group: the prefix hits in order, without those the exact group already holds; empty with an unknown count when its read failed, and empty and exact when nothing was read. Its read is
+ * capped and has no next page: a cut read is a lower bound of the hits held.
+ */
 function startsWithOf(source: SourceModel, item: Normalized | undefined, page: GatePage | undefined, exact: readonly GraphNode[], failed: boolean): StartsWithGroup {
   const held = new Set(exact.map(entityKey));
   const nodes = item === undefined ? [] : inOrder(source, item.nodes).filter((node) => !held.has(entityKey(node)));
+  const unreferenced = item?.unreferenced ?? [];
   const dropped: Dropped = item === undefined ? { 'not-mapped': 0, 'ambiguous-type': 0, 'no-stable-id': 0 } : droppedOf([item]);
-  return { nodes, count: countOf(nodes.length, page, STARTS_WITH_SCOPE, failed), dropped, warnings: item === undefined ? [] : item.warnings };
+  return { nodes, ...unreferencedField(unreferenced), count: countOf(nodes.length + unreferenced.length, page, STARTS_WITH_SCOPE, failed), dropped, warnings: item === undefined ? [] : item.warnings };
 }
 
 export function createSearchService(deps: { readonly gate: Gate; readonly mapping: MappingModel; readonly access: SourceAccess; readonly indexes?: IndexReader; readonly clock?: () => number }): SearchService {
@@ -231,7 +288,7 @@ export function createSearchService(deps: { readonly gate: Gate; readonly mappin
       const facetPlan = typeahead ? undefined : planFacets(source, exactPlan.targets, relatedPlan.targets, evidencePlan.targets);
       const none = Promise.resolve(undefined);
       // the first read is the exact group when it is chosen (it goes through the gate even with no target), else the first chosen group that has a target: a failure that means the same for every group
-      // (the schema read, an unusable or refused source, a bad request) stops the search before another group is read
+      // (the schema read, an unavailable or refused source, a bad request) stops the search before another group is read
       const first: 'exact' | 'related' | 'evidence' | undefined = modeOn('exact') ? 'exact' : relatedTargets.length > 0 ? 'related' : evidenceTargets.length > 0 ? 'evidence' : undefined;
       const start = (group: 'exact' | 'related' | 'evidence'): Promise<GatePage | undefined> => {
         if (group === 'exact') return modeOn('exact') ? run(SEARCH_EXACT_ID, exactTargets) : none;
@@ -282,7 +339,7 @@ export function createSearchService(deps: { readonly gate: Gate; readonly mappin
         facets = FAILED_FACETS;
         if (facetsFailure === undefined) {
           try {
-            facets = facetsOf(facetPlan, facetsOutcome.status === 'fulfilled' ? facetsOutcome.value : undefined, cap);
+            facets = facetsOf(facetPlan, facetsOutcome.status === 'fulfilled' ? facetsOutcome.value : undefined);
           } catch (error) {
             // an answer of the read that cannot be read is a failure of that read and of nothing else
             if (!(error instanceof AppError) || error.code !== 'INTERNAL_ERROR') throw error;
@@ -301,34 +358,144 @@ export function createSearchService(deps: { readonly gate: Gate; readonly mappin
       const startsWithItem = startsWithPage === undefined ? undefined : normalizedOf(startsWithPage);
       const exact = exactItem === undefined ? [] : inOrder(source, exactItem.nodes);
       const related = relatedItem === undefined ? [] : inOrder(source, relatedItem.nodes);
-      const evidence = evidenceItem === undefined ? [] : evidenceHitsOf(source, evidenceItem.edges);
-      const dropped = droppedOf([exactItem, relatedItem, evidenceItem].filter((item) => item !== undefined));
+      const evidence = evidenceItem === undefined ? [] : evidenceHitsOf(source, evidenceOf(evidenceItem), evidencePage?.hasMore !== true);
+      const exactUnreferenced = exactItem?.unreferenced ?? [];
+      const relatedUnreferenced = relatedItem?.unreferenced ?? [];
+      const read = [exactItem, relatedItem, evidenceItem].filter((item) => item !== undefined);
+      const dropped = droppedOf(read);
       return {
         sourceId: request.sourceId,
         exact,
+        ...(exactUnreferenced.length === 0 ? {} : { exactUnreferenced: [...exactUnreferenced] }),
         cap,
         searchable: exactTargets.length > 0,
-        counts: { exact: countOf(exact.length, exactPage, EXACT_SCOPE, failed.has('exact')) },
+        counts: { exact: countOf(exact.length + exactUnreferenced.length, exactPage, EXACT_SCOPE, failed.has('exact')) },
+        ...(exactPage?.nextCursor === undefined ? {} : { exactNextCursor: exactPage.nextCursor }),
         disabledTypes: modeOn('exact') ? exactPlan.disabled.filter((entry) => typeOn(entry.entityType)) : [],
         related: {
           hits: related.map((node) => ({ node, matchedProperties: matchedPropertiesOf(node, relatedTargets, request.text) })),
-          count: countOf(related.length, relatedPage, RELATED_SCOPE, failed.has('related')),
+          ...unreferencedField(relatedUnreferenced),
+          count: countOf(related.length + relatedUnreferenced.length, relatedPage, RELATED_SCOPE, failed.has('related')),
           searchable: relatedTargets.length > 0,
           disabledTypes: modeOn('related') ? relatedPlan.disabled.filter((entry) => typeOn(entry.entityType)) : [],
+          ...nextOf(relatedPage),
         },
         evidence: {
           hits: evidence,
-          count: countOf(evidence.length, evidencePage, EVIDENCE_SCOPE, failed.has('evidence')),
+          count: countOf(relationshipsOf(evidence), evidencePage, EVIDENCE_SCOPE, failed.has('evidence')),
           searchable: evidenceTargets.length > 0,
           disabledRelationshipTypes: modeOn('evidence') ? evidencePlan.disabled : [],
+          ...nextOf(evidencePage),
         },
         failures: facetsFailure === undefined || !facetsRead ? failures : [...failures, facetsFailure],
         dropped,
-        warnings: warningsOf(dropped),
+        // only the exact and related groups list their unreferenced hits; an end of an evidence relationship with no stable ID is left out with its relationship
+        warnings: warningsOf(dropped, exactUnreferenced.length + relatedUnreferenced.length),
         elapsedMs: Math.max(0, Math.round(clock() - startedAt)),
         ...(withStartsWith ? { startsWith: startsWithOf(source, startsWithItem, startsWithPage, exact, failed.has('startsWith')) } : {}),
-        ...(facets === undefined ? {} : { facets, filters: { entityTypes: types, matchModes: [...modes] } }),
+        ...(facets === undefined ? {} : { facets: atLeastHeld(facets, { exact, related, unreferenced: { exact: exactUnreferenced, related: relatedUnreferenced }, evidence: relationshipsOf(evidence) }), filters: { entityTypes: types, matchModes: [...modes] } }),
       };
     },
+
+    async more(request) {
+      await deps.access.require({ traceId: request.traceId, principal: request.principal, sourceId: request.sourceId, auditAction: searchExactTemplate.auditAction });
+      const source = deps.mapping.sources.find((candidate) => candidate.id === request.sourceId);
+      if (source === undefined) throw new AppError('NOT_FOUND');
+      const { group } = request;
+      // the startsWith group is capped and has no next page
+      if (!isPagedGroup(group)) throw new AppError('INVALID_REQUEST');
+      if ((request.entityTypes ?? []).some((type) => !source.entities.some((entity) => entity.type === type))) throw new AppError('INVALID_REQUEST');
+      const typeOn = (type: string): boolean => request.entityTypes === undefined || request.entityTypes.includes(type);
+      // the page is planned as the first page was, from a fresh read of the schema: the same masking, the same properties and the same forms, so its parameters are the ones the cursor is bound to
+      const exactCandidates = group === 'exact' ? candidatesOf(source, 'exact', request.mask) : [];
+      const relatedCandidates = group === 'related' ? candidatesOf(source, 'related', request.mask) : [];
+      const evidenceRows = group === 'evidence' ? evidenceRowsOf(source) : 0;
+      const snapshot = await readOrFail(exactCandidates.length + relatedCandidates.length + evidenceRows > 0 ? deps.indexes : undefined, request);
+      const planSnapshot = snapshot === undefined || snapshot === 'unverified' || 'failure' in snapshot ? undefined : snapshot;
+      const plan = moreTargetsOf(group, { exact: exactCandidates, related: relatedCandidates }, source, planSnapshot, typeOn);
+      const scope = SCOPES[group];
+      let page: GatePage;
+      try {
+        page = await runSearch(deps.gate, {
+          traceId: request.traceId,
+          principal: request.principal,
+          sourceId: request.sourceId,
+          templateId: plan.templateId,
+          params: { text: request.text, targets: plan.targets },
+          limit: Math.min(SEARCH_GROUP_CAP, source.budgets.maxPage),
+          cursor: request.cursor,
+          mask: request.mask,
+          ...(snapshot === undefined ? {} : { indexes: snapshot }),
+        });
+      } catch (error) {
+        // a failed schema read is the failure of the request, whatever code it has; a code of the group's own is the failure of this page, and the cursor sent stays usable
+        const schemaFailed = snapshot !== undefined && snapshot !== 'unverified' && 'failure' in snapshot;
+        const failure = schemaFailed ? undefined : failureOf(group, error);
+        if (failure === undefined) throw error;
+        return { ...emptyPageOf(group), sourceId: request.sourceId, count: { quality: 'unknown', scope }, dropped: noDropped(), warnings: [], failure };
+      }
+      const item = normalizedOf(page);
+      const hits = hitsOf(group, source, item, plan.targets, request.text);
+      // the group's count is the hits of every page so far: the gate carries those of the earlier pages in the signed cursor, so a caller cannot change them
+      if (page.held === undefined) throw new AppError('INTERNAL_ERROR');
+      const dropped = droppedOf([item]);
+      // an evidence page lists no unreferenced record: an end with no stable ID is left out with its relationship
+      const warnings = hits.group === 'evidence' ? warningsOf(dropped) : item.warnings;
+      return { ...hits, sourceId: request.sourceId, count: countOf(page.held, page, scope, false), dropped, warnings, ...nextOf(page) };
+    },
   };
+}
+
+const isPagedGroup = (group: SearchGroup): group is SearchPagedGroup => SEARCH_PAGED_GROUPS.some((candidate) => candidate === group);
+
+const SCOPES: Readonly<Record<SearchPagedGroup, string>> = { exact: EXACT_SCOPE, related: RELATED_SCOPE, evidence: EVIDENCE_SCOPE };
+
+const noDropped = (): Dropped => ({ 'not-mapped': 0, 'ambiguous-type': 0, 'no-stable-id': 0 });
+
+/** The template and the targets of one group's page, as the first page of the search had them: the exact and the related group narrowed by the entity types. */
+function moreTargetsOf(
+  group: SearchPagedGroup,
+  candidates: { readonly exact: readonly Candidate[]; readonly related: readonly Candidate[] },
+  source: SourceModel,
+  snapshot: IndexSnapshot | undefined,
+  typeOn: (type: string) => boolean,
+): { readonly templateId: string; readonly targets: readonly SearchTarget[] } | { readonly templateId: string; readonly targets: readonly EvidenceTarget[] } {
+  switch (group) {
+    case 'exact':
+      return { templateId: SEARCH_EXACT_ID, targets: planOf(candidates.exact, snapshot).targets.filter((target) => typeOn(target.entityType)) };
+    case 'related':
+      return { templateId: SEARCH_RELATED_ID, targets: planOf(candidates.related, snapshot).targets.filter((target) => typeOn(target.entityType)) };
+    case 'evidence':
+      return { templateId: SEARCH_EVIDENCE_ID, targets: planEvidence(source, snapshot).targets };
+    default:
+      return exhaustive(group);
+  }
+}
+
+type PageHits =
+  | Pick<Extract<SearchMoreResult, { group: 'exact' }>, 'group' | 'nodes' | 'unreferenced'>
+  | Pick<Extract<SearchMoreResult, { group: 'related' }>, 'group' | 'hits' | 'unreferenced'>
+  | Pick<Extract<SearchMoreResult, { group: 'evidence' }>, 'group' | 'hits'>;
+
+function emptyPageOf(group: SearchPagedGroup): PageHits {
+  return group === 'related' || group === 'evidence' ? { group, hits: [] } : { group, nodes: [] };
+}
+
+/** The hits of one group's page in that group's own shape, in the order the first page puts them in. */
+function hitsOf(group: SearchPagedGroup, source: SourceModel, item: Normalized, targets: readonly SearchTarget[] | readonly EvidenceTarget[], text: string): PageHits {
+  switch (group) {
+    case 'exact':
+      return { group, nodes: inOrder(source, item.nodes), ...unreferencedField(item.unreferenced) };
+    case 'related':
+      return {
+        group,
+        hits: inOrder(source, item.nodes).map((node) => ({ node, matchedProperties: matchedPropertiesOf(node, targets.filter((target): target is SearchTarget => 'entityType' in target), text) })),
+        ...unreferencedField(item.unreferenced),
+      };
+    case 'evidence':
+      // a later page cannot know the members an earlier page listed, so its member counts are lower bounds
+      return { group, hits: evidenceHitsOf(source, evidenceOf(item), false) };
+    default:
+      return exhaustive(group);
+  }
 }

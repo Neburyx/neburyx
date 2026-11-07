@@ -22,15 +22,18 @@ function started(indexes: () => ExecuteOutcome, options: SearchAppOptions = {}) 
 const ids = (calls: readonly ExecuteCall[]): string[] => calls.map((call) => call.templateId);
 const naming = (calls: readonly ExecuteCall[], label: string): number => calls.filter((call) => call.cypher.includes(`\`${label}\``)).length;
 
-describe('a type whose reference index is not online is left out of the related read', () => {
+describe('a reference property whose index is not online is left out of the related read', () => {
   it.each([
-    ['an index being built', [...without('batchRef'), rangeIndex('Widget', 'batchRef', 'POPULATING')]],
-    ['an index that has failed', [...without('batchRef'), rangeIndex('Widget', 'batchRef', 'FAILED')]],
-    ['an index that is gone', without('batchRef')],
-  ])('leaves the whole type out for %s, names it, reads the other type, and no statement of the related read names the label', async (_name, indexes) => {
+    ['an index being built', [...without('batchRef', 'ownerRef'), rangeIndex('Widget', 'batchRef', 'POPULATING'), rangeIndex('Widget', 'ownerRef', 'POPULATING')], 'index-building'],
+    ['an index that has failed', [...without('batchRef', 'ownerRef'), rangeIndex('Widget', 'batchRef', 'FAILED'), rangeIndex('Widget', 'ownerRef', 'FAILED')], 'index-failed'],
+    ['an index that is gone', without('batchRef', 'ownerRef'), 'index-unavailable'],
+  ])('names a type none of whose reference properties is read for %s, with each property and the reason %s, reads the other type, and no statement of the related read names the label', async (_name, indexes, reason) => {
     const { app, executor } = await started(() => schemaAnswer(indexes));
     const answer = searchResultSchema.parse((await postSearch(app, body)).json());
-    expect(answer.related.disabledTypes).toEqual([{ entityType: 'widget', reason: 'index-unavailable' }]);
+    expect(answer.related.disabledTypes).toEqual([
+      { entityType: 'widget', property: 'batchRef', reason, typeSearched: false },
+      { entityType: 'widget', property: 'ownerRef', reason, typeSearched: false },
+    ]);
     expect(answer.related.searchable).toBe(true);
     expect(answer.related.hits.map((hit) => hit.node.ref.stableId)).toEqual(['GT-1']);
     expect(naming(relatedCalls(executor), 'Widget')).toBe(0);
@@ -39,11 +42,14 @@ describe('a type whose reference index is not online is left out of the related 
     await app.close();
   });
 
-  it('leaves a type out when only one of its two reference properties has no index', async () => {
-    const { app, executor } = await started(() => schemaAnswer(without('ownerRef')));
+  it('reads a type by its reference property that has an index when the other has none, and names only that one', async () => {
+    const { app, executor } = await started(() => schemaAnswer([...without('ownerRef'), rangeIndex('Widget', 'ownerRef', 'POPULATING')]));
     const answer = searchResultSchema.parse((await postSearch(app, body)).json());
-    expect(answer.related.disabledTypes).toEqual([{ entityType: 'widget', reason: 'index-unavailable' }]);
-    expect(naming(relatedCalls(executor), 'Widget')).toBe(0);
+    expect(answer.related.disabledTypes).toEqual([{ entityType: 'widget', property: 'ownerRef', reason: 'index-building', typeSearched: true }]);
+    expect(answer.related.hits.map((hit) => hit.node.ref.stableId)).toEqual(['W-1', 'GT-1']);
+    const [related] = relatedCalls(executor);
+    expect(related?.cypher).toContain('n.`batchRef`');
+    expect(related?.cypher).not.toContain('ownerRef');
     await app.close();
   });
 
@@ -51,7 +57,7 @@ describe('a type whose reference index is not online is left out of the related 
     const { app, executor } = await started(() => schemaAnswer(without('batchRef', 'ownerRef', 'widgetRef')));
     const answer = searchResultSchema.parse((await postSearch(app, { sourceId: 'demo', text: 'W-1' })).json());
     expect(answer.related).toMatchObject({ hits: [], searchable: false });
-    expect(answer.related.disabledTypes.map((disabled) => disabled.entityType).sort()).toEqual(['gadget', 'widget']);
+    expect(answer.related.disabledTypes.map((disabled) => disabled.entityType).sort()).toEqual(['gadget', 'widget', 'widget']);
     expect(relatedCalls(executor)).toEqual([]);
     expect(answer.exact.map((node) => node.ref.stableId)).toEqual(['W-1']);
     expect(answer.searchable).toBe(true);
@@ -100,13 +106,13 @@ describe('one schema read serves both groups', () => {
   it('follows the indexes of each group on its own: the exact index lost leaves the related group as it was, and the reverse', async () => {
     const exactLost = await started(() => schemaAnswer(without('widgetId', 'ownerName')));
     const first = searchResultSchema.parse((await postSearch(exactLost.app, body)).json());
-    expect(first.disabledTypes.map((disabled) => disabled.entityType)).toEqual(['widget']);
+    expect(first.disabledTypes.map((disabled) => disabled.entityType)).toEqual(['widget', 'widget']);
     expect(first.related.disabledTypes).toEqual([]);
     expect(relatedCalls(exactLost.executor)).toHaveLength(1);
     await exactLost.app.close();
     const relatedLost = await started(() => schemaAnswer(without('batchRef', 'ownerRef')));
     const second = searchResultSchema.parse((await postSearch(relatedLost.app, body)).json());
-    expect(second.related.disabledTypes.map((disabled) => disabled.entityType)).toEqual(['widget']);
+    expect(second.related.disabledTypes.map((disabled) => disabled.entityType)).toEqual(['widget', 'widget']);
     expect(second.disabledTypes).toEqual([]);
     expect(searchCalls(relatedLost.executor)).toHaveLength(1);
     await relatedLost.app.close();
@@ -127,23 +133,14 @@ describe('where the guard cannot say, and when the schema read fails', () => {
   it.each([
     ['a timeout', { status: 'timeout' } as const, 504],
     ['a source that is down', { status: 'unavailable', reason: 'unreachable' } as const, 503],
-    ['an answer that cannot be read', { status: 'rows', rows: [{ indexes: 'nonsense', truncated: false }] } as const, 500],
-    ['a truncated answer', schemaAnswer([], true), 500],
-  ])('answers the error of the schema read for %s, makes no data read, and audits the failed search', async (_name, outcome, status) => {
+    ['an answer that cannot be read', { status: 'rows', rows: [{ indexes: 'nonsense', truncated: false }] } as const, 503],
+    ['a truncated answer', schemaAnswer(ALL, true), 503],
+  ])('answers the error of the schema read for %s, makes no data read, and audits the search as not made', async (_name, outcome, status) => {
     const { app, executor, events } = await started(() => outcome);
     const response = await postSearch(app, body);
     expect(response.statusCode).toBe(status);
     expect(ids(executor.calls)).toEqual(['schema-indexes']);
-    expect(events.filter((event) => event.action.startsWith('entity.search')).every((event) => event.result === 'failed')).toBe(true);
-    await app.close();
-  });
-
-  it('refuses a source that is not usable with SOURCE_UNAVAILABLE and makes no statement', async () => {
-    const { app, executor } = await started(() => schemaAnswer(ALL), { usability: { isUsable: () => false } });
-    const response = await postSearch(app, body);
-    expect(response.statusCode).toBe(503);
-    expect(response.json().error.code).toBe('SOURCE_UNAVAILABLE');
-    expect(executor.calls).toEqual([]);
+    expect(events.filter((event) => event.action.startsWith('entity.search')).every((event) => event.result !== 'success')).toBe(true);
     await app.close();
   });
 });

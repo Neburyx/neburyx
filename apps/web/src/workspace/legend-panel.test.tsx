@@ -132,7 +132,7 @@ describe('the legend\'s entity types while the profile is read', () => {
     const { container, set } = controlled('s', { phase: 'ready', data: types(['kind-a', 'kind-b']) });
     set({ phase: 'loading', data: types(['kind-a', 'kind-b']) });
     set({ phase: 'ready', data: types(['kind-a', 'kind-b']), failure: { code: 'SOURCE_UNAVAILABLE', message: 'unavailable', retryable: true, traceId: 'trace-1' } });
-    expect(alert()?.textContent).toBe('SOURCE_UNAVAILABLE · trace trace-1');
+    expect(alert()?.textContent).toBe('The source did not answer. Try again shortly. · trace trace-1');
     expect(rows(container)).toEqual(['KIND-A', 'KIND-B']);
     set({ phase: 'ready', data: types(['kind-a', 'kind-b']) });
     expect(alert()).toBeNull();

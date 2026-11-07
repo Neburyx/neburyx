@@ -5,11 +5,11 @@ import { rangeIndex, schemaAnswer, withSchema } from '../testing/search-fixtures
 const get = (app: Awaited<ReturnType<typeof startSearchApp>>['app']) => app.inject({ method: 'GET', url: '/v1/entities/demo/widget/W-001' });
 
 describe('the entity read and the index of its type', () => {
-  it('answers 503 SOURCE_UNAVAILABLE, retryable, when the stable-ID index has been dropped since the check, and no statement names the type', async () => {
+  it('answers 503 SOURCE_UNAVAILABLE, not retryable, with the reason index-unavailable, when the stable-ID index has been dropped since the check, and no statement names the type', async () => {
     const { app, executor, events } = await startSearchApp({ ownSchema: true, respond: withSchema(() => schemaAnswer([]), answering([widget(1)])) });
     const response = await get(app);
     expect(response.statusCode).toBe(503);
-    expect(response.json().error).toMatchObject({ code: 'SOURCE_UNAVAILABLE', retryable: true });
+    expect(response.json().error).toMatchObject({ code: 'SOURCE_UNAVAILABLE', retryable: false, details: { reason: 'index-unavailable' } });
     expect(executor.calls.map((call) => call.templateId)).toEqual(['schema-indexes']);
     expect(events.filter((event) => event.action === 'entity.load')).toEqual([expect.objectContaining({ result: 'refused' })]);
     await app.close();

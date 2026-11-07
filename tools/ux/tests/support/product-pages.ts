@@ -107,7 +107,7 @@ export const REACH: Readonly<Record<string, (page: Page) => Promise<void>>> = {
   },
   'Search results with an evidence relationship left out': async (page) => {
     await searchFor(page, 'evdrop-1');
-    await expect(page.getByText(/Evidence records are disabled for this relationship/)).toBeVisible();
+    await expect(page.getByText(/^Not searched: LINKS .* · recordId: no online index$/)).toBeVisible();
   },
   'Search results with filters': async (page) => {
     await searchFor(page, 'mix-3-2');
@@ -117,6 +117,16 @@ export const REACH: Readonly<Record<string, (page: Page) => Promise<void>>> = {
   'Search results with a capped filter count': async (page) => {
     await searchFor(page, 'many-26');
     await expect(page.getByRole('complementary', { name: 'Filters' }).getByText('≥ 25 results · lower bound')).toBeVisible();
+  },
+  'Search results with more matches to show': async (page) => {
+    await searchFor(page, 'many-30');
+    await expect(page.getByRole('button', { name: 'Show more: Exact matches' })).toBeVisible();
+  },
+  'Search results with a next page no longer valid': async (page) => {
+    await page.route((url) => url.pathname === '/v1/search/entities/more', (route) => route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ error: { code: 'CURSOR_INVALIDATED', message: 'This page of results is no longer valid. Start again.', retryable: false, traceId: 'tr-ux' } }) }));
+    await searchFor(page, 'many-30');
+    await page.getByRole('button', { name: 'Show more: Exact matches' }).click();
+    await expect(page.getByRole('button', { name: 'Search again' })).toBeVisible();
   },
   'Search results with the filter counts not read': async (page) => {
     await searchFor(page, 'facfail-1');

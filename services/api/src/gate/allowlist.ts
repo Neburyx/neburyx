@@ -63,7 +63,7 @@ export function allowlistFromMapping(source: SourceModel): SourceAllowlist {
       if (evidenceProblem !== undefined) throw new SourceGateError(source.id, `evidence property of relationship type ${relationship.type}`, property, evidenceProblem);
     }
     for (const property of [...relationship.evidence, ...(relationship.observedAt === undefined ? [] : [relationship.observedAt]), ...(relationship.stableId === undefined ? [] : [relationship.stableId])]) properties.add(property);
-    if (relationship.stableId !== undefined && relationship.evidence.length > 0) evidenceRows.push({ type: relationship.type, from: relationship.from, to: relationship.to, properties: [...relationship.evidence] });
+    if (relationship.evidence.length > 0) evidenceRows.push({ type: relationship.type, from: relationship.from, to: relationship.to, properties: [...relationship.evidence] });
   }
   return { entityLabels, relationshipTypes, stableIds, searchProperties, referenceProperties, evidenceRows, relationshipRows, properties };
 }

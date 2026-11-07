@@ -8,7 +8,7 @@ import type { Gate } from '../gate/types.js';
 import type { SourceAccess } from '../investigations/source-access.js';
 import type { MappingModel, SourceModel } from '../mapping/model.js';
 import type { AuditSink, Principal } from '../seams/seams.js';
-import type { DegreeVerdicts, SourceUsability } from '../source-test/usability.js';
+import type { DegreeVerdicts } from '../source-test/usability.js';
 import type { DegreeCache } from './degree-cache.js';
 import { sumOf } from './degree-sum.js';
 import { neighborCountsOf, SCOPE_SUFFIX } from './neighbor-counts.js';
@@ -61,25 +61,18 @@ function previewOf(request: DegreePreviewRequest, source: SourceModel, pairs: re
   };
 }
 
-/** A node cannot be told from another entity type's node that shares its label, so a type whose label is shared is answered as the entity read answers it. */
-function sharesLabel(source: SourceModel, entityType: string): boolean {
-  const label = source.entities.find((entity) => entity.type === entityType)?.label;
-  return source.entities.filter((entity) => entity.label === label).length > 1;
-}
-
-export function createDegreePreviewService(deps: { readonly gate: Gate; readonly mapping: MappingModel; readonly access: SourceAccess; readonly entities: EntityReader; readonly verdicts: DegreeVerdicts; readonly cache?: { readonly store: DegreeCache; readonly usability: SourceUsability; readonly audit: AuditSink; readonly logger: { warn(fields: object, message: string): void } } }): DegreePreviewService {
+export function createDegreePreviewService(deps: { readonly gate: Gate; readonly mapping: MappingModel; readonly access: SourceAccess; readonly entities: EntityReader; readonly verdicts: DegreeVerdicts; readonly cache?: { readonly store: DegreeCache; readonly audit: AuditSink; readonly logger: { warn(fields: object, message: string): void } } }): DegreePreviewService {
   return {
     async preview(request) {
       await deps.access.require({ traceId: request.traceId, principal: request.principal, sourceId: request.sourceId, auditAction: degreePreviewBoundedTemplate.auditAction });
       const source = deps.mapping.sources.find((candidate) => candidate.id === request.sourceId);
-      if (source === undefined || !source.entities.some((entity) => entity.type === request.entityType) || sharesLabel(source, request.entityType)) throw new AppError('NOT_FOUND');
+      if (source === undefined || !source.entities.some((entity) => entity.type === request.entityType)) throw new AppError('NOT_FOUND');
       const pairs = degreePairsOf(source.relationships, request.entityType);
       const revision = deps.verdicts.revisionOf(request.sourceId);
       const key = { sourceId: request.sourceId, configHash: source.configHash, principalId: request.principal.id, entityType: request.entityType, stableId: request.stableId, mask: request.mask, verdictRevision: revision };
       const held = deps.cache?.store.get(key);
       if (deps.cache !== undefined && held !== undefined) {
-        // a served answer skips the gate, so it keeps the gate's rule that a source whose mapping does not fit is not read, and its audit event
-        if (!deps.cache.usability.isUsable(request.sourceId)) throw new AppError('SOURCE_UNAVAILABLE');
+        // a served answer skips the gate, so it keeps the gate's audit event
         await recordHit(deps.cache, request, pairs.length === 0 ? entityLoadTemplate.auditAction : degreePreviewBoundedTemplate.auditAction);
         return held;
       }

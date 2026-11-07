@@ -108,18 +108,18 @@ describe('the context line of a related record', () => {
 
 describe('a type left out of the related group', () => {
   it('is named under the summary with its own message, beside the notes of the exact group', async () => {
-    const left = { entityType: TYPE, reason: 'index-unavailable' as const };
-    const kit = searchKit(['demo'], async () => ok(answerOf('demo', [hit('demo', 'AC-1')], { disabledTypes: [left], related: { ...relatedOf([hit('demo', 'REF-1')]), disabledTypes: [left] } })));
+    const left = { entityType: TYPE, property: 'ref', reason: 'index-unavailable' as const, typeSearched: true };
+    const kit = searchKit(['demo'], async () => ok(answerOf('demo', [hit('demo', 'AC-1')], { disabledTypes: [left], related: { ...relatedOf([hit('demo', 'REF-1')]), disabledTypes: [{ ...left, reason: 'index-building' }] } })));
     renderApp(searchAt('demo', 'AC-1'), kit.client);
-    expect(await screen.findByText('KIND-A: Related records are disabled for this type.')).toBeDefined();
-    expect(within(main()).getByText('KIND-A: Search is disabled for this type.')).toBeDefined();
+    expect(await screen.findByText('Not searched for related records: KIND-A · ref: index is building')).toBeDefined();
+    expect(within(main()).getByText('Not searched: KIND-A · ref: no online index')).toBeDefined();
   });
 
   it('is named, with the reason the group was not searched left out, when every type was left out', async () => {
-    const left = { entityType: TYPE, reason: 'index-unavailable' as const };
+    const left = { entityType: TYPE, property: 'ref', reason: 'index-failed' as const, typeSearched: false };
     const kit = searchKit(['demo'], async () => ok(answerOf('demo', [hit('demo', 'AC-1')], { related: { hits: [], count: { value: 0, quality: 'exact', scope: 'search:related' }, searchable: false, disabledTypes: [left] } })));
     renderApp(searchAt('demo', 'AC-1'), kit.client);
-    expect(await screen.findByText('KIND-A: Related records are disabled for this type.')).toBeDefined();
+    expect(await screen.findByText('Not searched for related records: KIND-A, none of its properties · ref: index failed')).toBeDefined();
     expect(within(main()).queryByText('No property of this source is configured for related records.')).toBeNull();
     expect(within(main()).getByText('1 exact match · 0.18 s')).toBeDefined();
   });

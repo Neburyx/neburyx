@@ -103,5 +103,5 @@ export function normalizeExpansion(context: NormalizeContext, rows: readonly Rea
     ranked.push({ rank, edge: summarizedAggregate(context, { type: row.rtype, ...ends, members: row.members, first: row.first, last: row.last, direction: row.dir, flags: row.flag === null ? [] : [row.flag] }) });
   });
   const edges = ranked.sort((left, right) => left.rank - right.rank).map((entry) => entry.edge);
-  return { nodes, edges, dropped, warnings: warningsOf(dropped), anchorFound: anchor !== undefined && isObject(anchor), returned: edges.length };
+  return { nodes, unreferenced: [], edges, dropped, warnings: warningsOf(dropped), anchorFound: anchor !== undefined && isObject(anchor), returned: edges.length };
 }

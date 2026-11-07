@@ -14,10 +14,10 @@ import type { GateParameter, Params, SourceAllowlist, Template } from './types.j
  */
 const MARKER = /@(entity|relationship|stableId|searchBranches|facetProbes|degreeCounts|expandNeighbors)\(([A-Za-z][A-Za-z0-9]*)\)/g;
 /**
- * The placeholders of a branch text: for a target of an entity type the label of the type and the property (`@label`, `@property`); for a target of a relationship mapping row the
- * relationship type, the labels of its two entity types and the property (`@type`, `@fromLabel`, `@toLabel`, `@property`).
+ * The placeholders of a branch text: for a target of an entity type the label of the type and the property (`@label`, `@property`) and, in a search branch, the entity type of the target
+ * (`@entityType`, written as the parameter `$branchEntityTypes[<branch position>]`); for a target of a relationship mapping row the relationship type, the labels of its two entity types and the property (`@type`, `@fromLabel`, `@toLabel`, `@property`).
  */
-export const BRANCH_MARKER = /@(label|property|type|fromLabel|toLabel)(?![A-Za-z0-9])/g;
+export const BRANCH_MARKER = /@(label|property|entityType|type|fromLabel|toLabel)(?![A-Za-z0-9])/g;
 /** A name that cannot sit inside backticks: one with a backtick, a backslash or a control character, such as `a`b`. */
 const UNQUOTABLE = /[`\\\u0000-\u001f\u007f]/;
 
@@ -31,6 +31,9 @@ export function quoteName(name: string): string {
   if (nameProblem(name) !== undefined) throw new AppError('INTERNAL_ERROR');
   return `\`${name}\``;
 }
+
+/** The list parameter the gate fills with the entity type of each search branch, in branch order, from the validated targets; no request or template sets it. */
+export const BRANCH_ENTITY_TYPES = 'branchEntityTypes';
 
 export type MarkerKind = 'entity' | 'relationship' | 'stableId' | 'searchBranches' | 'facetProbes' | 'degreeCounts' | 'expandNeighbors';
 
@@ -65,14 +68,18 @@ function gateValuesOf(template: Template, allowlist: SourceAllowlist): [string, 
 const targetSchema = z.strictObject({ entityType: z.string(), property: z.string(), match: z.enum(['value', 'text']) });
 const evidenceTargetSchema = z.strictObject({ relationshipType: z.string(), from: z.string(), to: z.string(), property: z.string(), match: z.enum(['value', 'text']) });
 
-/** The branch of one entity target, checked against the `search` or the `reference` properties of the mapping. */
-function entityBranchOf(target: { readonly entityType: string; readonly property: string }, kind: 'search' | 'reference', text: string, allowlist: SourceAllowlist): string {
+/** The branch of one entity target, checked against the `search` or the `reference` properties of the mapping; `position` is the branch's place in a search statement, whose text returns the entity type. */
+function entityBranchOf(target: { readonly entityType: string; readonly property: string }, kind: 'search' | 'reference', text: string, allowlist: SourceAllowlist, position?: number): string {
   const label = allowlist.entityLabels.get(target.entityType);
   if (label === undefined || (kind === 'search' ? allowlist.searchProperties : allowlist.referenceProperties).get(target.entityType)?.includes(target.property) !== true) throw new AppError('INVALID_REQUEST');
-  return text.replace(BRANCH_MARKER, (_whole, placeholder: string) => quoteName(placeholder === 'label' ? label : target.property));
+  return text.replace(BRANCH_MARKER, (_whole, placeholder: string) => {
+    if (placeholder !== 'entityType') return quoteName(placeholder === 'label' ? label : target.property);
+    if (position === undefined) throw new AppError('INTERNAL_ERROR');
+    return `$${BRANCH_ENTITY_TYPES}[${position}]`;
+  });
 }
 
-/** The branch of one evidence target, which must be an evidence property of a relationship mapping row that has a `stable_id`, with the labels of that row's two entity types. */
+/** The branch of one evidence target, which must be an evidence property of a relationship mapping row, with the labels of that row's two entity types. */
 function evidenceBranchOf(target: { readonly relationshipType: string; readonly from: string; readonly to: string; readonly property: string }, text: string, allowlist: SourceAllowlist): string {
   const row = allowlist.evidenceRows.find((candidate) => candidate.type === target.relationshipType && candidate.from === target.from && candidate.to === target.to);
   const fromLabel = allowlist.entityLabels.get(target.from);
@@ -95,13 +102,22 @@ function branchesOf(template: Template, params: Params, allowlist: SourceAllowli
   }
   const seen = new Set<string>();
   return list.data
-    .map((target) => {
+    .map((target, position) => {
       const key = JSON.stringify([target.entityType, target.property]);
       if (seen.has(key)) throw new AppError('INVALID_REQUEST');
       seen.add(key);
-      return entityBranchOf(target, branches.allowlist === 'search' ? 'search' : 'reference', branches[target.match], allowlist);
+      return entityBranchOf(target, branches.allowlist === 'search' ? 'search' : 'reference', branches[target.match], allowlist, position);
     })
     .join(' UNION ');
+}
+
+/** `$branchEntityTypes`: the entity type of each branch of an entity search, in branch order, from the targets `branchesOf` checked; none for a template without entity branches. */
+function branchEntityTypesOf(template: Template, params: Params): [string, readonly string[]][] {
+  const branches = template.searchBranches;
+  if (branches === undefined || branches.allowlist === 'evidence') return [];
+  const list = z.array(targetSchema).safeParse(params[branches.param]);
+  if (!list.success) throw new AppError('INVALID_REQUEST');
+  return [[BRANCH_ENTITY_TYPES, list.data.map((target) => target.entityType)]];
 }
 
 /** The branches of an evidence template: one for each target, which must be an evidence property of a relationship mapping row that has a `stable_id`, with the labels of that row's two entity types. */
@@ -131,7 +147,7 @@ const facetTargetSchema = z.discriminatedUnion('kind', [
 ]);
 
 /**
- * The statement of the facet probes of a template that has them: for each probe `i` a `CALL { CALL { <its branches joined by UNION> } WITH n LIMIT $limit + 1 RETURN count(*) AS c<i> }` (`r` for a probe of
+ * The statement of the facet probes of a template that has them: for each probe `i` a `CALL { CALL { <its branches joined by UNION> } WITH n LIMIT $countCap + 1 RETURN count(*) AS c<i> }` (`r` for a probe of
  * evidence), then one `RETURN` of every `c<i>`. A probe holds targets of one kind, each checked against the allowlist of its kind and quoted by `quoteName`; the number `i` is the position of the probe in
  * the list, written by this function and never taken from the request.
  */
@@ -157,7 +173,7 @@ function facetProbesOf(template: Template, params: Params, allowlist: SourceAllo
       if (target.kind === 'evidence') return evidenceBranchOf(target, spec.evidence[target.match], allowlist);
       return entityBranchOf(target, target.kind, spec.node[target.match], allowlist);
     });
-    return `CALL { CALL { ${branches.join(' UNION ')} } WITH ${evidence ? 'r' : 'n'} LIMIT $limit + 1 RETURN count(*) AS c${index} }`;
+    return `CALL { CALL { ${branches.join(' UNION ')} } WITH ${evidence ? 'r' : 'n'} LIMIT $countCap + 1 RETURN count(*) AS c${index} }`;
   });
   return `${calls.join('\n')}\nRETURN ${list.data.map((_probe, index) => `c${index}`).join(', ')}`;
 }
@@ -243,6 +259,6 @@ export function renderTemplate(template: Template, params: Params, allowlist: So
   });
   const markerNames = new Set([...template.entityParams, ...template.relationshipParams, ...(template.searchBranches === undefined ? [] : [template.searchBranches.param]), ...(template.facetProbes === undefined ? [] : [template.facetProbes.param]), ...(template.degreeCounts === undefined ? [] : [template.degreeCounts.param]), ...(template.expandNeighbors === undefined ? [] : [template.expandNeighbors.relTypesParam, template.expandNeighbors.directionParam])]);
   const kept = Object.entries(params).filter(([key]) => !markerNames.has(key));
-  const cap: [string, unknown][] = template.degreeCounts?.form === 'bounded' ? [['countCap', countCap]] : [];
-  return { cypher, parameters: Object.fromEntries([...kept, ['limit', limit], ...cap, ...gateValuesOf(template, allowlist)]) };
+  const cap: [string, unknown][] = template.degreeCounts?.form === 'bounded' || template.facetProbes !== undefined ? [['countCap', countCap]] : [];
+  return { cypher, parameters: Object.fromEntries([...kept, ['limit', limit], ...cap, ...gateValuesOf(template, allowlist), ...branchEntityTypesOf(template, params)]) };
 }

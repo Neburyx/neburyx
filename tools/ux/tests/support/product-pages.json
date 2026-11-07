@@ -6,6 +6,8 @@
     { "name": "Home with the list read failed", "route": "" },
     { "name": "Home with the source read failed", "route": "" },
     { "name": "Search results with results", "route": "search" },
+    { "name": "Search results with more matches to show", "route": "search" },
+    { "name": "Search results with a next page no longer valid", "route": "search" },
     { "name": "Search results with related records", "route": "search" },
     { "name": "Search results with one group failed", "route": "search" },
     { "name": "Search results with evidence records", "route": "search" },

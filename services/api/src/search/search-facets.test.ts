@@ -58,27 +58,51 @@ describe('the facets of a search answer', () => {
   });
 
   it.each([
-    [24, 'exact', 24],
-    [25, 'exact', 25],
-    [26, 'lowerBound', 25],
-  ])('counts %i matches as %s with the value %i for the cap of 25', async (matches, quality, value) => {
-    const { answer, parts } = await searched(widgets(matches));
+    [39, 'exact', 39],
+    [40, 'exact', 40],
+    [41, 'lowerBound', 40],
+  ])('counts %i matches as %s with the value %i for a source whose count cap is 40, past the page of 25', async (matches, quality, value) => {
+    const { answer, parts } = await searched(widgets(matches), { budgets: { heavy_op_threshold: 40 } });
     const facets = searchable(answer);
     expect(facets.entityType[0]?.count).toEqual({ value, quality, scope: FACET_SCOPES.entityType });
     expect(facets.matchMode[0]?.count).toEqual({ value, quality, scope: FACET_SCOPES.matchMode });
     expect(facets.total).toEqual({ value, quality, scope: FACET_SCOPES.total });
-    expect(facetCalls(parts.executor)[0]?.rowLimit).toBe(26);
+    expect(facetCalls(parts.executor)[0]?.parameters['countCap']).toBe(40);
+    expect(answer?.counts.exact).toEqual({ value: 25, quality: 'lowerBound', scope: 'search:exact' });
     await parts.app.close();
   });
 
-  it.each([
-    [9, 'exact', 9],
-    [10, 'exact', 10],
-    [11, 'lowerBound', 10],
-  ])('counts %i matches as %s with the value %i for a source whose max_page is 10', async (matches, quality, value) => {
-    const { answer, parts } = await searched(widgets(matches), { budgets: { max_page: 10, default_page: 10 } });
-    expect(searchable(answer).total).toEqual({ value, quality, scope: FACET_SCOPES.total });
-    expect(facetCalls(parts.executor)[0]?.rowLimit).toBe(11);
+  it('counts past the page of a source whose max_page is 10, up to the count cap', async () => {
+    const { answer, parts } = await searched(widgets(11), { budgets: { max_page: 10, default_page: 10 } });
+    expect(searchable(answer).total).toEqual({ value: 11, quality: 'exact', scope: FACET_SCOPES.total });
+    expect(answer?.counts.exact).toEqual({ value: 10, quality: 'lowerBound', scope: 'search:exact' });
+    expect(facetCalls(parts.executor)[0]?.parameters['countCap']).toBe(500);
+    await parts.app.close();
+  });
+
+  it('counts at the default count cap of 500 as exact, and above it as a lower bound of 500', async () => {
+    for (const [matches, quality, value] of [[500, 'exact', 500], [501, 'lowerBound', 500]] as const) {
+      const { answer, parts } = await searched(widgets(matches));
+      expect(searchable(answer).total).toEqual({ value, quality, scope: FACET_SCOPES.total });
+      await parts.app.close();
+    }
+  });
+
+  it('shows a lower-bound facet as at least the hits its group holds when the count cap is below the page', async () => {
+    const { answer, parts } = await searched(widgets(30), { budgets: { heavy_op_threshold: 10 } });
+    expect(answer?.exact).toHaveLength(25);
+    expect(searchable(answer).total).toEqual({ value: 25, quality: 'lowerBound', scope: FACET_SCOPES.total });
+    expect(searchable(answer).matchMode[0]?.count).toEqual({ value: 25, quality: 'lowerBound', scope: FACET_SCOPES.matchMode });
+    await parts.app.close();
+  });
+
+  it('never answers an exact facet lower than the hits its group holds, when the source changed between the two reads', async () => {
+    const stored = widgets(3);
+    const model = searchModelOf(stored);
+    const { answer, parts } = await searched(stored, {}, { respond: (call) => (call.templateId === 'search-facets' ? Promise.resolve(facetRowOf(call, 1)) : model(call)) });
+    expect(answer?.exact).toHaveLength(3);
+    expect(searchable(answer).total).toEqual({ value: 3, quality: 'lowerBound', scope: FACET_SCOPES.total });
+    expect(searchable(answer).entityType[0]?.count).toEqual({ value: 3, quality: 'lowerBound', scope: FACET_SCOPES.entityType });
     await parts.app.close();
   });
 
@@ -91,8 +115,9 @@ describe('the facets of a search answer', () => {
       ['widget', { value: 2, quality: 'exact', scope: FACET_SCOPES.entityType }],
       ['gadget', { value: 1, quality: 'exact', scope: FACET_SCOPES.entityType }],
     ]);
-    expect(facets.matchMode[0]?.count).toMatchObject({ value: 2 });
-    expect(facets.total).toMatchObject({ value: 2 });
+    // the read counts two nodes; the group holds three hits (the second node as each of its types), so neither count is shown below the hits held
+    expect(facets.matchMode[0]?.count).toEqual({ value: 3, quality: 'lowerBound', scope: FACET_SCOPES.matchMode });
+    expect(facets.total).toEqual({ value: 3, quality: 'lowerBound', scope: FACET_SCOPES.total });
     await parts.app.close();
   });
 });
@@ -165,8 +190,8 @@ describe('a type-ahead request', () => {
 });
 
 describe('the helper that answers a facet read for tests', () => {
-  it('gives every probe the same count, at most the row limit', () => {
-    const call = { cypher: 'CALL { }\nRETURN c0, c1', rowLimit: 5, parameters: {} } as never;
+  it('gives every probe the same count, at most the count cap plus one', () => {
+    const call = { cypher: 'CALL { }\nRETURN c0, c1', rowLimit: 5, parameters: { countCap: 4 } } as never;
     expect(facetRowOf(call, 9)).toEqual({ status: 'rows', rows: [{ c0: 5, c1: 5 }] });
   });
 });

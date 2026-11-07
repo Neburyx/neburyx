@@ -1,8 +1,8 @@
-export { ERROR_CODES, errorBodySchema, errorCodeSchema, errorDetailsSchema, partialDetailsSchema } from './error-codes.js';
+export { ERROR_CODES, errorBodySchema, errorCodeSchema, errorDetailsSchema, partialDetailsSchema, SOURCE_UNAVAILABLE_REASONS } from './error-codes.js';
 export { errorResponseSchema } from './error-response.js';
-export type { ErrorCode, ErrorResponse } from './error-codes.js';
+export type { ErrorCode, ErrorDetails, ErrorResponse, SourceUnavailableReason } from './error-codes.js';
 export { ERROR_DETAIL_KEYS, allowedDetails } from './error-details.js';
-export { ERROR_TABLE, findMissingCodes } from './error-table.js';
+export { ERROR_TABLE, findMissingCodes, SOURCE_UNAVAILABLE_ENTRIES } from './error-table.js';
 export type { ErrorEntry } from './error-table.js';
 export { buildOpenApiDocument } from './openapi.js';
 export type { OpenApiDocument } from './openapi.js';
@@ -40,7 +40,7 @@ export {
   testOutcomeSchema,
 } from './source-test.js';
 export type { DegreeBasis, DegreeChecks, DegreeType, MappingCheck, MappingChecks, MappingFinding, SourceTestReport, TestOutcome } from './source-test.js';
-export { COUNT_QUALITIES, DATA_CLASSES, countSchema, edgeRefSchema, edgeSchema, elementRefSchema, nodeSchema, propertySchema, storedEdgeRefSchema } from './graph.js';
+export { COUNT_QUALITIES, DATA_CLASSES, aggregateSchema, countSchema, edgeRefSchema, edgeSchema, elementRefSchema, nodeSchema, propertySchema, storedEdgeRefSchema } from './graph.js';
 export type { Count, DataClass, EdgeRef, ElementRef, GraphEdge, GraphNode, GraphProperty, StoredEdgeRef } from './graph.js';
 export { canCarryInPath, MAX_REFERENCE_TEXT_CHARACTERS, MAX_REFERENCE_VALUE_CHARACTERS, MAX_PATH_REFERENCE_LENGTH, MAX_STABLE_ID_LENGTH, entityLookupRequestSchema, entityPathSchema, referenceTextSchema, referenceValueSchema, entityQuerySchema, pathSegmentOf, stableIdSchema, valueOfPathSegment } from './entities.js';
 export type { EntityPath } from './entities.js';
@@ -76,28 +76,36 @@ export {
   MIN_SEARCH_TEXT_LENGTH,
   MIN_TYPEAHEAD_TEXT_LENGTH,
   SEARCH_DISABLED_REASONS,
-  SEARCH_EVIDENCE_DISABLED_REASONS,
   SEARCH_FAILURE_GROUPS,
   SEARCH_GROUPS,
   SEARCH_GROUP_CAP,
   SEARCH_GROUP_FAILURE_CODES,
   SEARCH_MATCH_MODES,
+  SEARCH_PAGED_GROUPS,
   disabledRelationshipSchema,
   disabledTypeSchema,
   droppedSchema,
   evidenceGroupSchema,
+  aggregateEvidenceHitSchema,
+  aggregateMemberSchema,
   evidenceHitSchema,
+  evidenceRecordSchema,
+  storedEvidenceHitSchema,
+  relationshipsOf,
   evidenceRuleSchema,
   facetsSchema,
   filtersSchema,
   groupFailureSchema,
   relatedGroupSchema,
   relatedHitSchema,
+  searchMoreRequestSchema,
+  searchMoreResultSchema,
   searchRequestSchema,
   searchResultSchema,
   searchTextSchema,
   startsWithGroupSchema,
   typeaheadTextSchema,
+  unreferencedHitSchema,
 } from './search.js';
 export { DEGREE_DIRECTIONS, DEGREE_WARNING_CODES, degreeByNeighborTypeSchema, degreeByTypeSchema, degreePreviewRequestSchema, degreePreviewSchema, degreeWarningSchema } from './degree-preview.js';
 export { COVERAGE_MAX_ENTITIES, COVERAGE_SCOPE, LOADED_QUALITIES, combineCoverage, coverageEntitySchema, coverageRequestSchema, coverageResponseSchema } from './coverage.js';
@@ -106,4 +114,4 @@ export { EXPAND_DIRECTIONS, EXPAND_SORTS, expandPageSchema, expandRequestSchema,
 export type { ExpandPage, ExpandRequest, ExpandResponse } from './expand.js';
 export type { EntityLookupRequest } from './entities.js';
 export type { DegreeByType, DegreePreview, DegreePreviewRequest, DegreeWarning } from './degree-preview.js';
-export type { DisabledRelationship, DisabledType, EvidenceGroup, EvidenceHit, Facets, GroupFailure, RelatedGroup, RelatedHit, SearchFailureGroup, SearchFilters, SearchGroup, SearchMatchMode, SearchRequest, SearchResult, StartsWithGroup } from './search.js';
+export type { AggregateEvidenceHit, AggregateMember, DisabledRelationship, DisabledType, EvidenceGroup, EvidenceHit, EvidenceRecord, Facets, GroupFailure, RelatedGroup, RelatedHit, SearchFailureGroup, SearchFilters, SearchGroup, SearchMatchMode, SearchMoreRequest, SearchMoreResult, SearchPagedGroup, SearchRequest, SearchResult, StartsWithGroup, StoredEvidenceHit, UnreferencedHit } from './search.js';

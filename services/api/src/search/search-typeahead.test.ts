@@ -160,14 +160,15 @@ describe('masking in a type-ahead request', () => {
 });
 
 describe('a type-ahead request when a search index is not online', () => {
-  it('leaves a type out of both groups, names it once, and searches the others', async () => {
+  it('leaves a property out of both groups, names it once with its reason, and searches the rest of its type and the others', async () => {
     const nodes = [stored('Widget', { widgetId: 'AB-1' }, 1), stored('Gadget', { gadgetId: 'AB-2' }, 2)];
     const { app, executor } = await started(nodes, {}, () => schemaAnswer([rangeIndex('Widget', 'widgetId', 'POPULATING'), rangeIndex('Widget', 'ownerName'), rangeIndex('Gadget', 'gadgetId')]));
     const result = resultOf(await postSearch(app, typeahead('AB')));
-    expect(result.disabledTypes).toEqual([{ entityType: 'widget', reason: 'index-unavailable' }]);
+    expect(result.disabledTypes).toEqual([{ entityType: 'widget', property: 'widgetId', reason: 'index-building', typeSearched: true }]);
     expect(result.searchable).toBe(true);
     expect(stableIds(result.startsWith?.nodes ?? [])).toEqual(['AB-2']);
-    expect(executor.calls.filter((call) => call.cypher.includes('`Widget`'))).toEqual([]);
+    expect(executor.calls.filter((call) => call.cypher.includes('`widgetId`'))).toEqual([]);
+    expect(executor.calls.filter((call) => call.cypher.includes('`Widget`') && call.cypher.includes('`ownerName`'))).toHaveLength(2);
     await app.close();
   });
 
@@ -175,7 +176,7 @@ describe('a type-ahead request when a search index is not online', () => {
     const { app, executor, events } = await started([], {}, () => schemaAnswer([]));
     const result = resultOf(await postSearch(app, typeahead('AB')));
     expect(result.searchable).toBe(false);
-    expect(result.disabledTypes.map((disabled) => disabled.entityType).sort()).toEqual(['gadget', 'widget']);
+    expect(result.disabledTypes.map((disabled) => disabled.entityType).sort()).toEqual(['gadget', 'widget', 'widget']);
     expect(result.startsWith).toMatchObject({ nodes: [], count: { value: 0, quality: 'exact' } });
     expect(ids(executor.calls)).toEqual(['schema-indexes']);
     expect(events.filter((event) => event.action === 'entity.search')).toHaveLength(1);
@@ -201,17 +202,17 @@ describe('a type-ahead request that fails', () => {
   const TEXT = 'needle-text-9042';
 
   it.each([
-    ['a schema read that times out', () => ({ status: 'timeout' }) as const, 504, 'QUERY_TIMEOUT'],
-    ['a source that is busy or down at the schema read', () => ({ status: 'unavailable', reason: 'unreachable' }) as const, 503, 'SOURCE_UNAVAILABLE'],
-    ['a schema answer that cannot be read', () => ({ status: 'rows', rows: [{ nothing: true }] }) as const, 500, 'INTERNAL_ERROR'],
-    ['a schema answer that is truncated', () => schemaAnswer([], true), 500, 'INTERNAL_ERROR'],
-  ])('answers %s with its error and runs neither data statement', async (_name, answer, status, code) => {
+    ['a schema read that times out', () => ({ status: 'timeout' }) as const, 504, 'QUERY_TIMEOUT', 'failed'],
+    ['a source that is busy or down at the schema read', () => ({ status: 'unavailable', reason: 'unreachable' }) as const, 503, 'SOURCE_UNAVAILABLE', 'failed'],
+    ['a schema answer that cannot be read', () => ({ status: 'rows', rows: [{ nothing: true }] }) as const, 503, 'SOURCE_UNAVAILABLE', 'refused'],
+    ['a schema answer that is truncated', () => schemaAnswer([], true), 503, 'SOURCE_UNAVAILABLE', 'refused'],
+  ])('answers %s with its error and runs neither data statement', async (_name, answer, status, code, audited) => {
     const { app, executor, events } = await started([], {}, answer);
     const response = await postSearch(app, typeahead(TEXT));
     expect(response.statusCode).toBe(status);
     expect(response.json().error.code).toBe(code);
     expect(ids(executor.calls)).toEqual(['schema-indexes']);
-    expect(events.filter((event) => event.action === 'entity.search')).toEqual([expect.objectContaining({ result: 'failed' })]);
+    expect(events.filter((event) => event.action === 'entity.search')).toEqual([expect.objectContaining({ result: audited })]);
     await app.close();
   });
 

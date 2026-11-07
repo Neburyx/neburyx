@@ -1,3 +1,4 @@
+import type { ExecuteOutcome } from '../gate/executor.js';
 import { writeFileSync } from 'node:fs';
 import { FACET_SCOPES, SEARCH_GROUP_CAP, type SearchResult } from '@neburyx/contracts';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -36,7 +37,7 @@ let rig: FacetsRig;
 let breakable: FacetsRig;
 
 beforeAll(async () => {
-  rig = await startFacetsRig({ mapping: { entities: ENTITIES, relationships: RELATIONSHIPS }, seed });
+  rig = await startFacetsRig({ mapping: { entities: ENTITIES, relationships: RELATIONSHIPS, budgets: { heavy_op_threshold: COUNT_CAP } }, seed });
   breakable = await startFacetsRig({ mapping: { entities: ENTITIES, relationships: RELATIONSHIPS }, seed });
 }, 600_000);
 
@@ -48,24 +49,26 @@ const facets = (answer: SearchResult) => {
   if (answer.facets === undefined || !answer.facets.searchable) throw new Error('the answer has no facets');
   return answer.facets;
 };
+/** The count cap of the source: above the page of 25 and below 40. */
+const COUNT_CAP = 30;
 const evidenceCount = (answer: SearchResult) => facets(answer).matchMode.find((entry) => entry.mode === 'evidence')?.count;
 const evidenceProbe = (...properties: string[]): FacetProbe => ({ targets: properties.map((property) => ({ kind: 'evidence' as const, relationshipType: 'COMMON', from: 'item', to: 'thing', property, match: 'value' as const })) });
 const independent = (rec: string) => rig.independent('MATCH (:Item)-[r:COMMON]->(:Thing) WHERE r.rec = $t OR r.doc = $t RETURN count(DISTINCT r) AS c', { t: rec });
 
 describe(`the evidence count of the facets against an independent count, on ${NEO4J_SERIES}`, () => {
-  it.each([24, 25, 26])('counts %i supporting relationships as the capped independent count and as the evidence group does', async (size) => {
+  it.each([24, 25, 26, 40])('counts %i supporting relationships as the independent count capped at the count cap, while the evidence group holds a page', async (size) => {
     const found = await independent(`ev${size}`);
     expect(found).toBe(size);
     const answer = await rig.search(`ev${size}`);
-    const expected = found > SEARCH_GROUP_CAP ? { value: SEARCH_GROUP_CAP, quality: 'lowerBound' } : { value: found, quality: 'exact' };
+    const expected = found > COUNT_CAP ? { value: COUNT_CAP, quality: 'lowerBound' } : { value: found, quality: 'exact' };
     expect(evidenceCount(answer)).toEqual({ ...expected, scope: FACET_SCOPES.matchMode });
-    expect(answer.evidence.count).toMatchObject(expected);
+    expect(answer.evidence.count).toMatchObject(found > SEARCH_GROUP_CAP ? { value: SEARCH_GROUP_CAP, quality: 'lowerBound' } : { value: found, quality: 'exact' });
   });
 
   it('counts a relationship that two evidence properties carry the text in once', async () => {
     const answer = await rig.search('evboth');
     expect(await independent('evboth')).toBe(40);
-    expect(evidenceCount(answer)).toMatchObject({ value: 25, quality: 'lowerBound' });
+    expect(evidenceCount(answer)).toMatchObject({ value: COUNT_CAP, quality: 'lowerBound' });
   });
 
   it('does not count a relationship of the type between other entity types, whatever their number', async () => {
@@ -75,13 +78,14 @@ describe(`the evidence count of the facets against an independent count, on ${NE
     expect(answer.dropped).toEqual({ 'not-mapped': 0, 'ambiguous-type': 0, 'no-stable-id': 0 });
   });
 
-  it('has no probe for a relationship row without a stable ID, and the group names it', async () => {
+  it('probes a relationship row without a stable ID like the others, and counts its relationships as the evidence group does', async () => {
     const from = rig.statements.length;
     const answer = await rig.search('evnoagg');
-    expect(answer.evidence.disabledRelationshipTypes).toEqual([{ relationshipType: 'NOAGG', from: 'item', to: 'thing', reason: 'no-stable-id' }]);
+    expect(answer.evidence.disabledRelationshipTypes).toEqual([]);
     const facetStatement = rig.statements.slice(from).find((call) => call.templateId === 'search-facets');
-    expect(facetStatement?.cypher).not.toContain('NOAGG');
-    expect(evidenceCount(answer)).toMatchObject({ value: 0 });
+    expect(facetStatement?.cypher).toContain('NOAGG');
+    expect(evidenceCount(answer)).toEqual({ value: 1, quality: 'exact', scope: FACET_SCOPES.matchMode });
+    expect(answer.evidence.count).toEqual({ value: 1, quality: 'exact', scope: 'search:evidence' });
   });
 
   it('counts an entity and a relationship that carry the same text apart, the entity in the total and its type and the relationship in the evidence mode only', async () => {
@@ -98,14 +102,14 @@ describe(`the plan of the evidence probe, on ${NEO4J_SERIES}`, () => {
     ['a common value that more than the cap matches on two properties', 'evboth', [evidenceProbe('rec', 'doc')]],
     ['overlapping targets of several probes', 'evboth', [evidenceProbe('rec', 'doc'), evidenceProbe('rec'), evidenceProbe('doc')]],
     ['a value carried by many relationships between other end types', 'wrongends', [evidenceProbe('rec')]],
-  ])('seeks the relationship index of every branch and emits at most the cap plus one rows from each, for %s', async (name, text, probes) => {
+  ])('seeks the relationship index of every branch and emits at most the count cap plus one rows from each, for %s', async (name, text, probes) => {
     const { operators, row } = await rig.profile(text, probes);
     const names = operators.map((operator) => operator.name);
     const branches = probes.reduce((total, probe) => total + probe.targets.length, 0);
     expect(names.filter((operatorName) => /RelationshipIndexSeek/.test(operatorName)), names.join(' > ')).toHaveLength(branches);
     expect(names.some((operatorName) => /RelationshipTypeScan|NodeByLabelScan|AllNodesScan|IndexScan/.test(operatorName)), names.join(' > ')).toBe(false);
-    expect(operators.filter((operator) => operator.name.startsWith('Limit')).every((operator) => operator.rows <= SEARCH_GROUP_CAP + 1)).toBe(true);
-    expect(Object.values(row).every((count) => count <= SEARCH_GROUP_CAP + 1)).toBe(true);
+    expect(operators.filter((operator) => operator.name.startsWith('Limit')).every((operator) => operator.rows <= COUNT_CAP + 1)).toBe(true);
+    expect(Object.values(row).every((count) => count <= COUNT_CAP + 1)).toBe(true);
     if (process.env['FACET_PROFILE_OUT'] !== undefined) {
       writeFileSync(`${process.env['FACET_PROFILE_OUT']}-evidence-${name.replaceAll(' ', '-')}.json`, JSON.stringify({ text, row, seeks: operators.filter((operator) => /Seek/.test(operator.name)), filters: operators.filter((operator) => /Filter/.test(operator.name)), limits: operators.filter((operator) => operator.name.startsWith('Limit')).map((operator) => operator.rows) }, null, 2));
     }
@@ -119,40 +123,42 @@ describe(`the plan of the evidence probe, on ${NEO4J_SERIES}`, () => {
 });
 
 describe(`the guard under the facets, on ${NEO4J_SERIES}`, () => {
-  it('leaves a relationship row whose index was dropped after the API started out whole: no evidence entry, the group names the row, no statement names the row', async () => {
+  it('leaves out the evidence property whose index was dropped after the API started: the group names the property, the row is searched and counted by its other property, no statement names the dropped one', async () => {
     await breakable.search('ev24');
     await breakable.admin('DROP INDEX common_doc');
     const from = breakable.statements.length;
     const answer = await breakable.search('ev24');
     expect(answer.evidence.disabledRelationshipTypes).toEqual([
-      { relationshipType: 'COMMON', from: 'item', to: 'thing', reason: 'index-unavailable' },
-      { relationshipType: 'NOAGG', from: 'item', to: 'thing', reason: 'no-stable-id' },
+      { relationshipType: 'COMMON', from: 'item', to: 'thing', property: 'doc', reason: 'index-unavailable' },
     ]);
-    expect(evidenceCount(answer)).toBeUndefined();
-    expect(breakable.statements.slice(from).filter((call) => /COMMON/.test(call.cypher))).toEqual([]);
+    expect(evidenceCount(answer)).toMatchObject({ value: 24, quality: 'exact' });
+    expect(answer.evidence.hits.length).toBeGreaterThan(0);
+    expect(breakable.statements.slice(from).filter((call) => /`doc`/.test(call.cypher))).toEqual([]);
+    expect(breakable.statements.slice(from).filter((call) => /COMMON/.test(call.cypher)).length).toBeGreaterThan(0);
     expect(breakable.statements.slice(from).filter((call) => call.templateId === 'schema-indexes')).toHaveLength(1);
   });
 
   it('counts an entity type by the matches of the group that kept its index when the other group lost it, and the group that lost it names the type', async () => {
     await breakable.admin('DROP INDEX item_ref');
     const answer = await breakable.search('ev24');
-    expect(answer.related.disabledTypes).toEqual([{ entityType: 'item', reason: 'index-unavailable' }]);
+    expect(answer.related.disabledTypes).toEqual([{ entityType: 'item', property: 'ref', reason: 'index-unavailable', typeSearched: false }]);
     expect(facets(answer).entityType.find((entry) => entry.entityType === 'item')?.count).toMatchObject({ value: 1, quality: 'exact' });
     expect(facets(answer).matchMode.find((entry) => entry.mode === 'related')).toBeUndefined();
   });
 });
 
 describe(`a schema read that fails before the facets, on ${NEO4J_SERIES}`, () => {
+  const schemaAnswer = (outcome: ExecuteOutcome) => (): void => rig.onStatement((call) => (call.templateId === 'schema-indexes' ? outcome : undefined));
   it.each([
-    ['QUERY_TIMEOUT', () => rig.onStatement((call) => (call.templateId === 'schema-indexes' ? { status: 'timeout' } : undefined))],
-    ['SOURCE_UNAVAILABLE', () => rig.onStatement((call) => (call.templateId === 'schema-indexes' ? { status: 'unavailable', reason: 'unreachable' } : undefined))],
-    ['INTERNAL_ERROR', () => rig.onStatement((call) => (call.templateId === 'schema-indexes' ? { status: 'rows', rows: [{ name: 'broken' }] } : undefined))],
-    ['SOURCE_BUSY', () => rig.setBusy(true)],
-  ])('fails the search with %s, the code of the schema read, and runs no data read', async (code, inject) => {
+    ['QUERY_TIMEOUT', schemaAnswer({ status: 'timeout' }), undefined],
+    ['SOURCE_UNAVAILABLE', schemaAnswer({ status: 'unavailable', reason: 'unreachable' }), 'unreachable'],
+    ['SOURCE_UNAVAILABLE', schemaAnswer({ status: 'rows', rows: [{ name: 'broken' }] }), 'index-list-unreadable'],
+    ['SOURCE_BUSY', (): void => rig.setBusy(true), undefined],
+  ] as const)('fails the search with %s (%s), the code of the schema read, and runs no data read', async (code, inject, reason) => {
     const from = rig.statements.length;
     inject();
     try {
-      await expect(rig.search('ev24')).rejects.toMatchObject({ code });
+      await expect(rig.search('ev24')).rejects.toMatchObject(reason === undefined ? { code } : { code, reason });
       expect(rig.statements.slice(from).filter((call) => call.templateId !== 'schema-indexes')).toEqual([]);
     } finally {
       rig.onStatement(undefined);

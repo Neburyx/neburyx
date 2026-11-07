@@ -91,8 +91,8 @@ describe('POST /v1/search/entities answers a search', () => {
     await post(app, { sourceId: 'demo', text: 'W-001' });
     const [call] = searchCalls(executor);
     expect(call?.cypher.match(/MATCH/g)).toHaveLength(3);
-    expect(call?.cypher).toContain('MATCH (n:`Widget`) WHERE n.`ownerName` IN [$text, $textInteger] RETURN n LIMIT $limit + 1');
-    expect(call?.cypher).toContain('MATCH (n:`Gadget`) WHERE n.`gadgetId` IN [$text, $textInteger] RETURN n LIMIT $limit + 1');
+    expect(call?.cypher).toContain('MATCH (n:`Widget`) WHERE n.`ownerName` IN [$text, $textInteger] AND ($cursor IS NULL OR elementId(n) > $cursor.after) WITH n ORDER BY elementId(n) LIMIT $limit + 1 RETURN n');
+    expect(call?.cypher).toContain('MATCH (n:`Gadget`) WHERE n.`gadgetId` IN [$text, $textInteger] AND ($cursor IS NULL OR elementId(n) > $cursor.after) WITH n ORDER BY elementId(n) LIMIT $limit + 1 RETURN n');
     expect(call?.parameters).toMatchObject({ text: 'W-001', textInteger: null, limit: SEARCH_GROUP_CAP });
     await app.close();
   });
@@ -166,7 +166,8 @@ describe('what a search reports when normalization leaves rows out or merges the
     expect(result.exact.map((node) => node.ref.stableId).sort()).toEqual(shown.nodes.map((node) => node.ref.stableId).sort());
     expect(result.dropped).toMatchObject(shown.dropped);
     expect(result.warnings).toEqual(shown.warnings);
-    expect(result.counts.exact).toMatchObject({ value: shown.nodes.length, quality: total > SEARCH_GROUP_CAP ? 'lowerBound' : 'exact' });
+    expect(result.exactUnreferenced ?? []).toEqual(shown.unreferenced);
+    expect(result.counts.exact).toMatchObject({ value: shown.nodes.length + shown.unreferenced.length, quality: total > SEARCH_GROUP_CAP ? 'lowerBound' : 'exact' });
     for (const node of result.exact) expect(node.qualityFlags).toEqual(shown.nodes.find((candidate) => candidate.ref.stableId === node.ref.stableId)?.qualityFlags);
     await app.close();
   });
@@ -181,13 +182,15 @@ describe('what a search reports when normalization leaves rows out or merges the
     await app.close();
   });
 
-  it('counts a read that overflowed and lost rows as a lower bound of the hits it holds', async () => {
+  it('counts a read that overflowed as a lower bound of the hits it holds, the unreferenced one too', async () => {
     const rows = widgets(26).map((row, index) => (index === 0 ? missing(1) : row));
     const { app } = await started(rows);
     const result = searchResultSchema.parse((await post(app, { sourceId: 'demo', text: 'W-' })).json());
     expect(result.exact).toHaveLength(24);
-    expect(result.counts.exact).toMatchObject({ value: 24, quality: 'lowerBound' });
-    expect(result.warnings).toEqual(['1 row was left out because they have no usable stable ID.']);
+    expect(result.exactUnreferenced).toEqual([{ entityType: 'widget', title: expect.any(String), properties: expect.any(Array), reason: 'no-stable-id' }]);
+    expect(result.counts.exact).toMatchObject({ value: 25, quality: 'lowerBound' });
+    expect(result.dropped['no-stable-id']).toBe(1);
+    expect(result.warnings).toEqual(['1 row has no usable stable ID, so it is listed and cannot be opened or added.']);
     await app.close();
   });
 });

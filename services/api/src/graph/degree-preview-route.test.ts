@@ -11,9 +11,8 @@ import { memoryAppStore } from '../testing/app-store.js';
 import { entityRows, plainNode } from '../testing/entity-fixtures.js';
 import { TestExecutor } from '../testing/gate.js';
 import { baseSource, fileOf } from '../testing/mapping.js';
-import { withOnlineIndexes } from '../testing/search-fixtures.js';
+import { onlineIndexesOf, schemaAnswer, withOnlineIndexes, withSchema, type IndexRow } from '../testing/search-fixtures.js';
 import { testSourceGate } from '../testing/source-gate.js';
-import type { SourceUsability } from '../source-test/usability.js';
 import { makeWebRoot } from '../testing/web-root.js';
 
 const webRoot = makeWebRoot();
@@ -44,7 +43,7 @@ const mapping = parseMapping(
 interface Options {
   readonly degrees?: (call: ExecuteCall) => ExecuteOutcome;
   readonly nodes?: ExecuteOutcome;
-  readonly usability?: SourceUsability;
+  readonly indexes?: (online: readonly IndexRow[]) => readonly IndexRow[];
   readonly deny?: boolean;
 }
 
@@ -57,7 +56,8 @@ async function started(options: Options = {}) {
     if (call.templateId === 'entity-load') return Promise.resolve(options.nodes ?? entityRows(plainNode(['Island'], { islandId: 'I-1' })));
     return Promise.resolve((options.degrees ?? (() => rowOf(2, 501, 4)))(call));
   };
-  const executor = new TestExecutor(withOnlineIndexes(source, answer));
+  const online = onlineIndexesOf(source);
+  const executor = new TestExecutor(withSchema(() => schemaAnswer(options.indexes?.(online) ?? online), answer));
   const events: AuditEvent[] = [];
   const defaults = communitySeams();
   const seams: Pick<Seams, 'policy' | 'coordinator' | 'audit'> = {
@@ -65,7 +65,7 @@ async function started(options: Options = {}) {
     coordinator: defaults.coordinator,
     audit: { record: (event) => (events.push(event), Promise.resolve()) },
   };
-  const parts = testSourceGate(mapping, { executor, seams, ...(options.usability === undefined ? {} : { usability: options.usability }) });
+  const parts = testSourceGate(mapping, { executor, seams });
   const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store: memoryAppStore(), mapping, gate: parts.gate, seams });
   return { app, executor, events };
 }
@@ -126,6 +126,34 @@ describe('POST /v1/graph/preview-expansion', () => {
     await app.close();
   });
 
+  it('answers the preview of a node whose entity type shares its label with another, for either type, counted on the node with the label and the stable ID', async () => {
+    for (const entityType of ['twin_a', 'twin_b']) {
+      const { app, executor } = await started({ degrees: () => rowOf(3) });
+      const response = await post(app, { sourceId: 'demo', ref: { entityType, stableId: 'T-1' } });
+      expect(response.statusCode, entityType).toBe(200);
+      const preview = degreePreviewSchema.parse(response.json());
+      expect(preview.ref).toEqual({ sourceId: 'demo', entityType, stableId: 'T-1' });
+      expect(preview.byType.map((entry) => [entry.relationshipType, entry.direction, entry.count.value])).toEqual([['TWINNED', entityType === 'twin_a' ? 'out' : 'in', 3]]);
+      expect(preview.warnings.map((warning) => warning.code)).not.toContain('duplicate-stable-id');
+      expect(degreeCalls(executor)[0]?.cypher).toContain('MATCH (n:`Twin`) WHERE n.`twinId` IN [$stableId, $stableInteger]');
+      await app.close();
+    }
+  });
+
+  it('warns duplicate-stable-id for a shared label when the source holds nodes of both types with the stable ID', async () => {
+    const { app } = await started({ degrees: () => ({ status: 'rows', rows: [{ c0: 3 }, { c0: 9 }] }) });
+    const preview = degreePreviewSchema.parse((await post(app, { sourceId: 'demo', ref: { entityType: 'twin_a', stableId: 'T-1' } })).json());
+    expect(preview.byType[0]?.count.value).toBe(3);
+    expect(preview.warnings.map((warning) => warning.code)).toContain('duplicate-stable-id');
+    await app.close();
+  });
+
+  it('answers NOT_FOUND for a shared label only when the node is not in the source', async () => {
+    const { app } = await started({ degrees: () => ({ status: 'rows', rows: [] }) });
+    expect((await post(app, { sourceId: 'demo', ref: { entityType: 'twin_a', stableId: 'T-1' } })).statusCode).toBe(404);
+    await app.close();
+  });
+
   it('answers NOT_FOUND for a missing node, with the same body whatever the cause', async () => {
     const missing = await started({ degrees: () => ({ status: 'rows', rows: [] }) });
     const none = await post(missing.app, widget);
@@ -134,8 +162,7 @@ describe('POST /v1/graph/preview-expansion', () => {
     const empty = await started({ degrees: () => ({ status: 'rows', rows: [] }) });
     const noType = await post(empty.app, { sourceId: 'demo', ref: { entityType: 'nothing', stableId: 'W-1' } });
     const noSource = await post(empty.app, { sourceId: 'nope', ref: { entityType: 'widget', stableId: 'W-1' } });
-    const shared = await post(empty.app, { sourceId: 'demo', ref: { entityType: 'twin_a', stableId: 'T-1' } });
-    for (const response of [noType, noSource, shared]) {
+    for (const response of [noType, noSource]) {
       expect(response.statusCode).toBe(404);
       expect({ ...response.json().error, traceId: undefined }).toEqual(body);
     }
@@ -166,11 +193,11 @@ describe('POST /v1/graph/preview-expansion', () => {
     await app.close();
   });
 
-  it('answers SOURCE_UNAVAILABLE without reading for a source whose mapping checks have not passed', async () => {
-    const { app, executor } = await started({ usability: { isUsable: () => false } });
+  it('answers SOURCE_UNAVAILABLE with the reason index-building, retryable, without reading the counts, while the index of the stable ID is building', async () => {
+    const { app, executor } = await started({ indexes: (online) => online.map((row) => (row.name === 'Widget' ? { ...row, state: 'POPULATING' } : row)) });
     const response = await post(app, widget);
     expect(response.statusCode).toBe(503);
-    expect(response.json().error.code).toBe('SOURCE_UNAVAILABLE');
+    expect(response.json().error).toMatchObject({ code: 'SOURCE_UNAVAILABLE', retryable: true, details: { reason: 'index-building' } });
     expect(degreeCalls(executor)).toEqual([]);
     await app.close();
   });

@@ -2,7 +2,15 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppError } from '../errors.js';
 import { normalizeModelOf } from '../gate/normalize/model.js';
 import { normalizeRows } from '../gate/normalize/index.js';
-import { NEO4J_SERIES, runAdmin, runAll } from '../testing/neo4j-server.js';
+import { envFor, NEO4J_SERIES, runAdmin, runAll } from '../testing/neo4j-server.js';
+import { assembleGate } from '../gate/assemble.js';
+import { createTemplateCatalog } from '../gate/catalog.js';
+import { DEGREE_PREVIEW_BOUNDED_ID, degreePreviewBoundedTemplate } from '../gate/templates/degree-preview.js';
+import { entityLoadTemplate } from '../gate/templates/entity-load.js';
+import { schemaIndexesTemplate } from '../gate/templates/schema-indexes.js';
+import { isKeyed } from '../mapping/model.js';
+import { communitySeams } from '../seams/community-seams.js';
+import { createNeo4jExecutor } from '../sources/executor.js';
 import { itemsOf, madeRecordCount, removeMadeRecords, startPackServers, withMadeRecords, type PackServer } from '../testing/normalization-capture.js';
 import { PACKS } from '../testing/pack-fixtures.js';
 import { LOCAL_PRINCIPAL } from '../testing/gate.js';
@@ -214,5 +222,52 @@ describe.each(PACKS)(`the entity read of the %s pack against records written by 
         expect(JSON.stringify(node), `mask ${mask}`).not.toContain(FULL_MASK);
       }
     });
+  });
+});
+
+/** A gate over the pack's server whose mapping adds a second entity type with the label and the stable ID property of the first one that is not keyed. */
+function sharedLabelGate(target: PackServer) {
+  const first = target.source.entities.find((entity) => !isKeyed(entity));
+  if (first === undefined) throw new Error('the pack has no entity type that is not keyed');
+  const twin = { ...first, type: `${first.type}-twin` };
+  const source = { ...target.source, entities: [...target.source.entities, twin] };
+  const mapping = { sources: [source] };
+  const executor = createNeo4jExecutor({ sources: mapping.sources, env: { DEMO_NEO4J_USER: target.server.reader.user, DEMO_NEO4J_PASSWORD: target.server.reader.password, ...envFor(target.server) }, logger: { warn: () => undefined } });
+  const defaults = communitySeams();
+  const { gate } = assembleGate({
+    mapping,
+    seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit },
+    executor,
+    logger: { warn: () => undefined },
+    catalog: createTemplateCatalog({ templates: [entityLoadTemplate, schemaIndexesTemplate, degreePreviewBoundedTemplate] }),
+  });
+  const reader = createEntityReader({ gate, mapping, access: communityAccess(mapping) });
+  return { first, twin, gate, reader, close: () => executor.close() };
+}
+
+describe(`the entity read of an entity type whose label another type shares, on ${NEO4J_SERIES}`, () => {
+  it('answers the node as the type it is asked for, for either type, and its degree read counts the node with the label and the ID', async () => {
+    const [target] = servers;
+    if (target === undefined) throw new Error('no server');
+    const shared = sharedLabelGate(target);
+    try {
+      const [row] = await itemsOf(target, 'capture-node', { entityType: shared.first.type });
+      if (row === undefined) throw new Error(`the demo graph holds no ${shared.first.type}`);
+      const expected = expectedFrom(target, row);
+      for (const entityType of [shared.first.type, shared.twin.type]) {
+        const node = await shared.reader.read({ traceId: 'tr-shared', principal: LOCAL_PRINCIPAL, sourceId: target.source.id, entityType, stableId: expected.ref.stableId, mask: false });
+        expect(node.ref, entityType).toEqual({ sourceId: target.source.id, entityType, stableId: expected.ref.stableId });
+        expect(node.properties, entityType).toEqual(expected.properties);
+      }
+      const hasPairs = target.source.relationships.some((relationship) => relationship.from === shared.first.type || relationship.to === shared.first.type);
+      if (hasPairs) {
+        const page = await shared.gate.run({ traceId: 'tr-shared-degree', principal: LOCAL_PRINCIPAL, sourceId: target.source.id, templateId: DEGREE_PREVIEW_BOUNDED_ID, params: { entityType: shared.first.type, stableId: expected.ref.stableId }, limit: 1 });
+        expect(page.items[0]).toMatchObject({ found: true, duplicate: false });
+      }
+      const missing = await shared.reader.read({ traceId: 'tr-shared-missing', principal: LOCAL_PRINCIPAL, sourceId: target.source.id, entityType: shared.twin.type, stableId: 'ZZ-NOT-THERE', mask: false }).catch((error: unknown) => error);
+      expect(missing).toMatchObject({ code: 'NOT_FOUND' });
+    } finally {
+      await shared.close();
+    }
   });
 });

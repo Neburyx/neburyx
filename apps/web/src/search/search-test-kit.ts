@@ -1,4 +1,4 @@
-import { FACET_SCOPES, type EvidenceHit, type Facets, type GraphNode, type OpenInvestigationRequest, type OpenInvestigationResponse, type SearchMatchMode, type SearchRequest, type SearchResult, type SourceProfile } from '@neburyx/contracts';
+import { FACET_SCOPES, relationshipsOf, type AggregateEvidenceHit, type AggregateMember, type EvidenceHit, type EvidenceRecord, type Facets, type GraphNode, type OpenInvestigationRequest, type OpenInvestigationResponse, type SearchMatchMode, type SearchRequest, type SearchResult, type SourceProfile, type StoredEvidenceHit } from '@neburyx/contracts';
 import type { ApiClient, ApiResult } from '../api/client.js';
 import { testProfile } from '../dev/test-profile.js';
 import { nodeOf } from '../investigations/test-data.js';
@@ -43,16 +43,33 @@ export function withRelated(sourceId: string, exact: readonly GraphNode[], relat
   return { ok: true, value: answerOf(sourceId, exact, { related: relatedOf(related, count), ...overrides }) };
 }
 
-export function evidenceHit(stableId: string, overrides: { readonly type?: string; readonly from?: string; readonly to?: string; readonly records?: readonly string[]; readonly rules?: readonly { readonly ruleId: string; readonly ruleVersion: number }[]; readonly sourceId?: string } = {}): EvidenceHit {
+const recordOf = (record: string | EvidenceRecord): EvidenceRecord => (typeof record === 'string' ? { sourceRecordId: record } : record);
+
+export function evidenceHit(stableId: string, overrides: { readonly type?: string; readonly from?: string; readonly to?: string; readonly records?: readonly (string | EvidenceRecord)[]; readonly rules?: readonly { readonly ruleId: string; readonly ruleVersion: number }[]; readonly sourceId?: string } = {}): StoredEvidenceHit {
   return {
     supports: { sourceId: overrides.sourceId ?? 'demo', type: overrides.type ?? 'MADE_FROM', from: overrides.from ?? TYPE, to: overrides.to ?? TYPE, stableId },
-    records: (overrides.records ?? [`REC-${stableId}`]).map((sourceRecordId) => ({ sourceRecordId })),
+    records: (overrides.records ?? [`REC-${stableId}`]).map(recordOf),
     rules: [...(overrides.rules ?? [])],
   };
 }
 
+/** An aggregate hit of the relationship type `SEEN_WITH` between two entities of `TYPE`, with members of the given element IDs (each carrying one record) or as given. */
+export function aggregateHit(
+  members: readonly (string | AggregateMember)[],
+  overrides: { readonly from?: string; readonly to?: string; readonly quality?: 'exact' | 'lowerBound'; readonly sourceId?: string } = {},
+): AggregateEvidenceHit {
+  const sourceId = overrides.sourceId ?? 'demo';
+  const listed = members.map((member) => (typeof member === 'string' ? { elementId: member, records: [{ sourceRecordId: 'REC-1' }] } : member));
+  return {
+    aggregate: { type: 'SEEN_WITH', from: { sourceId, entityType: TYPE, stableId: overrides.from ?? 'W-1' }, to: { sourceId, entityType: TYPE, stableId: overrides.to ?? 'W-2' } },
+    members: listed,
+    memberCount: { value: listed.length, quality: overrides.quality ?? 'exact', scope: 'members' },
+    rules: [],
+  };
+}
+
 export function evidenceOf(hits: readonly EvidenceHit[], count?: SearchResult['evidence']['count']): SearchResult['evidence'] {
-  return { hits: [...hits], count: count ?? { value: hits.length, quality: 'exact', scope: 'search:evidence' }, searchable: true, disabledRelationshipTypes: [] };
+  return { hits: [...hits], count: count ?? { value: relationshipsOf(hits), quality: 'exact', scope: 'search:evidence' }, searchable: true, disabledRelationshipTypes: [] };
 }
 
 export function withEvidence(sourceId: string, exact: readonly GraphNode[], evidence: readonly EvidenceHit[], count?: SearchResult['evidence']['count'], overrides: Partial<SearchResult> = {}): ApiResult<SearchResult> {

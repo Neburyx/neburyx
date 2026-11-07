@@ -1,5 +1,4 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { ALWAYS_USABLE } from '../testing/usability.js';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -55,7 +54,7 @@ async function run(args: readonly string[], environment: Record<string, string |
     openSourceGate: (options: SourceGateOptions) => {
       const executor = createNeo4jExecutor({ sources: options.mapping.sources, env: options.env, logger: options.logger, createDriver: fake.factory });
       const defaults = communitySeams();
-      const parts = assembleGate({ usability: ALWAYS_USABLE, mapping: options.mapping, seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit, ...seams }, executor, logger: options.logger });
+      const parts = assembleGate({ mapping: options.mapping, seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit, ...seams }, executor, logger: options.logger });
       return { ...parts, close: () => executor.close() };
     },
     ...overrides,
@@ -125,22 +124,6 @@ describe('a source that answers', () => {
       'PROFILE MATCH (n:`Order Line`) WITH n LIMIT 1 RETURN COUNT { (n)-[:`HAS LINE`]->() } AS outgoing, COUNT { (n)<-[:`HAS LINE`]-() } AS incoming',
     ]);
     expect(result.fake.forbidden).toEqual([]);
-  });
-});
-
-describe('the record the command hands its gate', () => {
-  it('has every source unchecked, because the command runs system-scope templates only', async () => {
-    let handed: SourceGateOptions['usability'] | undefined;
-    await run(['--name', 'alpha'], env(), { rows: [SERVER_ROW] }, {
-      openSourceGate: (options: SourceGateOptions) => {
-        handed = options.usability;
-        const executor = createNeo4jExecutor({ sources: options.mapping.sources, env: options.env, logger: options.logger, createDriver: fakeDrivers({ rows: [SERVER_ROW] }).factory });
-        const defaults = communitySeams();
-        const parts = assembleGate({ usability: options.usability, mapping: options.mapping, seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit }, executor, logger: options.logger });
-        return { ...parts, close: () => executor.close() };
-      },
-    });
-    expect([handed?.isUsable('alpha'), handed?.isUsable('beta')]).toEqual([false, false]);
   });
 });
 

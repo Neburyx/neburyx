@@ -33,7 +33,7 @@ describe('the allowlist of a source', () => {
     expect(() => allowlistFromMapping(sourceWith({ entities: [{ type: 'gadget', label: 'Gadget', stable_id: stableId }], relationships: [] }))).toThrow(SourceGateError);
   });
 
-  it('holds the evidence properties of each relationship mapping row that has a stable ID, in the mapping order, and none of a row without one', () => {
+  it('holds the evidence properties of each relationship mapping row that has any, with a stable ID or without one, in the mapping order', () => {
     const allowlist = allowlistFromMapping(
       sourceWith({
         entities: [{ type: 'gadget', label: 'Gadget', stable_id: 'gadgetId' }, { type: 'person', label: 'Person', stable_id: 'personId' }],
@@ -44,7 +44,10 @@ describe('the allowlist of a source', () => {
         ],
       }),
     );
-    expect(allowlist.evidenceRows).toEqual([{ type: 'MADE_BY', from: 'gadget', to: 'person', properties: ['recordId', 'docId'] }]);
+    expect(allowlist.evidenceRows).toEqual([
+      { type: 'MADE_BY', from: 'gadget', to: 'person', properties: ['recordId', 'docId'] },
+      { type: 'MADE_BY', from: 'person', to: 'gadget', properties: ['otherId'] },
+    ]);
   });
 
   it.each([

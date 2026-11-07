@@ -256,6 +256,30 @@ describe('Home: the Source health card while the sources are not read', () => {
     expect(scope.getByRole('heading', { name: 'alpha', level: 3 })).toBeTruthy();
   });
 
+  it.each([
+    ['index-unavailable', 'A needed index is not there, so the read was not run.', false],
+    ['index-building', 'A needed index is still building, so the read is slow. Try again later.', true],
+  ] as const)('names an unavailable source with the reason %s by its sentence in the card, and offers Try again only when a retry can help', async (reason, message, retryable) => {
+    let reads = 0;
+    const client = fakeClient({
+      getMe: async () => ({ ok: true, value: me() }),
+      getProfile: async (sourceId) => ({ ok: true, value: testProfile(sourceId) }),
+      listInvestigations: async () => ({ ok: true, value: listOf([ROW]) }),
+      getSources: async () => {
+        reads += 1;
+        return reads === 1 ? { ok: false, failure: { code: 'SOURCE_UNAVAILABLE', message, retryable, traceId: 'tr-health', details: { reason } } } : { ok: true, value: { items: [alpha], nextCursor: null } };
+      },
+    });
+    renderApp('/', client);
+    await within(await screen.findByRole('region', { name: 'Source health' })).findByText('The sources could not be read.');
+    expect(within(region()).getByRole('alert').textContent).toBe(`${message} · trace tr-health`);
+    const tryAgain = within(region()).queryByRole('button', { name: 'Try again' });
+    expect(tryAgain !== null).toBe(retryable);
+    if (tryAgain === null) return;
+    await userEvent.setup().click(tryAgain);
+    expect(await within(region()).findByRole('heading', { name: 'alpha', level: 3 })).toBeTruthy();
+  });
+
   it('says no sources are configured for an empty list, with no block and the link kept', async () => {
     renderApp('/', failing([[]]).client);
     const scope = within(await screen.findByRole('region', { name: 'Source health' }));

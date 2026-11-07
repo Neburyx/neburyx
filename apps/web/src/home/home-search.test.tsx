@@ -132,6 +132,17 @@ describe('the Home search box while the sources and the identity are read', () =
     expect(await screen.findByRole('search')).toBeTruthy();
   });
 
+  it.each([
+    ['index-unavailable', 'A needed index is not there, so the read was not run.', false],
+    ['index-building', 'A needed index is still building, so the read is slow. Try again later.', true],
+  ] as const)('names an unavailable source with the reason %s by its sentence, and offers Try again only when a retry can help', async (reason, message, retryable) => {
+    renderApp('/', searching({ getSources: async () => ({ ok: false, failure: { code: 'SOURCE_UNAVAILABLE', message, retryable, traceId: 'tr-home', details: { reason } } }) }).client);
+    const failure = (await screen.findAllByText('The sources could not be read.')).map((paragraph) => paragraph.closest('.search-failure')).find((found) => found !== null);
+    if (!(failure instanceof HTMLElement)) throw new Error('the search box shows no failure');
+    expect(within(failure).getByRole('alert').textContent).toBe(`${message} · trace tr-home`);
+    expect(within(failure).queryByRole('button', { name: 'Try again' }) !== null).toBe(retryable);
+  });
+
   it('shows the failure and reads again when the identity could not be read', async () => {
     let reads = 0;
     renderApp('/', searching({ getMe: async () => (++reads === 1 ? { ok: false, failure: { code: 'NETWORK_UNAVAILABLE' } } : { ok: true, value: me() }) }).client);

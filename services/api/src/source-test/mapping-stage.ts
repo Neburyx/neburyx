@@ -17,6 +17,8 @@ export const STAGE_START_WINDOW_MS = 2 * DEFAULT_BUDGETS.requestTimeoutMs;
 type Read<T> = { readonly kind: 'item'; readonly item: T } | { readonly kind: 'refused' } | { readonly kind: 'unreadable'; readonly shape: readonly Record<string, string>[] } | { readonly kind: 'timeout' };
 
 const isRefused = (error: unknown): boolean => error instanceof AppError && error.code === 'SOURCE_UNAVAILABLE' && error.reason === 'refused';
+/** A schema read is one row; the gate refuses an answer with more as cut, which is an answer the check cannot read. */
+const isCut = (error: unknown): boolean => error instanceof AppError && error.code === 'INTERNAL_ERROR' && error.reason === 'read-cut';
 
 /**
  * One read of the stage. A refusal and an answer the template cannot read are results of their own; a timeout is returned only when the caller asks for it
@@ -28,11 +30,12 @@ async function readOne<T>(run: CheckRun, request: { traceId: string; sourceId: s
     page = await run({ ...request, limit: 1 });
   } catch (error) {
     if (isRefused(error)) return { kind: 'refused' };
+    if (isCut(error)) return { kind: 'unreadable', shape: [] };
     if (timeoutIsResult && error instanceof AppError && error.code === 'QUERY_TIMEOUT') return { kind: 'timeout' };
     throw error;
   }
   const [item] = page.items;
-  if (page.hasMore || page.items.length !== 1 || item === undefined) return { kind: 'unreadable', shape: [] };
+  if (page.items.length !== 1 || item === undefined) return { kind: 'unreadable', shape: [] };
   if (isUnreadable(item)) return { kind: 'unreadable', shape: [item.unreadable] };
   const parsed = schema.safeParse(item);
   return parsed.success ? { kind: 'item', item: parsed.data } : { kind: 'unreadable', shape: [] };

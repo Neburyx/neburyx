@@ -8,7 +8,6 @@ import { fakeDrivers, neo4jError } from '../../testing/fake-source-driver.js';
 import { auditing, mappingOf, sourceWith } from '../../testing/gate-fixtures.js';
 import { LOCAL_PRINCIPAL } from '../../testing/gate.js';
 import { ENV, useClock } from '../../testing/source-rig.js';
-import { ALWAYS_USABLE } from '../../testing/usability.js';
 
 const VALUE = 'PROPERTY-VALUE-7731';
 const mapping = mappingOf(sourceWith('alpha', { auth: { kind: 'basic', username_env: 'DEMO_USER', password_env: 'DEMO_PASSWORD' } }));
@@ -20,6 +19,7 @@ const read = {
   paramsSchema: z.strictObject({}),
   scope: 'user' as const,
   paged: false,
+  rows: 'one' as const,
   entityParams: [],
   relationshipParams: [],
   refsOf: () => [],
@@ -33,7 +33,7 @@ function rig(behaviour: Parameters<typeof fakeDrivers>[0]) {
   const logger = { warn: (fields: object) => void logs.push(fields) };
   const executor = createNeo4jExecutor({ sources: mapping.sources, env: ENV, logger, createDriver: fake.factory });
   const recording = auditing();
-  const { gate } = assembleGate({ usability: ALWAYS_USABLE, mapping, seams: { ...communitySeams(), audit: recording.seams.audit }, executor, logger, catalog: createTemplateCatalog({ templates: [read] }) });
+  const { gate } = assembleGate({ mapping, seams: { ...communitySeams(), audit: recording.seams.audit }, executor, logger, catalog: createTemplateCatalog({ templates: [read] }) });
   return { gate, logs, events: recording.events, executor };
 }
 

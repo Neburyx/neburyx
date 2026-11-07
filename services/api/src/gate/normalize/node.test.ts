@@ -136,3 +136,35 @@ describe('a mapped property named like a member of every object', () => {
   });
 });
 
+
+describe('a node whose stable ID cannot be used', () => {
+  it('becomes an unreferenced hit with its entity type, its title and its projected properties, and nothing of the record that is not projected, no element ID among them', () => {
+    const plain = plainNode(['Gadget'], { gadgetId: { $type: 'float', value: '3.0' }, title: 'Lamp', kind: 'tool', secretNote: 'not projected' }, '4:element-id-of-the-record:9');
+    const result = normalizeRows(context(), [{ n: plain }]);
+    expect(result.nodes).toEqual([]);
+    expect(result.unreferenced).toEqual([
+      {
+        entityType: 'gadget',
+        title: 'Gadget Lamp',
+        properties: [
+          { key: 'gadgetId', value: '3.0', dataClass: 'number', masked: false },
+          { key: 'title', value: 'Lamp', dataClass: 'text', masked: false },
+          { key: 'kind', value: 'tool', dataClass: 'text', masked: false },
+          { key: 'madeOn', dataClass: 'unknown', masked: false },
+        ],
+        reason: 'no-stable-id',
+      },
+    ]);
+    expect(JSON.stringify(result)).not.toContain('element-id-of-the-record');
+    expect(JSON.stringify(result)).not.toContain('not projected');
+  });
+
+  it('leaves out an edge to it, since it has no reference to point at', () => {
+    const gadget = plainNode(['Gadget'], { title: 'Lamp' });
+    const person = plainNode(['Person'], { personId: 'p1' });
+    const made = { $type: 'relationship' as const, elementId: 'r-1', type: 'MADE_BY', startElementId: gadget.elementId, endElementId: person.elementId, properties: {} };
+    const result = normalizeRows(context(), [{ a: gadget, r: made, b: person }]);
+    expect(result.edges).toEqual([]);
+    expect(result.dropped).toEqual({ 'not-mapped': 0, 'ambiguous-type': 0, 'no-stable-id': 1, 'end-not-shown': 1 });
+  });
+});

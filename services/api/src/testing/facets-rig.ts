@@ -13,7 +13,6 @@ import { prepareParameters } from '../sources/parameters.js';
 import { LOCAL_PRINCIPAL } from './gate.js';
 import { envFor, runAll, runAdmin, sourceFor, startNeo4j, type RunningNeo4j } from './neo4j-server.js';
 import { communityAccess } from './source-access.js';
-import { ALWAYS_USABLE } from './usability.js';
 
 export interface FacetsRigOptions {
   readonly mapping: Record<string, unknown>;
@@ -54,7 +53,7 @@ export async function startFacetsRig(options: FacetsRigOptions) {
         return answer === undefined ? real.execute(call) : Promise.resolve(answer);
       },
     };
-    const assembled = assembleGate({ usability: ALWAYS_USABLE, mapping: { sources: [source] }, seams: { policy: defaults.policy, coordinator, audit: defaults.audit }, executor: recording, logger: { warn: () => undefined } });
+    const assembled = assembleGate({ mapping: { sources: [source] }, seams: { policy: defaults.policy, coordinator, audit: defaults.audit }, executor: recording, logger: { warn: () => undefined } });
     const service = createSearchService({ gate: assembled.gate, indexes: assembled.indexes, mapping: { sources: [source] }, access: communityAccess({ sources: [source] }) });
     return {
       server,
@@ -73,10 +72,10 @@ export async function startFacetsRig(options: FacetsRigOptions) {
           await session.close();
         }
       },
-      profile: async (text: string, probes: readonly FacetProbe[], limit = 25): Promise<{ readonly operators: PlanOperator[]; readonly row: Record<string, number> }> => {
+      profile: async (text: string, probes: readonly FacetProbe[], countCap = source.budgets.heavyOpThreshold): Promise<{ readonly operators: PlanOperator[]; readonly row: Record<string, number> }> => {
         const template = createTemplateCatalog({ templates: [searchFacetsTemplate] }).find(SEARCH_FACETS_ID);
         if (template === undefined) throw new Error('no facet template');
-        const rendered = renderTemplate(template, template.paramsSchema.parse({ text, probes }), allowlistFromMapping(source), limit);
+        const rendered = renderTemplate(template, template.paramsSchema.parse({ text, probes }), allowlistFromMapping(source), 25, countCap);
         const session = server.admin.session({ database: server.database });
         try {
           const result = await session.run(`PROFILE ${rendered.cypher}`, prepareParameters(rendered.parameters, []));

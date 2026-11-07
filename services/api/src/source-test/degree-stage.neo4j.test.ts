@@ -1,5 +1,4 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { ALWAYS_USABLE } from '../testing/usability.js';
 import { createSourceGate, type SourceGate } from '../gate/source-gate.js';
 import { communitySeams } from '../seams/community-seams.js';
 import { memoryAppStore } from '../testing/app-store.js';
@@ -38,7 +37,7 @@ afterAll(async () => {
 
 async function report(target: RunningNeo4j) {
   const mapping = mappingFor(target);
-  const gate = createSourceGate({ usability: ALWAYS_USABLE, mapping, env: envFor(target), seams: communitySeams(), logger: { warn: () => undefined } });
+  const gate = createSourceGate({ mapping, env: envFor(target), seams: communitySeams(), logger: { warn: () => undefined } });
   gates.push(gate);
   return createSourceTester({ gate: gate.gate, mapping, store: memoryAppStore() }).run({ traceId: 'tr-degree', principal: LOCAL_PRINCIPAL, sourceId: 'alpha' });
 }

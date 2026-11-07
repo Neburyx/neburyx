@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ERROR_TABLE } from '@neburyx/contracts';
+import { ERROR_TABLE, SOURCE_UNAVAILABLE_ENTRIES, SOURCE_UNAVAILABLE_REASONS } from '@neburyx/contracts';
 import { createApiClient, type Fetcher } from './client.js';
 
 const ME = {
@@ -52,7 +52,7 @@ describe('the API client, reading the principal', () => {
 
 describe('the API client, reading an error body', () => {
   const body = (code: 'QUERY_BUDGET_EXCEEDED' | 'SOURCE_UNAVAILABLE' | 'RATE_LIMITED' | 'QUERY_TIMEOUT', extra: Record<string, unknown> = {}) => ({
-    error: { code, message: ERROR_TABLE[code].message, retryable: ERROR_TABLE[code].retryable, traceId: 'trace-1', ...extra },
+    error: { code, message: ERROR_TABLE[code].message, retryable: ERROR_TABLE[code].retryable, traceId: 'trace-1', ...(code === 'SOURCE_UNAVAILABLE' ? { details: { reason: 'unreachable' } } : {}), ...extra },
   });
   const failWith = (status: number, payload: unknown): Fetcher => async () => new Response(JSON.stringify(payload), { status });
 
@@ -60,6 +60,12 @@ describe('the API client, reading an error body', () => {
     const client = createApiClient(failWith(400, body('QUERY_BUDGET_EXCEEDED', { details: { maxPage: 100 } })));
     const result = await client.getMe();
     expect(result).toEqual({ ok: false, failure: { code: 'QUERY_BUDGET_EXCEEDED', message: ERROR_TABLE.QUERY_BUDGET_EXCEEDED.message, retryable: ERROR_TABLE.QUERY_BUDGET_EXCEEDED.retryable, traceId: 'trace-1', details: { maxPage: 100 } } });
+  });
+
+  it.each(SOURCE_UNAVAILABLE_REASONS)('returns an unavailable source with the reason %s, its sentence and its retry flag', async (reason) => {
+    const { message, retryable } = SOURCE_UNAVAILABLE_ENTRIES[reason];
+    const result = await createApiClient(failWith(503, body('SOURCE_UNAVAILABLE', { message, retryable, details: { reason } }))).getMe();
+    expect(result).toEqual({ ok: false, failure: { code: 'SOURCE_UNAVAILABLE', message, retryable, traceId: 'trace-1', details: { reason } } });
   });
 
   it.each(['SOURCE_UNAVAILABLE', 'QUERY_TIMEOUT', 'RATE_LIMITED'] as const)('returns %s, not an unreachable API, at the status the contract gives it (also 503 and 504)', async (code) => {
@@ -72,6 +78,9 @@ describe('the API client, reading an error body', () => {
     ['an unknown code', { error: { code: 'MADE_UP', message: 'x', retryable: false, traceId: 't' } }],
     ['a field its code does not allow', body('SOURCE_UNAVAILABLE', { extra: 1 })],
     ['details that belong to another code', body('SOURCE_UNAVAILABLE', { details: { maxPage: 3 } })],
+    ['an unavailable source that gives no reason', body('SOURCE_UNAVAILABLE', { details: undefined })],
+    ['an unavailable source whose sentence is not that of its reason', body('SOURCE_UNAVAILABLE', { details: { reason: 'index-failed' } })],
+    ['an unavailable source whose retry flag is not that of its reason', body('SOURCE_UNAVAILABLE', { message: SOURCE_UNAVAILABLE_ENTRIES['index-failed'].message, retryable: true, details: { reason: 'index-failed' } })],
     ['a message that is not the code\'s message', body('RATE_LIMITED', { message: 'something else' })],
     ['a body of the wrong type', ['error']],
     ['no error key', { code: 'SOURCE_UNAVAILABLE' }],

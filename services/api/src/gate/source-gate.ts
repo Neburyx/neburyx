@@ -1,7 +1,6 @@
 import type { MappingModel } from '../mapping/model.js';
 import type { Seams } from '../seams/seams.js';
 import type { ReferenceKeys } from '../reference/keys.js';
-import type { SourceUsability } from '../source-test/usability.js';
 import { createNeo4jExecutor } from '../sources/executor.js';
 import { assembleGate } from './assemble.js';
 import type { CursorCodec } from './cursor/codec.js';
@@ -14,8 +13,6 @@ export interface SourceGateOptions {
   readonly logger: GateLogger;
   readonly clock?: Clock;
   readonly observer?: GateObserver;
-  /** Whether a data read may go to a source: the record of the running server, or one in which every source is unchecked for a process that runs system-scope templates only. */
-  readonly usability: SourceUsability;
   /** Signs and checks page cursors; absent, the gate signs with a key of its own. */
   readonly cursors?: CursorCodec;
   /** The keys of the reference tokens of keyed entity types. */
@@ -43,7 +40,6 @@ export function createSourceGate(options: SourceGateOptions): SourceGate {
       seams: options.seams,
       executor,
       logger: options.logger,
-      usability: options.usability,
       ...(options.cursors === undefined ? {} : { cursors: options.cursors }),
       ...(options.referenceKeys === undefined ? {} : { referenceKeys: options.referenceKeys }),
       ...(options.clock === undefined ? {} : { clock: options.clock }),

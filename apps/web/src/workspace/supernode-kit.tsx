@@ -98,5 +98,5 @@ export const panel = () => screen.queryByRole('complementary', { name: 'Expand r
 export const inPanel = () => within(screen.getByRole('complementary', { name: 'Expand relationships' }));
 export const answerPreview = (ask: Ask<unknown, DegreePreview> | undefined, value: DegreePreview = previewOf()) => act(async () => ask?.answer({ ok: true, value }));
 export const answerExpand = (ask: Ask<unknown, ExpandResponse> | undefined, value: ExpandResponse = response()) => act(async () => ask?.answer({ ok: true, value }));
-export const failExpand = (ask: Ask<unknown, ExpandResponse> | undefined, code: string, details?: { maxPage: number }) =>
+export const failExpand = (ask: Ask<unknown, ExpandResponse> | undefined, code: string, details?: { maxPage: number } | { reason: string }) =>
   act(async () => ask?.answer({ ok: false, failure: { code, message: 'x', retryable: false, traceId: 'tr-9', ...(details === undefined ? {} : { details }) } } as never));

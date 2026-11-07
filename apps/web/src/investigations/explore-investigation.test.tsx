@@ -181,15 +181,25 @@ describe('/explore', () => {
     expect(await screen.findByText('0 entities · 0 relationships · loaded · exact')).toBeTruthy();
   });
 
-  it('shows the failure notice with the code and Try again, and nothing else of the page, when the type of the entity has no online index', async () => {
+  it('shows the sentence of the reason and no Try again, and nothing else of the page, when the type of the entity has no online index', async () => {
     const { client } = knowing([A], {
-      getEntity: async () => ({ ok: false, failure: { code: 'SOURCE_UNAVAILABLE', message: 'The source is not available.', retryable: true, traceId: 'tr-index' } }),
+      getEntity: async () => ({ ok: false, failure: { code: 'SOURCE_UNAVAILABLE', message: 'A needed index is not there, so the read was not run.', retryable: false, traceId: 'tr-index', details: { reason: 'index-unavailable' } } }),
     });
     renderApp(`/explore/${INVESTIGATION_A}`, client);
     const notice = await screen.findByRole('group', { name: 'Opening failed' });
-    expect(notice.textContent).toContain('SOURCE_UNAVAILABLE');
+    expect(notice.textContent).toContain('A needed index is not there, so the read was not run.');
     expect(notice.textContent).toContain('tr-index');
-    expect(screen.getByRole('button', { name: TRY_AGAIN })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: TRY_AGAIN })).toBeNull();
     expect(screen.queryByText('1 entity · 0 relationships · loaded · exact')).toBeNull();
+  });
+
+  it('offers Try again beside the sentence while the index of the entity is still building', async () => {
+    const { client } = knowing([A], {
+      getEntity: async () => ({ ok: false, failure: { code: 'SOURCE_UNAVAILABLE', message: 'A needed index is still building, so the read is slow. Try again later.', retryable: true, traceId: 'tr-index', details: { reason: 'index-building' } } }),
+    });
+    renderApp(`/explore/${INVESTIGATION_A}`, client);
+    const notice = await screen.findByRole('group', { name: 'Opening failed' });
+    expect(notice.textContent).toContain('A needed index is still building, so the read is slow. Try again later.');
+    expect(screen.getByRole('button', { name: TRY_AGAIN })).toBeTruthy();
   });
 });

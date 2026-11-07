@@ -31,7 +31,7 @@ function rig(options: HarnessOptions = {}, template: Template = pagedTemplate())
   const audit: AuditEvent[] = [];
   const sink: AuditSink = { record: (event) => Promise.resolve(void audit.push(event)) };
   const executor = new TestExecutor((call) => Promise.resolve(rowsOf(call.rowLimit)));
-  const parts = harness({ catalog: testCatalog([template, testTemplate()]), executor, clock: clock.now, seams: { audit: sink }, ...options });
+  const parts = harness({ catalog: testCatalog([template, testTemplate({ cutMeans: 'duplicate' })]), executor, clock: clock.now, seams: { audit: sink }, ...options });
   return { ...parts, clock, audit };
 }
 

@@ -45,26 +45,31 @@ export function planFacets(source: SourceModel, exact: readonly SearchTarget[], 
 
 type Count = { readonly value: number; readonly quality: 'exact' | 'lowerBound' };
 
-/** A probe's count is the true count up to the cap plus one: exact up to and including the cap, and a lower bound of the cap above it. */
+/** A probe's count is the true count up to the count cap plus one: exact up to and including the cap, and a lower bound of the cap above it. */
 function countOf(found: number, cap: number): Count {
   return found > cap ? { value: cap, quality: 'lowerBound' } : { value: found, quality: 'exact' };
 }
 
-function countsOf(page: GatePage): readonly number[] {
+/** The counts of the read and the count cap the gate read them under. */
+function countsOf(page: GatePage): { readonly counts: readonly number[]; readonly cap: number } {
   const [item] = page.items;
   const counts = typeof item === 'object' && item !== null && 'counts' in item ? item.counts : undefined;
-  if (!Array.isArray(counts) || !counts.every((count): count is number => typeof count === 'number')) throw new AppError('INTERNAL_ERROR');
-  return counts;
+  const cap = typeof item === 'object' && item !== null && 'cap' in item ? item.cap : undefined;
+  if (!Array.isArray(counts) || !counts.every((count): count is number => typeof count === 'number') || typeof cap !== 'number') throw new AppError('INTERNAL_ERROR');
+  return { counts, cap };
 }
 
 /** The `facets` of an answer whose facet read failed: something to count, no count and no entry (the failure itself is named in `failures`). */
 export const FAILED_FACETS: Facets = { searchable: true, total: { quality: 'unknown', scope: FACET_SCOPES.total }, entityType: [], matchMode: [] };
 
-/** The `facets` of an answer from the page of the one facet read: `{ searchable: false }` when no probe was planned, otherwise an entry for each entity type and each match mode and the total. */
-export function facetsOf(plan: FacetPlan, page: GatePage | undefined, cap: number): Facets {
+/**
+ * The `facets` of an answer from the page of the one facet read: `{ searchable: false }` when no probe was planned, otherwise an entry for each entity type and each match mode and the total, each
+ * exact up to the source's count cap and a lower bound of the cap above it.
+ */
+export function facetsOf(plan: FacetPlan, page: GatePage | undefined): Facets {
   if (plan.probes.length === 0) return { searchable: false };
   if (page === undefined) throw new AppError('INTERNAL_ERROR');
-  const counts = countsOf(page);
+  const { counts, cap } = countsOf(page);
   if (counts.length !== plan.entries.length) throw new AppError('INTERNAL_ERROR');
   const entityType: Extract<Facets, { searchable: true }>['entityType'] = [];
   const matchMode: Extract<Facets, { searchable: true }>['matchMode'] = [];

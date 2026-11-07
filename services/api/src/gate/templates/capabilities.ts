@@ -49,6 +49,7 @@ export const capabilitiesTemplate: TemplateDefinition = {
   paramsSchema: z.strictObject({}),
   scope: 'system',
   paged: false,
+  rows: 'one',
   entityParams: [],
   relationshipParams: [],
   refsOf: () => [],

@@ -104,6 +104,29 @@ describe('a failure that can be tried again', () => {
     expect(bodies).toHaveLength(2);
     expect(bodies[1]).toBe(bodies[0]);
   });
+
+  it.each([
+    ['index-unavailable', 'A needed index is not there, so the read was not run.', false],
+    ['index-building', 'A needed index is still building, so the read is slow. Try again later.', true],
+  ] as const)('names an unavailable source with the reason %s by its sentence, and offers Try again only when a retry can help', async (reason, message, retryable) => {
+    let opens = 0;
+    const { client } = knowing([A], {
+      openInvestigation: async () => {
+        opens += 1;
+        return opens === 1 ? { ok: false, failure: { code: 'SOURCE_UNAVAILABLE', message, retryable, traceId: 'tr-link', details: { reason } } } : { ok: true, value: openedOf(A.investigation, A.node) };
+      },
+    });
+    renderApp(link('source-a', 'A-1'), client);
+    const notice = await screen.findByRole('group', { name: 'Opening failed' });
+    expect(notice.textContent).toContain(`${message} · trace tr-link`);
+    expect(screen.getByRole('link', { name: BACK_TO_HOME })).toBeTruthy();
+    const tryAgain = screen.queryByRole('button', { name: TRY_AGAIN });
+    expect(tryAgain !== null).toBe(retryable);
+    if (tryAgain === null) return;
+    await userEvent.setup().click(tryAgain);
+    expect(await screen.findByRole('heading', { name: 'kind-a A-1', level: 1 })).toBeTruthy();
+    expect(opens).toBe(2);
+  });
 });
 
 describe('the status line on these pages', () => {

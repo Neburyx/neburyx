@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
 import type { ApiClient, ApiFailure } from '../api/client.js';
-import { FailureNotice } from '../failure-notice.js';
+import { canRetry, FailureNotice } from '../failure-notice.js';
 import { PageHeading } from '../shell/page-heading.js';
 import { answeredData, retainedFailure, useShellData } from '../shell/shell-data.js';
 import { useSourceName } from '../shell/use-current-source.js';
@@ -110,9 +110,11 @@ export function DeepLinkPage({ client }: { readonly client: ApiClient }) {
         <div role="group" aria-label="Opening failed">
           <FailureNotice failure={failure} />
           {status.kind === 'failed' && status.sourceId !== undefined ? <AttemptedSource sourceId={status.sourceId} /> : null}
-          <button type="button" className="secondary" onClick={retry}>
-            {TRY_AGAIN}
-          </button>
+          {canRetry(failure) ? (
+            <button type="button" className="secondary" onClick={retry}>
+              {TRY_AGAIN}
+            </button>
+          ) : null}
           <p>
             <Link to="/">{BACK_TO_HOME}</Link>
           </p>

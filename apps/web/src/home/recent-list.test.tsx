@@ -88,6 +88,30 @@ describe('Recent while the list is not answered or is read again', () => {
     expect(emptyTitle()).toBeNull();
   });
 
+  describe.each([
+    ['index-unavailable', 'A needed index is not there, so the read was not run.', false],
+    ['index-building', 'A needed index is still building, so the read is slow. Try again later.', true],
+  ] as const)('for an unavailable source with the reason %s', (reason, message, retryable) => {
+    const unavailable = { code: 'SOURCE_UNAVAILABLE', message, retryable, traceId: 'tr-recent', details: { reason } } as const;
+
+    it(`names it by its sentence and ${retryable ? 'offers' : 'offers no'} Try again when the first read failed`, async () => {
+      const { calls } = await showing({ phase: 'failed', failure: unavailable });
+      expect(screen.getByText('Recent investigations could not be read.')).toBeTruthy();
+      expect(screen.getByRole('alert').textContent).toBe(`${message} · trace tr-recent`);
+      const tryAgain = screen.queryByRole('button', { name: 'Try again' });
+      expect(tryAgain !== null).toBe(retryable);
+      if (tryAgain !== null) act(() => tryAgain.click());
+      expect(calls.reloads).toBe(retryable ? 1 : 0);
+    });
+
+    it(`keeps the rows, names it by its sentence and ${retryable ? 'offers' : 'offers no'} Try again when a read again failed`, async () => {
+      await showing({ phase: 'ready', data: WITH_ROW, failure: unavailable });
+      expect(screen.getByRole('link', { name: 'kind-a A-1' })).toBeTruthy();
+      expect(screen.getByRole('alert').textContent).toBe(`${message} · trace tr-recent`);
+      expect(screen.queryByRole('button', { name: 'Try again' }) !== null).toBe(retryable);
+    });
+  });
+
   it('shows the rows and no empty state for an answer that holds an investigation', async () => {
     await showing({ phase: 'ready', data: WITH_ROW });
     expect(screen.getByRole('link', { name: 'kind-a A-1' })).toBeTruthy();

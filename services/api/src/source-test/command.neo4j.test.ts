@@ -1,5 +1,4 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { ALWAYS_USABLE } from '../testing/usability.js';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -66,7 +65,7 @@ describe(`neburyx test-source against the dev Neo4j server`, () => {
     expect(result.err).toBe('');
 
     const mapping = mappingOf(sourceWith('alpha', options()), sourceWith('beta', options()));
-    const gate = createSourceGate({ usability: ALWAYS_USABLE, mapping, env: envFor(neo4jServer), seams: communitySeams(), logger: { warn: () => undefined } });
+    const gate = createSourceGate({ mapping, env: envFor(neo4jServer), seams: communitySeams(), logger: { warn: () => undefined } });
     const routeStore = createAppStore(database.appUrl, () => undefined, { migrationsDirectory: SHIPPED });
     const app = await buildApp({ webRoot, logger: pino({ level: 'silent' }), store: routeStore, mapping, sourceTester: createSourceTester({ gate: gate.gate, mapping, store: routeStore }) });
     const report = sourceTestReportSchema.parse((await app.inject({ method: 'POST', url: '/v1/sources/alpha/test' })).json());

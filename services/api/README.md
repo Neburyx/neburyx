@@ -80,8 +80,8 @@ nothing is read; a read that got its user's slot and not the source slot gives t
 in the order they came. The slots live in the API process (`src/seams/read-slots.ts`, behind the gate's coordinator); each
 process that builds a gate has its own, so a `test-source` run has slots of its own, apart from the running server's.
 
-One read is one of these, and takes one pair of slots: a search group (exact, related, evidence, or the starts-with group of a
-type-ahead search); the facet read; an entity load; a degree preview that is not answered from the cache (a cached one reads
+One read is one of these, and takes one pair of slots: a search group or one more page of it (exact, related, evidence, or the
+starts-with group of a type-ahead search, which has no more pages); the facet read; an entity load; a degree preview that is not answered from the cache (a cached one reads
 nothing and takes no slot); one expansion, for all its neighbor types, whose pages are read one after another under the one
 lease; and the schema read the product makes for a search, an entity load, a preview or an expansion. A request never asks for a
 slot while it holds one: its schema read ends before its data read asks. A search reads its first group alone and then up to three

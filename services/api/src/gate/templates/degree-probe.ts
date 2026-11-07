@@ -32,6 +32,7 @@ export const degreeProbeTemplate: TemplateDefinition = {
   paramsSchema: z.strictObject({ entityType: z.string().min(1), relationshipType: z.string().min(1) }),
   scope: 'system',
   paged: false,
+  rows: 'one',
   profile: true,
   entityParams: ['entityType'],
   relationshipParams: ['relationshipType'],

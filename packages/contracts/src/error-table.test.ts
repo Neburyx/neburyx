@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { ERROR_CODES } from './error-codes.js';
-import { ERROR_TABLE, findMissingCodes } from './error-table.js';
+import { ERROR_CODES, SOURCE_UNAVAILABLE_REASONS } from './error-codes.js';
+import { ERROR_TABLE, findMissingCodes, SOURCE_UNAVAILABLE_ENTRIES } from './error-table.js';
 
 describe('findMissingCodes', () => {
   it('reports a code that a fixture table leaves out', () => {
@@ -30,6 +30,14 @@ describe('ERROR_TABLE', () => {
   it('marks the busy and rate-limited errors retryable, as the architecture says', () => {
     expect(ERROR_TABLE.SOURCE_BUSY.retryable).toBe(true);
     expect(ERROR_TABLE.RATE_LIMITED.retryable).toBe(true);
+  });
+
+  it('gives an unavailable source with no reason the sentence and retry flag of unreachable', () => {
+    expect(ERROR_TABLE.SOURCE_UNAVAILABLE).toEqual({ ...SOURCE_UNAVAILABLE_ENTRIES.unreachable, status: 503 });
+  });
+
+  it('gives each reason of an unavailable source a sentence free of query syntax and identifiers', () => {
+    for (const reason of SOURCE_UNAVAILABLE_REASONS) expect(SOURCE_UNAVAILABLE_ENTRIES[reason].message).not.toMatch(/MATCH|RETURN|WHERE|[A-Z]{2,}-\d+/);
   });
 
   it('keeps every message free of query syntax and identifiers', () => {

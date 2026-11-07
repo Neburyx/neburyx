@@ -67,15 +67,18 @@ describe('POST /v1/search/entities with related records', () => {
     await app.close();
   });
 
-  it('leaves a type whose reference index is not online out of the related read, so the read never scans it', async () => {
-    const without = onlineIndexesOf(source).filter((row) => row.property !== 'batchRef');
+  it('leaves a type none of whose reference indexes is online out of the related read, so the read never scans it', async () => {
+    const without = onlineIndexesOf(source).filter((row) => row.property !== 'batchRef' && row.property !== 'ownerRef');
     const { app, executor } = await started({ ownSchema: true, respond: withSchema(() => schemaAnswer(without), searchModelOf(stored)) });
     const answer = searchResultSchema.parse((await postSearch(app, { sourceId: 'demo', text: 'X-1' })).json());
     const [call] = relatedCalls(executor);
     expect(call?.cypher).not.toContain('Widget');
     expect(call?.cypher).toContain('Gadget');
     expect(answer.related.hits.map((hit) => hit.node.ref.stableId)).toEqual(['GT-1']);
-    expect(answer.related.disabledTypes).toEqual([{ entityType: 'widget', reason: 'index-unavailable' }]);
+    expect(answer.related.disabledTypes).toEqual([
+      { entityType: 'widget', property: 'batchRef', reason: 'index-unavailable', typeSearched: false },
+      { entityType: 'widget', property: 'ownerRef', reason: 'index-unavailable', typeSearched: false },
+    ]);
     await app.close();
   });
 });

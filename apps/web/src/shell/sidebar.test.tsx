@@ -41,7 +41,7 @@ describe('the sidebar', () => {
   it('shows the failure code and the trace ID of a server error, and only the code of a client failure, with the brand and links still there', async () => {
     const server: ApiClient = fakeClient({ getMe: async () => ({ ok: false, failure: { code: 'SOURCE_UNAVAILABLE', message: 'The data source is not available. Try again shortly.', retryable: true, traceId: 'trace-9' } }) });
     const view = renderApp('/', server);
-    expect((await within(identity()).findByRole('alert')).textContent).toBe('SOURCE_UNAVAILABLE · trace trace-9');
+    expect((await within(identity()).findByRole('alert')).textContent).toBe('The source did not answer. Try again shortly. · trace trace-9');
     expect(screen.getAllByRole('link')).toHaveLength(3);
     view.unmount();
     renderApp('/', fakeClient());

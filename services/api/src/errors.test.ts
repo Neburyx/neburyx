@@ -3,7 +3,8 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from './app.js';
 import { loadCommittedDocument, validatorFor } from './testing/document.js';
 import { createLogger } from './logger.js';
-import { AppError } from './errors.js';
+import { SOURCE_UNAVAILABLE_ENTRIES } from '@neburyx/contracts';
+import { AppError, detailsOf, errorResponse, unavailableReasonOf } from './errors.js';
 import { CYPHER, IDENTIFIER, registerErrorRoutes } from './testing/error-routes.js';
 import { makeWebRoot } from './testing/web-root.js';
 import { memoryAppStore } from './testing/app-store.js';
@@ -195,5 +196,38 @@ describe('hostile errors and details', () => {
     expect(JSON.parse(response.body)).not.toHaveProperty('error.details');
     expect(response.body).not.toContain(IDENTIFIER);
     expect(output.join('')).not.toContain(IDENTIFIER);
+  });
+});
+
+describe('the reason of an unavailable source', () => {
+  it.each([
+    ['unreachable', 'unreachable'],
+    ['database', 'unreachable'],
+    ['pool-full', 'unreachable'],
+    ['closed', 'unreachable'],
+    ['authentication', 'authentication'],
+    ['credentials', 'authentication'],
+    ['refused', 'refused'],
+    ['index-unavailable', 'index-unavailable'],
+    ['index-building', 'index-building'],
+    ['index-failed', 'index-failed'],
+    ['index-list-unreadable', 'index-list-unreadable'],
+  ] as const)('maps the tag %s to the public reason %s', (tag, reason) => {
+    expect(unavailableReasonOf(tag)).toBe(reason);
+  });
+
+  it('gives unreachable to an answer with no reason, as the admission of a read that is not let through has none', () => {
+    expect(unavailableReasonOf(undefined)).toBe('unreachable');
+  });
+
+  it('answers each reason with its sentence and retry flag, valid in the committed document, and never names the tag of the adapter', () => {
+    for (const tag of ['database', 'credentials', 'index-building', 'index-list-unreadable'] as const) {
+      const body = errorResponse('SOURCE_UNAVAILABLE', 'tr-1', detailsOf(new AppError('SOURCE_UNAVAILABLE', { timeoutMs: 5 }, tag)));
+      const reason = unavailableReasonOf(tag);
+      expect(body).toEqual({ error: { code: 'SOURCE_UNAVAILABLE', ...SOURCE_UNAVAILABLE_ENTRIES[reason], traceId: 'tr-1', details: { reason } } });
+      expect(validateErrorResponse(body)).toBe(true);
+      if (tag !== reason) expect(JSON.stringify(body)).not.toContain(tag);
+    }
+    expect(errorResponse('SOURCE_UNAVAILABLE', 'tr-2')).toEqual({ error: { code: 'SOURCE_UNAVAILABLE', ...SOURCE_UNAVAILABLE_ENTRIES.unreachable, traceId: 'tr-2', details: { reason: 'unreachable' } } });
   });
 });

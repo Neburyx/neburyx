@@ -71,5 +71,5 @@ export function withDerivedEdges(context: NormalizeContext, normalized: Normaliz
       qualityFlags: [],
     });
   }
-  return { ...normalized, edges, dropped, warnings: warningsOf(dropped) };
+  return { ...normalized, edges, dropped, warnings: warningsOf(dropped, normalized.unreferenced.length) };
 }

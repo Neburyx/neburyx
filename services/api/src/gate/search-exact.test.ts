@@ -36,8 +36,9 @@ if (template === undefined) throw new Error('the catalog has no search template'
 const WIDGET_ID = { entityType: 'widget', property: 'widgetId', match: 'value' as const };
 const GADGET_ID = { entityType: 'gadget', property: 'gadgetId', match: 'value' as const };
 const STATEMENT =
-  'CALL { MATCH (n:`Widget`) WHERE n.`widgetId` IN [$text, $textInteger] RETURN n LIMIT $limit + 1 UNION ' +
-  'MATCH (n:`Gadget`) WHERE n.`gadgetId` IN [$text, $textInteger] RETURN n LIMIT $limit + 1 } WITH n LIMIT $limit + 1 RETURN n';
+  "CALL { MATCH (n:`Widget`) WHERE n.`widgetId` IN [$text, $textInteger] AND ($cursor IS NULL OR elementId(n) > $cursor.after) WITH n ORDER BY elementId(n) LIMIT $limit + 1 RETURN n, $branchEntityTypes[0] AS entityType UNION " +
+  "MATCH (n:`Gadget`) WHERE n.`gadgetId` IN [$text, $textInteger] AND ($cursor IS NULL OR elementId(n) > $cursor.after) WITH n ORDER BY elementId(n) LIMIT $limit + 1 RETURN n, $branchEntityTypes[1] AS entityType } " +
+  'WITH n, collect(DISTINCT entityType) AS entityTypes ORDER BY elementId(n) LIMIT $limit + 1 RETURN n, entityTypes';
 
 const ONLINE = {
   sourceId: source.id,
@@ -119,7 +120,7 @@ describe('the statement of a search', () => {
   it('has one branch for each target, joined by UNION and cut by one limit over the combined result, with names from the mapping only, quoted', () => {
     const rendered = render('AC-1', [WIDGET_ID, GADGET_ID]);
     expect(rendered.cypher).toBe(STATEMENT);
-    expect(rendered.parameters).toEqual({ text: 'AC-1', textInteger: null, limit: 25 });
+    expect(rendered.parameters).toEqual({ text: 'AC-1', textInteger: null, limit: 25, branchEntityTypes: ['widget', 'gadget'] });
   });
 
   it('writes a single branch for a single target and a branch for every property of a type that has two', () => {
@@ -131,15 +132,15 @@ describe('the statement of a search', () => {
 
   it('writes a text branch for a property that has a TEXT index only, matching the text and not the integer it can be', () => {
     const rendered = render('123', [{ ...WIDGET_ID, match: 'text' }, GADGET_ID]);
-    expect(rendered.cypher).toContain('MATCH (n:`Widget`) WHERE n.`widgetId` = $text RETURN n LIMIT $limit + 1');
-    expect(rendered.cypher).toContain('MATCH (n:`Gadget`) WHERE n.`gadgetId` IN [$text, $textInteger] RETURN n LIMIT $limit + 1');
+    expect(rendered.cypher).toContain("MATCH (n:`Widget`) WHERE n.`widgetId` = $text AND ($cursor IS NULL OR elementId(n) > $cursor.after) WITH n ORDER BY elementId(n) LIMIT $limit + 1 RETURN n, $branchEntityTypes[0] AS entityType");
+    expect(rendered.cypher).toContain("MATCH (n:`Gadget`) WHERE n.`gadgetId` IN [$text, $textInteger] AND ($cursor IS NULL OR elementId(n) > $cursor.after) WITH n ORDER BY elementId(n) LIMIT $limit + 1 RETURN n, $branchEntityTypes[1] AS entityType");
   });
 
   it('cuts every branch at the limit plus one, so a value that many entities carry cannot make the union read them all', () => {
     for (const targets of [[WIDGET_ID], [WIDGET_ID, GADGET_ID], [{ ...WIDGET_ID, match: 'text' as const }, GADGET_ID]]) {
       const { cypher } = render('AC-1', targets);
-      expect(cypher.match(/RETURN n LIMIT \$limit \+ 1/g)).toHaveLength(targets.length);
-      expect(cypher).toMatch(/\} WITH n LIMIT \$limit \+ 1 RETURN n$/);
+      expect(cypher.match(/WITH n ORDER BY elementId\(n\) LIMIT \$limit \+ 1 RETURN n, \$branchEntityTypes\[\d+\] AS entityType/g)).toHaveLength(targets.length);
+      expect(cypher).toMatch(/\} WITH n, collect\(DISTINCT entityType\) AS entityTypes ORDER BY elementId\(n\) LIMIT \$limit \+ 1 RETURN n, entityTypes$/);
     }
   });
 
@@ -199,13 +200,35 @@ describe('a search with nothing to read', () => {
     expect(audit).toEqual([expect.objectContaining({ action: 'entity.search', result: 'success' })]);
   });
 
-  it('still refuses a principal the policy refuses, and a source that is not usable, without calling the executor', async () => {
+  it('still refuses a principal the policy refuses without calling the executor', async () => {
     const denied = rig({ seams: { policy: { authorizeSource: () => Promise.resolve({ allowed: false, reason: 'denied' }) } } });
     expect(await codeOf(denied.gate.run(search({ text: 'AC-1', targets: [] })))).toBe('ACCESS_DENIED');
     expect(denied.executor.calls).toEqual([]);
-    const unusable = rig({ usability: { isUsable: () => false } });
-    expect(await codeOf(unusable.gate.run(search({ text: 'AC-1', targets: [] })))).toBe('SOURCE_UNAVAILABLE');
-    expect(unusable.executor.calls).toEqual([]);
+  });
+});
+
+describe('a search written by hand for a property whose index is not online', () => {
+  const OWNER_NAME = { entityType: 'widget', property: 'ownerName', match: 'value' as const };
+  const withOwnerName = (state: string | undefined) => ({ ...ONLINE, entries: ONLINE.entries.flatMap((entry) => (entry.property !== 'ownerName' ? [entry] : state === undefined ? [] : [{ ...entry, state }])) });
+
+  it.each([
+    ['missing', undefined, 'index-unavailable'],
+    ['building', 'POPULATING', 'index-building'],
+    ['failed', 'FAILED', 'index-failed'],
+  ])('is refused when that index is %s, with SOURCE_UNAVAILABLE and the reason %s, audited as refused, and no statement runs', async (_name, state, reason) => {
+    const { gate, executor, audit } = rig();
+    const failure: unknown = await gate.run({ ...search({ text: 'AC-1', targets: [WIDGET_ID, OWNER_NAME] }), indexes: withOwnerName(state) }).catch((caught: unknown) => caught);
+    expect(failure).toMatchObject({ code: 'SOURCE_UNAVAILABLE', reason });
+    expect(executor.calls).toEqual([]);
+    expect(audit).toEqual([expect.objectContaining({ action: 'entity.search', result: 'refused' })]);
+  });
+
+  it('is refused with the reason that waiting does not cure when two needed indexes are missing in two ways', async () => {
+    const { gate, executor } = rig();
+    const indexes = { ...withOwnerName('POPULATING'), entries: withOwnerName('POPULATING').entries.filter((entry) => entry.name !== 'Gadget') };
+    const failure: unknown = await gate.run({ ...search({ text: 'AC-1', targets: [OWNER_NAME, GADGET_ID] }), indexes }).catch((caught: unknown) => caught);
+    expect(failure).toMatchObject({ code: 'SOURCE_UNAVAILABLE', reason: 'index-unavailable' });
+    expect(executor.calls).toEqual([]);
   });
 });
 
@@ -221,7 +244,7 @@ describe('the declaration of the search branches', () => {
     }
     return 'accepted';
   };
-  const NOT_PLACEHOLDERS = 'the template entity-search has a branch text that does not hold exactly the placeholders of its targets (@label, @property)';
+  const NOT_PLACEHOLDERS = 'the template entity-search has a branch text that does not hold exactly the placeholders of its targets (@label, @property, @entityType)';
 
   it('is accepted as written', () => {
     expect(failure({})).toBe('accepted');
@@ -239,15 +262,16 @@ describe('the declaration of the search branches', () => {
   it('is refused when a branch text holds anything but the two placeholders', () => {
     expect(failure({ searchBranches: { ...declared, value: 'MATCH (n:@label) WHERE n.id = @other RETURN n LIMIT $limit + 1' } })).toBe(NOT_PLACEHOLDERS);
     expect(failure({ searchBranches: { ...declared, text: 'MATCH (n:@label) RETURN n LIMIT $limit + 1' } })).toBe(NOT_PLACEHOLDERS);
+    expect(failure({ searchBranches: { ...declared, value: declared.value.replace(", @entityType AS entityType", '') } })).toBe(NOT_PLACEHOLDERS);
   });
 
   it('is refused when a branch text has no limit of its own', () => {
-    expect(failure({ searchBranches: { ...declared, value: 'MATCH (n:@label) WHERE n.@property IN [$text, $textInteger] RETURN n' } })).toBe('the template entity-search has a branch text with no LIMIT $limit + 1 of its own');
-    expect(failure({ searchBranches: { ...declared, text: 'MATCH (n:@label) WHERE n.@property = $text RETURN n' } })).toBe('the template entity-search has a branch text with no LIMIT $limit + 1 of its own');
+    expect(failure({ searchBranches: { ...declared, value: 'MATCH (n:@label) WHERE n.@property IN [$text, $textInteger] RETURN n, @entityType AS entityType' } })).toBe('the template entity-search has a branch text with no LIMIT $limit + 1 of its own');
+    expect(failure({ searchBranches: { ...declared, text: 'MATCH (n:@label) WHERE n.@property = $text RETURN n, @entityType AS entityType' } })).toBe('the template entity-search has a branch text with no LIMIT $limit + 1 of its own');
   });
 
   it('is refused without the enclosing limit, and without the properties it uses', () => {
-    expect(failure({ cypher: 'CALL { @searchBranches(targets) } RETURN n' })).toBe('the template entity-search has search branches and its Cypher has no enclosing LIMIT $limit + 1');
+    expect(failure({ cypher: 'CALL { @searchBranches(targets) } RETURN n' })).toBe('the template entity-search is paged and its Cypher has no LIMIT $limit + 1');
     expect(failure({ usedProperties: undefined })).toBe('the template entity-search has search branches and does not name the properties it uses');
   });
 

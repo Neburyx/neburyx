@@ -82,7 +82,7 @@ describe('the shell reads on Explore, each on its own', () => {
     renderApp('/explore', client);
     await act(async () => principal[0]?.(serverFailure('trace-1')));
     const strip = screen.getByRole('group', { name: 'Notices' });
-    expect(within(strip).getByRole('alert').textContent).toBe('SOURCE_UNAVAILABLE · trace trace-1');
+    expect(within(strip).getByRole('alert').textContent).toBe('The source did not answer. Try again shortly. · trace trace-1');
     expect(within(rail()).getAllByRole('link')).toHaveLength(3);
     expect(strip.previousElementSibling?.getAttribute('aria-label')).toBe('Investigation');
   });
@@ -101,7 +101,7 @@ describe('the shell reads on Explore, each on its own', () => {
     expect(screen.getByText('Local workspace')).toBeTruthy();
     expect(screen.queryByRole('group', { name: 'Notices' })).toBeNull();
     await act(async () => sources[0]?.(serverFailure('trace-2')));
-    expect(screen.getByRole('alert').textContent).toBe('SOURCE_UNAVAILABLE · trace trace-2');
+    expect(screen.getByRole('alert').textContent).toBe('The source did not answer. Try again shortly. · trace trace-2');
     expect(screen.getByText('Local workspace')).toBeTruthy();
   });
 });
@@ -121,7 +121,7 @@ describe('a later read after an answer', () => {
     expect(screen.queryByRole('alert')).toBeNull();
     await act(async () => replies[0]?.(serverFailure('trace-3')));
     expect(screen.getByText('Local workspace')).toBeTruthy();
-    expect(within(screen.getByRole('group', { name: 'Notices' })).getByRole('alert').textContent).toBe('SOURCE_UNAVAILABLE · trace trace-3');
+    expect(within(screen.getByRole('group', { name: 'Notices' })).getByRole('alert').textContent).toBe('The source did not answer. Try again shortly. · trace trace-3');
   });
 
   it('keeps the caption and names the failure when only the sources fail on a later read', async () => {

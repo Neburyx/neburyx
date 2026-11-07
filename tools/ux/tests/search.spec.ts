@@ -44,6 +44,35 @@ test.describe('searching for an entity', () => {
     await expect(page.getByRole('listitem').filter({ hasText: 'Open in graph' })).toHaveCount(25);
   });
 
+  test('reaches every match of a group with Show more, by keyboard: the hits stay, the next ones are added, the focus is on the first new one, and the last page has none', async ({ page }) => {
+    await searchFor(page, 'many-61');
+    await expect(groupTitle(page, 'Exact ID match (≥ 25 · lower bound)')).toBeVisible();
+    const more = page.getByRole('button', { name: 'Show more: Exact matches' });
+    await more.focus();
+    await page.keyboard.press('Enter');
+    await expect(groupTitle(page, 'Exact ID match (≥ 50 · lower bound)')).toBeVisible();
+    await expect(page.getByRole('listitem').filter({ hasText: 'Open in graph' })).toHaveCount(50);
+    await expect(page.locator(':focus')).toContainText('many-61-26');
+    await page.keyboard.press('Tab');
+    await expect(page.getByRole('button', { name: /^Open in graph: .*many-61-26/ })).toBeFocused();
+    await more.focus();
+    await page.keyboard.press('Space');
+    await expect(groupTitle(page, 'Exact ID match (61)')).toBeVisible();
+    await expect(page.getByRole('listitem').filter({ hasText: 'Open in graph' })).toHaveCount(61);
+    await expect(more).toHaveCount(0);
+    await expect(page.locator(':focus')).toContainText('many-61-51');
+  });
+
+  test('offers a new search when the next page is no longer valid, and keeps the hits', async ({ page }) => {
+    await page.route((url) => url.pathname === '/v1/search/entities/more', (route) => route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ error: { code: 'CURSOR_INVALIDATED', message: 'This page of results is no longer valid. Start again.', retryable: false, traceId: 'tr-ux' } }) }));
+    await searchFor(page, 'many-30');
+    await page.getByRole('button', { name: 'Show more: Exact matches' }).click();
+    await expect(page.getByRole('alert')).toContainText('This page of results is no longer valid. Search again to see the rest.');
+    await expect(page.getByRole('listitem').filter({ hasText: 'Open in graph' })).toHaveCount(25);
+    await page.getByRole('button', { name: 'Search again' }).click();
+    await expect(page.getByRole('button', { name: 'Show more: Exact matches' })).toBeVisible();
+  });
+
   test('shows the timed-out state when the source stalls, and Retry shows the results', async ({ page }, info) => {
     await searchFor(page, `stall-${info.project.name}`);
     await expect(page.getByRole('alert')).toContainText('Search timed out after 5 s');
@@ -93,7 +122,7 @@ test.describe('related records', () => {
 
   test('names a type left out of the related group, and says why a group was not searched without reading "No matching entities" for it', async ({ page }) => {
     await searchFor(page, 'reldrop-1');
-    await expect(page.getByText(/Related records are disabled for this type\./)).toBeVisible();
+    await expect(page.getByText(/^Not searched for related records: .*, none of its properties · batchRef: index is building$/)).toBeVisible();
     await expect(page.getByText('No property of this source is configured for related records.')).toHaveCount(0);
     await searchFor(page, 'missing-1');
     await expect(page.getByRole('heading', { level: 2, name: 'No matching entities' })).toBeVisible();

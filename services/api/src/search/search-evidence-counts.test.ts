@@ -2,7 +2,7 @@ import { searchResultSchema, type SearchResult } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
 import type { ExecuteCall, ExecuteOutcome } from '../gate/executor.js';
 import { evidenceCalls, postSearch, RELATED_ENTITIES, searchMappingOf, startSearchApp } from '../testing/search-app.js';
-import { searchModelOf, type StoredNode, type StoredRelationship } from '../testing/search-fixtures.js';
+import { searchModelOf, type StoredNode, type StoredRelationship, storedHits } from '../testing/search-fixtures.js';
 
 const TEXT = 'REC-1';
 const RELATIONSHIPS = [{ type: 'MADE_FROM', from: 'widget', to: 'gadget', stable_id: 'linkId', evidence: ['recordId'] }];
@@ -27,7 +27,7 @@ describe('the count of the evidence group', () => {
   ])('shows %i supporting relationships as %i hits and an %s count with its scope', async (relationships, hits, quality) => {
     const { answer, executor } = await searched(carrying(relationships));
     expect(answer.evidence.hits).toHaveLength(hits);
-    expect(new Set(answer.evidence.hits.map((hit) => hit.supports.stableId)).size).toBe(hits);
+    expect(new Set(storedHits(answer.evidence.hits).map((hit) => hit.supports.stableId)).size).toBe(hits);
     expect(answer.evidence.count).toEqual({ value: hits, quality, scope: 'search:evidence' });
     expect(answer.cap).toBe(25);
     expect(evidenceCalls(executor)[0]?.rowLimit).toBe(26);

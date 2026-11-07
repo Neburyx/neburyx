@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { BRANCH_MARKER, hasStrayMarkerCharacter, markersOf } from './render.js';
+import { BRANCH_ENTITY_TYPES, BRANCH_MARKER, hasStrayMarkerCharacter, markersOf } from './render.js';
 import { GATE_PARAMETERS, type Template, type TemplateCatalog } from './types.js';
 
 export type TemplateDefinition = Omit<Template, 'integerParameters'>;
@@ -11,12 +11,22 @@ export class CatalogError extends Error {
   }
 }
 
-/** Parameters the gate fills in for every template, which a template may not declare: the page limit and the verified cursor position. */
-const RESERVED = ['limit', 'cursor'] as const;
+/** Parameters the gate fills in, which a template may not declare: the page limit, the verified cursor position and the entity type of each search branch. */
+const RESERVED = ['limit', 'cursor', BRANCH_ENTITY_TYPES] as const;
+const BRANCH_ENTITY_TYPES_REFERENCE = new RegExp(`\\$${BRANCH_ENTITY_TYPES}(?![\\w])`);
 
 const article = (kind: string): string => (kind === 'entity' ? 'an' : 'a');
 /** The server-side page bound a paged template must carry, as in `LIMIT $limit + 1`. */
 const PAGED_LIMIT = /LIMIT\s+\$limit\s*\+\s*1(?![\w$])/;
+/** The bound of a facet probe, as in `LIMIT $countCap + 1`: the source's count cap, which the gate fills in. */
+const COUNT_CAP_LIMIT = /LIMIT\s+\$countCap\s*\+\s*1(?![\w$])/;
+/** The keyset of a search page, for the variable `n` or `r`: the rows after the cursor, sorted by element ID and cut at one more than the page, as in `elementId(n) > $cursor.after ... ORDER BY elementId(n) LIMIT $limit + 1`. */
+const keysetFilter = (variable: string): RegExp => new RegExp(`\\$cursor\\s+IS\\s+NULL\\s+OR\\s+elementId\\(${variable}\\)\\s*>\\s*\\$cursor\\.after(?![\\w$])`);
+const keysetOrder = (variable: string): RegExp => new RegExp(`ORDER\\s+BY\\s+elementId\\(${variable}\\)\\s+LIMIT\\s+\\$limit\\s*\\+\\s*1(?![\\w$])`);
+/** What a capped search read may not hold: a cursor, or a sort that would read every match before the cut. */
+const CURSOR_OR_SORT = /\$cursor(?![\w$])|ORDER\s+BY/;
+/** The sort a search template's cursor binds. */
+const SEARCH_SORT = 'elementId';
 
 interface Shape {
   readonly properties: ReadonlyMap<string, string | undefined>;
@@ -86,7 +96,7 @@ function checkSearchBranches(definition: TemplateDefinition, shape: Shape): void
   }
   if (used.length !== 1 || used[0]?.name !== branches.param) throw new CatalogError(definition.id, 'declares search branches and does not use its branch marker exactly once');
   if (shape.properties.get(branches.param) !== 'array') throw new CatalogError(definition.id, 'declares search branches for a parameter its schema does not have as a list');
-  const required = branches.allowlist === 'evidence' ? EVIDENCE_PLACEHOLDERS : ENTITY_PLACEHOLDERS;
+  const required = branches.allowlist === 'evidence' ? EVIDENCE_PLACEHOLDERS : SEARCH_ENTITY_PLACEHOLDERS;
   for (const text of [branches.value, branches.text]) {
     const placeholders = [...text.matchAll(BRANCH_MARKER)].map((match) => match[1]);
     if (!required.every((name) => placeholders.includes(name)) || !placeholders.every((name) => name !== undefined && required.includes(name)) || text.replace(BRANCH_MARKER, '').includes('@')) {
@@ -95,15 +105,35 @@ function checkSearchBranches(definition: TemplateDefinition, shape: Shape): void
     if (!PAGED_LIMIT.test(text)) throw new CatalogError(definition.id, 'has a branch text with no LIMIT $limit + 1 of its own');
   }
   if (!PAGED_LIMIT.test(definition.cypher)) throw new CatalogError(definition.id, 'has search branches and its Cypher has no enclosing LIMIT $limit + 1');
+  checkSearchCut(definition, branches);
   if (definition.usedProperties === undefined) throw new CatalogError(definition.id, 'has search branches and does not name the properties it uses');
   if (definition.indexNeeds === undefined) throw new CatalogError(definition.id, 'has search branches and does not name the indexes it needs');
   if (branches.allowlist !== 'search' && branches.allowlist !== 'reference' && branches.allowlist !== 'evidence') throw new CatalogError(definition.id, 'has search branches and does not say which allowlist its targets are checked against');
 }
 
 /**
+ * A search template pages by keyset on the element ID of the variable it returns first (`r` for evidence, `n` otherwise): it is paged, binds the sort `elementId`, says where the next page starts,
+ * and each branch text filters on the cursor and sorts by element ID before its limit, as the enclosing statement sorts before its own. A branch that is not sorted would page a different order than the union.
+ * A search template that is not paged is a capped read instead: its cut means a lower bound, and neither a branch nor the statement reads a cursor or sorts, so the source stops at the limit.
+ */
+function checkSearchCut(definition: TemplateDefinition, branches: NonNullable<TemplateDefinition['searchBranches']>): void {
+  const variable = branches.allowlist === 'evidence' ? 'r' : 'n';
+  if (!definition.paged) {
+    if (definition.cutMeans !== 'lowerBound') throw new CatalogError(definition.id, "has search branches and is neither paged by element ID nor declared cutMeans: 'lowerBound'");
+    if ([branches.value, branches.text, definition.cypher].some((text) => CURSOR_OR_SORT.test(text))) throw new CatalogError(definition.id, 'has search branches, is not paged and reads a cursor or sorts before its limit');
+    return;
+  }
+  if (definition.sort !== SEARCH_SORT || definition.nextPosition === undefined) throw new CatalogError(definition.id, 'has search branches and is not paged by element ID');
+  for (const text of [branches.value, branches.text]) {
+    if (!keysetFilter(variable).test(text) || !keysetOrder(variable).test(text)) throw new CatalogError(definition.id, `has a branch text that does not read the page after the cursor in ORDER BY elementId(${variable}) LIMIT $limit + 1`);
+  }
+  if (!keysetOrder(variable).test(definition.cypher)) throw new CatalogError(definition.id, `has search branches and its Cypher is not cut in ORDER BY elementId(${variable}) LIMIT $limit + 1`);
+}
+
+/**
  * The facet template's own declaration: it declares its facet probes exactly when its Cypher is the one `@facetProbes` marker for the list parameter its schema has, and nothing else; each of its four branch
- * texts holds exactly the placeholders of its target kind and a `LIMIT $limit + 1` of its own, and returns the one variable the probe counts (`n` for an entity target, `r` for an evidence target);
- * and it names the properties it uses and the indexes it needs, so a masked request is checked and the gate can refuse a read whose index is gone.
+ * texts holds exactly the placeholders of its target kind and a `LIMIT $countCap + 1` of its own, and returns the one variable the probe counts (`n` for an entity target, `r` for an evidence target);
+ * it names the properties it uses and the indexes it needs, so a masked request is checked and the gate can refuse a read whose index is gone; and it has no `countCap` of its own (the gate fills it).
  */
 function checkFacetProbes(definition: TemplateDefinition, shape: Shape): void {
   const used = markersOf(definition.cypher).filter((marker) => marker.kind === 'facetProbes');
@@ -125,15 +155,18 @@ function checkFacetProbes(definition: TemplateDefinition, shape: Shape): void {
       if (!kind.required.every((name) => placeholders.includes(name)) || !placeholders.every((name) => name !== undefined && kind.required.includes(name)) || text.replace(BRANCH_MARKER, '').includes('@')) {
         throw new CatalogError(definition.id, `has a probe branch text that does not hold exactly the placeholders of its targets (${kind.required.map((name) => `@${name}`).join(', ')})`);
       }
-      if (!PAGED_LIMIT.test(text)) throw new CatalogError(definition.id, 'has a probe branch text with no LIMIT $limit + 1 of its own');
+      if (!COUNT_CAP_LIMIT.test(text)) throw new CatalogError(definition.id, 'has a probe branch text with no LIMIT $countCap + 1 of its own');
       if (!text.includes(kind.returns)) throw new CatalogError(definition.id, 'has a probe branch text that does not return the one variable the probe counts');
     }
   }
   if (definition.usedProperties === undefined) throw new CatalogError(definition.id, 'has facet probes and does not name the properties it uses');
   if (definition.indexNeeds === undefined) throw new CatalogError(definition.id, 'has facet probes and does not name the indexes it needs');
+  if (shape.properties.has('countCap')) throw new CatalogError(definition.id, 'has the gate-filled parameter countCap in its parameter schema');
 }
 
 const ENTITY_PLACEHOLDERS: readonly string[] = ['label', 'property'];
+/** A search branch of an entity target also returns the target's entity type, so the normalizer resolves a node whose labels match two types as the type that matched it. */
+const SEARCH_ENTITY_PLACEHOLDERS: readonly string[] = [...ENTITY_PLACEHOLDERS, 'entityType'];
 const EVIDENCE_PLACEHOLDERS: readonly string[] = ['type', 'fromLabel', 'toLabel', 'property'];
 
 const PROFILE_PREFIX = 'PROFILE ';
@@ -189,9 +222,20 @@ function checkReferenceParams(definition: TemplateDefinition, shape: Shape): voi
   if (!definition.entityParams.includes(names.entityType) || !shape.properties.has(names.entityType) || !shape.properties.has(names.stableId)) throw new CatalogError(definition.id, 'declares reference parameters its schema or its entity parameters do not have');
 }
 
+/** A template that is not paged says what its rows are, one aggregate row or a read whose cut means a duplicate or a lower bound, and a paged one says none of them. */
+function checkRows(definition: TemplateDefinition): void {
+  const declared = (definition.rows === undefined ? 0 : 1) + (definition.cutMeans === undefined ? 0 : 1);
+  if (definition.paged && declared > 0) throw new CatalogError(definition.id, 'is paged and declares rows or cutMeans');
+  if (!definition.paged && declared !== 1) throw new CatalogError(definition.id, "is not paged and does not declare exactly one of rows: 'one', cutMeans: 'duplicate' or cutMeans: 'lowerBound'");
+}
+
 function build(definition: TemplateDefinition): Template {
   const shape = shapeOf(definition);
   for (const name of RESERVED) if (shape.properties.has(name)) throw new CatalogError(definition.id, `declares the reserved parameter ${name}`);
+  // only the gate's `@entityType` placeholder reads the branch entity types, at the position of its own branch
+  const texts = [definition.cypher, ...(definition.searchBranches === undefined ? [] : [definition.searchBranches.value, definition.searchBranches.text])];
+  if (texts.some((text) => BRANCH_ENTITY_TYPES_REFERENCE.test(text))) throw new CatalogError(definition.id, `reads the gate-filled parameter ${BRANCH_ENTITY_TYPES} itself`);
+  checkRows(definition);
   if (definition.paged && definition.expandNeighbors === undefined && !PAGED_LIMIT.test(definition.cypher)) throw new CatalogError(definition.id, 'is paged and its Cypher has no LIMIT $limit + 1');
   checkProfile(definition);
   checkMarkers(definition, shape);

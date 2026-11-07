@@ -1,4 +1,4 @@
-import type { GraphNode, GraphProperty, PiiClass } from '@neburyx/contracts';
+import type { GraphNode, GraphProperty, PiiClass, UnreferencedHit } from '@neburyx/contracts';
 import type { Normalized } from '../normalize/index.js';
 import type { EntityNormalizer } from '../normalize/model.js';
 import { PLACEHOLDER, placeholderText } from '../normalize/node.js';
@@ -40,13 +40,31 @@ const classOf = (entity: EntityNormalizer, key: string): PiiClass | undefined =>
 /** The mask of a property's value: in the shape of its class when the value is text, and the full mask for any other kind of value (a number, a date, a list). */
 const maskOf = (property: GraphProperty, piiClass: PiiClass | undefined): string => (property.dataClass === 'text' ? maskValue(property.value, piiClass) : FULL_MASK);
 
-function maskNode(node: GraphNode, entity: EntityNormalizer): GraphNode {
-  const properties = node.properties.map((property) => {
+function maskProperties(properties: readonly GraphProperty[], entity: EntityNormalizer): GraphProperty[] {
+  return properties.map((property) => {
     if (!entity.pii.includes(property.key) || property.value === undefined) return property;
     const piiClass = classOf(entity, property.key);
     return { ...property, value: maskOf(property, piiClass), dataClass: piiClass ?? property.dataClass, masked: true, maskedBy: 'request' as const };
   });
-  return { ...node, display: { ...node.display, title: maskedTitle(node, entity) }, properties };
+}
+
+function maskNode(node: GraphNode, entity: EntityNormalizer): GraphNode {
+  return { ...node, display: { ...node.display, title: maskedTitle(node, entity) }, properties: maskProperties(node.properties, entity) };
+}
+
+/**
+ * An unreferenced hit with its `pii` fields masked as a node's are. Its title is built again from its unmasked properties, with the mask of each `pii` field; one with a placeholder that has no value
+ * is the entity type alone, as the normalizer made it, which holds no value.
+ */
+function maskUnreferenced(hit: UnreferencedHit, entity: EntityNormalizer): UnreferencedHit {
+  let incomplete = false;
+  const title = entity.title.replace(PLACEHOLDER, (_whole, key: string) => {
+    const property = hit.properties.find((candidate) => candidate.key === key);
+    const text = property?.value === undefined ? undefined : entity.pii.includes(key) ? maskOf(property, classOf(entity, key)) : placeholderText(property.value);
+    if (text === undefined) incomplete = true;
+    return text ?? '';
+  });
+  return { ...hit, title: incomplete ? entity.type : title, properties: maskProperties(hit.properties, entity) };
 }
 
 /** A reference as text that does not depend on the order of its fields. */
@@ -73,11 +91,15 @@ export function redactResult(visible: Normalized, context: GateContext): Normali
     const entity = context.model.entitiesByType.get(node.ref.entityType);
     return entity === undefined ? node : maskNode(node, entity);
   });
-  return { ...result, nodes };
+  const unreferenced = result.unreferenced.map((hit) => {
+    const entity = context.model.entitiesByType.get(hit.entityType);
+    return entity === undefined ? hit : maskUnreferenced(hit, entity);
+  });
+  return { ...result, nodes, unreferenced };
 }
 
 /**
- * The redact stage: when the request asks for masking, the `pii` fields of the nodes of a normalized result are replaced by their masks before anything leaves the gate.
+ * The redact stage: when the request asks for masking, the `pii` fields of the nodes and the unreferenced hits of a normalized result are replaced by their masks before anything leaves the gate.
  * An item that is not a normalized result passes through.
  */
 export function redactItems(items: readonly Item[], context: GateContext): readonly Item[] {

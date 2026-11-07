@@ -4,18 +4,21 @@ import { communitySeams } from '../seams/community-seams.js';
 import type { Seams } from '../seams/seams.js';
 import { gateRequest } from '../testing/gate.js';
 import { postSearch, searchMappingOf, startSearchApp, type SearchAppOptions } from '../testing/search-app.js';
+import { schemaAnswer, withSchema } from '../testing/search-fixtures.js';
 
 const TEXT = 'needle-text-9042';
 const body = { sourceId: 'demo', text: TEXT };
 
 const busy: Seams['coordinator'] = { acquireRead: () => Promise.resolve({ status: 'busy' }) };
+const noData = () => Promise.resolve({ status: 'rows', rows: [] } as const);
+const unlistable: SearchAppOptions = { ownSchema: true, respond: withSchema(() => schemaAnswer([], true), noData) };
 const refusing: Seams['policy'] = { authorizeSource: () => Promise.resolve({ allowed: false, reason: 'denied' }) };
 
 const FAILURES: readonly (readonly [string, SearchAppOptions, number, string, string])[] = [
   ['a read that exceeds the source timeout', { respond: () => Promise.resolve({ status: 'timeout' }) }, 504, 'QUERY_TIMEOUT', 'failed'],
   ['a source that is busy', { coordinator: busy }, 503, 'SOURCE_BUSY', 'failed'],
   ['a source that is down', { respond: () => Promise.resolve({ status: 'unavailable', reason: 'unreachable' }) }, 503, 'SOURCE_UNAVAILABLE', 'failed'],
-  ['a source that is not usable', { usability: { isUsable: () => false } }, 503, 'SOURCE_UNAVAILABLE', 'refused'],
+  ['a source whose indexes cannot be listed whole', unlistable, 503, 'SOURCE_UNAVAILABLE', 'refused'],
   ['a principal the policy refuses (answered as a source that is not configured)', { policy: refusing }, 404, 'NOT_FOUND', 'denied'],
 ];
 
@@ -57,13 +60,25 @@ describe('a search that fails', () => {
     await app.close();
   });
 
-  it('does not call the executor for a source that is not usable, for a principal the policy refuses or for a busy source', async () => {
-    for (const options of [{ usability: { isUsable: () => false } }, { policy: refusing }, { coordinator: busy }]) {
+  it('makes no data read for a source whose indexes cannot be listed whole, for a principal the policy refuses or for a busy source', async () => {
+    for (const options of [unlistable, { policy: refusing }, { coordinator: busy }]) {
       const { app, executor } = await startSearchApp(options);
       await postSearch(app, body);
-      expect(executor.calls).toEqual([]);
+      expect(executor.calls.filter((call) => call.templateId !== 'schema-indexes')).toEqual([]);
       await app.close();
     }
+  });
+
+  it.each([
+    ['a source that is down', { respond: () => Promise.resolve({ status: 'unavailable', reason: 'unreachable' } as const) }, 'unreachable', 'The source did not answer. Try again shortly.', true],
+    ['a source that refuses the login', { respond: () => Promise.resolve({ status: 'unavailable', reason: 'authentication' } as const) }, 'authentication', 'The source refused the login. Ask an administrator.', false],
+    ['a source whose indexes cannot be listed whole', unlistable, 'index-list-unreadable', "The source's indexes could not be listed, so the read was not run.", false],
+  ] satisfies [string, SearchAppOptions, string, string, boolean][])('names the reason of %s, with its sentence and whether to retry', async (_name, options, reason, message, retryable) => {
+    const { app } = await startSearchApp(options);
+    const response = await postSearch(app, body);
+    expect(response.statusCode).toBe(503);
+    expect(response.json().error).toMatchObject({ code: 'SOURCE_UNAVAILABLE', message, retryable, details: { reason } });
+    await app.close();
   });
 
   it('tells the timeout of the source in the error of a read that timed out, and nothing else of it', async () => {

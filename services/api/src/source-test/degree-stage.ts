@@ -63,6 +63,14 @@ type Verdict = Pick<DegreeType, 'result' | 'basis'>;
 const COULD_NOT_TELL = (basis: 'timeout' | 'refused' | 'skipped' | 'unreadable'): Verdict => ({ result: 'could-not-tell', basis });
 
 const isRefused = (error: unknown): boolean => error instanceof AppError && error.code === 'SOURCE_UNAVAILABLE' && error.reason === 'refused';
+/** The probe is one row; the gate refuses an answer with more as cut, which is an answer the stage cannot read. */
+const isCut = (error: unknown): boolean => error instanceof AppError && error.code === 'INTERNAL_ERROR' && error.reason === 'read-cut';
+
+function logUnreadable(deps: DegreeStageDeps, sourceId: string, columnTypes: readonly Record<string, string>[]): Verdict {
+  // the type of each column, never a value
+  deps.logger?.warn({ event: 'source.degree_unreadable', sourceId, columnTypes }, 'source degree probe answer could not be read');
+  return COULD_NOT_TELL('unreadable');
+}
 
 /**
  * One probe. A refusal, a timeout and an answer the template cannot read are results of their own; anything else says nothing about the source and is rethrown.
@@ -73,16 +81,13 @@ async function probe(source: SourceModel, run: CheckRun, traceId: string, pair: 
     page = await run({ traceId, sourceId: source.id, templateId: DEGREE_PROBE_ID, params: pair, limit: 1 });
   } catch (error) {
     if (isRefused(error)) return COULD_NOT_TELL('refused');
+    if (isCut(error)) return logUnreadable(deps, source.id, []);
     if (error instanceof AppError && error.code === 'QUERY_TIMEOUT') return COULD_NOT_TELL('timeout');
     throw error;
   }
   const [item] = page.items;
   const parsed = degreeProbeItemSchema.safeParse(item);
-  if (page.hasMore || page.items.length !== 1 || item === undefined || !parsed.success) {
-    // the type of each column, never a value
-    deps.logger?.warn({ event: 'source.degree_unreadable', sourceId: source.id, columnTypes: item !== undefined && isUnreadable(item) ? [item.unreadable] : [] }, 'source degree probe answer could not be read');
-    return COULD_NOT_TELL('unreadable');
-  }
+  if (page.items.length !== 1 || item === undefined || !parsed.success) return logUnreadable(deps, source.id, item !== undefined && isUnreadable(item) ? [item.unreadable] : []);
   return judgePlan(parsed.data.operators);
 }
 

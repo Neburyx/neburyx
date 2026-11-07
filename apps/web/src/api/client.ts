@@ -11,6 +11,7 @@ import {
   nodeSchema,
   openInvestigationResponseSchema,
   pathSegmentOf,
+  searchMoreResultSchema,
   searchResultSchema,
   sourceProfileSchema,
   sourcesResponseSchema,
@@ -30,6 +31,8 @@ import {
   type MeResponse,
   type OpenInvestigationRequest,
   type OpenInvestigationResponse,
+  type SearchMoreRequest,
+  type SearchMoreResult,
   type SearchRequest,
   type SearchResult,
   type SourceProfile,
@@ -74,6 +77,8 @@ export interface ApiClient {
   listInvestigations(limit: number, signal?: AbortSignal): Promise<ApiResult<InvestigationListResponse>>;
   /** The exact matches of a text in one source, and with `typeahead` the entities that start with it; every hit and the answer name the source that was asked, or the answer is refused. */
   searchEntities(request: SearchRequest, signal?: AbortSignal): Promise<ApiResult<SearchResult>>;
+  /** The next page of one group of a search, from that group's cursor; the page names the source and the group that were asked, or it is refused. */
+  searchMore(request: SearchMoreRequest, signal?: AbortSignal): Promise<ApiResult<SearchMoreResult>>;
   /** How many relationships a node has by type and direction, each count with its quality, before anything is loaded; the answer names the node asked for, or it is refused. */
   previewExpansion(request: DegreePreviewRequest, signal?: AbortSignal): Promise<ApiResult<DegreePreview>>;
   /** How many relationships of the loaded entities are not yet retrieved, from the previews the server already holds; it reads no source. */
@@ -175,6 +180,13 @@ export function createApiClient(fetcher: Fetcher = (input, init) => fetch(input,
       if (!result.ok) return result;
       const hits = [...result.value.exact, ...(result.value.startsWith?.nodes ?? [])];
       return result.value.sourceId !== search.sourceId || hits.some((node) => node.ref.sourceId !== search.sourceId) ? failed('SCHEMA_MISMATCH') : result;
+    },
+    searchMore: async (more, signal) => {
+      const result = await request(fetcher, '/v1/search/entities/more', searchMoreResultSchema, signal, 'POST', more);
+      if (!result.ok) return result;
+      const page = result.value;
+      const refs = page.group === 'exact' ? page.nodes.map((node) => node.ref.sourceId) : page.group === 'related' ? page.hits.map((hit) => hit.node.ref.sourceId) : page.hits.flatMap((hit) => ('supports' in hit ? [hit.supports.sourceId] : [hit.aggregate.from.sourceId, hit.aggregate.to.sourceId]));
+      return page.sourceId !== more.sourceId || page.group !== more.group || refs.some((sourceId) => sourceId !== more.sourceId) ? failed('SCHEMA_MISMATCH') : result;
     },
     previewExpansion: async (preview, signal) => {
       const result = await request(fetcher, '/v1/graph/preview-expansion', degreePreviewSchema, signal, 'POST', preview);

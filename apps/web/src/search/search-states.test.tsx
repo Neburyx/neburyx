@@ -62,15 +62,15 @@ describe('what the page says about the three groups together', () => {
   });
 
   it('gives a group whose types were left out their own notes and no reason line', () => {
-    const left = { entityType: 'kind-a', reason: 'index-unavailable' as const };
-    const leftRow = { relationshipType: 'MADE_FROM', from: 'kind-a', to: 'kind-b', reason: 'index-unavailable' as const };
+    const left = { entityType: 'kind-a', property: 'code', reason: 'index-unavailable' as const, typeSearched: false };
+    const leftRow = { relationshipType: 'MADE_FROM', from: 'kind-a', to: 'kind-b', property: 'recordId', reason: 'index-unavailable' as const };
     expect(statesOf(answer('none', 'empty', 'empty', { disabledTypes: [left] }), false)).toMatchObject({ noMatches: true, reasons: [] });
     expect(statesOf(answer('empty', 'none', 'empty', { related: { ...relatedOf([]), searchable: false, disabledTypes: [left] } }), false)).toMatchObject({ noMatches: true, reasons: [] });
     expect(statesOf(answer('empty', 'empty', 'none', { evidence: { hits: [], count: { value: 0, quality: 'exact', scope: 'search:evidence' }, searchable: false, disabledRelationshipTypes: [leftRow] } }), false)).toMatchObject({ noMatches: true, reasons: [] });
   });
 
   it('says the page has no group to search, and not "No matching entities", when every group is not searched or disabled', () => {
-    const leftRow = { relationshipType: 'MADE_FROM', from: 'kind-a', to: 'kind-b', reason: 'no-stable-id' as const };
+    const leftRow = { relationshipType: 'MADE_FROM', from: 'kind-a', to: 'kind-b', property: 'recordId', reason: 'index-unavailable' as const };
     const states = statesOf(answer('none', 'none', 'none', { evidence: { hits: [], count: { value: 0, quality: 'exact', scope: 'search:evidence' }, searchable: false, disabledRelationshipTypes: [leftRow] } }), false);
     expect(states.noMatches).toBe(false);
     expect(states.reasons).toEqual([NO_SEARCH_PROPERTIES, NO_RELATED_PROPERTIES]);

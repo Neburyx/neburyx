@@ -41,7 +41,7 @@ async function started(options: { readonly deny?: () => boolean; readonly onRead
       return Promise.resolve({ status: 'rows', rows: [{ c0: 1, c1: 2, c2: 3 }] });
     }),
   );
-  const parts = testSourceGate(mapping, { executor, seams, usability: record });
+  const parts = testSourceGate(mapping, { executor, seams });
   const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store: memoryAppStore(), mapping, gate: parts.gate, seams, degreeVerdicts: record });
   const reads = () => executor.calls.filter((call) => call.templateId.startsWith('degree-preview')).length;
   const previews = () => events.filter((event) => event.action === 'entity.degree_preview');
@@ -87,7 +87,7 @@ describe('the degree preview cache in the endpoint', () => {
     const events: AuditEvent[] = [];
     const defaults = communitySeams();
     const seams: Pick<Seams, 'policy' | 'coordinator' | 'audit'> = { policy: defaults.policy, coordinator: defaults.coordinator, audit: { record: (event) => (events.push(event), Promise.resolve()) } };
-    const parts = testSourceGate(loneMapping, { executor, usability: record, seams });
+    const parts = testSourceGate(loneMapping, { executor, seams });
     const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store: memoryAppStore(), mapping: loneMapping, gate: parts.gate, seams, degreeVerdicts: record });
     const request = { sourceId: 'alpha', ref: { entityType: 'order_line', stableId: 'L-1' } };
     expect((await post(app, request)).statusCode).toBe(200);
@@ -128,13 +128,22 @@ describe('the degree preview cache in the endpoint', () => {
     await app.close();
   });
 
-  it('answers SOURCE_UNAVAILABLE from a cached answer once a newer mapping check failed, with the degree verdict unchanged', async () => {
-    const { app, record, reads } = await started();
-    await post(app, body());
-    record.observe({ ...CHECK, checkedAt: '2026-11-02T10:00:10.000Z', mappingChecks: { status: 'fail', findings: [{ severity: 'fail', check: 'label', message: 'x' }] } });
+  it('serves a cached answer after a newer mapping check failed for a type that is not the node\'s, with the degree verdict unchanged', async () => {
+    const { app, record, reads, previews } = await started();
+    const first = await post(app, body());
+    record.observe({ ...CHECK, checkedAt: '2026-11-02T10:00:10.000Z', mappingChecks: { status: 'fail', findings: [{ severity: 'fail', check: 'label', message: 'Entity type "order_line" (label "Order Line"): no node carries the label' }] } });
     const response = await post(app, body());
-    expect(response.statusCode).toBe(503);
-    expect(response.json().error.code).toBe('SOURCE_UNAVAILABLE');
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual(first.json());
+    expect(reads()).toBe(1);
+    expect(previews().map((event) => event.result)).toEqual(['success', 'success']);
+    await app.close();
+  });
+
+  it('reads the source again, through the guard, while the source has a failing check, when the answer is not cached', async () => {
+    const { app, record, reads } = await started();
+    record.observe({ ...CHECK, checkedAt: '2026-11-02T10:00:10.000Z', mappingChecks: { status: 'fail', findings: [{ severity: 'fail', check: 'label', message: 'x' }] } });
+    expect((await post(app, body())).statusCode).toBe(200);
     expect(reads()).toBe(1);
     await app.close();
   });
@@ -172,7 +181,7 @@ describe('the degree preview cache in the endpoint', () => {
     record.observe(CHECK);
     let fail = true;
     const executor = new TestExecutor(withOnlineIndexes(source, () => Promise.resolve<ExecuteOutcome>(fail ? { status: 'timeout' } : { status: 'rows', rows: [{ c0: 1, c1: 2, c2: 3 }] })));
-    const parts = testSourceGate(mapping, { executor, usability: record });
+    const parts = testSourceGate(mapping, { executor });
     const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store: memoryAppStore(), mapping, gate: parts.gate, degreeVerdicts: record });
     expect((await post(app, body())).statusCode).toBe(504);
     fail = false;

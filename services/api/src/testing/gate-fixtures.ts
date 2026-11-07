@@ -81,6 +81,7 @@ export const integerTemplate: TemplateDefinition = {
   paramsSchema: z.strictObject({ k: z.number().int() }),
   scope: 'user',
   paged: false,
+  rows: 'one',
   entityParams: [],
   relationshipParams: [],
   refsOf: () => [],

@@ -78,9 +78,9 @@ describe('the answer in the Add from source tab', () => {
   });
 
   it('shows the warnings of the rows left out, the one disabled type above the rows of the others, and no "No matching entities"', async () => {
-    const result = searchAnswer('a', [exactHit], [], { disabledTypes: [{ entityType: 'kind-b', reason: 'index-unavailable' }], warnings: ['1 record left out: it has no stable ID.'] });
+    const result = searchAnswer('a', [exactHit], [], { disabledTypes: [{ entityType: 'kind-b', property: 'code', reason: 'index-unavailable', typeSearched: false }], warnings: ['1 record left out: it has no stable ID.'] });
     await answered('ACC', result);
-    expect(screen.getByText('kind-b: Search is disabled for this type.')).toBeDefined();
+    expect(screen.getByText('Not searched: kind-b, none of its properties · code: no online index')).toBeDefined();
     expect(screen.getByText('1 record left out: it has no stable ID.')).toBeDefined();
     expect(screen.queryByText('No matching entities')).toBeNull();
   });
@@ -93,17 +93,17 @@ describe('the answer in the Add from source tab', () => {
   });
 
   it('names a disabled type even when the types that were searched found nothing, and says "No matching entities" for them', async () => {
-    const result = searchAnswer('a', [], [], { disabledTypes: [{ entityType: 'kind-b', reason: 'index-unavailable' }] });
+    const result = searchAnswer('a', [], [], { disabledTypes: [{ entityType: 'kind-b', property: 'nickname', reason: 'index-building', typeSearched: true }] });
     await answered('ACC', result);
-    expect(screen.getByText('kind-b: Search is disabled for this type.')).toBeDefined();
+    expect(screen.getByText('Not searched: kind-b · nickname: index is building')).toBeDefined();
     expect(screen.getByText('No matching entities')).toBeDefined();
   });
 
   it('names every type and says no index was available when every type is disabled, with neither the masking wording nor "No matching entities"', async () => {
-    const result = searchAnswer('a', [], [], { searchable: false, disabledTypes: [{ entityType: 'kind-a', reason: 'index-unavailable' }, { entityType: 'kind-b', reason: 'index-unavailable' }] });
+    const result = searchAnswer('a', [], [], { searchable: false, disabledTypes: [{ entityType: 'kind-a', property: 'code', reason: 'index-unavailable', typeSearched: false }, { entityType: 'kind-b', property: 'code', reason: 'index-failed', typeSearched: false }] });
     await answered('ACC', result);
-    expect(screen.getByText('KIND-A: Search is disabled for this type.')).toBeDefined();
-    expect(screen.getByText('kind-b: Search is disabled for this type.')).toBeDefined();
+    expect(screen.getByText('Not searched: KIND-A, none of its properties · code: no online index')).toBeDefined();
+    expect(screen.getByText('Not searched: kind-b, none of its properties · code: index failed')).toBeDefined();
     expect(screen.getByText('No index is available for these types.')).toBeDefined();
     expect(screen.queryByText('No matching entities')).toBeNull();
     expect(screen.queryByText('Nothing can be searched while personal data is masked. Turn masking off to search personal data.')).toBeNull();
@@ -217,6 +217,16 @@ describe('a search that fails in the Add from source tab', () => {
     await failed({ code: 'NOT_FOUND', message: 'gone', retryable: false, traceId: 'tr-5' });
     expect(screen.getByText('The source “a” is not configured.')).toBeDefined();
     expect(screen.getByText('trace tr-5')).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeDefined();
+  });
+
+  it('shows the sentence of an unavailable source, and Retry only when its reason says a retry can help', async () => {
+    await failed({ code: 'SOURCE_UNAVAILABLE', message: 'A needed index is not there, so the read was not run.', retryable: false, traceId: 'tr-6', details: { reason: 'index-unavailable' } });
+    expect(screen.getByText('A needed index is not there, so the read was not run.')).toBeDefined();
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+    cleanup();
+    await failed({ code: 'SOURCE_UNAVAILABLE', message: 'A needed index is still building, so the read is slow. Try again later.', retryable: true, traceId: 'tr-6', details: { reason: 'index-building' } });
+    expect(screen.getByText('A needed index is still building, so the read is slow. Try again later.')).toBeDefined();
     expect(screen.getByRole('button', { name: 'Retry' })).toBeDefined();
   });
 

@@ -19,20 +19,20 @@ import { createNeo4jExecutor, type Neo4jExecutor } from '../sources/executor.js'
 import { LOCAL_PRINCIPAL } from './gate.js';
 import { envFor, runAdmin, startNeo4j, type RunningNeo4j } from './neo4j-server.js';
 import { PACKS, packMappingText, packSource, repoRoot, type Pack } from './pack-fixtures.js';
-import { ALWAYS_USABLE } from './usability.js';
 
 // The demo graph tool is a developer tool that the product may not import, so the graphs are built the way a person builds them: by running its command line.
 const run = promisify(execFile);
 const TOOL = join(repoRoot, 'tools', 'demo-graph', 'dist', 'main.js');
 
-const captureTemplate = (id: string, cypher: string, entityParams: string[], relationshipParams: string[], params: Record<string, z.ZodString>): TemplateDefinition => ({
+/** A capture of one row (`LIMIT 1` or a single `RETURN`), or of a few rows, which is a page cut at the limit plus one like any read that returns a list. */
+const captureTemplate = (id: string, cypher: string, entityParams: string[], relationshipParams: string[], params: Record<string, z.ZodString>, kind: 'one' | 'list' = 'one'): TemplateDefinition => ({
   id,
   version: '1',
   auditAction: `test.${id}`,
-  cypher,
+  cypher: kind === 'list' ? `${cypher} LIMIT $limit + 1` : cypher,
   paramsSchema: z.strictObject(params),
   scope: 'system',
-  paged: false,
+  ...(kind === 'list' ? { paged: true } : { paged: false, rows: 'one' as const }),
   entityParams,
   relationshipParams,
   refsOf: () => [],
@@ -68,8 +68,9 @@ export const CAPTURE_TEMPLATES: readonly TemplateDefinition[] = [
     ['firstType', 'secondType'],
     { entityType: z.string(), middleType: z.string(), lastType: z.string(), firstType: z.string(), secondType: z.string() },
   ),
-  captureTemplate('capture-made', "MATCH (n) WHERE n.zzMarker IN ['m1', 'm2', 'm3'] RETURN n ORDER BY n.zzMarker", [], [], {}),
-  captureTemplate('capture-members', 'MATCH (a)-[r]->(b) WHERE r.zzMarker IS NOT NULL RETURN a, r, b ORDER BY r.zzMarker', [], [], {}),
+  captureTemplate('capture-made', "MATCH (n) WHERE n.zzMarker IN ['m1', 'm2', 'm3'] RETURN n ORDER BY n.zzMarker", [], [], {}, 'list'),
+  captureTemplate('capture-members', 'MATCH (a)-[r]->(b) WHERE r.zzMarker IS NOT NULL RETURN a, r, b ORDER BY r.zzMarker', [], [], {}, 'list'),
+  captureTemplate('capture-marked', 'MATCH (n) WHERE n.zzMarker = $marker RETURN n ORDER BY elementId(n)', [], [], { marker: z.string() }, 'list'),
   captureTemplate(
     'capture-relationship',
     'MATCH p = (a:@entity(entityType))-[r:@relationship(relationshipType)]->(b:@entity(otherType)) RETURN a, r, b, p ORDER BY a.@stableId(entityType), b.@stableId(otherType), elementId(r) LIMIT 1',
@@ -124,7 +125,6 @@ export async function startPackServers(): Promise<PackServer[]> {
       },
     };
     const { gate, system } = assembleGate({
-      usability: ALWAYS_USABLE,
       mapping: gateMapping,
       seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit },
       executor: recording,

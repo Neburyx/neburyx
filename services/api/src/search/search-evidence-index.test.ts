@@ -2,7 +2,7 @@ import { searchResultSchema } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
 import type { ExecuteOutcome } from '../gate/executor.js';
 import { evidenceCalls, postSearch, RELATED_ENTITIES, searchCalls, searchMappingOf, startSearchApp } from '../testing/search-app.js';
-import { onlineIndexesOf, relationshipRangeIndex, schemaAnswer, searchModelOf, type IndexRow, type StoredNode, type StoredRelationship } from '../testing/search-fixtures.js';
+import { onlineIndexesOf, relationshipRangeIndex, schemaAnswer, searchModelOf, type IndexRow, type StoredNode, type StoredRelationship, storedHits } from '../testing/search-fixtures.js';
 
 const TEXT = 'REC-1';
 const body = { sourceId: 'demo', text: TEXT };
@@ -16,7 +16,7 @@ const TWO_ROWS = [
   { type: 'USED_IN', from: 'widget', to: 'gadget', stable_id: 'linkId', evidence: ['recordId'] },
 ];
 
-function started(options: { readonly relationships?: readonly unknown[]; readonly entities?: readonly unknown[]; readonly schema?: (indexes: IndexRow[]) => ExecuteOutcome; readonly usability?: { isUsable: () => boolean } } = {}) {
+function started(options: { readonly relationships?: readonly unknown[]; readonly entities?: readonly unknown[]; readonly schema?: (indexes: IndexRow[]) => ExecuteOutcome } = {}) {
   const mapping = searchMappingOf({ entities: options.entities ?? RELATED_ENTITIES, relationships: options.relationships ?? TWO_ROWS });
   const [source] = mapping.sources;
   if (source === undefined) throw new Error('the mapping has no source');
@@ -27,7 +27,6 @@ function started(options: { readonly relationships?: readonly unknown[]; readonl
     mapping,
     ownSchema: true,
     respond: (call) => (call.templateId === 'schema-indexes' ? Promise.resolve(schema(online)) : model(call)),
-    ...(options.usability === undefined ? {} : { usability: options.usability }),
   });
 }
 
@@ -36,14 +35,14 @@ const answerOf = async (app: Awaited<ReturnType<typeof started>>['app']) => sear
 
 describe('a relationship row whose evidence index is not online', () => {
   it.each([
-    ['missing', (rows: IndexRow[]) => without(rows, 'USED_IN')],
-    ['building', (rows: IndexRow[]) => [...without(rows, 'USED_IN'), relationshipRangeIndex('USED_IN', 'recordId', 'POPULATING')]],
-    ['failed', (rows: IndexRow[]) => [...without(rows, 'USED_IN'), relationshipRangeIndex('USED_IN', 'recordId', 'FAILED')]],
-  ])('is left out whole and named, with no statement naming it, when its index is %s, and the other row is still searched', async (_name, change) => {
+    ['missing', (rows: IndexRow[]) => without(rows, 'USED_IN'), 'index-unavailable'],
+    ['building', (rows: IndexRow[]) => [...without(rows, 'USED_IN'), relationshipRangeIndex('USED_IN', 'recordId', 'POPULATING')], 'index-building'],
+    ['failed', (rows: IndexRow[]) => [...without(rows, 'USED_IN'), relationshipRangeIndex('USED_IN', 'recordId', 'FAILED')], 'index-failed'],
+  ])('names its property, with no statement naming it, when its index is %s, and the other row is still searched', async (_name, change, reason) => {
     const { app, executor } = await started({ schema: (rows) => schemaAnswer(change(rows)) });
     const answer = await answerOf(app);
-    expect(answer.evidence.disabledRelationshipTypes).toEqual([{ relationshipType: 'USED_IN', from: 'widget', to: 'gadget', reason: 'index-unavailable' }]);
-    expect(answer.evidence.hits.map((hit) => hit.supports.type)).toEqual(['MADE_FROM']);
+    expect(answer.evidence.disabledRelationshipTypes).toEqual([{ relationshipType: 'USED_IN', from: 'widget', to: 'gadget', property: 'recordId', reason }]);
+    expect(storedHits(answer.evidence.hits).map((hit) => hit.supports.type)).toEqual(['MADE_FROM']);
     expect(answer.evidence.searchable).toBe(true);
     expect(evidenceCalls(executor)).toHaveLength(1);
     expect(evidenceCalls(executor)[0]?.cypher).not.toContain('USED_IN');
@@ -62,13 +61,44 @@ describe('a relationship row whose evidence index is not online', () => {
   });
 });
 
-describe('a relationship row with no stable ID, and a mapping with no evidence property', () => {
-  it('does not search a row that has an evidence property and no stable ID, and names it with the reason no-stable-id', async () => {
-    const { app, executor } = await started({ relationships: [{ type: 'MADE_FROM', from: 'widget', to: 'gadget', evidence: ['recordId'] }] });
+describe('a relationship row with two evidence properties, one of them without an online index', () => {
+  it('searches the property that has an index and names the other with its reason', async () => {
+    const relationships = [{ type: 'MADE_FROM', from: 'widget', to: 'gadget', stable_id: 'linkId', evidence: ['recordId', 'batchNo'] }];
+    const { app, executor } = await started({ relationships, schema: (rows) => schemaAnswer([...rows.filter((row) => row.property !== 'batchNo'), relationshipRangeIndex('MADE_FROM', 'batchNo', 'FAILED')]) });
     const answer = await answerOf(app);
-    expect(answer.evidence.disabledRelationshipTypes).toEqual([{ relationshipType: 'MADE_FROM', from: 'widget', to: 'gadget', reason: 'no-stable-id' }]);
+    expect(answer.evidence.disabledRelationshipTypes).toEqual([{ relationshipType: 'MADE_FROM', from: 'widget', to: 'gadget', property: 'batchNo', reason: 'index-failed' }]);
+    expect(answer.evidence.searchable).toBe(true);
+    expect(storedHits(answer.evidence.hits).map((hit) => hit.supports.stableId)).toEqual(['L-1']);
+    const [read] = evidenceCalls(executor);
+    expect(read?.cypher).toContain('`recordId`');
+    expect(read?.cypher).not.toContain('batchNo');
+    await app.close();
+  });
+});
+
+describe('a relationship row with no stable ID, and a mapping with no evidence property', () => {
+  const NO_ID_ROW = [{ type: 'MADE_FROM', from: 'widget', to: 'gadget', evidence: ['recordId'] }];
+
+  it.each([
+    ['missing', (rows: IndexRow[]) => without(rows, 'MADE_FROM'), 'index-unavailable'],
+    ['building', (rows: IndexRow[]) => [...without(rows, 'MADE_FROM'), relationshipRangeIndex('MADE_FROM', 'recordId', 'POPULATING')], 'index-building'],
+    ['failed', (rows: IndexRow[]) => [...without(rows, 'MADE_FROM'), relationshipRangeIndex('MADE_FROM', 'recordId', 'FAILED')], 'index-failed'],
+  ] as const)('does not read the evidence property of a row with no stable ID whose index is %s, and names it as a row with one is named', async (_name, schema, reason) => {
+    const { app, executor } = await started({ relationships: NO_ID_ROW, schema: (rows) => schemaAnswer(schema(rows)) });
+    const answer = await answerOf(app);
+    expect(answer.evidence.disabledRelationshipTypes).toEqual([{ relationshipType: 'MADE_FROM', from: 'widget', to: 'gadget', property: 'recordId', reason }]);
     expect(answer.evidence.searchable).toBe(false);
     expect(evidenceCalls(executor)).toHaveLength(0);
+    await app.close();
+  });
+
+  it('searches the evidence property of a row with no stable ID through its index, with no reason named', async () => {
+    const { app, executor } = await started({ relationships: NO_ID_ROW });
+    const answer = await answerOf(app);
+    expect(answer.evidence.disabledRelationshipTypes).toEqual([]);
+    expect(answer.evidence.searchable).toBe(true);
+    const [call] = evidenceCalls(executor);
+    expect(call?.cypher).toContain('USING RANGE INDEX SEEK r:`MADE_FROM`(`recordId`)');
     await app.close();
   });
 
@@ -91,7 +121,7 @@ describe('a mapping whose only searchable group is the evidence group', () => {
     const { app, executor, events } = await started({ entities, relationships: [TWO_ROWS[0]] });
     const answer = await answerOf(app);
     expect(answer.searchable).toBe(false);
-    expect(answer.evidence.hits.map((hit) => hit.supports.stableId)).toEqual(['L-1']);
+    expect(storedHits(answer.evidence.hits).map((hit) => hit.supports.stableId)).toEqual(['L-1']);
     expect(searchCalls(executor)).toHaveLength(0);
     expect(executor.calls.filter((call) => call.templateId === 'schema-indexes')).toHaveLength(1);
     expect(evidenceCalls(executor)).toHaveLength(1);
@@ -106,7 +136,7 @@ describe('where the guard cannot say, and when the schema read fails', () => {
     const { app, executor } = await started({ schema: () => ({ status: 'unavailable', reason: 'refused' }) });
     const answer = await answerOf(app);
     expect(answer.evidence.disabledRelationshipTypes).toEqual([]);
-    expect(answer.evidence.hits.map((hit) => hit.supports.type).sort()).toEqual(['MADE_FROM', 'USED_IN']);
+    expect(storedHits(answer.evidence.hits).map((hit) => hit.supports.type).sort()).toEqual(['MADE_FROM', 'USED_IN']);
     expect(Object.keys(answer.evidence).sort()).toEqual(['count', 'disabledRelationshipTypes', 'hits', 'searchable']);
     expect(evidenceCalls(executor)).toHaveLength(1);
     await app.close();
@@ -115,14 +145,14 @@ describe('where the guard cannot say, and when the schema read fails', () => {
   it.each([
     ['a timeout', { status: 'timeout' } as const, 504],
     ['a source that is down', { status: 'unavailable', reason: 'unreachable' } as const, 503],
-    ['an answer that cannot be read', { status: 'rows', rows: [{ indexes: 'nonsense', truncated: false }] } as const, 500],
-    ['a truncated answer', schemaAnswer([], true), 500],
-  ])('answers the error of the schema read for %s, makes no data read and audits every run as failed', async (_name, outcome, status) => {
+    ['an answer that cannot be read', { status: 'rows', rows: [{ indexes: 'nonsense', truncated: false }] } as const, 503],
+    ['a truncated answer', schemaAnswer([], true), 503],
+  ])('answers the error of the schema read for %s, makes no data read and audits no run as a success', async (_name, outcome, status) => {
     const { app, executor, events } = await started({ schema: () => outcome });
     const response = await postSearch(app, body);
     expect(response.statusCode).toBe(status);
     expect(executor.calls.map((call) => call.templateId)).toEqual(['schema-indexes']);
-    expect(events.filter((event) => event.action.startsWith('entity.search')).every((event) => event.result === 'failed')).toBe(true);
+    expect(events.filter((event) => event.action.startsWith('entity.search')).every((event) => event.result !== 'success')).toBe(true);
     await app.close();
   });
 });

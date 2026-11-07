@@ -20,7 +20,7 @@ describe('the related group while the request asks for masking', () => {
     await masked.app.close();
     const plain = await startSearchApp({ mapping, ownSchema: true, respond });
     const plainAnswer = searchResultSchema.parse((await postSearch(plain.app, { sourceId: 'demo', text: 'X-1' })).json());
-    expect(plainAnswer.related.disabledTypes).toEqual([{ entityType: 'widget', reason: 'index-unavailable' }]);
+    expect(plainAnswer.related.disabledTypes).toEqual([{ entityType: 'widget', property: 'ownerRef', reason: 'index-unavailable', typeSearched: true }]);
     await plain.app.close();
   });
 

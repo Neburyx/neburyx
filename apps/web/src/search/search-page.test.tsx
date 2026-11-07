@@ -58,11 +58,32 @@ describe('the Search results page', () => {
     expect(within(main()).getByText('0 exact matches · 0.18 s')).toBeDefined();
   });
 
-  it('names a type whose search is disabled by its display name, and shows the warnings of the answer', async () => {
-    const kit = searchKit(['demo'], async () => ok(answerOf('demo', [hit('demo', 'AC-1')], { disabledTypes: [{ entityType: TYPE, reason: 'index-unavailable' }], warnings: ['1 row was left out because they have no usable stable ID.'] })));
+  it('names a property that was not searched with the display name of its type and why, and shows the warnings of the answer and the rest of the page', async () => {
+    const kit = searchKit(['demo'], async () => ok(answerOf('demo', [hit('demo', 'AC-1')], { disabledTypes: [{ entityType: TYPE, property: 'nickname', reason: 'index-unavailable', typeSearched: true }], warnings: ['1 row was left out because they have no usable stable ID.'] })));
     renderApp(searchAt('demo', 'AC-1'), kit.client);
-    expect(await screen.findByText('KIND-A: Search is disabled for this type.')).toBeDefined();
+    expect(await screen.findByText('Not searched: KIND-A · nickname: no online index')).toBeDefined();
     expect(within(main()).getByText('1 row was left out because they have no usable stable ID.')).toBeDefined();
+    expect(screen.getByRole('heading', { level: 2, name: 'Exact ID match (1)' })).toBeDefined();
+  });
+
+  it.each([
+    ['index-building', 'index is building'],
+    ['index-failed', 'index failed'],
+  ] as const)('says why a property was not searched for the reason %s', async (reason, text) => {
+    const kit = searchKit(['demo'], async () => ok(answerOf('demo', [hit('demo', 'AC-1')], { disabledTypes: [{ entityType: TYPE, property: 'nickname', reason, typeSearched: true }] })));
+    renderApp(searchAt('demo', 'AC-1'), kit.client);
+    expect(await screen.findByText(`Not searched: KIND-A · nickname: ${text}`)).toBeDefined();
+  });
+
+  it('names a type none of whose properties was searched as not searched, with the reason of each property', async () => {
+    const disabledTypes = [
+      { entityType: TYPE, property: 'code', reason: 'index-building', typeSearched: false },
+      { entityType: TYPE, property: 'nickname', reason: 'index-failed', typeSearched: false },
+    ] as const;
+    const kit = searchKit(['demo'], async () => ok(answerOf('demo', [], { disabledTypes: [...disabledTypes] })));
+    renderApp(searchAt('demo', 'AC-1'), kit.client);
+    expect(await screen.findByText('Not searched: KIND-A, none of its properties · code: index is building · nickname: index failed')).toBeDefined();
+    expect(screen.queryByText(/^Not searched: KIND-A · /)).toBeNull();
   });
 });
 
@@ -294,9 +315,9 @@ describe('a text of one character, a masked search with nothing to search, and t
   });
 
   it('lists the types that were left out, and not "No matching entities", when every type is left out', async () => {
-    const kit = searchKit(['demo'], async () => ok(answerOf('demo', [], { searchable: false, disabledTypes: [{ entityType: 'kind-a', reason: 'index-unavailable' }] })));
+    const kit = searchKit(['demo'], async () => ok(answerOf('demo', [], { searchable: false, disabledTypes: [{ entityType: 'kind-a', property: 'code', reason: 'index-unavailable', typeSearched: false }] })));
     renderApp(searchAt('demo', 'Ana'), kit.client);
-    expect(await screen.findByText('KIND-A: Search is disabled for this type.')).toBeDefined();
+    expect(await screen.findByText('Not searched: KIND-A, none of its properties · code: no online index')).toBeDefined();
     expect(screen.queryByText('No matching entities')).toBeNull();
     expect(screen.queryByText('Nothing can be searched while personal data is masked. Turn masking off to search personal data.')).toBeNull();
   });

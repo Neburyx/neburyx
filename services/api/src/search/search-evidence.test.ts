@@ -2,7 +2,7 @@ import { searchResultSchema } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
 import { entityRows, plainNode } from '../testing/entity-fixtures.js';
 import { evidenceCalls, postSearch, RELATED_ENTITIES, relatedCalls, searchCalls, searchMappingOf, startSearchApp } from '../testing/search-app.js';
-import { onlineIndexesOf, relationshipRangeIndex, relationshipTextIndex, schemaAnswer, searchModelOf, withSchema, type StoredNode, type StoredRelationship } from '../testing/search-fixtures.js';
+import { onlineIndexesOf, relationshipRangeIndex, relationshipTextIndex, schemaAnswer, searchModelOf, withSchema, type StoredNode, type StoredRelationship, storedHits } from '../testing/search-fixtures.js';
 
 const RELATIONSHIPS = [
   { type: 'MADE_FROM', from: 'widget', to: 'gadget', stable_id: 'linkId', evidence: ['recordId', 'docId'] },
@@ -87,7 +87,7 @@ describe('POST /v1/search/entities with evidence records', () => {
   it('does not match a relationship of another pair of entity types that the row does not give evidence for', async () => {
     const { app } = await started([link('L-2', { recordId: 'REC-2' }, widgetNode, partNode), link('L-3', { recordId: 'REC-2' })]);
     const answer = await answerOf(app, 'REC-2');
-    expect(answer.evidence.hits.map((hit) => hit.supports.stableId)).toEqual(['L-3']);
+    expect(storedHits(answer.evidence.hits).map((hit) => hit.supports.stableId)).toEqual(['L-3']);
     await app.close();
   });
 
@@ -140,7 +140,7 @@ describe('POST /v1/search/entities with evidence records', () => {
     const { app } = await started([link('L-1', { recordId: 'REC-1', docId: 'REC-1' })]);
     const answer = await answerOf(app, 'REC-1');
     expect(answer.evidence.hits).toHaveLength(1);
-    expect(answer.evidence.hits[0]?.records).toEqual([{ sourceRecordId: 'REC-1' }]);
+    expect(storedHits(answer.evidence.hits)[0]?.records).toEqual([{ sourceRecordId: 'REC-1' }]);
     expect(answer.evidence.count).toMatchObject({ value: 1 });
     await app.close();
   });
@@ -167,9 +167,16 @@ describe('POST /v1/search/entities with evidence records', () => {
     const relatedMapping = searchMappingOf({ entities: RELATED_ENTITIES, relationships: RELATIONSHIPS });
     const { app } = await startSearchApp({ mapping: relatedMapping, respond });
     const answer = await answerOf(app, 'REC-1');
-    expect(answer.evidence.hits.map((hit) => hit.supports.stableId)).toEqual(['L-1']);
+    expect(storedHits(answer.evidence.hits).map((hit) => hit.supports.stableId)).toEqual(['L-1']);
     expect(answer.dropped).toEqual({ 'not-mapped': 1, 'ambiguous-type': 0, 'no-stable-id': 2, 'end-not-shown': 1 });
-    expect(answer.warnings).toHaveLength(3);
+    // the exact record with no stable ID is listed; the evidence end with none is left out with its relationship
+    expect(answer.exactUnreferenced).toHaveLength(1);
+    expect(answer.warnings).toEqual([
+      "1 row was left out because they are not part of this source's mapping.",
+      '1 row was left out because they have no usable stable ID.',
+      '1 row was left out because one of their ends was left out.',
+      '1 row has no usable stable ID, so it is listed and cannot be opened or added.',
+    ]);
     await app.close();
   });
 });

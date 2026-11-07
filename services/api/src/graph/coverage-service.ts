@@ -2,9 +2,9 @@ import type { CoverageEntity, CoverageResponse } from '@neburyx/contracts';
 import { AppError } from '../errors.js';
 import { degreePreviewBoundedTemplate } from '../gate/templates/degree-preview.js';
 import type { SourceAccess } from '../investigations/source-access.js';
-import type { MappingModel, SourceModel } from '../mapping/model.js';
+import type { MappingModel } from '../mapping/model.js';
 import type { AuditSink, Principal } from '../seams/seams.js';
-import type { DegreeVerdicts, SourceUsability } from '../source-test/usability.js';
+import type { DegreeVerdicts } from '../source-test/usability.js';
 import { notRetrievedOf } from './coverage-sum.js';
 import type { DegreeCache } from './degree-cache.js';
 
@@ -26,13 +26,7 @@ interface CoverageDeps {
   readonly verdicts: DegreeVerdicts;
   readonly audit: AuditSink;
   readonly logger: { warn(fields: object, message: string): void };
-  readonly cache?: { readonly store: DegreeCache; readonly usability: SourceUsability };
-}
-
-/** A type whose label another type shares has no preview, because its nodes cannot be told from the other's. */
-function sharesLabel(source: SourceModel, entityType: string): boolean {
-  const label = source.entities.find((entity) => entity.type === entityType)?.label;
-  return source.entities.filter((entity) => entity.label === label).length > 1;
+  readonly cache?: { readonly store: DegreeCache };
 }
 
 export function createCoverageService(deps: CoverageDeps): CoverageService {
@@ -44,14 +38,11 @@ export function createCoverageService(deps: CoverageDeps): CoverageService {
       const source = deps.mapping.sources.find((candidate) => candidate.id === call.sourceId);
       if (source === undefined || call.entities.some((entity) => !source.entities.some((known) => known.type === entity.ref.entityType))) throw new AppError('NOT_FOUND');
       const cache = deps.cache;
-      if (cache !== undefined && !cache.usability.isUsable(call.sourceId)) throw new AppError('SOURCE_UNAVAILABLE');
       const revision = deps.verdicts.revisionOf(call.sourceId);
       const parts = call.entities.map((entity) => ({
         loadedRelationships: entity.loadedRelationships,
         loadedQuality: entity.loadedQuality,
-        preview: sharesLabel(source, entity.ref.entityType)
-          ? undefined
-          : cache?.store.get({ sourceId: call.sourceId, configHash: source.configHash, principalId: call.principal.id, entityType: entity.ref.entityType, stableId: entity.ref.stableId, mask: call.mask, verdictRevision: revision }),
+        preview: cache?.store.get({ sourceId: call.sourceId, configHash: source.configHash, principalId: call.principal.id, entityType: entity.ref.entityType, stableId: entity.ref.stableId, mask: call.mask, verdictRevision: revision }),
       }));
       const response = { notRetrieved: notRetrievedOf(parts) };
       await recordRead(deps, call);

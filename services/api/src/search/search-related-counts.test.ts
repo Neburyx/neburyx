@@ -42,7 +42,7 @@ describe('the count of the related group', () => {
     expect(relatedCalls(executor)[0]?.rowLimit).toBe(11);
   });
 
-  it('holds the number of hits it has, as a lower bound, when the read overflowed and normalization left rows out or merged them', async () => {
+  it('holds the number of hits it has, the unreferenced one too, as a lower bound, when the read overflowed and normalization left rows out or merged them', async () => {
     const rows = [
       ...Array.from({ length: 20 }, (_, index) => plainNode(['Gadget'], { gadgetId: `GT-${index + 1}`, widgetRef: TEXT }, `4:g:${index + 1}`)),
       plainNode(['Nothing'], { gadgetId: 'N-1' }, '4:n:1'),
@@ -56,7 +56,8 @@ describe('the count of the related group', () => {
     const { answer } = await searched([], {}, (call) => (call.templateId === 'schema-indexes' ? searchModelOf([])(call) : respond(call)));
     expect(answer.related.hits).toHaveLength(22);
     expect(answer.related.hits.length).toBeLessThan(25);
-    expect(answer.related.count).toEqual({ value: answer.related.hits.length, quality: 'lowerBound', scope: 'search:related' });
+    expect(answer.related.unreferenced).toHaveLength(1);
+    expect(answer.related.count).toEqual({ value: answer.related.hits.length + 1, quality: 'lowerBound', scope: 'search:related' });
     expect(answer.dropped).toMatchObject({ 'not-mapped': 1, 'no-stable-id': 1 });
   });
 
@@ -101,7 +102,7 @@ describe('the diagnostics of the two groups', () => {
   it('adds up what both runs left out, by reason, and makes the sentences from the totals', async () => {
     const { answer } = await searched([], {}, respond);
     expect(answer.dropped).toEqual({ 'not-mapped': 2, 'ambiguous-type': 0, 'no-stable-id': 1 });
-    expect(answer.warnings).toEqual(warningsOf({ 'not-mapped': 2, 'ambiguous-type': 0, 'no-stable-id': 1 }));
+    expect(answer.warnings).toEqual(warningsOf({ 'not-mapped': 2, 'ambiguous-type': 0, 'no-stable-id': 1 }, 1));
     expect(answer.warnings).toHaveLength(2);
   });
 

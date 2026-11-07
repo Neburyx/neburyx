@@ -6,12 +6,12 @@ import type { AuditEvent } from '../seams/seams.js';
 import { auditResultFor, FALLBACK_AUDIT_ACTION } from './audit.js';
 import { authorizeRequest } from './authorize.js';
 import { acquireLease, executeRead, releaseWhenClosed, type ExecuteResult, type SharedLease } from './execute.js';
-import { isMet, readIndexSnapshot } from './index-guard.js';
+import { gapOf, readIndexSnapshot, worstGapOf, type IndexGap } from './index-guard.js';
 import { exhaustive } from './exhaustive.js';
 import type { GateDeps } from './deps.js';
 import { SYSTEM_PRINCIPAL } from './system-principal.js';
 import type { Gate, GateContext, IndexReader, GatePage, GateRequest, GateStage, Params, SystemRunner, Template } from './types.js';
-import { findTemplate, validateRequest, type Validated } from './validate.js';
+import { findTemplate, HELD_FIELD, validateRequest, type Validated } from './validate.js';
 
 interface Progress {
   stage: GateStage;
@@ -46,7 +46,7 @@ function resolveContext(deps: GateDeps, request: GateRequest, system: boolean): 
   };
 }
 
-/** Finds out, before the data read, that the indexes a template needs are online: from the snapshot the caller gave or from one fresh read of the schema; a refusal when one is not. */
+/** Finds out, before the data read, that the indexes a template needs are online: from the snapshot the caller gave or from one fresh read of the schema; a refusal that names why when one is not. */
 async function guardIndexes(deps: GateDeps, request: GateRequest, context: GateContext, template: Template, params: Params): Promise<void> {
   const needs = template.indexNeeds?.(params, context.allowlist) ?? [];
   if (needs.length === 0) return;
@@ -55,19 +55,35 @@ async function guardIndexes(deps: GateDeps, request: GateRequest, context: GateC
   const given = request.indexes !== undefined && request.indexes.sourceId === request.sourceId ? request.indexes : undefined;
   const snapshot = given ?? (await readIndexSnapshot((read) => runGate(deps, { ...read, principal: SYSTEM_PRINCIPAL }, true), { traceId: request.traceId, sourceId: request.sourceId }));
   if (snapshot === 'unverified') return;
-  if (needs.some((need) => !isMet(snapshot, need, context.allowlist))) throw new AppError('SOURCE_UNAVAILABLE', undefined, 'index-unavailable');
+  const gap = worstGapOf(needs.flatMap((need): IndexGap[] => {
+    const found = gapOf(snapshot, need, context.allowlist);
+    return found === undefined ? [] : [found];
+  }));
+  if (gap !== undefined) throw new AppError('SOURCE_UNAVAILABLE', undefined, gap);
+}
+
+// a template with no next page would hand on a cut result as if it were whole; only a declared cut has a meaning of its own (a duplicate of the entity read, a lower bound of a capped read), and no cursor is signed for it
+function refuseCut(deps: GateDeps, template: Template, read: ExecuteResult): ExecuteResult {
+  if (!template.paged && template.cutMeans === undefined && read.hasMore) {
+    deps.logger.warn({ event: 'gate.read_cut', templateId: template.id }, 'gate read of a template that is not paged returned more rows than its limit');
+    throw new AppError('INTERNAL_ERROR', undefined, 'read-cut');
+  }
+  return read;
 }
 
 async function finishPage(deps: GateDeps, progress: Progress, request: GateRequest, context: GateContext, validated: Validated, result: ExecuteResult): Promise<GatePage> {
   const { template, params, binding } = validated;
-  const normalized = await inStage(deps, progress, 'normalize', () => {
-    const items = template.normalize(result.rows, result.plan, { sourceId: context.sourceId, hasMore: result.hasMore, model: context.model, limit: request.limit, countCap: context.budgets.countCap, params, references: deps.references });
-    // the page after this one, when there is one: the template says where it starts and the gate signs it for this request
+  const items = await inStage(deps, progress, 'normalize', () =>
+    template.normalize(result.rows, result.plan, { sourceId: context.sourceId, hasMore: result.hasMore, model: context.model, limit: request.limit, countCap: context.budgets.countCap, params, references: deps.references }),
+  );
+  return inStage(deps, progress, 'redact', () => {
+    const redacted = deps.redact(items, context);
+    const held = template.heldOf === undefined ? undefined : validated.held + template.heldOf(redacted);
+    // the page after this one, when there is one: the template says where it starts and the gate signs it for this request, with the hits held so far when the template counts them
     const position = template.paged && result.hasMore ? template.nextPosition?.(result.rows, request.limit) : undefined;
-    return { items, nextCursor: position === undefined ? undefined : deps.cursors.mint(binding, mapPositionReferences(template, position, context, (entityType, stableId) => makeToken(deps.references, { sourceId: context.sourceId, entityType }, stableId))) };
+    const signed = position === undefined ? undefined : { ...mapPositionReferences(template, position, context, (entityType, stableId) => makeToken(deps.references, { sourceId: context.sourceId, entityType }, stableId)), ...(held === undefined ? {} : { [HELD_FIELD]: held }) };
+    return { items: redacted, hasMore: result.hasMore, ...(signed === undefined ? {} : { nextCursor: deps.cursors.mint(binding, signed) }), ...(held === undefined ? {} : { held }) };
   });
-  const redacted = await inStage(deps, progress, 'redact', () => deps.redact(normalized.items, context));
-  return { items: redacted, hasMore: result.hasMore, ...(normalized.nextCursor === undefined ? {} : { nextCursor: normalized.nextCursor }) };
 }
 
 async function runStages(deps: GateDeps, request: GateRequest, system: boolean, progress: Progress): Promise<GatePage> {
@@ -78,11 +94,11 @@ async function runStages(deps: GateDeps, request: GateRequest, system: boolean, 
     return validateRequest(deps.catalog, found, request, context, deps.cursors, deps.references);
   });
   const { template, params, rendered } = validated;
-  await inStage(deps, progress, 'authorize', () => authorizeRequest(deps.seams.policy, deps.usability, context, template));
+  await inStage(deps, progress, 'authorize', () => authorizeRequest(deps.seams.policy, context, template));
   const result = await inStage(deps, progress, 'execute', async (): Promise<ExecuteResult> => {
     if (template.readsNothing?.(params, context.allowlist) === true) return { rows: [], hasMore: false };
     if (!system) await guardIndexes(deps, request, context, template, params);
-    return executeRead({ coordinator: deps.seams.coordinator, executor: deps.executor, clock: deps.clock, logger: deps.logger }, context, template, rendered, request.limit);
+    return refuseCut(deps, template, await executeRead({ coordinator: deps.seams.coordinator, executor: deps.executor, clock: deps.clock, logger: deps.logger }, context, template, rendered, request.limit));
   });
   return finishPage(deps, progress, request, context, validated, result);
 }
@@ -103,7 +119,7 @@ async function runManyStages(deps: GateDeps, requests: readonly GateRequest[], p
   );
   const [lead] = validated;
   if (lead === undefined) return [];
-  await inStage(deps, progress, 'authorize', () => authorizeRequest(deps.seams.policy, deps.usability, context, lead.template));
+  await inStage(deps, progress, 'authorize', () => authorizeRequest(deps.seams.policy, context, lead.template));
   const results = await inStage(deps, progress, 'execute', async (): Promise<readonly ExecuteResult[]> => {
     const reads = validated.filter((entry) => entry.template.readsNothing?.(entry.params, context.allowlist) !== true);
     const executeDeps = { coordinator: deps.seams.coordinator, executor: deps.executor, clock: deps.clock, logger: deps.logger };
@@ -125,7 +141,7 @@ async function runManyStages(deps: GateDeps, requests: readonly GateRequest[], p
       for (const [index, entry] of validated.entries()) {
         const request = requests[index];
         if (request === undefined) throw new AppError('INTERNAL_ERROR');
-        out.push(reads.includes(entry) ? await executeRead(executeDeps, context, entry.template, entry.rendered, request.limit, shared) : { rows: [], hasMore: false });
+        out.push(reads.includes(entry) ? refuseCut(deps, entry.template, await executeRead(executeDeps, context, entry.template, entry.rendered, request.limit, shared)) : { rows: [], hasMore: false });
       }
       return out;
     } finally {
@@ -217,7 +233,7 @@ export function createGates(deps: GateDeps): { readonly gate: Gate; readonly sys
     indexes: {
       async read(request) {
         const decision = await deps.seams.policy.authorizeSource({ principal: request.principal, sourceId: request.sourceId });
-        if (!decision.allowed || !deps.usability.isUsable(request.sourceId)) return 'unverified';
+        if (!decision.allowed) return 'unverified';
         return readIndexSnapshot((read) => runGate(deps, { ...read, principal: SYSTEM_PRINCIPAL }, true), request);
       },
     },

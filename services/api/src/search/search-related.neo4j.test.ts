@@ -14,7 +14,6 @@ import { prepareParameters } from '../sources/parameters.js';
 import { LOCAL_PRINCIPAL } from '../testing/gate.js';
 import { envFor, NEO4J_SERIES, runAdmin, runAll, sourceFor, startNeo4j, type RunningNeo4j } from '../testing/neo4j-server.js';
 import { communityAccess } from '../testing/source-access.js';
-import { ALWAYS_USABLE } from '../testing/usability.js';
 import { createSearchService } from './search-service.js';
 
 const PROFILED = 'test-related-profiled';
@@ -58,7 +57,7 @@ function rigFor(source: SourceModel): Rig {
   };
   const executor = createNeo4jExecutor({ sources: [source], env: envFor(server), logger: { warn: () => undefined } });
   const recording: Neo4jExecutor = { ...executor, execute: (call) => (statements.push({ templateId: call.templateId, cypher: call.cypher }), executor.execute(call)) };
-  const assembled = assembleGate({ usability: ALWAYS_USABLE, mapping: { sources: [source] }, seams, executor: recording, logger: { warn: () => undefined } });
+  const assembled = assembleGate({ mapping: { sources: [source] }, seams, executor: recording, logger: { warn: () => undefined } });
   return { gate: assembled.gate, indexes: assembled.indexes, close: () => executor.close() };
 }
 
@@ -88,13 +87,13 @@ beforeAll(async () => {
     scope: 'system',
     profile: true,
     cypher: `PROFILE ${searchRelatedTemplate.cypher}`,
-    normalize: (rows, plan = null) => [{ operators: (plan ?? []).map((operator) => operator.name), rows: rows.length }],
+    normalize: (rows, plan = null) => [{ operators: (plan ?? []).map((operator) => `${operator.name} ${operator.details ?? ''}`), rows: rows.length }],
   };
   const executor = createNeo4jExecutor({ sources: [sourceOf(ENTITIES)], env: envFor(server), logger: { warn: () => undefined } });
   const defaults = communitySeams();
   profiling = {
     executor,
-    system: assembleGate({ usability: ALWAYS_USABLE, mapping: { sources: [sourceOf(ENTITIES)] }, seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit }, executor, logger: { warn: () => undefined }, catalog: createTemplateCatalog({ templates: [profiled, searchExactTemplate] }) }).system,
+    system: assembleGate({ mapping: { sources: [sourceOf(ENTITIES)] }, seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit }, executor, logger: { warn: () => undefined }, catalog: createTemplateCatalog({ templates: [profiled, searchExactTemplate] }) }).system,
   };
 }, 600_000);
 
@@ -176,21 +175,22 @@ describe(`the cap and the count of the related group on ${NEO4J_SERIES}`, () => 
 });
 
 describe(`the rows of the related group that normalization leaves out, on ${NEO4J_SERIES}`, () => {
-  it('leaves out a record with no stable ID and one whose labels fit two entity types, counts them by reason, and shows the record that is whole', async () => {
+  it('lists a record with no stable ID as unreferenced, shows a record of two labels as each type a target matched, and the record that is whole', async () => {
     const answer = await search('drop-1');
-    expect(answer.related.hits.map((hit) => hit.node.ref.stableId)).toEqual(['OK-1']);
-    expect(answer.related.count).toMatchObject({ value: 1, quality: 'exact' });
-    expect(answer.dropped).toEqual({ 'not-mapped': 0, 'ambiguous-type': 1, 'no-stable-id': 1 });
-    expect(answer.warnings).toHaveLength(2);
+    expect(answer.related.hits.map((hit) => `${hit.node.ref.entityType} ${hit.node.ref.stableId}`).sort()).toEqual(['by_range AMB-1', 'by_range OK-1', 'by_text AMB-1']);
+    expect(answer.related.unreferenced).toEqual([expect.objectContaining({ entityType: 'by_range', reason: 'no-stable-id' })]);
+    expect(answer.related.count).toMatchObject({ value: 4, quality: 'exact' });
+    expect(answer.dropped).toEqual({ 'not-mapped': 0, 'ambiguous-type': 0, 'no-stable-id': 1 });
+    expect(answer.warnings).toHaveLength(1);
   });
 
-  it('holds the hits it has, as a lower bound, when a capped read had rows left out', async () => {
+  it('holds the hits it has, the unreferenced ones too, as a lower bound, when a capped read had records with no stable ID', async () => {
     const answer = await search('cap-drop');
-    const shown = answer.related.hits.length + answer.dropped['no-stable-id'];
-    expect(shown).toBe(25);
-    expect(answer.dropped['no-stable-id']).toBeGreaterThan(0);
-    expect(answer.related.count).toEqual({ value: answer.related.hits.length, quality: 'lowerBound', scope: 'search:related' });
-    expect(answer.related.hits.length).toBeLessThan(25);
+    const unreferenced = answer.related.unreferenced?.length ?? 0;
+    expect(answer.related.hits.length + unreferenced).toBe(25);
+    expect(unreferenced).toBe(answer.dropped['no-stable-id']);
+    expect(unreferenced).toBeGreaterThan(0);
+    expect(answer.related.count).toEqual({ value: 25, quality: 'lowerBound', scope: 'search:related' });
   });
 });
 
@@ -206,23 +206,26 @@ describe(`the statement of the related read, planned on ${NEO4J_SERIES}`, () => 
     return item !== undefined && Array.isArray(item['operators']) ? item['operators'].map(String) : [];
   };
 
-  it.each(['REF-1', '123', '9007199254740993', 'a text that is no integer'])('seeks the index of every branch, under a RANGE index, a constraint and a TEXT-only index, for %s, with no scan and no filter', async (text) => {
+  it.each(['REF-1', '123', '9007199254740993', 'a text that is no integer'])('seeks the index of every branch, under a RANGE index, a constraint and a TEXT-only index, for %s, with no scan and no filter but the cursor of the page', async (text) => {
     const names = await operators(text);
     expect(names.filter((name) => /IndexSeek/.test(name)), names.join(' > ')).toHaveLength(targets.length);
-    expect(names.some((name) => /NodeByLabelScan|AllNodesScan|NodeIndexScan|^Filter/.test(name)), names.join(' > ')).toBe(false);
+    expect(names.some((name) => /NodeByLabelScan|AllNodesScan|NodeIndexScan/.test(name)), names.join(' > ')).toBe(false);
+    expect(names.filter((name) => /^Filter/.test(name)).every((name) => name.includes('elementId') && name.includes('$cursor')), names.join(' > ')).toBe(true);
   });
 
-  it('cuts a branch at its own limit: a value that 3000 records carry reads fewer than a third of them', async () => {
+  it('reads a value that 3000 records carry by its index only, sorted, bounded by those matches and never by a scan', async () => {
     const template = createTemplateCatalog({ templates: [searchRelatedTemplate] }).find('entity-related');
     if (template === undefined) throw new Error('no template');
     const rendered = renderTemplate(template, template.paramsSchema.parse({ text: 'common-text', targets: [{ entityType: 'common', property: 'ref', match: 'value' }] }), allowlistFromMapping(sourceOf(ENTITIES)), 25);
     const session = server.admin.session({ database: server.database });
     try {
-      const result = await session.run(`PROFILE ${rendered.cypher}`, prepareParameters(rendered.parameters, []));
+      const result = await session.run(`PROFILE ${rendered.cypher}`, prepareParameters({ ...rendered.parameters, cursor: null }, []));
       expect(result.records).toHaveLength(26);
       const hits = (node: { readonly dbHits: number; readonly children: readonly unknown[] } | undefined): number => (node === undefined ? 0 : node.dbHits + node.children.reduce<number>((sum, child) => sum + (isProfile(child) ? hits(child) : 0), 0));
       const profile = result.summary.profile;
-      expect(isProfile(profile) ? hits(profile) : Number.POSITIVE_INFINITY).toBeLessThan(COMMON_MATCHES / 3);
+      // a page is sorted by element ID, so each branch reads every match of the value through its index seek, which the transaction timeout bounds; it never scans
+      expect(isProfile(profile) ? hits(profile) : Number.POSITIVE_INFINITY).toBeLessThan(COMMON_MATCHES * 4);
+      expect(JSON.stringify(profile)).not.toMatch(/NodeByLabelScan|AllNodesScan|NodeIndexScan/);
     } finally {
       await session.close();
     }
@@ -264,6 +267,7 @@ describe(`a reference index that is gone since the check, on ${NEO4J_SERIES}`, (
     const stillBuilding = during.related.disabledTypes.some((disabled) => disabled.entityType === 'slow');
     if (stillBuilding) expect(naming('Slow', from)).toBe(0);
     expect(stillBuilding, 'the index of 200,000 nodes was online before the search ran').toBe(true);
+    expect(during.related.disabledTypes.find((disabled) => disabled.entityType === 'slow')).toMatchObject({ property: 'ref', reason: 'index-building', typeSearched: false });
     await runAdmin(server, 'CALL db.awaitIndexes(300)');
     expect(await relatedIds('77', 'slow')).toEqual(['77']);
   }, 300_000);

@@ -11,7 +11,6 @@ import { parseMapping } from '../mapping/load.js';
 import type { SourceModel } from '../mapping/model.js';
 import { communitySeams } from '../seams/community-seams.js';
 import { memoryAppStore } from '../testing/app-store.js';
-import { ALWAYS_USABLE } from '../testing/usability.js';
 import { LOCAL_PRINCIPAL } from '../testing/gate.js';
 import { NEO4J_SERIES, runAdmin, runAll, startNeo4j, type RunningNeo4j } from '../testing/neo4j-server.js';
 import { createSourceTester } from './tester.js';
@@ -72,7 +71,7 @@ async function report(pack: string) {
   const source = sourceOf(pack);
   if (server === undefined) throw new Error(`no server for ${pack}`);
   const mapping = { sources: [source] };
-  const gate = createSourceGate({ mapping, env: { DEMO_NEO4J_USER: server.reader.user, DEMO_NEO4J_PASSWORD: server.reader.password }, seams: communitySeams(), logger: { warn: () => undefined }, usability: ALWAYS_USABLE });
+  const gate = createSourceGate({ mapping, env: { DEMO_NEO4J_USER: server.reader.user, DEMO_NEO4J_PASSWORD: server.reader.password }, seams: communitySeams(), logger: { warn: () => undefined } });
   gates.push(gate);
   return createSourceTester({ gate: gate.gate, mapping, store: memoryAppStore() }).run({ traceId: 'tr-demo', principal: LOCAL_PRINCIPAL, sourceId: source.id });
 }

@@ -2,7 +2,6 @@ import { createCursorCodec, type CursorCodec, type CursorPosition } from '../../
 import { communitySeams } from '../../seams/community-seams.js';
 import { createSourceGate, type SourceGate } from '../../gate/source-gate.js';
 import { envFor, runAll, sourceFor, startNeo4j, type RunningNeo4j } from '../neo4j-server.js';
-import { ALWAYS_USABLE } from '../usability.js';
 import { buildSupernodes, ENTITIES, RELATIONSHIPS } from './fixture.js';
 
 /** The graphs of the supernode benchmark behind a real gate, in a database of this run's own. The measurement of a cancelled read is to start from the same rig. */
@@ -51,7 +50,7 @@ export async function startRig(): Promise<Rig> {
     await buildSupernodes(server);
     const defaults = communitySeams();
     const { codec, positionOf } = recordingCodec();
-    const parts = createSourceGate({ cursors: codec, mapping: { sources: [sourceFor(server, { entities: ENTITIES, relationships: RELATIONSHIPS })] }, env: envFor(server), seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit }, logger: { warn: () => undefined }, usability: ALWAYS_USABLE });
+    const parts = createSourceGate({ cursors: codec, mapping: { sources: [sourceFor(server, { entities: ENTITIES, relationships: RELATIONSHIPS })] }, env: envFor(server), seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit }, logger: { warn: () => undefined } });
     return { server, parts, edition, positionOf };
   } catch (error) {
     await server.stop().catch(() => undefined);

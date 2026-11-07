@@ -229,3 +229,24 @@ describe('a cheap degree read the gate runs', () => {
     expect(dataCalls(executor, DEGREE_PREVIEW_CHEAP_ID)[0]?.parameters['stableInteger']).toEqual({ $type: 'integer', value: '-9223372036854775808' });
   });
 });
+
+describe('the degree read of an entity type whose label another type shares', () => {
+  const shared = mappingWith({
+    entities: [...ENTITIES, { type: 'twin', label: 'Widget', stable_id: 'twinId' }],
+    relationships: [...RELATIONSHIPS, { type: 'PAIRS', from: 'twin', to: 'gadget' }],
+  });
+
+  it('anchors on the label and the stable ID property of the type asked for, and counts only that type\'s pairs', async () => {
+    const { read, executor } = rig(() => rowOf(4), shared);
+    expect(await read({ entityType: 'twin', stableId: 'T-1' })).toMatchObject({ items: [{ found: true, counts: [{ value: 4, quality: 'exact' }], duplicate: false }] });
+    const [call] = dataCalls(executor);
+    expect(call?.cypher).toContain('MATCH (n:`Widget`) WHERE n.`twinId` IN [$stableId, $stableInteger]');
+    expect(call?.cypher).toContain('(n)-[:`PAIRS`]->()');
+    expect(call?.cypher).not.toContain('`LINKS`');
+  });
+
+  it('says a second node holds the ID when the anchor finds two, whichever type the other is', async () => {
+    const { read } = rig(() => ({ status: 'rows', rows: [{ c0: 4 }, { c0: 9 }] }), shared);
+    expect(await read({ entityType: 'twin', stableId: 'T-1' })).toMatchObject({ items: [{ found: true, counts: [{ value: 4 }], duplicate: true }] });
+  });
+});

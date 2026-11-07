@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { ALWAYS_USABLE } from '../testing/usability.js';
 import { sourceTestReportSchema } from '@neburyx/contracts';
 import { assembleGate } from '../gate/assemble.js';
 import { createNeo4jExecutor } from '../sources/executor.js';
@@ -32,7 +31,7 @@ function rig(behaviour: FakeBehaviour, options: { readonly maxPage?: number; rea
   const logger = { warn: (fields: object, message: string) => void logs.push({ fields: { ...fields }, message }) };
   const executor = createNeo4jExecutor({ sources: mapping.sources, env: ENV, logger, createDriver: fake.factory });
   const defaults = communitySeams();
-  const parts = assembleGate({ usability: ALWAYS_USABLE, mapping, seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit, ...options.seams }, executor, logger, ...(options.redact === undefined ? {} : { redact: options.redact }) });
+  const parts = assembleGate({ mapping, seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit, ...options.seams }, executor, logger, ...(options.redact === undefined ? {} : { redact: options.redact }) });
   const store = memoryAppStore();
   const tester = createSourceTester({ gate: parts.gate, mapping, store, logger, clock: () => Date.UTC(2026, 10, 2, 10, 0, 0) });
   return { tester, fake, logs, executor, store, gate: parts.gate };

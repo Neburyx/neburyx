@@ -42,7 +42,7 @@ test.describe('evidence records', () => {
 
   test('names a relationship left out of the evidence group, and says no relationship is configured for evidence for a source with none', async ({ page }) => {
     await searchFor(page, 'evdrop-1');
-    await expect(page.getByText('LINKS (ACCOUNT → ACCOUNT): Evidence records are disabled for this relationship.')).toBeVisible();
+    await expect(page.getByText('Not searched: LINKS (ACCOUNT → ACCOUNT) · recordId: no online index')).toBeVisible();
     await expect(page.getByText('No relationship of this source is configured for evidence records.')).toHaveCount(0);
     await searchFor(page, 'missing-1');
     await expect(page.getByText('No relationship of this source is configured for evidence records.')).toBeVisible();
@@ -58,5 +58,31 @@ test.describe('evidence records', () => {
     await expect(page.getByText(/0 supporting/)).toHaveCount(0);
     await page.getByRole('button', { name: 'Retry' }).click();
     await expect(groupTitle(page, 'Exact ID match (1)')).toBeVisible();
+  });
+
+  test('shows an aggregate of relationships with no stable ID with its members as text, and Show more adds the next members to the same row by keyboard', async ({ page }) => {
+    await searchFor(page, 'agg-30');
+    await expect(groupTitle(page, 'Evidence records · Supporting relationships (≥ 25 · lower bound)')).toBeVisible();
+    const aggregate = page.getByRole('region', { name: /^Evidence records/ }).locator('.search-hits > li');
+    await expect(aggregate).toHaveCount(1);
+    await expect(aggregate).toContainText('SEEN_WITH');
+    await expect(aggregate).toContainText('≥ 25 relationships · lower bound');
+    await expect(aggregate.locator('.search-member')).toHaveCount(25);
+    await expect(aggregate.locator('.search-member').first()).toHaveText('Element ID 5:agg-30:01 · 1 record: REC-agg-30');
+    await expect(aggregate.getByRole('button')).toHaveCount(0);
+    const more = page.getByRole('button', { name: 'Show more: Evidence records' });
+    await more.focus();
+    await page.keyboard.press('Enter');
+    await expect(groupTitle(page, 'Evidence records · Supporting relationships (30)')).toBeVisible();
+    await expect(aggregate).toHaveCount(1);
+    await expect(aggregate.locator('.search-member')).toHaveCount(30);
+    await expect(aggregate).toContainText('30 relationships');
+    await expect(page.locator(':focus')).toHaveText('Element ID 5:agg-30:26 · 1 record: REC-agg-30');
+  });
+
+  test('keeps a supporting relationship whose evidence value cannot be shown, and says so with the property name', async ({ page }) => {
+    await searchFor(page, 'evx-1');
+    const row = page.getByRole('region', { name: 'Evidence records · Supporting relationships (1)' }).getByRole('listitem');
+    await expect(row).toContainText('2 records: REC-evx-1, docId: Value cannot be shown');
   });
 });

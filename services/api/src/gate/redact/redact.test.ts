@@ -125,7 +125,7 @@ describe('the redact stage on an item that is not a normalized result', () => {
       provenanceRefs: [],
       authorization: { canInspect: true, canExport: true },
     };
-    const result = redactResult({ nodes: [node], edges: [], dropped: { 'not-mapped': 0, 'ambiguous-type': 0, 'no-stable-id': 0 }, warnings: [] }, redactContext(model, true));
+    const result = redactResult({ nodes: [node], unreferenced: [], edges: [], dropped: { 'not-mapped': 0, 'ambiguous-type': 0, 'no-stable-id': 0 }, warnings: [] }, redactContext(model, true));
     expect(result.nodes[0]?.properties[0]).toEqual({ key: first, dataClass: 'unknown', masked: false });
   });
 
@@ -139,7 +139,7 @@ describe('the redact stage on an item that is not a normalized result', () => {
       provenanceRefs: [],
       authorization: { canInspect: true, canExport: true },
     };
-    const result = { nodes: [node], edges: [], dropped: { 'not-mapped': 0, 'ambiguous-type': 0, 'no-stable-id': 0 }, warnings: [] };
+    const result = { nodes: [node], unreferenced: [], edges: [], dropped: { 'not-mapped': 0, 'ambiguous-type': 0, 'no-stable-id': 0 }, warnings: [] };
     expect(redactResult(result, redactContext(model, true)).nodes[0]).toEqual(node);
   });
 });
@@ -393,3 +393,31 @@ describe('values that are not text, and fields named like members of every objec
   });
 });
 
+
+describe('the unreferenced hits of a result', () => {
+  const source = firstSource(
+    mappingOf(
+      sourceWith('alpha', {
+        entities: [{ type: 'holder', label: 'Holder', stable_id: 'email', title: '{ownerLabel} ({email})', search: ['nickname'], pii: [{ property: 'email', class: 'email' }, { property: 'ownerLabel', class: 'name' }] }],
+        relationships: [],
+      }),
+    ),
+  );
+  const model = normalizeModelOf(source);
+  const plain = normalizeRows({ sourceId: REQUEST, hasMore: false, model }, [{ n: plainNode(['Holder'], { email: 4.5, ownerLabel: 'Ana Silva', nickname: 'needle' }) }]);
+
+  it('are masked as nodes are when the request asks: each personal-data property and the title built from one', () => {
+    const [hit] = redactResult(plain, redactContext(model, true)).unreferenced;
+    expect(hit?.properties.find((property) => property.key === 'ownerLabel')).toMatchObject({ masked: true, maskedBy: 'request', dataClass: 'name' });
+    // the unusable stable ID of a keyed type is the personal data itself, so it is masked too
+    expect(hit?.properties.find((property) => property.key === 'email')).toMatchObject({ masked: true, maskedBy: 'request' });
+    expect(JSON.stringify(hit)).not.toContain('Ana Silva');
+    expect(JSON.stringify(hit)).not.toContain('4.5');
+    expect(hit?.properties.find((property) => property.key === 'nickname')).toMatchObject({ value: 'needle', masked: false });
+  });
+
+  it('are left as they are when the request does not ask', () => {
+    expect(redactResult(plain, redactContext(model, false)).unreferenced).toEqual(plain.unreferenced);
+    expect(plain.unreferenced[0]?.title).toBe('Ana Silva (4.5)');
+  });
+});

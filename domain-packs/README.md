@@ -79,6 +79,13 @@ Expanding a node reads its relationships page by page, newest first. How a relat
 - **Without a `stable_id`**, all relationships of the type between a node and one neighbor are shown as one aggregate relationship with its member count and the earliest and latest observed time; the pages are ordered by the latest observed time and then by the neighbor.
 - A relationship of a type that has a `stable_id` but lacks it, or holds one that is empty or not text or a whole number, is shown as a member of the aggregate for its neighbor, marked "no stable ID".
 
+## Search and the mapping
+
+- Each `search`, `reference` and `evidence` property needs its own online index. A property without one is left out of search and named with the reason; the entity type's other properties are still searched.
+- A node whose `stable_id` property is missing or holds a value that is not a usable ID is still found by search: it is listed and marked "No usable stable ID", and cannot be opened or added until it holds one.
+- The `evidence` properties of a relationship type without a `stable_id` are searched too. A hit shows the relationships between the two ends as one aggregate, each member by its element ID as text.
+- Two entity types may share a label: a node that a search matches as both types is a hit of each, and a node is opened and previewed as the type asked for.
+
 ## Rules for a pack
 
 - Names that belong to a domain (entity types, labels, relationship types, property keys) live in the pack and only there. Code and tests read them from the pack.

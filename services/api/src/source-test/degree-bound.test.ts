@@ -7,7 +7,6 @@ import { mappingOf, sourceWith } from '../testing/gate-fixtures.js';
 import { LOCAL_PRINCIPAL } from '../testing/gate.js';
 import { ENV, useClock } from '../testing/source-rig.js';
 import { SERVER_ROW } from '../testing/source-tester.js';
-import { ALWAYS_USABLE } from '../testing/usability.js';
 import { createNeo4jExecutor } from '../sources/executor.js';
 import { createSourceTester } from './tester.js';
 
@@ -20,7 +19,7 @@ function rig(degree: { hang?: boolean }) {
   const logger = { warn: () => undefined };
   const executor = createNeo4jExecutor({ sources: mapping.sources, env: ENV, logger, createDriver: fake.factory });
   const defaults = communitySeams();
-  const parts = assembleGate({ usability: ALWAYS_USABLE, mapping, seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit }, executor, logger });
+  const parts = assembleGate({ mapping, seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit }, executor, logger });
   const tester = createSourceTester({ gate: parts.gate, mapping, store: memoryAppStore() });
   return { fake, tester, executor };
 }

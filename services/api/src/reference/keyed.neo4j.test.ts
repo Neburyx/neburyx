@@ -6,7 +6,6 @@ import { createSourceGate, type SourceGate } from '../gate/source-gate.js';
 import { communitySeams } from '../seams/community-seams.js';
 import { memoryAppStore } from '../testing/app-store.js';
 import { envFor, NEO4J_SERIES, runAdmin, runAll, sourceFor, startNeo4j, type RunningNeo4j } from '../testing/neo4j-server.js';
-import { ALWAYS_USABLE } from '../testing/usability.js';
 import { makeWebRoot } from '../testing/web-root.js';
 import { deriveReferenceKeys } from './keys.js';
 
@@ -33,7 +32,7 @@ beforeAll(async () => {
     relationships: [{ type: 'HAS_PHONE', from: 'person', to: 'phone' }],
   });
   const mapping = { sources: [source] };
-  parts = createSourceGate({ usability: ALWAYS_USABLE, mapping, env: envFor(server), seams: communitySeams(), logger: { warn: () => undefined }, referenceKeys: keys });
+  parts = createSourceGate({ mapping, env: envFor(server), seams: communitySeams(), logger: { warn: () => undefined }, referenceKeys: keys });
   app = await buildApp({ webRoot, logger: pino({ level: 'silent' }), store: memoryAppStore(), mapping, gate: parts.gate, indexes: parts.indexes, referenceKeys: keys, closeSources: () => parts.close() });
 }, 600_000);
 

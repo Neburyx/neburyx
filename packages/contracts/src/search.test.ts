@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SEARCH_GROUP_CAP, searchRequestSchema, searchResultSchema, typeaheadTextSchema } from './search.js';
+import { SEARCH_GROUP_CAP, relationshipsOf, searchMoreRequestSchema, searchMoreResultSchema, searchRequestSchema, searchResultSchema, typeaheadTextSchema } from './search.js';
 
 const node = {
   ref: { sourceId: 'demo', entityType: 'widget', stableId: 'AC-1' },
@@ -69,12 +69,35 @@ describe('the search result', () => {
   });
 
   it('refuses an unknown reason for a disabled type and an unknown field', () => {
-    expect(searchResultSchema.safeParse({ ...result, disabledTypes: [{ entityType: 'widget', reason: 'because' }] }).success).toBe(false);
+    expect(searchResultSchema.safeParse({ ...result, disabledTypes: [{ entityType: 'widget', property: 'widgetId', reason: 'because', typeSearched: false }] }).success).toBe(false);
     expect(searchResultSchema.safeParse({ ...result, extra: true }).success).toBe(false);
   });
 
+  describe('a property that is not searched', () => {
+    const entry = (property: string, reason: string, typeSearched: boolean) => ({ entityType: 'widget', property, reason, typeSearched });
+    const accepts = (disabledTypes: unknown[]): boolean => searchResultSchema.safeParse({ ...result, disabledTypes, related: { ...result.related, disabledTypes } }).success;
+
+    it.each(['index-unavailable', 'index-building', 'index-failed'])('is named with its type, its property and the reason %s', (reason) => {
+      expect(accepts([entry('ownerName', reason, true)])).toBe(true);
+    });
+
+    it('names the type as not searched in every entry of it, each with its own property and reason', () => {
+      expect(accepts([entry('widgetId', 'index-building', false), entry('ownerName', 'index-failed', false)])).toBe(true);
+    });
+
+    it.each([
+      ['an entry with no property', [{ entityType: 'widget', reason: 'index-unavailable', typeSearched: true }]],
+      ['an entry that does not say whether the type is searched', [{ entityType: 'widget', property: 'ownerName', reason: 'index-unavailable' }]],
+      ['the reason no-stable-id, which only a relationship row has', [entry('ownerName', 'no-stable-id', true)]],
+      ['a property named twice', [entry('ownerName', 'index-failed', true), entry('ownerName', 'index-building', true)]],
+      ['two entries of a type that disagree on whether it is searched', [entry('widgetId', 'index-building', false), entry('ownerName', 'index-failed', true)]],
+    ])('is refused for %s', (_name, disabledTypes) => {
+      expect(accepts(disabledTypes)).toBe(false);
+    });
+  });
+
   it('accepts a related group with hits, and holds its count as exact or a lower bound only', () => {
-    const related = { hits: [{ node, matchedProperties: ['batchRef'] }], count: { value: 1, quality: 'exact', scope: 'search:related' }, searchable: true, disabledTypes: [{ entityType: 'widget', reason: 'index-unavailable' }] };
+    const related = { hits: [{ node, matchedProperties: ['batchRef'] }], count: { value: 1, quality: 'exact', scope: 'search:related' }, searchable: true, disabledTypes: [{ entityType: 'widget', property: 'ownerRef', reason: 'index-unavailable', typeSearched: true }] };
     expect(searchResultSchema.safeParse({ ...result, related }).success).toBe(true);
     expect(searchResultSchema.safeParse({ ...result, related: { ...related, count: { value: SEARCH_GROUP_CAP, quality: 'lowerBound', scope: 'search:related' } } }).success).toBe(true);
     expect(searchResultSchema.safeParse({ ...result, related: { ...related, count: { value: 1, quality: 'estimated', scope: 'search:related' } } }).success).toBe(false);
@@ -113,7 +136,53 @@ describe('the search result', () => {
   describe('the evidence group', () => {
     const supports = { sourceId: 'demo', type: 'MADE_FROM', from: 'widget', to: 'gadget', stableId: 'L-1' };
     const hit = { supports, records: [{ sourceRecordId: 'REC-1' }], rules: [] };
-    const evidence = { hits: [hit], count: { value: 1, quality: 'exact', scope: 'search:evidence' }, searchable: true, disabledRelationshipTypes: [{ relationshipType: 'MADE_FROM', from: 'widget', to: 'part', reason: 'no-stable-id' }] };
+    const evidence = {
+      hits: [hit],
+      count: { value: 1, quality: 'exact', scope: 'search:evidence' },
+      searchable: true,
+      disabledRelationshipTypes: [
+        ...['index-unavailable', 'index-building', 'index-failed'].map((reason) => ({ relationshipType: 'USED_IN', from: 'widget', to: 'part', property: `record-${reason}`, reason })),
+      ],
+    };
+
+    const member = (elementId: string) => ({ elementId, records: [{ sourceRecordId: 'REC-1' }] });
+    const aggregateHit = { aggregate: { type: 'MADE_FROM', from: node.ref, to: node.ref }, members: [member('5:r:1'), { ...member('5:r:2'), observedAt: '2026-01-02T03:04:05Z' }], memberCount: { value: 2, quality: 'exact' as const, scope: 'members' }, rules: [] };
+
+    it('accepts an aggregate hit with its members, as exact or a lower bound', () => {
+      expect(searchResultSchema.safeParse({ ...result, evidence: { ...evidence, hits: [hit, aggregateHit], count: { value: 3, quality: 'exact', scope: 'search:evidence' } } }).success).toBe(true);
+      expect(searchResultSchema.safeParse({ ...result, evidence: { ...evidence, hits: [{ ...aggregateHit, memberCount: { value: 2, quality: 'lowerBound', scope: 'members' } }] } }).success).toBe(true);
+    });
+
+    it('accepts a record that cannot be read, named by its property, in a stored hit and in a member', () => {
+      const unreadable = { property: 'docId', unreadable: true };
+      expect(searchResultSchema.safeParse({ ...result, evidence: { ...evidence, hits: [{ ...hit, records: [unreadable] }] } }).success).toBe(true);
+      expect(searchResultSchema.safeParse({ ...result, evidence: { ...evidence, hits: [{ ...aggregateHit, members: [{ elementId: '5:r:1', records: [{ sourceRecordId: 'REC-1' }, unreadable] }], memberCount: { value: 1, quality: 'exact', scope: 'members' } }] } }).success).toBe(true);
+    });
+
+    it('counts a stored hit as one relationship and an aggregate as its members', () => {
+      expect(relationshipsOf([hit, aggregateHit])).toBe(3);
+      expect(relationshipsOf([])).toBe(0);
+    });
+
+    it.each([
+      ['a record marked unreadable with no property', { ...hit, records: [{ unreadable: true }] }],
+      ['a record marked unreadable that also holds a value', { ...hit, records: [{ property: 'docId', unreadable: true, sourceRecordId: 'REC-1' }] }],
+      ['a record marked readable', { ...hit, records: [{ property: 'docId', unreadable: false }] }],
+      ['an aggregate with no member', { ...aggregateHit, members: [], memberCount: { value: 0, quality: 'exact', scope: 'members' } }],
+      ['a member twice', { ...aggregateHit, members: [member('5:r:1'), member('5:r:1')] }],
+      ['a member count that is not the members listed', { ...aggregateHit, memberCount: { value: 3, quality: 'exact', scope: 'members' } }],
+      ['an estimated member count', { ...aggregateHit, memberCount: { value: 2, quality: 'estimated', scope: 'members' } }],
+      ['an unknown member count', { ...aggregateHit, memberCount: { quality: 'unknown', scope: 'members' } }],
+      ['a member with no record', { ...aggregateHit, members: [{ elementId: '5:r:1', records: [] }, member('5:r:2')] }],
+      ['a member with an empty element ID', { ...aggregateHit, members: [member(''), member('5:r:2')] }],
+      ['a member with a reference', { ...aggregateHit, members: [{ ...member('5:r:1'), ref: node.ref }, member('5:r:2')] }],
+      ['a member with a stable ID', { ...aggregateHit, members: [{ ...member('5:r:1'), stableId: 'L-1' }, member('5:r:2')] }],
+      ['an aggregate with a stored reference', { ...aggregateHit, supports: hit.supports }],
+      ['an aggregate with no member count', { aggregate: aggregateHit.aggregate, members: aggregateHit.members, rules: [] }],
+      ['an aggregate whose end has no stable ID', { ...aggregateHit, aggregate: { type: 'MADE_FROM', from: { sourceId: 'demo', entityType: 'widget' }, to: node.ref } }],
+    ])('refuses %s', (_name, refused) => {
+      expect(searchResultSchema.safeParse({ ...result, evidence: { ...evidence, hits: [refused] } }).success).toBe(false);
+    });
 
     it('accepts a hit with rules', () => {
       expect(searchResultSchema.safeParse({ ...result, evidence: { ...evidence, hits: [{ ...hit, rules: [{ ruleId: 'first', ruleVersion: 1 }, { ruleId: 'second', ruleVersion: 2 }] }] } }).success).toBe(true);
@@ -137,8 +206,11 @@ describe('the search result', () => {
       ['a rule version of zero', { ...evidence, hits: [{ ...hit, rules: [{ ruleId: 'first', ruleVersion: 0 }] }] }],
       ['a rule version that is not an integer', { ...evidence, hits: [{ ...hit, rules: [{ ruleId: 'first', ruleVersion: 1.5 }] }] }],
       ['a rule version that is text', { ...evidence, hits: [{ ...hit, rules: [{ ruleId: 'first', ruleVersion: '1' }] }] }],
-      ['a reason for a row left out that is not one of the two', { ...evidence, disabledRelationshipTypes: [{ relationshipType: 'MADE_FROM', from: 'widget', to: 'part', reason: 'because' }] }],
-      ['a row left out with no ends', { ...evidence, disabledRelationshipTypes: [{ relationshipType: 'MADE_FROM', reason: 'no-stable-id' }] }],
+      ['a reason for a row left out that is not one of its reasons', { ...evidence, disabledRelationshipTypes: [{ relationshipType: 'MADE_FROM', from: 'widget', to: 'part', reason: 'because' }] }],
+      ['a row left out with no ends', { ...evidence, disabledRelationshipTypes: [{ relationshipType: 'MADE_FROM', property: 'recordId', reason: 'index-unavailable' }] }],
+      ['a whole row left out for having no stable ID', { ...evidence, disabledRelationshipTypes: [{ relationshipType: 'MADE_FROM', from: 'widget', to: 'part', reason: 'no-stable-id' }] }],
+      ['a property not searched with no property named', { ...evidence, disabledRelationshipTypes: [{ relationshipType: 'MADE_FROM', from: 'widget', to: 'part', reason: 'index-building' }] }],
+      ['a row with no stable ID that names a property', { ...evidence, disabledRelationshipTypes: [{ relationshipType: 'MADE_FROM', from: 'widget', to: 'part', property: 'recordId', reason: 'no-stable-id' }] }],
       ['an estimated count', { ...evidence, count: { value: 1, quality: 'estimated', scope: 'search:evidence' } }],
       ['a field the group does not name', { ...evidence, facets: [] }],
     ])('refuses %s', (_name, group) => {
@@ -191,11 +263,12 @@ describe('the startsWith group of the search result', () => {
     ['an unknown count', { ...group, count: { quality: 'unknown', scope: 'search:startsWith' } }],
     ['no list of dropped rows', { nodes: group.nodes, count: group.count, warnings: [] }],
     ['a field the contract does not name', { ...group, cap: 25 }],
+    ['a next cursor, as the group is capped and has no next page', { ...group, count: { value: 25, quality: 'lowerBound', scope: 'search:startsWith' }, nextCursor: 'v1.a.b' }],
   ])('refuses %s', (_name, startsWith) => {
     expect(searchResultSchema.safeParse({ ...typeahead, startsWith }).success).toBe(false);
   });
 
-  it('takes a lower bound', () => {
+  it('takes a lower bound with no cursor', () => {
     expect(searchResultSchema.safeParse({ ...typeahead, startsWith: { ...group, count: { value: 25, quality: 'lowerBound', scope: 'search:startsWith' } } }).success).toBe(true);
   });
 });
@@ -411,5 +484,109 @@ describe('the selection of a search request', () => {
     ['match modes with type-ahead', { typeahead: true, matchModes: ['exact'] }],
   ])('refuses %s', (_name, body) => {
     expect(accepts(body)).toBe(false);
+  });
+});
+
+describe('the cursors of the groups of a search result', () => {
+  const lowerBound = (scope: string) => ({ value: 25, quality: 'lowerBound', scope });
+
+  it('accepts a cursor on each group whose count is a lower bound', () => {
+    const paged = {
+      ...result,
+      counts: { exact: lowerBound('search:exact') },
+      exactNextCursor: 'v1.a.b',
+      related: { ...result.related, count: lowerBound('search:related'), nextCursor: 'v1.c.d' },
+      evidence: { ...result.evidence, searchable: true, count: lowerBound('search:evidence'), nextCursor: 'v1.e.f' },
+    };
+    expect(searchResultSchema.safeParse(paged).success).toBe(true);
+  });
+
+  it.each([
+    ['the exact group', { exactNextCursor: 'v1.a.b' }],
+    ['the related group', { related: { ...result.related, nextCursor: 'v1.a.b' } }],
+    ['the evidence group', { evidence: { ...result.evidence, nextCursor: 'v1.a.b' } }],
+    ['an empty cursor', { counts: { exact: lowerBound('search:exact') }, exactNextCursor: '' }],
+  ])('refuses a cursor on %s whose count is exact', (_name, change) => {
+    expect(searchResultSchema.safeParse({ ...result, ...change }).success).toBe(false);
+  });
+});
+
+describe('the request for the next page of a group', () => {
+  const body = { sourceId: 'demo', text: 'AC-1', group: 'exact', cursor: 'v1.a.b' };
+
+  it('accepts a group, a cursor, a mask and entity types', () => {
+    for (const group of ['exact', 'related', 'evidence']) expect(searchMoreRequestSchema.safeParse({ ...body, group }).success).toBe(true);
+    expect(searchMoreRequestSchema.safeParse({ ...body, mask: true, entityTypes: ['widget'] }).success).toBe(true);
+  });
+
+  it.each([
+    ['no cursor', { cursor: undefined }],
+    ['an empty cursor', { cursor: '' }],
+    ['the facets, which are not a group', { group: 'facets' }],
+    ['the startsWith group, which has no next page', { group: 'startsWith' }],
+    ['match modes, as the group is the mode', { matchModes: ['exact'] }],
+    ['an empty list of entity types', { entityTypes: [] }],
+    ['an empty text', { text: '' }],
+    ['a field the contract does not name', { limit: 50 }],
+  ])('refuses %s', (_name, change) => {
+    expect(searchMoreRequestSchema.safeParse({ ...body, ...change }).success).toBe(false);
+  });
+});
+
+describe('the next page of a group', () => {
+  const page = { sourceId: 'demo', group: 'exact', nodes: [node], count: { value: 1, quality: 'exact', scope: 'search:exact' }, dropped: result.dropped, warnings: [] };
+
+  it('accepts a last page, a page with a next cursor, and a failed page in the shape of its group', () => {
+    expect(searchMoreResultSchema.safeParse(page).success).toBe(true);
+    expect(searchMoreResultSchema.safeParse({ ...page, count: { value: 1, quality: 'lowerBound', scope: 'search:exact' }, nextCursor: 'v1.a.b' }).success).toBe(true);
+    expect(searchMoreResultSchema.safeParse({ ...page, nodes: [], count: { quality: 'unknown', scope: 'search:exact' }, failure: { group: 'exact', code: 'QUERY_TIMEOUT', timeoutMs: 5000 } }).success).toBe(true);
+    expect(searchMoreResultSchema.safeParse({ sourceId: 'demo', group: 'related', hits: [{ node, matchedProperties: ['batchRef'] }], count: { value: 1, quality: 'exact', scope: 'search:related' }, dropped: result.dropped, warnings: [] }).success).toBe(true);
+  });
+
+  it.each([
+    ['a cursor with an exact count', { nextCursor: 'v1.a.b' }],
+    ['an unknown count with no failure', { count: { quality: 'unknown', scope: 'search:exact' } }],
+    ['a failure with hits', { failure: { group: 'exact', code: 'QUERY_TIMEOUT' }, count: { quality: 'unknown', scope: 'search:exact' } }],
+    ['a failure with a known count', { nodes: [], failure: { group: 'exact', code: 'SOURCE_BUSY' } }],
+    ['a failure of another group', { nodes: [], count: { quality: 'unknown', scope: 'search:exact' }, failure: { group: 'related', code: 'SOURCE_BUSY' } }],
+    ['a failure with a cursor', { nodes: [], count: { quality: 'unknown', scope: 'search:exact' }, nextCursor: 'v1.a.b', failure: { group: 'exact', code: 'SOURCE_BUSY' } }],
+    ['a failure code that fails the whole request', { nodes: [], count: { quality: 'unknown', scope: 'search:exact' }, failure: { group: 'exact', code: 'CURSOR_INVALIDATED' } }],
+    ['hits in the shape of another group', { nodes: undefined, hits: [] }],
+    ['a page of the startsWith group, which has no next page', { group: 'startsWith', count: { value: 1, quality: 'exact', scope: 'search:startsWith' } }],
+  ])('refuses %s', (_name, change) => {
+    expect(searchMoreResultSchema.safeParse({ ...page, ...change }).success).toBe(false);
+  });
+});
+
+describe('the unreferenced hits of a group', () => {
+  const hit = { entityType: 'widget', title: 'widget', properties: [{ key: 'nickname', value: 'needle', dataClass: 'text', masked: false }], reason: 'no-stable-id' };
+  const counted = (value: number, scope: string) => ({ value, quality: 'exact', scope });
+
+  it('are listed in the exact, related and startsWith groups and in a page of the exact and related groups', () => {
+    expect(searchResultSchema.safeParse({ ...result, exactUnreferenced: [hit], counts: { exact: counted(2, 'search:exact') } }).success).toBe(true);
+    expect(searchResultSchema.safeParse({ ...result, related: { ...result.related, unreferenced: [hit], count: counted(1, 'search:related') } }).success).toBe(true);
+    const startsWith = { nodes: [], unreferenced: [hit], count: counted(1, 'search:startsWith'), dropped: { 'not-mapped': 0, 'ambiguous-type': 0, 'no-stable-id': 1 }, warnings: [] };
+    expect(searchResultSchema.safeParse({ ...typeahead, startsWith }).success).toBe(true);
+    const page = { sourceId: 'demo', count: counted(1, 'search:exact'), dropped: { 'not-mapped': 0, 'ambiguous-type': 0, 'no-stable-id': 1 }, warnings: [] };
+    for (const shape of [{ group: 'exact', nodes: [] }, { group: 'related', hits: [] }]) expect(searchMoreResultSchema.safeParse({ ...page, ...shape, unreferenced: [hit] }).success, shape.group).toBe(true);
+    expect(searchMoreResultSchema.safeParse({ ...page, group: 'evidence', hits: [], unreferenced: [hit] }).success).toBe(false);
+  });
+
+  it('carry no reference, no cursor and no element ID: a hit with any other field is refused', () => {
+    for (const extra of [{ ref: node.ref }, { elementId: '4:x:1' }, { nextCursor: 'v1.a.b' }, { stableId: '1.5' }]) {
+      expect(searchResultSchema.safeParse({ ...result, exactUnreferenced: [{ ...hit, ...extra }] }).success, Object.keys(extra)[0]).toBe(false);
+    }
+    expect(searchResultSchema.safeParse({ ...result, exactUnreferenced: [{ ...hit, reason: 'ambiguous-type' }] }).success).toBe(false);
+  });
+
+  it('are absent rather than an empty list', () => {
+    expect(searchResultSchema.safeParse({ ...result, exactUnreferenced: [] }).success).toBe(false);
+  });
+
+  it('are none in a group whose read failed, nor in a failed page', () => {
+    const failedRelated = { ...result, related: { ...result.related, unreferenced: [hit], count: { quality: 'unknown', scope: 'search:related' } }, failures: [{ group: 'related', code: 'QUERY_TIMEOUT' }] };
+    expect(searchResultSchema.safeParse(failedRelated).success).toBe(false);
+    const failedPage = { sourceId: 'demo', group: 'exact', nodes: [], unreferenced: [hit], count: { quality: 'unknown', scope: 'search:exact' }, dropped: { 'not-mapped': 0, 'ambiguous-type': 0, 'no-stable-id': 0 }, warnings: [], failure: { group: 'exact', code: 'QUERY_TIMEOUT' } };
+    expect(searchMoreResultSchema.safeParse(failedPage).success).toBe(false);
   });
 });

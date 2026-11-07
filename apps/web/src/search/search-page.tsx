@@ -1,6 +1,6 @@
 import { Navigate, useLocation, useSearchParams } from 'react-router';
 import type { ApiClient } from '../api/client.js';
-import { FailureNotice } from '../failure-notice.js';
+import { canRetry, FailureNotice } from '../failure-notice.js';
 import { PageHeading } from '../shell/page-heading.js';
 import { answeredData, retainedFailure, useShellData } from '../shell/shell-data.js';
 import { useClientState } from '../state/context.js';
@@ -26,9 +26,11 @@ function Failure({ failure, message, retry }: { readonly failure: Parameters<typ
       <div className="search-failure">
         <p>{message}</p>
         <FailureNotice failure={failure} />
-        <button type="button" className="secondary" onClick={retry}>
-          {SEARCH_COPY.tryAgain}
-        </button>
+        {canRetry(failure) ? (
+          <button type="button" className="secondary" onClick={retry}>
+            {SEARCH_COPY.tryAgain}
+          </button>
+        ) : null}
       </div>
     </section>
   );

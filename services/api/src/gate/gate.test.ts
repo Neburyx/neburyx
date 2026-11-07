@@ -186,6 +186,7 @@ describe('the context a template is normalized with', () => {
   it('holds the source of the request, whether the page was cut and the model of that source', async () => {
     const seen: unknown[] = [];
     const template = testTemplate({
+      cutMeans: 'duplicate',
       normalize: (rows, _plan, context) => {
         seen.push(context);
         return rows.map((row) => ({ title: String(row['title']) }));
@@ -208,3 +209,40 @@ describe('the context a template is normalized with', () => {
   });
 });
 
+
+describe('a read of a template that is not paged', () => {
+  const rig = (overrides: Parameters<typeof testTemplate>[0], rows: number) => {
+    const audit = recordingAudit();
+    const normalized: number[] = [];
+    const template = testTemplate({ ...overrides, normalize: (found) => (normalized.push(found.length), found.map((row) => ({ title: String(row['title']) }))) });
+    const parts = harness({ catalog: testCatalog([template]), seams: { audit }, executor: new TestExecutor(() => Promise.resolve(rowsOf(rows))) });
+    return { ...parts, audit, normalized };
+  };
+
+  it.each([
+    ['declares nothing', {}],
+    ["declares rows: 'one'", { rows: 'one' as const }],
+  ])('that %s and returns more rows than its limit is INTERNAL_ERROR tagged read-cut, audited as failed, with no row normalized or returned', async (_name, overrides) => {
+    const { gate, audit, normalized, observer, logs } = rig(overrides, 2);
+    const failure = await gate.run(gateRequest({ limit: 1 })).catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(AppError);
+    expect(failure).toMatchObject({ code: 'INTERNAL_ERROR', reason: 'read-cut' });
+    expect(normalized).toEqual([]);
+    expect(audit.events).toEqual([expectedEvent('test.read', 'failed')]);
+    expect(observer.events).toContainEqual({ stage: 'execute', outcome: 'failed' });
+    expect(observer.events.map((event) => event.stage)).not.toContain('normalize');
+    expect(logs).toEqual([{ fields: { event: 'gate.read_cut', templateId: 'test-read' }, message: expect.any(String) }]);
+  });
+
+  it('that declares no cut meaning and returns no more than its limit is answered', async () => {
+    const { gate, audit } = rig({ rows: 'one' }, 1);
+    expect(await gate.run(gateRequest({ limit: 1 }))).toEqual({ items: [{ title: 'item 1' }], hasMore: false });
+    expect(audit.events).toEqual([expectedEvent('test.read', 'success')]);
+  });
+
+  it.each([['duplicate' as const], ['lowerBound' as const]])("that declares cutMeans: '%s' and returns more rows than its limit is answered with its page and no cursor, and the template is told the read was cut", async (cutMeans) => {
+    const { gate, normalized } = rig({ cutMeans }, 2);
+    expect(await gate.run(gateRequest({ limit: 1 }))).toEqual({ items: [{ title: 'item 1' }], hasMore: true });
+    expect(normalized).toEqual([1]);
+  });
+});

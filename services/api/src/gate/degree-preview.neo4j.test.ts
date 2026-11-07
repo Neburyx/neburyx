@@ -9,7 +9,6 @@ import { makeWebRoot } from '../testing/web-root.js';
 import { communitySeams } from '../seams/community-seams.js';
 import { gateRequest, LOCAL_PRINCIPAL } from '../testing/gate.js';
 import { envFor, NEO4J_SERIES, runAdmin, runAll, sourceFor, startNeo4j, type RunningNeo4j } from '../testing/neo4j-server.js';
-import { ALWAYS_USABLE } from '../testing/usability.js';
 import { allowlistFromMapping } from './allowlist.js';
 import { createTemplateCatalog } from './catalog.js';
 import { judgePlan } from '../source-test/degree-judge.js';
@@ -53,7 +52,7 @@ beforeAll(async () => {
   await runAdmin(server, 'CALL db.awaitIndexes(300)');
   const mapping = { sources: [source()] };
   const defaults = communitySeams();
-  parts = createSourceGate({ mapping, env: envFor(server), seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit }, logger: { warn: () => undefined }, usability: ALWAYS_USABLE });
+  parts = createSourceGate({ mapping, env: envFor(server), seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit }, logger: { warn: () => undefined } });
 }, 900_000);
 
 afterAll(async () => {

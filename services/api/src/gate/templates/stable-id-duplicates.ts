@@ -31,6 +31,7 @@ export const stableIdDuplicatesTemplate: TemplateDefinition = {
   paramsSchema: z.strictObject({ entityType: z.string().min(1) }),
   scope: 'system',
   paged: false,
+  rows: 'one',
   entityParams: ['entityType'],
   relationshipParams: [],
   refsOf: () => [],

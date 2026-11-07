@@ -8,7 +8,6 @@ import type { SystemRunner } from '../gate/types.js';
 import { communitySeams } from '../seams/community-seams.js';
 import { createNeo4jExecutor, type Neo4jExecutor } from '../sources/executor.js';
 import { envFor, NEO4J_SERIES, runAdmin, runAll, sourceFor, startNeo4j, type RunningNeo4j } from '../testing/neo4j-server.js';
-import { ALWAYS_USABLE } from '../testing/usability.js';
 
 let server: RunningNeo4j;
 let system: SystemRunner;
@@ -30,7 +29,7 @@ function templateOf(id: string, cypher: string): TemplateDefinition {
     paramsSchema: z.strictObject({ text: z.string() }).transform((params) => ({ ...params, textInteger: integerCandidateOf(params.text) })),
     scope: 'system',
     profile: true,
-    paged: false,
+    paged: true,
     entityParams: [],
     relationshipParams: [],
     refsOf: () => [],
@@ -79,7 +78,7 @@ beforeAll(async () => {
     logger: { warn: (fields: object) => void logged.push({ ...fields }) },
   });
   const catalog = createTemplateCatalog({ templates: Object.entries(STATEMENTS).map(([id, cypher]) => templateOf(id, cypher)) });
-  system = assembleGate({ usability: ALWAYS_USABLE, mapping, seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit }, executor, logger: { warn: () => undefined }, catalog }).system;
+  system = assembleGate({ mapping, seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit }, executor, logger: { warn: () => undefined }, catalog }).system;
 }, 900_000);
 
 afterAll(async () => {

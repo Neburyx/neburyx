@@ -1,5 +1,4 @@
 import { rmSync } from 'node:fs';
-import { ALWAYS_USABLE } from '../testing/usability.js';
 import { createServer } from 'node:net';
 import pino from 'pino';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -26,7 +25,7 @@ beforeAll(async () => {
   const mapping = mappingOf(
     sourceWith('alpha', { uri: server.boltUri, database: server.database, auth: { kind: 'basic', username_env: NEO4J_ENV_USER, password_env: NEO4J_ENV_PASSWORD } }),
   );
-  sourceGate = createSourceGate({ usability: ALWAYS_USABLE, mapping, env: envFor(server), seams: communitySeams(), logger: { warn: () => undefined } });
+  sourceGate = createSourceGate({ mapping, env: envFor(server), seams: communitySeams(), logger: { warn: () => undefined } });
   app = await buildApp({
     webRoot,
     logger: pino({ level: 'silent' }),
@@ -68,7 +67,7 @@ describe(`a source that fails, on the dev Neo4j server`, () => {
     const mapping = mappingOf(
       sourceWith('beta', { uri: server.boltUri, database: server.database, auth: { kind: 'basic', username_env: NEO4J_ENV_USER, password_env: NEO4J_ENV_PASSWORD }, ...overrides }),
     );
-    const parts = createSourceGate({ usability: ALWAYS_USABLE, mapping, env, seams: communitySeams(), logger: { warn: () => undefined } });
+    const parts = createSourceGate({ mapping, env, seams: communitySeams(), logger: { warn: () => undefined } });
     try {
       return await createSourceTester({ gate: parts.gate, mapping, store: memoryAppStore() }).run({ traceId: 'tr-failure', principal: LOCAL_PRINCIPAL, sourceId: 'beta' });
     } finally {

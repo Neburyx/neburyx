@@ -38,8 +38,9 @@ export function statesOf(result: SearchResult, mask: boolean): AnswerStates {
   const modes = result.filters?.matchModes ?? [];
   const types = result.filters?.entityTypes ?? [];
   const hiddenIn = (group: Group) => modes.length > 0 && !modes.includes(group);
-  const exact = stateOf(result.exact.length, result.searchable, failedIn('exact'), hiddenIn('exact'));
-  const related = stateOf(result.related.hits.length, result.related.searchable, failedIn('related'), hiddenIn('related'));
+  // a hit with no usable stable ID is listed in its group, so a group that holds only such hits has hits
+  const exact = stateOf(result.exact.length + (result.exactUnreferenced?.length ?? 0), result.searchable, failedIn('exact'), hiddenIn('exact'));
+  const related = stateOf(result.related.hits.length + (result.related.unreferenced?.length ?? 0), result.related.searchable, failedIn('related'), hiddenIn('related'));
   const evidence = stateOf(result.evidence.hits.length, result.evidence.searchable, failedIn('evidence'), hiddenIn('evidence'));
   const states = [exact, related, evidence];
   const hidden = (['exact', 'related', 'evidence'] as const).filter(hiddenIn);

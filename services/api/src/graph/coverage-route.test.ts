@@ -40,7 +40,7 @@ const CHECK: VerdictCheck = { sourceId: 'alpha', checkedAt: '2026-11-02T10:00:00
 const AUDIT_ACTION = 'entity.degree_preview';
 
 const entity = (stableId: string, loadedRelationships = 0, sourceId = 'alpha', entityType = 'person', loadedQuality: CoverageEntity['loadedQuality'] = 'exact') => ({ ref: { sourceId, entityType, stableId }, loadedRelationships, loadedQuality });
-const counts: Readonly<Record<string, readonly [number, number]>> = { 'P-1': [3, 4], 'P-2': [1, 1], 'P-3': [2, 0] };
+const counts: Readonly<Record<string, readonly [number, number]>> = { 'P-1': [3, 4], 'P-2': [1, 1], 'P-3': [2, 0], 'T-1': [2, 0] };
 
 interface Options {
   readonly auditFails?: boolean;
@@ -65,10 +65,11 @@ async function started(options: Options = {}) {
   };
   const answer = (call: ExecuteCall): Promise<ExecuteOutcome> => {
     const pair = counts[String(call.parameters['stableId'])] ?? [0, 0];
-    return Promise.resolve({ status: 'rows', rows: [{ c0: pair[0], c1: pair[1] }] });
+    // an entity type with one mapped pair is read with one count column
+    return Promise.resolve({ status: 'rows', rows: [String(call.parameters['stableId']).startsWith('T-') ? { c0: pair[0] } : { c0: pair[0], c1: pair[1] }] });
   };
   const executor = new TestExecutor(withOnlineIndexes(source, answer));
-  const parts = testSourceGate(mapping, { executor, seams, usability: record });
+  const parts = testSourceGate(mapping, { executor, seams });
   const logger = createLogger({ write: (line) => void logged.push(line) });
   const degreeCache = options.lifetimeMs === undefined ? {} : { degreeCache: { lifetimeMs: options.lifetimeMs, ...(options.clock === undefined ? {} : { clock: options.clock }) } };
   const app = await buildApp({ webRoot, logger, store: memoryAppStore(), mapping, gate: parts.gate, seams, degreeVerdicts: record, ...degreeCache });
@@ -200,23 +201,23 @@ describe('POST /v1/graph/coverage', () => {
     await app.close();
   });
 
-  it('counts an entity whose type shares its label with another type as having no preview', async () => {
-    const { app, preview, coverage } = await started();
-    await preview('P-1');
+  it('uses the preview of an entity whose type shares its label with another type', async () => {
+    const { app, coverage } = await started();
+    const previewed = await app.inject({ method: 'POST', url: '/v1/graph/preview-expansion', payload: { sourceId: 'alpha', ref: { entityType: 'twin_a', stableId: 'T-1' }, mask: false } });
+    expect(previewed.statusCode).toBe(200);
     const response = await coverage({ sourceId: 'alpha', entities: [entity('T-1', 0, 'alpha', 'twin_a')] });
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual(unknown);
+    expect(response.json()).toEqual({ notRetrieved: { value: 2, quality: 'exact', scope: 'not yet retrieved' } });
     await app.close();
   });
 
-  it('answers NOT_FOUND once the person may no longer read the source, and SOURCE_UNAVAILABLE after a failed mapping check', async () => {
+  it('answers NOT_FOUND once the person may no longer read the source, and still answers after a failed mapping check', async () => {
     let denied = false;
     const { app, record, preview, coverage } = await started({ deny: () => denied });
     await preview('P-1');
     record.observe({ ...CHECK, checkedAt: '2026-11-02T10:00:10.000Z', mappingChecks: { status: 'fail', findings: [{ severity: 'fail', check: 'label', message: 'x' }] } });
-    const unavailable = await coverage({ sourceId: 'alpha', entities: [entity('P-1')] });
-    expect(unavailable.statusCode).toBe(503);
-    expect(unavailable.json().error.code).toBe('SOURCE_UNAVAILABLE');
+    const answered = await coverage({ sourceId: 'alpha', entities: [entity('P-1')] });
+    expect(answered.statusCode).toBe(200);
     denied = true;
     expect((await coverage({ sourceId: 'alpha', entities: [entity('P-1')] })).statusCode).toBe(404);
     await app.close();

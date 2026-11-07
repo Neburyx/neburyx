@@ -7,7 +7,6 @@ import type { SystemRunner } from '../gate/types.js';
 import { communitySeams } from '../seams/community-seams.js';
 import { createNeo4jExecutor } from '../sources/executor.js';
 import { mappingOf, sourceWith } from '../testing/gate-fixtures.js';
-import { ALWAYS_USABLE } from '../testing/usability.js';
 import { judgePlan } from './degree-judge.js';
 
 // A check by hand against an Enterprise server you run yourself, for what a container cannot show: the plan and db hits of the degree probe on Enterprise, and whether
@@ -59,7 +58,7 @@ describe.skipIf(!live)('the degree probe against an Enterprise server', () => {
       const logger = { warn: () => undefined };
       const executor = createNeo4jExecutor({ sources: mapping.sources, env: { NBX_EE_U: user, NBX_EE_P: password }, logger });
       const defaults = communitySeams();
-      const { system: runner } = assembleGate({ usability: ALWAYS_USABLE, mapping, seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit }, executor, logger });
+      const { system: runner } = assembleGate({ mapping, seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit }, executor, logger });
       runners.push({ runner, close: () => executor.close() });
       return runner;
     };

@@ -3,7 +3,7 @@ import type { Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { investigationListResponseSchema, investigationResponseSchema, meResponseSchema, openInvestigationResponseSchema, searchResultSchema, sourceProfileSchema, sourcesResponseSchema, sourceTestReportSchema } from '@neburyx/contracts';
+import { investigationListResponseSchema, investigationResponseSchema, meResponseSchema, openInvestigationResponseSchema, searchMoreResultSchema, searchResultSchema, sourceProfileSchema, sourcesResponseSchema, sourceTestReportSchema } from '@neburyx/contracts';
 import { createSupportServer } from './support-server.ts';
 
 const committed: unknown = JSON.parse(readFileSync(new URL('../fixtures/profile.json', import.meta.url), 'utf8'));
@@ -284,6 +284,20 @@ describe('the support server, searching', () => {
     const answer = searchResultSchema.parse(await (await searchOf(base, { sourceId: 'demo', text })).json());
     expect(answer.exact).toHaveLength(shown);
     expect(answer.counts.exact).toMatchObject({ value: shown, quality });
+  });
+
+  it('pages the exact group of many-61 with its cursor: 25, 25 and 11, each page counting every page so far, the last exact (61) and without a cursor, and refuses another cursor as CURSOR_INVALIDATED', async () => {
+    const base = await start();
+    const moreOf = async (body: unknown) => fetch(`${base}/v1/search/entities/more`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    const first = searchResultSchema.parse(await (await searchOf(base, { sourceId: 'demo', text: 'many-61' })).json());
+    expect(first.exactNextCursor).toEqual(expect.any(String));
+    const second = searchMoreResultSchema.parse(await (await moreOf({ sourceId: 'demo', text: 'many-61', group: 'exact', cursor: first.exactNextCursor })).json());
+    expect(second).toMatchObject({ count: { value: 50, quality: 'lowerBound' } });
+    const third = searchMoreResultSchema.parse(await (await moreOf({ sourceId: 'demo', text: 'many-61', group: 'exact', cursor: second.nextCursor })).json());
+    expect(third).toMatchObject({ count: { value: 61, quality: 'exact' } });
+    expect(third.nextCursor).toBeUndefined();
+    expect(searchResultSchema.parse(await (await searchOf(base, { sourceId: 'demo', text: 'many-25' })).json()).exactNextCursor).toBeUndefined();
+    expect((await moreOf({ sourceId: 'demo', text: 'many-40', group: 'exact', cursor: first.exactNextCursor })).status).toBe(409);
   });
 
   it('times out the first search of a text that starts with stall, with the timeout of the source, and answers the next, for each such text on its own', async () => {

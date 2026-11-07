@@ -1,6 +1,5 @@
 import { seamsOf } from './app.js';
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { ALWAYS_USABLE } from './testing/usability.js';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
@@ -329,6 +328,28 @@ describe('the startup check in start', () => {
     };
   }
 
+  const LONG_INTERVAL_MS = 60 * 60 * 1000;
+  const PERSON: ExecuteOutcome = { status: 'rows', rows: [{ n: { $type: 'node', elementId: '4:fixture:1', labels: ['Person'], properties: { id: 'P-1' } } }] };
+  const readPerson = (app: { inject: (request: { method: 'GET'; url: string }) => Promise<{ statusCode: number }> }) => app.inject({ method: 'GET', url: '/v1/entities/alpha/person/P-1' });
+  const alphaReads = (executor: TestExecutor): string[] => executor.calls.filter((call) => call.sourceId === 'alpha' && (call.templateId === 'schema-indexes' || call.templateId === 'entity-load')).map((call) => call.templateId);
+
+  /** A source that is down at the start, and answers once `up.on` is set; its entity read finds one person. */
+  function lateSource(schema: (call: ExecuteCall) => ExecuteOutcome = fittingSchemaAnswer, hold?: Promise<void>, pingIntervalMs = 20) {
+    const up = { on: false };
+    const executor = serverExecutor(
+      async (call) => {
+        if (call.sourceId === 'alpha' && !up.on) return { status: 'unavailable', reason: 'unreachable' } as const;
+        if (hold !== undefined && up.on && call.templateId === 'capabilities') await hold;
+        return call.templateId === 'entity-load' ? PERSON : ({ status: 'rows', rows: [SERVER_ROW] } as const);
+      },
+      undefined,
+      schema,
+    );
+    const parts = wired(executor);
+    const run = io({ ...parts.io, pingIntervalMs });
+    return { up, parts, run };
+  }
+
   const down = (call: ExecuteCall) => Promise.resolve(call.sourceId === 'alpha' ? ({ status: 'unavailable', reason: 'unreachable' } as const) : ({ status: 'rows', rows: [SERVER_ROW] } as const));
 
   it('checks every source before the server listens, and starts although one is down', async () => {
@@ -388,51 +409,34 @@ describe('the startup check in start', () => {
       if (result.exitCode === 0) await result.app.close();
     });
 
-    it('hands the gate the record of the running server: usable for a source whose check passed or only warned, unusable for none the start let through, unchecked for one that was down', async () => {
-      const parts = wired(serverExecutor(down));
-      let handed: SourceGateOptions['usability'] | undefined;
-      const run = io({ ...parts.io, openSourceGate: (options: SourceGateOptions): SourceGate => ((handed = options.usability), parts.io.openSourceGate()) });
+    it('reads a source that was down at the start once it answers, before any check has reached it: unchecked is usable, and the read is guarded by its indexes', async () => {
+      const { up, parts, run } = lateSource(fittingSchemaAnswer, undefined, LONG_INTERVAL_MS);
       const result = await start(ENV, run.io);
-      expect(result.exitCode).toBe(0);
-      expect([handed?.isUsable('alpha'), handed?.isUsable('beta')]).toEqual([false, true]);
-      if (result.exitCode === 0) await result.app.close();
+      if (result.exitCode !== 0) throw new Error('the API did not start');
+      up.on = true;
+      const response = await readPerson(result.app);
+      expect(response.statusCode).toBe(200);
+      expect(alphaReads(parts.executor)).toEqual(['schema-indexes', 'entity-load']);
+      expect(parts.store.checks.filter((check) => check.report.sourceId === 'alpha' && check.report.server !== null)).toEqual([]);
+      await result.app.close();
     });
 
     describe('first contact', () => {
-      /** A source that is down at the start, and answers once `up.on` is set. */
-      function lateSource(schema: (call: ExecuteCall) => ExecuteOutcome = fittingSchemaAnswer, hold?: Promise<void>) {
-        const up = { on: false };
-        const executor = serverExecutor(
-          async (call) => {
-            if (call.sourceId === 'alpha' && !up.on) return { status: 'unavailable', reason: 'unreachable' } as const;
-            if (hold !== undefined && up.on && call.templateId === 'capabilities') await hold;
-            return { status: 'rows', rows: [SERVER_ROW] } as const;
-          },
-          undefined,
-          schema,
-        );
-        const parts = wired(executor);
-        let handed: SourceGateOptions['usability'] | undefined;
-        const run = io({ ...parts.io, pingIntervalMs: 20, openSourceGate: (options: SourceGateOptions): SourceGate => ((handed = options.usability), parts.io.openSourceGate()) });
-        return { up, parts, run, usable: (id: string) => handed?.isUsable(id) };
-      }
 
-      it('checks a source that was down at the start when it first answers, and makes it usable with the state of the report', async () => {
-        const { up, parts, run, usable } = lateSource();
+      it('checks a source that was down at the start when it first answers, and stores the state of the report', async () => {
+        const { up, parts, run } = lateSource();
         const result = await start(ENV, run.io);
         expect(result.exitCode).toBe(0);
         if (result.exitCode !== 0) return;
-        expect([usable('alpha'), usable('beta')]).toEqual([false, true]);
         up.on = true;
-        await vi.waitFor(() => expect(usable('alpha')).toBe(true), { timeout: 5000, interval: 20 });
         await vi.waitFor(async () => expect((await parts.store.listSources())[0]).toMatchObject({ id: 'alpha', state: 'connected' }), { timeout: 5000, interval: 20 });
         expect(parts.store.checks.filter((check) => check.report.sourceId === 'alpha' && check.report.server !== null)).toHaveLength(1);
         await result.app.close();
       });
 
-      it('leaves a source with a wrong mapping unusable and unavailable with the reason, and does not check it again', async () => {
+      it('leaves a source with a wrong mapping unavailable with the reason, does not check it again, and still reads it: a finding refuses no read by itself', async () => {
         const wrong = (call: ExecuteCall): ExecuteOutcome => (call.sourceId === 'alpha' && call.templateId === 'schema-tokens' ? { status: 'rows', rows: [{ labels: [], types: [] }] } : fittingSchemaAnswer(call));
-        const { up, parts, run, usable } = lateSource(wrong);
+        const { up, parts, run } = lateSource(wrong);
         const result = await start(ENV, run.io);
         if (result.exitCode !== 0) throw new Error('the API did not start');
         up.on = true;
@@ -440,7 +444,8 @@ describe('the startup check in start', () => {
         const checks = parts.store.checks.length;
         await new Promise((resolve) => setTimeout(resolve, 150));
         expect(parts.store.checks).toHaveLength(checks);
-        expect(usable('alpha')).toBe(false);
+        expect((await readPerson(result.app)).statusCode).toBe(200);
+        expect(alphaReads(parts.executor).slice(-2)).toEqual(['schema-indexes', 'entity-load']);
         // the ping that follows keeps the state of that check: it reached the source and was stored since the start
         expect((await parts.store.listSources())[0]).toMatchObject({ state: 'unavailable' });
         await result.app.close();
@@ -448,17 +453,16 @@ describe('the startup check in start', () => {
 
       it('follows a passing check that another process stored, within one ping interval', async () => {
         const wrong = (call: ExecuteCall): ExecuteOutcome => (call.sourceId === 'alpha' && call.templateId === 'schema-tokens' ? { status: 'rows', rows: [{ labels: [], types: [] }] } : fittingSchemaAnswer(call));
-        const { up, parts, run, usable } = lateSource(wrong);
+        const { up, parts, run } = lateSource(wrong);
         const result = await start(ENV, run.io);
         if (result.exitCode !== 0) throw new Error('the API did not start');
         up.on = true;
         await vi.waitFor(async () => expect((await parts.store.listSources())[0]?.stateReason).toMatch(/^The mapping does not fit the source: /), { timeout: 5000, interval: 20 });
-        expect(usable('alpha')).toBe(false);
         // the command, in its own process, finds the mapping fixed and stores its report in the same database
         const { gate } = testSourceGate(mapping, { executor: serverExecutor() });
         const tester = createSourceTester({ gate, mapping, store: parts.store });
         await tester.run({ traceId: 'tr-command', principal: (await parts.store.current()).principal, sourceId: 'alpha' });
-        await vi.waitFor(() => expect(usable('alpha')).toBe(true), { timeout: 5000, interval: 20 });
+        await vi.waitFor(async () => expect((await parts.store.listSources())[0]).toMatchObject({ id: 'alpha', state: 'connected' }), { timeout: 5000, interval: 20 });
         await result.app.close();
       });
 
@@ -535,7 +539,7 @@ describe('the startup check against sources that never answer', () => {
       openSourceGate: (options: SourceGateOptions): SourceGate => {
         const executor = createNeo4jExecutor({ sources: options.mapping.sources, env: { DEMO_USER: 'u', DEMO_PASSWORD: 'p' }, logger: options.logger, createDriver: fake.factory });
         const defaults = communitySeams();
-        const parts = assembleGate({ usability: ALWAYS_USABLE, mapping: options.mapping, seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit }, executor, logger: options.logger });
+        const parts = assembleGate({ mapping: options.mapping, seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit }, executor, logger: options.logger });
         return { ...parts, close: () => executor.close() };
       },
     });
@@ -572,7 +576,7 @@ describe('the startup check against sources whose privileges read never answers'
       openSourceGate: (options: SourceGateOptions): SourceGate => {
         const executor = createNeo4jExecutor({ sources: options.mapping.sources, env: { DEMO_USER: 'u', DEMO_PASSWORD: 'p' }, logger: options.logger, createDriver: fake.factory });
         const defaults = communitySeams();
-        const parts = assembleGate({ usability: ALWAYS_USABLE, mapping: options.mapping, seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit }, executor, logger: options.logger });
+        const parts = assembleGate({ mapping: options.mapping, seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit }, executor, logger: options.logger });
         return { ...parts, close: () => executor.close() };
       },
     });
@@ -663,7 +667,7 @@ describe('closing while a ping is stuck', () => {
       openSourceGate: (options: SourceGateOptions): SourceGate => {
         const executor = createNeo4jExecutor({ sources: options.mapping.sources, env: { DEMO_USER: 'u', DEMO_PASSWORD: 'p' }, logger: options.logger, createDriver: fake.factory });
         const defaults = communitySeams();
-        const parts = assembleGate({ usability: ALWAYS_USABLE, mapping: options.mapping, seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit }, executor, logger: options.logger });
+        const parts = assembleGate({ mapping: options.mapping, seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit }, executor, logger: options.logger });
         return { ...parts, close: () => executor.close() };
       },
     });

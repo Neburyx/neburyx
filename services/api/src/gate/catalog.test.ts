@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { CatalogError, createTemplateCatalog, type TemplateDefinition } from './catalog.js';
 import { connectivityTemplate } from './templates/connectivity.js';
+import { defaultCatalogTemplates } from './assemble.js';
 import { integerTemplate, markerTemplate, nodesTemplate } from '../testing/gate-fixtures.js';
 
 function failure(...templates: TemplateDefinition[]): string {
@@ -57,6 +58,14 @@ describe('a template the catalog refuses, naming the template and the problem', 
     expect(failure(variant({ paramsSchema: z.strictObject({ kind: z.unknown(), limit: z.number() }) }))).toBe('the template nodes-read declares the reserved parameter limit');
   });
 
+  it('declares the reserved parameter branchEntityTypes, which the gate fills for search branches', () => {
+    expect(failure(variant({ paramsSchema: z.strictObject({ kind: z.unknown(), branchEntityTypes: z.array(z.string()) }) }))).toBe('the template nodes-read declares the reserved parameter branchEntityTypes');
+  });
+
+  it('reads the branch entity types in its own Cypher, outside the placeholder the gate writes', () => {
+    expect(failure(variant({ cypher: 'MATCH (n:@entity(kind)) RETURN n.id AS id, $branchEntityTypes[0] AS entityType LIMIT $limit + 1' }))).toBe('the template nodes-read reads the gate-filled parameter branchEntityTypes itself');
+  });
+
   it.each(['MATCH (n:@entity(kind)) RETURN n.id AS id LIMIT $limit', 'MATCH (n:@entity(kind)) RETURN n.id AS id LIMIT 10', 'MATCH (n:@entity(kind)) RETURN n.id AS id LIMIT $limits + 1'])(
     'is paged and its Cypher has no LIMIT $limit + 1: %s',
     (cypher) => {
@@ -86,7 +95,7 @@ describe('a template the catalog refuses, naming the template and the problem', 
 });
 
 describe('gate-filled parameters', () => {
-  const filled = variant({ id: 'filled', cypher: 'RETURN [x IN $mappedLabels WHERE true] AS labels', paramsSchema: z.strictObject({}), entityParams: [], paged: false, gateParameters: ['mappedLabels'] });
+  const filled = variant({ id: 'filled', cypher: 'RETURN [x IN $mappedLabels WHERE true] AS labels', paramsSchema: z.strictObject({}), entityParams: [], paged: false, rows: 'one', gateParameters: ['mappedLabels'] });
 
   it('are accepted when the Cypher uses each one and the parameter schema has none of them', () => {
     expect(createTemplateCatalog({ templates: [filled] }).find('filled')?.gateParameters).toEqual(['mappedLabels']);
@@ -111,19 +120,19 @@ describe('gate-filled parameters', () => {
 
 describe('the stable id marker', () => {
   it('is accepted when a declared entity parameter backs it', () => {
-    const template = variant({ id: 'stable', cypher: 'MATCH (n:@entity(kind)) WHERE n.@stableId(kind) IS NOT NULL RETURN count(n) AS c', paged: false });
+    const template = variant({ id: 'stable', cypher: 'MATCH (n:@entity(kind)) WHERE n.@stableId(kind) IS NOT NULL RETURN count(n) AS c', paged: false, rows: 'one' });
     expect(createTemplateCatalog({ templates: [template] }).find('stable')?.entityParams).toEqual(['kind']);
   });
 
   it('is refused when no declared entity parameter backs it', () => {
-    expect(failure(variant({ id: 'stable', cypher: 'MATCH (n:@entity(kind)) WHERE n.@stableId(other) IS NOT NULL RETURN count(n) AS c', paged: false }))).toBe(
+    expect(failure(variant({ id: 'stable', cypher: 'MATCH (n:@entity(kind)) WHERE n.@stableId(other) IS NOT NULL RETURN count(n) AS c', paged: false, rows: 'one' }))).toBe(
       'the template stable has a stable id marker that no declared entity parameter backs',
     );
   });
 });
 
 describe('profiled templates', () => {
-  const profiled = { cypher: 'PROFILE MATCH (n:@entity(kind)) RETURN n.id AS id LIMIT 1', paged: false, scope: 'system', profile: true } as const;
+  const profiled = { cypher: 'PROFILE MATCH (n:@entity(kind)) RETURN n.id AS id LIMIT 1', paged: false, rows: 'one', scope: 'system', profile: true } as const;
 
   it('are accepted when the flag, the PROFILE prefix and the system scope agree', () => {
     expect(createTemplateCatalog({ templates: [variant(profiled)] }).find('nodes-read')?.profile).toBe(true);
@@ -139,5 +148,61 @@ describe('profiled templates', () => {
 
   it('are refused for a user-scope template', () => {
     expect(failure(variant({ ...profiled, scope: 'user' }))).toBe('the template nodes-read is profiled and not a system template');
+  });
+});
+
+describe('what a template that is not paged returns', () => {
+  const single = variant({ id: 'single', cypher: 'MATCH (n:@entity(kind)) RETURN count(n) AS c', paged: false });
+
+  it("is refused when it declares none of rows: 'one', cutMeans: 'duplicate' and cutMeans: 'lowerBound', as for a read of two rows with no declaration", () => {
+    expect(failure(single)).toBe("the template single is not paged and does not declare exactly one of rows: 'one', cutMeans: 'duplicate' or cutMeans: 'lowerBound'");
+  });
+
+  it('is refused when it declares both rows and cutMeans', () => {
+    expect(failure({ ...single, rows: 'one', cutMeans: 'duplicate' })).toBe("the template single is not paged and does not declare exactly one of rows: 'one', cutMeans: 'duplicate' or cutMeans: 'lowerBound'");
+    expect(failure({ ...single, rows: 'one', cutMeans: 'lowerBound' })).toBe("the template single is not paged and does not declare exactly one of rows: 'one', cutMeans: 'duplicate' or cutMeans: 'lowerBound'");
+  });
+
+  it('is accepted with one of them', () => {
+    expect(createTemplateCatalog({ templates: [{ ...single, rows: 'one' }] }).find('single')?.rows).toBe('one');
+    expect(createTemplateCatalog({ templates: [{ ...single, cutMeans: 'duplicate' }] }).find('single')?.cutMeans).toBe('duplicate');
+    expect(createTemplateCatalog({ templates: [{ ...single, cutMeans: 'lowerBound' }] }).find('single')?.cutMeans).toBe('lowerBound');
+  });
+
+  it('is refused on a paged template, which says where its next page starts instead, so a cut that means a lower bound is accepted only for a template that is not paged', () => {
+    expect(failure(variant({ rows: 'one' }))).toBe('the template nodes-read is paged and declares rows or cutMeans');
+    expect(failure(variant({ cutMeans: 'duplicate' }))).toBe('the template nodes-read is paged and declares rows or cutMeans');
+    expect(failure(variant({ cutMeans: 'lowerBound' }))).toBe('the template nodes-read is paged and declares rows or cutMeans');
+  });
+});
+
+describe('the templates of the shipped catalog', () => {
+  const templates = defaultCatalogTemplates();
+
+  it('page every read that returns a list but the capped type-ahead prefix read, and declare every other one as one aggregate row, as the reads whose extra row means a duplicate, or as the capped read', () => {
+    const cutOf = (cut: string | undefined): string => (cut === 'duplicate' ? 'cut means a duplicate' : cut === 'lowerBound' ? 'cut means a lower bound' : 'undeclared');
+    const declared = Object.fromEntries(templates.map((template) => [template.id, template.paged ? 'paged' : template.rows === 'one' ? 'one row' : cutOf(template.cutMeans)]));
+    expect(declared).toEqual({
+      connectivity: 'one row',
+      capabilities: 'one row',
+      privileges: 'paged',
+      'schema-tokens': 'one row',
+      'schema-indexes': 'one row',
+      'stable-id-duplicates': 'one row',
+      'degree-probe': 'one row',
+      'degree-preview-bounded': 'cut means a duplicate',
+      'degree-preview-cheap': 'cut means a duplicate',
+      'entity-load': 'cut means a duplicate',
+      'expand-neighbors': 'paged',
+      'entity-search': 'paged',
+      'entity-related': 'paged',
+      'relationship-evidence': 'paged',
+      'search-facets': 'one row',
+      'entity-search-prefix': 'cut means a lower bound',
+    });
+  });
+
+  it('are accepted by the catalog', () => {
+    expect(() => createTemplateCatalog({ templates })).not.toThrow();
   });
 });

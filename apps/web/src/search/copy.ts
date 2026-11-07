@@ -1,4 +1,4 @@
-import type { Count, SearchFailureGroup } from '@neburyx/contracts';
+import type { Count, DisabledType, EvidenceRecord, SearchFailureGroup, SearchPagedGroup } from '@neburyx/contracts';
 
 export const SEARCH_COPY = {
   title: 'Search results',
@@ -18,13 +18,9 @@ export const SEARCH_COPY = {
   relatedNote: 'Related records reference the ID; they are not extra exact matches.',
   evidenceTitle: 'Evidence records · Supporting relationships',
   viewEvidence: 'View evidence',
-  evidenceDisabled: 'Evidence records are disabled for this relationship',
-  evidenceNoStableId: 'Evidence records are not searched for this relationship because it has no stable ID',
   openInGraph: 'Open in graph',
   emptyTitle: 'No matching entities',
   emptyHint: 'Check the ID or try another indexed property.',
-  disabledType: 'Search is disabled for this type',
-  relatedDisabledType: 'Related records are disabled for this type',
   openFailed: 'The entity could not be opened.',
 } as const;
 
@@ -39,7 +35,19 @@ export const NOTHING_SEARCHABLE_MASKED = 'Nothing can be searched while personal
 export const NO_SEARCH_PROPERTIES = 'No property of this source is configured for search.';
 export const NO_RELATED_PROPERTIES = 'No property of this source is configured for related records.';
 export const NO_EVIDENCE_PROPERTIES = 'No relationship of this source is configured for evidence records.';
-export const evidenceRecordsText = (recordIds: readonly string[]): string => `${recordIds.length} ${recordIds.length === 1 ? 'record' : 'records'}: ${recordIds.join(', ')}`;
+/** What a record whose value is neither text nor a number says, with the property that holds it: never an empty value. */
+export const UNREADABLE_VALUE = 'Value cannot be shown';
+export const evidenceRecordText = (record: EvidenceRecord): string => ('unreadable' in record ? `${record.property}: ${UNREADABLE_VALUE}` : record.sourceRecordId);
+export const evidenceRecordsText = (records: readonly EvidenceRecord[]): string => `${records.length} ${records.length === 1 ? 'record' : 'records'}: ${records.map(evidenceRecordText).join(', ')}`;
+/** What an aggregate's members are: relationships with no stable ID, each listed by its element ID, which is never a reference. */
+export const AGGREGATE_NOTE = 'No stable ID: each relationship is listed by its element ID and cannot be opened or copied as an ID';
+export const membersText = (count: Count): string | undefined => {
+  if (count.value === undefined) return undefined;
+  if (count.quality === 'exact') return `${count.value} ${count.value === 1 ? 'relationship' : 'relationships'}`;
+  return count.quality === 'lowerBound' ? `≥ ${count.value} relationships · lower bound` : undefined;
+};
+export const memberText = (elementId: string): string => `Element ID ${elementId}`;
+export const observedText = (observedAt: string): string => `observed ${observedAt}`;
 export const evidenceRuleText = (ruleId: string, ruleVersion: number): string => `Used by rule ${ruleId} v${ruleVersion}`;
 export const EXACT_MASKED = 'Exact matches cannot be searched while personal data is masked. Turn masking off to search personal data.';
 export const RELATED_MASKED = 'Related records cannot be searched while personal data is masked. Turn masking off to search personal data.';
@@ -52,6 +60,51 @@ export function groupFailedText(group: SearchFailureGroup, code: string, timeout
   return `${name} were not read (${code}).`;
 }
 export const RETRY = 'Retry';
+
+const INDEX_GAP_TEXT: Readonly<Record<DisabledType['reason'], string>> = { 'index-unavailable': 'no online index', 'index-building': 'index is building', 'index-failed': 'index failed' };
+const NOT_SEARCHED = 'Not searched';
+const RELATED_NOT_SEARCHED = 'Not searched for related records';
+const NO_PROPERTY_SEARCHED = 'none of its properties';
+
+const propertyGapText = (property: string, reason: DisabledType['reason']): string => `${property}: ${INDEX_GAP_TEXT[reason]}`;
+
+/**
+ * One line for each property that was not searched, "Not searched: <type> · <property>: <why>", and one line for a type none of whose properties was searched, naming each property with its reason.
+ * `group` says which group the properties belong to.
+ */
+export function notSearchedLines(entries: readonly DisabledType[], typeName: (entityType: string) => string, group: 'exact' | 'related'): readonly { readonly key: string; readonly text: string }[] {
+  const prefix = group === 'exact' ? NOT_SEARCHED : RELATED_NOT_SEARCHED;
+  const wholeTypes = [...new Set(entries.filter((entry) => !entry.typeSearched).map((entry) => entry.entityType))];
+  const whole = wholeTypes.map((entityType) => {
+    const gaps = entries.filter((entry) => entry.entityType === entityType).map((entry) => propertyGapText(entry.property, entry.reason));
+    return { key: entityType, text: `${prefix}: ${typeName(entityType)}, ${NO_PROPERTY_SEARCHED} · ${gaps.join(' · ')}` };
+  });
+  const partial = entries.filter((entry) => entry.typeSearched).map((entry) => ({ key: `${entry.entityType}:${entry.property}`, text: `${prefix}: ${typeName(entry.entityType)} · ${propertyGapText(entry.property, entry.reason)}` }));
+  return [...whole, ...partial];
+}
+
+/** An evidence property that was not searched: "Not searched: <relationship> (<from> → <to>) · <property>: <why>". */
+export const evidenceNotSearchedText = (relationship: string, property: string, reason: DisabledType['reason']): string => `${NOT_SEARCHED}: ${relationship} · ${propertyGapText(property, reason)}`;
+
+/** What a hit with no usable stable ID says: it is listed, and nothing can be done with it. */
+export const UNREFERENCED_TEXT = 'No usable stable ID: this item cannot be opened or added';
+/** The accessible name of such a hit: its title and type, and why it cannot be opened or added. */
+export const unreferencedLabel = (title: string, type: string): string => `${title}, ${type}: ${UNREFERENCED_TEXT}`;
+
+export const MORE_COPY = {
+  showMore: 'Show more',
+  loadingMore: 'Loading more…',
+  invalidated: 'This page of results is no longer valid. Search again to see the rest.',
+  searchAgain: 'Search again',
+} as const;
+/** The accessible name of Show more under a group: what it reads more of. */
+export const showMoreLabel = (group: SearchPagedGroup): string => `${MORE_COPY.showMore}: ${PAGE_GROUP_NAMES[group]}`;
+/** The line that says the next page of a group could not be read: the group's hits stay. */
+export function moreFailedText(group: SearchPagedGroup, code: string, timeoutMs: number | undefined): string {
+  const name = PAGE_GROUP_NAMES[group];
+  if (code === 'QUERY_TIMEOUT') return timeoutMs === undefined ? `More ${name.toLowerCase()} were not read: the source did not answer in time.` : `More ${name.toLowerCase()} were not read: the source did not answer within ${secondsOf(timeoutMs)} s.`;
+  return `More ${name.toLowerCase()} were not read (${code}).`;
+}
 
 export const FILTERS_COPY = {
   title: 'Filters',

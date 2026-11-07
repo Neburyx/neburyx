@@ -6,7 +6,7 @@ a rule says so in its own documentation.
 ## Pagination
 
 Applies to every list backed by the application database (investigations, saved views, saved patterns, users, audit events,
-exports). Graph reads (search and expansion) have their own page shapes and budgets and are not covered here.
+exports). Graph reads have their own page shapes and budgets: search is described under [Search](#search), and expansion is not covered here.
 
 - Query parameters: `limit`, a positive integer, **default 25, maximum 100**; and `cursor`, the opaque string from the
   previous response.
@@ -23,6 +23,77 @@ exports). Graph reads (search and expansion) have their own page shapes and budg
 - A limit above 100 is refused with `QUERY_BUDGET_EXCEEDED` (and the maximum in `details.maxPage`), never clamped. A limit that
   is not a positive integer is `INVALID_REQUEST`. A cursor that is invalid, altered, expired, or whose binding (user, route,
   source, policy version, sort or filters) does not match the request is `CURSOR_INVALIDATED`.
+
+## Search
+
+`POST /v1/search/entities` matches one whole text against one source and answers in result groups: `exact` (the entity
+types' `search` properties), `related` (their `reference` properties) and `evidence` (the relationships' `evidence`
+properties), with facet counts. With `typeahead: true` it adds a `startsWith` group and reads neither the related nor the
+evidence group.
+
+- **Pages.** A group shows at most 25 hits (or the source's `max_page` when that is lower). A group whose read found more holds
+  a cursor (`exactNextCursor` for the exact group, `nextCursor` in `related` and `evidence`) and its count is a `lowerBound` of
+  the hits held; a group with no more has no cursor and an `exact` count.
+- **The next page.** `POST /v1/search/entities/more` with `{ sourceId, text, group, cursor, mask?, entityTypes? }`, where
+  `group` is `exact`, `related` or `evidence`, reads the next page of that group only, with the same masking, the same searched
+  properties and the same index plan as the first page (the source's indexes are read again). The answer holds the page's hits,
+  `count`, `nextCursor`, `dropped` and `warnings`. `count` is the group's count: every hit of the pages read so far, this one
+  included, a `lowerBound` while `nextCursor` is present and `exact` on the last page; a client shows it as it is. Pages follow the source's element ID order, so no hit is on two pages and none is skipped, and a
+  node found through two properties is listed once.
+- **The search cursor** follows the cursor rules above and is also bound to the group, the text, the selection and the
+  masking; a cursor used for any other request is `CURSOR_INVALIDATED`, and the client searches again. Its position is the
+  element ID of the last row shown, an opaque value that is never used as a reference.
+- **A page that fails.** A read that fails with a code of its group (`QUERY_TIMEOUT` with `timeoutMs`, `SOURCE_BUSY`,
+  `RATE_LIMITED` or `INTERNAL_ERROR`) is answered with `200`, the `failure`, no hit and an `unknown` count, and the cursor that
+  was sent can be sent again. A value so common that sorting its matches passes the source's transaction timeout fails its
+  page this way. Any other failure fails the request with its own status and code.
+- **Type-ahead.** The `startsWith` group is read once, cut at the page and not sorted, so a short common prefix never makes the
+  source read every match. It has no next page: its count is a `lowerBound` when the read was cut, and `/more` refuses the
+  group with `INVALID_REQUEST`.
+- **Facets** count the whole match set, whatever is selected, each up to the source's count cap (`heavy_op_threshold`, 500 by
+  default): `exact` up to and including the cap and a `lowerBound` of the cap above it, so a facet says how far the pages go.
+  An `exact` facet is never lower than the hits its group holds, a lower-bound facet below them is shown as at least the hits
+  held, and no facet is the sum of others.
+- **Indexes.** A property is searched only through an online index. A property that has none is left out and named in
+  `disabledTypes` (`disabledRelationshipTypes` for evidence) with its reason: `index-unavailable` (no online index),
+  `index-building` (the index is still being built) or `index-failed`. The type's other properties are still searched, and a
+  type is marked as not searched (`typeSearched: false`) only when none of its properties is. A read that reaches the source
+  for a property whose index is not online is refused as `SOURCE_UNAVAILABLE` before any data is read. A login that may not
+  list indexes is the one case this cannot check: its reads run under the source's timeout and limits.
+- **Entity types that share a label.** A node whose labels match several entity types is a hit of each type whose target
+  matched it, never dropped for that. The entity read and the degree preview read a node as the entity type they ask for.
+- **Nodes with no usable stable ID.** A hit whose stable ID property is missing, empty or not a usable ID (a fraction, an
+  integer beyond the safe range, another type) is listed in its group as an unreferenced hit `{ entityType, title,
+  properties, reason: 'no-stable-id' }`, masked as a node is, counted, and paged with the other hits; `dropped['no-stable-id']`
+  is their number. It holds no reference, no cursor and no element ID, so it cannot be opened or added, and the web marks it
+  "No usable stable ID: this item cannot be opened or added".
+- **Evidence on relationships with no `stable_id`** is searched like any other. A hit is the aggregate `{ aggregate: { type,
+  from, to }, members, memberCount, rules }`: the relationship type and both ends, its members on this page, each
+  `{ elementId, records, observedAt? }`, and `memberCount`, a `lowerBound` while another page may hold more. A member's element
+  ID is text only: nothing opens, copies or links by it, because it can name another relationship once that one is deleted.
+  The web adds the members of the next page to the same aggregate.
+- **Evidence values that cannot be read** (neither text nor a number) are kept as `{ property, unreadable: true }`, so the list
+  and the count agree; the web says "Value cannot be shown" with the property name.
+
+## An unavailable source
+
+`SOURCE_UNAVAILABLE` (503) always carries `details.reason`, one of a fixed set. `message` is the reason's sentence and
+`retryable` its flag, and the web offers Retry only when `retryable` is true.
+
+| `details.reason` | `message` | `retryable` |
+|---|---|---|
+| `unreachable` | The source did not answer. Try again shortly. | `true` |
+| `authentication` | The source refused the login. Ask an administrator. | `false` |
+| `refused` | The source does not allow this read for the login. | `false` |
+| `index-unavailable` | A needed index is not there, so the read was not run. | `false` |
+| `index-building` | A needed index is still building, so the read is slow. Try again later. | `true` |
+| `index-failed` | A needed index failed, so the read was not run. | `false` |
+| `index-list-unreadable` | The source's indexes could not be listed, so the read was not run. | `false` |
+
+`unreachable` covers a source that did not answer for any reason that a retry can cure, and an answer that names no reason.
+A read that needs several indexes that are not online names the least recoverable: `index-failed`, then
+`index-unavailable`, then `index-building`. An index list that cannot be read whole refuses the read
+(`index-list-unreadable`) rather than run it without the check.
 
 ## Field limits
 
@@ -110,8 +181,10 @@ and returns the report. The report says whether the login can write: `readOnlyCh
 "The login can write to the source; give Neburyx a login that can only read." A run that cannot show whether the login writes is not a failure. A listing the check cannot read (a row that is not five strings) is a `warn` with the reason "The server listed privileges that could not be read, so read-only is not verified." The report also carries `mappingChecks`: whether the labels, relationship types, indexes and stable ids that the mapping names exist on the source. Its `status` is `pass`, `warn`
 (a missing sort index, an index still being built, a stable id that nothing enforces as unique), `not-verified` (the login may not list indexes, an answer that could not be read,
 a duplicate check that ran out of time), `fail` (a missing label, relationship type or index, a stable id that is not indexed or not unique) or `not-run` (the source did not answer, or its
-server version is not on the support matrix). A failure makes the outcome `fail` and the state `unavailable` with a reason that names the first problem and says what to do; the source then serves no data
-read until a later check passes. Each finding names the entity type or relationship type, the property and the check, and never an address, a credential, a node value or a name the mapping does not use.
+server version is not on the support matrix). A failure makes the outcome `fail` and the state `unavailable` with a reason that names the first problem and says what to do. A finding refuses no read by
+itself: a read of what no finding names runs, a missing label or relationship type or a stable id that is not unique gives what the source holds, and an index
+finding refuses only the reads that need that index (see [Search](#search)). A source that no check has reached yet is read the same way, its reads checked
+against its indexes. Each finding names the entity type or relationship type, the property and the check, and never an address, a credential, a node value or a name the mapping does not use.
 The report also carries `degreeChecks`: for each entity type that has a mapped relationship, whether the server answers a count of its neighbors from the degree of the node (`cheap`), by expanding its relationships (`not-cheap`) or in a way the check could not tell (`could-not-tell`), with the basis of the result, the relationship types probed and the server version it was found on (`foundOn`). The check runs the count under `PROFILE` on one node of the entity type and reads the server's plan; it never reads a count into the report, and the plan words are the server's, so a plan the check does not recognise is `could-not-tell`, not `not-cheap`. Its `status` is `pass` (every type is cheap), `warn` (any other, with one warning for each such type, such as "Degree counts are estimated for X: no cheap per-type degree index") or `not-run` (the source did not answer, the version is not on the support matrix, the mapping check failed, or no entity type has a relationship). Degree results never change the outcome or the state. A check is at most seven gate deadlines (capabilities, privileges, the mapping reads and the degree probes).
 A source that stops answering during the schema reads or the degree probes gives an error (`504` or `503`) and no report, because that says nothing about the mapping. The route never runs the write probe,
 which only the `test-source` command runs on request (`readOnlyCheck` is then `write-probe`). It declares `principal`; in Community every principal that the policy allows to read the source may

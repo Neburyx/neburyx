@@ -61,7 +61,7 @@ describe('a selection of entity types', () => {
     const both = await searched(stored, { entityTypes: ['gadget'], matchModes: ['exact'] });
     expect(selected.answer?.facets).toEqual(unselected.answer?.facets);
     expect(both.answer?.facets).toEqual(unselected.answer?.facets);
-    expect(selected.answer?.facets).toMatchObject({ searchable: true, entityType: [{ entityType: 'widget', count: { value: 25, quality: 'lowerBound' } }, { entityType: 'gadget', count: { value: 5, quality: 'exact', scope: FACET_SCOPES.entityType } }] });
+    expect(selected.answer?.facets).toMatchObject({ searchable: true, entityType: [{ entityType: 'widget', count: { value: 30, quality: 'exact' } }, { entityType: 'gadget', count: { value: 5, quality: 'exact', scope: FACET_SCOPES.entityType } }] });
     expect(selected.answer?.exact.every((node) => node.ref.entityType === 'gadget')).toBe(true);
     for (const run of [unselected, selected, both]) await run.parts.app.close();
   });

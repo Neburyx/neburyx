@@ -7,7 +7,6 @@ import { communitySeams } from '../seams/community-seams.js';
 import { createNeo4jExecutor, type Neo4jExecutor } from '../sources/executor.js';
 import { mappingOf, sourceWith } from '../testing/gate-fixtures.js';
 import { envFor, NEO4J_SERIES, NEO4J_ENV_PASSWORD, NEO4J_ENV_USER, runAdmin, runAll, startNeo4j, type RunningNeo4j } from '../testing/neo4j-server.js';
-import { ALWAYS_USABLE } from '../testing/usability.js';
 import { judgePlan } from './degree-judge.js';
 
 const image = NEO4J_SERIES;
@@ -59,7 +58,7 @@ beforeAll(async () => {
   executor = createNeo4jExecutor({ sources: mapping.sources, env: envFor(server), logger: { warn: () => undefined } });
   const defaults = communitySeams();
   const catalog = createTemplateCatalog({ templates: [...Object.values(shapes), ...[DEGREE_PROBE_ID].flatMap((id) => defaultCatalog().find(id) ?? [])] });
-  system = assembleGate({ usability: ALWAYS_USABLE, mapping, seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit }, executor, logger: { warn: () => undefined }, catalog }).system;
+  system = assembleGate({ mapping, seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit }, executor, logger: { warn: () => undefined }, catalog }).system;
 }, 300_000);
 
 afterAll(async () => {

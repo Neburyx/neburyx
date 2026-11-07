@@ -36,10 +36,16 @@ These shape code directly. Breaking one is a bug, whatever the tests say.
 - **A read that needs an index finds out first.** A template names the indexes it needs; the gate reads
   the source's indexes at the start of the request and refuses, or leaves out, what has no online
   index before any data is read, because a database answers a missing index with a scan and not with
-  an error. A login that cannot list indexes cannot be protected this way, and that is said.
+  an error. No read runs without its index. What is left out is the one property, not its whole type,
+  and a refusal names why: `index-unavailable`, `index-building` or `index-failed`, the least
+  recoverable first when several needs are unmet, and `index-list-unreadable` when the index list
+  cannot be read whole. A login that cannot list indexes cannot be protected this way, and that is
+  said. The result of a source check never decides a read by itself: a read the check's findings do
+  not concern runs, and an index finding acts only through this guard.
 - **Bounded fetches.** Never load a full neighborhood. Every read has a page size with a server-side
   maximum, a timeout and a budget. Limits come from config or a named constant, not a literal in the
-  call.
+  call. A template that is not paged declares what a cut means (one row, a duplicate, or a lower
+  bound); a cut it does not declare is an error, never a shorter list passed on as whole.
 - **Honest counts.** A count carries its quality: `exact`, `estimated`, `lowerBound` or `unknown`.
   Use the shared count type from `packages/contracts` (its value is absent when the quality is
   `unknown`), and never let a function return a bare number that a caller could show as exact.

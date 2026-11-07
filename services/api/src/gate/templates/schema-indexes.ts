@@ -47,6 +47,7 @@ export const schemaIndexesTemplate: TemplateDefinition = {
   paramsSchema: z.strictObject({}),
   scope: 'system',
   paged: false,
+  rows: 'one',
   entityParams: [],
   relationshipParams: [],
   gateParameters: ['mappedLabels', 'mappedTypes', 'mappedProperties'],

@@ -3,11 +3,6 @@ import type { DegreeChecks, SourceTestReport } from '@neburyx/contracts';
 /** What the running server knows about a source's mapping: `usable`, `unusable` (a check found it does not fit), or `unchecked` (no check since this process started). */
 export type Verdict = 'usable' | 'unusable' | 'unchecked';
 
-/** What the gate asks: whether a data read may go to the source. */
-export interface SourceUsability {
-  isUsable(sourceId: string): boolean;
-}
-
 /** The part of a stored check that sets the verdict. */
 export type VerdictCheck = Pick<SourceTestReport, 'sourceId' | 'checkedAt' | 'server' | 'mappingChecks'> & { readonly degreeChecks?: DegreeChecks };
 
@@ -22,7 +17,7 @@ export interface DegreeVerdicts {
 /** No check has shown any degree to be cheap, so every preview is bounded. */
 export const NO_DEGREE_VERDICTS: DegreeVerdicts = { isCheap: () => false, revisionOf: () => 0 };
 
-export interface UsabilityRecord extends SourceUsability, DegreeVerdicts {
+export interface UsabilityRecord extends DegreeVerdicts {
   verdictOf(sourceId: string): Verdict;
   /** Takes the verdict of a check that reached the source; an older check than the one held, or one that did not reach the source, changes nothing. */
   observe(check: VerdictCheck): void;
@@ -47,9 +42,6 @@ function cheapOf(degrees: DegreeChecks | undefined): Map<string, Set<string>> {
 
 const signatureOf = (cheap: ReadonlyMap<string, ReadonlySet<string>>): string => JSON.stringify([...cheap].map(([entityType, types]) => [entityType, [...types].sort()]).sort());
 
-/** A record in which every source is `unchecked`: for a process that runs system-scope templates only. */
-export const ALL_UNCHECKED: SourceUsability = { isUsable: () => false };
-
 /**
  * The verdict is only ever moved by a check that reached the source and is newer than the one that set it, so pruning the history, a refresh that began
  * before a newer check was stored, and a check that did not settle cannot change it.
@@ -58,7 +50,6 @@ export function createUsabilityRecord(): UsabilityRecord {
   const held = new Map<string, Held>();
   const floors: Floors = new Map();
   return {
-    isUsable: (sourceId) => held.get(sourceId)?.verdict === 'usable',
     verdictOf: (sourceId) => held.get(sourceId)?.verdict ?? 'unchecked',
     observe(check) {
       if (check.server === null) return;

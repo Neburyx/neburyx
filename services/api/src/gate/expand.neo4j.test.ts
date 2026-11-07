@@ -5,7 +5,6 @@ import { renderTemplate } from './render.js';
 import { communitySeams } from '../seams/community-seams.js';
 import { gateRequest, LOCAL_PRINCIPAL } from '../testing/gate.js';
 import { envFor, NEO4J_SERIES, runAdmin, runAll, sourceFor, startNeo4j, type RunningNeo4j } from '../testing/neo4j-server.js';
-import { ALWAYS_USABLE } from '../testing/usability.js';
 import { createSourceGate, type SourceGate } from './source-gate.js';
 import type { ExpansionPage } from './normalize/expansion.js';
 import { EXPAND_NEIGHBORS_ID } from './templates/expand-neighbors.js';
@@ -46,7 +45,7 @@ beforeAll(async () => {
   await runAdmin(server, "MATCH (h:XHub {hubId: 'big'}) UNWIND range(1, 10000) AS i MATCH (l:XLeaf {leafId: 'b' + toString(i)}) CREATE (h)-[:NOTED {seenAt: datetime('2026-02-01T00:00:00Z')}]->(l)");
   await runAdmin(server, 'CALL db.awaitIndexes(300)');
   const defaults = communitySeams();
-  parts = createSourceGate({ mapping: { sources: [sourceFor(server, { entities, relationships })] }, env: envFor(server), seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit }, logger: { warn: () => undefined }, usability: ALWAYS_USABLE });
+  parts = createSourceGate({ mapping: { sources: [sourceFor(server, { entities, relationships })] }, env: envFor(server), seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit }, logger: { warn: () => undefined } });
 }, 900_000);
 
 afterAll(async () => {

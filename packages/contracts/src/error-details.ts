@@ -1,12 +1,12 @@
 import type { ErrorCode } from './error-codes.js';
-import { errorDetailsSchema, partialDetailsSchema } from './error-codes.js';
+import { errorDetailsSchema, partialDetailsSchema, type ErrorDetails } from './error-codes.js';
 
 type DetailKey = keyof typeof errorDetailsSchema.shape;
 
 export const ERROR_DETAIL_KEYS: Readonly<Record<ErrorCode, readonly DetailKey[]>> = {
   QUERY_BUDGET_EXCEEDED: ['maxPage'],
   QUERY_TIMEOUT: ['timeoutMs'],
-  SOURCE_UNAVAILABLE: [],
+  SOURCE_UNAVAILABLE: ['reason'],
   SOURCE_BUSY: [],
   RATE_LIMITED: ['retryAfterMs'],
   ACCESS_DENIED: [],
@@ -25,10 +25,10 @@ export const ERROR_DETAIL_KEYS: Readonly<Record<ErrorCode, readonly DetailKey[]>
   SOURCE_MISMATCH: [],
 };
 
-export function allowedDetails(code: ErrorCode, details: unknown): Record<string, number> | undefined {
+export function allowedDetails(code: ErrorCode, details: unknown): ErrorDetails | undefined {
   if (typeof details !== 'object' || details === null) return undefined;
   if (code === 'PARTIAL_RESULT') return partialAllowed(details);
-  const allowed: Record<string, number> = {};
+  const allowed: Record<string, number | string> = {};
   try {
     for (const key of ERROR_DETAIL_KEYS[code]) {
       const candidate = Object.getOwnPropertyDescriptor(details, key)?.value;
@@ -38,10 +38,12 @@ export function allowedDetails(code: ErrorCode, details: unknown): Record<string
   } catch {
     return undefined;
   }
-  return Object.keys(allowed).length > 0 ? allowed : undefined;
+  if (Object.keys(allowed).length === 0) return undefined;
+  const parsed = errorDetailsSchema.safeParse(allowed);
+  return parsed.success ? parsed.data : undefined;
 }
 
-function partialAllowed(details: object): Record<string, number> | undefined {
+function partialAllowed(details: object): ErrorDetails | undefined {
   try {
     const parsed = partialDetailsSchema.safeParse({
       retained: Object.getOwnPropertyDescriptor(details, 'retained')?.value,

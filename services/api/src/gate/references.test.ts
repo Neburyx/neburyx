@@ -26,7 +26,7 @@ if (source === undefined) throw new Error('no source');
 const token = (value: string, sourceId = 'alpha', entityType = 'phone') => makeToken(TEST_REFERENCE_KEYS, { sourceId, entityType }, value);
 
 function rig() {
-  const executor = new TestExecutor(withOnlineIndexes(source ?? (() => { throw new Error('no source'); })(), (call) => Promise.resolve(call.templateId === ENTITY_LOAD_ID ? entityRows(plainNode(['Handle'], { phoneNumber: PHONE })) : ({ status: 'rows' as const, rows: [{ c0: 1 }] }))));
+  const executor = new TestExecutor(withOnlineIndexes(source ?? (() => { throw new Error('no source'); })(), (call) => Promise.resolve(call.templateId === ENTITY_LOAD_ID ? entityRows(call.cypher.includes('`Thing`') ? plainNode(['Thing'], { thingId: call.parameters['stableId'] }) : plainNode(['Handle'], { phoneNumber: PHONE })) : ({ status: 'rows' as const, rows: [{ c0: 1 }] }))));
   const parts = testSourceGate(mapping, { executor, referenceKeys: TEST_REFERENCE_KEYS });
   const read = (templateId: string, params: unknown, mask = false) => parts.gate.run(gateRequest({ sourceId: 'alpha', templateId, params, limit: 1, mask, indexes: { sourceId: 'alpha', entries: onlineIndexesOf(source ?? (() => { throw new Error('no source'); })()).map((row) => ({ ...row })) } }));
   const reads = (templateId: string) => executor.calls.filter((call) => call.templateId === templateId);

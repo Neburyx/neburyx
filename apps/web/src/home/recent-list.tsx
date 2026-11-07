@@ -1,6 +1,6 @@
 import type { SourceProfile } from '@neburyx/contracts';
 import type { RequestState } from '../api/use-request.js';
-import { FailureNotice } from '../failure-notice.js';
+import { canRetry, FailureNotice } from '../failure-notice.js';
 import { answeredData, useShellData } from '../shell/shell-data.js';
 import { HOME_COPY, MORE_THAN_SHOWN, RECENT_NOTE } from './copy.js';
 import { useRecent, useRecentState } from './recent-context.js';
@@ -33,9 +33,11 @@ export function RecentList() {
           <div className="recent-failure">
             <p>{HOME_COPY.couldNotRead}</p>
             <FailureNotice failure={failure} />
-            <button type="button" className="secondary" onClick={recent.reload}>
-              {HOME_COPY.tryAgain}
-            </button>
+            {canRetry(failure) ? (
+              <button type="button" className="secondary" onClick={recent.reload}>
+                {HOME_COPY.tryAgain}
+              </button>
+            ) : null}
           </div>
         )
       ) : (
@@ -44,9 +46,11 @@ export function RecentList() {
           {failure === undefined ? null : (
             <div className="recent-failure">
               <FailureNotice failure={failure} />
-              <button type="button" className="secondary" onClick={recent.reload}>
-                {HOME_COPY.tryAgain}
-              </button>
+              {canRetry(failure) ? (
+                <button type="button" className="secondary" onClick={recent.reload}>
+                  {HOME_COPY.tryAgain}
+                </button>
+              ) : null}
             </div>
           )}
           {data.items.length === 0 ? (

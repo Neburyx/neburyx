@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useRef } from 'react';
-import type { Facets, GraphNode, SearchResult, SourceProfile, SourceSummary } from '@neburyx/contracts';
+import { relationshipsOf, type Facets, type GraphNode, type SearchResult, type SourceProfile, type SourceSummary } from '@neburyx/contracts';
+import { evidenceRowsOf } from './evidence-section.js';
 import type { ApiClient, ApiResult } from '../api/client.js';
 import { useRequest } from '../api/use-request.js';
 import type { QueryKey } from '../state/keys.js';
 import { SEARCH_COPY } from './copy.js';
-import { searchKeyOf } from './search-key.js';
+import { searchKeyOf, searchKeyText } from './search-key.js';
+import { atLeastHeld } from './facets-held.js';
+import { useMorePages } from './use-more-pages.js';
 import { SearchAnswer } from './search-answer.js';
 import { SearchFailure } from './search-failure.js';
 import { FiltersPanel } from './filters-panel.js';
@@ -63,14 +66,26 @@ export function SearchResults({ client, source, principalId, profile, text, mask
   const latest = sameSearch?.result.facets;
   if (sameSearch !== undefined && latest !== undefined && latest.searchable && latest.total.quality !== 'unknown') counts.current = { text: sameSearch.text, facets: latest };
   const kept = counts.current?.text === sameSearch?.text ? counts.current?.facets : undefined;
-  const panel = latest === undefined || !latest.searchable ? undefined : { facets: latest.total.quality === 'unknown' ? (kept ?? latest) : latest, counted: latest.total.quality !== 'unknown' };
+  const asked = searchKeyText({ sourceId: source.id, principalId, text, mask, selection });
+  const pages = useMorePages(
+    client,
+    shown === undefined ? undefined : { identity: searchKeyText({ sourceId: source.id, principalId, text: shown.text, mask, selection: shown.selection }), sourceId: source.id, text: shown.text, mask, entityTypes: shown.selection.entityTypes, result: shown.result },
+    asked,
+  );
+  const held = {
+    exact: [...(shown?.result.exact ?? []), ...pages.exact.more],
+    related: [...(shown?.result.related.hits ?? []), ...pages.related.more].map((hit) => hit.node),
+    evidence: relationshipsOf(evidenceRowsOf([...(shown?.result.evidence.hits ?? []), ...pages.evidence.more], false, undefined).map((row) => row.hit)),
+    unreferenced: { exact: [...(shown?.result.exactUnreferenced ?? []), ...pages.exact.unreferenced], related: [...(shown?.result.related.unreferenced ?? []), ...pages.related.unreferenced] },
+  };
+  const panel = latest === undefined || !latest.searchable ? undefined : { facets: latest.total.quality === 'unknown' ? (kept ?? latest) : atLeastHeld(latest, held), counted: latest.total.quality !== 'unknown' };
   return (
     <div className={panel === undefined ? 'search-body' : 'search-body search-body-filtered'}>
       {panel === undefined ? null : <FiltersPanel facets={panel.facets} counted={panel.counted} selection={selection} profile={profile} loading={state.phase === 'loading'} onChange={onSelect} onRetry={retry} />}
       <div ref={region} tabIndex={-1} className="search-results" aria-busy={state.phase === 'loading'}>
         {state.phase === 'loading' ? <p role="status">{SEARCH_COPY.searching}</p> : null}
         {failure === undefined ? null : <SearchFailure failure={failure} sourceId={source.id} onRetry={retry} />}
-        {shown === undefined ? null : <SearchAnswer result={shown.result} answeredText={shown.text} currentText={text} profile={profile} busy={busy} mask={mask} onOpen={onOpen} onRetry={retry} onReset={() => onSelect({ entityTypes: [], matchModes: [] })} />}
+        {shown === undefined ? null : <SearchAnswer result={shown.result} answeredText={shown.text} currentText={text} profile={profile} busy={busy} mask={mask} onOpen={onOpen} onRetry={retry} onReset={() => onSelect({ entityTypes: [], matchModes: [] })} pages={pages} />}
       </div>
     </div>
   );

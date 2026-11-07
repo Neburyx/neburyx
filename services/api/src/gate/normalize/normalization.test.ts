@@ -4,7 +4,7 @@ import { PACKS, packSource, readFixture } from '../../testing/pack-fixtures.js';
 import { countOf } from './count.js';
 import { withDerivedEdges } from './derived.js';
 import { normalizeModelOf } from './model.js';
-import { normalizeRows } from './index.js';
+import { expectedTypesOf, normalizeRows } from './index.js';
 import { normalizeExpansion } from './expansion.js';
 
 // The Normalization suite (TAS §17): identity, source scope, masked and missing properties, stored versus derived edges. It runs on the records captured from the demo
@@ -28,10 +28,31 @@ describe.each(PACKS)('the Normalization suite on the %s pack', (pack) => {
     expect(result.nodes[0]?.ref.entityType).toBe(entity?.type);
   });
 
+  it('identity by the asked type: a captured node that also carries the label of a second entity type is that type only when the read asks for it, and is otherwise left out as ambiguous', () => {
+    const [first, second] = source.entities;
+    if (first === undefined || second === undefined) throw new Error('the pack has fewer than two entity types');
+    const captured = rows('node').map((row) => {
+      const plain = row['n'] as { labels: string[]; properties: Record<string, unknown> };
+      return { n: { ...plain, labels: [...plain.labels, second.label], properties: { ...plain.properties, [second.stableId]: 'SECOND-1' } } };
+    });
+    const unasked = normalizeRows(context, captured);
+    expect(unasked.nodes).toEqual([]);
+    expect(unasked.dropped['ambiguous-type']).toBe(1);
+    const asFirst = normalizeRows(context, captured, expectedTypesOf(captured, () => [first.type]));
+    expect(asFirst.nodes.map((node) => node.ref.entityType)).toEqual([first.type]);
+    const asSecond = normalizeRows(context, captured, expectedTypesOf(captured, () => [second.type]));
+    expect(asSecond.nodes.map((node) => node.ref.entityType)).toEqual([second.type]);
+    expect(asSecond.dropped).toEqual({ 'not-mapped': 0, 'ambiguous-type': 0, 'no-stable-id': 0 });
+  });
+
   it('source scope: nothing is invented for a row without a stable ID or for a row that belongs to another source', () => {
     const made = normalizeRows(context, rows('made'));
     expect(made.dropped).toEqual({ 'not-mapped': 1, 'ambiguous-type': 0, 'no-stable-id': 1 });
     expect(made.nodes).toHaveLength(1);
+    // the row without a stable ID is listed, never given a reference; it is the one counted as no-stable-id
+    expect(made.unreferenced).toHaveLength(1);
+    expect(made.unreferenced[0]).toMatchObject({ reason: 'no-stable-id' });
+    expect(Object.keys(made.unreferenced[0] ?? {}).sort()).toEqual(['entityType', 'properties', 'reason', 'title']);
     const foreign = normalizeRows(context, readFixture(other)['node'] as Record<string, unknown>[]);
     expect(foreign.nodes).toEqual([]);
     expect(foreign.edges).toEqual([]);

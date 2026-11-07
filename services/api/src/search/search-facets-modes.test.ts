@@ -58,11 +58,11 @@ describe('the match modes and the total of the facets', () => {
   });
 
   it.each([
-    [24, 'exact', 24],
-    [25, 'exact', 25],
-    [26, 'lowerBound', 25],
-  ])('counts %i matches of each of the related and the evidence mode, and of the total, as %s with the value %i', async (matches, quality, value) => {
-    const { answer, parts } = await searched(referencing(matches), carrying(matches));
+    [29, 'exact', 29],
+    [30, 'exact', 30],
+    [31, 'lowerBound', 30],
+  ])('counts %i matches of each of the related and the evidence mode, and of the total, as %s with the value %i for a count cap of 30', async (matches, quality, value) => {
+    const { answer, parts } = await searched(referencing(matches), carrying(matches), { budgets: { heavy_op_threshold: 30 } });
     expect(modeOf(answer, 'related')).toEqual({ value, quality, scope: FACET_SCOPES.matchMode });
     expect(modeOf(answer, 'evidence')).toEqual({ value, quality, scope: FACET_SCOPES.matchMode });
     expect(facetsOf(answer).total).toEqual({ value, quality, scope: FACET_SCOPES.total });
@@ -78,17 +78,20 @@ describe('the match modes and the total of the facets', () => {
     const stored = [gadget(1, { gadgetId: TEXT }), gadget(2, { widgetRef: TEXT }), gadget(3, { widgetRef: TEXT })];
     const respond = withSchema(() => schemaAnswer(noGadgetReference), searchModelOf([...stored, anchors.from, anchors.to], () => undefined, []));
     const { answer, parts } = await searched(stored, [], {}, { ownSchema: true, respond });
-    expect(answer?.related.disabledTypes).toEqual([{ entityType: 'gadget', reason: 'index-unavailable' }]);
+    expect(answer?.related.disabledTypes).toEqual([{ entityType: 'gadget', property: 'widgetRef', reason: 'index-unavailable', typeSearched: false }]);
     expect(typeOf(answer, 'gadget')).toEqual(exactCount(1, FACET_SCOPES.entityType));
     expect(modeOf(answer, 'related')).toEqual(exactCount(0, FACET_SCOPES.matchMode));
     expect(facetCalls(parts.executor)[0]?.cypher).not.toContain('widgetRef');
     await parts.app.close();
   });
 
-  it('has no evidence probe for a relationship row without a stable ID, which the evidence group names as before', async () => {
-    const { answer, parts } = await searched([], carrying(1));
-    expect(answer?.evidence.disabledRelationshipTypes).toEqual([{ relationshipType: 'NO_ID', from: 'widget', to: 'gadget', reason: 'no-stable-id' }]);
-    expect(facetCalls(parts.executor)[0]?.cypher).not.toContain('NO_ID');
+  it('counts the relationships of a row without a stable ID in the evidence mode, as the evidence group counts its members', async () => {
+    const members: StoredRelationship[] = [1, 2, 3].map((index) => ({ elementId: `5:n:${index}`, type: 'NO_ID', from: anchors.from, to: anchors.to, properties: { recordId: TEXT } }));
+    const { answer, parts } = await searched([], [...carrying(1), ...members]);
+    expect(answer?.evidence.disabledRelationshipTypes).toEqual([]);
+    expect(facetCalls(parts.executor)[0]?.cypher).toContain('NO_ID');
+    expect(modeOf(answer, 'evidence')).toEqual(exactCount(4, FACET_SCOPES.matchMode));
+    expect(answer?.evidence.count).toEqual(exactCount(4, 'search:evidence'));
     await parts.app.close();
   });
 });
@@ -103,14 +106,18 @@ describe('what a facet counts that a group cannot show', () => {
     await parts.app.close();
   });
 
-  it('counts a node with two mapped labels in each of its types, which the group drops as ambiguous', async () => {
+  it('counts a node with two mapped labels once in each type that matched it, which the group shows as a hit of each of those types', async () => {
     const both: StoredNode = { elementId: '4:x:1', label: 'Widget', alsoLabels: ['Gadget'], properties: { widgetId: 'W-1', gadgetId: 'GT-1', ownerName: TEXT, gadgetRegion: TEXT } };
     const { answer, parts } = await searched([both], [], { entities: [...RELATED_ENTITIES.slice(0, 1), { ...RELATED_ENTITIES[1], search: ['gadgetId', 'gadgetRegion'] }, ...RELATED_ENTITIES.slice(2)] });
     expect(typeOf(answer, 'widget')).toEqual(exactCount(1, FACET_SCOPES.entityType));
     expect(typeOf(answer, 'gadget')).toEqual(exactCount(1, FACET_SCOPES.entityType));
-    expect(facetsOf(answer).total).toEqual(exactCount(1, FACET_SCOPES.total));
-    expect(answer?.exact).toEqual([]);
-    expect(answer?.dropped).toMatchObject({ 'ambiguous-type': 1 });
+    expect(answer?.exact.map((node) => [node.ref.entityType, node.ref.stableId])).toEqual([
+      ['widget', 'W-1'],
+      ['gadget', 'GT-1'],
+    ]);
+    expect(answer?.dropped).toEqual({ 'not-mapped': 0, 'ambiguous-type': 0, 'no-stable-id': 0 });
+    // the read counts one node; the group holds a hit of each of its two types, so the total is never shown below the hits held
+    expect(facetsOf(answer).total).toEqual({ value: 2, quality: 'lowerBound', scope: FACET_SCOPES.total });
     await parts.app.close();
   });
 
@@ -163,7 +170,7 @@ describe('the evidence probe', () => {
     const other: StoredRelationship = { elementId: '5:r:other', type: 'MADE_FROM', from: anchors.from, to: { elementId: '4:p:1', label: 'Part', properties: { partId: 'P-1' } }, properties: { linkId: 'L-OTHER', recordId: TEXT } };
     const { answer, parts } = await searched([], [...carrying(2), other]);
     const statement = facetCalls(parts.executor)[0]?.cypher ?? '';
-    expect(statement).toContain('USING RANGE INDEX SEEK r:`MADE_FROM`(`recordId`) WHERE r.`recordId` IN [$text, $textInteger] RETURN r LIMIT $limit + 1');
+    expect(statement).toContain('USING RANGE INDEX SEEK r:`MADE_FROM`(`recordId`) WHERE r.`recordId` IN [$text, $textInteger] RETURN r LIMIT $countCap + 1');
     expect(modeOf(answer, 'evidence')).toEqual(exactCount(2, FACET_SCOPES.matchMode));
     await parts.app.close();
   });

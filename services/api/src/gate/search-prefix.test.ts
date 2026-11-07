@@ -38,8 +38,9 @@ if (template === undefined) throw new Error('the catalog has no prefix template'
 const WIDGET_ID = { entityType: 'widget', property: 'widgetId', match: 'value' as const };
 const WIDGET_OWNER = { entityType: 'widget', property: 'ownerName', match: 'value' as const };
 const GADGET_ID = { entityType: 'gadget', property: 'gadgetId', match: 'value' as const };
-const BRANCH = (label: string, property: string): string => `MATCH (n:\`${label}\`) WHERE n.\`${property}\` STARTS WITH $text AND n.\`${property}\` <> $text RETURN n LIMIT $limit + 1`;
-const STATEMENT = `CALL { ${BRANCH('Widget', 'widgetId')} UNION ${BRANCH('Gadget', 'gadgetId')} } WITH n LIMIT $limit + 1 RETURN n`;
+const BRANCH = (label: string, property: string, position: number): string =>
+  `MATCH (n:\`${label}\`) WHERE n.\`${property}\` STARTS WITH $text AND n.\`${property}\` <> $text WITH n LIMIT $limit + 1 RETURN n, $branchEntityTypes[${position}] AS entityType`;
+const STATEMENT = `CALL { ${BRANCH('Widget', 'widgetId', 0)} UNION ${BRANCH('Gadget', 'gadgetId', 1)} } WITH n, collect(DISTINCT entityType) AS entityTypes LIMIT $limit + 1 RETURN n, entityTypes`;
 
 const entry = (type: IndexEntry['type'], name: string, property: string, constrained = false): IndexEntry => ({ type, entityType: 'NODE', name, property, single: true, state: 'ONLINE', constrained });
 const snapshotOf = (...entries: IndexEntry[]): IndexSnapshot => ({ sourceId: source.id, entries });
@@ -128,11 +129,11 @@ describe('a prefix search whose index is not there', () => {
   const BUILDING = snapshotOf(entry('RANGE', 'Widget', 'widgetId'), { ...entry('RANGE', 'Gadget', 'gadgetId'), state: 'POPULATING' });
 
   it.each([
-    ['a type with no index', WITHOUT_WIDGET],
-    ['an index that is being built', BUILDING],
-  ])('is refused for %s as an index that is unavailable, before any data read, and recorded as refused', async (_name, indexes) => {
+    ['a type with no index', WITHOUT_WIDGET, 'index-unavailable'],
+    ['an index that is being built', BUILDING, 'index-building'],
+  ])('is refused for %s with the reason %s, before any data read, and recorded as refused', async (_name, indexes, reason) => {
     const { gate, executor, audit } = rig();
-    expect(await failureOf(gate.run(prefix({ text: 'AC', targets: [WIDGET_ID, GADGET_ID] }, indexes)))).toBe('SOURCE_UNAVAILABLE:index-unavailable');
+    expect(await failureOf(gate.run(prefix({ text: 'AC', targets: [WIDGET_ID, GADGET_ID] }, indexes)))).toBe(`SOURCE_UNAVAILABLE:${reason}`);
     expect(executor.calls).toEqual([]);
     expect(audit[0]).toMatchObject({ action: 'entity.search', result: 'refused' });
   });
@@ -154,7 +155,14 @@ describe('the statement of a prefix search', () => {
   it('has one branch for each target, joined by UNION, cut by a limit in each branch and one over the combined result, with names from the mapping only, quoted', () => {
     const rendered = render('AC', [WIDGET_ID, GADGET_ID]);
     expect(rendered.cypher).toBe(STATEMENT);
-    expect(rendered.parameters).toEqual({ text: 'AC', limit: 25 });
+    expect(rendered.parameters).toEqual({ text: 'AC', limit: 25, branchEntityTypes: ['widget', 'gadget'] });
+  });
+
+  it('cuts each branch and the combined result before any sort and reads no cursor, so a common prefix never makes the source read every match', () => {
+    const { cypher } = render('AC', [WIDGET_ID, GADGET_ID]);
+    expect(cypher).not.toContain('ORDER BY');
+    expect(cypher).not.toContain('$cursor');
+    expect(cypher.match(/WITH n LIMIT \$limit \+ 1/g)).toHaveLength(2);
   });
 
   it('writes the same branch for the two match forms of a target', () => {
@@ -178,6 +186,8 @@ describe('a prefix search through the real gate with a fake adapter', () => {
   it('runs the stages in order as one READ with one more row than the limit, audits it as entity.search, and returns the rows as normalized nodes', async () => {
     const { gate, executor, audit, observer } = rig();
     const page = await gate.run(prefix({ text: 'AC', targets: [WIDGET_ID, GADGET_ID] }));
+    expect(page).toMatchObject({ hasMore: false });
+    expect(page.nextCursor).toBeUndefined();
     expect(observer.events.map((event) => event.stage)).toEqual(['resolve', 'validate', 'authorize', 'execute', 'normalize', 'redact', 'audit']);
     expect(executor.calls).toHaveLength(1);
     expect(executor.calls[0]).toMatchObject({ accessMode: 'READ', rowLimit: 26, cypher: STATEMENT, templateId: SEARCH_PREFIX_ID });
@@ -214,9 +224,23 @@ describe('the declaration of the prefix template', () => {
   it('is refused when a branch has no limit of its own, and without the enclosing limit or the properties it uses', () => {
     const declared = searchPrefixTemplate.searchBranches;
     if (declared === undefined) throw new Error('the prefix template declares no branches');
-    expect(failure({ searchBranches: { ...declared, value: 'MATCH (n:@label) WHERE n.@property STARTS WITH $text RETURN n' } })).toBe('the template entity-search-prefix has a branch text with no LIMIT $limit + 1 of its own');
+    expect(failure({ searchBranches: { ...declared, value: 'MATCH (n:@label) WHERE n.@property STARTS WITH $text RETURN n, @entityType AS entityType' } })).toBe('the template entity-search-prefix has a branch text with no LIMIT $limit + 1 of its own');
     expect(failure({ cypher: 'CALL { @searchBranches(targets) } RETURN n' })).toBe('the template entity-search-prefix has search branches and its Cypher has no enclosing LIMIT $limit + 1');
     expect(failure({ usedProperties: undefined })).toBe('the template entity-search-prefix has search branches and does not name the properties it uses');
+  });
+
+  it("is refused when it is paged, or declares another meaning of its cut than a lower bound", () => {
+    expect(failure({ paged: true })).toBe('the template entity-search-prefix is paged and declares rows or cutMeans');
+    expect(failure({ cutMeans: 'duplicate' })).toBe("the template entity-search-prefix has search branches and is neither paged by element ID nor declared cutMeans: 'lowerBound'");
+    expect(failure({ cutMeans: undefined })).toBe("the template entity-search-prefix is not paged and does not declare exactly one of rows: 'one', cutMeans: 'duplicate' or cutMeans: 'lowerBound'");
+  });
+
+  it('answers a read cut at its limit with hasMore and no cursor, and no INTERNAL_ERROR', async () => {
+    const { gate } = rig();
+    const page = await gate.run(prefix({ text: 'AC', targets: [WIDGET_ID, GADGET_ID] }, ONLINE, 1));
+    expect(page).toMatchObject({ hasMore: true });
+    expect(page.nextCursor).toBeUndefined();
+    expect(normalizedOf(page).nodes.map((node) => node.ref.stableId)).toEqual(['AC-12']);
   });
 
   it('names every target in the properties it uses and in the indexes it needs, any kind of index meeting the need', () => {

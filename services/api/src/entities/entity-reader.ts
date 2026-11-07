@@ -32,7 +32,9 @@ export function createEntityReader(deps: { readonly gate: Gate; readonly mapping
       await deps.access.require(request);
       const page = await readThroughGate(deps.gate, request);
       const [item] = page.items;
-      const node = isNormalized(item) ? item.nodes.find((candidate) => candidate.ref.entityType === request.entityType) : undefined;
+      if (!isNormalized(item)) throw new AppError('INTERNAL_ERROR');
+      // the entity read refuses a row it cannot make a node of, so a page with no node of the type is a read that found no row
+      const node = item.nodes.find((candidate) => candidate.ref.entityType === request.entityType);
       if (node === undefined) throw new AppError('NOT_FOUND');
       return node;
     },

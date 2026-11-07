@@ -10,7 +10,7 @@ import { NEO4J_SERIES, runAdmin, runAll } from '../testing/neo4j-server.js';
 import { itemsOf, removeMadeRecords, startPackServers, type PackServer } from '../testing/normalization-capture.js';
 import { PACKS } from '../testing/pack-fixtures.js';
 import { communityAccess } from '../testing/source-access.js';
-import { ALWAYS_USABLE } from '../testing/usability.js';
+import { storedHits } from '../testing/search-fixtures.js';
 import { createSearchService } from './search-service.js';
 
 interface Open {
@@ -32,7 +32,6 @@ beforeAll(async () => {
       env,
       seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: { record: (event) => Promise.resolve(void events.push(event)) } },
       logger: { warn: () => undefined },
-      usability: ALWAYS_USABLE,
     });
     return { target, gate, events };
   });
@@ -249,10 +248,10 @@ describe.each(PACKS)(`the search of the %s pack on ${NEO4J_SERIES}`, (pack) => {
       const text = edge?.evidenceRefs[0];
       if (edge === undefined || text === undefined) throw new Error(`the demo graph holds no ${relationship.type} that carries a record`);
       const answer = await search(text);
-      const hit = answer.evidence.hits.find((candidate) => 'stableId' in edge.ref && JSON.stringify(candidate.supports) === JSON.stringify(edge.ref));
+      const hit = storedHits(answer.evidence.hits).find((candidate) => 'stableId' in edge.ref && JSON.stringify(candidate.supports) === JSON.stringify(edge.ref));
       expect(hit, relationship.type).toBeDefined();
       expect(hit?.supports).toEqual(edge.ref);
-      expect(hit?.records.map((record) => record.sourceRecordId), relationship.type).toEqual([...new Set(edge.evidenceRefs)]);
+      expect(hit?.records.map((record) => ('unreadable' in record ? record.property : record.sourceRecordId)), relationship.type).toEqual([...new Set(edge.evidenceRefs)]);
       const endValues = normalized.nodes.flatMap((node) => node.properties.map((property) => property.value)).filter((value): value is string => typeof value === 'string' && value.length > 3 && value !== text);
       for (const value of endValues) expect(JSON.stringify(answer.evidence), `${relationship.type} ${value}`).not.toContain(value);
     }

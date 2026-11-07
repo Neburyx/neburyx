@@ -72,3 +72,64 @@ describe('a search over two branches', () => {
     expect(page.hasMore).toBe(true);
   });
 });
+
+describe('a search over the targets of two entity types whose labels a node carries both of', () => {
+  const twoTypes = parseMapping(
+    fileOf(
+      baseSource({
+        id: 'demo',
+        entities: [
+          { type: 'widget', label: 'Widget', stable_id: 'widgetId', search: ['code'] },
+          { type: 'gadget ü', label: 'Gadget', stable_id: 'gadgetId', search: ['code'] },
+          { type: 'twin', label: 'Widget', stable_id: 'twinId', search: ['code'] },
+        ],
+        relationships: [],
+      }),
+    ),
+    'neburyx.yaml',
+  ).sources[0];
+  if (twoTypes === undefined) throw new Error('the mapping has no source');
+  const BOTH: StoredNode = { elementId: '4:b:1', label: 'Widget', alsoLabels: ['Gadget'], properties: { code: 'C-1', widgetId: 'W-1', gadgetId: 'GD-1', twinId: 'T-1' } };
+  const search = (targets: readonly object[]) => {
+    const executor = new TestExecutor(withOnlineIndexes(twoTypes, searchModelOf([BOTH])));
+    const parts = harness({ catalog: createTemplateCatalog({ templates: [searchExactTemplate, schemaIndexesTemplate] }), executor, modelFor: () => normalizeModelOf(twoTypes), allowlistFor: () => allowlistFromMapping(twoTypes) });
+    return parts.gate.run(gateRequest({ sourceId: twoTypes.id, templateId: SEARCH_EXACT_ID, params: { text: 'C-1', targets }, limit: 25 }));
+  };
+  const code = (entityType: string) => ({ entityType, property: 'code', match: 'value' });
+  const refsOf = (page: Awaited<ReturnType<typeof search>>) => normalizedOf(page).nodes.map((node) => [node.ref.entityType, node.ref.stableId]);
+
+  it('is a hit of the type the target names, with that type\'s stable ID, and is not counted as dropped', async () => {
+    const page = await search([code('gadget ü')]);
+    expect(refsOf(page)).toEqual([['gadget ü', 'GD-1']]);
+    expect(normalizedOf(page).dropped).toEqual({ 'not-mapped': 0, 'ambiguous-type': 0, 'no-stable-id': 0 });
+  });
+
+  it('is one hit of each type that a target of that type matched, also of two types that share a label', async () => {
+    expect(refsOf(await search([code('widget'), code('gadget ü')]))).toEqual([
+      ['widget', 'W-1'],
+      ['gadget ü', 'GD-1'],
+    ]);
+    expect(refsOf(await search([code('widget'), code('twin')]))).toEqual([
+      ['widget', 'W-1'],
+      ['twin', 'T-1'],
+    ]);
+  });
+
+  it('returns each target\'s entity type from a list parameter the gate fills, never as query text', async () => {
+    const executor = new TestExecutor(withOnlineIndexes(twoTypes, searchModelOf([BOTH])));
+    const parts = harness({ catalog: createTemplateCatalog({ templates: [searchExactTemplate, schemaIndexesTemplate] }), executor, modelFor: () => normalizeModelOf(twoTypes), allowlistFor: () => allowlistFromMapping(twoTypes) });
+    await parts.gate.run(gateRequest({ sourceId: twoTypes.id, templateId: SEARCH_EXACT_ID, params: { text: 'C-1', targets: [code('widget'), code('gadget ü')] }, limit: 25 }));
+    const call = executor.calls.find((entry) => entry.templateId === SEARCH_EXACT_ID);
+    expect(call?.cypher).toContain('RETURN n, $branchEntityTypes[0] AS entityType');
+    expect(call?.cypher).toContain('RETURN n, $branchEntityTypes[1] AS entityType');
+    expect(call?.cypher).not.toContain('gadget');
+    expect(call?.parameters['branchEntityTypes']).toEqual(['widget', 'gadget ü']);
+  });
+
+  it('refuses a request that sets the branch entity types itself, before any read', async () => {
+    const executor = new TestExecutor(withOnlineIndexes(twoTypes, searchModelOf([BOTH])));
+    const parts = harness({ catalog: createTemplateCatalog({ templates: [searchExactTemplate, schemaIndexesTemplate] }), executor, modelFor: () => normalizeModelOf(twoTypes), allowlistFor: () => allowlistFromMapping(twoTypes) });
+    await expect(parts.gate.run(gateRequest({ sourceId: twoTypes.id, templateId: SEARCH_EXACT_ID, params: { text: 'C-1', targets: [code('widget')], branchEntityTypes: ['twin'] }, limit: 25 }))).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
+    expect(executor.calls.filter((entry) => entry.templateId === SEARCH_EXACT_ID)).toEqual([]);
+  });
+});

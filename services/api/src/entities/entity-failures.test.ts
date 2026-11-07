@@ -13,8 +13,7 @@ import { baseSource, fileOf, type Json } from '../testing/mapping.js';
 import { testSourceGate } from '../testing/source-gate.js';
 import { makeWebRoot } from '../testing/web-root.js';
 import type { ExecuteOutcome } from '../gate/executor.js';
-import type { SourceUsability } from '../source-test/usability.js';
-import { withOnlineIndexes } from '../testing/search-fixtures.js';
+import { onlineIndexesOf, schemaAnswer, withSchema, type IndexRow } from '../testing/search-fixtures.js';
 
 const webRoot = makeWebRoot();
 afterAll(() => rmSync(webRoot, { recursive: true, force: true }));
@@ -39,18 +38,19 @@ function mappingWith(overrides: Json = {}) {
 
 interface Options {
   readonly answer?: ExecuteOutcome;
-  readonly usability?: SourceUsability;
+  /** The indexes the schema read lists, from those the mapping needs; absent, every one is online. */
+  readonly indexes?: (online: readonly IndexRow[]) => readonly IndexRow[];
   readonly mapping?: ReturnType<typeof mappingWith>;
 }
 
 async function started(options: Options = {}) {
   const mapping = options.mapping ?? mappingWith();
-  const executor = new TestExecutor(withOnlineIndexes(mapping.sources[0] ?? (() => { throw new Error('the mapping has no source'); })(), () => Promise.resolve(options.answer ?? entityRows())));
+  const online = onlineIndexesOf(mapping.sources[0] ?? (() => { throw new Error('the mapping has no source'); })());
+  const executor = new TestExecutor(withSchema(() => schemaAnswer(options.indexes?.(online) ?? online), () => Promise.resolve(options.answer ?? entityRows())));
   const events: AuditEvent[] = [];
   const defaults = communitySeams();
   const parts = testSourceGate(mapping, {
     executor,
-    ...(options.usability === undefined ? {} : { usability: options.usability }),
     seams: {
       policy: defaults.policy,
       coordinator: defaults.coordinator,
@@ -81,13 +81,18 @@ describe('a read that cannot be answered', () => {
     await app.close();
   });
 
-  it('answers SOURCE_UNAVAILABLE without calling the adapter for a source whose mapping checks have not passed', async () => {
-    const { app, executor, events } = await started({ usability: { isUsable: () => false }, answer: entityRows(plainNode(['Widget'], { widgetId: 'W-1' })) });
+  it.each([
+    ['still building', 'POPULATING', 'index-building', 'A needed index is still building, so the read is slow. Try again later.', true],
+    ['failed', 'FAILED', 'index-failed', 'A needed index failed, so the read was not run.', false],
+    ['not there', undefined, 'index-unavailable', 'A needed index is not there, so the read was not run.', false],
+  ])('answers SOURCE_UNAVAILABLE, without reading the node, when the index of its stable ID is %s, with the reason and its sentence', async (_name, state, reason, message, retryable) => {
+    const indexes = (online: readonly IndexRow[]) => online.flatMap((row) => (row.name !== 'Widget' || row.property !== 'widgetId' ? [row] : state === undefined ? [] : [{ ...row, state }]));
+    const { app, executor, events } = await started({ indexes, answer: entityRows(plainNode(['Widget'], { widgetId: 'W-1' })) });
     const response = await app.inject({ method: 'GET', url: '/v1/entities/demo/widget/W-1' });
     expect(response.statusCode).toBe(503);
-    expect(response.json().error.code).toBe('SOURCE_UNAVAILABLE');
+    expect(response.json().error).toMatchObject({ code: 'SOURCE_UNAVAILABLE', message, retryable, details: { reason } });
     expect(entityCalls(executor.calls)).toEqual([]);
-    expect(events[0]).toMatchObject({ action: 'entity.load', result: 'refused' });
+    expect(events.find((event) => event.action === 'entity.load')).toMatchObject({ result: 'refused' });
     await app.close();
   });
 });
@@ -160,10 +165,36 @@ describe('a stable ID that more than one node carries', () => {
 });
 
 describe('a label that two entity types share', () => {
-  it('answers NOT_FOUND for either type, because the normalizer cannot say which type the node is', async () => {
-    const { app } = await started({ answer: entityRows(plainNode(['Gadget'], { gadgetId: 'H-1' })) });
-    expect((await app.inject({ method: 'GET', url: '/v1/entities/demo/gadget/H-1' })).statusCode).toBe(404);
-    expect((await app.inject({ method: 'GET', url: '/v1/entities/demo/gizmo/H-1' })).statusCode).toBe(404);
+  it('answers the node as the type the read names, for either type, never NOT_FOUND because of the shared label', async () => {
+    for (const entityType of ['gadget', 'gizmo']) {
+      const { app, events } = await started({ answer: entityRows(plainNode(['Gadget'], { gadgetId: 'H-1' })) });
+      const response = await app.inject({ method: 'GET', url: `/v1/entities/demo/${entityType}/H-1` });
+      expect(response.statusCode, entityType).toBe(200);
+      expect(nodeSchema.parse(response.json()).ref).toEqual({ sourceId: 'demo', entityType, stableId: 'H-1' });
+      expect(events.filter((event) => event.action === 'entity.load')).toEqual([expect.objectContaining({ result: 'success' })]);
+      await app.close();
+    }
+  });
+});
+
+describe('a row the normalizer cannot make a node of', () => {
+  it.each([
+    ['a float stable ID', { gadgetId: { $type: 'float', value: '1.0' } }],
+    ['an empty stable ID', { gadgetId: '' }],
+    ['a stable ID beyond the safe integers', { gadgetId: 2 ** 60 }],
+  ])('answers INTERNAL_ERROR, not NOT_FOUND, for %s, and records the read as failed', async (_name, properties) => {
+    const { app, events } = await started({ answer: entityRows(plainNode(['Gadget'], properties)) });
+    const response = await app.inject({ method: 'GET', url: '/v1/entities/demo/gadget/1' });
+    expect(response.statusCode).toBe(500);
+    expect(response.json().error).toMatchObject({ code: 'INTERNAL_ERROR' });
+    expect(JSON.stringify(response.json())).not.toContain('unreadable-node');
+    expect(events.filter((event) => event.action === 'entity.load')).toEqual([expect.objectContaining({ result: 'failed' })]);
     await app.close();
+  });
+
+  it('keeps NOT_FOUND for a read that found no row', async () => {
+    const empty = await started({ answer: entityRows() });
+    expect((await empty.app.inject({ method: 'GET', url: '/v1/entities/demo/gadget/1' })).json().error.code).toBe('NOT_FOUND');
+    await empty.app.close();
   });
 });

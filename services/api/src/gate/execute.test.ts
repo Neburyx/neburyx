@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { AuditEvent, Coordinator } from '../seams/seams.js';
 import { DEFAULT_BUDGETS } from './budgets.js';
-import { fakeClock, gateRequest, harness, rowsOf, TestExecutor } from '../testing/gate.js';
+import { fakeClock, gateRequest, harness, rowsOf, testCatalog, testTemplate, TestExecutor } from '../testing/gate.js';
 
 describe('an executor that reports a timeout', () => {
   it('gives QUERY_TIMEOUT and is called exactly once', async () => {
@@ -101,10 +101,15 @@ describe('the executor call', () => {
 
 describe('the rows an executor returns', () => {
   it('one more than the limit give a page of exactly the limit with more available', async () => {
-    const { gate } = harness({ executor: new TestExecutor(() => Promise.resolve(rowsOf(11))) });
+    const { gate } = harness({ catalog: testCatalog([testTemplate({ paged: true })]), executor: new TestExecutor(() => Promise.resolve(rowsOf(11))) });
     const page = await gate.run(gateRequest({ limit: 10 }));
     expect(page.items).toHaveLength(10);
     expect(page.hasMore).toBe(true);
+  });
+
+  it('one more than the limit of a template that is not paged and declares no cut meaning fail INTERNAL_ERROR tagged read-cut, with no row', async () => {
+    const { gate } = harness({ executor: new TestExecutor(() => Promise.resolve(rowsOf(11))) });
+    await expect(gate.run(gateRequest({ limit: 10 }))).rejects.toMatchObject({ code: 'INTERNAL_ERROR', reason: 'read-cut' });
   });
 
   it.each([10, 3, 0])('%s rows with a limit of 10 give no more', async (count) => {

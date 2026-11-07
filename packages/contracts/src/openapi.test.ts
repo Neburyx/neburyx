@@ -8,8 +8,8 @@ describe('buildOpenApiDocument', () => {
     const document = buildOpenApiDocument();
     expect(document.openapi).toBe('3.1.0');
     expect(document.info.title).toBe('Neburyx API');
-    expect(Object.keys(document.paths)).toEqual(['/healthz', '/readyz', '/v1/me', '/v1/sources/{id}/profile', '/v1/sources/{id}/test', '/v1/entities/{sourceId}/{entityType}/{stableId}', '/v1/entities/lookup', '/v1/investigations', '/v1/investigations/{id}', '/v1/search/entities', '/v1/graph/preview-expansion', '/v1/graph/coverage', '/v1/graph/expand', '/v1/sources']);
-    expect(Object.keys(document.components.schemas)).toEqual(['CoverageRequest', 'CoverageResponse', 'DegreePreview', 'DegreePreviewRequest', 'EntityLookupRequest', 'ErrorResponse', 'ExpandRequest', 'ExpandResponse', 'GraphNode', 'HealthResponse', 'InvestigationListResponse', 'InvestigationResponse', 'MeResponse', 'OpenInvestigationRequest', 'OpenInvestigationResponse', 'ReadyResponse', 'SearchRequest', 'SearchResult', 'SourceProfile', 'SourceTestReport', 'SourcesResponse']);
+    expect(Object.keys(document.paths)).toEqual(['/healthz', '/readyz', '/v1/me', '/v1/sources/{id}/profile', '/v1/sources/{id}/test', '/v1/entities/{sourceId}/{entityType}/{stableId}', '/v1/entities/lookup', '/v1/investigations', '/v1/investigations/{id}', '/v1/search/entities', '/v1/search/entities/more', '/v1/graph/preview-expansion', '/v1/graph/coverage', '/v1/graph/expand', '/v1/sources']);
+    expect(Object.keys(document.components.schemas)).toEqual(['CoverageRequest', 'CoverageResponse', 'DegreePreview', 'DegreePreviewRequest', 'EntityLookupRequest', 'ErrorResponse', 'ExpandRequest', 'ExpandResponse', 'GraphNode', 'HealthResponse', 'InvestigationListResponse', 'InvestigationResponse', 'MeResponse', 'OpenInvestigationRequest', 'OpenInvestigationResponse', 'ReadyResponse', 'SearchMoreRequest', 'SearchMoreResult', 'SearchRequest', 'SearchResult', 'SourceProfile', 'SourceTestReport', 'SourcesResponse']);
     expect(document.components.schemas.ErrorResponse).not.toHaveProperty('$schema');
     expect(document.components.schemas.MeResponse).not.toHaveProperty('$schema');
   });
@@ -73,6 +73,12 @@ describe('buildOpenApiDocument', () => {
     });
   });
 
+  it('gives the startsWith group no next cursor and names only the paged groups in the request for a next page', () => {
+    const document = buildOpenApiDocument();
+    expect(Object.keys((document.components.schemas.SearchResult as { properties: { startsWith: { properties: object } } }).properties.startsWith.properties)).not.toContain('nextCursor');
+    expect(document.components.schemas.SearchMoreRequest).toMatchObject({ properties: { group: { enum: ['exact', 'related', 'evidence'] } } });
+  });
+
   it('describes the facets of an answer, with the scope of each count, and the selection it was made for', () => {
     const document = buildOpenApiDocument();
     const schema = JSON.stringify(document.components.schemas.SearchResult);
@@ -85,8 +91,9 @@ describe('buildOpenApiDocument', () => {
     });
   });
 
-  it('describes a hit of the evidence group by the stored edge reference with its five fields, and the rules of the hit', () => {
+  it('describes a hit of the evidence group as a stored hit by the stored edge reference with its five fields, or an aggregate with its members by element ID, each with the rules of the hit', () => {
     const document = buildOpenApiDocument();
+    const record = { anyOf: [{ additionalProperties: false, required: [expect.any(String)] }, { additionalProperties: false, required: ['property', 'unreadable'], properties: { unreadable: { type: 'boolean', const: true } } }] };
     expect(document.components.schemas.SearchResult).toMatchObject({
       properties: {
         evidence: {
@@ -94,12 +101,26 @@ describe('buildOpenApiDocument', () => {
             hits: {
               type: 'array',
               items: {
-                additionalProperties: false,
-                required: ['supports', 'records', 'rules'],
-                properties: {
-                  supports: { additionalProperties: false, required: ['sourceId', 'type', 'from', 'to', 'stableId'], properties: { sourceId: { type: 'string' }, type: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' }, stableId: { type: 'string' } } },
-                  rules: { type: 'array' },
-                },
+                anyOf: [
+                  {
+                    additionalProperties: false,
+                    required: ['supports', 'records', 'rules'],
+                    properties: {
+                      supports: { additionalProperties: false, required: ['sourceId', 'type', 'from', 'to', 'stableId'], properties: { sourceId: { type: 'string' }, type: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' }, stableId: { type: 'string' } } },
+                      records: { type: 'array', minItems: 1, items: record },
+                      rules: { type: 'array' },
+                    },
+                  },
+                  {
+                    additionalProperties: false,
+                    required: ['aggregate', 'members', 'memberCount', 'rules'],
+                    properties: {
+                      aggregate: { additionalProperties: false, required: ['type', 'from', 'to'] },
+                      members: { type: 'array', minItems: 1, items: { additionalProperties: false, required: ['elementId', 'records'], properties: { elementId: { type: 'string' }, records: { type: 'array', items: record } } } },
+                      rules: { type: 'array' },
+                    },
+                  },
+                ],
               },
             },
           },

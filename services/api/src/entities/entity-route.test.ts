@@ -153,9 +153,9 @@ describe('GET /v1/entities/{sourceId}/{entityType}/{stableId}', () => {
     await app.close();
   });
 
-  it('answers NOT_FOUND when the node found is of another entity type than the one asked for', async () => {
+  it('answers INTERNAL_ERROR, not NOT_FOUND, when the read returns a row that is not a node of the entity type asked for', async () => {
     const { app } = await started(entityRows(plainNode(['Gadget'], { gadgetId: 'AC-1', gadgetName: 'Ana Silva' })));
-    expect((await get(app, '/v1/entities/demo/widget/AC-1')).statusCode).toBe(404);
+    expect((await get(app, '/v1/entities/demo/widget/AC-1')).statusCode).toBe(500);
     await app.close();
   });
 });

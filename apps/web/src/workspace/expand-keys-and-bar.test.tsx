@@ -142,7 +142,7 @@ describe('what the submenu says when it cannot offer a count or a type', () => {
     expect(screen.getByRole('status').textContent).toBe('Loading neighbors');
     await act(async () => asked[0]?.answer({ ok: false, failure: { code: 'SOURCE_UNAVAILABLE', message: 'x', retryable: true, traceId: 'tr-3' } } as never));
     expect(boxes()).toEqual(['TYPE-B']);
-    expect(screen.getByRole('alert').textContent).toBe('SOURCE_UNAVAILABLE · trace tr-3');
+    expect(screen.getByRole('alert').textContent).toBe('The source did not answer. Try again shortly. · trace tr-3');
     expect(screen.queryByText('No relationships are mapped for this entity type.')).toBeNull();
     expect(screen.getByRole('button', { name: 'Expand 1 neighbor' })).not.toBeNull();
   });

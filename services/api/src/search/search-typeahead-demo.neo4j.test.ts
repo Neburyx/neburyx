@@ -9,7 +9,6 @@ import { NEO4J_SERIES, runAdmin, runAll } from '../testing/neo4j-server.js';
 import { itemsOf, removeMadeRecords, startPackServers, type PackServer } from '../testing/normalization-capture.js';
 import { PACKS } from '../testing/pack-fixtures.js';
 import { communityAccess } from '../testing/source-access.js';
-import { ALWAYS_USABLE } from '../testing/usability.js';
 import { createSearchService } from './search-service.js';
 
 interface Open {
@@ -29,7 +28,6 @@ beforeAll(async () => {
       env,
       seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: { record: () => Promise.resolve() } },
       logger: { warn: () => undefined },
-      usability: ALWAYS_USABLE,
     });
     return { target, gate };
   });

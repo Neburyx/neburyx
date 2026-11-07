@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { PACKS, packSource, readFixture } from '../../testing/pack-fixtures.js';
 import { context, plainNode, twinSource } from '../../testing/normalize-fixtures.js';
 import { normalizeModelOf } from './model.js';
-import { normalizeRows } from './index.js';
+import { expectedTypesOf, normalizeRows } from './index.js';
 
 const rows = (...nodes: ReturnType<typeof plainNode>[]) => nodes.map((n) => ({ n }));
 
@@ -31,11 +31,14 @@ describe('a node the mapping does not describe', () => {
     ['a list', { personId: ['a'] }],
     ['a date', { personId: { $type: 'date', value: '2026-01-02' } }],
     ['a number beyond the safe range', { personId: 2 ** 60 }],
-  ])('is dropped as having no stable ID when the property is %s', (_name, properties) => {
+  ])('is listed as an unreferenced hit, counted as having no stable ID, when the property is %s', (_name, properties) => {
     const result = normalizeRows(context(), rows(plainNode(['Person'], properties)));
     expect(result.nodes).toEqual([]);
+    expect(result.unreferenced).toHaveLength(1);
+    expect(result.unreferenced[0]).toMatchObject({ entityType: 'person', reason: 'no-stable-id' });
+    expect(Object.keys(result.unreferenced[0] ?? {}).sort()).toEqual(['entityType', 'properties', 'reason', 'title']);
     expect(result.dropped['no-stable-id']).toBe(1);
-    expect(result.warnings).toEqual(['1 row was left out because they have no usable stable ID.']);
+    expect(result.warnings).toEqual(['1 row has no usable stable ID, so it is listed and cannot be opened or added.']);
   });
 
   it('writes one sentence for each reason that occurred, in a fixed order, with the count and no value, label or ID', () => {
@@ -47,7 +50,7 @@ describe('a node the mapping does not describe', () => {
     expect(result.warnings).toEqual([
       "1 row was left out because they are not part of this source's mapping.",
       '1 row was left out because their labels match more than one entity type.',
-      '1 row was left out because they have no usable stable ID.',
+      '1 row has no usable stable ID, so it is listed and cannot be opened or added.',
     ]);
     expect(JSON.stringify(result.warnings)).not.toMatch(/SECRET|Stranger|Gadget|Person/);
   });
@@ -55,6 +58,67 @@ describe('a node the mapping does not describe', () => {
   it('is never repaired: the other rows of the page are kept and nothing is made up', () => {
     const result = normalizeRows(context(), rows(plainNode(['Person'], {}), plainNode(['Person'], { personId: 'kept' })));
     expect(result.nodes.map((node) => node.ref.stableId)).toEqual(['kept']);
+    expect(result.unreferenced.map((hit) => hit.entityType)).toEqual(['person']);
+  });
+
+  it('is titled by its title template, or by its entity type alone when a placeholder has no value, never by a made-up ID', () => {
+    const result = normalizeRows(context(), rows(plainNode(['Gadget'], { gadgetId: 1.5, title: 'Lamp' }), plainNode(['Gadget'], { gadgetId: 1.5 })));
+    expect(result.unreferenced.map((hit) => hit.title)).toEqual(['Gadget Lamp', 'gadget']);
+  });
+
+  it('gives a listed record its own sentence, and puts a relationship whose stable ID cannot be used in the aggregate of its ends, flagged', () => {
+    const p1 = plainNode(['Person'], { personId: 'p1' });
+    const p2 = plainNode(['Person'], { personId: 'p2' });
+    const knows = { $type: 'relationship' as const, elementId: 'r-x', type: 'KNOWS', startElementId: p1.elementId, endElementId: p2.elementId, properties: {} };
+    const result = normalizeRows(context(), [{ a: p1, r: knows, b: p2 }, { n: plainNode(['Person'], {}) }]);
+    expect(result.dropped['no-stable-id']).toBe(1);
+    expect(result.unreferenced).toHaveLength(1);
+    expect(result.edges.map((edge) => edge.qualityFlags)).toEqual([['no-stable-id']]);
+    expect(result.warnings).toEqual(['1 row has no usable stable ID, so it is listed and cannot be opened or added.']);
+  });
+});
+
+describe('a node whose labels match two entity types', () => {
+  const twins = context({ model: normalizeModelOf(twinSource) });
+  const both = plainNode(['Gadget'], { gadgetId: 'g1', twinId: 't1' });
+
+  it('is resolved as the type a row asks for, with that type\'s stable ID, and is not counted as dropped', () => {
+    const read = [{ n: both, entityTypes: ['twin'] }];
+    const result = normalizeRows(twins, read, expectedTypesOf(read, (row) => (Array.isArray(row['entityTypes']) ? row['entityTypes'].map(String) : undefined)));
+    expect(result.nodes.map((node) => node.ref)).toEqual([{ sourceId: 'request-source', entityType: 'twin', stableId: 't1' }]);
+    expect(result.dropped).toEqual({ 'not-mapped': 0, 'ambiguous-type': 0, 'no-stable-id': 0 });
+  });
+
+  it('is one node of each type the rows ask for', () => {
+    const asked = (row: Readonly<Record<string, unknown>>) => (Array.isArray(row['entityTypes']) ? row['entityTypes'].map(String) : undefined);
+    const read = [{ n: both, entityTypes: ['gadget', 'twin'] }];
+    const result = normalizeRows(twins, read, expectedTypesOf(read, asked));
+    expect(result.nodes.map((node) => [node.ref.entityType, node.ref.stableId])).toEqual([
+      ['gadget', 'g1'],
+      ['twin', 't1'],
+    ]);
+    const splitRows = [{ n: both, entityTypes: ['gadget'] }, { n: both, entityTypes: ['twin'] }];
+    const split = normalizeRows(twins, splitRows, expectedTypesOf(splitRows, asked));
+    expect(split.nodes.map((node) => node.ref.entityType)).toEqual(['gadget', 'twin']);
+  });
+
+  it('is resolved as the type the read asks for every node of', () => {
+    const read = rows(both);
+    const result = normalizeRows(twins, read, expectedTypesOf(read, () => ['gadget']));
+    expect(result.nodes.map((node) => node.ref)).toEqual([{ sourceId: 'request-source', entityType: 'gadget', stableId: 'g1' }]);
+  });
+
+  it('is left out as ambiguous-type, counted, when the read asks for no type', () => {
+    const result = normalizeRows(twins, rows(both));
+    expect(result.nodes).toEqual([]);
+    expect(result.dropped['ambiguous-type']).toBe(1);
+  });
+
+  it('is an unreferenced hit of the asked type when that type\'s stable ID is not usable', () => {
+    const read = rows(plainNode(['Gadget'], { gadgetId: 'g1', twinId: 2.5 }));
+    const result = normalizeRows(twins, read, expectedTypesOf(read, () => ['twin']));
+    expect(result.nodes).toEqual([]);
+    expect(result.unreferenced).toEqual([{ entityType: 'twin', title: '2.5', properties: [{ key: 'twinId', value: 2.5, dataClass: 'number', masked: false }], reason: 'no-stable-id' }]);
   });
 });
 

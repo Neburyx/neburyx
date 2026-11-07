@@ -1,4 +1,4 @@
-import type { ErrorCode } from './error-codes.js';
+import type { ErrorCode, SourceUnavailableReason } from './error-codes.js';
 import { ERROR_CODES } from './error-codes.js';
 
 export interface ErrorEntry {
@@ -7,10 +7,21 @@ export interface ErrorEntry {
   readonly retryable: boolean;
 }
 
+/** The sentence and the retry flag of each reason of `SOURCE_UNAVAILABLE`; `unreachable` is also the entry of an answer that gives no reason. */
+export const SOURCE_UNAVAILABLE_ENTRIES: Readonly<Record<SourceUnavailableReason, Omit<ErrorEntry, 'status'>>> = {
+  unreachable: { message: 'The source did not answer. Try again shortly.', retryable: true },
+  authentication: { message: 'The source refused the login. Ask an administrator.', retryable: false },
+  refused: { message: 'The source does not allow this read for the login.', retryable: false },
+  'index-unavailable': { message: 'A needed index is not there, so the read was not run.', retryable: false },
+  'index-building': { message: 'A needed index is still building, so the read is slow. Try again later.', retryable: true },
+  'index-failed': { message: 'A needed index failed, so the read was not run.', retryable: false },
+  'index-list-unreadable': { message: "The source's indexes could not be listed, so the read was not run.", retryable: false },
+};
+
 export const ERROR_TABLE: Readonly<Record<ErrorCode, ErrorEntry>> = {
   QUERY_BUDGET_EXCEEDED: { message: 'Refine your filters to continue.', status: 422, retryable: true },
   QUERY_TIMEOUT: { message: 'The source did not answer in time. Try again or refine your filters.', status: 504, retryable: true },
-  SOURCE_UNAVAILABLE: { message: 'The data source is not available. Try again shortly.', status: 503, retryable: true },
+  SOURCE_UNAVAILABLE: { ...SOURCE_UNAVAILABLE_ENTRIES.unreachable, status: 503 },
   SOURCE_BUSY: { message: 'The data source is busy. Try again shortly.', status: 503, retryable: true },
   RATE_LIMITED: { message: 'Too many requests. Try again shortly.', status: 429, retryable: true },
   ACCESS_DENIED: { message: 'You do not have access to this.', status: 403, retryable: false },

@@ -13,6 +13,7 @@ export const connectivityTemplate: TemplateDefinition = {
   scope: 'system',
   auditSystemRuns: false,
   paged: false,
+  rows: 'one',
   entityParams: [],
   relationshipParams: [],
   refsOf: () => [],

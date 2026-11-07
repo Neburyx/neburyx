@@ -2,10 +2,9 @@ import { randomBytes } from 'node:crypto';
 import { AppError } from '../errors.js';
 import type { MappingModel, SourceModel } from '../mapping/model.js';
 import type { Seams } from '../seams/seams.js';
-import type { SourceUsability } from '../source-test/usability.js';
 import { allowlistFromMapping } from './allowlist.js';
 import { DEFAULT_BUDGETS } from './budgets.js';
-import { createTemplateCatalog } from './catalog.js';
+import { createTemplateCatalog, type TemplateDefinition } from './catalog.js';
 import type { ReadExecutor } from './executor.js';
 import { createGates } from './gate.js';
 import { redactItems } from './redact/index.js';
@@ -38,8 +37,6 @@ export interface AssembleOptions {
   readonly observer?: GateObserver;
   readonly catalog?: TemplateCatalog;
   readonly redact?: (items: readonly Item[], context: GateContext) => readonly Item[];
-  /** Whether a data read may go to a source. */
-  readonly usability: SourceUsability;
   /** Signs and checks page cursors; absent, the gate signs with a key of its own that no other process has. */
   readonly cursors?: CursorCodec;
   /** The keys of the reference tokens of keyed entity types; absent, the gate makes keys of its own, which no other process has, so a token does not outlive the process. */
@@ -48,8 +45,12 @@ export interface AssembleOptions {
   readonly policyVersion?: (sourceId: string) => string;
 }
 
+export function defaultCatalogTemplates(): readonly TemplateDefinition[] {
+  return [connectivityTemplate, capabilitiesTemplate, privilegesTemplate, schemaTokensTemplate, schemaIndexesTemplate, stableIdDuplicatesTemplate, degreeProbeTemplate, degreePreviewBoundedTemplate, degreePreviewCheapTemplate, entityLoadTemplate, expandNeighborsTemplate, searchExactTemplate, searchRelatedTemplate, searchEvidenceTemplate, searchFacetsTemplate, searchPrefixTemplate];
+}
+
 export function defaultCatalog(): TemplateCatalog {
-  return createTemplateCatalog({ templates: [connectivityTemplate, capabilitiesTemplate, privilegesTemplate, schemaTokensTemplate, schemaIndexesTemplate, stableIdDuplicatesTemplate, degreeProbeTemplate, degreePreviewBoundedTemplate, degreePreviewCheapTemplate, entityLoadTemplate, expandNeighborsTemplate, searchExactTemplate, searchRelatedTemplate, searchEvidenceTemplate, searchFacetsTemplate, searchPrefixTemplate] });
+  return createTemplateCatalog({ templates: defaultCatalogTemplates() });
 }
 
 function budgetsFrom(source: SourceModel): Budgets {
@@ -94,6 +95,5 @@ export function assembleGate(options: AssembleOptions): { readonly gate: Gate; r
     clock: options.clock ?? Date.now,
     logger: options.logger,
     observer: options.observer,
-    usability: options.usability,
   });
 }

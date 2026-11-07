@@ -8,7 +8,6 @@ import { parseMapping } from '../mapping/load.js';
 import type { MappingModel } from '../mapping/model.js';
 import { communitySeams } from '../seams/community-seams.js';
 import type { AuditEvent, Seams } from '../seams/seams.js';
-import type { SourceUsability } from '../source-test/usability.js';
 import { memoryAppStore } from './app-store.js';
 import { entityRows, plainNode } from './entity-fixtures.js';
 import { TestExecutor } from './gate.js';
@@ -52,7 +51,6 @@ export interface SearchAppOptions {
   readonly policy?: Seams['policy'];
   readonly coordinator?: Seams['coordinator'];
   readonly audit?: Seams['audit'];
-  readonly usability?: SourceUsability;
   readonly redact?: AssembleOptions['redact'];
   readonly catalog?: AssembleOptions['catalog'];
 }
@@ -70,7 +68,6 @@ export async function startSearchApp(options: SearchAppOptions = {}) {
   const parts = testSourceGate(mapping, {
     executor,
     seams,
-    ...(options.usability === undefined ? {} : { usability: options.usability }),
     ...(options.redact === undefined ? {} : { redact: options.redact }),
     ...(options.catalog === undefined ? {} : { catalog: options.catalog }),
   });
@@ -84,6 +81,10 @@ export type SearchApp = Awaited<ReturnType<typeof startSearchApp>>;
 export const postSearch = (app: SearchApp['app'], payload: unknown) =>
   app.inject({ method: 'POST', url: '/v1/search/entities', payload: JSON.stringify(payload), headers: { 'content-type': 'application/json' } });
 
+export const postMore = (app: SearchApp['app'], payload: unknown) =>
+  app.inject({ method: 'POST', url: '/v1/search/entities/more', payload: JSON.stringify(payload), headers: { 'content-type': 'application/json' } });
+
+export const prefixCalls = (executor: TestExecutor) => executor.calls.filter((call) => call.templateId === 'entity-search-prefix');
 export const searchCalls = (executor: TestExecutor) => executor.calls.filter((call) => call.templateId === 'entity-search');
 export const relatedCalls = (executor: TestExecutor) => executor.calls.filter((call) => call.templateId === 'entity-related');
 export const facetCalls = (executor: TestExecutor) => executor.calls.filter((call) => call.templateId === 'search-facets');

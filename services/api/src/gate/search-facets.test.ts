@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { z } from 'zod';
 import { AppError } from '../errors.js';
+import { DEFAULT_BUDGETS } from './budgets.js';
 import { MAX_FACET_PROBES } from '../mapping/model.js';
 import { parseMapping } from '../mapping/load.js';
 import type { AuditEvent } from '../seams/seams.js';
@@ -59,7 +61,7 @@ describe('a facet read the gate refuses before any read', () => {
     ['a reference target that names a search property', [{ targets: [{ ...WIDGET_BATCH, property: 'widgetId' }] }]],
     ['a relationship type the mapping does not name', [{ targets: [{ ...RECORD, relationshipType: 'NOTHING' }] }]],
     ['an entity type used as a relationship type', [{ targets: [{ ...RECORD, relationshipType: 'widget' }] }]],
-    ['a relationship row that has no stable ID', [{ targets: [{ ...RECORD, relationshipType: 'NO_ID' }] }]],
+    ['a relationship row that has no stable ID, with a property it has no evidence for', [{ targets: [{ ...RECORD, relationshipType: 'NO_ID', property: 'docId' }] }]],
     ['ends the row does not map', [{ targets: [{ ...RECORD, from: 'gadget', to: 'widget' }] }]],
     ['a property name with a backtick', [{ targets: [{ ...WIDGET_ID, property: 'widgetId` OR 1=1 //' }] }]],
     ['one probe of both kinds', [{ targets: [WIDGET_ID, RECORD] }]],
@@ -94,14 +96,15 @@ describe('a facet read the gate runs', () => {
     const [call] = executor.calls;
     expect(call?.cypher).toBe(
       [
-        'CALL { CALL { MATCH (n:`Widget`) WHERE n.`widgetId` IN [$text, $textInteger] RETURN n LIMIT $limit + 1 UNION MATCH (n:`Widget`) WHERE n.`ownerName` IN [$text, $textInteger] RETURN n LIMIT $limit + 1 UNION MATCH (n:`Widget`) WHERE n.`batchRef` IN [$text, $textInteger] RETURN n LIMIT $limit + 1 } WITH n LIMIT $limit + 1 RETURN count(*) AS c0 }',
-        'CALL { CALL { MATCH (n:`Gadget`) WHERE n.`gadgetId` = $text RETURN n LIMIT $limit + 1 } WITH n LIMIT $limit + 1 RETURN count(*) AS c1 }',
-        'CALL { CALL { MATCH (a:`Widget`)-[r:`MADE_FROM`]->(b:`Gadget`) USING RANGE INDEX SEEK r:`MADE_FROM`(`recordId`) WHERE r.`recordId` IN [$text, $textInteger] RETURN r LIMIT $limit + 1 UNION MATCH (a:`Widget`)-[r:`MADE_FROM`]->(b:`Gadget`) USING TEXT INDEX r:`MADE_FROM`(`docId`) WHERE r.`docId` = $text RETURN r LIMIT $limit + 1 } WITH r LIMIT $limit + 1 RETURN count(*) AS c2 }',
+        'CALL { CALL { MATCH (n:`Widget`) WHERE n.`widgetId` IN [$text, $textInteger] RETURN n LIMIT $countCap + 1 UNION MATCH (n:`Widget`) WHERE n.`ownerName` IN [$text, $textInteger] RETURN n LIMIT $countCap + 1 UNION MATCH (n:`Widget`) WHERE n.`batchRef` IN [$text, $textInteger] RETURN n LIMIT $countCap + 1 } WITH n LIMIT $countCap + 1 RETURN count(*) AS c0 }',
+        'CALL { CALL { MATCH (n:`Gadget`) WHERE n.`gadgetId` = $text RETURN n LIMIT $countCap + 1 } WITH n LIMIT $countCap + 1 RETURN count(*) AS c1 }',
+        'CALL { CALL { MATCH (a:`Widget`)-[r:`MADE_FROM`]->(b:`Gadget`) USING RANGE INDEX SEEK r:`MADE_FROM`(`recordId`) WHERE r.`recordId` IN [$text, $textInteger] RETURN r LIMIT $countCap + 1 UNION MATCH (a:`Widget`)-[r:`MADE_FROM`]->(b:`Gadget`) USING TEXT INDEX r:`MADE_FROM`(`docId`) WHERE r.`docId` = $text RETURN r LIMIT $countCap + 1 } WITH r LIMIT $countCap + 1 RETURN count(*) AS c2 }',
         'RETURN c0, c1, c2',
       ].join('\n'),
     );
     expect(call?.cypher).not.toContain('T-1');
-    expect(call?.parameters).toMatchObject({ text: 'T-1', limit: 25 });
+    // the probes are cut at the source's count cap, filled in by the gate, and never at the page limit
+    expect(call?.parameters).toMatchObject({ text: 'T-1', limit: 25, countCap: DEFAULT_BUDGETS.countCap });
     expect(call?.rowLimit).toBe(26);
     expect(audit.map((event) => `${event.action} ${event.result}`)).toEqual(['entity.search_facets success']);
   });
@@ -109,7 +112,7 @@ describe('a facet read the gate runs', () => {
   it('answers one item with the counts in the order of the probes', async () => {
     const { gate } = rig(7);
     const page = await gate.run(facets([{ targets: [WIDGET_ID] }, { targets: [GADGET_ID] }]));
-    expect(page.items).toEqual([{ counts: [7, 7] }]);
+    expect(page.items).toEqual([{ counts: [7, 7], cap: DEFAULT_BUDGETS.countCap }]);
     expect(page.hasMore).toBe(false);
   });
 
@@ -157,16 +160,16 @@ describe('a facet read the gate runs', () => {
 });
 
 describe('the counts of a facet read the gate cannot trust', () => {
-  const run = (rows: readonly Record<string, unknown>[], limit = 25) => {
+  const run = (rows: readonly Record<string, unknown>[], countCap = DEFAULT_BUDGETS.countCap) => {
     const executor = new TestExecutor(() => Promise.resolve({ status: 'rows' as const, rows }));
-    const parts = harness({ catalog, executor, modelFor: () => model, allowlistFor: () => allowlist });
-    return codeOf(parts.gate.run(facets([{ targets: [WIDGET_ID] }, { targets: [GADGET_ID] }], { limit })));
+    const parts = harness({ catalog, executor, modelFor: () => model, allowlistFor: () => allowlist, budgetsFor: () => ({ ...DEFAULT_BUDGETS, countCap }) });
+    return codeOf(parts.gate.run(facets([{ targets: [WIDGET_ID] }, { targets: [GADGET_ID] }])));
   };
 
   it.each([
     ['a negative count', [{ c0: -1, c1: 0 }]],
     ['a count that is not a whole number', [{ c0: 1.5, c1: 0 }]],
-    ['a count above the limit plus one', [{ c0: 27, c1: 0 }]],
+    ['a count above the count cap plus one', [{ c0: DEFAULT_BUDGETS.countCap + 2, c1: 0 }]],
     ['a count that is not a number', [{ c0: '3', c1: 0 }]],
     ['a missing count', [{ c0: 3 }, { c0: 3, c1: 3 }]],
     ['a column with another name', [{ c0: 3, total: 3 }]],
@@ -175,19 +178,20 @@ describe('the counts of a facet read the gate cannot trust', () => {
     expect(await run(rows)).toBe('INTERNAL_ERROR');
   });
 
-  it('accepts the limit plus one and zero, and takes the limit of the request', async () => {
-    expect(await run([{ c0: 26, c1: 0 }])).toBe('ok');
+  it('accepts the count cap plus one and zero, and takes the cap of the source and not the page limit', async () => {
+    expect(await run([{ c0: DEFAULT_BUDGETS.countCap + 1, c1: 0 }])).toBe('ok');
     expect(await run([{ c0: 11, c1: 0 }], 10)).toBe('ok');
     expect(await run([{ c0: 12, c1: 0 }], 10)).toBe('INTERNAL_ERROR');
+    expect(await run([{ c0: 26, c1: 0 }], 100)).toBe('ok');
   });
 
   it('answers no item for no row, which the service refuses as it refuses a count it cannot read', () => {
-    expect(normalizeFacetCounts([], undefined, { sourceId: 'demo', hasMore: false, model: normalizeModelOf(source), limit: 25 })).toEqual([]);
+    expect(normalizeFacetCounts([], undefined, { sourceId: 'demo', hasMore: false, model: normalizeModelOf(source), limit: 25, countCap: 500 })).toEqual([]);
   });
 
   it('holds no value of the row in the failure it raises', () => {
     try {
-      normalizeFacetCounts([{ c0: 999, c1: 0 }], undefined, { sourceId: 'demo', hasMore: false, model: normalizeModelOf(source), limit: 25 });
+      normalizeFacetCounts([{ c0: 999, c1: 0 }], undefined, { sourceId: 'demo', hasMore: false, model: normalizeModelOf(source), limit: 25, countCap: 500 });
       throw new Error('expected a failure');
     } catch (error) {
       expect(error).toBeInstanceOf(AppError);
@@ -225,13 +229,18 @@ describe('the catalog refuses a facet template that breaks the structure', () =>
   });
 
   it.each([
-    ['a node branch with no limit of its own', { node: { ...spec.node, value: 'MATCH (n:@label) WHERE n.@property IN [$text, $textInteger] RETURN n' } }, 'no LIMIT $limit + 1 of its own'],
-    ['a node branch that returns another variable', { node: { ...spec.node, text: 'MATCH (m:@label) WHERE m.@property = $text RETURN m LIMIT $limit + 1' } }, 'does not return the one variable'],
+    ['a node branch with no limit of its own', { node: { ...spec.node, value: 'MATCH (n:@label) WHERE n.@property IN [$text, $textInteger] RETURN n' } }, 'no LIMIT $countCap + 1 of its own'],
+    ['a node branch cut at the page limit and not the count cap', { node: { ...spec.node, value: 'MATCH (n:@label) WHERE n.@property IN [$text, $textInteger] RETURN n LIMIT $limit + 1' } }, 'no LIMIT $countCap + 1 of its own'],
+    ['a node branch that returns another variable', { node: { ...spec.node, text: 'MATCH (m:@label) WHERE m.@property = $text RETURN m LIMIT $countCap + 1' } }, 'does not return the one variable'],
     ['a node branch with an evidence placeholder', { node: { ...spec.node, value: 'MATCH (n:@label) WHERE n.@property IN [$text, $textInteger] AND n.@type = 1 RETURN n LIMIT $limit + 1' } }, 'placeholders of its targets'],
     ['an evidence branch with a missing placeholder', { evidence: { ...spec.evidence, text: 'MATCH (a)-[r:@type]->(b) USING TEXT INDEX r:@type(@property) WHERE r.@property = $text RETURN r LIMIT $limit + 1' } }, 'placeholders of its targets'],
     ['an evidence branch that returns the ends too', { evidence: { ...spec.evidence, value: spec.evidence.value.replace('RETURN r LIMIT', 'RETURN r, a, b LIMIT') } }, 'does not return the one variable'],
   ])('has %s', (_name, change, message) => {
     expect(failure({ facetProbes: { ...spec, ...change } })).toContain(message);
+  });
+
+  it('has a count cap of its own in its parameter schema, which only the gate fills', () => {
+    expect(failure({ paramsSchema: z.strictObject({ text: z.string(), probes: z.array(z.unknown()), countCap: z.number().int() }) })).toContain('has the gate-filled parameter countCap in its parameter schema');
   });
 
   it('does not name the properties it uses or the indexes it needs', () => {

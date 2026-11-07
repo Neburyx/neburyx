@@ -3,7 +3,7 @@ import { useLocation, useSearchParams } from 'react-router';
 import { MAX_SEARCH_TEXT_LENGTH, MIN_SEARCH_TEXT_LENGTH, type SourceProfile, type SourceSummary } from '@neburyx/contracts';
 import type { ApiClient, ApiResult } from '../api/client.js';
 import { useRequest } from '../api/use-request.js';
-import { FailureNotice } from '../failure-notice.js';
+import { canRetry, FailureNotice } from '../failure-notice.js';
 import { SOURCE_NOT_AVAILABLE_TEXT } from '../investigations/messages.js';
 import { PageHeading } from '../shell/page-heading.js';
 import { useSessionMask } from '../state/context.js';
@@ -119,9 +119,11 @@ export function SearchWorkspace({ client, source, sources, principalId, text }: 
           <div className="search-failure">
             <p>{SEARCH_COPY.couldNotReadProfile}</p>
             <FailureNotice failure={profileFailure} />
-            <button type="button" className="secondary" onClick={profile.reload}>
-              {SEARCH_COPY.tryAgain}
-            </button>
+            {canRetry(profileFailure) ? (
+              <button type="button" className="secondary" onClick={profile.reload}>
+                {SEARCH_COPY.tryAgain}
+              </button>
+            ) : null}
           </div>
         )
       ) : codePoints(text) < MIN_SEARCH_TEXT_LENGTH ? null : (

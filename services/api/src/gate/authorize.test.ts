@@ -100,3 +100,11 @@ describe('stubs for the policy provider, the audit sink and the coordinator', ()
     expect(log).toEqual([`authorize ${LOCAL_PRINCIPAL.id} ${SOURCE_A}`, 'lease', 'execute', 'release', 'audit success']);
   });
 });
+
+describe('a principal the policy allows', () => {
+  it('reads, whatever the checks of the source showed: authorization asks the policy alone', async () => {
+    const { gate, executor } = harness();
+    await gate.run(gateRequest());
+    expect(executor.calls).toHaveLength(1);
+  });
+});
