@@ -38,7 +38,7 @@ test.describe('the scope lines', () => {
     await page.keyboard.press('Enter');
     await page.keyboard.press('Space');
     await page.keyboard.press('ContextMenu');
-    await menuOf(page).first().getByRole('menuitem', { name: 'Expand by type' }).focus();
+    await menuOf(page).first().getByRole('menuitem', { name: 'Expand by neighbor type' }).focus();
     await page.keyboard.press('ArrowRight');
     const rows = page.locator('.neighbor-types-row');
     await expect(rows.first()).toBeFocused();
