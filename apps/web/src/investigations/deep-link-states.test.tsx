@@ -1,4 +1,4 @@
-import { act, screen } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import type { ApiFailure } from '../api/client.js';
@@ -21,7 +21,7 @@ describe('a link that is not a link', () => {
     const { client } = answering(undefined, { openInvestigation: async () => void (sent += 1) });
     renderApp('/source-a/entity/kind-a/~?x=1', client);
     const heading = await screen.findByRole('heading', { name: LINK_MALFORMED_TITLE, level: 1 });
-    expect(document.activeElement).toBe(heading);
+    await waitFor(() => expect(document.activeElement).toBe(heading));
     expect(headingNote()).toBeNull();
     expect(screen.queryByText('Synthetic data')).toBeNull();
     expect(screen.getByRole('link', { name: BACK_TO_HOME }).getAttribute('href')).toBe('/');
@@ -36,7 +36,7 @@ describe('a link to nothing the person can read', () => {
       const { client } = answering('NOT_FOUND');
       const view = renderApp(link(target, 'A-9'), client);
       const heading = await screen.findByRole('heading', { name: LINK_NOT_FOUND_TITLE, level: 1 });
-      expect(document.activeElement).toBe(heading);
+      await waitFor(() => expect(document.activeElement).toBe(heading));
       expect(screen.getByText(LINK_NOT_FOUND_TEXT)).toBeTruthy();
       expect(headingNote()).toBeNull();
       expect(screen.queryByText('Synthetic data')).toBeNull();
@@ -90,7 +90,7 @@ describe('a failure that can be tried again', () => {
     await screen.findByRole('heading', { name: 'Sources', level: 1 });
     await act(async () => view.router.navigate(link('source-a', 'A-1')));
     const notice = await screen.findByRole('group', { name: 'Opening failed' });
-    expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'The link could not be opened', level: 1 }));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'The link could not be opened', level: 1 })));
     expect(state.investigation.getState()).toBe(shown);
     expect(state.holds(INVESTIGATION_B, false)).toBe(true);
     expect(sourceLine()).toContain('Source source-b');
@@ -134,7 +134,7 @@ describe('the keyboard on these pages', () => {
     const { client } = answering(undefined, { openInvestigation: async () => ({ ok: false, failure: { code: 'NETWORK_UNAVAILABLE' } }) });
     renderApp(link('source-a', 'A-1'), client);
     const retry = await screen.findByRole('button', { name: TRY_AGAIN });
-    expect(document.activeElement).toBe(screen.getByRole('heading', { level: 1 }));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', { level: 1 })));
     const home = screen.getByRole('link', { name: BACK_TO_HOME });
     const user = userEvent.setup();
     const reached: Element[] = [];
