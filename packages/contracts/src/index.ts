@@ -1,4 +1,4 @@
-export { ERROR_CODES, errorBodySchema, errorCodeSchema, errorDetailsSchema } from './error-codes.js';
+export { ERROR_CODES, errorBodySchema, errorCodeSchema, errorDetailsSchema, partialDetailsSchema } from './error-codes.js';
 export { errorResponseSchema } from './error-response.js';
 export type { ErrorCode, ErrorResponse } from './error-codes.js';
 export { ERROR_DETAIL_KEYS, allowedDetails } from './error-details.js';

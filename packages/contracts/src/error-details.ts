@@ -1,5 +1,5 @@
 import type { ErrorCode } from './error-codes.js';
-import { errorDetailsSchema } from './error-codes.js';
+import { errorDetailsSchema, partialDetailsSchema } from './error-codes.js';
 
 type DetailKey = keyof typeof errorDetailsSchema.shape;
 
@@ -11,7 +11,7 @@ export const ERROR_DETAIL_KEYS: Readonly<Record<ErrorCode, readonly DetailKey[]>
   RATE_LIMITED: ['retryAfterMs'],
   ACCESS_DENIED: [],
   CURSOR_INVALIDATED: [],
-  PARTIAL_RESULT: [],
+  PARTIAL_RESULT: ['retained', 'requested'],
   EVIDENCE_NOT_AVAILABLE: [],
   CONFLICTED_VIEW_VERSION: [],
   CONFLICT: [],
@@ -27,6 +27,7 @@ export const ERROR_DETAIL_KEYS: Readonly<Record<ErrorCode, readonly DetailKey[]>
 
 export function allowedDetails(code: ErrorCode, details: unknown): Record<string, number> | undefined {
   if (typeof details !== 'object' || details === null) return undefined;
+  if (code === 'PARTIAL_RESULT') return partialAllowed(details);
   const allowed: Record<string, number> = {};
   try {
     for (const key of ERROR_DETAIL_KEYS[code]) {
@@ -38,4 +39,16 @@ export function allowedDetails(code: ErrorCode, details: unknown): Record<string
     return undefined;
   }
   return Object.keys(allowed).length > 0 ? allowed : undefined;
+}
+
+function partialAllowed(details: object): Record<string, number> | undefined {
+  try {
+    const parsed = partialDetailsSchema.safeParse({
+      retained: Object.getOwnPropertyDescriptor(details, 'retained')?.value,
+      requested: Object.getOwnPropertyDescriptor(details, 'requested')?.value,
+    });
+    return parsed.success ? { retained: parsed.data.retained, requested: parsed.data.requested } : undefined;
+  } catch {
+    return undefined;
+  }
 }

@@ -26,7 +26,17 @@ export type ErrorCode = (typeof ERROR_CODES)[number];
 
 export const errorCodeSchema = z.enum(ERROR_CODES);
 
+const retainedSchema = z.number().int().nonnegative();
+const requestedSchema = z.number().int().positive();
+
+/** What a partial result keeps and what was asked for: whole counts of the operation's own items, the first strictly below the second. */
+export const partialDetailsSchema = z
+  .strictObject({ retained: retainedSchema, requested: requestedSchema })
+  .refine(({ retained, requested }) => retained < requested, { message: 'retained must be below requested' });
+
 export const errorDetailsSchema = z.strictObject({
+  retained: retainedSchema.optional(),
+  requested: requestedSchema.optional(),
   maxPage: z.number().int().positive().optional(),
   retryAfterMs: z.number().int().nonnegative().optional(),
   timeoutMs: z.number().int().positive().optional(),
@@ -39,7 +49,7 @@ export const errorBodySchema = z.object({
     retryable: z.boolean(),
     traceId: z.string().min(1),
     details: errorDetailsSchema.optional(),
-  }),
+  }).refine(({ code, details }) => code !== 'PARTIAL_RESULT' || partialDetailsSchema.safeParse(details).success, { message: 'PARTIAL_RESULT carries retained and requested counts' }),
 });
 
 export type ErrorResponse = z.infer<typeof errorBodySchema>;

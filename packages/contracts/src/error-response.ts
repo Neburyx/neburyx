@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ERROR_CODES, errorDetailsSchema, type ErrorCode } from './error-codes.js';
+import { ERROR_CODES, errorDetailsSchema, partialDetailsSchema, type ErrorCode } from './error-codes.js';
 import { ERROR_DETAIL_KEYS } from './error-details.js';
 import { ERROR_TABLE } from './error-table.js';
 
@@ -12,6 +12,7 @@ function variantFor(code: ErrorCode): z.ZodObject {
     retryable: z.literal(retryable),
     traceId: z.string().min(1),
   };
+  if (code === 'PARTIAL_RESULT') return z.strictObject({ ...shape, details: partialDetailsSchema });
   return z.strictObject(
     ERROR_DETAIL_KEYS[code].length > 0 ? { ...shape, details: z.strictObject(fields).optional() } : shape,
   );
