@@ -28,3 +28,15 @@ export const HEALTH_COPY = {
   title: 'Source health',
   viewSources: 'View sources →',
 } as const;
+
+export const LIBRARY_COPY = {
+  label: 'Library',
+  investigations: 'Investigations',
+  savedViews: 'Saved views',
+  patterns: 'Patterns',
+  noPatterns: 'Built-in patterns are not available yet.',
+  loading: 'Loading…',
+  notRead: 'Not read',
+  acrossSources: (count: number): string => `Across ${count} ${count === 1 ? 'source' : 'sources'}`,
+  lastEdited: (clock: string): string => `Last edited ${clock} UTC`,
+} as const;

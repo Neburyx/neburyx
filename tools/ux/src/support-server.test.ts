@@ -104,17 +104,18 @@ describe('the investigations the support server holds', () => {
     vi.useFakeTimers({ toFake: ['Date'], now: Date.parse('2026-11-05T12:00:00.000Z') });
     const base = await startWithTypes();
     const list = async (query = '') => investigationListResponseSchema.parse(await (await fetch(`${base}/v1/investigations${query}`)).json());
-    expect(await list()).toEqual({ items: [], hasMore: false });
+    expect(await list()).toEqual({ items: [], hasMore: false, counts: { investigations: { value: 0, quality: 'exact', scope: 'investigations' }, sources: { value: 0, quality: 'exact', scope: 'investigation-sources' }, savedViews: { count: { value: 0, quality: 'exact', scope: 'named-views' }, lastEditedAt: null } } });
     for (const id of ['T-1', 'T-2', 'T-3', 'T-4', 'T-5', 'T-6']) {
       vi.advanceTimersByTime(1000);
       await open(base, request({ entity: { sourceId: 'demo', entityType: 'thing', stableId: id } }));
     }
     const first = await list('?limit=5&sort=lastEdited');
     expect(first.items.map((item) => item.startingEntity?.stableId)).toEqual(['T-6', 'T-5', 'T-4', 'T-3', 'T-2']);
-    expect(first).toMatchObject({ hasMore: true });
+    expect(first).toMatchObject({ hasMore: true, counts: { investigations: { value: 6 }, sources: { value: 1 } } });
     expect(first.items[0]).toMatchObject({ sourceAlias: 'demo', save: { state: 'unsaved', savedAt: null }, sourceState: 'available' });
     expect(await list()).toEqual(first);
     expect((await list('?limit=25')).hasMore).toBe(false);
+    expect((await list('?limit=1')).counts.investigations.value).toBe(6);
     for (const query of ['?limit=0', '?limit=26', '?sort=name', '?other=1', '?limit=5&limit=6']) expect((await fetch(`${base}/v1/investigations${query}`)).status).toBe(400);
   });
 
@@ -365,5 +366,40 @@ describe('the support server\'s source health', () => {
     expect(after.map((item) => [item.state, item.lastTest])).toEqual([['connected', null], ['connected', null]]);
     await post(base, '/v1/sources/demo/test');
     expect((await sourcesOf(base)).length).toBe(2);
+  });
+});
+
+describe('the support server\'s named views', () => {
+  const post = (base: string, path: string, body: unknown = {}): Promise<Response> => fetch(base + path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+
+  async function startWithTypes(): Promise<string> {
+    const server = createSupportServer({ root: folder, profile: { sourceId: 'demo', entityTypes: [{ type: 'thing' }] } });
+    await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
+    closing = () => new Promise<void>((done) => void server.close(() => done()));
+    return baseOf(server);
+  }
+  const counted = async (base: string) => investigationListResponseSchema.parse(await (await fetch(`${base}/v1/investigations`)).json()).counts.savedViews;
+
+  it('counts no named view until a spec holds some, then answers the count and the time, and forgets them on reset', async () => {
+    const base = await startWithTypes();
+    expect(await counted(base)).toEqual({ count: { value: 0, quality: 'exact', scope: 'named-views' }, lastEditedAt: null });
+    expect((await post(base, '/__support/named-views', { count: 2, lastEditedAt: '2026-11-05T09:42:00.000Z' })).status).toBe(200);
+    expect(await counted(base)).toEqual({ count: { value: 2, quality: 'exact', scope: 'named-views' }, lastEditedAt: '2026-11-05T09:42:00.000Z' });
+    await post(base, '/__support/reset');
+    expect((await counted(base)).count.value).toBe(0);
+  });
+
+  it('accepts a time the contract accepts, including one without milliseconds', async () => {
+    const base = await startWithTypes();
+    expect((await post(base, '/__support/named-views', { count: 1, lastEditedAt: '2026-11-05T09:42:00Z' })).status).toBe(200);
+    expect((await counted(base)).lastEditedAt).toBe('2026-11-05T09:42:00Z');
+  });
+
+  it('refuses a count that is not a whole number, a time that is not a time, and a count and a time that disagree, and changes nothing', async () => {
+    const base = await startWithTypes();
+    for (const body of [{ count: -1, lastEditedAt: null }, { count: 1.5, lastEditedAt: null }, { count: 2 ** 60, lastEditedAt: '2026-11-05T09:42:00.000Z' }, { count: 1, lastEditedAt: 'yesterday' }, { count: 1, lastEditedAt: '+010000-01-01T00:00:00.000Z' }, { count: 1, lastEditedAt: null }, { count: 0, lastEditedAt: '2026-11-05T09:42:00.000Z' }, { count: 1, lastEditedAt: '2026-11-05T09:42:00.000Z', extra: true }, { count: 'x' }, null, []]) {
+      expect((await post(base, '/__support/named-views', body)).status, JSON.stringify(body)).toBe(400);
+    }
+    expect((await counted(base)).count.value).toBe(0);
   });
 });

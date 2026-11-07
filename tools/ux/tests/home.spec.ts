@@ -252,3 +252,54 @@ test.describe('Home: the Source health card in a browser', () => {
     expect(await onSourcesPage(page, 'banking-demo')).toMatchObject({ facts: held.facts });
   });
 });
+
+const library = (page: Page) => page.getByRole('group', { name: 'Library' });
+const cardOf = (page: Page, title: string) => library(page).locator('.library-card', { has: page.getByRole('heading', { name: title, level: 3 }) });
+const figureOf = async (page: Page, title: string): Promise<number> => Number(await cardOf(page, title).locator('.library-figure').textContent());
+
+test.describe('Home: the library cards in a browser', () => {
+  test.beforeEach(async ({ request }) => {
+    await request.post('/__support/reset');
+  });
+  test.afterEach(async ({ request }) => {
+    await request.post('/__support/reset');
+  });
+
+  test('shows the number of investigations opened in two sources with the sources they span, no saved view and the Patterns line, with no horizontal scroll, and the count grows by one with one more', async ({ page }) => {
+    const id = stamp();
+    await page.goto('/');
+    await expect(cardOf(page, 'Investigations').locator('.library-figure')).toBeVisible();
+    const before = await figureOf(page, 'Investigations');
+    await openByLink(page, 'banking-demo', `LA-${id}`);
+    await openByLink(page, 'claims-demo', `LB-${id}`);
+    await page.goto('/');
+    await expect(cardOf(page, 'Investigations').locator('.library-figure')).toHaveText(String(before + 2));
+    await expect(cardOf(page, 'Investigations')).toContainText('Across 2 sources');
+    await expect(cardOf(page, 'Saved views').locator('.library-figure')).toHaveText('0');
+    await expect(cardOf(page, 'Saved views')).not.toContainText('Last edited');
+    await expect(cardOf(page, 'Patterns')).toContainText('Built-in patterns are not available yet.');
+    await expect(cardOf(page, 'Patterns').locator('.library-figure')).toHaveCount(0);
+    expect(await noHorizontalScroll(page)).toBe(true);
+    await expect(library(page).getByRole('link')).toHaveCount(0);
+    await expect(library(page).getByRole('button')).toHaveCount(0);
+    await openByLink(page, 'banking-demo', `LC-${id}`);
+    await page.goto('/');
+    await expect(cardOf(page, 'Investigations').locator('.library-figure')).toHaveText(String(before + 3));
+    expect(await figureOf(page, 'Investigations')).toBeGreaterThanOrEqual(await page.locator('.recent-row').count());
+  });
+
+  test('sends one read of the list from a fresh load and none for the cards', async ({ page }) => {
+    const sent = requests(page);
+    await page.goto('/');
+    await expect(cardOf(page, 'Investigations').locator('.library-figure')).toBeVisible();
+    await page.waitForLoadState('networkidle');
+    expect(sent.filter((line) => line === 'GET /v1/investigations')).toHaveLength(1);
+  });
+
+  test('shows the count of named views and the time of the newest, in UTC, when the support server holds some', async ({ page, request }) => {
+    await request.post('/__support/named-views', { data: { count: 3, lastEditedAt: '2026-11-05T09:42:00.000Z' } });
+    await page.goto('/');
+    await expect(cardOf(page, 'Saved views').locator('.library-figure')).toHaveText('3');
+    await expect(cardOf(page, 'Saved views')).toContainText('Last edited 09:42 UTC');
+  });
+});

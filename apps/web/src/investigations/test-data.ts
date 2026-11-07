@@ -1,4 +1,4 @@
-import type { GraphNode, Investigation, InvestigationListItem, InvestigationResponse, OpenInvestigationResponse } from '@neburyx/contracts';
+import type { GraphNode, Investigation, InvestigationListItem, InvestigationListResponse, InvestigationResponse, OpenInvestigationResponse } from '@neburyx/contracts';
 import type { ApiClient } from '../api/client.js';
 import { fakeClient } from '../api/fake-client.js';
 import { me, source } from '../test-utils.js';
@@ -24,6 +24,19 @@ export function investigationOf(id: string, sourceId: string, entityType: string
     lastEditedAt: '2026-11-05T10:00:00.000Z',
     version: 1,
     ...overrides,
+  };
+}
+
+/** A list answer whose counts are those of `all`, the rows the server could list (the rows shown unless more are given), and of the named views given. */
+export function listOf(items: readonly InvestigationListItem[], hasMore = false, all: readonly InvestigationListItem[] = items, savedViews: { readonly count: number; readonly lastEditedAt: string | null } = { count: 0, lastEditedAt: null }): InvestigationListResponse {
+  return {
+    items: [...items],
+    hasMore,
+    counts: {
+      investigations: { value: all.length, quality: 'exact', scope: 'investigations' },
+      sources: { value: new Set(all.map((item) => item.sourceId)).size, quality: 'exact', scope: 'investigation-sources' },
+      savedViews: { count: { value: savedViews.count, quality: 'exact', scope: 'named-views' }, lastEditedAt: savedViews.lastEditedAt },
+    },
   };
 }
 
@@ -70,7 +83,7 @@ export function knowing(known: readonly KnownInvestigation[], overrides: Partial
     getProfile: async (sourceId) => ({ ok: true, value: testProfile(sourceId) }),
     listInvestigations: async (limit) => {
       calls.listInvestigations.push(limit);
-      return { ok: true, value: { items: known.slice(0, limit).map((entry) => listItemOf(entry.investigation)), hasMore: known.length > limit } };
+      return { ok: true, value: listOf(known.slice(0, limit).map((entry) => listItemOf(entry.investigation)), known.length > limit, known.map((entry) => listItemOf(entry.investigation))) };
     },
     getInvestigation: async (id) => {
       calls.getInvestigation.push(id);

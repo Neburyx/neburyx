@@ -164,3 +164,38 @@
 .open-link [role='alert'] {
   flex: 1 0 100%;
 }
+
+.library-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-12);
+}
+
+.library-card {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+  padding: var(--space-12) var(--space-16);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.library-card h3 {
+  margin: 0;
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-medium);
+}
+
+.library-figure {
+  margin: 0;
+  font-size: var(--font-size-heading-2);
+  font-weight: var(--font-weight-semibold);
+}
+
+.library-note {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-small);
+}

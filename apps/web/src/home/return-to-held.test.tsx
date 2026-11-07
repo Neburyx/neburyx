@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { ApiClient } from '../api/client.js';
 import { testProfile } from '../dev/test-profile.js';
-import { INVESTIGATION_A, INVESTIGATION_B, investigationOf, knowing, listItemOf, nodeOf } from '../investigations/test-data.js';
+import { INVESTIGATION_A, INVESTIGATION_B, investigationOf, knowing, listItemOf, nodeOf, listOf } from '../investigations/test-data.js';
 import { createClientState } from '../state/client-state.js';
 import { renderApp } from '../test-utils.js';
 
@@ -78,7 +78,7 @@ describe('going Back and Forward between investigations opened from Recent', () 
 
   it('shows an investigation opened elsewhere on the next visit to Home, and the earlier rows meanwhile', async () => {
     let items = [listItemOf(A.investigation)];
-    const parts = knowing([A, B, NEWER], { listInvestigations: async () => ({ ok: true, value: { items, hasMore: false } }) });
+    const parts = knowing([A, B, NEWER], { listInvestigations: async () => ({ ok: true, value: listOf(items) }) });
     const view = renderApp('/', parts.client, createClientState());
     await screen.findByRole('link', { name: 'kind-a A-1' });
     await go(view, '/sources');
@@ -90,7 +90,7 @@ describe('going Back and Forward between investigations opened from Recent', () 
 
   it('lists the rows the endpoint answers: an older investigation that was only resumed stays outside the five most recent', async () => {
     const list = [listItemOf(NEWER.investigation), listItemOf(A.investigation)];
-    const parts = knowing([A, B, NEWER, OLDER], { listInvestigations: async () => ({ ok: true, value: { items: list, hasMore: true } }) });
+    const parts = knowing([A, B, NEWER, OLDER], { listInvestigations: async () => ({ ok: true, value: listOf(list, true) }) });
     const view = renderApp('/', parts.client, createClientState());
     await screen.findByRole('link', { name: 'kind-a N-1' });
     await go(view, '/source-a/entity/kind-a/OLD-1');

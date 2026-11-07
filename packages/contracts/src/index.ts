@@ -55,6 +55,7 @@ export {
   draftSchema,
   investigationListItemSchema,
   investigationListQuerySchema,
+  investigationListCountsSchema,
   investigationListResponseSchema,
   investigationResponseSchema,
   investigationSaveSchema,
@@ -65,7 +66,7 @@ export {
   queryContextDocumentSchema,
   startingEntitySchema,
 } from './investigations.js';
-export type { Investigation, InvestigationListItem, InvestigationListResponse, InvestigationResponse, InvestigationSave, InvestigationSourceState, LayoutDocument, OpenInvestigationRequest, OpenInvestigationResponse, QueryContextDocument } from './investigations.js';
+export type { Investigation, InvestigationListCounts, InvestigationListItem, InvestigationListResponse, InvestigationResponse, InvestigationSave, InvestigationSourceState, LayoutDocument, OpenInvestigationRequest, OpenInvestigationResponse, QueryContextDocument } from './investigations.js';
 export {
   MAX_SEARCH_TEXT_LENGTH,
   MIN_SEARCH_TEXT_LENGTH,

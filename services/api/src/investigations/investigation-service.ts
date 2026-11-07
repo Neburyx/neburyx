@@ -115,10 +115,22 @@ export function createInvestigationService(deps: InvestigationServiceDeps): Inve
       return { created: false, body: answerOf(investigation, false, await readEntity(call)) };
     },
     async list({ principal, limit = DEFAULT_INVESTIGATION_LIST_LIMIT }) {
-      const sourceIds = await deps.access.readable({ principal, sourceIds: await deps.store.listInvestigationSourceIds(principal.id) });
-      const found = await deps.store.listInvestigations({ ownerId: principal.id, sourceIds, limit: limit + 1 });
-      const items = found.slice(0, limit).map((row: ListedInvestigation) => ({ ...shown(deps.mapping, row), sourceAlias: row.sourceAlias, save: row.save }));
-      return { items, hasMore: found.length > limit };
+      return deps.store.readLibrary(async (reader) => {
+        const sourceIds = await deps.access.readable({ principal, sourceIds: await reader.listInvestigationSourceIds(principal.id) });
+        const found = await reader.listInvestigations({ ownerId: principal.id, sourceIds, limit: limit + 1 });
+        const counts = await reader.countInvestigations({ ownerId: principal.id, sourceIds });
+        const views = await reader.countNamedViews({ ownerId: principal.id, sourceIds });
+        const items = found.slice(0, limit).map((row: ListedInvestigation) => ({ ...shown(deps.mapping, row), sourceAlias: row.sourceAlias, save: row.save }));
+        return {
+          items,
+          hasMore: found.length > limit,
+          counts: {
+            investigations: { value: counts.investigations, quality: 'exact' as const, scope: 'investigations' as const },
+            sources: { value: counts.sources, quality: 'exact' as const, scope: 'investigation-sources' as const },
+            savedViews: { count: { value: views.views, quality: 'exact' as const, scope: 'named-views' as const }, lastEditedAt: views.lastEditedAt },
+          },
+        };
+      });
     },
     async read({ id, principal }) {
       if (!UUID.test(id)) throw new AppError('NOT_FOUND');

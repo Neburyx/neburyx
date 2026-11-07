@@ -2,7 +2,7 @@ import { act, configure, screen } from '@testing-library/react';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { InvestigationListItem, SourceProfile } from '@neburyx/contracts';
 import { testProfile } from '../dev/test-profile.js';
-import { INVESTIGATION_A, INVESTIGATION_B, investigationOf, knowing, listItemOf, nodeOf } from '../investigations/test-data.js';
+import { INVESTIGATION_A, INVESTIGATION_B, investigationOf, knowing, listItemOf, nodeOf, listOf } from '../investigations/test-data.js';
 import { renderApp, source } from '../test-utils.js';
 import { legendGlyph } from '../workspace/legend-panel.js';
 
@@ -21,7 +21,7 @@ function profileWith(overrides: Partial<SourceProfile> = {}, sourceId = 'source-
 async function shown(items: InvestigationListItem[], overrides = {}) {
   const parts = knowing(
     items.map((item) => known(item)),
-    { listInvestigations: async () => ({ ok: true, value: { items, hasMore: false } }), getProfile: async (sourceId: string) => ({ ok: true, value: profileWith({}, sourceId) }), ...overrides },
+    { listInvestigations: async () => ({ ok: true, value: listOf(items) }), getProfile: async (sourceId: string) => ({ ok: true, value: profileWith({}, sourceId) }), ...overrides },
   );
   renderApp('/', parts.client);
   await screen.findByRole('link', { name: items[0]?.title ?? '' });
@@ -150,7 +150,7 @@ describe('a Recent row: a profile that is read again at the next visit', () => {
   async function secondVisit(second: (sourceId: string) => ReturnType<NonNullable<ReturnType<typeof knowing>['client']['getProfile']>>) {
     let reads = 0;
     const parts = knowing([known(base)], {
-      listInvestigations: async () => ({ ok: true, value: { items: [listItemOf({ ...base, caseRef: 'CASE-9' })], hasMore: false } }),
+      listInvestigations: async () => ({ ok: true, value: listOf([listItemOf({ ...base, caseRef: 'CASE-9' })]) }),
       getProfile: async (sourceId: string) => (++reads === 1 ? { ok: true as const, value: profileWith({ vocabulary: { caseRef: 'Referral' } }, sourceId) } : second(sourceId)),
     });
     const view = renderApp('/', parts.client);

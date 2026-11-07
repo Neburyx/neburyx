@@ -3,11 +3,11 @@ import { describe, expect, it } from 'vitest';
 import type { ApiResult } from '../api/client.js';
 import { fakeClient } from '../api/fake-client.js';
 import { testProfile } from '../dev/test-profile.js';
-import { investigationOf, listItemOf } from '../investigations/test-data.js';
+import { investigationOf, listItemOf, listOf } from '../investigations/test-data.js';
 import { createRecentInvestigations } from './recent-store.js';
 
 const item = (id: number, sourceId: string): InvestigationListItem => listItemOf(investigationOf(`0192f000-0000-7000-8000-00000000010${id}`, sourceId, 'kind-a', `X-${id}`));
-const answer = (...items: InvestigationListItem[]): ApiResult<InvestigationListResponse> => ({ ok: true, value: { items, hasMore: false } });
+const answer = (...items: InvestigationListItem[]): ApiResult<InvestigationListResponse> => ({ ok: true, value: listOf(items) });
 const down: ApiResult<never> = { ok: false, failure: { code: 'NETWORK_UNAVAILABLE' } };
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -39,7 +39,7 @@ describe('the recent investigations of the session', () => {
     recent.ensure();
     await settle();
     expect(reads.lists).toEqual([5]);
-    expect(recent.getState().list).toEqual({ phase: 'ready', data: { items: [], hasMore: false } });
+    expect(recent.getState().list).toEqual({ phase: 'ready', data: listOf([]) });
   });
 
   it('reads the list again at every later visit, keeps the earlier rows on screen until the new answer, and shows the new one', async () => {
@@ -50,7 +50,7 @@ describe('the recent investigations of the session', () => {
     recent.ensure();
     await settle();
     recent.ensure();
-    expect(recent.getState().list).toEqual({ phase: 'loading', data: { items: [first], hasMore: false } });
+    expect(recent.getState().list).toEqual({ phase: 'loading', data: listOf([first]) });
     held[0]?.(answer(second, first));
     await settle();
     expect(reads.lists).toHaveLength(2);

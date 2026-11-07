@@ -1,7 +1,7 @@
 import { act, configure, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { INVESTIGATION_A, INVESTIGATION_B, investigationOf, knowing, listItemOf, nodeOf } from '../investigations/test-data.js';
+import { INVESTIGATION_A, INVESTIGATION_B, investigationOf, knowing, listItemOf, nodeOf, listOf } from '../investigations/test-data.js';
 import type { ApiClient } from '../api/client.js';
 import { createClientState } from '../state/client-state.js';
 import { renderApp, source } from '../test-utils.js';
@@ -18,7 +18,7 @@ const rowsOf = (): HTMLElement[] => [...document.querySelectorAll<HTMLElement>('
 describe('Home: the Recent list', () => {
   it('lists the investigations of two sources with their own sources, in the order the list answers, from one read of the list with the documented query', async () => {
     const asked: number[] = [];
-    const parts = knowing([B, A], { listInvestigations: async (limit) => (asked.push(limit), { ok: true, value: { items: [listItemOf(B.investigation), listItemOf(A.investigation)], hasMore: false } }) });
+    const parts = knowing([B, A], { listInvestigations: async (limit) => (asked.push(limit), { ok: true, value: listOf([listItemOf(B.investigation), listItemOf(A.investigation)]) }) });
     renderApp('/', parts.client);
     await screen.findByRole('link', { name: 'kind-a C-1' });
     const rows = rowsOf();
@@ -57,7 +57,7 @@ describe('Home: the Recent list', () => {
     const parts = knowing([A], {
       listInvestigations: async () => {
         attempts += 1;
-        return attempts === 1 ? { ok: false, failure: { code: 'NETWORK_UNAVAILABLE' } } : { ok: true, value: { items: [listItemOf(A.investigation)], hasMore: false } };
+        return attempts === 1 ? { ok: false, failure: { code: 'NETWORK_UNAVAILABLE' } } : { ok: true, value: listOf([listItemOf(A.investigation)]) };
       },
     });
     renderApp('/', parts.client);
@@ -107,7 +107,7 @@ describe('Home: a visit after the first', () => {
     let release: (value: Awaited<ReturnType<ApiClient['listInvestigations']>>) => void = () => undefined;
     let reads = 0;
     const parts = knowing([A], {
-      listInvestigations: (_limit: number) => (++reads === 1 ? Promise.resolve({ ok: true as const, value: { items: [listItemOf(A.investigation)], hasMore: false } }) : new Promise((resolve) => (release = resolve))),
+      listInvestigations: (_limit: number) => (++reads === 1 ? Promise.resolve({ ok: true as const, value: listOf([listItemOf(A.investigation)]) }) : new Promise((resolve) => (release = resolve))),
     });
     const view = renderApp('/', parts.client);
     await screen.findByRole('link', { name: 'kind-a A-1' });
@@ -116,7 +116,7 @@ describe('Home: a visit after the first', () => {
     await visit(view, '/');
     expect(await screen.findByText('Loading recent investigations…')).toBeTruthy();
     expect(screen.getByRole('link', { name: 'kind-a A-1' })).toBeTruthy();
-    await act(async () => release({ ok: true, value: { items: [listItemOf(B.investigation), listItemOf(A.investigation)], hasMore: false } }));
+    await act(async () => release({ ok: true, value: listOf([listItemOf(B.investigation), listItemOf(A.investigation)]) }));
     await screen.findByRole('link', { name: 'kind-a C-1' });
     expect(screen.queryByText('Loading recent investigations…')).toBeNull();
     expect(rowsOf()).toHaveLength(2);
@@ -125,7 +125,7 @@ describe('Home: a visit after the first', () => {
   it('keeps the earlier rows and shows the failure when the new read fails, and reads again on Try again', async () => {
     let reads = 0;
     const parts = knowing([A], {
-      listInvestigations: async () => (++reads === 2 ? { ok: false as const, failure: { code: 'NETWORK_UNAVAILABLE' } } : { ok: true as const, value: { items: [listItemOf(A.investigation)], hasMore: false } }),
+      listInvestigations: async () => (++reads === 2 ? { ok: false as const, failure: { code: 'NETWORK_UNAVAILABLE' } } : { ok: true as const, value: listOf([listItemOf(A.investigation)]) }),
     });
     const view = renderApp('/', parts.client);
     await screen.findByRole('link', { name: 'kind-a A-1' });

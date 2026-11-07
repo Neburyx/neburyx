@@ -56,7 +56,7 @@ interface Started {
   readonly asks: string[];
   readonly events: AuditEvent[];
   readonly executor: TestExecutor;
-  readonly list: (query?: string) => Promise<{ readonly status: number; readonly body: { items: { id: string; sourceId: string; sourceState: string; sourceAlias: string }[]; hasMore: boolean; error?: { code: string } } }>;
+  readonly list: (query?: string) => Promise<{ readonly status: number; readonly body: { items: { id: string; sourceId: string; sourceState: string; sourceAlias: string }[]; hasMore: boolean; counts?: unknown; error?: { code: string } } }>;
 }
 
 async function started(refused: readonly string[] = ['secret'], options: { readonly store?: MemoryAppStore; readonly failPolicy?: boolean } = {}): Promise<Started> {
@@ -80,6 +80,7 @@ async function started(refused: readonly string[] = ['secret'], options: { reado
   return { store, asks, events, executor, list };
 }
 
+const counts = (investigations: number, sources: number) => ({ investigations: { value: investigations, quality: 'exact', scope: 'investigations' }, sources: { value: sources, quality: 'exact', scope: 'investigation-sources' }, savedViews: { count: { value: 0, quality: 'exact', scope: 'named-views' }, lastEditedAt: null } });
 const idsOf = (answer: Awaited<ReturnType<Started['list']>>): string[] => answer.body.items.map((item) => item.id);
 
 describe('the list of the caller\'s investigations', () => {
@@ -124,6 +125,7 @@ describe('the list of the caller\'s investigations', () => {
     const answer = await list(`?${query}`);
     expect(answer.status).toBe(400);
     expect(answer.body.error?.code).toBe('INVALID_REQUEST');
+    expect(answer.body.counts).toBeUndefined();
     expect(asks).toEqual([]);
   });
 
@@ -139,7 +141,7 @@ describe('the list of the caller\'s investigations', () => {
 
   it('answers an empty list with no rows and no more', async () => {
     const { list } = await started();
-    expect((await list()).body).toEqual({ items: [], hasMore: false });
+    expect((await list()).body).toEqual({ items: [], hasMore: false, counts: counts(0, 0) });
   });
 
   it('answers 500 INTERNAL_ERROR when the investigations cannot be read', async () => {
@@ -147,6 +149,53 @@ describe('the list of the caller\'s investigations', () => {
     const answer = await list();
     expect(answer.status).toBe(500);
     expect(answer.body.error?.code).toBe('INTERNAL_ERROR');
+  });
+
+  it('answers 500 INTERNAL_ERROR with no rows and no counts when the counts cannot be read, and reads no source', async () => {
+    const { store, list, executor } = await started(['secret'], { store: memoryStoreWith({ failCounts: true }) });
+    store.investigations.push(row('open', 1));
+    const answer = await list();
+    expect(answer.status).toBe(500);
+    expect(answer.body.error?.code).toBe('INTERNAL_ERROR');
+    expect(answer.body.items).toBeUndefined();
+    expect(answer.body.counts).toBeUndefined();
+    expect(executor.calls).toHaveLength(0);
+  });
+});
+
+describe('the counts of the list', () => {
+  it('counts every investigation the person may list and the sources they are on, whatever the limit, in the shape of the contract', async () => {
+    const { store, list } = await started();
+    store.investigations.push(row('open', 1), row('open', 2), row('retired', 3));
+    const answer = await list('?limit=1');
+    expect(answer.body.items).toHaveLength(1);
+    expect(answer.body.counts).toEqual(counts(3, 2));
+    expect(investigationListResponseSchema.safeParse(answer.body).success).toBe(true);
+    expect((await list('?limit=25')).body.counts).toEqual(counts(3, 2));
+  });
+
+  it('counts an investigation of a source no longer in the configuration, and its source', async () => {
+    const { store, list } = await started();
+    store.investigations.push(row('retired', 1));
+    expect((await list()).body.counts).toEqual(counts(1, 1));
+  });
+
+  it('counts neither the investigations nor the source of a source the policy refuses, and writes no audit event', async () => {
+    const { store, list, events } = await started();
+    store.investigations.push(row('open', 1), row('secret', 2), row('secret', 3));
+    expect((await list()).body.counts).toEqual(counts(1, 1));
+    expect(events).toEqual([]);
+  });
+
+  it('counts no closed, archived or other person\'s investigation', async () => {
+    const { store, list } = await started();
+    store.investigations.push(row('open', 1), row('open', 2, { status: 'closed' }), row('open', 3, { status: 'archived' }), row('secret', 4, { ownerId: SECOND_USER }), row('open', 5, { ownerId: SECOND_USER }));
+    expect((await list()).body.counts).toEqual(counts(1, 1));
+  });
+
+  it('says zero and exact for a person with no investigation', async () => {
+    const { list } = await started();
+    expect((await list()).body.counts).toEqual(counts(0, 0));
   });
 });
 
@@ -194,5 +243,6 @@ describe('the sources a person may read in the list', () => {
     expect(answer.status).toBe(500);
     expect(answer.body.error?.code).toBe('INTERNAL_ERROR');
     expect(answer.body.items).toBeUndefined();
+    expect(answer.body.counts).toBeUndefined();
   });
 });

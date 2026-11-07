@@ -1,3 +1,4 @@
+import { listOf } from '../investigations/test-data.js';
 import { act, configure, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -38,7 +39,7 @@ function homeClient(reads: Array<readonly SourceSummary[] | 'pending'>, override
     getProfile: async (sourceId) => ({ ok: true, value: testProfile(sourceId) }),
     listInvestigations: async () => {
       calls.list += 1;
-      return { ok: true, value: { items: [], hasMore: false } };
+      return { ok: true, value: listOf([]) };
     },
     ...overrides,
   });
@@ -202,7 +203,7 @@ describe('Home: the Source health card while the sources are not read', () => {
     const client = fakeClient({
       getMe: async () => ({ ok: true, value: me() }),
       getProfile: async (sourceId) => ({ ok: true, value: testProfile(sourceId) }),
-      listInvestigations: async () => ({ ok: true, value: { items: [], hasMore: false } }),
+      listInvestigations: async () => ({ ok: true, value: listOf([]) }),
       getSources: async () => {
         const answer = answers[Math.min(reads, answers.length - 1)];
         reads += 1;

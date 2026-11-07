@@ -75,6 +75,6 @@ describe('buildOpenApiDocument', () => {
     const { minimum, maximum } = z.object({ minimum: z.number(), maximum: z.number() }).parse(list.parameters[0]?.schema);
     const accepted = (limit: number): boolean => investigationListQuerySchema.safeParse({ limit: String(limit) }).success;
     expect([accepted(minimum - 1), accepted(minimum), accepted(maximum), accepted(maximum + 1)], 'the documented bounds are the ones the route accepts').toEqual([false, true, true, false]);
-    expect(document.components.schemas.InvestigationListResponse).toMatchObject({ required: ['items', 'hasMore'], additionalProperties: false });
+    expect(document.components.schemas.InvestigationListResponse).toMatchObject({ required: ['items', 'hasMore', 'counts'], additionalProperties: false });
   });
 });

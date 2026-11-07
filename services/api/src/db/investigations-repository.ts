@@ -76,13 +76,36 @@ export interface ListQuery {
   readonly limit: number;
 }
 
+export interface CountQuery {
+  readonly ownerId: string;
+  readonly sourceIds: readonly string[];
+}
+
+export interface InvestigationCounts {
+  readonly investigations: number;
+  readonly sources: number;
+}
+
+export interface NamedViewCounts {
+  readonly views: number;
+  readonly lastEditedAt: string | null;
+}
+
+/** The reads of one list call, all at the snapshot the first of them took. */
+export interface LibraryReader {
+  listInvestigationSourceIds(ownerId: string): Promise<string[]>;
+  listInvestigations(query: ListQuery): Promise<ListedInvestigation[]>;
+  countInvestigations(query: CountQuery): Promise<InvestigationCounts>;
+  countNamedViews(query: CountQuery): Promise<NamedViewCounts>;
+}
+
 export interface InvestigationStore {
   /** Writes the investigation and its draft, or, when the input has a case reference and the owner already has an open investigation for it, returns that one and writes nothing. The two are decided in one step, so two calls at once make one investigation. */
   createInvestigation(input: NewInvestigation): Promise<CreatedInvestigation>;
   findReusableInvestigation(query: ReusableQuery): Promise<InvestigationRow | undefined>;
   readInvestigation(id: string, ownerId: string): Promise<StoredInvestigation | undefined>;
-  listInvestigationSourceIds(ownerId: string): Promise<string[]>;
-  listInvestigations(query: ListQuery): Promise<ListedInvestigation[]>;
+  /** Runs the reads of one list call at one snapshot; what they return is not changed by an investigation another call creates meanwhile. */
+  readLibrary<T>(read: (reader: LibraryReader) => Promise<T>): Promise<T>;
 }
 
 interface InvestigationRecord {
@@ -208,12 +231,12 @@ interface ListedRecord extends InvestigationRecord {
   readonly saved_at: Date | null;
 }
 
-export async function listInvestigationSourceIds(db: pg.Pool, ownerId: string): Promise<string[]> {
+export async function listInvestigationSourceIds(db: pg.Pool | pg.PoolClient, ownerId: string): Promise<string[]> {
   const result = await db.query<{ source_id: string }>(`SELECT DISTINCT source_id FROM investigations WHERE owner_id = $1 AND status = 'open' AND deleted_at IS NULL`, [ownerId]);
   return result.rows.map((record) => record.source_id);
 }
 
-export async function listInvestigations(db: pg.Pool, query: ListQuery): Promise<ListedInvestigation[]> {
+export async function listInvestigations(db: pg.Pool | pg.PoolClient, query: ListQuery): Promise<ListedInvestigation[]> {
   const result = await db.query<ListedRecord>(
     `SELECT ${QUALIFIED_COLUMNS}, s.alias AS source_alias, CASE WHEN named.content_hash = draft.content_hash THEN named.created_at END AS saved_at
      FROM investigations i
@@ -226,4 +249,53 @@ export async function listInvestigations(db: pg.Pool, query: ListQuery): Promise
     [query.ownerId, [...query.sourceIds], query.limit],
   );
   return result.rows.map((record) => ({ ...rowOf(record), sourceAlias: record.source_alias, save: record.saved_at === null ? { state: 'unsaved', savedAt: null } : { state: 'saved', savedAt: record.saved_at.toISOString() } }));
+}
+
+export async function countInvestigations(db: pg.Pool | pg.PoolClient, query: CountQuery): Promise<InvestigationCounts> {
+  const result = await db.query<{ investigations: number; sources: number }>(
+    `SELECT count(*)::int AS investigations, count(DISTINCT source_id)::int AS sources
+     FROM investigations
+     WHERE owner_id = $1 AND source_id = ANY($2::text[]) AND status = 'open' AND deleted_at IS NULL`,
+    [query.ownerId, [...query.sourceIds]],
+  );
+  const [row] = result.rows;
+  if (row === undefined) throw new Error('the counts were not returned');
+  return { investigations: row.investigations, sources: row.sources };
+}
+
+export async function countNamedViews(db: pg.Pool | pg.PoolClient, query: CountQuery): Promise<NamedViewCounts> {
+  const result = await db.query<{ views: number; last_edited_at: Date | null }>(
+    `SELECT count(*)::int AS views, max(v.updated_at) AS last_edited_at
+     FROM saved_views v
+     JOIN investigations i ON i.id = v.investigation_id
+     WHERE v.kind = 'named' AND i.owner_id = $1 AND i.source_id = ANY($2::text[]) AND i.status = 'open' AND i.deleted_at IS NULL`,
+    [query.ownerId, [...query.sourceIds]],
+  );
+  const [row] = result.rows;
+  if (row === undefined) throw new Error('the named view counts were not returned');
+  return { views: row.views, lastEditedAt: row.last_edited_at === null ? null : row.last_edited_at.toISOString() };
+}
+
+export async function readLibrary<T>(pool: pg.Pool, read: (reader: LibraryReader) => Promise<T>): Promise<T> {
+  const client = await pool.connect();
+  let discard = false;
+  try {
+    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    const answer = await read({
+      listInvestigationSourceIds: (ownerId) => listInvestigationSourceIds(client, ownerId),
+      listInvestigations: (query) => listInvestigations(client, query),
+      countInvestigations: (query) => countInvestigations(client, query),
+      countNamedViews: (query) => countNamedViews(client, query),
+    });
+    await client.query('COMMIT');
+    return answer;
+  } catch (error) {
+    // The error that stopped the read is the one to report; a connection whose rollback failed may still hold the transaction, so it is destroyed and not returned to the pool.
+    await client.query('ROLLBACK').catch(() => {
+      discard = true;
+    });
+    throw error;
+  } finally {
+    client.release(discard);
+  }
 }

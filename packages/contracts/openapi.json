@@ -360,7 +360,7 @@
       "get": {
         "operationId": "listInvestigations",
         "summary": "The caller's recent investigations, across every source the caller may read",
-        "description": "Reads Postgres only; no source is read. Lists the caller's own open, undeleted investigations, the most recently edited first and, between equal times, the larger id first. Investigations of a configured source the policy does not let the caller read are left out without a record, and the order, limit and hasMore are those of the investigations that remain; investigations of a source no longer in the configuration are listed with sourceState removed. limit is a whole number from 1 to 25 (5 when left out) and sort is lastEdited, the only order; any other query parameter is refused. sourceAlias is the alias the product stored for the source. save is saved, with the time of the named view, when the caller's draft equals the named view it was last saved as, and unsaved otherwise. hasMore is true when more investigations than limit could be listed. There is no cursor and no filter.",
+        "description": "Reads Postgres only; no source is read. Lists the caller's own open, undeleted investigations, the most recently edited first and, between equal times, the larger id first. Investigations of a configured source the policy does not let the caller read are left out without a record, and the order, limit and hasMore are those of the investigations that remain; investigations of a source no longer in the configuration are listed with sourceState removed. limit is a whole number from 1 to 25 (5 when left out) and sort is lastEdited, the only order; any other query parameter is refused. sourceAlias is the alias the product stored for the source. save is saved, with the time of the named view, when the caller's draft equals the named view it was last saved as, and unsaved otherwise. hasMore is true when more investigations than limit could be listed. counts holds the number of investigations that could be listed, the number of sources they are on (a source no longer in the configuration included) and the number of named views they hold with the newest time any of them was updated (null when there is none), all exact, whatever the limit; the rows, hasMore and counts are read at one snapshot. There is no cursor and no filter.",
         "parameters": [
           {
             "name": "limit",
@@ -1614,11 +1614,117 @@
           },
           "hasMore": {
             "type": "boolean"
+          },
+          "counts": {
+            "type": "object",
+            "properties": {
+              "investigations": {
+                "type": "object",
+                "properties": {
+                  "value": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "quality": {
+                    "type": "string",
+                    "const": "exact"
+                  },
+                  "scope": {
+                    "type": "string",
+                    "const": "investigations"
+                  }
+                },
+                "required": [
+                  "value",
+                  "quality",
+                  "scope"
+                ],
+                "additionalProperties": false
+              },
+              "sources": {
+                "type": "object",
+                "properties": {
+                  "value": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "quality": {
+                    "type": "string",
+                    "const": "exact"
+                  },
+                  "scope": {
+                    "type": "string",
+                    "const": "investigation-sources"
+                  }
+                },
+                "required": [
+                  "value",
+                  "quality",
+                  "scope"
+                ],
+                "additionalProperties": false
+              },
+              "savedViews": {
+                "type": "object",
+                "properties": {
+                  "count": {
+                    "type": "object",
+                    "properties": {
+                      "value": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "quality": {
+                        "type": "string",
+                        "const": "exact"
+                      },
+                      "scope": {
+                        "type": "string",
+                        "const": "named-views"
+                      }
+                    },
+                    "required": [
+                      "value",
+                      "quality",
+                      "scope"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "lastEditedAt": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "count",
+                  "lastEditedAt"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "investigations",
+              "sources",
+              "savedViews"
+            ],
+            "additionalProperties": false
           }
         },
         "required": [
           "items",
-          "hasMore"
+          "hasMore",
+          "counts"
         ],
         "additionalProperties": false
       },

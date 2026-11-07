@@ -2,7 +2,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { extname, join, normalize, sep } from 'node:path';
-import { DEFAULT_INVESTIGATION_LIST_LIMIT, investigationListQuerySchema, type Investigation, type LastTest, openInvestigationRequestSchema, SEARCH_GROUP_CAP, searchRequestSchema, searchResultSchema, type SourceSummary, sourceSummarySchema, type SourceTestReport, valueOfPathSegment } from '@neburyx/contracts';
+import { DEFAULT_INVESTIGATION_LIST_LIMIT, investigationListCountsSchema, investigationListQuerySchema, type Investigation, type LastTest, openInvestigationRequestSchema, SEARCH_GROUP_CAP, searchRequestSchema, searchResultSchema, type SourceSummary, sourceSummarySchema, type SourceTestReport, valueOfPathSegment } from '@neburyx/contracts';
 
 interface SupportProfile {
   readonly sourceId: string;
@@ -198,6 +198,7 @@ function draftOf(stored: StoredInvestigation): unknown {
 /** The synthetic stand-in for the entity and investigation endpoints: it holds the investigations opened since it started, and an entity named `missing` does not exist. */
 function createInvestigations(options: SupportServerOptions) {
   const held = new Map<string, StoredInvestigation>();
+  let namedViews: { readonly count: number; readonly lastEditedAt: string | null } = { count: 0, lastEditedAt: null };
   const typesOf = new Map(profilesOf(options).map((profile) => [profile.sourceId, new Set((profile.entityTypes ?? []).map((entry) => entry.type))]));
   const refused = new Set(options.refusedSources ?? []);
   const readable = (sourceId: string): boolean => typesOf.has(sourceId) && !refused.has(sourceId);
@@ -212,6 +213,18 @@ function createInvestigations(options: SupportServerOptions) {
       if (stored === undefined) return json(response, 404, NOT_FOUND);
       json(response, 200, { investigation: shown(stored), draft: draftOf(stored) });
     },
+    /** The named views the list counts: none until a spec sets them, because nothing in the app saves one. */
+    holdNamedViews(body: unknown, response: ServerResponse): void {
+      const given = typeof body === 'object' && body !== null && !Array.isArray(body) ? Object.fromEntries(Object.entries(body)) : undefined;
+      const keys = Object.keys(given ?? {}).sort();
+      const parsed = investigationListCountsSchema.shape.savedViews.safeParse({ count: { value: given?.['count'], quality: 'exact', scope: 'named-views' }, lastEditedAt: given?.['lastEditedAt'] });
+      if (given === undefined || keys.join() !== 'count,lastEditedAt' || !parsed.success || (parsed.data.count.value === 0) !== (parsed.data.lastEditedAt === null)) return json(response, 400, INVALID);
+      namedViews = { count: parsed.data.count.value, lastEditedAt: parsed.data.lastEditedAt };
+      json(response, 200, {});
+    },
+    forgetNamedViews(): void {
+      namedViews = { count: 0, lastEditedAt: null };
+    },
     list(search: URLSearchParams, response: ServerResponse): void {
       const entries = [...search.entries()];
       const query = investigationListQuerySchema.safeParse(Object.fromEntries(entries));
@@ -223,6 +236,11 @@ function createInvestigations(options: SupportServerOptions) {
       json(response, 200, {
         items: eligible.slice(0, limit).map((stored) => ({ ...shown(stored), sourceAlias: stored.sourceId, save: { state: 'unsaved', savedAt: null } })),
         hasMore: eligible.length > limit,
+        counts: {
+          investigations: { value: eligible.length, quality: 'exact', scope: 'investigations' },
+          sources: { value: new Set(eligible.map((stored) => stored.sourceId)).size, quality: 'exact', scope: 'investigation-sources' },
+          savedViews: { count: { value: namedViews.count, quality: 'exact', scope: 'named-views' }, lastEditedAt: namedViews.lastEditedAt },
+        },
       });
     },
     open(body: unknown, response: ServerResponse): void {
@@ -356,7 +374,11 @@ export function createSupportServer(options: SupportServerOptions): Server {
       const isApi = path === API_PREFIX || path.startsWith(`${API_PREFIX}/`) || PROBE_PATHS.has(path);
       if (request.method === 'POST' && path === '/v1/investigations') return investigations.open(await bodyOf(request), response);
       if (request.method === 'POST' && path === '/v1/search/entities') return search.run(await bodyOf(request), response);
-      if (request.method === 'POST' && path.startsWith('/__support/')) return sources.control(path, await bodyOf(request), response);
+      if (request.method === 'POST' && path === '/__support/named-views') return investigations.holdNamedViews(await bodyOf(request), response);
+      if (request.method === 'POST' && path.startsWith('/__support/')) {
+        if (path === '/__support/reset') investigations.forgetNamedViews();
+        return sources.control(path, await bodyOf(request), response);
+      }
       const testing = /^\/v1\/sources\/([^/]+)\/test$/.exec(path);
       if (request.method === 'POST' && testing?.[1] !== undefined) return sources.test(decodeURIComponent(testing[1]), response);
       if (request.method !== 'GET' && request.method !== 'HEAD') return json(response, 405, { error: { code: 'METHOD_NOT_ALLOWED' } });

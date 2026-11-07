@@ -21,6 +21,7 @@ export interface MemoryAppStoreOptions {
   readonly failChecks?: boolean;
   readonly failInvestigations?: boolean;
   readonly failList?: boolean;
+  readonly failCounts?: boolean;
 }
 
 export interface MemoryAppStore extends AppStore {
@@ -128,17 +129,31 @@ export function memoryStoreWith(options: MemoryAppStoreOptions): MemoryAppStore 
       return Promise.resolve(investigation === undefined || draft === undefined ? undefined : { investigation, draft });
     },
     // The double has no named views: every draft is unsaved. The Postgres suite proves the saved rule.
-    listInvestigationSourceIds: (ownerId) => {
-      if (options.failList === true) return Promise.reject(new Error('the investigations could not be read'));
-      return Promise.resolve([...new Set(investigations.filter((row) => row.ownerId === ownerId && row.status === 'open').map((row) => row.sourceId))]);
-    },
-    listInvestigations: (query) => {
-      if (options.failList === true) return Promise.reject(new Error('the investigations could not be read'));
-      const listed: ListedInvestigation[] = investigations
-        .filter((row) => row.ownerId === query.ownerId && row.status === 'open' && query.sourceIds.includes(row.sourceId))
-        .map((row) => ({ ...row, sourceAlias: rows.find((source) => source.id === row.sourceId)?.alias ?? row.sourceId, save: { state: 'unsaved' as const, savedAt: null } }))
-        .sort((left, right) => (left.lastEditedAt < right.lastEditedAt ? 1 : left.lastEditedAt > right.lastEditedAt ? -1 : left.id < right.id ? 1 : -1));
-      return Promise.resolve(listed.slice(0, query.limit));
+    readLibrary: (read) => {
+      const snapshot = [...investigations];
+      return read({
+        listInvestigationSourceIds: (ownerId) => {
+          if (options.failList === true) return Promise.reject(new Error('the investigations could not be read'));
+          return Promise.resolve([...new Set(snapshot.filter((row) => row.ownerId === ownerId && row.status === 'open').map((row) => row.sourceId))]);
+        },
+        listInvestigations: (query) => {
+          if (options.failList === true) return Promise.reject(new Error('the investigations could not be read'));
+          const listed: ListedInvestigation[] = snapshot
+            .filter((row) => row.ownerId === query.ownerId && row.status === 'open' && query.sourceIds.includes(row.sourceId))
+            .map((row) => ({ ...row, sourceAlias: rows.find((source) => source.id === row.sourceId)?.alias ?? row.sourceId, save: { state: 'unsaved' as const, savedAt: null } }))
+            .sort((left, right) => (left.lastEditedAt < right.lastEditedAt ? 1 : left.lastEditedAt > right.lastEditedAt ? -1 : left.id < right.id ? 1 : -1));
+          return Promise.resolve(listed.slice(0, query.limit));
+        },
+        countInvestigations: (query) => {
+          if (options.failCounts === true) return Promise.reject(new Error('the counts could not be read'));
+          const counted = snapshot.filter((row) => row.ownerId === query.ownerId && row.status === 'open' && query.sourceIds.includes(row.sourceId));
+          return Promise.resolve({ investigations: counted.length, sources: new Set(counted.map((row) => row.sourceId)).size });
+        },
+        countNamedViews: () => {
+          if (options.failCounts === true) return Promise.reject(new Error('the counts could not be read'));
+          return Promise.resolve({ views: 0, lastEditedAt: null });
+        },
+      });
     },
     readiness: () => Promise.resolve({ database: 'ok', migrations: 'ok' }),
     close: () => Promise.resolve(),
