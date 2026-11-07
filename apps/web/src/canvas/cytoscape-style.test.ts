@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CAPTION_WIDTH } from './caption-layout.js';
 import { STYLE } from './cytoscape-renderer.js';
-import { CAPTION_FONT_SIZE, CAPTION_MIN_ZOOM, FOCUS_COLOR, FOCUS_RING_GAP, FOCUS_RING_WIDTH, GLYPH_SIZE, MIN_LEGIBLE_FONT_SIZE, NODE_DIAMETER, PIN_BADGE_SIZE } from './look.js';
+import { CAPTION_FONT_SIZE, CAPTION_KNOCKOUT, CAPTION_MIN_ZOOM, FOCUS_COLOR, FOCUS_RING_GAP, FOCUS_RING_WIDTH, GLYPH_SIZE, MIN_LEGIBLE_FONT_SIZE, NODE_DIAMETER, PIN_BADGE_SIZE } from './look.js';
 
 const overlayOf = (rule: (typeof STYLE)[number]): unknown => ('style' in rule ? Reflect.get(rule.style, 'overlay-opacity') : undefined);
 const forSelector = (selector: string): unknown => {
@@ -74,10 +74,10 @@ describe('the ring of the keyboard walk', () => {
   };
 
   it('is an outline around an entity and an underlay behind a relationship, in the focus colour, after the selected rules so it shows on a selected element', () => {
-    expect(rule('node[?focused]')).toEqual({ 'outline-width': FOCUS_RING_WIDTH, 'outline-color': FOCUS_COLOR, 'outline-style': 'solid', 'outline-offset': FOCUS_RING_GAP, 'outline-opacity': 1 });
-    expect(rule('edge[?focused]')).toEqual({ 'underlay-color': FOCUS_COLOR, 'underlay-opacity': 1, 'underlay-padding': FOCUS_RING_WIDTH });
+    expect(rule('node[?ringed]')).toEqual({ 'outline-width': FOCUS_RING_WIDTH, 'outline-color': FOCUS_COLOR, 'outline-style': 'solid', 'outline-offset': FOCUS_RING_GAP, 'outline-opacity': 1 });
+    expect(rule('edge[?ringed]')).toEqual({ 'underlay-color': FOCUS_COLOR, 'underlay-opacity': 1, 'underlay-padding': FOCUS_RING_WIDTH + FOCUS_RING_GAP, 'line-outline-width': FOCUS_RING_GAP, 'line-outline-color': CAPTION_KNOCKOUT });
     const at = (selector: string): number => STYLE.findIndex((candidate) => candidate.selector === selector);
-    expect(at('node[?focused]')).toBeGreaterThan(at('node[?selected]'));
-    expect(at('edge[?focused]')).toBeGreaterThan(at('edge[?selected]'));
+    expect(at('node[?ringed]')).toBeGreaterThan(at('node[?selected]'));
+    expect(at('edge[?ringed]')).toBeGreaterThan(at('edge[?selected]'));
   });
 });

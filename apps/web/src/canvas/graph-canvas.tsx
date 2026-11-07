@@ -57,7 +57,7 @@ export function GraphCanvas({ profile, view = 'fit' }: { readonly profile?: Sour
     () => placeNewEntities({ ids: graph.nodes.map((node) => elementKey(node.ref)), links: graph.edges.map((edge) => [elementKey(edge.from), elementKey(edge.to)] as const), positions }),
     [graph, positions],
   );
-  const scene = useMemo(() => buildScene(graph, placed.size === 0 ? positions : new Map([...positions, ...placed]), profile, selection, tool, source, view, pins, walking ? focused : undefined), [graph, positions, placed, profile, selection, tool, source, view, pins, walking, focused]);
+  const scene = useMemo(() => buildScene(graph, placed.size === 0 ? positions : new Map([...positions, ...placed]), profile, selection, tool, source, view, pins, walking ? focused : undefined, !menuOpen), [graph, positions, placed, profile, selection, tool, source, view, pins, walking, focused, menuOpen]);
   const announcement = walking && scene.focused !== undefined ? describeWalked(graph, profile, pins, scene.focused) : undefined;
 
   useEffect(() => {

@@ -6,7 +6,7 @@ import { paintCaption, type CaptionPainter } from './caption-painter.js';
 import { glyphUri } from './glyphs.js';
 import { pinBadgeUri } from './pin-badge.js';
 import { createHoverTip, type HoverTip } from './hover-tip.js';
-import { AGGREGATE_WIDTH, ARROW_GAP, CAPTION_MIN_ZOOM, ARROW_SHAPE, DASH_PATTERN, DERIVED_COLOR, DOT_PATTERN, EDGE_COLOR, EDGE_WIDTH, FIT_PADDING, FOCUS_COLOR, FOCUS_RING_GAP, FOCUS_RING_WIDTH, GLYPH_COLOR, GLYPH_SIZE, LABEL_FILL, LABEL_FONT_SIZE, NODE_DIAMETER, NODE_FILL, NODE_OUTER_DIAMETER, NODE_OUTLINE, NODE_OUTLINE_WIDTH, PIN_BADGE_SIZE, PILL_FILL, PILL_OUTLINE_WIDTH, SELECTED_COLOR, SELECTED_HALO_COLOR, SELECTED_HALO_OPACITY, SELECTED_HALO_PADDING, SELECTED_LINE_EXTRA, SELECTED_OUTLINE_WIDTH, TIP_GAP } from './look.js';
+import { AGGREGATE_WIDTH, CAPTION_KNOCKOUT, ARROW_GAP, CAPTION_MIN_ZOOM, ARROW_SHAPE, DASH_PATTERN, DERIVED_COLOR, DOT_PATTERN, EDGE_COLOR, EDGE_WIDTH, FIT_PADDING, FOCUS_COLOR, FOCUS_RING_GAP, FOCUS_RING_WIDTH, GLYPH_COLOR, GLYPH_SIZE, LABEL_FILL, LABEL_FONT_SIZE, NODE_DIAMETER, NODE_FILL, NODE_OUTER_DIAMETER, NODE_OUTLINE, NODE_OUTLINE_WIDTH, PIN_BADGE_SIZE, PILL_FILL, PILL_OUTLINE_WIDTH, SELECTED_COLOR, SELECTED_HALO_COLOR, SELECTED_HALO_OPACITY, SELECTED_HALO_PADDING, SELECTED_LINE_EXTRA, SELECTED_OUTLINE_WIDTH, TIP_GAP } from './look.js';
 import type { RelationshipLook } from './relationship-look.js';
 import { createBoxGesture, type BoxOverlay } from './box-gesture.js';
 import { createBoxOverlay } from './box-overlay.js';
@@ -128,8 +128,9 @@ export const STYLE: StylesheetJson = [
   { selector: 'edge[?selected]', style: { 'line-color': SELECTED_COLOR, 'target-arrow-color': SELECTED_COLOR, width: EDGE_WIDTH + SELECTED_LINE_EXTRA } },
   { selector: 'edge[?selected][?aggregate]', style: { width: AGGREGATE_WIDTH + SELECTED_LINE_EXTRA } },
   // The ring of the keyboard walk: an outline around an entity and an underlay behind a relationship.
-  { selector: 'node[?focused]', style: { 'outline-width': FOCUS_RING_WIDTH, 'outline-color': FOCUS_COLOR, 'outline-style': 'solid', 'outline-offset': FOCUS_RING_GAP, 'outline-opacity': 1 } },
-  { selector: 'edge[?focused]', style: { 'underlay-color': FOCUS_COLOR, 'underlay-opacity': 1, 'underlay-padding': FOCUS_RING_WIDTH } },
+  { selector: 'node[?ringed]', style: { 'outline-width': FOCUS_RING_WIDTH, 'outline-color': FOCUS_COLOR, 'outline-style': 'solid', 'outline-offset': FOCUS_RING_GAP, 'outline-opacity': 1 } },
+  // the band has a gap of the canvas colour between it and the line, so a derived or selected relationship keeps its own look inside the ring
+  { selector: 'edge[?ringed]', style: { 'underlay-color': FOCUS_COLOR, 'underlay-opacity': 1, 'underlay-padding': FOCUS_RING_WIDTH + FOCUS_RING_GAP, 'line-outline-width': FOCUS_RING_GAP, 'line-outline-color': CAPTION_KNOCKOUT } },
 ];
 
 /** The library's own handle, named here so that a test need not import the library. */
@@ -592,6 +593,8 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
           if (element.data('selected') !== selected) element.data('selected', selected);
           const focused = scene.focused === item.id;
           if (element.data('focused') !== focused) element.data('focused', focused);
+          const ringed = focused && scene.focusRing !== false;
+          if (element.data('ringed') !== ringed) element.data('ringed', ringed);
         }
       });
       if (hovered !== undefined && !wantedEntities.has(hovered)) hovered = undefined;
@@ -667,6 +670,7 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
           labelShown: edge.style('label') !== '',
           lineShown: edge.style('display') !== 'none' && edge.style('visibility') === 'visible' && parseFloat(edge.style('opacity')) > 0 && parseFloat(edge.style('line-opacity')) > 0 && parseFloat(edge.style('width')) > 0,
           focused: parseFloat(edge.style('underlay-opacity')) > 0,
+          lineOutline: parseFloat(edge.style('line-outline-width')),
         })),
       };
     },

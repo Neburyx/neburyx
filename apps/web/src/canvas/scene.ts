@@ -32,6 +32,8 @@ export interface Scene {
   readonly pinned: ReadonlySet<string>;
   /** The key of the drawn element the walk is at, which the drawing rings; undefined when the walk is off. */
   readonly focused?: string | undefined;
+  /** False while a menu holds the focus: the walk's element is still told and revealed, and its ring is not drawn, so that one ring shows at a time. */
+  readonly focusRing?: boolean;
   /** Relationships that are loaded but not drawn, because an entity they join is not loaded. */
   readonly omitted: number;
   /** Whether the viewport is set to show everything when a graph is first drawn, or left as the entities' own positions give it. */
@@ -53,7 +55,7 @@ export interface Inspection {
   readonly boundingBox: { readonly x1: number; readonly y1: number; readonly x2: number; readonly y2: number } | undefined;
   readonly interaction: { readonly panning: boolean; readonly zooming: boolean; readonly boxSelecting: boolean; readonly nodesGrabbable: boolean; readonly nodesSelectable: boolean };
   readonly nodes: readonly { readonly id: string; readonly diameter: number; readonly outline: string; readonly outlineWidth: number; readonly halo: boolean; readonly images: readonly string[]; readonly caption: string; readonly captionShown: boolean; readonly glyphShown: boolean; readonly badgeShown: boolean; readonly focused: boolean }[];
-  readonly edges: readonly { readonly id: string; readonly source: string; readonly target: string; readonly width: number; readonly color: string; readonly lineStyle: string; readonly arrow: string; readonly label: string; readonly labelOutline: number; readonly labelShown: boolean; readonly lineShown: boolean; readonly focused: boolean }[];
+  readonly edges: readonly { readonly id: string; readonly source: string; readonly target: string; readonly width: number; readonly color: string; readonly lineStyle: string; readonly arrow: string; readonly label: string; readonly labelOutline: number; readonly labelShown: boolean; readonly lineShown: boolean; readonly focused: boolean; readonly lineOutline: number }[];
 }
 
 /** A right-click: the drawn item it landed on, or none for empty canvas, and where the pointer was in the browser window. */

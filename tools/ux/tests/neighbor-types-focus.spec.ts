@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { canvasOf, menuOf, openSample, screenOf } from './support/workspace.ts';
+import { canvasOf, drawing, menuOf, openSample, screenOf } from './support/workspace.ts';
 
 const count = { value: 3, quality: 'exact', scope: 'relationships' };
 
@@ -61,5 +61,24 @@ test.describe('the neighbor types submenu', () => {
     release?.();
     await expect(page.locator('.neighbor-types-row').first()).toBeFocused();
     expect(await outline(page, '.neighbor-types-row'), 'the row').not.toBe('none');
+  });
+
+  test('draws one ring at a time: none on the canvas element while the menu or its submenu has the focus, and the ring is back when the menu is closed', async ({ page }) => {
+    await openSample(page);
+    const ringed = async (): Promise<number> => (await drawing(page)).nodes.filter((node) => node.focused).length;
+    await canvasOf(page).focus();
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Space');
+    expect(await ringed(), 'the walk element has its ring before the menu').toBe(1);
+    await page.keyboard.press('ContextMenu');
+    await expect(entry(page)).toBeFocused();
+    await expect.poll(ringed, 'the canvas ring while the menu has the focus').toBe(0);
+    await page.keyboard.press('ArrowRight');
+    await expect(page.locator('.neighbor-types-row').first()).toBeFocused();
+    expect(await ringed(), 'the canvas ring while the submenu has the focus').toBe(0);
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+    await expect(menuOf(page)).toHaveCount(0);
+    await expect.poll(ringed, 'the canvas ring once the menu is closed').toBe(1);
   });
 });

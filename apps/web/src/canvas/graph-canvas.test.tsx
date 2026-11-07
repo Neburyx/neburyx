@@ -258,6 +258,25 @@ describe('the development read-out of the graph canvas', () => {
     await waitFor(() => expect(canvas.dataset['focusedElement']).toBeUndefined());
   });
 
+  it('tells the renderer to draw no ring on the walk element while a menu is open, and keeps naming the element', async () => {
+    const state = createClientState();
+    load(state, 2, 1);
+    const factory = stubFactory();
+    view(state, factory.create);
+    const canvas = screen.getByRole('application', { name: 'Graph canvas' });
+    act(() => canvas.focus());
+    act(() => state.presentation.walkTo(nodeKey('n1')));
+    const last = () => factory.made[0]?.scenes.at(-1);
+    await waitFor(() => expect(last()?.focused).toBe(nodeKey('n1')));
+    expect(last()?.focusRing).toBe(true);
+    act(() => state.presentation.setOpenMenu({ kind: 'node', key: nodeKey('n1'), x: 10, y: 10 }));
+    await waitFor(() => expect(last()?.focusRing).toBe(false));
+    expect(last()?.focused).toBe(nodeKey('n1'));
+    expect(canvas.dataset['focusedElement']).toBe(nodeKey('n1'));
+    act(() => state.presentation.setOpenMenu(undefined));
+    await waitFor(() => expect(last()?.focusRing).toBe(true));
+  });
+
   it('gives a function that reads what the renderer has drawn, for a recorded browser run', () => {
     const state = createClientState();
     load(state, 2, 1);

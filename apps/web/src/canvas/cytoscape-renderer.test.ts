@@ -1247,6 +1247,39 @@ describe('the Cytoscape renderer in a container whose size changes', () => {
       return { ...base, relationships: base.relationships.map((relationship) => ({ ...relationship, look: { ...relationship.look, label: 'USES' } })) };
     };
 
+    it('draws no ring while the scene says a menu holds the focus, and rings the element again when the menu is gone', () => {
+      const { renderer } = inContainer((callback) => callback());
+      const ringed = () => ({ nodes: renderer.inspect().nodes.map((node) => node.focused), edges: renderer.inspect().edges.map((edge) => edge.focused) });
+      renderer.draw(labelled({ focused: 'b' }));
+      expect(ringed().nodes).toEqual([false, true]);
+      renderer.draw(labelled({ focused: 'b', focusRing: false }));
+      expect(ringed()).toEqual({ nodes: [false, false], edges: [false] });
+      renderer.draw(labelled({ focused: 'ab', focusRing: false }));
+      expect(ringed()).toEqual({ nodes: [false, false], edges: [false] });
+      renderer.draw(labelled({ focused: 'b' }));
+      expect(ringed().nodes).toEqual([false, true]);
+    });
+
+    it('keeps the caption and the label of the walk element below the limit while the ring is hidden for a menu', () => {
+      const { renderer, core } = inContainer((callback) => callback());
+      core.zoom(CAPTION_MIN_ZOOM * 0.5);
+      renderer.draw(labelled({ focused: 'a', focusRing: false }));
+      expect(shown(renderer)).toEqual({ captions: [true, false], labels: [false] });
+      renderer.draw(labelled({ focused: 'ab', focusRing: false }));
+      expect(shown(renderer)).toEqual({ captions: [false, false], labels: [true] });
+    });
+
+    it('rings a derived relationship with a gap, and keeps it dashed inside the ring', () => {
+      const { renderer } = inContainer((callback) => callback());
+      const base = two({ focused: 'ab' });
+      renderer.draw({ ...base, relationships: base.relationships.map((relationship) => ({ ...relationship, look: { ...relationship.look, origin: 'derived' as const } })) });
+      const [edge] = renderer.inspect().edges;
+      expect(edge).toMatchObject({ focused: true, lineStyle: 'dashed' });
+      expect(edge?.lineOutline).toBeGreaterThan(0);
+      renderer.draw({ ...base, focusRing: false, relationships: base.relationships.map((relationship) => ({ ...relationship, look: { ...relationship.look, origin: 'derived' as const } })) });
+      expect(renderer.inspect().edges[0]).toMatchObject({ focused: false, lineStyle: 'dashed' });
+    });
+
     it('rings the entity or the relationship the scene says the walk is at, moves the ring, takes it away, and keeps the caption and label of the one it is at below the limit', () => {
       const { renderer, core } = inContainer((callback) => callback());
       const ringed = () => ({ nodes: renderer.inspect().nodes.map((node) => node.focused), edges: renderer.inspect().edges.map((edge) => edge.focused) });

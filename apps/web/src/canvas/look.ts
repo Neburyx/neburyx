@@ -30,7 +30,8 @@ export const SELECTED_HALO_DIAMETER = 48;
 export const SELECTED_LINE_EXTRA = 1;
 /** The library measures the halo's padding from the disc without its outline, so the halo is the design's diameter when the padding is this. */
 export const SELECTED_HALO_PADDING = (SELECTED_HALO_DIAMETER - (NODE_OUTER_DIAMETER - SELECTED_OUTLINE_WIDTH)) / 2;
-export const FOCUS_COLOR = '#ffb000';
+/** The accent, as the focus ring of the page is (`--color-focus`); it is told apart from the selection, which has the same colour, by shape: a ring with a gap round the disc, against an outline on it and a faint halo. */
+export const FOCUS_COLOR = DERIVED_COLOR;
 export const FOCUS_RING_WIDTH = 3;
 export const FOCUS_RING_GAP = 2;
 export const PIN_BADGE_SIZE = 16;
