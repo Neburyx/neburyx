@@ -12,6 +12,15 @@ async function overlaps(first: Locator, second: Locator): Promise<boolean> {
   return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
 }
 
+test.beforeEach(async ({ page }) => {
+  // a real, connected source keeps `/` on Home whatever investigations other specs left or removed
+  await page.request.post('/__support/sources', { data: { 'banking-demo': { synthetic: false } } });
+});
+
+test.afterEach(async ({ page }) => {
+  await page.request.post('/__support/reset');
+});
+
 test.describe('the controls of Home', () => {
   test('draws the source selector, the search box and the Search button at one height, the token of the search row', async ({ page }) => {
     await page.goto('/');
@@ -51,11 +60,13 @@ test.describe('the controls of Home', () => {
     for (const [first, one] of controls.entries()) for (const [second, other] of controls.entries()) if (second > first) expect(await overlaps(one, other), `control ${first} over control ${second}`).toBe(false);
   });
 
-  test('draws the focus outline on each control of the search row, the entry action and the prompt, in the order of the markup', async ({ page }) => {
+  test('draws the focus outline on each control of the search row, the entry actions and the prompt, in the order of the markup', async ({ page }) => {
+    await page.goto(`/banking-demo/entity/account/HC-${String(Date.now()).slice(-8)}`);
+    await page.request.post('/__support/sources', { data: { 'banking-demo': { demoCase: { entityType: 'account', stableId: 'DEMO-1', caseRef: 'REF-DEMO-1' } } } });
     await page.goto('/');
     const focus = await tokenColour(page, '--color-focus');
     await page.getByRole('button', { name: 'Open a deep link' }).click();
-    const order = [page.getByRole('combobox', { name: 'Source' }), page.getByRole('searchbox', { name: 'Search text' }), page.getByRole('button', { name: 'Search' }), page.getByRole('button', { name: 'Open a deep link' }), page.getByRole('form', { name: 'Open a link' }).getByLabel('Link', { exact: true }), page.getByRole('form', { name: 'Open a link' }).getByRole('button', { name: 'Open' }), page.getByRole('form', { name: 'Open by parts' }).getByLabel('Source', { exact: true })];
+    const order = [page.getByRole('combobox', { name: 'Source' }), page.getByRole('searchbox', { name: 'Search text' }), page.getByRole('button', { name: 'Search' }), page.getByRole('button', { name: 'Open a deep link' }), page.getByRole('button', { name: 'Open the demo case' }), page.getByRole('form', { name: 'Open a link' }).getByLabel('Link', { exact: true }), page.getByRole('form', { name: 'Open a link' }).getByRole('button', { name: 'Open' }), page.getByRole('form', { name: 'Open by parts' }).getByLabel('Source', { exact: true })];
     await order[0]?.focus();
     for (const [index, control] of order.entries()) {
       if (index > 0) await page.keyboard.press('Tab');

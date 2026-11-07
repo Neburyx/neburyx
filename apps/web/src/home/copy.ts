@@ -3,7 +3,6 @@ export const HOME_COPY = {
   description: 'Resume recent work, or start from a search.',
   recentTitle: 'Recent',
   loading: 'Loading recent investigations…',
-  empty: 'No recent investigations.',
   tryAgain: 'Try again',
   couldNotRead: 'Recent investigations could not be read.',
 } as const;
@@ -23,6 +22,7 @@ export const sourceStateNote = (state: string, reason: string | null): string =>
 export const SEARCH_PLACEHOLDER = 'Search an entity or ID';
 
 export const OPEN_LINK_ACTION = 'Open a deep link';
+export const OPEN_DEMO_CASE_ACTION = 'Open the demo case';
 
 export const HEALTH_COPY = {
   title: 'Source health',

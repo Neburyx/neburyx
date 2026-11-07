@@ -1,4 +1,4 @@
-import { listOf } from '../investigations/test-data.js';
+import { INVESTIGATION_A, investigationOf, listItemOf, listOf } from '../investigations/test-data.js';
 import { act, configure, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -10,6 +10,8 @@ import { testProfile } from '../dev/test-profile.js';
 
 beforeAll(() => configure({ reactStrictMode: true }));
 afterAll(() => configure({ reactStrictMode: false }));
+
+const ROW = listItemOf(investigationOf(INVESTIGATION_A, 'a', 'kind-a', 'A-1'));
 
 const STORED = {
   checkedAt: '2026-10-30T10:16:08.000Z',
@@ -39,7 +41,7 @@ function homeClient(reads: Array<readonly SourceSummary[] | 'pending'>, override
     getProfile: async (sourceId) => ({ ok: true, value: testProfile(sourceId) }),
     listInvestigations: async () => {
       calls.list += 1;
-      return { ok: true, value: listOf([]) };
+      return { ok: true, value: listOf([ROW]) };
     },
     ...overrides,
   });
@@ -184,7 +186,7 @@ describe('Home: the Source health card for sources that are not connected', () =
     expect(reasonOf('alpha')).toBe('Connection refused');
     expect(reasonOf('beta')).toBe('TLS handshake failed');
     expect(screen.getByRole('heading', { name: 'Recent', level: 2 })).toBeTruthy();
-    expect(await screen.findByText('No recent investigations.')).toBeTruthy();
+    expect(await screen.findByRole('link', { name: 'kind-a A-1' })).toBeTruthy();
     expect(screen.getByRole('searchbox')).toBeTruthy();
     expect(screen.queryByText(/No source connected/i)).toBeNull();
   });
@@ -203,7 +205,7 @@ describe('Home: the Source health card while the sources are not read', () => {
     const client = fakeClient({
       getMe: async () => ({ ok: true, value: me() }),
       getProfile: async (sourceId) => ({ ok: true, value: testProfile(sourceId) }),
-      listInvestigations: async () => ({ ok: true, value: listOf([]) }),
+      listInvestigations: async () => ({ ok: true, value: listOf([ROW]) }),
       getSources: async () => {
         const answer = answers[Math.min(reads, answers.length - 1)];
         reads += 1;
@@ -218,7 +220,7 @@ describe('Home: the Source health card while the sources are not read', () => {
   it('says the sources are loading while they are unanswered and keeps the rest of Home', async () => {
     renderApp('/', failing(['pending']).client);
     expect((await within(await screen.findByRole('region', { name: 'Source health' })).findByRole('status')).textContent).toBe('Loading sources…');
-    expect(await screen.findByText('No recent investigations.')).toBeTruthy();
+    expect(await screen.findByRole('link', { name: 'kind-a A-1' })).toBeTruthy();
   });
 
   it('shows the failure with its code and Try again in the card, keeps the rest of Home, and reads the sources once more when it is activated', async () => {
@@ -228,7 +230,7 @@ describe('Home: the Source health card while the sources are not read', () => {
     await within(await screen.findByRole('region', { name: 'Source health' })).findByText('The sources could not be read.');
     expect(within(region()).getByRole('alert').textContent).toContain('NETWORK_UNAVAILABLE');
     expect(screen.getByRole('heading', { name: 'Recent', level: 2 })).toBeTruthy();
-    expect(await screen.findByText('No recent investigations.')).toBeTruthy();
+    expect(await screen.findByRole('link', { name: 'kind-a A-1' })).toBeTruthy();
     expect(within(region()).queryByRole('link', { name: 'View sources →' })).toBeNull();
     expect(parts.reads()).toBe(1);
     expect(within(region()).getByRole('button', { name: 'Try again' }).className).toBe('secondary');

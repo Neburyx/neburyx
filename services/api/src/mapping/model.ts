@@ -80,12 +80,19 @@ export interface BudgetsModel {
   readonly heavyOpThreshold: number;
 }
 
+export interface DemoCaseModel {
+  readonly entityType: string;
+  readonly stableId: string;
+  readonly caseRef: string;
+}
+
 export interface SourceModel {
   readonly id: string;
   readonly uri: string;
   readonly database: string;
   readonly auth: { readonly usernameEnv: string; readonly passwordEnv: string };
   readonly synthetic: boolean;
+  readonly demoCase?: DemoCaseModel;
   readonly budgets: BudgetsModel;
   readonly vocabulary: { readonly caseRef?: string };
   readonly entities: readonly EntityModel[];

@@ -35,6 +35,7 @@ import './styles/controls.css';
 import './styles/workspace.css';
 import './styles/sources.css';
 import './styles/search.css';
+import './styles/first-run.css';
 import './styles/home.css';
 
 const root = document.getElementById('root');

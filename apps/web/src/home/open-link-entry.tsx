@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { OpenDeepLinkPrompt } from '../investigations/open-deep-link-prompt.js';
 import { OPEN_LINK_ACTION } from './copy.js';
+import { DemoCaseActions } from './demo-case-actions.js';
 
 const PANEL_ID = 'open-link-panel';
 
@@ -26,9 +27,12 @@ export function OpenLinkEntry() {
 
   return (
     <div className="open-link">
-      <button ref={action} type="button" className="link" aria-expanded={open} aria-controls={open ? PANEL_ID : undefined} onClick={() => (open ? close() : setOpen(true))}>
-        {OPEN_LINK_ACTION}
-      </button>
+      <div className="entry-actions">
+        <button ref={action} type="button" className="link" aria-expanded={open} aria-controls={open ? PANEL_ID : undefined} onClick={() => (open ? close() : setOpen(true))}>
+          {OPEN_LINK_ACTION}
+        </button>
+        <DemoCaseActions />
+      </div>
       {open ? (
         <div id={PANEL_ID} ref={panel} onKeyDown={onKeyDown}>
           <OpenDeepLinkPrompt />

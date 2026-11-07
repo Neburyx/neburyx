@@ -2,7 +2,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { extname, join, normalize, sep } from 'node:path';
-import { DEFAULT_INVESTIGATION_LIST_LIMIT, investigationListCountsSchema, investigationListQuerySchema, type Investigation, type LastTest, openInvestigationRequestSchema, SEARCH_GROUP_CAP, searchRequestSchema, searchResultSchema, type SourceSummary, sourceSummarySchema, type SourceTestReport, valueOfPathSegment } from '@neburyx/contracts';
+import { DEFAULT_INVESTIGATION_LIST_LIMIT, investigationListCountsSchema, investigationListQuerySchema, type Investigation, type LastTest, openInvestigationRequestSchema, SEARCH_GROUP_CAP, searchRequestSchema, searchResultSchema, type SourceSummary, sourceSummaryFieldsSchema, sourceSummarySchema, type SourceTestReport, valueOfPathSegment } from '@neburyx/contracts';
 
 interface SupportProfile {
   readonly sourceId: string;
@@ -48,7 +48,7 @@ function me(sourceIds: readonly string[]): unknown {
   };
 }
 
-const SOURCE_SUMMARY = { state: 'connected', stateReason: null, readOnly: true, synthetic: true, lastTestAt: null, lastTest: null, mappingSummary: { entityTypes: 4, relationshipTypes: 6, derivedRules: 2 } } as const;
+const SOURCE_SUMMARY = { state: 'connected', stateReason: null, readOnly: true, synthetic: true, lastTestAt: null, lastTest: null, mappingSummary: { entityTypes: 4, relationshipTypes: 6, derivedRules: 2 }, demoCase: null } as const;
 
 type SourceChange = Partial<Omit<SourceSummary, 'id'>>;
 
@@ -133,8 +133,8 @@ function createSources(options: SupportServerOptions) {
       if (path !== '/__support/sources' || typeof body !== 'object' || body === null || Array.isArray(body)) return json(response, 404, NOT_FOUND);
       const next = new Map<string, SourceChange>();
       for (const [sourceId, change] of Object.entries(body)) {
-        const parsed = sourceSummarySchema.omit({ id: true }).partial().safeParse(change);
-        if (!known.includes(sourceId) || !parsed.success) return json(response, 400, INVALID);
+        const parsed = sourceSummaryFieldsSchema.omit({ id: true }).partial().safeParse(change);
+        if (!known.includes(sourceId) || !parsed.success || !sourceSummarySchema.safeParse({ id: sourceId, alias: sourceId, ...SOURCE_SUMMARY, ...parsed.data }).success) return json(response, 400, INVALID);
         next.set(sourceId, parsed.data);
       }
       changes = next;
@@ -224,6 +224,9 @@ function createInvestigations(options: SupportServerOptions) {
     },
     forgetNamedViews(): void {
       namedViews = { count: 0, lastEditedAt: null };
+    },
+    forgetInvestigations(): void {
+      held.clear();
     },
     list(search: URLSearchParams, response: ServerResponse): void {
       const entries = [...search.entries()];
@@ -439,6 +442,10 @@ export function createSupportServer(options: SupportServerOptions): Server {
       if (request.method === 'POST' && path === '/v1/investigations') return investigations.open(await bodyOf(request), response);
       if (request.method === 'POST' && path === '/v1/search/entities') return search.run(await bodyOf(request), response);
       if (request.method === 'POST' && path === '/__support/named-views') return investigations.holdNamedViews(await bodyOf(request), response);
+      if (request.method === 'POST' && path === '/__support/forget-investigations') {
+        investigations.forgetInvestigations();
+        return json(response, 200, {});
+      }
       if (request.method === 'POST' && path.startsWith('/__support/')) {
         if (path === '/__support/reset') investigations.forgetNamedViews();
         return sources.control(path, await bodyOf(request), response);

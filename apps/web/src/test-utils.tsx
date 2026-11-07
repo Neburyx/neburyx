@@ -33,7 +33,7 @@ export function me(overrides: Partial<MeResponse> = {}): MeResponse {
 }
 
 export function source(id: string, overrides: Partial<SourceSummary> = {}): SourceSummary {
-  return { id, alias: `Source ${id}`, state: 'connected', stateReason: null, readOnly: true, synthetic: true, lastTestAt: null, lastTest: null, mappingSummary: { entityTypes: 1, relationshipTypes: 1, derivedRules: 0 }, ...overrides };
+  return { id, alias: `Source ${id}`, state: 'connected', stateReason: null, readOnly: true, synthetic: true, lastTestAt: null, lastTest: null, mappingSummary: { entityTypes: 1, relationshipTypes: 1, derivedRules: 0 }, demoCase: null, ...overrides };
 }
 
 export function testReport(sourceId: string, overrides: Partial<SourceTestReport> = {}): SourceTestReport {

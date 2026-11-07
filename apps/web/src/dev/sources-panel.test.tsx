@@ -16,6 +16,7 @@ const SUMMARY = {
   lastTestAt: null,
   lastTest: null,
   mappingSummary: { entityTypes: 2, relationshipTypes: 1, derivedRules: 0 },
+  demoCase: null,
 } as const;
 
 function source(id: string, overrides: Partial<SourceSummary> = {}): SourceSummary {

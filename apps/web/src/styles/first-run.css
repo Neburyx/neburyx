@@ -1,0 +1,113 @@
+.first-run {
+  display: flex;
+  flex-direction: column;
+  gap: var(--section-gap);
+}
+
+.page-title .page-tag {
+  margin-left: auto;
+  padding: var(--space-4) var(--space-12);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-small);
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-12);
+}
+
+.empty-state h2,
+.empty-state h3,
+.empty-state p {
+  margin: 0;
+}
+
+.empty-state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-12);
+}
+
+.first-run .empty-state {
+  align-items: center;
+  padding-top: var(--space-40);
+  text-align: center;
+}
+
+.empty-state-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--space-40);
+  height: var(--space-40);
+  border-radius: var(--radius-panel);
+  background: var(--color-accent-surface);
+}
+
+.empty-state-icon .icon {
+  background: var(--color-accent);
+}
+
+.first-run .empty-state h2 {
+  font-size: var(--font-size-heading-1);
+}
+
+.setup-note {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-8);
+  text-align: center;
+}
+
+.setup-note p {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-small);
+}
+
+.setup-command {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  padding: var(--space-8) var(--space-12);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface-muted);
+  font-family: var(--font-mono);
+}
+
+.setup-command code {
+  font-family: inherit;
+  overflow-wrap: anywhere;
+}
+
+.getting-started {
+  padding-top: var(--space-24);
+  border-top: var(--border-width) solid var(--color-border);
+}
+
+.getting-started ol {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-24);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.getting-started h3 {
+  margin: 0 0 var(--space-4);
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-medium);
+}
+
+.getting-started p {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-small);
+}

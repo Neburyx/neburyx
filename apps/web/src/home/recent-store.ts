@@ -8,16 +8,19 @@ import { RECENT_LIMIT } from './copy.js';
 export interface RecentState {
   readonly list: RequestState<InvestigationListResponse>;
   readonly profiles: ReadonlyMap<string, RequestState<SourceProfile>>;
+  /** The visit that asked for the list read the state belongs to, so a page can tell its own answer from an earlier visit's. */
+  readonly readBy: object | undefined;
 }
 
 export interface RecentInvestigations extends ReadableStore<RecentState> {
-  /** A read already under way is not repeated, so the two effects of StrictMode ask once. */
-  readonly ensure: () => void;
+  /** Asks for the list on behalf of a visit. A read under way that this visit asked for is not repeated, so the two effects of StrictMode ask once; one that an earlier visit asked for is asked again, so its answer cannot pass for this visit's. */
+  readonly ensure: (visit: object) => void;
   readonly reload: () => void;
 }
 
 export function createRecentInvestigations(client: ApiClient): RecentInvestigations {
-  const state = createStore<RecentState>({ list: { phase: 'idle' }, profiles: new Map() });
+  const state = createStore<RecentState>({ list: { phase: 'idle' }, profiles: new Map(), readBy: undefined });
+  let readBy: object | undefined;
   const profileRequests = new Map<string, RequestStore<SourceProfile>>();
   let list: RequestStore<InvestigationListResponse> | undefined;
 
@@ -55,9 +58,12 @@ export function createRecentInvestigations(client: ApiClient): RecentInvestigati
 
   return {
     ...readable(state),
-    ensure: () => {
+    ensure: (visit) => {
+      if (list !== undefined && readBy === visit && list.getState().phase === 'loading') return;
+      readBy = visit;
+      state.setState({ ...state.getState(), readBy: visit });
       if (list === undefined) list = start();
-      else if (list.getState().phase !== 'loading') list.reload();
+      else list.reload();
     },
     reload: () => {
       if (list === undefined) list = start();

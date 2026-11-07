@@ -4,10 +4,32 @@ import { randomBytes } from 'node:crypto';
 import { parseDocument, stringify } from 'yaml';
 import { z } from 'zod';
 import { PACKS_FOLDER, packFiles } from './packs.js';
+import { PresetError, readPreset } from './preset.js';
 
 export class CombineError extends Error {}
 
 const sourceEntry = z.record(z.string(), z.unknown());
+
+function entityTypesOf(entry: Record<string, unknown>): readonly unknown[] {
+  const { entities } = entry;
+  return Array.isArray(entities) ? entities.map((entity: unknown) => (typeof entity === 'object' && entity !== null && 'type' in entity ? entity.type : undefined)) : [];
+}
+
+/** Adds the pack's preset as the source's `demo_case`, the one place the preset is written being its `cases.yaml`. */
+function withDemoCase(pack: string, entry: Record<string, unknown>, casesFile: string): Record<string, unknown> {
+  if ('demo_case' in entry) throw new CombineError(`pack ${pack} holds a demo_case in its mapping; its preset is written in its cases file only`);
+  let preset;
+  try {
+    preset = readPreset(casesFile);
+  } catch (error) {
+    if (error instanceof PresetError) throw new CombineError(`pack ${pack}: ${error.message}`);
+    throw error;
+  }
+  if (preset === undefined) return entry;
+  if (entry['synthetic'] !== true) throw new CombineError(`pack ${pack}: the preset needs synthetic: true on the pack's source`);
+  if (!entityTypesOf(entry).includes(preset.entity.type)) throw new CombineError(`pack ${pack}: the preset names an entity type the pack's mapping does not have`);
+  return { ...entry, demo_case: preset };
+}
 
 function sourcesOf(pack: string, folder: string): { readonly id: string; readonly entry: Record<string, unknown> } {
   const { mapping } = packFiles(pack, folder);
@@ -31,7 +53,7 @@ function sourcesOf(pack: string, folder: string): { readonly id: string; readonl
   const entry = sourceEntry.safeParse(sources[0]);
   const id: unknown = entry.success ? entry.data['id'] : undefined;
   if (!entry.success || typeof id !== 'string' || id === '') throw new CombineError(`the source of pack ${pack} has no ID`);
-  return { id, entry: entry.data };
+  return { id, entry: withDemoCase(pack, entry.data, packFiles(pack, folder).cases) };
 }
 
 const LOOPBACK_BOLT = /^bolt:\/\/(?:localhost|127\.0\.0\.1|\[::1\]):(\d{1,5})$/;

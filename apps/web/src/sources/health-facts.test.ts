@@ -12,6 +12,7 @@ const summary = (overrides: Partial<SourceSummary> = {}): SourceSummary => ({
   lastTestAt: null,
   lastTest: null,
   mappingSummary: { entityTypes: 8, relationshipTypes: 12, derivedRules: 1 },
+  demoCase: null,
   ...overrides,
 });
 

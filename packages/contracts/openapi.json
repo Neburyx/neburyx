@@ -4932,6 +4932,39 @@
                     "derivedRules"
                   ],
                   "additionalProperties": false
+                },
+                "demoCase": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "entityType": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "stableId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "caseRef": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 100
+                        }
+                      },
+                      "required": [
+                        "entityType",
+                        "stableId",
+                        "caseRef"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 }
               },
               "required": [
@@ -4943,7 +4976,8 @@
                 "synthetic",
                 "lastTestAt",
                 "lastTest",
-                "mappingSummary"
+                "mappingSummary",
+                "demoCase"
               ],
               "additionalProperties": false
             }

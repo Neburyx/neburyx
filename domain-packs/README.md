@@ -18,6 +18,24 @@ A domain pack is a directory of plain YAML and Markdown that describes one kind 
 
 Every pack here describes a **synthetic** graph (`synthetic: true`). The address in each file is a host name on the demo network, and the credentials are the names of environment variables, never values.
 
+## The demo case
+
+A source flagged `synthetic: true` may name a `demo_case`: the entity the product opens first, and the case reference that investigation carries. The product offers it as **Open demo case** on its first page and as **Open the demo case** on Home.
+
+```yaml
+sources:
+  - id: banking-demo
+    synthetic: true
+    demo_case:
+      entity: { type: account, id: AC-0002000 }
+      case_ref: "REF-DEMO-1001"
+```
+
+- `entity.type` is one of the source's entity types, `entity.id` is the stable ID of an entity of that type, and `case_ref` is the case reference. A type or an ID may hold up to 200 characters and a case reference up to 100, and none holds a control character or an unpaired surrogate (a `\uD800`-style escape).
+- A source without `synthetic: true` cannot have one, and the mapping is refused.
+- A pack states its preset once, in `cases.yaml`; the pack's own `neburyx.yaml` holds no `demo_case`. `pnpm demo-graph combine` copies the preset into the combined mapping that the demo environment and `pnpm dev` use. A mapping without `demo_case`, such as a pack's own `neburyx.yaml` run as it is, shows no demo case, and the product offers no action for it.
+- To offer one from a mapping you write yourself, add the key to a synthetic source as above.
+
 ## Start from a pack
 
 1. Copy `neburyx.yaml` to a new file.

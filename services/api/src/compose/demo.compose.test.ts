@@ -113,10 +113,17 @@ const packMappingSchema = z.object({
   ]),
 });
 
+const presetSchema = z.object({ entity: z.object({ type: z.string(), id: z.string() }), case_ref: z.string() });
+
+function presetOf(name: string): z.infer<typeof presetSchema> {
+  return z.object({ preset: presetSchema }).parse(parse(readFileSync(join(repository, 'domain-packs', name, 'cases.yaml'), 'utf8'))).preset;
+}
+
+/** The source entry of a pack as the combined mapping holds it: the pack's own entry and the preset of its cases file as the demo case. */
 function packSource(name: string): unknown {
   const whole: unknown = parse(readFileSync(join(repository, 'domain-packs', name, 'neburyx.yaml'), 'utf8'));
-  const sources = z.object({ sources: z.array(z.unknown()).length(1) }).parse(whole).sources;
-  return sources[0];
+  const [source] = z.object({ sources: z.array(z.record(z.string(), z.unknown())).length(1) }).parse(whole).sources;
+  return { ...source, demo_case: presetOf(name) };
 }
 
 function packOf(name: string) {
@@ -149,9 +156,13 @@ describe('the demo stack', () => {
     await vi.waitFor(
       async () => {
         const body = sourcesResponseSchema.parse(await (await fetch(`${stack.url}/v1/sources`)).json());
-        expect(body.items.map((item) => [item.id, item.state, item.synthetic]).sort()).toEqual([
-          ['banking-demo', 'connected', true],
-          ['insurance-demo', 'connected', true],
+        const demoCaseOf = (name: (typeof DEMO_PACKS)[number]) => {
+          const { entity, case_ref: caseRef } = presetOf(name);
+          return { entityType: entity.type, stableId: entity.id, caseRef };
+        };
+        expect(body.items.map((item) => [item.id, item.state, item.synthetic, item.demoCase]).sort()).toEqual([
+          ['banking-demo', 'connected', true, demoCaseOf('banking-fraud')],
+          ['insurance-demo', 'connected', true, demoCaseOf('insurance-claims')],
         ]);
       },
       { timeout: 60_000, interval: 2000 },

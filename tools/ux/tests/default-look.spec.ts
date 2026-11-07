@@ -4,6 +4,10 @@ import { PRODUCT_PAGES, REACH } from './support/product-pages.ts';
 
 test.use({ baseURL: 'http://127.0.0.1:4175' });
 
+test.afterEach(async ({ page }) => {
+  await page.request.post('/__support/reset');
+});
+
 test.describe('the check of the browser\'s default look', () => {
   test('has a way to reach every page and state of its list, and no other', () => {
     expect(PRODUCT_PAGES.length).toBeGreaterThan(0);

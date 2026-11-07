@@ -1,7 +1,7 @@
-import { act, configure, screen, waitFor } from '@testing-library/react';
+import { act, configure, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { INVESTIGATION_A, INVESTIGATION_B, investigationOf, knowing, listItemOf, nodeOf, listOf } from '../investigations/test-data.js';
+import { failsThenWaits, INVESTIGATION_A, INVESTIGATION_B, investigationOf, knowing, listItemOf, nodeOf, listOf, REAL_SOURCE } from '../investigations/test-data.js';
 import type { ApiClient } from '../api/client.js';
 import { createClientState } from '../state/client-state.js';
 import { renderApp, source } from '../test-utils.js';
@@ -48,7 +48,8 @@ describe('Home: the Recent list', () => {
   });
 
   it('says it is loading while the list is read', async () => {
-    renderApp('/', knowing([A], { listInvestigations: () => new Promise(() => undefined) }).client);
+    renderApp('/', knowing([A], failsThenWaits()).client);
+    await userEvent.setup().click(await screen.findByRole('button', { name: 'Try again' }));
     expect((await screen.findByRole('status')).textContent).toBe('Loading recent investigations…');
   });
 
@@ -69,11 +70,23 @@ describe('Home: the Recent list', () => {
     expect(attempts).toBe(2);
   });
 
-  it('says there are no recent investigations when the list is empty', async () => {
-    renderApp('/', knowing([]).client);
-    expect(await screen.findByText('No recent investigations.')).toBeTruthy();
+  it('shows the empty state in Recent\'s place when the list is empty', async () => {
+    renderApp('/', knowing([], REAL_SOURCE).client);
+    expect(await screen.findByRole('heading', { name: 'No investigations yet', level: 3 })).toBeTruthy();
     expect(screen.queryByText(/starting entity/)).toBeNull();
     expect(rowsOf()).toHaveLength(0);
+  });
+
+  it.each([
+    ['a real source that is connected', REAL_SOURCE],
+    ['a failed sources read', { getSources: async () => ({ ok: false as const, failure: { code: 'NETWORK_UNAVAILABLE' as const } }) }],
+  ])('never offers Connect your Neo4j or says no source is connected on Home with an empty list and %s', async (_name, overrides) => {
+    renderApp('/', knowing([], overrides).client);
+    await screen.findByRole('heading', { name: 'No investigations yet', level: 3 });
+    const main = within(screen.getByRole('main'));
+    expect(main.queryByText(/No source connected/i)).toBeNull();
+    expect(main.queryByText(/Connect your/i)).toBeNull();
+    expect(main.queryByRole('button', { name: /Connect your Neo4j/ })).toBeNull();
   });
 
   it('shows five rows and says so when the list holds more', async () => {

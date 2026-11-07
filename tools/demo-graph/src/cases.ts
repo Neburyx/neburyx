@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { parseDocument } from 'yaml';
 import { z } from 'zod';
 import type { Definition, Issue } from './definition.js';
+import { MAX_PRESET_CASE_REF, MAX_PRESET_TEXT, presetSchema } from './preset.js';
 import type { MappingSource } from './mapping.js';
 import type { ExportData } from './validate.js';
 
@@ -16,15 +17,13 @@ export class CasesError extends Error {
 }
 
 export const MAX_LISTED_IDS = 100;
-export const MAX_CASE_REF = 100;
+export const MAX_CASE_REF = MAX_PRESET_CASE_REF;
 const MAX_ISSUES = 50;
 
 const name = z.string().min(1);
 
-const caseRef = z.string().refine((value) => [...value].length >= 1 && [...value].length <= MAX_CASE_REF && !/\p{Cc}/u.test(value));
-
 const casesSchema = z.strictObject({
-  preset: z.strictObject({ entity: z.strictObject({ type: name, id: name }), case_ref: caseRef }),
+  preset: presetSchema,
   cases: z
     .array(
       z.strictObject({
@@ -87,7 +86,7 @@ const REASONS: Readonly<Record<string, string>> = {
   too_big: `holds more than the reader accepts (at most ${MAX_LISTED_IDS} stable IDs; use a count for a large answer)`,
   too_small: 'is empty or too short',
   invalid_value: 'is not one of the values the reader accepts',
-  custom: `is empty, longer than ${MAX_CASE_REF} code points or holds a control character`,
+  custom: `is empty, longer than the reader accepts (${MAX_PRESET_TEXT} code points for an entity type and an ID, ${MAX_CASE_REF} for a case reference) or holds a control character or an unpaired surrogate`,
 };
 
 function placeOf(path: readonly PropertyKey[]): string {

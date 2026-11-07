@@ -7,7 +7,7 @@ import { counted, renderApp } from '../test-utils.js';
 import { testProfile } from './test-profile.js';
 
 const ME = { principal: { id: '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d', displayName: 'Local user', role: 'administrator' as const }, edition: 'community' as const, identityMode: 'none' as const, sources: [] };
-const SOURCE: SourceSummary = { id: 'source-a', alias: 'Source a', state: 'connected', stateReason: null, readOnly: true, synthetic: true, lastTestAt: null, lastTest: null, mappingSummary: { entityTypes: 3, relationshipTypes: 2, derivedRules: 1 } };
+const SOURCE: SourceSummary = { id: 'source-a', alias: 'Source a', state: 'connected', stateReason: null, readOnly: true, synthetic: true, lastTestAt: null, lastTest: null, demoCase: null, mappingSummary: { entityTypes: 3, relationshipTypes: 2, derivedRules: 1 } };
 
 function clientFor(profile = testProfile()) {
   return fakeClient({

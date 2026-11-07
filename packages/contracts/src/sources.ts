@@ -1,4 +1,7 @@
 import { z } from 'zod';
+import { addressable, addressableTextOfAtMost } from './addressable-text.js';
+import { MAX_STABLE_ID_LENGTH, stableIdSchema } from './entities.js';
+import { caseRefSchema } from './investigations.js';
 import { mappingSummarySchema, sourceStateSchema } from './source-basics.js';
 import { DEGREE_STATUSES, readOnlyCheckSchema, serverInfoSchema, testOutcomeSchema } from './source-test.js';
 
@@ -18,7 +21,15 @@ export const lastTestSchema = z
   })
   .refine((test) => test.server !== null || test.versionSupported === null, { message: 'versionSupported is null when the server did not answer', path: ['versionSupported'] });
 
-export const sourceSummarySchema = z.strictObject({
+/** The investigation a synthetic source offers to open first: its starting entity and the case reference it carries. */
+export const demoCaseSchema = z.strictObject({
+  entityType: addressableTextOfAtMost(MAX_STABLE_ID_LENGTH),
+  stableId: addressable(stableIdSchema),
+  caseRef: addressable(caseRefSchema),
+});
+
+/** The members of a source summary, before the rule that ties the demo case to a synthetic source (a refined schema cannot be narrowed to some of its members). */
+export const sourceSummaryFieldsSchema = z.strictObject({
   id: z.string().min(1),
   alias: z.string().min(1),
   state: sourceStateSchema,
@@ -28,7 +39,10 @@ export const sourceSummarySchema = z.strictObject({
   lastTestAt: z.iso.datetime().nullable(),
   lastTest: lastTestSchema.nullable(),
   mappingSummary: mappingSummarySchema,
+  demoCase: demoCaseSchema.nullable(),
 });
+
+export const sourceSummarySchema = sourceSummaryFieldsSchema.refine((source) => source.demoCase === null || source.synthetic, { message: 'only a synthetic source has a demo case', path: ['demoCase'] });
 
 export const sourcesResponseSchema = z.strictObject({
   items: z.array(sourceSummarySchema),
@@ -37,5 +51,6 @@ export const sourcesResponseSchema = z.strictObject({
 
 export type SourceState = z.infer<typeof sourceStateSchema>;
 export type SourceSummary = z.infer<typeof sourceSummarySchema>;
+export type DemoCase = z.infer<typeof demoCaseSchema>;
 export type LastTest = z.infer<typeof lastTestSchema>;
 export type SourcesResponse = z.infer<typeof sourcesResponseSchema>;

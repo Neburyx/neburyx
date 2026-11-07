@@ -100,6 +100,15 @@ describe('the investigations the support server holds', () => {
   const open = (base: string, body: unknown) => fetch(`${base}/v1/investigations`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
   const request = (extra: Record<string, unknown> = {}) => ({ sourceId: 'demo', entity: { sourceId: 'demo', entityType: 'thing', stableId: 'T-1' }, ...extra });
 
+  it('forgets every investigation opened when a spec asks, and lists none afterwards', async () => {
+    const base = await startWithTypes();
+    await open(base, request());
+    const count = async (): Promise<number> => investigationListResponseSchema.parse(await (await fetch(`${base}/v1/investigations`)).json()).counts.investigations.value;
+    expect(await count()).toBe(1);
+    expect((await fetch(`${base}/__support/forget-investigations`, { method: 'POST' })).status).toBe(200);
+    expect(await count()).toBe(0);
+  });
+
   it('lists the investigations opened, the most recently created first, five unless asked, with whether more exist, and refuses a query that is not the contract\'s', async () => {
     vi.useFakeTimers({ toFake: ['Date'], now: Date.parse('2026-11-05T12:00:00.000Z') });
     const base = await startWithTypes();
@@ -320,6 +329,7 @@ describe('the support server\'s source health', () => {
     expect((await post(base, '/__support/sources', { nowhere: { state: 'degraded' } })).status).toBe(400);
     expect((await post(base, '/__support/sources', { demo: { state: 'sleeping' } })).status).toBe(400);
     expect((await post(base, '/__support/sources', { demo: { surprise: true } })).status).toBe(400);
+    expect((await post(base, '/__support/sources', { demo: { synthetic: false, demoCase: { entityType: 'thing', stableId: 'T-1', caseRef: 'R' } } })).status).toBe(400);
     expect((await post(base, '/__support/nothing')).status).toBe(404);
     expect((await sourcesOf(base)).map((item) => item.state)).toEqual(['connected', 'connected']);
   });

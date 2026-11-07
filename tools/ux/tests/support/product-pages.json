@@ -33,6 +33,7 @@
     { "name": "Explore without an investigation", "route": "explore" },
     { "name": "The deep-link page failed", "route": ":sourceId/entity/:entityType/:stableId" },
     { "name": "Investigations", "route": "investigations" },
-    { "name": "The not-found page", "route": "*" }
+    { "name": "The not-found page", "route": "*" },
+    { "name": "First run", "route": "" }
   ]
 }

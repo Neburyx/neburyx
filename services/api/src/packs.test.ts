@@ -109,6 +109,23 @@ function linkedIndex(file: RawMappingFile): number {
   return index;
 }
 
+describe('the demo case of a pack', () => {
+  const presetOf = (pack: string): { readonly entity: { readonly type: string; readonly id: string }; readonly case_ref: string } =>
+    z.object({ preset: z.object({ entity: z.object({ type: z.string(), id: z.string() }), case_ref: z.string() }) }).parse(parse(readFileSync(join(PACKS_ROOT, pack, CASES_FILE), 'utf8'))).preset;
+
+  it.each([...SHIPPED_ENTITY_TYPES.keys()])('holds no demo case in the mapping of %s, so its source shows none', (pack) => {
+    expect(textOf(pack)).not.toContain('demo_case');
+    expect(modelOf(pack).demoCase).toBeUndefined();
+  });
+
+  it.each([...SHIPPED_ENTITY_TYPES.keys()])('accepts the preset of the cases file of %s as the demo case of its mapping, and the source then carries it', (pack) => {
+    const raw = rawOf(pack);
+    const preset = presetOf(pack);
+    const withCase = asText({ sources: [{ ...sourceOf(raw), demo_case: preset }] });
+    expect(onlySource(parseMapping(withCase, MAPPING_FILE).sources).demoCase).toEqual({ entityType: preset.entity.type, stableId: preset.entity.id, caseRef: preset.case_ref });
+  });
+});
+
 describe('finding the packs', () => {
   it('lists every directory of the packs folder, each with a mapping file, and includes the shipped packs', () => {
     for (const name of SHIPPED_ENTITY_TYPES.keys()) expect(packs).toContain(name);

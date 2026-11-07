@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import pino from 'pino';
+import { sourcesResponseSchema } from '@neburyx/contracts';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createPool } from '../db/pool.js';
 import { listSourceRows, SYNC_LOCK_KEY, syncSources } from '../db/sources-repository.js';
@@ -247,6 +248,26 @@ describe('removal', () => {
       expect(list.items.map((item: { id: string }) => item.id)).toEqual(['alpha']);
       const me = (await result.app.inject({ method: 'GET', url: '/v1/me' })).json();
       expect(me.sources.map((item: { sourceId: string }) => item.sourceId)).toEqual(['alpha']);
+    } finally {
+      await stopApi(result);
+    }
+  });
+});
+
+describe('the demo case of a source on a started API', () => {
+  it('answers the demo case of a synthetic source that names one, while the source is still in the state it starts in', async () => {
+    const database = await migrated();
+    const named = source('alpha', { synthetic: true, demo_case: { entity: { type: 'node_a', id: 'A-1' }, case_ref: 'REF-1' } });
+    const file = mappingFile(named, source('beta', { synthetic: true }), source('gamma'));
+    const { result } = await startApi({ DATABASE_URL: database.appUrl, NEBURYX_CONFIG: file }, undefined, { openSourceGate: unansweringGate });
+    if (result.exitCode !== 0) throw new Error('the API did not start');
+    try {
+      const list = sourcesResponseSchema.parse((await result.app.inject({ method: 'GET', url: '/v1/sources' })).json());
+      expect(list.items.map((item) => [item.id, item.state, item.demoCase])).toEqual([
+        ['alpha', 'unknown', { entityType: 'node_a', stableId: 'A-1', caseRef: 'REF-1' }],
+        ['beta', 'unknown', null],
+        ['gamma', 'unknown', null],
+      ]);
     } finally {
       await stopApi(result);
     }

@@ -28,10 +28,10 @@ describe('routes and navigation', () => {
     expect(screen.getByText('This screen is not built yet.')).toBeTruthy();
   });
 
-  it('shows Home at /, with its own heading and the Recent card', () => {
+  it('shows Home at /, with its own heading and the Recent card', async () => {
     renderAt('/');
     expect(screen.getByRole('heading', { name: 'Investigations', level: 1 })).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Recent', level: 2 })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Recent', level: 2 })).toBeTruthy();
     expect(screen.queryByText('This screen is not built yet.')).toBeNull();
   });
 

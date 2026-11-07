@@ -147,6 +147,13 @@
   margin: 0;
 }
 
+.entry-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-8) var(--space-16);
+}
+
 .open-link form {
   display: flex;
   flex-wrap: wrap;

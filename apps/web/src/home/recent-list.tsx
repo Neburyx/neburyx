@@ -1,10 +1,10 @@
-import { useEffect } from 'react';
 import type { SourceProfile } from '@neburyx/contracts';
 import type { RequestState } from '../api/use-request.js';
 import { FailureNotice } from '../failure-notice.js';
 import { answeredData, useShellData } from '../shell/shell-data.js';
 import { HOME_COPY, MORE_THAN_SHOWN, RECENT_NOTE } from './copy.js';
 import { useRecent, useRecentState } from './recent-context.js';
+import { HomeEmptyState } from './home-empty-state.js';
 import { RecentRow } from './recent-row.js';
 
 // a profile whose last read failed is not used, so the row falls back to what is stored; one that is being read again is kept until its answer
@@ -17,7 +17,6 @@ function usableProfile(state: RequestState<SourceProfile> | undefined): SourcePr
 export function RecentList() {
   const recent = useRecent();
   const { list: state, profiles } = useRecentState();
-  useEffect(() => recent.ensure(), [recent]);
   const sources = answeredData(useShellData().sources)?.items;
   const now = Date.now();
 
@@ -51,7 +50,7 @@ export function RecentList() {
             </div>
           )}
           {data.items.length === 0 ? (
-            <p>{HOME_COPY.empty}</p>
+            <HomeEmptyState />
           ) : (
             <>
               <p className="recent-note-line">{RECENT_NOTE}</p>

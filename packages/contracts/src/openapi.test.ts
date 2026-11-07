@@ -113,4 +113,25 @@ describe('buildOpenApiDocument', () => {
     expect([accepted(minimum - 1), accepted(minimum), accepted(maximum), accepted(maximum + 1)], 'the documented bounds are the ones the route accepts').toEqual([false, true, true, false]);
     expect(document.components.schemas.InvestigationListResponse).toMatchObject({ required: ['items', 'hasMore', 'counts'], additionalProperties: false });
   });
+
+  it('describes the demo case of a source as a required member that is an object with the limits it enforces, or null', () => {
+    const { SourcesResponse } = buildOpenApiDocument().components.schemas;
+    expect(SourcesResponse).toMatchObject({
+      properties: {
+        items: {
+          items: {
+            required: expect.arrayContaining(['demoCase']),
+            properties: {
+              demoCase: {
+                anyOf: [
+                  { type: 'object', required: ['entityType', 'stableId', 'caseRef'], additionalProperties: false, properties: { stableId: { maxLength: 200 }, caseRef: { maxLength: 100 } } },
+                  { type: 'null' },
+                ],
+              },
+            },
+          },
+        },
+      },
+    });
+  });
 });

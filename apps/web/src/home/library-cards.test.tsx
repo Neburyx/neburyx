@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { InvestigationListResponse } from '@neburyx/contracts';
 import type { ApiResult } from '../api/client.js';
-import { INVESTIGATION_A, INVESTIGATION_B, investigationOf, knowing, listItemOf, listOf, nodeOf } from '../investigations/test-data.js';
+import { failsThenWaits, INVESTIGATION_A, INVESTIGATION_B, investigationOf, knowing, listItemOf, listOf, nodeOf, REAL_SOURCE } from '../investigations/test-data.js';
 import { renderApp } from '../test-utils.js';
 
 beforeAll(() => configure({ reactStrictMode: true }));
@@ -51,14 +51,15 @@ describe('Home: the Investigations card', () => {
   });
 
   it('shows zero for a person with no investigation', async () => {
-    renderApp('/', knowing([]).client);
-    await screen.findByText('No recent investigations.');
+    renderApp('/', knowing([], REAL_SOURCE).client);
+    await screen.findByRole('heading', { name: 'No investigations yet', level: 3 });
     expect(within(cardOf('Investigations')).getByText('0')).toBeTruthy();
     expect(within(cardOf('Investigations')).getByText('Across 0 sources')).toBeTruthy();
   });
 
   it('says Loading… and shows no number while the list has never been answered', async () => {
-    renderApp('/', knowing([A], { listInvestigations: () => new Promise(() => undefined) }).client);
+    renderApp('/', knowing([A], failsThenWaits()).client);
+    await userEvent.setup().click(await screen.findByRole('button', { name: 'Try again' }));
     await screen.findByText('Loading recent investigations…');
     const card = cardOf('Investigations');
     expect(within(card).getByText('Loading…')).toBeTruthy();
@@ -140,7 +141,8 @@ describe('Home: the Saved views card', () => {
   });
 
   it('says Loading… and then Not read, with no number, before the list has ever been answered', async () => {
-    const first = renderApp('/', knowing([A], { listInvestigations: () => new Promise(() => undefined) }).client);
+    const first = renderApp('/', knowing([A], failsThenWaits()).client);
+    await userEvent.setup().click(await screen.findByRole('button', { name: 'Try again' }));
     await screen.findByText('Loading recent investigations…');
     expect(within(cardOf('Saved views')).getByText('Loading…')).toBeTruthy();
     expect(cardOf('Saved views').querySelector('.library-figure')).toBeNull();
@@ -180,10 +182,11 @@ describe('Home: the Saved views card', () => {
 describe('Home: the Patterns card', () => {
   it.each([
     ['answered', () => knowing([A, B]).client, 'kind-a A-1'],
-    ['loading', () => knowing([A], { listInvestigations: () => new Promise(() => undefined) }).client, 'Loading recent investigations…'],
+    ['loading', () => knowing([A], failsThenWaits()).client, 'Loading recent investigations…'],
     ['failed', () => knowing([A], { listInvestigations: async () => failure }).client, 'Recent investigations could not be read.'],
   ])('says built-in patterns are not available yet, with no number, when the list is %s', async (state, client, awaited) => {
     renderApp('/', client());
+    if (state === 'loading') await userEvent.setup().click(await screen.findByRole('button', { name: 'Try again' }));
     await (state === 'answered' ? screen.findByRole('link', { name: awaited }) : screen.findByText(awaited));
     const card = cardOf('Patterns');
     expect(within(card).getByText('Built-in patterns are not available yet.')).toBeTruthy();

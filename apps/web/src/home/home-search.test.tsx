@@ -1,7 +1,7 @@
 import { act, configure, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { knowing } from '../investigations/test-data.js';
+import { INVESTIGATION_A, investigationOf, knowing, nodeOf } from '../investigations/test-data.js';
 import { answerOf, hit } from '../search/search-test-kit.js';
 import { createClientState } from '../state/client-state.js';
 import { me, renderApp, source } from '../test-utils.js';
@@ -9,8 +9,9 @@ import { me, renderApp, source } from '../test-utils.js';
 beforeAll(() => configure({ reactStrictMode: true }));
 afterAll(() => configure({ reactStrictMode: false }));
 
+const A = { investigation: investigationOf(INVESTIGATION_A, 'source-a', 'kind-a', 'A-1'), node: nodeOf('source-a', 'kind-a', 'A-1') };
 const searching = (overrides = {}) =>
-  knowing([], { searchEntities: async (request) => ({ ok: true, value: answerOf(request.sourceId, [hit(request.sourceId, request.text)]) }), ...overrides });
+  knowing([A], { searchEntities: async (request) => ({ ok: true, value: answerOf(request.sourceId, [hit(request.sourceId, request.text)]) }), ...overrides });
 const oneSource = { getSources: async () => ({ ok: true as const, value: { items: [source('source-a')], nextCursor: null } }) };
 
 const form = (): HTMLElement => screen.getByRole('search');

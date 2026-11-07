@@ -36,6 +36,7 @@ export function summariesOf(rows: readonly SourceRow[], mapping: MappingModel, l
         lastTestAt: row.lastTestAt,
         lastTest: report === undefined ? null : lastTestOf(report),
         mappingSummary: mappingSummaryOf(source),
+        demoCase: source.demoCase ?? null,
       },
     ];
   });

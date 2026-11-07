@@ -207,3 +207,19 @@ describe('the mapping hash and the class of a pii field', () => {
     expect(hashOf(classed({ property: 'name', class: 'name' }))).toBe(hashOf(classed({ class: 'name', property: 'name' })));
   });
 });
+
+describe('the demo case in the config hash', () => {
+  const demoCase: Json = { entity: { type: 'node_a', id: 'A-1' }, case_ref: 'REF-1' };
+
+  it('changes the hash when the demo case changes', () => {
+    const named = hashOf(baseSource({ synthetic: true, demo_case: demoCase }));
+    expect(named).not.toBe(hashOf(baseSource({ synthetic: true })));
+    expect(named).not.toBe(hashOf(baseSource({ synthetic: true, demo_case: { ...demoCase, case_ref: 'REF-2' } })));
+    expect(named).not.toBe(hashOf(baseSource({ synthetic: true, demo_case: { ...demoCase, entity: { type: 'node_a', id: 'A-2' } } })));
+  });
+
+  it('leaves the hash of a source without a demo case as it was before the key existed', () => {
+    expect(hashOf(baseSource())).toBe('7f64d76ec7da1d267bcd7e31efdbfbebc0169b61472d7db802e5e503b979acba');
+    expect(hashOf(baseSource({ synthetic: true }))).toBe('fb2ec3f7cb9a4a89ccbe5ab5fa4ff677cfe0eebf99e332668ce412f9498f98b6');
+  });
+});

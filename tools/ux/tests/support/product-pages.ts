@@ -55,8 +55,16 @@ export const REACH: Readonly<Record<string, (page: Page) => Promise<void>>> = {
   'Home with Recent rows': async (page) => {
     await openEntity(page, 'banking-demo', `PA-${unique()}`);
     await openEntity(page, 'claims-demo', `PB-${unique()}`);
+    await page.request.post('/__support/sources', { data: { 'banking-demo': { demoCase: { entityType: 'account', stableId: 'DEMO-1', caseRef: 'REF-DEMO-1' } } } });
     await page.goto('/');
     await expect(page.locator('.recent-row').first()).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Open the demo case' })).toBeVisible();
+  },
+  'First run': async (page) => {
+    await page.request.post('/__support/forget-investigations');
+    await page.request.post('/__support/sources', { data: { 'banking-demo': { demoCase: { entityType: 'account', stableId: 'DEMO-1', caseRef: 'REF-DEMO-1' } } } });
+    await page.goto('/');
+    await expect(page.getByRole('button', { name: 'Open demo case' })).toBeVisible();
   },
   'Home with the prompt open': openPrompt,
   "Home with the prompt's problem lines": async (page) => {

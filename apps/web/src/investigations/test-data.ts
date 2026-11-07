@@ -104,3 +104,12 @@ export function knowing(known: readonly KnownInvestigation[], overrides: Partial
   });
   return { client, calls };
 }
+
+/** Makes the install's one source a real, connected source, so a person with no investigation is shown Home and not First run. */
+export const REAL_SOURCE: Partial<ApiClient> = { getSources: async () => ({ ok: true, value: { items: [source('source-a', { synthetic: false })], nextCursor: null } }) };
+
+/** A list read that fails the first time and then never answers: Home is chosen from the failure and the retry leaves it with nothing held and the read under way. */
+export function failsThenWaits(): Pick<ApiClient, 'listInvestigations'> {
+  let reads = 0;
+  return { listInvestigations: async () => (++reads === 1 ? { ok: false, failure: { code: 'NETWORK_UNAVAILABLE' } } : new Promise<never>(() => undefined)) };
+}

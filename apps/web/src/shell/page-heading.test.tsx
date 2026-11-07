@@ -47,6 +47,7 @@ describe('the page heading', () => {
   it('shows a long unbroken source name whole in the heading', async () => {
     const alias = 'b'.repeat(120);
     renderApp('/', clientWith({ me: me(), sources: [source('a', { alias })] }));
+    await screen.findByRole('heading', { name: 'Recent', level: 2 });
     expect(await header().findByText(`${alias} · read-only`)).toBeTruthy();
   });
 

@@ -11,6 +11,7 @@ const item = {
   lastTestAt: null,
   lastTest: null,
   mappingSummary: { entityTypes: 3, relationshipTypes: 2, derivedRules: 1 },
+  demoCase: null,
 };
 
 describe('source list contract', () => {
@@ -40,6 +41,44 @@ describe('source list contract', () => {
   it('refuses a negative or fractional definition count', () => {
     expect(sourceSummarySchema.safeParse({ ...item, mappingSummary: { ...item.mappingSummary, entityTypes: -1 } }).success).toBe(false);
     expect(sourceSummarySchema.safeParse({ ...item, mappingSummary: { ...item.mappingSummary, derivedRules: 1.5 } }).success).toBe(false);
+  });
+
+  describe('demo case', () => {
+    const demoCase = { entityType: 'node_a', stableId: 'A-1', caseRef: 'REF-1' };
+
+    it('accepts a demo case on a synthetic source and null on any source', () => {
+      expect(sourceSummarySchema.safeParse({ ...item, synthetic: true, demoCase }).success).toBe(true);
+      expect(sourceSummarySchema.safeParse({ ...item, synthetic: true }).success).toBe(true);
+      expect(sourceSummarySchema.safeParse(item).success).toBe(true);
+    });
+
+    it('accepts a pair of surrogates and values of exactly the limits, counted as characters', () => {
+      const wide = '\u{1F600}';
+      const atLimits = { entityType: wide.repeat(200), stableId: wide.repeat(200), caseRef: wide.repeat(100) };
+      expect(sourceSummarySchema.safeParse({ ...item, synthetic: true, demoCase: atLimits }).success).toBe(true);
+      expect(sourceSummarySchema.safeParse({ ...item, synthetic: true, demoCase: { ...atLimits, entityType: `${atLimits.entityType}x` } }).success).toBe(false);
+    });
+
+    it.each(['\u0007', '\uD800', '\uDC00'])('refuses a control character or an unpaired surrogate (%j) in each member', (bad) => {
+      for (const member of ['entityType', 'stableId', 'caseRef'] as const) {
+        expect(sourceSummarySchema.safeParse({ ...item, synthetic: true, demoCase: { ...demoCase, [member]: `x${bad}y` } }).success, member).toBe(false);
+      }
+    });
+
+    it('refuses a demo case on a source that is not synthetic, naming the field', () => {
+      const result = sourceSummarySchema.safeParse({ ...item, synthetic: false, demoCase });
+      expect(result.success).toBe(false);
+      expect(result.error?.issues[0]?.path).toEqual(['demoCase']);
+    });
+
+    it('refuses a demo case with a missing or an extra member, an empty member or a value over the limits, and a missing field', () => {
+      const synthetic = { ...item, synthetic: true };
+      for (const bad of [{ entityType: 'node_a', stableId: 'A-1' }, { ...demoCase, extra: 1 }, { ...demoCase, entityType: '' }, { ...demoCase, stableId: '' }, { ...demoCase, caseRef: '' }, { ...demoCase, entityType: 'T'.repeat(201) }, { ...demoCase, stableId: 'I'.repeat(201) }, { ...demoCase, caseRef: 'R'.repeat(101) }]) {
+        expect(sourceSummarySchema.safeParse({ ...synthetic, demoCase: bad }).success).toBe(false);
+      }
+      const { demoCase: _omitted, ...withoutField } = synthetic;
+      expect(sourceSummarySchema.safeParse(withoutField).success).toBe(false);
+    });
   });
 
   describe('last test', () => {

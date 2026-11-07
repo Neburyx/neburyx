@@ -9,6 +9,7 @@ import { createRecentInvestigations } from './recent-store.js';
 const item = (id: number, sourceId: string): InvestigationListItem => listItemOf(investigationOf(`0192f000-0000-7000-8000-00000000010${id}`, sourceId, 'kind-a', `X-${id}`));
 const answer = (...items: InvestigationListItem[]): ApiResult<InvestigationListResponse> => ({ ok: true, value: listOf(items) });
 const down: ApiResult<never> = { ok: false, failure: { code: 'NETWORK_UNAVAILABLE' } };
+const visit = {};
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 function counting(lists: ApiResult<InvestigationListResponse>[], profile: (sourceId: string) => ApiResult<SourceProfile> = (sourceId) => ({ ok: true, value: testProfile(sourceId) })) {
@@ -35,11 +36,31 @@ describe('the recent investigations of the session', () => {
     const { client, reads } = counting([answer()]);
     const recent = createRecentInvestigations(client);
     expect(reads.lists).toEqual([]);
-    recent.ensure();
-    recent.ensure();
+    recent.ensure(visit);
+    recent.ensure(visit);
     await settle();
     expect(reads.lists).toEqual([5]);
     expect(recent.getState().list).toEqual({ phase: 'ready', data: listOf([]) });
+  });
+
+  it('asks once for the two effects of one visit, asks again when a visit finds the read of an earlier visit under way, and ignores the answer of that earlier read', async () => {
+    const { client, reads, held } = counting([]);
+    const recent = createRecentInvestigations(client);
+    const earlier = {};
+    const later = {};
+    recent.ensure(earlier);
+    recent.ensure(earlier);
+    expect(reads.lists).toEqual([5]);
+    expect(recent.getState().readBy).toBe(earlier);
+    recent.ensure(later);
+    expect(reads.lists).toEqual([5, 5]);
+    expect(recent.getState().readBy).toBe(later);
+    held[0]?.(answer());
+    await settle();
+    expect(recent.getState().list).toEqual({ phase: 'loading' });
+    held[1]?.(answer(item(1, 'a')));
+    await settle();
+    expect(recent.getState().list).toMatchObject({ phase: 'ready', data: { items: [item(1, 'a')] } });
   });
 
   it('reads the list again at every later visit, keeps the earlier rows on screen until the new answer, and shows the new one', async () => {
@@ -47,15 +68,15 @@ describe('the recent investigations of the session', () => {
     const second = item(2, 'a');
     const { client, reads, held } = counting([answer(first)]);
     const recent = createRecentInvestigations(client);
-    recent.ensure();
+    recent.ensure(visit);
     await settle();
-    recent.ensure();
+    recent.ensure(visit);
     expect(recent.getState().list).toEqual({ phase: 'loading', data: listOf([first]) });
     held[0]?.(answer(second, first));
     await settle();
     expect(reads.lists).toHaveLength(2);
     expect(recent.getState().list).toMatchObject({ phase: 'ready', data: { items: [second, first] } });
-    recent.ensure();
+    recent.ensure(visit);
     expect(reads.lists).toHaveLength(3);
   });
 
@@ -63,12 +84,12 @@ describe('the recent investigations of the session', () => {
     const rows = answer(item(1, 'a'), item(2, 'a'), item(3, 'b'));
     const { client, reads } = counting([rows, rows]);
     const recent = createRecentInvestigations(client);
-    recent.ensure();
+    recent.ensure(visit);
     await settle();
     expect([...reads.profiles].sort()).toEqual(['a', 'b']);
     expect([...recent.getState().profiles.keys()].sort()).toEqual(['a', 'b']);
     expect(recent.getState().profiles.get('a')).toMatchObject({ phase: 'ready' });
-    recent.ensure();
+    recent.ensure(visit);
     await settle();
     expect([...reads.profiles].sort()).toEqual(['a', 'a', 'b', 'b']);
   });
@@ -76,10 +97,10 @@ describe('the recent investigations of the session', () => {
   it('reads no profile for a source that has no row in the new list', async () => {
     const { client, reads } = counting([answer(item(1, 'a'), item(2, 'b')), answer(item(3, 'b'))]);
     const recent = createRecentInvestigations(client);
-    recent.ensure();
+    recent.ensure(visit);
     await settle();
     expect([...reads.profiles].sort()).toEqual(['a', 'b']);
-    recent.ensure();
+    recent.ensure(visit);
     await settle();
     expect([...reads.profiles].sort()).toEqual(['a', 'b', 'b']);
   });
@@ -89,11 +110,11 @@ describe('the recent investigations of the session', () => {
     const rows = answer(item(1, 'a'));
     const { client, reads } = counting([rows, rows], (sourceId) => (failing ? down : { ok: true, value: testProfile(sourceId) }));
     const recent = createRecentInvestigations(client);
-    recent.ensure();
+    recent.ensure(visit);
     await settle();
     expect(recent.getState().profiles.get('a')).toMatchObject({ phase: 'failed' });
     failing = false;
-    recent.ensure();
+    recent.ensure(visit);
     await settle();
     expect(reads.profiles).toEqual(['a', 'a']);
     expect(recent.getState().profiles.get('a')).toMatchObject({ phase: 'ready' });
@@ -102,7 +123,7 @@ describe('the recent investigations of the session', () => {
   it('does not use a profile that names another source', async () => {
     const { client } = counting([answer(item(1, 'a'))], () => ({ ok: true, value: testProfile('other') }));
     const recent = createRecentInvestigations(client);
-    recent.ensure();
+    recent.ensure(visit);
     await settle();
     expect(recent.getState().profiles.get('a')).toEqual({ phase: 'failed', failure: { code: 'SCHEMA_MISMATCH' } });
   });
@@ -110,11 +131,11 @@ describe('the recent investigations of the session', () => {
   it('reads no profile when the list could not be read, shows the failure, and reads the list again at the next visit and on Try again', async () => {
     const { client, reads } = counting([down, down, answer()]);
     const recent = createRecentInvestigations(client);
-    recent.ensure();
+    recent.ensure(visit);
     await settle();
     expect(recent.getState().list).toEqual({ phase: 'failed', failure: { code: 'NETWORK_UNAVAILABLE' } });
     expect(reads.profiles).toEqual([]);
-    recent.ensure();
+    recent.ensure(visit);
     await settle();
     expect(reads.lists).toHaveLength(2);
     recent.reload();

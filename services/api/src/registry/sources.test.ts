@@ -39,6 +39,7 @@ describe('GET /v1/sources', () => {
         lastTestAt: null,
         lastTest: null,
         mappingSummary: { entityTypes: 2, relationshipTypes: 1, derivedRules: 0 },
+        demoCase: null,
       })),
       nextCursor: null,
     });
@@ -70,6 +71,21 @@ describe('GET /v1/sources', () => {
     const app = await appWith(['alpha'], memoryStoreWith({ sources: [row('alpha', { state: 'unavailable', stateReason: 'TLS handshake failed', synthetic: true })] }));
     const item = (await app.inject({ method: 'GET', url: '/v1/sources' })).json().items[0];
     expect(item).toMatchObject({ state: 'unavailable', stateReason: 'TLS handshake failed', synthetic: true });
+    await app.close();
+  });
+
+  it('carries the demo case of a synthetic source that names one, and null for every other source', async () => {
+    const demoCase = { entity: { type: 'node_a', id: 'A-1' }, case_ref: 'REF-1' };
+    const mapping = parseMapping(fileOf(baseSource({ id: 'alpha', synthetic: true, demo_case: demoCase }), baseSource({ id: 'beta', synthetic: true }), baseSource({ id: 'gamma' })), 'neburyx.yaml');
+    const store = memoryStoreWith({ sources: [row('alpha', { synthetic: true }), row('beta', { synthetic: true }), row('gamma')] });
+    const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store, mapping });
+    const response = await app.inject({ method: 'GET', url: '/v1/sources' });
+    const body = sourcesResponseSchema.parse(response.json());
+    expect(body.items.map((item) => [item.id, item.state, item.demoCase])).toEqual([
+      ['alpha', 'unknown', { entityType: 'node_a', stableId: 'A-1', caseRef: 'REF-1' }],
+      ['beta', 'unknown', null],
+      ['gamma', 'unknown', null],
+    ]);
     await app.close();
   });
 

@@ -255,6 +255,11 @@ function buildSource(raw: RawSource, index: number, report: Report): SourceModel
     );
   }
 
+  if (raw.demo_case !== undefined) {
+    if (raw.synthetic !== true) report([...base, 'demo_case'], 'needs synthetic: true on the source');
+    if (!entityTypes.has(raw.demo_case.entity.type)) report([...base, 'demo_case', 'entity', 'type'], 'is not an entity type of this source');
+  }
+
   const budgets = resolveBudgets(raw.budgets);
   const defaultPage = raw.budgets?.default_page ?? Math.min(budgets.defaultPage, budgets.maxPage);
   if (raw.budgets?.default_page !== undefined && raw.budgets.default_page > budgets.maxPage) {
@@ -267,6 +272,7 @@ function buildSource(raw: RawSource, index: number, report: Report): SourceModel
     database: raw.database,
     auth: { usernameEnv: raw.auth.username_env, passwordEnv: raw.auth.password_env },
     synthetic: raw.synthetic ?? false,
+    ...(raw.demo_case === undefined ? {} : { demoCase: { entityType: raw.demo_case.entity.type, stableId: raw.demo_case.entity.id, caseRef: raw.demo_case.case_ref } }),
     budgets: { ...budgets, defaultPage },
     vocabulary: raw.vocabulary?.case_ref === undefined ? {} : { caseRef: raw.vocabulary.case_ref },
     entities: raw.entities.map((entity, i) => buildEntity(entity, [...base, 'entities', i], report)),

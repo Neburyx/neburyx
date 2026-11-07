@@ -1,3 +1,4 @@
+import { MAX_CASE_REF_LENGTH, MAX_STABLE_ID_LENGTH } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
 import { deepLinkPath, readDeepLink, type DeepLink } from './deep-link.js';
 
@@ -23,6 +24,12 @@ describe('a link of this app', () => {
     expect(path).toMatch(/^\/source-a\/entity\/[^/?#]+\/[^/?#]+\?caseRef=[^&#]+$/);
     expect(read(path)).toEqual({ ok: true, link: original });
     expect(read(`${ORIGIN}${path}`)).toEqual({ ok: true, link: original });
+  });
+
+  it('reads back a type and a stable ID of exactly the contract limit and a case reference of exactly its limit, counted as characters', () => {
+    const wide = '\u{1F600}';
+    const original = link({ entityType: wide.repeat(MAX_STABLE_ID_LENGTH), stableId: wide.repeat(MAX_STABLE_ID_LENGTH), caseRef: wide.repeat(MAX_CASE_REF_LENGTH) });
+    expect(read(deepLinkPath(original))).toEqual({ ok: true, link: original });
   });
 
   it('makes a dot-only value travel with a tilde in front, and no other value', () => {

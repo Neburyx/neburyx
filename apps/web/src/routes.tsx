@@ -16,7 +16,7 @@ import { createTestRuns } from './sources/test-runs.js';
 import { TestRunsProvider } from './sources/test-runs-context.js';
 import { createShellData, ShellDataProvider } from './shell/shell-data.js';
 import type { ClientState } from './state/client-state.js';
-import { HomePage } from './home/home-page.js';
+import { StartPage } from './first-run/start-page.js';
 import { RecentProvider } from './home/recent-context.js';
 import { createRecentInvestigations } from './home/recent-store.js';
 import { DeepLinkPage } from './investigations/deep-link-page.js';
@@ -116,7 +116,7 @@ export function appRoutes(client: ApiClient, state: ClientState): RouteObject[] 
         {
           element: <PageShell />,
           children: [
-            { index: true, element: <HomePage /> },
+            { index: true, element: <StartPage /> },
             { path: 'investigations', element: <NotBuiltYet title="Investigations" /> },
             { path: 'search', element: <SearchPage client={client} /> },
             { path: 'sources', element: <SourcesPage /> },

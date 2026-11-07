@@ -10,7 +10,7 @@ function sourceName(current: CurrentSource): string | undefined {
 export type HeadingSource = string | null | { readonly alias: string; readonly synthetic: boolean };
 
 /** `source` replaces the line about the source in view: a name to show in its place, or `null` for a page that is about no source the shell knows, so it shows none and no Synthetic data badge. */
-export function PageHeading({ title, description, source, focused = false }: { readonly title: string; readonly description: string; readonly source?: HeadingSource; readonly focused?: boolean }) {
+export function PageHeading({ title, description, source, tag, focused = false }: { readonly title: string; readonly description: string; readonly source?: HeadingSource; readonly tag?: string; readonly focused?: boolean }) {
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     if (focused) heading.current?.focus();
@@ -26,6 +26,7 @@ export function PageHeading({ title, description, source, focused = false }: { r
         <h1 ref={heading} tabIndex={focused ? -1 : undefined}>
           {title}
         </h1>
+        {tag === undefined ? null : <span className="page-tag">{tag}</span>}
       </div>
       {name === undefined && !synthetic ? null : (
         <div className="source-note">
