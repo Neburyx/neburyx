@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { edgeSchema } from '@neburyx/contracts';
 import { PACKS, packSource, readFixture } from '../../testing/pack-fixtures.js';
-import { context, plainNode, plainRelationship } from '../../testing/normalize-fixtures.js';
+import { context, pairedSource, plainNode, plainRelationship } from '../../testing/normalize-fixtures.js';
 import { normalizeModelOf } from './model.js';
 import { normalizeRows } from './index.js';
 
@@ -20,7 +20,7 @@ describe('a relationship of a type mapped with a stable ID', () => {
     const [edge] = result.edges;
     expect(edgeSchema.safeParse(edge).success).toBe(true);
     expect(edge).toMatchObject({
-      ref: { sourceId: 'request-source', stableId: 'L-1' },
+      ref: { sourceId: 'request-source', type: 'KNOWS', from: 'person', to: 'person', stableId: 'L-1' },
       from: ref('person', 'p1'),
       to: ref('person', 'p2'),
       type: 'KNOWS',
@@ -53,11 +53,19 @@ describe('a relationship of a type mapped with a stable ID', () => {
     expect(result.edges[0]).toMatchObject({ from: ref('person', 'p1'), to: ref('person', 'p2'), qualityFlags: ['conflicting-duplicate'] });
   });
 
-  it('flags the same stable ID under two relationship types as well', () => {
+  it('is two edges, with no flag, when two relationship types have the same stable ID, each reference naming its type', () => {
     const [a, b] = [person('p1'), person('p2')] as const;
     const result = normalizeRows(context(), [row(a, plainRelationship('KNOWS', a, b, { linkId: 'L-9' }), b), row(a, plainRelationship('LIKES', a, b, { linkId: 'L-9' }), b)]);
-    expect(result.edges.filter((edge) => 'stableId' in edge.ref)).toHaveLength(1);
-    expect(result.edges[0]?.qualityFlags).toEqual(['conflicting-duplicate']);
+    expect(result.edges.map((edge) => ('stableId' in edge.ref ? [edge.ref.type, edge.ref.stableId] : []))).toEqual([['KNOWS', 'L-9'], ['LIKES', 'L-9']]);
+    expect(result.edges.every((edge) => edge.qualityFlags.length === 0)).toBe(true);
+  });
+
+  it('is two edges, with no flag, when one type between two pairs of entity types has the same stable ID, each reference naming its ends', () => {
+    const a = person('p1');
+    const [b, c] = [person('p2'), plainNode(['Org'], { orgId: 'o1' })] as const;
+    const result = normalizeRows(context({ model: normalizeModelOf(pairedSource) }), [row(a, plainRelationship('KNOWS', a, b, { linkId: 'L-9' }), b), row(a, plainRelationship('KNOWS', a, c, { linkId: 'L-9' }), c)]);
+    expect(result.edges.map((edge) => ('stableId' in edge.ref ? [edge.ref.from, edge.ref.to] : []))).toEqual([['person', 'person'], ['person', 'org']]);
+    expect(result.edges.every((edge) => edge.qualityFlags.length === 0)).toBe(true);
   });
 
   it('is left out and counted when it has no stable ID', () => {

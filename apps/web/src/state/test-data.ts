@@ -17,8 +17,8 @@ export function node(sourceId: string, stableId: string): GraphNode {
   };
 }
 
-export function edgeRef(sourceId: string, stableId: string): EdgeRef {
-  return { sourceId, stableId };
+export function edgeRef(sourceId: string, stableId: string, type = 'rel-a', from = 'type-a', to = 'type-a'): EdgeRef {
+  return { sourceId, type, from, to, stableId };
 }
 
 export function edge(sourceId: string, stableId: string, from: string, to: string): GraphEdge {

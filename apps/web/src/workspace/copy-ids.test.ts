@@ -2,7 +2,7 @@ import type { EdgeRef, GraphEdge } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
 import { createClientState } from '../state/client-state.js';
 import { edgeKey, elementKey } from '../state/keys.js';
-import { edge, key, node, ref } from '../state/test-data.js';
+import { edge, edgeRef, key, node, ref } from '../state/test-data.js';
 import { idsOfSelection } from './copy-ids.js';
 
 const a = ref('a', 'type-a', 'n1');
@@ -10,7 +10,7 @@ const b = ref('a', 'type-a', 'n2');
 const withRef = (id: string, edgeRef: EdgeRef, semantics: GraphEdge['semantics']): GraphEdge => ({ ...edge('a', id, 'n1', 'n2'), ref: edgeRef, semantics });
 
 const stored = edge('a', 'e1', 'n1', 'n2');
-const unknownOrigin = withRef('e2', { sourceId: 'a', stableId: 'e2' }, 'unknown');
+const unknownOrigin = withRef('e2', edgeRef('a', 'e2'), 'unknown');
 const aggregate = withRef('g', { sourceId: 'a', aggregate: { type: 'rel-a', from: a, to: b } }, 'stored');
 const derived = withRef('d', { sourceId: 'a', derived: { ruleId: 'rule-1', from: a, to: b } }, 'derived');
 

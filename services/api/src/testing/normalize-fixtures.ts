@@ -36,6 +36,20 @@ export const plainRelationship = (type: string, from: { elementId: string }, to:
   properties,
 });
 
+/** One relationship type mapped between two pairs of entity types with one stable ID key, for the references that must stay apart. */
+export const pairedSource = mappingOf(
+  sourceWith('alpha', {
+    entities: [
+      { type: 'person', label: 'Person', stable_id: 'personId' },
+      { type: 'org', label: 'Org', stable_id: 'orgId' },
+    ],
+    relationships: [
+      { type: 'KNOWS', from: 'person', to: 'person', stable_id: 'linkId' },
+      { type: 'KNOWS', from: 'person', to: 'org', stable_id: 'linkId' },
+    ],
+  }),
+).sources[0] ?? failNoSource();
+
 /** Two entity types that share one label: a node with that label cannot be told apart. */
 export const twinSource = mappingOf(
   sourceWith('alpha', {

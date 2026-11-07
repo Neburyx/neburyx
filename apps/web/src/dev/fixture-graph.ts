@@ -94,7 +94,7 @@ export function generateFixtureGraph(profile: SourceProfile, seed: number): Fixt
     if (relationship.aggregate) {
       add({ ...base(), ref: { sourceId: profile.sourceId, aggregate: { type: relationship.type, from: from.ref, to: to.ref } }, from: from.ref, to: to.ref, type: relationship.type, semantics: 'stored', memberCount: { value: 2 + pickIndex(random, 40), quality: 'exact', scope: 'members of this relationship type between the two entities' } });
     } else {
-      add({ ...base(), ref: { sourceId: profile.sourceId, stableId: `fixture-r-${String(edges.length).padStart(4, '0')}-${attempt}` }, from: from.ref, to: to.ref, type: relationship.type, semantics: 'stored' });
+      add({ ...base(), ref: { sourceId: profile.sourceId, type: relationship.type, from: from.ref.entityType, to: to.ref.entityType, stableId: `fixture-r-${String(edges.length).padStart(4, '0')}-${attempt}` }, from: from.ref, to: to.ref, type: relationship.type, semantics: 'stored' });
     }
   }
   if (edges.length !== edgeTotal) throw new FixtureError('PROFILE_TOO_SMALL');
@@ -152,7 +152,7 @@ export function generateAddition(profile: SourceProfile, existing: readonly Grap
     if (option === undefined || partner === undefined) continue;
     const from = option.forward ? chosen.added : partner;
     const to = option.forward ? partner : chosen.added;
-    edges.push({ direction: 'from-to', properties: [], evidenceRefs: [], qualityFlags: [], ref: { sourceId: profile.sourceId, stableId: `fixture-r-add-${round}-${index}` }, from: from.ref, to: to.ref, type: option.relationship.type, semantics: 'stored' });
+    edges.push({ direction: 'from-to', properties: [], evidenceRefs: [], qualityFlags: [], ref: { sourceId: profile.sourceId, type: option.relationship.type, from: from.ref.entityType, to: to.ref.entityType, stableId: `fixture-r-add-${round}-${index}` }, from: from.ref, to: to.ref, type: option.relationship.type, semantics: 'stored' });
   }
   return { nodes, edges };
 }

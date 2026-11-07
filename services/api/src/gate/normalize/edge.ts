@@ -49,7 +49,7 @@ function storedEdge(context: NormalizeContext, row: RelationshipNormalizer, rela
     return text === undefined ? [] : [text];
   });
   return {
-    ref: { sourceId: context.sourceId, stableId },
+    ref: { sourceId: context.sourceId, type: row.type, from: from.entityType, to: to.entityType, stableId },
     from,
     to,
     type: row.type,
@@ -106,10 +106,10 @@ export function normalizeEdges(context: NormalizeContext, relationships: readonl
         dropped.push('no-stable-id');
         continue;
       }
-      const key = JSON.stringify(['stored', stableId]);
+      const key = JSON.stringify(['stored', row.type, start.ref.entityType, end.ref.entityType, stableId]);
       const known = slots.get(key);
       if (known === undefined) slots.set(key, { kind: 'stored', edge: storedEdge(context, row, relationship, stableId, start.ref, end.ref) });
-      // a different relationship with the same stable ID is not hidden: the first edge stays and says so
+      // a different relationship with the same type, ends and stable ID is not hidden: the first edge stays and says so
       else if (known.kind === 'stored' && !known.edge.qualityFlags.includes('conflicting-duplicate')) slots.set(key, { kind: 'stored', edge: { ...known.edge, qualityFlags: [...known.edge.qualityFlags, 'conflicting-duplicate'] } });
       continue;
     }

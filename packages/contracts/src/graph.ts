@@ -41,9 +41,14 @@ export type GraphNode = z.infer<typeof nodeSchema>;
 
 const text = z.string().min(1);
 
-/** The three forms of an edge's reference: a stored relationship with a stable ID, all of one type between two entities without one, and a derived edge. */
+/**
+ * The three forms of an edge's reference: a stored relationship with a stable ID, all of one type between two entities without one, and a derived edge. A stored one names its type
+ * and the entity types of its ends because a stable ID is unique per relationship type and mapping row, not across types.
+ */
+export const storedEdgeRefSchema = z.strictObject({ sourceId: text, type: text, from: text, to: text, stableId: text });
+
 export const edgeRefSchema = z.union([
-  z.strictObject({ sourceId: text, stableId: text }),
+  storedEdgeRefSchema,
   z.strictObject({ sourceId: text, aggregate: z.strictObject({ type: text, from: elementRefSchema, to: elementRefSchema }) }),
   z.strictObject({ sourceId: text, derived: z.strictObject({ ruleId: text, from: elementRefSchema, to: elementRefSchema }) }),
 ]);
@@ -71,4 +76,5 @@ export const edgeSchema = z
   .refine((edge) => 'aggregate' in edge.ref === (edge.memberCount !== undefined), { message: 'an aggregate edge has a member count and no other edge has one', path: ['memberCount'] });
 
 export type EdgeRef = z.infer<typeof edgeRefSchema>;
+export type StoredEdgeRef = z.infer<typeof storedEdgeRefSchema>;
 export type GraphEdge = z.infer<typeof edgeSchema>;

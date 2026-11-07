@@ -23,7 +23,7 @@ export function elementKey(ref: ElementRef): string {
 }
 
 export function edgeKey(ref: EdgeRef): string {
-  if ('stableId' in ref) return JSON.stringify(['edge', ref.sourceId, 'stored', ref.stableId]);
+  if ('stableId' in ref) return JSON.stringify(['edge', ref.sourceId, 'stored', ref.type, ref.from, ref.to, ref.stableId]);
   if ('aggregate' in ref) return JSON.stringify(['edge', ref.sourceId, 'aggregate', ref.aggregate.type, elementKey(ref.aggregate.from), elementKey(ref.aggregate.to)]);
   return JSON.stringify(['edge', ref.sourceId, 'derived', ref.derived.ruleId, elementKey(ref.derived.from), elementKey(ref.derived.to)]);
 }

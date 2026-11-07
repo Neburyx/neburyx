@@ -94,7 +94,7 @@ export function createFrameSampleState(): ClientState {
     const common = { from: fromRef, to: toRef, type, direction: 'from-to' as const, properties: [], evidenceRefs: [], qualityFlags: [] };
     if (kind === 'aggregate') return { ...common, ref: { sourceId: FRAME_SAMPLE_SOURCE, aggregate: { type, from: fromRef, to: toRef } }, semantics: 'stored' as const, memberCount: { value: 42, quality: 'exact' as const, scope: 'members of this relationship type between the two entities' } };
     if (kind === 'derived') return { ...common, ref: { sourceId: FRAME_SAMPLE_SOURCE, derived: { ruleId: type, from: fromRef, to: toRef } }, semantics: 'derived' as const, derivation: { ruleId: type, ruleVersion: 1, supportingEdgeRefs: [] } };
-    return { ...common, ref: { sourceId: FRAME_SAMPLE_SOURCE, stableId: `sample-r-${index}` }, semantics: 'stored' as const };
+    return { ...common, ref: { sourceId: FRAME_SAMPLE_SOURCE, type, from: fromRef.entityType, to: toRef.entityType, stableId: `sample-r-${index}` }, semantics: 'stored' as const };
   });
   const key = { sourceId: FRAME_SAMPLE_SOURCE, principalId: 'frame-sample', policyVersion: DEFAULT_POLICY_VERSION, filterHash: DEFAULT_FILTER_HASH, params: FRAME_SAMPLE_MARKER, mask: false };
   state.bindSource(FRAME_SAMPLE_SOURCE);

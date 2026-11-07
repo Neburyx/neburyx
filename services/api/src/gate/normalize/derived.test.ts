@@ -69,7 +69,7 @@ describe('a derived edge', () => {
     const cases: readonly (readonly [string, (supportOf: (from: string, to: string) => EdgeRef) => DerivedClaim])[] = [
       ['a rule the mapping does not hold', (supportOf) => claim([supportOf('g1', 'p1'), supportOf('g2', 'p1')], { ruleId: 'invented' })],
       ['ends that are not entities of the rule', (supportOf) => claim([supportOf('g1', 'p1'), supportOf('g2', 'p1')], { to: ref('person', 'p1') })],
-      ['a support that is not in the result', () => claim([{ sourceId: REQUEST, stableId: 'absent' }, { sourceId: REQUEST, stableId: 'absent-too' }])],
+      ['a support that is not in the result', () => claim([{ sourceId: REQUEST, type: 'OWNS', from: 'gadget', to: 'person', stableId: 'absent' }, { sourceId: REQUEST, type: 'OWNS', from: 'gadget', to: 'person', stableId: 'absent-too' }])],
       ['too few supports', (supportOf) => claim([supportOf('g1', 'p1')])],
       ['too many supports', (supportOf) => claim([supportOf('g1', 'p1'), supportOf('g2', 'p1'), supportOf('g3', 'p2')])],
       ['supports that do not meet at one middle entity', (supportOf) => claim([supportOf('g1', 'p1'), supportOf('g3', 'p2')], { to: ref('gadget', 'g3') })],

@@ -71,6 +71,7 @@ describe('POST /v1/investigations', () => {
     const context = queryContextDocumentSchema.parse(draft?.queryContext);
     expect(layout).toMatchObject({ schemaVersion: 1, nodes: [{ t: 'widget', id: 'W-1', pinned: false, hidden: false, groupId: null }], edges: [], groups: [] });
     expect(context).toMatchObject({ schemaVersion: 1, loaded: { nodes: [{ t: 'widget', id: 'W-1' }], edges: [] }, expansions: [] });
+    expect(JSON.stringify([draft?.layout, draft?.queryContext])).not.toContain('stableId');
     await app.close();
   });
 

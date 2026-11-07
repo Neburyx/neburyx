@@ -58,7 +58,8 @@ describe('ElementRef and Node', () => {
 
 describe('Edge', () => {
   const end = (stableId: string) => ({ sourceId: 'alpha', entityType: 'gadget', stableId });
-  const stored = { ref: { sourceId: 'alpha', stableId: 'r-1' }, from: end('a'), to: end('b'), type: 'MADE_BY', direction: 'from-to', semantics: 'stored', properties: [], evidenceRefs: [], qualityFlags: [] };
+  const storedRef = { sourceId: 'alpha', type: 'MADE_BY', from: 'gadget', to: 'gadget', stableId: 'r-1' };
+  const stored = { ref: storedRef, from: end('a'), to: end('b'), type: 'MADE_BY', direction: 'from-to', semantics: 'stored', properties: [], evidenceRefs: [], qualityFlags: [] };
   const aggregate = { ...stored, ref: { sourceId: 'alpha', aggregate: { type: 'MADE_BY', from: end('a'), to: end('b') } }, memberCount: { value: 2, quality: 'exact', scope: 'members' }, observedFirst: '2026-01-02', observedLast: '2026-01-03' };
   const derived = { ...stored, ref: { sourceId: 'alpha', derived: { ruleId: 'shared', from: end('a'), to: end('b') } }, type: 'shared', semantics: 'derived', derivation: { ruleId: 'shared', ruleVersion: 1, supportingEdgeRefs: [stored.ref, aggregate.ref] } };
 
@@ -73,6 +74,14 @@ describe('Edge', () => {
     ['a stored edge with a derivation', { ...stored, derivation: derived.derivation }],
     ['a direction other than from-to', { ...stored, direction: 'out' }],
     ['a ref of no known form', { ...stored, ref: { sourceId: 'alpha', other: 1 } }],
+    ['a stored ref with no type', { ...stored, ref: { sourceId: 'alpha', from: 'gadget', to: 'gadget', stableId: 'r-1' } }],
+    ['a stored ref with no from', { ...stored, ref: { sourceId: 'alpha', type: 'MADE_BY', to: 'gadget', stableId: 'r-1' } }],
+    ['a stored ref with no to', { ...stored, ref: { sourceId: 'alpha', type: 'MADE_BY', from: 'gadget', stableId: 'r-1' } }],
+    ['a stored ref with no stable ID', { ...stored, ref: { sourceId: 'alpha', type: 'MADE_BY', from: 'gadget', to: 'gadget' } }],
+    ['a stored ref in the old shape', { ...stored, ref: { sourceId: 'alpha', stableId: 'r-1' } }],
+    ['a stored ref with an empty type', { ...stored, ref: { ...storedRef, type: '' } }],
+    ['a stored ref with an empty end type', { ...stored, ref: { ...storedRef, to: '' } }],
+    ['a stored ref with an unknown key', { ...stored, ref: { ...storedRef, extra: 1 } }],
     ['an unknown key', { ...stored, confidence: 0.9 }],
   ])('refuses %s', (_name, edge) => {
     expect(edgeSchema.safeParse(edge).success).toBe(false);

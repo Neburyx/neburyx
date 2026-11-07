@@ -9,7 +9,7 @@ import { useLoadedGraph } from '../state/context.js';
 import { edgeKey, elementKey } from '../state/keys.js';
 import type { PointerTool } from '../state/presentation-state.js';
 import type { Count, EdgeRef, GraphEdge, GraphNode } from '@neburyx/contracts';
-import { edge, key, node, ref } from '../state/test-data.js';
+import { edge, edgeRef, key, node, ref } from '../state/test-data.js';
 import { commandItem, ids, item, load, loadGraph, menu, nodeKey, onCanvas, placeOf, selection, show, withBuiltIns, type CommandOptions } from './context-menu-kit.js';
 import { createMenuRegistry, type MenuItem, type MenuRegistry, type MenuItemState, type SubmenuProps } from './menu-registry.js';
 
@@ -417,7 +417,7 @@ describe('what a right-click on an item does to the selection', () => {
     act(() => state.presentation.select([nodeKey('n1')]));
     const { rightClick } = show(state);
     rightClick(rightClickOn('node', nodeKey('missing')));
-    rightClick(rightClickOn('relationship', edgeKey({ sourceId: 'a', stableId: 'missing' })));
+    rightClick(rightClickOn('relationship', edgeKey(edgeRef('a', 'missing'))));
     expect(screen.queryByRole('menu')).toBeNull();
     expect(selection(state)).toEqual([nodeKey('n1')]);
     expect(state.presentation.view.getState().openMenu).toBeUndefined();

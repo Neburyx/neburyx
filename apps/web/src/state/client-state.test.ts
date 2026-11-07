@@ -466,6 +466,26 @@ describe('selection of relationships', () => {
   });
 });
 
+describe('the key of a stored relationship', () => {
+  it('names its type and its ends, so relationships that share a stable ID text but differ in type or in an end do not meet', () => {
+    const base = edgeRef('source-a', 'r-1');
+    const otherType = edgeRef('source-a', 'r-1', 'rel-b');
+    const otherEnd = edgeRef('source-a', 'r-1', 'rel-a', 'type-a', 'type-b');
+    expect(new Set([edgeKey(base), edgeKey(otherType), edgeKey(otherEnd)]).size).toBe(3);
+  });
+
+  it('keeps two such relationships as two loaded edges that can both be selected', () => {
+    const state = createClientState();
+    state.bindSource('source-a');
+    const [from, to] = [ref('source-a', 'type-a', 'n1'), ref('source-a', 'type-a', 'n2')];
+    const [first, second] = [edgeRef('source-a', 'r-1'), edgeRef('source-a', 'r-1', 'rel-b')];
+    state.setLoaded([], [from, to], [first, second]);
+    state.presentation.select([edgeKey(first), edgeKey(second)]);
+    expect(state.investigation.getState().edgeRefs).toHaveLength(2);
+    expect(state.presentation.view.getState().selection.size).toBe(2);
+  });
+});
+
 describe('a supporting ref in another source', () => {
   it('alone is enough to refuse a result whose endpoints and own ref are all in the bound source', () => {
     const state = createClientState();
