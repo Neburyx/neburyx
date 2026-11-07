@@ -9,6 +9,7 @@
     "test:contract": "vitest run --passWithNoTests contract.test",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:neo4j": "vitest run --config vitest.neo4j.config.ts --reporter=verbose",
+    "bench:supernode": "vitest run --config vitest.benchmark.config.ts --reporter=verbose",
     "test:image": "vitest run --config vitest.image.config.ts",
     "test:compose": "vitest run --config vitest.compose.config.ts"
   },
