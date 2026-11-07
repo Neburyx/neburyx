@@ -141,6 +141,13 @@ describe('View evidence', () => {
     expect(seen).toEqual([{ sourceId: 'demo', type: 'MADE_FROM', from: 'kind-a', to: 'kind-a', stableId: 'L-1' }]);
   });
 
+  it('marks the View evidence of a row link-style, like the Open in graph of the other groups', async () => {
+    unregister = registerViewEvidence(() => undefined);
+    const kit = searchKit(['demo'], async () => withEvidence('demo', [], [evidenceHit('L-1')]));
+    renderApp(searchAt('demo', 'REC-1'), kit.client);
+    expect((await screen.findByRole('button', { name: 'View evidence: MADE_FROM L-1' })).className).toBe('link');
+  });
+
   it('stays with the registration that is current when an earlier registration of the same function is removed', async () => {
     const seen: string[] = [];
     const action = (supports: StoredEdgeRef): void => void seen.push(supports.stableId);

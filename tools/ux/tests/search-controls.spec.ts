@@ -45,6 +45,11 @@ test.describe('the controls of the Search results page', () => {
     for (let index = 0; index < 3; index += 1) expect(await lookOf(rows.nth(index))).toMatchObject({ 'border-top-width': '0px', color: accent });
   });
 
+  test('draws the Retry of a failed evidence group as accent text, like the other search buttons', async ({ page }) => {
+    await searchFor(page, 'evfail-1');
+    expect(await lookOf(page.getByRole('button', { name: 'Retry' }))).toMatchObject({ 'border-top-width': '0px', 'background-color': 'rgba(0, 0, 0, 0)', color: await tokenColour(page, '--color-accent') });
+  });
+
   test('draws the Retry of a failed search as link-style text and keeps the form on screen', async ({ page }) => {
     await page.route((url) => url.pathname === '/v1/search/entities', (route) => route.abort());
     await searchFor(page, 'AC-1');

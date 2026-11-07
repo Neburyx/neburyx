@@ -89,6 +89,18 @@ export const REACH: Readonly<Record<string, (page: Page) => Promise<void>>> = {
     await searchFor(page, 'relfail-1');
     await expect(page.getByRole('button', { name: 'Retry' })).toBeVisible();
   },
+  'Search results with evidence records': async (page) => {
+    await searchFor(page, 'ev-3');
+    await expect(page.getByRole('heading', { level: 2, name: /Evidence records/ })).toBeVisible();
+  },
+  'Search results with the evidence group failed': async (page) => {
+    await searchFor(page, 'evfail-1');
+    await expect(page.getByRole('button', { name: 'Retry' })).toBeVisible();
+  },
+  'Search results with an evidence relationship left out': async (page) => {
+    await searchFor(page, 'evdrop-1');
+    await expect(page.getByText(/Evidence records are disabled for this relationship/)).toBeVisible();
+  },
   'Search results with no match': async (page) => {
     await searchFor(page, 'missing-1');
     await expect(page.getByText('No matching entities')).toBeVisible();

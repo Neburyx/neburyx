@@ -22,7 +22,7 @@ function EvidenceRow({ hit, profile, viewEvidence }: { readonly hit: EvidenceHit
         ))}
       </div>
       {viewEvidence === undefined ? null : (
-        <button type="button" aria-label={`${SEARCH_COPY.viewEvidence}: ${supports.type} ${supports.stableId}`} onClick={() => viewEvidence(supports)}>
+        <button type="button" className="link" aria-label={`${SEARCH_COPY.viewEvidence}: ${supports.type} ${supports.stableId}`} onClick={() => viewEvidence(supports)}>
           {SEARCH_COPY.viewEvidence}
         </button>
       )}
