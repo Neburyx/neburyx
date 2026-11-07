@@ -22,6 +22,18 @@ export interface StoredNode {
   readonly properties: Readonly<Record<string, unknown>>;
 }
 
+export interface StoredRelationship {
+  readonly elementId: string;
+  readonly type: string;
+  readonly from: StoredNode;
+  readonly to: StoredNode;
+  readonly properties: Readonly<Record<string, unknown>>;
+}
+
+const EVIDENCE_STATEMENT = /^CALL \{ (.*) \} WITH r, a, b LIMIT \$limit \+ 1 RETURN r, a, b$/;
+const EVIDENCE_VALUE_BRANCH = /MATCH \(a:`([^`]+)`\)-\[r:`([^`]+)`\]->\(b:`([^`]+)`\) USING RANGE INDEX SEEK r:`\2`\(`([^`]+)`\) WHERE r\.`\4` IN \[\$text, \$textInteger\] RETURN r, a, b LIMIT \$limit \+ 1/;
+const EVIDENCE_TEXT_BRANCH = /MATCH \(a:`([^`]+)`\)-\[r:`([^`]+)`\]->\(b:`([^`]+)`\) USING TEXT INDEX r:`\2`\(`([^`]+)`\) WHERE r\.`\4` = \$text RETURN r, a, b LIMIT \$limit \+ 1/;
+
 const BRANCH = /MATCH \(n:`([^`]+)`\) WHERE n\.`([^`]+)` (?:IN \[\$text, \$textInteger\]|= \$text|STARTS WITH \$text AND n\.`[^`]+` <> \$text) RETURN n LIMIT \$limit \+ 1/;
 
 /**
@@ -29,8 +41,10 @@ const BRANCH = /MATCH \(n:`([^`]+)`\) WHERE n\.`([^`]+)` (?:IN \[\$text, \$textI
  * starts with the text), UNION keeps one row for a node, and the limit of the statement cuts the combined result. The real server's behaviour is proved on the Neo4j server; this stands in
  * for it where the gate's handling is the subject.
  */
-export function searchModelOf(stored: readonly StoredNode[], observeBranch: (rows: number) => void = () => undefined): (call: ExecuteCall) => Promise<ExecuteOutcome> {
+export function searchModelOf(stored: readonly StoredNode[], observeBranch: (rows: number) => void = () => undefined, relationships: readonly StoredRelationship[] = []): (call: ExecuteCall) => Promise<ExecuteOutcome> {
   return (call) => {
+    const evidenceInner = EVIDENCE_STATEMENT.exec(call.cypher)?.[1];
+    if (evidenceInner !== undefined) return Promise.resolve(evidenceAnswer(evidenceInner, call, relationships, observeBranch));
     const inner = /^CALL \{ (.*) \} WITH n LIMIT \$limit \+ 1 RETURN n$/.exec(call.cypher)?.[1];
     if (inner === undefined) throw new Error('the statement is not the search statement');
     const seen = new Set<string>();
@@ -56,6 +70,39 @@ export function searchModelOf(stored: readonly StoredNode[], observeBranch: (row
   };
 }
 
+/** The model of the evidence statement: each branch matches a relationship of the type between the labels of its two ends on the property, UNION keeps one row for a relationship, the limit cuts it. */
+function evidenceAnswer(inner: string, call: ExecuteCall, relationships: readonly StoredRelationship[], observeBranch: (rows: number) => void): ExecuteOutcome {
+  const seen = new Set<string>();
+  const found: StoredRelationship[] = [];
+  for (const branch of inner.split(' UNION ')) {
+    const valueBranch = EVIDENCE_VALUE_BRANCH.exec(branch);
+    const textBranch = EVIDENCE_TEXT_BRANCH.exec(branch);
+    const matched = valueBranch ?? textBranch;
+    const [fromLabel, type, toLabel, property] = matched === null ? [] : [matched[1], matched[2], matched[3], matched[4]];
+    if (type === undefined) throw new Error('a branch is not the evidence branch');
+    const text = call.parameters['text'];
+    const integer = call.parameters['textInteger'];
+    const wanted = branch.includes('IN [$text, $textInteger]') ? [text, isTaggedInteger(integer) ? integer.value : undefined] : [text];
+    const read = relationships
+      .filter((relationship) => relationship.type === type && relationship.from.label === fromLabel && relationship.to.label === toLabel && relationship.properties[property ?? ''] !== undefined && wanted.includes(relationship.properties[property ?? '']))
+      .slice(0, call.rowLimit);
+    observeBranch(read.length);
+    for (const relationship of read) {
+      if (seen.has(relationship.elementId)) continue;
+      seen.add(relationship.elementId);
+      found.push(relationship);
+    }
+  }
+  return {
+    status: 'rows',
+    rows: found.slice(0, call.rowLimit).map((relationship) => ({
+      r: { $type: 'relationship', elementId: relationship.elementId, type: relationship.type, startElementId: relationship.from.elementId, endElementId: relationship.to.elementId, properties: relationship.properties },
+      a: plainNode([relationship.from.label], relationship.from.properties, relationship.from.elementId),
+      b: plainNode([relationship.to.label], relationship.to.properties, relationship.to.elementId),
+    })),
+  };
+}
+
 export interface IndexRow {
   readonly type: 'RANGE' | 'TEXT';
   readonly entityType: 'NODE' | 'RELATIONSHIP';
@@ -67,6 +114,8 @@ export interface IndexRow {
 }
 
 export const rangeIndex = (label: string, property: string, state = 'ONLINE', constrained = false): IndexRow => ({ type: 'RANGE', entityType: 'NODE', name: label, property, single: true, state, constrained });
+export const relationshipRangeIndex = (type: string, property: string, state = 'ONLINE'): IndexRow => ({ type: 'RANGE', entityType: 'RELATIONSHIP', name: type, property, single: true, state, constrained: false });
+export const relationshipTextIndex = (type: string, property: string, state = 'ONLINE'): IndexRow => ({ type: 'TEXT', entityType: 'RELATIONSHIP', name: type, property, single: true, state, constrained: false });
 export const textIndex = (label: string, property: string, state = 'ONLINE'): IndexRow => ({ type: 'TEXT', entityType: 'NODE', name: label, property, single: true, state, constrained: false });
 
 /** What the source answers to the schema read: the given indexes, or an answer in the shape the fixture is told to give. */
@@ -79,9 +128,11 @@ export function withSchema(indexes: () => ExecuteOutcome, data: (call: ExecuteCa
   return (call) => (call.templateId === 'schema-indexes' ? Promise.resolve(indexes()) : data(call));
 }
 
-/** Every index the mapping's reads need, online: a constraint on each stable ID and a RANGE index on each search and reference property. */
+/** Every index the mapping's reads need, online: a constraint on each stable ID and a RANGE index on each search and reference property, and one on each evidence property of a relationship. */
 export function onlineIndexesOf(source: SourceModel): IndexRow[] {
-  return source.entities.flatMap((entity) => [rangeIndex(entity.label, entity.stableId, 'ONLINE', true), ...[...new Set([...entity.search, ...entity.reference])].filter((property) => property !== entity.stableId).map((property) => rangeIndex(entity.label, property))]);
+  const nodes = source.entities.flatMap((entity) => [rangeIndex(entity.label, entity.stableId, 'ONLINE', true), ...[...new Set([...entity.search, ...entity.reference])].filter((property) => property !== entity.stableId).map((property) => rangeIndex(entity.label, property))]);
+  const relationships = source.relationships.flatMap((row) => [...new Set(row.evidence)].map((property) => relationshipRangeIndex(row.type, property)));
+  return [...nodes, ...relationships];
 }
 
 /** A responder that answers the schema read with every index of the source online, and every other read with `data`. */

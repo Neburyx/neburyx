@@ -197,6 +197,7 @@ describe('the API client, searching a source', () => {
     counts: { exact: { value: hits.length, quality: 'exact', scope: 'search:exact' } },
     disabledTypes: [],
     related: { hits: [], count: { value: 0, quality: 'exact', scope: 'search:related' }, searchable: true, disabledTypes: [] },
+    evidence: { hits: [], count: { value: 0, quality: 'exact', scope: 'search:evidence' }, searchable: false, disabledRelationshipTypes: [] },
     failures: [],
     dropped: { 'not-mapped': 0, 'ambiguous-type': 0, 'no-stable-id': 0 },
     warnings: [],

@@ -16,6 +16,10 @@ export const SEARCH_COPY = {
   groupTitle: 'Exact ID match',
   relatedTitle: 'Related records · Referenced ID',
   relatedNote: 'Related records reference the ID; they are not extra exact matches.',
+  evidenceTitle: 'Evidence records · Supporting relationships',
+  viewEvidence: 'View evidence',
+  evidenceDisabled: 'Evidence records are disabled for this relationship',
+  evidenceNoStableId: 'Evidence records are not searched for this relationship because it has no stable ID',
   openInGraph: 'Open in graph',
   emptyTitle: 'No matching entities',
   emptyHint: 'Check the ID or try another indexed property.',
@@ -34,10 +38,13 @@ export const TOO_LONG = 'Use at most 200 characters.';
 export const NOTHING_SEARCHABLE_MASKED = 'Nothing can be searched while personal data is masked.';
 export const NO_SEARCH_PROPERTIES = 'No property of this source is configured for search.';
 export const NO_RELATED_PROPERTIES = 'No property of this source is configured for related records.';
+export const NO_EVIDENCE_PROPERTIES = 'No relationship of this source is configured for evidence records.';
+export const evidenceRecordsText = (recordIds: readonly string[]): string => `${recordIds.length} ${recordIds.length === 1 ? 'record' : 'records'}: ${recordIds.join(', ')}`;
+export const evidenceRuleText = (ruleId: string, ruleVersion: number): string => `Used by rule ${ruleId} v${ruleVersion}`;
 export const EXACT_MASKED = 'Exact matches cannot be searched while personal data is masked.';
 export const RELATED_MASKED = 'Related records cannot be searched while personal data is masked.';
-const PAGE_GROUP_NAMES = { exact: 'Exact matches', related: 'Related records', startsWith: 'Matches that start with the text' } as const;
-const PAGE_GROUP_NOT_READ = { exact: 'exact matches not read', related: 'related records not read', startsWith: 'matches that start with the text not read' } as const;
+const PAGE_GROUP_NAMES = { exact: 'Exact matches', related: 'Related records', evidence: 'Evidence records', startsWith: 'Matches that start with the text' } as const;
+const PAGE_GROUP_NOT_READ = { exact: 'exact matches not read', related: 'related records not read', evidence: 'evidence records not read', startsWith: 'matches that start with the text not read' } as const;
 export const groupNotReadSummary = (group: SearchGroup): string => PAGE_GROUP_NOT_READ[group];
 export function groupFailedText(group: SearchGroup, code: string, timeoutMs: number | undefined): string {
   const name = PAGE_GROUP_NAMES[group];
@@ -96,7 +103,7 @@ export function startsWithText(count: Count): string | undefined {
 
 export const addedNote = (title: string): string => `Added ${title}.`;
 
-const GROUP_NAMES = { exact: 'exact ID matches', related: 'related records', startsWith: 'matches that start with the text' } as const;
+const GROUP_NAMES = { exact: 'exact ID matches', related: 'related records', evidence: 'evidence records', startsWith: 'matches that start with the text' } as const;
 
 export const groupNotRead = (group: keyof typeof GROUP_NAMES): string => `${GROUP_NAMES[group]} not read`;
 

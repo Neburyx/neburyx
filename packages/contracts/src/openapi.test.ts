@@ -47,7 +47,8 @@ describe('buildOpenApiDocument', () => {
       additionalProperties: false,
       properties: {
         exact: { type: 'array' },
-        failures: { type: 'array', items: { properties: { group: { enum: ['exact', 'related', 'startsWith'] } } } },
+        failures: { type: 'array', items: { properties: { group: { enum: ['exact', 'related', 'evidence', 'startsWith'] } } } },
+        evidence: { type: 'object', additionalProperties: false, properties: { hits: { type: 'array' }, searchable: { type: 'boolean' }, disabledRelationshipTypes: { type: 'array' } } },
         related: { type: 'object', additionalProperties: false, properties: { hits: { type: 'array' }, searchable: { type: 'boolean' }, disabledTypes: { type: 'array' } } },
         startsWith: {
           type: 'object',
@@ -60,6 +61,29 @@ describe('buildOpenApiDocument', () => {
                 { required: ['value', 'quality', 'scope'], properties: { quality: { enum: ['exact', 'lowerBound'] } } },
                 { required: ['quality', 'scope'], properties: { quality: { const: 'unknown' } }, additionalProperties: false },
               ],
+            },
+          },
+        },
+      },
+    });
+  });
+
+  it('describes a hit of the evidence group by the stored edge reference with its five fields, and the rules of the hit', () => {
+    const document = buildOpenApiDocument();
+    expect(document.components.schemas.SearchResult).toMatchObject({
+      properties: {
+        evidence: {
+          properties: {
+            hits: {
+              type: 'array',
+              items: {
+                additionalProperties: false,
+                required: ['supports', 'records', 'rules'],
+                properties: {
+                  supports: { additionalProperties: false, required: ['sourceId', 'type', 'from', 'to', 'stableId'], properties: { sourceId: { type: 'string' }, type: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' }, stableId: { type: 'string' } } },
+                  rules: { type: 'array' },
+                },
+              },
             },
           },
         },

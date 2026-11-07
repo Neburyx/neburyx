@@ -37,11 +37,17 @@ export function allowlistFromMapping(source: SourceModel): SourceAllowlist {
     for (const property of [entity.stableId, ...entity.search, ...entity.reference]) properties.add(property);
   }
   const relationshipTypes = new Set<string>();
+  const evidenceRows: { type: string; from: string; to: string; properties: readonly string[] }[] = [];
   for (const relationship of source.relationships) {
     const problem = nameProblem(relationship.type);
     if (problem !== undefined) throw new SourceGateError(source.id, `relationship type ${relationship.type}`, relationship.type, problem);
     relationshipTypes.add(relationship.type);
+    for (const property of relationship.evidence) {
+      const evidenceProblem = nameProblem(property);
+      if (evidenceProblem !== undefined) throw new SourceGateError(source.id, `evidence property of relationship type ${relationship.type}`, property, evidenceProblem);
+    }
     for (const property of [...relationship.evidence, ...(relationship.observedAt === undefined ? [] : [relationship.observedAt]), ...(relationship.stableId === undefined ? [] : [relationship.stableId])]) properties.add(property);
+    if (relationship.stableId !== undefined && relationship.evidence.length > 0) evidenceRows.push({ type: relationship.type, from: relationship.from, to: relationship.to, properties: [...relationship.evidence] });
   }
-  return { entityLabels, relationshipTypes, stableIds, searchProperties, referenceProperties, properties };
+  return { entityLabels, relationshipTypes, stableIds, searchProperties, referenceProperties, evidenceRows, properties };
 }

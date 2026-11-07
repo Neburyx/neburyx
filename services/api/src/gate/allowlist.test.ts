@@ -33,6 +33,30 @@ describe('the allowlist of a source', () => {
     expect(() => allowlistFromMapping(sourceWith({ entities: [{ type: 'gadget', label: 'Gadget', stable_id: stableId }], relationships: [] }))).toThrow(SourceGateError);
   });
 
+  it('holds the evidence properties of each relationship mapping row that has a stable ID, in the mapping order, and none of a row without one', () => {
+    const allowlist = allowlistFromMapping(
+      sourceWith({
+        entities: [{ type: 'gadget', label: 'Gadget', stable_id: 'gadgetId' }, { type: 'person', label: 'Person', stable_id: 'personId' }],
+        relationships: [
+          { type: 'MADE_BY', from: 'gadget', to: 'person', stable_id: 'linkId', evidence: ['recordId', 'docId'] },
+          { type: 'MADE_BY', from: 'person', to: 'gadget', evidence: ['otherId'] },
+          { type: 'KNOWS', from: 'person', to: 'person', stable_id: 'linkId' },
+        ],
+      }),
+    );
+    expect(allowlist.evidenceRows).toEqual([{ type: 'MADE_BY', from: 'gadget', to: 'person', properties: ['recordId', 'docId'] }]);
+  });
+
+  it.each([
+    ['a backtick', 'bad`rec'],
+    ['a backslash', 'bad\\rec'],
+    ['a control character', 'bad\u0001rec'],
+    ['only whitespace', '   '],
+  ])('refuses an evidence property with %s, because it is written into the Cypher as a quoted name', (_name, property) => {
+    const entities = [{ type: 'gadget', label: 'Gadget', stable_id: 'gadgetId' }, { type: 'person', label: 'Person', stable_id: 'personId' }];
+    expect(() => allowlistFromMapping(sourceWith({ entities, relationships: [{ type: 'MADE_BY', from: 'gadget', to: 'person', stable_id: 'linkId', evidence: [property] }] }))).toThrow(SourceGateError);
+  });
+
   it('holds the reference properties of each entity type, by type', () => {
     const allowlist = allowlistFromMapping(
       sourceWith({ entities: [{ type: 'gadget', label: 'Gadget', stable_id: 'gadgetId', search: ['title'], reference: ['extRef', 'otherRef'] }, { type: 'person', label: 'Person', stable_id: 'personId' }], relationships: [] }),

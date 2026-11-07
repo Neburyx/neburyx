@@ -103,7 +103,7 @@ export function gateRequest(overrides: Partial<GateRequest> = {}): GateRequest {
   };
 }
 
-export const EMPTY_ALLOWLIST: SourceAllowlist = { entityLabels: new Map(), relationshipTypes: new Set(), stableIds: new Map(), searchProperties: new Map(), referenceProperties: new Map(), properties: new Set() };
+export const EMPTY_ALLOWLIST: SourceAllowlist = { entityLabels: new Map(), relationshipTypes: new Set(), stableIds: new Map(), searchProperties: new Map(), referenceProperties: new Map(), evidenceRows: [], properties: new Set() };
 
 export interface Harness {
   readonly gate: Gate;

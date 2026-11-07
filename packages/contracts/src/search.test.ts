@@ -17,6 +17,7 @@ const result = {
   searchable: true,
   disabledTypes: [],
   related: { hits: [], count: { value: 0, quality: 'exact', scope: 'search:related' }, searchable: true, disabledTypes: [] },
+  evidence: { hits: [], count: { value: 0, quality: 'exact', scope: 'search:evidence' }, searchable: false, disabledRelationshipTypes: [] },
   failures: [],
   dropped: { 'not-mapped': 0, 'ambiguous-type': 0, 'no-stable-id': 0 },
   warnings: [],
@@ -101,6 +102,42 @@ describe('the search result', () => {
     expect(searchResultSchema.safeParse({ ...failedRelated, failures: [{ group: 'related', code: 'QUERY_TIMEOUT', timeoutMs: 0 }] }).success).toBe(false);
   });
 
+  describe('the evidence group', () => {
+    const supports = { sourceId: 'demo', type: 'MADE_FROM', from: 'widget', to: 'gadget', stableId: 'L-1' };
+    const hit = { supports, records: [{ sourceRecordId: 'REC-1' }], rules: [] };
+    const evidence = { hits: [hit], count: { value: 1, quality: 'exact', scope: 'search:evidence' }, searchable: true, disabledRelationshipTypes: [{ relationshipType: 'MADE_FROM', from: 'widget', to: 'part', reason: 'no-stable-id' }] };
+
+    it('accepts a hit with rules', () => {
+      expect(searchResultSchema.safeParse({ ...result, evidence: { ...evidence, hits: [{ ...hit, rules: [{ ruleId: 'first', ruleVersion: 1 }, { ruleId: 'second', ruleVersion: 2 }] }] } }).success).toBe(true);
+    });
+
+    it('accepts hits, a count of its own and the rows left out', () => {
+      expect(searchResultSchema.safeParse({ ...result, evidence }).success).toBe(true);
+      expect(searchResultSchema.safeParse({ ...result, evidence: { ...evidence, count: { value: SEARCH_GROUP_CAP, quality: 'lowerBound', scope: 'search:evidence' } } }).success).toBe(true);
+    });
+
+    it.each([
+      ['an answer with no evidence group', undefined],
+      ['a hit with no reference', { ...evidence, hits: [{ ...hit, supports: undefined }] }],
+      ['a reference in the old shape', { ...evidence, hits: [{ ...hit, supports: { sourceId: 'demo', stableId: 'L-1' } }] }],
+      ['an aggregate reference', { ...evidence, hits: [{ ...hit, supports: { sourceId: 'demo', aggregate: { type: 'MADE_FROM', from: node.ref, to: node.ref } } }] }],
+      ['a hit with no record', { ...evidence, hits: [{ ...hit, records: [] }] }],
+      ['an empty record ID', { ...evidence, hits: [{ ...hit, records: [{ sourceRecordId: '' }] }] }],
+      ['a hit with no list of rules', { ...evidence, hits: [{ supports, records: hit.records }] }],
+      ['a rule with no ruleId', { ...evidence, hits: [{ ...hit, rules: [{ ruleVersion: 1 }] }] }],
+      ['a rule with an empty ruleId', { ...evidence, hits: [{ ...hit, rules: [{ ruleId: '', ruleVersion: 1 }] }] }],
+      ['a rule version of zero', { ...evidence, hits: [{ ...hit, rules: [{ ruleId: 'first', ruleVersion: 0 }] }] }],
+      ['a rule version that is not an integer', { ...evidence, hits: [{ ...hit, rules: [{ ruleId: 'first', ruleVersion: 1.5 }] }] }],
+      ['a rule version that is text', { ...evidence, hits: [{ ...hit, rules: [{ ruleId: 'first', ruleVersion: '1' }] }] }],
+      ['a reason for a row left out that is not one of the two', { ...evidence, disabledRelationshipTypes: [{ relationshipType: 'MADE_FROM', from: 'widget', to: 'part', reason: 'because' }] }],
+      ['a row left out with no ends', { ...evidence, disabledRelationshipTypes: [{ relationshipType: 'MADE_FROM', reason: 'no-stable-id' }] }],
+      ['an estimated count', { ...evidence, count: { value: 1, quality: 'estimated', scope: 'search:evidence' } }],
+      ['a field the group does not name', { ...evidence, facets: [] }],
+    ])('refuses %s', (_name, group) => {
+      expect(searchResultSchema.safeParse({ ...result, evidence: group }).success).toBe(false);
+    });
+  });
+
   it('holds the cap as a named constant of 25', () => {
     expect(SEARCH_GROUP_CAP).toBe(25);
   });
@@ -170,6 +207,46 @@ describe('the failures of the search result', () => {
     ['a failed exact group, unknown and empty, beside an answered prefix group', failedExact],
   ])('accepts %s', (_name, body) => {
     expect(searchResultSchema.safeParse(body).success).toBe(true);
+  });
+
+  describe('of the evidence group', () => {
+    const answered = { ...result, evidence: { hits: [], count: { value: 0, quality: 'exact', scope: 'search:evidence' }, searchable: true, disabledRelationshipTypes: [] } };
+    const failedEvidence = { ...answered, evidence: { ...answered.evidence, count: { quality: 'unknown', scope: 'search:evidence' } }, failures: [{ group: 'evidence', code: 'QUERY_TIMEOUT', timeoutMs: 5000 }] };
+    const supports = { sourceId: 'demo', type: 'MADE_FROM', from: 'widget', to: 'gadget', stableId: 'L-1' };
+
+    it('accepts a failed evidence group, unknown and empty, beside an answered exact group', () => {
+      expect(searchResultSchema.safeParse(failedEvidence).success).toBe(true);
+    });
+
+    const noExact = { ...result, searchable: false, exact: [], counts: { exact: { value: 0, quality: 'exact', scope: 'search:exact' } } };
+    const unknownRelated = { quality: 'unknown', scope: 'search:related' };
+    const unknownEvidence = { quality: 'unknown', scope: 'search:evidence' };
+
+    it('accepts an answer in which nothing was searched, and a failed evidence group beside an answered related group when the exact group was not searched', () => {
+      const nothing = { ...noExact, related: { ...result.related, searchable: false }, evidence: { ...answered.evidence, searchable: false } };
+      expect(searchResultSchema.safeParse(nothing).success).toBe(true);
+      const beside = { ...noExact, evidence: { ...failedEvidence.evidence }, failures: failedEvidence.failures };
+      expect(searchResultSchema.safeParse(beside).success).toBe(true);
+    });
+
+    it.each([
+      ['the evidence group was the only one read and it failed', { ...noExact, related: { ...result.related, searchable: false }, evidence: failedEvidence.evidence, failures: failedEvidence.failures }],
+      ['the related and the evidence group were the only ones read and both failed', { ...noExact, related: { ...result.related, count: unknownRelated }, evidence: { ...failedEvidence.evidence, count: unknownEvidence }, failures: [{ group: 'related', code: 'QUERY_TIMEOUT' }, { group: 'evidence', code: 'QUERY_TIMEOUT' }] }],
+    ])('refuses an answer in which %s', (_name, body) => {
+      expect(searchResultSchema.safeParse(body).success).toBe(false);
+    });
+
+    it.each([
+      ['an unknown evidence count with no failure', { ...failedEvidence, failures: [] }],
+      ['a failed evidence group whose count is not unknown', { ...failedEvidence, evidence: answered.evidence }],
+      ['a failed evidence group that holds hits', { ...failedEvidence, evidence: { ...failedEvidence.evidence, hits: [{ supports, records: [{ sourceRecordId: 'REC-1' }], rules: [] }] } }],
+      ['a failure of an evidence group that was not read', { ...failedEvidence, evidence: { ...failedEvidence.evidence, searchable: false } }],
+      ['a failure of a related group that was not read', { ...result, related: { ...result.related, searchable: false, count: { quality: 'unknown', scope: 'search:related' } }, failures: [{ group: 'related', code: 'QUERY_TIMEOUT' }] }],
+      ['a failure of an exact group that was not read', { ...result, searchable: false, exact: [], counts: { exact: { quality: 'unknown', scope: 'search:exact' } }, failures: [{ group: 'exact', code: 'QUERY_TIMEOUT' }] }],
+      ['every group that was read failed', { ...failedEvidence, searchable: true, exact: [], counts: { exact: { quality: 'unknown', scope: 'search:exact' } }, related: { ...result.related, count: { quality: 'unknown', scope: 'search:related' } }, failures: [{ group: 'exact', code: 'QUERY_TIMEOUT' }, { group: 'related', code: 'QUERY_TIMEOUT' }, { group: 'evidence', code: 'QUERY_TIMEOUT' }] }],
+    ])('refuses %s', (_name, body) => {
+      expect(searchResultSchema.safeParse(body).success).toBe(false);
+    });
   });
 
   it.each([

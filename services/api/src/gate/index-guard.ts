@@ -1,24 +1,27 @@
 import { AppError } from '../errors.js';
 import { schemaIndexesItemSchema, SCHEMA_INDEXES_ID } from './templates/schema-indexes.js';
-import type { GatePage, IndexNeed, IndexSnapshot, SourceAllowlist } from './types.js';
+import type { GatePage, IndexNeed, IndexSnapshot, RelationshipIndexNeed, SourceAllowlist } from './types.js';
 
 /** The form in which a property has an ONLINE single-property index: `value` for a RANGE index or a constraint (any value, including an integer), `text` for a TEXT index (strings only). */
 export type OnlineForm = 'value' | 'text';
 
 const SINGLE_NODE_INDEX_ONLINE = 'ONLINE';
 
-export function onlineFormOf(snapshot: IndexSnapshot, label: string, property: string): OnlineForm | undefined {
-  const online = snapshot.entries.filter((entry) => entry.entityType === 'NODE' && entry.name === label && entry.property === property && entry.single && entry.state === SINGLE_NODE_INDEX_ONLINE);
+export function onlineFormOf(snapshot: IndexSnapshot, name: string, property: string, kind: 'NODE' | 'RELATIONSHIP' = 'NODE'): OnlineForm | undefined {
+  const online = snapshot.entries.filter((entry) => entry.entityType === kind && entry.name === name && entry.property === property && entry.single && entry.state === SINGLE_NODE_INDEX_ONLINE);
   if (online.some((entry) => entry.type === 'RANGE')) return 'value';
   return online.some((entry) => entry.type === 'TEXT') ? 'text' : undefined;
 }
 
 /** Whether the index of a need is there: a need that asks for `value` is met by a RANGE index or a constraint only, one that accepts any by a TEXT index too. */
-export function isMet(snapshot: IndexSnapshot, need: IndexNeed, allowlist: SourceAllowlist): boolean {
-  const label = allowlist.entityLabels.get(need.entityType);
-  if (label === undefined) return true;
-  const form = onlineFormOf(snapshot, label, need.property);
+export function isMet(snapshot: IndexSnapshot, need: IndexNeed | RelationshipIndexNeed, allowlist: SourceAllowlist): boolean {
+  const form = 'relationshipType' in need ? onlineFormOf(snapshot, need.relationshipType, need.property, 'RELATIONSHIP') : onlineEntityForm(snapshot, need, allowlist);
   return form !== undefined && (need.accepts === 'any' || form === 'value');
+}
+
+function onlineEntityForm(snapshot: IndexSnapshot, need: IndexNeed, allowlist: SourceAllowlist): OnlineForm | undefined {
+  const label = allowlist.entityLabels.get(need.entityType);
+  return label === undefined ? ('value' as const) : onlineFormOf(snapshot, label, need.property);
 }
 
 export interface SchemaRead {

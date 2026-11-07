@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { nodeSchema } from './graph.js';
+import { nodeSchema, storedEdgeRefSchema } from './graph.js';
 
 /** A stable ID can be one character, so an exact search takes one; the minimum of 2 belongs to type-ahead. */
 export const MIN_SEARCH_TEXT_LENGTH = 1;
@@ -12,7 +12,10 @@ export const SEARCH_GROUP_CAP = 25;
 export const SEARCH_DISABLED_REASONS = ['index-unavailable'] as const;
 
 /** The groups of a search answer, in the order the page shows them. */
-export const SEARCH_GROUPS = ['exact', 'related', 'startsWith'] as const;
+export const SEARCH_GROUPS = ['exact', 'related', 'evidence', 'startsWith'] as const;
+
+/** Why a relationship mapping row is not searched for evidence: its relationship index is not online, or the row has no `stable_id` to name a relationship by. */
+export const SEARCH_EVIDENCE_DISABLED_REASONS = ['index-unavailable', 'no-stable-id'] as const;
 
 /** The codes of a read that fails for one group only; every other failure fails the whole search. */
 export const SEARCH_GROUP_FAILURE_CODES = ['QUERY_TIMEOUT', 'SOURCE_BUSY', 'RATE_LIMITED', 'INTERNAL_ERROR'] as const;
@@ -78,6 +81,29 @@ export const relatedGroupSchema = z.strictObject({
   disabledTypes: z.array(disabledTypeSchema),
 });
 
+/** A relationship mapping row left out of the evidence group: the relationship type and the entity types of its ends. */
+export const disabledRelationshipSchema = z.strictObject({ relationshipType: z.string().min(1), from: z.string().min(1), to: z.string().min(1), reason: z.enum(SEARCH_EVIDENCE_DISABLED_REASONS) });
+
+/** A rule of the mapping that uses the hit's relationship type: configured, not proof that the relationship supports a derived relationship. */
+export const evidenceRuleSchema = z.strictObject({ ruleId: z.string().min(1), ruleVersion: z.number().int().positive() });
+
+/** A relationship that carries the searched record ID in an evidence property: its reference, the values of all its evidence properties and the configured rules that use its type. */
+export const evidenceHitSchema = z.strictObject({
+  supports: storedEdgeRefSchema,
+  records: z.array(z.strictObject({ sourceRecordId: z.string().min(1) })).min(1),
+  rules: z.array(evidenceRuleSchema),
+});
+
+/** The evidence records of a search: the relationships whose evidence properties hold the typed text, from one read of their own. */
+export const evidenceGroupSchema = z.strictObject({
+  hits: z.array(evidenceHitSchema),
+  /** The supporting relationships held: exact up to and including the cap, a lower bound when the read found more, unknown for a group whose read failed. */
+  count: groupCountSchema,
+  /** False when the group had no relationship row to read (no evidence property, every row left out, or a type-ahead request). */
+  searchable: z.boolean(),
+  disabledRelationshipTypes: z.array(disabledRelationshipSchema),
+});
+
 /** The entities whose `search` property starts with the typed text and are not in the exact group; a lower bound when more were read than the cap, never counted as exact matches. */
 export const startsWithGroupSchema = z.strictObject({
   nodes: z.array(nodeSchema),
@@ -97,6 +123,7 @@ export const searchResultSchema = z
     counts: z.strictObject({ exact: groupCountSchema }),
     disabledTypes: z.array(disabledTypeSchema),
     related: relatedGroupSchema,
+    evidence: evidenceGroupSchema,
     /** The groups whose read failed while another group's was answered; empty when every read answered. */
     failures: z.array(groupFailureSchema),
     dropped: droppedSchema,
@@ -108,13 +135,22 @@ export const searchResultSchema = z
   .superRefine((result, context) => {
     const failed = new Set(result.failures.map((failure) => failure.group));
     if (failed.size !== result.failures.length) context.addIssue({ code: 'custom', message: 'a group fails once', path: ['failures'] });
-    const read = 1 + (result.related.searchable ? 1 : 0) + (result.startsWith === undefined ? 0 : 1);
-    if (failed.size >= read) context.addIssue({ code: 'custom', message: 'when every group read failed the search failed as a whole and has no answer', path: ['failures'] });
+    const read = (result.searchable ? 1 : 0) + (result.related.searchable ? 1 : 0) + (result.evidence.searchable ? 1 : 0) + (result.startsWith !== undefined && result.searchable ? 1 : 0);
+    if (failed.size > 0 && failed.size >= read) context.addIssue({ code: 'custom', message: 'when every group read failed the search failed as a whole and has no answer', path: ['failures'] });
+    const unread = [
+      ...(failed.has('exact') && !result.searchable ? ['exact'] : []),
+      ...(failed.has('related') && !result.related.searchable ? ['related'] : []),
+      ...(failed.has('evidence') && !result.evidence.searchable ? ['evidence'] : []),
+    ];
+    if (unread.length > 0) context.addIssue({ code: 'custom', message: 'a group that was not read cannot have failed', path: ['failures'] });
     if ((result.counts.exact.quality === 'unknown') !== failed.has('exact') || (failed.has('exact') && result.exact.length > 0)) {
       context.addIssue({ code: 'custom', message: 'the exact count is unknown, and the group empty, exactly when its read failed', path: ['counts', 'exact'] });
     }
     if ((result.related.count.quality === 'unknown') !== failed.has('related') || (failed.has('related') && result.related.hits.length > 0)) {
       context.addIssue({ code: 'custom', message: 'the related count is unknown, and the group empty, exactly when its read failed', path: ['related', 'count'] });
+    }
+    if ((result.evidence.count.quality === 'unknown') !== failed.has('evidence') || (failed.has('evidence') && result.evidence.hits.length > 0)) {
+      context.addIssue({ code: 'custom', message: 'the evidence count is unknown, and the group empty, exactly when its read failed', path: ['evidence', 'count'] });
     }
     if (result.startsWith === undefined) {
       if (failed.has('startsWith')) context.addIssue({ code: 'custom', message: 'a startsWith failure needs the startsWith group', path: ['failures'] });
@@ -130,6 +166,9 @@ export type SearchResult = z.infer<typeof searchResultSchema>;
 export type DisabledType = z.infer<typeof disabledTypeSchema>;
 export type RelatedHit = z.infer<typeof relatedHitSchema>;
 export type RelatedGroup = z.infer<typeof relatedGroupSchema>;
+export type EvidenceHit = z.infer<typeof evidenceHitSchema>;
+export type EvidenceGroup = z.infer<typeof evidenceGroupSchema>;
+export type DisabledRelationship = z.infer<typeof disabledRelationshipSchema>;
 export type StartsWithGroup = z.infer<typeof startsWithGroupSchema>;
 export type GroupFailure = z.infer<typeof groupFailureSchema>;
 export type SearchGroup = (typeof SEARCH_GROUPS)[number];

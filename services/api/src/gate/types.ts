@@ -35,6 +35,18 @@ export interface IndexNeed {
   readonly accepts: 'value' | 'any';
 }
 
+/** An index a read needs on a relationship property: of a relationship type between two entity types, of one kind as for an entity (`value` or `any`). */
+export interface RelationshipIndexNeed {
+  readonly relationshipType: string;
+  readonly from: string;
+  readonly to: string;
+  readonly property: string;
+  readonly accepts: 'value' | 'any';
+}
+
+/** A property a request uses: of an entity type, or of the relationship mapping row of a relationship type between two entity types. */
+export type UsedProperty = { readonly entityType: string; readonly property: string } | { readonly relationshipType: string; readonly from: string; readonly to: string; readonly property: string };
+
 /** One operator of the plan that a profiled read returns: its name, the server's description of it and the db hits it made. */
 export interface PlanOperator {
   readonly name: string;
@@ -68,16 +80,17 @@ export interface Template {
   readonly profile?: boolean;
   /** What a cursor of this template binds besides the source, the person, the template and its parameters: the order of its pages; empty when it has none. */
   readonly sort?: string;
-  /** The properties of entity types that a request searches, filters or sorts by; a request that asks for masking may not use a `pii` one. A template without it uses none. */
-  usedProperties?(params: Params): readonly { readonly entityType: string; readonly property: string }[];
+  /** The properties that a request searches, filters or sorts by, of entity types or of relationship mapping rows; a request that asks for masking may not use a `pii` one of an entity type. A template without it uses none. */
+  usedProperties?(params: Params): readonly UsedProperty[];
   /**
    * The search template's own declaration, for no other template: a statement with one branch for each target of a list parameter. The Cypher holds `@searchBranches(<param>)`,
-   * and the gate writes in, for each target, the branch text of its match form (`value` or `text`) with `@label` and `@property` replaced by the quoted names, joined by `UNION`.
-   * Each target is checked against the source's allowlist of the kind the template names: its `search` or its `reference` properties.
+   * and the gate writes in, for each target, the branch text of its match form (`value` or `text`) with the placeholders replaced by the quoted names, joined by `UNION`: `@label` and `@property` for a
+   * target of an entity type, `@type`, `@fromLabel`, `@toLabel` and `@property` for a target of a relationship mapping row. Each target is checked against the source's allowlist of the kind the
+   * template names: its `search` or its `reference` properties, or the evidence properties of its relationship rows that have a `stable_id`.
    */
-  readonly searchBranches?: { readonly param: string; readonly allowlist: 'search' | 'reference'; readonly value: string; readonly text: string };
+  readonly searchBranches?: { readonly param: string; readonly allowlist: 'search' | 'reference' | 'evidence'; readonly value: string; readonly text: string };
   /** The indexes this read needs, so that the gate can find out before the data read that they are there; a template that names none is not guarded. */
-  indexNeeds?(params: Params, allowlist: SourceAllowlist): readonly IndexNeed[];
+  indexNeeds?(params: Params, allowlist: SourceAllowlist): readonly (IndexNeed | RelationshipIndexNeed)[];
   /** True for a request that has nothing to read, such as an empty list of targets: the gate runs every stage but the read, and the answer has no row. */
   readsNothing?(params: Params): boolean;
   /** Where the page after this one starts, from the rows of this page; the gate signs it into the page's `nextCursor`. Only a paged template has one. */
@@ -95,6 +108,8 @@ export interface SourceAllowlist {
   readonly searchProperties: ReadonlyMap<string, readonly string[]>;
   /** The `reference` properties of each entity type, by type, in the mapping's order. */
   readonly referenceProperties: ReadonlyMap<string, readonly string[]>;
+  /** The evidence properties of each relationship mapping row that has a `stable_id`, in the mapping's order: the rows an evidence read may name. */
+  readonly evidenceRows: readonly { readonly type: string; readonly from: string; readonly to: string; readonly properties: readonly string[] }[];
   /** Every property name the mapping names: search, reference, evidence, sort and stable id properties. */
   readonly properties: ReadonlySet<string>;
 }

@@ -1,7 +1,7 @@
 import { ICON_KEYS } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
 import { parseMapping } from './load.js';
-import { MAX_REFERENCE_PROPERTIES, MAX_SEARCH_PROPERTIES } from './model.js';
+import { MAX_EVIDENCE_PROPERTIES, MAX_REFERENCE_PROPERTIES, MAX_SEARCH_PROPERTIES } from './model.js';
 import { baseSource, expectRefused, fileOf, firstSource, issuesOf, load, type Json } from '../testing/mapping.js';
 
 const fullEntity = {
@@ -122,6 +122,18 @@ describe('entity and relationship types as written', () => {
     const entities = (count: number) => [{ type: 'node_a', label: 'NodeA', stable_id: 'id', reference: names(50) }, { type: 'node_b', label: 'NodeB', stable_id: 'id', reference: names(count - 50) }];
     expect(() => load(baseSource({ entities: entities(MAX_REFERENCE_PROPERTIES), relationships: undefined }))).not.toThrow();
     expectRefused(baseSource({ entities: entities(MAX_REFERENCE_PROPERTIES + 1), relationships: undefined }), 'sources[0].entities', 'more than the 100 a search can read');
+  });
+
+  it('refuses a source with more evidence properties on relationships with a stable ID than an evidence lookup can read, across rows, and accepts one at the limit', () => {
+    const names = (prefix: string, count: number) => Array.from({ length: count }, (_, index) => `${prefix}${index}`);
+    const entities = [{ type: 'node_a', label: 'NodeA', stable_id: 'id' }, { type: 'node_b', label: 'NodeB', stable_id: 'id' }];
+    const rows = (count: number) => [
+      { type: 'FIRST', from: 'node_a', to: 'node_b', stable_id: 'linkId', evidence: names('e', 50) },
+      { type: 'SECOND', from: 'node_b', to: 'node_a', stable_id: 'linkId', evidence: names('f', count - 50) },
+      { type: 'THIRD', from: 'node_a', to: 'node_a', evidence: names('g', 500) },
+    ];
+    expect(() => load(baseSource({ entities, relationships: rows(MAX_EVIDENCE_PROPERTIES) }))).not.toThrow();
+    expectRefused(baseSource({ entities, relationships: rows(MAX_EVIDENCE_PROPERTIES + 1) }), 'sources[0].relationships', 'more than the 100 a search can read');
   });
 
   it('allows a pii property to be searchable', () => {

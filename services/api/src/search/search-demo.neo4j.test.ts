@@ -238,4 +238,23 @@ describe.each(PACKS)(`the search of the %s pack on ${NEO4J_SERIES}`, (pack) => {
       expect(JSON.stringify(plain)).toContain('Someone Else');
     });
   });
+  it('finds, for a relationship of every type that has an evidence property and a stable ID, the edge the Normalization suite builds from the same record, with its record IDs and no property of its ends', async () => {
+    const { source } = current().target;
+    const rows = source.relationships.filter((relationship) => relationship.stableId !== undefined && relationship.evidence.length > 0);
+    expect(rows.length).toBeGreaterThan(0);
+    for (const relationship of rows) {
+      const captured = await itemsOf(current().target, 'capture-relationship', { entityType: relationship.from, otherType: relationship.to, relationshipType: relationship.type });
+      const normalized = normalizeRows({ sourceId: source.id, hasMore: false, model: normalizeModelOf(source) }, captured);
+      const [edge] = normalized.edges;
+      const text = edge?.evidenceRefs[0];
+      if (edge === undefined || text === undefined) throw new Error(`the demo graph holds no ${relationship.type} that carries a record`);
+      const answer = await search(text);
+      const hit = answer.evidence.hits.find((candidate) => 'stableId' in edge.ref && JSON.stringify(candidate.supports) === JSON.stringify(edge.ref));
+      expect(hit, relationship.type).toBeDefined();
+      expect(hit?.supports).toEqual(edge.ref);
+      expect(hit?.records.map((record) => record.sourceRecordId), relationship.type).toEqual([...new Set(edge.evidenceRefs)]);
+      const endValues = normalized.nodes.flatMap((node) => node.properties.map((property) => property.value)).filter((value): value is string => typeof value === 'string' && value.length > 3 && value !== text);
+      for (const value of endValues) expect(JSON.stringify(answer.evidence), `${relationship.type} ${value}`).not.toContain(value);
+    }
+  });
 });

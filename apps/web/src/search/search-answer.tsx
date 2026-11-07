@@ -1,6 +1,7 @@
 import type { GraphNode, SearchResult, SourceProfile } from '@neburyx/contracts';
-import { countText, matchesText, relatedText, secondsText } from './count-label.js';
+import { countText, evidenceText, matchesText, relatedText, secondsText } from './count-label.js';
 import { groupFailedText, groupNotReadSummary, referencesLine, RETRY, SEARCH_COPY, showingResultsFor } from './copy.js';
+import { EvidenceNotes, EvidenceSection } from './evidence-section.js';
 import { ResultRow } from './result-row.js';
 import { statesOf } from './states.js';
 
@@ -19,9 +20,10 @@ export function SearchAnswer({ result, answeredText, currentText, profile, busy,
   const count = result.counts.exact;
   const typeOf = (entityType: string) => profile.entityTypes.find((type) => type.type === entityType);
   const states = statesOf(result, mask);
-  const failureOf = (group: 'exact' | 'related') => result.failures.find((failure) => failure.group === group);
+  const failureOf = (group: 'exact' | 'related' | 'evidence') => result.failures.find((failure) => failure.group === group);
   const exactFailure = failureOf('exact');
   const relatedFailure = failureOf('related');
+  const evidenceFailure = failureOf('evidence');
   const failureLine = (failure: NonNullable<typeof exactFailure>) => (
     <p key={failure.group} role="alert" className="search-group-failure">
       {groupFailedText(failure.group, failure.code, failure.timeoutMs)}
@@ -30,8 +32,17 @@ export function SearchAnswer({ result, answeredText, currentText, profile, busy,
   return (
     <>
       {answeredText === currentText ? null : <p className="search-labelled">{showingResultsFor(answeredText)}</p>}
-      {result.searchable || result.related.searchable ? (
-        <p className="search-summary">{[result.searchable ? (exactFailure === undefined ? matchesText(count) : groupNotReadSummary('exact')) : undefined, result.related.searchable ? (relatedFailure === undefined ? relatedText(result.related.count) : groupNotReadSummary('related')) : undefined, secondsText(result.elapsedMs)].filter((part) => part !== undefined).join(' · ')}</p>
+      {result.searchable || result.related.searchable || result.evidence.searchable ? (
+        <p className="search-summary">
+          {[
+            result.searchable ? (exactFailure === undefined ? matchesText(count) : groupNotReadSummary('exact')) : undefined,
+            result.related.searchable ? (relatedFailure === undefined ? relatedText(result.related.count) : groupNotReadSummary('related')) : undefined,
+            result.evidence.searchable ? (evidenceFailure === undefined ? evidenceText(result.evidence.count) : groupNotReadSummary('evidence')) : undefined,
+            secondsText(result.elapsedMs),
+          ]
+            .filter((part) => part !== undefined)
+            .join(' · ')}
+        </p>
       ) : null}
       {result.related.hits.length === 0 ? null : <p className="search-note">{SEARCH_COPY.relatedNote}</p>}
       {result.disabledTypes.length === 0 ? null : (
@@ -52,6 +63,7 @@ export function SearchAnswer({ result, answeredText, currentText, profile, busy,
           ))}
         </ul>
       )}
+      <EvidenceNotes group={result.evidence} profile={profile} />
       {result.warnings.length === 0 ? null : (
         <ul className="search-notes">
           {result.warnings.map((warning) => (
@@ -96,6 +108,8 @@ export function SearchAnswer({ result, answeredText, currentText, profile, busy,
           </ul>
         </section>
       )}
+      {evidenceFailure === undefined ? null : failureLine(evidenceFailure)}
+      <EvidenceSection group={result.evidence} profile={profile} />
       {result.failures.length === 0 ? null : (
         <button type="button" className="link search-retry" onClick={onRetry}>
           {RETRY}

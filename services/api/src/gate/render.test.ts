@@ -16,6 +16,7 @@ const ALLOWLIST: SourceAllowlist = {
   stableIds: new Map([['person', 'id']]),
   searchProperties: new Map([['person', ['id', 'name']]]),
   referenceProperties: new Map(),
+  evidenceRows: [],
   properties: new Set(['id', 'name']),
 };
 

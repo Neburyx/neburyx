@@ -221,7 +221,7 @@ describe('the declaration of the search branches', () => {
     }
     return 'accepted';
   };
-  const NOT_PLACEHOLDERS = 'the template entity-search has a branch text that does not hold exactly the label and property placeholders';
+  const NOT_PLACEHOLDERS = 'the template entity-search has a branch text that does not hold exactly the placeholders of its targets (@label, @property)';
 
   it('is accepted as written', () => {
     expect(failure({})).toBe('accepted');

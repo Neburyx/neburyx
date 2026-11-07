@@ -3,6 +3,7 @@ import { resolveBudgets } from './budgets.js';
 import { hashSource } from './hash.js';
 import { checkLink } from './links.js';
 import {
+  MAX_EVIDENCE_PROPERTIES,
   MAX_REFERENCE_PROPERTIES,
   MAX_SEARCH_PROPERTIES,
   type DerivedRuleModel,
@@ -239,6 +240,9 @@ function buildSource(raw: RawSource, index: number, report: Report): SourceModel
   if (searchProperties > MAX_SEARCH_PROPERTIES) report([...base, 'entities'], `list ${searchProperties} search properties in all, more than the ${MAX_SEARCH_PROPERTIES} a search can read`);
   const referenceProperties = raw.entities.reduce((total, entity) => total + new Set(entity.reference ?? []).size, 0);
   if (referenceProperties > MAX_REFERENCE_PROPERTIES) report([...base, 'entities'], `list ${referenceProperties} reference properties in all, more than the ${MAX_REFERENCE_PROPERTIES} a search can read`);
+
+  const evidenceProperties = rawRelationships.reduce((total, relationship) => total + (relationship.stable_id === undefined ? 0 : new Set(relationship.evidence ?? []).size), 0);
+  if (evidenceProperties > MAX_EVIDENCE_PROPERTIES) report([...base, 'relationships'], `list ${evidenceProperties} evidence properties in all on relationships with a stable_id, more than the ${MAX_EVIDENCE_PROPERTIES} a search can read`);
 
   const budgets = resolveBudgets(raw.budgets);
   const defaultPage = raw.budgets?.default_page ?? Math.min(budgets.defaultPage, budgets.maxPage);

@@ -5,6 +5,7 @@ export const MAX_SEARCH_PROPERTIES = 100;
 
 /** The most properties a source may list under `reference` in all its entity types: each is a branch of the one related-records read. */
 export const MAX_REFERENCE_PROPERTIES = 100;
+export const MAX_EVIDENCE_PROPERTIES = 100;
 
 export type LinkKind = 'entity' | 'evidence';
 

@@ -86,3 +86,4 @@ export const postSearch = (app: SearchApp['app'], payload: unknown) =>
 
 export const searchCalls = (executor: TestExecutor) => executor.calls.filter((call) => call.templateId === 'entity-search');
 export const relatedCalls = (executor: TestExecutor) => executor.calls.filter((call) => call.templateId === 'entity-related');
+export const evidenceCalls = (executor: TestExecutor) => executor.calls.filter((call) => call.templateId === 'relationship-evidence');

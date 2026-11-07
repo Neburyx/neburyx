@@ -1,3 +1,4 @@
+import { evidenceHitsOf, evidenceRowsOf, planEvidence } from './evidence-group.js';
 import { SEARCH_GROUP_CAP, SEARCH_GROUP_FAILURE_CODES, type DisabledType, type ErrorCode, type GraphNode, type GroupFailure, type SearchGroup, type SearchResult, type StartsWithGroup } from '@neburyx/contracts';
 import { AppError } from '../errors.js';
 import { onlineFormOf } from '../gate/index-guard.js';
@@ -5,6 +6,7 @@ import { matchedPropertiesOf } from './matched-properties.js';
 import { DROP_REASONS, warningsOf, type Dropped } from '../gate/normalize/drops.js';
 import type { Normalized } from '../gate/normalize/index.js';
 import { SEARCH_EXACT_ID, searchExactTemplate, type SearchTarget } from '../gate/templates/search-exact.js';
+import { SEARCH_EVIDENCE_ID } from '../gate/templates/search-evidence.js';
 import { SEARCH_PREFIX_ID } from '../gate/templates/search-prefix.js';
 import { SEARCH_RELATED_ID } from '../gate/templates/search-related.js';
 import type { SourceAccess } from '../investigations/source-access.js';
@@ -28,6 +30,7 @@ export interface SearchService {
 
 const EXACT_SCOPE = 'search:exact';
 const RELATED_SCOPE = 'search:related';
+const EVIDENCE_SCOPE = 'search:evidence';
 const STARTS_WITH_SCOPE = 'search:startsWith';
 
 type Group = 'exact' | 'related';
@@ -126,7 +129,8 @@ function failureOf(group: SearchGroup, error: unknown): GroupFailure | undefined
 
 /**
  * The groups whose read failed while another group's was answered. A failure that means the same for every group (an unusable or unreadable source, a bad request) fails the whole search,
- * whichever group's read it came from and whatever the other reads gave; so does the failure of every group that was read, with the exact group's error when more than one failed.
+ * whichever group's read it came from and whatever the other reads gave; so does the failure of every group that was read, with the error of the first of the exact, related and evidence
+ * groups that was read when more than one failed.
  */
 function failuresOf(groups: readonly GroupOutcome[]): GroupFailure[] {
   const rejected = groups.flatMap((entry): { readonly group: SearchGroup; readonly read: boolean; readonly error: unknown }[] => {
@@ -183,11 +187,14 @@ export function createSearchService(deps: { readonly gate: Gate; readonly mappin
       // the related group belongs to the Search results page: a type-ahead request does not read it
       const relatedCandidates = request.typeahead === true ? [] : candidatesOf(source, 'related', request.mask);
       // the schema is read once for the request, fresh, when there is a property to search; it is a system read and not a group's read
-      const reader = exactCandidates.length + relatedCandidates.length > 0 ? deps.indexes : undefined;
+      const typeahead = request.typeahead === true;
+      const reader = exactCandidates.length + relatedCandidates.length + (typeahead ? 0 : evidenceRowsOf(source)) > 0 ? deps.indexes : undefined;
       const snapshot = await readOrFail(reader, request);
       const planSnapshot = snapshot === undefined || snapshot === 'unverified' || 'failure' in snapshot ? undefined : snapshot;
       const exactPlan = planOf(exactCandidates, planSnapshot);
       const relatedPlan = planOf(relatedCandidates, planSnapshot);
+      // the evidence group belongs to the Search results page too: a type-ahead request does not read it
+      const evidencePlan = typeahead ? { targets: [], disabled: [] } : planEvidence(source, planSnapshot);
       const cap = Math.min(SEARCH_GROUP_CAP, source.budgets.maxPage);
       const run = (templateId: string, targets: readonly object[]): Promise<GatePage> =>
         runSearch(deps.gate, {
@@ -205,28 +212,33 @@ export function createSearchService(deps: { readonly gate: Gate; readonly mappin
       const [exactOutcome] = await Promise.allSettled([run(SEARCH_EXACT_ID, exactPlan.targets)]);
       const schemaFailed = snapshot !== undefined && snapshot !== 'unverified' && 'failure' in snapshot;
       if (exactOutcome.status === 'rejected' && (schemaFailed || failureOf('exact', exactOutcome.reason) === undefined)) throw exactOutcome.reason;
-      // the group read after the exact one settles before the answer, so no read is left running when it is sent: the related group, or for a type-ahead request the startsWith group, read for the exact group's targets as a value
-      const withStartsWith = request.typeahead === true;
+      // the groups read after the exact one settle together before the answer, so no read is left running when it is sent: the related and the evidence group, or for a type-ahead request the startsWith group alone, read for the exact group's targets as a value
+      const withStartsWith = typeahead;
       const startsWithRead = withStartsWith && exactPlan.targets.length > 0;
-      const [relatedOutcome, startsWithOutcome] = await Promise.allSettled([
+      const [relatedOutcome, evidenceOutcome, startsWithOutcome] = await Promise.allSettled([
         relatedPlan.targets.length === 0 ? none : run(SEARCH_RELATED_ID, relatedPlan.targets),
+        evidencePlan.targets.length === 0 ? none : run(SEARCH_EVIDENCE_ID, evidencePlan.targets),
         startsWithRead ? run(SEARCH_PREFIX_ID, exactPlan.targets.map((target) => ({ ...target, match: 'value' as const }))) : none,
       ]);
       const failures = failuresOf([
         { group: 'exact', read: exactPlan.targets.length > 0, outcome: exactOutcome },
         { group: 'related', read: relatedPlan.targets.length > 0, outcome: relatedOutcome },
+        { group: 'evidence', read: evidencePlan.targets.length > 0, outcome: evidenceOutcome },
         ...(withStartsWith ? [{ group: 'startsWith' as const, read: startsWithRead, outcome: startsWithOutcome }] : []),
       ]);
       const failed = new Set(failures.map((failure) => failure.group));
       const exactPage = exactOutcome.status === 'fulfilled' ? exactOutcome.value : undefined;
       const relatedPage = relatedOutcome.status === 'fulfilled' ? relatedOutcome.value : undefined;
+      const evidencePage = evidenceOutcome.status === 'fulfilled' ? evidenceOutcome.value : undefined;
       const startsWithPage = startsWithOutcome.status === 'fulfilled' ? startsWithOutcome.value : undefined;
       const exactItem = exactPage === undefined ? undefined : normalizedOf(exactPage);
       const relatedItem = relatedPage === undefined ? undefined : normalizedOf(relatedPage);
+      const evidenceItem = evidencePage === undefined ? undefined : normalizedOf(evidencePage);
       const startsWithItem = startsWithPage === undefined ? undefined : normalizedOf(startsWithPage);
       const exact = exactItem === undefined ? [] : inOrder(source, exactItem.nodes);
       const related = relatedItem === undefined ? [] : inOrder(source, relatedItem.nodes);
-      const dropped = droppedOf([exactItem, relatedItem].filter((item) => item !== undefined));
+      const evidence = evidenceItem === undefined ? [] : evidenceHitsOf(source, evidenceItem.edges);
+      const dropped = droppedOf([exactItem, relatedItem, evidenceItem].filter((item) => item !== undefined));
       return {
         sourceId: request.sourceId,
         exact,
@@ -239,6 +251,12 @@ export function createSearchService(deps: { readonly gate: Gate; readonly mappin
           count: countOf(related.length, relatedPage, RELATED_SCOPE, failed.has('related')),
           searchable: relatedPlan.targets.length > 0,
           disabledTypes: relatedPlan.disabled,
+        },
+        evidence: {
+          hits: evidence,
+          count: countOf(evidence.length, evidencePage, EVIDENCE_SCOPE, failed.has('evidence')),
+          searchable: evidencePlan.targets.length > 0,
+          disabledRelationshipTypes: evidencePlan.disabled,
         },
         failures,
         dropped,

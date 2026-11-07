@@ -27,7 +27,7 @@ export function validateRequest(catalog: TemplateCatalog, template: Template, re
   // a masked field is not an oracle: while masking is asked, a request cannot search, filter or sort by a pii field
   if (context.mask) {
     for (const used of template.usedProperties?.(parsed.data) ?? []) {
-      if (context.model.entitiesByType.get(used.entityType)?.pii.includes(used.property) === true) throw new AppError('INVALID_REQUEST');
+      if ('entityType' in used && context.model.entitiesByType.get(used.entityType)?.pii.includes(used.property) === true) throw new AppError('INVALID_REQUEST');
     }
   }
   const refs = template.refsOf(parsed.data);

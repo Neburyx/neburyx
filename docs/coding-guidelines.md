@@ -29,8 +29,8 @@ These shape code directly. Breaking one is a bug, whatever the tests say.
 - **No query text from input.** Queries come from fixed, parameterised templates. Values are always
   parameters. The only interpolation allowed is a label, a relationship-type name or a property name
   taken from the validated mapping allowlist and backtick-quoted, done in one helper. Only a search
-  template (the exact search, the related lookup and the type-ahead lookup) may repeat one fixed branch for each entry of a list of allowlisted targets (a label
-  and a property of the `search` or the `reference` list); the branch text is fixed, the gate writes in only the quoted names, and the
+  template (the exact search, the related lookup, the evidence lookup and the type-ahead lookup) may repeat one fixed branch for each entry of a list of allowlisted targets (a label
+  and a property of the `search` or the `reference` list, or, for the evidence lookup, a relationship type, the entity types of its ends and an evidence property of one mapping row); the branch text is fixed, the gate writes in only the quoted names, and the
   catalog checks the declaration. A name from a request is checked against the allowlist, never inserted as is. Never
   build Cypher or SQL by joining strings in any other way.
 - **A read that needs an index finds out first.** A template names the indexes it needs; the gate reads

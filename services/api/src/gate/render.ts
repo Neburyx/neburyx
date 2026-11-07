@@ -9,8 +9,11 @@ import type { GateParameter, Params, SourceAllowlist, Template } from './types.j
  * `@searchBranches(targets)` writes one branch for each target in the list parameter `targets`, from the template's branch text (see `Template.searchBranches`).
  */
 const MARKER = /@(entity|relationship|stableId|searchBranches)\(([A-Za-z][A-Za-z0-9]*)\)/g;
-/** The two placeholders of a branch text: the label of the target's entity type and its property. */
-export const BRANCH_MARKER = /@(label|property)(?![A-Za-z0-9])/g;
+/**
+ * The placeholders of a branch text: for a target of an entity type the label of the type and the property (`@label`, `@property`); for a target of a relationship mapping row the
+ * relationship type, the labels of its two entity types and the property (`@type`, `@fromLabel`, `@toLabel`, `@property`).
+ */
+export const BRANCH_MARKER = /@(label|property|type|fromLabel|toLabel)(?![A-Za-z0-9])/g;
 /** A name that cannot sit inside backticks: one with a backtick, a backslash or a control character, such as `a`b`. */
 const UNQUOTABLE = /[`\\\u0000-\u001f\u007f]/;
 
@@ -56,11 +59,13 @@ function gateValuesOf(template: Template, allowlist: SourceAllowlist): [string, 
 }
 
 const targetSchema = z.strictObject({ entityType: z.string(), property: z.string(), match: z.enum(['value', 'text']) });
+const evidenceTargetSchema = z.strictObject({ relationshipType: z.string(), from: z.string(), to: z.string(), property: z.string(), match: z.enum(['value', 'text']) });
 
 /** The branches of a template that has them: one for each target, checked against the search allowlist, each name quoted by `quoteName`, joined by `UNION`; empty for a template without branches. */
 function branchesOf(template: Template, params: Params, allowlist: SourceAllowlist): string {
   const branches = template.searchBranches;
   if (branches === undefined) return '';
+  if (branches.allowlist === 'evidence') return evidenceBranchesOf(template, params, allowlist);
   const list = z.array(targetSchema).max(MAX_SEARCH_PROPERTIES).safeParse(params[branches.param]);
   if (!list.success) throw new AppError('INVALID_REQUEST');
   if (list.data.length === 0) {
@@ -76,6 +81,32 @@ function branchesOf(template: Template, params: Params, allowlist: SourceAllowli
       if (seen.has(key)) throw new AppError('INVALID_REQUEST');
       seen.add(key);
       return branches[target.match].replace(BRANCH_MARKER, (_whole, kind: string) => quoteName(kind === 'label' ? label : target.property));
+    })
+    .join(' UNION ');
+}
+
+/** The branches of an evidence template: one for each target, which must be an evidence property of a relationship mapping row that has a `stable_id`, with the labels of that row's two entity types. */
+function evidenceBranchesOf(template: Template, params: Params, allowlist: SourceAllowlist): string {
+  const branches = template.searchBranches;
+  if (branches === undefined) return '';
+  const list = z.array(evidenceTargetSchema).max(MAX_SEARCH_PROPERTIES).safeParse(params[branches.param]);
+  if (!list.success) throw new AppError('INVALID_REQUEST');
+  if (list.data.length === 0) {
+    if (template.readsNothing?.(params) === true) return '';
+    throw new AppError('INVALID_REQUEST');
+  }
+  const seen = new Set<string>();
+  return list.data
+    .map((target) => {
+      const row = allowlist.evidenceRows.find((candidate) => candidate.type === target.relationshipType && candidate.from === target.from && candidate.to === target.to);
+      const fromLabel = allowlist.entityLabels.get(target.from);
+      const toLabel = allowlist.entityLabels.get(target.to);
+      if (row === undefined || fromLabel === undefined || toLabel === undefined || !row.properties.includes(target.property)) throw new AppError('INVALID_REQUEST');
+      const key = JSON.stringify([target.relationshipType, target.from, target.to, target.property]);
+      if (seen.has(key)) throw new AppError('INVALID_REQUEST');
+      seen.add(key);
+      const names: Record<string, string> = { type: target.relationshipType, fromLabel, toLabel, property: target.property };
+      return branches[target.match].replace(BRANCH_MARKER, (_whole, kind: string) => quoteName(names[kind] ?? ''));
     })
     .join(' UNION ');
 }

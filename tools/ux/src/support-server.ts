@@ -265,10 +265,29 @@ function createInvestigations(options: SupportServerOptions) {
 const SEARCH_TYPE = 'account';
 const MANY = /^many-(\d+)$/;
 const RELATED = /^rel-(\d+)$/;
+const EVIDENCE = /^ev-(\d+)$/;
 const STALLS_ONCE = 'stall';
 const STARTS_WITH_SUFFIXES = ['-1', '-2'];
 const TIMEOUT = { error: { code: 'QUERY_TIMEOUT', message: 'The source did not answer in time. Try again or refine your filters.', retryable: true, traceId: 'tr-support', details: { timeoutMs: 5000 } } };
+const NO_EVIDENCE = { hits: [], count: { value: 0, quality: 'exact', scope: 'search:evidence' }, searchable: false, disabledRelationshipTypes: [] };
 const NO_RELATED = { hits: [], count: { value: 0, quality: 'exact', scope: 'search:related' }, searchable: false, disabledTypes: [] };
+
+function evidenceGroup(sourceId: string, text: string): unknown {
+  const matches = EVIDENCE.exec(text);
+  if (matches !== null) {
+    const found = Number(matches[1]);
+    const shown = Math.min(found, SEARCH_GROUP_CAP);
+    const hits = Array.from({ length: shown }, (_, index) => ({
+      supports: { sourceId, type: 'LINKS', from: SEARCH_TYPE, to: SEARCH_TYPE, stableId: `${text}-l${String(index + 1).padStart(2, '0')}` },
+      records: [{ sourceRecordId: `REC-${text}-${index + 1}` }],
+      rules: index === 0 ? [{ ruleId: 'shared-link', ruleVersion: 1 }] : [],
+    }));
+    return { hits, count: { value: shown, quality: found > SEARCH_GROUP_CAP ? 'lowerBound' : 'exact', scope: 'search:evidence' }, searchable: true, disabledRelationshipTypes: [] };
+  }
+  if (text.startsWith('evfail')) return { ...NO_EVIDENCE, searchable: true, count: { quality: 'unknown', scope: 'search:evidence' } };
+  if (text.startsWith('evdrop')) return { ...NO_EVIDENCE, disabledRelationshipTypes: [{ relationshipType: 'LINKS', from: SEARCH_TYPE, to: SEARCH_TYPE, reason: 'index-unavailable' }] };
+  return NO_EVIDENCE;
+}
 
 function relatedGroup(sourceId: string, text: string): unknown {
   const matches = RELATED.exec(text);
@@ -324,7 +343,8 @@ function createSearch(options: SupportServerOptions) {
         counts: { exact: exactFailed ? { quality: 'unknown', scope: 'search:exact' } : { value: nodes.length, quality: found > SEARCH_GROUP_CAP ? 'lowerBound' : 'exact', scope: 'search:exact' } },
         disabledTypes: [],
         related,
-        failures,
+        evidence: withRelated ? evidenceGroup(sourceId, text) : NO_EVIDENCE,
+        failures: withRelated && text.startsWith('evfail') ? [{ group: 'evidence', code: 'QUERY_TIMEOUT', timeoutMs: 5000 }, ...failures] : failures,
         dropped: { 'not-mapped': 0, 'ambiguous-type': 0, 'no-stable-id': 0 },
         warnings: [],
         elapsedMs: 180,

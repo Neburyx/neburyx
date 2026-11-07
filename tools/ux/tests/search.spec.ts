@@ -157,7 +157,7 @@ test.describe('two configured sources', () => {
       searched.push(body.sourceId);
       if (body.sourceId !== SECOND) return route.fallback();
       const node = { ref: { sourceId: SECOND, entityType: 'account', stableId: body.text }, display: { title: `second ${body.text}`, type: 'account' }, properties: [], qualityFlags: [], provenanceRefs: [], authorization: { canInspect: true, canExport: true } };
-      return route.fulfill({ json: { sourceId: SECOND, exact: [node], cap: 25, searchable: true, counts: { exact: { value: 1, quality: 'exact', scope: 'search:exact' } }, disabledTypes: [], related: { hits: [], count: { value: 0, quality: 'exact', scope: 'search:related' }, searchable: false, disabledTypes: [] }, failures: [], dropped: { 'not-mapped': 0, 'ambiguous-type': 0, 'no-stable-id': 0 }, warnings: [], elapsedMs: 120 } });
+      return route.fulfill({ json: { sourceId: SECOND, exact: [node], cap: 25, searchable: true, counts: { exact: { value: 1, quality: 'exact', scope: 'search:exact' } }, disabledTypes: [], related: { hits: [], count: { value: 0, quality: 'exact', scope: 'search:related' }, searchable: false, disabledTypes: [] }, evidence: { hits: [], count: { value: 0, quality: 'exact', scope: 'search:evidence' }, searchable: false, disabledRelationshipTypes: [] }, failures: [], dropped: { 'not-mapped': 0, 'ambiguous-type': 0, 'no-stable-id': 0 }, warnings: [], elapsedMs: 120 } });
     });
     await searchFor(page, 'AC-1');
     const selector = page.getByRole('combobox', { name: 'Source' });

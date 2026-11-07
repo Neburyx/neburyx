@@ -19,4 +19,10 @@ export function relatedText(count: Count): string | undefined {
   return count.quality === 'exact' ? `${text} related ${count.value === 1 ? 'record' : 'records'}` : `≥ ${count.value} related records · lower bound`;
 }
 
+export function evidenceText(count: Count): string | undefined {
+  const text = countText(count);
+  if (text === undefined) return undefined;
+  return count.quality === 'exact' ? `${text} supporting ${count.value === 1 ? 'relationship' : 'relationships'}` : `≥ ${count.value} supporting relationships · lower bound`;
+}
+
 export const secondsText = (elapsedMs: number): string => `${(elapsedMs / 1000).toFixed(2)} s`;

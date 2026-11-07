@@ -17,6 +17,7 @@ import { degreeProbeTemplate } from './templates/degree-probe.js';
 import { entityLoadTemplate } from './templates/entity-load.js';
 import { searchExactTemplate } from './templates/search-exact.js';
 import { searchPrefixTemplate } from './templates/search-prefix.js';
+import { searchEvidenceTemplate } from './templates/search-evidence.js';
 import { searchRelatedTemplate } from './templates/search-related.js';
 import { privilegesTemplate } from './templates/privileges.js';
 import { schemaIndexesTemplate } from './templates/schema-indexes.js';
@@ -42,7 +43,7 @@ export interface AssembleOptions {
 }
 
 export function defaultCatalog(): TemplateCatalog {
-  return createTemplateCatalog({ templates: [connectivityTemplate, capabilitiesTemplate, privilegesTemplate, schemaTokensTemplate, schemaIndexesTemplate, stableIdDuplicatesTemplate, degreeProbeTemplate, entityLoadTemplate, searchExactTemplate, searchRelatedTemplate, searchPrefixTemplate] });
+  return createTemplateCatalog({ templates: [connectivityTemplate, capabilitiesTemplate, privilegesTemplate, schemaTokensTemplate, schemaIndexesTemplate, stableIdDuplicatesTemplate, degreeProbeTemplate, entityLoadTemplate, searchExactTemplate, searchRelatedTemplate, searchEvidenceTemplate, searchPrefixTemplate] });
 }
 
 function budgetsFrom(source: SourceModel): Budgets {

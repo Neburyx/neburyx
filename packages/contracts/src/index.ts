@@ -39,8 +39,8 @@ export {
   testOutcomeSchema,
 } from './source-test.js';
 export type { DegreeBasis, DegreeChecks, DegreeType, MappingCheck, MappingChecks, MappingFinding, SourceTestReport, TestOutcome } from './source-test.js';
-export { COUNT_QUALITIES, DATA_CLASSES, countSchema, edgeRefSchema, edgeSchema, elementRefSchema, nodeSchema, propertySchema } from './graph.js';
-export type { Count, DataClass, EdgeRef, ElementRef, GraphEdge, GraphNode, GraphProperty } from './graph.js';
+export { COUNT_QUALITIES, DATA_CLASSES, countSchema, edgeRefSchema, edgeSchema, elementRefSchema, nodeSchema, propertySchema, storedEdgeRefSchema } from './graph.js';
+export type { Count, DataClass, EdgeRef, ElementRef, GraphEdge, GraphNode, GraphProperty, StoredEdgeRef } from './graph.js';
 export { MAX_STABLE_ID_LENGTH, entityPathSchema, entityQuerySchema, pathSegmentOf, stableIdSchema, valueOfPathSegment } from './entities.js';
 export type { EntityPath } from './entities.js';
 export {
@@ -72,11 +72,16 @@ export {
   MIN_SEARCH_TEXT_LENGTH,
   MIN_TYPEAHEAD_TEXT_LENGTH,
   SEARCH_DISABLED_REASONS,
+  SEARCH_EVIDENCE_DISABLED_REASONS,
   SEARCH_GROUPS,
   SEARCH_GROUP_CAP,
   SEARCH_GROUP_FAILURE_CODES,
+  disabledRelationshipSchema,
   disabledTypeSchema,
   droppedSchema,
+  evidenceGroupSchema,
+  evidenceHitSchema,
+  evidenceRuleSchema,
   groupFailureSchema,
   relatedGroupSchema,
   relatedHitSchema,
@@ -86,4 +91,4 @@ export {
   startsWithGroupSchema,
   typeaheadTextSchema,
 } from './search.js';
-export type { DisabledType, GroupFailure, RelatedGroup, RelatedHit, SearchGroup, SearchRequest, SearchResult, StartsWithGroup } from './search.js';
+export type { DisabledRelationship, DisabledType, EvidenceGroup, EvidenceHit, GroupFailure, RelatedGroup, RelatedHit, SearchGroup, SearchRequest, SearchResult, StartsWithGroup } from './search.js';
