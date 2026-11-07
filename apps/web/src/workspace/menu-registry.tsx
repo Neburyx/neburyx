@@ -2,6 +2,7 @@ import { createContext, useContext, type ComponentType, type ReactNode } from 'r
 import type { CanvasCommands } from '../canvas/canvas-commands.js';
 import type { ClientState } from '../state/client-state.js';
 import type { MenuTargetKind } from '../state/presentation-state.js';
+import type { ExpansionControls } from './expand-context.js';
 import { createStore, readable, useStoreSelector, type ReadableStore } from '../state/store.js';
 
 export type { MenuTargetKind };
@@ -43,6 +44,8 @@ export interface MenuContext {
   readonly state: ClientState;
   /** Absent while no renderer is running. */
   readonly canvas: CanvasCommands | undefined;
+  /** What expanding a node needs; absent where the app is drawn without expansions. */
+  readonly expansion?: ExpansionControls | undefined;
 }
 
 export type MenuItemState = 'enabled' | 'disabled';

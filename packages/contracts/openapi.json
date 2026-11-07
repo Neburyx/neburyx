@@ -868,6 +868,115 @@
         }
       }
     },
+    "/v1/graph/expand": {
+      "post": {
+        "operationId": "expandNeighbors",
+        "summary": "One page of the neighbors of a node for each asked neighbor type",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExpandRequest"
+              }
+            }
+          }
+        },
+        "description": "Reads one page of at most `limit` relationships (the source default page when absent; above the source maximum the answer is QUERY_BUDGET_EXCEEDED) for each asked neighbor type, newest first by the observed time of the mapping row and undated last, with the neighbor nodes. The types are read one after another under one read lease and the answer holds a page and a cursor for each; a failure in any of them answers the failure and no page. A cursor continues one type and is refused with CURSOR_INVALIDATED when altered, expired or minted for another source, person, policy version, sort, neighbor type, relationship types, direction or node. Relationships of a type with no stable ID are returned as aggregate edges with their member count.",
+        "responses": {
+          "200": {
+            "description": "The pages of the neighbor types",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExpandResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The body is not valid, or names a neighbor type or relationship type that is not mapped for the node, or a page size below 1",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The node is not in the source, or the source is not configured or may not be read (one answer for all)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A cursor is altered, expired or for another request (CURSOR_INVALIDATED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "The body is not JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The page size is over the source maximum (QUERY_BUDGET_EXCEEDED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The expansion could not run, or the source answered with something unreadable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The source is not available, or is busy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The source did not answer in time",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/sources": {
       "get": {
         "operationId": "listSources",
@@ -1098,6 +1207,11 @@
               ],
               "additionalProperties": false
             }
+          },
+          "pageSize": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
           }
         },
         "required": [
@@ -1105,7 +1219,8 @@
           "total",
           "byType",
           "byNeighborType",
-          "warnings"
+          "warnings",
+          "pageSize"
         ],
         "additionalProperties": false
       },
@@ -1817,6 +1932,931 @@
         },
         "required": [
           "error"
+        ],
+        "additionalProperties": false
+      },
+      "ExpandRequest": {
+        "type": "object",
+        "properties": {
+          "sourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "ref": {
+            "type": "object",
+            "properties": {
+              "entityType": {
+                "type": "string",
+                "minLength": 1
+              },
+              "stableId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 266691
+              }
+            },
+            "required": [
+              "entityType",
+              "stableId"
+            ],
+            "additionalProperties": false
+          },
+          "relTypes": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "neighborTypes": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "out",
+              "in",
+              "both"
+            ]
+          },
+          "sort": {
+            "type": "string",
+            "enum": [
+              "observed"
+            ]
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "cursors": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string",
+              "minLength": 1
+            },
+            "additionalProperties": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "mask": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "sourceId",
+          "ref",
+          "neighborTypes"
+        ],
+        "additionalProperties": false
+      },
+      "ExpandResponse": {
+        "type": "object",
+        "properties": {
+          "ref": {
+            "type": "object",
+            "properties": {
+              "sourceId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "entityType": {
+                "type": "string",
+                "minLength": 1
+              },
+              "stableId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 266691
+              }
+            },
+            "required": [
+              "sourceId",
+              "entityType",
+              "stableId"
+            ],
+            "additionalProperties": false
+          },
+          "pageSize": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "nodes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "ref": {
+                  "type": "object",
+                  "properties": {
+                    "sourceId": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "entityType": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "stableId": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "sourceId",
+                    "entityType",
+                    "stableId"
+                  ],
+                  "additionalProperties": false
+                },
+                "display": {
+                  "type": "object",
+                  "properties": {
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "badges": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "title",
+                    "type"
+                  ],
+                  "additionalProperties": false
+                },
+                "properties": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "value": {},
+                      "dataClass": {
+                        "type": "string",
+                        "enum": [
+                          "text",
+                          "number",
+                          "boolean",
+                          "date",
+                          "dateTime",
+                          "localDateTime",
+                          "time",
+                          "localTime",
+                          "duration",
+                          "point",
+                          "list",
+                          "other",
+                          "unknown",
+                          "name",
+                          "email",
+                          "phone"
+                        ]
+                      },
+                      "masked": {
+                        "type": "boolean"
+                      },
+                      "maskedBy": {
+                        "type": "string",
+                        "enum": [
+                          "policy",
+                          "request"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "key",
+                      "dataClass",
+                      "masked"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "qualityFlags": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "provenanceRefs": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "authorization": {
+                  "type": "object",
+                  "properties": {
+                    "canInspect": {
+                      "type": "boolean"
+                    },
+                    "canExport": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "canInspect",
+                    "canExport"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "ref",
+                "display",
+                "properties",
+                "qualityFlags",
+                "provenanceRefs",
+                "authorization"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "edges": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "ref": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "sourceId": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "type": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "from": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "to": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "stableId": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "sourceId",
+                        "type",
+                        "from",
+                        "to",
+                        "stableId"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "sourceId": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "aggregate": {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "from": {
+                              "type": "object",
+                              "properties": {
+                                "sourceId": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "entityType": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "stableId": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "required": [
+                                "sourceId",
+                                "entityType",
+                                "stableId"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "to": {
+                              "type": "object",
+                              "properties": {
+                                "sourceId": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "entityType": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "stableId": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "required": [
+                                "sourceId",
+                                "entityType",
+                                "stableId"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "from",
+                            "to"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "sourceId",
+                        "aggregate"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "sourceId": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "derived": {
+                          "type": "object",
+                          "properties": {
+                            "ruleId": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "from": {
+                              "type": "object",
+                              "properties": {
+                                "sourceId": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "entityType": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "stableId": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "required": [
+                                "sourceId",
+                                "entityType",
+                                "stableId"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "to": {
+                              "type": "object",
+                              "properties": {
+                                "sourceId": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "entityType": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "stableId": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "required": [
+                                "sourceId",
+                                "entityType",
+                                "stableId"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "ruleId",
+                            "from",
+                            "to"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "sourceId",
+                        "derived"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "memberCount": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "quality": {
+                      "type": "string",
+                      "enum": [
+                        "exact",
+                        "estimated",
+                        "lowerBound",
+                        "unknown"
+                      ]
+                    },
+                    "scope": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "quality",
+                    "scope"
+                  ],
+                  "additionalProperties": false
+                },
+                "from": {
+                  "type": "object",
+                  "properties": {
+                    "sourceId": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "entityType": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "stableId": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "sourceId",
+                    "entityType",
+                    "stableId"
+                  ],
+                  "additionalProperties": false
+                },
+                "to": {
+                  "type": "object",
+                  "properties": {
+                    "sourceId": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "entityType": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "stableId": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "sourceId",
+                    "entityType",
+                    "stableId"
+                  ],
+                  "additionalProperties": false
+                },
+                "type": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "direction": {
+                  "type": "string",
+                  "enum": [
+                    "from-to",
+                    "out",
+                    "in"
+                  ]
+                },
+                "semantics": {
+                  "type": "string",
+                  "enum": [
+                    "stored",
+                    "derived",
+                    "unknown"
+                  ]
+                },
+                "observedFirst": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "observedLast": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "derivation": {
+                  "type": "object",
+                  "properties": {
+                    "ruleId": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "ruleVersion": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "supportingEdgeRefs": {
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "sourceId": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "type": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "from": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "to": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "stableId": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "required": [
+                              "sourceId",
+                              "type",
+                              "from",
+                              "to",
+                              "stableId"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "sourceId": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "aggregate": {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "from": {
+                                    "type": "object",
+                                    "properties": {
+                                      "sourceId": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "entityType": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "stableId": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      }
+                                    },
+                                    "required": [
+                                      "sourceId",
+                                      "entityType",
+                                      "stableId"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "to": {
+                                    "type": "object",
+                                    "properties": {
+                                      "sourceId": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "entityType": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "stableId": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      }
+                                    },
+                                    "required": [
+                                      "sourceId",
+                                      "entityType",
+                                      "stableId"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "from",
+                                  "to"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "sourceId",
+                              "aggregate"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "sourceId": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "derived": {
+                                "type": "object",
+                                "properties": {
+                                  "ruleId": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "from": {
+                                    "type": "object",
+                                    "properties": {
+                                      "sourceId": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "entityType": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "stableId": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      }
+                                    },
+                                    "required": [
+                                      "sourceId",
+                                      "entityType",
+                                      "stableId"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "to": {
+                                    "type": "object",
+                                    "properties": {
+                                      "sourceId": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "entityType": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "stableId": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      }
+                                    },
+                                    "required": [
+                                      "sourceId",
+                                      "entityType",
+                                      "stableId"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": [
+                                  "ruleId",
+                                  "from",
+                                  "to"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "sourceId",
+                              "derived"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "ruleId",
+                    "ruleVersion",
+                    "supportingEdgeRefs"
+                  ],
+                  "additionalProperties": false
+                },
+                "properties": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "value": {},
+                      "dataClass": {
+                        "type": "string",
+                        "enum": [
+                          "text",
+                          "number",
+                          "boolean",
+                          "date",
+                          "dateTime",
+                          "localDateTime",
+                          "time",
+                          "localTime",
+                          "duration",
+                          "point",
+                          "list",
+                          "other",
+                          "unknown",
+                          "name",
+                          "email",
+                          "phone"
+                        ]
+                      },
+                      "masked": {
+                        "type": "boolean"
+                      },
+                      "maskedBy": {
+                        "type": "string",
+                        "enum": [
+                          "policy",
+                          "request"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "key",
+                      "dataClass",
+                      "masked"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "evidenceRefs": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "observedAt": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "validFrom": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "validTo": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "qualityFlags": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "ref",
+                "from",
+                "to",
+                "type",
+                "direction",
+                "semantics",
+                "properties",
+                "evidenceRefs",
+                "qualityFlags"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "pages": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "neighborType": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "returned": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "hasMore": {
+                  "type": "boolean"
+                },
+                "matchingTotal": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "quality": {
+                      "type": "string",
+                      "enum": [
+                        "exact",
+                        "estimated",
+                        "lowerBound",
+                        "unknown"
+                      ]
+                    },
+                    "scope": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "quality",
+                    "scope"
+                  ],
+                  "additionalProperties": false
+                },
+                "nextCursor": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "neighborType",
+                "returned",
+                "hasMore",
+                "matchingTotal"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "ref",
+          "pageSize",
+          "nodes",
+          "edges",
+          "pages",
+          "warnings"
         ],
         "additionalProperties": false
       },
@@ -4147,6 +5187,21 @@
                 "minimum": 0,
                 "maximum": 9007199254740991
               },
+              "end-not-shown": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "end-missing": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "no-mapping-row": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
               "not-visible": {
                 "type": "integer",
                 "minimum": 0,
@@ -4378,6 +5433,21 @@
                     "maximum": 9007199254740991
                   },
                   "no-stable-id": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "end-not-shown": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "end-missing": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "no-mapping-row": {
                     "type": "integer",
                     "minimum": 0,
                     "maximum": 9007199254740991
@@ -5132,7 +6202,8 @@
                       "type": "string",
                       "enum": [
                         "fail",
-                        "warn"
+                        "warn",
+                        "info"
                       ]
                     },
                     "check": {
@@ -5150,6 +6221,7 @@
                         "index-building",
                         "stable-id-unenforced",
                         "rel-stable-id-unindexed",
+                        "rel-stable-id-unconstrained",
                         "schema-refused",
                         "schema-unreadable",
                         "stable-id-unverified"

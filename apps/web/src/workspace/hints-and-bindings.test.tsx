@@ -118,7 +118,9 @@ describe('pressing the keys of a hint runs its command', () => {
     registerStandInKeyBindings({ platform: 'mac', view: createKeyBindingRegistry('mac').view, register: (entry) => { recorded.push(entry); return () => undefined; } });
     const log: string[] = [];
     const keys = createKeyBindingRegistry('mac');
-    for (const entry of recorded) keys.register({ ...entry, run: () => void log.push(entry.id) });
+    const taken = new Set<string>();
+    const registered = recorded.filter((entry) => !taken.has(entry.id) && Boolean(taken.add(entry.id)));
+    for (const entry of registered) keys.register({ ...entry, run: () => void log.push(entry.id) });
     const state = createClientState();
     renderApp('/explore', client, state, undefined, undefined, undefined, undefined, undefined, undefined, keys);
     const alone = (binding: { readonly when?: unknown; readonly scope: string }): boolean => binding.when === undefined && binding.scope === 'workspace';
@@ -129,7 +131,7 @@ describe('pressing the keys of a hint runs its command', () => {
         document.body.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, metaKey: spec.mod, shiftKey: spec.shift, altKey: spec.alt }));
       }
     }
-    expect(log.sort()).toEqual(recorded.filter(alone).map((entry) => entry.id).sort());
+    expect(log.sort()).toEqual(registered.filter(alone).map((entry) => entry.id).sort());
     expect(log.length).toBeGreaterThanOrEqual(12);
   });
 });

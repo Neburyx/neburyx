@@ -2,6 +2,7 @@ import { createContext, useContext, type ReactNode } from 'react';
 import type { CanvasCommands } from '../canvas/canvas-commands.js';
 import type { ClientState } from '../state/client-state.js';
 import { createStore, readable, useStoreSelector, type ReadableStore } from '../state/store.js';
+import type { ExpansionControls } from './expand-context.js';
 import { detectPlatform, parseKeys, sameKeys, showKeys, type KeySpec, type Platform } from './key-spec.js';
 
 export type KeyGroup = 'tools' | 'selection' | 'actions' | 'view';
@@ -14,6 +15,8 @@ export interface KeyContext {
   readonly state: ClientState;
   /** Absent while no renderer is running. */
   readonly canvas: CanvasCommands | undefined;
+  /** What expanding a node needs; absent where the app is drawn without expansions. */
+  readonly expansion?: ExpansionControls | undefined;
   /** The key press that runs the binding; absent when a command is run some other way. */
   readonly event?: KeyboardEvent | undefined;
 }

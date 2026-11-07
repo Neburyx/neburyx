@@ -5,6 +5,7 @@ import { useClientState, useLoadedGraph } from '../state/context.js';
 import { drawnKeys } from '../state/loaded-graph.js';
 import type { OpenMenu } from '../state/presentation-state.js';
 import { useStoreSelector } from '../state/store.js';
+import { useExpansionControls } from './expand-context.js';
 import { useKeyBindings } from './key-binding-registry.js';
 import { menuHeader } from './menu-header.js';
 import { placeMenu, type Placement } from './menu-placement.js';
@@ -28,6 +29,7 @@ interface SubmenuOpen {
 export function ContextMenu() {
   const state = useClientState();
   const canvas = useCanvasCommands();
+  const expansion = useExpansionControls();
   const open = useStoreSelector(state.presentation.view, (current) => current.openMenu);
   const items = useMenuItems(open?.kind);
   const graph = useLoadedGraph();
@@ -42,7 +44,7 @@ export function ContextMenu() {
   const [placement, setPlacement] = useState<Placement | undefined>(undefined);
   const [, remeasure] = useState(0);
   const [submenuOpen, setSubmenuOpen] = useState<SubmenuOpen | undefined>(undefined);
-  const contextFor = (menu: OpenMenu): MenuContext => ({ kind: menu.kind, key: menu.key, selection: [...state.presentation.view.getState().selection], state, canvas });
+  const contextFor = (menu: OpenMenu): MenuContext => ({ kind: menu.kind, key: menu.key, selection: [...state.presentation.view.getState().selection], state, canvas, expansion });
   const parent = submenuOpen === undefined || submenuOpen.menu !== shown ? undefined : items.find((item) => item.id === submenuOpen.id && item.registration === submenuOpen.registration && item.submenu !== undefined && stateOf(item, contextFor(submenuOpen.menu)) === 'enabled');
   const activeSubmenu = parent === undefined || submenuOpen === undefined ? undefined : { item: parent, row: submenuOpen.row, takeFocus: submenuOpen.takeFocus, ring: submenuOpen.ring };
   const pointerDown = useRef(false);

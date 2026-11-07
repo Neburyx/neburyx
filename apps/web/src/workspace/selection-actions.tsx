@@ -5,8 +5,8 @@ export interface SelectionAction {
   readonly id: string;
   readonly label: string;
   readonly icon: ReactNode;
-  /** Receives the keys of the selected items in selection order. */
-  readonly run: (selection: readonly string[]) => void;
+  /** Receives the keys of the selected items in selection order; text it returns is shown beside the action. */
+  readonly run: (selection: readonly string[]) => void | string;
 }
 
 export class ActionError extends Error {
@@ -49,6 +49,11 @@ const SelectionActionsContext = createContext<SelectionActionRegistry | undefine
 
 export function SelectionActionsProvider({ registry, children }: { readonly registry: SelectionActionRegistry; readonly children: ReactNode }) {
   return <SelectionActionsContext.Provider value={registry}>{children}</SelectionActionsContext.Provider>;
+}
+
+/** The registry when one is provided, and nothing in a part of the app drawn without one. */
+export function useSelectionActionRegistryWhenProvided(): SelectionActionRegistry | undefined {
+  return useContext(SelectionActionsContext);
 }
 
 export function useSelectionActionRegistry(): SelectionActionRegistry {

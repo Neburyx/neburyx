@@ -39,6 +39,7 @@ export function SelectionBar() {
   const mask = useSessionMask();
   const selection = useStoreSelector(state.presentation.view, (current) => current.selection);
   const requests = useRef(0);
+  const [actionNote, setActionNote] = useState<{ readonly selection: ReadonlySet<string>; readonly text: string } | undefined>(undefined);
   const [copy, setCopy] = useState<{ readonly selection: ReadonlySet<string>; readonly status: CopyStatus } | undefined>(undefined);
   const drawn = drawnKeys(graph);
   const selected = [...selection].filter((key) => drawn.has(key));
@@ -68,7 +69,10 @@ export function SelectionBar() {
       <span className="selection-count">{formatNumber(selected.length)} selected</span>
       <span className="selection-separator" aria-hidden="true" />
       {actions.map((action) => (
-        <button key={action.id} type="button" className="selection-action" onClick={() => action.run(selected)}>
+        <button key={action.id} type="button" className="selection-action" onClick={() => {
+            const note = action.run(selected);
+            setActionNote(typeof note === 'string' ? { selection, text: note } : undefined);
+          }}>
           {action.icon}
           {action.label}
         </button>
@@ -81,6 +85,11 @@ export function SelectionBar() {
       <button type="button" className="selection-action selection-clear" aria-label="Clear selection" onClick={() => runSelectionCommand(state, 'clear-selection')}>
         <span className="icon icon-clear" aria-hidden="true" />
       </button>
+      {actionNote?.selection === selection ? (
+        <span className="selection-status" role="status">
+          {actionNote.text}
+        </span>
+      ) : null}
       {status === undefined ? null : (
         <span className="selection-status" role={status.kind === 'failed' ? 'alert' : 'status'}>
           {statusText(status)}

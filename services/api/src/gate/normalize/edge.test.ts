@@ -68,13 +68,14 @@ describe('a relationship of a type mapped with a stable ID', () => {
     expect(result.edges.every((edge) => edge.qualityFlags.length === 0)).toBe(true);
   });
 
-  it('is left out and counted when it has no stable ID', () => {
+  it.each([{ label: 'absent', properties: {} }, { label: 'empty', properties: { linkId: '' } }, { label: 'a float', properties: { linkId: 1.5 } }])('is kept as a member of the aggregate, flagged, when its stable ID is $label', ({ properties }) => {
     const a = person('p1');
     const b = person('p2');
-    const result = normalizeRows(context(), [row(a, plainRelationship('KNOWS', a, b, {}), b)]);
-    expect(result.edges).toEqual([]);
-    expect(result.dropped['no-stable-id']).toBe(1);
-    expect(result.warnings).toEqual(['1 row was left out because they have no usable stable ID.']);
+    const result = normalizeRows(context(), [row(a, plainRelationship('KNOWS', a, b, properties), b)]);
+    expect(result.edges).toHaveLength(1);
+    expect(result.edges[0]).toMatchObject({ memberCount: { value: 1, quality: 'exact' }, qualityFlags: ['no-stable-id'] });
+    expect(result.edges[0]?.ref).toHaveProperty('aggregate');
+    expect(result.warnings).toEqual([]);
   });
 });
 
@@ -159,7 +160,8 @@ describe('a relationship that is left out', () => {
     const stranger = plainNode(['Stranger'], { id: 'x' });
     const result = normalizeRows(context(), [row(a, plainRelationship('MADE_BY', a, stranger), stranger)]);
     expect(result.edges).toEqual([]);
-    expect(result.dropped['not-mapped']).toBe(2);
+    expect(result.dropped['not-mapped']).toBe(1);
+    expect(result.dropped['end-not-shown']).toBe(1);
   });
 
   it('is dropped when an end is not in the rows', () => {
@@ -167,7 +169,7 @@ describe('a relationship that is left out', () => {
     const b = person('p1');
     const result = normalizeRows(context(), [row(a, plainRelationship('MADE_BY', a, b))]);
     expect(result.edges).toEqual([]);
-    expect(result.dropped['not-mapped']).toBe(1);
+    expect(result.dropped['end-missing']).toBe(1);
   });
 
   it('is dropped when its type is not mapped between the entity types of its ends', () => {
@@ -175,7 +177,7 @@ describe('a relationship that is left out', () => {
     const b = person('p1');
     const result = normalizeRows(context(), [row(a, plainRelationship('KNOWS', a, b, { linkId: 'L' }), b), row(a, plainRelationship('UNMAPPED', a, b), b)]);
     expect(result.edges).toEqual([]);
-    expect(result.dropped['not-mapped']).toBe(2);
+    expect(result.dropped['no-mapping-row']).toBe(2);
   });
 
   it('is dropped, never turned round, when it runs against the mapped direction', () => {
@@ -183,7 +185,7 @@ describe('a relationship that is left out', () => {
     const b = person('p1');
     const result = normalizeRows(context(), [row(b, plainRelationship('MADE_BY', b, a), a)]);
     expect(result.edges).toEqual([]);
-    expect(result.dropped['not-mapped']).toBe(1);
+    expect(result.dropped['no-mapping-row']).toBe(1);
   });
 
   it('leaves the aggregate of the remaining members built from them only', () => {

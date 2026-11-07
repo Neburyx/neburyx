@@ -38,12 +38,26 @@ export function allowlistFromMapping(source: SourceModel): SourceAllowlist {
   }
   const relationshipTypes = new Set<string>();
   const evidenceRows: { type: string; from: string; to: string; properties: readonly string[] }[] = [];
-  const relationshipRows: { type: string; from: string; to: string }[] = [];
+  const relationshipRows: { type: string; from: string; to: string; stableId?: string; observedAt?: string }[] = [];
   for (const relationship of source.relationships) {
     const problem = nameProblem(relationship.type);
     if (problem !== undefined) throw new SourceGateError(source.id, `relationship type ${relationship.type}`, relationship.type, problem);
     relationshipTypes.add(relationship.type);
-    relationshipRows.push({ type: relationship.type, from: relationship.from, to: relationship.to });
+    if (relationship.stableId !== undefined) {
+      const stableProblem = nameProblem(relationship.stableId);
+      if (stableProblem !== undefined) throw new SourceGateError(source.id, `stable id of relationship type ${relationship.type}`, relationship.stableId, stableProblem);
+    }
+    if (relationship.observedAt !== undefined) {
+      const observedProblem = nameProblem(relationship.observedAt);
+      if (observedProblem !== undefined) throw new SourceGateError(source.id, `observed time of relationship type ${relationship.type}`, relationship.observedAt, observedProblem);
+    }
+    relationshipRows.push({
+      type: relationship.type,
+      from: relationship.from,
+      to: relationship.to,
+      ...(relationship.stableId === undefined ? {} : { stableId: relationship.stableId }),
+      ...(relationship.observedAt === undefined ? {} : { observedAt: relationship.observedAt }),
+    });
     for (const property of relationship.evidence) {
       const evidenceProblem = nameProblem(property);
       if (evidenceProblem !== undefined) throw new SourceGateError(source.id, `evidence property of relationship type ${relationship.type}`, property, evidenceProblem);

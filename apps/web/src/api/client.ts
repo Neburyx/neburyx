@@ -3,6 +3,7 @@ import {
   degreePreviewSchema,
   errorBodySchema,
   errorResponseSchema,
+  expandResponseSchema,
   investigationListResponseSchema,
   investigationResponseSchema,
   meResponseSchema,
@@ -18,6 +19,8 @@ import {
   type EntityLookupRequest,
   type ElementRef,
   type ErrorResponse,
+  type ExpandRequest,
+  type ExpandResponse,
   type GraphNode,
   type InvestigationListResponse,
   type InvestigationResponse,
@@ -31,6 +34,7 @@ import {
   type SourceTestReport,
 } from '@neburyx/contracts';
 import type { z } from 'zod';
+import { sourcesOfEdge } from '../state/keys.js';
 
 export interface FetchInit {
   readonly signal?: AbortSignal;
@@ -69,6 +73,8 @@ export interface ApiClient {
   searchEntities(request: SearchRequest, signal?: AbortSignal): Promise<ApiResult<SearchResult>>;
   /** How many relationships a node has by type and direction, each count with its quality, before anything is loaded; the answer names the node asked for, or it is refused. */
   previewExpansion(request: DegreePreviewRequest, signal?: AbortSignal): Promise<ApiResult<DegreePreview>>;
+  /** One page of the neighbors of a node for each asked neighbor type; the answer names the node and the source asked for and holds nothing of another source, or it is refused. */
+  expandNeighbors(request: ExpandRequest, signal?: AbortSignal): Promise<ApiResult<ExpandResponse>>;
 }
 
 function sameRef(left: ElementRef, right: ElementRef): boolean {
@@ -168,6 +174,15 @@ export function createApiClient(fetcher: Fetcher = (input, init) => fetch(input,
     previewExpansion: async (preview, signal) => {
       const result = await request(fetcher, '/v1/graph/preview-expansion', degreePreviewSchema, signal, 'POST', preview);
       return result.ok && !sameRef(result.value.ref, { sourceId: preview.sourceId, ...preview.ref }) ? failed('SCHEMA_MISMATCH') : result;
+    },
+    expandNeighbors: async (expansion, signal) => {
+      const result = await request(fetcher, '/v1/graph/expand', expandResponseSchema, signal, 'POST', expansion);
+      if (!result.ok) return result;
+      const answer = result.value;
+      const named = [...answer.nodes.flatMap((node) => [node.ref.sourceId]), ...answer.edges.flatMap((edge) => sourcesOfEdge(edge))];
+      const asked = expansion.neighborTypes;
+      const sameTypes = answer.pages.length === asked.length && answer.pages.every((page, index) => page.neighborType === asked[index]);
+      return !sameRef(answer.ref, { sourceId: expansion.sourceId, ...expansion.ref }) || named.some((sourceId) => sourceId !== expansion.sourceId) || !sameTypes ? failed('SCHEMA_MISMATCH') : result;
     },
     listInvestigations: (limit, signal) => request(fetcher, `/v1/investigations?limit=${limit}&sort=lastEdited`, investigationListResponseSchema, signal),
     getInvestigation: async (id, signal) => {

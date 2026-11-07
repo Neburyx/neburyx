@@ -3,6 +3,8 @@ import { GraphCanvas } from '../canvas/graph-canvas.js';
 import { useProfile } from '../canvas/profile-context.js';
 import { CanvasRegions } from './canvas-regions.js';
 import { ContextMenu } from './context-menu.js';
+import { ExpandSelectionAction } from './expand-selection-action.js';
+import { ExpansionStatus } from './expansion-status.js';
 import { DockColumn, FloatingPanels } from './panel-host.js';
 import { GraphScope } from './graph-scope.js';
 import { HeaderBar } from './header-bar.js';
@@ -30,7 +32,9 @@ export function WorkspaceShell({ canvasView, notice, status, busy = false }: { r
           <main className="canvas-region" aria-busy={busy ? true : undefined}>
             <GraphCanvas profile={profile} view={canvasView} />
             <GraphScope />
+            <ExpandSelectionAction />
             <SelectionBar />
+            <ExpansionStatus />
             <ContextMenu />
             <CanvasRegions />
             <FloatingPanels />

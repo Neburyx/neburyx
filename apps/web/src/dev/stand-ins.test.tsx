@@ -130,7 +130,7 @@ describe('the menu item stand-ins', () => {
     const registry = createMenuRegistry();
     registerBuiltInMenuItems(registry);
     expect(idsOf(registry, 'canvas')).toEqual(['fit-to-view', 'select-all', 'invert-selection', 'layout', 'show-legend']);
-    expect(idsOf(registry, 'node')).toEqual(['expand-neighbors']);
+    expect(idsOf(registry, 'node')).toEqual(['expand-neighbors', 'expand-by-type']);
     expect(idsOf(registry, 'relationship')).toEqual([]);
   });
 
@@ -192,7 +192,7 @@ describe('the menu item stand-ins', () => {
     expect(registry.view.getState().get('canvas')?.find((item) => item.id === 'stand-in-export-view')?.label).toBe('Real export');
     remove();
     expect(idsOf(registry, 'canvas')).toEqual(['fit-to-view', 'select-all', 'invert-selection', 'layout', 'stand-in-export-view', 'show-legend']);
-    expect(idsOf(registry, 'node')).toEqual(['expand-neighbors']);
+    expect(idsOf(registry, 'node')).toEqual(['expand-neighbors', 'expand-by-type']);
   });
 });
 

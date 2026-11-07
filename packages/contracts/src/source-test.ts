@@ -21,6 +21,7 @@ export const MAPPING_CHECK_SEVERITY = {
   'index-building': 'warn',
   'stable-id-unenforced': 'warn',
   'rel-stable-id-unindexed': 'warn',
+  'rel-stable-id-unconstrained': 'info',
   'schema-refused': 'warn',
   'schema-unreadable': 'warn',
   'stable-id-unverified': 'warn',
@@ -70,7 +71,7 @@ const checkNames = Object.keys(MAPPING_CHECK_SEVERITY) as [MappingCheck, ...Mapp
 
 export const mappingFindingSchema = z
   .strictObject({
-    severity: z.enum(['fail', 'warn']),
+    severity: z.enum(['fail', 'warn', 'info']),
     check: z.enum(checkNames),
     entityType: text.optional(),
     relationshipType: text.optional(),
@@ -81,7 +82,7 @@ export const mappingFindingSchema = z
   })
   .refine((finding) => MAPPING_CHECK_SEVERITY[finding.check] === finding.severity, { message: 'a check always has the same severity', path: ['severity'] });
 
-/** The strongest of the findings: fail, then not-verified, then warn, then pass; not-run when the mapping was not checked against the source. */
+/** The strongest of the findings: fail, then not-verified, then warn, then pass (advice, severity `info`, never changes it); not-run when the mapping was not checked against the source. */
 export const mappingChecksSchema = z
   .strictObject({ status: z.enum(MAPPING_CHECK_STATUSES), findings: z.array(mappingFindingSchema) })
   .refine(
@@ -91,6 +92,7 @@ export const mappingChecksSchema = z
       const plainWarnings = findings.filter((finding) => finding.severity === 'warn' && !UNVERIFIED_CHECKS.includes(finding.check));
       switch (status) {
         case 'pass':
+          return findings.every((finding) => finding.severity === 'info');
         case 'not-run':
           return findings.length === 0;
         case 'fail':

@@ -125,7 +125,7 @@ describe(`the rows of the evidence group that normalization leaves out, on ${NEO
     const answer = await search('drop-1');
     expect(answer.evidence.hits.map((hit) => hit.supports.stableId)).toEqual(['DR-3']);
     expect(answer.evidence.count).toEqual({ value: 1, quality: 'exact', scope: 'search:evidence' });
-    expect(answer.dropped).toEqual({ 'not-mapped': 2, 'ambiguous-type': 2, 'no-stable-id': 2 });
+    expect(answer.dropped).toEqual({ 'not-mapped': 0, 'ambiguous-type': 2, 'no-stable-id': 2, 'end-not-shown': 2 });
     expect(answer.warnings).toHaveLength(3);
   });
 

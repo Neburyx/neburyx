@@ -18,7 +18,7 @@ export function fittingTokens(params: Params): { labels: string[]; types: string
 export function fittingIndexes(params: Params): { indexes: IndexEntry[]; truncated: boolean } {
   const properties = listOf(params, 'mappedProperties');
   const nodes = listOf(params, 'mappedLabels').flatMap((name) => properties.map((property): IndexEntry => ({ type: 'RANGE', entityType: 'NODE', name, property, single: true, state: 'ONLINE', constrained: true })));
-  const relationships = listOf(params, 'mappedTypes').flatMap((name) => properties.map((property): IndexEntry => ({ type: 'RANGE', entityType: 'RELATIONSHIP', name, property, single: true, state: 'ONLINE', constrained: false })));
+  const relationships = listOf(params, 'mappedTypes').flatMap((name) => properties.map((property): IndexEntry => ({ type: 'RANGE', entityType: 'RELATIONSHIP', name, property, single: true, state: 'ONLINE', constrained: true })));
   return { indexes: [...nodes, ...relationships], truncated: false };
 }
 

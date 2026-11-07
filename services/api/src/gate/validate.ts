@@ -50,8 +50,8 @@ export function validateRequest(catalog: TemplateCatalog, template: Template, re
   if (request.limit > context.budgets.maxPage) throw new AppError('QUERY_BUDGET_EXCEEDED', { maxPage: context.budgets.maxPage });
   // a masked field is not an oracle: while masking is asked, a request cannot search, filter or sort by a pii field
   if (context.mask) {
-    for (const used of template.usedProperties?.(parsed.data) ?? []) {
-      if ('entityType' in used && context.model.entitiesByType.get(used.entityType)?.pii.includes(used.property) === true) throw new AppError('INVALID_REQUEST');
+    for (const used of template.usedProperties?.(parsed.data, context.allowlist) ?? []) {
+      if ('entityType' in used && used.use !== 'fixed-order' && context.model.entitiesByType.get(used.entityType)?.pii.includes(used.property) === true) throw new AppError('INVALID_REQUEST');
     }
   }
   const refs = template.refsOf(parsed.data);
@@ -61,7 +61,7 @@ export function validateRequest(catalog: TemplateCatalog, template: Template, re
     source: context.sourceId,
     principal: context.principal.id,
     policyVersion: context.policyVersion,
-    filterHash: filterHashOf(parsed.data, references.filterHash),
+    filterHash: filterHashOf({ params: parsed.data, mask: context.mask }, references.filterHash),
     sort: template.sort ?? '',
     target: template.id,
     targetVersion: template.version,

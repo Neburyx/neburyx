@@ -1,0 +1,21 @@
+export const EXPAND_HEADING = 'Expand by neighbor type';
+export const NO_STABLE_ID = 'This item cannot be expanded: no stable ID.';
+export const NO_RELATIONSHIPS = 'No relationships are mapped for this entity type.';
+export const COUNTS_ARE_OF_RELATIONSHIPS = 'Counts are of relationships.';
+export const SEPARATE_READS = 'Pages come from separate reads, and the source may have changed between them.';
+export const DUPLICATE_IDS = 'Duplicate relationship IDs in the source.';
+export const LOADING_NEIGHBORS = 'Loading neighbors';
+export const INVERT_SELECTION = 'Invert selection';
+export const SELECT_ALL = 'Select all';
+export const CLEAR = 'Clear';
+export const RETRY = 'Retry';
+export const START_OVER = 'Start over for this type';
+
+export const pageNote = (pageSize: number | undefined): string => `Counts show their quality. Loads the first ${pageSize === undefined ? 'page' : pageSize} per type.`;
+export const expandLabel = (count: number): string => `Expand ${count} ${count === 1 ? 'neighbor' : 'neighbors'}`;
+export const loadMoreLabel = (pageSize: number | undefined): string => `Load ${pageSize === undefined ? 'more' : `${pageSize} more`}`;
+export const loadedText = (count: number): string => `${count.toLocaleString('en-US')} loaded`;
+export const PAGED_NOTE = 'More can be loaded page by page.';
+export const NO_NEIGHBOR_TYPES = 'This item has no mapped neighbor types to expand.';
+export const expandingText = (count: number): string => `Expanding ${count} ${count === 1 ? 'item' : 'items'}`;
+export const cannotExpandText = (count: number): string => `${count} ${count === 1 ? 'item cannot' : 'items cannot'} be expanded: no stable ID.`;

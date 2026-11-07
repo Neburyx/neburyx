@@ -5,6 +5,7 @@ import { countOf } from './count.js';
 import { withDerivedEdges } from './derived.js';
 import { normalizeModelOf } from './model.js';
 import { normalizeRows } from './index.js';
+import { normalizeExpansion } from './expansion.js';
 
 // The Normalization suite (TAS §17): identity, source scope, masked and missing properties, stored versus derived edges. It runs on the records captured from the demo
 // containers through the real adapter (tools/demo-graph/fixtures/normalization), so 64-bit integers, temporal values, nodes, relationships and paths are the real thing.
@@ -95,5 +96,29 @@ describe.each(PACKS)('the Normalization suite on the %s pack', (pack) => {
     expect(path.nodes).toHaveLength(3);
     expect(path.edges).toHaveLength(2);
     expect((rows('relationship')[0] as { r: { $type: string } }).r.$type).toBe('relationship');
+  });
+
+  const expanded = (name: 'expansionStored' | 'expansionAggregate') => {
+    const row = source.relationships.find((candidate) => (name === 'expansionStored') === (candidate.stableId !== undefined));
+    if (row === undefined) throw new Error('the pack has no such relationship');
+    return normalizeExpansion({ ...context, params: { entityType: row.from, neighborType: row.to } }, rows(name));
+  };
+
+  it('expansion: the rows of the real statement, read from the demo graph, give edges and neighbors the contracts accept, and no relationship is left out', () => {
+    for (const name of ['expansionStored', 'expansionAggregate'] as const) {
+      const page = expanded(name);
+      expect(page.anchorFound).toBe(true);
+      expect(page.edges.length).toBeGreaterThan(0);
+      expect(page.edges.every((edge) => edgeSchema.safeParse(edge).success)).toBe(true);
+      expect(page.nodes.every((node) => nodeSchema.safeParse(node).success)).toBe(true);
+      expect(page.edges.every((edge) => edge.direction === 'out' || edge.direction === 'in')).toBe(true);
+      expect(Object.entries(page.dropped).filter(([, count]) => (count ?? 0) > 0)).toEqual([]);
+    }
+  });
+
+  it('expansion: a relationship type with a stable ID gives stored edges and one without gives aggregates that carry an exact member count', () => {
+    expect(expanded('expansionStored').edges.every((edge) => 'stableId' in edge.ref)).toBe(true);
+    const aggregates = expanded('expansionAggregate').edges;
+    expect(aggregates.every((edge) => 'aggregate' in edge.ref && edge.memberCount?.quality === 'exact' && (edge.memberCount.value ?? 0) >= 1)).toBe(true);
   });
 });

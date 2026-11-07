@@ -1,6 +1,6 @@
 import { runSelectionCommand } from '../canvas/selection-commands.js';
 import { LayoutList } from './layout-list.js';
-import { NeighborTypesSubmenu } from './neighbor-types-submenu.js';
+import { ExpandByTypeSubmenu } from './expand-by-type-submenu.js';
 import { MENU_GROUP, MENU_ORDER, type MenuContext, type MenuRegistry, type SubmenuProps } from './menu-registry.js';
 
 const canLayOut = (context: MenuContext): boolean => context.canvas !== undefined && context.state.loadedGraph().nodes.length > 0;
@@ -25,7 +25,19 @@ export function registerBuiltInMenuItems(registry: MenuRegistry): () => void {
       icon: <span className="icon icon-expand" aria-hidden="true" />,
       group: MENU_GROUP.node.expand,
       order: MENU_ORDER.node.expandNeighbors,
-      submenu: NeighborTypesSubmenu,
+      binding: 'expand',
+      state: (context) => (context.expansion === undefined ? 'disabled' : 'enabled'),
+      run: (context) => {
+        if (context.key !== undefined) context.expansion?.expandNode(context.key);
+      },
+    }),
+    registry.register('node', {
+      id: 'expand-by-type',
+      label: 'Expand by type',
+      icon: <span className="icon icon-expand" aria-hidden="true" />,
+      group: MENU_GROUP.node.expand,
+      order: MENU_ORDER.node.expandByType,
+      submenu: ExpandByTypeSubmenu,
     }),
     registry.register('canvas', {
       id: 'fit-to-view',

@@ -100,6 +100,8 @@ export {
   typeaheadTextSchema,
 } from './search.js';
 export { DEGREE_DIRECTIONS, DEGREE_WARNING_CODES, degreeByNeighborTypeSchema, degreeByTypeSchema, degreePreviewRequestSchema, degreePreviewSchema, degreeWarningSchema } from './degree-preview.js';
+export { EXPAND_DIRECTIONS, EXPAND_SORTS, expandPageSchema, expandRequestSchema, expandResponseSchema } from './expand.js';
+export type { ExpandPage, ExpandRequest, ExpandResponse } from './expand.js';
 export type { EntityLookupRequest } from './entities.js';
 export type { DegreeByType, DegreePreview, DegreePreviewRequest, DegreeWarning } from './degree-preview.js';
 export type { DisabledRelationship, DisabledType, EvidenceGroup, EvidenceHit, Facets, GroupFailure, RelatedGroup, RelatedHit, SearchFailureGroup, SearchFilters, SearchGroup, SearchMatchMode, SearchRequest, SearchResult, StartsWithGroup } from './search.js';

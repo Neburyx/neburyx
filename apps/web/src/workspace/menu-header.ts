@@ -28,8 +28,9 @@ export function menuHeader(open: OpenMenu, graph: LoadedGraph, profile: SourcePr
     const { type, count, origin } = relationshipParts(edge);
     const title = [type, count, origin ?? STORED_ORIGIN].filter((part) => part !== undefined).join(' · ');
     const ends = `${edge.from.stableId} ↔ ${edge.to.stableId}`;
+    const observed = 'aggregate' in edge.ref && edge.observedFirst !== undefined ? ` · first ${edge.observedFirst} · last ${edge.observedLast ?? edge.observedFirst}` : '';
     const rule = edge.semantics === 'derived' && edge.derivation !== undefined ? ` · ${edge.derivation.ruleId} v${edge.derivation.ruleVersion}` : '';
-    return { title, detail: `${ends}${rule}` };
+    return { title, detail: `${ends}${observed}${rule}` };
   }
   return undefined;
 }

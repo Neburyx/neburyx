@@ -28,7 +28,7 @@ const FITTING: readonly IndexEntry[] = [
   node('Gadget', 'title'),
   node('Gadget', 'extRef'),
   node('Person', 'personId', { constrained: true }),
-  edge('MADE_BY', 'linkId'),
+  edge('MADE_BY', 'linkId', { constrained: true }),
   edge('MADE_BY', 'madeAt'),
   edge('MADE_BY', 'recordId'),
 ];
@@ -122,10 +122,23 @@ describe('the indexes', () => {
   });
 });
 
+describe('the status of advice', () => {
+  it('stays pass when the only finding is advice, and warn when a warning comes with it', () => {
+    const advice = judgeIndexes(source, reads(FITTING.map((entry) => (entry.property === 'linkId' ? { ...entry, constrained: false } : entry))));
+    expect(statusOf(advice)).toBe('pass');
+    expect(statusOf([...advice, { severity: 'warn', check: 'sort-index', message: 'x' }])).toBe('warn');
+  });
+});
+
 describe('the relationship stable id', () => {
-  it('gives no finding with an index, whether or not a constraint backs it', () => {
-    expect(judgeIndexes(source, reads(FITTING.map((entry) => (entry.property === 'linkId' ? { ...entry, constrained: true } : entry))))).toEqual([]);
+  it('gives no finding with an index that a uniqueness constraint backs', () => {
     expect(judgeIndexes(source, reads(FITTING))).toEqual([]);
+  });
+
+  it('advises a uniqueness constraint, as advice that changes no status, when the index is not backed by one', () => {
+    expect(judgeIndexes(source, reads(FITTING.map((entry) => (entry.property === 'linkId' ? { ...entry, constrained: false } : entry))))).toEqual([
+      expect.objectContaining({ severity: 'info', check: 'rel-stable-id-unconstrained', relationshipType: 'MADE_BY', property: 'linkId', message: expect.stringContaining('uniqueness constraint') }),
+    ]);
   });
 
   it('warns when there is neither', () => {

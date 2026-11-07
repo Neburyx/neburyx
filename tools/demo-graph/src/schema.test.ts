@@ -18,7 +18,8 @@ describe('the constraints and indexes a mapping needs', () => {
 
   it('holds an index on each reference property and on the stable ID, evidence and observed-at properties of a relationship type', () => {
     expect(statements).toContain('CREATE INDEX IF NOT EXISTS FOR (n:`Gadget`) ON (n.`batch`)');
-    for (const property of ['linkId', 'source', 'seenAt']) expect(statements).toContain(`CREATE INDEX IF NOT EXISTS FOR ()-[r:\`HAS\`]-() ON (r.\`${property}\`)`);
+    expect(statements).toContain('CREATE CONSTRAINT IF NOT EXISTS FOR ()-[r:`HAS`]-() REQUIRE r.`linkId` IS UNIQUE');
+    for (const property of ['source', 'seenAt']) expect(statements).toContain(`CREATE INDEX IF NOT EXISTS FOR ()-[r:\`HAS\`]-() ON (r.\`${property}\`)`);
     expect(statements.filter((statement) => statement.includes('`NEAR`'))).toEqual([]);
   });
 

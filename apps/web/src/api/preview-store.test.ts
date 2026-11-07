@@ -5,7 +5,7 @@ import { fakeClient } from './fake-client.js';
 import { createPreviewStore } from './preview-store.js';
 
 const ref = (stableId: string, sourceId = 'demo') => ({ sourceId, entityType: 'widget', stableId });
-const previewOf = (stableId: string): DegreePreview => ({ ref: ref(stableId), total: { value: 1, quality: 'exact', scope: 'x' }, byType: [], byNeighborType: [], warnings: [] });
+const previewOf = (stableId: string): DegreePreview => ({ ref: ref(stableId), total: { value: 1, quality: 'exact', scope: 'x' }, byType: [], byNeighborType: [], warnings: [], pageSize: 25 });
 
 interface Pending {
   readonly body: { sourceId: string; ref: { stableId: string }; mask?: boolean };

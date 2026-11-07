@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import type { Socket } from 'node:net';
 import fastifyStatic from '@fastify/static';
-import { type ErrorCode, degreePreviewRequestSchema, entityLookupRequestSchema, degreePreviewSchema, entityPathSchema, entityQuerySchema, healthResponseSchema, investigationListQuerySchema, investigationListResponseSchema, investigationResponseSchema, meResponseSchema, nodeSchema, openInvestigationRequestSchema, openInvestigationResponseSchema, readyResponseSchema, searchRequestSchema, searchResultSchema, sourceProfileSchema, sourceTestReportSchema, sourcesResponseSchema } from '@neburyx/contracts';
+import { type ErrorCode, degreePreviewRequestSchema, entityLookupRequestSchema, degreePreviewSchema, entityPathSchema, entityQuerySchema, expandRequestSchema, expandResponseSchema, healthResponseSchema, investigationListQuerySchema, investigationListResponseSchema, investigationResponseSchema, meResponseSchema, nodeSchema, openInvestigationRequestSchema, openInvestigationResponseSchema, readyResponseSchema, searchRequestSchema, searchResultSchema, sourceProfileSchema, sourceTestReportSchema, sourcesResponseSchema } from '@neburyx/contracts';
 import { z } from 'zod';
 import Fastify, {
   type FastifyBaseLogger,
@@ -15,6 +15,7 @@ import type { AppStore } from './app-store.js';
 import { deriveReferenceKeys, type ReferenceKeys } from './reference/keys.js';
 import { canonicalLookup, canonicalOpen } from './reference/resolve.js';
 import { createDegreePreviewService } from './graph/degree-preview-service.js';
+import { createExpandService } from './graph/expand-service.js';
 import { createDegreeCache, type DegreeCacheOptions } from './graph/degree-cache.js';
 import { NO_DEGREE_VERDICTS, type DegreeVerdicts, type SourceUsability } from './source-test/usability.js';
 import { createEntityReader } from './entities/entity-reader.js';
@@ -341,6 +342,16 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       const identity = await options.store.current();
       const preview = await degrees.preview({ traceId: request.id, principal: identity.principal, sourceId: body.data.sourceId, ...body.data.ref, mask: body.data.mask === true });
       return degreePreviewSchema.parse(preview);
+    });
+
+    const expansions = createExpandService({ gate: options.gate, mapping, access, entities });
+    app.post('/v1/graph/expand', { config: { permission: 'principal' } }, async (request) => {
+      const body = expandRequestSchema.safeParse(request.body);
+      if (!noQuerySchema.safeParse(request.query).success || !body.success) throw new AppError('INVALID_REQUEST');
+      const identity = await options.store.current();
+      const { sourceId, ref, relTypes, neighborTypes, direction, limit, cursors, mask } = body.data;
+      const answer = await expansions.expand({ traceId: request.id, principal: identity.principal, sourceId, entityType: ref.entityType, stableId: ref.stableId, ...(relTypes === undefined ? {} : { relTypes }), neighborTypes, direction: direction ?? 'both', ...(limit === undefined ? {} : { limit }), ...(cursors === undefined ? {} : { cursors }), mask: mask === true });
+      return expandResponseSchema.parse(answer);
     });
 
     const investigations = createInvestigationService({ store: options.store, entities, mapping, access, references: createStoredReferences(mapping, referenceKeys) });

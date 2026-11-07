@@ -5,13 +5,13 @@ import { AdapterError } from '../sources/errors.js';
 import type { AuditEvent } from '../seams/seams.js';
 import { auditResultFor, FALLBACK_AUDIT_ACTION } from './audit.js';
 import { authorizeRequest } from './authorize.js';
-import { executeRead, type ExecuteResult } from './execute.js';
+import { acquireLease, executeRead, releaseRead, type ExecuteResult } from './execute.js';
 import { isMet, readIndexSnapshot } from './index-guard.js';
 import { exhaustive } from './exhaustive.js';
 import type { GateDeps } from './deps.js';
 import { SYSTEM_PRINCIPAL } from './system-principal.js';
 import type { Gate, GateContext, IndexReader, GatePage, GateRequest, GateStage, Params, SystemRunner, Template } from './types.js';
-import { findTemplate, validateRequest } from './validate.js';
+import { findTemplate, validateRequest, type Validated } from './validate.js';
 
 interface Progress {
   stage: GateStage;
@@ -58,19 +58,8 @@ async function guardIndexes(deps: GateDeps, request: GateRequest, context: GateC
   if (needs.some((need) => !isMet(snapshot, need, context.allowlist))) throw new AppError('SOURCE_UNAVAILABLE', undefined, 'index-unavailable');
 }
 
-async function runStages(deps: GateDeps, request: GateRequest, system: boolean, progress: Progress): Promise<GatePage> {
-  const context = await inStage(deps, progress, 'resolve', () => resolveContext(deps, request, system));
-  const { template, params, rendered, binding } = await inStage(deps, progress, 'validate', () => {
-    const found = findTemplate(deps.catalog, request);
-    progress.action = found.auditAction;
-    return validateRequest(deps.catalog, found, request, context, deps.cursors, deps.references);
-  });
-  await inStage(deps, progress, 'authorize', () => authorizeRequest(deps.seams.policy, deps.usability, context, template));
-  const result = await inStage(deps, progress, 'execute', async (): Promise<ExecuteResult> => {
-    if (template.readsNothing?.(params, context.allowlist) === true) return { rows: [], hasMore: false };
-    if (!system) await guardIndexes(deps, request, context, template, params);
-    return executeRead({ coordinator: deps.seams.coordinator, executor: deps.executor, clock: deps.clock, logger: deps.logger }, context, template, rendered, request.limit);
-  });
+async function finishPage(deps: GateDeps, progress: Progress, request: GateRequest, context: GateContext, validated: Validated, result: ExecuteResult): Promise<GatePage> {
+  const { template, params, binding } = validated;
   const normalized = await inStage(deps, progress, 'normalize', () => {
     const items = template.normalize(result.rows, result.plan, { sourceId: context.sourceId, hasMore: result.hasMore, model: context.model, limit: request.limit, countCap: context.budgets.countCap, params, references: deps.references });
     // the page after this one, when there is one: the template says where it starts and the gate signs it for this request
@@ -79,6 +68,78 @@ async function runStages(deps: GateDeps, request: GateRequest, system: boolean, 
   });
   const redacted = await inStage(deps, progress, 'redact', () => deps.redact(normalized.items, context));
   return { items: redacted, hasMore: result.hasMore, ...(normalized.nextCursor === undefined ? {} : { nextCursor: normalized.nextCursor }) };
+}
+
+async function runStages(deps: GateDeps, request: GateRequest, system: boolean, progress: Progress): Promise<GatePage> {
+  const context = await inStage(deps, progress, 'resolve', () => resolveContext(deps, request, system));
+  const validated = await inStage(deps, progress, 'validate', () => {
+    const found = findTemplate(deps.catalog, request);
+    progress.action = found.auditAction;
+    return validateRequest(deps.catalog, found, request, context, deps.cursors, deps.references);
+  });
+  const { template, params, rendered } = validated;
+  await inStage(deps, progress, 'authorize', () => authorizeRequest(deps.seams.policy, deps.usability, context, template));
+  const result = await inStage(deps, progress, 'execute', async (): Promise<ExecuteResult> => {
+    if (template.readsNothing?.(params, context.allowlist) === true) return { rows: [], hasMore: false };
+    if (!system) await guardIndexes(deps, request, context, template, params);
+    return executeRead({ coordinator: deps.seams.coordinator, executor: deps.executor, clock: deps.clock, logger: deps.logger }, context, template, rendered, request.limit);
+  });
+  return finishPage(deps, progress, request, context, validated, result);
+}
+
+/** One read of a request that reads several pages: the stages of each page, and the one lease its reads share. */
+async function runManyStages(deps: GateDeps, requests: readonly GateRequest[], progress: Progress): Promise<readonly GatePage[]> {
+  const [first] = requests;
+  if (first === undefined) return [];
+  // one authorize stage covers the request, so every page of it is read with the same template, for the same source, person and masking
+  if (requests.some((request) => request.templateId !== first.templateId || request.sourceId !== first.sourceId || request.principal.id !== first.principal.id || (request.mask ?? false) !== (first.mask ?? false))) throw new AppError('INVALID_REQUEST');
+  const context = await inStage(deps, progress, 'resolve', () => resolveContext(deps, first, false));
+  const validated = await inStage(deps, progress, 'validate', () =>
+    requests.map((request) => {
+      const found = findTemplate(deps.catalog, request);
+      progress.action = found.auditAction;
+      return validateRequest(deps.catalog, found, request, context, deps.cursors, deps.references);
+    }),
+  );
+  const [lead] = validated;
+  if (lead === undefined) return [];
+  await inStage(deps, progress, 'authorize', () => authorizeRequest(deps.seams.policy, deps.usability, context, lead.template));
+  const results = await inStage(deps, progress, 'execute', async (): Promise<readonly ExecuteResult[]> => {
+    const reads = validated.filter((entry) => entry.template.readsNothing?.(entry.params, context.allowlist) !== true);
+    const executeDeps = { coordinator: deps.seams.coordinator, executor: deps.executor, clock: deps.clock, logger: deps.logger };
+    // the schema is read once for the request, before the data lease is taken, so that no two leases are held at once
+    let indexes = first.indexes;
+    for (const entry of reads) {
+      if (indexes === undefined && (entry.template.indexNeeds?.(entry.params, context.allowlist) ?? []).length > 0) {
+        indexes = await readIndexSnapshot((read) => runGate(deps, { ...read, principal: SYSTEM_PRINCIPAL }, true), { traceId: first.traceId, sourceId: first.sourceId });
+      }
+    }
+    if (reads.length === 0) return validated.map(() => ({ rows: [], hasMore: false }));
+    for (const [index, entry] of validated.entries()) {
+      const request = requests[index];
+      if (request !== undefined && reads.includes(entry)) await guardIndexes(deps, { ...request, ...(indexes === undefined ? {} : { indexes }) }, context, entry.template, entry.params);
+    }
+    const lease = await acquireLease(executeDeps, context);
+    try {
+      const out: ExecuteResult[] = [];
+      for (const [index, entry] of validated.entries()) {
+        const request = requests[index];
+        if (request === undefined) throw new AppError('INTERNAL_ERROR');
+        out.push(reads.includes(entry) ? await executeRead(executeDeps, context, entry.template, entry.rendered, request.limit, lease) : { rows: [], hasMore: false });
+      }
+      return out;
+    } finally {
+      await releaseRead(lease, deps.logger);
+    }
+  });
+  const pages: GatePage[] = [];
+  for (const [index, entry] of validated.entries()) {
+    const request = requests[index];
+    const result = results[index];
+    if (request === undefined || result === undefined) throw new AppError('INTERNAL_ERROR');
+    pages.push(await finishPage(deps, progress, request, context, entry, result));
+  }
+  return pages;
 }
 
 async function recordAudit(deps: GateDeps, request: GateRequest, progress: Progress, failure: AppError | undefined): Promise<void> {
@@ -134,9 +195,25 @@ async function runGate(deps: GateDeps, request: GateRequest, system: boolean): P
   }
 }
 
+/** A request that reads several pages under one lease: every page or the failure, and one audit event for the whole. */
+async function runManyGate(deps: GateDeps, requests: readonly GateRequest[]): Promise<readonly GatePage[]> {
+  const [first] = requests;
+  if (first === undefined) return [];
+  const progress: Progress = { stage: 'resolve', action: FALLBACK_AUDIT_ACTION };
+  try {
+    const pages = await runManyStages(deps, requests, progress);
+    await recordAudit(deps, first, progress, undefined);
+    return pages;
+  } catch (error) {
+    const failure = asAppError(deps, error, progress.stage);
+    await recordAudit(deps, first, progress, failure);
+    throw failure;
+  }
+}
+
 export function createGates(deps: GateDeps): { readonly gate: Gate; readonly system: SystemRunner; readonly indexes: IndexReader } {
   return {
-    gate: { run: (request) => runGate(deps, request, false) },
+    gate: { run: (request) => runGate(deps, request, false), runMany: (requests) => runManyGate(deps, requests) },
     indexes: {
       async read(request) {
         const decision = await deps.seams.policy.authorizeSource({ principal: request.principal, sourceId: request.sourceId });

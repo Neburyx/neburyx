@@ -30,6 +30,7 @@ function recording(client: ApiClient) {
     searchEntities: (request, signal) => (calls.push('searchEntities'), client.searchEntities(request, signal)),
     lookupEntity: (request, signal) => (calls.push('lookupEntity'), client.lookupEntity(request, signal)),
     previewExpansion: (request, signal) => (calls.push('previewExpansion'), client.previewExpansion(request, signal)),
+    expandNeighbors: (request, signal) => (calls.push('expandNeighbors'), client.expandNeighbors(request, signal)),
   };
   return { client: wrapped, calls };
 }

@@ -41,7 +41,8 @@ describe('a path', () => {
     const result = normalizeRows(context(), [{ p: pathOf(g, [made, p], [toStranger, stranger], [fromStranger, q], [knows, q]) }]);
     expect(result.nodes.map((node) => node.ref.stableId)).toEqual(['g1', 'p1', 'p2']);
     expect(result.edges.map((edge) => edge.type + ':' + edge.from.stableId + '>' + edge.to.stableId)).toEqual(['MADE_BY:g1>p1', 'KNOWS:p2>p2']);
-    expect(result.dropped['not-mapped']).toBe(3);
+    expect(result.dropped['not-mapped']).toBe(1);
+    expect(result.dropped['end-not-shown']).toBe(2);
   });
 });
 

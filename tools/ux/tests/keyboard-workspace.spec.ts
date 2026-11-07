@@ -217,7 +217,7 @@ test.describe('the sheet of shortcuts', () => {
   test('has stand-in rows that work from their keys, and the keys in the menus equal the bound keys', async ({ page }) => {
     const mod = await modifier(page);
     const root = page.locator('html');
-    for (const [press, id] of [[`${mod}+k`, 'search'], ['e', 'expand'], ['f', 'focus'], ['p', 'pin'], ['Delete', 'hide'], [`${mod}+c`, 'copy-id'], ['Shift+p', 'find-paths'], [`${mod}+e`, 'export-view'], [`${mod}+Shift+c`, 'copy-properties']] as const) {
+    for (const [press, id] of [[`${mod}+k`, 'search'], ['f', 'focus'], ['p', 'pin'], ['Delete', 'hide'], [`${mod}+c`, 'copy-id'], ['Shift+p', 'find-paths'], [`${mod}+e`, 'export-view'], [`${mod}+Shift+c`, 'copy-properties']] as const) {
       await page.keyboard.press(press);
       await expect(root, `${press} reaches its stand-in`).toHaveAttribute('data-last-stand-in-key', id);
     }
@@ -232,7 +232,7 @@ test.describe('the sheet of shortcuts', () => {
     await page.keyboard.press('Escape');
     await page.keyboard.press('Enter');
     await page.keyboard.press('ContextMenu');
-    expect(await menuHints(page), 'the hints of the entity menu').toEqual(expected([['Expand neighbors', ''], ['Expand by type', ''], ['Focus neighborhood', 'f'], ['Find paths from here…', 'shift+p'], ['Find paths to…', ''], ['Run pattern', ''], ['Select neighbors', ''], ['Invert selection', 'mod+shift+i'], ['Group by type', ''], ['Pin position', 'p'], ['Hide from view', 'delete'], ['Copy ID', 'mod+c'], ['Copy properties', 'mod+shift+c'], ['Open source record', '']]));
+    expect(await menuHints(page), 'the hints of the entity menu').toEqual(expected([['Expand neighbors', 'e'], ['Expand by type', ''], ['Focus neighborhood', 'f'], ['Find paths from here…', 'shift+p'], ['Find paths to…', ''], ['Run pattern', ''], ['Select neighbors', ''], ['Invert selection', 'mod+shift+i'], ['Group by type', ''], ['Pin position', 'p'], ['Hide from view', 'delete'], ['Copy ID', 'mod+c'], ['Copy properties', 'mod+shift+c'], ['Open source record', '']]));
     await page.keyboard.press('Escape');
     for (let step = 0; step < 40; step += 1) {
       await page.keyboard.press('Tab');

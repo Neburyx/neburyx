@@ -63,7 +63,7 @@ export const searchRequestSchema = z.union([
 const droppedCount = z.number().int().nonnegative();
 
 /** The rows the normalize stage left out, by reason. */
-export const droppedSchema = z.strictObject({ 'not-mapped': droppedCount, 'ambiguous-type': droppedCount, 'no-stable-id': droppedCount, 'not-visible': droppedCount.optional() });
+export const droppedSchema = z.strictObject({ 'not-mapped': droppedCount, 'ambiguous-type': droppedCount, 'no-stable-id': droppedCount, 'end-not-shown': droppedCount.optional(), 'end-missing': droppedCount.optional(), 'no-mapping-row': droppedCount.optional(), 'not-visible': droppedCount.optional() });
 
 export const disabledTypeSchema = z.strictObject({ entityType: z.string().min(1), reason: z.enum(SEARCH_DISABLED_REASONS) });
 

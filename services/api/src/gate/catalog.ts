@@ -54,7 +54,8 @@ function checkMarkers(definition: TemplateDefinition, shape: Shape): void {
   const degree = markersOf(definition.cypher).filter((marker) => marker.kind === 'degreeCounts');
   // a degree statement reads the entity type's label and stable ID property, so its parameter counts as used by an entity marker and a stable id marker
   const used = [
-    ...markersOf(definition.cypher).filter((marker) => marker.kind !== 'searchBranches' && marker.kind !== 'facetProbes' && marker.kind !== 'degreeCounts'),
+    ...markersOf(definition.cypher).filter((marker) => marker.kind !== 'searchBranches' && marker.kind !== 'facetProbes' && marker.kind !== 'degreeCounts' && marker.kind !== 'expandNeighbors'),
+    ...markersOf(definition.cypher).filter((marker) => marker.kind === 'expandNeighbors').flatMap((marker) => [{ kind: 'entity' as const, name: marker.name }, { kind: 'stableId' as const, name: marker.name }]),
     ...degree.flatMap((marker) => [{ kind: 'entity' as const, name: marker.name }, { kind: 'stableId' as const, name: marker.name }]),
   ];
   for (const marker of used) {
@@ -164,6 +165,23 @@ function checkDegreeCounts(definition: TemplateDefinition, shape: Shape): void {
   if (shape.properties.has('countCap')) throw new CatalogError(definition.id, 'has the gate-filled parameter countCap in its parameter schema');
 }
 
+/**
+ * The expansion template's own declaration: its Cypher is exactly the one `@expandNeighbors(<anchor parameter>)` marker, it is paged, it names the stable-ID index it needs and says when it reads nothing,
+ * its schema has the four parameters it names (and none of them is gate-filled), and it declares the properties its order uses.
+ */
+function checkExpandNeighbors(definition: TemplateDefinition, shape: Shape): void {
+  const used = markersOf(definition.cypher).filter((marker) => marker.kind === 'expandNeighbors');
+  const spec = definition.expandNeighbors;
+  if (spec === undefined) {
+    if (used.length > 0) throw new CatalogError(definition.id, 'uses the expand neighbors marker without declaring an expansion');
+    return;
+  }
+  if (used.length !== 1 || used[0]?.name !== spec.anchorParam || definition.cypher !== `@expandNeighbors(${spec.anchorParam})`) throw new CatalogError(definition.id, 'declares an expansion and its Cypher is not exactly its one expand neighbors marker');
+  if (!definition.entityParams.includes(spec.anchorParam) || ![spec.anchorParam, spec.neighborParam, spec.directionParam].every((name) => shape.properties.get(name) === 'string') || !shape.properties.has(spec.relTypesParam)) throw new CatalogError(definition.id, 'declares an expansion for parameters its schema does not have');
+  if (definition.searchBranches !== undefined || definition.facetProbes !== undefined || definition.degreeCounts !== undefined || !definition.paged || definition.profile === true) throw new CatalogError(definition.id, 'declares an expansion and is also another kind of template, not paged, or profiled');
+  if (definition.indexNeeds === undefined || definition.readsNothing === undefined || definition.usedProperties === undefined || definition.nextPosition === undefined) throw new CatalogError(definition.id, 'declares an expansion and does not name its indexes, its empty case, its properties and its next position');
+}
+
 /** A template that reads a node by its reference names two parameters its schema has: the entity type (a declared entity parameter) and the stable ID. */
 function checkReferenceParams(definition: TemplateDefinition, shape: Shape): void {
   const names = definition.referenceParams;
@@ -174,12 +192,13 @@ function checkReferenceParams(definition: TemplateDefinition, shape: Shape): voi
 function build(definition: TemplateDefinition): Template {
   const shape = shapeOf(definition);
   for (const name of RESERVED) if (shape.properties.has(name)) throw new CatalogError(definition.id, `declares the reserved parameter ${name}`);
-  if (definition.paged && !PAGED_LIMIT.test(definition.cypher)) throw new CatalogError(definition.id, 'is paged and its Cypher has no LIMIT $limit + 1');
+  if (definition.paged && definition.expandNeighbors === undefined && !PAGED_LIMIT.test(definition.cypher)) throw new CatalogError(definition.id, 'is paged and its Cypher has no LIMIT $limit + 1');
   checkProfile(definition);
   checkMarkers(definition, shape);
   checkSearchBranches(definition, shape);
   checkFacetProbes(definition, shape);
   checkDegreeCounts(definition, shape);
+  checkExpandNeighbors(definition, shape);
   checkReferenceParams(definition, shape);
   checkGateParameters(definition, shape);
   const integerParameters = [...shape.properties].flatMap(([name, type]) => (type === 'integer' ? [name] : []));

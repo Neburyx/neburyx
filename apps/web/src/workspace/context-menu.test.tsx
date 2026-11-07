@@ -285,7 +285,7 @@ describe('the menu of an entity', () => {
     menus.register('node', { id: 'entity-item', label: 'Entity item', icon: null, group: 10, order: 10, run: () => undefined });
     const { rightClick } = show(state, {}, menus);
     rightClick(rightClickOn('node', nodeKey('n1')));
-    expect(within(screen.getByRole('menu', { name: 'n1' })).getAllByRole('menuitem').map((row) => row.querySelector('.menu-label')?.textContent)).toEqual(['Expand neighbors', 'Entity item']);
+    expect(within(screen.getByRole('menu', { name: 'n1' })).getAllByRole('menuitem').map((row) => row.querySelector('.menu-label')?.textContent)).toEqual(['Expand neighbors', 'Entity item', 'Expand by type']);
     rightClick(rightClickOn('relationship', edgeKey(stored.ref)));
     expect(within(screen.getByRole('menu')).queryAllByRole('menuitem')).toEqual([]);
     rightClick(onCanvas(5, 5));
@@ -326,14 +326,14 @@ describe('the menu of a relationship', () => {
   });
 
   it('shows the rule of a derived aggregate and not of an aggregate of unknown origin', () => {
-    expect(header(aggregate('e-agg-derived', count(42, 'exact'), { semantics: 'derived', derivation }))).toEqual({ title: 'rel-a · 42 · derived', detail: 'n1 ↔ n2 · SD-01 v2' });
-    expect(header(aggregate('e-agg-unknown', count(42, 'exact'), { semantics: 'unknown' }))).toEqual({ title: 'rel-a · 42 · origin unknown', detail: 'n1 ↔ n2' });
+    expect(header(aggregate('e-agg-derived', count(42, 'exact'), { semantics: 'derived', derivation }))).toEqual({ title: 'rel-a · 42 · exact · derived', detail: 'n1 ↔ n2 · SD-01 v2' });
+    expect(header(aggregate('e-agg-unknown', count(42, 'exact'), { semantics: 'unknown' }))).toEqual({ title: 'rel-a · 42 · exact · origin unknown', detail: 'n1 ↔ n2' });
   });
 
   it.each<[string, Count | undefined, string]>([
-    ['exact', count(42, 'exact'), 'rel-a · 42 · sourced'],
-    ['estimated', count(42, 'estimated'), 'rel-a · ~42 (estimated) · sourced'],
-    ['lower bound', count(42, 'lowerBound'), 'rel-a · ≥ 42 (lower bound) · sourced'],
+    ['exact', count(42, 'exact'), 'rel-a · 42 · exact · sourced'],
+    ['estimated', count(42, 'estimated'), 'rel-a · ~ 42 (estimated) · sourced'],
+    ['lower bound', count(42, 'lowerBound'), 'rel-a · ≥ 42 · lower bound · sourced'],
     ['unknown', count(undefined, 'unknown'), 'rel-a · sourced'],
     ['not given', undefined, 'rel-a · sourced'],
   ])('writes the member count of an aggregate as the canvas does when it is %s, with no number when it is unknown', (_name, memberCount, title) => {

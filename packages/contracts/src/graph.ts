@@ -60,7 +60,8 @@ export const edgeSchema = z
     from: elementRefSchema,
     to: elementRefSchema,
     type: text,
-    direction: z.literal('from-to'),
+    /** `from-to` for an edge of a read that has no anchor; `out` and `in` for an edge of an expansion, relative to the node that was expanded. */
+    direction: z.enum(['from-to', 'out', 'in']),
     semantics: z.enum(['stored', 'derived', 'unknown']),
     observedFirst: text.optional(),
     observedLast: text.optional(),

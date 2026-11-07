@@ -87,7 +87,7 @@ describe('createSourceGate', () => {
     const parts = createSourceGate({ usability: ALWAYS_USABLE, mapping, env: {}, seams: auditing().seams, logger: { warn: () => undefined } });
     expect(Object.keys(parts).sort()).toEqual(['close', 'gate', 'indexes', 'system']);
     expect(Object.keys(parts.indexes)).toEqual(['read']);
-    expect(Object.keys(parts.gate)).toEqual(['run']);
+    expect(Object.keys(parts.gate).sort()).toEqual(['run', 'runMany']);
     expect(Object.keys(parts.system)).toEqual(['run']);
     await parts.close();
   });

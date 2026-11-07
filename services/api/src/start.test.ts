@@ -235,7 +235,7 @@ describe('the source gate at start-up', () => {
     const opened: SourceGateOptions[] = [];
     const openSourceGate = (options: SourceGateOptions): SourceGate => {
       opened.push(options);
-      return { gate: unusedRunner, system: unusedRunner, indexes: { read: () => Promise.reject(new Error('not used')) }, close: () => (order.push('gate closed'), Promise.resolve()) };
+      return { gate: { run: unusedRunner.run, runMany: () => Promise.reject(new Error('not used')) }, system: unusedRunner, indexes: { read: () => Promise.reject(new Error('not used')) }, close: () => (order.push('gate closed'), Promise.resolve()) };
     };
     const openStore = (): AppStore => {
       const store = memoryAppStore();

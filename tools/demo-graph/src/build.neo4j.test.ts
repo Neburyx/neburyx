@@ -110,7 +110,7 @@ describe('build into a Neo4j container', () => {
   it('creates the unique constraints and the indexes of the mapping', async () => {
     const constraints = await query(server, 'SHOW CONSTRAINTS YIELD labelsOrTypes, properties, type RETURN labelsOrTypes, properties, type');
     // the server lines name the constraint type differently (UNIQUENESS, NODE_PROPERTY_UNIQUENESS)
-    expect(constraints.map((row) => `${String(row['labelsOrTypes'])}:${String(row['properties'])}:${String(row['type']).endsWith('UNIQUENESS') ? 'unique' : String(row['type'])}`).sort()).toEqual(['Gadget:gadgetId:unique', 'Widget:widgetId:unique']);
+    expect(constraints.map((row) => `${String(row['labelsOrTypes'])}:${String(row['properties'])}:${String(row['type']).endsWith('UNIQUENESS') ? 'unique' : String(row['type'])}`).sort()).toEqual(['Gadget:gadgetId:unique', 'HAS:linkId:unique', 'Widget:widgetId:unique']);
     const indexes = await query(server, "SHOW INDEXES YIELD labelsOrTypes, properties, type WHERE type <> 'LOOKUP' RETURN labelsOrTypes, properties");
     const listed = indexes.map((row) => `${String(row['labelsOrTypes'])}:${String(row['properties'])}`);
     for (const wanted of ['Widget:colour', 'Gadget:batch', 'HAS:linkId', 'HAS:source', 'HAS:seenAt']) expect(listed).toContain(wanted);

@@ -45,7 +45,8 @@ export interface RelationshipIndexNeed {
 }
 
 /** A property a request uses: of an entity type, or of the relationship mapping row of a relationship type between two entity types. */
-export type UsedProperty = { readonly entityType: string; readonly property: string } | { readonly relationshipType: string; readonly from: string; readonly to: string; readonly property: string };
+/** `fixed-order` marks a property that only orders a page, a use the server decides and the request does not choose, so a masked request is not refused for it. */
+export type UsedProperty = { readonly entityType: string; readonly property: string; readonly use?: 'fixed-order' } | { readonly relationshipType: string; readonly from: string; readonly to: string; readonly property: string };
 
 /** One operator of the plan that a profiled read returns: its name, the server's description of it and the db hits it made. */
 export interface PlanOperator {
@@ -81,7 +82,7 @@ export interface Template {
   /** What a cursor of this template binds besides the source, the person, the template and its parameters: the order of its pages; empty when it has none. */
   readonly sort?: string;
   /** The properties that a request searches, filters or sorts by, of entity types or of relationship mapping rows; a request that asks for masking may not use a `pii` one of an entity type. A template without it uses none. */
-  usedProperties?(params: Params): readonly UsedProperty[];
+  usedProperties?(params: Params, allowlist?: SourceAllowlist): readonly UsedProperty[];
   /**
    * The search template's own declaration, for no other template: a statement with one branch for each target of a list parameter. The Cypher holds `@searchBranches(<param>)`,
    * and the gate writes in, for each target, the branch text of its match form (`value` or `text`) with the placeholders replaced by the quoted names, joined by `UNION`: `@label` and `@property` for a
@@ -103,6 +104,13 @@ export interface Template {
    * `CALL` subquery for each pair that reads at most `$countCap + 1` relationships and counts them, or for `cheap` a `COUNT { }` expression for each pair, then one `RETURN` of every count as a column named by its position.
    */
   readonly degreeCounts?: { readonly param: string; readonly form: 'bounded' | 'cheap' };
+  /**
+   * The expansion template's own declaration, for no other template: a statement that reads one page of the relationships between one node and its neighbors of one entity type. The Cypher is the one marker
+   * `@expandNeighbors(<param>)`; the parameters name the anchor's entity type, the neighbor entity type, the optional list of relationship types and the direction, and the gate writes the whole statement
+   * from the mapping rows that join the two types: one branch for each row and direction that returns stored relationships (and, for a row mapped with a `stable_id`, an aggregate branch for those whose ID cannot be
+   * used), and one for each row without a `stable_id` that returns one aggregate for each neighbor. Every name is quoted from the allowlist; the request holds no name, only values.
+   */
+  readonly expandNeighbors?: { readonly anchorParam: string; readonly neighborParam: string; readonly relTypesParam: string; readonly directionParam: string };
   /**
    * For a paged template whose cursor position holds the stable ID of an entity: the names of the position fields that carry an entity type and its stable ID. For a keyed entity type the cursor holds the token of the
    * ID and the gate reads it back before the keyset parameters are built, so a cursor never exposes a personal value and the order stays that of the real value.
@@ -135,7 +143,7 @@ export interface SourceAllowlist {
   /** The evidence properties of each relationship mapping row that has a `stable_id`, in the mapping's order: the rows an evidence read may name. */
   readonly evidenceRows: readonly { readonly type: string; readonly from: string; readonly to: string; readonly properties: readonly string[] }[];
   /** The relationship rows of the mapping, in its order: the pairs a degree read counts. */
-  readonly relationshipRows: readonly { readonly type: string; readonly from: string; readonly to: string }[];
+  readonly relationshipRows: readonly { readonly type: string; readonly from: string; readonly to: string; readonly stableId?: string; readonly observedAt?: string }[];
   /** Every property name the mapping names: search, reference, evidence, sort and stable id properties. */
   readonly properties: ReadonlySet<string>;
 }
@@ -203,6 +211,11 @@ export type Clock = () => number;
 
 export interface Gate {
   run(request: GateRequest): Promise<GatePage>;
+  /**
+   * Reads several pages of one request, one after another under one read lease, all for the same source, person and masking, and answers every page or the failure of any, with nothing partial.
+   * Every request is validated (a cursor included) before the first read, one deadline covers them all, and one audit event is written.
+   */
+  runMany(requests: readonly GateRequest[]): Promise<readonly GatePage[]>;
 }
 
 /**

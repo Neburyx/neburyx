@@ -71,10 +71,13 @@ export const PLACEHOLDER = /\{([^{}]*)\}/g;
 
 type Resolved = { readonly entity: EntityNormalizer } | { readonly dropped: DropReason };
 
-function resolveEntity(context: NormalizeContext, labels: readonly string[]): Resolved {
+/** The entity type of a node from its labels; when the labels match several types, the type the read asked for settles it if it is one of them. */
+function resolveEntity(context: NormalizeContext, labels: readonly string[], expectedType?: string): Resolved {
   const found = new Map<string, EntityNormalizer>();
   for (const label of labels) for (const entity of context.model.entitiesByLabel.get(label) ?? []) found.set(entity.type, entity);
   if (found.size === 0) return { dropped: 'not-mapped' };
+  const expected = expectedType === undefined ? undefined : found.get(expectedType);
+  if (expected !== undefined) return { entity: expected };
   const [only] = [...found.values()];
   return found.size === 1 && only !== undefined ? { entity: only } : { dropped: 'ambiguous-type' };
 }
@@ -87,8 +90,8 @@ function referenceOf(context: NormalizeContext, entity: EntityNormalizer, stable
 }
 
 /** A node of the source, or the reason it was left out. The `sourceId` of the ref is the request's, whatever the record says. */
-export function normalizeNode(context: NormalizeContext, plain: PlainNode): { readonly node: GraphNode } | { readonly dropped: DropReason } {
-  const resolved = resolveEntity(context, plain.labels);
+export function normalizeNode(context: NormalizeContext, plain: PlainNode, expectedType?: string): { readonly node: GraphNode } | { readonly dropped: DropReason } {
+  const resolved = resolveEntity(context, plain.labels, expectedType);
   if ('dropped' in resolved) return resolved;
   const { entity } = resolved;
   const stableId = stableIdText(ownValue(plain.properties, entity.stableId));

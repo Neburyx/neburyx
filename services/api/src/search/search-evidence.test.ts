@@ -168,8 +168,8 @@ describe('POST /v1/search/entities with evidence records', () => {
     const { app } = await startSearchApp({ mapping: relatedMapping, respond });
     const answer = await answerOf(app, 'REC-1');
     expect(answer.evidence.hits.map((hit) => hit.supports.stableId)).toEqual(['L-1']);
-    expect(answer.dropped).toEqual({ 'not-mapped': 2, 'ambiguous-type': 0, 'no-stable-id': 2 });
-    expect(answer.warnings).toHaveLength(2);
+    expect(answer.dropped).toEqual({ 'not-mapped': 1, 'ambiguous-type': 0, 'no-stable-id': 2, 'end-not-shown': 1 });
+    expect(answer.warnings).toHaveLength(3);
     await app.close();
   });
 });

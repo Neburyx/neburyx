@@ -17,6 +17,7 @@ import { connectivityTemplate } from './templates/connectivity.js';
 import { degreePreviewBoundedTemplate, degreePreviewCheapTemplate } from './templates/degree-preview.js';
 import { degreeProbeTemplate } from './templates/degree-probe.js';
 import { entityLoadTemplate } from './templates/entity-load.js';
+import { expandNeighborsTemplate } from './templates/expand-neighbors.js';
 import { searchExactTemplate } from './templates/search-exact.js';
 import { searchPrefixTemplate } from './templates/search-prefix.js';
 import { searchEvidenceTemplate } from './templates/search-evidence.js';
@@ -48,7 +49,7 @@ export interface AssembleOptions {
 }
 
 export function defaultCatalog(): TemplateCatalog {
-  return createTemplateCatalog({ templates: [connectivityTemplate, capabilitiesTemplate, privilegesTemplate, schemaTokensTemplate, schemaIndexesTemplate, stableIdDuplicatesTemplate, degreeProbeTemplate, degreePreviewBoundedTemplate, degreePreviewCheapTemplate, entityLoadTemplate, searchExactTemplate, searchRelatedTemplate, searchEvidenceTemplate, searchFacetsTemplate, searchPrefixTemplate] });
+  return createTemplateCatalog({ templates: [connectivityTemplate, capabilitiesTemplate, privilegesTemplate, schemaTokensTemplate, schemaIndexesTemplate, stableIdDuplicatesTemplate, degreeProbeTemplate, degreePreviewBoundedTemplate, degreePreviewCheapTemplate, entityLoadTemplate, expandNeighborsTemplate, searchExactTemplate, searchRelatedTemplate, searchEvidenceTemplate, searchFacetsTemplate, searchPrefixTemplate] });
 }
 
 function budgetsFrom(source: SourceModel): Budgets {

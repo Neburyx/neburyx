@@ -447,6 +447,115 @@
       }
     }
   ],
+  "expansionStored": [
+    {
+      "a": {
+        "$type": "node",
+        "elementId": "eid-1",
+        "labels": [
+          "Claim"
+        ],
+        "properties": {
+          "lossType": "fire",
+          "claimNumber": "CL-000000",
+          "filedOn": {
+            "$type": "date",
+            "value": "2023-08-28"
+          },
+          "status": "review"
+        }
+      },
+      "phase": 0,
+      "tk": 1,
+      "ts": {
+        "$type": "dateTime",
+        "value": "2023-11-05T03:13:17Z"
+      },
+      "id": "FB-000000",
+      "rtype": "FILED_BY",
+      "dir": "out",
+      "ntype": null,
+      "flag": null,
+      "members": null,
+      "first": null,
+      "rel": {
+        "$type": "relationship",
+        "elementId": "eid-6",
+        "type": "FILED_BY",
+        "startElementId": "eid-1",
+        "endElementId": "eid-7",
+        "properties": {
+          "sourceRecordId": "SRC-FB-000000",
+          "eventId": "FB-000000",
+          "filedAt": {
+            "$type": "dateTime",
+            "value": "2023-11-05T03:13:17Z"
+          }
+        }
+      },
+      "m": {
+        "$type": "node",
+        "elementId": "eid-7",
+        "labels": [
+          "Claimant"
+        ],
+        "properties": {
+          "claimantId": "CT-00996",
+          "fullName": "Dara Gale",
+          "dateOfBirth": {
+            "$type": "date",
+            "value": "1994-04-30"
+          }
+        }
+      }
+    }
+  ],
+  "expansionAggregate": [
+    {
+      "a": {
+        "$type": "node",
+        "elementId": "eid-1",
+        "labels": [
+          "Claim"
+        ],
+        "properties": {
+          "lossType": "fire",
+          "claimNumber": "CL-000000",
+          "filedOn": {
+            "$type": "date",
+            "value": "2023-08-28"
+          },
+          "status": "review"
+        }
+      },
+      "phase": 3,
+      "tk": null,
+      "ts": null,
+      "id": "PO-001467",
+      "rtype": "UNDER_POLICY",
+      "dir": "out",
+      "ntype": "policy",
+      "flag": null,
+      "members": 1,
+      "first": null,
+      "rel": null,
+      "m": {
+        "$type": "node",
+        "elementId": "eid-3",
+        "labels": [
+          "Policy"
+        ],
+        "properties": {
+          "cover": "basic",
+          "policyNumber": "PO-001467",
+          "startedOn": {
+            "$type": "date",
+            "value": "2024-03-01"
+          }
+        }
+      }
+    }
+  ],
   "made": [
     {
       "n": {

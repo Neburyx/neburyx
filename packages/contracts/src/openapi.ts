@@ -8,6 +8,7 @@ import { readyResponseSchema } from './ready.js';
 import { sourceProfileSchema } from './profile.js';
 import { degreePreviewRequestSchema, degreePreviewSchema } from './degree-preview.js';
 import { entityLookupRequestSchema } from './entities.js';
+import { expandRequestSchema, expandResponseSchema } from './expand.js';
 import { searchRequestSchema, searchResultSchema } from './search.js';
 import { sourceTestReportSchema } from './source-test.js';
 import { sourcesResponseSchema } from './sources.js';
@@ -19,7 +20,7 @@ export interface OpenApiDocument {
   readonly openapi: string;
   readonly info: { readonly title: string; readonly version: string };
   readonly paths: Readonly<Record<string, unknown>>;
-  readonly components: { readonly schemas: { readonly DegreePreview: Record<string, unknown>; readonly DegreePreviewRequest: Record<string, unknown>; readonly EntityLookupRequest: Record<string, unknown>; readonly ErrorResponse: Record<string, unknown>; readonly GraphNode: Record<string, unknown>; readonly HealthResponse: Record<string, unknown>; readonly InvestigationListResponse: Record<string, unknown>; readonly InvestigationResponse: Record<string, unknown>; readonly MeResponse: Record<string, unknown>; readonly OpenInvestigationRequest: Record<string, unknown>; readonly OpenInvestigationResponse: Record<string, unknown>; readonly ReadyResponse: Record<string, unknown>; readonly SearchRequest: Record<string, unknown>; readonly SearchResult: Record<string, unknown>; readonly SourceProfile: Record<string, unknown>; readonly SourceTestReport: Record<string, unknown>; readonly SourcesResponse: Record<string, unknown> } };
+  readonly components: { readonly schemas: { readonly DegreePreview: Record<string, unknown>; readonly DegreePreviewRequest: Record<string, unknown>; readonly EntityLookupRequest: Record<string, unknown>; readonly ErrorResponse: Record<string, unknown>; readonly ExpandRequest: Record<string, unknown>; readonly ExpandResponse: Record<string, unknown>; readonly GraphNode: Record<string, unknown>; readonly HealthResponse: Record<string, unknown>; readonly InvestigationListResponse: Record<string, unknown>; readonly InvestigationResponse: Record<string, unknown>; readonly MeResponse: Record<string, unknown>; readonly OpenInvestigationRequest: Record<string, unknown>; readonly OpenInvestigationResponse: Record<string, unknown>; readonly ReadyResponse: Record<string, unknown>; readonly SearchRequest: Record<string, unknown>; readonly SearchResult: Record<string, unknown>; readonly SourceProfile: Record<string, unknown>; readonly SourceTestReport: Record<string, unknown>; readonly SourcesResponse: Record<string, unknown> } };
 }
 
 function schemaJson(schema: z.ZodType): Record<string, unknown> {
@@ -49,6 +50,8 @@ export function buildOpenApiDocument(
   degreePreviewRequest: z.ZodType = degreePreviewRequestSchema,
   degreePreview: z.ZodType = degreePreviewSchema,
   entityLookupRequest: z.ZodType = entityLookupRequestSchema,
+  expandRequest: z.ZodType = expandRequestSchema,
+  expandResponse: z.ZodType = expandResponseSchema,
 ): OpenApiDocument {
   return {
     openapi: '3.1.0',
@@ -251,6 +254,26 @@ export function buildOpenApiDocument(
           },
         },
       },
+      '/v1/graph/expand': {
+        post: {
+          operationId: 'expandNeighbors',
+          summary: 'One page of the neighbors of a node for each asked neighbor type',
+          requestBody: { required: true, content: jsonBody('ExpandRequest') },
+          description:
+            'Reads one page of at most `limit` relationships (the source default page when absent; above the source maximum the answer is QUERY_BUDGET_EXCEEDED) for each asked neighbor type, newest first by the observed time of the mapping row and undated last, with the neighbor nodes. The types are read one after another under one read lease and the answer holds a page and a cursor for each; a failure in any of them answers the failure and no page. A cursor continues one type and is refused with CURSOR_INVALIDATED when altered, expired or minted for another source, person, policy version, sort, neighbor type, relationship types, direction or node. Relationships of a type with no stable ID are returned as aggregate edges with their member count.',
+          responses: {
+            '200': { description: 'The pages of the neighbor types', content: jsonBody('ExpandResponse') },
+            '400': { description: 'The body is not valid, or names a neighbor type or relationship type that is not mapped for the node, or a page size below 1', content: jsonBody('ErrorResponse') },
+            '404': { description: 'The node is not in the source, or the source is not configured or may not be read (one answer for all)', content: jsonBody('ErrorResponse') },
+            '409': { description: 'A cursor is altered, expired or for another request (CURSOR_INVALIDATED)', content: jsonBody('ErrorResponse') },
+            '415': { description: 'The body is not JSON', content: jsonBody('ErrorResponse') },
+            '422': { description: 'The page size is over the source maximum (QUERY_BUDGET_EXCEEDED)', content: jsonBody('ErrorResponse') },
+            '500': { description: 'The expansion could not run, or the source answered with something unreadable', content: jsonBody('ErrorResponse') },
+            '503': { description: 'The source is not available, or is busy', content: jsonBody('ErrorResponse') },
+            '504': { description: 'The source did not answer in time', content: jsonBody('ErrorResponse') },
+          },
+        },
+      },
       '/v1/sources': {
         get: {
           operationId: 'listSources',
@@ -266,7 +289,7 @@ export function buildOpenApiDocument(
       },
     },
     components: {
-      schemas: { DegreePreview: schemaJson(degreePreview), DegreePreviewRequest: schemaJson(degreePreviewRequest), EntityLookupRequest: schemaJson(entityLookupRequest), ErrorResponse: schemaJson(errorResponse), GraphNode: schemaJson(graphNode), HealthResponse: schemaJson(healthResponse), InvestigationListResponse: schemaJson(investigationList), InvestigationResponse: schemaJson(investigationResponse), MeResponse: schemaJson(meResponse), OpenInvestigationRequest: schemaJson(openInvestigationRequest), OpenInvestigationResponse: schemaJson(openInvestigationResponse), ReadyResponse: schemaJson(readyResponse), SearchRequest: schemaJson(searchRequest), SearchResult: schemaJson(searchResult), SourceProfile: schemaJson(sourceProfile), SourceTestReport: schemaJson(sourceTestReport), SourcesResponse: schemaJson(sourcesResponse) },
+      schemas: { DegreePreview: schemaJson(degreePreview), DegreePreviewRequest: schemaJson(degreePreviewRequest), EntityLookupRequest: schemaJson(entityLookupRequest), ErrorResponse: schemaJson(errorResponse), ExpandRequest: schemaJson(expandRequest), ExpandResponse: schemaJson(expandResponse), GraphNode: schemaJson(graphNode), HealthResponse: schemaJson(healthResponse), InvestigationListResponse: schemaJson(investigationList), InvestigationResponse: schemaJson(investigationResponse), MeResponse: schemaJson(meResponse), OpenInvestigationRequest: schemaJson(openInvestigationRequest), OpenInvestigationResponse: schemaJson(openInvestigationResponse), ReadyResponse: schemaJson(readyResponse), SearchRequest: schemaJson(searchRequest), SearchResult: schemaJson(searchResult), SourceProfile: schemaJson(sourceProfile), SourceTestReport: schemaJson(sourceTestReport), SourcesResponse: schemaJson(sourcesResponse) },
     },
   };
 }

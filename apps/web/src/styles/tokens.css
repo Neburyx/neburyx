@@ -68,6 +68,7 @@
   --menu-max-width: calc(100vw - 16px);
   --menu-max-height: calc(100vh - 16px);
   --menu-width-canvas: 260px;
+  --menu-width-submenu: 280px;
   --menu-width-node: 304px;
   --menu-width-relationship: 300px;
   --stand-in-control-height: 36px;

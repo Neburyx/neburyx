@@ -1,5 +1,5 @@
 import type { Count, GraphEdge } from '@neburyx/contracts';
-import { formatNumber } from '../workspace/scope-text.js';
+import { degreeCountText } from '../workspace/degree-text.js';
 
 export type Origin = GraphEdge['semantics'];
 
@@ -9,24 +9,9 @@ export interface RelationshipLook {
   readonly label: string | undefined;
 }
 
-/** The member count with its quality in words; no number when the count is unknown, never a guess. */
+/** The member count with its quality in the shared words ("3 · exact", "~ 3 (estimated)", "≥ 3 · lower bound"); no number when the count is unknown, never a guess. */
 export function memberCountText(count: Count): string | undefined {
-  if (count.value === undefined) return undefined;
-  const value = formatNumber(count.value);
-  switch (count.quality) {
-    case 'exact':
-      return value;
-    case 'estimated':
-      return `~${value} (estimated)`;
-    case 'lowerBound':
-      return `≥ ${value} (lower bound)`;
-    case 'unknown':
-      return undefined;
-    default: {
-      const unreachable: never = count.quality;
-      return unreachable;
-    }
-  }
+  return count.value === undefined ? undefined : degreeCountText(count);
 }
 
 /** The word for an origin that is not stored; a stored relationship has none on the canvas. The one definition, shared by the canvas labels and the menu headers. */

@@ -1,6 +1,7 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useCanvasCommands } from '../canvas/canvas-commands.js';
 import { useClientState } from '../state/context.js';
+import { useExpansionControls } from './expand-context.js';
 import { useKeyBindingRegistry, type KeyBindingRegistry, type KeyContext, type KeyScope } from './key-binding-registry.js';
 import { matchesKeys } from './key-spec.js';
 
@@ -55,8 +56,11 @@ export function useKeyHandler(): void {
   const registry = useKeyBindingRegistry();
   const state = useClientState();
   const canvas = useCanvasCommands();
+  const controls = useExpansionControls();
+  const expansion = useRef(controls);
+  expansion.current = controls;
   useEffect(() => {
-    const listener = createKeyListener(registry, () => ({ state, canvas }));
+    const listener = createKeyListener(registry, () => ({ state, canvas, expansion: expansion.current }));
     document.addEventListener('keydown', listener);
     return () => document.removeEventListener('keydown', listener);
   }, [registry, state, canvas]);

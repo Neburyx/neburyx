@@ -13,12 +13,12 @@ test.describe('the neighbor types submenu', () => {
     await page.route((url) => url.pathname === '/v1/graph/preview-expansion', async (route) => {
       const body = route.request().postDataJSON() as { sourceId: string; ref: { entityType: string; stableId: string } };
       if (slow) await new Promise<void>((resolve) => (release = resolve));
-      await route.fulfill({ json: { ref: { sourceId: body.sourceId, ...body.ref }, total: count, byType: [], byNeighborType: [{ entityType: body.ref.entityType, count }], warnings: [] } });
+      await route.fulfill({ json: { ref: { sourceId: body.sourceId, ...body.ref }, total: count, byType: [], byNeighborType: [{ entityType: body.ref.entityType, count }], warnings: [], pageSize: 25 } });
     });
   });
 
   const outline = (page: Page, selector: string): Promise<string> => page.locator(selector).first().evaluate((element) => getComputedStyle(element).outlineStyle);
-  const entry = (page: Page) => menuOf(page).first().getByRole('menuitem', { name: 'Expand neighbors' });
+  const entry = (page: Page) => menuOf(page).first().getByRole('menuitem', { name: 'Expand by type' });
 
   async function openByKeyboard(page: Page): Promise<void> {
     await canvasOf(page).focus();
@@ -79,8 +79,10 @@ test.describe('the neighbor types submenu', () => {
     await page.keyboard.press('Space');
     expect(await ringed(), 'the walk element has its ring before the menu').toBe(1);
     await page.keyboard.press('ContextMenu');
-    await expect(entry(page)).toBeFocused();
+    await expect(menuOf(page).first().getByRole('menuitem', { name: 'Expand neighbors' })).toBeFocused();
     await expect.poll(ringed, 'the canvas ring while the menu has the focus').toBe(0);
+    await page.keyboard.press('ArrowDown');
+    await expect(entry(page)).toBeFocused();
     await page.keyboard.press('ArrowRight');
     await expect(page.locator('.neighbor-types-row').first()).toBeFocused();
     expect(await ringed(), 'the canvas ring while the submenu has the focus').toBe(0);

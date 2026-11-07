@@ -21,7 +21,11 @@ function entityStatements(entity: EntityModel): string[] {
 
 function relationshipStatements(relationship: RelationshipModel): string[] {
   const properties = new Set([...(relationship.stableId === undefined ? [] : [relationship.stableId]), ...relationship.evidence, ...(relationship.observedAt === undefined ? [] : [relationship.observedAt])]);
-  return [...properties].map((property) => `CREATE INDEX ${quote(relationshipIndexName(relationship.type, property))} IF NOT EXISTS FOR ()-[r:${quote(relationship.type)}]-() ON (r.${quote(property)})`);
+  return [...properties].map((property) =>
+    property === relationship.stableId
+      ? `CREATE CONSTRAINT ${quote(relationshipIndexName(relationship.type, property))} IF NOT EXISTS FOR ()-[r:${quote(relationship.type)}]-() REQUIRE r.${quote(property)} IS UNIQUE`
+      : `CREATE INDEX ${quote(relationshipIndexName(relationship.type, property))} IF NOT EXISTS FOR ()-[r:${quote(relationship.type)}]-() ON (r.${quote(property)})`,
+  );
 }
 
 /** Which of the pieces of a fitting graph to leave out, for a test that needs one thing missing. */
@@ -69,6 +73,8 @@ export async function createSchema(server: RunningNeo4j, source: SourceModel, op
 }
 
 export async function dropIndex(server: RunningNeo4j, name: string): Promise<void> {
+  // the index of a relationship stable ID is the one a uniqueness constraint owns, which goes with its constraint
+  await runAdmin(server, `DROP CONSTRAINT ${quote(name)} IF EXISTS`);
   await runAdmin(server, `DROP INDEX ${quote(name)} IF EXISTS`);
 }
 

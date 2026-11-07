@@ -18,6 +18,9 @@ const SELECTION: readonly { readonly id: SelectionCommandId; readonly keys: stri
   { id: 'clear-selection', keys: 'escape', label: 'Clear', order: 30 },
 ];
 
+/** The keys of the entities in a selection. */
+const selectedNodes = (selection: ReadonlySet<string>): string[] => [...selection].filter((key) => !isEdgeKey(key));
+
 const walking = ({ state }: KeyContext): boolean => state.presentation.view.getState().walking;
 const notWalking = (context: KeyContext): boolean => !walking(context);
 
@@ -103,6 +106,19 @@ export function registerBuiltInKeyBindings(registry: KeyBindingRegistry, schedul
     registry.register({ id: 'move', keys: ['arrowleft', 'arrowup', 'arrowdown', 'arrowright'], label: 'Move selected entities', shownAs: { mac: ['←↑↓→'], other: ['←↑↓→'] }, group: 'selection', order: 60, scope: 'canvas', repeat: true, run: move(MOVE_STEP) }),
     registry.register({ id: 'move-far', keys: ['shift+arrowleft', 'shift+arrowup', 'shift+arrowdown', 'shift+arrowright'], label: 'Move by 50', shownAs: { mac: ['⇧←↑↓→'], other: ['Shift+←↑↓→'] }, group: 'selection', order: 70, scope: 'canvas', repeat: true, run: move(MOVE_STEP_FAR) }),
     registry.register({ id: 'walk-add', keys: ['shift+enter', 'shift+space'], label: 'Add to the selection', group: 'selection', order: 110, scope: 'canvas', when: walking, run: (context) => walkSelect(context, true) }),
+    registry.register({
+      id: 'expand',
+      keys: ['e'],
+      label: 'Expand',
+      group: 'selection',
+      order: 40,
+      scope: 'workspace',
+      when: ({ state }) => state.presentation.view.getState().openMenu === undefined && selectedNodes(state.presentation.view.getState().selection).length === 1,
+      run: ({ state, expansion }) => {
+        const [key] = selectedNodes(state.presentation.view.getState().selection);
+        if (key !== undefined) expansion?.expandNode(key);
+      },
+    }),
     registry.register({
       id: 'shortcuts',
       keys: ['mod+/'],

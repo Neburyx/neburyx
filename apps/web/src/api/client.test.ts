@@ -256,6 +256,7 @@ const PREVIEW = {
   byType: [{ relationshipType: 'LINKS', direction: 'out', count: { value: 3, quality: 'exact', scope: 'degree:out:LINKS:mapped-relationship-ends' }, neighborTypes: ['gadget'] }],
   byNeighborType: [{ entityType: 'gadget', count: { value: 3, quality: 'exact', scope: 'degree:neighbor:gadget:mapped-relationship-ends' } }],
   warnings: [],
+  pageSize: 25,
 };
 const PREVIEW_REQUEST = { sourceId: 'demo', ref: { entityType: 'widget', stableId: 'W-1' } };
 

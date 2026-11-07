@@ -31,13 +31,8 @@ async function releaseLease(lease: ReadLease, logger: GateLogger): Promise<void>
 /** The timeout is the source's server-side transaction timeout, which is what the person is told; it holds no address, query or value. */
 const timedOut = (context: GateContext): AppError => new AppError('QUERY_TIMEOUT', { timeoutMs: context.budgets.timeoutMs });
 
-export async function executeRead(
-  deps: ExecuteDeps,
-  context: GateContext,
-  template: Template,
-  rendered: Rendered,
-  limit: number,
-): Promise<ExecuteResult> {
+/** The lease of a read: granted by the coordinator, or the failure the person is told (the source is busy, or unavailable). */
+export async function acquireLease(deps: Pick<ExecuteDeps, 'coordinator' | 'clock'>, context: GateContext): Promise<ReadLease> {
   if (deps.clock() >= context.deadlineAt) throw timedOut(context);
   const admission = await deps.coordinator.acquireRead({ principal: context.principal, sourceId: context.sourceId });
   switch (admission.status) {
@@ -46,10 +41,26 @@ export async function executeRead(
     case 'unavailable':
       throw new AppError('SOURCE_UNAVAILABLE');
     case 'granted':
-      break;
+      return admission.lease;
     default:
       return exhaustive(admission);
   }
+}
+
+export async function releaseRead(lease: ReadLease, logger: GateLogger): Promise<void> {
+  await releaseLease(lease, logger);
+}
+
+/** Runs one read. Without a lease it takes and releases its own; with one (a request that reads several pages under one lease) it uses it and leaves it to its owner to release. */
+export async function executeRead(
+  deps: ExecuteDeps,
+  context: GateContext,
+  template: Template,
+  rendered: Rendered,
+  limit: number,
+  held?: ReadLease,
+): Promise<ExecuteResult> {
+  const lease = held ?? (await acquireLease(deps, context));
   let outcome;
   try {
     if (deps.clock() >= context.deadlineAt) throw timedOut(context);
@@ -68,7 +79,7 @@ export async function executeRead(
       traceId: context.traceId,
     });
   } finally {
-    await releaseLease(admission.lease, deps.logger);
+    if (held === undefined) await releaseLease(lease, deps.logger);
   }
   switch (outcome.status) {
     case 'timeout':

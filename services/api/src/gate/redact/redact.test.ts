@@ -9,6 +9,7 @@ import { fixtureRows, PACKS, packSource } from '../../testing/pack-fixtures.js';
 import { firstSource } from '../../testing/mapping.js';
 import { normalizeModelOf } from '../normalize/model.js';
 import { normalizeRows, type Normalized } from '../normalize/index.js';
+import { normalizeExpansion } from '../normalize/expansion.js';
 import { maskValue, redactItems, redactResult } from './index.js';
 
 const REQUEST = 'the-request';
@@ -19,6 +20,38 @@ function at<T>(list: readonly T[], index: number): T {
   if (found === undefined) throw new Error(`no element at ${index}`);
   return found;
 }
+
+describe.each(PACKS)('the redact stage on the rows of an expansion of the %s pack', (pack) => {
+  const source = packSource(pack);
+  const model = normalizeModelOf(source);
+  const expansions = (['expansionStored', 'expansionAggregate'] as const).map((name) => {
+    const row = source.relationships.find((candidate) => (name === 'expansionStored') === (candidate.stableId !== undefined));
+    if (row === undefined) throw new Error('the pack has no such relationship');
+    return normalizeExpansion({ sourceId: REQUEST, hasMore: false, model, params: { entityType: row.from, neighborType: row.to } }, fixtureRows(pack, name));
+  });
+
+  it('masks every personal-data property of the anchor and the neighbors of a masked request, and gives an aggregate edge no property value', () => {
+    let seen = 0;
+    for (const page of expansions) {
+      const masked = redactResult(page, redactContext(model, true));
+      for (const node of masked.nodes) {
+        const entity = model.entitiesByType.get(node.ref.entityType);
+        for (const property of node.properties) {
+          if (entity?.pii.includes(property.key) && property.value !== undefined) {
+            expect(property.masked).toBe(true);
+            seen += 1;
+          }
+        }
+      }
+      for (const edge of masked.edges.filter((candidate) => 'aggregate' in candidate.ref)) expect(edge.properties).toEqual([]);
+    }
+    expect(seen).toBeGreaterThan(0);
+  });
+
+  it('changes nothing for a request that does not ask for masking', () => {
+    for (const page of expansions) expect(redactResult(page, redactContext(model, false))).toEqual(page);
+  });
+});
 
 const isNormalizedItem = (item: Record<string, unknown>): item is Record<string, unknown> & Normalized => Array.isArray(item['nodes']) && Array.isArray(item['edges']);
 

@@ -9,6 +9,7 @@ const preview = {
   byType: [{ relationshipType: 'LINKS', direction: 'out', count: exact(3), neighborTypes: ['gadget'] }],
   byNeighborType: [{ entityType: 'gadget', count: exact(3, 'degree:neighbor:gadget') }],
   warnings: [],
+  pageSize: 25,
 };
 
 describe('the degree preview request', () => {

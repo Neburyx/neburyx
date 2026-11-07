@@ -28,6 +28,8 @@ export const degreePreviewSchema = z.strictObject({
   byType: z.array(degreeByTypeSchema),
   byNeighborType: z.array(degreeByNeighborTypeSchema),
   warnings: z.array(degreeWarningSchema),
+  /** The number of relationships an expansion loads for each type when the request names no page size: the source's default page. */
+  pageSize: z.number().int().positive(),
 });
 
 export type DegreePreviewRequest = z.infer<typeof degreePreviewRequestSchema>;

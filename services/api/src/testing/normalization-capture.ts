@@ -8,11 +8,15 @@ import { z } from 'zod';
 import { assembleGate } from '../gate/assemble.js';
 import { createTemplateCatalog, type TemplateDefinition } from '../gate/catalog.js';
 import { entityLoadTemplate } from '../gate/templates/entity-load.js';
+import { expandNeighborsTemplate } from '../gate/templates/expand-neighbors.js';
 import { schemaIndexesTemplate } from '../gate/templates/schema-indexes.js';
-import type { Gate, SystemRunner } from '../gate/types.js';
+import type { ExecuteCall, ExecuteOutcome, ReadExecutor } from '../gate/executor.js';
+import { EXPAND_NEIGHBORS_ID } from '../gate/templates/expand-neighbors.js';
+import type { Gate, GatePage, SystemRunner } from '../gate/types.js';
 import type { SourceModel } from '../mapping/model.js';
 import { communitySeams } from '../seams/community-seams.js';
 import { createNeo4jExecutor, type Neo4jExecutor } from '../sources/executor.js';
+import { LOCAL_PRINCIPAL } from './gate.js';
 import { envFor, runAdmin, startNeo4j, type RunningNeo4j } from './neo4j-server.js';
 import { PACKS, packMappingText, packSource, repoRoot, type Pack } from './pack-fixtures.js';
 import { ALWAYS_USABLE } from './usability.js';
@@ -83,6 +87,8 @@ export interface PackServer {
   readonly system: SystemRunner;
   /** The user gate over the same source, with the capture templates and the entity read in its catalog. */
   readonly gate: Gate;
+  /** The rows the adapter handed to the gate for one expansion of a node, as the real template read them, and the page the gate made of them. */
+  expand(params: Record<string, string>, mask?: boolean): Promise<{ readonly rows: readonly Record<string, unknown>[]; readonly page: GatePage }>;
   close(): Promise<void>;
 }
 
@@ -109,15 +115,28 @@ export async function startPackServers(): Promise<PackServer[]> {
     const gateMapping = { sources: [source] };
     const executor: Neo4jExecutor = createNeo4jExecutor({ sources: gateMapping.sources, env: { DEMO_NEO4J_USER: server.reader.user, DEMO_NEO4J_PASSWORD: server.reader.password, ...envFor(server) }, logger: { warn: () => undefined } });
     const defaults = communitySeams();
+    const recorded: Record<string, unknown>[] = [];
+    const recording: ReadExecutor = {
+      async execute(call: ExecuteCall): Promise<ExecuteOutcome> {
+        const outcome = await executor.execute(call);
+        if (call.templateId === EXPAND_NEIGHBORS_ID && outcome.status === 'rows') recorded.push(...outcome.rows);
+        return outcome;
+      },
+    };
     const { gate, system } = assembleGate({
       usability: ALWAYS_USABLE,
       mapping: gateMapping,
       seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit },
-      executor,
+      executor: recording,
       logger: { warn: () => undefined },
-      catalog: createTemplateCatalog({ templates: [...CAPTURE_TEMPLATES, entityLoadTemplate, schemaIndexesTemplate] }),
+      catalog: createTemplateCatalog({ templates: [...CAPTURE_TEMPLATES, entityLoadTemplate, expandNeighborsTemplate, schemaIndexesTemplate] }),
     });
-    opened.push({ pack, server, source, system, gate, close: () => executor.close() });
+    const expand = async (params: Record<string, string>, mask = false) => {
+      recorded.length = 0;
+      const page = await gate.run({ traceId: 'tr-capture', principal: LOCAL_PRINCIPAL, sourceId: source.id, templateId: EXPAND_NEIGHBORS_ID, params: { ...params, direction: 'both', sort: 'observed' }, limit: 10, mask });
+      return { rows: [...recorded], page };
+    };
+    opened.push({ pack, server, source, system, gate, expand, close: () => executor.close() });
   }
   return opened;
 }

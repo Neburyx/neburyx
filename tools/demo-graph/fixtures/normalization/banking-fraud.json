@@ -357,8 +357,8 @@
             "value": "2023-11-08T00:45:41Z"
           },
           "fingerprint": "DV-000000",
-          "platform": "windows",
-          "isShared": true
+          "isShared": true,
+          "platform": "windows"
         }
       },
       "r2": {
@@ -445,8 +445,8 @@
             "value": "2023-11-08T00:45:41Z"
           },
           "fingerprint": "DV-000000",
-          "platform": "windows",
-          "isShared": true
+          "isShared": true,
+          "platform": "windows"
         }
       },
       "p": {
@@ -499,12 +499,130 @@
                   "value": "2023-11-08T00:45:41Z"
                 },
                 "fingerprint": "DV-000000",
-                "platform": "windows",
-                "isShared": true
+                "isShared": true,
+                "platform": "windows"
               }
             }
           }
         ]
+      }
+    }
+  ],
+  "expansionStored": [
+    {
+      "a": {
+        "$type": "node",
+        "elementId": "eid-1",
+        "labels": [
+          "Account"
+        ],
+        "properties": {
+          "accountId": "AC-0000000",
+          "holderName": "Ivo Lowe",
+          "phone": "+1-555-8945",
+          "openedOn": {
+            "$type": "date",
+            "value": "2015-01-14"
+          },
+          "accountKind": "business",
+          "status": "active"
+        }
+      },
+      "phase": 0,
+      "tk": 1,
+      "ts": {
+        "$type": "dateTime",
+        "value": "2025-09-29T00:55:31Z"
+      },
+      "id": "UD-0000000",
+      "rtype": "USES_DEVICE",
+      "dir": "out",
+      "ntype": null,
+      "flag": null,
+      "members": null,
+      "first": null,
+      "rel": {
+        "$type": "relationship",
+        "elementId": "eid-7",
+        "type": "USES_DEVICE",
+        "startElementId": "eid-1",
+        "endElementId": "eid-8",
+        "properties": {
+          "sourceRecordId": "SRC-UD-0000000",
+          "eventId": "UD-0000000",
+          "lastSeen": {
+            "$type": "dateTime",
+            "value": "2025-09-29T00:55:31Z"
+          },
+          "channel": "branch"
+        }
+      },
+      "m": {
+        "$type": "node",
+        "elementId": "eid-8",
+        "labels": [
+          "Device"
+        ],
+        "properties": {
+          "firstSeen": {
+            "$type": "dateTime",
+            "value": "2023-11-08T00:45:41Z"
+          },
+          "fingerprint": "DV-000000",
+          "isShared": true,
+          "platform": "windows"
+        }
+      }
+    }
+  ],
+  "expansionAggregate": [
+    {
+      "a": {
+        "$type": "node",
+        "elementId": "eid-2",
+        "labels": [
+          "Customer"
+        ],
+        "properties": {
+          "phone": "+1-555-9622",
+          "segment": "small-business",
+          "customerId": "CU-0000000",
+          "fullName": "Gus Cedar",
+          "dateOfBirth": {
+            "$type": "date",
+            "value": "1988-10-21"
+          },
+          "authId": "AUTH-0000000"
+        }
+      },
+      "phase": 3,
+      "tk": null,
+      "ts": null,
+      "id": "AC-0009152",
+      "rtype": "HOLDS_ACCOUNT",
+      "dir": "out",
+      "ntype": "account",
+      "flag": null,
+      "members": 1,
+      "first": null,
+      "rel": null,
+      "m": {
+        "$type": "node",
+        "elementId": "eid-4",
+        "labels": [
+          "Account"
+        ],
+        "properties": {
+          "accountId": "AC-0009152",
+          "holderName": "Kira Fenn",
+          "phone": "+1-555-3665",
+          "openedOn": {
+            "$type": "date",
+            "value": "2024-09-20"
+          },
+          "accountKind": "checking",
+          "status": "active"
+        }
       }
     }
   ],

@@ -50,7 +50,7 @@ describe('the sheet of keyboard shortcuts', () => {
     expect(screen.getByText(SHEET_FOOTNOTE)).toBeTruthy();
     expect(columns()).toEqual({
       TOOLS: ['Select V', 'Pan H', 'Box select B', 'Search ⌘K', 'Legend L'],
-      SELECTION: ['Select all ⌘A', 'Invert selection ⇧⌘I', 'Clear Esc', 'Move selected entities ←↑↓→', 'Move by 50 ⇧←↑↓→', 'Select the element Enter Space', 'Add to the selection ⇧Enter ⇧Space'],
+      SELECTION: ['Select all ⌘A', 'Invert selection ⇧⌘I', 'Clear Esc', 'Expand E', 'Move selected entities ←↑↓→', 'Move by 50 ⇧←↑↓→', 'Select the element Enter Space', 'Add to the selection ⇧Enter ⇧Space'],
       VIEW: ['Fit to view ⌘0', 'Keyboard shortcuts ⌘/', 'Walk the canvas Enter Space', 'Next element Tab', 'Previous element ⇧Tab', 'Leave the walk Esc', 'Open context menu Menu ⇧F10'],
     });
   });
@@ -139,7 +139,7 @@ describe('the sheet of keyboard shortcuts', () => {
     press('c', { metaKey: true });
     press('e', { metaKey: true });
     press('C', { metaKey: true, shiftKey: true });
-    expect(log.sort()).toEqual(['copy-id', 'copy-properties', 'expand', 'export-view', 'find-paths', 'focus', 'hide', 'pin', 'search']);
+    expect(log.sort()).toEqual(['copy-id', 'copy-properties', 'export-view', 'find-paths', 'focus', 'hide', 'pin', 'search']);
     act(() => removeStandIns());
     opener();
     expect(columns()['ACTIONS']).toBeUndefined();

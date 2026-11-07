@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { AppError } from '../errors.js';
 import { MAX_EVIDENCE_PROPERTIES, MAX_FACET_PROBES, MAX_REFERENCE_PROPERTIES, MAX_SEARCH_PROPERTIES } from '../mapping/model.js';
 import { degreePairsOf } from './templates/degree-pairs.js';
+import { expandBranchesOf, expandStatementOf, type ExpandDirection } from './templates/expand-statement.js';
 import type { GateParameter, Params, SourceAllowlist, Template } from './types.js';
 
 /**
@@ -11,7 +12,7 @@ import type { GateParameter, Params, SourceAllowlist, Template } from './types.j
  * `@facetProbes(probes)` writes the whole statement of the facet probes (see `Template.facetProbes`).
  * `@degreeCounts(kind)` writes the whole statement of a degree read for the entity type the parameter `kind` names (see `Template.degreeCounts`).
  */
-const MARKER = /@(entity|relationship|stableId|searchBranches|facetProbes|degreeCounts)\(([A-Za-z][A-Za-z0-9]*)\)/g;
+const MARKER = /@(entity|relationship|stableId|searchBranches|facetProbes|degreeCounts|expandNeighbors)\(([A-Za-z][A-Za-z0-9]*)\)/g;
 /**
  * The placeholders of a branch text: for a target of an entity type the label of the type and the property (`@label`, `@property`); for a target of a relationship mapping row the
  * relationship type, the labels of its two entity types and the property (`@type`, `@fromLabel`, `@toLabel`, `@property`).
@@ -31,12 +32,12 @@ export function quoteName(name: string): string {
   return `\`${name}\``;
 }
 
-export type MarkerKind = 'entity' | 'relationship' | 'stableId' | 'searchBranches' | 'facetProbes' | 'degreeCounts';
+export type MarkerKind = 'entity' | 'relationship' | 'stableId' | 'searchBranches' | 'facetProbes' | 'degreeCounts' | 'expandNeighbors';
 
 export function markersOf(cypher: string): { readonly kind: MarkerKind; readonly name: string }[] {
   return [...cypher.matchAll(MARKER)].flatMap((match) => {
     const [, kind, name] = match;
-    return (kind === 'entity' || kind === 'relationship' || kind === 'stableId' || kind === 'searchBranches' || kind === 'facetProbes' || kind === 'degreeCounts') && name !== undefined ? [{ kind, name }] : [];
+    return (kind === 'entity' || kind === 'relationship' || kind === 'stableId' || kind === 'searchBranches' || kind === 'facetProbes' || kind === 'degreeCounts' || kind === 'expandNeighbors') && name !== undefined ? [{ kind, name }] : [];
   });
 }
 
@@ -187,6 +188,28 @@ function degreeCountsOf(template: Template, params: Params, allowlist: SourceAll
   return `${anchor}\n${calls.join('\n')}\nRETURN ${patterns.map((_pattern, index) => `c${index}`).join(', ')}`;
 }
 
+/**
+ * The statement of an expansion read: the rows of the mapping that join the anchor's entity type to the neighbor type, for the asked direction and relationship types (checked against the
+ * allowlist), written as `expandStatementOf` says. A request that names no joining row has nothing to read.
+ */
+function expandNeighborsOf(template: Template, params: Params, allowlist: SourceAllowlist): string {
+  const spec = template.expandNeighbors;
+  if (spec === undefined) return '';
+  const anchor = params[spec.anchorParam];
+  const neighbor = params[spec.neighborParam];
+  const direction = params[spec.directionParam];
+  const relTypes = params[spec.relTypesParam];
+  if (typeof anchor !== 'string' || typeof neighbor !== 'string' || !allowlist.entityLabels.has(anchor) || !allowlist.entityLabels.has(neighbor)) throw new AppError('INVALID_REQUEST');
+  if (direction !== 'out' && direction !== 'in' && direction !== 'both') throw new AppError('INVALID_REQUEST');
+  const types = relTypes === undefined ? undefined : relationshipTypesOf(relTypes, allowlist.relationshipTypes);
+  const branches = expandBranchesOf(allowlist, anchor, neighbor, types, direction satisfies ExpandDirection);
+  if (branches.length === 0) {
+    if (template.readsNothing?.(params, allowlist) === true) return '';
+    throw new AppError('INVALID_REQUEST');
+  }
+  return expandStatementOf(allowlist, anchor, neighbor, branches);
+}
+
 export interface Rendered {
   readonly cypher: string;
   readonly parameters: Params;
@@ -209,14 +232,16 @@ export function renderTemplate(template: Template, params: Params, allowlist: So
   const branches = branchesOf(template, params, allowlist);
   const probes = facetProbesOf(template, params, allowlist);
   const degrees = degreeCountsOf(template, params, allowlist);
+  const expansion = expandNeighborsOf(template, params, allowlist);
   const cypher = template.cypher.replace(MARKER, (_whole, kind: string, name: string) => {
     if (kind === 'searchBranches') return branches;
     if (kind === 'facetProbes') return probes;
     if (kind === 'degreeCounts') return degrees;
+    if (kind === 'expandNeighbors') return expansion;
     const replacement = replacements.get(`${kind}:${name}`) ?? '';
     return kind === 'relationship' ? replacement : quoteName(replacement);
   });
-  const markerNames = new Set([...template.entityParams, ...template.relationshipParams, ...(template.searchBranches === undefined ? [] : [template.searchBranches.param]), ...(template.facetProbes === undefined ? [] : [template.facetProbes.param]), ...(template.degreeCounts === undefined ? [] : [template.degreeCounts.param])]);
+  const markerNames = new Set([...template.entityParams, ...template.relationshipParams, ...(template.searchBranches === undefined ? [] : [template.searchBranches.param]), ...(template.facetProbes === undefined ? [] : [template.facetProbes.param]), ...(template.degreeCounts === undefined ? [] : [template.degreeCounts.param]), ...(template.expandNeighbors === undefined ? [] : [template.expandNeighbors.relTypesParam, template.expandNeighbors.directionParam])]);
   const kept = Object.entries(params).filter(([key]) => !markerNames.has(key));
   const cap: [string, unknown][] = template.degreeCounts?.form === 'bounded' ? [['countCap', countCap]] : [];
   return { cypher, parameters: Object.fromEntries([...kept, ['limit', limit], ...cap, ...gateValuesOf(template, allowlist)]) };

@@ -16,8 +16,9 @@ export function schemaStatements(source: MappingSource): string[] {
     }
   }
   for (const relationship of source.relationships) {
-    const properties = new Set([...(relationship.stableId === undefined ? [] : [relationship.stableId]), ...relationship.evidence, ...(relationship.observedAt === undefined ? [] : [relationship.observedAt])]);
-    for (const property of properties) statements.push(`CREATE INDEX IF NOT EXISTS FOR ()-[r:${quote(relationship.type)}]-() ON (r.${quote(property)})`);
+    if (relationship.stableId !== undefined) statements.push(`CREATE CONSTRAINT IF NOT EXISTS FOR ()-[r:${quote(relationship.type)}]-() REQUIRE r.${quote(relationship.stableId)} IS UNIQUE`);
+    const properties = new Set([...relationship.evidence, ...(relationship.observedAt === undefined ? [] : [relationship.observedAt])]);
+    for (const property of properties) if (property !== relationship.stableId) statements.push(`CREATE INDEX IF NOT EXISTS FOR ()-[r:${quote(relationship.type)}]-() ON (r.${quote(property)})`);
   }
   return statements;
 }

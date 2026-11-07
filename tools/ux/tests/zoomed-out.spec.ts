@@ -12,7 +12,7 @@ test.describe('above the caption limit', () => {
     const now = await drawing(page);
     expect(now.nodes.every((node) => node.captionShown && node.glyphShown), 'every caption and glyph is drawn').toBe(true);
     const labelled = now.edges.filter((edge) => edge.label !== '');
-    expect(labelled.map((edge) => edge.label).sort(), 'the relationships that carry a label').toEqual(['SHARED_GADGET · derived', 'USES_GADGET · 42']);
+    expect(labelled.map((edge) => edge.label).sort(), 'the relationships that carry a label').toEqual(['SHARED_GADGET · derived', 'USES_GADGET · 42 · exact']);
     expect(labelled.every((edge) => edge.labelShown), 'every label is drawn').toBe(true);
     const at = await screenOf(page, 'holder');
     await page.mouse.move(at.x, at.y);
@@ -51,13 +51,13 @@ test.describe('below the caption limit', () => {
     await page.keyboard.press('Enter');
     for (let step = 0; step < 40; step += 1) {
       await page.keyboard.press('Tab');
-      if (((await announcement(page).textContent()) ?? '').startsWith('USES_GADGET · 42')) break;
+      if (((await announcement(page).textContent()) ?? '').startsWith('USES_GADGET · 42 · exact')) break;
     }
     const shownLabels = async (): Promise<string[]> => (await drawing(page)).edges.filter((edge) => edge.labelShown).map((edge) => edge.label);
-    await expect.poll(shownLabels, { message: 'the walked relationship keeps its label' }).toEqual(['USES_GADGET · 42']);
+    await expect.poll(shownLabels, { message: 'the walked relationship keeps its label' }).toEqual(['USES_GADGET · 42 · exact']);
     await page.keyboard.press('Space');
     await page.keyboard.press('Escape');
-    await expect.poll(shownLabels, { message: 'the selected relationship keeps its label' }).toEqual(['USES_GADGET · 42']);
+    await expect.poll(shownLabels, { message: 'the selected relationship keeps its label' }).toEqual(['USES_GADGET · 42 · exact']);
     await page.keyboard.press('Escape');
     await expect.poll(shownLabels, { message: 'cleared, no label is drawn' }).toEqual([]);
   });
@@ -92,7 +92,7 @@ test.describe('below the caption limit', () => {
     const to = await screenOf(page, 'gad-1');
     await page.mouse.move((from.x + to.x) / 2, (from.y + to.y) / 2);
     await expect(tip(page)).toHaveCount(1);
-    expect(await tipLines(page)).toEqual(['USES_GADGET · 42']);
+    expect(await tipLines(page)).toEqual(['USES_GADGET · 42 · exact']);
     const a = await screenOf(page, 'holder');
     const b = await screenOf(page, 'lin');
     await page.mouse.move(a.x + 400, a.y + 300);

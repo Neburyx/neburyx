@@ -43,24 +43,25 @@ function graphValuesOf(rows: readonly Readonly<Record<string, unknown>>[]): { re
   return { nodes: [...nodes.values()], relationships: [...relationships.values()] };
 }
 
-export function normalizeRows(context: NormalizeContext, rows: readonly Readonly<Record<string, unknown>>[]): Normalized {
+/** `expected` gives, by element ID, the entity type a node was read as (a read that names a type), which settles a node whose labels match several types. */
+export function normalizeRows(context: NormalizeContext, rows: readonly Readonly<Record<string, unknown>>[], expected: ReadonlyMap<string, string> = new Map()): Normalized {
   const found = graphValuesOf(rows);
   const nodes = new Map<string, GraphNode>();
   const outcomes = new Map<string, NodeOutcome>();
   const dropped = noDrops();
   for (const plain of found.nodes) {
-    const result = normalizeNode(context, plain);
+    const result = normalizeNode(context, plain, expected.get(plain.elementId));
     if ('node' in result) {
       const key = nodeKey(result.node);
       const known = nodes.get(key);
       nodes.set(key, known === undefined ? result.node : mergeNode(known, result.node));
       outcomes.set(plain.elementId, { ref: result.node.ref });
     } else {
-      dropped[result.dropped] += 1;
+      dropped[result.dropped] = (dropped[result.dropped] ?? 0) + 1;
       outcomes.set(plain.elementId, { dropped: result.dropped });
     }
   }
   const edges = normalizeEdges(context, found.relationships, outcomes);
-  for (const reason of edges.dropped) dropped[reason] += 1;
+  for (const reason of edges.dropped) dropped[reason] = (dropped[reason] ?? 0) + 1;
   return { nodes: [...nodes.values()], edges: edges.edges, dropped, warnings: warningsOf(dropped) };
 }

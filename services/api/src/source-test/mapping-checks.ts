@@ -112,6 +112,10 @@ export function judgeIndexes(source: SourceModel, reads: SchemaReads): MappingFi
     if (relationship.observedAt !== undefined) found.push(...judgeIndex(reads, 'RELATIONSHIP', relationship.type, relationship.observedAt, 'sort-index', fields, where, 'sort'));
     if (relationship.stableId !== undefined && indexesOn(reads, 'RELATIONSHIP', relationship.type, relationship.stableId).length === 0) {
       found.push(finding('rel-stable-id-unindexed', { ...fields, property: relationship.stableId }, `${where}: no index on the stable id property ${quoted(relationship.stableId)}`));
+    } else if (relationship.stableId !== undefined && !indexesOn(reads, 'RELATIONSHIP', relationship.type, relationship.stableId).some((entry) => entry.constrained)) {
+      found.push(
+        finding('rel-stable-id-unconstrained', { ...fields, property: relationship.stableId }, `${where}: advice: a uniqueness constraint on the stable id property ${quoted(relationship.stableId)} is needed for paging without a repeat or a gap`),
+      );
     }
   }
   return found;
@@ -134,7 +138,7 @@ export function judgeScan(entity: EntityModel, result: ScanResult): MappingFindi
 export function statusOf(findings: readonly MappingFinding[]): MappingChecks['status'] {
   if (findings.some((entry) => entry.severity === 'fail')) return 'fail';
   if (findings.some((entry) => UNVERIFIED_CHECKS.includes(entry.check))) return 'not-verified';
-  return findings.length > 0 ? 'warn' : 'pass';
+  return findings.some((entry) => entry.severity === 'warn') ? 'warn' : 'pass';
 }
 
 export function checksOf(findings: readonly MappingFinding[]): MappingChecks {

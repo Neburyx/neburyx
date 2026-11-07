@@ -43,6 +43,19 @@ async function captureAll(target: PackServer): Promise<Fixture> {
   const [firstType, middleType, secondType] = rule.via;
   captured['supports'] = await itemsOf(target, 'capture-supports', { entityType: rule.from, middleType: middleType ?? '', lastType: rule.to, firstType: firstType ?? '', secondType: secondType ?? '' });
   captured['stored'] = await itemsOf(target, 'capture-relationship', { entityType: keyed.from, otherType: keyed.to, relationshipType: keyed.type });
+  // the rows of the real expansion statement for a relationship that has a stable ID and for one that has none, each read from the demo graph through the gate
+  const expansionOf = async (row: (typeof target.source.relationships)[number]) => {
+    const anchor = target.source.entities.find((candidate) => candidate.type === row.from);
+    const items = await itemsOf(target, 'capture-relationship', { entityType: row.from, otherType: row.to, relationshipType: row.type });
+    const node = items.map((item) => item['a']).find((value): value is { properties: Record<string, unknown> } => typeof value === 'object' && value !== null && 'properties' in value);
+    const stableId = anchor === undefined || node === undefined ? undefined : node.properties[anchor.stableId];
+    if (typeof stableId !== 'string' && typeof stableId !== 'number') throw new Error('the pack has no node to expand');
+    return (await target.expand({ entityType: row.from, stableId: String(stableId), neighborType: row.to })).rows;
+  };
+  const unkeyed = target.source.relationships.find((candidate) => candidate.stableId === undefined);
+  if (unkeyed === undefined) throw new Error('the pack maps no relationship without a stable ID');
+  captured['expansionStored'] = await expansionOf(keyed);
+  captured['expansionAggregate'] = await expansionOf(unkeyed);
   // one set of made records for both reads: a server may give the element ID of a deleted record to a new one, and the capture names element IDs by their string
   await withMadeRecords(target, async () => {
     captured['made'] = await itemsOf(target, 'capture-made', {});

@@ -92,7 +92,7 @@ test.describe('the walk', () => {
     'CONTESTS, from CAS-20348 to TRN-99381',
     'SENDS, from LED-48291 to TRN-99381',
     'PAYS, from TRN-99381 to SEL-231',
-    'USES_GADGET · 42, from LED-48291 to GAD-884',
+    'USES_GADGET · 42 · exact, from LED-48291 to GAD-884',
     'USES_GADGET, from LED-71825 to GAD-884',
     'SEEN_AT, from GAD-884 to 198.51.100.42',
     'SEEN_AT, from GAD-217 to 198.51.100.42',

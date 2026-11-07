@@ -72,7 +72,7 @@ describe('Edge', () => {
     ['a member count on a stored edge', { ...stored, memberCount: { value: 1, quality: 'exact', scope: 'members' } }],
     ['a derived edge without a derivation', { ...derived, derivation: undefined }],
     ['a stored edge with a derivation', { ...stored, derivation: derived.derivation }],
-    ['a direction other than from-to', { ...stored, direction: 'out' }],
+    ['a direction that is none of from-to, out and in', { ...stored, direction: 'both' }],
     ['a ref of no known form', { ...stored, ref: { sourceId: 'alpha', other: 1 } }],
     ['a stored ref with no type', { ...stored, ref: { sourceId: 'alpha', from: 'gadget', to: 'gadget', stableId: 'r-1' } }],
     ['a stored ref with no from', { ...stored, ref: { sourceId: 'alpha', type: 'MADE_BY', to: 'gadget', stableId: 'r-1' } }],

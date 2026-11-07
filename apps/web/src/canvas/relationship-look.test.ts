@@ -41,17 +41,17 @@ describe('the look of a relationship', () => {
   });
 
   it.each<[string, Count, string]>([
-    ['exact', count(42, 'exact'), 'USES · 42'],
-    ['estimated', count(42, 'estimated'), 'USES · ~42 (estimated)'],
-    ['lower bound', count(3281, 'lowerBound'), 'USES · ≥ 3,281 (lower bound)'],
+    ['exact', count(42, 'exact'), 'USES · 42 · exact'],
+    ['estimated', count(42, 'estimated'), 'USES · ~ 42 (estimated)'],
+    ['lower bound', count(3281, 'lowerBound'), 'USES · ≥ 3,281 · lower bound'],
     ['unknown', count(undefined, 'unknown'), 'USES'],
   ])('labels a stored aggregate with a %s count', (_name, memberCount, label) => {
     expect(relationshipLook(aggregate('USES', memberCount))).toEqual({ aggregate: true, origin: 'stored', label });
   });
 
   it('adds the origin after the count for an aggregate of derived or unknown origin, keeping the count\'s quality words', () => {
-    expect(relationshipLook(aggregate('USES', count(42, 'exact'), 'derived')).label).toBe('USES · 42 · derived');
-    expect(relationshipLook(aggregate('USES', count(42, 'estimated'), 'unknown')).label).toBe('USES · ~42 (estimated) · origin unknown');
+    expect(relationshipLook(aggregate('USES', count(42, 'exact'), 'derived')).label).toBe('USES · 42 · exact · derived');
+    expect(relationshipLook(aggregate('USES', count(42, 'estimated'), 'unknown')).label).toBe('USES · ~ 42 (estimated) · origin unknown');
     expect(relationshipLook(aggregate('USES', count(undefined, 'unknown'), 'unknown')).label).toBe('USES · origin unknown');
   });
 

@@ -71,6 +71,14 @@ The type is then *keyed*. What changes:
 - An ID with a NUL or an unpaired surrogate, of any type, can be looked up, opened as an investigation, stored and read back exactly.
 - A source link on a keyed type holds the value itself, so it is refused unless the mapping says so with `link_carries_value: true`, and it is built only while masking is off.
 
+## A relationship type that is paged
+
+Expanding a node reads its relationships page by page, newest first. How a relationship type is paged depends on its mapping:
+
+- **With a `stable_id`** (and optionally `observed_at`), each relationship is an item of its own, ordered by its observed time and then by its ID. For the pages to continue without a repeat and without a gap, the `stable_id` property must be unique for the relationship type: create a uniqueness constraint on it. `test-source` reports it as advice (a finding of severity `info`, which does not change the state of the source) when a mapped relationship `stable_id` has no uniqueness constraint. Without the constraint the product still flags a repeated ID it sees inside one page or one run of pages (a relationship marked "duplicate relationship IDs in the source"), but it cannot see two relationships that share both the sort value and the ID across a page boundary, so a page may then miss one of them, and no gap-free claim is made.
+- **Without a `stable_id`**, all relationships of the type between a node and one neighbor are shown as one aggregate relationship with its member count and the earliest and latest observed time; the pages are ordered by the latest observed time and then by the neighbor.
+- A relationship of a type that has a `stable_id` but lacks it, or holds one that is empty or not text or a whole number, is shown as a member of the aggregate for its neighbor, marked "no stable ID".
+
 ## Rules for a pack
 
 - Names that belong to a domain (entity types, labels, relationship types, property keys) live in the pack and only there. Code and tests read them from the pack.

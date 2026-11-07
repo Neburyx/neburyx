@@ -111,7 +111,10 @@ async function runSearch(gate: Gate, request: GateRequest): Promise<GatePage> {
 function droppedOf(results: readonly Normalized[]): Dropped {
   const total: Dropped = { 'not-mapped': 0, 'ambiguous-type': 0, 'no-stable-id': 0 };
   for (const result of results) {
-    for (const reason of DROP_REASONS) total[reason] += result.dropped[reason];
+    for (const reason of DROP_REASONS) {
+      const count = result.dropped[reason] ?? 0;
+      if (count > 0 || total[reason] !== undefined) total[reason] = (total[reason] ?? 0) + count;
+    }
     const hidden = result.dropped['not-visible'];
     if (hidden !== undefined) total['not-visible'] = (total['not-visible'] ?? 0) + hidden;
   }

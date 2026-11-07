@@ -17,6 +17,8 @@ import { TestRunsProvider } from './sources/test-runs-context.js';
 import { answeredData, createShellData, ShellDataProvider } from './shell/shell-data.js';
 import { createPreviewStore } from './api/preview-store.js';
 import { PreviewProvider } from './workspace/preview-context.js';
+import { ExpandProvider } from './workspace/expand-context.js';
+import { createExpandStore } from './api/expand-store.js';
 import type { ClientState } from './state/client-state.js';
 import { StartPage } from './first-run/start-page.js';
 import { RecentProvider } from './home/recent-context.js';
@@ -92,6 +94,7 @@ export function appRoutes(client: ApiClient, state: ClientState): RouteObject[] 
   const excerpts = createExcerpts(client);
   const profile = createProfileStore(client, state.investigation);
   const previews = createPreviewStore(client, () => answeredData(shellData.getState().me)?.principal.id ?? '');
+  const expansions = createExpandStore(client, state, () => answeredData(shellData.getState().me)?.principal.id ?? '');
   const recent = createRecentInvestigations(client);
   const presence = createWorkspacePresence();
   return [
@@ -103,6 +106,7 @@ export function appRoutes(client: ApiClient, state: ClientState): RouteObject[] 
             <ShellDataProvider store={shellData}>
               <ProfileProvider store={profile}>
                 <PreviewProvider store={previews}>
+                <ExpandProvider store={expansions}>
                 <TestRunsProvider runs={testRuns}>
                   <ExcerptsProvider excerpts={excerpts}>
                     <SearchShortcut />
@@ -111,6 +115,7 @@ export function appRoutes(client: ApiClient, state: ClientState): RouteObject[] 
                     </RecentProvider>
                   </ExcerptsProvider>
                 </TestRunsProvider>
+                </ExpandProvider>
                 </PreviewProvider>
               </ProfileProvider>
             </ShellDataProvider>

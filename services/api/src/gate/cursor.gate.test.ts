@@ -153,11 +153,11 @@ describe('a cursor is bound to its request', () => {
     expect(await code(first.gate.run(request({ params: { key: 'k', window: { from: 'a', to: 'c' } }, cursor: page.nextCursor })))).toBe('CURSOR_INVALIDATED');
   });
 
-  it('binds the keyed HMAC of the canonical validated parameters, taken before limit and cursor are added', async () => {
+  it('binds the keyed HMAC of the canonical validated parameters and the masking, taken before limit and cursor are added', async () => {
     const { gate, executor } = rig();
     const page = await gate.run(request());
     const payload = JSON.parse(Buffer.from((page.nextCursor ?? '').split('.')[1] ?? '', 'base64url').toString('utf8')) as { f: string };
-    expect(payload.f).toBe(filterHashOf({ key: 'k1' }, TEST_REFERENCE_KEYS.filterHash));
+    expect(payload.f).toBe(filterHashOf({ params: { key: 'k1' }, mask: false }, TEST_REFERENCE_KEYS.filterHash));
     expect(executor.calls[0]?.parameters).toMatchObject({ limit: 2 });
   });
 

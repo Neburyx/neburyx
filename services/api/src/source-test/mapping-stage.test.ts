@@ -23,13 +23,13 @@ const mapping = mappingOf(
 const request = { traceId: 'tr-test', principal: LOCAL_PRINCIPAL, sourceId: 'alpha' };
 
 const node = (name: string, property: string, overrides: Partial<IndexEntry> = {}): IndexEntry => ({ type: 'RANGE', entityType: 'NODE', name, property, single: true, state: 'ONLINE', constrained: false, ...overrides });
-const edge = (name: string, property: string): IndexEntry => ({ ...node(name, property), entityType: 'RELATIONSHIP' });
+const edge = (name: string, property: string, overrides: Partial<IndexEntry> = {}): IndexEntry => ({ ...node(name, property), entityType: 'RELATIONSHIP', ...overrides });
 const FITTING: IndexEntry[] = [
   node('Gadget', 'gadgetId', { constrained: true }),
   node('Gadget', 'title'),
   node('Gadget', 'extRef'),
   node('Person', 'personId', { constrained: true }),
-  edge('MADE_BY', 'linkId'),
+  edge('MADE_BY', 'linkId', { constrained: true }),
   edge('MADE_BY', 'madeAt'),
   edge('MADE_BY', 'recordId'),
 ];

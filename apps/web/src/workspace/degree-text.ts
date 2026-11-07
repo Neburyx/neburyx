@@ -9,7 +9,7 @@ export function degreeCountText(count: Count): string {
     case 'exact':
       return `${number} · exact`;
     case 'estimated':
-      return `~${number} · estimated`;
+      return `~ ${number} (estimated)`;
     case 'lowerBound':
       return `≥ ${number} · lower bound`;
     case 'unknown':
