@@ -289,7 +289,7 @@ describe('the API client, previewing the degree of a node', () => {
 });
 
 describe('graphCoverage', () => {
-  const REQUEST = { sourceId: 'demo', entities: [{ ref: { sourceId: 'demo', entityType: 'widget', stableId: 'W-1' }, loadedRelationships: 2, loadedExact: true }] };
+  const REQUEST = { sourceId: 'demo', entities: [{ ref: { sourceId: 'demo', entityType: 'widget', stableId: 'W-1' }, loadedRelationships: 2, loadedQuality: 'exact' as const }] };
   const ANSWER = { notRetrieved: { value: 5, quality: 'exact', scope: 'not yet retrieved' } };
 
   it('posts the loaded entities to /v1/graph/coverage and parses the count', async () => {

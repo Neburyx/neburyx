@@ -1130,14 +1130,19 @@
                   "minimum": 0,
                   "maximum": 9007199254740991
                 },
-                "loadedExact": {
-                  "type": "boolean"
+                "loadedQuality": {
+                  "type": "string",
+                  "enum": [
+                    "exact",
+                    "estimated",
+                    "unknown"
+                  ]
                 }
               },
               "required": [
                 "ref",
                 "loadedRelationships",
-                "loadedExact"
+                "loadedQuality"
               ],
               "additionalProperties": false
             }

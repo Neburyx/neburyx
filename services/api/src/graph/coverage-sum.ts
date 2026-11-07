@@ -1,10 +1,9 @@
-import { COVERAGE_SCOPE, type Count, type DegreePreview } from '@neburyx/contracts';
+import { COVERAGE_SCOPE, type Count, type CoverageEntity, type DegreePreview } from '@neburyx/contracts';
 
 export interface CoveragePart {
   readonly preview: DegreePreview | undefined;
   readonly loadedRelationships: number;
-  /** False when the loaded count rests on a member count that is not exact. */
-  readonly loadedExact: boolean;
+  readonly loadedQuality: CoverageEntity['loadedQuality'];
 }
 
 type Quality = Count['quality'];
@@ -20,9 +19,9 @@ const UNKNOWN: Count = { quality: 'unknown', scope: COVERAGE_SCOPE };
 
 function remainderOf(part: CoveragePart): Remainder | undefined {
   const total = part.preview?.total;
-  if (total?.value === undefined || total.quality === 'unknown') return undefined;
+  if (total?.value === undefined || total.quality === 'unknown' || part.loadedQuality === 'unknown') return undefined;
   const clamped = part.loadedRelationships > total.value;
-  return { value: clamped ? 0 : total.value - part.loadedRelationships, quality: total.quality, clamped, loadedExact: part.loadedExact };
+  return { value: clamped ? 0 : total.value - part.loadedRelationships, quality: total.quality, clamped, loadedExact: part.loadedQuality === 'exact' };
 }
 
 const lowerBoundOf = (floors: readonly number[]): Count => {
@@ -35,7 +34,7 @@ const isFloor = (remainder: Remainder): boolean => (remainder.quality === 'exact
 /**
  * The cached totals less what is loaded, summed. A relationship between two loaded entities is in both totals and a neighbor can be shared, so only one entity with anything left is `exact`. Any `lowerBound`
  * total makes the result `lowerBound`, and its floor is the largest single `exact` or `lowerBound` remainder, since a sum may count twice. With an entity that has no preview the sum is not known, but the largest
- * such remainder is still a floor; with none above 0 it is `unknown`. More loaded than a total means the preview is older: remainder 0, at best `estimated`. A loaded count that rests on a member count that is not exact makes its remainder at best `estimated` and no floor.
+ * such remainder is still a floor; with none above 0 it is `unknown`. More loaded than a total means the preview is older: remainder 0, at best `estimated`. A loaded count resting on an `estimated` member count makes its remainder at best `estimated` and no floor; one resting on a lower bound or an unknown member count leaves the remainder unknown.
  */
 export function notRetrievedOf(parts: readonly CoveragePart[]): Count {
   const remainders: Remainder[] = [];

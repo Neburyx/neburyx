@@ -48,7 +48,7 @@ export function createCoverageService(deps: CoverageDeps): CoverageService {
       const revision = deps.verdicts.revisionOf(call.sourceId);
       const parts = call.entities.map((entity) => ({
         loadedRelationships: entity.loadedRelationships,
-        loadedExact: entity.loadedExact,
+        loadedQuality: entity.loadedQuality,
         preview: sharesLabel(source, entity.ref.entityType)
           ? undefined
           : cache?.store.get({ sourceId: call.sourceId, configHash: source.configHash, principalId: call.principal.id, entityType: entity.ref.entityType, stableId: entity.ref.stableId, mask: call.mask, verdictRevision: revision }),

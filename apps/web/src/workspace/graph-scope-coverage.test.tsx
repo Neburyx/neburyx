@@ -152,30 +152,38 @@ describe('the relationships loaded at each entity', () => {
   };
   const entitiesOf = (edges: readonly GraphEdge[]) => {
     const graph = base();
-    return coverageEntitiesOf({ ...graph, edges }).map((entity) => [entity.ref.stableId, entity.loadedRelationships, entity.loadedExact]);
+    return coverageEntitiesOf({ ...graph, edges }).map((entity) => [entity.ref.stableId, entity.loadedRelationships, entity.loadedQuality]);
   };
   const stored = () => base().edges;
 
   it('counts a stored relationship once for each of its ends and a stored self-loop twice', () => {
-    expect(entitiesOf(stored())).toEqual([['n1', 3, true], ['n2', 1, true]]);
+    expect(entitiesOf(stored())).toEqual([['n1', 3, 'exact'], ['n2', 1, 'exact']]);
   });
 
   it('counts an aggregate by its exact member count at each end, and a self-loop aggregate twice', () => {
-    expect(entitiesOf([aggregateOf('n1', 'n2', counted(52, 'exact'))])).toEqual([['n1', 52, true], ['n2', 52, true]]);
-    expect(entitiesOf([aggregateOf('n1', 'n1', counted(5, 'exact'))])).toEqual([['n1', 10, true], ['n2', 0, true]]);
+    expect(entitiesOf([aggregateOf('n1', 'n2', counted(52, 'exact'))])).toEqual([['n1', 52, 'exact'], ['n2', 52, 'exact']]);
+    expect(entitiesOf([aggregateOf('n1', 'n1', counted(5, 'exact'))])).toEqual([['n1', 10, 'exact'], ['n2', 0, 'exact']]);
   });
 
   it('adds stored and aggregate relationships at the same entity', () => {
-    expect(entitiesOf([...stored(), aggregateOf('n1', 'n2', counted(10, 'exact'))])).toEqual([['n1', 13, true], ['n2', 11, true]]);
+    expect(entitiesOf([...stored(), aggregateOf('n1', 'n2', counted(10, 'exact'))])).toEqual([['n1', 13, 'exact'], ['n2', 11, 'exact']]);
   });
 
-  it.each([['estimated', counted(8, 'estimated')], ['lower bound', counted(8, 'lowerBound')], ['unknown', counted(undefined, 'unknown')]])('marks the ends of an aggregate whose member count is %s as not exact', (_name, members) => {
+  it('marks the ends of an aggregate whose member count is estimated as estimated', () => {
+    expect(entitiesOf([aggregateOf('n1', 'n2', counted(8, 'estimated'))])).toEqual([['n1', 8, 'estimated'], ['n2', 8, 'estimated']]);
+  });
+
+  it.each([['lower bound', counted(8, 'lowerBound')], ['unknown', counted(undefined, 'unknown')]])('marks the ends of an aggregate whose member count is %s as unknown', (_name, members) => {
     const [first] = entitiesOf([aggregateOf('n1', 'n2', members)]);
-    expect(first?.[2]).toBe(false);
+    expect(first?.[2]).toBe('unknown');
+  });
+
+  it('takes the weakest quality at an entity with several aggregates', () => {
+    expect(entitiesOf([aggregateOf('n1', 'n2', counted(8, 'estimated')), aggregateOf('n1', 'n2', counted(2, 'lowerBound'))])[0]?.[2]).toBe('unknown');
   });
 
   it('counts a derived relationship as nothing', () => {
-    expect(entitiesOf([derivedOf('n1', 'n2')])).toEqual([['n1', 0, true], ['n2', 0, true]]);
+    expect(entitiesOf([derivedOf('n1', 'n2')])).toEqual([['n1', 0, 'exact'], ['n2', 0, 'exact']]);
   });
 });
 

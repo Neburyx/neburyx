@@ -3,6 +3,9 @@ import { countSchema, elementRefSchema, type Count } from './graph.js';
 
 const text = z.string().min(1);
 
+/** How sure a loaded-relationship count is, strongest first. */
+export const LOADED_QUALITIES = ['exact', 'estimated', 'unknown'] as const;
+
 /** The `scope` of every not-yet-retrieved count. */
 export const COVERAGE_SCOPE = 'not yet retrieved';
 
@@ -11,9 +14,9 @@ export const COVERAGE_MAX_ENTITIES = 500;
 
 /**
  * One loaded entity and how many relationships of it are loaded, counted once for each end that is at it (a self-loop counts 2): a stored relationship counts 1 and an aggregate its member count.
- * `loadedExact` is false when the member count of an aggregate at it is not `exact`, so the count may be off.
+ * `loadedQuality` is the weakest of the member counts of the aggregates at it: `estimated` when one is estimated, and `unknown` when one is a lower bound or has no value, since the loaded count is then not known.
  */
-export const coverageEntitySchema = z.strictObject({ ref: elementRefSchema, loadedRelationships: z.number().int().nonnegative(), loadedExact: z.boolean() });
+export const coverageEntitySchema = z.strictObject({ ref: elementRefSchema, loadedRelationships: z.number().int().nonnegative(), loadedQuality: z.enum(LOADED_QUALITIES) });
 
 /** `POST /v1/graph/coverage`: the loaded entities of one source, whose degree previews the server already holds; `mask` is the setting those previews were asked under. */
 export const coverageRequestSchema = z.strictObject({

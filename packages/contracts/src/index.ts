@@ -100,7 +100,7 @@ export {
   typeaheadTextSchema,
 } from './search.js';
 export { DEGREE_DIRECTIONS, DEGREE_WARNING_CODES, degreeByNeighborTypeSchema, degreeByTypeSchema, degreePreviewRequestSchema, degreePreviewSchema, degreeWarningSchema } from './degree-preview.js';
-export { COVERAGE_MAX_ENTITIES, COVERAGE_SCOPE, combineCoverage, coverageEntitySchema, coverageRequestSchema, coverageResponseSchema } from './coverage.js';
+export { COVERAGE_MAX_ENTITIES, COVERAGE_SCOPE, LOADED_QUALITIES, combineCoverage, coverageEntitySchema, coverageRequestSchema, coverageResponseSchema } from './coverage.js';
 export type { CoverageEntity, CoverageRequest, CoverageResponse } from './coverage.js';
 export { EXPAND_DIRECTIONS, EXPAND_SORTS, expandPageSchema, expandRequestSchema, expandResponseSchema } from './expand.js';
 export type { ExpandPage, ExpandRequest, ExpandResponse } from './expand.js';

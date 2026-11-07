@@ -1,5 +1,5 @@
 import { rmSync } from 'node:fs';
-import { coverageResponseSchema } from '@neburyx/contracts';
+import { coverageResponseSchema, type CoverageEntity } from '@neburyx/contracts';
 import { afterAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../app.js';
 import type { ExecuteCall, ExecuteOutcome } from '../gate/executor.js';
@@ -39,7 +39,7 @@ const REACHED = { product: 'Neo4j Kernel', version: '5.26.32', edition: 'communi
 const CHECK: VerdictCheck = { sourceId: 'alpha', checkedAt: '2026-11-02T10:00:00.000Z', server: REACHED, mappingChecks: { status: 'pass', findings: [] }, degreeChecks: { status: 'not-run', foundOn: null, types: [], warnings: [] } };
 const AUDIT_ACTION = 'entity.degree_preview';
 
-const entity = (stableId: string, loadedRelationships = 0, sourceId = 'alpha', entityType = 'person', loadedExact = true) => ({ ref: { sourceId, entityType, stableId }, loadedRelationships, loadedExact });
+const entity = (stableId: string, loadedRelationships = 0, sourceId = 'alpha', entityType = 'person', loadedQuality: CoverageEntity['loadedQuality'] = 'exact') => ({ ref: { sourceId, entityType, stableId }, loadedRelationships, loadedQuality });
 const counts: Readonly<Record<string, readonly [number, number]>> = { 'P-1': [3, 4], 'P-2': [1, 1], 'P-3': [2, 0] };
 
 interface Options {
@@ -246,8 +246,10 @@ describe('POST /v1/graph/coverage', () => {
     expect(only.json()).toEqual({ notRetrieved: { value: 4, quality: 'exact', scope: 'not yet retrieved' } });
     const withUnknown = await coverage({ sourceId: 'alpha', entities: [entity('P-1', 3), entity('P-2')] });
     expect(withUnknown.json()).toEqual({ notRetrieved: { value: 4, quality: 'lowerBound', scope: 'not yet retrieved' } });
-    const inexact = await coverage({ sourceId: 'alpha', entities: [entity('P-1', 3, 'alpha', 'person', false)] });
+    const inexact = await coverage({ sourceId: 'alpha', entities: [entity('P-1', 3, 'alpha', 'person', 'estimated')] });
     expect(inexact.json()).toEqual({ notRetrieved: { value: 4, quality: 'estimated', scope: 'not yet retrieved' } });
+    const unknownLoaded = await coverage({ sourceId: 'alpha', entities: [entity('P-1', 3, 'alpha', 'person', 'unknown')] });
+    expect(unknownLoaded.json()).toEqual(unknown);
     await app.close();
   });
 
