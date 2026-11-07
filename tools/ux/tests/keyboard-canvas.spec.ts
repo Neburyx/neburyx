@@ -205,7 +205,7 @@ test.describe('the context menu from the keys', () => {
     expect(await description(page)).toContain('1 selected');
     await page.keyboard.press('ContextMenu');
     await expect(menuOf(page)).toHaveCount(1);
-    const submenu = menuOf(page).first().getByRole('menuitem', { name: /Expand by type/ });
+    const submenu = menuOf(page).first().getByRole('menuitem', { name: 'Expand by neighbor type' });
     await submenu.focus();
     await page.keyboard.press('ArrowRight');
     await expect(submenu, 'the submenu opened').toHaveAttribute('aria-expanded', 'true');

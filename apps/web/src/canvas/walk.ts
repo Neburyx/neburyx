@@ -3,9 +3,9 @@ import { edgeKey, elementKey } from '../state/keys.js';
 import { partitionEdges, type LoadedGraph } from '../state/loaded-graph.js';
 import { relationshipParts } from './relationship-look.js';
 
-/** The elements the walk visits: the drawn entities in their loaded order, then the drawn relationships in theirs. */
-export function walkOrder(graph: LoadedGraph): readonly string[] {
-  return [...graph.nodes.map((node) => elementKey(node.ref)), ...partitionEdges(graph).drawable.map((edge) => edgeKey(edge.ref))];
+/** The elements the walk visits: the drawn entities in their loaded order, then the drawn relationships in theirs, then the aggregate nodes in the order the scene gives them. */
+export function walkOrder(graph: LoadedGraph, sceneItems: readonly string[] = []): readonly string[] {
+  return [...graph.nodes.map((node) => elementKey(node.ref)), ...partitionEdges(graph).drawable.map((edge) => edgeKey(edge.ref)), ...sceneItems];
 }
 
 /** The element a step from `at` lands on, wrapping at the ends; from no element (or one that is not in the order) a step forward lands on the first and a step back on the last. */
@@ -17,7 +17,9 @@ export function stepWalk(order: readonly string[], at: string | undefined, direc
 }
 
 /** What a screen reader is told when the walk reaches an element: an entity by its title and its type's display name, and "pinned" when it is; a relationship by its label as the canvas reads it and its two ends. */
-export function describeWalked(graph: LoadedGraph, profile: SourceProfile | undefined, pins: ReadonlySet<string>, key: string): string | undefined {
+export function describeWalked(graph: LoadedGraph, profile: SourceProfile | undefined, pins: ReadonlySet<string>, key: string, spoken: ReadonlyMap<string, string> = new Map()): string | undefined {
+  const aggregate = spoken.get(key);
+  if (aggregate !== undefined) return aggregate;
   const titles = new Map(graph.nodes.map((node) => [elementKey(node.ref), node.display.title]));
   const node = graph.nodes.find((candidate) => elementKey(candidate.ref) === key);
   if (node !== undefined) {

@@ -12,3 +12,8 @@ export function usePreviewStore(): PreviewStore {
   if (store === undefined) throw new Error('the degree previews are not provided');
   return store;
 }
+
+/** The store when one is provided, and nothing in a part of the app drawn without previews. */
+export function usePreviewStoreWhenProvided(): PreviewStore | undefined {
+  return useContext(PreviewContext);
+}

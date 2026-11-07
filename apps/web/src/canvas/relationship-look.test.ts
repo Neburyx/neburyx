@@ -1,7 +1,7 @@
 import type { Count, GraphEdge } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
 import { edge, ref } from '../state/test-data.js';
-import { memberCountText, relationshipLook } from './relationship-look.js';
+import { memberCountText, relationshipLook, relationshipParts } from './relationship-look.js';
 
 const from = ref('a', 'type-a', 'n1');
 const to = ref('a', 'type-a', 'n2');
@@ -47,6 +47,34 @@ describe('the look of a relationship', () => {
     ['unknown', count(undefined, 'unknown'), 'USES'],
   ])('labels a stored aggregate with a %s count', (_name, memberCount, label) => {
     expect(relationshipLook(aggregate('USES', memberCount))).toEqual({ aggregate: true, origin: 'stored', label });
+  });
+
+  describe('the canvas label of an aggregate of one member', () => {
+    it('is the type alone for an exact 1, and keeps the full label for the hover tip', () => {
+      expect(relationshipLook(aggregate('SENT', count(1, 'exact')))).toEqual({ aggregate: true, origin: 'stored', label: 'SENT', tip: 'SENT · 1 · exact' });
+    });
+
+    it('keeps the origin word for an exact 1 of derived or unknown origin', () => {
+      expect(relationshipLook(aggregate('SENT', count(1, 'exact'), 'derived'))).toMatchObject({ label: 'SENT · derived', tip: 'SENT · 1 · exact · derived' });
+      expect(relationshipLook(aggregate('SENT', count(1, 'exact'), 'unknown'))).toMatchObject({ label: 'SENT · origin unknown' });
+    });
+
+    it.each<[string, Count, string]>([
+      ['2 exact', count(2, 'exact'), 'SENT · 2 · exact'],
+      ['0 exact', count(0, 'exact'), 'SENT · 0 · exact'],
+      ['1 as a lower bound', count(1, 'lowerBound'), 'SENT · ≥ 1 · lower bound'],
+      ['1 as an estimate', count(1, 'estimated'), 'SENT · ~ 1 (estimated)'],
+    ])('keeps the count of %s in the label, with no separate tip', (_name, memberCount, label) => {
+      expect(relationshipLook(aggregate('SENT', memberCount))).toEqual({ aggregate: true, origin: 'stored', label });
+    });
+
+    it('is still an aggregate, so its line keeps its width', () => {
+      expect(relationshipLook(aggregate('SENT', count(1, 'exact'))).aggregate).toBe(true);
+    });
+
+    it('leaves the parts the menu header and the walk read with the full count', () => {
+      expect(relationshipParts(aggregate('SENT', count(1, 'exact')))).toMatchObject({ type: 'SENT', count: '1 · exact' });
+    });
   });
 
   it('adds the origin after the count for an aggregate of derived or unknown origin, keeping the count\'s quality words', () => {

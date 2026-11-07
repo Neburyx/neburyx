@@ -11,6 +11,8 @@ import { useStoreSelector } from '../state/store.js';
 import { KEY_SCOPE_ATTRIBUTE } from '../workspace/key-binding-handler.js';
 import { formatNumber, notDrawnLine } from '../workspace/scope-text.js';
 import { buildScene } from './build-scene.js';
+import { useAggregateNodes } from './use-aggregate-nodes.js';
+import { aggregateKey, parseAggregateKey } from '../workspace/aggregate-nodes.js';
 import { layoutEntities, placeNewEntities } from './incremental-layout.js';
 import { describeWalked } from './walk.js';
 import { useCanvasCommandsHandle } from './canvas-commands.js';
@@ -36,7 +38,8 @@ function applyMove(state: ClientState, move: EntityMove): void {
 }
 
 function applyBox(state: ClientState, box: BoxSelection): void {
-  replaceSelection(state, selectionAfterBox(state.presentation.view.getState().selection, box));
+  // an aggregate node in the box is ignored: the loaded items in it are selected
+  replaceSelection(state, selectionAfterBox(state.presentation.view.getState().selection, { ...box, ids: box.ids.filter((id) => parseAggregateKey(id) === undefined) }));
 }
 
 export function GraphCanvas({ profile, view = 'fit' }: { readonly profile?: SourceProfile | undefined; readonly view?: Scene['view'] }) {
@@ -57,15 +60,21 @@ export function GraphCanvas({ profile, view = 'fit' }: { readonly profile?: Sour
     () => placeNewEntities({ ids: graph.nodes.map((node) => elementKey(node.ref)), links: graph.edges.map((edge) => [elementKey(edge.from), elementKey(edge.to)] as const), positions }),
     [graph, positions],
   );
-  const drawn = useMemo(() => buildScene(graph, placed.size === 0 ? positions : new Map([...positions, ...placed]), profile, selection, tool, source, view, pins, walking ? focused : undefined), [graph, positions, placed, profile, selection, tool, source, view, pins, walking, focused]);
+  const aggregates = useAggregateNodes(graph, profile);
+  const drawn = useMemo(() => buildScene(graph, placed.size === 0 ? positions : new Map([...positions, ...placed]), profile, selection, tool, source, view, pins, walking ? focused : undefined, true, aggregates), [graph, positions, placed, profile, selection, tool, source, view, pins, walking, focused, aggregates]);
   // A menu holding the focus only takes the ring off the walk element: the scene is the same one, so the drawing that follows is not a sign that the renderer works again.
   const scene = useMemo(() => ({ ...drawn, focusRing: !menuOpen }), [drawn, menuOpen]);
   const lastDrawn = useRef<typeof drawn | undefined>(undefined);
-  const announcement = walking && scene.focused !== undefined ? describeWalked(graph, profile, pins, scene.focused) : undefined;
+  const sceneKeys = useMemo(() => aggregates.map((aggregate) => aggregateKey(aggregate.nodeKey, aggregate.neighborType)), [aggregates]);
+  const spoken = useMemo(() => new Map(aggregates.map((aggregate) => [aggregateKey(aggregate.nodeKey, aggregate.neighborType), aggregate.spoken])), [aggregates]);
+  const announcement = walking && scene.focused !== undefined ? describeWalked(graph, profile, pins, scene.focused, spoken) : undefined;
 
   useEffect(() => {
-    if (focused !== undefined && !drawnKeys(graph).has(focused)) state.presentation.forgetFocused();
-  }, [graph, focused, state]);
+    state.presentation.setSceneItems(sceneKeys);
+  }, [sceneKeys, state]);
+  useEffect(() => {
+    if (focused !== undefined && !drawnKeys(graph).has(focused) && !sceneKeys.includes(focused)) state.presentation.forgetFocused();
+  }, [graph, focused, state, sceneKeys]);
 
   // A menu opened from the walk holds the focus for a while and gives it back; if it closes with the focus elsewhere the walk is over.
   useEffect(() => {
@@ -192,6 +201,7 @@ export function GraphCanvas({ profile, view = 'fit' }: { readonly profile?: Sour
       <p id={descriptionId} className="visually-hidden">
         {counted(graph.nodes.length, 'entity', 'entities')} and {counted(graph.edges.length, 'relationship', 'relationships')} loaded
         {scene.omitted === 0 ? '' : `; ${notDrawnLine(scene.omitted)}`}
+        {aggregates.length === 0 ? '' : `; ${counted(aggregates.length, 'aggregate node', 'aggregate nodes')} for relationships not loaded`}
         {scene.selection.size === 0 ? '' : `; ${formatNumber(scene.selection.size)} selected`}
         {scene.pinned.size === 0 ? '' : `; ${formatNumber(scene.pinned.size)} pinned`}
         . {WALK_SENTENCE}

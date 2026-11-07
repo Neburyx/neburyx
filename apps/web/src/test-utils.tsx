@@ -25,6 +25,7 @@ import { createKeyBindingRegistry, KeyBindingsProvider, type KeyBindingRegistry 
 import { createMenuRegistry, MenuProvider, type MenuRegistry } from './workspace/menu-registry.js';
 import { createSelectionActionRegistry, SelectionActionsProvider, type SelectionActionRegistry } from './workspace/selection-actions.js';
 import { bindLegend } from './workspace/legend-binder.js';
+import { bindSupernodePanel } from './workspace/supernode-panel-binder.js';
 import { bindSearchPanel } from './search/search-panel-binder.js';
 import { createPanelRegistryFor, PanelsProvider, type PanelRegistry } from './workspace/panel-registry.js';
 import { createSlotRegistry, SlotsProvider, type SlotRegistry } from './workspace/slots.js';
@@ -165,10 +166,10 @@ export function stubRenderer(options: StubOptions = {}): StubRenderer {
       if (entity !== undefined) return { x: entity.position.x + 10, y: entity.position.y + 20 };
       return drawn.relationships.some((candidate) => candidate.id === key) ? { x: 300, y: 350 } : undefined;
     },
-    describe: () => ({ entities: drawn?.entities.length ?? 0, relationships: drawn?.relationships.length ?? 0 }),
+    describe: () => ({ entities: drawn?.entities.filter((entity) => entity.remainder !== true).length ?? 0, relationships: drawn?.relationships.filter((relationship) => relationship.remainder !== true).length ?? 0 }),
     viewport: () => ({ zoom: 1, x: 0, y: 0 }),
     positions: () => new Map((drawn?.entities ?? []).map((entity) => [entity.id, entity.position])),
-    inspect: () => ({ fits: 0, viewport: { zoom: 1, x: 0, y: 0 }, zoomLimits: { min: 0.1, max: 4 }, boundingBox: undefined, interaction: { panning: false, zooming: false, boxSelecting: false, nodesGrabbable: false, nodesSelectable: false }, nodes: [], edges: [] }),
+    inspect: () => ({ fits: 0, viewport: { zoom: 1, x: 0, y: 0 }, zoomLimits: { min: 0.1, max: 4 }, boundingBox: undefined, interaction: { panning: false, zooming: false, boxSelecting: false, nodesGrabbable: false, nodesSelectable: false }, remainders: [], nodes: [], edges: [] }),
     dispose() {
       stub.disposed += 1;
     },
@@ -221,6 +222,7 @@ export function renderApp(path: string | { readonly pathname: string; readonly s
   );
   const unbindLegend = bindLegend(state, panels);
   const unbindSearch = bindSearchPanel(state, panels);
+  const unbindSupernode = bindSupernodePanel(state, panels);
   const unbindBanner = bindBannerToInvestigation(state, banner);
   return {
     banner,
@@ -234,6 +236,7 @@ export function renderApp(path: string | { readonly pathname: string; readonly s
     unmount: () => {
       unbindLegend();
       unbindSearch();
+      unbindSupernode();
       unbindBanner();
       view.unmount();
     },
@@ -257,6 +260,7 @@ export function WorkspaceHarness({ client, state, profile: injected, createRende
   const panels = useMemo(() => {
     const registry = createPanelRegistryFor(clientState);
     bindLegend(clientState, registry);
+    bindSupernodePanel(clientState, registry);
     return registry;
   }, [clientState]);
   const keyBindings = useMemo(() => builtInKeyBindings(), []);

@@ -26,7 +26,7 @@ const notWalking = (context: KeyContext): boolean => !walking(context);
 
 /** With nothing left to walk to the walk is over and the key is the browser's. */
 function walkStep({ state }: KeyContext, direction: 1 | -1): 'unhandled' | undefined {
-  const target = stepWalk(walkOrder(state.loadedGraph()), state.presentation.view.getState().focused, direction);
+  const target = stepWalk(walkOrder(state.loadedGraph(), state.presentation.view.getState().sceneItems), state.presentation.view.getState().focused, direction);
   if (target === undefined) {
     state.presentation.endWalk();
     return 'unhandled';
@@ -83,7 +83,7 @@ export function registerBuiltInKeyBindings(registry: KeyBindingRegistry, schedul
       scope: 'canvas',
       when: notWalking,
       run: ({ state }) => {
-        const order = walkOrder(state.loadedGraph());
+        const order = walkOrder(state.loadedGraph(), state.presentation.view.getState().sceneItems);
         const { focused } = state.presentation.view.getState();
         const start = focused !== undefined && order.includes(focused) ? focused : order[0];
         if (start !== undefined) state.presentation.walkTo(start);

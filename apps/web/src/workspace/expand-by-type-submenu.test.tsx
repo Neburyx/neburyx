@@ -73,7 +73,7 @@ function opened(options: { readonly open?: boolean; readonly ids?: readonly stri
 }
 
 const menu = (id = 'n1') => within(screen.getByRole('menu', { name: id }));
-const byTypeRow = () => menu().getByRole('menuitem', { name: 'Expand by type' });
+const byTypeRow = () => menu().getByRole('menuitem', { name: 'Expand by neighbor type' });
 const submenu = () => screen.getByRole('group', { name: 'Expand by neighbor type' });
 const checkbox = (name: string) => within(submenu()).getByRole('checkbox', { name: new RegExp(`^${name}`) });
 const settle = () => act(() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
@@ -88,23 +88,42 @@ const response = (overrides: Partial<ExpandResponse> = {}): ExpandResponse => ({
   ...overrides,
 });
 
-describe('the Expand neighbors and Expand by type entries of the node menu', () => {
-  it('registers Expand neighbors as a command with the E key and Expand by type with a submenu, in the expand group', () => {
+describe('the Expand neighbors and Expand by neighbor type entries of the node menu', () => {
+  it('registers Expand neighbors as a command with the E key and Expand by neighbor type with a submenu, in the expand group', () => {
     const registry = createMenuRegistry();
     registerBuiltInMenuItems(registry);
     const items = registry.view.getState().get('node') ?? [];
     expect(items.find((entry) => entry.id === 'expand-neighbors')).toMatchObject({ label: 'Expand neighbors', group: MENU_GROUP.node.expand, order: MENU_ORDER.node.expandNeighbors, binding: 'expand' });
     expect(items.find((entry) => entry.id === 'expand-neighbors')?.submenu).toBeUndefined();
-    expect(items.find((entry) => entry.id === 'expand-by-type')).toMatchObject({ label: 'Expand by type', group: MENU_GROUP.node.expand, order: MENU_ORDER.node.expandByType });
-    expect(items.find((entry) => entry.id === 'expand-by-type')?.submenu).toBeDefined();
+    expect(items.find((entry) => entry.id === 'expand-by-neighbor-type')).toMatchObject({ label: 'Expand by neighbor type', group: MENU_GROUP.node.expand, order: MENU_ORDER.node.expandByNeighborType });
+    expect(items.find((entry) => entry.id === 'expand-by-neighbor-type')?.submenu).toBeDefined();
   });
 
-  it('asks nothing until Expand by type is opened, then asks once for the preview of the node, without the mask flag', async () => {
+  it('asks nothing until Expand by neighbor type is opened, then asks once for the preview of the node, without the mask flag', async () => {
     const { previews } = opened();
     expect(previews).toHaveLength(0);
     await userEvent.setup().click(byTypeRow());
     expect(previews).toHaveLength(1);
     expect(previews[0]?.body).toEqual({ sourceId: 'a', ref: { entityType: 'type-a', stableId: 'n1' } });
+  });
+
+  it('asks for the preview of the current masking setting, with the mask flag when the session masks', async () => {
+    const { previews, state, view, rightClick } = opened({ open: false });
+    state.setMask(true);
+    view.rightClick(rightClick('n1'));
+    await userEvent.setup().click(byTypeRow());
+    expect(previews).toHaveLength(1);
+    expect(previews[0]?.body).toMatchObject({ mask: true });
+  });
+
+  it('names and sends the page size the person set elsewhere, not the last answered one', async () => {
+    const { previews, expansions, expand } = opened();
+    expand.setPageSize(ref('a', 'type-a', 'n1'), 10);
+    await userEvent.setup().click(byTypeRow());
+    await answerPreview(previews[0]);
+    expect(screen.getByText('Counts show their quality. Loads the first 10 per type.')).not.toBeNull();
+    await userEvent.setup().click(within(submenu()).getByRole('button', { name: 'Expand 3 neighbors' }));
+    expect(expansions[0]?.body.limit).toBe(10);
   });
 
   it('shows the heading, the note with the page size, one ticked row for each neighbor type with its count and quality, and the button with the number of ticked types', async () => {

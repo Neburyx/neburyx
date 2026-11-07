@@ -9,6 +9,8 @@ export interface SceneEntity {
   readonly id: string;
   readonly position: Position;
   readonly look: EntityLook;
+  /** Stands for neighbors that are not loaded (an aggregate node): drawn, never selected, pinned, dragged, counted or saved. */
+  readonly remainder?: boolean;
 }
 
 export interface SceneRelationship {
@@ -16,6 +18,8 @@ export interface SceneRelationship {
   readonly from: string;
   readonly to: string;
   readonly look: RelationshipLook;
+  /** Joins an aggregate node to the node it belongs to. */
+  readonly remainder?: boolean;
 }
 
 export interface Scene {
@@ -54,6 +58,8 @@ export interface Inspection {
   /** The box the entities cover on screen, caption space included as the fit counts it, or undefined when none is drawn. */
   readonly boundingBox: { readonly x1: number; readonly y1: number; readonly x2: number; readonly y2: number } | undefined;
   readonly interaction: { readonly panning: boolean; readonly zooming: boolean; readonly boxSelecting: boolean; readonly nodesGrabbable: boolean; readonly nodesSelectable: boolean };
+  /** The aggregate nodes drawn and their captions; they are not among `nodes`. */
+  readonly remainders: readonly { readonly id: string; readonly caption: string; readonly grabbable: boolean }[];
   readonly nodes: readonly { readonly id: string; readonly diameter: number; readonly outline: string; readonly outlineWidth: number; readonly halo: boolean; readonly images: readonly string[]; readonly caption: string; readonly captionShown: boolean; readonly glyphShown: boolean; readonly badgeShown: boolean; readonly focused: boolean }[];
   readonly edges: readonly { readonly id: string; readonly source: string; readonly target: string; readonly width: number; readonly color: string; readonly lineStyle: string; readonly arrow: string; readonly label: string; readonly labelOutline: number; readonly labelShown: boolean; readonly lineShown: boolean; readonly focused: boolean; readonly lineOutline: number }[];
 }

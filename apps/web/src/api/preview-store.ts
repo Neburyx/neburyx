@@ -1,11 +1,16 @@
 import type { DegreePreview, ElementRef } from '@neburyx/contracts';
 import type { ApiClient } from './client.js';
 import type { FailureReporter } from './failure-reporter.js';
+import { createStore, readable, type ReadableStore } from '../state/store.js';
 import { createRequestStore, type RequestStore } from './request-store.js';
 
 export interface PreviewStore {
   /** The request for the degree preview of a node: made once, when the node's menu asks for it, and kept for the session; ask again with its `reload`. */
   forNode(ref: ElementRef, mask: boolean): RequestStore<DegreePreview>;
+  /** The answered preview of a node under a masking setting, if one was asked for and has answered; it never asks, so drawing from it costs no request. */
+  held(ref: ElementRef, mask: boolean): DegreePreview | undefined;
+  /** Changes whenever any held request changes. */
+  readonly view: ReadableStore<number>;
 }
 
 const keyOf = (person: string, ref: ElementRef, mask: boolean): string => JSON.stringify([person, ref.sourceId, ref.entityType, ref.stableId, mask]);
@@ -16,7 +21,13 @@ const keyOf = (person: string, ref: ElementRef, mask: boolean): string => JSON.s
  */
 export function createPreviewStore(client: ApiClient, person: () => string, report?: FailureReporter): PreviewStore {
   const requests = new Map<string, RequestStore<DegreePreview>>();
+  const changes = createStore(0);
   return {
+    view: readable(changes),
+    held(ref, mask) {
+      const state = requests.get(keyOf(person(), ref, mask))?.getState();
+      return state?.phase === 'ready' ? state.data : undefined;
+    },
     forNode(ref, mask) {
       const key = keyOf(person(), ref, mask);
       const held = requests.get(key);
@@ -27,6 +38,7 @@ export function createPreviewStore(client: ApiClient, person: () => string, repo
         (failure, reload) => void report?.(failure, ref.sourceId, reload),
       );
       requests.set(key, request);
+      request.subscribe(() => changes.setState(changes.getState() + 1));
       return request;
     },
   };

@@ -285,7 +285,7 @@ describe('the menu of an entity', () => {
     menus.register('node', { id: 'entity-item', label: 'Entity item', icon: null, group: 10, order: 10, run: () => undefined });
     const { rightClick } = show(state, {}, menus);
     rightClick(rightClickOn('node', nodeKey('n1')));
-    expect(within(screen.getByRole('menu', { name: 'n1' })).getAllByRole('menuitem').map((row) => row.querySelector('.menu-label')?.textContent)).toEqual(['Expand neighbors', 'Entity item', 'Expand by type']);
+    expect(within(screen.getByRole('menu', { name: 'n1' })).getAllByRole('menuitem').map((row) => row.querySelector('.menu-label')?.textContent)).toEqual(['Expand neighbors', 'Entity item', 'Expand by neighbor type', 'Expand by type']);
     rightClick(rightClickOn('relationship', edgeKey(stored.ref)));
     expect(within(screen.getByRole('menu')).queryAllByRole('menuitem')).toEqual([]);
     rightClick(onCanvas(5, 5));

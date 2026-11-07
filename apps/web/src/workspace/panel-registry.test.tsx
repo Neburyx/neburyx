@@ -97,3 +97,15 @@ describe('the panel registry\'s notice of a removal', () => {
     expect(onRemoved).not.toHaveBeenCalled();
   });
 });
+
+describe('placing a registered panel', () => {
+  it('changes its placement and keeps its registration number, and does nothing for an ID that is not registered', () => {
+    const registry = createPanelRegistry();
+    registry.register({ id: 'one', title: 'One', placement: { kind: 'floating', side: 'left', top: 10 }, content: () => null });
+    const before = registry.view.getState()[0]?.registration;
+    registry.place('one', { kind: 'floating', side: 'left', top: 10, inset: 99 });
+    registry.place('missing', { kind: 'dock' });
+    expect(registry.view.getState()).toHaveLength(1);
+    expect(registry.view.getState()[0]).toMatchObject({ registration: before, placement: { kind: 'floating', side: 'left', top: 10, inset: 99 } });
+  });
+});

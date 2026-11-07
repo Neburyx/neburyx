@@ -130,7 +130,7 @@ describe('the menu item stand-ins', () => {
     const registry = createMenuRegistry();
     registerBuiltInMenuItems(registry);
     expect(idsOf(registry, 'canvas')).toEqual(['fit-to-view', 'select-all', 'invert-selection', 'layout', 'show-legend']);
-    expect(idsOf(registry, 'node')).toEqual(['expand-neighbors', 'expand-by-type']);
+    expect(idsOf(registry, 'node')).toEqual(['expand-neighbors', 'expand-by-neighbor-type', 'expand-by-type']);
     expect(idsOf(registry, 'relationship')).toEqual([]);
   });
 
@@ -140,7 +140,7 @@ describe('the menu item stand-ins', () => {
     registerStandInMenuItems(registry);
     expect(labelsOf(registry, 'canvas')).toEqual(['Fit to view', 'Select all', 'Invert selection', 'Group all by type', 'Ungroup all', 'Layout', '(from the target)', 'Export view…']);
     expect(labelsOf(registry, 'node')).toEqual([
-      'Expand neighbors', 'Expand by type', 'Focus neighborhood', 'Find paths from here…', 'Find paths to…', 'Run pattern', 'Select neighbors', 'Invert selection', 'Group by type', 'Pin position', 'Hide from view', 'Copy ID', 'Copy properties', 'Open source record',
+      'Expand neighbors', 'Expand by neighbor type', 'Expand by type', 'Focus neighborhood', 'Find paths from here…', 'Find paths to…', 'Run pattern', 'Select neighbors', 'Invert selection', 'Group by type', 'Pin position', 'Hide from view', 'Copy ID', 'Copy properties', 'Open source record',
     ]);
     expect(labelsOf(registry, 'relationship')).toEqual([
       'Why is this relationship here?', 'View supporting records', 'Highlight endpoints', 'Select both endpoints', 'Find paths between endpoints', 'Hide this relationship', '(from the target)', '(from the target)', 'Copy relationship ID', 'Copy properties', 'Open source record',
@@ -192,7 +192,7 @@ describe('the menu item stand-ins', () => {
     expect(registry.view.getState().get('canvas')?.find((item) => item.id === 'stand-in-export-view')?.label).toBe('Real export');
     remove();
     expect(idsOf(registry, 'canvas')).toEqual(['fit-to-view', 'select-all', 'invert-selection', 'layout', 'stand-in-export-view', 'show-legend']);
-    expect(idsOf(registry, 'node')).toEqual(['expand-neighbors', 'expand-by-type']);
+    expect(idsOf(registry, 'node')).toEqual(['expand-neighbors', 'expand-by-neighbor-type', 'expand-by-type']);
   });
 });
 

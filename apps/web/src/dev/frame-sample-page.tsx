@@ -12,6 +12,7 @@ import { createKeyBindingRegistry, KeyBindingsProvider } from '../workspace/key-
 import { createMenuRegistry, MenuProvider } from '../workspace/menu-registry.js';
 import { createSelectionActionRegistry, SelectionActionsProvider } from '../workspace/selection-actions.js';
 import { bindLegend } from '../workspace/legend-binder.js';
+import { bindSupernodePanel } from '../workspace/supernode-panel-binder.js';
 import { createPanelRegistryFor, PanelsProvider } from '../workspace/panel-registry.js';
 import { createSlotRegistry, SlotsProvider } from '../workspace/slots.js';
 import { createToolRegistry, ToolsProvider } from '../workspace/tool-registry.js';
@@ -84,6 +85,7 @@ export function FrameSamplePage() {
   const [panels] = useState(() => {
     const registry = createPanelRegistryFor(state);
     bindLegend(state, registry);
+    bindSupernodePanel(state, registry);
     registerStandInPanels(registry, { floating: floatingSide(window.location.search), dock: new URLSearchParams(window.location.search).get('dock') !== 'none' });
     return registry;
   });

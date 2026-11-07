@@ -190,6 +190,17 @@ export const REACH: Readonly<Record<string, (page: Page) => Promise<void>>> = {
     await page.getByRole('button', { name: 'Search', exact: true }).click();
     await expect(page.getByRole('searchbox', { name: 'Find on canvas' })).toBeVisible();
   },
+  'Explore with the Expand relationships panel open': async (page) => {
+    await openEntity(page, 'banking-demo', `PE-${unique()}`);
+    const canvas = page.getByRole('application', { name: 'Graph canvas' });
+    await expect(canvas).toBeVisible();
+    await canvas.focus();
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Space');
+    await page.keyboard.press('ContextMenu');
+    await page.getByRole('menuitem', { name: 'Expand by type', exact: true }).first().click();
+    await expect(page.getByRole('complementary', { name: 'Expand relationships' })).toBeVisible();
+  },
   "Explore with the Search panel's Add tab": async (page) => {
     await openAddTab(page);
     await page.getByRole('searchbox', { name: 'Find in the source' }).fill('AC-2');

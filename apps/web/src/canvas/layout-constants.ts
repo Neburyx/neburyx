@@ -8,3 +8,7 @@ export const FORCE_STEPS = 60;
 export const SEARCH_STEP = 20;
 export const SEED_OFFSET = 90;
 export const SPIRAL_STEP = 120;
+/** How far an aggregate node is drawn from the node it belongs to. */
+export const REMAINDER_RADIUS = 150;
+/** How much further out the next ring of places for an aggregate node is. */
+export const REMAINDER_RING_STEP = 110;

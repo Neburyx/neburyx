@@ -52,6 +52,10 @@ export interface PresentationState {
   readonly searchFocus: number;
   /** Whether the sheet of keyboard shortcuts is shown. */
   readonly sheetOpen: boolean;
+  /** The keys of the items the scene draws that are not loaded elements (aggregate nodes), in walk order: the walk may stand on them, and select, position and pin still refuse them. */
+  readonly sceneItems: readonly string[];
+  /** The key of the node the Expand relationships panel is open for, and the neighbor type to have ticked when it was opened from an aggregate node; undefined when the panel is closed. Not saved with a view. */
+  readonly supernodePanel: { readonly key: string; readonly neighborType?: string | undefined } | undefined;
   /** The canvas's element walk is on: the keys move a ring through the drawn elements. Not saved with a view. */
   readonly walking: boolean;
   /** The element the walk is at, or was at when it ended, until it is gone; the ring is drawn only while the walk is on. */
@@ -77,6 +81,8 @@ export const INITIAL_PRESENTATION: PresentationState = {
   searchTab: 'canvas',
   searchFocus: 0,
   sheetOpen: false,
+  sceneItems: [],
+  supernodePanel: undefined,
   walking: false,
   focused: undefined,
   moveNote: undefined,
@@ -109,6 +115,10 @@ export interface PresentationActions {
   /** Opens the Search panel, or asks an open one to focus its box again. */
   requestSearch(): void;
   setSheetOpen(open: boolean): void;
+  /** Tells which scene items are drawn, in walk order; a walk standing on one that is gone is forgotten by the canvas. */
+  setSceneItems(keys: readonly string[]): void;
+  /** Opens the Expand relationships panel for a node of the investigation (refused for a key it does not hold), or closes it with none. */
+  setSupernodePanel(open: { readonly key: string; readonly neighborType?: string | undefined } | undefined): void;
   /** Sets or clears what the last arrow-key move did. */
   announceMove(text: string | undefined): void;
   /** Starts the walk at an element, or moves it to another. */
@@ -196,7 +206,7 @@ export function createPresentationStore(known: KnownElements): PresentationStore
       store.setState({ ...store.getState(), sheetOpen });
     },
     walkTo(key) {
-      requireKnown([key], known.isElement);
+      requireKnown([key], (candidate) => known.isElement(candidate) || store.getState().sceneItems.includes(candidate));
       const current = store.getState();
       if (current.walking && current.focused === key) return;
       store.setState({ ...current, walking: true, focused: key, moveNote: undefined });
@@ -232,6 +242,15 @@ export function createPresentationStore(known: KnownElements): PresentationStore
       else collapsedPanels.delete(panel);
       store.setState({ ...store.getState(), collapsedPanels });
     },
+    setSceneItems(keys) {
+      const held = store.getState().sceneItems;
+      if (held.length === keys.length && held.every((key, at) => key === keys[at])) return;
+      store.setState({ ...store.getState(), sceneItems: keys });
+    },
+    setSupernodePanel(open) {
+      if (open !== undefined) requireKnown([open.key], known.isNode);
+      store.setState({ ...store.getState(), supernodePanel: open });
+    },
     setViewport(viewport) {
       if (![viewport.zoom, viewport.x, viewport.y].every(Number.isFinite)) throw new StateError('INVALID_VIEWPORT');
       store.setState({ ...store.getState(), viewport });
@@ -241,9 +260,10 @@ export function createPresentationStore(known: KnownElements): PresentationStore
       const selection = [...current.selection].filter(known.isElement);
       const positions = [...current.positions].filter(([key]) => known.isNode(key));
       const pins = [...current.pins].filter(known.isNode);
-      const focused = current.focused !== undefined && known.isElement(current.focused) ? current.focused : undefined;
-      if (selection.length === current.selection.size && positions.length === current.positions.size && pins.length === current.pins.size && focused === current.focused) return;
-      store.setState({ ...current, selection: new Set(selection), positions: new Map(positions), pins: new Set(pins), focused });
+      const focused = current.focused !== undefined && (known.isElement(current.focused) || current.sceneItems.includes(current.focused)) ? current.focused : undefined;
+      const supernodePanel = current.supernodePanel !== undefined && known.isNode(current.supernodePanel.key) ? current.supernodePanel : undefined;
+      if (selection.length === current.selection.size && positions.length === current.positions.size && pins.length === current.pins.size && focused === current.focused && supernodePanel === current.supernodePanel) return;
+      store.setState({ ...current, selection: new Set(selection), positions: new Map(positions), pins: new Set(pins), focused, supernodePanel });
     },
     snapshot() {
       const { selection, positions, pins, viewport } = store.getState();

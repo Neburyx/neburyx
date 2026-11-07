@@ -182,7 +182,7 @@ const STAND_IN_MENU_ITEMS: readonly (readonly [MenuTargetKind, MenuItem])[] = [
   ['canvas', command('stand-in-ungroup-all', 'Ungroup all', 'ungroup', MENU_GROUP.canvas.grouping, MENU_ORDER.canvas.ungroupAll)],
   ['canvas', command('stand-in-export-view', 'Export view…', 'download', MENU_GROUP.canvas.export, MENU_ORDER.canvas.exportView, { binding: 'export-view' })],
   ['node', command('stand-in-expand-neighbors', 'Expand neighbors', 'expand', NODE_GROUP.expand, NODE_ORDER.expandNeighbors, { binding: 'expand' })],
-  ['node', parent('stand-in-expand-by-type', 'Expand by type', 'types', NODE_GROUP.expand, NODE_ORDER.expandByType)],
+  ['node', parent('stand-in-expand-by-type', 'Expand by neighbor type', 'types', NODE_GROUP.expand, NODE_ORDER.expandByNeighborType)],
   ['node', command('stand-in-focus', 'Focus neighborhood', 'focus', NODE_GROUP.expand, NODE_ORDER.focusNeighborhood, { binding: 'focus' })],
   ['node', command('stand-in-paths-from', 'Find paths from here…', 'route', NODE_GROUP.paths, NODE_ORDER.findPathsFromHere, { binding: 'find-paths' })],
   ['node', command('stand-in-paths-to', 'Find paths to…', 'route', NODE_GROUP.paths, NODE_ORDER.findPathsTo)],

@@ -34,7 +34,7 @@ interface CaptionJob {
   readonly pinned: boolean;
 }
 
-const edgeData = (look: RelationshipLook) => ({ aggregate: look.aggregate, origin: look.origin, label: look.label ?? '' });
+const edgeData = (look: RelationshipLook) => ({ aggregate: look.aggregate, origin: look.origin, label: look.label ?? '', tip: look.tip ?? '' });
 
 
 // Cytoscape keeps the object it is given as the node's position and writes to it, so every position is copied in.
@@ -93,6 +93,9 @@ export const STYLE: StylesheetJson = [
     selector: 'edge[origin = "derived"]',
     style: { 'line-color': DERIVED_COLOR, 'line-style': 'dashed', 'line-dash-pattern': DASH_PATTERN, 'target-arrow-shape': 'none' },
   },
+  // An aggregate node stands for neighbors that are not loaded: a dashed outline, joined by a thin dashed line without an arrow.
+  { selector: 'node[?remainder]', style: { 'border-style': 'dashed' } },
+  { selector: 'edge[?remainder]', style: { width: 1, 'line-style': 'dashed', 'line-dash-pattern': DASH_PATTERN, 'target-arrow-shape': 'none' } },
   { selector: 'edge[origin = "unknown"]', style: { 'line-style': 'dotted', 'line-dash-pattern': DOT_PATTERN } },
   {
     selector: 'node[?selected]',
@@ -349,7 +352,7 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
           else tip.show({ title, detail: String(element.data('detail') ?? '') }, { x: at.x, y: at.y + element.renderedHeight() / 2 + TIP_GAP });
           return;
         }
-        const label = String(element.data('label') ?? '');
+        const label = String(element.data('tip') || element.data('label') || '');
         const at = element.renderedMidpoint();
         if (label === '') tip.hide();
         else tip.show({ title: label, detail: undefined }, { x: at.x, y: at.y + TIP_GAP });
@@ -559,7 +562,9 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
           if (existing.empty()) cy.add({ group: 'nodes', data: { id: entity.id }, position: { ...entity.position }, ...(far ? { classes: 'far' } : {}) });
           else if ((dragging === undefined || dragging.cancelled || dragging.id !== entity.id) && (existing.position('x') !== entity.position.x || existing.position('y') !== entity.position.y)) existing.position({ ...entity.position });
           const node = cy.getElementById(entity.id);
-          const grabbable = scene.tool !== 'pan' && !scene.pinned.has(entity.id);
+          const remainder = entity.remainder === true;
+          if (node.data('remainder') !== remainder) node.data('remainder', remainder);
+          const grabbable = !remainder && scene.tool !== 'pan' && !scene.pinned.has(entity.id);
           if (node.grabbable() !== grabbable) {
             if (grabbable) node.grabify();
             else node.ungrabify();
@@ -567,7 +572,7 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
           const pinned = scene.pinned.has(entity.id);
           const lookKey = `${entity.look.iconKey}\u0000${entity.look.line1}\u0000${entity.look.line2}\u0000${pinned}`;
           if (node.data('lookKey') !== lookKey) {
-            node.data({ lookKey, caption: `${entity.look.line1}\n${entity.look.line2}`, title: entity.look.line1, detail: entity.look.line2 });
+            node.data({ lookKey, caption: `${entity.look.line1}\n${entity.look.line2}`, title: entity.look.tip?.title ?? entity.look.line1, detail: entity.look.tip?.detail ?? entity.look.line2 });
             if (paints) {
               const known = captions.get(captionKey(entity.look.line1, entity.look.line2));
               node.style('background-image', imagesFor(entity.look.iconKey, pinned, known));
@@ -577,9 +582,10 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
         }
         for (const relationship of scene.relationships) {
           const existing = cy.getElementById(relationship.id);
-          if (existing.empty()) cy.add({ group: 'edges', data: { id: relationship.id, source: relationship.from, target: relationship.to, ...edgeData(relationship.look) }, ...(far && relationship.look.label !== undefined ? { classes: 'far' } : {}) });
+          if (existing.empty()) cy.add({ group: 'edges', data: { id: relationship.id, source: relationship.from, target: relationship.to, remainder: relationship.remainder === true, ...edgeData(relationship.look) }, ...(far && relationship.look.label !== undefined ? { classes: 'far' } : {}) });
           else {
             existing.data(edgeData(relationship.look));
+            if (existing.data('remainder') !== (relationship.remainder === true)) existing.data('remainder', relationship.remainder === true);
             if (far && relationship.look.label !== undefined) existing.addClass('far');
             if (existing.source().id() !== relationship.from || existing.target().id() !== relationship.to) existing.move({ source: relationship.from, target: relationship.to });
           }
@@ -650,14 +656,15 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
         zoomLimits: { min: cy.minZoom(), max: cy.maxZoom() },
         boundingBox: cy.nodes().empty() ? undefined : cy.nodes().renderedBoundingBox({}),
         interaction: { panning: cy.userPanningEnabled(), zooming: cy.userZoomingEnabled(), boxSelecting: cy.boxSelectionEnabled(), nodesGrabbable: cy.nodes().map((node) => node.grabbable()).includes(true), nodesSelectable: !cy.autounselectify() },
-        nodes: cy.nodes().map((node) => {
+        remainders: cy.nodes('[?remainder]').map((node) => ({ id: node.id(), caption: String(node.data('caption') ?? ''), grabbable: node.grabbable() })),
+        nodes: cy.nodes('[!remainder]').map((node) => {
           const image = node.style('background-image');
           const layers = image === 'none' ? [] : image.split(' ');
           const opacities = String(node.style('background-image-opacity')).split(' ').map(Number);
           const shownAt = (layer: number): boolean => (opacities[layer] ?? 1) > 0;
           return { id: node.id(), diameter: parseFloat(node.style('width')), outline: node.style('border-color'), outlineWidth: parseFloat(node.style('border-width')), halo: parseFloat(node.style('underlay-opacity')) > 0, images: layers, caption: String(node.data('caption') ?? ''), captionShown: shownAt(1), glyphShown: shownAt(0), badgeShown: layers.length === 3 && shownAt(2), focused: parseFloat(node.style('outline-width')) > 0 };
         }),
-        edges: cy.edges().map((edge) => ({
+        edges: cy.edges('[!remainder]').map((edge) => ({
           id: edge.id(),
           source: edge.source().id(),
           target: edge.target().id(),
@@ -676,14 +683,14 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
     },
     describe(): DrawnCounts {
       const cy = requireCore();
-      return { entities: cy.nodes().length, relationships: cy.edges().length };
+      return { entities: cy.nodes('[!remainder]').length, relationships: cy.edges('[!remainder]').length };
     },
     viewport() {
       const cy = requireCore();
       return { zoom: cy.zoom(), x: cy.pan().x, y: cy.pan().y };
     },
     positions() {
-      return new Map(requireCore().nodes().map((node) => [node.id(), { x: node.position('x'), y: node.position('y') }]));
+      return new Map(requireCore().nodes('[!remainder]').map((node) => [node.id(), { x: node.position('x'), y: node.position('y') }]));
     },
     dispose() {
       captionQueue = [];

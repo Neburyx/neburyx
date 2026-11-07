@@ -1640,3 +1640,34 @@ describe('the Cytoscape renderer in a container whose size changes', () => {
     expect(sizes.observed()).toEqual([]);
   });
 });
+
+describe('the aggregate nodes the Cytoscape renderer draws', () => {
+  const withRemainder = (): Scene => {
+    const base = scene([['a', { x: 0, y: 0 }], ['r', { x: 150, y: 0 }]], [['link', 'a', 'r']]);
+    return { ...base, entities: base.entities.map((entity) => (entity.id === 'r' ? { ...entity, remainder: true } : entity)), relationships: base.relationships.map((relationship) => ({ ...relationship, remainder: true })) };
+  };
+
+  it('are drawn but not counted among the entities and relationships, nor listed among the drawn nodes and positions', () => {
+    const renderer = mounted();
+    renderer.draw(withRemainder());
+    expect(renderer.describe()).toEqual({ entities: 1, relationships: 0 });
+    expect([...renderer.positions().keys()]).toEqual(['a']);
+    const drawn = renderer.inspect();
+    expect(drawn.nodes.map((node) => node.id)).toEqual(['a']);
+    expect(drawn.edges).toEqual([]);
+    expect(drawn.remainders.map((node) => node.id)).toEqual(['r']);
+  });
+
+  it('cannot be grabbed, in any pointer tool', () => {
+    const renderer = mounted();
+    renderer.draw(withRemainder());
+    expect(renderer.inspect().remainders).toEqual([{ id: 'r', caption: 'r\nType', grabbable: false }]);
+  });
+
+  it('are removed with their line when the scene no longer holds them', () => {
+    const renderer = mounted();
+    renderer.draw(withRemainder());
+    renderer.draw(scene([['a', { x: 0, y: 0 }]]));
+    expect(renderer.inspect().remainders).toEqual([]);
+  });
+});

@@ -1,5 +1,7 @@
 import { runSelectionCommand } from '../canvas/selection-commands.js';
 import { LayoutList } from './layout-list.js';
+import { nodeRefOfKey } from '../state/keys.js';
+import { EXPAND_BY_NEIGHBOR_TYPE, EXPAND_BY_TYPE } from './expand-copy.js';
 import { ExpandByTypeSubmenu } from './expand-by-type-submenu.js';
 import { MENU_GROUP, MENU_ORDER, type MenuContext, type MenuRegistry, type SubmenuProps } from './menu-registry.js';
 
@@ -32,12 +34,23 @@ export function registerBuiltInMenuItems(registry: MenuRegistry): () => void {
       },
     }),
     registry.register('node', {
+      id: 'expand-by-neighbor-type',
+      label: EXPAND_BY_NEIGHBOR_TYPE,
+      icon: <span className="icon icon-expand" aria-hidden="true" />,
+      group: MENU_GROUP.node.expand,
+      order: MENU_ORDER.node.expandByNeighborType,
+      submenu: ExpandByTypeSubmenu,
+    }),
+    registry.register('node', {
       id: 'expand-by-type',
-      label: 'Expand by type',
+      label: EXPAND_BY_TYPE,
       icon: <span className="icon icon-expand" aria-hidden="true" />,
       group: MENU_GROUP.node.expand,
       order: MENU_ORDER.node.expandByType,
-      submenu: ExpandByTypeSubmenu,
+      state: (context) => (context.key !== undefined && nodeRefOfKey(context.key) !== undefined ? 'enabled' : 'disabled'),
+      run: (context) => {
+        if (context.key !== undefined) context.state.presentation.setSupernodePanel({ key: context.key });
+      },
     }),
     registry.register('canvas', {
       id: 'fit-to-view',

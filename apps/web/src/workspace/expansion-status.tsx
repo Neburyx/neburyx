@@ -1,4 +1,4 @@
-import type { NodeExpansion } from '../api/expand-store.js';
+import { cursorWasRefused, type NodeExpansion } from '../api/expand-store.js';
 import { useStoreSelector } from '../state/store.js';
 import { useLoadedGraph } from '../state/context.js';
 import { nodeRefOfKey } from '../state/keys.js';
@@ -38,7 +38,7 @@ export function ExpansionStatus() {
           <div key={`${ref.entityType}/${ref.stableId}`} className="expansion-status-failure">
             <span className="expansion-status-line">{titleOf(ref.entityType, ref.stableId)}</span>
             <FailureNotice failure={expansion.failure} />
-            {expansion.failure.code === 'CURSOR_INVALIDATED' && expansion.failedAction?.kind === 'more' ? null : (
+            {cursorWasRefused(expansion) ? null : (
               <button type="button" className="neighbor-types-link" onClick={() => void store.retry(ref)}>
                 {RETRY}
               </button>

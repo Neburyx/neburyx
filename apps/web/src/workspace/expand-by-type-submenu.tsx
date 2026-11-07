@@ -1,12 +1,14 @@
-import type { DegreePreview, ElementRef, SourceProfile } from '@neburyx/contracts';
+import type { Count, DegreePreview, ElementRef, SourceProfile } from '@neburyx/contracts';
 import { useEffect, useRef, useState } from 'react';
-import type { TypeProgress } from '../api/expand-store.js';
+import { cursorWasRefused, type TypeProgress } from '../api/expand-store.js';
 import { useProfile } from '../canvas/profile-context.js';
 import { FailureNotice } from '../failure-notice.js';
 import { nodeRefOfKey } from '../state/keys.js';
+import { useLoadedGraph, useSessionMask } from '../state/context.js';
 import { useStoreSelector } from '../state/store.js';
 import { degreeCountText } from './degree-text.js';
-import { COUNTS_ARE_OF_RELATIONSHIPS, CLEAR, DUPLICATE_IDS, EXPAND_HEADING, INVERT_SELECTION, LOADING_NEIGHBORS, NO_RELATIONSHIPS, NO_STABLE_ID, RETRY, SELECT_ALL, SEPARATE_READS, START_OVER, PAGED_NOTE, expandLabel, loadMoreLabel, loadedText, pageNote } from './expand-copy.js';
+import { COUNTS_ARE_OF_RELATIONSHIPS, CLEAR, DUPLICATE_IDS, EXPAND_HEADING, INVERT_SELECTION, LOADING_NEIGHBORS, NO_RELATIONSHIPS, NO_STABLE_ID, RETRY, SELECT_ALL, SEPARATE_READS, START_OVER, PAGED_NOTE, expandLabel, loadMoreLabel, pageNote } from './expand-copy.js';
+import { loadedCountText, loadedOf } from './node-counts.js';
 import { neighborTypesOf, useExpandStore } from './expand-context.js';
 import type { SubmenuProps } from './menu-registry.js';
 import { usePreviewStore } from './preview-context.js';
@@ -28,13 +30,15 @@ interface RowProps {
   readonly checked: boolean;
   readonly onToggle: () => void;
   readonly progress: TypeProgress | undefined;
+  /** What is loaded of this type: one number for the checklist, the card and the aggregate nodes. */
+  readonly loaded: Count | undefined;
   readonly pageSize: number | undefined;
   readonly busy: boolean;
   readonly onMore: () => void;
   readonly onStartOver: () => void;
 }
 
-function TypeRow({ name, count, paged, checked, onToggle, progress, pageSize, busy, onMore, onStartOver }: RowProps) {
+function TypeRow({ name, count, paged, checked, onToggle, progress, loaded, pageSize, busy, onMore, onStartOver }: RowProps) {
   return (
     <li className="neighbor-types-item">
       <button type="button" role="checkbox" aria-checked={checked} className="neighbor-types-row" onClick={onToggle}>
@@ -43,10 +47,10 @@ function TypeRow({ name, count, paged, checked, onToggle, progress, pageSize, bu
         {count === undefined ? null : <span className="neighbor-types-count">{count}</span>}
       </button>
       {paged ? <p className="neighbor-types-note neighbor-types-paged">{PAGED_NOTE}</p> : null}
-      {progress === undefined || progress.loaded === 0 ? null : (
+      {loaded === undefined || loaded.value === 0 ? null : (
         <div className="neighbor-types-progress">
-          <span className="neighbor-types-note">{loadedText(progress.loaded)}</span>
-          {progress.restartNeeded ? (
+          <span className="neighbor-types-note">{loadedCountText(loaded)}</span>
+          {progress === undefined ? null : progress.restartNeeded ? (
             <button type="button" className="neighbor-types-link" disabled={busy} onClick={onStartOver}>
               {START_OVER}
             </button>
@@ -65,7 +69,9 @@ function ChecklistFor({ node, close }: { readonly node: ElementRef; readonly clo
   const previews = usePreviewStore();
   const expansions = useExpandStore();
   const profile = useProfile();
-  const request = previews.forNode(node, false);
+  const graph = useLoadedGraph();
+  const loaded = loadedOf(graph, node);
+  const request = previews.forNode(node, useSessionMask());
   const state = useStoreSelector(request, (current) => current);
   const expansion = useStoreSelector(expansions.view, () => expansions.of(node));
   const [cleared, setCleared] = useState<ReadonlySet<string>>(new Set());
@@ -76,10 +82,10 @@ function ChecklistFor({ node, close }: { readonly node: ElementRef; readonly clo
   const ticked = types.filter((type) => !cleared.has(type));
   const busy = expansion.status === 'loading';
   // a refused cursor can never succeed again, so Retry is not offered for it: the type starts over instead
-  const cursorRefused = expansion.failure?.code === 'CURSOR_INVALIDATED' && expansion.failedAction?.kind === 'more';
+  const cursorRefused = cursorWasRefused(expansion);
   const capped = preview?.warnings.find((warning) => warning.code === 'counts-capped');
   const anyLoaded = [...expansion.types.values()].some((progress) => progress.loaded > 0);
-  const pageSize = expansion.pageSize ?? preview?.pageSize;
+  const pageSize = expansion.chosenPageSize ?? expansion.pageSize ?? preview?.pageSize;
   const listed = types.length;
   useEffect(() => {
     const here = (): boolean => body.current?.closest('.menu-panel')?.contains(document.activeElement) === true;
@@ -115,6 +121,7 @@ function ChecklistFor({ node, close }: { readonly node: ElementRef; readonly clo
               checked={!cleared.has(type)}
               onToggle={() => setCleared((held) => (held.has(type) ? new Set([...held].filter((other) => other !== type)) : new Set(held).add(type)))}
               progress={expansion.types.get(type)}
+              loaded={loaded.byType.get(type)}
               pageSize={pageSize}
               busy={busy}
               onMore={() => void expansions.loadMore(node, type)}

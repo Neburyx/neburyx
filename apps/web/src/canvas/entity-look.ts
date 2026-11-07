@@ -4,6 +4,8 @@ export interface EntityLook {
   readonly iconKey: IconKey;
   readonly line1: string;
   readonly line2: string;
+  /** What the hover tip says instead of the two caption lines, when they are short for the room they have. */
+  readonly tip?: { readonly title: string; readonly detail: string };
 }
 
 function stateOf(node: GraphNode, stateProperty: string | null): string | undefined {

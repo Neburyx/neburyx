@@ -18,7 +18,8 @@ export const MENU_ORDER = {
   canvas: { fit: 10, selectAll: 20, invertSelection: 30, groupAll: 10, ungroupAll: 20, layout: 10, showLegend: 20, exportView: 10 },
   node: {
     expandNeighbors: 10,
-    expandByType: 20,
+    expandByNeighborType: 20,
+    expandByType: 25,
     focusNeighborhood: 30,
     findPathsFromHere: 10,
     findPathsTo: 20,

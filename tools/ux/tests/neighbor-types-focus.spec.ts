@@ -18,7 +18,7 @@ test.describe('the neighbor types submenu', () => {
   });
 
   const outline = (page: Page, selector: string): Promise<string> => page.locator(selector).first().evaluate((element) => getComputedStyle(element).outlineStyle);
-  const entry = (page: Page) => menuOf(page).first().getByRole('menuitem', { name: 'Expand by type' });
+  const entry = (page: Page) => menuOf(page).first().getByRole('menuitem', { name: 'Expand by neighbor type' });
 
   async function openByKeyboard(page: Page): Promise<void> {
     await canvasOf(page).focus();

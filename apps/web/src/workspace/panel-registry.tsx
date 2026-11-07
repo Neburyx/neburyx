@@ -40,6 +40,8 @@ export interface PanelRegistry {
   readonly view: ReadableStore<readonly RegisteredPanel[]>;
   /** Adds a panel and returns the function that takes out that registration only. An ID registered, or a second panel for the dock, is refused. */
   register(entry: PanelEntry): () => void;
+  /** Moves a registered panel without registering it again, so what the panel holds (its state, its focus, its collapsed state) stays. Does nothing for an ID that is not registered. */
+  place(id: string, placement: PanelPlacement): void;
 }
 
 export interface PanelRegistryOptions {
@@ -53,6 +55,13 @@ export function createPanelRegistry(options: PanelRegistryOptions = {}): PanelRe
   let registered = 0;
   return {
     view: readable(store),
+    place(id, placement) {
+      const at = registrations.findIndex(({ panel }) => panel.id === id);
+      const held = registrations[at];
+      if (held === undefined) return;
+      registrations[at] = { token: held.token, panel: { ...held.panel, placement } };
+      store.setState(registrations.map(({ panel }) => panel));
+    },
     register(entry) {
       if (registrations.some(({ panel }) => panel.id === entry.id)) throw new PanelError('PANEL_TAKEN', entry.id);
       if (entry.placement.kind === 'dock' && registrations.some(({ panel }) => panel.placement.kind === 'dock')) throw new PanelError('DOCK_TAKEN', entry.id);
