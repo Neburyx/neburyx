@@ -1,6 +1,6 @@
 import type { GraphNode, SearchResult, SourceProfile } from '@neburyx/contracts';
 import { countText, evidenceText, matchesText, relatedText, secondsText } from './count-label.js';
-import { groupFailedText, groupNotReadSummary, referencesLine, RETRY, SEARCH_COPY, showingResultsFor } from './copy.js';
+import { FILTERS_COPY, groupFailedText, groupNotReadSummary, hiddenBySelection, referencesLine, RETRY, SEARCH_COPY, showingResultsFor } from './copy.js';
 import { EvidenceNotes, EvidenceSection } from './evidence-section.js';
 import { ResultRow } from './result-row.js';
 import { statesOf } from './states.js';
@@ -14,9 +14,11 @@ export interface AnswerProps {
   readonly mask: boolean;
   readonly onOpen: (node: GraphNode) => void;
   readonly onRetry: () => void;
+  /** Clears the selection of the Filters, offered where the page says there is no result for it. */
+  readonly onReset: () => void;
 }
 
-export function SearchAnswer({ result, answeredText, currentText, profile, busy, mask, onOpen, onRetry }: AnswerProps) {
+export function SearchAnswer({ result, answeredText, currentText, profile, busy, mask, onOpen, onRetry, onReset }: AnswerProps) {
   const count = result.counts.exact;
   const typeOf = (entityType: string) => profile.entityTypes.find((type) => type.type === entityType);
   const states = statesOf(result, mask);
@@ -71,15 +73,34 @@ export function SearchAnswer({ result, answeredText, currentText, profile, busy,
           ))}
         </ul>
       )}
+      {states.hidden.map((group) => (
+        <p key={group} className="search-note">
+          {hiddenBySelection(group)}
+        </p>
+      ))}
       {states.reasons.map((reason) => (
         <p key={reason} className="search-nothing">
           {reason}
         </p>
       ))}
-      {states.noMatches ? (
+      {states.message === 'no-matches' ? (
         <div className="search-empty">
           <h2>{SEARCH_COPY.emptyTitle}</h2>
           <p>{SEARCH_COPY.emptyHint}</p>
+        </div>
+      ) : null}
+      {states.message === 'unshown' ? (
+        <div className="search-empty">
+          <h2>{FILTERS_COPY.unshown}</h2>
+        </div>
+      ) : null}
+      {states.message === 'no-result-for-selection' ? (
+        <div className="search-empty">
+          <h2>{FILTERS_COPY.noResultTitle}</h2>
+          <p>{FILTERS_COPY.noResultHint}</p>
+          <button type="button" className="link" onClick={onReset}>
+            {FILTERS_COPY.reset}
+          </button>
         </div>
       ) : null}
       {exactFailure === undefined ? null : failureLine(exactFailure)}

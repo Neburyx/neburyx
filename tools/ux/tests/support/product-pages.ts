@@ -101,6 +101,29 @@ export const REACH: Readonly<Record<string, (page: Page) => Promise<void>>> = {
     await searchFor(page, 'evdrop-1');
     await expect(page.getByText(/Evidence records are disabled for this relationship/)).toBeVisible();
   },
+  'Search results with filters': async (page) => {
+    await searchFor(page, 'mix-3-2');
+    await expect(page.getByRole('complementary', { name: 'Filters' })).toBeVisible();
+    await expect(page.getByText('5 results')).toBeVisible();
+  },
+  'Search results with a capped filter count': async (page) => {
+    await searchFor(page, 'many-26');
+    await expect(page.getByRole('complementary', { name: 'Filters' }).getByText('≥ 25 results · lower bound')).toBeVisible();
+  },
+  'Search results with the filter counts not read': async (page) => {
+    await searchFor(page, 'facfail-1');
+    await expect(page.getByText('Filters unavailable: counts not read')).toBeVisible();
+  },
+  'Search results with a selection': async (page) => {
+    await searchFor(page, 'mix-3-2');
+    await page.getByRole('complementary', { name: 'Filters' }).getByRole('checkbox', { name: /Customer/ }).click();
+    await expect(page.getByRole('complementary', { name: 'Filters' }).getByRole('button', { name: 'Reset' })).toBeVisible();
+  },
+  'Search results with no result for a selection': async (page) => {
+    await searchFor(page, 'ghost-3');
+    await page.getByRole('complementary', { name: 'Filters' }).getByRole('checkbox', { name: /Customer/ }).click();
+    await expect(page.getByRole('heading', { level: 2, name: 'No result for this selection' })).toBeVisible();
+  },
   'Search results with no match': async (page) => {
     await searchFor(page, 'missing-1');
     await expect(page.getByText('No matching entities')).toBeVisible();

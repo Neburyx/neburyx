@@ -29,8 +29,8 @@ test.describe('the controls of the Search results page', () => {
     const open = page.getByRole('button', { name: /^Open in graph/ }).first();
     await expect(open).toBeVisible();
     expect(await lookOf(open)).toMatchObject({ 'border-top-width': '0px', 'background-color': 'rgba(0, 0, 0, 0)', color: await tokenColour(page, '--color-accent') });
-    await page.getByRole('searchbox', { name: 'Search text' }).focus();
-    for (let press = 0; press < 2; press += 1) await page.keyboard.press('Tab');
+    await page.getByRole('complementary', { name: 'Filters' }).getByRole('checkbox').last().focus();
+    await page.keyboard.press('Tab');
     await expect(open).toBeFocused();
     expect(await lookOf(open, OUTLINE)).toEqual({ 'outline-style': 'solid', 'outline-width': '3px', 'outline-color': await tokenColour(page, '--color-focus') });
   });
@@ -48,6 +48,15 @@ test.describe('the controls of the Search results page', () => {
   test('draws the Retry of a failed evidence group as accent text, like the other search buttons', async ({ page }) => {
     await searchFor(page, 'evfail-1');
     expect(await lookOf(page.getByRole('button', { name: 'Retry' }))).toMatchObject({ 'border-top-width': '0px', 'background-color': 'rgba(0, 0, 0, 0)', color: await tokenColour(page, '--color-accent') });
+  });
+
+  test('draws the Reset of the Filters, in the panel and in the message that there is no result for the selection, as accent text like the other search buttons', async ({ page }) => {
+    await searchFor(page, 'ghost-3');
+    await page.getByRole('complementary', { name: 'Filters' }).getByRole('checkbox', { name: /Customer/ }).click();
+    const accent = await tokenColour(page, '--color-accent');
+    for (const reset of [page.getByRole('complementary', { name: 'Filters' }).getByRole('button', { name: 'Reset' }), page.getByRole('main').locator('.search-empty').getByRole('button', { name: 'Reset' })]) {
+      expect(await lookOf(reset)).toMatchObject({ 'border-top-width': '0px', 'background-color': 'rgba(0, 0, 0, 0)', color: accent });
+    }
   });
 
   test('draws the Retry of a failed search as link-style text and keeps the form on screen', async ({ page }) => {

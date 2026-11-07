@@ -22,7 +22,15 @@ const result = {
   dropped: { 'not-mapped': 0, 'ambiguous-type': 0, 'no-stable-id': 0 },
   warnings: [],
   elapsedMs: 12,
+  facets: {
+    searchable: true,
+    total: { value: 1, quality: 'exact', scope: 'search:facet:total' },
+    entityType: [{ entityType: 'widget', count: { value: 1, quality: 'exact', scope: 'search:facet:entityType' } }],
+    matchMode: [{ mode: 'exact', count: { value: 1, quality: 'exact', scope: 'search:facet:matchMode' } }],
+  },
+  filters: { entityTypes: [], matchModes: [] },
 };
+const { facets: _facets, filters: _filters, ...typeahead } = result;
 
 describe('the search request', () => {
   it.each([
@@ -175,7 +183,7 @@ describe('the startsWith group of the search result', () => {
 
   it('is optional, and holds nodes, a count, the rows left out and the warnings', () => {
     expect(searchResultSchema.safeParse(result).success).toBe(true);
-    expect(searchResultSchema.safeParse({ ...result, startsWith: group }).success).toBe(true);
+    expect(searchResultSchema.safeParse({ ...typeahead, startsWith: group }).success).toBe(true);
   });
 
   it.each([
@@ -184,20 +192,20 @@ describe('the startsWith group of the search result', () => {
     ['no list of dropped rows', { nodes: group.nodes, count: group.count, warnings: [] }],
     ['a field the contract does not name', { ...group, cap: 25 }],
   ])('refuses %s', (_name, startsWith) => {
-    expect(searchResultSchema.safeParse({ ...result, startsWith }).success).toBe(false);
+    expect(searchResultSchema.safeParse({ ...typeahead, startsWith }).success).toBe(false);
   });
 
   it('takes a lower bound', () => {
-    expect(searchResultSchema.safeParse({ ...result, startsWith: { ...group, count: { value: 25, quality: 'lowerBound', scope: 'search:startsWith' } } }).success).toBe(true);
+    expect(searchResultSchema.safeParse({ ...typeahead, startsWith: { ...group, count: { value: 25, quality: 'lowerBound', scope: 'search:startsWith' } } }).success).toBe(true);
   });
 });
 
 describe('the failures of the search result', () => {
   const group = { nodes: [], count: { quality: 'unknown', scope: 'search:startsWith' }, dropped: { 'not-mapped': 0, 'ambiguous-type': 0, 'no-stable-id': 0 }, warnings: [] };
-  const failedPrefix = { ...result, startsWith: group, failures: [{ group: 'startsWith', code: 'QUERY_TIMEOUT', timeoutMs: 5000 }] };
+  const failedPrefix = { ...typeahead, startsWith: group, failures: [{ group: 'startsWith', code: 'QUERY_TIMEOUT', timeoutMs: 5000 }] };
   const answeredGroup = { ...group, count: { value: 0, quality: 'exact', scope: 'search:startsWith' } };
   const unread = { ...result.related, searchable: false };
-  const failedExact = { ...result, exact: [], counts: { exact: { quality: 'unknown', scope: 'search:exact' } }, startsWith: answeredGroup, failures: [{ group: 'exact', code: 'SOURCE_BUSY' }] };
+  const failedExact = { ...typeahead, exact: [], counts: { exact: { quality: 'unknown', scope: 'search:exact' } }, startsWith: answeredGroup, failures: [{ group: 'exact', code: 'SOURCE_BUSY' }] };
 
   const failedRelated = { ...result, related: { ...result.related, count: { quality: 'unknown', scope: 'search:related' } }, failures: [{ group: 'related', code: 'QUERY_TIMEOUT', timeoutMs: 5000 }] };
 
@@ -267,5 +275,141 @@ describe('the failures of the search result', () => {
     ['no list of failures', Object.fromEntries(Object.entries(result).filter(([key]) => key !== 'failures'))],
   ])('refuses %s', (_name, body) => {
     expect(searchResultSchema.safeParse(body).success).toBe(false);
+  });
+});
+
+describe('the facets of the search result', () => {
+  const entry = (entityType: string, value = 1, quality: 'exact' | 'lowerBound' = 'exact') => ({ entityType, count: { value, quality, scope: 'search:facet:entityType' } });
+  const mode = (name: string, value = 1, quality: 'exact' | 'lowerBound' = 'exact') => ({ mode: name, count: { value, quality, scope: 'search:facet:matchMode' } });
+  const total = { value: 2, quality: 'exact', scope: 'search:facet:total' };
+  const facets = { searchable: true, total, entityType: [entry('widget'), entry('gadget')], matchMode: [mode('exact'), mode('related'), mode('evidence')] };
+  const parse = (override: Record<string, unknown>) => searchResultSchema.safeParse({ ...result, ...override }).success;
+
+  it('accepts entries of every kind with exact and lower-bound counts, and an answer that has nothing to count', () => {
+    expect(parse({ facets })).toBe(true);
+    expect(parse({ facets: { ...facets, total: { value: 25, quality: 'lowerBound', scope: 'search:facet:total' }, entityType: [entry('widget', 25, 'lowerBound')] } })).toBe(true);
+    expect(parse({ facets: { searchable: false } })).toBe(true);
+    expect(parse({ facets: { ...facets, entityType: [], matchMode: [] } })).toBe(true);
+  });
+
+  it('accepts a type-ahead answer, which holds neither the facets nor the filters', () => {
+    const group = { nodes: [], count: { value: 0, quality: 'exact', scope: 'search:startsWith' }, dropped: { 'not-mapped': 0, 'ambiguous-type': 0, 'no-stable-id': 0 }, warnings: [] };
+    expect(searchResultSchema.safeParse({ ...typeahead, startsWith: group }).success).toBe(true);
+  });
+
+  it.each([
+    ['an entity-type entry with the scope of the match modes', { ...facets, entityType: [{ entityType: 'widget', count: { value: 1, quality: 'exact', scope: 'search:facet:matchMode' } }] }],
+    ['a match-mode entry with the scope of the entity types', { ...facets, matchMode: [{ mode: 'exact', count: { value: 1, quality: 'exact', scope: 'search:facet:entityType' } }] }],
+    ['a total with the scope of a group', { ...facets, total: { value: 2, quality: 'exact', scope: 'search:exact' } }],
+    ['an entity type with two entries', { ...facets, entityType: [entry('widget'), entry('widget', 2)] }],
+    ['a match mode with two entries', { ...facets, matchMode: [mode('exact'), mode('exact', 2)] }],
+    ['a match mode the search does not know', { ...facets, matchMode: [mode('startsWith')] }],
+    ['an exact count with no value', { ...facets, total: { quality: 'exact', scope: 'search:facet:total' } }],
+    ['a lower bound with no value', { ...facets, entityType: [{ entityType: 'widget', count: { quality: 'lowerBound', scope: 'search:facet:entityType' } }] }],
+    ['an estimated count', { ...facets, total: { value: 2, quality: 'estimated', scope: 'search:facet:total' } }],
+    ['a negative count', { ...facets, total: { value: -1, quality: 'exact', scope: 'search:facet:total' } }],
+    ['an entry with an empty entity type', { ...facets, entityType: [entry('')] }],
+    ['an unknown field', { ...facets, group: 'facets' }],
+    ['a total on a facet that has nothing to count', { searchable: false, total }],
+    ['no total on a facet that has something to count', { searchable: true, entityType: [], matchMode: [] }],
+  ])('refuses %s', (_name, value) => {
+    expect(parse({ facets: value })).toBe(false);
+  });
+
+  it('refuses an answer that is not a type-ahead answer and has no facets or no filters', () => {
+    const { facets: _dropped, ...withoutFacets } = result;
+    const { filters: _kept, ...withoutFilters } = result;
+    expect(searchResultSchema.safeParse(withoutFacets).success).toBe(false);
+    expect(searchResultSchema.safeParse(withoutFilters).success).toBe(false);
+  });
+
+  it('refuses a type-ahead answer that holds the facets or the filters', () => {
+    const group = { nodes: [], count: { value: 0, quality: 'exact', scope: 'search:startsWith' }, dropped: { 'not-mapped': 0, 'ambiguous-type': 0, 'no-stable-id': 0 }, warnings: [] };
+    expect(searchResultSchema.safeParse({ ...typeahead, startsWith: group }).success).toBe(true);
+    expect(searchResultSchema.safeParse({ ...typeahead, startsWith: group, facets }).success).toBe(false);
+    expect(searchResultSchema.safeParse({ ...typeahead, startsWith: group, filters: result.filters }).success).toBe(false);
+  });
+
+  it('refuses filters with an unknown mode, an empty entity type or an unknown field', () => {
+    expect(parse({ filters: { entityTypes: ['widget'], matchModes: ['related'] } })).toBe(true);
+    expect(parse({ filters: { entityTypes: [], matchModes: ['startsWith'] } })).toBe(false);
+    expect(parse({ filters: { entityTypes: [''], matchModes: [] } })).toBe(false);
+    expect(parse({ filters: { entityTypes: [], matchModes: [], text: 'x' } })).toBe(false);
+  });
+});
+
+describe('the failure of the facet read in the search result', () => {
+  const failed = { searchable: true, total: { quality: 'unknown', scope: 'search:facet:total' }, entityType: [], matchMode: [] };
+  const facetsFailure = { group: 'facets', code: 'QUERY_TIMEOUT', timeoutMs: 5000 };
+  const unread = { hits: [], count: { quality: 'unknown', scope: 'search:related' }, searchable: true, disabledTypes: [] };
+  const parse = (override: Record<string, unknown>) => searchResultSchema.safeParse({ ...result, ...override }).success;
+
+  it('accepts an answer in which only the facet read failed, the failed shape, and the failure named once', () => {
+    expect(parse({ facets: failed, failures: [facetsFailure] })).toBe(true);
+    expect(parse({ facets: failed, failures: [{ group: 'facets', code: 'INTERNAL_ERROR' }] })).toBe(true);
+  });
+
+  it('accepts the sole result group that was read answering while the facet read fails, and exact answering while related and the facet read fail', () => {
+    const onlyExact = { related: { ...result.related, searchable: false }, evidence: { ...result.evidence, searchable: false } };
+    expect(parse({ ...onlyExact, facets: failed, failures: [facetsFailure] })).toBe(true);
+    expect(parse({ related: unread, facets: failed, failures: [{ group: 'related', code: 'QUERY_TIMEOUT', timeoutMs: 5000 }, facetsFailure] })).toBe(true);
+  });
+
+  it('refuses an answer in which every result group that was read failed, whether the facet read answered or failed', () => {
+    const exactFailed = { exact: [], counts: { exact: { quality: 'unknown', scope: 'search:exact' } } };
+    const onlyExact = { related: { ...result.related, searchable: false }, evidence: { ...result.evidence, searchable: false } };
+    expect(parse({ ...onlyExact, ...exactFailed, failures: [{ group: 'exact', code: 'SOURCE_BUSY' }] })).toBe(false);
+    expect(parse({ ...onlyExact, ...exactFailed, facets: failed, failures: [{ group: 'exact', code: 'SOURCE_BUSY' }, facetsFailure] })).toBe(false);
+  });
+
+  it('accepts an answer in which no result group could be read and there is nothing to count', () => {
+    const nothing = { searchable: false, related: { ...result.related, searchable: false }, evidence: { ...result.evidence, searchable: false }, facets: { searchable: false }, counts: { exact: { value: 0, quality: 'exact', scope: 'search:exact' } }, exact: [] };
+    expect(parse(nothing)).toBe(true);
+  });
+
+  it.each([
+    ['a failed facet read with entries', { facets: { ...failed, entityType: [{ entityType: 'widget', count: { value: 1, quality: 'exact', scope: 'search:facet:entityType' } }] }, failures: [facetsFailure] }],
+    ['a failed facet read with match-mode entries', { facets: { ...failed, matchMode: [{ mode: 'exact', count: { value: 1, quality: 'exact', scope: 'search:facet:matchMode' } }] }, failures: [facetsFailure] }],
+    ['a failed facet read with nothing to count', { facets: { searchable: false }, failures: [facetsFailure] }],
+    ['a failed facet read whose total has a value', { facets: { ...failed, total: { value: 0, quality: 'exact', scope: 'search:facet:total' } }, failures: [facetsFailure] }],
+    ['an unknown total with no failure of the facet read', { facets: failed, failures: [] }],
+    ['an unknown entry with no failure of the facet read', { facets: { searchable: true, total: { value: 1, quality: 'exact', scope: 'search:facet:total' }, entityType: [{ entityType: 'widget', count: { quality: 'unknown', scope: 'search:facet:entityType' } }], matchMode: [] } }],
+    ['the facet failure named twice', { facets: failed, failures: [facetsFailure, facetsFailure] }],
+    ['a facet failure with a code that belongs to the whole search', { facets: failed, failures: [{ group: 'facets', code: 'SOURCE_UNAVAILABLE' }] }],
+  ])('refuses %s', (_name, override) => {
+    expect(parse(override)).toBe(false);
+  });
+
+  it('refuses a facet failure in a type-ahead answer, which reads no facets', () => {
+    const group = { nodes: [], count: { value: 0, quality: 'exact', scope: 'search:startsWith' }, dropped: { 'not-mapped': 0, 'ambiguous-type': 0, 'no-stable-id': 0 }, warnings: [] };
+    expect(searchResultSchema.safeParse({ ...typeahead, startsWith: group, failures: [facetsFailure] }).success).toBe(false);
+  });
+});
+
+describe('the selection of a search request', () => {
+  const accepts = (body: Record<string, unknown>) => searchRequestSchema.safeParse({ sourceId: 'demo', text: 'ab', ...body }).success;
+
+  it('accepts a list of entity types, a list of match modes and both, each of different names', () => {
+    expect(accepts({ entityTypes: ['widget'] })).toBe(true);
+    expect(accepts({ entityTypes: ['widget', 'gadget'], matchModes: ['exact', 'related', 'evidence'] })).toBe(true);
+    expect(accepts({ matchModes: ['evidence'], mask: true, typeahead: false })).toBe(true);
+    expect(accepts({})).toBe(true);
+  });
+
+  it.each([
+    ['an empty list of entity types', { entityTypes: [] }],
+    ['an empty list of match modes', { matchModes: [] }],
+    ['an entity type twice', { entityTypes: ['widget', 'widget'] }],
+    ['a match mode twice', { matchModes: ['exact', 'exact'] }],
+    ['an unknown match mode', { matchModes: ['startsWith'] }],
+    ['a match mode that is not text', { matchModes: [1] }],
+    ['an entity type that is not text', { entityTypes: [7] }],
+    ['an empty entity type', { entityTypes: [''] }],
+    ['a selection that is not a list', { entityTypes: 'widget' }],
+    ['an unknown field beside the selection', { entityTypes: ['widget'], types: ['widget'] }],
+    ['entity types with type-ahead', { typeahead: true, entityTypes: ['widget'] }],
+    ['match modes with type-ahead', { typeahead: true, matchModes: ['exact'] }],
+  ])('refuses %s', (_name, body) => {
+    expect(accepts(body)).toBe(false);
   });
 });

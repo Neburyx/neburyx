@@ -89,6 +89,14 @@ export interface Template {
    * template names: its `search` or its `reference` properties, or the evidence properties of its relationship rows that have a `stable_id`.
    */
   readonly searchBranches?: { readonly param: string; readonly allowlist: 'search' | 'reference' | 'evidence'; readonly value: string; readonly text: string };
+  /**
+   * The facet template's own declaration, for no other template: a statement of probes, each a capped count of the distinct nodes (or relationships) that its targets match. The Cypher is the one marker
+   * `@facetProbes(<param>)`; the list parameter holds the probes, each a non-empty list of targets of one kind (entity targets of the `search` or `reference` lists, or evidence properties of a relationship row
+   * that has a `stable_id`), and the gate writes in, for each probe `i`, `CALL { CALL { <the probe's branches joined by UNION> } WITH n LIMIT $limit + 1 RETURN count(*) AS c<i> }` (the variable is `r` for
+   * evidence), then one `RETURN c0, c1, …`: one row of integers. The branch texts are the template's, for the `value` and the `text` form of an entity target and of an evidence target, with the placeholders
+   * of the search branches; each carries its own `LIMIT $limit + 1`.
+   */
+  readonly facetProbes?: { readonly param: string; readonly node: { readonly value: string; readonly text: string }; readonly evidence: { readonly value: string; readonly text: string } };
   /** The indexes this read needs, so that the gate can find out before the data read that they are there; a template that names none is not guarded. */
   indexNeeds?(params: Params, allowlist: SourceAllowlist): readonly (IndexNeed | RelationshipIndexNeed)[];
   /** True for a request that has nothing to read, such as an empty list of targets: the gate runs every stage but the read, and the answer has no row. */

@@ -70,7 +70,7 @@ async function runStages(deps: GateDeps, request: GateRequest, system: boolean, 
     return executeRead({ coordinator: deps.seams.coordinator, executor: deps.executor, clock: deps.clock, logger: deps.logger }, context, template, rendered, request.limit);
   });
   const normalized = await inStage(deps, progress, 'normalize', () => {
-    const items = template.normalize(result.rows, result.plan, { sourceId: context.sourceId, hasMore: result.hasMore, model: context.model });
+    const items = template.normalize(result.rows, result.plan, { sourceId: context.sourceId, hasMore: result.hasMore, model: context.model, limit: request.limit });
     // the page after this one, when there is one: the template says where it starts and the gate signs it for this request
     const position = template.paged && result.hasMore ? template.nextPosition?.(result.rows, request.limit) : undefined;
     return { items, nextCursor: position === undefined ? undefined : deps.cursors.mint(binding, position) };

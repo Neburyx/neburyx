@@ -44,7 +44,7 @@ describe('POST /v1/search/entities with evidence records', () => {
     expect(searchCalls(executor)).toHaveLength(1);
     expect(relatedCalls(executor)).toHaveLength(1);
     expect(executor.calls.filter((call) => call.templateId === 'schema-indexes')).toHaveLength(1);
-    expect(events.map((event) => `${event.action} ${event.result}`).sort()).toEqual(['entity.search success', 'entity.search_evidence success', 'entity.search_related success', 'source.schema_indexes success']);
+    expect(events.map((event) => `${event.action} ${event.result}`).sort()).toEqual(['entity.search success', 'entity.search_evidence success', 'entity.search_facets success', 'entity.search_related success', 'source.schema_indexes success']);
     await app.close();
   });
 
@@ -54,9 +54,9 @@ describe('POST /v1/search/entities with evidence records', () => {
     const coordinator = { acquireRead: () => (acquired += 1, Promise.resolve({ status: 'granted' as const, lease: { release: () => (released += 1, Promise.resolve()) } })) };
     const { app, executor } = await started([link('L-1', { recordId: 'REC-1' })], { coordinator });
     await answerOf(app, 'REC-1');
-    expect(executor.calls.map((call) => call.templateId).sort()).toEqual(['entity-related', 'entity-search', 'relationship-evidence', 'schema-indexes']);
-    expect(acquired).toBe(4);
-    expect(released).toBe(4);
+    expect(executor.calls.map((call) => call.templateId).sort()).toEqual(['entity-related', 'entity-search', 'relationship-evidence', 'schema-indexes', 'search-facets']);
+    expect(acquired).toBe(5);
+    expect(released).toBe(5);
     await app.close();
   });
 
@@ -71,9 +71,9 @@ describe('POST /v1/search/entities with evidence records', () => {
     };
     const model = searchModelOf([widgetNode, gadgetNode, partNode], () => undefined, [link('L-1', { recordId: 'REC-1' })]);
     const withoutEvidenceIndex = withSchema(() => schemaAnswer(onlineIndexesOf(source).filter((index) => index.entityType !== 'RELATIONSHIP')), model);
-    expect(await count({ mapping, ownSchema: true, respond: withoutEvidenceIndex })).toBe(3);
+    expect(await count({ mapping, ownSchema: true, respond: withoutEvidenceIndex })).toBe(4);
     const bare = searchMappingOf({ entities: RELATED_ENTITIES, relationships: [{ type: 'MADE_FROM', from: 'widget', to: 'gadget', stable_id: 'linkId' }] });
-    expect(await count({ mapping: bare, respond: model })).toBe(3);
+    expect(await count({ mapping: bare, respond: model })).toBe(4);
   });
 
   it('answers no hit and an exact zero for a text no relationship carries', async () => {

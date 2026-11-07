@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { useLocation, useSearchParams } from 'react-router';
 import { MAX_SEARCH_TEXT_LENGTH, MIN_SEARCH_TEXT_LENGTH, type SourceProfile, type SourceSummary } from '@neburyx/contracts';
 import type { ApiClient, ApiResult } from '../api/client.js';
@@ -10,6 +10,7 @@ import { useSessionMask } from '../state/context.js';
 import { captionOf, SEARCH_COPY, TOO_LONG } from './copy.js';
 import { focusSearchRequested } from './search-shortcut.js';
 import { SearchResults } from './search-results.js';
+import { addressOf, NO_SELECTION, selectionOf, type Selection } from './selection.js';
 import { useOpenResult } from './use-open-result.js';
 
 const codePoints = (text: string): number => Array.from(text).length;
@@ -32,7 +33,7 @@ export interface WorkspaceProps {
 
 /** The page for one source: its heading, the search box and the results; the profile of the source is read here and nothing is searched until it has been. */
 export function SearchWorkspace({ client, source, sources, principalId, text }: WorkspaceProps) {
-  const [, setParams] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const mask = useSessionMask();
   const selector = useRef<HTMLSelectElement>(null);
   const location = useLocation();
@@ -51,6 +52,9 @@ export function SearchWorkspace({ client, source, sources, principalId, text }: 
   const profileData = profile.state.phase === 'ready' || profile.state.phase === 'loading' ? profile.state.data : undefined;
   const profileFailure = profile.state.phase === 'failed' || profile.state.phase === 'ready' ? profile.state.failure : undefined;
   const { open, busy, refusal } = useOpenResult(client, principalId);
+  const address = params.toString();
+  // one object for one address, so a search is not sent again because the page was drawn again
+  const selection = useMemo(() => (profileData === undefined ? NO_SELECTION : selectionOf(new URLSearchParams(address), profileData)), [address, profileData]);
 
   useEffect(() => {
     if (comesFromSelector) selector.current?.focus();
@@ -70,7 +74,11 @@ export function SearchWorkspace({ client, source, sources, principalId, text }: 
     if (codePoints(entered) > MAX_SEARCH_TEXT_LENGTH) return setNotice(TOO_LONG);
     setNotice(undefined);
     if (entered === text) return setRepeats((count) => count + 1);
-    setParams({ source: source.id }, { state: { q: entered } });
+    setParams(addressOf(source.id, selection), { state: { q: entered } });
+  };
+
+  const select = (chosen: Selection): void => {
+    setParams(addressOf(source.id, chosen), { state: { q: text } });
   };
 
   const changeSource = (event: ChangeEvent<HTMLSelectElement>): void => {
@@ -117,7 +125,7 @@ export function SearchWorkspace({ client, source, sources, principalId, text }: 
           </div>
         )
       ) : codePoints(text) < MIN_SEARCH_TEXT_LENGTH ? null : (
-        <SearchResults key={`${source.id}\u0000${mask}`} client={client} source={source} principalId={principalId} profile={profileData} text={text} mask={mask} busy={busy} repeats={repeats} onOpen={open} />
+        <SearchResults key={`${source.id}\u0000${mask}`} client={client} source={source} principalId={principalId} profile={profileData} text={text} mask={mask} selection={selection} onSelect={select} busy={busy} repeats={repeats} onOpen={open} />
       )}
     </section>
   );

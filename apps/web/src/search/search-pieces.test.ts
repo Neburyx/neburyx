@@ -5,10 +5,11 @@ import { countText, matchesText, secondsText } from './count-label.js';
 import { summaryOf } from './hit-summary.js';
 import { hit, profiled, TYPE } from './search-test-kit.js';
 import { searchKeyOf, searchKeyText } from './search-key.js';
+import { NO_SELECTION } from './selection.js';
 import { chooseSearchSource } from './search-source.js';
 
 describe('the key of a search', () => {
-  const identity = { sourceId: 'demo', principalId: 'p-1', text: 'AC-1', mask: false };
+  const identity = { sourceId: 'demo', principalId: 'p-1', text: 'AC-1', mask: false, selection: NO_SELECTION };
 
   it('carries the source, the person, the text and the mask', () => {
     expect(searchKeyOf(identity)).toMatchObject({ sourceId: 'demo', principalId: 'p-1', filterHash: DEFAULT_FILTER_HASH, mask: false });
@@ -19,6 +20,14 @@ describe('the key of a search', () => {
     const keys = [identity, { ...identity, mask: true }, { ...identity, text: 'AC-2' }, { ...identity, sourceId: 'other' }, { ...identity, principalId: 'p-2' }].map(searchKeyText);
     expect(new Set(keys).size).toBe(5);
     expect(searchKeyText(identity)).toBe(queryKeyText(searchKeyOf(identity)));
+  });
+
+  it('is a different key for a different selection of entity types or of match modes, and the same key for the same selection', () => {
+    const narrowed = { ...identity, selection: { entityTypes: ['kind-a'], matchModes: [] } };
+    expect(searchKeyText(narrowed)).not.toBe(searchKeyText(identity));
+    expect(searchKeyText({ ...identity, selection: { entityTypes: [], matchModes: ['exact'] } })).not.toBe(searchKeyText(identity));
+    expect(searchKeyText({ ...identity, selection: { entityTypes: ['kind-a'], matchModes: [] } })).toBe(searchKeyText(narrowed));
+    expect(searchKeyText({ ...identity, selection: { entityTypes: ['kind-a', 'kind-b'], matchModes: [] } })).not.toBe(searchKeyText({ ...identity, selection: { entityTypes: ['kind-a'], matchModes: ['related'] } }));
   });
 });
 

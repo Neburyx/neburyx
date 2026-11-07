@@ -4,6 +4,7 @@ import { hashSource } from './hash.js';
 import { checkLink } from './links.js';
 import {
   MAX_EVIDENCE_PROPERTIES,
+  MAX_FACET_PROBES,
   MAX_REFERENCE_PROPERTIES,
   MAX_SEARCH_PROPERTIES,
   type DerivedRuleModel,
@@ -243,6 +244,16 @@ function buildSource(raw: RawSource, index: number, report: Report): SourceModel
 
   const evidenceProperties = rawRelationships.reduce((total, relationship) => total + (relationship.stable_id === undefined ? 0 : new Set(relationship.evidence ?? []).size), 0);
   if (evidenceProperties > MAX_EVIDENCE_PROPERTIES) report([...base, 'relationships'], `list ${evidenceProperties} evidence properties in all on relationships with a stable_id, more than the ${MAX_EVIDENCE_PROPERTIES} a search can read`);
+
+  const searchedTypes = raw.entities.filter((entity) => (entity.search ?? []).length > 0 || (entity.reference ?? []).length > 0).length;
+  const modes = (raw.entities.some((entity) => (entity.search ?? []).length > 0) ? 1 : 0) + (raw.entities.some((entity) => (entity.reference ?? []).length > 0) ? 1 : 0) + (evidenceProperties > 0 ? 1 : 0);
+  const probes = searchedTypes + modes + (searchedTypes > 0 ? 1 : 0);
+  if (probes > MAX_FACET_PROBES) {
+    report(
+      [...base, 'entities'],
+      `have ${searchedTypes} entity types with a search or reference property, which needs ${probes} facet counts, more than the ${MAX_FACET_PROBES} one search can count; give search or reference properties to fewer entity types (an entity type with none is not counted)`,
+    );
+  }
 
   const budgets = resolveBudgets(raw.budgets);
   const defaultPage = raw.budgets?.default_page ?? Math.min(budgets.defaultPage, budgets.maxPage);

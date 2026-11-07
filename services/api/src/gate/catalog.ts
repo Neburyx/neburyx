@@ -51,7 +51,7 @@ function checkGateParameters(definition: TemplateDefinition, shape: Shape): void
 
 function checkMarkers(definition: TemplateDefinition, shape: Shape): void {
   if (hasStrayMarkerCharacter(definition.cypher)) throw new CatalogError(definition.id, 'has Cypher with an @ that is not a marker');
-  const used = markersOf(definition.cypher).filter((marker) => marker.kind !== 'searchBranches');
+  const used = markersOf(definition.cypher).filter((marker) => marker.kind !== 'searchBranches' && marker.kind !== 'facetProbes');
   for (const marker of used) {
     if (marker.kind === 'stableId' && !definition.entityParams.includes(marker.name)) throw new CatalogError(definition.id, 'has a stable id marker that no declared entity parameter backs');
   }
@@ -94,6 +94,39 @@ function checkSearchBranches(definition: TemplateDefinition, shape: Shape): void
   if (branches.allowlist !== 'search' && branches.allowlist !== 'reference' && branches.allowlist !== 'evidence') throw new CatalogError(definition.id, 'has search branches and does not say which allowlist its targets are checked against');
 }
 
+/**
+ * The facet template's own declaration: it declares its facet probes exactly when its Cypher is the one `@facetProbes` marker for the list parameter its schema has, and nothing else; each of its four branch
+ * texts holds exactly the placeholders of its target kind and a `LIMIT $limit + 1` of its own, and returns the one variable the probe counts (`n` for an entity target, `r` for an evidence target);
+ * and it names the properties it uses and the indexes it needs, so a masked request is checked and the gate can refuse a read whose index is gone.
+ */
+function checkFacetProbes(definition: TemplateDefinition, shape: Shape): void {
+  const used = markersOf(definition.cypher).filter((marker) => marker.kind === 'facetProbes');
+  const probes = definition.facetProbes;
+  if (probes === undefined) {
+    if (used.length > 0) throw new CatalogError(definition.id, 'uses the facet probe marker without declaring facet probes');
+    return;
+  }
+  if (used.length !== 1 || used[0]?.name !== probes.param || definition.cypher !== `@facetProbes(${probes.param})`) throw new CatalogError(definition.id, 'declares facet probes and its Cypher is not exactly its one facet probe marker');
+  if (definition.searchBranches !== undefined) throw new CatalogError(definition.id, 'declares facet probes and search branches together');
+  if (shape.properties.get(probes.param) !== 'array') throw new CatalogError(definition.id, 'declares facet probes for a parameter its schema does not have as a list');
+  const kinds: readonly { readonly texts: readonly string[]; readonly required: readonly string[]; readonly returns: string }[] = [
+    { texts: [probes.node.value, probes.node.text], required: ENTITY_PLACEHOLDERS, returns: 'RETURN n LIMIT' },
+    { texts: [probes.evidence.value, probes.evidence.text], required: EVIDENCE_PLACEHOLDERS, returns: 'RETURN r LIMIT' },
+  ];
+  for (const kind of kinds) {
+    for (const text of kind.texts) {
+      const placeholders = [...text.matchAll(BRANCH_MARKER)].map((match) => match[1]);
+      if (!kind.required.every((name) => placeholders.includes(name)) || !placeholders.every((name) => name !== undefined && kind.required.includes(name)) || text.replace(BRANCH_MARKER, '').includes('@')) {
+        throw new CatalogError(definition.id, `has a probe branch text that does not hold exactly the placeholders of its targets (${kind.required.map((name) => `@${name}`).join(', ')})`);
+      }
+      if (!PAGED_LIMIT.test(text)) throw new CatalogError(definition.id, 'has a probe branch text with no LIMIT $limit + 1 of its own');
+      if (!text.includes(kind.returns)) throw new CatalogError(definition.id, 'has a probe branch text that does not return the one variable the probe counts');
+    }
+  }
+  if (definition.usedProperties === undefined) throw new CatalogError(definition.id, 'has facet probes and does not name the properties it uses');
+  if (definition.indexNeeds === undefined) throw new CatalogError(definition.id, 'has facet probes and does not name the indexes it needs');
+}
+
 const ENTITY_PLACEHOLDERS: readonly string[] = ['label', 'property'];
 const EVIDENCE_PLACEHOLDERS: readonly string[] = ['type', 'fromLabel', 'toLabel', 'property'];
 
@@ -114,6 +147,7 @@ function build(definition: TemplateDefinition): Template {
   checkProfile(definition);
   checkMarkers(definition, shape);
   checkSearchBranches(definition, shape);
+  checkFacetProbes(definition, shape);
   checkGateParameters(definition, shape);
   const integerParameters = [...shape.properties].flatMap(([name, type]) => (type === 'integer' ? [name] : []));
   return { ...definition, integerParameters };

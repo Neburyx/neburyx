@@ -1,7 +1,7 @@
 import { ICON_KEYS } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
 import { parseMapping } from './load.js';
-import { MAX_EVIDENCE_PROPERTIES, MAX_REFERENCE_PROPERTIES, MAX_SEARCH_PROPERTIES } from './model.js';
+import { MAX_EVIDENCE_PROPERTIES, MAX_FACET_PROBES, MAX_REFERENCE_PROPERTIES, MAX_SEARCH_PROPERTIES } from './model.js';
 import { baseSource, expectRefused, fileOf, firstSource, issuesOf, load, type Json } from '../testing/mapping.js';
 
 const fullEntity = {
@@ -134,6 +134,23 @@ describe('entity and relationship types as written', () => {
     ];
     expect(() => load(baseSource({ entities, relationships: rows(MAX_EVIDENCE_PROPERTIES) }))).not.toThrow();
     expectRefused(baseSource({ entities, relationships: rows(MAX_EVIDENCE_PROPERTIES + 1) }), 'sources[0].relationships', 'more than the 100 a search can read');
+  });
+
+  it('refuses a source that needs more facet counts than one search can make, naming the key and what to do, and accepts one at the limit', () => {
+    const typed = (count: number) => Array.from({ length: count }, (_, index) => ({ type: `type_${index}`, label: `Type${index}`, stable_id: 'id', search: ['id'], reference: ['ref'] }));
+    const relationships = [{ type: 'LINKS', from: 'type_0', to: 'type_1', stable_id: 'linkId', evidence: ['rec'] }];
+    // one probe for each type, one each for exact, referenced and evidence, and one for the total
+    const atLimit = MAX_FACET_PROBES - 4;
+    expect(() => load(baseSource({ entities: typed(atLimit), relationships }))).not.toThrow();
+    expectRefused(baseSource({ entities: typed(atLimit + 1), relationships }), 'sources[0].entities', 'more than the 50 one search can count');
+    expectRefused(baseSource({ entities: typed(atLimit + 1), relationships }), 'sources[0].entities', 'give search or reference properties to fewer entity types');
+  });
+
+  it('counts only the entity types that have a search or a reference property, and a mode only when it has a property', () => {
+    const plain = Array.from({ length: 80 }, (_, index) => ({ type: `plain_${index}`, label: `Plain${index}`, stable_id: 'id' }));
+    const searched = Array.from({ length: MAX_FACET_PROBES - 2 }, (_, index) => ({ type: `type_${index}`, label: `Type${index}`, stable_id: 'id', search: ['id'] }));
+    expect(() => load(baseSource({ entities: [...plain, ...searched], relationships: undefined }))).not.toThrow();
+    expectRefused(baseSource({ entities: [...plain, ...searched, { type: 'one_more', label: 'OneMore', stable_id: 'id', search: ['id'] }], relationships: undefined }), 'sources[0].entities', 'more than the 50');
   });
 
   it('allows a pii property to be searchable', () => {

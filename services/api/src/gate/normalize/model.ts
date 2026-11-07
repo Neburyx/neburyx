@@ -55,6 +55,8 @@ export interface NormalizeContext {
   /** True when the rows are not the whole answer (the read found more than the page). */
   readonly hasMore: boolean;
   readonly model: NormalizeModel;
+  /** The page limit of the request, which a template that counts rows to a cap needs to check what the read gave. */
+  readonly limit?: number;
 }
 
 const unique = (values: readonly string[]): string[] => [...new Set(values)];

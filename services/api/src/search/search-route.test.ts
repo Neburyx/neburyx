@@ -80,7 +80,7 @@ describe('POST /v1/search/entities answers a search', () => {
     expect(result.warnings).toEqual([]);
     expect(Number.isInteger(result.elapsedMs) && result.elapsedMs >= 0).toBe(true);
     expect(searchCalls(executor)).toHaveLength(1);
-    expect(executor.calls.map((call) => call.templateId)).toEqual(['schema-indexes', 'entity-search']);
+    expect(executor.calls.map((call) => call.templateId)).toEqual(['schema-indexes', 'entity-search', 'search-facets']);
     expect(searchCalls(executor)[0]).toMatchObject({ accessMode: 'READ', rowLimit: SEARCH_GROUP_CAP + 1 });
     expect(events.filter((event) => event.action === 'entity.search')).toEqual([expect.objectContaining({ result: 'success', sourceId: 'demo' })]);
     await app.close();

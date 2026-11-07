@@ -68,20 +68,25 @@ export {
 } from './investigations.js';
 export type { Investigation, InvestigationListCounts, InvestigationListItem, InvestigationListResponse, InvestigationResponse, InvestigationSave, InvestigationSourceState, LayoutDocument, OpenInvestigationRequest, OpenInvestigationResponse, QueryContextDocument } from './investigations.js';
 export {
+  FACET_SCOPES,
   MAX_SEARCH_TEXT_LENGTH,
   MIN_SEARCH_TEXT_LENGTH,
   MIN_TYPEAHEAD_TEXT_LENGTH,
   SEARCH_DISABLED_REASONS,
   SEARCH_EVIDENCE_DISABLED_REASONS,
+  SEARCH_FAILURE_GROUPS,
   SEARCH_GROUPS,
   SEARCH_GROUP_CAP,
   SEARCH_GROUP_FAILURE_CODES,
+  SEARCH_MATCH_MODES,
   disabledRelationshipSchema,
   disabledTypeSchema,
   droppedSchema,
   evidenceGroupSchema,
   evidenceHitSchema,
   evidenceRuleSchema,
+  facetsSchema,
+  filtersSchema,
   groupFailureSchema,
   relatedGroupSchema,
   relatedHitSchema,
@@ -91,4 +96,4 @@ export {
   startsWithGroupSchema,
   typeaheadTextSchema,
 } from './search.js';
-export type { DisabledRelationship, DisabledType, EvidenceGroup, EvidenceHit, GroupFailure, RelatedGroup, RelatedHit, SearchGroup, SearchRequest, SearchResult, StartsWithGroup } from './search.js';
+export type { DisabledRelationship, DisabledType, EvidenceGroup, EvidenceHit, Facets, GroupFailure, RelatedGroup, RelatedHit, SearchFailureGroup, SearchFilters, SearchGroup, SearchMatchMode, SearchRequest, SearchResult, StartsWithGroup } from './search.js';

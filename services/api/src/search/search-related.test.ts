@@ -28,7 +28,7 @@ describe('POST /v1/search/entities with related records', () => {
     expect(answer.related.count).toMatchObject({ value: 2, quality: 'exact', scope: 'search:related' });
     expect(answer.related.searchable).toBe(true);
     expect(answer.related.disabledTypes).toEqual([]);
-    expect(executor.calls.map((call) => call.templateId).sort()).toEqual(['entity-related', 'entity-search', 'schema-indexes']);
+    expect(executor.calls.map((call) => call.templateId).sort()).toEqual(['entity-related', 'entity-search', 'schema-indexes', 'search-facets']);
     await app.close();
   });
 
@@ -51,7 +51,7 @@ describe('POST /v1/search/entities with related records', () => {
     const text = 'X-1';
     const { app, events, lines } = await started();
     await postSearch(app, { sourceId: 'demo', text });
-    expect(events.map((event) => `${event.action} ${event.result}`).sort()).toEqual(['entity.search success', 'entity.search_related success', 'source.schema_indexes success']);
+    expect(events.map((event) => `${event.action} ${event.result}`).sort()).toEqual(['entity.search success', 'entity.search_facets success', 'entity.search_related success', 'source.schema_indexes success']);
     expect(JSON.stringify(events)).not.toContain(text);
     expect(lines.join('\n')).not.toContain(text);
     await app.close();
@@ -86,7 +86,7 @@ describe('the reads of a search counted through the seam', () => {
     const counting = { acquireRead: () => Promise.resolve((acquired += 1, { status: 'granted', lease: { release: () => Promise.resolve() } } as const)) };
     const { app } = await started({ coordinator: counting });
     await postSearch(app, { sourceId: 'demo', text: 'X-1' });
-    expect(acquired).toBe(3);
+    expect(acquired).toBe(4);
     await app.close();
   });
 
@@ -96,7 +96,7 @@ describe('the reads of a search counted through the seam', () => {
     const plain = searchMappingOf();
     const { app } = await startSearchApp({ mapping: plain, respond: searchModelOf(stored), coordinator: counting });
     await postSearch(app, { sourceId: 'demo', text: 'W-1' });
-    expect(acquired).toBe(2);
+    expect(acquired).toBe(3);
     await app.close();
   });
 });

@@ -1,5 +1,6 @@
 import { evidenceHitsOf, evidenceRowsOf, planEvidence } from './evidence-group.js';
-import { SEARCH_GROUP_CAP, SEARCH_GROUP_FAILURE_CODES, type DisabledType, type ErrorCode, type GraphNode, type GroupFailure, type SearchGroup, type SearchResult, type StartsWithGroup } from '@neburyx/contracts';
+import { FAILED_FACETS, facetsOf, planFacets } from './facets-group.js';
+import { SEARCH_GROUP_CAP, SEARCH_GROUP_FAILURE_CODES, SEARCH_MATCH_MODES, type DisabledType, type ErrorCode, type Facets, type GraphNode, type GroupFailure, type SearchFailureGroup, type SearchGroup, type SearchMatchMode, type SearchResult, type StartsWithGroup } from '@neburyx/contracts';
 import { AppError } from '../errors.js';
 import { onlineFormOf } from '../gate/index-guard.js';
 import { matchedPropertiesOf } from './matched-properties.js';
@@ -7,6 +8,7 @@ import { DROP_REASONS, warningsOf, type Dropped } from '../gate/normalize/drops.
 import type { Normalized } from '../gate/normalize/index.js';
 import { SEARCH_EXACT_ID, searchExactTemplate, type SearchTarget } from '../gate/templates/search-exact.js';
 import { SEARCH_EVIDENCE_ID } from '../gate/templates/search-evidence.js';
+import { SEARCH_FACETS_ID } from '../gate/templates/search-facets.js';
 import { SEARCH_PREFIX_ID } from '../gate/templates/search-prefix.js';
 import { SEARCH_RELATED_ID } from '../gate/templates/search-related.js';
 import type { SourceAccess } from '../investigations/source-access.js';
@@ -22,6 +24,10 @@ export interface SearchRequest {
   readonly mask: boolean;
   /** Adds the `startsWith` group: a third read through the gate that shares the one schema read. */
   readonly typeahead?: boolean;
+  /** Narrows the exact and related groups to these entity types of the mapping (OR); absent means all. */
+  readonly entityTypes?: readonly string[];
+  /** Narrows the search to the groups of these match modes (OR); a group that is not chosen is not read; absent means all. */
+  readonly matchModes?: readonly SearchMatchMode[];
 }
 
 export interface SearchService {
@@ -121,7 +127,7 @@ interface GroupOutcome {
 
 const isGroupFailureCode = (code: ErrorCode): code is GroupFailure['code'] => SEARCH_GROUP_FAILURE_CODES.some((candidate) => candidate === code);
 
-function failureOf(group: SearchGroup, error: unknown): GroupFailure | undefined {
+function failureOf(group: SearchFailureGroup, error: unknown): GroupFailure | undefined {
   if (!(error instanceof AppError) || !isGroupFailureCode(error.code)) return undefined;
   const timeoutMs = error.code === 'QUERY_TIMEOUT' ? timeoutOf(error.details) : undefined;
   return { group, code: error.code, ...(timeoutMs === undefined ? {} : { timeoutMs }) };
@@ -183,11 +189,18 @@ export function createSearchService(deps: { readonly gate: Gate; readonly mappin
       const source = deps.mapping.sources.find((candidate) => candidate.id === request.sourceId);
       if (source === undefined) throw new AppError('NOT_FOUND');
       const startedAt = clock();
+      // the selection is names of the mapping, checked before any read and put in the order of the mapping and of the modes; absent means all
+      const typeahead = request.typeahead === true;
+      if (typeahead && (request.entityTypes !== undefined || request.matchModes !== undefined)) throw new AppError('INVALID_REQUEST');
+      if ((request.entityTypes ?? []).some((type) => !source.entities.some((entity) => entity.type === type))) throw new AppError('INVALID_REQUEST');
+      const types = source.entities.map((entity) => entity.type).filter((type) => request.entityTypes?.includes(type) === true);
+      const modes = SEARCH_MATCH_MODES.filter((mode) => request.matchModes?.includes(mode) === true);
+      const modeOn = (mode: SearchMatchMode): boolean => modes.length === 0 || modes.includes(mode);
+      const typeOn = (type: string): boolean => types.length === 0 || types.includes(type);
       const exactCandidates = candidatesOf(source, 'exact', request.mask);
       // the related group belongs to the Search results page: a type-ahead request does not read it
       const relatedCandidates = request.typeahead === true ? [] : candidatesOf(source, 'related', request.mask);
       // the schema is read once for the request, fresh, when there is a property to search; it is a system read and not a group's read
-      const typeahead = request.typeahead === true;
       const reader = exactCandidates.length + relatedCandidates.length + (typeahead ? 0 : evidenceRowsOf(source)) > 0 ? deps.indexes : undefined;
       const snapshot = await readOrFail(reader, request);
       const planSnapshot = snapshot === undefined || snapshot === 'unverified' || 'failure' in snapshot ? undefined : snapshot;
@@ -195,37 +208,85 @@ export function createSearchService(deps: { readonly gate: Gate; readonly mappin
       const relatedPlan = planOf(relatedCandidates, planSnapshot);
       // the evidence group belongs to the Search results page too: a type-ahead request does not read it
       const evidencePlan = typeahead ? { targets: [], disabled: [] } : planEvidence(source, planSnapshot);
+      // the groups read are narrowed by the selection; the facets are planned from the plans above, which the selection does not touch
+      const exactTargets = modeOn('exact') ? exactPlan.targets.filter((target) => typeOn(target.entityType)) : [];
+      const relatedTargets = modeOn('related') ? relatedPlan.targets.filter((target) => typeOn(target.entityType)) : [];
+      const evidenceTargets = modeOn('evidence') ? evidencePlan.targets : [];
       const cap = Math.min(SEARCH_GROUP_CAP, source.budgets.maxPage);
-      const run = (templateId: string, targets: readonly object[]): Promise<GatePage> =>
+      const runWith = (templateId: string, params: object): Promise<GatePage> =>
         runSearch(deps.gate, {
           traceId: request.traceId,
           principal: request.principal,
           sourceId: request.sourceId,
           templateId,
-          params: { text: request.text, targets },
+          params,
           limit: cap,
           mask: request.mask,
           ...(snapshot === undefined ? {} : { indexes: snapshot }),
         });
+      const run = (templateId: string, targets: readonly object[]): Promise<GatePage> => runWith(templateId, { text: request.text, targets });
+      const facetPlan = typeahead ? undefined : planFacets(source, exactPlan.targets, relatedPlan.targets, evidencePlan.targets);
       const none = Promise.resolve(undefined);
-      // the exact group is read first: a failure that means the same for every group (the schema read, an unusable or refused source, a bad request) stops the search before another group is read
-      const [exactOutcome] = await Promise.allSettled([run(SEARCH_EXACT_ID, exactPlan.targets)]);
+      // the first read is the exact group when it is chosen (it goes through the gate even with no target), else the first chosen group that has a target: a failure that means the same for every group
+      // (the schema read, an unusable or refused source, a bad request) stops the search before another group is read
+      const first: 'exact' | 'related' | 'evidence' | undefined = modeOn('exact') ? 'exact' : relatedTargets.length > 0 ? 'related' : evidenceTargets.length > 0 ? 'evidence' : undefined;
+      const start = (group: 'exact' | 'related' | 'evidence'): Promise<GatePage | undefined> => {
+        if (group === 'exact') return modeOn('exact') ? run(SEARCH_EXACT_ID, exactTargets) : none;
+        if (group === 'related') return relatedTargets.length === 0 ? none : run(SEARCH_RELATED_ID, relatedTargets);
+        return evidenceTargets.length === 0 ? none : run(SEARCH_EVIDENCE_ID, evidenceTargets);
+      };
+      const outcomes: Record<'exact' | 'related' | 'evidence', PromiseSettledResult<GatePage | undefined>> = { exact: { status: 'fulfilled', value: undefined }, related: { status: 'fulfilled', value: undefined }, evidence: { status: 'fulfilled', value: undefined } };
       const schemaFailed = snapshot !== undefined && snapshot !== 'unverified' && 'failure' in snapshot;
-      if (exactOutcome.status === 'rejected' && (schemaFailed || failureOf('exact', exactOutcome.reason) === undefined)) throw exactOutcome.reason;
-      // the groups read after the exact one settle together before the answer, so no read is left running when it is sent: the related and the evidence group, or for a type-ahead request the startsWith group alone, read for the exact group's targets as a value
+      if (first !== undefined) {
+        const [firstOutcome] = await Promise.allSettled([start(first)]);
+        outcomes[first] = firstOutcome;
+        if (firstOutcome.status === 'rejected' && (schemaFailed || failureOf(first, firstOutcome.reason) === undefined)) throw firstOutcome.reason;
+      }
+      // the groups read after the first settle together before the answer, so no read is left running when it is sent: the other chosen groups and the facet read, or for a type-ahead request the startsWith group alone, read for the exact group's targets
       const withStartsWith = typeahead;
-      const startsWithRead = withStartsWith && exactPlan.targets.length > 0;
-      const [relatedOutcome, evidenceOutcome, startsWithOutcome] = await Promise.allSettled([
-        relatedPlan.targets.length === 0 ? none : run(SEARCH_RELATED_ID, relatedPlan.targets),
-        evidencePlan.targets.length === 0 ? none : run(SEARCH_EVIDENCE_ID, evidencePlan.targets),
-        startsWithRead ? run(SEARCH_PREFIX_ID, exactPlan.targets.map((target) => ({ ...target, match: 'value' as const }))) : none,
+      const startsWithRead = withStartsWith && exactTargets.length > 0;
+      const rest = (['exact', 'related', 'evidence'] as const).filter((group) => group !== first);
+      const settled = await Promise.allSettled([
+        ...rest.map(start),
+        startsWithRead ? run(SEARCH_PREFIX_ID, exactTargets.map((target) => ({ ...target, match: 'value' as const }))) : none,
+        facetPlan === undefined || facetPlan.probes.length === 0 ? none : runWith(SEARCH_FACETS_ID, { text: request.text, probes: facetPlan.probes }),
       ]);
+      rest.forEach((group, index) => {
+        const outcome = settled[index];
+        if (outcome !== undefined) outcomes[group] = outcome;
+      });
+      const startsWithOutcome = settled[rest.length];
+      const facetsOutcome = settled[rest.length + 1];
+      if (startsWithOutcome === undefined || facetsOutcome === undefined) throw new AppError('INTERNAL_ERROR');
+      // a schema read that failed is the failure of every read that follows it, whichever read it reaches the answer through: the search fails with it even when no group had a first read to carry it
+      if (schemaFailed) {
+        const rejection = [...rest.map((group) => outcomes[group]), startsWithOutcome, facetsOutcome].find((outcome) => outcome.status === 'rejected');
+        if (rejection?.status === 'rejected') throw rejection.reason;
+      }
+      const { exact: exactOutcome, related: relatedOutcome, evidence: evidenceOutcome } = outcomes;
       const failures = failuresOf([
-        { group: 'exact', read: exactPlan.targets.length > 0, outcome: exactOutcome },
-        { group: 'related', read: relatedPlan.targets.length > 0, outcome: relatedOutcome },
-        { group: 'evidence', read: evidencePlan.targets.length > 0, outcome: evidenceOutcome },
+        { group: 'exact', read: exactTargets.length > 0, outcome: exactOutcome },
+        { group: 'related', read: relatedTargets.length > 0, outcome: relatedOutcome },
+        { group: 'evidence', read: evidenceTargets.length > 0, outcome: evidenceOutcome },
         ...(withStartsWith ? [{ group: 'startsWith' as const, read: startsWithRead, outcome: startsWithOutcome }] : []),
       ]);
+      // the facet read is not a result group: its failure with a code of its own is named and keeps every group, a failure that means the same for every read fails the search, and it is never counted among the groups that failed
+      const facetsRead = facetPlan !== undefined && facetPlan.probes.length > 0;
+      let facetsFailure = facetsOutcome.status === 'rejected' ? failureOf('facets', facetsOutcome.reason) : undefined;
+      if (facetsOutcome.status === 'rejected' && facetsFailure === undefined) throw facetsOutcome.reason;
+      let facets: Facets | undefined;
+      if (facetPlan !== undefined) {
+        facets = FAILED_FACETS;
+        if (facetsFailure === undefined) {
+          try {
+            facets = facetsOf(facetPlan, facetsOutcome.status === 'fulfilled' ? facetsOutcome.value : undefined, cap);
+          } catch (error) {
+            // an answer of the read that cannot be read is a failure of that read and of nothing else
+            if (!(error instanceof AppError) || error.code !== 'INTERNAL_ERROR') throw error;
+            facetsFailure = { group: 'facets', code: 'INTERNAL_ERROR' };
+          }
+        }
+      }
       const failed = new Set(failures.map((failure) => failure.group));
       const exactPage = exactOutcome.status === 'fulfilled' ? exactOutcome.value : undefined;
       const relatedPage = relatedOutcome.status === 'fulfilled' ? relatedOutcome.value : undefined;
@@ -243,26 +304,27 @@ export function createSearchService(deps: { readonly gate: Gate; readonly mappin
         sourceId: request.sourceId,
         exact,
         cap,
-        searchable: exactPlan.targets.length > 0,
+        searchable: exactTargets.length > 0,
         counts: { exact: countOf(exact.length, exactPage, EXACT_SCOPE, failed.has('exact')) },
-        disabledTypes: exactPlan.disabled,
+        disabledTypes: modeOn('exact') ? exactPlan.disabled.filter((entry) => typeOn(entry.entityType)) : [],
         related: {
-          hits: related.map((node) => ({ node, matchedProperties: matchedPropertiesOf(node, relatedPlan.targets, request.text) })),
+          hits: related.map((node) => ({ node, matchedProperties: matchedPropertiesOf(node, relatedTargets, request.text) })),
           count: countOf(related.length, relatedPage, RELATED_SCOPE, failed.has('related')),
-          searchable: relatedPlan.targets.length > 0,
-          disabledTypes: relatedPlan.disabled,
+          searchable: relatedTargets.length > 0,
+          disabledTypes: modeOn('related') ? relatedPlan.disabled.filter((entry) => typeOn(entry.entityType)) : [],
         },
         evidence: {
           hits: evidence,
           count: countOf(evidence.length, evidencePage, EVIDENCE_SCOPE, failed.has('evidence')),
-          searchable: evidencePlan.targets.length > 0,
-          disabledRelationshipTypes: evidencePlan.disabled,
+          searchable: evidenceTargets.length > 0,
+          disabledRelationshipTypes: modeOn('evidence') ? evidencePlan.disabled : [],
         },
-        failures,
+        failures: facetsFailure === undefined || !facetsRead ? failures : [...failures, facetsFailure],
         dropped,
         warnings: warningsOf(dropped),
         elapsedMs: Math.max(0, Math.round(clock() - startedAt)),
         ...(withStartsWith ? { startsWith: startsWithOf(source, startsWithItem, startsWithPage, exact, failed.has('startsWith')) } : {}),
+        ...(facets === undefined ? {} : { facets, filters: { entityTypes: types, matchModes: [...modes] } }),
       };
     },
   };

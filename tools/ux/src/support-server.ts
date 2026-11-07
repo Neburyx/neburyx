@@ -264,6 +264,9 @@ function createInvestigations(options: SupportServerOptions) {
 
 const SEARCH_TYPE = 'account';
 const MANY = /^many-(\d+)$/;
+const MIX = /^mix-(\d+)-(\d+)$/;
+const GHOST = /^ghost-(\d+)$/;
+const OTHER_TYPE = 'customer';
 const RELATED = /^rel-(\d+)$/;
 const EVIDENCE = /^ev-(\d+)$/;
 const STALLS_ONCE = 'stall';
@@ -306,7 +309,9 @@ function relatedGroup(sourceId: string, text: string): unknown {
  * The synthetic stand-in for the search: a text `many-N` has N matches (25 at most are shown, and more than 25 is a lower bound), a text `rel-N` has one exact match and N related records
  * (shown and counted the same way), `relfail` has its related read fail while the exact group answers, `exactfail` the reverse (with two related records), `reldrop` has its related type left out,
  * a text that starts with `stall` times out the first time that text is searched and answers the next time, a text that starts with `missing` matches nothing, and any other text matches one
- * entity of that ID and has no related group; a type-ahead search also answers two entities whose ID starts with that text.
+ * entity of that ID and has no related group; a type-ahead search also answers two entities whose ID starts with that text. For the Filters: every answer that is not a type-ahead answer counts the match
+ * set (an entry for each of an account and a customer, the three match modes and the total, from the groups of the text), a text `mix-A-B` has A account and B customer exact matches, a text `ghost-N` counts N
+ * matches and shows none, a text that starts with `facfail` has its facet read fail while one exact match answers, and the selection (`entityTypes`, `matchModes`) narrows the rows and hides the groups.
  */
 function createSearch(options: SupportServerOptions) {
   const stalled = new Set<string>();
@@ -327,27 +332,66 @@ function createSearch(options: SupportServerOptions) {
       const ids = matches === null ? [text] : Array.from({ length: shown }, (_, index) => `${text}-${String(index + 1).padStart(2, '0')}`);
       const withRelated = parsed.data.typeahead !== true;
       const exactFailed = withRelated && text.startsWith('exactfail');
-      const nodes = exactFailed ? [] : ids.slice(0, found === 0 ? 0 : shown).map((id) => node(sourceId, SEARCH_TYPE, id));
+      const mixed = MIX.exec(text);
+      const ghost = GHOST.exec(text);
+      const accounts = mixed === null ? 0 : Number(mixed[1]);
+      const customers = mixed === null ? 0 : Number(mixed[2]);
+      const none: readonly string[] = [];
+      const selected = parsed.data.typeahead === true ? { entityTypes: none, matchModes: none } : { entityTypes: parsed.data.entityTypes ?? none, matchModes: parsed.data.matchModes ?? none };
+      const knownTypes = [SEARCH_TYPE, OTHER_TYPE];
+      if (selected.entityTypes.some((type) => !knownTypes.includes(type))) return json(response, 400, INVALID);
+      const typeOn = (type: string): boolean => selected.entityTypes.length === 0 || selected.entityTypes.includes(type);
+      const modeOn = (mode: string): boolean => selected.matchModes.length === 0 || selected.matchModes.includes(mode);
+      const exactOf = (type: string, count: number, prefix: string) => Array.from({ length: Math.min(count, SEARCH_GROUP_CAP) }, (_, index) => ({ type, node: node(sourceId, type, `${prefix}-${String(index + 1).padStart(2, '0')}`) }));
+      const mixedNodes = [...exactOf(SEARCH_TYPE, accounts, `${text}-a`), ...exactOf(OTHER_TYPE, customers, `${text}-c`)].slice(0, SEARCH_GROUP_CAP);
+      const plain = ghost !== null ? [] : mixed !== null ? mixedNodes : exactFailed ? [] : ids.slice(0, found === 0 ? 0 : shown).map((id) => ({ type: SEARCH_TYPE, node: node(sourceId, SEARCH_TYPE, id) }));
+      const nodes = !modeOn('exact') ? [] : plain.filter((entry) => typeOn(entry.type)).map((entry) => entry.node);
       const startsWith = parsed.data.typeahead === true && matches === null && found > 0 ? STARTS_WITH_SUFFIXES.map((suffix) => node(sourceId, SEARCH_TYPE, `${text}${suffix}`)) : [];
       const related = !withRelated
         ? { hits: [], count: { value: 0, quality: 'exact', scope: 'search:related' }, searchable: false, disabledTypes: [] }
         : exactFailed
         ? { hits: ['x1', 'x2'].map((id) => ({ node: node(sourceId, SEARCH_TYPE, `${text}-${id}`), matchedProperties: ['batchRef'] })), count: { value: 2, quality: 'exact', scope: 'search:related' }, searchable: true, disabledTypes: [] }
         : relatedGroup(sourceId, text);
+      const relatedShown = !modeOn('related') ? { ...NO_RELATED } : typeOn(SEARCH_TYPE) ? related : { hits: [], count: { value: 0, quality: 'exact', scope: 'search:related' }, searchable: true, disabledTypes: [] };
       const failures = !withRelated ? [] : exactFailed ? [{ group: 'exact', code: 'QUERY_TIMEOUT', timeoutMs: 5000 }] : text.startsWith('relfail') ? [{ group: 'related', code: 'QUERY_TIMEOUT', timeoutMs: 5000 }] : [];
+      const exactCount = exactFailed ? { quality: 'unknown', scope: 'search:exact' } : { value: nodes.length, quality: (mixed !== null ? accounts + customers : found) > SEARCH_GROUP_CAP && modeOn('exact') ? 'lowerBound' : 'exact', scope: 'search:exact' };
+      const relatedFound = RELATED.exec(text);
+      const evidenceFound = EVIDENCE.exec(text);
+      const counted = (found: number, scope: string) => ({ value: Math.min(found, SEARCH_GROUP_CAP), quality: found > SEARCH_GROUP_CAP ? 'lowerBound' : 'exact', scope });
+      const exactAll = ghost !== null ? Number(ghost[1]) : mixed !== null ? accounts + customers : exactFailed ? 0 : found;
+      const accountsAll = ghost !== null ? Number(ghost[1]) : mixed !== null ? accounts : exactFailed ? 0 : found;
+      const relatedAll = relatedFound === null ? 0 : Number(relatedFound[1]);
+      const evidenceAll = evidenceFound === null ? 0 : Number(evidenceFound[1]);
+      const facets = text.startsWith('facfail')
+        ? { searchable: true, total: { quality: 'unknown', scope: 'search:facet:total' }, entityType: [], matchMode: [] }
+        : {
+            searchable: true,
+            total: counted(exactAll + relatedAll, 'search:facet:total'),
+            entityType: [
+              { entityType: SEARCH_TYPE, count: counted(accountsAll + relatedAll, 'search:facet:entityType') },
+              { entityType: OTHER_TYPE, count: counted(customers, 'search:facet:entityType') },
+            ],
+            matchMode: [
+              { mode: 'exact', count: counted(exactAll, 'search:facet:matchMode') },
+              { mode: 'related', count: counted(relatedAll, 'search:facet:matchMode') },
+              { mode: 'evidence', count: counted(evidenceAll, 'search:facet:matchMode') },
+            ],
+          };
+      const shownEvidence = !modeOn('evidence') ? NO_EVIDENCE : withRelated ? evidenceGroup(sourceId, text) : NO_EVIDENCE;
       const answer = searchResultSchema.parse({
         sourceId,
         exact: nodes,
         cap: SEARCH_GROUP_CAP,
-        searchable: true,
-        counts: { exact: exactFailed ? { quality: 'unknown', scope: 'search:exact' } : { value: nodes.length, quality: found > SEARCH_GROUP_CAP ? 'lowerBound' : 'exact', scope: 'search:exact' } },
+        searchable: modeOn('exact'),
+        counts: { exact: modeOn('exact') ? exactCount : { value: 0, quality: 'exact', scope: 'search:exact' } },
         disabledTypes: [],
-        related,
-        evidence: withRelated ? evidenceGroup(sourceId, text) : NO_EVIDENCE,
-        failures: withRelated && text.startsWith('evfail') ? [{ group: 'evidence', code: 'QUERY_TIMEOUT', timeoutMs: 5000 }, ...failures] : failures,
+        related: relatedShown,
+        evidence: shownEvidence,
+        failures: [...(withRelated && text.startsWith('evfail') ? [{ group: 'evidence', code: 'QUERY_TIMEOUT', timeoutMs: 5000 }] : []), ...failures, ...(text.startsWith('facfail') && parsed.data.typeahead !== true ? [{ group: 'facets', code: 'QUERY_TIMEOUT', timeoutMs: 5000 }] : [])],
         dropped: { 'not-mapped': 0, 'ambiguous-type': 0, 'no-stable-id': 0 },
         warnings: [],
         elapsedMs: 180,
+        ...(parsed.data.typeahead === true ? {} : { facets, filters: { entityTypes: knownTypes.filter((type) => selected.entityTypes.includes(type)), matchModes: ['exact', 'related', 'evidence'].filter((mode) => selected.matchModes.includes(mode)) } }),
         ...(parsed.data.typeahead === true ? { startsWith: { nodes: startsWith, count: { value: startsWith.length, quality: 'exact', scope: 'search:startsWith' }, dropped: { 'not-mapped': 0, 'ambiguous-type': 0, 'no-stable-id': 0 }, warnings: [] } } : {}),
       });
       json(response, 200, answer);

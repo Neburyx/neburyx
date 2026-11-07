@@ -6,6 +6,8 @@ export const MAX_SEARCH_PROPERTIES = 100;
 /** The most properties a source may list under `reference` in all its entity types: each is a branch of the one related-records read. */
 export const MAX_REFERENCE_PROPERTIES = 100;
 export const MAX_EVIDENCE_PROPERTIES = 100;
+/** The most probes one facet read holds: one for each entity type that has a target, one for each match mode and one for the total. */
+export const MAX_FACET_PROBES = 50;
 
 export type LinkKind = 'entity' | 'evidence';
 

@@ -12,7 +12,7 @@ import type { SourceUsability } from '../source-test/usability.js';
 import { memoryAppStore } from './app-store.js';
 import { entityRows, plainNode } from './entity-fixtures.js';
 import { TestExecutor } from './gate.js';
-import { withOnlineIndexes } from './search-fixtures.js';
+import { facetRowOf, withOnlineIndexes } from './search-fixtures.js';
 import { baseSource, fileOf } from './mapping.js';
 import { testSourceGate } from './source-gate.js';
 import { makeWebRoot } from './web-root.js';
@@ -40,7 +40,7 @@ export const widgets = (count: number) => Array.from({ length: count }, (_, inde
 
 /** An executor that answers every read with the first rows that fit the row limit. */
 export function answering(rows: readonly Record<string, unknown>[]): (call: ExecuteCall) => Promise<ExecuteOutcome> {
-  return (call) => Promise.resolve(entityRows(...rows.slice(0, call.rowLimit)));
+  return (call) => Promise.resolve(call.templateId === 'search-facets' ? facetRowOf(call, rows.length) : entityRows(...rows.slice(0, call.rowLimit)));
 }
 
 export interface SearchAppOptions {
@@ -86,4 +86,5 @@ export const postSearch = (app: SearchApp['app'], payload: unknown) =>
 
 export const searchCalls = (executor: TestExecutor) => executor.calls.filter((call) => call.templateId === 'entity-search');
 export const relatedCalls = (executor: TestExecutor) => executor.calls.filter((call) => call.templateId === 'entity-related');
+export const facetCalls = (executor: TestExecutor) => executor.calls.filter((call) => call.templateId === 'search-facets');
 export const evidenceCalls = (executor: TestExecutor) => executor.calls.filter((call) => call.templateId === 'relationship-evidence');

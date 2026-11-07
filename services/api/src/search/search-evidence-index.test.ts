@@ -95,7 +95,8 @@ describe('a mapping whose only searchable group is the evidence group', () => {
     expect(searchCalls(executor)).toHaveLength(0);
     expect(executor.calls.filter((call) => call.templateId === 'schema-indexes')).toHaveLength(1);
     expect(evidenceCalls(executor)).toHaveLength(1);
-    expect(events.map((event) => `${event.action} ${event.result}`).sort()).toEqual(['entity.search success', 'entity.search_evidence success', 'source.schema_indexes success']);
+    expect(answer.facets).toEqual({ searchable: true, total: { value: 0, quality: 'exact', scope: 'search:facet:total' }, entityType: [], matchMode: [{ mode: 'evidence', count: { value: expect.any(Number), quality: 'exact', scope: 'search:facet:matchMode' } }] });
+    expect(events.map((event) => `${event.action} ${event.result}`).sort()).toEqual(['entity.search success', 'entity.search_evidence success', 'entity.search_facets success', 'source.schema_indexes success']);
     await app.close();
   });
 });

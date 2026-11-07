@@ -47,7 +47,7 @@ describe('buildOpenApiDocument', () => {
       additionalProperties: false,
       properties: {
         exact: { type: 'array' },
-        failures: { type: 'array', items: { properties: { group: { enum: ['exact', 'related', 'evidence', 'startsWith'] } } } },
+        failures: { type: 'array', items: { properties: { group: { enum: ['exact', 'related', 'evidence', 'startsWith', 'facets'] } } } },
         evidence: { type: 'object', additionalProperties: false, properties: { hits: { type: 'array' }, searchable: { type: 'boolean' }, disabledRelationshipTypes: { type: 'array' } } },
         related: { type: 'object', additionalProperties: false, properties: { hits: { type: 'array' }, searchable: { type: 'boolean' }, disabledTypes: { type: 'array' } } },
         startsWith: {
@@ -64,6 +64,18 @@ describe('buildOpenApiDocument', () => {
             },
           },
         },
+      },
+    });
+  });
+
+  it('describes the facets of an answer, with the scope of each count, and the selection it was made for', () => {
+    const document = buildOpenApiDocument();
+    const schema = JSON.stringify(document.components.schemas.SearchResult);
+    for (const scope of ['search:facet:entityType', 'search:facet:matchMode', 'search:facet:total']) expect(schema).toContain(scope);
+    expect(document.components.schemas.SearchResult).toMatchObject({
+      properties: {
+        facets: { anyOf: [{ properties: { searchable: { const: false } } }, { required: ['searchable', 'total', 'entityType', 'matchMode'], properties: { searchable: { const: true } } }] },
+        filters: { type: 'object', additionalProperties: false, required: ['entityTypes', 'matchModes'] },
       },
     });
   });

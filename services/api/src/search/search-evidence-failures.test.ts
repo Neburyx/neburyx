@@ -4,6 +4,7 @@ import { AppError } from '../errors.js';
 import { createTemplateCatalog } from '../gate/catalog.js';
 import type { ExecuteCall, ExecuteOutcome } from '../gate/executor.js';
 import { schemaIndexesTemplate } from '../gate/templates/schema-indexes.js';
+import { searchFacetsTemplate } from '../gate/templates/search-facets.js';
 import { searchEvidenceTemplate } from '../gate/templates/search-evidence.js';
 import { searchExactTemplate } from '../gate/templates/search-exact.js';
 import { searchRelatedTemplate } from '../gate/templates/search-related.js';
@@ -51,7 +52,7 @@ describe('an evidence read that fails while the other groups answer', () => {
     expect(answer.evidence).toMatchObject({ hits: [], searchable: true, count: { quality: 'unknown', scope: 'search:evidence' } });
     expect(answer.evidence.count).not.toHaveProperty('value');
     expect(answer.failures).toEqual([{ group: 'evidence', code: 'QUERY_TIMEOUT', timeoutMs: 5000 }]);
-    expect(searchEvents(events)).toEqual(['entity.search success', 'entity.search_evidence failed', 'entity.search_related success']);
+    expect(searchEvents(events)).toEqual(['entity.search success', 'entity.search_evidence failed', 'entity.search_facets success', 'entity.search_related success']);
     expect(JSON.stringify([answer.failures, events])).not.toContain(TEXT);
     expect(lines.join('\n')).not.toContain(TEXT);
   });
@@ -63,7 +64,7 @@ describe('an evidence read that fails while the other groups answer', () => {
 
   it('answers a rate limit raised inside the evidence run as a failure of that group only, audited as failed', async () => {
     const limited = { ...searchEvidenceTemplate, normalize: (): never => { throw new AppError('RATE_LIMITED'); } };
-    const catalog = createTemplateCatalog({ templates: [schemaIndexesTemplate, searchExactTemplate, searchRelatedTemplate, limited] });
+    const catalog = createTemplateCatalog({ templates: [schemaIndexesTemplate, searchExactTemplate, searchRelatedTemplate, searchFacetsTemplate, limited] });
     const { response, events } = await searched({ catalog });
     expect(answerOf(response.json()).failures).toEqual([{ group: 'evidence', code: 'RATE_LIMITED' }]);
     expect(events.filter((event) => event.action === 'entity.search_evidence')).toEqual([expect.objectContaining({ result: 'failed' })]);
@@ -113,7 +114,7 @@ describe('groups that fail together', () => {
     expect(answer.counts.exact).toEqual({ quality: 'unknown', scope: 'search:exact' });
     expect(answer.evidence.count).toEqual({ quality: 'unknown', scope: 'search:evidence' });
     expect(answer.related.count).toEqual({ value: 1, quality: 'exact', scope: 'search:related' });
-    expect(searchEvents(events)).toEqual(['entity.search failed', 'entity.search_evidence failed', 'entity.search_related success']);
+    expect(searchEvents(events)).toEqual(['entity.search failed', 'entity.search_evidence failed', 'entity.search_facets success', 'entity.search_related success']);
   });
 
   it('answers with the error of the exact group when every group that was read failed with a code of its own', async () => {
@@ -196,8 +197,8 @@ describe('the reads after the exact read settle before the answer', () => {
     expect(answered).toBe(true);
     expect(answer.failures).toEqual([{ group: 'related', code: 'QUERY_TIMEOUT', timeoutMs: 5000 }]);
     expect(answer.evidence.hits.map((hit) => hit.supports.stableId)).toEqual(['L-1']);
-    expect(parts.executor.calls.filter((call) => call.templateId !== 'schema-indexes')).toHaveLength(3);
-    expect(searchEvents(recorded)).toEqual(['entity.search success', 'entity.search_evidence success', 'entity.search_related failed']);
+    expect(parts.executor.calls.filter((call) => call.templateId !== 'schema-indexes')).toHaveLength(4);
+    expect(searchEvents(recorded)).toEqual(['entity.search success', 'entity.search_evidence success', 'entity.search_facets success', 'entity.search_related failed']);
     await parts.app.close();
   });
 });

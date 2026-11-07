@@ -202,7 +202,14 @@ describe('the API client, searching a source', () => {
     dropped: { 'not-mapped': 0, 'ambiguous-type': 0, 'no-stable-id': 0 },
     warnings: [],
     elapsedMs: 12,
+    facets: { searchable: false },
+    filters: { entityTypes: [], matchModes: [] },
   });
+
+  const typeaheadAnswer = (...args: Parameters<typeof answer>) => {
+    const { facets: _facets, filters: _filters, ...rest } = answer(...args);
+    return rest;
+  };
 
   it('posts the request as JSON to /v1/search/entities and returns the parsed answer', async () => {
     const seen: { input: string; init?: { method?: string; body?: string; headers?: Readonly<Record<string, string>> } }[] = [];
@@ -228,11 +235,11 @@ describe('the API client, searching a source', () => {
     const seen: string[] = [];
     const client = createApiClient(async (_input, init) => {
       seen.push(init?.body ?? '');
-      return new Response(JSON.stringify({ ...answer('demo', []), startsWith: group([node('demo')]) }));
+      return new Response(JSON.stringify({ ...typeaheadAnswer('demo', []), startsWith: group([node('demo')]) }));
     });
     expect(await client.searchEntities({ sourceId: 'demo', text: 'AC', typeahead: true })).toMatchObject({ ok: true, value: { startsWith: { nodes: [{ ref: { sourceId: 'demo' } }] } } });
     expect(JSON.parse(seen[0] ?? '{}')).toEqual({ sourceId: 'demo', text: 'AC', typeahead: true });
-    const foreign = respondWith({ ...answer('demo', [node('demo')]), startsWith: group([node('other')]) });
+    const foreign = respondWith({ ...typeaheadAnswer('demo', [node('demo')]), startsWith: group([node('other')]) });
     expect(await createApiClient(foreign).searchEntities({ sourceId: 'demo', text: 'AC', typeahead: true })).toEqual({ ok: false, failure: { code: 'SCHEMA_MISMATCH' } });
   });
 

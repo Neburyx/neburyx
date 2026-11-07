@@ -26,6 +26,12 @@ export function normalizeSearch(rows: readonly Row[], _plan?: Plan, context?: No
   return [{ ...normalizeRows(context, rows) }];
 }
 
+/** The branch texts of a target of an entity type: the form a RANGE index or a constraint serves, and the form a TEXT index serves. */
+export const NODE_BRANCH = {
+  value: 'MATCH (n:@label) WHERE n.@property IN [$text, $textInteger] RETURN n LIMIT $limit + 1',
+  text: 'MATCH (n:@label) WHERE n.@property = $text RETURN n LIMIT $limit + 1',
+} as const;
+
 export interface SearchTemplateOptions {
   readonly id: string;
   readonly auditAction: string;
@@ -48,8 +54,7 @@ export function searchTemplate(options: SearchTemplateOptions): TemplateDefiniti
     searchBranches: {
       param: 'targets',
       allowlist: options.properties,
-      value: 'MATCH (n:@label) WHERE n.@property IN [$text, $textInteger] RETURN n LIMIT $limit + 1',
-      text: 'MATCH (n:@label) WHERE n.@property = $text RETURN n LIMIT $limit + 1',
+      ...NODE_BRANCH,
     },
     paramsSchema: z.strictObject({ text: searchTextSchema, targets: targetsSchema }).transform((params) => ({ ...params, textInteger: integerCandidateOf(params.text) })),
     scope: 'user',

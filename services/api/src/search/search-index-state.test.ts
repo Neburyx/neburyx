@@ -20,8 +20,8 @@ describe('the indexes of a search are read at the start of each request', () => 
     const { app, executor, events } = await started(() => schemaAnswer(ALL_ONLINE));
     const response = await postSearch(app, body);
     expect(response.statusCode).toBe(200);
-    expect(ids(executor.calls)).toEqual(['schema-indexes', 'entity-search']);
-    expect(events.map((event) => `${event.action} ${event.result}`)).toEqual(['source.schema_indexes success', 'entity.search success']);
+    expect(ids(executor.calls)).toEqual(['schema-indexes', 'entity-search', 'search-facets']);
+    expect(events.map((event) => `${event.action} ${event.result}`)).toEqual(['source.schema_indexes success', 'entity.search success', 'entity.search_facets success']);
     await app.close();
   });
 
@@ -31,7 +31,7 @@ describe('the indexes of a search are read at the start of each request', () => 
     expect(searchResultSchema.parse((await postSearch(app, body)).json()).disabledTypes).toEqual([]);
     const second = searchResultSchema.parse((await postSearch(app, body)).json());
     expect(second.disabledTypes.map((disabled) => disabled.entityType).sort()).toEqual(['gadget', 'widget']);
-    expect(ids(executor.calls)).toEqual(['schema-indexes', 'entity-search', 'schema-indexes']);
+    expect(ids(executor.calls)).toEqual(['schema-indexes', 'entity-search', 'search-facets', 'schema-indexes']);
     await app.close();
   });
 });
@@ -86,7 +86,7 @@ describe('where the guard cannot say', () => {
     const result = searchResultSchema.parse((await postSearch(app, body)).json());
     expect(result.disabledTypes).toEqual([]);
     expect(result.searchable).toBe(true);
-    expect(ids(executor.calls)).toEqual(['schema-indexes', 'entity-search']);
+    expect(ids(executor.calls)).toEqual(['schema-indexes', 'entity-search', 'search-facets']);
     await app.close();
   });
 
@@ -138,7 +138,7 @@ describe('what the guard leaves to the other rules', () => {
     const { app, executor } = await startSearchApp({ ownSchema: true, respond: withSchema(() => schemaAnswer(ALL_ONLINE), () => Promise.resolve({ status: 'timeout' })) });
     const response = await postSearch(app, body);
     expect(response.statusCode).toBe(504);
-    expect(ids(executor.calls)).toEqual(['schema-indexes', 'entity-search']);
+    expect(ids(executor.calls)).toEqual(['schema-indexes', 'entity-search', 'search-facets']);
     await app.close();
   });
 });

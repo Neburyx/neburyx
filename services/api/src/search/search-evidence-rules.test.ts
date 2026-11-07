@@ -47,6 +47,6 @@ describe('the configured rules of an evidence hit', () => {
   it('builds the rules from the mapping alone, with one evidence read and no read made for them', async () => {
     const { executor } = await answer();
     expect(evidenceCalls(executor)).toHaveLength(1);
-    expect(executor.calls.map((call) => call.templateId).sort()).toEqual(['entity-related', 'entity-search', 'relationship-evidence', 'schema-indexes']);
+    expect(executor.calls.map((call) => call.templateId).sort()).toEqual(['entity-related', 'entity-search', 'relationship-evidence', 'schema-indexes', 'search-facets']);
   });
 });

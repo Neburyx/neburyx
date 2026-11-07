@@ -50,7 +50,7 @@ describe('a request that does not ask for type-ahead', () => {
     const response = await postSearch(app, { sourceId: 'demo', text: 'W', ...flag });
     expect(response.statusCode).toBe(200);
     expect(response.json()).not.toHaveProperty('startsWith');
-    expect(ids(executor.calls)).toEqual(['schema-indexes', 'entity-search']);
+    expect(ids(executor.calls)).toEqual(['schema-indexes', 'entity-search', 'search-facets']);
     await app.close();
   });
 });

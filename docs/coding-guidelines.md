@@ -29,9 +29,9 @@ These shape code directly. Breaking one is a bug, whatever the tests say.
 - **No query text from input.** Queries come from fixed, parameterised templates. Values are always
   parameters. The only interpolation allowed is a label, a relationship-type name or a property name
   taken from the validated mapping allowlist and backtick-quoted, done in one helper. Only a search
-  template (the exact search, the related lookup, the evidence lookup and the type-ahead lookup) may repeat one fixed branch for each entry of a list of allowlisted targets (a label
+  template (the exact search, the related lookup, the evidence lookup, the type-ahead lookup and the facet read) may repeat one fixed branch for each entry of a list of allowlisted targets (a label
   and a property of the `search` or the `reference` list, or, for the evidence lookup, a relationship type, the entity types of its ends and an evidence property of one mapping row); the branch text is fixed, the gate writes in only the quoted names, and the
-  catalog checks the declaration. A name from a request is checked against the allowlist, never inserted as is. Never
+  catalog checks the declaration. The facet read is the one template whose statement is a fixed chain of those branches: for each probe (a list of targets of one kind) one `CALL` subquery that counts the distinct rows of its branches, cut at the page limit plus one, and one `RETURN` of every count as a column named by its position, which the gate writes and never the request; it returns one row of integers, and a count that is not a whole number between zero and the limit plus one is refused. A name from a request is checked against the allowlist, never inserted as is. Never
   build Cypher or SQL by joining strings in any other way.
 - **A read that needs an index finds out first.** A template names the indexes it needs; the gate reads
   the source's indexes at the start of the request and refuses, or leaves out, what has no online

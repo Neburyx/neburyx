@@ -19,6 +19,8 @@ export function normalizedOf(page: GatePage): Normalized {
 export interface StoredNode {
   readonly elementId: string;
   readonly label: string;
+  /** Further labels the node carries, which a branch of one of them matches too. */
+  readonly alsoLabels?: readonly string[];
   readonly properties: Readonly<Record<string, unknown>>;
 }
 
@@ -43,31 +45,70 @@ const BRANCH = /MATCH \(n:`([^`]+)`\) WHERE n\.`([^`]+)` (?:IN \[\$text, \$textI
  */
 export function searchModelOf(stored: readonly StoredNode[], observeBranch: (rows: number) => void = () => undefined, relationships: readonly StoredRelationship[] = []): (call: ExecuteCall) => Promise<ExecuteOutcome> {
   return (call) => {
+    if (call.templateId === 'search-facets') return Promise.resolve(facetAnswer(call, stored, relationships, observeBranch));
     const evidenceInner = EVIDENCE_STATEMENT.exec(call.cypher)?.[1];
     if (evidenceInner !== undefined) return Promise.resolve(evidenceAnswer(evidenceInner, call, relationships, observeBranch));
     const inner = /^CALL \{ (.*) \} WITH n LIMIT \$limit \+ 1 RETURN n$/.exec(call.cypher)?.[1];
     if (inner === undefined) throw new Error('the statement is not the search statement');
-    const seen = new Set<string>();
-    const nodes: StoredNode[] = [];
-    for (const branch of inner.split(' UNION ')) {
-      const match = BRANCH.exec(branch);
-      if (match === null) throw new Error('a branch is not the search branch');
-      const [, label, property] = match;
-      const text = call.parameters['text'];
-      const integer = call.parameters['textInteger'];
-      const wanted = branch.includes('IN [$text, $textInteger]') ? [text, isTaggedInteger(integer) ? integer.value : undefined] : [text];
-      const matches = (value: unknown): boolean => (branch.includes('STARTS WITH') ? typeof value === 'string' && typeof text === 'string' && value.startsWith(text) && value !== text : wanted.includes(value));
-      // a branch reads no more than its own limit, which is the row limit of the read
-      const read = stored.filter((node) => node.label === label && typeof node.properties[property ?? ''] === 'string' && matches(node.properties[property ?? ''])).slice(0, call.rowLimit);
-      observeBranch(read.length);
-      for (const node of read) {
-        if (seen.has(node.elementId)) continue;
-        seen.add(node.elementId);
-        nodes.push(node);
-      }
-    }
-    return Promise.resolve(entityRows(...nodes.slice(0, call.rowLimit).map((node) => plainNode([node.label], node.properties, node.elementId))));
+    return Promise.resolve(entityRows(...nodesOf(inner, call, stored, observeBranch).slice(0, call.rowLimit).map((node) => plainNode([node.label, ...(node.alsoLabels ?? [])], node.properties, node.elementId))));
   };
+}
+
+/** The nodes of the branches of a search statement: each branch matches the label and property, reads no more than its own limit, and UNION keeps one row for a node. */
+function nodesOf(inner: string, call: ExecuteCall, stored: readonly StoredNode[], observeBranch: (rows: number) => void): StoredNode[] {
+  const seen = new Set<string>();
+  const nodes: StoredNode[] = [];
+  for (const branch of inner.split(' UNION ')) {
+    const match = BRANCH.exec(branch);
+    if (match === null) throw new Error('a branch is not the search branch');
+    const [, label, property] = match;
+    const text = call.parameters['text'];
+    const integer = call.parameters['textInteger'];
+    const wanted = branch.includes('IN [$text, $textInteger]') ? [text, isTaggedInteger(integer) ? integer.value : undefined] : [text];
+    const matches = (value: unknown): boolean => (branch.includes('STARTS WITH') ? typeof value === 'string' && typeof text === 'string' && value.startsWith(text) && value !== text : wanted.includes(value));
+    // a branch reads no more than its own limit, which is the row limit of the read
+    const read = stored.filter((node) => (node.label === label || node.alsoLabels?.includes(label ?? '') === true) && typeof node.properties[property ?? ''] === 'string' && matches(node.properties[property ?? ''])).slice(0, call.rowLimit);
+    observeBranch(read.length);
+    for (const node of read) {
+      if (seen.has(node.elementId)) continue;
+      seen.add(node.elementId);
+      nodes.push(node);
+    }
+  }
+  return nodes;
+}
+
+/** The one row a facet read answers when a test gives every probe the same count (at most the limit plus one), for a test whose subject is not the counts. */
+export function facetRowOf(call: ExecuteCall, count: number): ExecuteOutcome {
+  const columns = /\nRETURN (c\d+(?:, c\d+)*)$/.exec(call.cypher)?.[1];
+  if (columns === undefined) throw new Error('the statement is not the facet statement');
+  return { status: 'rows', rows: [Object.fromEntries(columns.split(', ').map((name) => [name, Math.min(count, call.rowLimit)]))] };
+}
+
+const PROBE = /^CALL \{ CALL \{ (.*) \} WITH (n|r) LIMIT \$limit \+ 1 RETURN count\(\*\) AS c(\d+) \}$/;
+const EVIDENCE_PROBE_BRANCH_VALUE = /MATCH \(a:`([^`]+)`\)-\[r:`([^`]+)`\]->\(b:`([^`]+)`\) USING RANGE INDEX SEEK r:`\2`\(`([^`]+)`\) WHERE r\.`\4` IN \[\$text, \$textInteger\] RETURN r LIMIT \$limit \+ 1/;
+
+/** The model of the facet statement: one row of counts, one for each probe, each the number of distinct nodes (or relationships) its branches find, cut at the limit plus one. */
+function facetAnswer(call: ExecuteCall, stored: readonly StoredNode[], relationships: readonly StoredRelationship[], observeBranch: (rows: number) => void): ExecuteOutcome {
+  const lines = call.cypher.split('\n');
+  const last = lines.pop();
+  const row: Record<string, number> = {};
+  for (const line of lines) {
+    const match = PROBE.exec(line);
+    if (match === null) throw new Error('a line is not a probe of the facet statement');
+    const [, inner, variable, index] = match;
+    if (inner === undefined || index === undefined) throw new Error('a probe has no branches');
+    const found = variable === 'n' ? nodesOf(inner, call, stored, observeBranch).length : evidenceProbeOf(inner, call, relationships, observeBranch).length;
+    row[`c${index}`] = Math.min(found, call.rowLimit);
+  }
+  if (last !== `RETURN ${Object.keys(row).join(', ')}`) throw new Error('the facet statement does not end with the one RETURN of its counts');
+  return { status: 'rows', rows: [row] };
+}
+
+function evidenceProbeOf(inner: string, call: ExecuteCall, relationships: readonly StoredRelationship[], observeBranch: (rows: number) => void): StoredRelationship[] {
+  const answer = evidenceAnswer(inner.replaceAll(' RETURN r LIMIT', ' RETURN r, a, b LIMIT'), call, relationships, observeBranch);
+  if (answer.status !== 'rows') throw new Error('the model answered no rows');
+  return relationships.filter((relationship) => answer.rows.some((row) => typeof row['r'] === 'object' && row['r'] !== null && 'elementId' in row['r'] && row['r'].elementId === relationship.elementId));
 }
 
 /** The model of the evidence statement: each branch matches a relationship of the type between the labels of its two ends on the property, UNION keeps one row for a relationship, the limit cuts it. */

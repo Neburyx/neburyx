@@ -1,4 +1,4 @@
-import type { EvidenceHit, GraphNode, OpenInvestigationRequest, OpenInvestigationResponse, SearchRequest, SearchResult, SourceProfile } from '@neburyx/contracts';
+import { FACET_SCOPES, type EvidenceHit, type Facets, type GraphNode, type OpenInvestigationRequest, type OpenInvestigationResponse, type SearchMatchMode, type SearchRequest, type SearchResult, type SourceProfile } from '@neburyx/contracts';
 import type { ApiClient, ApiResult } from '../api/client.js';
 import { testProfile } from '../dev/test-profile.js';
 import { nodeOf } from '../investigations/test-data.js';
@@ -7,8 +7,8 @@ import { clientWith, me, source } from '../test-utils.js';
 export const TYPE = 'kind-a';
 
 /** The entry of a search in the history: the address holds the source, and the typed text is in the state. */
-export function searchAt(source: string, text?: string): { readonly pathname: string; readonly search: string; readonly state?: { readonly q: string } } {
-  return { pathname: '/search', search: `?source=${source}`, ...(text === undefined ? {} : { state: { q: text } }) };
+export function searchAt(source: string, text?: string, selection = ''): { readonly pathname: string; readonly search: string; readonly state?: { readonly q: string } } {
+  return { pathname: '/search', search: `?source=${source}${selection}`, ...(text === undefined ? {} : { state: { q: text } }) };
 }
 
 export function hit(sourceId: string, stableId: string, properties: Record<string, unknown> = {}, entityType = TYPE): GraphNode {
@@ -30,6 +30,7 @@ export function answerOf(sourceId: string, exact: readonly GraphNode[], override
     dropped: { 'not-mapped': 0, 'ambiguous-type': 0, 'no-stable-id': 0 },
     warnings: [],
     elapsedMs: 180,
+    ...(overrides.startsWith === undefined ? { facets: { searchable: false }, filters: { entityTypes: [], matchModes: [] } } : {}),
     ...overrides,
   };
 }
@@ -58,8 +59,8 @@ export function withEvidence(sourceId: string, exact: readonly GraphNode[], evid
   return { ok: true, value: answerOf(sourceId, exact, { evidence: evidenceOf(evidence, count), ...overrides }) };
 }
 
-export function profiled(sourceId: string): SourceProfile {
-  const profile = testProfile(sourceId, [TYPE]);
+export function profiled(sourceId: string, types: readonly string[] = [TYPE]): SourceProfile {
+  const profile = testProfile(sourceId, types);
   return { ...profile, entityTypes: profile.entityTypes.map((type) => ({ ...type, keyProperties: ['stableCode', 'tier'], stateProperty: 'status' })) };
 }
 
@@ -87,7 +88,7 @@ export interface SearchKit {
 export function searchKit(
   sources: readonly string[],
   answer: (request: SearchRequest, signal: AbortSignal | undefined) => Promise<ApiResult<SearchResult>>,
-  options: { readonly synthetic?: Record<string, boolean>; readonly open?: (request: OpenInvestigationRequest, signal: AbortSignal | undefined) => Promise<ApiResult<OpenInvestigationResponse>> } = {},
+  options: { readonly types?: readonly string[]; readonly synthetic?: Record<string, boolean>; readonly open?: (request: OpenInvestigationRequest, signal: AbortSignal | undefined) => Promise<ApiResult<OpenInvestigationResponse>> } = {},
 ): SearchKit {
   const searches: SearchRequest[] = [];
   const signals: (AbortSignal | undefined)[] = [];
@@ -99,7 +100,7 @@ export function searchKit(
     opens,
     client: {
       ...base,
-      getProfile: async (sourceId) => ({ ok: true, value: profiled(sourceId) }),
+      getProfile: async (sourceId) => ({ ok: true, value: profiled(sourceId, options.types) }),
       openInvestigation: (request, signal) => {
         opens.push(request);
         return options.open === undefined ? base.openInvestigation(request, signal) : options.open(request, signal);
@@ -111,4 +112,24 @@ export function searchKit(
       },
     },
   };
+}
+
+
+/** The facets of an answer: a count for each entity type and each match mode, exact, and the total; a count above the cap is given as `[value, 'lowerBound']`. */
+export function facetsOf(counts: { readonly total: number | readonly [number, 'lowerBound']; readonly types?: readonly (readonly [string, number | readonly [number, 'lowerBound']])[]; readonly modes?: readonly (readonly [SearchMatchMode, number | readonly [number, 'lowerBound']])[] }): Facets {
+  const count = <Scope extends string>(value: number | readonly [number, 'lowerBound'], scope: Scope) => (typeof value === 'number' ? { value, quality: 'exact' as const, scope } : { value: value[0], quality: value[1], scope });
+  return {
+    searchable: true,
+    total: count(counts.total, FACET_SCOPES.total),
+    entityType: (counts.types ?? []).map(([entityType, value]) => ({ entityType, count: count(value, FACET_SCOPES.entityType) })),
+    matchMode: (counts.modes ?? []).map(([mode, value]) => ({ mode, count: count(value, FACET_SCOPES.matchMode) })),
+  };
+}
+
+export const FAILED_FACETS: Facets = { searchable: true, total: { quality: 'unknown', scope: FACET_SCOPES.total }, entityType: [], matchMode: [] };
+export const FACETS_FAILURE = { group: 'facets', code: 'QUERY_TIMEOUT', timeoutMs: 5000 } as const;
+
+/** An answer with these facets and the selection it was made for. */
+export function withFacets(sourceId: string, exact: readonly GraphNode[], facets: Facets, overrides: Partial<SearchResult> = {}): ApiResult<SearchResult> {
+  return { ok: true, value: answerOf(sourceId, exact, { facets, ...overrides }) };
 }

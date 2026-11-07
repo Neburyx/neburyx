@@ -25,4 +25,11 @@ export function evidenceText(count: Count): string | undefined {
   return count.quality === 'exact' ? `${text} supporting ${count.value === 1 ? 'relationship' : 'relationships'}` : `≥ ${count.value} supporting relationships · lower bound`;
 }
 
+/** The total of the entities a text matches as the Filters say it: "3 results", "1 result", "≥ 25 results · lower bound"; nothing for a total that was not read. */
+export function resultsText(count: Count): string | undefined {
+  if (count.value === undefined) return undefined;
+  if (count.quality === 'exact') return `${count.value} ${count.value === 1 ? 'result' : 'results'}`;
+  return count.quality === 'lowerBound' ? `≥ ${count.value} results · lower bound` : undefined;
+}
+
 export const secondsText = (elapsedMs: number): string => `${(elapsedMs / 1000).toFixed(2)} s`;

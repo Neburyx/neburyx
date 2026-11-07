@@ -1,4 +1,4 @@
-import type { Count, SearchGroup } from '@neburyx/contracts';
+import type { Count, SearchFailureGroup } from '@neburyx/contracts';
 
 export const SEARCH_COPY = {
   title: 'Search results',
@@ -43,15 +43,30 @@ export const evidenceRecordsText = (recordIds: readonly string[]): string => `${
 export const evidenceRuleText = (ruleId: string, ruleVersion: number): string => `Used by rule ${ruleId} v${ruleVersion}`;
 export const EXACT_MASKED = 'Exact matches cannot be searched while personal data is masked.';
 export const RELATED_MASKED = 'Related records cannot be searched while personal data is masked.';
-const PAGE_GROUP_NAMES = { exact: 'Exact matches', related: 'Related records', evidence: 'Evidence records', startsWith: 'Matches that start with the text' } as const;
-const PAGE_GROUP_NOT_READ = { exact: 'exact matches not read', related: 'related records not read', evidence: 'evidence records not read', startsWith: 'matches that start with the text not read' } as const;
-export const groupNotReadSummary = (group: SearchGroup): string => PAGE_GROUP_NOT_READ[group];
-export function groupFailedText(group: SearchGroup, code: string, timeoutMs: number | undefined): string {
+const PAGE_GROUP_NAMES = { exact: 'Exact matches', related: 'Related records', evidence: 'Evidence records', startsWith: 'Matches that start with the text', facets: 'Facet counts' } as const;
+const PAGE_GROUP_NOT_READ = { exact: 'exact matches not read', related: 'related records not read', evidence: 'evidence records not read', startsWith: 'matches that start with the text not read', facets: 'facet counts not read' } as const;
+export const groupNotReadSummary = (group: SearchFailureGroup): string => PAGE_GROUP_NOT_READ[group];
+export function groupFailedText(group: SearchFailureGroup, code: string, timeoutMs: number | undefined): string {
   const name = PAGE_GROUP_NAMES[group];
   if (code === 'QUERY_TIMEOUT') return timeoutMs === undefined ? `${name} were not read: the source did not answer in time.` : `${name} were not read: the source did not answer within ${secondsOf(timeoutMs)} s.`;
   return `${name} were not read (${code}).`;
 }
 export const RETRY = 'Retry';
+
+export const FILTERS_COPY = {
+  title: 'Filters',
+  entityType: 'Entity type',
+  matchMode: 'Match mode',
+  reset: 'Reset',
+  countsNotRead: 'Counts not read',
+  unavailable: 'Filters unavailable: counts not read',
+  noResultTitle: 'No result for this selection',
+  noResultHint: 'Reset the filters to see the matches of the other entries.',
+  unshown: 'Matches were found in the source but none could be shown.',
+  nothingForTypes: 'Nothing to search for the selected types.',
+} as const;
+export const MATCH_MODE_LABELS = { exact: 'Exact ID', related: 'Referenced ID', evidence: 'Evidence record' } as const;
+export const hiddenBySelection = (group: 'exact' | 'related' | 'evidence'): string => `${PAGE_GROUP_NAMES[group]} are hidden by the selection.`;
 export const GRAPH_UNCHANGED = 'Your graph was not changed.';
 
 /** The seconds a source allows a read, without a trailing zero: 5000 ms is "5", 2500 ms is "2.5". */
@@ -103,7 +118,7 @@ export function startsWithText(count: Count): string | undefined {
 
 export const addedNote = (title: string): string => `Added ${title}.`;
 
-const GROUP_NAMES = { exact: 'exact ID matches', related: 'related records', evidence: 'evidence records', startsWith: 'matches that start with the text' } as const;
+const GROUP_NAMES = { exact: 'exact ID matches', related: 'related records', evidence: 'evidence records', startsWith: 'matches that start with the text', facets: 'facet counts' } as const;
 
 export const groupNotRead = (group: keyof typeof GROUP_NAMES): string => `${GROUP_NAMES[group]} not read`;
 

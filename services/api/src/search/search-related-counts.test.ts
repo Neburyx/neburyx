@@ -4,7 +4,7 @@ import type { ExecuteCall, ExecuteOutcome } from '../gate/executor.js';
 import { warningsOf } from '../gate/normalize/drops.js';
 import { entityRows, plainNode } from '../testing/entity-fixtures.js';
 import { postSearch, relatedCalls, RELATED_ENTITIES, searchMappingOf, startSearchApp } from '../testing/search-app.js';
-import { searchModelOf, type StoredNode } from '../testing/search-fixtures.js';
+import { facetRowOf, searchModelOf, type StoredNode } from '../testing/search-fixtures.js';
 
 const TEXT = 'X-1';
 const referencing = (count: number): StoredNode[] =>
@@ -52,7 +52,7 @@ describe('the count of the related group', () => {
       plainNode(['Gadget'], { gadgetId: 'GT-22', widgetRef: TEXT }, '4:g:22'),
       plainNode(['Gadget'], { gadgetId: 'GT-23', widgetRef: TEXT }, '4:g:23'),
     ];
-    const respond = (call: ExecuteCall) => Promise.resolve(call.templateId === 'entity-related' ? entityRows(...rows.slice(0, call.rowLimit)) : entityRows());
+    const respond = (call: ExecuteCall) => Promise.resolve(call.templateId === 'search-facets' ? facetRowOf(call, 0) : call.templateId === 'entity-related' ? entityRows(...rows.slice(0, call.rowLimit)) : entityRows());
     const { answer } = await searched([], {}, (call) => (call.templateId === 'schema-indexes' ? searchModelOf([])(call) : respond(call)));
     expect(answer.related.hits).toHaveLength(22);
     expect(answer.related.hits.length).toBeLessThan(25);
@@ -62,7 +62,7 @@ describe('the count of the related group', () => {
 
   it('holds an exact count of the hits when the read did not overflow, however many rows normalization left out', async () => {
     const rows = [plainNode(['Gadget'], { gadgetId: 'GT-1', widgetRef: TEXT }, '4:g:1'), plainNode(['Nothing'], { gadgetId: 'N-1' }, '4:n:1')];
-    const { answer } = await searched([], {}, (call) => Promise.resolve(call.templateId === 'entity-related' ? entityRows(...rows) : entityRows()));
+    const { answer } = await searched([], {}, (call) => Promise.resolve(call.templateId === 'search-facets' ? facetRowOf(call, 0) : call.templateId === 'entity-related' ? entityRows(...rows) : entityRows()));
     expect(answer.related.count).toEqual({ value: 1, quality: 'exact', scope: 'search:related' });
     expect(answer.dropped['not-mapped']).toBe(1);
   });
@@ -93,6 +93,7 @@ describe('a record that is both an exact match and a referencing record', () => 
 describe('the diagnostics of the two groups', () => {
   const rows = (call: ExecuteCall): Promise<ExecuteOutcome> => {
     if (call.templateId === 'entity-search') return Promise.resolve(entityRows(plainNode(['Nothing'], { x: 1 }, '4:e:1'), plainNode(['Widget'], { widgetId: TEXT }, '4:e:2')));
+    if (call.templateId === 'search-facets') return Promise.resolve(facetRowOf(call, 0));
     return Promise.resolve(entityRows(plainNode(['Nothing'], { x: 1 }, '4:r:1'), plainNode(['Gadget'], { widgetRef: TEXT }, '4:r:2'), plainNode(['Gadget'], { gadgetId: 'GT-1', widgetRef: TEXT }, '4:r:3')));
   };
   const respond = (call: ExecuteCall) => (call.templateId === 'schema-indexes' ? searchModelOf([])(call) : rows(call));
@@ -106,7 +107,9 @@ describe('the diagnostics of the two groups', () => {
 
   it('leaves out the overflow row of a capped read, which the gate cuts before normalization', async () => {
     const many = (call: ExecuteCall): Promise<ExecuteOutcome> =>
-      call.templateId === 'entity-related'
+      call.templateId === 'search-facets'
+        ? Promise.resolve(facetRowOf(call, 0))
+        : call.templateId === 'entity-related'
         ? Promise.resolve(entityRows(...[...Array.from({ length: 25 }, (_, index) => plainNode(['Gadget'], { gadgetId: `GT-${index + 1}`, widgetRef: TEXT }, `4:g:${index + 1}`)), plainNode(['Nothing'], { x: 1 }, '4:over:1')]))
         : Promise.resolve(entityRows());
     const { answer } = await searched([], {}, (call) => (call.templateId === 'schema-indexes' ? searchModelOf([])(call) : many(call)));

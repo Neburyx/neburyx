@@ -210,7 +210,8 @@ describe(`an index that is gone since the check, on ${NEO4J_SERIES}`, () => {
     expect(result.disabledTypes.every((disabled) => disabled.reason === 'index-unavailable')).toBe(true);
     expect(result.exact.filter((node) => node.ref.entityType === 'bulk')).toEqual([]);
     expect(namingLabel('Bulk', from)).toBe(0);
-    expect(namingLabel('HeldByIndex', from)).toBe(1);
+    // the exact read and the facet read each name the label that still has its index
+    expect(namingLabel('HeldByIndex', from)).toBe(2);
     await runAdmin(server, 'CREATE INDEX bulk_code FOR (n:Bulk) ON (n.code)');
     await runAdmin(server, 'CALL db.awaitIndexes(120)');
     expect(await stableIds('bulk-24', 'bulk')).toHaveLength(24);

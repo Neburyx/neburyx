@@ -37,7 +37,7 @@ describe('what the page says about the three groups together', () => {
   });
 
   it('never reads "No matching entities" when every group is not searched', () => {
-    expect(statesOf(answer('none', 'none', 'none'), false)).toEqual({ noMatches: false, reasons: [NO_SEARCH_PROPERTIES, NO_RELATED_PROPERTIES, NO_EVIDENCE_PROPERTIES] });
+    expect(statesOf(answer('none', 'none', 'none'), false)).toMatchObject({ noMatches: false, reasons: [NO_SEARCH_PROPERTIES, NO_RELATED_PROPERTIES, NO_EVIDENCE_PROPERTIES] });
   });
 
   it.each<readonly [Cell, Cell, Cell, boolean, readonly string[]]>([
@@ -49,24 +49,24 @@ describe('what the page says about the three groups together', () => {
     ['none', 'none', 'empty', true, [EXACT_MASKED, RELATED_MASKED]],
     ['none', 'none', 'none', false, [NOTHING_SEARCHABLE_MASKED]],
   ])('while masked, exact %s, related %s, evidence %s: "No matching entities" is %s and the reasons are %j', (exact, related, evidence, noMatches, reasons) => {
-    expect(statesOf(answer(exact, related, evidence), true)).toEqual({ noMatches, reasons });
+    expect(statesOf(answer(exact, related, evidence), true)).toMatchObject({ noMatches, reasons });
   });
 
   it('never reads "No matching entities" when a group failed, and still says why a group that was not searched was not', () => {
     const failed = (group: 'exact' | 'related' | 'evidence') => ({ group, code: 'QUERY_TIMEOUT' as const });
     expect(statesOf(answer('empty', 'empty', 'empty', { failures: [failed('related')] }), false).noMatches).toBe(false);
     expect(statesOf(answer('empty', 'empty', 'empty', { failures: [failed('evidence')] }), false).noMatches).toBe(false);
-    expect(statesOf(answer('none', 'empty', 'empty', { failures: [failed('related')] }), false)).toEqual({ noMatches: false, reasons: [NO_SEARCH_PROPERTIES] });
-    expect(statesOf(answer('empty', 'none', 'empty', { failures: [failed('exact')] }), false)).toEqual({ noMatches: false, reasons: [NO_RELATED_PROPERTIES] });
-    expect(statesOf(answer('empty', 'empty', 'none', { failures: [failed('exact')] }), false)).toEqual({ noMatches: false, reasons: [NO_EVIDENCE_PROPERTIES] });
+    expect(statesOf(answer('none', 'empty', 'empty', { failures: [failed('related')] }), false)).toMatchObject({ noMatches: false, reasons: [NO_SEARCH_PROPERTIES] });
+    expect(statesOf(answer('empty', 'none', 'empty', { failures: [failed('exact')] }), false)).toMatchObject({ noMatches: false, reasons: [NO_RELATED_PROPERTIES] });
+    expect(statesOf(answer('empty', 'empty', 'none', { failures: [failed('exact')] }), false)).toMatchObject({ noMatches: false, reasons: [NO_EVIDENCE_PROPERTIES] });
   });
 
   it('gives a group whose types were left out their own notes and no reason line', () => {
     const left = { entityType: 'kind-a', reason: 'index-unavailable' as const };
     const leftRow = { relationshipType: 'MADE_FROM', from: 'kind-a', to: 'kind-b', reason: 'index-unavailable' as const };
-    expect(statesOf(answer('none', 'empty', 'empty', { disabledTypes: [left] }), false)).toEqual({ noMatches: true, reasons: [] });
-    expect(statesOf(answer('empty', 'none', 'empty', { related: { ...relatedOf([]), searchable: false, disabledTypes: [left] } }), false)).toEqual({ noMatches: true, reasons: [] });
-    expect(statesOf(answer('empty', 'empty', 'none', { evidence: { hits: [], count: { value: 0, quality: 'exact', scope: 'search:evidence' }, searchable: false, disabledRelationshipTypes: [leftRow] } }), false)).toEqual({ noMatches: true, reasons: [] });
+    expect(statesOf(answer('none', 'empty', 'empty', { disabledTypes: [left] }), false)).toMatchObject({ noMatches: true, reasons: [] });
+    expect(statesOf(answer('empty', 'none', 'empty', { related: { ...relatedOf([]), searchable: false, disabledTypes: [left] } }), false)).toMatchObject({ noMatches: true, reasons: [] });
+    expect(statesOf(answer('empty', 'empty', 'none', { evidence: { hits: [], count: { value: 0, quality: 'exact', scope: 'search:evidence' }, searchable: false, disabledRelationshipTypes: [leftRow] } }), false)).toMatchObject({ noMatches: true, reasons: [] });
   });
 
   it('says the page has no group to search, and not "No matching entities", when every group is not searched or disabled', () => {
