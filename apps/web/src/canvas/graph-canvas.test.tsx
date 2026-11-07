@@ -277,6 +277,23 @@ describe('the development read-out of the graph canvas', () => {
     await waitFor(() => expect(last()?.focusRing).toBe(true));
   });
 
+  it('keeps the notice of a failed command when a menu opens or closes, since that drawing is of the same scene, and clears it with the next change of the scene', async () => {
+    const state = createClientState();
+    load(state, 2, 1);
+    const factory = stubFactory();
+    view(state, factory.create);
+    const canvas = screen.getByRole('application', { name: 'Graph canvas' });
+    await waitFor(() => expect(factory.made[0]?.scenes.length).toBeGreaterThan(0));
+    act(() => factory.made[0]?.events[0]?.failed?.());
+    expect(screen.getByRole('alert').textContent).toBe('RENDERER_UNAVAILABLE');
+    act(() => state.presentation.setOpenMenu({ kind: 'node', key: nodeKey('n1'), x: 10, y: 10 }));
+    act(() => state.presentation.setOpenMenu(undefined));
+    expect(screen.queryByRole('alert')).not.toBeNull();
+    act(() => state.presentation.select([nodeKey('n1')]));
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+    expect(canvas).toBeTruthy();
+  });
+
   it('gives a function that reads what the renderer has drawn, for a recorded browser run', () => {
     const state = createClientState();
     load(state, 2, 1);

@@ -57,7 +57,10 @@ export function GraphCanvas({ profile, view = 'fit' }: { readonly profile?: Sour
     () => placeNewEntities({ ids: graph.nodes.map((node) => elementKey(node.ref)), links: graph.edges.map((edge) => [elementKey(edge.from), elementKey(edge.to)] as const), positions }),
     [graph, positions],
   );
-  const scene = useMemo(() => buildScene(graph, placed.size === 0 ? positions : new Map([...positions, ...placed]), profile, selection, tool, source, view, pins, walking ? focused : undefined, !menuOpen), [graph, positions, placed, profile, selection, tool, source, view, pins, walking, focused, menuOpen]);
+  const drawn = useMemo(() => buildScene(graph, placed.size === 0 ? positions : new Map([...positions, ...placed]), profile, selection, tool, source, view, pins, walking ? focused : undefined), [graph, positions, placed, profile, selection, tool, source, view, pins, walking, focused]);
+  // A menu holding the focus only takes the ring off the walk element: the scene is the same one, so the drawing that follows is not a sign that the renderer works again.
+  const scene = useMemo(() => ({ ...drawn, focusRing: !menuOpen }), [drawn, menuOpen]);
+  const lastDrawn = useRef<typeof drawn | undefined>(undefined);
   const announcement = walking && scene.focused !== undefined ? describeWalked(graph, profile, pins, scene.focused) : undefined;
 
   useEffect(() => {
@@ -144,11 +147,13 @@ export function GraphCanvas({ profile, view = 'fit' }: { readonly profile?: Sour
       if (!current) return;
       try {
         renderer.draw(scene, state.presentation.view.getState().viewport);
+        const ringOnly = lastDrawn.current === drawn;
+        lastDrawn.current = drawn;
         beforeLayout.current = undefined;
         if (placed.size > 0) state.presentation.setPositions(placed);
         if (__DEV_TOOLS__ && container.current !== null) writeReadout(container.current, { ...renderer.describe(), viewport: renderer.viewport(), drawn: { positions: renderer.positions(), pinned: state.presentation.view.getState().pins, focused: scene.focused } });
         if (keepNotice.current) keepNotice.current = false;
-        else setFailed(false);
+        else if (!ringOnly) setFailed(false);
       } catch {
         // the notice names the stable code; the library's own message is not shown
         const previous = beforeLayout.current;
@@ -165,7 +170,7 @@ export function GraphCanvas({ profile, view = 'fit' }: { readonly profile?: Sour
     return () => {
       current = false;
     };
-  }, [renderer, scene, placed, state]);
+  }, [renderer, scene, drawn, placed, state]);
 
   return (
     <>
