@@ -22,14 +22,14 @@ test.describe('the scope lines', () => {
     });
     await page.route((url) => url.pathname === '/v1/graph/coverage', async (route) => {
       asked.push(route.request().postDataJSON() as CoverageBody);
-      const notRetrieved = previewed === 0 ? { quality: 'unknown', scope: 'not yet retrieved' } : { value: 4, quality: 'exact', scope: 'not yet retrieved' };
+      const notRetrieved = previewed === 0 ? { quality: 'unknown', scope: 'not yet retrieved' } : { value: 3, quality: 'lowerBound', scope: 'not yet retrieved' };
       await route.fulfill({ json: { notRetrieved } });
     });
   });
 
   const remainder = (page: Page) => page.locator('.graph-scope p').nth(1);
 
-  test('carry no number until the server has one, then show it with its label, and keep the focus where it was', async ({ page }) => {
+  test('carry no number until the server has one, then show the lower bound of the previewed node with its label, and keep the focus where it was', async ({ page }) => {
     await openSample(page);
     await expect(remainder(page)).toHaveText('10 shown · more not yet retrieved');
     expect(asked[0]?.entities).toHaveLength(10);
@@ -43,7 +43,7 @@ test.describe('the scope lines', () => {
     const rows = page.locator('.neighbor-types-row');
     await expect(rows.first()).toBeFocused();
 
-    await expect(remainder(page)).toHaveText('10 shown · 4 not yet retrieved (exact)');
+    await expect(remainder(page)).toHaveText('10 shown · ≥ 3 not yet retrieved (lower bound)');
     await expect(rows.first()).toBeFocused();
     expect(asked.length).toBeGreaterThanOrEqual(2);
   });
