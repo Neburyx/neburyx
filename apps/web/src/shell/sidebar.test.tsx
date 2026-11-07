@@ -26,10 +26,11 @@ describe('the sidebar', () => {
     expect(screen.getByRole('main')).toBeTruthy();
   });
 
-  it('shows "Local workspace" and "Community edition" for Community', async () => {
+  it('shows only "Local workspace" in the identity block, with no edition line', async () => {
     renderApp('/', clientWith({ me: me(), sources: [] }));
     expect(await within(identity()).findByText('Local workspace')).toBeTruthy();
-    expect(within(identity()).getByText('Community edition')).toBeTruthy();
+    expect(within(identity()).queryByText(/edition/i)).toBeNull();
+    expect(identity().querySelectorAll('p')).toHaveLength(1);
   });
 
   it('shows a loading state while the principal is awaited', () => {

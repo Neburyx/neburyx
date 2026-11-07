@@ -12,10 +12,7 @@ export function IdentityBlock() {
           <p role="status">Loading</p>
         ) : null
       ) : (
-        <>
-          <p>Local workspace</p>
-          <p>Community edition</p>
-        </>
+        <p>Local workspace</p>
       )}
       {failure === undefined ? null : <FailureNotice failure={failure} />}
     </section>

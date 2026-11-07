@@ -12,7 +12,7 @@ for (const [name, path] of PAGES) {
     test.beforeEach(async ({ page }) => {
       await page.goto(path);
       await expect(page.locator('h1')).toBeVisible();
-      await expect(page.locator('.sidebar-bottom').getByText('Community edition')).toBeVisible();
+      await expect(page.locator('.sidebar-bottom').getByText('Local workspace')).toBeVisible();
     });
 
     test('has no sideways scroll and keeps its regions inside the viewport and the sidebar still', async ({ page }) => {
@@ -45,12 +45,14 @@ for (const [name, path] of PAGES) {
       expect(await styleOf(current, ['background-color', 'color', 'font-weight', 'border-radius'])).toEqual({ 'background-color': 'rgb(234, 237, 247)', color: 'rgb(82, 100, 167)', 'font-weight': '500', 'border-radius': '6px' });
     });
 
-    test('keeps the identity block anchored to the bottom, at the recorded distances', async ({ page }) => {
+    test('keeps the identity block anchored to the bottom, with one line and no edition line', async ({ page }) => {
       const divider = page.locator('.sidebar-bottom section').last();
-      expect(Math.abs((await fromBottom(page, divider)) - 83), 'the divider above the identity').toBeLessThanOrEqual(APPROXIMATE);
+      expect(Math.abs((await fromBottom(page, divider)) - 62), 'the divider above the identity').toBeLessThanOrEqual(APPROXIMATE);
       const lines = divider.locator('p');
-      expect(Math.abs((await fromBottom(page, lines.nth(0))) - 62), 'the first identity line').toBeLessThanOrEqual(APPROXIMATE);
-      expect(Math.abs((await fromBottom(page, lines.nth(1))) - 41), 'the second identity line').toBeLessThanOrEqual(APPROXIMATE);
+      await expect(lines).toHaveCount(1);
+      await expect(lines).toHaveText('Local workspace');
+      expect(Math.abs((await fromBottom(page, lines.nth(0))) - 41), 'the identity line').toBeLessThanOrEqual(APPROXIMATE);
+      await expect(page.getByText(/edition/i)).toHaveCount(0);
     });
 
     test('has the heading and the content padding of the frames, and no width that follows the font is compared', async ({ page }) => {
