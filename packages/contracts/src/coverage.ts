@@ -31,14 +31,15 @@ const UNKNOWN_COVERAGE: Count = { quality: 'unknown', scope: COVERAGE_SCOPE };
 /**
  * Joins the answers for the chunks of one loaded graph. `exact` needs every chunk `exact` and at most one with anything left, since a relationship between entities of two chunks is in both. A `lowerBound`
  * chunk makes the result `lowerBound`, with the largest `exact` or `lowerBound` value as its floor, which may be below what one request over the whole graph would give; an `estimated` chunk is no floor.
+ * An `unknown` chunk leaves the sum unknown, but that floor still holds, so the result is `lowerBound` when it is above 0 and `unknown` when not.
  */
 export function combineCoverage(chunks: readonly Count[]): Count {
-  if (chunks.length === 0 || chunks.some((chunk) => chunk.value === undefined)) return UNKNOWN_COVERAGE;
+  if (chunks.length === 0) return UNKNOWN_COVERAGE;
+  const floors = chunks.filter((chunk) => chunk.quality === 'exact' || chunk.quality === 'lowerBound').map((chunk) => chunk.value ?? 0);
+  const floor = Math.max(0, ...floors);
+  if (chunks.some((chunk) => chunk.value === undefined)) return floor > 0 ? { value: floor, quality: 'lowerBound', scope: COVERAGE_SCOPE } : UNKNOWN_COVERAGE;
+  if (chunks.some((chunk) => chunk.quality === 'lowerBound')) return { value: floor, quality: 'lowerBound', scope: COVERAGE_SCOPE };
   const values = chunks.map((chunk) => chunk.value ?? 0);
-  if (chunks.some((chunk) => chunk.quality === 'lowerBound')) {
-    const floors = chunks.filter((chunk) => chunk.quality === 'exact' || chunk.quality === 'lowerBound').map((chunk) => chunk.value ?? 0);
-    return { value: Math.max(...floors), quality: 'lowerBound', scope: COVERAGE_SCOPE };
-  }
   const sum = values.reduce((total, value) => total + value, 0);
   if (!Number.isSafeInteger(sum)) return UNKNOWN_COVERAGE;
   const weakened = values.filter((value) => value > 0).length > 1 || chunks.some((chunk) => chunk.quality === 'estimated');

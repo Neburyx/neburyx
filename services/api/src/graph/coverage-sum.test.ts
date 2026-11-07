@@ -26,8 +26,13 @@ describe('the not-yet-retrieved count', () => {
     ['an estimated preview older than the loads is clamped', [part(count(2, 'estimated'), 3), part(count(4, 'exact'), 1)], answer(3, 'estimated')],
     ['a lowerBound preview with more loaded than its value stays lowerBound, not estimated', [part(count(500, 'lowerBound'), 600)], answer(0, 'lowerBound')],
     ['a clamped exact remainder gives no floor beside a lowerBound part', [part(count(2, 'exact'), 3), part(count(500, 'lowerBound'), 100)], answer(400, 'lowerBound')],
-    ['a part with no preview', [part(count(7, 'exact'), 2), part(undefined)], unknown],
-    ['a preview whose total is unknown', [part({ quality: 'unknown', scope: 'degree:total' })], unknown],
+    ['an unknown part beside an exact remainder gives that remainder as a floor', [part(count(184533, 'exact'), 52), part(undefined), part(undefined)], answer(184481, 'lowerBound')],
+    ['an unknown part beside a lowerBound remainder gives the largest remainder as a floor', [part(count(500, 'lowerBound'), 20), part(undefined), part(count(300, 'lowerBound'), 0)], answer(480, 'lowerBound')],
+    ['an unknown part beside two exact remainders gives the larger, not the sum', [part(count(7, 'exact'), 2), part(count(4, 'exact'), 0), part(undefined)], answer(5, 'lowerBound')],
+    ['every part unknown', [part(undefined), part({ quality: 'unknown', scope: 'degree:total' })], unknown],
+    ['an unknown part beside only an estimated remainder stays unknown', [part(count(40, 'estimated'), 2), part(undefined)], unknown],
+    ['an unknown part beside only a clamped remainder stays unknown', [part(count(2, 'exact'), 3), part(undefined)], unknown],
+    ['an unknown part beside a remainder of 0 stays unknown', [part(count(3, 'exact'), 3), part(undefined)], unknown],
     ['the sum above the largest safe integer', [part(count(Number.MAX_SAFE_INTEGER, 'exact')), part(count(1, 'exact'))], unknown],
   ];
   it.each(cases)('%s', (_name, parts, expected) => {

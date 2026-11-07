@@ -231,10 +231,11 @@ describe('POST /v1/graph/coverage', () => {
     await app.close();
   });
 
-  it('answers unknown when any one of several nodes has no preview', async () => {
+  it('answers the largest remainder as a lower bound when one of several nodes has no preview', async () => {
     const { app, preview, coverage } = await started();
     await preview('P-1');
-    expect((await coverage({ sourceId: 'alpha', entities: [entity('P-1'), entity('P-2')] })).json()).toEqual(unknown);
+    const response = await coverage({ sourceId: 'alpha', entities: [entity('P-1', 2), entity('P-2')] });
+    expect(response.json()).toEqual({ notRetrieved: { value: 5, quality: 'lowerBound', scope: 'not yet retrieved' } });
     await app.close();
   });
 

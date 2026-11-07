@@ -263,7 +263,7 @@ export function buildOpenApiDocument(
           summary: 'How many relationships of the loaded entities are not yet retrieved, from the degree previews already fetched',
           requestBody: { required: true, content: jsonBody('CoverageRequest') },
           description:
-            'Reads only the degree previews the server holds for the named entities (under the same person, source, mapping, mask setting and degree verdicts) and never reads the source. The count is of relationships, not entities, and is never better than the weakest quality of its parts; it is unknown, with no value, when any named entity has no cached preview.',
+            'Reads only the degree previews the server holds for the named entities (under the same person, source, mapping, mask setting and degree verdicts) and never reads the source. The count is of relationships, not entities, and is never better than the weakest quality of its parts; when some named entity has no cached preview the answer is a lower bound from the others, and unknown, with no value, when they give none.',
           responses: {
             '200': { description: 'The count of relationships not yet retrieved', content: jsonBody('CoverageResponse') },
             '400': { description: 'The body is not valid, or names an entity of another source', content: jsonBody('ErrorResponse') },

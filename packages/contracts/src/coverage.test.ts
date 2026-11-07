@@ -41,7 +41,11 @@ describe('joining the answers for the chunks of one graph', () => {
     ['estimated when a chunk is estimated, even with one left', [chunk(0, 'exact'), chunk(5, 'estimated')], chunk(5, 'estimated')],
     ['lowerBound with the largest exact or lowerBound value, not the sum', [chunk(500, 'lowerBound'), chunk(9, 'exact'), chunk(300, 'lowerBound')], chunk(500, 'lowerBound')],
     ['an estimated chunk adds no floor beside a lowerBound chunk', [chunk(900, 'estimated'), chunk(40, 'lowerBound')], chunk(40, 'lowerBound')],
-    ['unknown when a chunk is unknown, whatever the others say', [chunk(500, 'lowerBound'), unknownChunk], { quality: 'unknown', scope: COVERAGE_SCOPE }],
+    ['an unknown chunk beside an exact chunk gives its value as a floor', [chunk(184481, 'exact'), unknownChunk], chunk(184481, 'lowerBound')],
+    ['an unknown chunk beside lowerBound and exact chunks gives the largest as a floor', [chunk(500, 'lowerBound'), unknownChunk, chunk(9, 'exact')], chunk(500, 'lowerBound')],
+    ['every chunk unknown', [unknownChunk, unknownChunk], { quality: 'unknown', scope: COVERAGE_SCOPE }],
+    ['an unknown chunk beside only an estimated chunk stays unknown', [chunk(40, 'estimated'), unknownChunk], { quality: 'unknown', scope: COVERAGE_SCOPE }],
+    ['an unknown chunk beside a chunk with nothing left stays unknown', [chunk(0, 'exact'), unknownChunk], { quality: 'unknown', scope: COVERAGE_SCOPE }],
     ['unknown when the sum passes the largest safe integer', [chunk(Number.MAX_SAFE_INTEGER, 'exact'), chunk(1, 'exact')], { quality: 'unknown', scope: COVERAGE_SCOPE }],
     ['unknown for no chunks', [], { quality: 'unknown', scope: COVERAGE_SCOPE }],
   ];
