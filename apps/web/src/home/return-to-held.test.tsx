@@ -31,6 +31,7 @@ function recording(client: ApiClient) {
     lookupEntity: (request, signal) => (calls.push('lookupEntity'), client.lookupEntity(request, signal)),
     previewExpansion: (request, signal) => (calls.push('previewExpansion'), client.previewExpansion(request, signal)),
     expandNeighbors: (request, signal) => (calls.push('expandNeighbors'), client.expandNeighbors(request, signal)),
+    graphCoverage: (request, signal) => client.graphCoverage(request, signal),
   };
   return { client: wrapped, calls };
 }

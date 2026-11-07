@@ -6,6 +6,7 @@ import { DEFAULT_INVESTIGATION_LIST_LIMIT, INVESTIGATION_LIST_SORTS, investigati
 import { meResponseSchema } from './me.js';
 import { readyResponseSchema } from './ready.js';
 import { sourceProfileSchema } from './profile.js';
+import { coverageRequestSchema, coverageResponseSchema } from './coverage.js';
 import { degreePreviewRequestSchema, degreePreviewSchema } from './degree-preview.js';
 import { entityLookupRequestSchema } from './entities.js';
 import { expandRequestSchema, expandResponseSchema } from './expand.js';
@@ -20,7 +21,7 @@ export interface OpenApiDocument {
   readonly openapi: string;
   readonly info: { readonly title: string; readonly version: string };
   readonly paths: Readonly<Record<string, unknown>>;
-  readonly components: { readonly schemas: { readonly DegreePreview: Record<string, unknown>; readonly DegreePreviewRequest: Record<string, unknown>; readonly EntityLookupRequest: Record<string, unknown>; readonly ErrorResponse: Record<string, unknown>; readonly ExpandRequest: Record<string, unknown>; readonly ExpandResponse: Record<string, unknown>; readonly GraphNode: Record<string, unknown>; readonly HealthResponse: Record<string, unknown>; readonly InvestigationListResponse: Record<string, unknown>; readonly InvestigationResponse: Record<string, unknown>; readonly MeResponse: Record<string, unknown>; readonly OpenInvestigationRequest: Record<string, unknown>; readonly OpenInvestigationResponse: Record<string, unknown>; readonly ReadyResponse: Record<string, unknown>; readonly SearchRequest: Record<string, unknown>; readonly SearchResult: Record<string, unknown>; readonly SourceProfile: Record<string, unknown>; readonly SourceTestReport: Record<string, unknown>; readonly SourcesResponse: Record<string, unknown> } };
+  readonly components: { readonly schemas: { readonly CoverageRequest: Record<string, unknown>; readonly CoverageResponse: Record<string, unknown>; readonly DegreePreview: Record<string, unknown>; readonly DegreePreviewRequest: Record<string, unknown>; readonly EntityLookupRequest: Record<string, unknown>; readonly ErrorResponse: Record<string, unknown>; readonly ExpandRequest: Record<string, unknown>; readonly ExpandResponse: Record<string, unknown>; readonly GraphNode: Record<string, unknown>; readonly HealthResponse: Record<string, unknown>; readonly InvestigationListResponse: Record<string, unknown>; readonly InvestigationResponse: Record<string, unknown>; readonly MeResponse: Record<string, unknown>; readonly OpenInvestigationRequest: Record<string, unknown>; readonly OpenInvestigationResponse: Record<string, unknown>; readonly ReadyResponse: Record<string, unknown>; readonly SearchRequest: Record<string, unknown>; readonly SearchResult: Record<string, unknown>; readonly SourceProfile: Record<string, unknown>; readonly SourceTestReport: Record<string, unknown>; readonly SourcesResponse: Record<string, unknown> } };
 }
 
 function schemaJson(schema: z.ZodType): Record<string, unknown> {
@@ -52,6 +53,8 @@ export function buildOpenApiDocument(
   entityLookupRequest: z.ZodType = entityLookupRequestSchema,
   expandRequest: z.ZodType = expandRequestSchema,
   expandResponse: z.ZodType = expandResponseSchema,
+  coverageRequest: z.ZodType = coverageRequestSchema,
+  coverageResponse: z.ZodType = coverageResponseSchema,
 ): OpenApiDocument {
   return {
     openapi: '3.1.0',
@@ -254,6 +257,22 @@ export function buildOpenApiDocument(
           },
         },
       },
+      '/v1/graph/coverage': {
+        post: {
+          operationId: 'graphCoverage',
+          summary: 'How many relationships of the loaded entities are not yet retrieved, from the degree previews already fetched',
+          requestBody: { required: true, content: jsonBody('CoverageRequest') },
+          description:
+            'Reads only the degree previews the server holds for the named entities (under the same person, source, mapping, mask setting and degree verdicts) and never reads the source. The count is of relationships, not entities, and is never better than the weakest quality of its parts; it is unknown, with no value, when any named entity has no cached preview.',
+          responses: {
+            '200': { description: 'The count of relationships not yet retrieved', content: jsonBody('CoverageResponse') },
+            '400': { description: 'The body is not valid, or names an entity of another source', content: jsonBody('ErrorResponse') },
+            '404': { description: 'An entity type is not in the mapping, or the source is not configured or may not be read (one answer for all)', content: jsonBody('ErrorResponse') },
+            '415': { description: 'The body is not JSON', content: jsonBody('ErrorResponse') },
+            '503': { description: 'The source is not available', content: jsonBody('ErrorResponse') },
+          },
+        },
+      },
       '/v1/graph/expand': {
         post: {
           operationId: 'expandNeighbors',
@@ -289,7 +308,7 @@ export function buildOpenApiDocument(
       },
     },
     components: {
-      schemas: { DegreePreview: schemaJson(degreePreview), DegreePreviewRequest: schemaJson(degreePreviewRequest), EntityLookupRequest: schemaJson(entityLookupRequest), ErrorResponse: schemaJson(errorResponse), ExpandRequest: schemaJson(expandRequest), ExpandResponse: schemaJson(expandResponse), GraphNode: schemaJson(graphNode), HealthResponse: schemaJson(healthResponse), InvestigationListResponse: schemaJson(investigationList), InvestigationResponse: schemaJson(investigationResponse), MeResponse: schemaJson(meResponse), OpenInvestigationRequest: schemaJson(openInvestigationRequest), OpenInvestigationResponse: schemaJson(openInvestigationResponse), ReadyResponse: schemaJson(readyResponse), SearchRequest: schemaJson(searchRequest), SearchResult: schemaJson(searchResult), SourceProfile: schemaJson(sourceProfile), SourceTestReport: schemaJson(sourceTestReport), SourcesResponse: schemaJson(sourcesResponse) },
+      schemas: { CoverageRequest: schemaJson(coverageRequest), CoverageResponse: schemaJson(coverageResponse), DegreePreview: schemaJson(degreePreview), DegreePreviewRequest: schemaJson(degreePreviewRequest), EntityLookupRequest: schemaJson(entityLookupRequest), ErrorResponse: schemaJson(errorResponse), ExpandRequest: schemaJson(expandRequest), ExpandResponse: schemaJson(expandResponse), GraphNode: schemaJson(graphNode), HealthResponse: schemaJson(healthResponse), InvestigationListResponse: schemaJson(investigationList), InvestigationResponse: schemaJson(investigationResponse), MeResponse: schemaJson(meResponse), OpenInvestigationRequest: schemaJson(openInvestigationRequest), OpenInvestigationResponse: schemaJson(openInvestigationResponse), ReadyResponse: schemaJson(readyResponse), SearchRequest: schemaJson(searchRequest), SearchResult: schemaJson(searchResult), SourceProfile: schemaJson(sourceProfile), SourceTestReport: schemaJson(sourceTestReport), SourcesResponse: schemaJson(sourcesResponse) },
     },
   };
 }

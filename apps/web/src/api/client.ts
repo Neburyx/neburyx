@@ -1,5 +1,6 @@
 import {
   canCarryInPath,
+  coverageResponseSchema,
   degreePreviewSchema,
   errorBodySchema,
   errorResponseSchema,
@@ -14,6 +15,8 @@ import {
   sourceProfileSchema,
   sourcesResponseSchema,
   sourceTestReportSchema,
+  type CoverageRequest,
+  type CoverageResponse,
   type DegreePreview,
   type DegreePreviewRequest,
   type EntityLookupRequest,
@@ -73,6 +76,8 @@ export interface ApiClient {
   searchEntities(request: SearchRequest, signal?: AbortSignal): Promise<ApiResult<SearchResult>>;
   /** How many relationships a node has by type and direction, each count with its quality, before anything is loaded; the answer names the node asked for, or it is refused. */
   previewExpansion(request: DegreePreviewRequest, signal?: AbortSignal): Promise<ApiResult<DegreePreview>>;
+  /** How many relationships of the loaded entities are not yet retrieved, from the previews the server already holds; it reads no source. */
+  graphCoverage(request: CoverageRequest, signal?: AbortSignal): Promise<ApiResult<CoverageResponse>>;
   /** One page of the neighbors of a node for each asked neighbor type; the answer names the node and the source asked for and holds nothing of another source, or it is refused. */
   expandNeighbors(request: ExpandRequest, signal?: AbortSignal): Promise<ApiResult<ExpandResponse>>;
 }
@@ -175,6 +180,7 @@ export function createApiClient(fetcher: Fetcher = (input, init) => fetch(input,
       const result = await request(fetcher, '/v1/graph/preview-expansion', degreePreviewSchema, signal, 'POST', preview);
       return result.ok && !sameRef(result.value.ref, { sourceId: preview.sourceId, ...preview.ref }) ? failed('SCHEMA_MISMATCH') : result;
     },
+    graphCoverage: (coverage, signal) => request(fetcher, '/v1/graph/coverage', coverageResponseSchema, signal, 'POST', coverage),
     expandNeighbors: async (expansion, signal) => {
       const result = await request(fetcher, '/v1/graph/expand', expandResponseSchema, signal, 'POST', expansion);
       if (!result.ok) return result;

@@ -72,3 +72,13 @@ export function notDrawnLine(count: number): string | undefined {
   if (count === 0) return undefined;
   return `${formatNumber(count)} ${count === 1 ? 'relationship' : 'relationships'} not drawn (entity not loaded)`;
 }
+
+/** The entities loaded that a filter hides, never more than are loaded; nothing when none are hidden. */
+export function hiddenByFiltersLine(filtered: number, loaded: number): string | undefined {
+  const hidden = Math.min(filtered, loaded);
+  return hidden === 0 ? undefined : `${formatNumber(hidden)} hidden by filters`;
+}
+
+export function shownCount(loaded: number, filtered: number): number {
+  return Math.max(0, loaded - filtered);
+}

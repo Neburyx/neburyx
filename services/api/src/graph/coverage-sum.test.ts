@@ -1,0 +1,40 @@
+import { COVERAGE_SCOPE, type Count, type DegreePreview } from '@neburyx/contracts';
+import { describe, expect, it } from 'vitest';
+import { notRetrievedOf, type CoveragePart } from './coverage-sum.js';
+
+const preview = (total: Count | undefined): DegreePreview | undefined =>
+  total === undefined ? undefined : { ref: { sourceId: 'demo', entityType: 'widget', stableId: 'W' }, total, byType: [], byNeighborType: [], warnings: [], pageSize: 25 };
+const count = (value: number, quality: Exclude<Count['quality'], 'unknown'>): Count => ({ value, quality, scope: 'degree:total' });
+const part = (total: Count | undefined, storedRelationships = 0): CoveragePart => ({ preview: preview(total), storedRelationships });
+const answer = (value: number, quality: Count['quality']): Count => ({ value, quality, scope: COVERAGE_SCOPE });
+const unknown: Count = { quality: 'unknown', scope: COVERAGE_SCOPE };
+
+describe('the not-yet-retrieved count', () => {
+  const cases: readonly (readonly [string, readonly CoveragePart[], Count])[] = [
+    ['one contributor, every preview exact', [part(count(7, 'exact'), 2)], answer(5, 'exact')],
+    ['one contributor beside an exact part with nothing left', [part(count(7, 'exact'), 2), part(count(3, 'exact'), 3)], answer(5, 'exact')],
+    ['two contributors, every preview exact', [part(count(7, 'exact'), 2), part(count(4, 'exact'), 1)], answer(8, 'estimated')],
+    ['two contributors that share a relationship are still not exact', [part(count(1, 'exact'), 0), part(count(1, 'exact'), 0)], answer(2, 'estimated')],
+    ['nothing left anywhere', [part(count(3, 'exact'), 3), part(count(2, 'exact'), 2)], answer(0, 'exact')],
+    ['an estimated preview that contributes', [part(count(40, 'estimated'), 2)], answer(38, 'estimated')],
+    ['a lowerBound preview alone', [part(count(500, 'lowerBound'), 20)], answer(480, 'lowerBound')],
+    ['a lowerBound part with nothing left beside one exact contributor', [part(count(500, 'lowerBound'), 500), part(count(9, 'exact'), 1)], answer(8, 'lowerBound')],
+    ['the largest remainder, not the sum, of two lowerBound parts', [part(count(500, 'lowerBound'), 0), part(count(300, 'lowerBound'), 0)], answer(500, 'lowerBound')],
+    ['an estimated remainder is no floor beside a lowerBound part', [part(count(900, 'estimated'), 0), part(count(500, 'lowerBound'), 400)], answer(100, 'lowerBound')],
+    ['an estimated part alone with a lowerBound part that has nothing left gives a floor of 0', [part(count(900, 'estimated'), 0), part(count(500, 'lowerBound'), 500)], answer(0, 'lowerBound')],
+    ['an exact preview older than the loads is clamped and at best estimated', [part(count(2, 'exact'), 3)], answer(0, 'estimated')],
+    ['an estimated preview older than the loads is clamped', [part(count(2, 'estimated'), 3), part(count(4, 'exact'), 1)], answer(3, 'estimated')],
+    ['a lowerBound preview with more loaded than its value stays lowerBound, not estimated', [part(count(500, 'lowerBound'), 600)], answer(0, 'lowerBound')],
+    ['a clamped exact remainder gives no floor beside a lowerBound part', [part(count(2, 'exact'), 3), part(count(500, 'lowerBound'), 100)], answer(400, 'lowerBound')],
+    ['a part with no preview', [part(count(7, 'exact'), 2), part(undefined)], unknown],
+    ['a preview whose total is unknown', [part({ quality: 'unknown', scope: 'degree:total' })], unknown],
+    ['the sum above the largest safe integer', [part(count(Number.MAX_SAFE_INTEGER, 'exact')), part(count(1, 'exact'))], unknown],
+  ];
+  it.each(cases)('%s', (_name, parts, expected) => {
+    expect(notRetrievedOf(parts)).toEqual(expected);
+  });
+
+  it('subtracts a self-loop once for each of its two ends', () => {
+    expect(notRetrievedOf([part(count(5, 'exact'), 2)])).toEqual(answer(3, 'exact'));
+  });
+});

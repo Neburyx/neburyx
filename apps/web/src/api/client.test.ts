@@ -287,3 +287,23 @@ describe('the API client, previewing the degree of a node', () => {
     expect(await client.previewExpansion(PREVIEW_REQUEST)).toEqual({ ok: false, failure: body.error });
   });
 });
+
+describe('graphCoverage', () => {
+  const REQUEST = { sourceId: 'demo', entities: [{ ref: { sourceId: 'demo', entityType: 'widget', stableId: 'W-1' }, storedRelationships: 2 }] };
+  const ANSWER = { notRetrieved: { value: 5, quality: 'exact', scope: 'not yet retrieved' } };
+
+  it('posts the loaded entities to /v1/graph/coverage and parses the count', async () => {
+    const seen: { input: string; init?: { body?: string } }[] = [];
+    const client = createApiClient(async (input, init) => {
+      seen.push({ input: String(input), ...(init === undefined ? {} : { init: { body: String(init.body) } }) });
+      return new Response(JSON.stringify(ANSWER));
+    });
+    expect(await client.graphCoverage(REQUEST)).toEqual({ ok: true, value: ANSWER });
+    expect(seen[0]?.input).toBe('/v1/graph/coverage');
+    expect(JSON.parse(seen[0]?.init?.body ?? '{}')).toEqual(REQUEST);
+  });
+
+  it('refuses an answer that does not parse as a schema mismatch', async () => {
+    expect(await createApiClient(respondWith({ notRetrieved: { value: 5, quality: 'unknown', scope: 'x' } })).graphCoverage(REQUEST)).toEqual({ ok: false, failure: { code: 'SCHEMA_MISMATCH' } });
+  });
+});

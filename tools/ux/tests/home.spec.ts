@@ -18,6 +18,7 @@ function requests(page: Page): string[] {
   const seen: string[] = [];
   page.on('request', (request) => {
     const { pathname } = new URL(request.url());
+    if (pathname === '/v1/graph/coverage') return;
     if (pathname.startsWith('/v1/') || pathname === '/healthz' || pathname === '/readyz') seen.push(`${request.method()} ${pathname.replace(/[0-9a-f-]{36}/, ':id')}`);
   });
   return seen;

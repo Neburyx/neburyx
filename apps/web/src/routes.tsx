@@ -15,7 +15,9 @@ import { ExcerptsProvider } from './sources/excerpts-context.js';
 import { createTestRuns } from './sources/test-runs.js';
 import { TestRunsProvider } from './sources/test-runs-context.js';
 import { answeredData, createShellData, ShellDataProvider } from './shell/shell-data.js';
+import { createCoverageStore } from './api/coverage-store.js';
 import { createPreviewStore } from './api/preview-store.js';
+import { CoverageProvider } from './workspace/coverage-context.js';
 import { PreviewProvider } from './workspace/preview-context.js';
 import { ExpandProvider } from './workspace/expand-context.js';
 import { createExpandStore } from './api/expand-store.js';
@@ -99,6 +101,7 @@ export function appRoutes(client: ApiClient, state: ClientState, banner?: Banner
   const person = (): string => answeredData(shellData.getState().me)?.principal.id ?? '';
   const report = banner === undefined ? undefined : bannerReporter(banner, (sourceId) => sourceNameOf(answeredData(shellData.getState().sources)?.items ?? [], sourceId));
   const previews = createPreviewStore(client, person, report);
+  const coverage = createCoverageStore(client, person, report);
   const expansions = createExpandStore(client, state, person, report);
   const recent = createRecentInvestigations(client);
   const presence = createWorkspacePresence();
@@ -111,6 +114,7 @@ export function appRoutes(client: ApiClient, state: ClientState, banner?: Banner
             <ShellDataProvider store={shellData}>
               <ProfileProvider store={profile}>
                 <PreviewProvider store={previews}>
+                <CoverageProvider store={coverage}>
                 <ExpandProvider store={expansions}>
                 <TestRunsProvider runs={testRuns}>
                   <ExcerptsProvider excerpts={excerpts}>
@@ -121,6 +125,7 @@ export function appRoutes(client: ApiClient, state: ClientState, banner?: Banner
                   </ExcerptsProvider>
                 </TestRunsProvider>
                 </ExpandProvider>
+                </CoverageProvider>
                 </PreviewProvider>
               </ProfileProvider>
             </ShellDataProvider>

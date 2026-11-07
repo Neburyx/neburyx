@@ -19,6 +19,7 @@ function recording(page: Page): { readonly seen: string[]; readonly metadata: st
   const metadata: string[] = [];
   page.on('request', (request) => {
     const { pathname } = new URL(request.url());
+    if (pathname === '/v1/graph/coverage') return;
     const line = `${request.method()} ${pathname.replace(/[0-9a-f-]{36}/, ':id')}`;
     if (pathname.startsWith('/v1/investigations') || pathname.startsWith('/v1/entities')) seen.push(line);
     else if (pathname.startsWith('/v1/')) metadata.push(line);

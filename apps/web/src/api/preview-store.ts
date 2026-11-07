@@ -11,6 +11,8 @@ export interface PreviewStore {
   held(ref: ElementRef, mask: boolean): DegreePreview | undefined;
   /** Changes whenever any held request changes. */
   readonly view: ReadableStore<number>;
+  /** How many previews have been answered, counting each answer once; it changes when a preview arrives, so what depends on the previews can ask again. */
+  readonly answers: ReadableStore<number>;
 }
 
 const keyOf = (person: string, ref: ElementRef, mask: boolean): string => JSON.stringify([person, ref.sourceId, ref.entityType, ref.stableId, mask]);
@@ -22,8 +24,10 @@ const keyOf = (person: string, ref: ElementRef, mask: boolean): string => JSON.s
 export function createPreviewStore(client: ApiClient, person: () => string, report?: FailureReporter): PreviewStore {
   const requests = new Map<string, RequestStore<DegreePreview>>();
   const changes = createStore(0);
+  const answers = createStore(0);
   return {
     view: readable(changes),
+    answers: readable(answers),
     held(ref, mask) {
       const state = requests.get(keyOf(person(), ref, mask))?.getState();
       return state?.phase === 'ready' ? state.data : undefined;
@@ -39,6 +43,13 @@ export function createPreviewStore(client: ApiClient, person: () => string, repo
       );
       requests.set(key, request);
       request.subscribe(() => changes.setState(changes.getState() + 1));
+      let counted: unknown;
+      request.subscribe(() => {
+        const state = request.getState();
+        if (state.phase !== 'ready' || state.data === counted) return;
+        counted = state.data;
+        answers.setState(answers.getState() + 1);
+      });
       return request;
     },
   };

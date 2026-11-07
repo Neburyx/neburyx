@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import type { Socket } from 'node:net';
 import fastifyStatic from '@fastify/static';
-import { type ErrorCode, degreePreviewRequestSchema, entityLookupRequestSchema, degreePreviewSchema, entityPathSchema, entityQuerySchema, expandRequestSchema, expandResponseSchema, healthResponseSchema, investigationListQuerySchema, investigationListResponseSchema, investigationResponseSchema, meResponseSchema, nodeSchema, openInvestigationRequestSchema, openInvestigationResponseSchema, readyResponseSchema, searchRequestSchema, searchResultSchema, sourceProfileSchema, sourceTestReportSchema, sourcesResponseSchema } from '@neburyx/contracts';
+import { type ErrorCode, coverageRequestSchema, coverageResponseSchema, degreePreviewRequestSchema, entityLookupRequestSchema, degreePreviewSchema, entityPathSchema, entityQuerySchema, expandRequestSchema, expandResponseSchema, healthResponseSchema, investigationListQuerySchema, investigationListResponseSchema, investigationResponseSchema, meResponseSchema, nodeSchema, openInvestigationRequestSchema, openInvestigationResponseSchema, readyResponseSchema, searchRequestSchema, searchResultSchema, sourceProfileSchema, sourceTestReportSchema, sourcesResponseSchema } from '@neburyx/contracts';
 import { z } from 'zod';
 import Fastify, {
   type FastifyBaseLogger,
@@ -14,6 +14,7 @@ import { AppError, codeForFailure, detailsOf, errorResponse, errorStatus } from 
 import type { AppStore } from './app-store.js';
 import { deriveReferenceKeys, type ReferenceKeys } from './reference/keys.js';
 import { canonicalLookup, canonicalOpen } from './reference/resolve.js';
+import { createCoverageService } from './graph/coverage-service.js';
 import { createDegreePreviewService } from './graph/degree-preview-service.js';
 import { createExpandService } from './graph/expand-service.js';
 import { createDegreeCache, type DegreeCacheOptions } from './graph/degree-cache.js';
@@ -335,13 +336,24 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       return searchResultSchema.parse(result);
     });
 
-    const degrees = createDegreePreviewService({ gate: options.gate, mapping, access, entities, verdicts: options.degreeVerdicts ?? NO_DEGREE_VERDICTS, ...(options.degreeVerdicts === undefined ? {} : { cache: { store: createDegreeCache(options.degreeCache), usability: options.degreeVerdicts, audit: (options.seams ?? communitySeams()).audit, logger: options.logger } }) });
+    const degreeCache = options.degreeVerdicts === undefined ? undefined : { store: createDegreeCache(options.degreeCache), usability: options.degreeVerdicts };
+    const auditSink = (options.seams ?? communitySeams()).audit;
+    const degrees = createDegreePreviewService({ gate: options.gate, mapping, access, entities, verdicts: options.degreeVerdicts ?? NO_DEGREE_VERDICTS, ...(degreeCache === undefined ? {} : { cache: { ...degreeCache, audit: auditSink, logger: options.logger } }) });
     app.post('/v1/graph/preview-expansion', { config: { permission: 'principal' } }, async (request) => {
       const body = degreePreviewRequestSchema.safeParse(request.body);
       if (!noQuerySchema.safeParse(request.query).success || !body.success) throw new AppError('INVALID_REQUEST');
       const identity = await options.store.current();
       const preview = await degrees.preview({ traceId: request.id, principal: identity.principal, sourceId: body.data.sourceId, ...body.data.ref, mask: body.data.mask === true });
       return degreePreviewSchema.parse(preview);
+    });
+
+    const coverage = createCoverageService({ mapping, access, verdicts: options.degreeVerdicts ?? NO_DEGREE_VERDICTS, audit: auditSink, logger: options.logger, ...(degreeCache === undefined ? {} : { cache: degreeCache }) });
+    app.post('/v1/graph/coverage', { config: { permission: 'principal' } }, async (request) => {
+      const body = coverageRequestSchema.safeParse(request.body);
+      if (!noQuerySchema.safeParse(request.query).success || !body.success) throw new AppError('INVALID_REQUEST');
+      const identity = await options.store.current();
+      const answer = await coverage.coverage({ traceId: request.id, principal: identity.principal, sourceId: body.data.sourceId, mask: body.data.mask === true, entities: body.data.entities });
+      return coverageResponseSchema.parse(answer);
     });
 
     const expansions = createExpandService({ gate: options.gate, mapping, access, entities });

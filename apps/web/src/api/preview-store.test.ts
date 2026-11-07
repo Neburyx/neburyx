@@ -113,4 +113,20 @@ describe('the preview store with a failure reporter', () => {
     await settle();
     expect(reported).toEqual([]);
   });
+
+  it('counts each answered preview once, and not a failure or a pending ask', async () => {
+    const { pending, store } = rig();
+    expect(store.answers.getState()).toBe(0);
+    store.forNode(ref('W-1'), false);
+    store.forNode(ref('W-2'), false);
+    expect(store.answers.getState()).toBe(0);
+    pending[0]?.answer({ ok: true, value: previewOf('W-1') });
+    await settle();
+    expect(store.answers.getState()).toBe(1);
+    pending[1]?.answer({ ok: false, failure: { code: 'NETWORK_UNAVAILABLE' } });
+    await settle();
+    expect(store.answers.getState()).toBe(1);
+    store.forNode(ref('W-1'), false);
+    expect(store.answers.getState()).toBe(1);
+  });
 });
