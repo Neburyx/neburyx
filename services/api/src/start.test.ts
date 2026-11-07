@@ -1,3 +1,4 @@
+import { seamsOf } from './app.js';
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { ALWAYS_USABLE } from './testing/usability.js';
 import { createServer } from 'node:net';
@@ -25,7 +26,7 @@ import { READINESS_LIMIT_MS } from './health/readiness.js';
 import { SHUTDOWN_TIMES } from './serve.js';
 import { createSourceTester } from './source-test/tester.js';
 import { start, type StartIo } from './start.js';
-import { memoryAppStore, memoryStoreWith } from './testing/app-store.js';
+import { LOCAL_IDENTITY, memoryAppStore, memoryStoreWith } from './testing/app-store.js';
 import { makeWebRoot } from './testing/web-root.js';
 
 const webRoot = makeWebRoot();
@@ -255,6 +256,20 @@ describe('the source gate at start-up', () => {
     expect(parts.opened[0]).toMatchObject({ mapping: { sources: [] }, env: DATABASE_ENV });
     await result.app.close();
     expect(order).toEqual(['gate closed', 'store closed']);
+  });
+
+  it('builds the gate with the read slots as its coordinator, the same the app holds, so every read of the running server waits for a slot', async () => {
+    const parts = tracked([]);
+    const run = io({ portOverride: 0, openSourceGate: parts.openSourceGate, openStore: parts.openStore });
+    const result = await start({ ...DATABASE_ENV }, run.io);
+    if (result.exitCode !== 0) throw new Error('the server did not start');
+    const coordinator = parts.opened[0]?.seams.coordinator;
+    expect(seamsOf(result.app).coordinator).toBe(coordinator);
+    const request = { principal: LOCAL_IDENTITY.principal, sourceId: 'demo', limits: { userConcurrency: 1, sourceConcurrency: 1, queueWaitMs: 20 }, leaseTtlMs: 60_000 };
+    const first = await coordinator?.acquireRead(request);
+    await expect(coordinator?.acquireRead(request)).resolves.toEqual({ status: 'busy' });
+    if (first?.status === 'granted') await first.lease.release();
+    await result.app.close();
   });
 
   it('closes the gate when the start fails after it was built', async () => {

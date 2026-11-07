@@ -5,7 +5,7 @@ import { AdapterError } from '../sources/errors.js';
 import type { AuditEvent } from '../seams/seams.js';
 import { auditResultFor, FALLBACK_AUDIT_ACTION } from './audit.js';
 import { authorizeRequest } from './authorize.js';
-import { acquireLease, executeRead, releaseRead, type ExecuteResult } from './execute.js';
+import { acquireLease, executeRead, releaseWhenClosed, type ExecuteResult, type SharedLease } from './execute.js';
 import { isMet, readIndexSnapshot } from './index-guard.js';
 import { exhaustive } from './exhaustive.js';
 import type { GateDeps } from './deps.js';
@@ -119,17 +119,17 @@ async function runManyStages(deps: GateDeps, requests: readonly GateRequest[], p
       const request = requests[index];
       if (request !== undefined && reads.includes(entry)) await guardIndexes(deps, { ...request, ...(indexes === undefined ? {} : { indexes }) }, context, entry.template, entry.params);
     }
-    const lease = await acquireLease(executeDeps, context);
+    const shared: SharedLease = { lease: await acquireLease(executeDeps, context), closings: [] };
     try {
       const out: ExecuteResult[] = [];
       for (const [index, entry] of validated.entries()) {
         const request = requests[index];
         if (request === undefined) throw new AppError('INTERNAL_ERROR');
-        out.push(reads.includes(entry) ? await executeRead(executeDeps, context, entry.template, entry.rendered, request.limit, lease) : { rows: [], hasMore: false });
+        out.push(reads.includes(entry) ? await executeRead(executeDeps, context, entry.template, entry.rendered, request.limit, shared) : { rows: [], hasMore: false });
       }
       return out;
     } finally {
-      await releaseRead(lease, deps.logger);
+      await releaseWhenClosed(shared.lease, shared.closings, deps.logger);
     }
   });
   const pages: GatePage[] = [];

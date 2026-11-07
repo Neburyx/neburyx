@@ -28,12 +28,26 @@ export interface AuditSink {
   record(event: AuditEvent): Promise<void>;
 }
 
+/** The slot limits of one source, as the gate resolved them for the read. */
+export interface ReadLimits {
+  /** Reads one person may have in flight on the source. */
+  readonly userConcurrency: number;
+  /** Reads everyone together may have in flight on the source. */
+  readonly sourceConcurrency: number;
+  /** How long a read waits, in all, for both of its slots before it is refused as busy. */
+  readonly queueWaitMs: number;
+}
+
 export interface ReadAccessRequest {
   readonly principal: Principal;
   readonly sourceId: string;
+  readonly limits: ReadLimits;
+  /** How long a granted lease may be held before it frees itself: a duration, so that a store shared by several copies can count it on its own clock. */
+  readonly leaseTtlMs: number;
 }
 
 export interface ReadLease {
+  /** Frees the lease's slots; a second call, or a call after the lease expired, frees nothing. */
   release(): Promise<void>;
 }
 

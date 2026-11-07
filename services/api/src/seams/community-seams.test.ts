@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { LOCAL_IDENTITY } from '../testing/app-store.js';
-import { communityAudit, communityCoordinator, communityPolicy } from './community-seams.js';
+import { communityAudit, communityPolicy, communitySeams } from './community-seams.js';
 import type { AuditEvent } from './seams.js';
 
 describe('the Community policy provider', () => {
@@ -45,15 +45,20 @@ describe('the Community audit sink', () => {
 });
 
 describe('the Community coordinator', () => {
-  it('grants every one of 100 read requests for one principal and source without a release', async () => {
-    const request = { principal: LOCAL_IDENTITY.principal, sourceId: 'source-a' };
-    const admissions = await Promise.all(Array.from({ length: 100 }, () => communityCoordinator.acquireRead(request)));
-    expect(admissions.every((admission) => admission.status === 'granted')).toBe(true);
+  const request = { principal: LOCAL_IDENTITY.principal, sourceId: 'source-a', limits: { userConcurrency: 2, sourceConcurrency: 32, queueWaitMs: 50 }, leaseTtlMs: 60_000 };
+
+  it('is the read slots: a third read of one person waits, and is refused as busy when no slot frees', async () => {
+    const { coordinator } = communitySeams();
+    const held = await Promise.all([coordinator.acquireRead(request), coordinator.acquireRead(request)]);
+    expect(held.map((admission) => admission.status)).toEqual(['granted', 'granted']);
+    await expect(coordinator.acquireRead(request)).resolves.toEqual({ status: 'busy' });
+    for (const admission of held) if (admission.status === 'granted') await admission.lease.release();
   });
 
-  it('resolves when a lease is released', async () => {
-    const admission = await communityCoordinator.acquireRead({ principal: LOCAL_IDENTITY.principal, sourceId: 'source-a' });
-    if (admission.status !== 'granted') throw new Error('expected a granted read');
-    await expect(admission.lease.release()).resolves.toBeUndefined();
+  it('gives each set of seams slots of its own', async () => {
+    const first = communitySeams().coordinator;
+    const held = await Promise.all([first.acquireRead(request), first.acquireRead(request)]);
+    await expect(communitySeams().coordinator.acquireRead(request)).resolves.toMatchObject({ status: 'granted' });
+    for (const admission of held) if (admission.status === 'granted') await admission.lease.release();
   });
 });

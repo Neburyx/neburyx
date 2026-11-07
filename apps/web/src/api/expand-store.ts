@@ -3,6 +3,7 @@ import type { ClientState } from '../state/client-state.js';
 import { DEFAULT_FILTER_HASH, DEFAULT_POLICY_VERSION, edgeKey, elementKey, queryKeyText, type QueryKey } from '../state/keys.js';
 import { createStore, readable, type ReadableStore } from '../state/store.js';
 import type { ApiClient, ApiFailure } from './client.js';
+import type { FailureReporter } from './failure-reporter.js';
 import { UNEXPECTED } from './use-request.js';
 
 /** What the client knows of the pages of one neighbor type of one node: how many of its relationships are on the canvas, where the next page starts, and whether that cursor can still be used. */
@@ -61,7 +62,7 @@ function neighborTypeOf(edge: GraphEdge, ref: ElementRef): string {
  * The expansions a person asked for in this session, outside React so that a menu that closes does not stop one. One request is one node's pages for the asked types and either adds all of its answer to the
  * loaded graph or nothing; an answer that arrives after the investigation or the masking changed, or after a newer ask for the same node, is dropped.
  */
-export function createExpandStore(client: ApiClient, state: ClientState, person: () => string): ExpandStore {
+export function createExpandStore(client: ApiClient, state: ClientState, person: () => string, report?: FailureReporter): ExpandStore {
   const store = createStore<ReadonlyMap<string, NodeExpansion>>(new Map());
   const notes = createStore<readonly string[]>([]);
   const chains = new Map<string, Map<string, Chain>>();
@@ -162,6 +163,11 @@ export function createExpandStore(client: ApiClient, state: ClientState, person:
     if (newest.get(nodeKey) !== mine || epochOf() !== epoch) return;
     if (!result.ok) {
       if (result.failure.code === 'ABORTED') return;
+      // shown elsewhere (the banner): the node goes back to what it was, and the banner's Retry asks the same again
+      if (report?.(result.failure, ref.sourceId, () => void run(ref, action)) === true) {
+        write(nodeKey, { ...before, status: 'idle', failure: undefined, failedAction: undefined });
+        return;
+      }
       const restart = action.kind === 'more' && result.failure.code === 'CURSOR_INVALIDATED';
       const progress = new Map(before.types);
       if (restart) progress.set(action.type, { ...(before.types.get(action.type) ?? { loaded: 0, hasMore: true, cursor: undefined }), restartNeeded: true });

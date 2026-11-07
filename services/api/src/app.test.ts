@@ -5,7 +5,6 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { buildApp, seamsOf } from './app.js';
 import {
   communityAudit,
-  communityCoordinator,
   communityPolicy,
   communitySeams,
 } from './seams/community-seams.js';
@@ -189,11 +188,8 @@ describe('the seams', () => {
 
   it('uses the three Community defaults when no seams are given, and still answers /v1/me', async () => {
     const server = await app();
-    expect(seamsOf(server)).toEqual({
-      policy: communityPolicy,
-      audit: communityAudit,
-      coordinator: communityCoordinator,
-    });
+    expect(seamsOf(server)).toMatchObject({ policy: communityPolicy, audit: communityAudit });
+    expect(seamsOf(server).coordinator).toHaveProperty('inspect');
     const response = await server.inject({ method: 'GET', url: '/v1/me' });
     expect(response.statusCode).toBe(200);
     expect(JSON.parse(response.body)).toMatchObject({ principal: { id: LOCAL_IDENTITY.principal.id }, edition: 'community' });
@@ -205,7 +201,7 @@ describe('the seams', () => {
 
   it('hands out a stub policy provider, which gives its denial', async () => {
     const server = await appWith({ ...communitySeams(), policy: denyingPolicy });
-    expect(seamsOf(server)).toEqual({ ...communitySeams(), policy: denyingPolicy });
+    expect(seamsOf(server).policy).toBe(denyingPolicy);
     expect(await seamsOf(server).policy.authorizeSource({ principal: LOCAL_IDENTITY.principal, sourceId: 'source-a' })).toEqual({
       allowed: false,
       reason: 'no grant for this source',
@@ -216,7 +212,7 @@ describe('the seams', () => {
     const kept: AuditEvent[] = [];
     const recording: AuditSink = { record: (given) => Promise.resolve(void kept.push(given)) };
     const server = await appWith({ ...communitySeams(), audit: recording });
-    expect(seamsOf(server)).toEqual({ ...communitySeams(), audit: recording });
+    expect(seamsOf(server).audit).toBe(recording);
     await seamsOf(server).audit.record(event);
     expect(kept).toEqual([event]);
   });
@@ -229,7 +225,7 @@ describe('the seams', () => {
 
   it('hands out a stub coordinator, which answers busy', async () => {
     const server = await appWith({ ...communitySeams(), coordinator: busyCoordinator });
-    expect(seamsOf(server)).toEqual({ ...communitySeams(), coordinator: busyCoordinator });
-    expect(await seamsOf(server).coordinator.acquireRead({ principal: LOCAL_IDENTITY.principal, sourceId: 'source-a' })).toEqual({ status: 'busy' });
+    expect(seamsOf(server).coordinator).toBe(busyCoordinator);
+    expect(await seamsOf(server).coordinator.acquireRead({ principal: LOCAL_IDENTITY.principal, sourceId: 'source-a', limits: { userConcurrency: 2, sourceConcurrency: 32, queueWaitMs: 2000 }, leaseTtlMs: 15_000 })).toEqual({ status: 'busy' });
   });
 });

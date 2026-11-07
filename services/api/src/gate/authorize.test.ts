@@ -55,7 +55,7 @@ describe('the read lease', () => {
     const { gate } = harness({ seams: { coordinator }, executor });
     await gate.run(gateRequest());
     expect(log).toEqual(['execute', 'release']);
-    expect(coordinator.requests).toEqual([{ principal: LOCAL_PRINCIPAL, sourceId: SOURCE_A }]);
+    expect(coordinator.requests).toEqual([{ principal: LOCAL_PRINCIPAL, sourceId: SOURCE_A, limits: { userConcurrency: 2, sourceConcurrency: 32, queueWaitMs: 2000 }, leaseTtlMs: 15_000 }]);
   });
 
   it('is released exactly once after a timeout', async () => {

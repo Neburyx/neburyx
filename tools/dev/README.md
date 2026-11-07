@@ -32,6 +32,6 @@ With both set:
 
 The env file is read as `NAME=value` lines: the value is everything after the first `=`, trimmed, with one pair of matching quotes removed; a `#` starts a comment only at the start of a line (`PASS=abc # note` makes the value `abc # note`); a line without `=` is skipped; an `export ` prefix is not accepted.
 
-Give a source's `uri` an IP address rather than a name that takes a while to resolve: by default a source's connection pool waits 2 seconds (`queue_wait_ms`), and a `.local` name can take longer on macOS.
+Give a source's `uri` an IP address rather than a name that takes a while to resolve: by default a read waits at most 2 seconds (`queue_wait_ms`) for a connection to the source, opening it included, and a `.local` name can take longer on macOS.
 
 With neither set, `pnpm dev` is unchanged.

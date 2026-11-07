@@ -81,3 +81,36 @@ describe('the preview store', () => {
     expect(request.getState()).toEqual({ phase: 'idle' });
   });
 });
+
+describe('the preview store with a failure reporter', () => {
+  const busy = { code: 'SOURCE_BUSY', message: 'busy', retryable: true, traceId: 't-1' } as const;
+
+  function reporting() {
+    const pending: Pending[] = [];
+    const reported: { code: string; sourceId: string; resend: () => void }[] = [];
+    const client = fakeClient({ previewExpansion: (body) => new Promise((resolve) => void pending.push({ body, answer: resolve })) });
+    const store = createPreviewStore(client, () => 'person-1', (failure, sourceId, resend) => (reported.push({ code: failure.code, sourceId, resend }), true));
+    return { pending, reported, store };
+  }
+
+  it('tells the reporter of a failure it keeps, with the source and a resend that asks again', async () => {
+    const { pending, reported, store } = reporting();
+    const request = store.forNode(ref('w1'), false);
+    pending[0]?.answer({ ok: false, failure: busy });
+    await settle();
+    expect(reported.map(({ code, sourceId }) => ({ code, sourceId }))).toEqual([{ code: 'SOURCE_BUSY', sourceId: 'demo' }]);
+    expect(request.getState()).toMatchObject({ phase: 'failed', failure: { code: 'SOURCE_BUSY' } });
+    reported[0]?.resend();
+    expect(pending).toHaveLength(2);
+  });
+
+  it('does not tell the reporter of a failure a newer ask made stale', async () => {
+    const { pending, reported, store } = reporting();
+    const request = store.forNode(ref('w1'), false);
+    request.reload();
+    pending[0]?.answer({ ok: false, failure: busy });
+    pending[1]?.answer({ ok: true, value: previewOf('w1') });
+    await settle();
+    expect(reported).toEqual([]);
+  });
+});

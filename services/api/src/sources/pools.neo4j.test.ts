@@ -25,11 +25,14 @@ afterAll(async () => {
 });
 
 describe('a pool that is full', () => {
-  it('answers unavailable to a call that waits longer than the queue wait, and does not disturb the call in progress', async () => {
+  it('holds twice the source slots, answers unavailable to a call that waits longer than the queue wait, and does not disturb the calls in progress', async () => {
     const first = executor.execute(call(SLOW_READ, 3000, 'pool-first'));
+    const second = executor.execute(call(SLOW_READ, 3000, 'pool-second'));
     expect(await pollUntil(() => transactionIsListed(server, 'pool-first'), 30_000)).toBe(true);
-    expect(await executor.execute(call('RETURN 1 AS one', 3000, 'pool-second'))).toEqual({ status: 'unavailable', reason: 'pool-full' });
+    expect(await pollUntil(() => transactionIsListed(server, 'pool-second'), 30_000)).toBe(true);
+    expect(await executor.execute(call('RETURN 1 AS one', 3000, 'pool-third'))).toEqual({ status: 'unavailable', reason: 'pool-full' });
     expect(await first).toEqual({ status: 'timeout' });
-    expect(await executor.execute(call('RETURN 1 AS one', 3000, 'pool-third'))).toMatchObject({ status: 'rows' });
+    expect(await second).toEqual({ status: 'timeout' });
+    expect(await executor.execute(call('RETURN 1 AS one', 3000, 'pool-fourth'))).toMatchObject({ status: 'rows' });
   });
 });

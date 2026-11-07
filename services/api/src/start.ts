@@ -139,7 +139,9 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
     if (config.cursorKey === undefined) io.logger.warn({ event: 'cursor.key_not_set' }, 'NEBURYX_CURSOR_KEY is not set: page cursors do not survive a restart and are not valid across API copies');
     const cursors = createCursorCodec({ key: config.cursorKey ?? randomBytes(32), clock: Date.now });
     const referenceKeys = deriveReferenceKeys(await store.referenceKey());
-    sourceGate = (io.openSourceGate ?? createSourceGate)({ mapping, env, seams: communitySeams(), logger: io.logger, usability, cursors, referenceKeys });
+    // one set of seams for the process: the gate's read slots are the app's
+    const seams = communitySeams();
+    sourceGate = (io.openSourceGate ?? createSourceGate)({ mapping, env, seams, logger: io.logger, usability, cursors, referenceKeys });
     const gate = sourceGate;
     const results = await createStartupChecker({ system: gate.system, mapping, store: observingStore, logger: io.logger }).run();
     const reachability = createReachabilityCache(mapping.sources.map((source) => source.id));
@@ -161,6 +163,7 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
       mapping,
       sourceTester: createSourceTester({ gate: gate.gate, mapping, store: observingStore, logger: io.logger }),
       gate: gate.gate,
+      seams,
       referenceKeys,
       degreeVerdicts: usability,
       indexes: gate.indexes,

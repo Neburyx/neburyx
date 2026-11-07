@@ -159,6 +159,10 @@ export interface Budgets {
   readonly requestTimeoutMs: number;
   /** The most relationships a bounded degree count reads for one relationship type and direction; the source's `heavy_op_threshold`, never the page limit. */
   readonly countCap: number;
+  /** The source's read slots: per person, for everyone, and the wait for both. */
+  readonly userConcurrency: number;
+  readonly sourceConcurrency: number;
+  readonly queueWaitMs: number;
 }
 
 export interface GateRequest {

@@ -274,10 +274,11 @@ describe('a type-ahead request in which one group fails', () => {
     let reads = 0;
     const defaults = communitySeams();
     const coordinator: Seams['coordinator'] = { acquireRead: (request) => (++reads === 3 ? Promise.resolve({ status: 'busy' }) : defaults.coordinator.acquireRead(request)) };
-    const { app } = await started(nodes, { coordinator });
+    const { app, executor } = await started(nodes, { coordinator });
     const result = resultOf(await postSearch(app, typeahead('AB')));
     expect(stableIds(result.exact)).toEqual(['AB']);
     expect(result.failures).toEqual([{ group: 'startsWith', code: 'SOURCE_BUSY' }]);
+    expect(executor.calls.map((call) => call.templateId)).not.toContain('entity-search-prefix');
     await app.close();
   });
 

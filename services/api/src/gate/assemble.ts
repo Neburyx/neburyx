@@ -53,7 +53,15 @@ export function defaultCatalog(): TemplateCatalog {
 }
 
 function budgetsFrom(source: SourceModel): Budgets {
-  return { timeoutMs: source.budgets.timeoutMs, maxPage: source.budgets.maxPage, requestTimeoutMs: DEFAULT_BUDGETS.requestTimeoutMs, countCap: source.budgets.heavyOpThreshold };
+  return {
+    timeoutMs: source.budgets.timeoutMs,
+    maxPage: source.budgets.maxPage,
+    requestTimeoutMs: DEFAULT_BUDGETS.requestTimeoutMs,
+    countCap: source.budgets.heavyOpThreshold,
+    userConcurrency: source.budgets.userConcurrency,
+    sourceConcurrency: source.budgets.sourceConcurrency,
+    queueWaitMs: source.budgets.queueWaitMs,
+  };
 }
 
 export function assembleGate(options: AssembleOptions): { readonly gate: Gate; readonly system: SystemRunner; readonly indexes: IndexReader } {

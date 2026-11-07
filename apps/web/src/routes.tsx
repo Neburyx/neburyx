@@ -20,6 +20,9 @@ import { PreviewProvider } from './workspace/preview-context.js';
 import { ExpandProvider } from './workspace/expand-context.js';
 import { createExpandStore } from './api/expand-store.js';
 import type { ClientState } from './state/client-state.js';
+import type { BannerController } from './banner/banner-controller.js';
+import { bannerReporter } from './banner/banner-reporter.js';
+import { sourceNameOf } from './shell/current-source.js';
 import { StartPage } from './first-run/start-page.js';
 import { RecentProvider } from './home/recent-context.js';
 import { createRecentInvestigations } from './home/recent-store.js';
@@ -88,13 +91,15 @@ function workspaceDevelopmentRoutes(): RouteObject[] {
   ];
 }
 
-export function appRoutes(client: ApiClient, state: ClientState): RouteObject[] {
+export function appRoutes(client: ApiClient, state: ClientState, banner?: BannerController): RouteObject[] {
   const shellData = createShellData(client);
   const testRuns = createTestRuns(client, shellData);
   const excerpts = createExcerpts(client);
   const profile = createProfileStore(client, state.investigation);
-  const previews = createPreviewStore(client, () => answeredData(shellData.getState().me)?.principal.id ?? '');
-  const expansions = createExpandStore(client, state, () => answeredData(shellData.getState().me)?.principal.id ?? '');
+  const person = (): string => answeredData(shellData.getState().me)?.principal.id ?? '';
+  const report = banner === undefined ? undefined : bannerReporter(banner, (sourceId) => sourceNameOf(answeredData(shellData.getState().sources)?.items ?? [], sourceId));
+  const previews = createPreviewStore(client, person, report);
+  const expansions = createExpandStore(client, state, person, report);
   const recent = createRecentInvestigations(client);
   const presence = createWorkspacePresence();
   return [

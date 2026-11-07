@@ -57,7 +57,7 @@ const menus = createMenuRegistry();
 registerBuiltInMenuItems(menus);
 const keyBindings = createKeyBindingRegistry();
 registerBuiltInKeyBindings(keyBindings);
-const router = createBrowserRouter(appRoutes(createApiClient(), state));
+const router = createBrowserRouter(appRoutes(createApiClient(), state, banner));
 createRoot(root).render(
   <StrictMode>
     <App router={router} state={state} banner={banner} slots={slots} selectionActions={createSelectionActionRegistry()} tools={tools} menus={menus} panels={panels} keyBindings={keyBindings} createRenderer={createCytoscapeRenderer} />

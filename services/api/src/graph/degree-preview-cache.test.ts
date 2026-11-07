@@ -29,9 +29,10 @@ async function started(options: { readonly deny?: () => boolean; readonly onRead
   record.observe(CHECK);
   const events: AuditEvent[] = [];
   const defaults = communitySeams();
+  let admissions = 0;
   const seams: Pick<Seams, 'policy' | 'coordinator' | 'audit'> = {
     policy: { authorizeSource: (request) => (options.deny?.() === true ? Promise.resolve({ allowed: false, reason: 'no' }) : defaults.policy.authorizeSource(request)) },
-    coordinator: defaults.coordinator,
+    coordinator: { acquireRead: (request) => ((admissions += 1), defaults.coordinator.acquireRead(request)) },
     audit: { record: (event) => (events.push(event), Promise.resolve()) },
   };
   const executor = new TestExecutor(
@@ -44,12 +45,23 @@ async function started(options: { readonly deny?: () => boolean; readonly onRead
   const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store: memoryAppStore(), mapping, gate: parts.gate, seams, degreeVerdicts: record });
   const reads = () => executor.calls.filter((call) => call.templateId.startsWith('degree-preview')).length;
   const previews = () => events.filter((event) => event.action === 'entity.degree_preview');
-  return { app, record, reads, previews };
+  return { app, record, reads, previews, executor, admissions: () => admissions };
 }
 
 const post = (app: Awaited<ReturnType<typeof started>>['app'], payload: object) => app.inject({ method: 'POST', url: '/v1/graph/preview-expansion', payload });
 
 describe('the degree preview cache in the endpoint', () => {
+  it('takes one read slot for each read of a preview it reads, and none for a preview it answers from the cache', async () => {
+    const { app, executor, admissions } = await started();
+    expect((await post(app, body())).statusCode).toBe(200);
+    expect(admissions()).toBe(executor.calls.length);
+    expect(executor.calls.filter((call) => call.templateId.startsWith('degree-preview'))).toHaveLength(1);
+    const before = admissions();
+    expect((await post(app, body())).statusCode).toBe(200);
+    expect(admissions()).toBe(before);
+    await app.close();
+  });
+
   it('answers the same request again without reading the source, and says the same', async () => {
     const { app, reads } = await started();
     const first = await post(app, body());

@@ -39,7 +39,7 @@ export function createNeo4jExecutor(options: Neo4jExecutorOptions): Neo4jExecuto
   const pending = new Set<Promise<void>>();
   let closing: Promise<void> | undefined;
 
-  function cleanUp(source: SourceModel, work: () => Promise<void>): void {
+  function cleanUp(source: SourceModel, work: () => Promise<void>): Promise<void> {
     const run = (async () => {
       let timer: ReturnType<typeof setTimeout> | undefined;
       const tooSlow = new Promise<'slow'>((resolve) => {
@@ -58,6 +58,7 @@ export function createNeo4jExecutor(options: Neo4jExecutorOptions): Neo4jExecuto
     })();
     pending.add(run);
     void run.finally(() => pending.delete(run));
+    return run;
   }
 
   function driverFor(source: SourceModel): SourceDriver | undefined {
@@ -68,7 +69,8 @@ export function createNeo4jExecutor(options: Neo4jExecutorOptions): Neo4jExecuto
       options.logger.warn({ event: 'source.credentials_missing', sourceId: source.id }, 'source credentials are not set');
       return undefined;
     }
-    const driver = createDriver(driverSettingsOf(source, credentials, source.budgets.sourceConcurrency));
+    // the read slots bound the reads that run; a slot can also have one connection still closing behind the read that holds it, as when the next page of an expansion starts
+    const driver = createDriver(driverSettingsOf(source, credentials, source.budgets.sourceConcurrency * 2));
     drivers.set(source.id, driver);
     return driver;
   }
@@ -99,7 +101,7 @@ export function createNeo4jExecutor(options: Neo4jExecutorOptions): Neo4jExecuto
 
   function discard(source: SourceModel, driver: SourceDriver): void {
     if (drivers.get(source.id) === driver) drivers.delete(source.id);
-    cleanUp(source, () => driver.close());
+    void cleanUp(source, () => driver.close());
   }
 
   function read(source: SourceModel, driver: SourceDriver, call: ExecuteCall, remainingMs: number): Promise<ExecuteOutcome> {
@@ -114,10 +116,14 @@ export function createNeo4jExecutor(options: Neo4jExecutorOptions): Neo4jExecuto
         if (settled) return;
         settled = true;
         clearTimeout(guard);
-        finish();
         const toClose = session;
         const toRollBack = transaction;
-        if (toClose !== undefined) cleanUp(source, () => endRead(source, toClose, toRollBack));
+        // said before the outcome, so the gate keeps the read's slots until its connection is back and a slot holder does not wait for a connection
+        if (toClose !== undefined) {
+          const closed = cleanUp(source, () => endRead(source, toClose, toRollBack));
+          call.onClosed?.(closed);
+        }
+        finish();
       };
       const fail = (error: unknown): void => {
         settle(() => {

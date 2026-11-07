@@ -15,6 +15,11 @@ export interface ExecuteCall {
   readonly rowLimit: number;
   readonly deadlineAt: number;
   readonly traceId: string;
+  /**
+   * Told, no later than the read settles (with an outcome or an error), of a promise that settles when the read's connection is back: its session closed, or the close given up.
+   * The gate keeps the read's lease until then. An executor that holds no connection after answering need not call it.
+   */
+  readonly onClosed?: (closed: Promise<void>) => void;
 }
 
 export type ExecuteOutcome =

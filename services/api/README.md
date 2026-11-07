@@ -72,6 +72,32 @@ environment variables the mapping names. A call answers `rows` (never more than 
 mode and every read runs in an explicit read transaction; Neo4j does not promise to reject a write sent that way, so the
 source's own privileges and the fixed read templates matter too.
 
+**Read slots.** Every read of a source takes two slots before it runs: one of the user's slots on that source
+(`user_concurrency`, default 2, at most 8), then one of the source's slots (`source_concurrency`, default 32, at most 256,
+set to what the customer's Neo4j can carry). One wait covers both: `queue_wait_ms` (default 2,000, at most 5,000), never longer
+than the time left to the request's deadline. A read that has no slot within the wait answers `SOURCE_BUSY` (503, retryable) and
+nothing is read; a read that got its user's slot and not the source slot gives the user's slot back. Waiting reads are served
+in the order they came. The slots live in the API process (`src/seams/read-slots.ts`, behind the gate's coordinator); each
+process that builds a gate has its own, so a `test-source` run has slots of its own, apart from the running server's.
+
+One read is one of these, and takes one pair of slots: a search group (exact, related, evidence, or the starts-with group of a
+type-ahead search); the facet read; an entity load; a degree preview that is not answered from the cache (a cached one reads
+nothing and takes no slot); one expansion, for all its neighbor types, whose pages are read one after another under the one
+lease; and the schema read the product makes for a search, an entity load, a preview or an expansion. A request never asks for a
+slot while it holds one: its schema read ends before its data read asks. A search reads its first group alone and then up to three
+reads at once (the other groups and the facet read, or the starts-with read of a type-ahead search), so with `user_concurrency` 2
+one of them waits for a slot. The facet read is the heaviest single read: up to 50 count probes in one read, about 42 ms for the
+server to compile each probe (measured on the demo graph), and an evidence branch that reads every relationship carrying the
+value. The product's own reads (schema reads, pings, start-up and first-contact checks) take source slots and not a user's slot.
+The write probe of `test-source --write-probe` is not a read through the gate and takes no slot.
+
+A read keeps its slots until its connection is back: the answer is sent as soon as the rows are in, and the slots are freed when
+the session has closed, or the close was given up after the source's `timeout_ms` (logged as `source.cleanup_slow`). The connection
+pool holds twice `source_concurrency` connections, one running and one closing for each slot (the next page of an expansion starts
+while the session of the page before is still closing), so a read that has its slots does not wait for a connection; after a
+close that was given up, the pool is the backstop. A lease whose release is lost frees itself after the time left to the request's deadline plus the source's
+`timeout_ms`.
+
 **Neo4j tests.** `pnpm test:neo4j` runs the `*.neo4j.test.ts` files against a Neo4j Enterprise 5.26 server that you own, not in CI
 (`packages/test-neo4j/README.md` has the three variables, the login it needs and what the tests create). Each file makes
 its own database and drops it. Sources are read with a login of the run that can only read that database, so a report

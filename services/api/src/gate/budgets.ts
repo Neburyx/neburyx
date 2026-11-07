@@ -5,4 +5,7 @@ export const DEFAULT_BUDGETS: Budgets = {
   maxPage: 50,
   requestTimeoutMs: 10_000,
   countCap: 500,
+  userConcurrency: 2,
+  sourceConcurrency: 32,
+  queueWaitMs: 2000,
 };

@@ -197,7 +197,7 @@ export function builtInKeyBindings(platform: 'mac' | 'other' = 'mac'): KeyBindin
 }
 
 export function renderApp(path: string | { readonly pathname: string; readonly search?: string; readonly state?: unknown }, client: ApiClient, state: ClientState = createClientState(), slots: SlotRegistry = createSlotRegistry(), createRenderer: CreateRenderer = stubFactory().create, selectionActions: SelectionActionRegistry = createSelectionActionRegistry(), tools: ToolRegistry = createToolRegistry(), menus: MenuRegistry = createMenuRegistry(), panels: PanelRegistry = createPanelRegistryFor(state), keyBindings: KeyBindingRegistry = builtInKeyBindings(), banner: BannerController = createBannerController()): { readonly banner: BannerController; readonly router: ReturnType<typeof createMemoryRouter>; readonly state: ClientState; readonly slots: SlotRegistry; readonly tools: ToolRegistry; readonly panels: PanelRegistry; readonly keyBindings: KeyBindingRegistry; readonly container: HTMLElement; readonly unmount: () => void } {
-  const router = createMemoryRouter(appRoutes(client, state), { initialEntries: [path] });
+  const router = createMemoryRouter(appRoutes(client, state, banner), { initialEntries: [path] });
   const view = render(
     <ClientStateProvider state={state}>
       <BannerProvider controller={banner}>

@@ -186,6 +186,7 @@ describe('POST /v1/graph/preview-expansion', () => {
     const response = await post(app, widget);
     expect(response.statusCode).toBe(503);
     expect(response.json().error).toMatchObject({ code: 'SOURCE_BUSY', retryable: true });
+    expect(executor.calls).toEqual([]);
     await app.close();
   });
 

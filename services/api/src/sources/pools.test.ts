@@ -20,7 +20,7 @@ describe('one pool per source', () => {
     expect(fake.drivers.map((driver) => driver.sessions[0]?.config.database)).toEqual(['graph-db', 'second-db']);
   });
 
-  it('sizes each pool from the budgets of its own source', async () => {
+  it('sizes each pool from the budgets of its own source: twice its slots, so a connection still closing never holds back a read that has its slot', async () => {
     useClock();
     const small = sourceModel({ budgets: { source_concurrency: 4, queue_wait_ms: 1500, timeout_ms: 3000 } });
     const large = sourceModel({ id: 'other', budgets: { source_concurrency: 40, queue_wait_ms: 500, timeout_ms: 9000 } });
@@ -28,8 +28,8 @@ describe('one pool per source', () => {
     await executor.execute(callFor());
     await executor.execute(callFor({ sourceId: 'other' }));
     expect(fake.drivers.map((driver) => [driver.settings.maxConnectionPoolSize, driver.settings.connectionAcquisitionTimeout, driver.settings.connectionTimeout])).toEqual([
-      [4, 1500, 3000],
-      [40, 500, 9000],
+      [8, 1500, 3000],
+      [80, 500, 9000],
     ]);
   });
 

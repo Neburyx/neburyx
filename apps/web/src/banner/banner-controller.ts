@@ -21,12 +21,15 @@ export interface PartialWording {
 
 export interface FailureOptions {
   readonly partial?: PartialWording;
+  /** The display name of the source the request read, for a state that names it. */
+  readonly source?: string;
   /** Sends the request that failed again, the same one; without it the banner has no Retry. */
   readonly resend?: () => void;
 }
 
 export interface BannerCauseContext {
   readonly partial?: PartialWording;
+  readonly source?: string;
   /** The Retry action of the banner with this ID, or undefined when the caller gave nothing to send again. It dismisses the banner first, then sends once. */
   retry(bannerId: string, label: string): BannerAction | undefined;
 }
@@ -89,6 +92,7 @@ export function createBannerController(): BannerController {
       if (describe === undefined) return false;
       const state = describe(failure, {
         ...(options.partial === undefined ? {} : { partial: options.partial }),
+        ...(options.source === undefined ? {} : { source: options.source }),
         retry(bannerId, label) {
           const { resend } = options;
           if (resend === undefined) return undefined;
