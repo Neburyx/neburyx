@@ -18,7 +18,7 @@ function Entity({ item, profile }: { readonly item: InvestigationListItem; reado
   return (
     <span className="recent-entity">
       <img src={legendGlyph(type?.icon ?? 'generic')} alt="" className="recent-glyph" />
-      <span>{start.stableId}</span>
+      {type?.keyed === true ? null : <span>{start.stableId}</span>}
       <span className="recent-type">{type?.displayName ?? start.entityType}</span>
     </span>
   );

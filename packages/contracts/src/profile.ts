@@ -9,6 +9,8 @@ export const BIND_KEYS = ['anchor', 'attribute', 'target', 'via'] as const;
 export const entityTypeProfileSchema = z.strictObject({
   type: name,
   label: name,
+  keyed: z.boolean(),
+  stableIdProperty: name,
   displayName: name,
   icon: iconKeySchema,
   title: name,

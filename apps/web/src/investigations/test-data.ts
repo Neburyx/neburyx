@@ -1,4 +1,5 @@
 import type { GraphNode, Investigation, InvestigationListItem, InvestigationListResponse, InvestigationResponse, OpenInvestigationResponse } from '@neburyx/contracts';
+import type { OpenInvestigationRequest } from '@neburyx/contracts';
 import type { ApiClient } from '../api/client.js';
 import { fakeClient } from '../api/fake-client.js';
 import { me, source } from '../test-utils.js';
@@ -97,7 +98,7 @@ export function knowing(known: readonly KnownInvestigation[], overrides: Partial
     },
     openInvestigation: async (request) => {
       calls.openInvestigation.push(calls.openInvestigation.length + 1);
-      const found = known.find((entry) => entry.node.ref.sourceId === request.entity.sourceId && entry.node.ref.entityType === request.entity.entityType && entry.node.ref.stableId === request.entity.stableId);
+      const found = known.find((entry) => entry.node.ref.sourceId === request.entity.sourceId && entry.node.ref.entityType === request.entity.entityType && entry.node.ref.stableId === entityIdOf(request.entity));
       return found === undefined ? { ok: false, failure: { code: 'NOT_FOUND', message: 'Not found.', retryable: false, traceId: 'tr-3' } } : { ok: true, value: openedOf(found.investigation, request.mask === true && found.masked !== undefined ? found.masked : found.node) };
     },
     ...overrides,
@@ -113,3 +114,6 @@ export function failsThenWaits(): Pick<ApiClient, 'listInvestigations'> {
   let reads = 0;
   return { listInvestigations: async () => (++reads === 1 ? { ok: false, failure: { code: 'NETWORK_UNAVAILABLE' } } : new Promise<never>(() => undefined)) };
 }
+
+/** The ID an open request names its entity by, whichever form it came in. */
+export const entityIdOf = (entity: OpenInvestigationRequest['entity']): string => ('stableId' in entity ? entity.stableId : entity.value);

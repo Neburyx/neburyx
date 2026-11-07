@@ -206,7 +206,7 @@ describe('POST /v1/graph/preview-expansion', () => {
     ['an unknown field in the node', { sourceId: 'demo', ref: { entityType: 'widget', stableId: 'W-1', sourceId: 'demo' } }],
     ['an empty source', { ...widget, sourceId: '' }],
     ['an empty stable ID', { sourceId: 'demo', ref: { entityType: 'widget', stableId: '' } }],
-    ['a stable ID of 201 characters', { sourceId: 'demo', ref: { entityType: 'widget', stableId: 'a'.repeat(201) } }],
+    ['a reference longer than the largest token', { sourceId: 'demo', ref: { entityType: 'widget', stableId: 'a'.repeat(266_692) } }],
   ])('answers INVALID_REQUEST for %s and reads nothing', async (_name, body) => {
     const { app, executor } = await started();
     const response = await post(app, body);

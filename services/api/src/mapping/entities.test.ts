@@ -1,7 +1,7 @@
 import { ICON_KEYS } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
 import { parseMapping } from './load.js';
-import { MAX_EVIDENCE_PROPERTIES, MAX_FACET_PROBES, MAX_REFERENCE_PROPERTIES, MAX_SEARCH_PROPERTIES } from './model.js';
+import { isKeyed, MAX_EVIDENCE_PROPERTIES, MAX_FACET_PROBES, MAX_REFERENCE_PROPERTIES, MAX_SEARCH_PROPERTIES } from './model.js';
 import { baseSource, expectRefused, fileOf, firstSource, issuesOf, load, type Json } from '../testing/mapping.js';
 
 const fullEntity = {
@@ -289,9 +289,19 @@ describe('duplicates and references', () => {
 });
 
 describe('pii and projection rules', () => {
-  it('refuses a stable ID that is also pii, naming the entity and property', () => {
-    const entity = { type: 'node_c', label: 'NodeC', stable_id: 'id', pii: ['id'] };
-    expectRefused(baseSource({ entities: [entity], relationships: undefined }), 'sources[0].entities[0].pii', 'lists id, which is the stable ID of node_c', 'source demo, entity node_c');
+  it('accepts a stable ID that is also pii, and the title of such a type is built from a pii property', () => {
+    const source = firstSource(load(baseSource({ entities: [{ type: 'node_c', label: 'NodeC', stable_id: 'id', pii: ['id'] }, { type: 'node_d', label: 'NodeD', stable_id: 'key' }], relationships: undefined })));
+    const [keyedType, plainType] = source.entities;
+    expect(keyedType === undefined ? undefined : isKeyed(keyedType)).toBe(true);
+    expect(plainType === undefined ? undefined : isKeyed(plainType)).toBe(false);
+    expect(keyedType?.title).toBe('{id}');
+    expect(keyedType?.titleUsesPii).toBe(true);
+    expect(plainType?.titleUsesPii).toBe(false);
+  });
+
+  it('measures nothing about the length of a stable ID: the model of a keyed type holds no limit', () => {
+    const source = firstSource(load(baseSource({ entities: [{ type: 'node_c', label: 'NodeC', stable_id: 'id', pii: [{ property: 'id', class: 'phone' }] }], relationships: undefined })));
+    expect(source.entities[0]?.piiClasses).toEqual({ id: 'phone' });
   });
 
   it.each([
@@ -349,8 +359,8 @@ describe('pii entries with a class', () => {
     expectRefused(baseSource({ entities: [entity(pii)], relationships: undefined }), `sources[0].entities[0].pii[${index}]`, 'lists x more than once');
   });
 
-  it('still refuses a stable ID that is pii when it is written with a class, and a link placeholder that is pii', () => {
-    expectRefused(baseSource({ entities: [{ ...entity([{ property: 'id', class: 'name' }]) }], relationships: undefined }), 'sources[0].entities[0].pii', 'lists id, which is the stable ID of node_c');
+  it('accepts a stable ID that is pii when it is written with a class, and still refuses a link placeholder that is pii', () => {
+    expect(isKeyed(firstSource(load(baseSource({ entities: [entity([{ property: 'id', class: 'name' }])], relationships: undefined }))).entities[0] ?? { pii: [], stableId: '' })).toBe(true);
     const linked = { type: 'node_c', label: 'NodeC', stable_id: 'id', pii: [{ property: 'id', class: 'text' }], link: 'https://records.example.test/{id}' };
     expectRefused(baseSource({ entities: [linked], relationships: undefined }), 'sources[0].entities[0].link', 'which is marked pii');
   });

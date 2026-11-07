@@ -5,6 +5,7 @@ import { migrationFileNames } from './migrate/provider.js';
 import { PROBE_STEP_MS, READINESS_LIMIT_MS, runReadiness } from './health/readiness.js';
 import { readIdentity, seedFirstStart } from './db/identity-repository.js';
 import { createInvestigation, findReusableInvestigation, readInvestigation, readLibrary, type InvestigationStore } from './db/investigations-repository.js';
+import { referenceKeyOf } from './db/reference-key-repository.js';
 import { applyPingState, hasActiveSource, latestChecksFor, latestQualifyingChecks, markSourceUnchecked, recordSourceCheck, type CheckedSource, type PingStateChange, type QualifyingCheck, type SourceCheck } from './db/source-checks-repository.js';
 import { listSourceRows, syncSources, type SourceRow } from './db/sources-repository.js';
 import type { SourceModel } from './mapping/model.js';
@@ -23,6 +24,8 @@ export interface AppStore extends InvestigationStore {
   latestChecksFor(sources: readonly CheckedSource[], onUnreadable?: (sourceId: string, checkedAt: string) => void): Promise<QualifyingCheck[]>;
   applyPingState(change: PingStateChange): Promise<boolean>;
   readiness(): Promise<ReadyChecks>;
+  /** The deployment's reference key, made by the first copy that asks and the same for every copy. */
+  referenceKey(): Promise<Buffer>;
   close(): Promise<void>;
 }
 
@@ -63,6 +66,7 @@ export function createAppStore(url: string, onConnectionError: () => void, optio
     markSourceUnchecked: (sourceId, reason) => markSourceUnchecked(pool, sourceId, reason),
     latestQualifyingChecks: (sources, since, onUnreadable) => latestQualifyingChecks(pool, sources, since, onUnreadable),
     latestChecksFor: (sources, onUnreadable) => latestChecksFor(pool, sources, onUnreadable),
+    referenceKey: () => referenceKeyOf(pool),
     applyPingState: (change) => applyPingState(pool, change),
     createInvestigation: (input) => createInvestigation(pool, input),
     findReusableInvestigation: (query) => findReusableInvestigation(pool, query),

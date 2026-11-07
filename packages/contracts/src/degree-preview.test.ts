@@ -23,7 +23,7 @@ describe('the degree preview request', () => {
     ['an empty source', { sourceId: '', ref: { entityType: 'widget', stableId: 'W-1' } }],
     ['an empty entity type', { sourceId: 'demo', ref: { entityType: '', stableId: 'W-1' } }],
     ['an empty stable ID', { sourceId: 'demo', ref: { entityType: 'widget', stableId: '' } }],
-    ['a stable ID of 201 characters', { sourceId: 'demo', ref: { entityType: 'widget', stableId: 'x'.repeat(201) } }],
+    ['a reference longer than the largest token', { sourceId: 'demo', ref: { entityType: 'widget', stableId: 'x'.repeat(266_692) } }],
     ['no node', { sourceId: 'demo' }],
   ])('refuses %s', (_name, body) => {
     expect(degreePreviewRequestSchema.safeParse(body).success).toBe(false);

@@ -19,6 +19,7 @@ import { createReachabilityCache, seedFromStartup } from './source-ping/cache.js
 import { createScheduledPing } from './source-ping/ping.js';
 import { applyPingResults } from './source-ping/state.js';
 import { createFirstContact, type FirstContact } from './source-test/first-contact.js';
+import { deriveReferenceKeys } from './reference/keys.js';
 import { observingStoreOf } from './source-test/observing-store.js';
 import { createUsabilityRecord } from './source-test/usability.js';
 import { refreshUsability } from './source-test/usability-refresh.js';
@@ -137,7 +138,8 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
     // a key that is not configured is made for this process only, so a page opened before a restart, or on another copy, says "Start again"
     if (config.cursorKey === undefined) io.logger.warn({ event: 'cursor.key_not_set' }, 'NEBURYX_CURSOR_KEY is not set: page cursors do not survive a restart and are not valid across API copies');
     const cursors = createCursorCodec({ key: config.cursorKey ?? randomBytes(32), clock: Date.now });
-    sourceGate = (io.openSourceGate ?? createSourceGate)({ mapping, env, seams: communitySeams(), logger: io.logger, usability, cursors });
+    const referenceKeys = deriveReferenceKeys(await store.referenceKey());
+    sourceGate = (io.openSourceGate ?? createSourceGate)({ mapping, env, seams: communitySeams(), logger: io.logger, usability, cursors, referenceKeys });
     const gate = sourceGate;
     const results = await createStartupChecker({ system: gate.system, mapping, store: observingStore, logger: io.logger }).run();
     const reachability = createReachabilityCache(mapping.sources.map((source) => source.id));
@@ -159,6 +161,7 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
       mapping,
       sourceTester: createSourceTester({ gate: gate.gate, mapping, store: observingStore, logger: io.logger }),
       gate: gate.gate,
+      referenceKeys,
       degreeVerdicts: usability,
       indexes: gate.indexes,
       reachability,

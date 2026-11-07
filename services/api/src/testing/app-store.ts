@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import type { AppStore } from '../app-store.js';
 import { sourceTestReportSchema } from '@neburyx/contracts';
 import type { PingStateChange, SourceCheck } from '../db/source-checks-repository.js';
@@ -50,6 +51,7 @@ export function memoryAppStore(): MemoryAppStore {
 
 export function memoryStoreWith(options: MemoryAppStoreOptions): MemoryAppStore {
   let rows = options.sources ?? [];
+  let key: Buffer | undefined;
   const checks: SourceCheck[] = [];
   const investigations: InvestigationRow[] = [];
   const drafts: (DraftRow & { readonly investigationId: string })[] = [];
@@ -156,6 +158,7 @@ export function memoryStoreWith(options: MemoryAppStoreOptions): MemoryAppStore 
       });
     },
     readiness: () => Promise.resolve({ database: 'ok', migrations: 'ok' }),
+    referenceKey: () => Promise.resolve((key ??= randomBytes(32))),
     close: () => Promise.resolve(),
   };
 }

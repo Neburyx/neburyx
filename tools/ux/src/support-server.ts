@@ -250,7 +250,9 @@ function createInvestigations(options: SupportServerOptions) {
       const parsed = openInvestigationRequestSchema.safeParse(body);
       if (!parsed.success) return json(response, 400, INVALID);
       const { entity, caseRef = null } = parsed.data;
-      const { entityType, stableId } = entity;
+      // the synthetic source keys no entity type, so a value and a reference are the same text
+      const { entityType } = entity;
+      const stableId = 'stableId' in entity ? entity.stableId : entity.value;
       const { sourceId } = parsed.data;
       if (!readable(sourceId)) return json(response, 404, NOT_FOUND);
       if (entity.sourceId !== sourceId) return json(response, 400, MISMATCH);

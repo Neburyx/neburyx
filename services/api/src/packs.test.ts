@@ -328,15 +328,6 @@ const mistakes: readonly Mistake[] = [
     reason: 'which is marked pii',
   },
   {
-    name: 'a stable ID marked pii',
-    mutate: (file) => {
-      const entity = sourceOf(file).entities[0];
-      if (entity !== undefined) markPii(entity, entity.stable_id);
-    },
-    path: () => 'sources[0].entities[0].pii',
-    reason: 'which is the stable ID of',
-  },
-  {
     name: 'a duplicate entity type',
     mutate: (file) => {
       const [first] = sourceOf(file).entities;

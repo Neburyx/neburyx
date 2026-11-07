@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHmac } from 'node:crypto';
 
 /** The JSON text of a value with the keys of every object sorted, so that two requests that differ only in the order of keys have the same text. */
 export function canonicalJson(value: unknown): string {
@@ -12,7 +12,7 @@ export function canonicalJson(value: unknown): string {
   return JSON.stringify(value) ?? 'null';
 }
 
-/** The filter hash a cursor binds: the SHA-256 (hex) of the canonical JSON of the validated parameters, taken before the page limit and the cursor are added. */
-export function filterHashOf(params: unknown): string {
-  return createHash('sha256').update(canonicalJson(params)).digest('hex');
+/** The filter hash a cursor binds: the HMAC-SHA-256 (hex) under the deployment's filter-hash key of the canonical JSON of the validated parameters, taken before the page limit and the cursor are added. It is keyed so that a parameter of little entropy, such as a phone number, cannot be guessed back from a cursor. */
+export function filterHashOf(params: unknown, key: Buffer): string {
+  return createHmac('sha256', key).update(canonicalJson(params)).digest('hex');
 }

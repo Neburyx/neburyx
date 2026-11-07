@@ -8,6 +8,8 @@
     {
       "type": "account",
       "label": "Account",
+      "keyed": false,
+      "stableIdProperty": "accountId",
       "displayName": "Account",
       "icon": "money",
       "title": "Account {accountId}",
@@ -34,6 +36,8 @@
     {
       "type": "customer",
       "label": "Customer",
+      "keyed": false,
+      "stableIdProperty": "customerId",
       "displayName": "Customer",
       "icon": "person",
       "title": "{fullName}",
@@ -57,6 +61,8 @@
     {
       "type": "device",
       "label": "Device",
+      "keyed": false,
+      "stableIdProperty": "fingerprint",
       "displayName": "Device",
       "icon": "terminal",
       "title": "{fingerprint}",
@@ -77,6 +83,8 @@
     {
       "type": "ip_address",
       "label": "IpAddress",
+      "keyed": false,
+      "stableIdProperty": "address",
       "displayName": "IP address",
       "icon": "network",
       "title": "{address}",
@@ -97,6 +105,8 @@
     {
       "type": "transaction",
       "label": "Transaction",
+      "keyed": false,
+      "stableIdProperty": "transactionId",
       "displayName": "Transaction",
       "icon": "document",
       "title": "Transaction {transactionId}",
@@ -120,6 +130,8 @@
     {
       "type": "merchant",
       "label": "Merchant",
+      "keyed": false,
+      "stableIdProperty": "merchantId",
       "displayName": "Merchant",
       "icon": "storefront",
       "title": "{name}",

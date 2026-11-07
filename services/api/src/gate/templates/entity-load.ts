@@ -1,4 +1,4 @@
-import { stableIdSchema } from '@neburyx/contracts';
+import { referenceValueSchema } from '@neburyx/contracts';
 import { z } from 'zod';
 import type { TemplateDefinition } from '../catalog.js';
 import { normalizeRows, type Normalized, type NormalizeContext } from '../normalize/index.js';
@@ -28,10 +28,11 @@ export const entityLoadTemplate: TemplateDefinition = {
   version: '1',
   auditAction: 'entity.load',
   cypher: 'MATCH (n:@entity(entityType)) WHERE n.@stableId(entityType) IN [$stableId, $stableInteger] RETURN n ORDER BY elementId(n) LIMIT $limit + 1',
-  paramsSchema: z.strictObject({ entityType: z.string().min(1), stableId: stableIdSchema }).transform((params) => ({ ...params, stableInteger: integerCandidateOf(params.stableId) })),
+  paramsSchema: z.strictObject({ entityType: z.string().min(1), stableId: referenceValueSchema }).transform((params) => ({ ...params, stableInteger: integerCandidateOf(params.stableId) })),
   scope: 'user',
   paged: false,
   entityParams: ['entityType'],
+  referenceParams: { entityType: 'entityType', stableId: 'stableId' },
   relationshipParams: [],
   indexNeeds: (params, allowlist) => {
     const property = allowlist.stableIds.get(String(params['entityType']));

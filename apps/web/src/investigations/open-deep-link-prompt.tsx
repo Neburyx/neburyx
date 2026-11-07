@@ -1,8 +1,13 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router';
-import { MAX_CASE_REF_LENGTH, MAX_STABLE_ID_LENGTH } from '@neburyx/contracts';
-import { characters, deepLinkPath, readDeepLink, SOURCE_ID, type DeepLink } from './deep-link.js';
-import { PROMPT_GIVE_ENTITY_TYPE, PROMPT_GIVE_SOURCE, PROMPT_GIVE_STABLE_ID, PROMPT_LABELS, PROMPT_NOT_A_LINK, PROMPT_NOT_OF_THIS_APP, PROMPT_OPEN, PROMPT_SOURCE_SHAPE, promptTooLong } from './messages.js';
+import { MAX_CASE_REF_LENGTH, MAX_REFERENCE_VALUE_CHARACTERS, MAX_STABLE_ID_LENGTH } from '@neburyx/contracts';
+import { useApiClient } from '../api/client-context.js';
+import { answeredData, useShellData } from '../shell/shell-data.js';
+import { EXPLORE_PATH } from '../shell/navigation.js';
+import { useClientState, useSessionMask } from '../state/context.js';
+import { characters, deepLinkPath, readDeepLink, SOURCE_ID } from './deep-link.js';
+import { openEntity } from './open-flow.js';
+import { PROMPT_GIVE_ENTITY_TYPE, PROMPT_GIVE_SOURCE, PROMPT_GIVE_STABLE_ID, PROMPT_LABELS, PROMPT_MASKED_VALUE, PROMPT_NOT_A_LINK, PROMPT_NOT_FOUND, PROMPT_NOT_OF_THIS_APP, PROMPT_SOURCE_UNAVAILABLE, PROMPT_OPEN, PROMPT_SOURCE_SHAPE, promptTooLong } from './messages.js';
 
 interface Parts {
   readonly sourceId: string;
@@ -18,7 +23,8 @@ function problemWith(parts: Parts): string | undefined {
   if (parts.stableId === '') return PROMPT_GIVE_STABLE_ID;
   if (!SOURCE_ID.test(parts.sourceId)) return PROMPT_SOURCE_SHAPE;
   if (characters(parts.entityType) > MAX_STABLE_ID_LENGTH) return promptTooLong('entity type', MAX_STABLE_ID_LENGTH);
-  if (characters(parts.stableId) > MAX_STABLE_ID_LENGTH) return promptTooLong('stable ID', MAX_STABLE_ID_LENGTH);
+  // a value is counted in UTF-16 code units, as the contract counts it
+  if (parts.stableId.length > MAX_REFERENCE_VALUE_CHARACTERS) return promptTooLong('stable ID', MAX_REFERENCE_VALUE_CHARACTERS);
   if (characters(parts.caseRef) > MAX_CASE_REF_LENGTH) return promptTooLong('case reference', MAX_CASE_REF_LENGTH);
   return undefined;
 }
@@ -38,10 +44,18 @@ function Message({ id, text }: { readonly id: string; readonly text: string | un
 /** The two ways to name a link: paste it, or type its parts. Each form uses only its own fields and goes to the route of the link it makes. */
 export function OpenDeepLinkPrompt() {
   const navigate = useNavigate();
+  const client = useApiClient();
+  const state = useClientState();
+  const mask = useSessionMask();
+  const principalId = answeredData(useShellData().me)?.principal.id;
   const [text, setText] = useState('');
   const [linkProblem, setLinkProblem] = useState<string | undefined>(undefined);
   const [parts, setParts] = useState<Parts>({ sourceId: '', entityType: '', stableId: '', caseRef: '' });
   const [partsProblem, setPartsProblem] = useState<string | undefined>(undefined);
+  const attempt = useRef<AbortController | undefined>(undefined);
+  // an answer that comes after the page was left, another value was sent, or masking changed is not applied
+  useEffect(() => () => attempt.current?.abort(), []);
+  useEffect(() => attempt.current?.abort(), [mask]);
 
   const openText = (event: FormEvent): void => {
     event.preventDefault();
@@ -54,11 +68,22 @@ export function OpenDeepLinkPrompt() {
   const openParts = (event: FormEvent): void => {
     event.preventDefault();
     const problem = problemWith(parts);
-    const link: DeepLink = { sourceId: parts.sourceId, entityType: parts.entityType, stableId: parts.stableId, ...(parts.caseRef === '' ? {} : { caseRef: parts.caseRef }) };
-    const read = problem === undefined ? readDeepLink(deepLinkPath(link), window.location.origin) : undefined;
-    if (problem !== undefined || read === undefined || !read.ok) return setPartsProblem(problem ?? PROMPT_NOT_A_LINK);
+    if (problem !== undefined) return setPartsProblem(problem);
+    if (principalId === undefined) return setPartsProblem(PROMPT_NOT_A_LINK);
     setPartsProblem(undefined);
-    navigate(deepLinkPath(read.link));
+    // the typed value goes in the body of the open request and never into an address: the investigation's own address follows
+    const request = { sourceId: parts.sourceId, entity: { sourceId: parts.sourceId, entityType: parts.entityType, value: parts.stableId }, ...(parts.caseRef === '' ? {} : { caseRef: parts.caseRef }) };
+    attempt.current?.abort();
+    const controller = new AbortController();
+    attempt.current = controller;
+    void openEntity(client, state, request, { principalId, mask }, controller.signal).then((answer) => {
+      if (controller.signal.aborted) return;
+      if (answer.kind === 'shown') navigate(`${EXPLORE_PATH}/${answer.id}`, { state: { resumed: answer.created === false } });
+      else if (answer.kind === 'source-unavailable') setPartsProblem(PROMPT_SOURCE_UNAVAILABLE);
+      else if (answer.failure.code === 'INVALID_REQUEST' && mask) setPartsProblem(PROMPT_MASKED_VALUE);
+      else if (answer.failure.code === 'NOT_FOUND') setPartsProblem(PROMPT_NOT_FOUND);
+      else setPartsProblem(`The entity could not be opened (${answer.failure.code}).`);
+    });
   };
 
   const setPart = (name: keyof Parts, value: string): void => setParts((held) => ({ ...held, [name]: value }));

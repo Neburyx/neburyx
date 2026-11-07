@@ -1,4 +1,4 @@
-import { MAX_CASE_REF_LENGTH, MAX_STABLE_ID_LENGTH, pathSegmentOf, valueOfPathSegment } from '@neburyx/contracts';
+import { canCarryInPath, MAX_CASE_REF_LENGTH, MAX_STABLE_ID_LENGTH, pathSegmentOf, valueOfPathSegment } from '@neburyx/contracts';
 
 export interface DeepLink {
   readonly sourceId: string;
@@ -67,8 +67,14 @@ export function readDeepLink(text: string, origin: string): ReadLink {
   const stableId = decoded(rawId ?? '');
   const caseRef = caseRefOf(query);
   if (sourceId === undefined || !SOURCE_ID.test(sourceId) || entityType === undefined || stableId === undefined || caseRef === null) return MALFORMED;
-  if (characters(stableId) > MAX_STABLE_ID_LENGTH || characters(entityType) > MAX_STABLE_ID_LENGTH) return MALFORMED;
+  // the reference is counted in UTF-16 code units, as the contract and `linkFor` count it
+  if (!canCarryInPath(stableId) || characters(entityType) > MAX_STABLE_ID_LENGTH) return MALFORMED;
   return { ok: true, link: { sourceId, entityType, stableId, ...(caseRef === undefined ? {} : { caseRef }) } };
+}
+
+/** The path of a link, or nothing when its ID cannot travel in a path (too long, a control character, an unpaired surrogate): such a node has no deep link and is opened from the graph or by ID. */
+export function linkFor(link: DeepLink): string | undefined {
+  return canCarryInPath(link.stableId) && canCarryInPath(link.entityType) ? deepLinkPath(link) : undefined;
 }
 
 /** The path of a link, made with the shared path-segment pair and one percent-encoding. */

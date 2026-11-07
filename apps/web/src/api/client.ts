@@ -1,4 +1,5 @@
 import {
+  canCarryInPath,
   degreePreviewSchema,
   errorBodySchema,
   errorResponseSchema,
@@ -14,6 +15,7 @@ import {
   sourceTestReportSchema,
   type DegreePreview,
   type DegreePreviewRequest,
+  type EntityLookupRequest,
   type ElementRef,
   type ErrorResponse,
   type GraphNode,
@@ -56,6 +58,8 @@ export interface ApiClient {
   testSource(sourceId: string, signal?: AbortSignal): Promise<ApiResult<SourceTestReport>>;
   /** One entity of a source, without its neighbors; `mask` asks for the personal-data fields to be masked. */
   getEntity(ref: ElementRef, options?: { readonly mask?: boolean }, signal?: AbortSignal): Promise<ApiResult<GraphNode>>;
+  /** One entity of a source by a reference or a raw value in a request body, for an ID that a path cannot carry; a raw value of a keyed type is accepted only unmasked. */
+  lookupEntity(request: EntityLookupRequest, signal?: AbortSignal): Promise<ApiResult<GraphNode>>;
   /** Opens an entity as an investigation: creates one, or resumes the caller's own for the same case reference. */
   openInvestigation(request: OpenInvestigationRequest, signal?: AbortSignal): Promise<ApiResult<OpenInvestigationResponse>>;
   getInvestigation(id: string, signal?: AbortSignal): Promise<ApiResult<InvestigationResponse>>;
@@ -129,7 +133,18 @@ export function createApiClient(fetcher: Fetcher = (input, init) => fetch(input,
       const result = await request(fetcher, `/v1/sources/${encodeURIComponent(sourceId)}/test`, sourceTestReportSchema, signal, 'POST');
       return result.ok && result.value.sourceId !== sourceId ? failed('SCHEMA_MISMATCH') : result;
     },
+    lookupEntity: async (lookup, signal) => {
+      const result = await request(fetcher, '/v1/entities/lookup', nodeSchema, signal, 'POST', lookup);
+      if (!result.ok) return result;
+      const asked = 'ref' in lookup ? lookup.ref : lookup.value;
+      const exact = 'ref' in lookup ? result.value.ref.stableId === lookup.ref.stableId : true;
+      return result.value.ref.sourceId !== lookup.sourceId || result.value.ref.entityType !== asked.entityType || !exact ? failed('SCHEMA_MISMATCH') : result;
+    },
     getEntity: async (ref, options, signal) => {
+      if (!canCarryInPath(ref.stableId) || !canCarryInPath(ref.entityType)) {
+        const result = await request(fetcher, '/v1/entities/lookup', nodeSchema, signal, 'POST', { sourceId: ref.sourceId, ...(options?.mask === true ? { mask: true } : {}), ref: { entityType: ref.entityType, stableId: ref.stableId } });
+        return result.ok && !sameRef(result.value.ref, ref) ? failed('SCHEMA_MISMATCH') : result;
+      }
       const path = `/v1/entities/${encodeURIComponent(ref.sourceId)}/${encodeURIComponent(pathSegmentOf(ref.entityType))}/${encodeURIComponent(pathSegmentOf(ref.stableId))}${options?.mask === true ? '?mask=true' : ''}`;
       const result = await request(fetcher, path, nodeSchema, signal);
       return result.ok && !sameRef(result.value.ref, ref) ? failed('SCHEMA_MISMATCH') : result;
@@ -139,8 +154,10 @@ export function createApiClient(fetcher: Fetcher = (input, init) => fetch(input,
       if (!result.ok) return result;
       const { investigation } = result.value;
       const startsAt = investigation.startingEntity;
-      const named = startsAt !== null && startsAt.entityType === open.entity.entityType && startsAt.stableId === open.entity.stableId;
-      return investigation.sourceId !== open.sourceId || !named || ('entity' in result.value && !sameRef(result.value.entity.ref, open.entity)) ? failed('SCHEMA_MISMATCH') : result;
+      // a request that named the entity by a reference is answered with that same reference; one that named it by a raw value is answered with the canonical reference of the same source and entity type
+      const named = startsAt !== null && startsAt.entityType === open.entity.entityType && ('stableId' in open.entity ? startsAt.stableId === open.entity.stableId : true);
+      const sameEntity = (node: ElementRef): boolean => node.sourceId === open.entity.sourceId && node.entityType === open.entity.entityType && ('stableId' in open.entity ? node.stableId === open.entity.stableId : startsAt !== null && node.stableId === startsAt.stableId);
+      return investigation.sourceId !== open.sourceId || !named || ('entity' in result.value && !sameEntity(result.value.entity.ref)) ? failed('SCHEMA_MISMATCH') : result;
     },
     searchEntities: async (search, signal) => {
       const result = await request(fetcher, '/v1/search/entities', searchResultSchema, signal, 'POST', search);

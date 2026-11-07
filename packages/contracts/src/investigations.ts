@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { stableIdSchema } from './entities.js';
+import { referenceTextSchema, referenceValueSchema } from './entities.js';
 import { elementRefSchema, nodeSchema } from './graph.js';
 
 /** The longest case reference and title, in characters (the database checks the same limits). */
@@ -14,7 +14,7 @@ export const INVESTIGATION_STATUSES = ['open', 'closed', 'archived'] as const;
 /** Whether the source of an investigation can be read as it was: it can, it is no longer in the configuration, or it now points at another database. Decided without reading the source. */
 export const INVESTIGATION_SOURCE_STATES = ['available', 'removed', 'repointed'] as const;
 
-export const caseRefSchema = text.refine((value) => codePoints(value) <= MAX_CASE_REF_LENGTH, { message: 'a case reference is at most 100 characters' }).meta({ maxLength: MAX_CASE_REF_LENGTH });
+export const caseRefSchema = text.refine((value) => !value.includes('\u0000') && !/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/.test(value), { message: 'a case reference has no NUL and no unpaired surrogate' }).refine((value) => codePoints(value) <= MAX_CASE_REF_LENGTH, { message: 'a case reference is at most 100 characters' }).meta({ maxLength: MAX_CASE_REF_LENGTH });
 
 export const startingEntitySchema = z.strictObject({ entityType: text, stableId: text });
 
@@ -65,12 +65,15 @@ export const investigationListCountsSchema = z.strictObject({
 export const investigationListResponseSchema = z.strictObject({ items: z.array(investigationListItemSchema), hasMore: z.boolean(), counts: investigationListCountsSchema });
 
 /** `POST /v1/investigations`: open an entity as an investigation. The entity names its own source so a reference to another source is refused, not read. */
-export const openInvestigationRequestSchema = z.strictObject({
-  sourceId: text,
-  entity: elementRefSchema.extend({ stableId: stableIdSchema }),
-  caseRef: caseRefSchema.optional(),
-  mask: z.boolean().optional(),
-});
+const openRequestBase = { sourceId: text, caseRef: caseRefSchema.optional(), mask: z.boolean().optional() };
+
+/** The entity as a reference the API returned (a token for a keyed entity type, the ID as it is for any other, of any length a body carries). */
+export const referenceOpenRequestSchema = z.strictObject({ ...openRequestBase, entity: elementRefSchema.extend({ stableId: referenceTextSchema }) });
+
+/** The entity as a raw value to resolve: for a keyed entity type it is accepted only when the request is not masked. */
+export const valueOpenRequestSchema = z.strictObject({ ...openRequestBase, entity: z.strictObject({ sourceId: text, entityType: text, value: referenceValueSchema }) });
+
+export const openInvestigationRequestSchema = z.union([referenceOpenRequestSchema, valueOpenRequestSchema]);
 
 const availableInvestigationSchema = investigationSchema.extend({ sourceState: z.literal('available') });
 const unavailableInvestigationSchema = investigationSchema.extend({ sourceState: z.enum(INVESTIGATION_SOURCE_STATES).exclude(['available']) });
@@ -111,6 +114,8 @@ export const investigationResponseSchema = z.strictObject({ investigation: inves
 
 export type Investigation = z.infer<typeof investigationSchema>;
 export type OpenInvestigationRequest = z.infer<typeof openInvestigationRequestSchema>;
+export type ReferenceOpenRequest = z.infer<typeof referenceOpenRequestSchema>;
+export type ValueOpenRequest = z.infer<typeof valueOpenRequestSchema>;
 export type OpenInvestigationResponse = z.infer<typeof openInvestigationResponseSchema>;
 export type LayoutDocument = z.infer<typeof layoutDocumentSchema>;
 export type QueryContextDocument = z.infer<typeof queryContextDocumentSchema>;

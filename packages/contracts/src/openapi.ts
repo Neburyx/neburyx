@@ -7,6 +7,7 @@ import { meResponseSchema } from './me.js';
 import { readyResponseSchema } from './ready.js';
 import { sourceProfileSchema } from './profile.js';
 import { degreePreviewRequestSchema, degreePreviewSchema } from './degree-preview.js';
+import { entityLookupRequestSchema } from './entities.js';
 import { searchRequestSchema, searchResultSchema } from './search.js';
 import { sourceTestReportSchema } from './source-test.js';
 import { sourcesResponseSchema } from './sources.js';
@@ -18,7 +19,7 @@ export interface OpenApiDocument {
   readonly openapi: string;
   readonly info: { readonly title: string; readonly version: string };
   readonly paths: Readonly<Record<string, unknown>>;
-  readonly components: { readonly schemas: { readonly DegreePreview: Record<string, unknown>; readonly DegreePreviewRequest: Record<string, unknown>; readonly ErrorResponse: Record<string, unknown>; readonly GraphNode: Record<string, unknown>; readonly HealthResponse: Record<string, unknown>; readonly InvestigationListResponse: Record<string, unknown>; readonly InvestigationResponse: Record<string, unknown>; readonly MeResponse: Record<string, unknown>; readonly OpenInvestigationRequest: Record<string, unknown>; readonly OpenInvestigationResponse: Record<string, unknown>; readonly ReadyResponse: Record<string, unknown>; readonly SearchRequest: Record<string, unknown>; readonly SearchResult: Record<string, unknown>; readonly SourceProfile: Record<string, unknown>; readonly SourceTestReport: Record<string, unknown>; readonly SourcesResponse: Record<string, unknown> } };
+  readonly components: { readonly schemas: { readonly DegreePreview: Record<string, unknown>; readonly DegreePreviewRequest: Record<string, unknown>; readonly EntityLookupRequest: Record<string, unknown>; readonly ErrorResponse: Record<string, unknown>; readonly GraphNode: Record<string, unknown>; readonly HealthResponse: Record<string, unknown>; readonly InvestigationListResponse: Record<string, unknown>; readonly InvestigationResponse: Record<string, unknown>; readonly MeResponse: Record<string, unknown>; readonly OpenInvestigationRequest: Record<string, unknown>; readonly OpenInvestigationResponse: Record<string, unknown>; readonly ReadyResponse: Record<string, unknown>; readonly SearchRequest: Record<string, unknown>; readonly SearchResult: Record<string, unknown>; readonly SourceProfile: Record<string, unknown>; readonly SourceTestReport: Record<string, unknown>; readonly SourcesResponse: Record<string, unknown> } };
 }
 
 function schemaJson(schema: z.ZodType): Record<string, unknown> {
@@ -47,6 +48,7 @@ export function buildOpenApiDocument(
   investigationList: z.ZodType = investigationListResponseSchema,
   degreePreviewRequest: z.ZodType = degreePreviewRequestSchema,
   degreePreview: z.ZodType = degreePreviewSchema,
+  entityLookupRequest: z.ZodType = entityLookupRequestSchema,
 ): OpenApiDocument {
   return {
     openapi: '3.1.0',
@@ -141,6 +143,24 @@ export function buildOpenApiDocument(
             '400': { description: 'A query parameter other than mask was sent, the stable ID is too long, or the entity type is not in the mapping', content: jsonBody('ErrorResponse') },
             '404': { description: 'No configured source has this id, the person may not read it (one answer for these), or the source holds no such entity', content: jsonBody('ErrorResponse') },
             '500': { description: 'The read could not be completed', content: jsonBody('ErrorResponse') },
+            '503': { description: 'The source is not available, or is busy', content: jsonBody('ErrorResponse') },
+            '504': { description: 'The source did not answer in time', content: jsonBody('ErrorResponse') },
+          },
+        },
+      },
+      '/v1/entities/lookup': {
+        post: {
+          operationId: 'lookupEntity',
+          summary: 'One entity of a source by a reference in the request body',
+          requestBody: { required: true, content: jsonBody('EntityLookupRequest') },
+          description:
+            'Answers the same node as the GET of an entity, for a reference that a path cannot carry (a reference or a value of any length up to the limit of a body, with any characters). ref is a reference as the API returned it: for an entity type whose stable ID is also personal data (a keyed type) a token that is valid only for the source and entity type it was made for, for any other type the ID as it is. value is a raw value to resolve: for a keyed type it is accepted only when the request is not masked (mask true is INVALID_REQUEST), and the node answered carries the token as its reference; for any other type it is the ID. A token of another source or entity type, a malformed token and a masked raw value of a keyed type are INVALID_REQUEST, one answer for all. No value or token is logged.',
+          responses: {
+            '200': { description: 'The entity, with its reference', content: jsonBody('GraphNode') },
+            '400': { description: 'The body is not valid, or the reference or the masked value is refused (one answer for all)', content: jsonBody('ErrorResponse') },
+            '404': { description: 'No such entity, or the source is not configured or may not be read (one answer for all)', content: jsonBody('ErrorResponse') },
+            '415': { description: 'The body is not JSON', content: jsonBody('ErrorResponse') },
+            '500': { description: 'The entity could not be read', content: jsonBody('ErrorResponse') },
             '503': { description: 'The source is not available, or is busy', content: jsonBody('ErrorResponse') },
             '504': { description: 'The source did not answer in time', content: jsonBody('ErrorResponse') },
           },
@@ -246,7 +266,7 @@ export function buildOpenApiDocument(
       },
     },
     components: {
-      schemas: { DegreePreview: schemaJson(degreePreview), DegreePreviewRequest: schemaJson(degreePreviewRequest), ErrorResponse: schemaJson(errorResponse), GraphNode: schemaJson(graphNode), HealthResponse: schemaJson(healthResponse), InvestigationListResponse: schemaJson(investigationList), InvestigationResponse: schemaJson(investigationResponse), MeResponse: schemaJson(meResponse), OpenInvestigationRequest: schemaJson(openInvestigationRequest), OpenInvestigationResponse: schemaJson(openInvestigationResponse), ReadyResponse: schemaJson(readyResponse), SearchRequest: schemaJson(searchRequest), SearchResult: schemaJson(searchResult), SourceProfile: schemaJson(sourceProfile), SourceTestReport: schemaJson(sourceTestReport), SourcesResponse: schemaJson(sourcesResponse) },
+      schemas: { DegreePreview: schemaJson(degreePreview), DegreePreviewRequest: schemaJson(degreePreviewRequest), EntityLookupRequest: schemaJson(entityLookupRequest), ErrorResponse: schemaJson(errorResponse), GraphNode: schemaJson(graphNode), HealthResponse: schemaJson(healthResponse), InvestigationListResponse: schemaJson(investigationList), InvestigationResponse: schemaJson(investigationResponse), MeResponse: schemaJson(meResponse), OpenInvestigationRequest: schemaJson(openInvestigationRequest), OpenInvestigationResponse: schemaJson(openInvestigationResponse), ReadyResponse: schemaJson(readyResponse), SearchRequest: schemaJson(searchRequest), SearchResult: schemaJson(searchResult), SourceProfile: schemaJson(sourceProfile), SourceTestReport: schemaJson(sourceTestReport), SourcesResponse: schemaJson(sourcesResponse) },
     },
   };
 }

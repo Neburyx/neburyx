@@ -6,7 +6,7 @@ const profile = {
   synthetic: false,
   vocabulary: { caseRef: null },
   entityTypes: [
-    { type: 'node_a', label: 'NodeA', displayName: 'Node A', icon: 'generic', title: '{id}', titleUsesPii: false, keyProperties: ['id'], stateProperty: null, searchable: [], filterable: [], pii: [] },
+    { type: 'node_a', label: 'NodeA', keyed: false, stableIdProperty: 'id', displayName: 'Node A', icon: 'generic', title: '{id}', titleUsesPii: false, keyProperties: ['id'], stateProperty: null, searchable: [], filterable: [], pii: [] },
   ],
   relationshipTypes: [{ type: 'LINKS', from: 'node_a', to: 'node_a', aggregate: true, observedAt: null, filterable: [], evidence: [] }],
   derivedRules: [{ id: 'r', from: 'node_a', to: 'node_a', via: ['LINKS', 'node_a', 'LINKS'], ruleVersion: 1 }],

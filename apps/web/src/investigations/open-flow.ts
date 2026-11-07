@@ -1,4 +1,4 @@
-import type { GraphNode, Investigation, OpenInvestigationRequest } from '@neburyx/contracts';
+import type { GraphNode, Investigation, ReferenceOpenRequest, ValueOpenRequest } from '@neburyx/contracts';
 import type { ApiClient, ApiFailure } from '../api/client.js';
 import type { ClientState } from '../state/client-state.js';
 import { StateError } from '../state/errors.js';
@@ -54,10 +54,13 @@ export async function openById(client: ApiClient, state: ClientState, id: string
   return show(state, investigation, entity.value, context, signal);
 }
 
+/** What opens an entity: its reference as the API returned it, or a raw value to resolve; the mask comes from the context. */
+export type OpenEntityRequest = Omit<ReferenceOpenRequest, 'mask'> | Omit<ValueOpenRequest, 'mask'>;
+
 export type OpenEntityOutcome = OpenOutcome & { readonly created?: boolean };
 
 /** Opens an entity as an investigation: the entity the answer carries is shown, so the page that follows reads nothing. */
-export async function openEntity(client: ApiClient, state: ClientState, request: Omit<OpenInvestigationRequest, 'mask'>, context: OpenContext, signal?: AbortSignal): Promise<OpenEntityOutcome> {
+export async function openEntity(client: ApiClient, state: ClientState, request: OpenEntityRequest, context: OpenContext, signal?: AbortSignal): Promise<OpenEntityOutcome> {
   const answer = await client.openInvestigation({ ...request, mask: context.mask }, signal);
   if (!answer.ok) return failedIn(request.sourceId, answer.failure);
   const body = answer.value;

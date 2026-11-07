@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import type { InvestigationListResponse, OpenInvestigationRequest, SourceSummary } from '@neburyx/contracts';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { ApiClient, ApiResult } from '../api/client.js';
-import { INVESTIGATION_A, investigationOf, knowing, listItemOf, listOf, nodeOf, openedOf, type KnownInvestigation } from '../investigations/test-data.js';
+import { entityIdOf, INVESTIGATION_A, investigationOf, knowing, listItemOf, listOf, nodeOf, openedOf, type KnownInvestigation } from '../investigations/test-data.js';
 import { LINK_NOT_FOUND_TITLE } from '../investigations/messages.js';
 import { renderApp, source } from '../test-utils.js';
 
@@ -116,7 +116,7 @@ describe('opening the demo case from First run', () => {
     renderApp('/', parts.client);
     await userEvent.setup().click(await screen.findByRole('button', { name: 'Open demo case' }));
     await waitFor(() => expect(parts.sent).toHaveLength(1));
-    expect(parts.sent[0]?.entity.stableId).toBe('..');
+    expect(parts.sent[0] === undefined ? undefined : entityIdOf(parts.sent[0].entity)).toBe('..');
   });
 
   it('shows the message of a deep link that finds nothing, with a way back to Home, when the open fails', async () => {

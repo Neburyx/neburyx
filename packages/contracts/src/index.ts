@@ -42,7 +42,7 @@ export {
 export type { DegreeBasis, DegreeChecks, DegreeType, MappingCheck, MappingChecks, MappingFinding, SourceTestReport, TestOutcome } from './source-test.js';
 export { COUNT_QUALITIES, DATA_CLASSES, countSchema, edgeRefSchema, edgeSchema, elementRefSchema, nodeSchema, propertySchema, storedEdgeRefSchema } from './graph.js';
 export type { Count, DataClass, EdgeRef, ElementRef, GraphEdge, GraphNode, GraphProperty, StoredEdgeRef } from './graph.js';
-export { MAX_STABLE_ID_LENGTH, entityPathSchema, entityQuerySchema, pathSegmentOf, stableIdSchema, valueOfPathSegment } from './entities.js';
+export { canCarryInPath, MAX_REFERENCE_TEXT_CHARACTERS, MAX_REFERENCE_VALUE_CHARACTERS, MAX_PATH_REFERENCE_LENGTH, MAX_STABLE_ID_LENGTH, entityLookupRequestSchema, entityPathSchema, referenceTextSchema, referenceValueSchema, entityQuerySchema, pathSegmentOf, stableIdSchema, valueOfPathSegment } from './entities.js';
 export type { EntityPath } from './entities.js';
 export {
   DEFAULT_INVESTIGATION_LIST_LIMIT,
@@ -63,11 +63,13 @@ export {
   investigationSchema,
   layoutDocumentSchema,
   openInvestigationRequestSchema,
+  referenceOpenRequestSchema,
+  valueOpenRequestSchema,
   openInvestigationResponseSchema,
   queryContextDocumentSchema,
   startingEntitySchema,
 } from './investigations.js';
-export type { Investigation, InvestigationListCounts, InvestigationListItem, InvestigationListResponse, InvestigationResponse, InvestigationSave, InvestigationSourceState, LayoutDocument, OpenInvestigationRequest, OpenInvestigationResponse, QueryContextDocument } from './investigations.js';
+export type { Investigation, InvestigationListCounts, InvestigationListItem, InvestigationListResponse, InvestigationResponse, InvestigationSave, InvestigationSourceState, LayoutDocument, OpenInvestigationRequest, ReferenceOpenRequest, ValueOpenRequest, OpenInvestigationResponse, QueryContextDocument } from './investigations.js';
 export {
   FACET_SCOPES,
   MAX_SEARCH_TEXT_LENGTH,
@@ -98,5 +100,6 @@ export {
   typeaheadTextSchema,
 } from './search.js';
 export { DEGREE_DIRECTIONS, DEGREE_WARNING_CODES, degreeByNeighborTypeSchema, degreeByTypeSchema, degreePreviewRequestSchema, degreePreviewSchema, degreeWarningSchema } from './degree-preview.js';
+export type { EntityLookupRequest } from './entities.js';
 export type { DegreeByType, DegreePreview, DegreePreviewRequest, DegreeWarning } from './degree-preview.js';
 export type { DisabledRelationship, DisabledType, EvidenceGroup, EvidenceHit, Facets, GroupFailure, RelatedGroup, RelatedHit, SearchFailureGroup, SearchFilters, SearchGroup, SearchMatchMode, SearchRequest, SearchResult, StartsWithGroup } from './search.js';

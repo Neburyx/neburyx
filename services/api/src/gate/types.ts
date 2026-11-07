@@ -103,6 +103,16 @@ export interface Template {
    * `CALL` subquery for each pair that reads at most `$countCap + 1` relationships and counts them, or for `cheap` a `COUNT { }` expression for each pair, then one `RETURN` of every count as a column named by its position.
    */
   readonly degreeCounts?: { readonly param: string; readonly form: 'bounded' | 'cheap' };
+  /**
+   * For a paged template whose cursor position holds the stable ID of an entity: the names of the position fields that carry an entity type and its stable ID. For a keyed entity type the cursor holds the token of the
+   * ID and the gate reads it back before the keyset parameters are built, so a cursor never exposes a personal value and the order stays that of the real value.
+   */
+  readonly referencePositions?: readonly { readonly entityType: string; readonly stableId: string }[];
+  /**
+   * The names of the parameters that carry an entity type and its stable ID, for a template that reads one node by its reference. For an entity type whose references are keyed the gate reads the token in the
+   * stable ID parameter before the parameters are checked, and the statement gets the value; any text that is not a token of this source and entity type is refused.
+   */
+  readonly referenceParams?: { readonly entityType: string; readonly stableId: string };
   /** The indexes this read needs, so that the gate can find out before the data read that they are there; a template that names none is not guarded. */
   indexNeeds?(params: Params, allowlist: SourceAllowlist): readonly (IndexNeed | RelationshipIndexNeed)[];
   /** True for a request that has nothing to read, such as an empty list of targets or an entity type with no mapped relationship: the gate runs every stage but the read, and the answer has no row. */

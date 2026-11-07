@@ -23,9 +23,13 @@ import type {
   TemplateCatalog,
 } from '../gate/types.js';
 import { createCursorCodec, type CursorCodec } from '../gate/cursor/codec.js';
+import { deriveReferenceKeys, type ReferenceKeys } from '../reference/keys.js';
 import { redactItems } from '../gate/redact/index.js';
 import { EMPTY_MODEL } from '../gate/normalize/model.js';
 import { LOCAL_IDENTITY } from './app-store.js';
+
+/** Fixed reference keys for tests. */
+export const TEST_REFERENCE_KEYS: ReferenceKeys = deriveReferenceKeys(Buffer.alloc(32, 9));
 
 /** A fixed signing key for tests: 32 bytes. */
 export const TEST_CURSOR_KEY = Buffer.alloc(32, 7);
@@ -122,6 +126,7 @@ export interface HarnessOptions {
   readonly allowlistFor?: (sourceId: string) => SourceAllowlist;
   readonly modelFor?: GateDeps['modelFor'];
   readonly cursors?: CursorCodec;
+  readonly references?: ReferenceKeys;
   readonly policyVersion?: GateDeps['policyVersion'];
   readonly redact?: GateDeps['redact'];
   readonly clock?: () => number;
@@ -141,6 +146,7 @@ export function harness(options: HarnessOptions = {}): Harness {
     allowlistFor: options.allowlistFor ?? (() => EMPTY_ALLOWLIST),
     modelFor: options.modelFor ?? (() => EMPTY_MODEL),
     cursors: options.cursors ?? createCursorCodec({ key: TEST_CURSOR_KEY, clock: options.clock ?? (() => 1_000_000) }),
+    references: options.references ?? TEST_REFERENCE_KEYS,
     policyVersion: options.policyVersion ?? (() => 'none'),
     redact: options.redact ?? redactItems,
     usability: options.usability ?? ALWAYS_USABLE,

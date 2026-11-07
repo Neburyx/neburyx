@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { entityPathSchema, pathSegmentOf, valueOfPathSegment } from './entities.js';
+import { canCarryInPath, entityPathSchema, pathSegmentOf, valueOfPathSegment } from './entities.js';
 
 describe('a value as a path segment', () => {
   it.each([
@@ -62,8 +62,11 @@ describe('a value as a path segment', () => {
 describe('the path of an entity read', () => {
   it('gives the values the segments stand for, and counts the length of the value', () => {
     expect(entityPathSchema.parse({ sourceId: 'demo', entityType: '~..', stableId: '~.' })).toEqual({ sourceId: 'demo', entityType: '..', stableId: '.' });
-    expect(entityPathSchema.safeParse({ sourceId: 'demo', entityType: 'widget', stableId: `~${'.'.repeat(200)}` }).success).toBe(true);
-    expect(entityPathSchema.safeParse({ sourceId: 'demo', entityType: 'widget', stableId: `~${'.'.repeat(201)}` }).success).toBe(false);
+    expect(entityPathSchema.safeParse({ sourceId: 'demo', entityType: 'widget', stableId: `~${'.'.repeat(400)}` }).success).toBe(true);
+    for (const unaddressable of ['a\u0000b', 'a\u0085b', 'a\ud800b', 'x'.repeat(401)]) {
+      expect(entityPathSchema.safeParse({ sourceId: 'demo', entityType: 'widget', stableId: unaddressable }).success, JSON.stringify(unaddressable)).toBe(false);
+    }
+    expect(entityPathSchema.safeParse({ sourceId: 'demo', entityType: 'widget', stableId: `~${'.'.repeat(401)}` }).success).toBe(false);
   });
 
   it.each([
@@ -75,5 +78,21 @@ describe('the path of an entity read', () => {
 
   it('applies the integer text rule to the value and not to the segment', () => {
     expect(entityPathSchema.parse({ sourceId: 'demo', entityType: 'widget', stableId: '9223372036854775807' }).stableId).toBe('9223372036854775807');
+  });
+});
+
+describe('the references a path can carry', () => {
+  it.each([
+    ['an ID of ordinary text', 'W-1', true],
+    ['an ID of exactly 400 characters', 'a'.repeat(400), true],
+    ['an ID of 401 characters', 'a'.repeat(401), false],
+    ['an ID with a control character', 'a\u0000b', false],
+    ['an ID with a delete character', 'a\u007fb', false],
+    ['an unpaired high surrogate', 'a\ud800', false],
+    ['an unpaired low surrogate', '\udc00a', false],
+    ['a pair of surrogates', '😀', true],
+    ['dots only', '..', true],
+  ])('says %s is %s', (_name, reference, expected) => {
+    expect(canCarryInPath(reference)).toBe(expected);
   });
 });

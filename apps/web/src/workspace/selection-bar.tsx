@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
-import { useClientState, useLoadedGraph } from '../state/context.js';
+import { useProfileWhenProvided } from '../canvas/profile-context.js';
+import { useClientState, useLoadedGraph, useSessionMask } from '../state/context.js';
 import { drawnKeys } from '../state/loaded-graph.js';
 import { useStoreSelector } from '../state/store.js';
 import { runSelectionCommand } from '../canvas/selection-commands.js';
@@ -34,6 +35,8 @@ export function SelectionBar() {
   const state = useClientState();
   const graph = useLoadedGraph();
   const actions = useSelectionActions();
+  const profile = useProfileWhenProvided();
+  const mask = useSessionMask();
   const selection = useStoreSelector(state.presentation.view, (current) => current.selection);
   const requests = useRef(0);
   const [copy, setCopy] = useState<{ readonly selection: ReadonlySet<string>; readonly status: CopyStatus } | undefined>(undefined);
@@ -47,7 +50,7 @@ export function SelectionBar() {
     const show = (status: CopyStatus): void => {
       if (request === requests.current) setCopy({ selection, status });
     };
-    const { ids, withoutId } = idsOfSelection(graph, new Set(selected));
+    const { ids, withoutId } = idsOfSelection(graph, new Set(selected), profile, mask);
     if (ids.length === 0) {
       show({ kind: 'nothing' });
       return;

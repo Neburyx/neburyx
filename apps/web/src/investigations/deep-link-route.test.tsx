@@ -5,7 +5,7 @@ import { createClientState } from '../state/client-state.js';
 import { renderApp } from '../test-utils.js';
 import { deepLinkPath } from './deep-link.js';
 import { OPENING_LINK, RESUMED } from './messages.js';
-import { INVESTIGATION_A, INVESTIGATION_B, investigationOf, knowing, nodeOf, openedOf } from './test-data.js';
+import { entityIdOf, INVESTIGATION_A, INVESTIGATION_B, investigationOf, knowing, nodeOf, openedOf } from './test-data.js';
 
 const A = { investigation: investigationOf(INVESTIGATION_A, 'source-a', 'kind-a', 'A-1', { caseRef: 'CASE-1' }), node: nodeOf('source-a', 'kind-a', 'A-1') };
 const B = { investigation: investigationOf(INVESTIGATION_B, 'source-b', 'kind-a', 'C-1'), node: nodeOf('source-b', 'kind-a', 'C-1') };
@@ -19,7 +19,7 @@ function recording(known = [A, B], answer?: (request: OpenInvestigationRequest) 
     openInvestigation: async (request) => {
       sent.push(request);
       await answer?.(request);
-      const found = known.find((entry) => entry.node.ref.sourceId === request.entity.sourceId && entry.node.ref.stableId === request.entity.stableId);
+      const found = known.find((entry) => entry.node.ref.sourceId === request.entity.sourceId && entry.node.ref.stableId === entityIdOf(request.entity));
       return found === undefined ? { ok: false, failure: { code: 'NOT_FOUND', message: 'Not found.', retryable: false, traceId: 'tr-1' } } : { ok: true, value: openedOf(found.investigation, found.node, true) };
     },
   });
@@ -62,7 +62,7 @@ describe('following a link', () => {
       const { client, sent } = recording([odd]);
       const view = renderApp(link('source-a', 'kind-a', stableId), client);
       await waitFor(() => expect(view.router.state.location.pathname).toBe(`/explore/${INVESTIGATION_A}`));
-      expect(sent.map((request) => request.entity.stableId), stableId).toEqual([stableId]);
+      expect(sent.map((request) => entityIdOf(request.entity)), stableId).toEqual([stableId]);
       view.unmount();
     }
     const odd = { investigation: investigationOf(INVESTIGATION_A, 'source-a', '..', 'X-1'), node: nodeOf('source-a', '..', 'X-1') };

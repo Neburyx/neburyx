@@ -43,8 +43,16 @@ describe('the request to open an investigation', () => {
     expect(openInvestigationRequestSchema.safeParse({ ...request, entity: { ...request.entity, stableId: '😀'.repeat(200) }, caseRef: '😀'.repeat(100) }).success).toBe(true);
   });
 
+  it('takes an ID of any length up to the limit of a body, and a raw value to resolve, with any characters', () => {
+    expect(openInvestigationRequestSchema.safeParse({ ...request, entity: { ...request.entity, stableId: 'a'.repeat(201) } }).success).toBe(true);
+    expect(openInvestigationRequestSchema.safeParse({ ...request, entity: { ...request.entity, stableId: 'a'.repeat(266_691) } }).success).toBe(true);
+    expect(openInvestigationRequestSchema.safeParse({ ...request, entity: { sourceId: 'demo', entityType: 'widget', value: '.\u0000\ud800' } }).success).toBe(true);
+  });
+
   it.each([
-    ['a stable ID of 201 characters', { ...request, entity: { ...request.entity, stableId: 'a'.repeat(201) } }],
+    ['a reference longer than the largest token', { ...request, entity: { ...request.entity, stableId: 'a'.repeat(266_692) } }],
+    ['a raw value longer than the limit of a value', { ...request, entity: { sourceId: 'demo', entityType: 'widget', value: 'a'.repeat(100_001) } }],
+    ['an entity with both a reference and a value', { ...request, entity: { ...request.entity, value: 'x' } }],
     ['a case reference of 101 characters', { ...request, caseRef: 'a'.repeat(101) }],
     ['a field it does not know', { ...request, title: 'Mine' }],
   ])('refuses %s', (_name, body) => {

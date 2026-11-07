@@ -10,6 +10,7 @@ import type { ReadExecutor } from './executor.js';
 import { createGates } from './gate.js';
 import { redactItems } from './redact/index.js';
 import { createCursorCodec, type CursorCodec } from './cursor/codec.js';
+import { deriveReferenceKeys, type ReferenceKeys } from '../reference/keys.js';
 import { normalizeModelOf } from './normalize/model.js';
 import { capabilitiesTemplate } from './templates/capabilities.js';
 import { connectivityTemplate } from './templates/connectivity.js';
@@ -40,6 +41,8 @@ export interface AssembleOptions {
   readonly usability: SourceUsability;
   /** Signs and checks page cursors; absent, the gate signs with a key of its own that no other process has. */
   readonly cursors?: CursorCodec;
+  /** The keys of the reference tokens of keyed entity types; absent, the gate makes keys of its own, which no other process has, so a token does not outlive the process. */
+  readonly referenceKeys?: ReferenceKeys;
   /** The version of the policy a cursor is bound to; Community has none. */
   readonly policyVersion?: (sourceId: string) => string;
 }
@@ -66,6 +69,7 @@ export function assembleGate(options: AssembleOptions): { readonly gate: Gate; r
       return found;
     },
     cursors: options.cursors ?? createCursorCodec({ key: randomBytes(32), clock: options.clock ?? Date.now }),
+    references: options.referenceKeys ?? deriveReferenceKeys(randomBytes(32)),
     policyVersion: options.policyVersion ?? (() => 'none'),
     modelFor: (sourceId) => {
       const found = models.get(sourceId);

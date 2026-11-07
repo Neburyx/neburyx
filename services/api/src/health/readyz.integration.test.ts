@@ -204,12 +204,15 @@ describe('the migrations check of /readyz', () => {
     const env = { DATABASE_MIGRATION_URL: database.ownerUrl, DATABASE_APP_ROLE: database.appRole };
     expect((await runInProcess(env, first)).code).toBe(0);
     await rows(database.ownerUrl, readFileSync(join(SHIPPED, '0004-sources.sql'), 'utf8'));
+    // the start reads the deployment's reference key, so the column it lives in is there too; migrate makes both again below
+    await rows(database.ownerUrl, readFileSync(join(SHIPPED, '0009-reference-key.sql'), 'utf8'));
     const api = await running({ database });
     try {
       const before = await api.call('/readyz');
       expect(before.status).toBe(503);
       expect(JSON.parse(before.body).checks).toEqual({ database: 'ok', migrations: 'pending' });
       await rows(database.ownerUrl, 'DROP TABLE sources');
+      await rows(database.ownerUrl, 'DROP TRIGGER deployment_reference_key_once ON deployment; DROP FUNCTION deployment_reference_key_is_set_once(); ALTER TABLE deployment DROP COLUMN reference_key');
       expect((await runCli(['migrate'], env).done).code).toBe(0);
       const after = await api.call('/readyz');
       expect(after.status).toBe(200);

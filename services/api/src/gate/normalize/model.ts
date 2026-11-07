@@ -1,11 +1,14 @@
 import type { PiiClass } from '@neburyx/contracts';
-import type { SourceModel } from '../../mapping/model.js';
+import { isKeyed, type SourceModel } from '../../mapping/model.js';
+import type { ReferenceKeys } from '../../reference/keys.js';
 
 /** What the normalizer needs to know of one entity type of a source: how to recognise it, name it, and which properties of it are shown. */
 export interface EntityNormalizer {
   readonly type: string;
   readonly label: string;
   readonly stableId: string;
+  /** True when the stable ID property is also `pii`: the reference of a node of this type is a keyed token. */
+  readonly keyed: boolean;
   readonly title: string;
   readonly titleProperties: readonly string[];
   /** The properties the mapping names for the type, in a fixed order: the projection list; any other property of a record is never shown. */
@@ -59,6 +62,8 @@ export interface NormalizeContext {
   readonly limit?: number;
   /** The cap of a bounded degree count, from the source's budgets. */
   readonly countCap?: number;
+  /** The keys that make the reference tokens of keyed entity types; a result with a keyed node cannot be normalized without them. */
+  readonly references?: ReferenceKeys;
   /** The validated parameters of the request. */
   readonly params?: Readonly<Record<string, unknown>>;
 }
@@ -73,6 +78,7 @@ export function normalizeModelOf(source: SourceModel): NormalizeModel {
       type: entity.type,
       label: entity.label,
       stableId: entity.stableId,
+      keyed: isKeyed(entity),
       title: entity.title,
       titleProperties: entity.titleProperties,
       projection: unique([

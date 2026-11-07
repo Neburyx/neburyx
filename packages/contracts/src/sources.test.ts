@@ -46,6 +46,10 @@ describe('source list contract', () => {
   describe('demo case', () => {
     const demoCase = { entityType: 'node_a', stableId: 'A-1', caseRef: 'REF-1' };
 
+    it('accepts the reference of a keyed type, a token longer than a configured value and than a path carries', () => {
+      expect(sourceSummarySchema.safeParse({ ...item, synthetic: true, demoCase: { ...demoCase, stableId: `p1.${'x'.repeat(555)}` } }).success).toBe(true);
+    });
+
     it('accepts a demo case on a synthetic source and null on any source', () => {
       expect(sourceSummarySchema.safeParse({ ...item, synthetic: true, demoCase }).success).toBe(true);
       expect(sourceSummarySchema.safeParse({ ...item, synthetic: true }).success).toBe(true);
@@ -73,7 +77,7 @@ describe('source list contract', () => {
 
     it('refuses a demo case with a missing or an extra member, an empty member or a value over the limits, and a missing field', () => {
       const synthetic = { ...item, synthetic: true };
-      for (const bad of [{ entityType: 'node_a', stableId: 'A-1' }, { ...demoCase, extra: 1 }, { ...demoCase, entityType: '' }, { ...demoCase, stableId: '' }, { ...demoCase, caseRef: '' }, { ...demoCase, entityType: 'T'.repeat(201) }, { ...demoCase, stableId: 'I'.repeat(201) }, { ...demoCase, caseRef: 'R'.repeat(101) }]) {
+      for (const bad of [{ entityType: 'node_a', stableId: 'A-1' }, { ...demoCase, extra: 1 }, { ...demoCase, entityType: '' }, { ...demoCase, stableId: '' }, { ...demoCase, caseRef: '' }, { ...demoCase, entityType: 'T'.repeat(201) }, { ...demoCase, stableId: 'I'.repeat(266_692) }, { ...demoCase, caseRef: 'R'.repeat(101) }]) {
         expect(sourceSummarySchema.safeParse({ ...synthetic, demoCase: bad }).success).toBe(false);
       }
       const { demoCase: _omitted, ...withoutField } = synthetic;

@@ -2,7 +2,7 @@ import { configure, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { SourceSummary } from '@neburyx/contracts';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { knowing } from '../investigations/test-data.js';
+import { INVESTIGATION_A, INVESTIGATION_B, investigationOf, knowing, nodeOf, openedOf } from '../investigations/test-data.js';
 import { renderApp, source } from '../test-utils.js';
 
 beforeAll(() => configure({ reactStrictMode: true }));
@@ -130,5 +130,44 @@ describe('the First run page by what the install has', () => {
     several.view.unmount();
     show([demo('source-a', { alias: 'Alpha' })]);
     expect(await screen.findByRole('button', { name: 'Open demo case' })).toBeTruthy();
+  });
+});
+
+describe('a demo case whose reference a path cannot carry', () => {
+  it('opens through the body of the open request and not through a deep link, and says so when that fails', async () => {
+    const long = `p1.${'x'.repeat(555)}`;
+    const sent: unknown[] = [];
+    const parts = knowing([], {
+      getSources: async () => ({ ok: true, value: { items: [demo('source-a', { demoCase: { ...PRESET, stableId: long } })], nextCursor: null } }),
+      openInvestigation: async (body) => (sent.push(body), { ok: false, failure: { code: 'NETWORK_UNAVAILABLE' } }),
+    });
+    const view = renderApp('/', parts.client);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Open demo case' }));
+    expect(sent).toMatchObject([{ sourceId: 'source-a', caseRef: 'CASE-1', entity: { entityType: 'kind-a', stableId: long } }]);
+    expect(view.router.state.location.pathname).toBe('/');
+    expect((await screen.findByRole('alert')).textContent).toContain('cannot be put in a link');
+  });
+
+  it('applies only the newest of two activations when two demo buttons are clicked and the earlier answer comes first', async () => {
+    const sources = [demo('source-a', { demoCase: { ...PRESET, stableId: `p1.${'a'.repeat(555)}` } }), demo('source-b', { demoCase: { ...PRESET, stableId: `p1.${'b'.repeat(555)}` } })];
+    const releases = new Map<string, () => void>();
+    const parts = knowing([], {
+      getSources: async () => ({ ok: true, value: { items: sources, nextCursor: null } }),
+      openInvestigation: async (body) => {
+        await new Promise<void>((resolve) => releases.set(body.sourceId, resolve));
+        const sourceId = body.sourceId;
+        const id = sourceId === 'source-a' ? INVESTIGATION_A : INVESTIGATION_B;
+        return { ok: true, value: openedOf(investigationOf(id, sourceId, 'kind-a', 'A-1'), nodeOf(sourceId, 'kind-a', 'A-1')) };
+      },
+    });
+    const view = renderApp('/', parts.client);
+    const user = userEvent.setup();
+    const buttons = await screen.findAllByRole('button', { name: /Open demo case/ });
+    await user.click(buttons[0] as HTMLElement);
+    await user.click(buttons[1] as HTMLElement);
+    releases.get('source-a')?.();
+    releases.get('source-b')?.();
+    await vi.waitFor(() => expect(view.router.state.location.pathname).toBe(`/explore/${INVESTIGATION_B}`));
   });
 });

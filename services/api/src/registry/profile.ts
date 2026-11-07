@@ -1,5 +1,5 @@
 import type { SourceProfile } from '@neburyx/contracts';
-import type { SourceModel } from '../mapping/model.js';
+import { isKeyed, type SourceModel } from '../mapping/model.js';
 import { canonicalBind, sortedEntries } from './canonical.js';
 import { mappingExcerptOf } from './excerpt.js';
 
@@ -11,6 +11,8 @@ export function buildSourceProfile(source: SourceModel): SourceProfile {
     entityTypes: source.entities.map((entity) => ({
       type: entity.type,
       label: entity.label,
+      keyed: isKeyed(entity),
+      stableIdProperty: entity.stableId,
       displayName: entity.display.name ?? entity.label,
       icon: entity.display.icon,
       title: entity.title,

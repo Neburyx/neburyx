@@ -131,7 +131,7 @@ describe('GET /v1/entities/{sourceId}/{entityType}/{stableId}', () => {
     ['a query parameter other than mask', '/v1/entities/demo/widget/AC-1?limit=5'],
     ['a mask value that is not true or false', '/v1/entities/demo/widget/AC-1?mask=yes'],
     ['a second mask parameter', '/v1/entities/demo/widget/AC-1?mask=true&mask=false'],
-    ['a stable ID of 201 characters', `/v1/entities/demo/widget/${'a'.repeat(201)}`],
+    ['a stable ID of 401 characters', `/v1/entities/demo/widget/${'a'.repeat(401)}`],
     ['a stable ID of 2,401 characters, past the old limit of the router', `/v1/entities/demo/widget/${'a'.repeat(2401)}`],
     ['a stable ID of 12,000 characters', `/v1/entities/demo/widget/${'a'.repeat(12_000)}`],
     ['an entity type of 5,000 characters', `/v1/entities/demo/${'t'.repeat(5000)}/AC-1`],
@@ -144,9 +144,9 @@ describe('GET /v1/entities/{sourceId}/{entityType}/{stableId}', () => {
     await app.close();
   });
 
-  it('takes a stable ID of exactly 200 characters, counted as characters and not bytes', async () => {
+  it('takes a stable ID of exactly 400 characters, counted as characters and not bytes', async () => {
     const { app, executor } = await started(entityRows());
-    const id = '€'.repeat(200);
+    const id = '€'.repeat(400);
     expect((await get(app, `/v1/entities/demo/widget/${encodeURIComponent(id)}`)).statusCode).toBe(404);
     expect(entityCalls(executor.calls)[0]?.parameters['stableId']).toBe(id);
     expect((await get(app, `/v1/entities/demo/widget/${encodeURIComponent(`${id}€`)}`)).statusCode).toBe(400);

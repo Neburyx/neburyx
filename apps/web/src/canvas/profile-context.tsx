@@ -1,9 +1,12 @@
-import { createContext, useContext, type ReactNode } from 'react';
+import { createContext, useContext, useSyncExternalStore, type ReactNode } from 'react';
 import type { SourceProfile } from '@neburyx/contracts';
 import { useClientState } from '../state/context.js';
 import { useStoreSelector, type ReadableStore } from '../state/store.js';
 import { answeredData } from '../shell/shell-data.js';
 import type { ProfileState, ProfileStore } from './profile-store.js';
+
+const NO_SUBSCRIBE = (): (() => void) => () => undefined;
+const NONE_STATE: ProfileState = { sourceId: null, request: { phase: 'idle' } };
 
 const ProfileContext = createContext<ProfileStore | undefined>(undefined);
 
@@ -25,5 +28,13 @@ export function useProfileState(): ProfileState {
 export function useProfile(): SourceProfile | undefined {
   const state = useProfileState();
   const bound = useStoreSelector(useClientState().investigation, (investigation) => investigation.sourceId);
+  return state.sourceId === bound ? answeredData(state.request) : undefined;
+}
+
+/** The profile of the bound source when a profile is provided at all, and nothing when this part of the app is drawn without one (a surface that works without it). */
+export function useProfileWhenProvided(): SourceProfile | undefined {
+  const store = useContext(ProfileContext);
+  const bound = useStoreSelector(useClientState().investigation, (investigation) => investigation.sourceId);
+  const state = useSyncExternalStore(store?.subscribe ?? NO_SUBSCRIBE, () => store?.getState() ?? NONE_STATE);
   return state.sourceId === bound ? answeredData(state.request) : undefined;
 }

@@ -10,4 +10,6 @@ export const mappingSummarySchema = z.strictObject({
   entityTypes: definitionCount,
   relationshipTypes: definitionCount,
   derivedRules: definitionCount,
+  /** Entity types whose stable ID is also a `pii` property, so their references are keyed; absent in a report made before it existed. */
+  keyedEntityTypes: definitionCount.optional(),
 });

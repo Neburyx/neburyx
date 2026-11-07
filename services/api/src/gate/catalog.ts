@@ -164,6 +164,13 @@ function checkDegreeCounts(definition: TemplateDefinition, shape: Shape): void {
   if (shape.properties.has('countCap')) throw new CatalogError(definition.id, 'has the gate-filled parameter countCap in its parameter schema');
 }
 
+/** A template that reads a node by its reference names two parameters its schema has: the entity type (a declared entity parameter) and the stable ID. */
+function checkReferenceParams(definition: TemplateDefinition, shape: Shape): void {
+  const names = definition.referenceParams;
+  if (names === undefined) return;
+  if (!definition.entityParams.includes(names.entityType) || !shape.properties.has(names.entityType) || !shape.properties.has(names.stableId)) throw new CatalogError(definition.id, 'declares reference parameters its schema or its entity parameters do not have');
+}
+
 function build(definition: TemplateDefinition): Template {
   const shape = shapeOf(definition);
   for (const name of RESERVED) if (shape.properties.has(name)) throw new CatalogError(definition.id, `declares the reserved parameter ${name}`);
@@ -173,6 +180,7 @@ function build(definition: TemplateDefinition): Template {
   checkSearchBranches(definition, shape);
   checkFacetProbes(definition, shape);
   checkDegreeCounts(definition, shape);
+  checkReferenceParams(definition, shape);
   checkGateParameters(definition, shape);
   const integerParameters = [...shape.properties].flatMap(([name, type]) => (type === 'integer' ? [name] : []));
   return { ...definition, integerParameters };

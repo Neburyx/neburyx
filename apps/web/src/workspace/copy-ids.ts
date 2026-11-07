@@ -1,3 +1,4 @@
+import type { GraphNode, SourceProfile } from '@neburyx/contracts';
 import { edgeKey, elementKey } from '../state/keys.js';
 import type { LoadedGraph } from '../state/loaded-graph.js';
 
@@ -8,9 +9,21 @@ export interface CopiedIds {
   readonly withoutId: number;
 }
 
-export function idsOfSelection(graph: LoadedGraph, selection: ReadonlySet<string>): CopiedIds {
+/**
+ * What Copy IDs copies for an entity: its stable ID, and for a keyed entity (one whose stable ID is personal data) the value of its stable-ID property when the view is unmasked, and the reference when it is
+ * masked, since the value is then masked. The client never reads the text of a reference.
+ */
+function copiedIdOf(node: GraphNode, profile: SourceProfile | undefined, mask: boolean): string {
+  const type = profile?.entityTypes.find((candidate) => candidate.type === node.ref.entityType);
+  if (type?.keyed !== true || mask) return node.ref.stableId;
+  const value = node.properties.find((property) => property.key === type.stableIdProperty)?.value;
+  if (typeof value === 'string' && value !== '') return value;
+  return typeof value === 'number' && Number.isSafeInteger(value) ? String(value) : node.ref.stableId;
+}
+
+export function idsOfSelection(graph: LoadedGraph, selection: ReadonlySet<string>, profile?: SourceProfile, mask = false): CopiedIds {
   const known = new Map<string, string | undefined>();
-  for (const node of graph.nodes) known.set(elementKey(node.ref), node.ref.stableId);
+  for (const node of graph.nodes) known.set(elementKey(node.ref), copiedIdOf(node, profile, mask));
   for (const edge of graph.edges) known.set(edgeKey(edge.ref), 'stableId' in edge.ref ? edge.ref.stableId : undefined);
   const ids: string[] = [];
   let withoutId = 0;

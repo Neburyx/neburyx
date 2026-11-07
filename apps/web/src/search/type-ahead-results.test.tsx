@@ -106,7 +106,7 @@ describe('the answer in the Add from source tab', () => {
     expect(screen.getByText('kind-b: Search is disabled for this type.')).toBeDefined();
     expect(screen.getByText('No index is available for these types.')).toBeDefined();
     expect(screen.queryByText('No matching entities')).toBeNull();
-    expect(screen.queryByText('Nothing can be searched while personal data is masked.')).toBeNull();
+    expect(screen.queryByText('Nothing can be searched while personal data is masked. Turn masking off to search personal data.')).toBeNull();
   });
 
   it('says what could not be searched when nothing was searchable, and never "No matching entities"', async () => {
@@ -120,7 +120,7 @@ describe('the answer in the Add from source tab', () => {
     await searchFor('ACC');
     act(() => parts.searches[0]?.answer({ ok: true, value: searchAnswer('a', [], [], { searchable: false }) }));
     await settle();
-    expect(screen.getByText('Nothing can be searched while personal data is masked.')).toBeDefined();
+    expect(screen.getByText('Nothing can be searched while personal data is masked. Turn masking off to search personal data.')).toBeDefined();
   });
 
   it('says "No matching entities" for a search that found nothing', async () => {

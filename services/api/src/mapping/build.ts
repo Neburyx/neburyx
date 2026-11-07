@@ -82,7 +82,6 @@ function buildEntity(raw: RawEntity, path: readonly (string | number)[], report:
   pii.forEach((property, index) => {
     if (pii.indexOf(property) !== index) report([...path, 'pii', index], `lists ${property} more than once`);
   });
-  if (pii.includes(raw.stable_id)) report([...path, 'pii'], `lists ${raw.stable_id}, which is the stable ID of ${raw.type}`);
 
   const title = raw.title ?? `{${raw.stable_id}}`;
   const parsedTitle = raw.title === undefined ? { properties: [raw.stable_id] } : parseTitle(raw.title);
@@ -113,15 +112,24 @@ function buildEntity(raw: RawEntity, path: readonly (string | number)[], report:
 }
 
 function linkOf(raw: RawEntity, path: readonly (string | number)[], report: Report): { readonly link?: EntityModel['link'] } {
-  if (raw.link === undefined) return {};
+  if (raw.link === undefined) {
+    if (raw.link_carries_value !== undefined) report([...path, 'link_carries_value'], 'is set on a type with no link');
+    return {};
+  }
+  const pii = (raw.pii ?? []).map((entry) => entry.property);
+  const keyed = pii.includes(raw.stable_id);
+  const carries = raw.link_carries_value === true;
+  if (raw.link_carries_value !== undefined && !keyed) report([...path, 'link_carries_value'], 'is set on a type whose stable ID is not a personal-data property');
   const check = checkLink(raw.link, {
     kind: 'entity',
     allowed: [raw.stable_id],
     allowedDescription: 'the stable ID property',
-    piiProperties: (raw.pii ?? []).map((entry) => entry.property),
+    piiProperties: keyed && carries ? pii.filter((property) => property !== raw.stable_id) : pii,
   });
-  if (check.status === 'valid') return { link: check.link };
-  for (const reason of check.reasons) report([...path, 'link'], reason);
+  if (check.status === 'valid') return { link: keyed && carries ? { ...check.link, carriesValue: true } : check.link };
+  for (const reason of check.reasons) {
+    report([...path, 'link'], keyed && !carries && reason.includes('marked pii') ? `${reason}; set link_carries_value: true to put the value itself in the link, which is built only while masking is off` : reason);
+  }
   return {};
 }
 

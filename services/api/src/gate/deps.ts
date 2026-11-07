@@ -1,4 +1,5 @@
 import type { Seams } from '../seams/seams.js';
+import type { ReferenceKeys } from '../reference/keys.js';
 import type { SourceUsability } from '../source-test/usability.js';
 import type { ReadExecutor } from './executor.js';
 import type { CursorCodec } from './cursor/codec.js';
@@ -13,6 +14,8 @@ export interface GateDeps {
   readonly allowlistFor: (sourceId: string) => SourceAllowlist;
   readonly modelFor: (sourceId: string) => NormalizeModel;
   readonly cursors: CursorCodec;
+  /** The keys of the reference tokens of keyed entity types. */
+  readonly references: ReferenceKeys;
   readonly policyVersion: (sourceId: string) => string;
   readonly redact: (items: readonly Item[], context: GateContext) => readonly Item[];
   readonly clock: Clock;

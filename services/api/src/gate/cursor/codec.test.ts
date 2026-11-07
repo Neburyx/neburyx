@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { fakeClock } from '../../testing/gate.js';
-import { filterHashOf } from './binding.js';
+import { canonicalJson, filterHashOf } from './binding.js';
 import { CURSOR_TTL_MS, createCursorCodec, type CursorBinding } from './codec.js';
 
 const KEY = Buffer.alloc(32, 7);
@@ -264,20 +264,29 @@ describe('the comparison of the MAC', () => {
 });
 
 describe('the filter hash', () => {
-  it('is the SHA-256 of the canonical JSON of the parameters, computed here independently of the code under test', () => {
+  const KEY = Buffer.alloc(32, 3);
+
+  it('is the HMAC-SHA-256 under the key of the canonical JSON of the parameters, computed here independently of the code under test', () => {
     const params = { b: [3, { y: 1, x: 2 }], a: 'text', c: null, d: 1.5 };
     const canonical = '{"a":"text","b":[3,{"x":2,"y":1}],"c":null,"d":1.5}';
-    expect(filterHashOf(params)).toBe(createHash('sha256').update(canonical).digest('hex'));
+    expect(filterHashOf(params, KEY)).toBe(createHmac('sha256', KEY).update(canonical).digest('hex'));
   });
 
   it('is the same when the keys of an object come in another order, and differs when a value changes', () => {
-    expect(filterHashOf({ a: 1, b: { x: 1, y: 2 } })).toBe(filterHashOf({ b: { y: 2, x: 1 }, a: 1 }));
-    expect(filterHashOf({ a: 1 })).not.toBe(filterHashOf({ a: 2 }));
-    expect(filterHashOf({ a: [1, 2] })).not.toBe(filterHashOf({ a: [2, 1] }));
+    expect(filterHashOf({ a: 1, b: { x: 1, y: 2 } }, KEY)).toBe(filterHashOf({ b: { y: 2, x: 1 }, a: 1 }, KEY));
+    expect(filterHashOf({ a: 1 }, KEY)).not.toBe(filterHashOf({ a: 2 }, KEY));
+    expect(filterHashOf({ a: [1, 2] }, KEY)).not.toBe(filterHashOf({ a: [2, 1] }, KEY));
+  });
+
+  it('is not the plain SHA-256 of the parameters, differs under another key, and cannot be recomputed without the key', () => {
+    const params = { stableId: '+1-212-555-0100' };
+    const plain = createHash('sha256').update(canonicalJson(params)).digest('hex');
+    expect(filterHashOf(params, KEY)).not.toBe(plain);
+    expect(filterHashOf(params, KEY)).not.toBe(filterHashOf(params, Buffer.alloc(32, 4)));
   });
 
   it('ignores a key whose value is undefined, as JSON does', () => {
-    expect(filterHashOf({ a: 1, b: undefined })).toBe(filterHashOf({ a: 1 }));
+    expect(filterHashOf({ a: 1, b: undefined }, KEY)).toBe(filterHashOf({ a: 1 }, KEY));
   });
 });
 

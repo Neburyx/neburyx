@@ -8,8 +8,8 @@ describe('buildOpenApiDocument', () => {
     const document = buildOpenApiDocument();
     expect(document.openapi).toBe('3.1.0');
     expect(document.info.title).toBe('Neburyx API');
-    expect(Object.keys(document.paths)).toEqual(['/healthz', '/readyz', '/v1/me', '/v1/sources/{id}/profile', '/v1/sources/{id}/test', '/v1/entities/{sourceId}/{entityType}/{stableId}', '/v1/investigations', '/v1/investigations/{id}', '/v1/search/entities', '/v1/graph/preview-expansion', '/v1/sources']);
-    expect(Object.keys(document.components.schemas)).toEqual(['DegreePreview', 'DegreePreviewRequest', 'ErrorResponse', 'GraphNode', 'HealthResponse', 'InvestigationListResponse', 'InvestigationResponse', 'MeResponse', 'OpenInvestigationRequest', 'OpenInvestigationResponse', 'ReadyResponse', 'SearchRequest', 'SearchResult', 'SourceProfile', 'SourceTestReport', 'SourcesResponse']);
+    expect(Object.keys(document.paths)).toEqual(['/healthz', '/readyz', '/v1/me', '/v1/sources/{id}/profile', '/v1/sources/{id}/test', '/v1/entities/{sourceId}/{entityType}/{stableId}', '/v1/entities/lookup', '/v1/investigations', '/v1/investigations/{id}', '/v1/search/entities', '/v1/graph/preview-expansion', '/v1/sources']);
+    expect(Object.keys(document.components.schemas)).toEqual(['DegreePreview', 'DegreePreviewRequest', 'EntityLookupRequest', 'ErrorResponse', 'GraphNode', 'HealthResponse', 'InvestigationListResponse', 'InvestigationResponse', 'MeResponse', 'OpenInvestigationRequest', 'OpenInvestigationResponse', 'ReadyResponse', 'SearchRequest', 'SearchResult', 'SourceProfile', 'SourceTestReport', 'SourcesResponse']);
     expect(document.components.schemas.ErrorResponse).not.toHaveProperty('$schema');
     expect(document.components.schemas.MeResponse).not.toHaveProperty('$schema');
   });
@@ -19,15 +19,20 @@ describe('buildOpenApiDocument', () => {
     expect(document.paths['/v1/investigations']).toMatchObject({ post: { requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/OpenInvestigationRequest' } } } } } });
     const request = document.components.schemas.OpenInvestigationRequest;
     expect(request).toMatchObject({
-      required: ['sourceId', 'entity'],
-      additionalProperties: false,
-      properties: {
-        caseRef: { type: 'string', minLength: 1, maxLength: 100 },
-        entity: { properties: { stableId: { minLength: 1, maxLength: 200 } } },
-        mask: { type: 'boolean' },
-      },
+      anyOf: [
+        {
+          required: ['sourceId', 'entity'],
+          additionalProperties: false,
+          properties: {
+            caseRef: { type: 'string', minLength: 1, maxLength: 100 },
+            entity: { properties: { stableId: { minLength: 1, maxLength: 266_691 } } },
+            mask: { type: 'boolean' },
+          },
+        },
+        { properties: { entity: { properties: { value: { minLength: 1, maxLength: 100_000 } } } } },
+      ],
     });
-    expect(request).not.toHaveProperty('properties.title');
+    expect(JSON.stringify(request)).not.toContain('"title"');
   });
 
   it('gives byte-identical output on every run', () => {
@@ -124,7 +129,7 @@ describe('buildOpenApiDocument', () => {
             properties: {
               demoCase: {
                 anyOf: [
-                  { type: 'object', required: ['entityType', 'stableId', 'caseRef'], additionalProperties: false, properties: { stableId: { maxLength: 200 }, caseRef: { maxLength: 100 } } },
+                  { type: 'object', required: ['entityType', 'stableId', 'caseRef'], additionalProperties: false, properties: { stableId: { maxLength: 266_691 }, caseRef: { maxLength: 100 } } },
                   { type: 'null' },
                 ],
               },

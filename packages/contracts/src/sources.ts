@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { addressable, addressableTextOfAtMost } from './addressable-text.js';
-import { MAX_STABLE_ID_LENGTH, stableIdSchema } from './entities.js';
+import { MAX_STABLE_ID_LENGTH, referenceTextSchema } from './entities.js';
 import { caseRefSchema } from './investigations.js';
 import { mappingSummarySchema, sourceStateSchema } from './source-basics.js';
 import { DEGREE_STATUSES, readOnlyCheckSchema, serverInfoSchema, testOutcomeSchema } from './source-test.js';
@@ -21,10 +21,10 @@ export const lastTestSchema = z
   })
   .refine((test) => test.server !== null || test.versionSupported === null, { message: 'versionSupported is null when the server did not answer', path: ['versionSupported'] });
 
-/** The investigation a synthetic source offers to open first: its starting entity and the case reference it carries. */
+/** The investigation a synthetic source offers to open first: its starting entity, as a reference (the token of a keyed type, which is longer than a path carries) and not as the configured value, and the case reference it carries. */
 export const demoCaseSchema = z.strictObject({
   entityType: addressableTextOfAtMost(MAX_STABLE_ID_LENGTH),
-  stableId: addressable(stableIdSchema),
+  stableId: addressable(referenceTextSchema),
   caseRef: addressable(caseRefSchema),
 });
 

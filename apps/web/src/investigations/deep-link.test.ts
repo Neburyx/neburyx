@@ -1,6 +1,6 @@
 import { MAX_CASE_REF_LENGTH, MAX_STABLE_ID_LENGTH } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
-import { deepLinkPath, readDeepLink, type DeepLink } from './deep-link.js';
+import { deepLinkPath, readDeepLink, type DeepLink, linkFor } from './deep-link.js';
 
 const ORIGIN = 'https://neburyx.example.test';
 const read = (text: string) => readDeepLink(text, ORIGIN);
@@ -57,7 +57,7 @@ describe('text that is not a link', () => {
     ['a bare tilde stable ID', '/source-a/entity/kind-a/~'],
     ['a bad percent escape', '/source-a/entity/kind-a/AC%ZZ'],
     ['a truncated percent escape', '/source-a/entity/kind-a/AC%'],
-    ['a stable ID of 201 characters', `/source-a/entity/kind-a/${long(201)}`],
+    ['a stable ID of 401 characters', `/source-a/entity/kind-a/${long(401)}`],
     ['a source ID that starts with a dot', '/.hidden/entity/kind-a/AC-1'],
     ['a source ID that starts with a dash', '/-x/entity/kind-a/AC-1'],
     ['a source ID with a percent sign', '/a%2Fb/entity/kind-a/AC-1'],
@@ -75,8 +75,13 @@ describe('text that is not a link', () => {
   });
 
   it('counts a limit in characters, not in bytes', () => {
-    expect(read(`/source-a/entity/kind-a/${encodeURIComponent('é'.repeat(200))}`).ok).toBe(true);
-    expect(read(`/source-a/entity/kind-a/${encodeURIComponent('é'.repeat(201))}`).ok).toBe(false);
+    expect(read(`/source-a/entity/kind-a/${encodeURIComponent('é'.repeat(400))}`).ok).toBe(true);
+    expect(read(`/source-a/entity/kind-a/${encodeURIComponent('é'.repeat(401))}`).ok).toBe(false);
+    // 200 characters outside the basic plane are 400 UTF-16 code units, the limit; 201 are 402
+    expect(read(`/source-a/entity/kind-a/${encodeURIComponent('😀'.repeat(200))}`).ok).toBe(true);
+    expect(read(`/source-a/entity/kind-a/${encodeURIComponent('😀'.repeat(201))}`).ok).toBe(false);
+    expect(linkFor({ sourceId: 'source-a', entityType: 'kind-a', stableId: '😀'.repeat(201) })).toBeUndefined();
+    expect(linkFor({ sourceId: 'source-a', entityType: 'kind-a', stableId: '😀'.repeat(200) })).toBeDefined();
     expect(read(`/source-a/entity/kind-a/AC-1?caseRef=${encodeURIComponent('é'.repeat(100))}`).ok).toBe(true);
     expect(read(`/source-a/entity/kind-a/AC-1?caseRef=${encodeURIComponent('é'.repeat(101))}`).ok).toBe(false);
   });
@@ -96,5 +101,15 @@ describe('text that is not a link', () => {
     ['an address with credentials', 'https://user:pass@evil.example.test/source-a/entity/kind-a/AC-1'],
   ])('is refused as not a link of this app: %s', (_name, text) => {
     expect(read(text)).toEqual({ ok: false, reason: 'foreign' });
+  });
+});
+
+describe('a link for an ID a path cannot carry', () => {
+  const link = (stableId: string) => ({ sourceId: 'source-a', entityType: 'kind-a', stableId });
+
+  it('is made for an ID a path can carry, and is not made for a long ID, a control character or an unpaired surrogate', () => {
+    expect(linkFor(link('A-1'))).toBe('/source-a/entity/kind-a/A-1');
+    expect(linkFor(link('a'.repeat(400)))).toBeDefined();
+    for (const id of ['a'.repeat(401), 'a\u0000b', 'a\ud800']) expect(linkFor(link(id)), id.length.toString()).toBeUndefined();
   });
 });

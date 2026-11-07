@@ -1,3 +1,4 @@
+import { makeToken } from '../../reference/token.js';
 import type { DataClass, GraphNode, GraphProperty } from '@neburyx/contracts';
 import type { DropReason } from './drops.js';
 import type { EntityNormalizer, NormalizeContext } from './model.js';
@@ -78,6 +79,13 @@ function resolveEntity(context: NormalizeContext, labels: readonly string[]): Re
   return found.size === 1 && only !== undefined ? { entity: only } : { dropped: 'ambiguous-type' };
 }
 
+/** The stable ID a reference carries: the value for a type that is not keyed, and for a keyed type the token that stands for it in this source and entity type. */
+function referenceOf(context: NormalizeContext, entity: EntityNormalizer, stableId: string): string {
+  if (!entity.keyed) return stableId;
+  if (context.references === undefined) throw new Error('the keyed references need the reference keys');
+  return makeToken(context.references, { sourceId: context.sourceId, entityType: entity.type }, stableId);
+}
+
 /** A node of the source, or the reason it was left out. The `sourceId` of the ref is the request's, whatever the record says. */
 export function normalizeNode(context: NormalizeContext, plain: PlainNode): { readonly node: GraphNode } | { readonly dropped: DropReason } {
   const resolved = resolveEntity(context, plain.labels);
@@ -110,7 +118,7 @@ export function normalizeNode(context: NormalizeContext, plain: PlainNode): { re
 
   return {
     node: {
-      ref: { sourceId: context.sourceId, entityType: entity.type, stableId },
+      ref: { sourceId: context.sourceId, entityType: entity.type, stableId: referenceOf(context, entity, stableId) },
       display: { title: incomplete ? `${entity.type} ${stableId}` : filled, type: entity.type },
       properties,
       qualityFlags: flags,

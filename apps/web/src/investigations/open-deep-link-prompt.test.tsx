@@ -1,6 +1,7 @@
-import { screen, within } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { createClientState } from '../state/client-state.js';
 import { renderApp } from '../test-utils.js';
 import { INVESTIGATION_A, investigationOf, knowing, nodeOf, openedOf } from './test-data.js';
 
@@ -80,7 +81,7 @@ describe('the form that takes the parts', () => {
     expect(sent).toHaveLength(1);
   });
 
-  it.each(['..', 'a/b', '100%', 'Zoë'])('sends the stable ID %s as it was typed, whatever the route it travels by', async (stableId) => {
+  it.each(['..', 'a/b', '100%', 'Zoë', 'x'.repeat(2000), 'a\u0000b'])('sends the typed ID as a value in the body of the open request, never in an address', async (stableId) => {
     const { sent, user } = prompt();
     await screen.findByRole('heading', { name: 'Open a deep link', level: 1 });
     const form = partsForm();
@@ -92,7 +93,8 @@ describe('the form that takes the parts', () => {
     await user.paste(stableId);
     await user.click(within(form).getByRole('button', { name: 'Open' }));
     await screen.findByRole('heading', { level: 1, name: 'kind-a A-1' });
-    expect((sent[0] as { entity: { stableId: string } }).entity.stableId).toBe(stableId);
+    expect(sent[0]).toMatchObject({ sourceId: 'source-a', entity: { sourceId: 'source-a', entityType: 'kind-a', value: stableId } });
+    expect(JSON.stringify(sent[0])).not.toContain('stableId');
   });
 
   it.each([
@@ -100,7 +102,7 @@ describe('the form that takes the parts', () => {
     ['no entity type', { source: 'source-a', type: '', id: 'A-1', caseRef: '' }, 'Give the entity type.'],
     ['no stable ID', { source: 'source-a', type: 'kind-a', id: '', caseRef: '' }, 'Give the stable ID.'],
     ['a source ID that starts with a dot', { source: '.x', type: 'kind-a', id: 'A-1', caseRef: '' }, 'The source ID starts with a letter or a digit'],
-    ['a stable ID of 201 characters', { source: 'source-a', type: 'kind-a', id: 'x'.repeat(201), caseRef: '' }, 'longer than 200 characters'],
+    ['a stable ID over the limit of a value', { source: 'source-a', type: 'kind-a', id: 'x'.repeat(100_001), caseRef: '' }, 'longer than 100000 characters'],
     ['a case reference of 101 characters', { source: 'source-a', type: 'kind-a', id: 'A-1', caseRef: 'x'.repeat(101) }, 'longer than 100 characters'],
   ])('says which part and why for %s, keeps what was typed and sends nothing', async (_name, values, message) => {
     const { view, sent, user } = prompt();
@@ -150,5 +152,107 @@ describe('both forms together', () => {
     }
     expect(sidebarStops).toBeGreaterThan(0);
     expect(reached).toEqual(expected);
+  });
+});
+
+describe('opening by a value while masked', () => {
+  it('says that masking is on and unmasking allows it, when the open is refused as a bad request', async () => {
+    const sent: unknown[] = [];
+    const { client } = knowing([A], {
+      openInvestigation: async (body) => {
+        sent.push(body);
+        return { ok: false, failure: { code: 'INVALID_REQUEST', message: 'x', retryable: false, traceId: 'tr-1' } };
+      },
+    });
+    const state = createClientState();
+    state.setMask(true);
+    renderApp('/dev/open-link', client, state);
+    const user = userEvent.setup();
+    await screen.findByRole('heading', { name: 'Open a deep link', level: 1 });
+    const form = partsForm();
+    for (const [label, value] of [['Source', 'source-a'], ['Entity type', 'kind-a'], ['Stable ID', '+1-212-555-0100']] as const) {
+      await user.click(within(form).getByLabelText(label));
+      await user.paste(value);
+    }
+    await user.click(within(form).getByRole('button', { name: 'Open' }));
+    expect((await within(form).findByRole('alert')).textContent).toContain('turn masking off');
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({ mask: true, entity: { value: '+1-212-555-0100' } });
+  });
+});
+
+describe('an open that is answered late', () => {
+  const fill = async (user: ReturnType<typeof userEvent.setup>, form: HTMLElement, id: string) => {
+    for (const [label, value] of [['Source', 'source-a'], ['Entity type', 'kind-a'], ['Stable ID', id]] as const) {
+      await user.click(within(form).getByLabelText(label));
+      await user.paste(value);
+    }
+  };
+
+  it('is not applied when masking changed meanwhile, and the page stays where it was', async () => {
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const { client } = knowing([A], {
+      openInvestigation: async () => {
+        await held;
+        return { ok: true, value: openedOf(A.investigation, A.node) };
+      },
+    });
+    const state = createClientState();
+    const view = renderApp('/dev/open-link', client, state);
+    const user = userEvent.setup();
+    await screen.findByRole('heading', { name: 'Open a deep link', level: 1 });
+    await fill(user, partsForm(), 'A-1');
+    await user.click(within(partsForm()).getByRole('button', { name: 'Open' }));
+    state.setMask(true);
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(view.router.state.location.pathname).toBe('/dev/open-link');
+  });
+
+  it('is not applied when the page was left before the answer came', async () => {
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const { client } = knowing([A], {
+      openInvestigation: async () => {
+        await held;
+        return { ok: true, value: openedOf(A.investigation, A.node) };
+      },
+    });
+    const view = renderApp('/dev/open-link', client);
+    const user = userEvent.setup();
+    await screen.findByRole('heading', { name: 'Open a deep link', level: 1 });
+    await fill(user, partsForm(), 'A-1');
+    await user.click(within(partsForm()).getByRole('button', { name: 'Open' }));
+    await view.router.navigate('/');
+    await screen.findByRole('heading', { name: 'Investigations', level: 1 });
+    expect(screen.queryByRole('form', { name: 'Open by parts' })).toBeNull();
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(view.router.state.location.pathname).toBe('/');
+  });
+});
+
+describe('the length of a typed value', () => {
+  const sendValue = async (value: string) => {
+    const { sent, user } = prompt();
+    await screen.findByRole('heading', { name: 'Open a deep link', level: 1 });
+    const form = partsForm();
+    fireEvent.change(within(form).getByLabelText('Source'), { target: { value: 'source-a' } });
+    fireEvent.change(within(form).getByLabelText('Entity type'), { target: { value: 'kind-a' } });
+    fireEvent.change(within(form).getByLabelText('Stable ID'), { target: { value } });
+    await user.click(within(form).getByRole('button', { name: 'Open' }));
+    return { sent, form };
+  };
+
+  it('counts UTF-16 code units as the contract does: 50,000 characters outside the basic plane are sent', async () => {
+    const { sent } = await sendValue('😀'.repeat(50_000));
+    await vi.waitFor(() => expect(sent).toHaveLength(1));
+  });
+
+  it('refuses one more, with no request', async () => {
+    const { sent, form } = await sendValue('😀'.repeat(50_001));
+    expect((await within(form).findByRole('alert')).textContent).toContain('longer than');
+    expect(sent).toHaveLength(0);
   });
 });

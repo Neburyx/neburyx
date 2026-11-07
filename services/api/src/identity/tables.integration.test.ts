@@ -75,7 +75,7 @@ describe('the migration and the app role', () => {
       );
     const first = await columns();
     expect(JSON.parse(first).map((column: { column_name: string }) => column.column_name)).toEqual([
-      'id', 'edition', 'identity_mode', 'initialized_at',
+      'id', 'edition', 'identity_mode', 'initialized_at', 'reference_key',
       'id', 'issuer', 'subject', 'login_name', 'break_glass', 'display_name', 'email', 'role', 'status', 'grants_version', 'last_active_at', 'created_at', 'updated_at',
     ]);
     const second = await runCli(['migrate'], env).done;

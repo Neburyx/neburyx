@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { readdirSync } from 'node:fs';
 import { networkInterfaces } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
@@ -12,18 +13,23 @@ const TAG_B = `b-${randomBytes(3).toString('hex')}`;
 const TAG_C = `c-${randomBytes(3).toString('hex')}`;
 const stacks: Stack[] = [];
 
+/** The number after the last shipped migration, so a migration the test adds comes after every one the older image has run. */
+const NEXT_MIGRATION = String(
+  Math.max(...readdirSync(fileURLToPath(new URL('../../migrations', import.meta.url))).flatMap((name) => Number(/^(\d{4})-/.exec(name)?.[1] ?? Number.NaN) || [])) + 1,
+).padStart(4, '0');
+
 beforeAll(async () => {
   await dockerStream(['build', '-f', 'deploy/docker/Dockerfile', '-t', `${IMAGE}:${TAG_A}`, '.'], repository);
   await buildDerivedImage(
     `${IMAGE}:${TAG_A}`,
     `${IMAGE}:${TAG_B}`,
-    '0009-upgrade-marker.sql',
+    `${NEXT_MIGRATION}-upgrade-marker.sql`,
     'CREATE TABLE upgrade_marker (id integer PRIMARY KEY);\nINSERT INTO upgrade_marker (id) VALUES (1);\n',
   );
   await buildDerivedImage(
     `${IMAGE}:${TAG_A}`,
     `${IMAGE}:${TAG_C}`,
-    '0009-broken.sql',
+    `${NEXT_MIGRATION}-broken.sql`,
     'CREATE TABLE half_done (id integer);\nSELECT * FROM table_that_does_not_exist;\n',
   );
 });

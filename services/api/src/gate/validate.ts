@@ -1,4 +1,8 @@
 import { AppError } from '../errors.js';
+import type { ReferenceKeys } from '../reference/keys.js';
+import { readToken } from '../reference/token.js';
+import { mapPositionReferences } from './cursor/references.js';
+import type { CursorPosition } from './cursor/codec.js';
 import { canonicalJson, filterHashOf } from './cursor/binding.js';
 import type { CursorBinding, CursorCodec } from './cursor/codec.js';
 import { renderTemplate, type Rendered } from './render.js';
@@ -18,9 +22,29 @@ export function findTemplate(catalog: TemplateCatalog, request: Pick<GateRequest
   return template;
 }
 
-export function validateRequest(catalog: TemplateCatalog, template: Template, request: Pick<GateRequest, 'params' | 'limit' | 'cursor'>, context: GateContext, cursors: CursorCodec): Validated {
+/** The position of a cursor with each stable ID it holds for a keyed entity type turned from its token back into the value, so that the keyset parameters are built from the real value. */
+export function readPosition(template: Template, position: CursorPosition, context: Pick<GateContext, 'model' | 'sourceId'>, references: ReferenceKeys): CursorPosition {
+  try {
+    return mapPositionReferences(template, position, context, (entityType, stableId) => readToken(references, { sourceId: context.sourceId, entityType }, stableId));
+  } catch {
+    // a cursor this gate signed holds tokens it made; one that does not read back is a cursor that no longer fits this deployment
+    throw new AppError('CURSOR_INVALIDATED');
+  }
+}
+
+/** The parameters with the token of a keyed entity type's stable ID replaced by the value it stands for; any other parameters are returned as they are, for the schema to check. */
+function readReferences(template: Template, params: unknown, context: GateContext, references: ReferenceKeys): unknown {
+  const names = template.referenceParams;
+  if (names === undefined || typeof params !== 'object' || params === null) return params;
+  const entityType: unknown = Object.getOwnPropertyDescriptor(params, names.entityType)?.value;
+  const stableId: unknown = Object.getOwnPropertyDescriptor(params, names.stableId)?.value;
+  if (typeof entityType !== 'string' || typeof stableId !== 'string' || context.model.entitiesByType.get(entityType)?.keyed !== true) return params;
+  return { ...params, [names.stableId]: readToken(references, { sourceId: context.sourceId, entityType }, stableId) };
+}
+
+export function validateRequest(catalog: TemplateCatalog, template: Template, request: Pick<GateRequest, 'params' | 'limit' | 'cursor'>, context: GateContext, cursors: CursorCodec, references: ReferenceKeys): Validated {
   if (!catalog.isEnabled(template.id, context.sourceId)) throw new AppError('INVALID_REQUEST');
-  const parsed = template.paramsSchema.safeParse(request.params);
+  const parsed = template.paramsSchema.safeParse(readReferences(template, request.params, context, references));
   if (!parsed.success) throw new AppError('INVALID_REQUEST');
   if (!Number.isInteger(request.limit) || request.limit < 1) throw new AppError('INVALID_REQUEST');
   if (request.limit > context.budgets.maxPage) throw new AppError('QUERY_BUDGET_EXCEEDED', { maxPage: context.budgets.maxPage });
@@ -37,7 +61,7 @@ export function validateRequest(catalog: TemplateCatalog, template: Template, re
     source: context.sourceId,
     principal: context.principal.id,
     policyVersion: context.policyVersion,
-    filterHash: filterHashOf(parsed.data),
+    filterHash: filterHashOf(parsed.data, references.filterHash),
     sort: template.sort ?? '',
     target: template.id,
     targetVersion: template.version,
@@ -46,6 +70,6 @@ export function validateRequest(catalog: TemplateCatalog, template: Template, re
   const rendered = renderTemplate(template, parsed.data, context.allowlist, request.limit, context.budgets.countCap);
   if (!template.paged) return { template, params: parsed.data, rendered, binding };
   // the position is the one this gate signed for this request, or none; a template reads it as the parameter `cursor`
-  const position = request.cursor === undefined ? null : cursors.verify(request.cursor, binding);
+  const position = request.cursor === undefined ? null : readPosition(template, cursors.verify(request.cursor, binding), context, references);
   return { template, params: parsed.data, rendered: { ...rendered, parameters: { ...rendered.parameters, cursor: position } }, binding };
 }

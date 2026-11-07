@@ -1,13 +1,13 @@
 import { z } from 'zod';
 import { countSchema, elementRefSchema } from './graph.js';
-import { stableIdSchema } from './entities.js';
+import { referenceTextSchema } from './entities.js';
 
 const text = z.string().min(1);
 
 /** `POST /v1/graph/preview-expansion`: the node of one source whose degree is asked for; `mask` is carried because a preview is cached per mask setting. */
 export const degreePreviewRequestSchema = z.strictObject({
   sourceId: text,
-  ref: z.strictObject({ entityType: text, stableId: stableIdSchema }),
+  ref: z.strictObject({ entityType: text, stableId: referenceTextSchema }),
   mask: z.boolean().optional(),
 });
 

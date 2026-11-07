@@ -1,4 +1,4 @@
-import { stableIdSchema } from '@neburyx/contracts';
+import { referenceValueSchema } from '@neburyx/contracts';
 import { z } from 'zod';
 import { AppError } from '../../errors.js';
 import type { TemplateDefinition } from '../catalog.js';
@@ -19,7 +19,7 @@ export interface DegreeValue {
 /** A node was found: one value for each mapped pair of its entity type, in `degreePairsOf` order. No node, or an entity type with no pair, gives `found: false`. */
 export type DegreeItem = { readonly found: false } | { readonly found: true; readonly counts: readonly DegreeValue[]; readonly duplicate: boolean };
 
-const paramsSchema = z.strictObject({ entityType: z.string().min(1), stableId: stableIdSchema }).transform((params) => ({ ...params, stableInteger: integerCandidateOf(params.stableId) }));
+const paramsSchema = z.strictObject({ entityType: z.string().min(1), stableId: referenceValueSchema }).transform((params) => ({ ...params, stableInteger: integerCandidateOf(params.stableId) }));
 
 const readsNothing = (params: Params, allowlist: SourceAllowlist): boolean => degreePairsOf(allowlist.relationshipRows, String(params['entityType'])).length === 0;
 
@@ -69,6 +69,7 @@ export const degreePreviewBoundedTemplate: TemplateDefinition = {
   scope: 'user',
   paged: false,
   entityParams: ['entityType'],
+  referenceParams: { entityType: 'entityType', stableId: 'stableId' },
   relationshipParams: [],
   indexNeeds,
   readsNothing,

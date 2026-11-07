@@ -15,6 +15,8 @@ export interface LinkTemplate {
   readonly kind: LinkKind;
   readonly template: string;
   readonly placeholder: string;
+  /** Set when the link of a keyed entity type holds the value itself: the mapping says so, and the link is built only for an unmasked request. */
+  readonly carriesValue?: true;
 }
 
 export interface EntityModel {
@@ -38,6 +40,17 @@ export interface EntityModel {
     readonly stateProperty?: string;
   };
 }
+
+/** The link of an entity for a request: none when the type has none, and none for a keyed type while masked, since its link holds the value. Built from the raw value, which the caller read from the reference on the server. */
+export function entityLinkFor(entity: Pick<EntityModel, 'link' | 'pii' | 'stableId'>, value: string, mask: boolean): string | undefined {
+  const { link } = entity;
+  if (link === undefined) return undefined;
+  if (isKeyed(entity) && (mask || link.carriesValue !== true)) return undefined;
+  return link.template.replace(`{${link.placeholder}}`, () => encodeURIComponent(value));
+}
+
+/** True when the stable ID property is also a `pii` property: the reference of such a node is a keyed token, never the value. Derived, so it is not part of the model and the configuration hash. */
+export const isKeyed = (entity: Pick<EntityModel, 'pii' | 'stableId'>): boolean => entity.pii.includes(entity.stableId);
 
 export interface RelationshipModel {
   readonly type: string;

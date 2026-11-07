@@ -1,7 +1,7 @@
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import type { Socket } from 'node:net';
 import fastifyStatic from '@fastify/static';
-import { type ErrorCode, degreePreviewRequestSchema, degreePreviewSchema, entityPathSchema, entityQuerySchema, healthResponseSchema, investigationListQuerySchema, investigationListResponseSchema, investigationResponseSchema, meResponseSchema, nodeSchema, openInvestigationRequestSchema, openInvestigationResponseSchema, readyResponseSchema, searchRequestSchema, searchResultSchema, sourceProfileSchema, sourceTestReportSchema, sourcesResponseSchema } from '@neburyx/contracts';
+import { type ErrorCode, degreePreviewRequestSchema, entityLookupRequestSchema, degreePreviewSchema, entityPathSchema, entityQuerySchema, healthResponseSchema, investigationListQuerySchema, investigationListResponseSchema, investigationResponseSchema, meResponseSchema, nodeSchema, openInvestigationRequestSchema, openInvestigationResponseSchema, readyResponseSchema, searchRequestSchema, searchResultSchema, sourceProfileSchema, sourceTestReportSchema, sourcesResponseSchema } from '@neburyx/contracts';
 import { z } from 'zod';
 import Fastify, {
   type FastifyBaseLogger,
@@ -12,12 +12,15 @@ import Fastify, {
 } from 'fastify';
 import { AppError, codeForFailure, detailsOf, errorResponse, errorStatus } from './errors.js';
 import type { AppStore } from './app-store.js';
+import { deriveReferenceKeys, type ReferenceKeys } from './reference/keys.js';
+import { canonicalLookup, canonicalOpen } from './reference/resolve.js';
 import { createDegreePreviewService } from './graph/degree-preview-service.js';
 import { createDegreeCache, type DegreeCacheOptions } from './graph/degree-cache.js';
 import { NO_DEGREE_VERDICTS, type DegreeVerdicts, type SourceUsability } from './source-test/usability.js';
 import { createEntityReader } from './entities/entity-reader.js';
 import { createSearchService } from './search/search-service.js';
 import { createInvestigationService } from './investigations/investigation-service.js';
+import { createStoredReferences } from './investigations/stored-references.js';
 import { createSourceAccess } from './investigations/source-access.js';
 import type { Gate, IndexReader } from './gate/types.js';
 import type { JobRunner } from './jobs/runner.js';
@@ -43,6 +46,8 @@ export interface AppOptions {
   readonly sourceTester?: SourceTester | undefined;
   readonly gate?: Gate | undefined;
   readonly indexes?: IndexReader | undefined;
+  /** The keys of the reference tokens of keyed entity types; the source summary carries a demo case's keyed starting entity as a token. */
+  readonly referenceKeys?: ReferenceKeys | undefined;
   /** What the checks showed about how the source answers a count of neighbors; absent, every degree preview is bounded. */
   readonly degreeVerdicts?: (DegreeVerdicts & SourceUsability) | undefined;
   /** Overrides the lifetime and size of the degree preview cache, which is only kept when the verdicts are given. */
@@ -264,7 +269,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
 
   app.get('/v1/me', { exposeHeadRoute: false, config: { permission: 'principal' } }, async () => {
     const [identity, rows] = await Promise.all([options.store.current(), options.store.listSources()]);
-    const sources = summariesOf(rows, mapping).map((source) => ({ sourceId: source.id, viewSensitive: true, synthetic: source.synthetic }));
+    const sources = summariesOf(rows, mapping, undefined, options.referenceKeys).map((source) => ({ sourceId: source.id, viewSensitive: true, synthetic: source.synthetic }));
     return meResponseSchema.parse({ ...identity, sources });
   });
 
@@ -273,7 +278,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
     const rows = await options.store.listSources();
     const checked = mapping.sources.map((source) => ({ id: source.id, identityHash: identityHashOf(source), configHash: source.configHash }));
     const latest = await options.store.latestChecksFor(checked, (sourceId) => options.logger.warn({ event: 'source.check_unreadable', sourceId }, 'a stored check could not be read'));
-    return sourcesResponseSchema.parse({ items: summariesOf(rows, mapping, new Map(latest.map((check) => [check.sourceId, check.report]))), nextCursor: null });
+    return sourcesResponseSchema.parse({ items: summariesOf(rows, mapping, new Map(latest.map((check) => [check.sourceId, check.report])), options.referenceKeys), nextCursor: null });
   });
 
   app.get('/v1/sources/:id/profile', { exposeHeadRoute: false, config: { permission: 'principal' } }, async (request, reply) => {
@@ -299,6 +304,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
 
   if (options.gate !== undefined) {
     const access = createSourceAccess({ mapping, seams: options.seams ?? communitySeams(), logger: options.logger });
+    const referenceKeys = options.referenceKeys ?? deriveReferenceKeys(randomBytes(32));
     const entities = createEntityReader({ gate: options.gate, mapping, access });
     app.get('/v1/entities/:sourceId/:entityType/:stableId', { exposeHeadRoute: false, config: { permission: 'principal' } }, async (request) => {
       const path = entityPathSchema.safeParse(request.params);
@@ -306,6 +312,15 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       if (!path.success || !query.success) throw new AppError('INVALID_REQUEST');
       const identity = await options.store.current();
       const node = await entities.read({ traceId: request.id, principal: identity.principal, ...path.data, mask: query.data.mask === 'true' });
+      return nodeSchema.parse(node);
+    });
+
+    app.post('/v1/entities/lookup', { config: { permission: 'principal' } }, async (request) => {
+      const body = entityLookupRequestSchema.safeParse(request.body);
+      if (!noQuerySchema.safeParse(request.query).success || !body.success) throw new AppError('INVALID_REQUEST');
+      const identity = await options.store.current();
+      const lookup = canonicalLookup(mapping, referenceKeys, body.data);
+      const node = await entities.read({ traceId: request.id, principal: identity.principal, sourceId: body.data.sourceId, ...lookup, mask: body.data.mask === true });
       return nodeSchema.parse(node);
     });
 
@@ -328,12 +343,12 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       return degreePreviewSchema.parse(preview);
     });
 
-    const investigations = createInvestigationService({ store: options.store, entities, mapping, access });
+    const investigations = createInvestigationService({ store: options.store, entities, mapping, access, references: createStoredReferences(mapping, referenceKeys) });
     app.post('/v1/investigations', { config: { permission: 'principal' } }, async (request, reply) => {
       const body = openInvestigationRequestSchema.safeParse(request.body);
       if (!noQuerySchema.safeParse(request.query).success || !body.success) throw new AppError('INVALID_REQUEST');
       const identity = await options.store.current();
-      const answer = await investigations.open({ traceId: request.id, principal: identity.principal, request: body.data });
+      const answer = await investigations.open({ traceId: request.id, principal: identity.principal, request: canonicalOpen(mapping, referenceKeys, body.data) });
       return reply
         .code(answer.created ? 201 : 200)
         .header('etag', `"${answer.body.investigation.version}"`)

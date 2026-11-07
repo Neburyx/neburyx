@@ -35,14 +35,14 @@ export const referencesLine = (text: string, properties: readonly string[]): str
 export const showingResultsFor = (text: string): string => `Showing results for “${text}”.`;
 
 export const TOO_LONG = 'Use at most 200 characters.';
-export const NOTHING_SEARCHABLE_MASKED = 'Nothing can be searched while personal data is masked.';
+export const NOTHING_SEARCHABLE_MASKED = 'Nothing can be searched while personal data is masked. Turn masking off to search personal data.';
 export const NO_SEARCH_PROPERTIES = 'No property of this source is configured for search.';
 export const NO_RELATED_PROPERTIES = 'No property of this source is configured for related records.';
 export const NO_EVIDENCE_PROPERTIES = 'No relationship of this source is configured for evidence records.';
 export const evidenceRecordsText = (recordIds: readonly string[]): string => `${recordIds.length} ${recordIds.length === 1 ? 'record' : 'records'}: ${recordIds.join(', ')}`;
 export const evidenceRuleText = (ruleId: string, ruleVersion: number): string => `Used by rule ${ruleId} v${ruleVersion}`;
-export const EXACT_MASKED = 'Exact matches cannot be searched while personal data is masked.';
-export const RELATED_MASKED = 'Related records cannot be searched while personal data is masked.';
+export const EXACT_MASKED = 'Exact matches cannot be searched while personal data is masked. Turn masking off to search personal data.';
+export const RELATED_MASKED = 'Related records cannot be searched while personal data is masked. Turn masking off to search personal data.';
 const PAGE_GROUP_NAMES = { exact: 'Exact matches', related: 'Related records', evidence: 'Evidence records', startsWith: 'Matches that start with the text', facets: 'Facet counts' } as const;
 const PAGE_GROUP_NOT_READ = { exact: 'exact matches not read', related: 'related records not read', evidence: 'evidence records not read', startsWith: 'matches that start with the text not read', facets: 'facet counts not read' } as const;
 export const groupNotReadSummary = (group: SearchFailureGroup): string => PAGE_GROUP_NOT_READ[group];

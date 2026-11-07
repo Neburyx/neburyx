@@ -17,7 +17,10 @@ const STORED_ORIGIN = 'sourced';
 export function menuHeader(open: OpenMenu, graph: LoadedGraph, profile: SourceProfile | undefined): MenuHeader | undefined {
   if (open.kind === 'node') {
     const node = graph.nodes.find((candidate) => elementKey(candidate.ref) === open.key);
-    return node === undefined ? undefined : { title: node.ref.stableId, detail: entityLook(node, profile).line2 };
+    if (node === undefined) return undefined;
+    // the reference of a keyed entity is a token that means nothing to a person: its display title (masked under a mask) stands in the header
+    const keyed = profile?.entityTypes.find((candidate) => candidate.type === node.ref.entityType)?.keyed === true;
+    return { title: keyed ? node.display.title : node.ref.stableId, detail: entityLook(node, profile).line2 };
   }
   if (open.kind === 'relationship') {
     const edge = graph.edges.find((candidate) => edgeKey(candidate.ref) === open.key);

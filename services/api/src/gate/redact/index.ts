@@ -16,15 +16,22 @@ function isNormalized(item: Item): item is Item & Normalized {
 
 /**
  * The title of a node when it is built from a `pii` field: the title template filled with the mask of each such field and the plain value of the others. A title that is
- * not built from a `pii` field, or that fell back to the type and the stable ID because a value was missing, holds no `pii` value and stays as it is.
+ * not built from a `pii` field stays as it is; one that fell back to the type and the stable ID because a value was missing holds no `pii` value unless the type is keyed, whose fallback is masked.
  */
 function maskedTitle(node: GraphNode, entity: EntityNormalizer): string {
-  if (!entity.titleProperties.some((key) => entity.pii.includes(key)) || node.qualityFlags.includes('title-incomplete')) return node.display.title;
+  if (node.qualityFlags.includes('title-incomplete')) return entity.keyed ? keyedFallbackTitle(node, entity) : node.display.title;
+  if (!entity.titleProperties.some((key) => entity.pii.includes(key))) return node.display.title;
   return entity.title.replace(PLACEHOLDER, (_whole, key: string) => {
     const property = node.properties.find((candidate) => candidate.key === key);
     if (property?.value === undefined) return '';
     return entity.pii.includes(key) ? maskOf(property, classOf(entity, key)) : (placeholderText(property.value) ?? '');
   });
+}
+
+/** The fallback title of a keyed node (its type and its stable ID) with the stable ID masked as its own class says, since that value is the personal data itself. */
+function keyedFallbackTitle(node: GraphNode, entity: EntityNormalizer): string {
+  const property = node.properties.find((candidate) => candidate.key === entity.stableId);
+  return `${entity.type} ${property === undefined ? FULL_MASK : maskOf(property, classOf(entity, entity.stableId))}`;
 }
 
 /** The class the mapping gives a field, read only from the entity's own classes (a field named `constructor` has none). */

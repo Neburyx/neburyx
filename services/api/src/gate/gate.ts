@@ -1,4 +1,6 @@
 import { AppError } from '../errors.js';
+import { makeToken } from '../reference/token.js';
+import { mapPositionReferences } from './cursor/references.js';
 import { AdapterError } from '../sources/errors.js';
 import type { AuditEvent } from '../seams/seams.js';
 import { auditResultFor, FALLBACK_AUDIT_ACTION } from './audit.js';
@@ -61,7 +63,7 @@ async function runStages(deps: GateDeps, request: GateRequest, system: boolean, 
   const { template, params, rendered, binding } = await inStage(deps, progress, 'validate', () => {
     const found = findTemplate(deps.catalog, request);
     progress.action = found.auditAction;
-    return validateRequest(deps.catalog, found, request, context, deps.cursors);
+    return validateRequest(deps.catalog, found, request, context, deps.cursors, deps.references);
   });
   await inStage(deps, progress, 'authorize', () => authorizeRequest(deps.seams.policy, deps.usability, context, template));
   const result = await inStage(deps, progress, 'execute', async (): Promise<ExecuteResult> => {
@@ -70,10 +72,10 @@ async function runStages(deps: GateDeps, request: GateRequest, system: boolean, 
     return executeRead({ coordinator: deps.seams.coordinator, executor: deps.executor, clock: deps.clock, logger: deps.logger }, context, template, rendered, request.limit);
   });
   const normalized = await inStage(deps, progress, 'normalize', () => {
-    const items = template.normalize(result.rows, result.plan, { sourceId: context.sourceId, hasMore: result.hasMore, model: context.model, limit: request.limit, countCap: context.budgets.countCap, params });
+    const items = template.normalize(result.rows, result.plan, { sourceId: context.sourceId, hasMore: result.hasMore, model: context.model, limit: request.limit, countCap: context.budgets.countCap, params, references: deps.references });
     // the page after this one, when there is one: the template says where it starts and the gate signs it for this request
     const position = template.paged && result.hasMore ? template.nextPosition?.(result.rows, request.limit) : undefined;
-    return { items, nextCursor: position === undefined ? undefined : deps.cursors.mint(binding, position) };
+    return { items, nextCursor: position === undefined ? undefined : deps.cursors.mint(binding, mapPositionReferences(template, position, context, (entityType, stableId) => makeToken(deps.references, { sourceId: context.sourceId, entityType }, stableId))) };
   });
   const redacted = await inStage(deps, progress, 'redact', () => deps.redact(normalized.items, context));
   return { items: redacted, hasMore: result.hasMore, ...(normalized.nextCursor === undefined ? {} : { nextCursor: normalized.nextCursor }) };

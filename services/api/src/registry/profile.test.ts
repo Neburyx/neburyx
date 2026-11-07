@@ -83,6 +83,8 @@ describe('the profile of a configured source', () => {
     expect(body.entityTypes[0]).toEqual({
       type: 'node_a',
       label: 'NodeA',
+      keyed: false,
+      stableIdProperty: 'id',
       displayName: 'Node A',
       icon: 'document',
       title: 'Item {name}',
@@ -95,11 +97,19 @@ describe('the profile of a configured source', () => {
     });
   });
 
+  it('marks a type whose stable ID is also personal data as keyed and names its stable ID property', async () => {
+    const source = fullSource('demo', { entities: [{ type: 'node_a', label: 'NodeA', stable_id: 'phoneId', pii: [{ property: 'phoneId', class: 'phone' }] }, { type: 'node_b', label: 'NodeB', stable_id: 'key' }], relationships: [], derived: [], patterns: [] });
+    const { body } = await profileOf(await appFor(mappingOf(source)));
+    expect(body.entityTypes.map((entry) => [entry.type, entry.keyed, entry.stableIdProperty])).toEqual([['node_a', true, 'phoneId'], ['node_b', false, 'key']]);
+  });
+
   it('describes an entity type that omits display and title with the defaults of the mapping', async () => {
     const { body } = await profileOf(await appFor(mappingOf(fullSource())));
     expect(body.entityTypes[1]).toEqual({
       type: 'node_b',
       label: 'NodeB',
+      keyed: false,
+      stableIdProperty: 'key',
       displayName: 'NodeB',
       icon: 'generic',
       title: '{key}',

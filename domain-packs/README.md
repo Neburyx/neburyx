@@ -45,8 +45,34 @@ sources:
 
 A command that checks a mapping against a running graph (`neburyx test-source`) is planned; this page will describe it when it exists.
 
+## An entity type whose identifier is personal data
+
+Some records are identified by a value that is itself personal data, such as a phone number or an email address. List the identifier under `pii` as well as naming it as the `stable_id`:
+
+```yaml
+entities:
+  - type: phone
+    label: Phone
+    stable_id: phoneNumber
+    search: [phoneNumber]
+    pii: [{ property: phoneNumber, class: phone }]
+```
+
+The type is then *keyed*. What changes:
+
+- The API never puts the value in a reference. A node of a keyed type is referred to by an opaque token that only this deployment can read, so the value is not in a URL, a log line, an audit row or a saved investigation. It appears only in the node's own properties and display title, and only while masking is off.
+- A token is tied to its source and entity type. A token from another source or type, or one that has been altered, is refused.
+- A path carries a reference of at most 400 characters with no control character; any other reference, and any value, goes in a request body. A value may be up to 100,000 characters (UTF-16 code units), and entity type names must be well-formed Unicode.
+- To find a node by its value, send the value in a request body: `POST /v1/entities/lookup` with `{ sourceId, value: { entityType, value } }`, or the `entity.value` form of `POST /v1/investigations`. While masking is on a raw value of a keyed type is refused, because naming a value to a masked view would confirm that it exists; use the token the API returned instead.
+- Masked search does not search a `pii` property, so a keyed value is found by search only while masking is off.
+- The token is made with a key the deployment creates on first start and keeps in its database. There is no key rotation, and a copy of the database holds the tokens and the key together, so protect it as you would the source of the values.
+- Adding `pii` to the identifier of a type that investigations already use is allowed: stored investigations of the type are shown with tokens, and a generated title that held the value is shown as the type's display name.
+- Taking `pii` off the identifier again keeps investigations opened in between working: they are shown with the plain ID and found again by it. The key stays in the deployment's database.
+- An ID with a NUL or an unpaired surrogate, of any type, can be looked up, opened as an investigation, stored and read back exactly.
+- A source link on a keyed type holds the value itself, so it is refused unless the mapping says so with `link_carries_value: true`, and it is built only while masking is off.
+
 ## Rules for a pack
 
 - Names that belong to a domain (entity types, labels, relationship types, property keys) live in the pack and only there. Code and tests read them from the pack.
-- Use synthetic hosts such as `example.test` in link templates. A link template takes one placeholder, the identifier of the record, and never one marked `pii`.
+- Use synthetic hosts such as `example.test` in link templates. A link template takes one placeholder, the identifier of the record, and never one marked `pii`, unless the type is keyed and the mapping says the link carries the value (see below).
 - One source per pack file.

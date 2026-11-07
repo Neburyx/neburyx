@@ -24,6 +24,10 @@ export const PROMPT_NOT_A_LINK = 'That is not a valid link: it names a source, a
 export const PROMPT_GIVE_SOURCE = 'Give the source.';
 export const PROMPT_GIVE_ENTITY_TYPE = 'Give the entity type.';
 export const PROMPT_GIVE_STABLE_ID = 'Give the stable ID.';
+export const LINK_CANNOT_CARRY_ID = 'This ID cannot be put in a link. Open it from the graph, or by its ID.';
+export const PROMPT_MASKED_VALUE = 'Masking is on. A personal-data ID can be opened by its value only when masking is off; turn masking off, or open it from the graph.';
+export const PROMPT_SOURCE_UNAVAILABLE = 'That source is not available right now.';
+export const PROMPT_NOT_FOUND = 'That entity is not in the source.';
 export const PROMPT_SOURCE_SHAPE = 'The source ID starts with a letter or a digit and has only letters, digits, dots, dashes and underscores.';
 export const promptTooLong = (what: string, limit: number): string => `The ${what} is longer than ${limit} characters.`;
 export const PROMPT_LABELS = { form: 'Open a link', partsForm: 'Open by parts', link: 'Link', source: 'Source', entityType: 'Entity type', stableId: 'Stable ID', caseRef: 'Case reference (optional)' } as const;

@@ -123,6 +123,7 @@ function lines(report: SourceTestReport): string {
     `Version supported: ${supported}`,
     `Operations: ${operations === '' ? 'none' : operations}`,
     `Mapping: ${mapping.entityTypes} entity types, ${mapping.relationshipTypes} relationship types, ${mapping.derivedRules} derived rules`,
+    ...((mapping.keyedEntityTypes ?? 0) === 0 ? [] : [`Keyed references: ${mapping.keyedEntityTypes} entity types have a personal-data stable ID, so their references are keyed and never hold the value.`]),
     `Read-only: ${READ_ONLY_WORDS[report.readOnlyCheck]}`,
     `Login can write: ${report.loginCanWrite === null ? 'unknown' : report.loginCanWrite ? 'yes' : 'no'}`,
     `Mapping checks: ${MAPPING_WORDS[report.mappingChecks.status]}`,

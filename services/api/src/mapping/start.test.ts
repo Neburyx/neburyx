@@ -85,7 +85,6 @@ describe('start-up with a mapping file', () => {
 const mistakes: readonly [string, Json, string][] = [
   ['a duplicate entity type', baseSource({ entities: [{ type: 'node_a', label: 'A', stable_id: 'id' }, { type: 'node_a', label: 'B', stable_id: 'id' }], relationships: undefined }), 'sources[0].entities[1].type'],
   ['an unmapped relationship endpoint', baseSource({ relationships: [{ type: 'LINKS', from: 'node_a', to: 'missing' }] }), 'sources[0].relationships[0].to'],
-  ['a pii stable ID', baseSource({ entities: [{ type: 'node_a', label: 'A', stable_id: 'id', pii: ['id'] }], relationships: undefined }), 'sources[0].entities[0].pii'],
   ['an unmapped derived entry', baseSource({ derived: [{ id: 'r', from: 'node_a', to: 'node_a', via: ['LINKS', 'missing', 'LINKS'], rule_version: 1 }] }), 'sources[0].derived[0].via[1]'],
   ['a bad preset', baseSource({ patterns: [{ id: 'p', name: 'P', template: 'shared-attribute', bind: { anchor: 'node_a' } }] }), 'sources[0].patterns[0].bind'],
   ['a budget above its ceiling', baseSource({ budgets: { max_page: 500 } }), 'sources[0].budgets.max_page'],
@@ -106,7 +105,7 @@ describe('start-up refused for a mapping mistake', () => {
   });
 
   it('names a marked-pii placeholder', async () => {
-    const outcome = await refused(fileOf(mistakes[9]?.[1] ?? {}));
+    const outcome = await refused(fileOf(mistakes.find(([name]) => name === 'a link with a pii placeholder')?.[1] ?? {}));
     expect(outcome.message).toContain('which is marked pii');
   });
 

@@ -1,13 +1,15 @@
 import { RESERVED_SOURCE_IDS } from './reserved-source-ids.js';
 import { addressableTextOfAtMost, iconKeySchema, MAX_CASE_REF_LENGTH, MAX_STABLE_ID_LENGTH, PII_CLASSES, presetTemplateSchema, type PiiClass } from '@neburyx/contracts';
 import { z } from 'zod';
+import { isWellFormed } from '../reference/well-formed.js';
 import { budgetsSchema } from './budgets.js';
 
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const SOURCE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const URI_SCHEMES = ['neo4j:', 'neo4j+s:', 'neo4j+ssc:', 'bolt:', 'bolt+s:', 'bolt+ssc:'];
 
-const name = z.string().min(1);
+/** A name is well-formed Unicode: a lone surrogate would be replaced when the name is encoded as UTF-8, so two different names could share one encoding. */
+const name = z.string().min(1).refine((text) => isWellFormed(text) && !text.includes('\u0000'), { message: 'must be well-formed Unicode (no unpaired surrogate, no NUL)' });
 const property = z.string().min(1).regex(/^[^{}]*$/);
 const propertyList = z.array(property);
 
@@ -95,6 +97,7 @@ const entitySchema = z.strictObject({
   pii: z.array(piiEntry).optional(),
   filterable: propertyList.optional(),
   link: z.string().optional(),
+  link_carries_value: z.boolean().optional(),
   display: displaySchema.optional(),
 });
 

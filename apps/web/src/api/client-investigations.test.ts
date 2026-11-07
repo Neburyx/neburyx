@@ -107,3 +107,56 @@ describe('getInvestigation', () => {
     expect(await createApiClient(fetcher).getInvestigation(INVESTIGATION_A)).toEqual({ ok: false, failure: { code: 'SCHEMA_MISMATCH' } });
   });
 });
+
+describe('an ID that a path cannot carry', () => {
+  it.each([
+    ['a long ID', 'x'.repeat(401)],
+    ['an ID with a control character', 'a\u0000b'],
+    ['an ID with an unpaired surrogate', 'a\ud800'],
+  ])('is read through the body of the lookup, with %s, and the answer must name the same reference', async (_name, stableId) => {
+    const ref = { sourceId: 'source-a', entityType: 'kind-a', stableId };
+    const { fetcher, asked } = answering(nodeOf(ref.sourceId, ref.entityType, ref.stableId));
+    const result = await createApiClient(fetcher).getEntity(ref, { mask: true });
+    expect(result.ok).toBe(true);
+    expect(asked[0]?.path).toBe('/v1/entities/lookup');
+    expect(JSON.parse(asked[0]?.init?.body ?? '{}')).toEqual({ sourceId: 'source-a', mask: true, ref: { entityType: 'kind-a', stableId } });
+    const other = answering(nodeOf(ref.sourceId, ref.entityType, 'another'));
+    expect(await createApiClient(other.fetcher).getEntity(ref)).toEqual({ ok: false, failure: { code: 'SCHEMA_MISMATCH' } });
+  });
+});
+
+describe('lookupEntity', () => {
+  it('requires the same reference back for a reference, and only the same source and type for a value', async () => {
+    const token = nodeOf('source-a', 'kind-a', 'p1.canonical');
+    const byRef = await createApiClient(answering(token).fetcher).lookupEntity({ sourceId: 'source-a', ref: { entityType: 'kind-a', stableId: 'p1.canonical' } });
+    expect(byRef.ok).toBe(true);
+    const wrongRef = await createApiClient(answering(token).fetcher).lookupEntity({ sourceId: 'source-a', ref: { entityType: 'kind-a', stableId: 'p1.other' } });
+    expect(wrongRef).toEqual({ ok: false, failure: { code: 'SCHEMA_MISMATCH' } });
+    const byValue = await createApiClient(answering(token).fetcher).lookupEntity({ sourceId: 'source-a', value: { entityType: 'kind-a', value: '+1-212-555-0100' } });
+    expect(byValue.ok).toBe(true);
+    for (const wrong of [nodeOf('source-b', 'kind-a', 'p1.canonical'), nodeOf('source-a', 'kind-b', 'p1.canonical')]) {
+      expect(await createApiClient(answering(wrong).fetcher).lookupEntity({ sourceId: 'source-a', value: { entityType: 'kind-a', value: 'v' } })).toEqual({ ok: false, failure: { code: 'SCHEMA_MISMATCH' } });
+    }
+  });
+});
+
+describe('openInvestigation by a value', () => {
+  const value = { sourceId: 'source-a', entity: { sourceId: 'source-a', entityType: 'kind-a', value: '+1-212-555-0100' } };
+
+  it('accepts the canonical reference of the same source and entity type, and refuses another source or type', async () => {
+    const canonical = openedOf(investigationOf(INVESTIGATION_A, 'source-a', 'kind-a', 'p1.canonical'), nodeOf('source-a', 'kind-a', 'p1.canonical'));
+    expect((await createApiClient(answering(canonical).fetcher).openInvestigation(value)).ok).toBe(true);
+    const otherType = openedOf(investigationOf(INVESTIGATION_A, 'source-a', 'kind-b', 'p1.canonical'), nodeOf('source-a', 'kind-b', 'p1.canonical'));
+    expect(await createApiClient(answering(otherType).fetcher).openInvestigation(value)).toEqual({ ok: false, failure: { code: 'SCHEMA_MISMATCH' } });
+    const mixed = openedOf(investigationOf(INVESTIGATION_A, 'source-a', 'kind-a', 'p1.canonical'), nodeOf('source-a', 'kind-a', 'p1.different'));
+    expect(await createApiClient(answering(mixed).fetcher).openInvestigation(value)).toEqual({ ok: false, failure: { code: 'SCHEMA_MISMATCH' } });
+  });
+
+  it('keeps the exact check for a reference', async () => {
+    const reference = { sourceId: 'source-a', entity: { sourceId: 'source-a', entityType: 'kind-a', stableId: 'p1.canonical' } };
+    const same = openedOf(investigationOf(INVESTIGATION_A, 'source-a', 'kind-a', 'p1.canonical'), nodeOf('source-a', 'kind-a', 'p1.canonical'));
+    expect((await createApiClient(answering(same).fetcher).openInvestigation(reference)).ok).toBe(true);
+    const different = openedOf(investigationOf(INVESTIGATION_A, 'source-a', 'kind-a', 'p1.other'), nodeOf('source-a', 'kind-a', 'p1.other'));
+    expect(await createApiClient(answering(different).fetcher).openInvestigation(reference)).toEqual({ ok: false, failure: { code: 'SCHEMA_MISMATCH' } });
+  });
+});

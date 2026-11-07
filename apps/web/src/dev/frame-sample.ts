@@ -59,7 +59,7 @@ const RELATIONSHIPS: ReadonlyArray<readonly [string, string, string, 'stored' | 
 const STATE_PROPERTY = 'status';
 
 export function frameSampleProfile(): SourceProfile {
-  const entityTypes = TYPES.map((entry) => ({ type: entry.type, label: entry.label, displayName: entry.label, icon: entry.icon, title: 'name', titleUsesPii: false, keyProperties: [], stateProperty: STATE_PROPERTY, searchable: [], filterable: [], pii: [] }));
+  const entityTypes = TYPES.map((entry) => ({ type: entry.type, label: entry.label, keyed: false, stableIdProperty: 'id', displayName: entry.label, icon: entry.icon, title: 'name', titleUsesPii: false, keyProperties: [], stateProperty: STATE_PROPERTY, searchable: [], filterable: [], pii: [] }));
   return {
     sourceId: FRAME_SAMPLE_SOURCE,
     synthetic: true,

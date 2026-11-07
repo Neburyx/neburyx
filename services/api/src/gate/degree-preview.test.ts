@@ -131,7 +131,7 @@ describe('a bounded degree read the gate refuses', () => {
     ['a cap in the request', { entityType: 'widget', stableId: 'W-1', countCap: 100000 }],
     ['a relationship type in the request', { entityType: 'widget', stableId: 'W-1', relationshipType: 'LINKS' }],
     ['an empty stable ID', { entityType: 'widget', stableId: '' }],
-    ['a stable ID of 201 characters', { entityType: 'widget', stableId: 'x'.repeat(201) }],
+    ['a stable ID over the limit of a value', { entityType: 'widget', stableId: 'x'.repeat(100_001) }],
     ['a stable ID that is not text', { entityType: 'widget', stableId: 7 }],
     ['no entity type', { stableId: 'W-1' }],
   ])('refuses %s with INVALID_REQUEST and runs no statement', async (_name, params) => {

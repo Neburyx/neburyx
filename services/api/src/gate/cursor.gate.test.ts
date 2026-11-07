@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { AppError } from '../errors.js';
 import type { AuditEvent, AuditSink } from '../seams/seams.js';
 import { createCursorCodec } from './cursor/codec.js';
-import { fakeClock, gateRequest, harness, LOCAL_PRINCIPAL, rowsOf, SOURCE_A, SOURCE_B, TEST_CURSOR_KEY, testCatalog, testTemplate, TestExecutor, type HarnessOptions } from '../testing/gate.js';
+import { fakeClock, gateRequest, harness, LOCAL_PRINCIPAL, rowsOf, SOURCE_A, SOURCE_B, TEST_CURSOR_KEY, TEST_REFERENCE_KEYS, testCatalog, testTemplate, TestExecutor, type HarnessOptions } from '../testing/gate.js';
 import { createTemplateCatalog } from './catalog.js';
 import { filterHashOf } from './cursor/binding.js';
 import type { Row, Template } from './types.js';
@@ -153,11 +153,11 @@ describe('a cursor is bound to its request', () => {
     expect(await code(first.gate.run(request({ params: { key: 'k', window: { from: 'a', to: 'c' } }, cursor: page.nextCursor })))).toBe('CURSOR_INVALIDATED');
   });
 
-  it('binds the SHA-256 of the canonical validated parameters, taken before limit and cursor are added', async () => {
+  it('binds the keyed HMAC of the canonical validated parameters, taken before limit and cursor are added', async () => {
     const { gate, executor } = rig();
     const page = await gate.run(request());
     const payload = JSON.parse(Buffer.from((page.nextCursor ?? '').split('.')[1] ?? '', 'base64url').toString('utf8')) as { f: string };
-    expect(payload.f).toBe(filterHashOf({ key: 'k1' }));
+    expect(payload.f).toBe(filterHashOf({ key: 'k1' }, TEST_REFERENCE_KEYS.filterHash));
     expect(executor.calls[0]?.parameters).toMatchObject({ limit: 2 });
   });
 

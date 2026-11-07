@@ -12,6 +12,7 @@ import {
   TestExecutor,
   testCatalog,
   type HarnessOptions,
+  TEST_REFERENCE_KEYS,
 } from '../testing/gate.js';
 import type { GateStage } from './types.js';
 
@@ -194,8 +195,8 @@ describe('the context a template is normalized with', () => {
     await gate.run(gateRequest({ limit: 2 }));
     await gate.run(gateRequest({ limit: 5 }));
     expect(seen).toEqual([
-      { sourceId: SOURCE_A, hasMore: true, model, limit: 2, countCap: 500, params: { key: 'k1' } },
-      { sourceId: SOURCE_A, hasMore: false, model, limit: 5, countCap: 500, params: { key: 'k1' } },
+      { sourceId: SOURCE_A, hasMore: true, model, limit: 2, countCap: 500, params: { key: 'k1' }, references: TEST_REFERENCE_KEYS },
+      { sourceId: SOURCE_A, hasMore: false, model, limit: 5, countCap: 500, params: { key: 'k1' }, references: TEST_REFERENCE_KEYS },
     ]);
   });
 

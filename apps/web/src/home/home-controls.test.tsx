@@ -79,7 +79,7 @@ describe('the entry action for the demo case on Home', () => {
   });
 
   it('opens the preset of the source whose action is activated, when several sources offer one', async () => {
-    const sent: Array<{ sourceId: string; entity: { entityType: string; stableId: string }; caseRef?: string }> = [];
+    const sent: Array<{ sourceId: string; entity: { entityType: string; stableId?: string; value?: string }; caseRef?: string }> = [];
     const other = { entityType: 'kind-b', stableId: 'K-7', caseRef: 'CASE-7' };
     const parts = knowing([A], { ...sourcesOf(demo('source-a', { alias: 'Alpha' }), demo('source-b', { alias: 'Beta', demoCase: other })), openInvestigation: async (request) => (sent.push(request), { ok: false, failure: { code: 'NETWORK_UNAVAILABLE' } }) });
     const view = renderApp('/', parts.client);

@@ -269,7 +269,7 @@ describe('a text of one character, a masked search with nothing to search, and t
     const state = createClientState();
     state.setMask(true);
     renderApp(searchAt('demo', 'Ana'), kit.client, state);
-    expect(await screen.findByText('Nothing can be searched while personal data is masked.')).toBeDefined();
+    expect(await screen.findByText('Nothing can be searched while personal data is masked. Turn masking off to search personal data.')).toBeDefined();
     expect(screen.queryByText('No matching entities')).toBeNull();
     expect(screen.queryByText(/exact match/)).toBeNull();
   });
@@ -278,7 +278,7 @@ describe('a text of one character, a masked search with nothing to search, and t
     const kit = searchKit(['demo'], async () => ok(answerOf('demo', [], { searchable: false })));
     renderApp(searchAt('demo', 'Ana'), kit.client);
     expect(await screen.findByText('No property of this source is configured for search.')).toBeDefined();
-    expect(screen.queryByText('Nothing can be searched while personal data is masked.')).toBeNull();
+    expect(screen.queryByText('Nothing can be searched while personal data is masked. Turn masking off to search personal data.')).toBeNull();
     expect(screen.queryByText('No matching entities')).toBeNull();
   });
 
@@ -298,7 +298,7 @@ describe('a text of one character, a masked search with nothing to search, and t
     renderApp(searchAt('demo', 'Ana'), kit.client);
     expect(await screen.findByText('KIND-A: Search is disabled for this type.')).toBeDefined();
     expect(screen.queryByText('No matching entities')).toBeNull();
-    expect(screen.queryByText('Nothing can be searched while personal data is masked.')).toBeNull();
+    expect(screen.queryByText('Nothing can be searched while personal data is masked. Turn masking off to search personal data.')).toBeNull();
   });
 });
 
