@@ -1,3 +1,4 @@
+import { createBannerController } from './banner/banner-controller.js';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { StrictMode } from 'react';
@@ -36,7 +37,7 @@ describe('the app under StrictMode', () => {
       expect(afterCreate).toBe(1);
       const { unmount } = render(
         <StrictMode>
-          <App router={router} state={state} slots={createSlotRegistry()} selectionActions={createSelectionActionRegistry()} tools={createToolRegistry()} menus={createMenuRegistry()} panels={createPanelRegistry()} keyBindings={createKeyBindingRegistry('other')} createRenderer={stubFactory().create} />
+          <App router={router} state={state} banner={createBannerController()} slots={createSlotRegistry()} selectionActions={createSelectionActionRegistry()} tools={createToolRegistry()} menus={createMenuRegistry()} panels={createPanelRegistry()} keyBindings={createKeyBindingRegistry('other')} createRenderer={stubFactory().create} />
         </StrictMode>,
       );
       expect(added.filter((type) => type === 'popstate')).toHaveLength(afterCreate);
@@ -55,7 +56,7 @@ describe('the app under StrictMode', () => {
     const router = createMemoryRouter(appRoutes(client, state), { initialEntries: ['/'] });
     render(
       <StrictMode>
-        <App router={router} state={state} slots={createSlotRegistry()} selectionActions={createSelectionActionRegistry()} tools={createToolRegistry()} menus={createMenuRegistry()} panels={createPanelRegistry()} keyBindings={createKeyBindingRegistry('other')} createRenderer={stubFactory().create} />
+        <App router={router} state={state} banner={createBannerController()} slots={createSlotRegistry()} selectionActions={createSelectionActionRegistry()} tools={createToolRegistry()} menus={createMenuRegistry()} panels={createPanelRegistry()} keyBindings={createKeyBindingRegistry('other')} createRenderer={stubFactory().create} />
       </StrictMode>,
     );
     await screen.findByText('Local workspace');

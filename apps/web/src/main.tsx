@@ -2,6 +2,8 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createBrowserRouter } from 'react-router';
 import { App } from './app.js';
+import { bindBannerToInvestigation } from './banner/bind-investigation.js';
+import { createBuiltInBannerController } from './banner/built-in-causes.js';
 import { createApiClient } from './api/client.js';
 import { appRoutes } from './routes.js';
 import { createClientState } from './state/client-state.js';
@@ -41,6 +43,8 @@ import './styles/home.css';
 const root = document.getElementById('root');
 if (root === null) throw new Error('the page has no #root element');
 const state = createClientState();
+const banner = createBuiltInBannerController();
+bindBannerToInvestigation(state, banner);
 const slots = createSlotRegistry();
 registerBuiltInSlots(slots);
 const panels = createPanelRegistryFor(state);
@@ -56,6 +60,6 @@ registerBuiltInKeyBindings(keyBindings);
 const router = createBrowserRouter(appRoutes(createApiClient(), state));
 createRoot(root).render(
   <StrictMode>
-    <App router={router} state={state} slots={slots} selectionActions={createSelectionActionRegistry()} tools={tools} menus={menus} panels={panels} keyBindings={keyBindings} createRenderer={createCytoscapeRenderer} />
+    <App router={router} state={state} banner={banner} slots={slots} selectionActions={createSelectionActionRegistry()} tools={tools} menus={menus} panels={panels} keyBindings={keyBindings} createRenderer={createCytoscapeRenderer} />
   </StrictMode>,
 );

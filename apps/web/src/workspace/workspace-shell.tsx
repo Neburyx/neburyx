@@ -8,6 +8,7 @@ import { GraphScope } from './graph-scope.js';
 import { HeaderBar } from './header-bar.js';
 import { KEY_SCOPE_ATTRIBUTE, useKeyHandler } from './key-binding-handler.js';
 import { NavigationRail } from './navigation-rail.js';
+import { StatusBanner } from '../banner/status-banner.js';
 import { NoticeStrip } from './notice-strip.js';
 import { useWorkspaceMark } from './workspace-presence.js';
 import { ShortcutSheet } from './shortcut-sheet.js';
@@ -23,6 +24,7 @@ export function WorkspaceShell({ canvasView, notice, status, busy = false }: { r
       <div className="workspace-body">
         <HeaderBar />
         <NoticeStrip extra={notice} />
+        <StatusBanner />
         {status === undefined ? null : <div className="status-strip">{status}</div>}
         <div className="workspace-stage">
           <main className="canvas-region" aria-busy={busy ? true : undefined}>

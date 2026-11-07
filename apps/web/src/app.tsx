@@ -7,12 +7,15 @@ import { PanelsProvider, type PanelRegistry } from './workspace/panel-registry.j
 import { KeyBindingsProvider, type KeyBindingRegistry } from './workspace/key-binding-registry.js';
 import { MenuProvider, type MenuRegistry } from './workspace/menu-registry.js';
 import { SelectionActionsProvider, type SelectionActionRegistry } from './workspace/selection-actions.js';
+import { BannerProvider } from './banner/banner-context.js';
+import type { BannerController } from './banner/banner-controller.js';
 import { SlotsProvider, type SlotRegistry } from './workspace/slots.js';
 import { ToolsProvider, type ToolRegistry } from './workspace/tool-registry.js';
 
 export interface AppProps {
   readonly router: ReturnType<typeof createBrowserRouter>;
   readonly state: ClientState;
+  readonly banner: BannerController;
   readonly slots: SlotRegistry;
   readonly selectionActions: SelectionActionRegistry;
   readonly tools: ToolRegistry;
@@ -23,9 +26,10 @@ export interface AppProps {
 }
 
 /** The router and the state are made once, outside React, so rendering twice (StrictMode) never makes a second router. */
-export function App({ router, state, slots, selectionActions, tools, menus, panels, keyBindings, createRenderer }: AppProps) {
+export function App({ router, state, banner, slots, selectionActions, tools, menus, panels, keyBindings, createRenderer }: AppProps) {
   return (
     <ClientStateProvider state={state}>
+      <BannerProvider controller={banner}>
       <SlotsProvider registry={slots}>
         <SelectionActionsProvider registry={selectionActions}>
           <ToolsProvider registry={tools}>
@@ -41,6 +45,7 @@ export function App({ router, state, slots, selectionActions, tools, menus, pane
           </ToolsProvider>
         </SelectionActionsProvider>
       </SlotsProvider>
+      </BannerProvider>
     </ClientStateProvider>
   );
 }

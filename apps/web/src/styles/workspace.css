@@ -1264,3 +1264,62 @@
   font-size: var(--font-size-small);
   line-height: var(--line-height-sheet-note);
 }
+
+.status-banner {
+  display: flex;
+  flex-direction: row;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-8) var(--space-16);
+  padding: var(--space-8) var(--space-16);
+  border-bottom: var(--border-width) solid var(--color-workspace-border);
+  background: var(--color-neutral-surface);
+  color: var(--color-neutral-text);
+}
+
+.status-banner--warning {
+  background: var(--color-badge-surface);
+}
+
+.status-banner--danger {
+  background: var(--color-danger-surface);
+}
+
+.status-banner-chip {
+  padding: var(--space-2) var(--space-8);
+  border-radius: var(--radius-flyout);
+  background: var(--color-surface);
+  box-shadow: inset 0 0 0 var(--border-width) var(--color-workspace-border);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
+}
+
+.status-banner--danger .status-banner-chip {
+  color: var(--color-danger);
+}
+
+.status-banner-message {
+  flex: 1;
+  min-width: var(--banner-message-min-width);
+}
+
+.status-banner-message p {
+  margin: 0;
+}
+
+.status-banner-headline {
+  color: var(--color-text-strong);
+  font-weight: var(--font-weight-medium);
+}
+
+.status-banner-text,
+.status-banner-side {
+  font-size: var(--font-size-small);
+}
+
+.status-banner-actions {
+  display: flex;
+  gap: var(--space-8);
+}

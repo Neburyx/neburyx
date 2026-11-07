@@ -12,6 +12,9 @@ import { createShellData, ShellDataProvider, useShellData, type ShellData } from
 import { createClientState, type ClientState } from './state/client-state.js';
 import { createStore, readable, type ReadableStore } from './state/store.js';
 import { ClientStateProvider } from './state/context.js';
+import { bindBannerToInvestigation } from './banner/bind-investigation.js';
+import { BannerProvider } from './banner/banner-context.js';
+import { createBannerController, type BannerController } from './banner/banner-controller.js';
 import { ProfileProvider } from './canvas/profile-context.js';
 import { createProfileStore, type ProfileState, type ProfileStore } from './canvas/profile-store.js';
 import { RendererProvider } from './canvas/renderer-context.js';
@@ -193,30 +196,34 @@ export function builtInKeyBindings(platform: 'mac' | 'other' = 'mac'): KeyBindin
   return registry;
 }
 
-export function renderApp(path: string | { readonly pathname: string; readonly search?: string; readonly state?: unknown }, client: ApiClient, state: ClientState = createClientState(), slots: SlotRegistry = createSlotRegistry(), createRenderer: CreateRenderer = stubFactory().create, selectionActions: SelectionActionRegistry = createSelectionActionRegistry(), tools: ToolRegistry = createToolRegistry(), menus: MenuRegistry = createMenuRegistry(), panels: PanelRegistry = createPanelRegistryFor(state), keyBindings: KeyBindingRegistry = builtInKeyBindings()): { readonly router: ReturnType<typeof createMemoryRouter>; readonly state: ClientState; readonly slots: SlotRegistry; readonly tools: ToolRegistry; readonly panels: PanelRegistry; readonly keyBindings: KeyBindingRegistry; readonly container: HTMLElement; readonly unmount: () => void } {
+export function renderApp(path: string | { readonly pathname: string; readonly search?: string; readonly state?: unknown }, client: ApiClient, state: ClientState = createClientState(), slots: SlotRegistry = createSlotRegistry(), createRenderer: CreateRenderer = stubFactory().create, selectionActions: SelectionActionRegistry = createSelectionActionRegistry(), tools: ToolRegistry = createToolRegistry(), menus: MenuRegistry = createMenuRegistry(), panels: PanelRegistry = createPanelRegistryFor(state), keyBindings: KeyBindingRegistry = builtInKeyBindings(), banner: BannerController = createBannerController()): { readonly banner: BannerController; readonly router: ReturnType<typeof createMemoryRouter>; readonly state: ClientState; readonly slots: SlotRegistry; readonly tools: ToolRegistry; readonly panels: PanelRegistry; readonly keyBindings: KeyBindingRegistry; readonly container: HTMLElement; readonly unmount: () => void } {
   const router = createMemoryRouter(appRoutes(client, state), { initialEntries: [path] });
   const view = render(
     <ClientStateProvider state={state}>
-      <SlotsProvider registry={slots}>
-        <SelectionActionsProvider registry={selectionActions}>
-          <ToolsProvider registry={tools}>
-            <MenuProvider registry={menus}>
-              <PanelsProvider registry={panels}>
-                <KeyBindingsProvider registry={keyBindings}>
-                  <RendererProvider createRenderer={createRenderer}>
-                    <RouterProvider router={router} />
-                  </RendererProvider>
-                </KeyBindingsProvider>
-              </PanelsProvider>
-            </MenuProvider>
-          </ToolsProvider>
-        </SelectionActionsProvider>
-      </SlotsProvider>
+      <BannerProvider controller={banner}>
+        <SlotsProvider registry={slots}>
+          <SelectionActionsProvider registry={selectionActions}>
+            <ToolsProvider registry={tools}>
+              <MenuProvider registry={menus}>
+                <PanelsProvider registry={panels}>
+                  <KeyBindingsProvider registry={keyBindings}>
+                    <RendererProvider createRenderer={createRenderer}>
+                      <RouterProvider router={router} />
+                    </RendererProvider>
+                  </KeyBindingsProvider>
+                </PanelsProvider>
+              </MenuProvider>
+            </ToolsProvider>
+          </SelectionActionsProvider>
+        </SlotsProvider>
+      </BannerProvider>
     </ClientStateProvider>,
   );
   const unbindLegend = bindLegend(state, panels);
   const unbindSearch = bindSearchPanel(state, panels);
+  const unbindBanner = bindBannerToInvestigation(state, banner);
   return {
+    banner,
     router,
     state,
     slots,
@@ -227,6 +234,7 @@ export function renderApp(path: string | { readonly pathname: string; readonly s
     unmount: () => {
       unbindLegend();
       unbindSearch();
+      unbindBanner();
       view.unmount();
     },
   };
