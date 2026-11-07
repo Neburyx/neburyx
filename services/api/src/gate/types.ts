@@ -97,10 +97,16 @@ export interface Template {
    * of the search branches; each carries its own `LIMIT $limit + 1`.
    */
   readonly facetProbes?: { readonly param: string; readonly node: { readonly value: string; readonly text: string }; readonly evidence: { readonly value: string; readonly text: string } };
+  /**
+   * The degree template's own declaration, for no other template: a statement that counts the relationships of one node, one count for each mapped (relationship type, direction) pair of its entity type.
+   * The Cypher is the one marker `@degreeCounts(<param>)`, the parameter names the entity type, and the gate writes the whole statement: the anchor lookup of the entity read, then for `bounded` one
+   * `CALL` subquery for each pair that reads at most `$countCap + 1` relationships and counts them, or for `cheap` a `COUNT { }` expression for each pair, then one `RETURN` of every count as a column named by its position.
+   */
+  readonly degreeCounts?: { readonly param: string; readonly form: 'bounded' | 'cheap' };
   /** The indexes this read needs, so that the gate can find out before the data read that they are there; a template that names none is not guarded. */
   indexNeeds?(params: Params, allowlist: SourceAllowlist): readonly (IndexNeed | RelationshipIndexNeed)[];
-  /** True for a request that has nothing to read, such as an empty list of targets: the gate runs every stage but the read, and the answer has no row. */
-  readsNothing?(params: Params): boolean;
+  /** True for a request that has nothing to read, such as an empty list of targets or an entity type with no mapped relationship: the gate runs every stage but the read, and the answer has no row. */
+  readsNothing?(params: Params, allowlist: SourceAllowlist): boolean;
   /** Where the page after this one starts, from the rows of this page; the gate signs it into the page's `nextCursor`. Only a paged template has one. */
   nextPosition?(rows: readonly Row[], limit: number): CursorPosition | undefined;
   refsOf(params: Params): readonly ElementRef[];
@@ -118,6 +124,8 @@ export interface SourceAllowlist {
   readonly referenceProperties: ReadonlyMap<string, readonly string[]>;
   /** The evidence properties of each relationship mapping row that has a `stable_id`, in the mapping's order: the rows an evidence read may name. */
   readonly evidenceRows: readonly { readonly type: string; readonly from: string; readonly to: string; readonly properties: readonly string[] }[];
+  /** The relationship rows of the mapping, in its order: the pairs a degree read counts. */
+  readonly relationshipRows: readonly { readonly type: string; readonly from: string; readonly to: string }[];
   /** Every property name the mapping names: search, reference, evidence, sort and stable id properties. */
   readonly properties: ReadonlySet<string>;
 }
@@ -131,6 +139,8 @@ export interface Budgets {
   readonly timeoutMs: number;
   readonly maxPage: number;
   readonly requestTimeoutMs: number;
+  /** The most relationships a bounded degree count reads for one relationship type and direction; the source's `heavy_op_threshold`, never the page limit. */
+  readonly countCap: number;
 }
 
 export interface GateRequest {

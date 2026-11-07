@@ -6,6 +6,7 @@ import { DEFAULT_INVESTIGATION_LIST_LIMIT, INVESTIGATION_LIST_SORTS, investigati
 import { meResponseSchema } from './me.js';
 import { readyResponseSchema } from './ready.js';
 import { sourceProfileSchema } from './profile.js';
+import { degreePreviewRequestSchema, degreePreviewSchema } from './degree-preview.js';
 import { searchRequestSchema, searchResultSchema } from './search.js';
 import { sourceTestReportSchema } from './source-test.js';
 import { sourcesResponseSchema } from './sources.js';
@@ -17,7 +18,7 @@ export interface OpenApiDocument {
   readonly openapi: string;
   readonly info: { readonly title: string; readonly version: string };
   readonly paths: Readonly<Record<string, unknown>>;
-  readonly components: { readonly schemas: { readonly ErrorResponse: Record<string, unknown>; readonly GraphNode: Record<string, unknown>; readonly HealthResponse: Record<string, unknown>; readonly InvestigationListResponse: Record<string, unknown>; readonly InvestigationResponse: Record<string, unknown>; readonly MeResponse: Record<string, unknown>; readonly OpenInvestigationRequest: Record<string, unknown>; readonly OpenInvestigationResponse: Record<string, unknown>; readonly ReadyResponse: Record<string, unknown>; readonly SearchRequest: Record<string, unknown>; readonly SearchResult: Record<string, unknown>; readonly SourceProfile: Record<string, unknown>; readonly SourceTestReport: Record<string, unknown>; readonly SourcesResponse: Record<string, unknown> } };
+  readonly components: { readonly schemas: { readonly DegreePreview: Record<string, unknown>; readonly DegreePreviewRequest: Record<string, unknown>; readonly ErrorResponse: Record<string, unknown>; readonly GraphNode: Record<string, unknown>; readonly HealthResponse: Record<string, unknown>; readonly InvestigationListResponse: Record<string, unknown>; readonly InvestigationResponse: Record<string, unknown>; readonly MeResponse: Record<string, unknown>; readonly OpenInvestigationRequest: Record<string, unknown>; readonly OpenInvestigationResponse: Record<string, unknown>; readonly ReadyResponse: Record<string, unknown>; readonly SearchRequest: Record<string, unknown>; readonly SearchResult: Record<string, unknown>; readonly SourceProfile: Record<string, unknown>; readonly SourceTestReport: Record<string, unknown>; readonly SourcesResponse: Record<string, unknown> } };
 }
 
 function schemaJson(schema: z.ZodType): Record<string, unknown> {
@@ -44,6 +45,8 @@ export function buildOpenApiDocument(
   searchRequest: z.ZodType = searchRequestSchema,
   searchResult: z.ZodType = searchResultSchema,
   investigationList: z.ZodType = investigationListResponseSchema,
+  degreePreviewRequest: z.ZodType = degreePreviewRequestSchema,
+  degreePreview: z.ZodType = degreePreviewSchema,
 ): OpenApiDocument {
   return {
     openapi: '3.1.0',
@@ -210,6 +213,24 @@ export function buildOpenApiDocument(
           },
         },
       },
+      '/v1/graph/preview-expansion': {
+        post: {
+          operationId: 'previewExpansion',
+          summary: 'The degree of a node by relationship type and direction, before anything is loaded',
+          requestBody: { required: true, content: jsonBody('DegreePreviewRequest') },
+          description:
+            'Counts the mapped relationships of one node, one count for each (relationship type, direction) pair of its entity type, in one read through the gate. A count read from the degree of the node (an entity type whose checks showed the server to answer that way) is exact whatever its size; a count read by the bounded read is exact up to and including the source\'s heavy_op_threshold and a lowerBound of that value above it, with one counts-capped warning for each pair read that way; byNeighborType gives the count by the entity type at the other end only where the pair has one mapped neighbor type, and unknown where it has several. total is the sum with the weakest quality of its parts, counted over the mapped relationship ends at the node, and is unknown when a sum would pass the largest safe integer. warnings name a capped count (counts-capped) and a second node with the same stable ID (duplicate-stable-id). A node that is not in the source, is of another entity type, or is in a source that is not configured or that the person may not read is NOT_FOUND, one answer for all. mask is part of the request because the answer is cached per mask setting; no property value is in it. No stable ID or count is logged.',
+          responses: {
+            '200': { description: 'The degree of the node', content: jsonBody('DegreePreview') },
+            '400': { description: 'The body is not valid', content: jsonBody('ErrorResponse') },
+            '404': { description: 'The node is not in the source, or the source is not configured or may not be read (one answer for all)', content: jsonBody('ErrorResponse') },
+            '415': { description: 'The body is not JSON', content: jsonBody('ErrorResponse') },
+            '500': { description: 'The preview could not run, or the source answered with something unreadable', content: jsonBody('ErrorResponse') },
+            '503': { description: 'The source is not available, or is busy', content: jsonBody('ErrorResponse') },
+            '504': { description: 'The source did not answer in time', content: jsonBody('ErrorResponse') },
+          },
+        },
+      },
       '/v1/sources': {
         get: {
           operationId: 'listSources',
@@ -225,7 +246,7 @@ export function buildOpenApiDocument(
       },
     },
     components: {
-      schemas: { ErrorResponse: schemaJson(errorResponse), GraphNode: schemaJson(graphNode), HealthResponse: schemaJson(healthResponse), InvestigationListResponse: schemaJson(investigationList), InvestigationResponse: schemaJson(investigationResponse), MeResponse: schemaJson(meResponse), OpenInvestigationRequest: schemaJson(openInvestigationRequest), OpenInvestigationResponse: schemaJson(openInvestigationResponse), ReadyResponse: schemaJson(readyResponse), SearchRequest: schemaJson(searchRequest), SearchResult: schemaJson(searchResult), SourceProfile: schemaJson(sourceProfile), SourceTestReport: schemaJson(sourceTestReport), SourcesResponse: schemaJson(sourcesResponse) },
+      schemas: { DegreePreview: schemaJson(degreePreview), DegreePreviewRequest: schemaJson(degreePreviewRequest), ErrorResponse: schemaJson(errorResponse), GraphNode: schemaJson(graphNode), HealthResponse: schemaJson(healthResponse), InvestigationListResponse: schemaJson(investigationList), InvestigationResponse: schemaJson(investigationResponse), MeResponse: schemaJson(meResponse), OpenInvestigationRequest: schemaJson(openInvestigationRequest), OpenInvestigationResponse: schemaJson(openInvestigationResponse), ReadyResponse: schemaJson(readyResponse), SearchRequest: schemaJson(searchRequest), SearchResult: schemaJson(searchResult), SourceProfile: schemaJson(sourceProfile), SourceTestReport: schemaJson(sourceTestReport), SourcesResponse: schemaJson(sourcesResponse) },
     },
   };
 }

@@ -13,6 +13,7 @@ import { createCursorCodec, type CursorCodec } from './cursor/codec.js';
 import { normalizeModelOf } from './normalize/model.js';
 import { capabilitiesTemplate } from './templates/capabilities.js';
 import { connectivityTemplate } from './templates/connectivity.js';
+import { degreePreviewBoundedTemplate, degreePreviewCheapTemplate } from './templates/degree-preview.js';
 import { degreeProbeTemplate } from './templates/degree-probe.js';
 import { entityLoadTemplate } from './templates/entity-load.js';
 import { searchExactTemplate } from './templates/search-exact.js';
@@ -44,11 +45,11 @@ export interface AssembleOptions {
 }
 
 export function defaultCatalog(): TemplateCatalog {
-  return createTemplateCatalog({ templates: [connectivityTemplate, capabilitiesTemplate, privilegesTemplate, schemaTokensTemplate, schemaIndexesTemplate, stableIdDuplicatesTemplate, degreeProbeTemplate, entityLoadTemplate, searchExactTemplate, searchRelatedTemplate, searchEvidenceTemplate, searchFacetsTemplate, searchPrefixTemplate] });
+  return createTemplateCatalog({ templates: [connectivityTemplate, capabilitiesTemplate, privilegesTemplate, schemaTokensTemplate, schemaIndexesTemplate, stableIdDuplicatesTemplate, degreeProbeTemplate, degreePreviewBoundedTemplate, degreePreviewCheapTemplate, entityLoadTemplate, searchExactTemplate, searchRelatedTemplate, searchEvidenceTemplate, searchFacetsTemplate, searchPrefixTemplate] });
 }
 
 function budgetsFrom(source: SourceModel): Budgets {
-  return { timeoutMs: source.budgets.timeoutMs, maxPage: source.budgets.maxPage, requestTimeoutMs: DEFAULT_BUDGETS.requestTimeoutMs };
+  return { timeoutMs: source.budgets.timeoutMs, maxPage: source.budgets.maxPage, requestTimeoutMs: DEFAULT_BUDGETS.requestTimeoutMs, countCap: source.budgets.heavyOpThreshold };
 }
 
 export function assembleGate(options: AssembleOptions): { readonly gate: Gate; readonly system: SystemRunner; readonly indexes: IndexReader } {

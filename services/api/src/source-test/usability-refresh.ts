@@ -4,7 +4,7 @@ import { identityHashOf } from '../registry/identity-hash.js';
 import type { UsabilityRecord } from './usability.js';
 
 export interface UsabilityStore {
-  latestQualifyingChecks(sources: readonly CheckedSource[], since: string, onUnreadable?: (sourceId: string) => void): Promise<QualifyingCheck[]>;
+  latestQualifyingChecks(sources: readonly CheckedSource[], since: string, onUnreadable?: (sourceId: string, checkedAt: string) => void): Promise<QualifyingCheck[]>;
 }
 
 export interface UsabilityLogger {
@@ -18,7 +18,10 @@ export interface UsabilityLogger {
 export async function refreshUsability(store: UsabilityStore, record: UsabilityRecord, mapping: MappingModel, since: string, logger: UsabilityLogger): Promise<void> {
   const sources = mapping.sources.map((source): CheckedSource => ({ id: source.id, identityHash: identityHashOf(source), configHash: source.configHash }));
   try {
-    const checks = await store.latestQualifyingChecks(sources, since, (sourceId) => logger.warn({ event: 'source.usability_row_unreadable', sourceId }, 'a stored check could not be read'));
+    const checks = await store.latestQualifyingChecks(sources, since, (sourceId, checkedAt) => {
+      logger.warn({ event: 'source.usability_row_unreadable', sourceId }, 'a stored check could not be read');
+      record.forgetDegrees(sourceId, checkedAt);
+    });
     for (const check of checks) record.observe(check.report);
   } catch {
     logger.warn({ event: 'source.usability_refresh_failed' }, 'source usability refresh failed');

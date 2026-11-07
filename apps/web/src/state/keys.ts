@@ -22,6 +22,24 @@ export function elementKey(ref: ElementRef): string {
   return JSON.stringify(['node', ref.sourceId, ref.entityType, ref.stableId]);
 }
 
+function isText(part: unknown): part is string {
+  return typeof part === 'string' && part !== '';
+}
+
+/** The reference an entity key names; undefined for a key that is not an entity key. */
+export function nodeRefOfKey(key: string): ElementRef | undefined {
+  try {
+    const parts: unknown = JSON.parse(key);
+    if (Array.isArray(parts) && parts.length === 4 && parts[0] === 'node') {
+      const [, sourceId, entityType, stableId] = parts;
+      if (isText(sourceId) && isText(entityType) && isText(stableId)) return { sourceId, entityType, stableId };
+    }
+  } catch {
+    // a key that is not JSON is not an entity key
+  }
+  return undefined;
+}
+
 export function edgeKey(ref: EdgeRef): string {
   if ('stableId' in ref) return JSON.stringify(['edge', ref.sourceId, 'stored', ref.type, ref.from, ref.to, ref.stableId]);
   if ('aggregate' in ref) return JSON.stringify(['edge', ref.sourceId, 'aggregate', ref.aggregate.type, elementKey(ref.aggregate.from), elementKey(ref.aggregate.to)]);

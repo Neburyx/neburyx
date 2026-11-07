@@ -145,7 +145,7 @@ describe('a facet read the gate runs', () => {
   });
 
   it('reads nothing for an empty list of probes: no statement and no read, with the event kept', async () => {
-    expect(searchFacetsTemplate.readsNothing?.({ text: 'T-1', probes: [] })).toBe(true);
+    expect(searchFacetsTemplate.readsNothing?.({ text: 'T-1', probes: [] }, allowlist)).toBe(true);
     const rendered = renderTemplate(catalog.find(SEARCH_FACETS_ID) ?? failNoTemplate(), { text: 'T-1', probes: [] }, allowlist, 25);
     expect(rendered.cypher).toBe('');
     const { gate, executor, audit } = rig();

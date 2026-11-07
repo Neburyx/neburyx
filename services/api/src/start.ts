@@ -19,6 +19,7 @@ import { createReachabilityCache, seedFromStartup } from './source-ping/cache.js
 import { createScheduledPing } from './source-ping/ping.js';
 import { applyPingResults } from './source-ping/state.js';
 import { createFirstContact, type FirstContact } from './source-test/first-contact.js';
+import { observingStoreOf } from './source-test/observing-store.js';
 import { createUsabilityRecord } from './source-test/usability.js';
 import { refreshUsability } from './source-test/usability-refresh.js';
 import { PING_INTERVAL_MS, startPingSchedule, type PingSchedule } from './source-ping/schedule.js';
@@ -129,13 +130,7 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
     await store.initialize();
     const openedStore = store;
     const usability = createUsabilityRecord();
-    const observingStore = {
-      ...openedStore,
-      recordSourceCheck: async (check: Parameters<AppStore['recordSourceCheck']>[0]) => {
-        await openedStore.recordSourceCheck(check);
-        usability.observe(check.report);
-      },
-    };
+    const observingStore = observingStoreOf(openedStore, usability);
     for (const sourceId of await store.syncSources(mapping.sources)) {
       io.logger.warn({ event: 'source.identity_changed', sourceId }, 'source now points to a different database');
     }
@@ -164,6 +159,7 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
       mapping,
       sourceTester: createSourceTester({ gate: gate.gate, mapping, store: observingStore, logger: io.logger }),
       gate: gate.gate,
+      degreeVerdicts: usability,
       indexes: gate.indexes,
       reachability,
       stopPing: () => {

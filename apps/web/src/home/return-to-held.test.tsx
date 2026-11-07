@@ -28,6 +28,7 @@ function recording(client: ApiClient) {
     getInvestigation: (id, signal) => (calls.push('getInvestigation'), client.getInvestigation(id, signal)),
     listInvestigations: (limit, signal) => (calls.push('listInvestigations'), client.listInvestigations(limit, signal)),
     searchEntities: (request, signal) => (calls.push('searchEntities'), client.searchEntities(request, signal)),
+    previewExpansion: (request, signal) => (calls.push('previewExpansion'), client.previewExpansion(request, signal)),
   };
   return { client: wrapped, calls };
 }

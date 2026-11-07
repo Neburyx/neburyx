@@ -53,7 +53,7 @@ describe('refreshing the record from the stored checks', () => {
     await refreshUsability(
       {
         latestQualifyingChecks: (_sources, _since, onUnreadable) => {
-          onUnreadable?.('beta');
+          onUnreadable?.('beta', '2026-11-02T10:00:05.000Z');
           return Promise.resolve([{ sourceId: 'alpha', checkedAt: '2026-11-02T10:00:10.000Z', report: { sourceId: 'alpha', checkedAt: '2026-11-02T10:00:10.000Z', server: reached, mappingChecks: { status: 'pass', findings: [] } } as never }]);
         },
       },

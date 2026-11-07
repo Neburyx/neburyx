@@ -126,11 +126,11 @@ describe('the menu item stand-ins', () => {
   const idsOf = (registry: MenuRegistry, kind: MenuTargetKind): string[] => (registry.view.getState().get(kind) ?? []).map((item) => item.id);
   const labelsOf = (registry: MenuRegistry, kind: MenuTargetKind): string[] => (registry.view.getState().get(kind) ?? []).map((item) => (typeof item.label === 'string' ? item.label : '(from the target)'));
 
-  it('leave the menus of production as they are before they are installed: the canvas menu holds its five items, the entity and relationship menus none', () => {
+  it('leave the menus of production as they are before they are installed: the canvas menu holds its five items, the entity menu its one, the relationship menu none', () => {
     const registry = createMenuRegistry();
     registerBuiltInMenuItems(registry);
     expect(idsOf(registry, 'canvas')).toEqual(['fit-to-view', 'select-all', 'invert-selection', 'layout', 'show-legend']);
-    expect(idsOf(registry, 'node')).toEqual([]);
+    expect(idsOf(registry, 'node')).toEqual(['expand-neighbors']);
     expect(idsOf(registry, 'relationship')).toEqual([]);
   });
 
@@ -192,7 +192,7 @@ describe('the menu item stand-ins', () => {
     expect(registry.view.getState().get('canvas')?.find((item) => item.id === 'stand-in-export-view')?.label).toBe('Real export');
     remove();
     expect(idsOf(registry, 'canvas')).toEqual(['fit-to-view', 'select-all', 'invert-selection', 'layout', 'stand-in-export-view', 'show-legend']);
-    expect(idsOf(registry, 'node')).toEqual([]);
+    expect(idsOf(registry, 'node')).toEqual(['expand-neighbors']);
   });
 });
 

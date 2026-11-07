@@ -194,8 +194,8 @@ describe('the context a template is normalized with', () => {
     await gate.run(gateRequest({ limit: 2 }));
     await gate.run(gateRequest({ limit: 5 }));
     expect(seen).toEqual([
-      { sourceId: SOURCE_A, hasMore: true, model, limit: 2 },
-      { sourceId: SOURCE_A, hasMore: false, model, limit: 5 },
+      { sourceId: SOURCE_A, hasMore: true, model, limit: 2, countCap: 500, params: { key: 'k1' } },
+      { sourceId: SOURCE_A, hasMore: false, model, limit: 5, countCap: 500, params: { key: 'k1' } },
     ]);
   });
 

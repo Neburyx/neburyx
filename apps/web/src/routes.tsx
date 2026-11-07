@@ -14,7 +14,9 @@ import { createExcerpts } from './sources/excerpts.js';
 import { ExcerptsProvider } from './sources/excerpts-context.js';
 import { createTestRuns } from './sources/test-runs.js';
 import { TestRunsProvider } from './sources/test-runs-context.js';
-import { createShellData, ShellDataProvider } from './shell/shell-data.js';
+import { answeredData, createShellData, ShellDataProvider } from './shell/shell-data.js';
+import { createPreviewStore } from './api/preview-store.js';
+import { PreviewProvider } from './workspace/preview-context.js';
 import type { ClientState } from './state/client-state.js';
 import { StartPage } from './first-run/start-page.js';
 import { RecentProvider } from './home/recent-context.js';
@@ -89,6 +91,7 @@ export function appRoutes(client: ApiClient, state: ClientState): RouteObject[] 
   const testRuns = createTestRuns(client, shellData);
   const excerpts = createExcerpts(client);
   const profile = createProfileStore(client, state.investigation);
+  const previews = createPreviewStore(client, () => answeredData(shellData.getState().me)?.principal.id ?? '');
   const recent = createRecentInvestigations(client);
   const presence = createWorkspacePresence();
   return [
@@ -99,6 +102,7 @@ export function appRoutes(client: ApiClient, state: ClientState): RouteObject[] 
           <WorkspacePresenceProvider presence={presence}>
             <ShellDataProvider store={shellData}>
               <ProfileProvider store={profile}>
+                <PreviewProvider store={previews}>
                 <TestRunsProvider runs={testRuns}>
                   <ExcerptsProvider excerpts={excerpts}>
                     <SearchShortcut />
@@ -107,6 +111,7 @@ export function appRoutes(client: ApiClient, state: ClientState): RouteObject[] 
                     </RecentProvider>
                   </ExcerptsProvider>
                 </TestRunsProvider>
+                </PreviewProvider>
               </ProfileProvider>
             </ShellDataProvider>
           </WorkspacePresenceProvider>

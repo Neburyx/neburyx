@@ -125,7 +125,7 @@ describe('an evidence lookup the gate runs', () => {
   });
 
   it('renders a read of nothing for an empty list of targets and writes no value into the statement', () => {
-    expect(searchEvidenceTemplate.readsNothing?.({ text: 'R-1', targets: [] })).toBe(true);
+    expect(searchEvidenceTemplate.readsNothing?.({ text: 'R-1', targets: [] }, allowlist)).toBe(true);
     const rendered = renderTemplate(catalog.find(SEARCH_EVIDENCE_ID) ?? failNoTemplate(), { text: 'R-1', targets: [] }, allowlist, 25);
     expect(rendered.cypher).toBe('CALL {  } WITH r, a, b LIMIT $limit + 1 RETURN r, a, b');
   });

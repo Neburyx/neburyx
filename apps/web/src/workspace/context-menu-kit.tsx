@@ -33,10 +33,10 @@ export interface Shown {
   readonly rightClick: (request: RightClick) => void;
 }
 
-export function show(state: ClientState, options: StubOptions = {}, menus: MenuRegistry = withBuiltIns(), extra: ReactNode = null): Shown {
+export function show(state: ClientState, options: StubOptions = {}, menus: MenuRegistry = withBuiltIns(), extra: ReactNode = null, wrap: (tree: ReactNode) => ReactNode = (tree) => tree): Shown {
   const factory = stubFactory(options);
   const outside = vi.fn<() => void>();
-  render(
+  const tree = (
     <ClientStateProvider state={state}>
       <MenuProvider registry={menus}>
         <KeyBindingsProvider registry={builtInKeyBindings()}>
@@ -53,8 +53,9 @@ export function show(state: ClientState, options: StubOptions = {}, menus: MenuR
           </ProfileProvider>
         </KeyBindingsProvider>
       </MenuProvider>
-    </ClientStateProvider>,
+    </ClientStateProvider>
   );
+  render(wrap(tree));
   const rightClick = (request: RightClick): void => {
     const events = factory.made[0]?.events[0];
     if (events === undefined) throw new Error('the renderer was not mounted');

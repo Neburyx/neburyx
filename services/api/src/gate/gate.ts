@@ -65,12 +65,12 @@ async function runStages(deps: GateDeps, request: GateRequest, system: boolean, 
   });
   await inStage(deps, progress, 'authorize', () => authorizeRequest(deps.seams.policy, deps.usability, context, template));
   const result = await inStage(deps, progress, 'execute', async (): Promise<ExecuteResult> => {
-    if (template.readsNothing?.(params) === true) return { rows: [], hasMore: false };
+    if (template.readsNothing?.(params, context.allowlist) === true) return { rows: [], hasMore: false };
     if (!system) await guardIndexes(deps, request, context, template, params);
     return executeRead({ coordinator: deps.seams.coordinator, executor: deps.executor, clock: deps.clock, logger: deps.logger }, context, template, rendered, request.limit);
   });
   const normalized = await inStage(deps, progress, 'normalize', () => {
-    const items = template.normalize(result.rows, result.plan, { sourceId: context.sourceId, hasMore: result.hasMore, model: context.model, limit: request.limit });
+    const items = template.normalize(result.rows, result.plan, { sourceId: context.sourceId, hasMore: result.hasMore, model: context.model, limit: request.limit, countCap: context.budgets.countCap, params });
     // the page after this one, when there is one: the template says where it starts and the gate signs it for this request
     const position = template.paged && result.hasMore ? template.nextPosition?.(result.rows, request.limit) : undefined;
     return { items, nextCursor: position === undefined ? undefined : deps.cursors.mint(binding, position) };

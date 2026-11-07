@@ -9,6 +9,10 @@ function integerValue(value: unknown): number {
 }
 
 describe('prepareParameters', () => {
+  it('turns the count cap of a degree read into a driver integer without a declaration', () => {
+    expect(integerValue(prepareParameters({ countCap: 500, limit: 1 }, [])['countCap'])).toBe(500);
+  });
+
   it('turns the page limit into a driver integer, with or without a declaration', () => {
     expect(integerValue(prepareParameters({ limit: 4 }, [])['limit'])).toBe(4);
   });

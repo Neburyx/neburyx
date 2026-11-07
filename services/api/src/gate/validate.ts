@@ -43,7 +43,7 @@ export function validateRequest(catalog: TemplateCatalog, template: Template, re
     targetVersion: template.version,
   };
   if (request.cursor !== undefined && !template.paged) throw new AppError('INVALID_REQUEST');
-  const rendered = renderTemplate(template, parsed.data, context.allowlist, request.limit);
+  const rendered = renderTemplate(template, parsed.data, context.allowlist, request.limit, context.budgets.countCap);
   if (!template.paged) return { template, params: parsed.data, rendered, binding };
   // the position is the one this gate signed for this request, or none; a template reads it as the parameter `cursor`
   const position = request.cursor === undefined ? null : cursors.verify(request.cursor, binding);

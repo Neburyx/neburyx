@@ -86,7 +86,7 @@ export interface QualifyingCheck {
  * The newest check of each source that counts for the running process: it reached the source, carries the source's current identity hash and config hash,
  * and was stored at or after `since`. One query for all sources; it reads Postgres only.
  */
-export async function latestQualifyingChecks(db: pg.Pool, sources: readonly CheckedSource[], since: string, onUnreadable?: (sourceId: string) => void): Promise<QualifyingCheck[]> {
+export async function latestQualifyingChecks(db: pg.Pool, sources: readonly CheckedSource[], since: string, onUnreadable?: (sourceId: string, checkedAt: string) => void): Promise<QualifyingCheck[]> {
   if (sources.length === 0) return [];
   const result = await db.query<{ source_id: string; checked_at: Date; report: unknown }>(
     `SELECT DISTINCT ON (c.source_id) c.source_id, c.checked_at, c.report
@@ -102,7 +102,7 @@ export async function latestQualifyingChecks(db: pg.Pool, sources: readonly Chec
     try {
       return [{ sourceId: row.source_id, checkedAt: row.checked_at.toISOString(), report: readStoredReport(row.report) }];
     } catch {
-      onUnreadable?.(row.source_id);
+      onUnreadable?.(row.source_id, row.checked_at.toISOString());
       return [];
     }
   });
@@ -112,7 +112,7 @@ export async function latestQualifyingChecks(db: pg.Pool, sources: readonly Chec
  * The newest check of each source made for the connection and the mapping it has now, whether or not it reached the source and whenever it was stored.
  * One query for all sources; it reads Postgres only. A row this version cannot read is left out and reported.
  */
-export async function latestChecksFor(db: pg.Pool, sources: readonly CheckedSource[], onUnreadable?: (sourceId: string) => void): Promise<QualifyingCheck[]> {
+export async function latestChecksFor(db: pg.Pool, sources: readonly CheckedSource[], onUnreadable?: (sourceId: string, checkedAt: string) => void): Promise<QualifyingCheck[]> {
   if (sources.length === 0) return [];
   const result = await db.query<{ source_id: string; checked_at: Date; report: unknown }>(
     `SELECT DISTINCT ON (c.source_id) c.source_id, c.checked_at, c.report
@@ -126,7 +126,7 @@ export async function latestChecksFor(db: pg.Pool, sources: readonly CheckedSour
     try {
       return [{ sourceId: row.source_id, checkedAt: row.checked_at.toISOString(), report: readStoredReport(row.report) }];
     } catch {
-      onUnreadable?.(row.source_id);
+      onUnreadable?.(row.source_id, row.checked_at.toISOString());
       return [];
     }
   });

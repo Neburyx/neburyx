@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Socket } from 'node:net';
 import fastifyStatic from '@fastify/static';
-import { type ErrorCode, entityPathSchema, entityQuerySchema, healthResponseSchema, investigationListQuerySchema, investigationListResponseSchema, investigationResponseSchema, meResponseSchema, nodeSchema, openInvestigationRequestSchema, openInvestigationResponseSchema, readyResponseSchema, searchRequestSchema, searchResultSchema, sourceProfileSchema, sourceTestReportSchema, sourcesResponseSchema } from '@neburyx/contracts';
+import { type ErrorCode, degreePreviewRequestSchema, degreePreviewSchema, entityPathSchema, entityQuerySchema, healthResponseSchema, investigationListQuerySchema, investigationListResponseSchema, investigationResponseSchema, meResponseSchema, nodeSchema, openInvestigationRequestSchema, openInvestigationResponseSchema, readyResponseSchema, searchRequestSchema, searchResultSchema, sourceProfileSchema, sourceTestReportSchema, sourcesResponseSchema } from '@neburyx/contracts';
 import { z } from 'zod';
 import Fastify, {
   type FastifyBaseLogger,
@@ -12,6 +12,9 @@ import Fastify, {
 } from 'fastify';
 import { AppError, codeForFailure, detailsOf, errorResponse, errorStatus } from './errors.js';
 import type { AppStore } from './app-store.js';
+import { createDegreePreviewService } from './graph/degree-preview-service.js';
+import { createDegreeCache, type DegreeCacheOptions } from './graph/degree-cache.js';
+import { NO_DEGREE_VERDICTS, type DegreeVerdicts, type SourceUsability } from './source-test/usability.js';
 import { createEntityReader } from './entities/entity-reader.js';
 import { createSearchService } from './search/search-service.js';
 import { createInvestigationService } from './investigations/investigation-service.js';
@@ -40,6 +43,10 @@ export interface AppOptions {
   readonly sourceTester?: SourceTester | undefined;
   readonly gate?: Gate | undefined;
   readonly indexes?: IndexReader | undefined;
+  /** What the checks showed about how the source answers a count of neighbors; absent, every degree preview is bounded. */
+  readonly degreeVerdicts?: (DegreeVerdicts & SourceUsability) | undefined;
+  /** Overrides the lifetime and size of the degree preview cache, which is only kept when the verdicts are given. */
+  readonly degreeCache?: DegreeCacheOptions | undefined;
   readonly reachability?: ReachabilityView | undefined;
   readonly stopPing?: (() => void) | undefined;
   readonly drainPing?: (() => Promise<void>) | undefined;
@@ -310,6 +317,15 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       const narrowing = body.data.typeahead === true ? {} : { ...(body.data.entityTypes === undefined ? {} : { entityTypes: body.data.entityTypes }), ...(body.data.matchModes === undefined ? {} : { matchModes: body.data.matchModes }) };
       const result = await searching.search({ traceId: request.id, principal: identity.principal, sourceId: body.data.sourceId, text: body.data.text, mask: body.data.mask === true, typeahead: body.data.typeahead === true, ...narrowing });
       return searchResultSchema.parse(result);
+    });
+
+    const degrees = createDegreePreviewService({ gate: options.gate, mapping, access, entities, verdicts: options.degreeVerdicts ?? NO_DEGREE_VERDICTS, ...(options.degreeVerdicts === undefined ? {} : { cache: { store: createDegreeCache(options.degreeCache), usability: options.degreeVerdicts, audit: (options.seams ?? communitySeams()).audit, logger: options.logger } }) });
+    app.post('/v1/graph/preview-expansion', { config: { permission: 'principal' } }, async (request) => {
+      const body = degreePreviewRequestSchema.safeParse(request.body);
+      if (!noQuerySchema.safeParse(request.query).success || !body.success) throw new AppError('INVALID_REQUEST');
+      const identity = await options.store.current();
+      const preview = await degrees.preview({ traceId: request.id, principal: identity.principal, sourceId: body.data.sourceId, ...body.data.ref, mask: body.data.mask === true });
+      return degreePreviewSchema.parse(preview);
     });
 
     const investigations = createInvestigationService({ store: options.store, entities, mapping, access });

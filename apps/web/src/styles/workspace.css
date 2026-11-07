@@ -550,6 +550,46 @@
   --icon: url('../assets/lucide/contrast.svg');
 }
 
+.icon-expand {
+  --icon: url('../assets/lucide/maximize-2.svg');
+}
+
+.neighbor-types {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  min-width: var(--menu-width-canvas);
+  padding: var(--space-8) var(--space-12);
+}
+
+.neighbor-types-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.neighbor-types-row {
+  display: flex;
+  min-height: var(--menu-row-height);
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-16);
+}
+
+.neighbor-types-count {
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.neighbor-types-note {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-small);
+}
+
 .region-toggles {
   bottom: var(--space-16);
   left: var(--space-16);

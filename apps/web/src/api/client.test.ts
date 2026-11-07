@@ -249,3 +249,40 @@ describe('the API client, searching a source', () => {
     expect(await client.searchEntities({ sourceId: 'demo', text: 'AC-1' })).toEqual({ ok: false, failure: body.error });
   });
 });
+
+const PREVIEW = {
+  ref: { sourceId: 'demo', entityType: 'widget', stableId: 'W-1' },
+  total: { value: 3, quality: 'exact', scope: 'degree:total:mapped-relationship-ends' },
+  byType: [{ relationshipType: 'LINKS', direction: 'out', count: { value: 3, quality: 'exact', scope: 'degree:out:LINKS:mapped-relationship-ends' }, neighborTypes: ['gadget'] }],
+  byNeighborType: [{ entityType: 'gadget', count: { value: 3, quality: 'exact', scope: 'degree:neighbor:gadget:mapped-relationship-ends' } }],
+  warnings: [],
+};
+const PREVIEW_REQUEST = { sourceId: 'demo', ref: { entityType: 'widget', stableId: 'W-1' } };
+
+describe('the API client, previewing the degree of a node', () => {
+  it('posts the request to the preview path and parses the answer', async () => {
+    const seen: { input: string; init?: Parameters<Fetcher>[1] }[] = [];
+    const client = createApiClient(async (input, init) => {
+      seen.push({ input, ...(init === undefined ? {} : { init }) });
+      return new Response(JSON.stringify(PREVIEW));
+    });
+    expect(await client.previewExpansion({ ...PREVIEW_REQUEST, mask: true })).toEqual({ ok: true, value: PREVIEW });
+    expect(seen[0]?.input).toBe('/v1/graph/preview-expansion');
+    expect(JSON.parse(seen[0]?.init?.body ?? '{}')).toEqual({ ...PREVIEW_REQUEST, mask: true });
+  });
+
+  it.each([
+    ['an answer that does not parse', { ...PREVIEW, total: 3 }],
+    ['a valid answer for another source', { ...PREVIEW, ref: { ...PREVIEW.ref, sourceId: 'other' } }],
+    ['a valid answer for another node', { ...PREVIEW, ref: { ...PREVIEW.ref, stableId: 'W-2' } }],
+    ['a valid answer for another entity type', { ...PREVIEW, ref: { ...PREVIEW.ref, entityType: 'gadget' } }],
+  ])('refuses %s as a schema mismatch', async (_name, body) => {
+    expect(await createApiClient(respondWith(body)).previewExpansion(PREVIEW_REQUEST)).toEqual({ ok: false, failure: { code: 'SCHEMA_MISMATCH' } });
+  });
+
+  it('gives the error of the API as it came', async () => {
+    const body = { error: { code: 'NOT_FOUND', message: ERROR_TABLE.NOT_FOUND.message, retryable: false, traceId: 'tr-1' } };
+    const client = createApiClient(async () => new Response(JSON.stringify(body), { status: 404 }));
+    expect(await client.previewExpansion(PREVIEW_REQUEST)).toEqual({ ok: false, failure: body.error });
+  });
+});

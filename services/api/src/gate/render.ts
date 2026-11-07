@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { AppError } from '../errors.js';
 import { MAX_EVIDENCE_PROPERTIES, MAX_FACET_PROBES, MAX_REFERENCE_PROPERTIES, MAX_SEARCH_PROPERTIES } from '../mapping/model.js';
+import { degreePairsOf } from './templates/degree-pairs.js';
 import type { GateParameter, Params, SourceAllowlist, Template } from './types.js';
 
 /**
@@ -8,8 +9,9 @@ import type { GateParameter, Params, SourceAllowlist, Template } from './types.j
  * `@stableId(kind)` writes the `stable_id` property of the entity type that the parameter `kind` names.
  * `@searchBranches(targets)` writes one branch for each target in the list parameter `targets`, from the template's branch text (see `Template.searchBranches`).
  * `@facetProbes(probes)` writes the whole statement of the facet probes (see `Template.facetProbes`).
+ * `@degreeCounts(kind)` writes the whole statement of a degree read for the entity type the parameter `kind` names (see `Template.degreeCounts`).
  */
-const MARKER = /@(entity|relationship|stableId|searchBranches|facetProbes)\(([A-Za-z][A-Za-z0-9]*)\)/g;
+const MARKER = /@(entity|relationship|stableId|searchBranches|facetProbes|degreeCounts)\(([A-Za-z][A-Za-z0-9]*)\)/g;
 /**
  * The placeholders of a branch text: for a target of an entity type the label of the type and the property (`@label`, `@property`); for a target of a relationship mapping row the
  * relationship type, the labels of its two entity types and the property (`@type`, `@fromLabel`, `@toLabel`, `@property`).
@@ -29,12 +31,12 @@ export function quoteName(name: string): string {
   return `\`${name}\``;
 }
 
-export type MarkerKind = 'entity' | 'relationship' | 'stableId' | 'searchBranches' | 'facetProbes';
+export type MarkerKind = 'entity' | 'relationship' | 'stableId' | 'searchBranches' | 'facetProbes' | 'degreeCounts';
 
 export function markersOf(cypher: string): { readonly kind: MarkerKind; readonly name: string }[] {
   return [...cypher.matchAll(MARKER)].flatMap((match) => {
     const [, kind, name] = match;
-    return (kind === 'entity' || kind === 'relationship' || kind === 'stableId' || kind === 'searchBranches' || kind === 'facetProbes') && name !== undefined ? [{ kind, name }] : [];
+    return (kind === 'entity' || kind === 'relationship' || kind === 'stableId' || kind === 'searchBranches' || kind === 'facetProbes' || kind === 'degreeCounts') && name !== undefined ? [{ kind, name }] : [];
   });
 }
 
@@ -87,7 +89,7 @@ function branchesOf(template: Template, params: Params, allowlist: SourceAllowli
   const list = z.array(targetSchema).max(MAX_SEARCH_PROPERTIES).safeParse(params[branches.param]);
   if (!list.success) throw new AppError('INVALID_REQUEST');
   if (list.data.length === 0) {
-    if (template.readsNothing?.(params) === true) return '';
+    if (template.readsNothing?.(params, allowlist) === true) return '';
     throw new AppError('INVALID_REQUEST');
   }
   const seen = new Set<string>();
@@ -108,7 +110,7 @@ function evidenceBranchesOf(template: Template, params: Params, allowlist: Sourc
   const list = z.array(evidenceTargetSchema).max(MAX_SEARCH_PROPERTIES).safeParse(params[branches.param]);
   if (!list.success) throw new AppError('INVALID_REQUEST');
   if (list.data.length === 0) {
-    if (template.readsNothing?.(params) === true) return '';
+    if (template.readsNothing?.(params, allowlist) === true) return '';
     throw new AppError('INVALID_REQUEST');
   }
   const seen = new Set<string>();
@@ -138,7 +140,7 @@ function facetProbesOf(template: Template, params: Params, allowlist: SourceAllo
   const list = z.array(z.strictObject({ targets: z.array(facetTargetSchema).max(MAX_SEARCH_PROPERTIES + MAX_REFERENCE_PROPERTIES + MAX_EVIDENCE_PROPERTIES) })).max(MAX_FACET_PROBES).safeParse(params[spec.param]);
   if (!list.success) throw new AppError('INVALID_REQUEST');
   if (list.data.length === 0) {
-    if (template.readsNothing?.(params) === true) return '';
+    if (template.readsNothing?.(params, allowlist) === true) return '';
     throw new AppError('INVALID_REQUEST');
   }
   const calls = list.data.map((probe, index) => {
@@ -159,13 +161,39 @@ function facetProbesOf(template: Template, params: Params, allowlist: SourceAllo
   return `${calls.join('\n')}\nRETURN ${list.data.map((_probe, index) => `c${index}`).join(', ')}`;
 }
 
+const ANCHOR = 'MATCH (n:@label) WHERE n.@stableId IN [$stableId, $stableInteger] WITH n ORDER BY elementId(n) LIMIT $limit + 1';
+
+/**
+ * The statement of a degree read: the anchor lookup of the entity read (the node found by its label and `stable_id` property, the first by element ID, one row more than asked for to learn whether another
+ * node has the ID), then one count for each mapped pair of the entity type, in `degreePairsOf` order. A bounded count expands at most `$countCap + 1` relationships of the pair; a cheap count is the
+ * server's `COUNT { }` of the pair with no predicate. Every name is quoted by `quoteName` from the allowlist, and the position of a count, never the request, names its column.
+ */
+function degreeCountsOf(template: Template, params: Params, allowlist: SourceAllowlist): string {
+  const spec = template.degreeCounts;
+  if (spec === undefined) return '';
+  const entityType = params[spec.param];
+  const label = typeof entityType === 'string' ? allowlist.entityLabels.get(entityType) : undefined;
+  const stableId = typeof entityType === 'string' ? allowlist.stableIds.get(entityType) : undefined;
+  if (typeof entityType !== 'string' || label === undefined || stableId === undefined) throw new AppError('INVALID_REQUEST');
+  const pairs = degreePairsOf(allowlist.relationshipRows, entityType);
+  if (pairs.length === 0) {
+    if (template.readsNothing?.(params, allowlist) === true) return '';
+    throw new AppError('INVALID_REQUEST');
+  }
+  const anchor = ANCHOR.replace('@label', quoteName(label)).replace('@stableId', quoteName(stableId));
+  const patterns = pairs.map((pair) => (pair.direction === 'out' ? `(n)-[:${quoteName(pair.relationshipType)}]->()` : `(n)<-[:${quoteName(pair.relationshipType)}]-()`));
+  if (spec.form === 'cheap') return `${anchor}\nRETURN ${patterns.map((pattern, index) => `COUNT { ${pattern} } AS c${index}`).join(', ')}`;
+  const calls = patterns.map((pattern, index) => `CALL { WITH n MATCH ${pattern} WITH 1 AS hit LIMIT $countCap + 1 RETURN count(*) AS c${index} }`);
+  return `${anchor}\n${calls.join('\n')}\nRETURN ${patterns.map((_pattern, index) => `c${index}`).join(', ')}`;
+}
+
 export interface Rendered {
   readonly cypher: string;
   readonly parameters: Params;
 }
 
 /** Checks the marker parameters against the allowlist and writes the quoted names into the Cypher; every other parameter stays a parameter. */
-export function renderTemplate(template: Template, params: Params, allowlist: SourceAllowlist, limit: number): Rendered {
+export function renderTemplate(template: Template, params: Params, allowlist: SourceAllowlist, limit: number, countCap = 0): Rendered {
   const replacements = new Map<string, string>();
   for (const name of template.entityParams) {
     const value = params[name];
@@ -180,13 +208,16 @@ export function renderTemplate(template: Template, params: Params, allowlist: So
   }
   const branches = branchesOf(template, params, allowlist);
   const probes = facetProbesOf(template, params, allowlist);
+  const degrees = degreeCountsOf(template, params, allowlist);
   const cypher = template.cypher.replace(MARKER, (_whole, kind: string, name: string) => {
     if (kind === 'searchBranches') return branches;
     if (kind === 'facetProbes') return probes;
+    if (kind === 'degreeCounts') return degrees;
     const replacement = replacements.get(`${kind}:${name}`) ?? '';
     return kind === 'relationship' ? replacement : quoteName(replacement);
   });
-  const markerNames = new Set([...template.entityParams, ...template.relationshipParams, ...(template.searchBranches === undefined ? [] : [template.searchBranches.param]), ...(template.facetProbes === undefined ? [] : [template.facetProbes.param])]);
+  const markerNames = new Set([...template.entityParams, ...template.relationshipParams, ...(template.searchBranches === undefined ? [] : [template.searchBranches.param]), ...(template.facetProbes === undefined ? [] : [template.facetProbes.param]), ...(template.degreeCounts === undefined ? [] : [template.degreeCounts.param])]);
   const kept = Object.entries(params).filter(([key]) => !markerNames.has(key));
-  return { cypher, parameters: Object.fromEntries([...kept, ['limit', limit], ...gateValuesOf(template, allowlist)]) };
+  const cap: [string, unknown][] = template.degreeCounts?.form === 'bounded' ? [['countCap', countCap]] : [];
+  return { cypher, parameters: Object.fromEntries([...kept, ['limit', limit], ...cap, ...gateValuesOf(template, allowlist)]) };
 }

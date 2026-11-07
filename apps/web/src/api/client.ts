@@ -1,4 +1,5 @@
 import {
+  degreePreviewSchema,
   errorBodySchema,
   errorResponseSchema,
   investigationListResponseSchema,
@@ -11,6 +12,8 @@ import {
   sourceProfileSchema,
   sourcesResponseSchema,
   sourceTestReportSchema,
+  type DegreePreview,
+  type DegreePreviewRequest,
   type ElementRef,
   type ErrorResponse,
   type GraphNode,
@@ -60,6 +63,8 @@ export interface ApiClient {
   listInvestigations(limit: number, signal?: AbortSignal): Promise<ApiResult<InvestigationListResponse>>;
   /** The exact matches of a text in one source, and with `typeahead` the entities that start with it; every hit and the answer name the source that was asked, or the answer is refused. */
   searchEntities(request: SearchRequest, signal?: AbortSignal): Promise<ApiResult<SearchResult>>;
+  /** How many relationships a node has by type and direction, each count with its quality, before anything is loaded; the answer names the node asked for, or it is refused. */
+  previewExpansion(request: DegreePreviewRequest, signal?: AbortSignal): Promise<ApiResult<DegreePreview>>;
 }
 
 function sameRef(left: ElementRef, right: ElementRef): boolean {
@@ -142,6 +147,10 @@ export function createApiClient(fetcher: Fetcher = (input, init) => fetch(input,
       if (!result.ok) return result;
       const hits = [...result.value.exact, ...(result.value.startsWith?.nodes ?? [])];
       return result.value.sourceId !== search.sourceId || hits.some((node) => node.ref.sourceId !== search.sourceId) ? failed('SCHEMA_MISMATCH') : result;
+    },
+    previewExpansion: async (preview, signal) => {
+      const result = await request(fetcher, '/v1/graph/preview-expansion', degreePreviewSchema, signal, 'POST', preview);
+      return result.ok && !sameRef(result.value.ref, { sourceId: preview.sourceId, ...preview.ref }) ? failed('SCHEMA_MISMATCH') : result;
     },
     listInvestigations: (limit, signal) => request(fetcher, `/v1/investigations?limit=${limit}&sort=lastEdited`, investigationListResponseSchema, signal),
     getInvestigation: async (id, signal) => {

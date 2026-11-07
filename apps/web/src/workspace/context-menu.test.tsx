@@ -278,14 +278,14 @@ describe('the menu of an entity', () => {
     expect(placeOf()).toEqual({ left: '108px', top: '208px' });
   });
 
-  it('shows the header only when no item is registered for entities, and a registered entity item only in the entity menu', () => {
+  it('shows the built-in entity item and a registered entity item only in the entity menu', () => {
     const state = createClientState();
     loadGraph(state, [jordan, node('a', 'n2')], [stored]);
     const menus = withBuiltIns();
     menus.register('node', { id: 'entity-item', label: 'Entity item', icon: null, group: 10, order: 10, run: () => undefined });
     const { rightClick } = show(state, {}, menus);
     rightClick(rightClickOn('node', nodeKey('n1')));
-    expect(within(screen.getByRole('menu', { name: 'n1' })).getAllByRole('menuitem').map((row) => row.textContent)).toEqual(['Entity item']);
+    expect(within(screen.getByRole('menu', { name: 'n1' })).getAllByRole('menuitem').map((row) => row.querySelector('.menu-label')?.textContent)).toEqual(['Expand neighbors', 'Entity item']);
     rightClick(rightClickOn('relationship', edgeKey(stored.ref)));
     expect(within(screen.getByRole('menu')).queryAllByRole('menuitem')).toEqual([]);
     rightClick(onCanvas(5, 5));

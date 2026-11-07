@@ -57,6 +57,10 @@ export interface NormalizeContext {
   readonly model: NormalizeModel;
   /** The page limit of the request, which a template that counts rows to a cap needs to check what the read gave. */
   readonly limit?: number;
+  /** The cap of a bounded degree count, from the source's budgets. */
+  readonly countCap?: number;
+  /** The validated parameters of the request. */
+  readonly params?: Readonly<Record<string, unknown>>;
 }
 
 const unique = (values: readonly string[]): string[] => [...new Set(values)];

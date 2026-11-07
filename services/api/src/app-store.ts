@@ -19,8 +19,8 @@ export interface AppStore extends InvestigationStore {
   hasActiveSource(sourceId: string): Promise<boolean>;
   recordSourceCheck(check: SourceCheck): Promise<void>;
   markSourceUnchecked(sourceId: string, reason: string): Promise<void>;
-  latestQualifyingChecks(sources: readonly CheckedSource[], since: string, onUnreadable?: (sourceId: string) => void): Promise<QualifyingCheck[]>;
-  latestChecksFor(sources: readonly CheckedSource[], onUnreadable?: (sourceId: string) => void): Promise<QualifyingCheck[]>;
+  latestQualifyingChecks(sources: readonly CheckedSource[], since: string, onUnreadable?: (sourceId: string, checkedAt: string) => void): Promise<QualifyingCheck[]>;
+  latestChecksFor(sources: readonly CheckedSource[], onUnreadable?: (sourceId: string, checkedAt: string) => void): Promise<QualifyingCheck[]>;
   applyPingState(change: PingStateChange): Promise<boolean>;
   readiness(): Promise<ReadyChecks>;
   close(): Promise<void>;

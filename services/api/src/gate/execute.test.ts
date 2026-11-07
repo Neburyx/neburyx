@@ -83,7 +83,7 @@ describe('an executor that fails', () => {
 describe('the executor call', () => {
   it('holds read access mode, the source timeout, the page limit plus one, the request deadline and the trace ID', async () => {
     const clock = fakeClock(42_000);
-    const { gate, executor } = harness({ clock: clock.now, budgetsFor: () => ({ timeoutMs: 3000, maxPage: 20, requestTimeoutMs: 8000 }) });
+    const { gate, executor } = harness({ clock: clock.now, budgetsFor: () => ({ timeoutMs: 3000, maxPage: 20, requestTimeoutMs: 8000, countCap: 500 }) });
     await gate.run(gateRequest({ limit: 12, traceId: 'tr-call-1' }));
     expect(executor.calls).toHaveLength(1);
     expect(executor.calls[0]).toMatchObject({

@@ -1,5 +1,6 @@
 import { runSelectionCommand } from '../canvas/selection-commands.js';
 import { LayoutList } from './layout-list.js';
+import { NeighborTypesSubmenu } from './neighbor-types-submenu.js';
 import { MENU_GROUP, MENU_ORDER, type MenuContext, type MenuRegistry, type SubmenuProps } from './menu-registry.js';
 
 const canLayOut = (context: MenuContext): boolean => context.canvas !== undefined && context.state.loadedGraph().nodes.length > 0;
@@ -18,6 +19,14 @@ function LayoutSubmenu({ context, close }: SubmenuProps) {
 
 export function registerBuiltInMenuItems(registry: MenuRegistry): () => void {
   const removals = [
+    registry.register('node', {
+      id: 'expand-neighbors',
+      label: 'Expand neighbors',
+      icon: <span className="icon icon-expand" aria-hidden="true" />,
+      group: MENU_GROUP.node.expand,
+      order: MENU_ORDER.node.expandNeighbors,
+      submenu: NeighborTypesSubmenu,
+    }),
     registry.register('canvas', {
       id: 'fit-to-view',
       label: 'Fit to view',

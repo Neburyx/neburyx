@@ -51,7 +51,12 @@ function checkGateParameters(definition: TemplateDefinition, shape: Shape): void
 
 function checkMarkers(definition: TemplateDefinition, shape: Shape): void {
   if (hasStrayMarkerCharacter(definition.cypher)) throw new CatalogError(definition.id, 'has Cypher with an @ that is not a marker');
-  const used = markersOf(definition.cypher).filter((marker) => marker.kind !== 'searchBranches' && marker.kind !== 'facetProbes');
+  const degree = markersOf(definition.cypher).filter((marker) => marker.kind === 'degreeCounts');
+  // a degree statement reads the entity type's label and stable ID property, so its parameter counts as used by an entity marker and a stable id marker
+  const used = [
+    ...markersOf(definition.cypher).filter((marker) => marker.kind !== 'searchBranches' && marker.kind !== 'facetProbes' && marker.kind !== 'degreeCounts'),
+    ...degree.flatMap((marker) => [{ kind: 'entity' as const, name: marker.name }, { kind: 'stableId' as const, name: marker.name }]),
+  ];
   for (const marker of used) {
     if (marker.kind === 'stableId' && !definition.entityParams.includes(marker.name)) throw new CatalogError(definition.id, 'has a stable id marker that no declared entity parameter backs');
   }
@@ -140,6 +145,25 @@ function checkProfile(definition: TemplateDefinition): void {
   if (definition.profile === true && definition.scope !== 'system') throw new CatalogError(definition.id, 'is profiled and not a system template');
 }
 
+/**
+ * The degree template's own declaration: it declares its degree counts exactly when its Cypher is the one `@degreeCounts(<param>)` marker for an entity parameter its schema has, and nothing else; it
+ * is not paged and not profiled, it names the stable-ID index it needs, and a bounded one has no `$countCap` of its own in its schema (the gate fills it from the budgets).
+ */
+function checkDegreeCounts(definition: TemplateDefinition, shape: Shape): void {
+  const used = markersOf(definition.cypher).filter((marker) => marker.kind === 'degreeCounts');
+  const spec = definition.degreeCounts;
+  if (spec === undefined) {
+    if (used.length > 0) throw new CatalogError(definition.id, 'uses the degree counts marker without declaring degree counts');
+    return;
+  }
+  if (used.length !== 1 || used[0]?.name !== spec.param || definition.cypher !== `@degreeCounts(${spec.param})`) throw new CatalogError(definition.id, 'declares degree counts and its Cypher is not exactly its one degree counts marker');
+  if (!definition.entityParams.includes(spec.param) || shape.properties.get(spec.param) !== 'string') throw new CatalogError(definition.id, 'declares degree counts for a parameter that is not a declared entity parameter its schema has as text');
+  if (definition.searchBranches !== undefined || definition.facetProbes !== undefined || definition.paged || definition.profile === true) throw new CatalogError(definition.id, 'declares degree counts and is also paged, profiled or a search or facet template');
+  if (definition.indexNeeds === undefined) throw new CatalogError(definition.id, 'has degree counts and does not name the index it needs');
+  if (definition.readsNothing === undefined) throw new CatalogError(definition.id, 'has degree counts and does not say when it reads nothing');
+  if (shape.properties.has('countCap')) throw new CatalogError(definition.id, 'has the gate-filled parameter countCap in its parameter schema');
+}
+
 function build(definition: TemplateDefinition): Template {
   const shape = shapeOf(definition);
   for (const name of RESERVED) if (shape.properties.has(name)) throw new CatalogError(definition.id, `declares the reserved parameter ${name}`);
@@ -148,6 +172,7 @@ function build(definition: TemplateDefinition): Template {
   checkMarkers(definition, shape);
   checkSearchBranches(definition, shape);
   checkFacetProbes(definition, shape);
+  checkDegreeCounts(definition, shape);
   checkGateParameters(definition, shape);
   const integerParameters = [...shape.properties].flatMap(([name, type]) => (type === 'integer' ? [name] : []));
   return { ...definition, integerParameters };

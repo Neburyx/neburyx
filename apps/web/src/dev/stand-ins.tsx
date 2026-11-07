@@ -208,10 +208,11 @@ const STAND_IN_MENU_ITEMS: readonly (readonly [MenuTargetKind, MenuItem])[] = [
   ['relationship', command('stand-in-open-relationship-record', 'Open source record', 'external', RELATIONSHIP_GROUP.copy, RELATIONSHIP_ORDER.openSourceRecord, { state: 'disabled' })],
 ];
 
-/** Puts a stand-in for each menu item that is not built yet, leaves the places that are taken, and returns the function that takes out what it put in. */
+/** Puts a stand-in for each menu item that is not built yet, leaves the places that are taken (by an item of the same ID, or one in the same group and order), and returns the function that takes out what it put in. */
 export function registerStandInMenuItems(registry: MenuRegistry): () => void {
-  const taken = new Set([...registry.view.getState()].flatMap(([kind, items]) => items.map((item) => `${kind}/${item.id}`)));
-  const removals = STAND_IN_MENU_ITEMS.filter(([kind, item]) => !taken.has(`${kind}/${item.id}`)).map(([kind, item]) => registry.register(kind, item));
+  const held = [...registry.view.getState()].flatMap(([kind, items]) => items.map((item) => ({ kind, item })));
+  const taken = new Set(held.flatMap(({ kind, item }) => [`${kind}/${item.id}`, `${kind}/${item.group}/${item.order}`]));
+  const removals = STAND_IN_MENU_ITEMS.filter(([kind, item]) => !taken.has(`${kind}/${item.id}`) && !taken.has(`${kind}/${item.group}/${item.order}`)).map(([kind, item]) => registry.register(kind, item));
   return () => {
     for (const remove of removals) remove();
   };
