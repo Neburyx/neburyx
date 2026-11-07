@@ -1,5 +1,7 @@
 {
   "date": "2026-11-07",
+  "commit": "d51630f",
+  "note": "before the read slots of a later commit: each read now waits for a slot, which this run did not",
   "neo4j": {
     "version": "5.26.32",
     "edition": "enterprise"

@@ -57,6 +57,12 @@ describe('the record of the supernode benchmark', () => {
     expect(text).toContain('all at 100,000: stopped at row 4,000; not reached: 50%, 90%.');
   });
 
+  it('says which commit the run exercised, and the note that goes with it', () => {
+    expect(renderRecord(data(10))).not.toContain('Run on the code of commit');
+    const text = renderRecord({ ...data(10), commit: 'abc1234', note: 'before a later change' });
+    expect(text).toContain('- Run on the code of commit abc1234, before a later change.');
+  });
+
   it('says that 2026.x was not measured, and what the server address was without printing it', () => {
     const text = renderRecord(data(10));
     expect(text).toContain('Neo4j 2026.x');

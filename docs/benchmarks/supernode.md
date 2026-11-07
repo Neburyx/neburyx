@@ -10,6 +10,7 @@ The statement the gate renders has several branches, each of which matches the r
 
 ## How it was measured
 
+- Run on the code of commit d51630f, before the read slots of a later commit: each read now waits for a slot, which this run did not.
 - Neo4j 5.26.32 (enterprise); run on 2026-11-07. The server's address is not a loopback address. One benchmark process, one request at a time, no other load that the run made.
 - One anchor per size, each with the same number of relationships of four types to one neighbor type: *dated* (an ID and a time), *undated* (an ID, no time), *aggregate* (no ID, a time, 10 relationships to each neighbor, read as one row per neighbor) and *plain* (no ID, no time, one relationship to each neighbor: the shape of the banking demo pack's 100,000-neighbor node, which is not loaded itself). *All* asks for the four together, as "expand neighbors" does for one neighbor type: at size 100,000 that is 400,000 relationships to 100,000 neighbors. "100k" below is the size 100,000 of every read set.
 - Page size 25, the product's default. Time is the wall time of the gate call (resolve, validate, authorize, execute, normalize, redact, audit, with the driver and the network), in milliseconds. Budgets are the source's defaults (5 s read timeout, 10 s request).

@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -45,6 +46,7 @@ describe('the supernode benchmark', () => {
     }
     const data: RunData = {
       date: new Date().toISOString().slice(0, 10),
+      commit: execFileSync('git', ['rev-parse', '--short', 'HEAD']).toString().trim(),
       neo4j: { version: server.version, edition: rig.edition },
       serverIsLoopback: LOOPBACK_HOSTS.has(new URL(server.boltUri.replace(/^neo4j/, 'bolt')).hostname),
       cold,

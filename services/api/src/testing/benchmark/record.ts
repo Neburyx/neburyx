@@ -15,6 +15,9 @@ export interface Stopped {
 
 export interface RunData {
   readonly date: string;
+  /** The commit whose code the run exercised, and a note on what that code did not yet have, when a later commit changed the read path. */
+  readonly commit?: string;
+  readonly note?: string;
   readonly neo4j: { readonly version: string; readonly edition: string };
   /** Whether the server's address is a loopback address, as the run found; the address itself is never recorded. */
   readonly serverIsLoopback: boolean;
@@ -83,6 +86,7 @@ export function renderRecord(data: RunData): string {
     '',
     '## How it was measured',
     '',
+    ...(data.commit === undefined ? [] : [`- Run on the code of commit ${data.commit}${data.note === undefined ? '' : `, ${data.note}`}.`]),
     `- Neo4j ${data.neo4j.version} (${data.neo4j.edition}); run on ${data.date}. The server's address ${data.serverIsLoopback ? 'is' : 'is not'} a loopback address. One benchmark process, one request at a time, no other load that the run made.`,
     `- One anchor per size, each with the same number of relationships of four types to one neighbor type: *dated* (an ID and a time), *undated* (an ID, no time), *aggregate* (no ID, a time, ${MEMBERS_PER_NEIGHBOR} relationships to each neighbor, read as one row per neighbor) and *plain* (no ID, no time, one relationship to each neighbor: the shape of the banking demo pack's 100,000-neighbor node, which is not loaded itself). *All* asks for the four together, as "expand neighbors" does for one neighbor type: at size 100,000 that is 400,000 relationships to 100,000 neighbors. "100k" below is the size 100,000 of every read set.`,
     `- Page size ${PAGE}, the product's default. Time is the wall time of the gate call (resolve, validate, authorize, execute, normalize, redact, audit, with the driver and the network), in milliseconds. Budgets are the source's defaults (5 s read timeout, 10 s request).`,
