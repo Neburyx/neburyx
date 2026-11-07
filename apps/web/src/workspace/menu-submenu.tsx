@@ -9,13 +9,14 @@ interface SubmenuProps {
   readonly item: RegisteredMenuItem;
   readonly row: HTMLElement;
   readonly takeFocus: boolean;
+  readonly ring: boolean;
   readonly context: MenuContext;
   readonly close: () => void;
   readonly closeAll: () => void;
 }
 
 /** The content of a submenu, beside the row it belongs to; content that throws closes only this submenu. */
-export function Submenu({ item, row, takeFocus, context, close, closeAll }: SubmenuProps) {
+export function Submenu({ item, row, takeFocus, ring, context, close, closeAll }: SubmenuProps) {
   const holder = useRef<HTMLDivElement>(null);
   const panel = useRef<HTMLDivElement>(null);
   const [placement, setPlacement] = useState<Placement | undefined>(undefined);
@@ -39,11 +40,11 @@ export function Submenu({ item, row, takeFocus, context, close, closeAll }: Subm
     if (!takeFocus || !placed) return;
     const candidates = [...(panel.current?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? [])];
     for (const candidate of candidates) {
-      candidate.focus();
+      candidate.focus({ focusVisible: ring });
       if (document.activeElement === candidate) return;
     }
-    panel.current?.focus();
-  }, [takeFocus, placed]);
+    panel.current?.focus({ focusVisible: ring });
+  }, [takeFocus, placed, ring]);
   const Content = item.submenu;
   if (Content === undefined) return null;
   return (

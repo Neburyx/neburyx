@@ -554,6 +554,12 @@
   --icon: url('../assets/lucide/maximize-2.svg');
 }
 
+.neighbor-types-notes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
 .neighbor-types {
   display: flex;
   flex-direction: column;

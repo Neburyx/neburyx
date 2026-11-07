@@ -152,6 +152,53 @@ describe('the menu from the keyboard', () => {
     }
   });
 
+  it('takes the focus into a submenu opened with the mouse without a ring, and moves between its buttons with the arrow keys', async () => {
+    const { rightClick } = open(registryOf(parent('More', Probe, 10), command('Other', 20)));
+    const calls: Array<{ target: HTMLElement; focusVisible: boolean | undefined }> = [];
+    const original = HTMLElement.prototype.focus;
+    HTMLElement.prototype.focus = function (this: HTMLElement, options?: FocusOptions & { focusVisible?: boolean }) {
+      calls.push({ target: this, focusVisible: options?.focusVisible });
+      return original.call(this, options);
+    };
+    try {
+      rightClick(onCanvas(10, 10));
+      const user = userEvent.setup();
+      await user.click(row('More'));
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Inside' }));
+      expect(calls.filter((call) => call.target === document.activeElement).every((call) => call.focusVisible === false)).toBe(true);
+      await user.keyboard('{ArrowDown}');
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Second inside' }));
+      await user.keyboard('{ArrowDown}');
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Inside' }));
+      await user.keyboard('{End}');
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Second inside' }));
+    } finally {
+      HTMLElement.prototype.focus = original;
+    }
+  });
+
+  it('shows the ring of a keyboard opening that follows a press which never became a click', async () => {
+    const { rightClick } = open(registryOf(parent('More', Probe, 10), command('Other', 20)));
+    const calls: Array<{ target: HTMLElement; focusVisible: boolean | undefined }> = [];
+    const original = HTMLElement.prototype.focus;
+    HTMLElement.prototype.focus = function (this: HTMLElement, options?: FocusOptions & { focusVisible?: boolean }) {
+      calls.push({ target: this, focusVisible: options?.focusVisible });
+      return original.call(this, options);
+    };
+    try {
+      rightClick(onCanvas(10, 10));
+      const user = userEvent.setup();
+      await user.pointer({ keys: '[MouseLeft>]', target: row('Other') });
+      row('More').focus();
+      await user.keyboard('{ArrowRight}');
+      const inside = calls.filter((call) => call.target === screen.getByRole('button', { name: 'Inside' }));
+      expect(inside.length).toBeGreaterThan(0);
+      expect(inside.every((call) => call.focusVisible !== false)).toBe(true);
+    } finally {
+      HTMLElement.prototype.focus = original;
+    }
+  });
+
   it('closes only the submenu with ArrowLeft or Escape and puts the focus back on its item, then Escape closes the menu and returns the focus', async () => {
     const { rightClick } = await openFromOutside(registryOf(parent('More', Probe, 10), command('Other', 20)));
     rightClick(onCanvas(10, 10));

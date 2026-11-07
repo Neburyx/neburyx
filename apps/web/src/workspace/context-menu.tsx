@@ -12,6 +12,7 @@ import { stateOf, useMenuItems, type MenuContext, type RegisteredMenuItem } from
 import { Submenu } from './menu-submenu.js';
 
 const CANVAS_MENU_NAME = 'Canvas';
+const SUBMENU_STOPS = 'button:not([disabled]), [tabindex="0"]';
 const ROWS = ':scope > .menu-panel > [role="menuitem"]';
 
 interface SubmenuOpen {
@@ -20,6 +21,8 @@ interface SubmenuOpen {
   readonly registration: number;
   readonly row: HTMLElement;
   readonly takeFocus: boolean;
+  /** Whether the focus the submenu takes shows its ring: not when a pointer opened it. */
+  readonly ring: boolean;
 }
 
 export function ContextMenu() {
@@ -41,7 +44,8 @@ export function ContextMenu() {
   const [submenuOpen, setSubmenuOpen] = useState<SubmenuOpen | undefined>(undefined);
   const contextFor = (menu: OpenMenu): MenuContext => ({ kind: menu.kind, key: menu.key, selection: [...state.presentation.view.getState().selection], state, canvas });
   const parent = submenuOpen === undefined || submenuOpen.menu !== shown ? undefined : items.find((item) => item.id === submenuOpen.id && item.registration === submenuOpen.registration && item.submenu !== undefined && stateOf(item, contextFor(submenuOpen.menu)) === 'enabled');
-  const activeSubmenu = parent === undefined || submenuOpen === undefined ? undefined : { item: parent, row: submenuOpen.row, takeFocus: submenuOpen.takeFocus };
+  const activeSubmenu = parent === undefined || submenuOpen === undefined ? undefined : { item: parent, row: submenuOpen.row, takeFocus: submenuOpen.takeFocus, ring: submenuOpen.ring };
+  const pointerDown = useRef(false);
   const activeNow = useRef(activeSubmenu);
   activeNow.current = activeSubmenu;
   const lastSubmenuRow = useRef<HTMLElement | undefined>(undefined);
@@ -160,6 +164,7 @@ export function ContextMenu() {
   const contextNow = (): MenuContext => contextFor(shown);
   const labelOf = (item: RegisteredMenuItem): string => (typeof item.label === 'function' ? item.label(contextNow()) : item.label);
   const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>): void => {
+    pointerDown.current = false;
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
     if (target.closest('.context-submenu') !== null) {
@@ -168,6 +173,15 @@ export function ContextMenu() {
         event.preventDefault();
         setSubmenuOpen(undefined);
         submenu.row.focus();
+        return;
+      }
+      if (event.defaultPrevented) return;
+      const inside = [...(target.closest('.context-submenu')?.querySelectorAll<HTMLElement>(SUBMENU_STOPS) ?? [])];
+      const at = inside.indexOf(target);
+      const to = at < 0 ? undefined : { ArrowDown: at + 1, ArrowUp: at - 1, Home: 0, End: inside.length - 1 }[event.key];
+      if (to !== undefined && inside.length > 1) {
+        event.preventDefault();
+        inside[(to + inside.length) % inside.length]?.focus();
       }
       return;
     }
@@ -222,11 +236,16 @@ export function ContextMenu() {
                 aria-haspopup={opensSubmenu ? 'menu' : undefined}
                 aria-expanded={opensSubmenu ? activeSubmenu?.item === item : undefined}
                 tabIndex={-1}
-                onPointerEnter={(event) => setSubmenuOpen(opensSubmenu && !inert ? { menu: shown, id: item.id, registration: item.registration, row: event.currentTarget, takeFocus: false } : undefined)}
+                onPointerDown={() => {
+                  pointerDown.current = true;
+                }}
+                onPointerEnter={(event) => setSubmenuOpen(opensSubmenu && !inert ? { menu: shown, id: item.id, registration: item.registration, row: event.currentTarget, takeFocus: false, ring: true } : undefined)}
                 onClick={(event) => {
+                  const byPointer = pointerDown.current;
+                  pointerDown.current = false;
                   if (inert) return;
                   if (opensSubmenu) {
-                    setSubmenuOpen({ menu: shown, id: item.id, registration: item.registration, row: event.currentTarget, takeFocus: true });
+                    setSubmenuOpen({ menu: shown, id: item.id, registration: item.registration, row: event.currentTarget, takeFocus: true, ring: !byPointer });
                     return;
                   }
                   const context = contextNow();
@@ -249,7 +268,7 @@ export function ContextMenu() {
         })}
       </div>
       {activeSubmenu === undefined ? null : (
-        <Submenu item={activeSubmenu.item} row={activeSubmenu.row} takeFocus={activeSubmenu.takeFocus} context={contextNow()} close={() => setSubmenuOpen(undefined)} closeAll={() => closeMenu(true)} />
+        <Submenu item={activeSubmenu.item} row={activeSubmenu.row} takeFocus={activeSubmenu.takeFocus} ring={activeSubmenu.ring} context={contextNow()} close={() => setSubmenuOpen(undefined)} closeAll={() => closeMenu(true)} />
       )}
     </div>
   );

@@ -1,5 +1,5 @@
 import type { DegreePreview, SourceProfile } from '@neburyx/contracts';
-import { useEffect, useRef } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import { FailureNotice } from '../failure-notice.js';
 import { useProfile } from '../canvas/profile-context.js';
 import { nodeRefOfKey } from '../state/keys.js';
@@ -15,20 +15,23 @@ function displayNameOf(profile: SourceProfile | undefined, entityType: string): 
 }
 
 function NeighborTypeList({ preview, profile }: { readonly preview: DegreePreview; readonly profile: SourceProfile | undefined }) {
+  const notes = useId();
   if (preview.byNeighborType.length === 0) return <p className="neighbor-types-note">No relationships are mapped for this entity type.</p>;
   const capped = preview.warnings.find((warning) => warning.code === 'counts-capped');
   return (
     <>
       <ul className="neighbor-types-list" aria-label="Neighbor types">
         {preview.byNeighborType.map((entry) => (
-          <li key={entry.entityType} className="neighbor-types-row">
+          <li key={entry.entityType} className="neighbor-types-row" tabIndex={0} aria-describedby={notes}>
             <span className="menu-label">{displayNameOf(profile, entry.entityType)}</span>
             <span className="neighbor-types-count">{degreeCountText(entry.count)}</span>
           </li>
         ))}
       </ul>
-      <p className="neighbor-types-note">{COUNTS_ARE_OF_RELATIONSHIPS}</p>
-      {capped === undefined ? null : <p className="neighbor-types-note">{capped.reason}.</p>}
+      <div id={notes} className="neighbor-types-notes">
+        <p className="neighbor-types-note">{COUNTS_ARE_OF_RELATIONSHIPS}</p>
+        {capped === undefined ? null : <p className="neighbor-types-note">{capped.reason}.</p>}
+      </div>
     </>
   );
 }
@@ -57,6 +60,9 @@ function NeighborTypesRequest({ request, profile }: { readonly request: ReturnTy
     // the answer arrives after the submenu took the focus, so Retry takes it when it appears, and the body keeps it when Retry is pressed and goes away
     if (state.phase === 'failed' && focusIsHere()) retry.current?.focus();
     if (state.phase === 'loading' && wasFailed.current && (document.activeElement === document.body || focusIsHere())) body.current?.focus();
+    // a keyboard opening that waited for the answer holds the focus on the body or the panel, and the first row takes it when the list appears
+    const holder = document.activeElement;
+    if (state.phase === 'ready' && holder !== null && (holder === body.current || holder === body.current?.closest('.menu-panel'))) body.current?.querySelector<HTMLElement>('.neighbor-types-row')?.focus({ focusVisible: holder.matches(':focus-visible') });
     wasFailed.current = state.phase === 'failed';
   }, [state.phase]);
   return (

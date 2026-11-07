@@ -1,7 +1,7 @@
 import { act, cleanup, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { DegreePreview } from '@neburyx/contracts';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, onTestFinished } from 'vitest';
 import type { ApiResult } from '../api/client.js';
 import { fakeClient } from '../api/fake-client.js';
 import { createPreviewStore } from '../api/preview-store.js';
@@ -192,5 +192,83 @@ describe('the Expand neighbors entry of the node menu', () => {
     await act(async () => asked[0]?.answer({ ok: true, value: answerFor() }));
     expect(within(submenu()).queryByRole('button')).toBeNull();
     expect(state.loadedGraph().nodes).toHaveLength(before);
+  });
+
+  const recordFocus = (): Array<{ readonly target: HTMLElement; readonly focusVisible: boolean | undefined }> => {
+    const calls: Array<{ target: HTMLElement; focusVisible: boolean | undefined }> = [];
+    const original = HTMLElement.prototype.focus;
+    HTMLElement.prototype.focus = function (this: HTMLElement, options?: FocusOptions & { focusVisible?: boolean }) {
+      calls.push({ target: this, focusVisible: options?.focusVisible });
+      return original.call(this, options);
+    };
+    onTestFinished(() => {
+      HTMLElement.prototype.focus = original;
+    });
+    return calls;
+  };
+  const inSubmenu = (element: HTMLElement): boolean => submenu().closest('.menu-panel')?.contains(element) === true;
+
+  it('takes the focus into the panel when it is opened with the mouse, without a ring, and puts it on the first row when the answer arrives', async () => {
+    const { asked } = opened();
+    const calls = recordFocus();
+    await userEvent.setup().click(nodeMenuRow());
+    expect(inSubmenu(document.activeElement as HTMLElement)).toBe(true);
+    await act(async () => asked[0]?.answer({ ok: true, value: answerFor() }));
+    expect(document.activeElement).toBe(within(submenu()).getAllByRole('listitem')[0]);
+    const inside = calls.filter((call) => inSubmenu(call.target));
+    expect(inside.length).toBeGreaterThan(0);
+    expect(inside.every((call) => call.focusVisible === false)).toBe(true);
+  });
+
+  it('puts the ring on the first row when it is opened with the keyboard, also when the answer arrives later', async () => {
+    const { asked } = opened();
+    const calls = recordFocus();
+    const user = userEvent.setup();
+    nodeMenuRow().focus();
+    await user.keyboard('{Enter}');
+    await settle();
+    expect(inSubmenu(document.activeElement as HTMLElement)).toBe(true);
+    expect(document.activeElement?.classList.contains('neighbor-types-row')).toBe(false);
+    await act(async () => asked[0]?.answer({ ok: true, value: answerFor() }));
+    expect(document.activeElement).toBe(within(submenu()).getAllByRole('listitem')[0]);
+    const inside = calls.filter((call) => inSubmenu(call.target));
+    expect(inside.every((call) => call.focusVisible !== false)).toBe(true);
+  });
+
+  it('moves between the rows with the arrow keys, Home and End, and Escape returns to the entry', async () => {
+    const { asked } = opened();
+    const user = userEvent.setup();
+    nodeMenuRow().focus();
+    await user.keyboard('{Enter}');
+    await act(async () => asked[0]?.answer({ ok: true, value: answerFor() }));
+    const rows = within(submenu()).getAllByRole('listitem');
+    await user.keyboard('{ArrowDown}');
+    expect(document.activeElement).toBe(rows[1]);
+    await user.keyboard('{End}');
+    expect(document.activeElement).toBe(rows[2]);
+    await user.keyboard('{ArrowDown}');
+    expect(document.activeElement).toBe(rows[0]);
+    await user.keyboard('{ArrowUp}');
+    expect(document.activeElement).toBe(rows[2]);
+    await user.keyboard('{Home}');
+    expect(document.activeElement).toBe(rows[0]);
+    await user.keyboard('{Escape}');
+    expect(document.activeElement).toBe(nodeMenuRow());
+  });
+
+  it('moves the focus to Retry when a failure arrives after a mouse opening too', async () => {
+    const { asked } = opened();
+    await userEvent.setup().click(nodeMenuRow());
+    await act(async () => asked[0]?.answer({ ok: false, failure: { code: 'NETWORK_UNAVAILABLE' } }));
+    expect(document.activeElement).toBe(within(submenu()).getByRole('button', { name: 'Retry' }));
+  });
+
+  it('says the note of the list when the list is described', async () => {
+    const { asked } = opened();
+    await userEvent.setup().click(nodeMenuRow());
+    await act(async () => asked[0]?.answer({ ok: true, value: answerFor() }));
+    const first = within(submenu()).getAllByRole('listitem')[0] as HTMLElement;
+    expect(first.getAttribute('aria-describedby')).not.toBeNull();
+    expect(document.getElementById(first.getAttribute('aria-describedby') as string)?.textContent).toContain('Counts are of relationships.');
   });
 });
