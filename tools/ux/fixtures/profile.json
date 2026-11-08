@@ -31,7 +31,8 @@
       "pii": [
         "holderName",
         "phone"
-      ]
+      ],
+      "sortable": []
     },
     {
       "type": "customer",
@@ -56,7 +57,8 @@
         "fullName",
         "dateOfBirth",
         "phone"
-      ]
+      ],
+      "sortable": []
     },
     {
       "type": "device",
@@ -78,7 +80,8 @@
       "filterable": [
         "platform"
       ],
-      "pii": []
+      "pii": [],
+      "sortable": []
     },
     {
       "type": "ip_address",
@@ -100,7 +103,8 @@
       "filterable": [
         "network"
       ],
-      "pii": []
+      "pii": [],
+      "sortable": []
     },
     {
       "type": "transaction",
@@ -125,7 +129,10 @@
         "channel",
         "amount"
       ],
-      "pii": []
+      "pii": [],
+      "sortable": [
+        "amount"
+      ]
     },
     {
       "type": "merchant",
@@ -148,7 +155,8 @@
       "filterable": [
         "category"
       ],
-      "pii": []
+      "pii": [],
+      "sortable": []
     }
   ],
   "relationshipTypes": [
@@ -159,7 +167,8 @@
       "aggregate": true,
       "observedAt": null,
       "filterable": [],
-      "evidence": []
+      "evidence": [],
+      "sortable": []
     },
     {
       "type": "USES_DEVICE",
@@ -172,7 +181,8 @@
       ],
       "evidence": [
         "sourceRecordId"
-      ]
+      ],
+      "sortable": []
     },
     {
       "type": "CONNECTS_FROM",
@@ -183,7 +193,8 @@
       "filterable": [],
       "evidence": [
         "sourceRecordId"
-      ]
+      ],
+      "sortable": []
     },
     {
       "type": "INITIATED",
@@ -192,7 +203,8 @@
       "aggregate": false,
       "observedAt": "initiatedAt",
       "filterable": [],
-      "evidence": []
+      "evidence": [],
+      "sortable": []
     },
     {
       "type": "PAID_TO",
@@ -201,7 +213,8 @@
       "aggregate": true,
       "observedAt": null,
       "filterable": [],
-      "evidence": []
+      "evidence": [],
+      "sortable": []
     },
     {
       "type": "TRANSFERRED_TO",
@@ -210,7 +223,8 @@
       "aggregate": true,
       "observedAt": null,
       "filterable": [],
-      "evidence": []
+      "evidence": [],
+      "sortable": []
     }
   ],
   "derivedRules": [

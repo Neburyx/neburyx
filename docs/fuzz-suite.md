@@ -26,6 +26,8 @@ A test feeds the check a statement built from text and shows it fails.
 | Entity type the mapping does not name | `NOT_FOUND` on degree preview and coverage; `INVALID_REQUEST` on expand, search, lookup and the entity read |
 | Coverage: no entries, more than 500, a duplicate | `INVALID_REQUEST`; a ref of another source: `SOURCE_MISMATCH`; coverage never reads the source |
 | Expand `limit` below 1, a fraction, beyond the safe integers | `INVALID_REQUEST` |
+| Expand `filters` or `rank` that name an operator, a target, an order or a kind outside the closed sets, a property the mapping does not declare (for every asked neighbor type and every row read), more than 6 conditions, an `in` of more than 20 values, a range with no end, values of mixed kinds, a number beyond 2^53, or temporal text that is not ISO; a condition or rank on a personal-data property while masking is asked | `INVALID_REQUEST`, no read |
+| Expand `filters` or `rank` changed, or taken off, when continuing with a cursor | `CURSOR_INVALIDATED` |
 | Expand `limit` above the source's `max_page` (default 50) | `QUERY_BUDGET_EXCEEDED`, with `maxPage` |
 | Search more with a `limit`, more than 25 exact references, or references of another source, of an unmapped type, or sent to a group other than `related` | `INVALID_REQUEST`, no read |
 | A stable ID of a keyed entity type that is not a token this server made for that source and type (forged, truncated, extended, another spelling, another source or type), in expand, preview, lookup, the entity path and the exact references of search more | `INVALID_REQUEST`, no read |

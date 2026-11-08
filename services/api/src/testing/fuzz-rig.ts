@@ -21,12 +21,12 @@ export const FUZZ_SOURCE = 'demo';
 
 export const FUZZ_ENTITIES = [
   { type: 'widget', label: 'Widget', stable_id: 'widgetId', search: ['widgetId', 'nickname', 'ownerName'], reference: ['batchRef'], pii: [{ property: 'ownerName', class: 'name' }] },
-  { type: 'gadget', label: 'Gadget', stable_id: 'gadgetId', search: ['gadgetId', 'region'] },
+  { type: 'gadget', label: 'Gadget', stable_id: 'gadgetId', search: ['gadgetId', 'region'], filterable: ['tier', 'weight'], sortable: ['weight'] },
   { type: 'phone', label: 'Handle', stable_id: 'phoneNumber', search: ['phoneNumber'], pii: [{ property: 'phoneNumber', class: 'phone' }] },
   { type: 'holder', label: 'Holder', stable_id: 'holderCode', search: ['holderCode'], pii: [{ property: 'holderCode', class: 'text' }] },
 ];
 export const FUZZ_RELATIONSHIPS = [
-  { type: 'MADE_FROM', from: 'widget', to: 'gadget', stable_id: 'linkId', evidence: ['recordId'], observed_at: 'seenAt' },
+  { type: 'MADE_FROM', from: 'widget', to: 'gadget', stable_id: 'linkId', evidence: ['recordId'], observed_at: 'seenAt', filterable: ['grade'], sortable: ['grade'] },
   { type: 'USES', from: 'widget', to: 'phone', observed_at: 'seenAt' },
 ];
 
@@ -43,13 +43,13 @@ export function allowedNames(): ReadonlySet<string> {
   const names = new Set<string>();
   for (const entity of FUZZ_ENTITIES) {
     names.add(entity.label);
-    for (const property of [entity.stable_id, ...entity.search, ...(entity.reference ?? [])]) names.add(property);
+    for (const property of [entity.stable_id, ...entity.search, ...(entity.reference ?? []), ...(entity.filterable ?? []), ...(entity.sortable ?? [])]) names.add(property);
   }
   for (const row of FUZZ_RELATIONSHIPS) {
     names.add(row.type);
     names.add(row.observed_at);
     names.add(row.stable_id ?? '');
-    for (const property of row.evidence ?? []) names.add(property);
+    for (const property of [...(row.evidence ?? []), ...(row.filterable ?? []), ...(row.sortable ?? [])]) names.add(property);
   }
   names.delete('');
   return names;

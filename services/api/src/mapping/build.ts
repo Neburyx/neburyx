@@ -101,6 +101,7 @@ function buildEntity(raw: RawEntity, path: readonly (string | number)[], report:
     pii,
     ...(Object.keys(piiClasses).length === 0 ? {} : { piiClasses }),
     filterable,
+    ...((raw.sortable ?? []).length === 0 ? {} : { sortable: [...(raw.sortable ?? [])] }),
     ...((raw.degree ?? []).length === 0 ? {} : { degree: (raw.degree ?? []).map((entry) => ({ type: entry.type, direction: entry.direction, property: entry.property, ...(entry.observed_at === undefined ? {} : { observedAt: entry.observed_at }) })) }),
     ...linkOf(raw, path, report),
     display: {
@@ -161,6 +162,7 @@ function buildRelationship(raw: RawRelationship, path: readonly (string | number
     ...(raw.observed_at === undefined ? {} : { observedAt: raw.observed_at }),
     evidence,
     filterable: raw.filterable ?? [],
+    ...((raw.sortable ?? []).length === 0 ? {} : { sortable: [...(raw.sortable ?? [])] }),
     ...(evidenceLink === undefined ? {} : { evidenceLink }),
   };
 }

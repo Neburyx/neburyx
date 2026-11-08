@@ -1,4 +1,5 @@
 import type { Cell, PreviewCell } from './measure.js';
+import { refinedLines, type RefinedRecord } from './refined.js';
 import type { Profile } from './profile.js';
 import type { Sample, Summary } from './stats.js';
 import type { DbHitCause } from './db-hit-cause.js';
@@ -56,6 +57,8 @@ export interface RunData {
   readonly dbHitCause: DbHitCause;
   /** The measurement of a cancelled read, added by a run of its own; absent from a record made before it. */
   readonly cancel?: CancelRecord;
+  /** The measurement of filtered, ranked and counted reads, added by a run of its own; absent from a record made before it. */
+  readonly refined?: RefinedRecord;
 }
 
 /** A cell whose failed calls are more than a twentieth of its samples has a p95 that is a failed call's length, which is only a lower bound of what the call would have taken. */
@@ -194,6 +197,7 @@ export function renderRecord(data: RunData, options: RenderOptions = {}): string
   lines.push('### Degree preview (bounded read)', '', '| Relationships | Count labels | Samples | Failures | p50 (ms) | p95 (ms) | max (ms) |', '|---|---|---|---|---|---|---|');
   for (const preview of data.previews) lines.push(`| ${preview.size.toLocaleString('en-US')} | ${preview.quality} | ${preview.samples} | ${preview.failures} | ${ms(preview.p50)} | ${ms(preview.p95)} | ${ms(preview.max)} |`);
   if (data.cancel !== undefined) lines.push(...cancelLines(data.cancel));
+  if (data.refined !== undefined) lines.push(...refinedLines(data.refined));
   lines.push('', '## Not measured', '', '- Neo4j 2026.x and other editions: only the dev server was measured. The series check of the test helper accepts 2026.x, but no 2026.x server was reachable, so no run was made on it.', `- The banking demo pack's own node (the plain read set has its shape and size), concurrent readers, ${data.serverIsLoopback ? 'a remote server, ' : ''}a cold server, the cost of a cancelled read and the CI supernode suite.`, '');
   return lines.join('\n');
 }

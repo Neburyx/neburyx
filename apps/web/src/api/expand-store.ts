@@ -1,4 +1,4 @@
-import type { ElementRef, ExpandRequest, ExpandResponse, GraphEdge } from '@neburyx/contracts';
+import type { Count, ElementRef, ExpandFilter, ExpandRank, ExpandRequest, ExpandResponse, GraphEdge } from '@neburyx/contracts';
 import type { ClientState } from '../state/client-state.js';
 import { DEFAULT_FILTER_HASH, DEFAULT_POLICY_VERSION, edgeKey, elementKey, queryKeyText, type QueryKey } from '../state/keys.js';
 import { outsideFocusNote } from '../canvas/focus-note.js';
@@ -12,6 +12,15 @@ import { UNEXPECTED } from './use-request.js';
 import { BOUNDED_LIMIT } from './heavy-estimate.js';
 import type { HeavyGuard } from './heavy-guard.js';
 
+/** What narrows and orders an expansion beyond its types: the conditions on the neighbors and the relationships, and the property the pages are ranked by instead of the observed time. */
+export interface Refinement {
+  readonly filters: readonly ExpandFilter[];
+  readonly rank: ExpandRank | undefined;
+}
+
+/** The refinement as text, so that two refinements are the same ask exactly when their texts are equal. */
+export const refinementKey = (refinement: Refinement | undefined): string => JSON.stringify([[...(refinement?.filters ?? [])].map((filter) => JSON.stringify(filter)).sort(), refinement?.rank ?? null]);
+
 /** What the client knows of the pages of one neighbor type of one node: how many of its relationships are on the canvas, where the next page starts, and whether that cursor can still be used. */
 export interface TypeProgress {
   readonly loaded: number;
@@ -19,6 +28,10 @@ export interface TypeProgress {
   readonly cursor: string | undefined;
   /** The server refused the cursor (it expired, or the policy changed): the type continues only from its first page. */
   readonly restartNeeded: boolean;
+  /** How many relationships match the filters of the chain, as the first page of the chain counted them; none when the chain has no filter. It is kept for the later pages, which do not count again. */
+  readonly matching?: Count | undefined;
+  /** How many relationships the pages of the chain now running brought, whether or not they were already on the canvas. */
+  readonly inChain?: number | undefined;
 }
 
 const notAskedAfterFailure = (count: number): string => `${count} selected ${count === 1 ? 'node was' : 'nodes were'} not asked after the failure.`;
@@ -64,10 +77,10 @@ interface Passed {
 }
 
 export type ExpansionAction =
-  | ({ readonly kind: 'first'; readonly types: readonly string[]; readonly relTypes?: readonly string[] | undefined; readonly batch?: ExpandBatch | undefined } & Passed)
+  | ({ readonly kind: 'first'; readonly types: readonly string[]; readonly relTypes?: readonly string[] | undefined; readonly refinement?: Refinement | undefined; readonly batch?: ExpandBatch | undefined } & Passed)
   | { readonly kind: 'more'; readonly type: string }
   | { readonly kind: 'restart'; readonly type: string }
-  | ({ readonly kind: 'pages'; readonly first: readonly string[]; readonly more: readonly string[]; readonly relTypes: readonly string[] | undefined } & Passed);
+  | ({ readonly kind: 'pages'; readonly first: readonly string[]; readonly more: readonly string[]; readonly relTypes: readonly string[] | undefined; readonly refinement?: Refinement | undefined } & Passed);
 
 const requestKindOf = (action: ExpansionAction): RequestKind => (action.kind === 'more' || (action.kind === 'pages' && action.first.length === 0) ? 'more' : action.kind === 'restart' ? 'start-over' : 'expand');
 
@@ -96,6 +109,8 @@ export interface ExpandStore {
   setPageSize(ref: ElementRef, value: number): PageSizeCheck;
   /** The relationship types the loaded chain of a neighbor type was started with; undefined for all sourced types or when there is no chain. */
   relTypesOf(ref: ElementRef, neighborType: string): readonly string[] | undefined;
+  /** The filters and the rank the loaded chain of a neighbor type was started with; undefined when it has none or there is no chain. */
+  refinementOf(ref: ElementRef, neighborType: string): Refinement | undefined;
   loadMore(ref: ElementRef, neighborType: string): Promise<ExpandOutcome>;
   startOver(ref: ElementRef, neighborType: string): Promise<ExpandOutcome>;
   /** Asks again for what failed last for the node. */
@@ -109,7 +124,7 @@ export interface ExpandStore {
   /** Changes when the keeper record changes, for components that show whether a node can be collapsed. */
   readonly records: ReadableStore<number>;
   /** One request for the panel: the first page of the types in `first` and the next page of those in `more` (each with the cursor it was given), over the relationship types given. */
-  load(ref: ElementRef, plan: { readonly first: readonly string[]; readonly more: readonly string[]; readonly relTypes: readonly string[] | undefined }): Promise<ExpandOutcome>;
+  load(ref: ElementRef, plan: { readonly first: readonly string[]; readonly more: readonly string[]; readonly relTypes: readonly string[] | undefined; readonly refinement?: Refinement | undefined }): Promise<ExpandOutcome>;
 }
 
 export type Collapsibility = 'yes' | 'loading' | 'nothing';
@@ -135,6 +150,8 @@ interface Chain {
   chain: Set<string>;
   /** The relationship types the chain was started with: the cursor binds them. */
   relTypes: readonly string[] | undefined;
+  /** The filters and the rank the chain was started with: the cursor binds them too. */
+  refinement: Refinement | undefined;
 }
 
 function neighborTypeOf(edge: GraphEdge, ref: ElementRef): string {
@@ -236,13 +253,13 @@ export function createExpandStore(client: ApiClient, state: ClientState, person:
     const heldEdges = new Set(current.edgeRefs.map(edgeKey));
     const typeChains = chainsOf(nodeKey);
     // a first page or a restart begins a new chain, and only once its answer is here: a failed ask leaves the chain it had
-    for (const type of firstTypesOf(action)) typeChains.set(type, { all: typeChains.get(type)?.all ?? new Set<string>(), chain: new Set<string>(), relTypes: action.kind === 'first' || action.kind === 'pages' ? action.relTypes : typeChains.get(type)?.relTypes });
+    for (const type of firstTypesOf(action)) typeChains.set(type, { all: typeChains.get(type)?.all ?? new Set<string>(), chain: new Set<string>(), relTypes: action.kind === 'first' || action.kind === 'pages' ? action.relTypes : typeChains.get(type)?.relTypes, refinement: action.kind === 'first' || action.kind === 'pages' ? action.refinement : typeChains.get(type)?.refinement });
     const duplicates: string[] = [];
     const fresh = answer.edges.filter((edge) => !heldEdges.has(edgeKey(edge.ref)));
     const freshNodes = answer.nodes.filter((node) => !heldNodes.has(elementKey(node.ref)));
     for (const edge of answer.edges) {
       const type = neighborTypeOf(edge, ref);
-      const chain = typeChains.get(type) ?? { all: new Set<string>(), chain: new Set<string>(), relTypes: undefined };
+      const chain = typeChains.get(type) ?? { all: new Set<string>(), chain: new Set<string>(), relTypes: undefined, refinement: undefined };
       typeChains.set(type, chain);
       const key = edgeKey(edge.ref);
       if (moreTypesOf(action).includes(type) && chain.chain.has(key)) duplicates.push(key);
@@ -356,6 +373,8 @@ export function createExpandStore(client: ApiClient, state: ClientState, person:
     }));
     // the cursor binds the relationship types, so a continuation asks for the ones its chain began with
     const relTypes = action.kind === 'first' || action.kind === 'pages' ? action.relTypes : chainsOf(nodeKey).get(action.type)?.relTypes;
+    // the filters and the rank are bound by the cursor too: a continuation asks with the ones its chain began with
+    const refinement = action.kind === 'first' || action.kind === 'pages' ? action.refinement : chainsOf(nodeKey).get(action.type)?.refinement;
     const boundedLimit = action.kind === 'first' || action.kind === 'pages' ? action.limit : undefined;
     const request: ExpandRequest = {
       sourceId: ref.sourceId,
@@ -366,6 +385,8 @@ export function createExpandStore(client: ApiClient, state: ClientState, person:
       ...(boundedLimit === undefined && before.chosenPageSize === undefined ? {} : { limit: boundedLimit ?? before.chosenPageSize }),
       ...(state.mask.getState() ? { mask: true } : {}),
       ...(Object.keys(cursors).length === 0 ? {} : { cursors }),
+      ...(refinement === undefined || refinement.filters.length === 0 ? {} : { filters: [...refinement.filters] }),
+      ...(refinement?.rank === undefined ? {} : { rank: refinement.rank }),
     };
     // a newer ask for the node stops the older one's fetch, and the person's Cancel stops this one; either way nothing of the answer is merged
     controllers.get(nodeKey)?.abort();
@@ -410,7 +431,9 @@ export function createExpandStore(client: ApiClient, state: ClientState, person:
     const progress = new Map(before.types);
     for (const page of result.value.pages) {
       const chain = chainsOf(nodeKey).get(page.neighborType);
-      progress.set(page.neighborType, { loaded: chain?.all.size ?? 0, hasMore: page.hasMore, cursor: page.nextCursor, restartNeeded: false });
+      // the first page of a chain with filters counts what they match; the pages after it do not, and keep that number
+      const counted = (refinement?.filters.length ?? 0) > 0 ? (firstTypesOf(action).includes(page.neighborType) ? page.matchingTotal : before.types.get(page.neighborType)?.matching) : undefined;
+      progress.set(page.neighborType, { loaded: chain?.all.size ?? 0, hasMore: page.hasMore, cursor: page.nextCursor, restartNeeded: false, matching: counted, inChain: chain?.chain.size ?? 0 });
     }
     write(nodeKey, { epoch, status: 'idle', failure: undefined, types: progress, pageSize: result.value.pageSize, chosenPageSize: before.chosenPageSize, duplicates: before.duplicates || duplicates.length > 0, warnings: result.value.warnings, failedAction: undefined });
     return 'sent';
@@ -489,7 +512,7 @@ export function createExpandStore(client: ApiClient, state: ClientState, person:
     touch,
     report: (note) => notes.setState([note]),
     expand: (ref, neighborTypes, relTypes, batch) => run(ref, { kind: 'first', types: neighborTypes, relTypes, batch }),
-    load: (ref, plan) => run(ref, { kind: 'pages', first: plan.first, more: plan.more, relTypes: plan.relTypes }),
+    load: (ref, plan) => run(ref, { kind: 'pages', first: plan.first, more: plan.more, relTypes: plan.relTypes, refinement: plan.refinement }),
     ceilingOf,
     setPageSize(ref, value) {
       const ceiling = ceilingOf(ref.sourceId);
@@ -501,6 +524,7 @@ export function createExpandStore(client: ApiClient, state: ClientState, person:
       return { ok: true, value };
     },
     relTypesOf: (ref, neighborType) => chains.get(`${epochOf()}|${elementKey(ref)}`)?.get(neighborType)?.relTypes,
+    refinementOf: (ref, neighborType) => chains.get(`${epochOf()}|${elementKey(ref)}`)?.get(neighborType)?.refinement,
     loadMore: (ref, neighborType) => run(ref, { kind: 'more', type: neighborType }),
     startOver: (ref, neighborType) => run(ref, { kind: 'restart', type: neighborType }),
     retry: async (ref) => {

@@ -21,6 +21,7 @@ export function buildSourceProfile(source: SourceModel): SourceProfile {
       stateProperty: entity.display.stateProperty ?? null,
       searchable: [...entity.search],
       filterable: [...entity.filterable],
+      sortable: [...(entity.sortable ?? [])],
       pii: [...entity.pii],
     })),
     relationshipTypes: source.relationships.map((relationship) => ({
@@ -30,6 +31,7 @@ export function buildSourceProfile(source: SourceModel): SourceProfile {
       aggregate: relationship.aggregate,
       observedAt: relationship.observedAt ?? null,
       filterable: [...relationship.filterable],
+      sortable: [...(relationship.sortable ?? [])],
       evidence: [...relationship.evidence],
     })),
     derivedRules: source.derived.map((rule) => ({ id: rule.id, from: rule.from, to: rule.to, via: [...rule.via], ruleVersion: rule.ruleVersion })),

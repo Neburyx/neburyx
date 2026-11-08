@@ -29,7 +29,7 @@ interface Ask {
 /** type-a joins type-b by link-a and link-d, and type-c by link-c; type-b joins type-c by link-b; type-c joins itself by link-e. */
 const profile = (() => {
   const base = testProfile('a', ['type-a', 'type-b', 'type-c']);
-  const row = (type: string, from: string, to: string) => ({ type, from, to, aggregate: false, observedAt: null, filterable: [], evidence: [] });
+  const row = (type: string, from: string, to: string) => ({ type, from, to, aggregate: false, observedAt: null, filterable: [], sortable: [], evidence: [] });
   return { ...base, relationshipTypes: [row('link-a', 'type-a', 'type-b'), row('link-b', 'type-b', 'type-c'), row('link-c', 'type-a', 'type-c'), row('link-d', 'type-a', 'type-b'), row('link-e', 'type-c', 'type-c')] };
 })();
 const nodeOf = (type: string, id: string) => ({ ...node('a', id), ref: ref('a', type, id), display: { title: id, type } });

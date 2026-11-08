@@ -1361,6 +1361,34 @@
   border-color: var(--color-accent);
 }
 
+.supernode-filters {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.supernode-filters legend {
+  padding: 0;
+}
+
+.supernode-filter-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+  padding: var(--space-8) 0;
+  border-bottom: var(--border-width) solid var(--color-control-border);
+}
+
+.supernode-filter-row > select:first-child,
+.supernode-filter-row > .neighbor-types-note {
+  grid-column: 1 / -1;
+}
+
+.supernode-filter-row .supernode-number {
+  min-width: 0;
+}
+
 .supernode-links {
   display: flex;
   gap: var(--space-12);

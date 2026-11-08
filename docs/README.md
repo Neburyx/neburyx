@@ -8,6 +8,7 @@ Public technical documentation. Pre-release placeholder: the technical architect
 - [api-conventions.md](api-conventions.md): the rules every endpoint follows: pagination, field limits, idempotency keys, concurrency and the permission each route declares.
 - [cancellation.md](cancellation.md): what happens when a request is cancelled, what is not promised, what was tested and what was not verified.
 - [query-timeout.md](query-timeout.md): the limit on every read, what a timed-out request answers and shows, what was measured and what was not verified.
+- [filtered-expansion.md](filtered-expansion.md): filtering and ranking an expansion by the properties a mapping declares, the operators, the count, what masking does and what it costs.
 - [fuzz-suite.md](fuzz-suite.md): the input fuzz suite, what it proves about statement text and refusals, a recorded run and how to replay a failure.
 - [circuit-breaker.md](circuit-breaker.md): the rule that stops a source being asked when its reads keep timing out, how it recovers, what a person sees and the three settings.
 - [source-state.md](source-state.md): which stored check decides the state a source shows when several API copies run, and what stays different between copies.

@@ -82,6 +82,7 @@ Node 24 LTS (`.nvmrc`; with nvm, `nvm use`) and pnpm through Corepack, at the ve
 | Browser (UX) tests, after `pnpm build`, `pnpm --filter @neburyx/web build:ux` and `pnpm --filter @neburyx/renderer-spike build:node` (Chromium; `NEBURYX_UX_CHROME` may name an installed Chrome) | `pnpm test:ux` |
 | Driver timeout check (starts Neo4j containers; needs Docker, takes about ten minutes; not in CI) | `pnpm check:driver` |
 | Supernode benchmark (builds synthetic nodes of 1,000, 10,000 and 100,000 relationships in a database of its own on the Neo4j Enterprise server that `test:neo4j` uses, times a page of the paged expand through the gate and writes `docs/benchmarks/supernode.md` and `.json`; takes hours; not in CI; see `docs/benchmarks/README.md`) | `pnpm bench:supernode` |
+| Filtered, ranked and counted reads, only (10,000 and 100,000 relationships; adds a section to `docs/benchmarks/supernode.md` and `.json` and changes nothing else; about 20 to 30 minutes; not in CI) | `pnpm bench:refined` |
 | Render `docs/benchmarks/supernode.md` again from the stored `supernode.json` (no server) | `pnpm bench:render` |
 | Regenerate `packages/contracts/openapi.json` | `pnpm --filter @neburyx/contracts generate` |
 

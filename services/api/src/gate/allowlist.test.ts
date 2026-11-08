@@ -75,4 +75,30 @@ describe('the allowlist of a source', () => {
   ])('refuses a reference property with %s, because it is written into the Cypher as a quoted name', (_name, property) => {
     expect(() => allowlistFromMapping(sourceWith({ entities: [{ type: 'gadget', label: 'Gadget', stable_id: 'gadgetId', reference: [property] }], relationships: [] }))).toThrow(SourceGateError);
   });
+  it('holds the filterable and sortable properties of each entity type and of each relationship row, and leaves out what is not declared', () => {
+    const allowlist = allowlistFromMapping(
+      sourceWith({
+        entities: [{ type: 'gadget', label: 'Gadget', stable_id: 'gadgetId', filterable: ['size'], sortable: ['weight'] }, { type: 'person', label: 'Person', stable_id: 'personId' }],
+        relationships: [{ type: 'MADE_BY', from: 'gadget', to: 'person', observed_at: 'madeAt', filterable: ['rating'], sortable: ['score'] }, { type: 'KNOWS', from: 'person', to: 'person' }],
+      }),
+    );
+    expect([...(allowlist.filterableProperties ?? [])]).toEqual([['gadget', ['size']]]);
+    expect([...(allowlist.sortableProperties ?? [])]).toEqual([['gadget', ['weight']]]);
+    expect(allowlist.relationshipRows[0]).toMatchObject({ type: 'MADE_BY', filterable: ['rating'], sortable: ['score'], observedAt: 'madeAt' });
+    expect(allowlist.relationshipRows[1]).toEqual({ type: 'KNOWS', from: 'person', to: 'person' });
+  });
+
+  it.each([
+    ['a backtick', 'bad`name'],
+    ['a backslash', 'bad\\name'],
+    ['a control character', 'bad\u0001name'],
+    ['only whitespace', '   '],
+  ])('refuses a filterable or sortable property with %s, entity or relationship, because it is written into the Cypher as a quoted name', (_name, property) => {
+    const entities = [{ type: 'gadget', label: 'Gadget', stable_id: 'gadgetId' }];
+    const refuses = (overrides: Record<string, unknown>) => expect(() => allowlistFromMapping(sourceWith(overrides))).toThrow(SourceGateError);
+    refuses({ entities: [{ ...entities[0], filterable: [property] }], relationships: [] });
+    refuses({ entities: [{ ...entities[0], sortable: [property] }], relationships: [] });
+    refuses({ entities, relationships: [{ type: 'SELF', from: 'gadget', to: 'gadget', filterable: [property] }] });
+    refuses({ entities, relationships: [{ type: 'SELF', from: 'gadget', to: 'gadget', sortable: [property] }] });
+  });
 });

@@ -16,6 +16,7 @@ import { connectivityTemplate } from './templates/connectivity.js';
 import { degreePreviewBoundedTemplate, degreePreviewCheapTemplate } from './templates/degree-preview.js';
 import { degreeProbeTemplate } from './templates/degree-probe.js';
 import { entityLoadTemplate } from './templates/entity-load.js';
+import { expandCountTemplate } from './templates/expand-count.js';
 import { expandNeighborsTemplate } from './templates/expand-neighbors.js';
 import { searchExactTemplate } from './templates/search-exact.js';
 import { searchPrefixTemplate } from './templates/search-prefix.js';
@@ -47,7 +48,7 @@ export interface AssembleOptions {
 }
 
 export function defaultCatalogTemplates(): readonly TemplateDefinition[] {
-  return [connectivityTemplate, capabilitiesTemplate, privilegesTemplate, schemaTokensTemplate, schemaIndexesTemplate, stableIdDuplicatesTemplate, degreeProbeTemplate, degreePreviewBoundedTemplate, degreePreviewCheapTemplate, entityLoadTemplate, expandNeighborsTemplate, searchExactTemplate, searchRelatedTemplate, searchEvidenceTemplate, searchFacetsTemplate, searchPrefixTemplate, relatedContextTemplate];
+  return [connectivityTemplate, capabilitiesTemplate, privilegesTemplate, schemaTokensTemplate, schemaIndexesTemplate, stableIdDuplicatesTemplate, degreeProbeTemplate, degreePreviewBoundedTemplate, degreePreviewCheapTemplate, entityLoadTemplate, expandNeighborsTemplate, expandCountTemplate, searchExactTemplate, searchRelatedTemplate, searchEvidenceTemplate, searchFacetsTemplate, searchPrefixTemplate, relatedContextTemplate];
 }
 
 export function defaultCatalog(): TemplateCatalog {

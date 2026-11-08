@@ -60,4 +60,4 @@ export function textLeaves(value: unknown, known: ReadonlySet<string>, min = 4):
 }
 
 /** The names of the request fields of the read routes. */
-export const FIELD_NAMES: readonly string[] = ['sourceId', 'entityType', 'stableId', 'neighborTypes', 'relTypes', 'direction', 'limit', 'cursors', 'mask', 'ref', 'value', 'text', 'entityTypes', 'matchModes', 'typeahead', 'group', 'cursor', 'exactRefs', 'entities', 'loadedRelationships', 'loadedQuality'];
+export const FIELD_NAMES: readonly string[] = ['sourceId', 'entityType', 'stableId', 'neighborTypes', 'relTypes', 'direction', 'limit', 'cursors', 'mask', 'ref', 'value', 'text', 'entityTypes', 'matchModes', 'typeahead', 'group', 'cursor', 'exactRefs', 'entities', 'loadedRelationships', 'loadedQuality', 'filters', 'rank', 'order', 'property', 'values', 'from', 'kind', 'neighbor', 'relationship', 'between', 'number', 'boolean', 'date', 'dateTime', 'localDateTime', 'time', 'localTime'];

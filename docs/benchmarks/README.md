@@ -14,6 +14,8 @@ What it measures, how a position and a sample are defined, and what the figures 
 
 ## Rendering the record again
 
+`pnpm bench:refined` measures only the filtered, ranked and counted reads (rank by a relationship property and by a neighbor property, a selective and a loose filter, and the exact count) at 10,000 and at 100,000 relationships, in a database of its own, and adds them to `supernode.json` and `supernode.md` as a section that names the commit it ran on and the date. It changes nothing else in the record, and `pnpm bench:supernode` keeps that section when it rewrites the rest. It takes about 20 to 30 minutes.
+
 `pnpm bench:render` renders `supernode.md` again from the stored `supernode.json` with no server, adding what is known of the extra db hits of the first page of the dated read set for the series of the stored run, and says so in the text. It fails, and exits non-zero, when the stored data is not the data of a run.
 
 ## Supernode test suite

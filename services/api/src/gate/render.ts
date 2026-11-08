@@ -1,8 +1,9 @@
+import { expandFilterSchema, expandRankSchema, filterShapeProblem, MAX_FILTERS } from '@neburyx/contracts';
 import { z } from 'zod';
 import { AppError } from '../errors.js';
 import { MAX_EVIDENCE_PROPERTIES, MAX_FACET_PROBES, MAX_REFERENCE_PROPERTIES, MAX_SEARCH_PROPERTIES } from '../mapping/model.js';
 import { declarationsOf, degreePairsOf } from './templates/degree-pairs.js';
-import { expandBranchesOf, expandStatementOf, type ExpandDirection } from './templates/expand-statement.js';
+import { expandBranchesOf, expandCountStatementOf, expandStatementOf, undeclaredFilter, undeclaredRank, type ExpandDirection } from './templates/expand-statement.js';
 import { CONTEXT_BRANCHES, contextBranchesOf, relatedContextStatementOf, type ContextBranch } from './templates/related-context-statement.js';
 import type { GateParameter, Params, SourceAllowlist, Template } from './types.js';
 
@@ -226,7 +227,18 @@ function expandNeighborsOf(template: Template, params: Params, allowlist: Source
     if (template.readsNothing?.(params, allowlist) === true) return '';
     throw new AppError('INVALID_REQUEST');
   }
-  return expandStatementOf(allowlist, anchor, neighbor, branches);
+  const filters = params['filters'];
+  const rank = params['rank'];
+  if (spec.form === 'count' && (filters === undefined || rank !== undefined)) throw new AppError('INVALID_REQUEST');
+  if (filters === undefined && rank === undefined) return expandStatementOf(allowlist, anchor, neighbor, branches);
+  const parsedFilters = filters === undefined ? undefined : z.array(expandFilterSchema).max(MAX_FILTERS).safeParse(filters);
+  const parsedRank = rank === undefined ? undefined : expandRankSchema.safeParse(rank);
+  if (parsedFilters?.success === false || parsedRank?.success === false) throw new AppError('INVALID_REQUEST');
+  const given = parsedFilters?.data ?? [];
+  if (given.some((filter) => filterShapeProblem(filter) !== undefined) || undeclaredFilter(allowlist, neighbor, branches, given) !== undefined) throw new AppError('INVALID_REQUEST');
+  if (parsedRank?.data !== undefined && undeclaredRank(allowlist, neighbor, branches, parsedRank.data)) throw new AppError('INVALID_REQUEST');
+  if (spec.form === 'count') return expandCountStatementOf(allowlist, anchor, neighbor, branches, given);
+  return expandStatementOf(allowlist, anchor, neighbor, branches, given, parsedRank?.data);
 }
 
 const contextRefSchema = z.looseObject({ entityType: z.string() });

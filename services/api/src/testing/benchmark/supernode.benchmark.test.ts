@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -13,6 +13,12 @@ import { startRig, stopRig, type Rig } from './rig.js';
 
 const RECORD_DIRECTORY = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../../docs/benchmarks');
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
+
+/** The section on filtered, ranked and counted reads of the stored record, when it has one. */
+function storedRefined(): RunData['refined'] | undefined {
+  const file = resolve(RECORD_DIRECTORY, 'supernode.json');
+  return existsSync(file) ? (JSON.parse(readFileSync(file, 'utf8')) as RunData).refined : undefined;
+}
 
 let rig: Rig | undefined;
 
@@ -58,6 +64,8 @@ describe('the supernode benchmark', () => {
       profiles,
       dbHitCause: dbHitCauseFor(server.version),
       cancel: await measureCancel(rig),
+      // the section on filtered, ranked and counted reads is made by its own run (`pnpm bench:refined`) and is kept
+      ...(storedRefined() === undefined ? {} : { refined: storedRefined() }),
     };
     mkdirSync(RECORD_DIRECTORY, { recursive: true });
     writeFileSync(resolve(RECORD_DIRECTORY, 'supernode.json'), `${JSON.stringify(data, null, 2)}\n`);

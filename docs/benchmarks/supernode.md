@@ -145,6 +145,33 @@ A running expand (the first page of the "all four types" read set) is aborted on
 
 A read that finished before it could be aborted has no time and is counted on its own. A read that is short (a few milliseconds, as at 1,000 relationships) cannot be told from one that ended by itself, so only the sizes where the uncancelled read is much longer than the time to gone show a stop that the abort caused.
 
+## Filtered, ranked and counted reads
+
+Run on the code of commit 6bc4ba3 on 2026-11-08, on Neo4j 5.26.32 (enterprise), by `refined.benchmark.test.ts`, apart from the run of the rest of this record, which is as it was. The anchors are the dated relationships (`LINKED`) of the sizes below; each carries `score` (`i % 20`) and its neighbor `band` and `size`. Each cell is the first page of 25 (a page at any depth reads the same relationships), 30 timed reads after 5 untimed, through the gate; db hits are those of the server's plan for one profiled run. The count has no cap and is exact.
+
+A page still matches every relationship of the type on the node before it sorts and cuts, whatever the filter or the rank; a condition reads its property on every relationship, so a filter that keeps nearly everything costs more than no filter and a selective one costs less, a rank by a neighbor property reads one more property for each candidate, and the count reads the relationships without sorting or returning rows. No index is used or needed.
+
+| Relationships | Read | Result | p50 (ms) | p95 (ms) | max (ms) | db hits |
+|---|---|---|---|---|---|---|
+| 10,000 | no filter, most recent (baseline) | 25 rows | 81 | 145 | 365 | 110,266 |
+| 10,000 | rank by a relationship property, highest first | 25 rows | 89 | 100 | 296 | 110,266 |
+| 10,000 | rank by a relationship property, lowest first | 25 rows | 88 | 99 | 237 | 110,266 |
+| 10,000 | rank by a neighbor property, highest first | 25 rows | 94 | 105 | 245 | 130,266 |
+| 10,000 | selective filter (1 in 20) | 25 rows | 57 | 80 | 223 | 83,766 |
+| 10,000 | loose filter (all) | 25 rows | 101 | 127 | 261 | 150,266 |
+| 10,000 | selective filter, ranked by a relationship property | 25 rows | 55 | 70 | 217 | 82,766 |
+| 10,000 | count, selective filter | 500 (exact) | 42 | 63 | 65 | 21,003 |
+| 10,000 | count, loose filter | 10,000 (exact) | 46 | 62 | 66 | 40,003 |
+| 100,000 | no filter, most recent (baseline) | 25 rows | 471 | 534 | 564 | 1,100,266 |
+| 100,000 | rank by a relationship property, highest first | 25 rows | 549 | 615 | 646 | 1,100,266 |
+| 100,000 | rank by a relationship property, lowest first | 25 rows | 534 | 615 | 617 | 1,100,266 |
+| 100,000 | rank by a neighbor property, highest first | 25 rows | 581 | 649 | 661 | 1,300,266 |
+| 100,000 | selective filter (1 in 20) | 25 rows | 189 | 206 | 213 | 835,266 |
+| 100,000 | loose filter (all) | 25 rows | 614 | 718 | 720 | 1,500,266 |
+| 100,000 | selective filter, ranked by a relationship property | 25 rows | 193 | 205 | 208 | 825,266 |
+| 100,000 | count, selective filter | 5,000 (exact) | 58 | 67 | 70 | 210,003 |
+| 100,000 | count, loose filter | 100,000 (exact) | 63 | 71 | 71 | 400,003 |
+
 ## Not measured
 
 - Neo4j 2026.x and other editions: only the dev server was measured. The series check of the test helper accepts 2026.x, but no 2026.x server was reachable, so no run was made on it.

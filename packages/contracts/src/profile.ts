@@ -19,6 +19,8 @@ export const entityTypeProfileSchema = z.strictObject({
   stateProperty: name.nullable(),
   searchable: nameList,
   filterable: nameList,
+  /** Properties an expansion may rank by. */
+  sortable: nameList.default([]),
   pii: nameList,
 });
 
@@ -29,6 +31,8 @@ export const relationshipTypeProfileSchema = z.strictObject({
   aggregate: z.boolean(),
   observedAt: name.nullable(),
   filterable: nameList,
+  /** Properties an expansion may rank by; the row's `observedAt` is sortable and filterable without being listed. */
+  sortable: nameList.default([]),
   evidence: nameList,
 });
 

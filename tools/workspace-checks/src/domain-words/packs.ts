@@ -34,6 +34,7 @@ const packFileSchema = z.object({
           search: names,
           pii: piiEntries,
           filterable: names,
+          sortable: names,
           reference: names,
           display: z.object({ key_properties: names, state_property: name.optional() }).optional(),
           degree: z.array(z.object({ type: name, direction: name, property: name, observed_at: name.optional() })).optional(),
@@ -47,6 +48,7 @@ const packFileSchema = z.object({
             observed_at: name.optional(),
             evidence: names,
             filterable: names,
+            sortable: names,
           }),
         )
         .optional(),
@@ -88,6 +90,7 @@ function identifiersOf(pack: string, file: PackFile): Identifier[] {
         entity.search,
         entity.pii?.map((entry) => (typeof entry === 'string' ? entry : entry.property)),
         entity.filterable,
+        entity.sortable,
         entity.reference,
         entity.display?.key_properties,
         entity.degree?.map((entry) => entry.property),
@@ -98,7 +101,7 @@ function identifiersOf(pack: string, file: PackFile): Identifier[] {
     }
     for (const relationship of source.relationships ?? []) {
       add(relationship.type, 'relationship type');
-      propertiesOf([relationship.stable_id, relationship.observed_at], relationship.evidence, relationship.filterable).forEach((key) => add(key, 'property key'));
+      propertiesOf([relationship.stable_id, relationship.observed_at], relationship.evidence, relationship.filterable, relationship.sortable).forEach((key) => add(key, 'property key'));
     }
     propertiesOf((source.derived ?? []).map((rule) => rule.stop_list_property)).forEach((key) => add(key, 'property key'));
   }

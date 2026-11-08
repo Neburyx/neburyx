@@ -94,6 +94,19 @@ describe('entity and relationship types as written', () => {
     expect(loaded?.display.keyProperties).toEqual(['id', 'a', 'b']);
   });
 
+  it('records the sortable properties of an entity type and of a relationship row, and has no key at all when none are declared', () => {
+    const declared = firstSource(load(baseSource({ entities: [{ type: 'node_c', label: 'NodeC', stable_id: 'id', sortable: ['weight'] }], relationships: [{ type: 'LINK', from: 'node_c', to: 'node_c', sortable: ['score'] }] })));
+    expect(declared.entities[0]?.sortable).toEqual(['weight']);
+    expect(declared.relationships[0]?.sortable).toEqual(['score']);
+    const plain = firstSource(load(baseSource()));
+    expect(plain.entities.every((entity) => !('sortable' in entity))).toBe(true);
+    expect(plain.relationships.every((relationship) => !('sortable' in relationship))).toBe(true);
+  });
+
+  it('refuses a sortable list that is not a list of property names', () => {
+    expectRefused(baseSource({ entities: [{ type: 'node_c', label: 'NodeC', stable_id: 'id', sortable: ['a}b'] }], relationships: undefined }), 'sources[0].entities[0].sortable[0]', 'invalid format');
+  });
+
   it('records a relationship without a stable ID as an aggregate type', () => {
     const [relationship] = firstSource(load(baseSource())).relationships;
     expect(relationship).toMatchObject({ aggregate: true, evidence: [], filterable: [] });
@@ -182,6 +195,7 @@ describe('braces in property names', () => {
     ['stable_id', { stable_id: 'a{b' }],
     ['search', { stable_id: 'id', search: ['a}b'] }],
     ['filterable', { stable_id: 'id', filterable: ['{x}'] }],
+    ['sortable', { stable_id: 'id', sortable: ['{x}'] }],
     ['pii', { stable_id: 'id', pii: ['a{'] }],
     ['reference', { stable_id: 'id', reference: ['}'] }],
     ['display.key_properties', { stable_id: 'id', display: { key_properties: ['a{b'] } }],

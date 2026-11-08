@@ -2,6 +2,7 @@ import { rmSync } from 'node:fs';
 import { afterAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../app.js';
 import type { ExecuteOutcome } from '../gate/executor.js';
+import { EXPAND_COUNT_ID } from '../gate/templates/expand-count.js';
 import { EXPAND_NEIGHBORS_ID } from '../gate/templates/expand-neighbors.js';
 import { createLogger } from '../logger.js';
 import { parseMapping } from '../mapping/load.js';
@@ -26,7 +27,7 @@ const mapping = parseMapping(
       budgets: { breaker_failures: 2, breaker_cooldown_ms: 30_000 },
       entities: [
         { type: 'hub', label: 'Hub', stable_id: 'hubId' },
-        { type: 'leaf', label: 'Leaf', stable_id: 'leafId' },
+        { type: 'leaf', label: 'Leaf', stable_id: 'leafId', filterable: ['band'] },
       ],
       relationships: [{ type: 'LINKED', from: 'hub', to: 'leaf', stable_id: 'relId' }],
     }),
@@ -75,6 +76,30 @@ describe('any other unavailable source', () => {
     expect(answer.statusCode).toBe(503);
     expect(answer.json().error.details).toEqual({ reason: 'unreachable' });
     expect(answer.headers['retry-after']).toBeUndefined();
+    await app.close();
+  });
+});
+
+describe('the count of a filtered expansion and the breaker', () => {
+  it('counts a timeout of the count read as a timeout of the source, so that two filtered asks stop the third, which is refused as any read is', async () => {
+    const defaults = communitySeams();
+    const executor = new TestExecutor(
+      withSchema(
+        () => schemaAnswer(onlineIndexesOf(source)),
+        (call) => Promise.resolve<ExecuteOutcome>(call.templateId === EXPAND_COUNT_ID ? { status: 'timeout' } : call.templateId === EXPAND_NEIGHBORS_ID ? { status: 'rows', rows: [] } : entityRows(plainNode(['Hub'], { hubId: 'H-1' }))),
+      ),
+    );
+    const parts = testSourceGate(mapping, { executor, seams: defaults });
+    const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store: memoryAppStore(), mapping, gate: parts.gate, seams: defaults });
+    const filtered = () => app.inject({ method: 'POST', url: '/v1/graph/expand', payload: { sourceId: 'demo', ref: { entityType: 'hub', stableId: 'H-1' }, neighborTypes: ['leaf'], filters: [{ on: 'neighbor', property: 'band', op: 'eq', value: { kind: 'text', value: 'high' } }] } });
+    for (let ask = 0; ask < 2; ask += 1) {
+      const answered = await filtered();
+      expect(answered.statusCode).toBe(200);
+      expect(answered.json().pages[0].matchingTotal).toMatchObject({ value: 0, quality: 'exact' });
+    }
+    const refused = await filtered();
+    expect(refused.statusCode).toBe(503);
+    expect(refused.json()).toMatchObject({ error: { code: 'SOURCE_UNAVAILABLE', details: { reason: 'repeated-timeouts' } } });
     await app.close();
   });
 });

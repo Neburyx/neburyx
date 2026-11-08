@@ -120,7 +120,7 @@ export interface Template {
    * from the mapping rows that join the two types: one branch for each row and direction that returns stored relationships (and, for a row mapped with a `stable_id`, an aggregate branch for those whose ID cannot be
    * used), and one for each row without a `stable_id` that returns one aggregate for each neighbor. Every name is quoted from the allowlist; the request holds no name, only values.
    */
-  readonly expandNeighbors?: { readonly anchorParam: string; readonly neighborParam: string; readonly relTypesParam: string; readonly directionParam: string };
+  readonly expandNeighbors?: { readonly anchorParam: string; readonly neighborParam: string; readonly relTypesParam: string; readonly directionParam: string; /** `count`: one row, the number of relationships the same branches match, for the same filters; the default is a page. */ readonly form?: 'page' | 'count' };
   /**
    * The relationship context template's own declaration, for no other template: a statement that looks for one stored relationship between each of a list of hits and each of a list of exact matches (both lists of references of
    * entities of the source). The Cypher is the one marker `@relatedContext(<hits parameter>)`, and the gate writes the whole statement from the mapping rows that join the entity types present in the two lists: one branch for each
@@ -166,7 +166,11 @@ export interface SourceAllowlist {
   /** The evidence properties of each relationship mapping row that has any, with or without a `stable_id`, in the mapping's order: the rows an evidence read may name. */
   readonly evidenceRows: readonly { readonly type: string; readonly from: string; readonly to: string; readonly properties: readonly string[] }[];
   /** The relationship rows of the mapping, in its order: the pairs a degree read counts. */
-  readonly relationshipRows: readonly { readonly type: string; readonly from: string; readonly to: string; readonly stableId?: string; readonly observedAt?: string }[];
+  readonly relationshipRows: readonly { readonly type: string; readonly from: string; readonly to: string; readonly stableId?: string; readonly observedAt?: string; readonly filterable?: readonly string[]; readonly sortable?: readonly string[] }[];
+  /** The `filterable` properties of each entity type, by type, in the mapping's order; a type with none is absent. */
+  readonly filterableProperties?: ReadonlyMap<string, readonly string[]>;
+  /** The `sortable` properties of each entity type, by type; a type with none is absent. */
+  readonly sortableProperties?: ReadonlyMap<string, readonly string[]>;
   /** The degree properties each entity type declares, by type; a type with none is absent. */
   readonly degreeProperties?: ReadonlyMap<string, readonly DegreeDeclaration[]>;
   /** Every property name the mapping names: search, reference, evidence, sort and stable id properties. */

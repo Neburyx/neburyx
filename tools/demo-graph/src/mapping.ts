@@ -26,12 +26,13 @@ const mappingFileSchema = z.object({
           search: names,
           pii: piiEntries,
           filterable: names,
+          sortable: names,
           reference: names,
           display: z.object({ key_properties: names, state_property: name.optional() }).optional(),
         }),
       ),
       relationships: z
-        .array(z.object({ type: name, from: name, to: name, stable_id: name.optional(), observed_at: name.optional(), evidence: names, filterable: names }))
+        .array(z.object({ type: name, from: name, to: name, stable_id: name.optional(), observed_at: name.optional(), evidence: names, filterable: names, sortable: names }))
         .optional(),
       derived: z.array(z.object({ id: name, from: name, to: name, via: z.array(name), stop_list_property: name.optional() })).optional(),
     }),
@@ -88,6 +89,7 @@ function entityOf(raw: z.infer<typeof mappingFileSchema>['sources'][number]['ent
     ...(raw.search ?? []),
     ...(raw.pii ?? []).map((entry) => (typeof entry === 'string' ? entry : entry.property)),
     ...(raw.filterable ?? []),
+    ...(raw.sortable ?? []),
     ...(raw.reference ?? []),
     ...(raw.display?.key_properties ?? []),
     ...(raw.display?.state_property === undefined ? [] : [raw.display.state_property]),
@@ -140,6 +142,7 @@ export function readMappingSource(path: string, sourceId?: string): MappingSourc
         ...(relationship.observed_at === undefined ? [] : [relationship.observed_at]),
         ...(relationship.evidence ?? []),
         ...(relationship.filterable ?? []),
+        ...(relationship.sortable ?? []),
       ]),
     })),
   };

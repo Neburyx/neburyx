@@ -106,6 +106,7 @@ const entitySchema = z.strictObject({
   reference: propertyList.optional(),
   pii: z.array(piiEntry).optional(),
   filterable: propertyList.optional(),
+  sortable: propertyList.optional(),
   link: z.string().optional(),
   link_carries_value: z.boolean().optional(),
   display: displaySchema.optional(),
@@ -120,6 +121,7 @@ const relationshipSchema = z.strictObject({
   observed_at: property.optional(),
   evidence: propertyList.optional(),
   filterable: propertyList.optional(),
+  sortable: propertyList.optional(),
   evidence_link: z.string().optional(),
 });
 

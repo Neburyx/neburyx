@@ -1451,5 +1451,249 @@
       "the db hits of the 10 %, 50 % and 90 % positions of the dated read set",
       "the other read sets show no extra db hits at their first position in this record; their plans were not examined"
     ]
+  },
+  "refined": {
+    "date": "2026-11-08",
+    "commit": "6bc4ba3",
+    "neo4j": {
+      "version": "5.26.32",
+      "edition": "enterprise"
+    },
+    "cells": [
+      {
+        "size": 10000,
+        "name": "no filter, most recent (baseline)",
+        "kind": "page",
+        "time": {
+          "samples": 30,
+          "p50": 80.99158299999908,
+          "p95": 145.04008299999987,
+          "max": 365.43829099999857
+        },
+        "dbHits": 110266,
+        "result": 25
+      },
+      {
+        "size": 10000,
+        "name": "rank by a relationship property, highest first",
+        "kind": "page",
+        "time": {
+          "samples": 30,
+          "p50": 89.12404199999946,
+          "p95": 99.9250830000019,
+          "max": 296.08158300000287
+        },
+        "dbHits": 110266,
+        "result": 25
+      },
+      {
+        "size": 10000,
+        "name": "rank by a relationship property, lowest first",
+        "kind": "page",
+        "time": {
+          "samples": 30,
+          "p50": 87.64533300000039,
+          "p95": 98.91324999999779,
+          "max": 237.4429170000003
+        },
+        "dbHits": 110266,
+        "result": 25
+      },
+      {
+        "size": 10000,
+        "name": "rank by a neighbor property, highest first",
+        "kind": "page",
+        "time": {
+          "samples": 30,
+          "p50": 93.61108400000012,
+          "p95": 105.39720800000214,
+          "max": 244.70650000000023
+        },
+        "dbHits": 130266,
+        "result": 25
+      },
+      {
+        "size": 10000,
+        "name": "selective filter (1 in 20)",
+        "kind": "page",
+        "time": {
+          "samples": 30,
+          "p50": 56.567166000000725,
+          "p95": 80.12970800000039,
+          "max": 223.1162919999988
+        },
+        "dbHits": 83766,
+        "result": 25
+      },
+      {
+        "size": 10000,
+        "name": "loose filter (all)",
+        "kind": "page",
+        "time": {
+          "samples": 30,
+          "p50": 101.01499999999942,
+          "p95": 127.41649999999936,
+          "max": 261.31070799999725
+        },
+        "dbHits": 150266,
+        "result": 25
+      },
+      {
+        "size": 10000,
+        "name": "selective filter, ranked by a relationship property",
+        "kind": "page",
+        "time": {
+          "samples": 30,
+          "p50": 54.63883400000486,
+          "p95": 69.58200000000215,
+          "max": 217.489333000005
+        },
+        "dbHits": 82766,
+        "result": 25
+      },
+      {
+        "size": 10000,
+        "name": "count, selective filter",
+        "kind": "count",
+        "time": {
+          "samples": 30,
+          "p50": 42.00391700000182,
+          "p95": 62.854792000005546,
+          "max": 65.37470800000301
+        },
+        "dbHits": 21003,
+        "result": 500
+      },
+      {
+        "size": 10000,
+        "name": "count, loose filter",
+        "kind": "count",
+        "time": {
+          "samples": 30,
+          "p50": 46.24254099999962,
+          "p95": 62.37741599999572,
+          "max": 65.96329100000003
+        },
+        "dbHits": 40003,
+        "result": 10000
+      },
+      {
+        "size": 100000,
+        "name": "no filter, most recent (baseline)",
+        "kind": "page",
+        "time": {
+          "samples": 30,
+          "p50": 470.79404099999374,
+          "p95": 534.2332920000044,
+          "max": 564.140250000004
+        },
+        "dbHits": 1100266,
+        "result": 25
+      },
+      {
+        "size": 100000,
+        "name": "rank by a relationship property, highest first",
+        "kind": "page",
+        "time": {
+          "samples": 30,
+          "p50": 548.9127090000111,
+          "p95": 615.3738329999906,
+          "max": 645.7931670000107
+        },
+        "dbHits": 1100266,
+        "result": 25
+      },
+      {
+        "size": 100000,
+        "name": "rank by a relationship property, lowest first",
+        "kind": "page",
+        "time": {
+          "samples": 30,
+          "p50": 534.2351669999916,
+          "p95": 614.9594999999972,
+          "max": 616.7980410000018
+        },
+        "dbHits": 1100266,
+        "result": 25
+      },
+      {
+        "size": 100000,
+        "name": "rank by a neighbor property, highest first",
+        "kind": "page",
+        "time": {
+          "samples": 30,
+          "p50": 580.7823750000098,
+          "p95": 649.0182499999937,
+          "max": 661.1066250000003
+        },
+        "dbHits": 1300266,
+        "result": 25
+      },
+      {
+        "size": 100000,
+        "name": "selective filter (1 in 20)",
+        "kind": "page",
+        "time": {
+          "samples": 30,
+          "p50": 189.35208300000522,
+          "p95": 205.50658299999486,
+          "max": 212.96066700000665
+        },
+        "dbHits": 835266,
+        "result": 25
+      },
+      {
+        "size": 100000,
+        "name": "loose filter (all)",
+        "kind": "page",
+        "time": {
+          "samples": 30,
+          "p50": 613.7799579999992,
+          "p95": 717.5280409999832,
+          "max": 719.9331250000105
+        },
+        "dbHits": 1500266,
+        "result": 25
+      },
+      {
+        "size": 100000,
+        "name": "selective filter, ranked by a relationship property",
+        "kind": "page",
+        "time": {
+          "samples": 30,
+          "p50": 192.68537500000093,
+          "p95": 204.96791700000176,
+          "max": 208.25887499999953
+        },
+        "dbHits": 825266,
+        "result": 25
+      },
+      {
+        "size": 100000,
+        "name": "count, selective filter",
+        "kind": "count",
+        "time": {
+          "samples": 30,
+          "p50": 58.2180830000143,
+          "p95": 67.12216700002318,
+          "max": 70.40804199999548
+        },
+        "dbHits": 210003,
+        "result": 5000
+      },
+      {
+        "size": 100000,
+        "name": "count, loose filter",
+        "kind": "count",
+        "time": {
+          "samples": 30,
+          "p50": 63.48537499998929,
+          "p95": 70.88683299999684,
+          "max": 71.31845800002338
+        },
+        "dbHits": 400003,
+        "result": 100000
+      }
+    ]
   }
 }

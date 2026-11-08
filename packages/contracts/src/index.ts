@@ -111,8 +111,8 @@ export {
 export { DEGREE_DIRECTIONS, DEGREE_WARNING_CODES, degreeByNeighborTypeSchema, degreeByTypeSchema, degreePreviewRequestSchema, degreePreviewSchema, degreeWarningSchema } from './degree-preview.js';
 export { COVERAGE_MAX_ENTITIES, COVERAGE_SCOPE, LOADED_QUALITIES, combineCoverage, coverageEntitySchema, coverageRequestSchema, coverageResponseSchema } from './coverage.js';
 export type { CoverageEntity, CoverageRequest, CoverageResponse } from './coverage.js';
-export { EXPAND_DIRECTIONS, EXPAND_SORTS, expandPageSchema, expandRequestSchema, expandResponseSchema } from './expand.js';
-export type { ExpandPage, ExpandRequest, ExpandResponse } from './expand.js';
+export { EXPAND_DIRECTIONS, EXPAND_SORTS, FILTER_KINDS, MAX_FILTERS, MAX_FILTER_VALUES, expandFilterSchema, expandPageSchema, expandRankSchema, expandRequestSchema, expandResponseSchema, filterShapeProblem, filterValueSchema } from './expand.js';
+export type { ExpandFilter, ExpandPage, ExpandRank, ExpandRequest, ExpandResponse, FilterKind, FilterValue } from './expand.js';
 export type { EntityLookupRequest } from './entities.js';
 export type { DegreeByType, DegreePreview, DegreePreviewRequest, DegreeWarning } from './degree-preview.js';
 export type { AggregateEvidenceHit, AggregateMember, DisabledRelationship, DisabledType, EvidenceGroup, EvidenceHit, EvidenceRecord, Facets, GroupFailure, RelatedGroup, RelatedHit, RelationshipContext, SearchFailureGroup, SearchFilters, SearchGroup, SearchMatchMode, SearchMoreRequest, SearchMoreResult, SearchPagedGroup, SearchRequest, SearchResult, StartsWithGroup, StoredEvidenceHit, UnreferencedHit } from './search.js';

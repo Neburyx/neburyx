@@ -41,6 +41,8 @@ export interface EntityModel {
   /** The class the mapping gives a `pii` field, which picks the shape of its mask; a field without one is masked fully. */
   readonly piiClasses?: Readonly<Record<string, PiiClass>>;
   readonly filterable: readonly string[];
+  /** The properties an expansion may rank its pages by; present only when the mapping declares some, so a mapping without them keeps its configuration hash. */
+  readonly sortable?: readonly string[];
   /** Present only when the mapping declares degree properties, so a mapping without them keeps its configuration hash. */
   readonly degree?: readonly DegreeDeclaration[];
   readonly link?: LinkTemplate;
@@ -72,6 +74,8 @@ export interface RelationshipModel {
   readonly observedAt?: string;
   readonly evidence: readonly string[];
   readonly filterable: readonly string[];
+  /** As for an entity type: present only when declared. */
+  readonly sortable?: readonly string[];
   readonly evidenceLink?: LinkTemplate;
 }
 

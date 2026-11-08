@@ -3,11 +3,12 @@ import { expandResponseSchema } from '@neburyx/contracts';
 import { afterAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../app.js';
 import type { ExecuteCall, ExecuteOutcome } from '../gate/executor.js';
+import { EXPAND_COUNT_ID } from '../gate/templates/expand-count.js';
 import { EXPAND_NEIGHBORS_ID } from '../gate/templates/expand-neighbors.js';
 import { createLogger } from '../logger.js';
 import { parseMapping } from '../mapping/load.js';
 import { communitySeams } from '../seams/community-seams.js';
-import type { AuditEvent, Seams } from '../seams/seams.js';
+import type { AuditEvent, ReadAdmission, Seams } from '../seams/seams.js';
 import { memoryAppStore } from '../testing/app-store.js';
 import { entityRows } from '../testing/entity-fixtures.js';
 import { plainNode, plainRelationship } from '../testing/normalize-fixtures.js';
@@ -26,12 +27,12 @@ const mapping = parseMapping(
       id: 'demo',
       entities: [
         { type: 'hub', label: 'Hub', stable_id: 'hubId' },
-        { type: 'leaf', label: 'Leaf', stable_id: 'leafId' },
+        { type: 'leaf', label: 'Leaf', stable_id: 'leafId', filterable: ['band', 'secret'], sortable: ['rating', 'secret'], pii: ['secret'] },
         { type: 'other', label: 'Other', stable_id: 'otherId' },
       ],
       relationships: [
-        { type: 'LINKED', from: 'hub', to: 'leaf', stable_id: 'relId', observed_at: 'seenAt' },
-        { type: 'MET', from: 'hub', to: 'other' },
+        { type: 'LINKED', from: 'hub', to: 'leaf', stable_id: 'relId', observed_at: 'seenAt', filterable: ['score'], sortable: ['points'] },
+        { type: 'MET', from: 'hub', to: 'other', filterable: ['weight'] },
         { type: 'LOOPS', from: 'hub', to: 'hub' },
       ],
     }),
@@ -47,6 +48,8 @@ interface Options {
   readonly deny?: boolean;
   readonly absent?: boolean;
   readonly schema?: 'building' | 'refused';
+  /** The coordinator refuses every read after this many have been granted (the index read and the page are two). */
+  readonly refuseAfter?: { readonly granted: number; readonly admission: ReadAdmission };
 }
 
 const storedRows = (count: number) =>
@@ -75,6 +78,7 @@ async function started(options: Options = {}) {
     policy: options.deny === true ? { authorizeSource: () => Promise.resolve({ allowed: false, reason: 'no' }) } : defaults.policy,
     coordinator: {
       acquireRead: async (request) => {
+        if (options.refuseAfter !== undefined && lease.acquired >= options.refuseAfter.granted) return options.refuseAfter.admission;
         const admission = await defaults.coordinator.acquireRead(request);
         if (admission.status !== 'granted') return admission;
         lease.held += 1;
@@ -250,5 +254,209 @@ describe('POST /v1/graph/expand', () => {
     expect(denied.events).toEqual([expect.objectContaining({ action: 'graph.expand', result: 'denied' })]);
     expect(expandCalls(denied.executor)).toEqual([]);
     await denied.app.close();
+  });
+  describe('with filters', () => {
+    const band = (value: string) => ({ on: 'neighbor', property: 'band', op: 'eq', value: { kind: 'text', value } });
+
+    it('reads with the conditions as parameters, never in the statement text, and keeps a filter that leaves nothing honest', async () => {
+      const { app, executor } = await started({ answer: () => ({ status: 'rows', rows: [] }) });
+      const response = await post(app, request({ filters: [band('PRIVATE-BAND'), { on: 'relationship', property: 'score', op: 'between', from: { kind: 'number', value: 0.8 } }] }));
+      expect(response.statusCode).toBe(200);
+      expect(expandResponseSchema.parse(response.json()).pages[0]).toMatchObject({ returned: 0, hasMore: false, matchingTotal: { value: 0, quality: 'exact' } });
+      const [call] = expandCalls(executor);
+      expect(call?.parameters['filters']).toHaveLength(2);
+      expect(call?.cypher).not.toContain('PRIVATE-BAND');
+      expect(call?.cypher).toContain('m.`band` IS :: STRING NOT NULL');
+      expect(call?.cypher).toContain('r.`score` >= $filters[0].from.value');
+      await app.close();
+    });
+
+    it.each([
+      ['a neighbor property that is not declared', [{ ...band('x'), property: 'leafId' }]],
+      ['a relationship property that is not declared', [{ on: 'relationship', property: 'nothing', op: 'eq', value: { kind: 'text', value: 'x' } }]],
+      ['a relationship property that only one of the rows read declares', [{ on: 'relationship', property: 'score', op: 'eq', value: { kind: 'number', value: 1 } }]],
+      ['an operator outside the set', [{ ...band('x'), op: 'contains' }]],
+      ['a name with a backtick', [{ ...band('x'), property: 'band` RETURN 1 //' }]],
+    ])('answers INVALID_REQUEST and reads nothing for %s', async (_name, filters) => {
+      const { app, executor } = await started();
+      const response = await post(app, request({ filters, relTypes: filters[0]?.on === 'relationship' ? ['LINKED', 'MET'] : undefined, neighborTypes: ['leaf'] }));
+      expect(response.statusCode).toBe(400);
+      expect(expandCalls(executor)).toEqual([]);
+      await app.close();
+    });
+
+    it('refuses the whole request, before any type is read, when one of the asked types does not declare the property', async () => {
+      const { app, executor } = await started();
+      const response = await post(app, request({ neighborTypes: ['leaf', 'other'], filters: [band('x')] }));
+      expect(response.statusCode).toBe(400);
+      expect(expandCalls(executor)).toEqual([]);
+      await app.close();
+    });
+
+    it('keeps a cursor only for the same conditions, in any order, and refuses it for other conditions', async () => {
+      const { app } = await started();
+      const filters = [band('a'), { on: 'relationship', property: 'score', op: 'eq', value: { kind: 'number', value: 1 } }];
+      const first = expandResponseSchema.parse((await post(app, request({ limit: 2, relTypes: ['LINKED'], filters }))).json());
+      const cursor = first.pages[0]?.nextCursor ?? '';
+      expect(cursor).not.toBe('');
+      const same = await post(app, request({ limit: 2, relTypes: ['LINKED'], filters: [...filters].reverse(), cursors: { leaf: cursor } }));
+      expect(same.statusCode).toBe(200);
+      const other = await post(app, request({ limit: 2, relTypes: ['LINKED'], filters: [band('b')], cursors: { leaf: cursor } }));
+      expect(other.statusCode).toBe(409);
+      const none = await post(app, request({ limit: 2, relTypes: ['LINKED'], cursors: { leaf: cursor } }));
+      expect(none.statusCode).toBe(409);
+      await app.close();
+    });
+
+    it('refuses a condition on a personal-data property while masking is asked, and allows it when it is not', async () => {
+      const { app, executor } = await started();
+      const secret = [{ on: 'neighbor', property: 'secret', op: 'eq', value: { kind: 'text', value: 'x' } }];
+      const masked = await post(app, request({ filters: secret, mask: true }));
+      expect(masked.statusCode).toBe(400);
+      expect(expandCalls(executor)).toEqual([]);
+      expect((await post(app, request({ filters: secret, mask: false }))).statusCode).toBe(200);
+      await app.close();
+    });
+  });
+
+  describe('with a rank', () => {
+    it('reads in the order asked, as parameters of the template and not as text, and an absent rank leaves the order as it was', async () => {
+      const { app, executor } = await started();
+      expect((await post(app, request({ rank: { on: 'neighbor', property: 'rating', order: 'asc' } }))).statusCode).toBe(200);
+      const [call] = expandCalls(executor);
+      expect(call?.cypher).toContain('ORDER BY phase, sk, sv ASC');
+      expect(call?.parameters['rank']).toEqual({ on: 'neighbor', property: 'rating', order: 'asc' });
+      executor.calls.length = 0;
+      await post(app, request());
+      expect(expandCalls(executor)[0]?.cypher).toContain('ORDER BY phase, tk, ts DESC');
+      await app.close();
+    });
+
+    it.each([
+      ['a neighbor property that is not declared sortable', { on: 'neighbor', property: 'band', order: 'desc' }],
+      ['a relationship property that the row does not declare', { on: 'relationship', property: 'nothing', order: 'desc' }],
+      ['an order outside the two', { on: 'neighbor', property: 'rating', order: 'sideways' }],
+      ['a name with a backtick', { on: 'neighbor', property: 'rating` RETURN 1 //', order: 'asc' }],
+    ])('answers INVALID_REQUEST and reads nothing for %s', async (_name, rank) => {
+      const { app, executor } = await started();
+      const response = await post(app, request({ rank }));
+      expect(response.statusCode).toBe(400);
+      expect(expandCalls(executor)).toEqual([]);
+      await app.close();
+    });
+
+    it('refuses the whole request when one asked type does not declare the property, and reads none of them', async () => {
+      const { app, executor } = await started();
+      const response = await post(app, request({ neighborTypes: ['leaf', 'other'], rank: { on: 'neighbor', property: 'rating', order: 'asc' } }));
+      expect(response.statusCode).toBe(400);
+      expect(expandCalls(executor)).toEqual([]);
+      await app.close();
+    });
+
+    it('refuses a rank on a personal-data property while masking is asked, and allows it when not', async () => {
+      const { app, executor } = await started();
+      const rank = { on: 'neighbor', property: 'secret', order: 'asc' };
+      expect((await post(app, request({ rank, mask: true }))).statusCode).toBe(400);
+      expect(expandCalls(executor)).toEqual([]);
+      expect((await post(app, request({ rank, mask: false }))).statusCode).toBe(200);
+      await app.close();
+    });
+
+    it('invalidates a cursor when the rank or its order changes, and keeps it for the same rank', async () => {
+      const { app } = await started();
+      const asc = { on: 'neighbor', property: 'rating', order: 'asc' };
+      const first = expandResponseSchema.parse((await post(app, request({ limit: 2, rank: asc }))).json());
+      const cursor = first.pages[0]?.nextCursor ?? '';
+      expect(cursor).not.toBe('');
+      expect((await post(app, request({ limit: 2, rank: asc, cursors: { leaf: cursor } }))).statusCode).toBe(200);
+      expect((await post(app, request({ limit: 2, rank: { ...asc, order: 'desc' }, cursors: { leaf: cursor } }))).statusCode).toBe(409);
+      expect((await post(app, request({ limit: 2, cursors: { leaf: cursor } }))).statusCode).toBe(409);
+      await app.close();
+    });
+  });
+
+  describe('the count of what a filter matches', () => {
+    const band = [{ on: 'neighbor', property: 'band', op: 'eq', value: { kind: 'text', value: 'high' } }];
+    const countCalls = (executor: TestExecutor) => executor.calls.filter((call) => call.templateId === EXPAND_COUNT_ID);
+    const answering = (count: ExecuteOutcome) => (call: ExecuteCall): ExecuteOutcome => (call.templateId === EXPAND_COUNT_ID ? count : defaultAnswer(call));
+
+    it('is the exact number the count read gives, in the total of the first page, with the same conditions as parameters', async () => {
+      const { app, executor } = await started({ answer: answering({ status: 'rows', rows: [{ total: 4210 }] }) });
+      const answer = expandResponseSchema.parse((await post(app, request({ limit: 2, filters: band }))).json());
+      expect(answer.pages[0]).toMatchObject({ returned: 2, hasMore: true, matchingTotal: { value: 4210, quality: 'exact' } });
+      const [call] = countCalls(executor);
+      expect(call?.parameters['filters']).toEqual(expandCalls(executor)[0]?.parameters['filters']);
+      expect(call?.cypher).toContain('RETURN sum(c) AS total');
+      expect(call?.cypher).not.toMatch(/[$]limit|[$]cursor|ORDER BY phase/);
+      await app.close();
+    });
+
+    it('is not read for a request with no filter, nor for a page that continues a chain', async () => {
+      const { app, executor } = await started({ answer: answering({ status: 'rows', rows: [{ total: 7 }] }) });
+      await post(app, request({ limit: 2 }));
+      expect(countCalls(executor)).toEqual([]);
+      const first = expandResponseSchema.parse((await post(app, request({ limit: 2, filters: band }))).json());
+      expect(countCalls(executor)).toHaveLength(1);
+      const next = expandResponseSchema.parse((await post(app, request({ limit: 2, filters: band, cursors: { leaf: first.pages[0]?.nextCursor } }))).json());
+      expect(countCalls(executor)).toHaveLength(1);
+      expect(next.pages[0]?.matchingTotal).toMatchObject({ quality: 'unknown' });
+      await app.close();
+    });
+
+    it('is unknown, with a warning, when the count times out and the page has more; the page is still answered', async () => {
+      const { app } = await started({ answer: answering({ status: 'timeout' }) });
+      const response = await post(app, request({ limit: 2, filters: band }));
+      expect(response.statusCode).toBe(200);
+      const answer = expandResponseSchema.parse(response.json());
+      expect(answer.pages[0]).toMatchObject({ returned: 2, hasMore: true, matchingTotal: { quality: 'unknown' } });
+      expect(answer.pages[0]?.matchingTotal).not.toHaveProperty('value');
+      expect(answer.warnings.join(' ')).toContain('could not be counted');
+      await app.close();
+    });
+
+    it('falls back to the relationships the page itself holds when the first page holds everything, and says so only by being exact', async () => {
+      const { app } = await started({ answer: answering({ status: 'unavailable', reason: 'refused' }) });
+      const answer = expandResponseSchema.parse((await post(app, request({ neighborTypes: ['other'], relTypes: ['MET'], filters: [{ on: 'relationship', property: 'weight', op: 'eq', value: { kind: 'number', value: 1 } }] }))).json());
+      expect(answer.pages[0]).toMatchObject({ returned: 1, hasMore: false, matchingTotal: { quality: 'exact' } });
+      expect(answer.warnings.join(' ')).toContain('could not be counted');
+      await app.close();
+    });
+
+    it.each([
+      ['a source that has no free read slot', { status: 'busy' } as ReadAdmission],
+      ['a source the breaker has stopped', { status: 'unavailable', reason: 'repeated-timeouts', retryAfterMs: 30_000 } as ReadAdmission],
+      ['a source that is out', { status: 'unavailable' } as ReadAdmission],
+    ])('is not read, and the page is still answered with its own total and a warning, for %s', async (_name, admission) => {
+      const { app, executor } = await started({ refuseAfter: { granted: 2, admission } });
+      const response = await post(app, request({ neighborTypes: ['other'], relTypes: ['MET'], filters: [{ on: 'relationship', property: 'weight', op: 'eq', value: { kind: 'number', value: 1 } }] }));
+      expect(response.statusCode).toBe(200);
+      const answer = expandResponseSchema.parse(response.json());
+      expect(answer.pages[0]).toMatchObject({ returned: 1, hasMore: false, matchingTotal: { quality: 'exact' } });
+      expect(answer.warnings.join(' ')).toContain('could not be counted');
+      expect(countCalls(executor)).toEqual([]);
+      await app.close();
+    });
+
+    it('is unknown, not the page total, when the source is out and the page has more', async () => {
+      const { app } = await started({ refuseAfter: { granted: 2, admission: { status: 'unavailable' } } });
+      const answer = expandResponseSchema.parse((await post(app, request({ limit: 2, filters: band }))).json());
+      expect(answer.pages[0]?.matchingTotal).toMatchObject({ quality: 'unknown' });
+      await app.close();
+    });
+
+    it('is unknown when the count read answers something that is not a number', async () => {
+      const { app } = await started({ answer: answering({ status: 'rows', rows: [{ total: 'many' }] }) });
+      const answer = expandResponseSchema.parse((await post(app, request({ limit: 2, filters: band }))).json());
+      expect(answer.pages[0]?.matchingTotal).toMatchObject({ quality: 'unknown' });
+      await app.close();
+    });
+
+    it('is refused for a personal-data condition while masking is asked, as the page is, before any read', async () => {
+      const { app, executor } = await started();
+      const response = await post(app, request({ mask: true, filters: [{ on: 'neighbor', property: 'secret', op: 'eq', value: { kind: 'text', value: 'x' } }] }));
+      expect(response.statusCode).toBe(400);
+      expect(executor.calls.filter((call) => call.templateId === EXPAND_COUNT_ID || call.templateId === EXPAND_NEIGHBORS_ID)).toEqual([]);
+      await app.close();
+    });
   });
 });

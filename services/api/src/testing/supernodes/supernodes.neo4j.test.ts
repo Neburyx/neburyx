@@ -5,7 +5,7 @@
  * Time: the run measured on the dev 5.26 server took about 12 minutes, the build of the anchors included. The slowest cases walk the whole order of "all" at 10,000 relationships (31,000 rows)
  * twice, by pages of 25 and of 50, and 200 pages of 25 at 100,000. The hook gets an hour; a case has the timeout it states (10 to 60 minutes) or the 30 minutes of the config.
  */
-import { degreePreviewSchema, type DegreePreview } from '@neburyx/contracts';
+import { degreePreviewSchema, type DegreePreview, type ExpandFilter, type ExpandRank } from '@neburyx/contracts';
 import neo4j from 'neo4j-driver';
 import { rmSync } from 'node:fs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -31,7 +31,7 @@ import { performance } from 'node:perf_hooks';
 import { writeCostRecord, type PageCost } from './cost.js';
 import { checkCountLabel } from './labels.js';
 import { checkPageBounds, checkPreviewBounds, MAX_PAGE, PAGE, PAGE_BYTES } from './bounds.js';
-import { cursorAtRow, keyOfEdge, readPage } from './pages.js';
+import { countRefined, cursorAtRow, keyOfEdge, readPage, readRefinedPage } from './pages.js';
 import { expectedOrder, labelOf } from './order.js';
 import { checkSameSequence, checkWalk, timeOf, type WalkedPage } from './walk.js';
 
@@ -342,6 +342,82 @@ describe(`the cost of each page on ${NEO4J_SERIES}`, () => {
     const written = writeCostRecord({ neo4j: { version: rig.server.version, edition: rig.edition }, commit: commitOf(), date: new Date().toISOString().slice(0, 10), dbHitCause: dbHitCauseFor(rig.server.version), pages });
     process.stdout.write(written === undefined ? `${pages.length} page costs read; no record written: NBX_SUPERNODE_RECORD is not set\n` : `${pages.length} page costs written to ${written}\n`);
   }, 3_600_000);
+});
+
+describe(`filtered and ranked pages of a supernode on ${NEO4J_SERIES}`, () => {
+  // the dated relationships carry `score` = i % 20 and their neighbors `band` = i % 10 and `size` = i (see the fixture)
+  const idOf = (edge: { readonly ref: unknown }): string => String((edge.ref as { stableId?: unknown }).stableId);
+  const idsOf = (size: number, keep: (i: number) => boolean): string[] => Array.from({ length: size }, (_unused, index) => index + 1).filter(keep).map((i) => `l-${hubOf(size)}-${i}`);
+  const score = (value: number): ExpandFilter => ({ on: 'relationship', property: 'score', op: 'eq', value: { kind: 'number', value } });
+  const byScore = (order: 'asc' | 'desc'): ExpandRank => ({ on: 'relationship', property: 'score', order });
+  const bySize: ExpandRank = { on: 'neighbor', property: 'size', order: 'desc' };
+
+  for (const size of SIZES) {
+    it(`keeps a ranked first page at ${size.toLocaleString('en')} relationships under the bounds, in the order of the rank`, async () => {
+      const page = await readRefinedPage(rig.parts.gate, size, { rank: byScore('desc') }, PAGE);
+      expect(page.item.edges).toHaveLength(PAGE);
+      expect(page.hasMore).toBe(true);
+      checkPageBounds(page.item, PAGE, `ranked by score at ${size}`);
+      // score 19 first, and among equal scores the ID text, descending
+      expect(page.item.edges.map(idOf)).toEqual(idsOf(size, (i) => i % 20 === 19).sort().reverse().slice(0, PAGE));
+      const sized = await readRefinedPage(rig.parts.gate, size, { rank: bySize }, PAGE);
+      checkPageBounds(sized.item, PAGE, `ranked by size at ${size}`);
+      expect(sized.item.edges.map(idOf)).toEqual(idsOf(size, () => true).sort((a, b) => Number(b.split('-').at(-1)) - Number(a.split('-').at(-1))).slice(0, PAGE));
+    }, 900_000);
+
+    it(`counts what a filter matches exactly at ${size.toLocaleString('en')} relationships, and pages inside the filter under the bounds`, async () => {
+      const total = await countRefined(rig.parts.gate, size, [score(3)]);
+      expect(total).toBe(size / 20);
+      // the label the expand service gives the first page of a filtered chain is the count read's, exact and the same number
+      const mapping = { sources: [sourceFor(rig.server, { entities: ENTITIES, relationships: RELATIONSHIPS })] };
+      const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store: memoryAppStore(), mapping, gate: rig.parts.gate });
+      try {
+        const response = await app.inject({ method: 'POST', url: '/v1/graph/expand', payload: { sourceId: 'graph', ref: { entityType: 'hub', stableId: hubOf(size) }, neighborTypes: ['leaf'], relTypes: ['LINKED'], limit: PAGE, filters: [score(3)] } });
+        expect(response.statusCode).toBe(200);
+        const matching = (response.json() as { pages: { matchingTotal: unknown }[] }).pages[0]?.matchingTotal;
+        checkCountLabel(matching, `filtered count at ${size}`);
+        expect(matching).toMatchObject({ value: total, quality: 'exact' });
+      } finally {
+        await app.close();
+      }
+      const page = await readRefinedPage(rig.parts.gate, size, { filters: [score(3)] }, PAGE);
+      expect(page.item.edges).toHaveLength(Math.min(PAGE, total));
+      checkPageBounds(page.item, PAGE, `filtered by score at ${size}`);
+      expect(page.item.edges.map(idOf).every((id) => idsOf(size, (i) => i % 20 === 3).includes(id))).toBe(true);
+      expect(await countRefined(rig.parts.gate, size, [{ on: 'neighbor', property: 'band', op: 'eq', value: { kind: 'number', value: 99 } }])).toBe(0);
+    }, 900_000);
+  }
+
+  for (const size of [1_000, 10_000]) {
+    it(`walks a filtered chain that holds several scores at ${size.toLocaleString('en')} relationships, ranked, once and in order`, async () => {
+      const filters: ExpandFilter[] = [{ on: 'relationship', property: 'score', op: 'between', from: { kind: 'number', value: 3 }, to: { kind: 'number', value: 5 } }];
+      const seen: string[] = [];
+      let cursor: string | undefined;
+      do {
+        const page = await readRefinedPage(rig.parts.gate, size, { filters, rank: byScore('desc') }, PAGE, cursor);
+        checkPageBounds(page.item, PAGE, `filtered chain of three scores at ${size}`);
+        seen.push(...page.item.edges.map(idOf));
+        cursor = page.nextCursor;
+      } while (cursor !== undefined);
+      // the highest score first, and within a score the ID text, descending
+      expect(seen).toEqual([5, 4, 3].flatMap((value) => idsOf(size, (i) => i % 20 === value).sort().reverse()));
+    }, 1_800_000);
+
+    it(`walks the whole filtered and ranked chain at ${size.toLocaleString('en')} relationships once and in order`, async () => {
+      const filters = [score(3)];
+      const seen: string[] = [];
+      let cursor: string | undefined;
+      do {
+        const page = await readRefinedPage(rig.parts.gate, size, { filters, rank: byScore('asc') }, PAGE, cursor);
+        checkPageBounds(page.item, PAGE, `filtered chain at ${size}`);
+        seen.push(...page.item.edges.map(idOf));
+        cursor = page.nextCursor;
+      } while (cursor !== undefined);
+      expect(seen).toHaveLength(size / 20);
+      expect(new Set(seen).size).toBe(seen.length);
+      expect(seen).toEqual(idsOf(size, (i) => i % 20 === 3).sort().reverse());
+    }, 1_800_000);
+  }
 });
 
 describe('the byte bound', () => {

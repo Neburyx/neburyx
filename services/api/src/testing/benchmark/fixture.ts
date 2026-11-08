@@ -3,11 +3,11 @@ import { runAdmin, type RunningNeo4j } from '../neo4j-server.js';
 
 export const ENTITIES = [
   { type: 'hub', label: 'BenchHub', stable_id: 'hubId' },
-  { type: 'leaf', label: 'BenchLeaf', stable_id: 'leafId' },
+  { type: 'leaf', label: 'BenchLeaf', stable_id: 'leafId', filterable: ['band'], sortable: ['size'] },
 ];
 
 export const RELATIONSHIPS = [
-  { type: 'LINKED', from: 'hub', to: 'leaf', stable_id: 'relId', observed_at: 'seenAt' },
+  { type: 'LINKED', from: 'hub', to: 'leaf', stable_id: 'relId', observed_at: 'seenAt', filterable: ['score'], sortable: ['score'] },
   { type: 'TIED', from: 'hub', to: 'leaf', stable_id: 'tieId' },
   { type: 'NOTED', from: 'hub', to: 'leaf', observed_at: 'seenAt' },
   { type: 'PAID', from: 'hub', to: 'leaf' },
@@ -27,6 +27,7 @@ export interface BuiltCounts {
 }
 
 /**
+ * The dated relationships with an ID (`LINKED`) carry `score`, `i % 20`, and their neighbors `band`, `i % 10`, and `size`, `i`, so that the cases of the suite can filter and rank by a declared property with known results.
  * Builds one anchor with `size` relationships of each of four types to one neighbor type: dated with an ID (`LINKED`), undated with an ID (`TIED`) and with no ID and no time (`PAID`), one to each neighbor, and dated with no ID (`NOTED`),
  * ten to each of a tenth as many neighbors. Written in chunks, with the dev login, into the database of this run.
  */
@@ -36,7 +37,7 @@ async function buildAnchor(server: RunningNeo4j, size: number): Promise<void> {
   await runAdmin(server, `CREATE (:BenchHub {hubId: '${hub}'})`);
   for (let from = 1; from <= size; from += CHUNK) {
     const to = Math.min(size, from + CHUNK - 1);
-    await runAdmin(server, `MATCH (h:BenchHub {hubId: '${hub}'}) UNWIND range(${from}, ${to}) AS i CREATE (h)-[:LINKED {relId: 'l-${hub}-' + toString(i), seenAt: datetime('2026-01-01T00:00:00Z') + duration({seconds: i})}]->(:BenchLeaf {leafId: ${leafOf('i')}})`);
+    await runAdmin(server, `MATCH (h:BenchHub {hubId: '${hub}'}) UNWIND range(${from}, ${to}) AS i CREATE (h)-[:LINKED {relId: 'l-${hub}-' + toString(i), seenAt: datetime('2026-01-01T00:00:00Z') + duration({seconds: i}), score: i % 20}]->(:BenchLeaf {leafId: ${leafOf('i')}, band: i % 10, size: i})`);
   }
   for (let from = 1; from <= size; from += CHUNK) {
     const to = Math.min(size, from + CHUNK - 1);

@@ -212,8 +212,11 @@ function checkExpandNeighbors(definition: TemplateDefinition, shape: Shape): voi
   }
   if (used.length !== 1 || used[0]?.name !== spec.anchorParam || definition.cypher !== `@expandNeighbors(${spec.anchorParam})`) throw new CatalogError(definition.id, 'declares an expansion and its Cypher is not exactly its one expand neighbors marker');
   if (!definition.entityParams.includes(spec.anchorParam) || ![spec.anchorParam, spec.neighborParam, spec.directionParam].every((name) => shape.properties.get(name) === 'string') || !shape.properties.has(spec.relTypesParam)) throw new CatalogError(definition.id, 'declares an expansion for parameters its schema does not have');
-  if (definition.searchBranches !== undefined || definition.facetProbes !== undefined || definition.degreeCounts !== undefined || !definition.paged || definition.profile === true) throw new CatalogError(definition.id, 'declares an expansion and is also another kind of template, not paged, or profiled');
-  if (definition.indexNeeds === undefined || definition.readsNothing === undefined || definition.usedProperties === undefined || definition.nextPosition === undefined) throw new CatalogError(definition.id, 'declares an expansion and does not name its indexes, its empty case, its properties and its next position');
+  const counting = spec.form === 'count';
+  if (definition.searchBranches !== undefined || definition.facetProbes !== undefined || definition.degreeCounts !== undefined || definition.paged === counting || definition.profile === true || (counting && definition.rows !== 'one')) {
+    throw new CatalogError(definition.id, counting ? "declares an expansion count and is also another kind of template, paged, profiled or not declared rows: 'one'" : 'declares an expansion and is also another kind of template, not paged, or profiled');
+  }
+  if (definition.indexNeeds === undefined || definition.readsNothing === undefined || definition.usedProperties === undefined || (!counting && definition.nextPosition === undefined)) throw new CatalogError(definition.id, 'declares an expansion and does not name its indexes, its empty case, its properties and its next position');
 }
 
 /**

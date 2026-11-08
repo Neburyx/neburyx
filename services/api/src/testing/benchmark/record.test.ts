@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Cell } from './measure.js';
 import { DB_HIT_CAUSE } from './db-hit-cause.js';
+import type { RefinedRecord } from './refined.js';
 import { DB_HIT_NOTICE, isLowerBound, renderRecord, verdictOf, type RunData } from './record.js';
 
 const cell = (size: number, readSet: Cell['readSet'], position: string, p95: number, failures = 0): Cell => ({ size, readSet, position, rows: size, repeated: 0, samples: 30, failures, p50: p95 / 2, p95, max: p95 + 1 });
@@ -166,5 +167,32 @@ describe('the cancel section of the record', () => {
   it('says the record was rendered again from stored data only when asked to', () => {
     expect(renderRecord(data(10))).not.toContain('Rendered again');
     expect(renderRecord(data(10), { fromStored: true })).toContain('Rendered again from the stored run of 2026-11-07, not from a new run.');
+  });
+});
+
+describe('the section of the record on filtered, ranked and counted reads', () => {
+  const refined: RefinedRecord = {
+    date: '2026-11-08',
+    commit: 'abc1234',
+    neo4j: { version: '5.26.0', edition: 'enterprise' },
+    cells: [
+      { size: 100_000, name: 'selective filter (1 in 20)', kind: 'page', time: { samples: 30, p50: 100, p95: 120, max: 130 }, dbHits: 1_234_567, result: 25 },
+      { size: 100_000, name: 'count, loose filter', kind: 'count', time: { samples: 30, p50: 20, p95: 25, max: 30 }, dbHits: 400_000, result: 100_000 },
+    ],
+  };
+
+  it('is rendered with its commit, its cells and the count labelled exact, after the rest of the record', () => {
+    const text = renderRecord({ ...data(10), refined });
+    expect(text).toContain('## Filtered, ranked and counted reads');
+    expect(text).toContain('commit abc1234 on 2026-11-08');
+    expect(text).toContain('| 100,000 | selective filter (1 in 20) | 25 rows | 100 | 120 | 130 | 1,234,567 |');
+    expect(text).toContain('| 100,000 | count, loose filter | 100,000 (exact) | 20 | 25 | 30 | 400,000 |');
+    expect(text.indexOf('## Filtered, ranked and counted reads')).toBeGreaterThan(text.indexOf('### Degree preview'));
+  });
+
+  it('leaves the rest of the record exactly as it was, and is absent from a record made without it', () => {
+    const plain = renderRecord(data(10));
+    expect(plain).not.toContain('Filtered, ranked and counted reads');
+    expect(renderRecord({ ...data(10), refined }).startsWith(plain.slice(0, plain.indexOf('## Not measured')))).toBe(true);
   });
 });

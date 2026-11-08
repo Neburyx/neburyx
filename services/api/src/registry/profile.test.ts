@@ -24,13 +24,14 @@ const fullEntities: Json[] = [
     reference: ['ref'],
     pii: ['name'],
     filterable: ['status'],
+    sortable: ['size'],
     link: 'https://records.example.test/PRIVATE_LINK_PATH/{id}',
     display: { name: 'Node A', icon: 'document', key_properties: ['status', 'size'], state_property: 'status' },
   },
   { type: 'node_b', label: 'NodeB', stable_id: 'key' },
 ];
 const fullRelationships: Json[] = [
-  { type: 'EVENT', from: 'node_a', to: 'node_b', stable_id: 'entryId', observed_at: 'seenAt', evidence: ['recordId'], filterable: ['kind'], evidence_link: 'https://audit.example.test/PRIVATE_EVIDENCE_PATH/{recordId}' },
+  { type: 'EVENT', from: 'node_a', to: 'node_b', stable_id: 'entryId', observed_at: 'seenAt', evidence: ['recordId'], filterable: ['kind'], sortable: ['rank'], evidence_link: 'https://audit.example.test/PRIVATE_EVIDENCE_PATH/{recordId}' },
   { type: 'LINKS', from: 'node_b', to: 'node_a' },
 ];
 const fullDerived: Json[] = [{ id: 'shared', from: 'node_a', to: 'node_a', via: ['EVENT', 'node_b', 'LINKS'], rule_version: 2, stop_list_property: 'isIgnored' }];
@@ -93,6 +94,7 @@ describe('the profile of a configured source', () => {
       stateProperty: 'status',
       searchable: ['name', 'code'],
       filterable: ['status'],
+      sortable: ['size'],
       pii: ['name'],
     });
   });
@@ -118,6 +120,7 @@ describe('the profile of a configured source', () => {
       stateProperty: null,
       searchable: [],
       filterable: [],
+      sortable: [],
       pii: [],
     });
   });
@@ -134,8 +137,8 @@ describe('the profile of a configured source', () => {
   it('marks a relationship type with a stable id as stored and one without as aggregate', async () => {
     const { body } = await profileOf(await appFor(mappingOf(fullSource())));
     expect(body.relationshipTypes).toEqual([
-      { type: 'EVENT', from: 'node_a', to: 'node_b', aggregate: false, observedAt: 'seenAt', filterable: ['kind'], evidence: ['recordId'] },
-      { type: 'LINKS', from: 'node_b', to: 'node_a', aggregate: true, observedAt: null, filterable: [], evidence: [] },
+      { type: 'EVENT', from: 'node_a', to: 'node_b', aggregate: false, observedAt: 'seenAt', filterable: ['kind'], sortable: ['rank'], evidence: ['recordId'] },
+      { type: 'LINKS', from: 'node_b', to: 'node_a', aggregate: true, observedAt: null, filterable: [], sortable: [], evidence: [] },
     ]);
   });
 

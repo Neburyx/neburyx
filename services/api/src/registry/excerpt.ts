@@ -34,6 +34,7 @@ function entityOf(entity: EntityModel): Record<string, unknown> {
     ...nonEmpty('reference', entity.reference),
     ...nonEmpty('pii', entity.pii),
     ...nonEmpty('filterable', entity.filterable),
+    ...nonEmpty('sortable', entity.sortable ?? []),
     ...(Object.keys(display).length === 0 ? {} : { display }),
   };
 }
@@ -61,6 +62,7 @@ export function mappingExcerptOf(source: SourceModel): string {
       ...(relationship.observedAt === undefined ? {} : { observed_at: relationship.observedAt }),
       ...nonEmpty('evidence', relationship.evidence),
       ...nonEmpty('filterable', relationship.filterable),
+      ...nonEmpty('sortable', relationship.sortable ?? []),
     })),
     derived: source.derived.map((rule) => ({
       id: rule.id,

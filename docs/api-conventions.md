@@ -6,7 +6,7 @@ a rule says so in its own documentation.
 ## Pagination
 
 Applies to every list backed by the application database (investigations, saved views, saved patterns, users, audit events,
-exports). Graph reads have their own page shapes and budgets: search is described under [Search](#search), and expansion is not covered here.
+exports). Graph reads have their own page shapes and budgets: search is described under [Search](#search), and expansion is described in [filtered-expansion.md](filtered-expansion.md) (its optional request fields `filters`, at least 1 and at most 6, and `rank`, both bound by the cursor, and the meaning of `matchingTotal` when filters are given).
 
 - Query parameters: `limit`, a positive integer, **default 25, maximum 100**; and `cursor`, the opaque string from the
   previous response.

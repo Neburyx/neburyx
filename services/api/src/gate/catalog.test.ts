@@ -194,6 +194,7 @@ describe('the templates of the shipped catalog', () => {
       'degree-preview-cheap': 'cut means a duplicate',
       'entity-load': 'cut means a duplicate',
       'expand-neighbors': 'paged',
+      'expand-count': 'one row',
       'entity-search': 'paged',
       'entity-related': 'paged',
       'relationship-evidence': 'paged',

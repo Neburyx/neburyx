@@ -1,6 +1,6 @@
 import type { DegreePreview, ElementRef, SourceProfile } from '@neburyx/contracts';
-import { useEffect, useId, useState } from 'react';
-import { FALLBACK_PAGE_SIZE, cursorWasRefused } from '../api/expand-store.js';
+import { useEffect, useId, useRef, useState } from 'react';
+import { FALLBACK_PAGE_SIZE, cursorWasRefused, refinementKey, type Refinement } from '../api/expand-store.js';
 import { useProfileWhenProvided } from '../canvas/profile-context.js';
 import { canRetry, FailureNotice } from '../failure-notice.js';
 import { useClientState, useLoadedGraph, useSessionMask } from '../state/context.js';
@@ -15,7 +15,12 @@ import {
   DUPLICATE_IDS,
   INVERT_SELECTION,
   LOADING_NEIGHBORS,
-  MOST_RECENT,
+  FILTERS_CLEARED_BY_MASK,
+  FILTERS_NEED_VALUES,
+  NOTHING_MATCHES,
+  CLEAR_FILTERS,
+  PERSONAL_DATA_NOT_OFFERED,
+  matchingLine,
   NEIGHBOR_TYPES_LABEL,
   NO_COUNT_FOR_COMBINATION,
   NO_RELATIONSHIPS,
@@ -41,6 +46,8 @@ import {
 import { neighborTypesOf, startUntickedTypes, useExpandStore } from './expand-context.js';
 import { allNeighborTypes, neighborCount, relationshipCounts, relationshipOptions, sameTypes, type DirectionCount } from './supernode-options.js';
 import { usePreviewStore } from './preview-context.js';
+import { declaredProperties, readDrafts, type FilterDraft } from './expand-refine.js';
+import { FilterField, RankField, type RankChoice } from './expand-refine-fields.js';
 
 export const PANEL_FIRST_CONTROL = 'data-panel-first';
 
@@ -54,6 +61,14 @@ function neighborCountText(preview: DegreePreview | undefined, type: string, rel
   const found = neighborCount(preview, type, relationshipType);
   if (found.over === 'all') return found.count === undefined ? undefined : degreeCountText(found.count);
   return found.counts.length === 0 ? NO_COUNT_FOR_COMBINATION : directionsText(found.counts);
+}
+
+/** The total that the filtered count stands beside: the one count of the choice, or the counts of the directions when it has more than one. */
+function totalForLine(preview: DegreePreview | undefined, type: string, relationshipType: string | undefined): string | undefined {
+  const found = neighborCount(preview, type, relationshipType);
+  if (found.over === 'all') return found.count === undefined ? undefined : degreeCountText(found.count);
+  const [only] = found.counts;
+  return found.counts.length === 1 && only !== undefined ? degreeCountText(only.count) : found.counts.length === 0 ? undefined : directionsText(found.counts);
 }
 
 const parsedSize = (text: string): number => (/^\d+$/.test(text.trim()) ? Number(text) : Number.NaN);
@@ -78,6 +93,10 @@ export function ExpandForm({ node, only }: { readonly node: ElementRef; /** The 
   const [relationshipType, setRelationshipType] = useState<string | undefined>(() => (onOptions.length === 1 && options.length > 1 ? onOptions[0]?.type : undefined));
   const [unticked, setUnticked] = useState<ReadonlySet<string> | undefined>(undefined);
   const [sizeText, setSizeText] = useState<string | undefined>(undefined);
+  const [drafts, setDrafts] = useState<readonly FilterDraft[]>([]);
+  const [rankChoice, setRankChoice] = useState<RankChoice | undefined>(undefined);
+  const [maskNote, setMaskNote] = useState(false);
+  const draftIds = useRef(0);
   const fieldId = useId();
   const askedTypes: readonly string[] | undefined = relationshipType === FILTERS_CHOICE ? onOptions.map((option) => option.type) : relationshipType === undefined ? undefined : [relationshipType];
   const chosenOptions = askedTypes === undefined ? [] : options.filter((option) => askedTypes.includes(option.type));
@@ -90,6 +109,14 @@ export function ExpandForm({ node, only }: { readonly node: ElementRef; /** The 
   const cleared: ReadonlySet<string> = unticked ?? new Set(only === undefined ? startUnticked : all.filter((type) => type !== only));
   const ticked = listed.filter((type) => !cleared.has(type));
   const leftOut = chosen === undefined ? [] : all.filter((type) => !cleared.has(type) && !listed.includes(type));
+  const neighborName = ticked.length === 1 ? displayNameOf(profile, ticked[0] ?? '') : 'Neighbor';
+  const declaredSortable = declaredProperties(profile, node.entityType, ticked, askedTypes, 'sortable', mask);
+  const declaredFilterable = declaredProperties(profile, node.entityType, ticked, askedTypes, 'filterable', mask);
+  const personalHidden = mask && declaredProperties(profile, node.entityType, ticked, askedTypes, 'filterable', false).neighbor.length + declaredProperties(profile, node.entityType, ticked, askedTypes, 'sortable', false).neighbor.length > declaredFilterable.neighbor.length + declaredSortable.neighbor.length;
+  // a rank on a property the chosen types do not all declare is not asked for: the order falls back to the observed time
+  const rank = rankChoice === undefined || !(rankChoice.on === 'neighbor' ? declaredSortable.neighbor : declaredSortable.relationship).includes(rankChoice.property) ? undefined : rankChoice;
+  const read = readDrafts(drafts.filter((draft) => (draft.on === 'neighbor' ? declaredFilterable.neighbor : declaredFilterable.relationship).includes(draft.property)));
+  const refinement: Refinement = { filters: read.filters, rank };
   const ceiling = expansions.ceilingOf(node.sourceId);
   const shown = sizeText ?? String(expansion.chosenPageSize ?? expansion.pageSize ?? preview?.pageSize ?? FALLBACK_PAGE_SIZE);
   const size = parsedSize(shown);
@@ -106,6 +133,23 @@ export function ExpandForm({ node, only }: { readonly node: ElementRef; /** The 
   useEffect(() => {
     if (budgetLowered && changedCeiling !== undefined) setSizeText(String(changedCeiling));
   }, [budgetLowered, changedCeiling]);
+
+  // when masking is turned on, what filters or ranks by personal data is taken off, and the person is told
+  const maskSeen = useRef(mask);
+  useEffect(() => {
+    if (maskSeen.current === mask) return;
+    maskSeen.current = mask;
+    if (!mask) {
+      setMaskNote(false);
+      return;
+    }
+    const keepDraft = (draft: FilterDraft): boolean => (draft.on === 'neighbor' ? declaredFilterable.neighbor : declaredFilterable.relationship).includes(draft.property);
+    const droppedFilters = drafts.some((draft) => !keepDraft(draft));
+    const droppedRank = rankChoice !== undefined && !(rankChoice.on === 'neighbor' ? declaredSortable.neighbor : declaredSortable.relationship).includes(rankChoice.property);
+    if (droppedFilters) setDrafts(drafts.filter(keepDraft));
+    if (droppedRank) setRankChoice(undefined);
+    setMaskNote(droppedFilters || droppedRank);
+  }, [mask, drafts, rankChoice, declaredFilterable, declaredSortable]);
 
   const filteredNow = filteredKeys(graph, typeFilter);
   const handHidden = useStoreSelector(client.presentation.view, (current) => current.hidden);
@@ -127,13 +171,13 @@ export function ExpandForm({ node, only }: { readonly node: ElementRef; /** The 
   const toggle = (type: string): void => setUnticked(cleared.has(type) ? new Set([...cleared].filter((other) => other !== type)) : new Set(cleared).add(type));
   const asked = askedTypes;
   const load = (): void => {
-    if (!sizeValid || ticked.length === 0 || busy) return;
+    if (!sizeValid || ticked.length === 0 || busy || read.problems.size > 0) return;
     expansions.setPageSize(node, size);
     const more = ticked.filter((type) => {
       const progress = expansion.types.get(type);
-      return progress !== undefined && progress.hasMore && !progress.restartNeeded && progress.cursor !== undefined && sameTypes(expansions.relTypesOf(node, type), asked);
+      return progress !== undefined && progress.hasMore && !progress.restartNeeded && progress.cursor !== undefined && sameTypes(expansions.relTypesOf(node, type), asked) && refinementKey(expansions.refinementOf(node, type)) === refinementKey(refinement);
     });
-    void expansions.load(node, { first: ticked.filter((type) => !more.includes(type)), more, relTypes: asked });
+    void expansions.load(node, { first: ticked.filter((type) => !more.includes(type)), more, relTypes: asked, refinement });
   };
 
   return (
@@ -208,13 +252,14 @@ export function ExpandForm({ node, only }: { readonly node: ElementRef; /** The 
         )}
       </div>
 
-      <label className="supernode-field">
-        <span className="supernode-label">{RANK_BY_LABEL}</span>
-        <select value="observed" onChange={() => undefined}>
-          <option value="observed">{MOST_RECENT}</option>
-        </select>
-        <span className="neighbor-types-note">{dated === 'all' ? RANK_NOTE_TIME : dated === 'some' ? RANK_NOTE_MIXED : RANK_NOTE_NONE}</span>
-      </label>
+      <RankField declared={declaredSortable} neighborName={neighborName} rank={rank} onChange={setRankChoice} observedNote={dated === 'all' ? RANK_NOTE_TIME : dated === 'some' ? RANK_NOTE_MIXED : RANK_NOTE_NONE} />
+      <FilterField declared={declaredFilterable} neighborName={neighborName} drafts={drafts} problems={read.problems} next={() => ++draftIds.current} onChange={setDrafts} />
+      {personalHidden ? <p className="neighbor-types-note">{PERSONAL_DATA_NOT_OFFERED}</p> : null}
+      {maskNote ? (
+        <p className="neighbor-types-note" role="status">
+          {FILTERS_CLEARED_BY_MASK}
+        </p>
+      ) : null}
 
       <div className="supernode-field">
         <label className="supernode-label" htmlFor={`${fieldId}-size`}>
@@ -228,10 +273,34 @@ export function ExpandForm({ node, only }: { readonly node: ElementRef; /** The 
       </div>
 
       {leftOut.length === 0 || relationshipType === undefined || relationshipType === FILTERS_CHOICE ? null : <p className="neighbor-types-note">{leftOutText(leftOut.map((type) => displayNameOf(profile, type)), relationshipType)}</p>}
-      <button type="button" className="primary supernode-load" disabled={!sizeValid || ticked.length === 0} aria-disabled={busy ? true : undefined} onClick={load}>
+      <button type="button" className="primary supernode-load" disabled={!sizeValid || ticked.length === 0 || read.problems.size > 0} aria-disabled={busy ? true : undefined} onClick={load}>
         {loadPerTypeLabel(sizeValid ? size : (expansion.chosenPageSize ?? FALLBACK_PAGE_SIZE))}
       </button>
       {ticked.length === 0 ? <p className="neighbor-types-note">{CHOOSE_A_TYPE}</p> : null}
+      {read.problems.size > 0 ? <p className="neighbor-types-note">{FILTERS_NEED_VALUES}</p> : null}
+      {ticked.flatMap((type) => {
+        const progress = expansion.types.get(type);
+        const chainRefinement = expansions.refinementOf(node, type);
+        // what a chain counted is shown while the panel still asks what the chain was started with
+        if (progress === undefined || (chainRefinement?.filters.length ?? 0) === 0 || progress.matching === undefined || refinementKey(chainRefinement) !== refinementKey(refinement)) return [];
+        const total = relationshipType === FILTERS_CHOICE ? undefined : totalForLine(preview, type, relationshipType);
+        return [
+          <p key={`matching-${type}`} className="neighbor-types-note" role="status">
+            {matchingLine(displayNameOf(profile, type), degreeCountText(progress.matching), total)}
+          </p>,
+        ];
+      })}
+      {ticked.some((type) => {
+        const progress = expansion.types.get(type);
+        return progress !== undefined && !progress.hasMore && progress.inChain === 0 && (expansions.refinementOf(node, type)?.filters.length ?? 0) > 0 && refinementKey(expansions.refinementOf(node, type)) === refinementKey(refinement) && !busy;
+      }) ? (
+        <p className="neighbor-types-note" role="status">
+          {NOTHING_MATCHES}{' '}
+          <button type="button" className="neighbor-types-link" onClick={() => setDrafts([])}>
+            {CLEAR_FILTERS}
+          </button>
+        </p>
+      ) : null}
 
       {hiddenNeighbors === 0 ? null : (
         <p className="neighbor-types-note">

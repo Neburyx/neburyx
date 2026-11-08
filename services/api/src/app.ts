@@ -405,8 +405,8 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       const body = expandRequestSchema.safeParse(request.body);
       if (!noQuerySchema.safeParse(request.query).success || !body.success) throw new AppError('INVALID_REQUEST');
       const identity = await options.store.current();
-      const { sourceId, ref, relTypes, neighborTypes, direction, limit, cursors, mask } = body.data;
-      const answer = await expansions.expand({ traceId: request.id, principal: identity.principal, sourceId, entityType: ref.entityType, stableId: ref.stableId, ...(relTypes === undefined ? {} : { relTypes }), neighborTypes, direction: direction ?? 'both', signal: signalOf(request), ...(limit === undefined ? {} : { limit }), ...(cursors === undefined ? {} : { cursors }), mask: mask === true });
+      const { sourceId, ref, relTypes, neighborTypes, direction, filters, rank, limit, cursors, mask } = body.data;
+      const answer = await expansions.expand({ traceId: request.id, principal: identity.principal, sourceId, entityType: ref.entityType, stableId: ref.stableId, ...(relTypes === undefined ? {} : { relTypes }), neighborTypes, direction: direction ?? 'both', signal: signalOf(request), ...(filters === undefined ? {} : { filters }), ...(rank === undefined ? {} : { rank }), ...(limit === undefined ? {} : { limit }), ...(cursors === undefined ? {} : { cursors }), mask: mask === true });
       return expandResponseSchema.parse(answer);
     });
 

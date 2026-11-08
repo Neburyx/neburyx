@@ -1,5 +1,7 @@
 import type { Gate } from '../../gate/types.js';
 import type { ExpansionPage } from '../../gate/normalize/expansion.js';
+import type { ExpandFilter, ExpandRank } from '@neburyx/contracts';
+import { EXPAND_COUNT_ID } from '../../gate/templates/expand-count.js';
 import { EXPAND_NEIGHBORS_ID } from '../../gate/templates/expand-neighbors.js';
 import { gateRequest, LOCAL_PRINCIPAL } from '../gate.js';
 import { hubOf } from '../benchmark/fixture.js';
@@ -35,4 +37,29 @@ export async function cursorAtRow(gate: Gate, size: number, set: ReadSet, row: n
     cursor = page.nextCursor;
   }
   return cursor;
+}
+
+/** One page of the dated relationships of an anchor (`LINKED`) under filters and a rank, through the gate. */
+export async function readRefinedPage(gate: Gate, size: number, refinement: { readonly filters?: readonly ExpandFilter[]; readonly rank?: ExpandRank }, limit: number, cursor?: string): Promise<ReadPage> {
+  const result = await gate.run(
+    gateRequest({
+      sourceId: 'graph',
+      principal: LOCAL_PRINCIPAL,
+      templateId: EXPAND_NEIGHBORS_ID,
+      params: { entityType: 'hub', stableId: hubOf(size), neighborType: 'leaf', direction: 'both', sort: 'observed', relTypes: ['LINKED'], ...(refinement.filters === undefined ? {} : { filters: refinement.filters }), ...(refinement.rank === undefined ? {} : { rank: refinement.rank }) },
+      limit,
+      ...(cursor === undefined ? {} : { cursor }),
+    }),
+  );
+  const item = result.items[0] as unknown as ExpansionPage | undefined;
+  if (item === undefined || !item.anchorFound) throw new Error(`the anchor of ${size} relationships was not found`);
+  return { item, hasMore: result.hasMore, nextCursor: result.nextCursor };
+}
+
+/** The exact number of the dated relationships of an anchor that the filters match, by the count read of the gate. */
+export async function countRefined(gate: Gate, size: number, filters: readonly ExpandFilter[]): Promise<number> {
+  const result = await gate.run(gateRequest({ sourceId: 'graph', principal: LOCAL_PRINCIPAL, templateId: EXPAND_COUNT_ID, params: { entityType: 'hub', stableId: hubOf(size), neighborType: 'leaf', direction: 'both', relTypes: ['LINKED'], filters }, limit: 1 }));
+  const total = (result.items[0] as { total?: unknown } | undefined)?.total;
+  if (typeof total !== 'number') throw new Error('the count read gave no number');
+  return total;
 }

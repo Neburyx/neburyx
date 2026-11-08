@@ -1,6 +1,7 @@
-import { referenceValueSchema } from '@neburyx/contracts';
+import { expandFilterSchema, expandRankSchema, filterShapeProblem, MAX_FILTERS, referenceValueSchema, type ExpandFilter } from '@neburyx/contracts';
 import { z } from 'zod';
 import type { TemplateDefinition } from '../catalog.js';
+import { canonicalJson } from '../cursor/binding.js';
 import type { CursorPosition } from '../cursor/codec.js';
 import { normalizeExpansion } from '../normalize/expansion.js';
 import type { NormalizeContext } from '../normalize/model.js';
@@ -12,6 +13,13 @@ export const EXPAND_NEIGHBORS_ID = 'expand-neighbors';
 
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 
+/** The filters in one order and without repeats, and the values of an `in` likewise, so that a set asked in another order is the same request: it keeps its cursor and renders the same statement. */
+export function canonicalFiltersOf(filters: readonly ExpandFilter[]): ExpandFilter[] {
+  const uniqueSorted = <T>(values: readonly T[]): T[] =>
+    [...new Map(values.map((value) => [canonicalJson(value), value] as const))].sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0)).map(([, value]) => value);
+  return uniqueSorted(filters.map((filter): ExpandFilter => (filter.op === 'in' ? { ...filter, values: uniqueSorted(filter.values) } : filter)));
+}
+
 const paramsSchema = z
   .strictObject({
     entityType: z.string().min(1),
@@ -20,26 +28,41 @@ const paramsSchema = z
     relTypes: z.array(z.string().min(1)).min(1).optional(),
     direction: z.enum(['out', 'in', 'both']),
     sort: z.literal('observed'),
+    rank: expandRankSchema.optional(),
+    filters: z
+      .array(expandFilterSchema)
+      .min(1)
+      .max(MAX_FILTERS)
+      .refine((filters) => filters.every((filter) => filterShapeProblem(filter) === undefined))
+      .optional(),
   })
-  .transform((params) => ({ ...params, stableInteger: integerCandidateOf(params.stableId) }));
+  .transform(({ filters, ...params }) => ({ ...params, ...(filters === undefined ? {} : { filters: canonicalFiltersOf(filters) }), stableInteger: integerCandidateOf(params.stableId) }));
 
-function branchesOf(params: Params, allowlist: SourceAllowlist) {
+export function branchesOf(params: Params, allowlist: SourceAllowlist) {
   const relTypes = Array.isArray(params['relTypes']) ? params['relTypes'].filter((entry): entry is string => typeof entry === 'string') : undefined;
   const direction = params['direction'];
   return expandBranchesOf(allowlist, String(params['entityType']), String(params['neighborType']), relTypes, direction === 'out' || direction === 'in' ? direction : 'both');
 }
 
-function usedProperties(params: Params, allowlist?: SourceAllowlist): readonly UsedProperty[] {
+export function usedProperties(params: Params, allowlist?: SourceAllowlist): readonly UsedProperty[] {
   if (allowlist === undefined) return [];
   const neighborType = String(params['neighborType']);
   const neighborId = allowlist.stableIds.get(neighborType);
+  const filters = z.array(expandFilterSchema).safeParse(params['filters']);
+  const filtered = (filters.success ? filters.data : []).flatMap((filter): UsedProperty[] =>
+    filter.on === 'neighbor' ? [{ entityType: neighborType, property: filter.property }] : branchesOf(params, allowlist).map((branch) => ({ relationshipType: branch.type, from: branch.from, to: branch.to, property: filter.property })),
+  );
+  const rank = expandRankSchema.safeParse(params['rank']);
+  const ranked: UsedProperty[] = !rank.success ? [] : rank.data.on === 'neighbor' ? [{ entityType: neighborType, property: rank.data.property }] : branchesOf(params, allowlist).map((branch) => ({ relationshipType: branch.type, from: branch.from, to: branch.to, property: rank.data.property }));
   return [
+    ...filtered,
+    ...ranked,
     ...branchesOf(params, allowlist).flatMap((branch): UsedProperty[] => (branch.observedAt === undefined ? [] : [{ relationshipType: branch.type, from: branch.from, to: branch.to, property: branch.observedAt }])),
     ...(neighborId === undefined ? [] : [{ entityType: neighborType, property: neighborId, use: 'fixed-order' as const }]),
   ];
 }
 
-function indexNeeds(params: Params, allowlist: SourceAllowlist) {
+export function indexNeeds(params: Params, allowlist: SourceAllowlist) {
   const property = allowlist.stableIds.get(String(params['entityType']));
   return property === undefined ? [] : [{ entityType: String(params['entityType']), property, accepts: 'value' as const }];
 }
@@ -62,7 +85,8 @@ function nextPosition(rows: readonly Row[]): CursorPosition | undefined {
   if (last === undefined) return undefined;
   const { phase, id, rtype, dir, ntype } = last;
   if (typeof phase !== 'number' || typeof id !== 'string' || typeof rtype !== 'string' || typeof dir !== 'string') return undefined;
-  return { phase, ...sortValueOf(last['ts']), id, rtype, dir, nType: typeof ntype === 'string' ? ntype : null };
+  // a ranked read carries the sort value in `sv` and keeps `ts` for the observed time; the cursor holds the sort value either way
+  return { phase, ...sortValueOf('sv' in last ? last['sv'] : last['ts']), id, rtype, dir, nType: typeof ntype === 'string' ? ntype : null };
 }
 
 function normalize(rows: readonly Row[], _plan?: Plan, context?: NormalizeContext): readonly Item[] {

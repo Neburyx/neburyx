@@ -17,6 +17,8 @@ export function allowlistFromMapping(source: SourceModel): SourceAllowlist {
   const searchProperties = new Map<string, readonly string[]>();
   const referenceProperties = new Map<string, readonly string[]>();
   const degreeProperties = new Map<string, readonly DegreeDeclaration[]>();
+  const filterableProperties = new Map<string, readonly string[]>();
+  const sortableProperties = new Map<string, readonly string[]>();
   for (const entity of source.entities) {
     const problem = nameProblem(entity.label);
     if (problem !== undefined) throw new SourceGateError(source.id, `label of entity type ${entity.type}`, entity.label, problem);
@@ -41,12 +43,19 @@ export function allowlistFromMapping(source: SourceModel): SourceAllowlist {
       const dateProblem = declaration.observedAt === undefined ? undefined : nameProblem(declaration.observedAt);
       if (dateProblem !== undefined) throw new SourceGateError(source.id, `degree date property of entity type ${entity.type}`, declaration.observedAt ?? '', dateProblem);
     }
+    for (const [kind, names, into] of [['filterable', entity.filterable, filterableProperties], ['sortable', entity.sortable ?? [], sortableProperties]] as const) {
+      for (const property of names) {
+        const listedProblem = nameProblem(property);
+        if (listedProblem !== undefined) throw new SourceGateError(source.id, `${kind} property of entity type ${entity.type}`, property, listedProblem);
+      }
+      if (names.length > 0) into.set(entity.type, [...names]);
+    }
     if (entity.degree !== undefined) degreeProperties.set(entity.type, entity.degree.map((declaration) => ({ ...declaration })));
     for (const property of [entity.stableId, ...entity.search, ...entity.reference]) properties.add(property);
   }
   const relationshipTypes = new Set<string>();
   const evidenceRows: { type: string; from: string; to: string; properties: readonly string[] }[] = [];
-  const relationshipRows: { type: string; from: string; to: string; stableId?: string; observedAt?: string }[] = [];
+  const relationshipRows: { type: string; from: string; to: string; stableId?: string; observedAt?: string; filterable?: readonly string[]; sortable?: readonly string[] }[] = [];
   for (const relationship of source.relationships) {
     const problem = nameProblem(relationship.type);
     if (problem !== undefined) throw new SourceGateError(source.id, `relationship type ${relationship.type}`, relationship.type, problem);
@@ -59,12 +68,20 @@ export function allowlistFromMapping(source: SourceModel): SourceAllowlist {
       const observedProblem = nameProblem(relationship.observedAt);
       if (observedProblem !== undefined) throw new SourceGateError(source.id, `observed time of relationship type ${relationship.type}`, relationship.observedAt, observedProblem);
     }
+    for (const [kind, names] of [['filterable', relationship.filterable], ['sortable', relationship.sortable ?? []]] as const) {
+      for (const property of names) {
+        const listedProblem = nameProblem(property);
+        if (listedProblem !== undefined) throw new SourceGateError(source.id, `${kind} property of relationship type ${relationship.type}`, property, listedProblem);
+      }
+    }
     relationshipRows.push({
       type: relationship.type,
       from: relationship.from,
       to: relationship.to,
       ...(relationship.stableId === undefined ? {} : { stableId: relationship.stableId }),
       ...(relationship.observedAt === undefined ? {} : { observedAt: relationship.observedAt }),
+      ...(relationship.filterable.length === 0 ? {} : { filterable: [...relationship.filterable] }),
+      ...((relationship.sortable ?? []).length === 0 ? {} : { sortable: [...(relationship.sortable ?? [])] }),
     });
     for (const property of relationship.evidence) {
       const evidenceProblem = nameProblem(property);
@@ -73,5 +90,5 @@ export function allowlistFromMapping(source: SourceModel): SourceAllowlist {
     for (const property of [...relationship.evidence, ...(relationship.observedAt === undefined ? [] : [relationship.observedAt]), ...(relationship.stableId === undefined ? [] : [relationship.stableId])]) properties.add(property);
     if (relationship.evidence.length > 0) evidenceRows.push({ type: relationship.type, from: relationship.from, to: relationship.to, properties: [...relationship.evidence] });
   }
-  return { entityLabels, relationshipTypes, stableIds, searchProperties, referenceProperties, degreeProperties, evidenceRows, relationshipRows, properties };
+  return { entityLabels, relationshipTypes, stableIds, searchProperties, referenceProperties, degreeProperties, evidenceRows, relationshipRows, properties, filterableProperties, sortableProperties };
 }
