@@ -256,6 +256,33 @@ describe('the Expand neighbors and Expand by neighbor type entries of the node m
     expect(document.activeElement).toBe(byTypeRow());
   });
 
+  it('starts with the types the filters switched off unticked, and sends the ticked ones', async () => {
+    const { previews, expansions, state } = opened();
+    state.presentation.setMappedTypes({ entityTypes: ['type-a', 'kind-b', 'type-c', 'type-d'], relationshipTypes: [] });
+    state.setEntityTypeOff('type-c', true);
+    const user = userEvent.setup();
+    await user.click(byTypeRow());
+    await answerPreview(previews[0]);
+    expect(within(submenu()).getAllByRole('checkbox').map((row) => [row.textContent?.slice(0, 6), row.getAttribute('aria-checked')])).toEqual([['kind-b', 'true'], ['type-c', 'false'], ['type-d', 'true']]);
+    await user.click(within(submenu()).getByRole('button', { name: 'Expand 2 neighbors' }));
+    expect(expansions[0]?.body.neighborTypes).toEqual(['kind-b', 'type-d']);
+    expect(expansions[0]?.body.relTypes).toBeUndefined();
+  });
+
+  it('makes no request, opens the Expand relationships panel and says so when the filters leave the ticked types no relationship type', async () => {
+    const { previews, expansions, state, expand } = opened();
+    state.presentation.setMappedTypes({ entityTypes: ['type-a', 'kind-b'], relationshipTypes: ['link-a', 'link-b'] });
+    state.setRelationshipTypeOff('link-a', true);
+    const user = userEvent.setup();
+    await user.click(byTypeRow());
+    await answerPreview(previews[0]);
+    expect(within(submenu()).getAllByRole('checkbox').every((row) => row.getAttribute('aria-checked') === 'true')).toBe(true);
+    await user.click(within(submenu()).getByRole('button', { name: 'Expand 3 neighbors' }));
+    expect(expansions).toHaveLength(0);
+    expect(state.presentation.view.getState().supernodePanel?.key).toBe(nodeKey('n1'));
+    expect(expand.notes.getState()).toEqual(['Filters leave no relationship to expand for this entity. Choose types here.']);
+  });
+
   it('loads the first page of each ticked type with one request, adds the answer to the graph, selects what was added and closes the menu', async () => {
     const { previews, expansions, state } = opened();
     const user = userEvent.setup();

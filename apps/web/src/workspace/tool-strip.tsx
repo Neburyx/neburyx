@@ -26,7 +26,8 @@ export function ToolStrip() {
   }, [flyoutOpen, state]);
   if (tools.length === 0) return null;
   const activeActionIds = activeActions === '' ? [] : activeActions.split('\n');
-  const active = open?.id ?? (activeActionIds.length === 0 && tools.some((tool) => tool.id === EXPLORE_TOOL_ID) ? EXPLORE_TOOL_ID : undefined);
+  // one tool is drawn active: the flyout while it is open, else the panel that is open, else Explore
+  const active = open?.id ?? activeActionIds[0] ?? (tools.some((tool) => tool.id === EXPLORE_TOOL_ID) ? EXPLORE_TOOL_ID : undefined);
   const Flyout = open?.kind.type === 'flyout' ? open.kind.content : undefined;
   return (
     <div className="tool-strip" ref={root}>
@@ -40,7 +41,7 @@ export function ToolStrip() {
             aria-haspopup={tool.kind.type === 'flyout' ? 'menu' : undefined}
             aria-expanded={tool.kind.type === 'flyout' ? tool.id === open?.id : undefined}
             aria-pressed={tool.kind.type === 'action' && tool.kind.isActive !== undefined ? activeActionIds.includes(tool.id) : undefined}
-            data-active={tool.id === active || activeActionIds.includes(tool.id) ? 'true' : undefined}
+            data-active={tool.id === active ? 'true' : undefined}
             ref={(element) => {
               if (element === null) buttons.current.delete(tool.id);
               else buttons.current.set(tool.id, element);

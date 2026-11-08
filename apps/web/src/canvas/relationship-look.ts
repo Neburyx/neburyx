@@ -9,6 +9,8 @@ export interface RelationshipLook {
   readonly label: string | undefined;
   /** The label with its member count, when the canvas label leaves out a count that says nothing (an exact 1); read in the hover tip. Absent when it is the label. */
   readonly tip?: string;
+  /** An aggregate that stands for exactly one relationship: drawn as thin as a stored relationship, since its width would claim more. Absent for every other relationship, and for an aggregate that may hold more than one (a count above one, a lower bound, an estimate or no count). */
+  readonly single?: true;
 }
 
 /** The member count with its quality in the shared words ("3 · exact", "~ 3 (estimated)", "≥ 3 · lower bound"); no number when the count is unknown, never a guess. */
@@ -47,7 +49,7 @@ export function relationshipParts(edge: GraphEdge): RelationshipParts {
 /** A member count of exactly one, exact, says nothing more than the line itself: the canvas label leaves it out (the tip, the menu header and the walk keep it). */
 const isNeedlessCount = (edge: GraphEdge): boolean => edge.memberCount?.quality === 'exact' && edge.memberCount.value === 1;
 
-/** The line style follows the origin and the width follows whether it is an aggregate; the label is the type, then the count of an aggregate (not an exact 1), then the origin when it is not stored. A stored relationship that is not an aggregate carries its type as a label only while an entity it joins is selected. */
+/** The line style follows the origin and the width follows whether it stands for more than one relationship; the label is the type, then the count of an aggregate (not an exact 1), then the origin when it is not stored. A stored relationship that is not an aggregate carries its type as a label only while an entity it joins is selected. */
 export function relationshipLook(edge: GraphEdge, touchesSelection = false): RelationshipLook {
   const aggregate = 'aggregate' in edge.ref;
   const { type, count, origin } = relationshipParts(edge);
@@ -56,5 +58,5 @@ export function relationshipLook(edge: GraphEdge, touchesSelection = false): Rel
   const shown = left ? [type, origin].filter((part) => part !== undefined).join(' · ') : full;
   const always = aggregate || edge.semantics !== 'stored';
   const label = always ? shown : touchesSelection ? edge.type : undefined;
-  return { aggregate, origin: edge.semantics, label, ...(left && always ? { tip: full } : {}) };
+  return { aggregate, origin: edge.semantics, label, ...(left && always ? { tip: full } : {}), ...(aggregate && isNeedlessCount(edge) ? { single: true as const } : {}) };
 }

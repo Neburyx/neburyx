@@ -181,6 +181,9 @@ export function startsWithText(count: Count): string | undefined {
 
 export const addedNote = (title: string): string => `Added ${title}.`;
 
+/** What is said when a find or an add switched an entity type on that a filter had switched off. */
+export const shownByFiltersText = (typeName: string): string => `${typeName} shown again by the filters`;
+
 const GROUP_NAMES = { exact: 'exact ID matches', related: 'related records', evidence: 'evidence records', startsWith: 'matches that start with the text', facets: 'facet counts', context: 'relationship context' } as const;
 
 export const groupNotRead = (group: keyof typeof GROUP_NAMES): string => `${GROUP_NAMES[group]} not read`;

@@ -878,6 +878,10 @@
   --icon: url('../assets/lucide/search.svg');
 }
 
+.icon-filters {
+  --icon: url('../assets/lucide/sliders-horizontal.svg');
+}
+
 .icon-plus {
   --icon: url('../assets/lucide/plus.svg');
 }

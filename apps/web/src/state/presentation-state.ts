@@ -1,4 +1,5 @@
 import { StateError } from './errors.js';
+import { nodeRefOfKey } from './keys.js';
 import { createStore, readable, type ReadableStore } from './store.js';
 
 export interface Position {
@@ -35,6 +36,20 @@ export interface OpenTool {
 
 export type SearchTab = 'canvas' | 'source';
 
+/** The types switched off in the Filters panel; a type that is not listed is on, so a type that first appears later is shown. */
+export interface TypeFilter {
+  readonly offEntityTypes: ReadonlySet<string>;
+  readonly offRelationshipTypes: ReadonlySet<string>;
+}
+
+export const NO_TYPE_FILTER: TypeFilter = { offEntityTypes: new Set(), offRelationshipTypes: new Set() };
+
+/** The entity and relationship types the mapping of the bound source names; undefined until its profile is read. */
+export interface MappedTypes {
+  readonly entityTypes: readonly string[];
+  readonly relationshipTypes: readonly string[];
+}
+
 export interface PresentationState {
   readonly tool: PointerTool;
   readonly selection: ReadonlySet<string>;
@@ -48,6 +63,12 @@ export interface PresentationState {
   readonly focusReturn: { readonly viewport: Viewport | undefined } | undefined;
   /** What the canvas is asked to do with its view after the next drawing: fit it to what is drawn (focus was put on an entity), or show the viewport from before focus. A new object for each request, so each is served once. Not saved with a view. */
   readonly viewChange: ViewChange | undefined;
+  /** The types the Filters panel has switched off: still loaded, not drawn. Part of the view that is saved. */
+  readonly typeFilter: TypeFilter;
+  /** The types of the mapping, which a type to switch off must be one of. Not saved with a view. */
+  readonly mappedTypes: MappedTypes | undefined;
+  /** The Filters panel is open; it and the Search panel are never open together. Not saved with a view, and kept when another source is bound. */
+  readonly filtersOpen: boolean;
   readonly panelSizes: ReadonlyMap<string, number>;
   /** A panel is collapsed under the registration number it was collapsed with, so a panel taken out and registered again opens expanded. Not saved with a view. */
   readonly collapsedPanels: ReadonlyMap<string, number>;
@@ -99,6 +120,9 @@ export const INITIAL_PRESENTATION: PresentationState = {
   neighborhoodFocus: undefined,
   focusReturn: undefined,
   viewChange: undefined,
+  typeFilter: NO_TYPE_FILTER,
+  mappedTypes: undefined,
+  filtersOpen: false,
   panelSizes: new Map(),
   collapsedPanels: new Map(),
   legendOpen: false,
@@ -142,6 +166,11 @@ export interface PresentationActions {
   showHidden(keys: readonly string[]): void;
   /** Shows every hidden entity again. */
   showAllHidden(): void;
+  /** Tells which types the mapping names; an off type a known mapping does not name is dropped from the filter. Undefined when no profile is known: the filter is kept as it is. */
+  setMappedTypes(types: MappedTypes | undefined): void;
+  /** Switches every type on again. */
+  resetTypeFilter(): void;
+  setFiltersOpen(open: boolean): void;
   setPanelSize(panel: string, size: number): void;
   clearPanelSize(panel: string): void;
   setLegendOpen(open: boolean): void;
@@ -168,13 +197,17 @@ export interface PresentationActions {
   setViewport(viewport: Viewport): void;
 }
 
-export type PresentationSnapshot = Pick<PresentationState, 'selection' | 'positions' | 'pins' | 'hidden' | 'neighborhoodFocus' | 'focusReturn' | 'viewport'>;
+export type PresentationSnapshot = Pick<PresentationState, 'selection' | 'positions' | 'pins' | 'hidden' | 'typeFilter' | 'neighborhoodFocus' | 'focusReturn' | 'viewport'>;
 
 export interface PresentationStore extends PresentationActions {
   reset(): void;
   snapshot(): PresentationSnapshot;
   restore(snapshot: PresentationSnapshot): void;
   replacePins(keys: readonly string[]): void;
+  /** Switches an entity type of the mapping off or on (refused with `UNKNOWN_TYPE` for another); the entities of an off type, and the keys in `alsoDeselect` (the relationships that touch them), leave the selection, and the walk, the Expand panel and a menu about one let go of it. */
+  setEntityTypeOff(type: string, off: boolean, alsoDeselect?: readonly string[]): void;
+  /** Switches a relationship type of the mapping off or on (refused with `UNKNOWN_TYPE` for another); `leaving` are the keys of the loaded relationships of that type, which leave the selection, and a walk or a menu on one lets go of it. */
+  setRelationshipTypeOff(type: string, off: boolean, leaving?: readonly string[]): void;
   prune(): void;
 }
 
@@ -260,6 +293,75 @@ export function createPresentationStore(known: KnownElements): PresentationStore
       if (store.getState().hidden.size === 0) return;
       store.setState({ ...store.getState(), hidden: new Set() });
     },
+    setEntityTypeOff(type, off, alsoDeselect = []) {
+      const current = store.getState();
+      if (current.mappedTypes === undefined || !current.mappedTypes.entityTypes.includes(type)) throw new StateError('UNKNOWN_TYPE');
+      if (current.typeFilter.offEntityTypes.has(type) === off) return;
+      const offEntityTypes = new Set(current.typeFilter.offEntityTypes);
+      if (off) offEntityTypes.add(type);
+      else offEntityTypes.delete(type);
+      const typeFilter = { ...current.typeFilter, offEntityTypes };
+      if (!off) {
+        store.setState({ ...current, typeFilter });
+        return;
+      }
+      const gone = (key: string): boolean => nodeRefOfKey(key)?.entityType === type || alsoDeselect.includes(key);
+      const endsFocus = current.neighborhoodFocus !== undefined && gone(current.neighborhoodFocus);
+      store.setState({
+        ...current,
+        ...(endsFocus ? endedFocus(current) : {}),
+        typeFilter,
+        selection: new Set([...current.selection].filter((key) => !gone(key))),
+        focused: current.focused !== undefined && gone(current.focused) ? undefined : current.focused,
+        supernodePanel: current.supernodePanel !== undefined && gone(current.supernodePanel.key) ? undefined : current.supernodePanel,
+        openMenu: current.openMenu?.key !== undefined && gone(current.openMenu.key) ? undefined : current.openMenu,
+        moveNote: endsFocus ? { text: FOCUS_LEFT, serial: (current.moveNote?.serial ?? 0) + 1 } : undefined,
+      });
+    },
+    setRelationshipTypeOff(type, off, leaving = []) {
+      const current = store.getState();
+      if (current.mappedTypes === undefined || !current.mappedTypes.relationshipTypes.includes(type)) throw new StateError('UNKNOWN_TYPE');
+      if (current.typeFilter.offRelationshipTypes.has(type) === off) return;
+      const offRelationshipTypes = new Set(current.typeFilter.offRelationshipTypes);
+      if (off) offRelationshipTypes.add(type);
+      else offRelationshipTypes.delete(type);
+      const typeFilter = { ...current.typeFilter, offRelationshipTypes };
+      if (!off) {
+        store.setState({ ...current, typeFilter });
+        return;
+      }
+      const gone = new Set(leaving);
+      store.setState({
+        ...current,
+        typeFilter,
+        selection: new Set([...current.selection].filter((key) => !gone.has(key))),
+        focused: current.focused !== undefined && gone.has(current.focused) ? undefined : current.focused,
+        openMenu: current.openMenu?.key !== undefined && gone.has(current.openMenu.key) ? undefined : current.openMenu,
+        moveNote: undefined,
+      });
+    },
+    setMappedTypes(mappedTypes) {
+      const current = store.getState();
+      const same = (a: readonly string[], b: readonly string[]): boolean => a.length === b.length && a.every((item, at) => item === b[at]);
+      if (current.mappedTypes === mappedTypes || (current.mappedTypes !== undefined && mappedTypes !== undefined && same(current.mappedTypes.entityTypes, mappedTypes.entityTypes) && same(current.mappedTypes.relationshipTypes, mappedTypes.relationshipTypes))) return;
+      if (mappedTypes === undefined) {
+        store.setState({ ...current, mappedTypes });
+        return;
+      }
+      const offEntityTypes = new Set([...current.typeFilter.offEntityTypes].filter((type) => mappedTypes.entityTypes.includes(type)));
+      const offRelationshipTypes = new Set([...current.typeFilter.offRelationshipTypes].filter((type) => mappedTypes.relationshipTypes.includes(type)));
+      const kept = offEntityTypes.size === current.typeFilter.offEntityTypes.size && offRelationshipTypes.size === current.typeFilter.offRelationshipTypes.size;
+      store.setState({ ...current, mappedTypes, typeFilter: kept ? current.typeFilter : { offEntityTypes, offRelationshipTypes } });
+    },
+    resetTypeFilter() {
+      const { typeFilter } = store.getState();
+      if (typeFilter.offEntityTypes.size === 0 && typeFilter.offRelationshipTypes.size === 0) return;
+      store.setState({ ...store.getState(), typeFilter: NO_TYPE_FILTER });
+    },
+    setFiltersOpen(filtersOpen) {
+      if (store.getState().filtersOpen === filtersOpen) return;
+      store.setState({ ...store.getState(), filtersOpen, ...(filtersOpen ? { searchOpen: false } : {}) });
+    },
     replacePins(keys) {
       requireKnown(keys, known.isNode);
       store.setState({ ...store.getState(), pins: new Set(keys) });
@@ -274,7 +376,7 @@ export function createPresentationStore(known: KnownElements): PresentationStore
     },
     setSearchOpen(searchOpen) {
       if (store.getState().searchOpen === searchOpen) return;
-      store.setState({ ...store.getState(), searchOpen });
+      store.setState({ ...store.getState(), searchOpen, ...(searchOpen ? { filtersOpen: false } : {}) });
     },
     setSearchTab(searchTab) {
       if (store.getState().searchTab === searchTab) return;
@@ -282,7 +384,7 @@ export function createPresentationStore(known: KnownElements): PresentationStore
     },
     requestSearch() {
       const current = store.getState();
-      store.setState({ ...current, searchOpen: true, searchFocus: current.searchFocus + 1 });
+      store.setState({ ...current, searchOpen: true, filtersOpen: false, searchFocus: current.searchFocus + 1 });
     },
     setSheetOpen(sheetOpen) {
       if (store.getState().sheetOpen === sheetOpen) return;
@@ -360,15 +462,15 @@ export function createPresentationStore(known: KnownElements): PresentationStore
       });
     },
     snapshot() {
-      const { selection, positions, pins, hidden, neighborhoodFocus, focusReturn, viewport } = store.getState();
-      return { selection, positions, pins, hidden, neighborhoodFocus, focusReturn, viewport };
+      const { selection, positions, pins, hidden, typeFilter, neighborhoodFocus, focusReturn, viewport } = store.getState();
+      return { selection, positions, pins, hidden, typeFilter, neighborhoodFocus, focusReturn, viewport };
     },
     restore(snapshot) {
       store.setState({ ...store.getState(), ...snapshot, walking: false, focused: undefined, moveNote: undefined, openMenu: undefined });
     },
     reset() {
-      const { tool, panelSizes, collapsedPanels, legendOpen, searchOpen, searchTab, searchFocus, sheetOpen } = store.getState();
-      store.setState({ ...INITIAL_PRESENTATION, tool, panelSizes, collapsedPanels, legendOpen, searchOpen, searchTab, searchFocus, sheetOpen });
+      const { tool, panelSizes, collapsedPanels, legendOpen, searchOpen, searchTab, searchFocus, sheetOpen, filtersOpen, mappedTypes } = store.getState();
+      store.setState({ ...INITIAL_PRESENTATION, tool, panelSizes, collapsedPanels, legendOpen, searchOpen, searchTab, searchFocus, sheetOpen, filtersOpen, mappedTypes });
     },
   };
 }

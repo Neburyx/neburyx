@@ -11,7 +11,7 @@ import { elementKey } from '../state/keys.js';
 import { useClientState, useLoadedGraph, useSessionMask, useVisibleGraph } from '../state/context.js';
 import { useStoreSelector } from '../state/store.js';
 import { AddResults } from './add-results.js';
-import { addedNote, SEARCH_PANEL_COPY, TOO_LONG } from './copy.js';
+import { addedNote, SEARCH_PANEL_COPY, shownByFiltersText, TOO_LONG } from './copy.js';
 import { useAddEntity } from './use-add-entity.js';
 import { useTypeahead } from './use-typeahead.js';
 import { useMorePages } from './use-more-pages.js';
@@ -40,6 +40,8 @@ function TypeaheadBox({ client, sourceId, mask, box }: { readonly client: ApiCli
   const principalId = answeredData(shell.me)?.principal.id;
   const adding = useAddEntity(client, state, sourceId, principalId, mask);
   const alias = answeredData(shell.sources)?.items.find((item) => item.id === sourceId)?.alias ?? sourceId;
+  const [found, setFound] = useState('');
+  useEffect(() => setFound(''), [adding.added]);
   const [centerAfterShown, setCenterAfterShown] = useState<string | undefined>(undefined);
   const drawn = useVisibleGraph();
   useEffect(() => {
@@ -49,15 +51,24 @@ function TypeaheadBox({ client, sourceId, mask, box }: { readonly client: ApiCli
   }, [centerAfterShown, drawn, canvas]);
   const find = (node: GraphNode): void => {
     const key = elementKey(node.ref);
-    const { neighborhoodFocus, hidden } = state.presentation.view.getState();
+    const { neighborhoodFocus, hidden, typeFilter } = state.presentation.view.getState();
     const outside = neighborhoodFocus !== undefined && !neighborhoodOf(graph, neighborhoodFocus).has(key);
+    const typeName = profile?.entityTypes.find((candidate) => candidate.type === node.ref.entityType)?.displayName ?? node.ref.entityType;
+    const offByFilter = typeFilter.offEntityTypes.has(node.ref.entityType);
+    const byHand = hidden.has(key);
+    if (offByFilter) state.setEntityTypeOff(node.ref.entityType, false);
     state.presentation.select([key]);
     if (outside) leaveFocus(state);
-    if (hidden.has(key)) {
-      state.presentation.showHidden([key]);
-      state.presentation.announceMove(`${outside ? `${FOCUS_LEFT} ` : ''}Shown again: ${node.display.title}`);
+    if (byHand) state.presentation.showHidden([key]);
+    if (byHand || offByFilter) {
+      const said = [...(byHand ? [`Shown again: ${node.display.title}`] : []), ...(offByFilter ? [shownByFiltersText(typeName)] : [])].join('; ');
+      state.presentation.announceMove(`${outside ? `${FOCUS_LEFT} ` : ''}${said}`);
+      setFound(said);
       setCenterAfterShown(key);
-    } else if (outside) setCenterAfterShown(key);
+      return;
+    }
+    setFound('');
+    if (outside) setCenterAfterShown(key);
     else canvas?.centerOn(key);
   };
   return (
@@ -70,7 +81,7 @@ function TypeaheadBox({ client, sourceId, mask, box }: { readonly client: ApiCli
       ) : null}
       <AddResults sourceAlias={alias} text={text} typeahead={typeahead} pages={pages} env={{ sourceId, profile, loaded: new Set(graph.nodes.map((node) => elementKey(node.ref))), adding, mask, onFind: find }} />
       <p role="status" className="search-panel-status">
-        {adding.added === undefined ? '' : addedNote(adding.added)}
+        {found !== '' || adding.added === undefined ? found : `${addedNote(adding.added)}${adding.shownAgain === undefined ? '' : ` ${shownByFiltersText(profile?.entityTypes.find((candidate) => candidate.type === adding.shownAgain)?.displayName ?? adding.shownAgain)}`}`}
       </p>
     </>
   );

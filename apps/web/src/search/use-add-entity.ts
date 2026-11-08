@@ -13,6 +13,8 @@ export interface AddEntity {
   readonly loading: ReadonlySet<string>;
   readonly failures: ReadonlyMap<string, ApiFailure>;
   readonly added: string | undefined;
+  /** The entity type that a filter had switched off and that adding the entity switched on again; nothing when no filter was in the way. */
+  readonly shownAgain: string | undefined;
 }
 
 function addedKey(investigationId: string | null, sourceId: string, principalId: string, node: GraphNode, mask: boolean): QueryKey {
@@ -40,6 +42,7 @@ export function useAddEntity(client: ApiClient, state: ClientState, sourceId: st
   const [loading, setLoading] = useState<ReadonlySet<string>>(new Set());
   const [failures, setFailures] = useState<ReadonlyMap<string, ApiFailure>>(new Map());
   const [added, setAdded] = useState<string | undefined>(undefined);
+  const [shownAgain, setShownAgain] = useState<string | undefined>(undefined);
   const running = useRef(new Map<string, AbortController>());
   const expansions = useExpandStoreWhenProvided();
 
@@ -82,11 +85,15 @@ export function useAddEntity(client: ApiClient, state: ClientState, sourceId: st
         if (!result.ok) return void setFailures((previous) => new Map(previous).set(key, result.failure));
         if (result.value.ref.sourceId !== sourceId || elementKey(result.value.ref) !== key) return void setFailures((previous) => new Map(previous).set(key, { code: 'SCHEMA_MISMATCH' }));
         place(state, sourceId, principalId, mask, result.value, expansions);
+        const type = result.value.ref.entityType;
+        const wasOff = state.presentation.view.getState().typeFilter.offEntityTypes.has(type);
+        if (wasOff) state.setEntityTypeOff(type, false);
+        setShownAgain(wasOff ? type : undefined);
         setAdded(result.value.display.title);
       });
     },
     [client, state, sourceId, principalId, mask, expansions],
   );
 
-  return { add, loading, failures, added };
+  return { add, loading, failures, added, shownAgain };
 }

@@ -3,13 +3,14 @@ import { useEffect, useRef, useState } from 'react';
 import { cursorWasRefused, type TypeProgress } from '../api/expand-store.js';
 import { useProfile } from '../canvas/profile-context.js';
 import { canRetry, FailureNotice } from '../failure-notice.js';
-import { nodeRefOfKey } from '../state/keys.js';
-import { useLoadedGraph, useSessionMask } from '../state/context.js';
+import { elementKey, nodeRefOfKey } from '../state/keys.js';
+import { useClientState, useLoadedGraph, useSessionMask } from '../state/context.js';
 import { useStoreSelector } from '../state/store.js';
 import { degreeCountText } from './degree-text.js';
 import { COUNTS_ARE_OF_RELATIONSHIPS, CLEAR, DUPLICATE_IDS, EXPAND_HEADING, INVERT_SELECTION, LOADING_NEIGHBORS, NO_LONGER_IN_SOURCE, NO_RELATIONSHIPS, NO_RELATIONSHIPS_FOUND, NO_STABLE_ID, RETRY, SELECT_ALL, SEPARATE_READS, START_OVER, PAGED_NOTE, expandLabel, loadMoreLabel, pageNote } from './expand-copy.js';
 import { loadedCountText, loadedOf } from './node-counts.js';
-import { neighborTypesOf, useExpandStore } from './expand-context.js';
+import { neighborTypesOf, relTypesToSend, startUntickedTypes, useExpandStore } from './expand-context.js';
+import { FILTERS_LEAVE_NOTHING } from './expand-copy.js';
 import type { SubmenuProps } from './menu-registry.js';
 import { usePreviewStore } from './preview-context.js';
 
@@ -77,11 +78,13 @@ function ChecklistFor({ node, close }: { readonly node: ElementRef; readonly clo
   const request = previews.forNode(node, useSessionMask());
   const state = useStoreSelector(request, (current) => current);
   const expansion = useStoreSelector(expansions.view, () => expansions.of(node));
-  const [cleared, setCleared] = useState<ReadonlySet<string>>(new Set());
+  const client = useClientState();
+  const [unticked, setCleared] = useState<ReadonlySet<string> | undefined>(undefined);
   const body = useRef<HTMLDivElement>(null);
   const retry = useRef<HTMLButtonElement>(null);
   const preview = state.phase === 'ready' ? state.data : undefined;
   const types = typesOf(preview, profile, node.entityType);
+  const cleared: ReadonlySet<string> = unticked ?? new Set(startUntickedTypes(profile, client.presentation.view.getState().typeFilter, node.entityType, types));
   const ticked = types.filter((type) => !cleared.has(type));
   const busy = expansion.status === 'loading';
   // a refused cursor can never succeed again, so Retry is not offered for it: the type starts over instead
@@ -131,7 +134,7 @@ function ChecklistFor({ node, close }: { readonly node: ElementRef; readonly clo
               count={entry === undefined ? undefined : degreeCountText(entry.count)}
               paged={entry !== undefined && entry.count.quality !== 'exact'}
               checked={!cleared.has(type)}
-              onToggle={() => setCleared((held) => (held.has(type) ? new Set([...held].filter((other) => other !== type)) : new Set(held).add(type)))}
+              onToggle={() => setCleared(cleared.has(type) ? new Set([...cleared].filter((other) => other !== type)) : new Set(cleared).add(type))}
               progress={expansion.types.get(type)}
               loaded={loaded.byType.get(type)}
               pageSize={pageSize}
@@ -160,7 +163,12 @@ function ChecklistFor({ node, close }: { readonly node: ElementRef; readonly clo
             className="primary neighbor-types-expand"
             disabled={ticked.length === 0 || busy}
             onClick={() => {
-              void expansions.expand(node, ticked);
+              const relTypes = relTypesToSend(profile, client.presentation.view.getState().typeFilter, node.entityType, ticked);
+              if (relTypes !== undefined && relTypes.length === 0) {
+                // an empty list would ask over every relationship type, the off ones too, so the panel opens instead
+                client.presentation.setSupernodePanel({ key: elementKey(node) });
+                expansions.report(FILTERS_LEAVE_NOTHING);
+              } else void expansions.expand(node, ticked, relTypes);
               close();
             }}
           >

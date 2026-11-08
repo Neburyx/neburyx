@@ -3,7 +3,9 @@ import { useEffect, useId, useState } from 'react';
 import { FALLBACK_PAGE_SIZE, cursorWasRefused } from '../api/expand-store.js';
 import { useProfileWhenProvided } from '../canvas/profile-context.js';
 import { canRetry, FailureNotice } from '../failure-notice.js';
-import { useSessionMask } from '../state/context.js';
+import { useClientState, useLoadedGraph, useSessionMask } from '../state/context.js';
+import { elementKey } from '../state/keys.js';
+import { filteredKeys } from '../state/loaded-graph.js';
 import { useStoreSelector } from '../state/store.js';
 import { degreeCountText } from './degree-text.js';
 import {
@@ -23,6 +25,9 @@ import {
   RANK_NOTE_MIXED,
   RANK_NOTE_NONE,
   RANK_NOTE_TIME,
+  SHOW_THESE_TYPES,
+  hiddenByFiltersNote,
+  selectedInFiltersLabel,
   RELATIONSHIP_TYPE_LABEL,
   RETRY,
   SELECT_ALL,
@@ -33,11 +38,14 @@ import {
   pageSizeRange,
   summaryText,
 } from './expand-copy.js';
-import { neighborTypesOf, useExpandStore } from './expand-context.js';
+import { neighborTypesOf, startUntickedTypes, useExpandStore } from './expand-context.js';
 import { allNeighborTypes, neighborCount, relationshipCounts, relationshipOptions, sameTypes, type DirectionCount } from './supernode-options.js';
 import { usePreviewStore } from './preview-context.js';
 
 export const PANEL_FIRST_CONTROL = 'data-panel-first';
+
+/** The value of the relationship type choice that stands for the types the filters leave on. */
+const FILTERS_CHOICE = '\u0000filters';
 
 const displayNameOf = (profile: SourceProfile | undefined, entityType: string): string => profile?.entityTypes.find((entry) => entry.type === entityType)?.displayName ?? entityType;
 const directionsText = (counts: readonly DirectionCount[]): string => counts.map((entry) => `${entry.direction} ${degreeCountText(entry.count)}`).join('; ');
@@ -60,16 +68,26 @@ export function ExpandForm({ node, only }: { readonly node: ElementRef; /** The 
   const state = useStoreSelector(request, (current) => current);
   const expansion = useStoreSelector(expansions.view, () => expansions.of(node));
   const preview = state.phase === 'ready' ? state.data : undefined;
-  const [relationshipType, setRelationshipType] = useState<string | undefined>(undefined);
+  const client = useClientState();
+  const typeFilter = useStoreSelector(client.presentation.view, (current) => current.typeFilter);
+  const graph = useLoadedGraph();
+  const options = relationshipOptions(profile, node.entityType);
+  const onOptions = options.filter((option) => !typeFilter.offRelationshipTypes.has(option.type));
+  // exactly one relationship type left on of several: it is chosen at the start; two or more left: the choice "Selected in Filters" is offered
+  const filtersChoose = onOptions.length >= 2 && onOptions.length < options.length;
+  const [relationshipType, setRelationshipType] = useState<string | undefined>(() => (onOptions.length === 1 && options.length > 1 ? onOptions[0]?.type : undefined));
   const [unticked, setUnticked] = useState<ReadonlySet<string> | undefined>(undefined);
   const [sizeText, setSizeText] = useState<string | undefined>(undefined);
   const fieldId = useId();
-  const options = relationshipOptions(profile, node.entityType);
-  const chosen = options.find((option) => option.type === relationshipType);
-  const all = allNeighborTypes(preview, neighborTypesOf(profile, node.entityType));
-  const listed = chosen === undefined ? all : all.filter((type) => chosen.neighborTypes.includes(type));
-  // until a tick is changed the types are ticked by default, or only the type the panel was opened for
-  const cleared: ReadonlySet<string> = unticked ?? new Set(only === undefined ? [] : all.filter((type) => type !== only));
+  const askedTypes: readonly string[] | undefined = relationshipType === FILTERS_CHOICE ? onOptions.map((option) => option.type) : relationshipType === undefined ? undefined : [relationshipType];
+  const chosenOptions = askedTypes === undefined ? [] : options.filter((option) => askedTypes.includes(option.type));
+  const chosen = chosenOptions.length === 1 ? chosenOptions[0] : undefined;
+  const mapped = neighborTypesOf(profile, node.entityType);
+  const all = allNeighborTypes(preview, mapped);
+  const listed = askedTypes === undefined ? all : all.filter((type) => chosenOptions.some((option) => option.neighborTypes.includes(type)));
+  // until a tick is changed the types are ticked as the filters have them (all of them when the filters leave this node nothing), or only the type the panel was opened for
+  const startUnticked = startUntickedTypes(profile, typeFilter, node.entityType, all);
+  const cleared: ReadonlySet<string> = unticked ?? new Set(only === undefined ? startUnticked : all.filter((type) => type !== only));
   const ticked = listed.filter((type) => !cleared.has(type));
   const leftOut = chosen === undefined ? [] : all.filter((type) => !cleared.has(type) && !listed.includes(type));
   const ceiling = expansions.ceilingOf(node.sourceId);
@@ -79,7 +97,8 @@ export function ExpandForm({ node, only }: { readonly node: ElementRef; /** The 
   const busy = expansion.status === 'loading';
   const budgetLowered = expansion.failure?.code === 'QUERY_BUDGET_EXCEEDED';
   const refused = cursorWasRefused(expansion);
-  const dated = chosen?.observed ?? (options.length === 0 ? 'none' : options.every((option) => option.observed === 'all') ? 'all' : options.every((option) => option.observed === 'none') ? 'none' : 'some');
+  const datedOptions = chosenOptions.length === 0 ? options : chosenOptions;
+  const dated = chosen?.observed ?? (datedOptions.length === 0 ? 'none' : datedOptions.every((option) => option.observed === 'all') ? 'all' : datedOptions.every((option) => option.observed === 'none') ? 'none' : 'some');
   const capped = preview?.warnings.find((warning) => warning.code === 'counts-capped');
   const anyLoaded = [...expansion.types.values()].some((progress) => progress.loaded > 0);
   const changedCeiling = expansion.chosenPageSize;
@@ -88,13 +107,25 @@ export function ExpandForm({ node, only }: { readonly node: ElementRef; /** The 
     if (budgetLowered && changedCeiling !== undefined) setSizeText(String(changedCeiling));
   }, [budgetLowered, changedCeiling]);
 
+  const filteredNow = filteredKeys(graph, typeFilter);
+  const handHidden = useStoreSelector(client.presentation.view, (current) => current.hidden);
+  const hiddenEnds = graph.edges.flatMap((edge) => {
+    const from = elementKey(edge.from);
+    const to = elementKey(edge.to);
+    const here = elementKey(node);
+    return from === here ? [edge.to] : to === here ? [edge.from] : [];
+  }).filter((end) => filteredNow.has(elementKey(end)) && !handHidden.has(elementKey(end)));
+  const hiddenNeighbors = new Set(hiddenEnds.map(elementKey)).size;
+  const showHiddenTypes = (): void => {
+    for (const type of new Set(hiddenEnds.map((end) => end.entityType))) client.setEntityTypeOff(type, false);
+  };
   const edit = (text: string): void => {
     setSizeText(text);
     const value = parsedSize(text);
     if (Number.isInteger(value) && value >= 1 && value <= ceiling) expansions.setPageSize(node, value);
   };
   const toggle = (type: string): void => setUnticked(cleared.has(type) ? new Set([...cleared].filter((other) => other !== type)) : new Set(cleared).add(type));
-  const asked = relationshipType === undefined ? undefined : [relationshipType];
+  const asked = askedTypes;
   const load = (): void => {
     if (!sizeValid || ticked.length === 0 || busy) return;
     expansions.setPageSize(node, size);
@@ -130,6 +161,7 @@ export function ExpandForm({ node, only }: { readonly node: ElementRef; /** The 
           onChange={(event) => setRelationshipType(event.target.value === '' ? undefined : event.target.value)}
         >
           <option value="">{ALL_SOURCED_TYPES}</option>
+          {filtersChoose ? <option value={FILTERS_CHOICE}>{selectedInFiltersLabel(onOptions.length)}</option> : null}
           {options.map((option) => {
             const counts = relationshipCounts(preview, option.type);
             return (
@@ -151,7 +183,7 @@ export function ExpandForm({ node, only }: { readonly node: ElementRef; /** The 
         ) : (
           <ul className="neighbor-types-list" aria-label={NEIGHBOR_TYPES_LABEL}>
             {listed.map((type) => {
-              const count = neighborCountText(preview, type, relationshipType);
+              const count = relationshipType === FILTERS_CHOICE ? undefined : neighborCountText(preview, type, relationshipType);
               return (
                 <li key={type} className="neighbor-types-item">
                   <button type="button" role="checkbox" aria-checked={!cleared.has(type)} className="neighbor-types-row" onClick={() => toggle(type)}>
@@ -195,12 +227,20 @@ export function ExpandForm({ node, only }: { readonly node: ElementRef; /** The 
         </p>
       </div>
 
-      {leftOut.length === 0 || relationshipType === undefined ? null : <p className="neighbor-types-note">{leftOutText(leftOut.map((type) => displayNameOf(profile, type)), relationshipType)}</p>}
+      {leftOut.length === 0 || relationshipType === undefined || relationshipType === FILTERS_CHOICE ? null : <p className="neighbor-types-note">{leftOutText(leftOut.map((type) => displayNameOf(profile, type)), relationshipType)}</p>}
       <button type="button" className="primary supernode-load" disabled={!sizeValid || ticked.length === 0} aria-disabled={busy ? true : undefined} onClick={load}>
         {loadPerTypeLabel(sizeValid ? size : (expansion.chosenPageSize ?? FALLBACK_PAGE_SIZE))}
       </button>
       {ticked.length === 0 ? <p className="neighbor-types-note">{CHOOSE_A_TYPE}</p> : null}
 
+      {hiddenNeighbors === 0 ? null : (
+        <p className="neighbor-types-note">
+          {hiddenByFiltersNote(hiddenNeighbors)}{' '}
+          <button type="button" className="neighbor-types-link" onClick={showHiddenTypes}>
+            {SHOW_THESE_TYPES}
+          </button>
+        </p>
+      )}
       {busy ? (
         <p className="neighbor-types-note" role="status">
           {LOADING_NEIGHBORS}

@@ -7,6 +7,8 @@ import { createStore, readable } from '../state/store.js';
 import { registerBuiltInMenuItems } from '../workspace/built-in-menu-items.js';
 import { registerBuiltInSlots } from '../workspace/built-in-slots.js';
 import { registerBuiltInTools } from '../workspace/built-in-tools.js';
+import { bindFiltersPanel } from '../workspace/filters-binder.js';
+import { registerFiltersTool } from '../workspace/filters-tool.js';
 import { registerBuiltInKeyBindings } from '../workspace/built-in-key-bindings.js';
 import { createKeyBindingRegistry, KeyBindingsProvider } from '../workspace/key-binding-registry.js';
 import { createMenuRegistry, MenuProvider } from '../workspace/menu-registry.js';
@@ -71,6 +73,7 @@ export function FrameSamplePage() {
   const [tools] = useState(() => {
     const registry = createToolRegistry();
     registerBuiltInTools(registry);
+    registerFiltersTool(registry, state);
     registerStandInTools(registry);
     return registry;
   });
@@ -84,6 +87,7 @@ export function FrameSamplePage() {
     const registry = createPanelRegistryFor(state);
     bindLegend(state, registry);
     bindSupernodePanel(state, registry);
+    bindFiltersPanel(state, registry);
     registerStandInPanels(registry, { floating: floatingSide(window.location.search), dock: new URLSearchParams(window.location.search).get('dock') !== 'none' });
     return registry;
   });

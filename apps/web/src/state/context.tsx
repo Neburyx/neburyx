@@ -1,6 +1,6 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import type { ClientState } from './client-state.js';
-import { deriveLoadedGraph, excludedKeys, visibleGraph, type LoadedGraph } from './loaded-graph.js';
+import { deriveLoadedGraph, excludedKeys, filteredKeys, visibleGraph, withoutRelationshipTypes, type LoadedGraph } from './loaded-graph.js';
 import { useStoreSelector } from './store.js';
 
 const ClientStateContext = createContext<ClientState | undefined>(undefined);
@@ -13,6 +13,11 @@ export function useClientState(): ClientState {
   const state = useContext(ClientStateContext);
   if (state === undefined) throw new Error('the client state is not provided');
   return state;
+}
+
+/** The state when one is provided, and nothing in a part of the app drawn without it. */
+export function useClientStateWhenProvided(): ClientState | undefined {
+  return useContext(ClientStateContext);
 }
 
 /** Whether the session asks for the personal-data fields to be masked. */
@@ -31,7 +36,16 @@ export function useLoadedGraph(): LoadedGraph {
 export function useVisibleGraph(): LoadedGraph {
   const state = useClientState();
   const graph = useLoadedGraph();
+  const excluded = useExcludedKeys(graph);
+  const offRelationshipTypes = useStoreSelector(state.presentation.view, (current) => current.typeFilter.offRelationshipTypes);
+  return useMemo(() => withoutRelationshipTypes(visibleGraph(graph, excluded), offRelationshipTypes), [graph, excluded, offRelationshipTypes]);
+}
+
+/** The entities of the loaded graph that are left out of the view, by hand or by a filter. */
+export function useExcludedKeys(graph: LoadedGraph): ReadonlySet<string> {
+  const state = useClientState();
   const hidden = useStoreSelector(state.presentation.view, (current) => current.hidden);
   const neighborhoodFocus = useStoreSelector(state.presentation.view, (current) => current.neighborhoodFocus);
-  return useMemo(() => visibleGraph(graph, excludedKeys(graph, { hidden, neighborhoodFocus })), [graph, hidden, neighborhoodFocus]);
+  const typeFilter = useStoreSelector(state.presentation.view, (current) => current.typeFilter);
+  return useMemo(() => excludedKeys(graph, { hidden, neighborhoodFocus, filtered: filteredKeys(graph, typeFilter) }), [graph, hidden, neighborhoodFocus, typeFilter]);
 }

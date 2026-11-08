@@ -66,11 +66,12 @@ export function GraphCanvas({ profile, view = 'fit' }: { readonly profile?: Sour
     [loadedGraph, positions],
   );
   const allAggregates = useAggregateNodes(loadedGraph, profile);
+  const offEntityTypes = useStoreSelector(state.presentation.view, (current) => current.typeFilter.offEntityTypes);
   const aggregates = useMemo(() => {
-    if (graph === loadedGraph) return allAggregates;
+    if (graph === loadedGraph && offEntityTypes.size === 0) return allAggregates;
     const drawnNodes = new Set(graph.nodes.map((node) => elementKey(node.ref)));
-    return allAggregates.filter((aggregate) => drawnNodes.has(aggregate.nodeKey));
-  }, [allAggregates, graph, loadedGraph]);
+    return allAggregates.filter((aggregate) => drawnNodes.has(aggregate.nodeKey) && !offEntityTypes.has(aggregate.neighborType));
+  }, [allAggregates, graph, loadedGraph, offEntityTypes]);
   const drawn = useMemo(() => buildScene(graph, placed.size === 0 ? positions : new Map([...positions, ...placed]), profile, selection, tool, source, view, pins, walking ? focused : undefined, true, aggregates), [graph, positions, placed, profile, selection, tool, source, view, pins, walking, focused, aggregates]);
   // A menu holding the focus only takes the ring off the walk element: the scene is the same one, so the drawing that follows is not a sign that the renderer works again.
   const scene = useMemo(() => ({ ...drawn, focusRing: !menuOpen }), [drawn, menuOpen]);

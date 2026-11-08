@@ -353,3 +353,67 @@ describe('the workspace of the Add tab', () => {
     expect(screen.getByRole('region', { name: 'Request status' })).toBeDefined();
   });
 });
+
+describe('Find and Add of an entity whose type a filter switched off', () => {
+  const mapped = { entityTypes: ['type-a', 'kind-a'], relationshipTypes: [] };
+  const status = (): string => [...document.querySelectorAll('.search-panel-status')].at(-1)?.textContent ?? '';
+
+  it('switches the type on, says so in the status line and the announcement, and selects and centres the entity', async () => {
+    const parts = await panelWorkspace({ nodes: [node('a', 'ACC-1'), first] });
+    parts.state.presentation.setMappedTypes(mapped);
+    parts.state.setEntityTypeOff('kind-a', true);
+    await searchFor('ACC');
+    act(() => parts.searches[0]?.answer({ ok: true, value: searchAnswer('a', [first], [second]) }));
+    await settle();
+    fireEvent.click(screen.getByRole('button', { name: 'On canvas: Title ACC-100' }));
+    await settle();
+    expect(parts.state.presentation.view.getState().typeFilter.offEntityTypes.size).toBe(0);
+    expect([...parts.state.presentation.view.getState().selection]).toEqual([keyOf(first)]);
+    expect(parts.renderer()?.centered).toEqual([keyOf(first)]);
+    expect(status()).toBe('KIND-A shown again by the filters');
+    expect(parts.state.presentation.view.getState().moveNote?.text).toBe('KIND-A shown again by the filters');
+  });
+
+  it('shows an entity that is also hidden by hand again, and names both', async () => {
+    const parts = await panelWorkspace({ nodes: [node('a', 'ACC-1'), first] });
+    parts.state.presentation.setMappedTypes(mapped);
+    parts.state.hide([keyOf(first)]);
+    parts.state.setEntityTypeOff('kind-a', true);
+    await searchFor('ACC');
+    act(() => parts.searches[0]?.answer({ ok: true, value: searchAnswer('a', [first], [second]) }));
+    await settle();
+    fireEvent.click(screen.getByRole('button', { name: 'On canvas: Title ACC-100' }));
+    await settle();
+    expect(parts.state.presentation.view.getState().hidden.size).toBe(0);
+    expect(parts.state.presentation.view.getState().typeFilter.offEntityTypes.size).toBe(0);
+    expect(status()).toBe('Shown again: Title ACC-100; KIND-A shown again by the filters');
+    expect(parts.state.presentation.view.getState().moveNote?.text).toBe(status());
+  });
+
+  it('loads an added entity of an off type, switches the type on and says so beside Added', async () => {
+    const parts = await withRows({ nodes: [node('a', 'ACC-1')] });
+    parts.state.presentation.setMappedTypes(mapped);
+    parts.state.setEntityTypeOff('kind-a', true);
+    fireEvent.click(addButton('Title ACC-100'));
+    act(() => parts.loads[0]?.answer({ ok: true, value: first }));
+    await settle();
+    expect(parts.state.presentation.view.getState().typeFilter.offEntityTypes.size).toBe(0);
+    expect(parts.state.visibleGraph().nodes.map((entry) => entry.ref.stableId)).toContain('ACC-100');
+    expect(status()).toBe('Added Title ACC-100. KIND-A shown again by the filters');
+  });
+
+  it('leaves the filters alone when the add fails, and for an entity of a type that is on', async () => {
+    const parts = await withRows({ nodes: [node('a', 'ACC-1')] });
+    parts.state.presentation.setMappedTypes(mapped);
+    parts.state.setEntityTypeOff('type-a', true);
+    fireEvent.click(addButton('Title ACC-100'));
+    act(() => parts.loads[0]?.answer({ ok: false, failure: TIMEOUT }));
+    await settle();
+    expect([...parts.state.presentation.view.getState().typeFilter.offEntityTypes]).toEqual(['type-a']);
+    fireEvent.click(addButton('Title ACC-100'));
+    act(() => parts.loads[1]?.answer({ ok: true, value: first }));
+    await settle();
+    expect([...parts.state.presentation.view.getState().typeFilter.offEntityTypes]).toEqual(['type-a']);
+    expect(status()).toBe('Added Title ACC-100.');
+  });
+});

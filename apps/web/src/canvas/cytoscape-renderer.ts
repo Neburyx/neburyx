@@ -34,7 +34,7 @@ interface CaptionJob {
   readonly pinned: boolean;
 }
 
-const edgeData = (look: RelationshipLook) => ({ aggregate: look.aggregate, origin: look.origin, label: look.label ?? '', tip: look.tip ?? '' });
+const edgeData = (look: RelationshipLook) => ({ aggregate: look.aggregate, single: look.single === true, origin: look.origin, label: look.label ?? '', tip: look.tip ?? '' });
 
 
 // Cytoscape keeps the object it is given as the node's position and writes to it, so every position is copied in.
@@ -123,6 +123,8 @@ export const STYLE: StylesheetJson = [
       'text-border-opacity': 1,
     },
   },
+  // an aggregate of exactly one relationship is as thin as a stored relationship: a bold line claims more than one
+  { selector: 'edge[?aggregate][?single]', style: { width: EDGE_WIDTH } },
   // Below the zoom where captions are read an entity is drawn with its glyph and badge only, and a relationship without its label, except a selected one; the one under the pointer is told in the page's own text (the hover tip).
   { selector: 'node.far', style: { 'background-image-opacity': [1, 0, 1] } },
   { selector: 'node.far[?selected], node.far[?focused]', style: { 'background-image-opacity': [1, 1, 1] } },
@@ -130,6 +132,7 @@ export const STYLE: StylesheetJson = [
   { selector: 'edge.far[?selected], edge.far[?focused]', style: { label: 'data(label)' } },
   { selector: 'edge[?selected]', style: { 'line-color': SELECTED_COLOR, 'target-arrow-color': SELECTED_COLOR, width: EDGE_WIDTH + SELECTED_LINE_EXTRA } },
   { selector: 'edge[?selected][?aggregate]', style: { width: AGGREGATE_WIDTH + SELECTED_LINE_EXTRA } },
+  { selector: 'edge[?selected][?aggregate][?single]', style: { width: EDGE_WIDTH + SELECTED_LINE_EXTRA } },
   // The ring of the keyboard walk: an outline around an entity and an underlay behind a relationship.
   { selector: 'node[?ringed]', style: { 'outline-width': FOCUS_RING_WIDTH, 'outline-color': FOCUS_COLOR, 'outline-style': 'solid', 'outline-offset': FOCUS_RING_GAP, 'outline-opacity': 1 } },
   // the band has a gap of the canvas colour between it and the line, so a derived or selected relationship keeps its own look inside the ring

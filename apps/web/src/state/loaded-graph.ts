@@ -1,6 +1,7 @@
 import type { Count, GraphEdge, GraphNode } from '@neburyx/contracts';
 import type { InvestigationState } from './investigation-state.js';
 import { edgeKey, elementKey, queryKeyText } from './keys.js';
+import type { TypeFilter } from './presentation-state.js';
 import type { ServerState } from './server-state.js';
 
 export interface LoadedGraph {
@@ -134,6 +135,41 @@ export function visibleGraph(graph: LoadedGraph, left: ReadonlySet<string>): Loa
   };
   byHidden.set(left, visible);
   return visible;
+}
+
+const filteredSets = new WeakMap<LoadedGraph, WeakMap<ReadonlySet<string>, ReadonlySet<string>>>();
+const NO_KEYS: ReadonlySet<string> = new Set();
+
+/** The keys of the loaded entities whose type the filters have switched off. The same two inputs give the same set. */
+export function filteredKeys(graph: LoadedGraph, filter: TypeFilter): ReadonlySet<string> {
+  if (filter.offEntityTypes.size === 0) return NO_KEYS;
+  let byOff = filteredSets.get(graph);
+  if (byOff === undefined) {
+    byOff = new WeakMap();
+    filteredSets.set(graph, byOff);
+  }
+  const known = byOff.get(filter.offEntityTypes);
+  if (known !== undefined) return known;
+  const keys: ReadonlySet<string> = new Set(graph.nodes.filter((node) => filter.offEntityTypes.has(node.ref.entityType)).map((node) => elementKey(node.ref)));
+  byOff.set(filter.offEntityTypes, keys);
+  return keys;
+}
+
+const withoutTypes = new WeakMap<LoadedGraph, WeakMap<ReadonlySet<string>, LoadedGraph>>();
+
+/** The graph without the relationships of the types that are off; the entities stay. The same two inputs give the same object. */
+export function withoutRelationshipTypes(graph: LoadedGraph, off: ReadonlySet<string>): LoadedGraph {
+  if (off.size === 0) return graph;
+  let byOff = withoutTypes.get(graph);
+  if (byOff === undefined) {
+    byOff = new WeakMap();
+    withoutTypes.set(graph, byOff);
+  }
+  const known = byOff.get(off);
+  if (known !== undefined) return known;
+  const kept: LoadedGraph = { ...graph, edges: graph.edges.filter((edge) => !off.has(edge.type)) };
+  byOff.set(off, kept);
+  return kept;
 }
 
 /** The keys of every element the canvas draws: each loaded entity and each relationship between two loaded entities. */

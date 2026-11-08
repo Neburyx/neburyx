@@ -302,7 +302,7 @@ describe('the entities the Cytoscape renderer draws', () => {
 
 describe('the relationships the Cytoscape renderer draws', () => {
   const rgb = (hex: string): string => `rgb(${[1, 3, 5].map((at) => parseInt(hex.slice(at, at + 2), 16)).join(',')})`;
-  const look = (aggregate: boolean, origin: 'stored' | 'derived' | 'unknown', label: string | undefined) => ({ aggregate, origin, label });
+  const look = (aggregate: boolean, origin: 'stored' | 'derived' | 'unknown', label: string | undefined, single?: true) => ({ aggregate, origin, label, ...(single === true ? { single } : {}) });
   const two = (relationships: ReadonlyArray<{ id: string; look: ReturnType<typeof look> }>): Scene => ({
     entities: [
       { id: 'a', position: { x: 0, y: 0 }, look: { iconKey: 'generic', line1: 'a', line2: 'T' } },
@@ -332,6 +332,19 @@ describe('the relationships the Cytoscape renderer draws', () => {
   it('draws an aggregate as a 3.5 px line with an arrow and a pill outlined 1.5 px', () => {
     const edge = drawn([{ id: 'g', look: look(true, 'stored', 'T · 42') }]).get('g');
     expect(edge).toMatchObject({ width: 3.5, color: rgb('#8c96a8'), lineStyle: 'solid', arrow: 'chevron', label: 'T · 42', labelOutline: 1.5 });
+  });
+
+  it('draws an aggregate bold when it stands for more than one relationship or may, and thin when it stands for exactly one', () => {
+    const edges = drawn([
+      { id: 'one', look: look(true, 'stored', 'T', true) },
+      { id: 'two', look: look(true, 'stored', 'T · 2 · exact') },
+      { id: 'bound', look: look(true, 'stored', 'T · ≥ 3 · lower bound') },
+      { id: 'none', look: look(true, 'stored', 'T') },
+    ]);
+    expect(edges.get('one')).toMatchObject({ width: 1.4, labelOutline: 1.5 });
+    expect(edges.get('two')?.width).toBe(3.5);
+    expect(edges.get('bound')?.width).toBe(3.5);
+    expect(edges.get('none')?.width).toBe(3.5);
   });
 
   it('draws a relationship of unknown origin as a dotted line with an arrow and its label, and an unknown-origin aggregate with the aggregate width', () => {
@@ -973,6 +986,10 @@ describe('the clicks and the selected look of the Cytoscape renderer', () => {
     expect(edges.get('g')).toMatchObject({ width: 4.5, color: ACCENT, lineStyle: 'solid', label: 'T · 42', labelOutline: 1.5 });
     expect(edges.get('d')).toMatchObject({ width: 2.4, color: ACCENT, lineStyle: 'dashed', arrow: 'none' });
     expect(edges.get('u')).toMatchObject({ width: 2.4, color: ACCENT, lineStyle: 'dotted' });
+    renderer.draw(withSelection({ ...base, relationships: [{ id: 'one', from: 'a', to: 'b', look: { aggregate: true, origin: 'stored' as const, label: 'T', single: true as const } }, { id: 'two', from: 'a', to: 'b', look: { aggregate: true, origin: 'stored' as const, label: 'T · 2 · exact' } }] }, ['one', 'two']));
+    const picked = new Map(renderer.inspect().edges.map((edge) => [edge.id, edge]));
+    expect(picked.get('one')?.width).toBe(2.4);
+    expect(picked.get('two')?.width).toBe(4.5);
     renderer.draw(base);
     expect(renderer.inspect().edges.find((edge) => edge.id === 's')).toMatchObject({ width: 1.4, color: 'rgb(140,150,168)' });
     expect(renderer.inspect().edges.find((edge) => edge.id === 'g')?.width).toBe(3.5);

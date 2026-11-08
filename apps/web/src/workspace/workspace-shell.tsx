@@ -7,6 +7,7 @@ import { ExpandSelectionAction } from './expand-selection-action.js';
 import { HideSelectionAction } from './hide-selection-action.js';
 import { ExpansionStatus } from './expansion-status.js';
 import { DockColumn, FloatingPanels } from './panel-host.js';
+import { MappedTypesSync } from './mapped-types-sync.js';
 import { GraphScope } from './graph-scope.js';
 import { HeaderBar } from './header-bar.js';
 import { KEY_SCOPE_ATTRIBUTE, useKeyHandler } from './key-binding-handler.js';
@@ -32,6 +33,7 @@ export function WorkspaceShell({ canvasView, notice, status, busy = false }: { r
         <div className="workspace-stage">
           <main className="canvas-region" aria-busy={busy ? true : undefined}>
             <GraphCanvas profile={profile} view={canvasView} />
+            <MappedTypesSync />
             <GraphScope />
             <ExpandSelectionAction />
             <HideSelectionAction />

@@ -1,5 +1,6 @@
 import type { Count } from '@neburyx/contracts';
-import type { LoadedGraph } from '../state/loaded-graph.js';
+import { elementKey } from '../state/keys.js';
+import { partitionEdges, type LoadedGraph } from '../state/loaded-graph.js';
 
 /** No loaded node carries a degree preview yet, so what is still out there is not known. */
 export const UNKNOWN_REMAINDER: Count = { quality: 'unknown', scope: 'not yet retrieved' };
@@ -86,6 +87,28 @@ export function outsideFocusLine(outside: number): string {
 /** The entities loaded that a filter hides; nothing when none are hidden. */
 export function hiddenByFiltersLine(filtered: number): string | undefined {
   return filtered === 0 ? undefined : `${formatNumber(filtered)} hidden by filters`;
+}
+
+/** The entities a filter hides that are not already out of the view by hand or outside the neighborhood focus; the three parts never overlap. */
+export function filteredOnlyCount(loaded: readonly string[], hidden: ReadonlySet<string>, filtered: ReadonlySet<string>, outside: ReadonlySet<string> = new Set()): number {
+  return loaded.filter((key) => filtered.has(key) && !hidden.has(key) && !outside.has(key)).length;
+}
+
+/** The result line of the Filters panel: "M of L match · exact · H hidden", where L is the loaded entities not hidden by hand or outside the neighborhood focus (as the caller passes them in `hidden`), M those of them a filter leaves, and H the rest; nothing when nothing is loaded. */
+export function filterResultLine(loaded: readonly string[], hidden: ReadonlySet<string>, filtered: ReadonlySet<string>): string | undefined {
+  if (loaded.length === 0) return undefined;
+  const counted = loaded.filter((key) => !hidden.has(key));
+  const hiding = filteredOnlyCount(loaded, hidden, filtered);
+  return `${formatNumber(counted.length - hiding)} of ${formatNumber(counted.length)} match · exact · ${formatNumber(hiding)} hidden`;
+}
+
+/** The relationships line of the Filters panel while a relationship type is off: "M of L relationships match", where L is the relationships with both ends loaded that touch no entity hidden by hand and M those of them that are drawn (their type is on and neither end is filtered). Nothing while no relationship type is off. */
+export function relationshipResultLine(graph: LoadedGraph, hidden: ReadonlySet<string>, filtered: ReadonlySet<string>, offTypes: ReadonlySet<string>): string | undefined {
+  if (offTypes.size === 0) return undefined;
+  const { drawable } = partitionEdges(graph);
+  const counted = drawable.filter((edge) => !hidden.has(elementKey(edge.from)) && !hidden.has(elementKey(edge.to)));
+  const matching = counted.filter((edge) => !offTypes.has(edge.type) && !filtered.has(elementKey(edge.from)) && !filtered.has(elementKey(edge.to)));
+  return `${formatNumber(matching.length)} of ${formatNumber(counted.length)} ${counted.length === 1 ? 'relationship matches' : 'relationships match'}`;
 }
 
 /** What is left to show of the loaded entities: those neither hidden by hand, nor by a filter, nor outside the neighborhood focus is on; an entity that is both counts once, and a key that is not loaded counts for nothing. */

@@ -18,6 +18,19 @@ export const expandLabel = (count: number): string => `Expand ${count} ${count =
 export const loadMoreLabel = (pageSize: number | undefined): string => `Load ${pageSize === undefined ? 'more' : `${pageSize} more`}`;
 export const loadedText = (count: number): string => `${count.toLocaleString('en-US')} loaded`;
 export const PAGED_NOTE = 'More can be loaded page by page.';
+/** What the notes line says when the filters narrowed an expansion: how many of the node's neighbor types were asked, and of its relationship types when those were narrowed. */
+export const narrowedExpansionText = (asked: number, neighborTotal: number, relationships: { readonly asked: number; readonly total: number } | undefined): string =>
+  `Expanded with filters: ${asked} of ${neighborTotal} neighbor types${relationships === undefined ? '' : `, ${relationships.asked} of ${relationships.total} relationship types`}.`;
+
+/** What the notes line says when the filters narrowed what the action bar expanded for several entities. */
+export const NARROWED_BY_FILTERS = 'Expanded with filters.';
+
+/** What the notes line says when the filters leave nothing to expand for a node; the Expand relationships panel opens beside it. */
+export const FILTERS_LEAVE_NOTHING = 'Filters leave no relationship to expand for this entity. Choose types here.';
+
+/** What the notes line says after an expansion of several entities of which some were left no relationship by the filters. */
+export const skippedByFiltersText = (count: number): string => `${count} skipped: filters leave them nothing.`;
+
 export const NO_NEIGHBOR_TYPES = 'This item has no mapped neighbor types to expand.';
 export const expandingText = (count: number): string => `Expanding ${count} ${count === 1 ? 'item' : 'items'}`;
 export const failedBeforeText = (count: number): string => `${count} selected ${count === 1 ? 'node' : 'nodes'} failed to expand before this one.`;
@@ -28,6 +41,9 @@ export const EXPAND_BY_TYPE = 'Expand by type';
 export const CLOSE_PANEL = 'Close Expand relationships';
 export const RELATIONSHIP_TYPE_LABEL = 'Relationship type';
 export const ALL_SOURCED_TYPES = 'All sourced types';
+export const selectedInFiltersLabel = (count: number): string => `Selected in Filters (${count})`;
+export const hiddenByFiltersNote = (count: number): string => `${count} loaded ${count === 1 ? 'entity is' : 'entities are'} hidden by filters.`;
+export const SHOW_THESE_TYPES = 'Show these types';
 export const NEIGHBOR_TYPES_LABEL = 'Neighbor types';
 export const RANK_BY_LABEL = 'Rank by';
 export const MOST_RECENT = 'Most recent';

@@ -3,7 +3,7 @@ import { StateError } from './errors.js';
 import { createInvestigationStore, type InvestigationRecord, type InvestigationState, type LoadedInvestigation } from './investigation-state.js';
 import { createJobStore, type JobState } from './job-state.js';
 import { edgeKey, elementKey, type QueryKey } from './keys.js';
-import { deriveLoadedGraph, excludedKeys, neighborhoodOf, visibleGraph, type LoadedGraph } from './loaded-graph.js';
+import { deriveLoadedGraph, excludedKeys, filteredKeys, neighborhoodOf, visibleGraph, withoutRelationshipTypes, type LoadedGraph } from './loaded-graph.js';
 import { createPresentationStore, type PresentationActions, type PresentationSnapshot, type Viewport } from './presentation-state.js';
 import { createServerStore, type GraphResult, type ServerState } from './server-state.js';
 import { createStore, readable, type ReadableStore } from './store.js';
@@ -15,7 +15,7 @@ export interface ClientState {
   readonly server: ReadableStore<ServerState> & { get(key: QueryKey): GraphResult | undefined };
   readonly investigation: ReadableStore<InvestigationState>;
   /** Hiding goes through `hide` of the state, which also takes the relationships of the hidden entities out of the selection. */
-  readonly presentation: Omit<PresentationActions, 'hide' | 'focusOn'>;
+  readonly presentation: Omit<PresentationActions, 'hide' | 'focusOn' | 'setEntityTypeOff' | 'setRelationshipTypeOff'>;
   readonly jobs: ReadableStore<JobState>;
   /** Whether the session asks for the personal-data fields to be masked; every read of the session carries it. */
   readonly mask: ReadableStore<boolean>;
@@ -40,6 +40,10 @@ export interface ClientState {
   hide(keys: readonly string[]): void;
   /** Puts the neighborhood focus on an entity; refused with `UNKNOWN_ELEMENT` for a key that is not a loaded, shown entity. Runs no source read. */
   focusOn(key: string, viewport?: Viewport): void;
+  /** Switches an entity type off or on; the selected relationships that touch an entity of an off type leave the selection with it. */
+  setEntityTypeOff(type: string, off: boolean): void;
+  /** Switches a relationship type off or on; the loaded relationships of the type leave the selection with it. */
+  setRelationshipTypeOff(type: string, off: boolean): void;
 }
 
 const readFor = (keys: readonly QueryKey[], mask: boolean): boolean => keys.every((key) => key.mask === mask);
@@ -73,11 +77,11 @@ export function createClientState(): ClientState {
     isNode: (key) => nodeKeys().has(key),
     isElement: (key) => nodeKeys().has(key) || edgeKeys().has(key),
   });
-  const { view, setTool, setOpenTool, setOpenMenu, select, setPosition, setPositions, pin, setPanelSize, clearPanelSize, setPanelCollapsed, clearPanelCollapsed, setLegendOpen, setSearchOpen, setSearchTab, requestSearch, setSheetOpen, setSupernodePanel, setSceneItems, walkTo, endWalk, forgetFocused, announceMove, setViewport, showAllHidden, showHidden, leaveFocus } = presentation;
+  const { view, setTool, setOpenTool, setOpenMenu, select, setPosition, setPositions, pin, setPanelSize, clearPanelSize, setPanelCollapsed, clearPanelCollapsed, setLegendOpen, setSearchOpen, setSearchTab, requestSearch, setSheetOpen, setSupernodePanel, setSceneItems, walkTo, endWalk, forgetFocused, announceMove, setViewport, showAllHidden, showHidden, leaveFocus, setMappedTypes, resetTypeFilter, setFiltersOpen } = presentation;
   return {
     server: { ...server.view, get: server.get },
     investigation: investigation.view,
-    presentation: { view, setTool, setOpenTool, setOpenMenu, select, setPosition, setPositions, pin, setPanelSize, clearPanelSize, setPanelCollapsed, clearPanelCollapsed, setLegendOpen, setSearchOpen, setSearchTab, requestSearch, setSheetOpen, setSupernodePanel, setSceneItems, walkTo, endWalk, forgetFocused, announceMove, setViewport, showAllHidden, showHidden, leaveFocus },
+    presentation: { view, setTool, setOpenTool, setOpenMenu, select, setPosition, setPositions, pin, setPanelSize, clearPanelSize, setPanelCollapsed, clearPanelCollapsed, setLegendOpen, setSearchOpen, setSearchTab, requestSearch, setSheetOpen, setSupernodePanel, setSceneItems, walkTo, endWalk, forgetFocused, announceMove, setViewport, showAllHidden, showHidden, leaveFocus, setMappedTypes, resetTypeFilter, setFiltersOpen },
     jobs: createJobStore(),
     mask: readable(mask),
     setMask: (next) => mask.setState(next),
@@ -148,9 +152,9 @@ export function createClientState(): ClientState {
     replacePins: (keys) => presentation.replacePins(keys),
     loadedGraph: () => deriveLoadedGraph(server.view.getState(), investigation.view.getState()),
     visibleGraph: () => {
-      const { hidden, neighborhoodFocus } = presentation.view.getState();
+      const { hidden, neighborhoodFocus, typeFilter } = presentation.view.getState();
       const graph = deriveLoadedGraph(server.view.getState(), investigation.view.getState());
-      return visibleGraph(graph, excludedKeys(graph, { hidden, neighborhoodFocus }));
+      return withoutRelationshipTypes(visibleGraph(graph, excludedKeys(graph, { hidden, neighborhoodFocus, filtered: filteredKeys(graph, typeFilter) })), typeFilter.offRelationshipTypes);
     },
     focusOn(key, viewport) {
       const graph = deriveLoadedGraph(server.view.getState(), investigation.view.getState());
@@ -158,6 +162,15 @@ export function createClientState(): ClientState {
       const goneNodes = new Set(graph.nodes.map((node) => elementKey(node.ref)).filter((candidate) => !near.has(candidate)));
       const goneEdges = graph.edges.filter((edge) => goneNodes.has(elementKey(edge.from)) || goneNodes.has(elementKey(edge.to))).map((edge) => edgeKey(edge.ref));
       presentation.focusOn(key, [...goneNodes, ...goneEdges], viewport);
+    },
+    setRelationshipTypeOff(type, off) {
+      const graph = deriveLoadedGraph(server.view.getState(), investigation.view.getState());
+      presentation.setRelationshipTypeOff(type, off, graph.edges.filter((edge) => edge.type === type).map((edge) => edgeKey(edge.ref)));
+    },
+    setEntityTypeOff(type, off) {
+      const graph = deriveLoadedGraph(server.view.getState(), investigation.view.getState());
+      const ofType = new Set(graph.nodes.filter((node) => node.ref.entityType === type).map((node) => elementKey(node.ref)));
+      presentation.setEntityTypeOff(type, off, graph.edges.filter((edge) => ofType.has(elementKey(edge.from)) || ofType.has(elementKey(edge.to))).map((edge) => edgeKey(edge.ref)));
     },
     hide(keys) {
       const hiding = new Set(keys);

@@ -28,6 +28,7 @@ import { createSelectionActionRegistry, SelectionActionsProvider, type Selection
 import { bindLegend } from './workspace/legend-binder.js';
 import { bindSupernodePanel } from './workspace/supernode-panel-binder.js';
 import { bindSearchPanel } from './search/search-panel-binder.js';
+import { bindFiltersPanel } from './workspace/filters-binder.js';
 import { createPanelRegistryFor, PanelsProvider, type PanelRegistry } from './workspace/panel-registry.js';
 import { createSlotRegistry, SlotsProvider, type SlotRegistry } from './workspace/slots.js';
 import { createToolRegistry, ToolsProvider, type ToolRegistry } from './workspace/tool-registry.js';
@@ -238,6 +239,7 @@ export function renderApp(path: string | { readonly pathname: string; readonly s
   );
   const unbindLegend = bindLegend(state, panels);
   const unbindSearch = bindSearchPanel(state, panels);
+  const unbindFilters = bindFiltersPanel(state, panels);
   const unbindSupernode = bindSupernodePanel(state, panels);
   const unbindBanner = bindBannerToInvestigation(state, banner);
   return {
@@ -252,6 +254,7 @@ export function renderApp(path: string | { readonly pathname: string; readonly s
     unmount: () => {
       unbindLegend();
       unbindSearch();
+      unbindFilters();
       unbindSupernode();
       unbindBanner();
       view.unmount();

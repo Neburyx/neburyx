@@ -51,7 +51,7 @@ describe('the look of a relationship', () => {
 
   describe('the canvas label of an aggregate of one member', () => {
     it('is the type alone for an exact 1, and keeps the full label for the hover tip', () => {
-      expect(relationshipLook(aggregate('SENT', count(1, 'exact')))).toEqual({ aggregate: true, origin: 'stored', label: 'SENT', tip: 'SENT · 1 · exact' });
+      expect(relationshipLook(aggregate('SENT', count(1, 'exact')))).toEqual({ aggregate: true, origin: 'stored', label: 'SENT', tip: 'SENT · 1 · exact', single: true });
     });
 
     it('keeps the origin word for an exact 1 of derived or unknown origin', () => {
@@ -68,8 +68,19 @@ describe('the look of a relationship', () => {
       expect(relationshipLook(aggregate('SENT', memberCount))).toEqual({ aggregate: true, origin: 'stored', label });
     });
 
-    it('is still an aggregate, so its line keeps its width', () => {
-      expect(relationshipLook(aggregate('SENT', count(1, 'exact'))).aggregate).toBe(true);
+    it('is still an aggregate, and is marked as standing for one relationship, so its line is as thin as a stored one', () => {
+      const look = relationshipLook(aggregate('SENT', count(1, 'exact')));
+      expect(look.aggregate).toBe(true);
+      expect(look.single).toBe(true);
+    });
+
+    it.each<[string, Count]>([
+      ['exact 2', count(2, 'exact')],
+      ['lower bound 1', count(1, 'lowerBound')],
+      ['estimated 1', count(1, 'estimated')],
+      ['unknown', count(undefined, 'unknown')],
+    ])('leaves an aggregate of %s without the mark, so its line keeps the aggregate width', (_name, memberCount) => {
+      expect(relationshipLook(aggregate('SENT', memberCount)).single).toBeUndefined();
     });
 
     it('leaves the parts the menu header and the walk read with the full count', () => {
