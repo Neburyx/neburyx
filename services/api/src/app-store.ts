@@ -6,6 +6,7 @@ import { PROBE_STEP_MS, READINESS_LIMIT_MS, runReadiness } from './health/readin
 import { readIdentity, seedFirstStart } from './db/identity-repository.js';
 import { createInvestigation, findReusableInvestigation, readInvestigation, readLibrary, type InvestigationStore } from './db/investigations-repository.js';
 import { referenceKeyOf } from './db/reference-key-repository.js';
+import type { SourceHashes } from './source-state/decide.js';
 import { applyPingState, hasActiveSource, latestChecksFor, latestQualifyingChecks, markSourceUnchecked, recordSourceCheck, type CheckedSource, type PingStateChange, type QualifyingCheck, type SourceCheck } from './db/source-checks-repository.js';
 import { listSourceRows, syncSources, type SourceRow } from './db/sources-repository.js';
 import type { SourceModel } from './mapping/model.js';
@@ -19,7 +20,7 @@ export interface AppStore extends InvestigationStore {
   listSources(): Promise<readonly SourceRow[]>;
   hasActiveSource(sourceId: string): Promise<boolean>;
   recordSourceCheck(check: SourceCheck): Promise<void>;
-  markSourceUnchecked(sourceId: string, reason: string): Promise<void>;
+  markSourceUnchecked(sourceId: string, reason: string, source: SourceHashes): Promise<void>;
   latestQualifyingChecks(sources: readonly CheckedSource[], since: string, onUnreadable?: (sourceId: string, checkedAt: string) => void): Promise<QualifyingCheck[]>;
   latestChecksFor(sources: readonly CheckedSource[], onUnreadable?: (sourceId: string, checkedAt: string) => void): Promise<QualifyingCheck[]>;
   applyPingState(change: PingStateChange): Promise<boolean>;
@@ -63,7 +64,7 @@ export function createAppStore(url: string, onConnectionError: () => void, optio
     listSources: () => listSourceRows(pool),
     hasActiveSource: (sourceId) => hasActiveSource(pool, sourceId),
     recordSourceCheck: (check) => recordSourceCheck(pool, check),
-    markSourceUnchecked: (sourceId, reason) => markSourceUnchecked(pool, sourceId, reason),
+    markSourceUnchecked: (sourceId, reason, source) => markSourceUnchecked(pool, sourceId, reason, source),
     latestQualifyingChecks: (sources, since, onUnreadable) => latestQualifyingChecks(pool, sources, since, onUnreadable),
     latestChecksFor: (sources, onUnreadable) => latestChecksFor(pool, sources, onUnreadable),
     referenceKey: () => referenceKeyOf(pool),

@@ -6,6 +6,7 @@ import type { SourceRow } from '../db/sources-repository.js';
 import type { Identity } from '../identity/identity.js';
 import { validatedDraft, type CreatedInvestigation, type DraftRow, type InvestigationRow, type ListedInvestigation, type NewDraft, type NewInvestigation, type ReusableQuery, type StoredInvestigation } from '../db/investigations-repository.js';
 import type { SourceModel } from '../mapping/model.js';
+import { decideSourceState, type StoredCheck } from '../source-state/decide.js';
 
 export const LOCAL_IDENTITY: Identity = {
   principal: { id: '0192f000-0000-7000-8000-000000000001', displayName: 'Local workspace', role: 'administrator' },
@@ -53,6 +54,10 @@ export function memoryStoreWith(options: MemoryAppStoreOptions): MemoryAppStore 
   let rows = options.sources ?? [];
   let key: Buffer | undefined;
   const checks: SourceCheck[] = [];
+  const storedChecksOf = (sourceId: string): StoredCheck[] =>
+    checks
+      .filter((check) => check.report.sourceId === sourceId)
+      .map((check) => ({ id: check.id, checkedAt: check.report.checkedAt, identityHash: check.identityHash, configHash: check.configHash, reachedSource: check.report.server !== null, state: check.report.state, stateReason: check.report.stateReason }));
   const investigations: InvestigationRow[] = [];
   const drafts: (DraftRow & { readonly investigationId: string })[] = [];
   return {
@@ -94,19 +99,20 @@ export function memoryStoreWith(options: MemoryAppStoreOptions): MemoryAppStore 
           return found === undefined ? [] : [{ sourceId: source.id, checkedAt: found.report.checkedAt, report: found.report }];
         }),
       ),
-    markSourceUnchecked: (sourceId, reason) => {
-      rows = rows.map((row) => (row.id === sourceId ? { ...row, state: 'unknown', stateReason: reason } : row));
+    markSourceUnchecked: (sourceId, reason, source) => {
+      // the rule of the Postgres store: only when no check of any copy qualifies
+      if (decideSourceState(storedChecksOf(sourceId), source).decidedBy === null) {
+        rows = rows.map((row) => (row.id === sourceId ? { ...row, state: 'unknown', stateReason: reason } : row));
+      }
       return Promise.resolve();
     },
-    // Only the Postgres suite proves the identity rule and the rule that a fresher test wins; this double follows neither, so unit tests do not assert on them.
+    // Only the Postgres suite proves the rule that a fresher test wins over a ping; this double decides a reachable ping by the same rule as the Postgres store (the newest qualifying check) and an unreachable one by its sentence.
     applyPingState: (change: PingStateChange) => {
       if (options.failPingState === true) return Promise.reject(new Error('the state could not be written'));
       const row = rows.find((candidate) => candidate.id === change.sourceId);
       if (row === undefined) return Promise.resolve(false);
-      const latest = [...checks].reverse().find((check) => check.report.sourceId === change.sourceId);
-      const next = change.reachable
-        ? { state: latest?.report.state ?? ('unknown' as const), stateReason: latest?.report.stateReason ?? null }
-        : { state: 'unavailable' as const, stateReason: change.reason };
+      const shown = decideSourceState(storedChecksOf(change.sourceId), { identityHash: change.identityHash, configHash: change.configHash });
+      const next = change.reachable ? { state: shown.state as SourceRow['state'], stateReason: shown.stateReason } : { state: 'unavailable' as const, stateReason: change.reason };
       const changed = row.state !== next.state || row.stateReason !== next.stateReason;
       rows = rows.map((candidate) => (candidate.id === change.sourceId ? { ...candidate, ...next } : candidate));
       return Promise.resolve(changed);

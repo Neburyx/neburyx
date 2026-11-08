@@ -171,6 +171,22 @@ describe('the startup check of a source whose check does not settle', () => {
     ]);
   });
 
+  it('leaves the state a qualifying check of another copy decided, and stores no check', async () => {
+    const executor = serverExecutor(undefined, undefined, { status: 'unavailable', reason: 'pool-full' });
+    const store = memoryAppStore();
+    await store.syncSources(mapping.sources);
+    // another copy's start check settled and was stored for the same connection and mapping
+    const settled = checker(answering(), store);
+    await settled.checker.run();
+    const before = (await store.listSources()).map((row) => [row.id, row.state, row.stateReason]);
+    const stored = store.checks.length;
+    const { checker: startup } = checker(executor, store);
+    await startup.run();
+    expect(store.checks).toHaveLength(stored);
+    expect((await store.listSources()).map((row) => [row.id, row.state, row.stateReason])).toEqual(before);
+    expect(before.map((row) => row[1])).not.toContain('unknown');
+  });
+
   it('writes one warning line with the event and the source id when the login may not list indexes', async () => {
     const executor = serverExecutor(undefined, undefined, (call) => (call.templateId === 'schema-indexes' ? { status: 'unavailable', reason: 'refused' } : fittingSchemaAnswer(call)));
     const { checker: startup, log } = checker(executor);

@@ -10,4 +10,5 @@ Public technical documentation. Pre-release placeholder: the technical architect
 - [query-timeout.md](query-timeout.md): the limit on every read, what a timed-out request answers and shows, what was measured and what was not verified.
 - [fuzz-suite.md](fuzz-suite.md): the input fuzz suite, what it proves about statement text and refusals, a recorded run and how to replay a failure.
 - [circuit-breaker.md](circuit-breaker.md): the rule that stops a source being asked when its reads keep timing out, how it recovers, what a person sees and the three settings.
+- [source-state.md](source-state.md): which stored check decides the state a source shows when several API copies run, and what stays different between copies.
 - [benchmarks/](benchmarks/README.md): the supernode benchmark, what it measures, how to run it and the last record.

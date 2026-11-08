@@ -7,7 +7,7 @@ import { identityHashOf } from '../registry/identity-hash.js';
 import { applyPingResults } from './state.js';
 
 const mapping = mappingOf(sourceWith('a'), sourceWith('b'), sourceWith('c'));
-const context = { mapping, since: '2026-11-02T10:00:00.000Z' };
+const context = { mapping };
 const [sourceA, sourceB] = mapping.sources;
 const result = (sourceId: string, overrides: Partial<PingResult> = {}): PingResult => ({ sourceId, previous: 'reachable', current: 'unreachable', reason: 'The source could not be reached.', skipped: false, recovered: false, startedAt: 1_000, ...overrides });
 
@@ -17,8 +17,8 @@ describe('writing the state of the results', () => {
     const store = { applyPingState: (change: unknown) => (changes.push(change), Promise.resolve(true)) };
     await applyPingResults(store, { warn: () => undefined }, [result('a'), result('b', { current: 'reachable', reason: null }), result('c', { skipped: true })], context);
     expect(changes).toEqual([
-      { sourceId: 'a', reachable: false, reason: 'The source could not be reached.', observedAt: '1970-01-01T00:00:01.000Z', identityHash: identityHashOf(sourceA), configHash: sourceA?.configHash, since: context.since },
-      { sourceId: 'b', reachable: true, reason: null, observedAt: '1970-01-01T00:00:01.000Z', identityHash: identityHashOf(sourceB), configHash: sourceB?.configHash, since: context.since },
+      { sourceId: 'a', reachable: false, reason: 'The source could not be reached.', observedAt: '1970-01-01T00:00:01.000Z', identityHash: identityHashOf(sourceA), configHash: sourceA?.configHash },
+      { sourceId: 'b', reachable: true, reason: null, observedAt: '1970-01-01T00:00:01.000Z', identityHash: identityHashOf(sourceB), configHash: sourceB?.configHash },
     ]);
   });
 

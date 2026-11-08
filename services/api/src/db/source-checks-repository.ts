@@ -1,7 +1,7 @@
 import { serverVersionText } from '../source-test/server-version.js';
 import { sourceTestReportSchema, type SourceTestReport } from '@neburyx/contracts';
 import { readStoredReport } from '../source-test/stored-report.js';
-import { NOT_CHECKED_SINCE_START } from '../source-test/reasons.js';
+import { decideSourceState, type SourceHashes, type StoredCheck } from '../source-state/decide.js';
 import type pg from 'pg';
 import { AppError } from '../errors.js';
 
@@ -64,9 +64,36 @@ export async function recordSourceCheck(db: pg.Pool, check: SourceCheck): Promis
   }
 }
 
-/** Marks a source as not checked since the start: the state `unknown` with the reason, and no check row. */
-export async function markSourceUnchecked(db: pg.Pool, sourceId: string, reason: string): Promise<void> {
-  await db.query(`UPDATE sources SET state = 'unknown', state_reason = $2 WHERE id = $1 AND removed_at IS NULL AND (state <> 'unknown' OR state_reason IS DISTINCT FROM $2)`, [sourceId, reason]);
+/** The kept checks of a source, newest first, as the rule reads them; read inside the transaction that holds the source's row lock. */
+async function storedChecksOf(client: pg.PoolClient, sourceId: string): Promise<StoredCheck[]> {
+  const result = await client.query<{ id: string; checked_at: Date; identity_hash: string | null; config_hash: string | null; reached: boolean; state: string | null; reason: string | null }>(
+    `SELECT id, checked_at, identity_hash, config_hash, jsonb_typeof(report -> 'server') = 'object' AS reached, report ->> 'state' AS state, report ->> 'stateReason' AS reason
+       FROM source_checks WHERE source_id = $1 ORDER BY checked_at DESC, id DESC LIMIT $2`,
+    [sourceId, KEPT_CHECKS],
+  );
+  return result.rows.map((row) => ({ id: row.id, checkedAt: row.checked_at.toISOString(), identityHash: row.identity_hash, configHash: row.config_hash, reachedSource: row.reached, state: row.state, stateReason: row.reason }));
+}
+
+/**
+ * Marks a source as not checked since the start (state `unknown` with the reason) after a start that did not settle, and stores no check row.
+ * It writes only when no check of any copy qualifies for the connection and the mapping this process runs (see `decideSourceState`): a state another copy decided stays.
+ */
+export async function markSourceUnchecked(db: pg.Pool, sourceId: string, reason: string, source: SourceHashes): Promise<void> {
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    const locked = await client.query('SELECT 1 FROM sources WHERE id = $1 AND removed_at IS NULL FOR UPDATE', [sourceId]);
+    if ((locked.rowCount ?? 0) > 0 && decideSourceState(await storedChecksOf(client, sourceId), source).decidedBy === null) {
+      await client.query(`UPDATE sources SET state = 'unknown', state_reason = $2 WHERE id = $1 AND (state <> 'unknown' OR state_reason IS DISTINCT FROM $2)`, [sourceId, reason]);
+    }
+    await client.query('COMMIT');
+  } catch (error) {
+    // A failed rollback must not hide the error that caused it; the connection is released either way.
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 /** A source as the running process knows it: what a stored check must carry to count for it. */
@@ -140,15 +167,14 @@ export interface PingStateChange {
   readonly reason: string | null;
   /** When the ping's read started: a failed ping gives way to a test that was reached later. */
   readonly observedAt: string;
-  /** The identity hash and the config hash of the source as this process runs it, and when this process started: only a check that matches and is not older counts when the ping restores the state. */
+  /** The identity hash and the config hash of the source as this process runs it: only a check that matches counts when the ping restores the state. */
   readonly identityHash: string;
   readonly configHash: string;
-  readonly since: string;
 }
 
 /**
  * Sets the state of a source from a ping, under the lock a test run takes: `unavailable` with the sentence when the ping failed;
- * when it succeeded, the state of the newest test that counts for the running process (see `latestQualifyingChecks`), or `unknown` with the reason that the source has not been checked since the start.
+ * when it succeeded, the state of the newest check of any copy that reached the source for the connection and the mapping this process runs (see `decideSourceState`), or `unknown` with the reason that the source has not been checked since the start.
  * Writes only when the state would change, and leaves `updated_at` alone. Returns whether a row was changed.
  */
 export async function applyPingState(db: pg.Pool, change: PingStateChange): Promise<boolean> {
@@ -170,16 +196,9 @@ export async function applyPingState(db: pg.Pool, change: PingStateChange): Prom
         return false;
       }
     } else {
-      // the newest check that counts for this process (it reached the source, matches the identity and the mapping, was stored since the start), else not checked
-      const newest = await client.query<{ state: string | null; reason: string | null }>(
-        `SELECT report ->> 'state' AS state, report ->> 'stateReason' AS reason FROM source_checks
-          WHERE source_id = $1 AND identity_hash = $2 AND config_hash = $3 AND checked_at >= $4 AND jsonb_typeof(report -> 'server') = 'object'
-          ORDER BY checked_at DESC, id DESC LIMIT 1`,
-        [change.sourceId, change.identityHash, change.configHash, change.since],
-      );
-      const row = newest.rows[0];
-      state = row?.state ?? 'unknown';
-      reason = row === undefined ? NOT_CHECKED_SINCE_START : row.reason;
+      const shown = decideSourceState(await storedChecksOf(client, change.sourceId), { identityHash: change.identityHash, configHash: change.configHash });
+      state = shown.state;
+      reason = shown.stateReason;
     }
     const updated = await client.query(
       `UPDATE sources SET state = $2, state_reason = $3 WHERE id = $1 AND (state, state_reason) IS DISTINCT FROM ($2, $3)`,

@@ -2,6 +2,8 @@ import { AppError } from '../errors.js';
 import type { Clock, SystemRunner } from '../gate/types.js';
 import type { MappingModel } from '../mapping/model.js';
 import type { MappingFinding } from '@neburyx/contracts';
+import { identityHashOf } from '../registry/identity-hash.js';
+import type { SourceHashes } from '../source-state/decide.js';
 import { checkSource, type CheckStore } from './check.js';
 import { FIX_THE_SOURCE, NOT_CHECKED_SINCE_START } from './reasons.js';
 
@@ -22,7 +24,7 @@ export interface StartupLogger {
 }
 
 export interface StartupStore extends CheckStore {
-  markSourceUnchecked(sourceId: string, reason: string): Promise<void>;
+  markSourceUnchecked(sourceId: string, reason: string, source: SourceHashes): Promise<void>;
 }
 
 export interface StartupCheckerDeps {
@@ -70,8 +72,8 @@ export function createStartupChecker(deps: StartupCheckerDeps): StartupChecker {
       // a failure of the gate says nothing about the source; a failure of the database is not caught here and stops the start
       if (!(error instanceof AppError)) throw error;
       outcome = 'error';
-      // nothing was stored, so the state left from before the restart would stand: say that the source has not been checked
-      await deps.store.markSourceUnchecked(sourceId, NOT_CHECKED_SINCE_START);
+      // nothing was stored: mark the source as not checked unless a check of any copy qualifies, so a state another copy decided stays
+      await deps.store.markSourceUnchecked(sourceId, NOT_CHECKED_SINCE_START, { identityHash: identityHashOf(source), configHash: source.configHash });
     }
     const log = outcome === 'pass' ? deps.logger.info : deps.logger.warn;
     log.call(deps.logger, { event: 'source.startup_check', sourceId, outcome }, 'source startup check');

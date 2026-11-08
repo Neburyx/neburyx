@@ -446,7 +446,7 @@ describe('the startup check in start', () => {
         expect(parts.store.checks).toHaveLength(checks);
         expect((await readPerson(result.app)).statusCode).toBe(200);
         expect(alphaReads(parts.executor).slice(-2)).toEqual(['schema-indexes', 'entity-load']);
-        // the ping that follows keeps the state of that check: it reached the source and was stored since the start
+        // the ping that follows keeps the state of that check: it reached the source and matches the source's connection and mapping
         expect((await parts.store.listSources())[0]).toMatchObject({ state: 'unavailable' });
         await result.app.close();
       });

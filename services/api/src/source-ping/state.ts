@@ -15,10 +15,9 @@ export interface PingStateLogger {
  * Writes the state each ping implies for its source; a skipped ping implies none. A write that fails is logged once with the source ID
  * and does not stop the others; the next run tries again.
  */
-/** What the state write needs to know about the running process: the mapping it runs and when it started. */
+/** What the state write needs to know about the running process: the mapping it runs. */
 export interface PingStateContext {
   readonly mapping: MappingModel;
-  readonly since: string;
 }
 
 export async function applyPingResults(store: PingStateStore, logger: PingStateLogger, results: readonly PingResult[], context: PingStateContext): Promise<void> {
@@ -36,7 +35,6 @@ export async function applyPingResults(store: PingStateStore, logger: PingStateL
             observedAt: new Date(result.startedAt).toISOString(),
             identityHash: identityHashOf(source),
             configHash: source.configHash,
-            since: context.since,
           });
         } catch {
           logger.warn({ event: 'source.ping_state_failed', sourceId: result.sourceId }, 'source ping state write failed');

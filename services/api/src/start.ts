@@ -187,7 +187,7 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
       ping: createScheduledPing({ system: gate.system, mapping, cache: reachability }),
       intervalMs: pingIntervalMs,
       onResults: async (results) => {
-        await applyPingResults(openedStore, io.logger, results, { mapping, since: startedAt });
+        await applyPingResults(openedStore, io.logger, results, { mapping });
         await refreshUsability(openedStore, usability, mapping, startedAt, io.logger);
         contact.afterTick(results);
       },
