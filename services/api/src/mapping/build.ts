@@ -101,6 +101,7 @@ function buildEntity(raw: RawEntity, path: readonly (string | number)[], report:
     pii,
     ...(Object.keys(piiClasses).length === 0 ? {} : { piiClasses }),
     filterable,
+    ...((raw.degree ?? []).length === 0 ? {} : { degree: (raw.degree ?? []).map((entry) => ({ type: entry.type, direction: entry.direction, property: entry.property, ...(entry.observed_at === undefined ? {} : { observedAt: entry.observed_at }) })) }),
     ...linkOf(raw, path, report),
     display: {
       ...(raw.display?.name === undefined ? {} : { name: raw.display.name }),
@@ -232,6 +233,26 @@ function reportDuplicates<T>(
   });
 }
 
+/** Each degree entry names a pair the entity has in the mapping, once, and a property that is neither the entity's `stable_id` nor a `pii` property. */
+function checkDegree(entity: RawEntity, path: readonly (string | number)[], rows: readonly RawRelationship[], report: Report): void {
+  const pairs = rows.flatMap((row) => [...(row.from === entity.type ? [{ relationshipType: row.type, direction: 'out' }] : []), ...(row.to === entity.type ? [{ relationshipType: row.type, direction: 'in' }] : [])]);
+  const pii = (entity.pii ?? []).map((entry) => entry.property);
+  const seen = new Set<string>();
+  (entity.degree ?? []).forEach((entry, index) => {
+    const at = [...path, index];
+    const named = `${entry.type} ${entry.direction}`;
+    if (!pairs.some((pair) => pair.relationshipType === entry.type && pair.direction === entry.direction)) report(at, `names ${named}, which is not a relationship of entity type ${entity.type} in this source`);
+    if (seen.has(named)) report(at, `repeats ${named}`);
+    seen.add(named);
+    if (entry.property === entity.stable_id) report([...at, 'property'], `is the stable ID property of entity type ${entity.type}, which is not a degree`);
+    if (pii.includes(entry.property)) report([...at, 'property'], `is a personal-data property of entity type ${entity.type}, which is not a degree`);
+    if (entry.observed_at === undefined) return;
+    if (entry.observed_at === entry.property) report([...at, 'observed_at'], `is the same property as the degree, which cannot also be its date`);
+    if (entry.observed_at === entity.stable_id) report([...at, 'observed_at'], `is the stable ID property of entity type ${entity.type}, which is not a date`);
+    if (pii.includes(entry.observed_at)) report([...at, 'observed_at'], `is a personal-data property of entity type ${entity.type}, which is not a date`);
+  });
+}
+
 function buildSource(raw: RawSource, index: number, report: Report): SourceModel {
   const base = ['sources', index] as const;
   const rawRelationships = raw.relationships ?? [];
@@ -244,6 +265,8 @@ function buildSource(raw: RawSource, index: number, report: Report): SourceModel
   reportDuplicates(rawRelationships, (r) => [r.type, 'from', r.from, 'to', r.to], (i) => [...base, 'relationships', i, 'type'], 'relationship', report);
   reportDuplicates(rawDerived, (rule) => [rule.id], (i) => [...base, 'derived', i, 'id'], 'derived rule', report);
   reportDuplicates(rawPresets, (preset) => [preset.id], (i) => [...base, 'patterns', i, 'id'], 'pattern', report);
+
+  for (const [entityIndex, entity] of raw.entities.entries()) checkDegree(entity, [...base, 'entities', entityIndex, 'degree'], rawRelationships, report);
 
   const searchProperties = raw.entities.reduce((total, entity) => total + new Set(entity.search ?? []).size, 0);
   if (searchProperties > MAX_SEARCH_PROPERTIES) report([...base, 'entities'], `list ${searchProperties} search properties in all, more than the ${MAX_SEARCH_PROPERTIES} a search can read`);

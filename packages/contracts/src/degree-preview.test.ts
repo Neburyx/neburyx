@@ -42,6 +42,12 @@ describe('the degree preview response', () => {
     expect(degreePreviewSchema.safeParse({ ...preview, warnings: [{ code: 'counts-capped', relationshipType: 'LINKS', reason: 'Counts are capped for this entity type' }] }).success).toBe(true);
   });
 
+  it('parses an estimated count with its date and the warning that a degree property was not used', () => {
+    const estimated = { value: 1200, quality: 'estimated', scope: 'degree:out:LINKS', observedAt: '2026-01-02T03:04:05Z' };
+    expect(degreePreviewSchema.safeParse({ ...preview, byType: [{ ...preview.byType[0], count: estimated }] }).success).toBe(true);
+    expect(degreePreviewSchema.safeParse({ ...preview, warnings: [{ code: 'degree-property-ignored', relationshipType: 'LINKS', reason: 'A degree property of the source was not used' }] }).success).toBe(true);
+  });
+
   it.each([
     ['an exact count with no value', { ...preview, total: { quality: 'exact', scope: 'x' } }],
     ['an unknown count with a value', { ...preview, total: { value: 3, quality: 'unknown', scope: 'x' } }],
@@ -49,6 +55,7 @@ describe('the degree preview response', () => {
     ['a direction that is not out or in', { ...preview, byType: [{ ...preview.byType[0], direction: 'both' }] }],
     ['a pair with no neighbor type', { ...preview, byType: [{ ...preview.byType[0], neighborTypes: [] }] }],
     ['a warning code that is not named', { ...preview, warnings: [{ code: 'other', reason: 'x' }] }],
+    ['a date on an exact count', { ...preview, byType: [{ ...preview.byType[0], count: { ...exact(3), observedAt: '2026-01-02' } }] }],
     ['a field the schema does not name', { ...preview, extra: 1 }],
     ['no heavyOpThreshold', { ...preview, heavyOpThreshold: undefined }],
     ['a heavyOpThreshold of zero', { ...preview, heavyOpThreshold: 0 }],

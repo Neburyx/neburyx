@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { AppError } from '../errors.js';
 import { MAX_EVIDENCE_PROPERTIES, MAX_FACET_PROBES, MAX_REFERENCE_PROPERTIES, MAX_SEARCH_PROPERTIES } from '../mapping/model.js';
-import { degreePairsOf } from './templates/degree-pairs.js';
+import { declarationsOf, degreePairsOf } from './templates/degree-pairs.js';
 import { expandBranchesOf, expandStatementOf, type ExpandDirection } from './templates/expand-statement.js';
 import type { GateParameter, Params, SourceAllowlist, Template } from './types.js';
 
@@ -201,7 +201,9 @@ function degreeCountsOf(template: Template, params: Params, allowlist: SourceAll
   const patterns = pairs.map((pair) => (pair.direction === 'out' ? `(n)-[:${quoteName(pair.relationshipType)}]->()` : `(n)<-[:${quoteName(pair.relationshipType)}]-()`));
   if (spec.form === 'cheap') return `${anchor}\nRETURN ${patterns.map((pattern, index) => `COUNT { ${pattern} } AS c${index}`).join(', ')}`;
   const calls = patterns.map((pattern, index) => `CALL { WITH n MATCH ${pattern} WITH 1 AS hit LIMIT $countCap + 1 RETURN count(*) AS c${index} }`);
-  return `${anchor}\n${calls.join('\n')}\nRETURN ${patterns.map((_pattern, index) => `c${index}`).join(', ')}`;
+  const declared = declarationsOf(pairs, allowlist.degreeProperties?.get(entityType));
+  const properties = declared.flatMap((declaration, index) => (declaration === undefined ? [] : [`n.${quoteName(declaration.property)} AS p${index}`, ...(declaration.observedAt === undefined ? [] : [`n.${quoteName(declaration.observedAt)} AS t${index}`])]));
+  return `${anchor}\n${calls.join('\n')}\nRETURN ${[...patterns.map((_pattern, index) => `c${index}`), ...properties].join(', ')}`;
 }
 
 /**

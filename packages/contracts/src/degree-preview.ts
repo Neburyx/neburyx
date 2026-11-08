@@ -13,7 +13,7 @@ export const degreePreviewRequestSchema = z.strictObject({
 
 export const DEGREE_DIRECTIONS = ['out', 'in'] as const;
 
-export const DEGREE_WARNING_CODES = ['counts-capped', 'duplicate-stable-id'] as const;
+export const DEGREE_WARNING_CODES = ['counts-capped', 'duplicate-stable-id', 'degree-property-ignored'] as const;
 
 export const degreeWarningSchema = z.strictObject({ code: z.enum(DEGREE_WARNING_CODES), relationshipType: text.optional(), reason: text });
 

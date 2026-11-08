@@ -36,6 +36,7 @@ const packFileSchema = z.object({
           filterable: names,
           reference: names,
           display: z.object({ key_properties: names, state_property: name.optional() }).optional(),
+          degree: z.array(z.object({ type: name, direction: name, property: name, observed_at: name.optional() })).optional(),
         }),
       ),
       relationships: z
@@ -89,6 +90,8 @@ function identifiersOf(pack: string, file: PackFile): Identifier[] {
         entity.filterable,
         entity.reference,
         entity.display?.key_properties,
+        entity.degree?.map((entry) => entry.property),
+        entity.degree?.map((entry) => entry.observed_at),
         placeholdersOf(entity.title),
       );
       keys.forEach((key) => add(key, 'property key'));

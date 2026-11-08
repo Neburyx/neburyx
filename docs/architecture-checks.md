@@ -107,7 +107,7 @@ serves any domain with no code change.
 
 **What it reads.** Every `domain-packs/*/neburyx.yaml`: each entity `type`, `label` and `stable_id`; each relationship
 `type`, `stable_id` and `observed_at`; every property named in `search`, `pii`, `filterable`, `reference`, `evidence` or
-`key_properties`; the `state_property` and the `stop_list_property`; and the property names inside `title` placeholders.
+`key_properties`; the `property` and `observed_at` of each `degree` entry; the `state_property` and the `stop_list_property`; and the property names inside `title` placeholders.
 Preset and rule ids and names, the vocabulary, source ids, addresses, credential variable names and link templates are not
 identifiers. If no pack is found, a pack file is missing, is not valid YAML or has another shape, or a pack yields no
 identifiers, the check fails and names the file; it never passes for nothing.

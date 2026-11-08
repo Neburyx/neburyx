@@ -129,7 +129,7 @@ function ChecklistFor({ node, close }: { readonly node: ElementRef; readonly clo
               key={type}
               name={displayNameOf(profile, type)}
               count={entry === undefined ? undefined : degreeCountText(entry.count)}
-              paged={entry !== undefined && (entry.count.quality === 'lowerBound' || entry.count.quality === 'unknown')}
+              paged={entry !== undefined && entry.count.quality !== 'exact'}
               checked={!cleared.has(type)}
               onToggle={() => setCleared((held) => (held.has(type) ? new Set([...held].filter((other) => other !== type)) : new Set(held).add(type)))}
               progress={expansion.types.get(type)}

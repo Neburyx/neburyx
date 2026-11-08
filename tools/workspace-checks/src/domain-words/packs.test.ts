@@ -20,6 +20,7 @@ sources:
         reference: [e_reference]
         link: "https://marker.example.test/{e_stable}"
         display: { icon: money, key_properties: [e_key_only], state_property: e_state }
+        degree: [{ type: r_type, direction: out, property: e_degree, observed_at: e_degree_at }]
     relationships:
       - type: r_type
         from: e_type
@@ -69,7 +70,7 @@ describe('the identifiers of a pack', () => {
     expect(named('label')).toEqual(['e_label']);
     expect(named('relationship type')).toEqual(['r_type']);
     expect(named('property key')).toEqual(
-      ['d_stop', 'e_filter', 'e_key_only', 'e_pii', 'e_pii_classed', 'e_reference', 'e_search', 'e_stable', 'e_state', 'e_title_other', 'e_title_prop', 'r_evidence', 'r_filter', 'r_observed', 'r_stable'].sort(),
+      ['d_stop', 'e_degree', 'e_degree_at', 'e_filter', 'e_key_only', 'e_pii', 'e_pii_classed', 'e_reference', 'e_search', 'e_stable', 'e_state', 'e_title_other', 'e_title_prop', 'r_evidence', 'r_filter', 'r_observed', 'r_stable'].sort(),
     );
   });
 

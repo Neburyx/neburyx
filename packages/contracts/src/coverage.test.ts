@@ -53,3 +53,21 @@ describe('joining the answers for the chunks of one graph', () => {
     expect(combineCoverage(chunks)).toEqual(expected);
   });
 });
+
+describe('combining coverage chunks with an estimate', () => {
+  const chunk = (value: number, quality: 'exact' | 'estimated' | 'lowerBound', observedAt?: string): Count => ({ value, quality, scope: COVERAGE_SCOPE, ...(observedAt === undefined ? {} : { observedAt }) });
+
+  it('is at best estimated when one chunk is estimated, and never exact', () => {
+    expect(combineCoverage([chunk(10, 'exact'), chunk(5, 'estimated')])).toEqual({ value: 15, quality: 'estimated', scope: COVERAGE_SCOPE });
+    expect(combineCoverage([chunk(0, 'exact'), chunk(5, 'estimated')])).toEqual({ value: 5, quality: 'estimated', scope: COVERAGE_SCOPE });
+  });
+
+  it('takes no floor from an estimated chunk beside a lowerBound chunk', () => {
+    expect(combineCoverage([chunk(10_000, 'estimated'), chunk(500, 'lowerBound')])).toEqual({ value: 500, quality: 'lowerBound', scope: COVERAGE_SCOPE });
+  });
+
+  it('carries no date of a chunk', () => {
+    expect(combineCoverage([chunk(5, 'estimated', '2026-01-02'), chunk(1, 'exact')])).not.toHaveProperty('observedAt');
+    expect(combineCoverage([chunk(5, 'estimated', '2026-01-02')])).not.toHaveProperty('observedAt');
+  });
+});

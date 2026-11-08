@@ -1,3 +1,4 @@
+import type { DegreeDeclaration } from '../../mapping/model.js';
 export type DegreeDirection = 'out' | 'in';
 
 export interface DegreePair {
@@ -27,4 +28,9 @@ export function degreePairsOf(rows: readonly DegreeRow[], entityType: string): r
     }
   }
   return pairs;
+}
+
+/** For each pair, in the order of `pairs`, the declaration of a degree property that names it, or nothing. */
+export function declarationsOf(pairs: readonly DegreePair[], declarations: readonly DegreeDeclaration[] | undefined): readonly (DegreeDeclaration | undefined)[] {
+  return pairs.map((pair) => declarations?.find((declaration) => declaration.type === pair.relationshipType && declaration.direction === pair.direction));
 }

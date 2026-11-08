@@ -8,8 +8,11 @@ export const countSchema = z
     value: z.number().int().nonnegative().optional(),
     quality: z.enum(COUNT_QUALITIES),
     scope: z.string().min(1),
+    /** When the number was computed, as its source gave it: only an `estimated` count (a degree the customer precomputed) has one. */
+    observedAt: z.string().min(1).optional(),
   })
-  .refine((count) => (count.quality === 'unknown') === (count.value === undefined), { message: 'a count has a value exactly when its quality is not unknown', path: ['value'] });
+  .refine((count) => (count.quality === 'unknown') === (count.value === undefined), { message: 'a count has a value exactly when its quality is not unknown', path: ['value'] })
+  .refine((count) => count.observedAt === undefined || count.quality === 'estimated', { message: 'only an estimated count has an observedAt', path: ['observedAt'] });
 
 export const elementRefSchema = z.strictObject({ sourceId: z.string().min(1), entityType: z.string().min(1), stableId: z.string().min(1) });
 

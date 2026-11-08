@@ -1,4 +1,4 @@
-import type { SourceModel } from '../mapping/model.js';
+import type { DegreeDeclaration, SourceModel } from '../mapping/model.js';
 import { nameProblem } from './render.js';
 import type { SourceAllowlist } from './types.js';
 
@@ -16,6 +16,7 @@ export function allowlistFromMapping(source: SourceModel): SourceAllowlist {
   const properties = new Set<string>();
   const searchProperties = new Map<string, readonly string[]>();
   const referenceProperties = new Map<string, readonly string[]>();
+  const degreeProperties = new Map<string, readonly DegreeDeclaration[]>();
   for (const entity of source.entities) {
     const problem = nameProblem(entity.label);
     if (problem !== undefined) throw new SourceGateError(source.id, `label of entity type ${entity.type}`, entity.label, problem);
@@ -34,6 +35,13 @@ export function allowlistFromMapping(source: SourceModel): SourceAllowlist {
       if (referenceProblem !== undefined) throw new SourceGateError(source.id, `reference property of entity type ${entity.type}`, property, referenceProblem);
     }
     referenceProperties.set(entity.type, [...entity.reference]);
+    for (const declaration of entity.degree ?? []) {
+      const degreeProblem = nameProblem(declaration.property);
+      if (degreeProblem !== undefined) throw new SourceGateError(source.id, `degree property of entity type ${entity.type}`, declaration.property, degreeProblem);
+      const dateProblem = declaration.observedAt === undefined ? undefined : nameProblem(declaration.observedAt);
+      if (dateProblem !== undefined) throw new SourceGateError(source.id, `degree date property of entity type ${entity.type}`, declaration.observedAt ?? '', dateProblem);
+    }
+    if (entity.degree !== undefined) degreeProperties.set(entity.type, entity.degree.map((declaration) => ({ ...declaration })));
     for (const property of [entity.stableId, ...entity.search, ...entity.reference]) properties.add(property);
   }
   const relationshipTypes = new Set<string>();
@@ -65,5 +73,5 @@ export function allowlistFromMapping(source: SourceModel): SourceAllowlist {
     for (const property of [...relationship.evidence, ...(relationship.observedAt === undefined ? [] : [relationship.observedAt]), ...(relationship.stableId === undefined ? [] : [relationship.stableId])]) properties.add(property);
     if (relationship.evidence.length > 0) evidenceRows.push({ type: relationship.type, from: relationship.from, to: relationship.to, properties: [...relationship.evidence] });
   }
-  return { entityLabels, relationshipTypes, stableIds, searchProperties, referenceProperties, evidenceRows, relationshipRows, properties };
+  return { entityLabels, relationshipTypes, stableIds, searchProperties, referenceProperties, degreeProperties, evidenceRows, relationshipRows, properties };
 }

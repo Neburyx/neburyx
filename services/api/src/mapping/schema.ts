@@ -87,6 +87,16 @@ const displaySchema = z.strictObject({
   state_property: property.optional(),
 });
 
+/** A property read by name in a statement, so one the gate could not quote (a backtick, a backslash, a control character, or only whitespace) is refused here. */
+const quotableProperty = property.refine((text) => text.trim() !== '' && !/[`\\\u0000-\u001f\u007f]/.test(text), { message: 'must not be only whitespace or hold a backtick, a backslash or a control character' });
+
+const degreeEntrySchema = z.strictObject({
+  type: name,
+  direction: z.enum(['out', 'in']),
+  property: quotableProperty,
+  observed_at: quotableProperty.optional(),
+});
+
 const entitySchema = z.strictObject({
   type: name,
   label: name,
@@ -99,6 +109,7 @@ const entitySchema = z.strictObject({
   link: z.string().optional(),
   link_carries_value: z.boolean().optional(),
   display: displaySchema.optional(),
+  degree: z.array(degreeEntrySchema).optional(),
 });
 
 const relationshipSchema = z.strictObject({

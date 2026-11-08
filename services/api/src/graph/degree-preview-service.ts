@@ -29,9 +29,10 @@ export interface DegreePreviewService {
 const ONE_ROW = 1;
 const TOTAL_SCOPE = `degree:total:${SCOPE_SUFFIX}`;
 const CAPPED_REASON = 'Counts are capped for this entity type';
+const IGNORED_REASON = 'A degree property of the source was not used: its value is not a usable count';
 const DUPLICATE_REASON = 'More than one node has this stable ID; the first by element ID is counted';
 
-const countOfValue = (value: DegreeValue, scope: string): Count => ({ value: value.value, quality: value.quality, scope });
+const countOfValue = (value: DegreeValue, scope: string): Count => ({ value: value.value, quality: value.quality, scope, ...(value.observedAt === undefined ? {} : { observedAt: value.observedAt }) });
 
 /** The entity types at the other end of the mapping rows of a pair, each once, in the order of the rows. */
 function neighborTypesOf(source: SourceModel, entityType: string, pair: DegreePair): string[] {
@@ -49,14 +50,17 @@ function previewOf(request: DegreePreviewRequest, source: SourceModel, pairs: re
     if (value === undefined) throw new AppError('INTERNAL_ERROR');
     return { relationshipType: pair.relationshipType, direction: pair.direction, count: countOfValue(value, `degree:${pair.direction}:${pair.relationshipType}:${SCOPE_SUFFIX}`), neighborTypes: neighborTypesOf(source, request.entityType, pair) };
   });
+  const floors = item.counts.map((value) => value.provenFloor);
   const cappedWarnings = capped ? pairs.map((pair) => ({ code: 'counts-capped' as const, relationshipType: pair.relationshipType, reason: CAPPED_REASON })) : [];
+  const ignoredTypes = [...new Set(pairs.flatMap((pair, index) => (item.counts[index]?.propertyIgnored === true ? [pair.relationshipType] : [])))];
+  const ignored = ignoredTypes.map((relationshipType) => ({ code: 'degree-property-ignored' as const, relationshipType, reason: IGNORED_REASON }));
   const duplicate = item.duplicate ? [{ code: 'duplicate-stable-id' as const, reason: DUPLICATE_REASON }] : [];
   return {
     ref: { sourceId: request.sourceId, entityType: request.entityType, stableId: request.stableId },
-    total: sumOf(byType.map((entry) => entry.count), TOTAL_SCOPE),
+    total: sumOf(byType.map((entry) => entry.count), TOTAL_SCOPE, floors),
     byType,
-    byNeighborType: neighborCountsOf(byType),
-    warnings: [...cappedWarnings, ...duplicate],
+    byNeighborType: neighborCountsOf(byType, floors),
+    warnings: [...cappedWarnings, ...ignored, ...duplicate],
     pageSize: source.budgets.defaultPage,
     heavyOpThreshold: source.budgets.heavyOpThreshold,
   };

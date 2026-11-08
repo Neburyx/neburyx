@@ -19,6 +19,15 @@ export interface LinkTemplate {
   readonly carriesValue?: true;
 }
 
+/** A node property the customer maintains with the degree of one (relationship type, direction) pair of the entity type; only a count above the cap of the live read may take it, as `estimated`. */
+export interface DegreeDeclaration {
+  readonly type: string;
+  readonly direction: 'out' | 'in';
+  readonly property: string;
+  /** A second node property that holds when the customer computed the number; without it the estimate carries no date. */
+  readonly observedAt?: string;
+}
+
 export interface EntityModel {
   readonly type: string;
   readonly label: string;
@@ -32,6 +41,8 @@ export interface EntityModel {
   /** The class the mapping gives a `pii` field, which picks the shape of its mask; a field without one is masked fully. */
   readonly piiClasses?: Readonly<Record<string, PiiClass>>;
   readonly filterable: readonly string[];
+  /** Present only when the mapping declares degree properties, so a mapping without them keeps its configuration hash. */
+  readonly degree?: readonly DegreeDeclaration[];
   readonly link?: LinkTemplate;
   readonly display: {
     readonly name?: string;

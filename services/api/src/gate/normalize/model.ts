@@ -1,5 +1,5 @@
 import type { PiiClass } from '@neburyx/contracts';
-import { isKeyed, type SourceModel } from '../../mapping/model.js';
+import { isKeyed, type DegreeDeclaration, type SourceModel } from '../../mapping/model.js';
 import type { ReferenceKeys } from '../../reference/keys.js';
 
 /** What the normalizer needs to know of one entity type of a source: how to recognise it, name it, and which properties of it are shown. */
@@ -18,6 +18,8 @@ export interface EntityNormalizer {
   /** The properties the mapping marks `pii`, and the class of those that have one. */
   readonly pii: readonly string[];
   readonly piiClasses: Readonly<Record<string, PiiClass>>;
+  /** The degree properties the mapping declares for the type, if any. */
+  readonly degree?: readonly DegreeDeclaration[];
 }
 
 /** One relationship row of the mapping: a type between two entity types, with the properties of it that are shown. */
@@ -94,6 +96,7 @@ export function normalizeModelOf(source: SourceModel): NormalizeModel {
       expected: unique([...entity.titleProperties, ...entity.display.keyProperties]),
       pii: entity.pii,
       piiClasses: entity.piiClasses ?? {},
+      ...(entity.degree === undefined ? {} : { degree: entity.degree }),
     };
     entitiesByLabel.set(entity.label, [...(entitiesByLabel.get(entity.label) ?? []), normalizer]);
     entitiesByType.set(entity.type, normalizer);

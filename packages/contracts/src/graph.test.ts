@@ -87,3 +87,21 @@ describe('Edge', () => {
     expect(edgeSchema.safeParse(edge).success).toBe(false);
   });
 });
+
+describe('the date of a count', () => {
+  const scope = 'degree:out:LINKS:mapped-relationship-ends';
+
+  it('belongs to an estimated count, which parses with it and without it', () => {
+    expect(countSchema.safeParse({ value: 1200, quality: 'estimated', scope, observedAt: '2026-01-02T03:04:05Z' }).success).toBe(true);
+    expect(countSchema.safeParse({ value: 1200, quality: 'estimated', scope }).success).toBe(true);
+  });
+
+  it.each(['exact', 'lowerBound'] as const)('is refused on a %s count', (quality) => {
+    expect(countSchema.safeParse({ value: 5, quality, scope, observedAt: '2026-01-02' }).success).toBe(false);
+  });
+
+  it('is refused on an unknown count and when it is empty', () => {
+    expect(countSchema.safeParse({ quality: 'unknown', scope, observedAt: '2026-01-02' }).success).toBe(false);
+    expect(countSchema.safeParse({ value: 5, quality: 'estimated', scope, observedAt: '' }).success).toBe(false);
+  });
+});

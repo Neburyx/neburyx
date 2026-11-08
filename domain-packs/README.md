@@ -79,6 +79,29 @@ Expanding a node reads its relationships page by page, newest first. How a relat
 - **Without a `stable_id`**, all relationships of the type between a node and one neighbor are shown as one aggregate relationship with its member count and the earliest and latest observed time; the pages are ordered by the latest observed time and then by the neighbor.
 - A relationship of a type that has a `stable_id` but lacks it, or holds one that is empty or not text or a whole number, is shown as a member of the aggregate for its neighbor, marked "no stable ID".
 
+## Degree counts you maintain yourself
+
+A node with very many relationships is counted up to a cap (`heavy_op_threshold`, 500 by default) and then reported as a lower bound, "at least 500". If your graph keeps the degree of a node in a property, the mapping can name it, so that the count above the cap is shown as an estimate:
+
+```yaml
+entities:
+  - type: account
+    label: Account
+    stable_id: accountId
+    degree:
+      - type: TRANSFERS_TO      # a relationship type this entity has in the mapping
+        direction: out          # out or in
+        property: outTransfers  # a node property that holds the count for that pair
+        observed_at: outTransfersAt   # optional: a node property that holds when it was computed
+```
+
+- A declared property is only read for a pair whose live count stopped at the cap, and its number is taken only when it is a whole number above the cap. It is shown as an **estimated** count, never exact. A count the source answered exactly is never replaced, whatever the property holds, and an entity type whose server answers the count cheaply is read live and exact.
+- A value that is missing, not a whole number, negative, or not above the cap leaves the lower bound as it was. A value that is present but unusable is named in the answer's warnings (`degree-property-ignored`, once for a relationship type) without its value or the property name.
+- `observed_at` is shown with the estimate when that property holds a date, a date and time, or text. Without it, or with any other kind of value, the estimate has no date; the time of the read is never used in its place.
+- A total or a neighbor-type count made from a single pair is that pair's count, date included. One made from two or more pairs that includes an estimate is at best estimated, with no date. A lower bound that includes an estimate adds the cap for it, never the estimate, so a stale property is not shown as a minimum.
+- The mapping is refused at load for a `type` and `direction` the entity does not have, a pair declared twice, a `property` or `observed_at` that is the entity's `stable_id` or a `pii` property (or the same property as the degree), and a name that cannot be written into a query.
+- The property is read in the same read-only statement as the count. Keep it up to date yourself: Neburyx only reads it.
+
 ## Search and the mapping
 
 - Each `search`, `reference` and `evidence` property needs its own online index. A property without one is left out of search and named with the reason; the entity type's other properties are still searched.

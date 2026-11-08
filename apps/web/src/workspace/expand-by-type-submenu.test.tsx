@@ -18,7 +18,7 @@ import { registerBuiltInMenuItems } from './built-in-menu-items.js';
 
 afterEach(() => cleanup());
 
-const count = (value: number | undefined, quality: 'exact' | 'lowerBound' | 'unknown', scope = 'x') => (value === undefined ? { quality: 'unknown' as const, scope } : { value, quality, scope });
+const count = (value: number | undefined, quality: 'exact' | 'estimated' | 'lowerBound' | 'unknown', scope = 'x') => (value === undefined ? { quality: 'unknown' as const, scope } : { value, quality, scope });
 const previewOf = (overrides: Partial<DegreePreview> = {}): DegreePreview => ({
   ref: { sourceId: 'a', entityType: 'type-a', stableId: 'n1' },
   total: count(512, 'lowerBound'),
@@ -161,6 +161,76 @@ describe('the Expand neighbors and Expand by neighbor type entries of the node m
     await userEvent.setup().click(byTypeRow());
     await answerPreview(previews[0]);
     expect(within(submenu()).getAllByText('More can be loaded page by page.')).toHaveLength(2);
+  });
+
+  it('says it on a row whose count is estimated, with or without its date, shows no date, and leaves an exact row without it', async () => {
+    const { previews } = opened();
+    await userEvent.setup().click(byTypeRow());
+    await answerPreview(previews[0], previewOf({ byNeighborType: [{ entityType: 'kind-b', count: count(12, 'exact') }, { entityType: 'type-c', count: { ...count(10_000, 'estimated'), observedAt: '2026-01-02T03:04:05Z' } }, { entityType: 'type-d', count: count(8_000, 'estimated') }] }));
+    expect(within(submenu()).getAllByText('More can be loaded page by page.')).toHaveLength(2);
+    expect(within(screen.getByText('type-c').closest('li') ?? submenu()).queryByText('More can be loaded page by page.')).not.toBeNull();
+    expect(within(screen.getByText('kind-b').closest('li') ?? submenu()).queryByText('More can be loaded page by page.')).toBeNull();
+    expect(submenu().textContent).not.toContain('2026-01-02');
+  });
+
+  it('keeps a row whose count is estimated tickable, and counts it in the neighbors to expand', async () => {
+    const { previews } = opened();
+    await userEvent.setup().click(byTypeRow());
+    await answerPreview(previews[0], previewOf({ byNeighborType: [{ entityType: 'kind-b', count: count(12, 'exact') }, { entityType: 'type-c', count: count(10_000, 'estimated') }] }));
+    expect((checkbox('type-c') as HTMLButtonElement).disabled).toBe(false);
+    expect(within(submenu()).getByRole('button', { name: 'Expand 2 neighbors' })).not.toBeNull();
+  });
+
+  it('expands an estimated row as it expands a lower-bound one: one request names its type, by mouse and by keyboard', async () => {
+    const estimated = previewOf({ byNeighborType: [{ entityType: 'kind-b', count: { ...count(10_000, 'estimated'), observedAt: '2026-01-02' } }] });
+    const first = opened();
+    const user = userEvent.setup();
+    await user.click(byTypeRow());
+    await answerPreview(first.previews[0], estimated);
+    await user.click(within(submenu()).getByRole('button', { name: 'Expand 1 neighbor' }));
+    expect(first.expansions[0]?.body).toMatchObject({ neighborTypes: ['kind-b'] });
+    cleanup();
+    const second = opened();
+    await user.click(byTypeRow());
+    await answerPreview(second.previews[0], estimated);
+    checkbox('kind-b').focus();
+    await user.keyboard(' ');
+    await user.keyboard(' ');
+    within(submenu()).getByRole('button', { name: 'Expand 1 neighbor' }).focus();
+    await user.keyboard('{Enter}');
+    expect(second.expansions[0]?.body).toMatchObject({ neighborTypes: ['kind-b'] });
+  });
+
+  it('offers Load more with the loaded count on an estimated row, by mouse and by keyboard, and Start over when a cursor is refused', async () => {
+    const { previews, expansions, view, rightClick } = opened();
+    const user = userEvent.setup();
+    const estimated = previewOf({ byNeighborType: [{ entityType: 'kind-b', count: { ...count(10_000, 'estimated'), observedAt: '2026-01-02' } }] });
+    const page = (cursor: string | undefined) => response({ pages: [{ neighborType: 'kind-b', returned: 1, hasMore: cursor !== undefined, ...(cursor === undefined ? {} : { nextCursor: cursor }), matchingTotal: { quality: 'unknown', scope: 'x' } }] });
+    await user.click(byTypeRow());
+    await answerPreview(previews[0], estimated);
+    await user.click(within(submenu()).getByRole('button', { name: 'Expand 1 neighbor' }));
+    await act(async () => expansions[0]?.answer({ ok: true, value: page('v1.one.mac') }));
+    const reopen = async () => {
+      view.rightClick(rightClick('n1'));
+      await user.click(byTypeRow());
+      for (const ask of previews.slice(1)) await answerPreview(ask, estimated);
+    };
+    await reopen();
+    expect(within(submenu()).getByText('More can be loaded page by page.')).not.toBeNull();
+    expect(within(submenu()).getByText('1 loaded')).not.toBeNull();
+    await user.click(within(submenu()).getByRole('button', { name: 'Load 25 more' }));
+    expect(expansions[1]?.body).toMatchObject({ neighborTypes: ['kind-b'], cursors: { 'kind-b': 'v1.one.mac' } });
+    await act(async () => expansions[1]?.answer({ ok: true, value: page('v1.two.mac') }));
+    await reopen();
+    within(submenu()).getByRole('button', { name: 'Load 25 more' }).focus();
+    await user.keyboard('{Enter}');
+    expect(expansions[2]?.body).toMatchObject({ cursors: { 'kind-b': 'v1.two.mac' } });
+    await act(async () => expansions[2]?.answer({ ok: false, failure: { code: 'CURSOR_INVALIDATED', message: 'x', retryable: false, traceId: 'tr-6' } }));
+    await reopen();
+    expect(within(submenu()).queryByRole('button', { name: 'Load 25 more' })).toBeNull();
+    await user.click(within(submenu()).getByRole('button', { name: 'Start over for this type' }));
+    expect(expansions[3]?.body).toMatchObject({ neighborTypes: ['kind-b'] });
+    expect(expansions[3]?.body).not.toHaveProperty('cursors');
   });
 
   it('keeps a type whose count is unknown or a lower bound tickable', async () => {

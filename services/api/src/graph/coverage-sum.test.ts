@@ -17,6 +17,8 @@ describe('the not-yet-retrieved count', () => {
     ['two contributors that share a relationship are still not exact', [part(count(1, 'exact'), 0), part(count(1, 'exact'), 0)], answer(2, 'estimated')],
     ['nothing left anywhere', [part(count(3, 'exact'), 3), part(count(2, 'exact'), 2)], answer(0, 'exact')],
     ['an estimated preview that contributes', [part(count(40, 'estimated'), 2)], answer(38, 'estimated')],
+    ['a total made of an estimate counted at its proven cap leaves a floor of what was proved less what is loaded', [part(count(1000, 'lowerBound'), 100)], answer(900, 'lowerBound')],
+    ['an estimated total above its cap loses no number and gives no floor beside a lowerBound part', [part(count(10_000, 'estimated'), 100), part(count(500, 'lowerBound'), 100)], answer(400, 'lowerBound')],
     ['a lowerBound preview alone', [part(count(500, 'lowerBound'), 20)], answer(480, 'lowerBound')],
     ['a lowerBound part with nothing left beside one exact contributor', [part(count(500, 'lowerBound'), 500), part(count(9, 'exact'), 1)], answer(8, 'lowerBound')],
     ['the largest remainder, not the sum, of two lowerBound parts', [part(count(500, 'lowerBound'), 0), part(count(300, 'lowerBound'), 0)], answer(500, 'lowerBound')],
@@ -48,5 +50,14 @@ describe('the not-yet-retrieved count', () => {
 
   it('subtracts a self-loop once for each of its two ends', () => {
     expect(notRetrievedOf([part(count(5, 'exact'), 2)])).toEqual(answer(3, 'exact'));
+  });
+});
+
+describe('the not-yet-retrieved count of an estimate that has a date', () => {
+  it('is estimated, adds no floor, more loaded than the estimate is 0 at best estimated, and carries no date', () => {
+    const dated: Count = { value: 10_000, quality: 'estimated', scope: 'degree:total', observedAt: '2026-01-02' };
+    expect(notRetrievedOf([part(dated, 100)])).toEqual(answer(9_900, 'estimated'));
+    expect(notRetrievedOf([part(dated, 20_000)])).toEqual(answer(0, 'estimated'));
+    expect(notRetrievedOf([part(dated, 100)])).not.toHaveProperty('observedAt');
   });
 });

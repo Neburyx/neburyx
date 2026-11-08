@@ -4,6 +4,7 @@ import type { CursorPosition } from './cursor/codec.js';
 import type { IndexEntry } from './templates/schema-indexes.js';
 import type { NormalizeContext, NormalizeModel } from './normalize/model.js';
 import type { AppError } from '../errors.js';
+import type { DegreeDeclaration } from '../mapping/model.js';
 import type { Principal } from '../seams/seams.js';
 
 export const GATE_STAGES = ['resolve', 'validate', 'authorize', 'execute', 'normalize', 'redact', 'audit'] as const;
@@ -158,6 +159,8 @@ export interface SourceAllowlist {
   readonly evidenceRows: readonly { readonly type: string; readonly from: string; readonly to: string; readonly properties: readonly string[] }[];
   /** The relationship rows of the mapping, in its order: the pairs a degree read counts. */
   readonly relationshipRows: readonly { readonly type: string; readonly from: string; readonly to: string; readonly stableId?: string; readonly observedAt?: string }[];
+  /** The degree properties each entity type declares, by type; a type with none is absent. */
+  readonly degreeProperties?: ReadonlyMap<string, readonly DegreeDeclaration[]>;
   /** Every property name the mapping names: search, reference, evidence, sort and stable id properties. */
   readonly properties: ReadonlySet<string>;
 }
