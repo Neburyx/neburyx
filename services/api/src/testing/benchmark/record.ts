@@ -1,6 +1,7 @@
 import type { Cell, PreviewCell } from './measure.js';
 import type { Profile } from './profile.js';
 import type { Sample, Summary } from './stats.js';
+import type { DbHitCause } from './db-hit-cause.js';
 import { MEMBERS_PER_NEIGHBOR, PAGE, SAMPLES_PER_POSITION, type ReadSet } from './plan.js';
 
 export const TARGET_MS = 3000;
@@ -51,6 +52,8 @@ export interface RunData {
   readonly stopped: readonly Stopped[];
   readonly previews: readonly PreviewCell[];
   readonly profiles: readonly Profile[];
+  /** What is known about the extra db hits of the first page of the dated read set on this run's series; the record cannot be rendered without it. */
+  readonly dbHitCause: DbHitCause;
   /** The measurement of a cancelled read, added by a run of its own; absent from a record made before it. */
   readonly cancel?: CancelRecord;
 }
@@ -118,13 +121,32 @@ function cancelLines(cancel: CancelRecord): string[] {
   return lines;
 }
 
-export function renderRecord(data: RunData): string {
+export interface RenderOptions {
+  /** The record is rendered again from the stored data of a run, not from a new run. */
+  readonly fromStored?: boolean;
+}
+
+export const DB_HIT_NOTICE = 'Db hit figures in this record are not to be cited without the section "Db hits of the first dated page".';
+
+function dbHitLines(cause: DbHitCause): string[] {
+  const heading = ['## Db hits of the first dated page', ''];
+  if (!cause.checked) return [...heading, `The first page of the dated read set takes far more db hits than its deeper pages in a run on Neo4j 5.26. The cause was found on 5.26 and has not been checked on Neo4j ${cause.series}, so the db hit figures of this run are not to be cited.`, ''];
+  return [...heading, cause.text, '', 'Affected:', ...cause.affected.map((entry) => `- ${entry}`), '', 'Not affected:', ...cause.unaffected.map((entry) => `- ${entry}`), ''];
+}
+
+export function renderRecord(data: RunData, options: RenderOptions = {}): string {
+  // data read from a file can lack the field the type requires
+  const cause: DbHitCause | undefined = data.dbHitCause;
+  if (cause === undefined) throw new Error('the run data holds no dbHitCause: the record cannot say what its db hit figures mean');
   const verdict = verdictOf(data.cells, data.stopped);
   const heaviest = data.profiles.filter((profile) => profile.size === BASELINE_SIZE).reduce<Profile | undefined>((best, profile) => (best === undefined || profile.dbHits > best.dbHits ? profile : best), undefined);
   const sizes = [...new Set(data.cells.map((cell) => cell.size))];
   const sets = [...new Set(data.cells.map((cell) => cell.readSet))];
   const lines: string[] = [
     '# Supernode benchmark',
+    '',
+    `> ${DB_HIT_NOTICE}`,
+    ...(options.fromStored === true ? ['>', `> Rendered again from the stored run of ${data.date}, not from a new run.`] : []),
     '',
     'The cost of one page of the paged expand (`POST /v1/graph/expand`, template `expand-neighbors`) and of the degree preview, on a node of 1,000, 10,000 and 100,000 relationships of each type, measured through the gate against a Neo4j server. Synthetic data only. Written by `pnpm bench:supernode`; the numbers are in [supernode.json](supernode.json).',
     '',
@@ -134,6 +156,7 @@ export function renderRecord(data: RunData): string {
     '',
     'The statement the gate renders has several branches, each of which matches the relationships of its type again (the profile tables give the count and the server\'s own db hits for each read set, size and position).',
     '',
+    ...dbHitLines(data.dbHitCause),
     '## How it was measured',
     '',
     ...(data.commit === undefined ? [] : [`- Run on the code of commit ${data.commit}${data.note === undefined ? '' : `, ${data.note}`}.`]),
@@ -171,6 +194,6 @@ export function renderRecord(data: RunData): string {
   lines.push('### Degree preview (bounded read)', '', '| Relationships | Count labels | Samples | Failures | p50 (ms) | p95 (ms) | max (ms) |', '|---|---|---|---|---|---|---|');
   for (const preview of data.previews) lines.push(`| ${preview.size.toLocaleString('en-US')} | ${preview.quality} | ${preview.samples} | ${preview.failures} | ${ms(preview.p50)} | ${ms(preview.p95)} | ${ms(preview.max)} |`);
   if (data.cancel !== undefined) lines.push(...cancelLines(data.cancel));
-  lines.push('', '## Not measured', '', '- Neo4j 2026.x and other editions: only the dev server was measured. A 2026.x run needs the series check of the test helper (`testing/neo4j-server.ts`) widened and a server of that series.', `- The banking demo pack's own node (the plain read set has its shape and size), concurrent readers, ${data.serverIsLoopback ? 'a remote server, ' : ''}a cold server, the cost of a cancelled read and the CI supernode suite.`, '');
+  lines.push('', '## Not measured', '', '- Neo4j 2026.x and other editions: only the dev server was measured. The series check of the test helper accepts 2026.x, but no 2026.x server was reachable, so no run was made on it.', `- The banking demo pack's own node (the plain read set has its shape and size), concurrent readers, ${data.serverIsLoopback ? 'a remote server, ' : ''}a cold server, the cost of a cancelled read and the CI supernode suite.`, '');
   return lines.join('\n');
 }

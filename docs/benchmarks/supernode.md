@@ -1,5 +1,9 @@
 # Supernode benchmark
 
+> Db hit figures in this record are not to be cited without the section "Db hits of the first dated page".
+>
+> Rendered again from the stored run of 2026-11-07, not from a new run.
+
 The cost of one page of the paged expand (`POST /v1/graph/expand`, template `expand-neighbors`) and of the degree preview, on a node of 1,000, 10,000 and 100,000 relationships of each type, measured through the gate against a Neo4j server. Synthetic data only. Written by `pnpm bench:supernode`; the numbers are in [supernode.json](supernode.json).
 
 ## What a page costs the server
@@ -7,6 +11,17 @@ The cost of one page of the paged expand (`POST /v1/graph/expand`, template `exp
 Each page still matches every relationship of the anchor for the asked type before it sorts and cuts. The statement matches all of them in each of its branches, orders them, and keeps the page and one row, so the work of a page grows with the number of relationships of the type on the node, whichever page is asked; the keyset cursor only decides which rows survive the cut. (TAS §8.2, "What keyset buys, honestly".)
 
 The statement the gate renders has several branches, each of which matches the relationships of its type again (the profile tables give the count and the server's own db hits for each read set, size and position).
+
+## Db hits of the first dated page
+
+The plan the server made the first time it saw the statement after the database was built reads the whole relationship index of the type seven separate times across the four branches of the statement, so the db hits of that plan are 7 x (N + 1) plus the work of the page, N being the relationships of the type in the whole database and not the node's. Plans made later for the same statement with another parameter shape expand from the anchor instead and take about 11,000 db hits for the same rows. Which plan a request gets follows when its plan was first made, not whether it has a cursor: asked with a cursor first, the plan with a cursor scans and the one without expands. A plan, once made, is kept for the run. In a small database the later plan scans as well.
+
+Affected:
+- the db hits and server times of the position whose plan was made first after the database was built: in this record the first position of the dated read set, at every size
+
+Not affected:
+- the db hits of the 10 %, 50 % and 90 % positions of the dated read set
+- the other read sets show no extra db hits at their first position in this record; their plans were not examined
 
 ## How it was measured
 
@@ -132,5 +147,5 @@ A read that finished before it could be aborted has no time and is counted on it
 
 ## Not measured
 
-- Neo4j 2026.x and other editions: only the dev server was measured. A 2026.x run needs the series check of the test helper (`testing/neo4j-server.ts`) widened and a server of that series.
+- Neo4j 2026.x and other editions: only the dev server was measured. The series check of the test helper accepts 2026.x, but no 2026.x server was reachable, so no run was made on it.
 - The banking demo pack's own node (the plain read set has its shape and size), concurrent readers, a cold server, the cost of a cancelled read and the CI supernode suite.

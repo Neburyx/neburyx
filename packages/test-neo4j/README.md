@@ -22,7 +22,7 @@ wherever the settings come from: that prefix marks what the tests create and cle
 ## What the login needs
 
 The login must be able to create and drop databases, logins and roles on the server (the `admin` role does). The server
-must be Neo4j Enterprise 5.26.
+must be Neo4j Enterprise, of the 5.26 series or of the 2026 series (the global setup of a run reads the version once and hands the series to the test files, whose titles name it); any other series is refused, with the series it saw.
 
 ## What the tests create, and what they never touch
 
@@ -38,9 +38,14 @@ that the end of the file does not stop (`stopAllStarted`); a run that is killed 
 server is a closed port of a loopback forwarder (`forwardTo`, which takes `bolt://`, `neo4j://` and the `+ssc`
 forms, and reads a `neo4j://` address as the direct address of that one server), not a stopped container.
 
-## What is no longer tested
+## What is tested, and what is not
 
-The tests ran against containers of Neo4j 5.26 (Community) and 2026 in CI. They now run against the one server you
-point them at, and not in CI: Neo4j 2026 and the Community edition are not tested, and neither is a server that is
-read-only through its configuration or that is stopped and started again (a closed port and a database set to read only
-stand in for them).
+| | Status |
+|---|---|
+| Neo4j Enterprise 5.26 | Tested, on the one server you point the tests at. |
+| Neo4j Enterprise 2026.x | The series check accepts it. **Not run:** no 2026.x server was reachable (2026-11-08), so the supernode suite and the profile of the first page of the dated read set have not been run on it. |
+| Passing in CI on both versions | **Not met.** The Neo4j tests run against one server you own; there is no Neo4j job in CI, and starting containers is not part of the tests. A CI job with a Neo4j service is a separate decision. |
+| Neo4j Community | **Not met**, for the same reason: the tests need an Enterprise server (databases and logins are created per run). |
+| A server that is read-only through its configuration, or stopped and started again | Not tested; a closed port and a database set to read only stand in for them. |
+
+The tests used to run against containers of Neo4j 5.26 (Community) and 2026 in CI. They now run against the one server you point them at, and not in CI.

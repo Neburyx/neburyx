@@ -1,6 +1,7 @@
 import { startDevNeo4j, stopAllStarted, type DevNeo4j, type Login } from '@neburyx/test-neo4j';
 import neo4j from 'neo4j-driver';
-import { afterAll } from 'vitest';
+import { afterAll, inject } from 'vitest';
+import { checkSeries } from './series.js';
 import type { SourceModel } from '../mapping/model.js';
 import { baseSource, firstSource, load, type Json } from './mapping.js';
 
@@ -15,7 +16,7 @@ export type RunningNeo4j = DevNeo4j & { readonly reader: Login };
 export const startNeo4j = async (): Promise<RunningNeo4j> => {
   const server = await startDevNeo4j();
   try {
-    if (!server.version.startsWith(`${NEO4J_SERIES_NUMBER}.`)) throw new Error(`the tests are written for Neo4j ${NEO4J_SERIES_NUMBER}; the dev server runs ${server.version}`);
+    checkSeries(server.version);
     const reader = await server.createLogin('reader');
     return Object.assign(server, { reader });
   } catch (error) {
@@ -29,8 +30,22 @@ afterAll(async () => {
   await stopAllStarted();
 });
 
-/** The release series the dev server runs and these tests state their expectations for; a server of another series is refused at the start. */
-export const NEO4J_SERIES_NUMBER = '5.26';
+declare module 'vitest' {
+  export interface ProvidedContext {
+    neo4jSeries: string;
+  }
+}
+
+/** The release series of the server this run connects to (`5.26` or `2026`), read by the global setup and handed to the test files; `5.26` where no setup ran, as in a unit test. */
+const provided = (): string => {
+  try {
+    return inject('neo4jSeries') ?? '5.26';
+  } catch {
+    // inject throws outside a vitest run with a global setup, as in a tool that imports this module; the default series stands in
+    return '5.26';
+  }
+};
+export const NEO4J_SERIES_NUMBER = provided();
 export const NEO4J_SERIES = `neo4j:${NEO4J_SERIES_NUMBER}`;
 
 export const NEO4J_ENV_USER = 'NEO4J_TEST_USER';

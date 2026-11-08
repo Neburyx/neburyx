@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { bounded, pollUntil, runAll } from './neo4j-server.js';
+import { checkSeries, provideSeries, seriesOf } from './series.js';
 
 afterEach(() => {
   vi.useRealTimers();
@@ -73,5 +74,36 @@ describe('polling until an observation answers', () => {
     await vi.advanceTimersByTimeAsync(1000);
     expect(await outcome).toMatchObject({ message: 'the observation did not finish within 1000 ms' });
     expect(observe).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('the series of the server the Neo4j tests accept', () => {
+  it.each([
+    ['5.26.32', '5.26'],
+    ['5.26.0', '5.26'],
+    ['2026.10.1', '2026'],
+    ['2026.1.0', '2026'],
+  ])('accepts %s as %s', (version, series) => {
+    expect(seriesOf(version)).toBe(series);
+    expect(checkSeries(version)).toBe(series);
+  });
+
+  it.each([
+    ['5.25.0', 'the server runs 5.25'],
+    ['2025.1.0', 'the server runs 2025.1'],
+    ['2027.1.0', 'the server runs 2027.1'],
+    ['5.260.1', 'the server runs 5.260'],
+    ['', 'the server runs no version'],
+  ])('refuses %j, naming the series it saw and the two accepted', (version, saw) => {
+    expect(() => checkSeries(version)).toThrow(saw);
+    expect(() => checkSeries(version)).toThrow('Neo4j 5.26 and 2026');
+  });
+
+  it('hands the series of the server to the test files, and hands nothing over for a series it refuses', () => {
+    const provided: [string, string][] = [];
+    expect(provideSeries('2026.10.1', (key, value) => provided.push([key, value]))).toBe('2026');
+    expect(provided).toEqual([['neo4jSeries', '2026']]);
+    expect(() => provideSeries('5.25.0', (key, value) => provided.push([key, value]))).toThrow();
+    expect(provided).toHaveLength(1);
   });
 });

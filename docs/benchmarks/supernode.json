@@ -1,11 +1,11 @@
 {
-  "date": "2026-11-07",
-  "commit": "d51630f",
-  "note": "before the read slots of a later commit: each read now waits for a slot, which this run did not",
   "neo4j": {
     "version": "5.26.32",
     "edition": "enterprise"
   },
+  "date": "2026-11-07",
+  "commit": "d51630f",
+  "note": "before the read slots of a later commit: each read now waits for a slot, which this run did not",
   "serverIsLoopback": false,
   "cold": {
     "ms": 1529.9084170000006,
@@ -1438,6 +1438,18 @@
           "max": 1285.1389579999995
         }
       }
+    ]
+  },
+  "dbHitCause": {
+    "checked": true,
+    "series": "5.26",
+    "text": "The plan the server made the first time it saw the statement after the database was built reads the whole relationship index of the type seven separate times across the four branches of the statement, so the db hits of that plan are 7 x (N + 1) plus the work of the page, N being the relationships of the type in the whole database and not the node's. Plans made later for the same statement with another parameter shape expand from the anchor instead and take about 11,000 db hits for the same rows. Which plan a request gets follows when its plan was first made, not whether it has a cursor: asked with a cursor first, the plan with a cursor scans and the one without expands. A plan, once made, is kept for the run. In a small database the later plan scans as well.",
+    "affected": [
+      "the db hits and server times of the position whose plan was made first after the database was built: in this record the first position of the dated read set, at every size"
+    ],
+    "unaffected": [
+      "the db hits of the 10 %, 50 % and 90 % positions of the dated read set",
+      "the other read sets show no extra db hits at their first position in this record; their plans were not examined"
     ]
   }
 }

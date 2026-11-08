@@ -71,6 +71,7 @@ Node 24 LTS (`.nvmrc`; with nvm, `nvm use`) and pnpm through Corepack, at the ve
 | Contract test | `pnpm test:contract` |
 | Integration tests (a Postgres container; needs Docker) | `pnpm test:integration` |
 | Neo4j tests, the adapter's and the demo graph tool's (run against a Neo4j Enterprise 5.26 server you own, not in CI; `NBX_EE_URI`, `NBX_EE_USER` and `NBX_EE_PASSWORD` in the environment or in `~/.config/neburyx/dev-neo4j.env`; each file makes and drops its own `nbx-test-` database; see `packages/test-neo4j/README.md`) | `pnpm test:neo4j` |
+| Supernode suite alone (anchors of 1,000, 10,000 and 100,000 relationships built once in a `nbx-test-` database of the Neo4j server that `test:neo4j` uses; payload bounds, count labels, stable load-more, the cost of each page, written to the file `NBX_SUPERNODE_RECORD` names; also run by `test:neo4j`; takes about 12 minutes on the dev 5.26 server; see `docs/benchmarks/README.md`) | `pnpm test:supernodes` |
 | Build a pack's demo graph into a demo Neo4j (see `tools/demo-graph/README.md`) | `pnpm demo-graph build --pack banking-fraud --uri bolt://localhost:7687` |
 | Image tests (builds the image and runs it; needs Docker, takes minutes) | `pnpm test:image` |
 | Compose tests (brings the Community stack up and upgrades it, and brings the demo stack up; need Docker, take minutes) | `pnpm test:compose` |
@@ -79,6 +80,7 @@ Node 24 LTS (`.nvmrc`; with nvm, `nvm use`) and pnpm through Corepack, at the ve
 | Browser (UX) tests, after `pnpm build`, `pnpm --filter @neburyx/web build:ux` and `pnpm --filter @neburyx/renderer-spike build:node` (Chromium; `NEBURYX_UX_CHROME` may name an installed Chrome) | `pnpm test:ux` |
 | Driver timeout check (starts Neo4j containers; needs Docker, takes about ten minutes; not in CI) | `pnpm check:driver` |
 | Supernode benchmark (builds synthetic nodes of 1,000, 10,000 and 100,000 relationships in a database of its own on the Neo4j Enterprise server that `test:neo4j` uses, times a page of the paged expand through the gate and writes `docs/benchmarks/supernode.md` and `.json`; takes hours; not in CI; see `docs/benchmarks/README.md`) | `pnpm bench:supernode` |
+| Render `docs/benchmarks/supernode.md` again from the stored `supernode.json` (no server) | `pnpm bench:render` |
 | Regenerate `packages/contracts/openapi.json` | `pnpm --filter @neburyx/contracts generate` |
 
 To run the API with the built web app (after `pnpm build` and `neburyx migrate`; `DATABASE_URL` is the app role's connection string):

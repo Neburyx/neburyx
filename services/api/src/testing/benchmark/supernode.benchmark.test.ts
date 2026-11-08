@@ -3,6 +3,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { dbHitCauseFor } from './db-hit-cause.js';
 import { measureCold, measurePreview, measureReadSet, type Cell, type PreviewCell } from './measure.js';
 import { READ_SETS, SIZES } from './plan.js';
 import { measureCancel } from './cancel-measure.js';
@@ -55,6 +56,7 @@ describe('the supernode benchmark', () => {
       stopped,
       previews,
       profiles,
+      dbHitCause: dbHitCauseFor(server.version),
       cancel: await measureCancel(rig),
     };
     mkdirSync(RECORD_DIRECTORY, { recursive: true });

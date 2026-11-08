@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Cell } from './measure.js';
-import { isLowerBound, renderRecord, verdictOf, type RunData } from './record.js';
+import { DB_HIT_CAUSE } from './db-hit-cause.js';
+import { DB_HIT_NOTICE, isLowerBound, renderRecord, verdictOf, type RunData } from './record.js';
 
 const cell = (size: number, readSet: Cell['readSet'], position: string, p95: number, failures = 0): Cell => ({ size, readSet, position, rows: size, repeated: 0, samples: 30, failures, p50: p95 / 2, p95, max: p95 + 1 });
 const data = (p95: number): RunData => ({
@@ -9,6 +10,7 @@ const data = (p95: number): RunData => ({
   serverIsLoopback: true,
   cold: { ms: 400, failed: false },
   stopped: [],
+  dbHitCause: DB_HIT_CAUSE,
   profiles: [{ size: 100_000, readSet: 'all', position: '90%', branches: 11, dbHits: 1234567, rootRows: 26, availableMs: 40, consumedMs: 41, indexSeek: true }],
   cells: [cell(1000, 'dated', 'first', 5), cell(100_000, 'dated', 'first', 10), cell(100_000, 'all', '90%', p95)],
   previews: [{ size: 100_000, quality: 'lowerBound / exact', samples: 30, failures: 0, p50: 1, p95: 2, max: 3 }],
@@ -143,6 +145,26 @@ describe('the cancel section of the record', () => {
     const { fileURLToPath } = await import('node:url');
     const directory = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../../docs/benchmarks');
     const stored = JSON.parse(readFileSync(resolve(directory, 'supernode.json'), 'utf8')) as RunData;
-    expect(renderRecord(stored)).toBe(readFileSync(resolve(directory, 'supernode.md'), 'utf8'));
+    expect(renderRecord(stored, { fromStored: true })).toBe(readFileSync(resolve(directory, 'supernode.md'), 'utf8'));
+  });
+
+  it('opens with the notice that db hit figures are not to be cited without the section on their cause, and holds that section', () => {
+    const text = renderRecord(data(10));
+    expect(text.split('\n')[2]).toBe(`> ${DB_HIT_NOTICE}`);
+    expect(text).toContain('## Db hits of the first dated page');
+    expect(text).toContain('seven separate times');
+    expect(text).toContain('Affected:');
+    expect(text).toContain('Not affected:');
+  });
+
+  it('says the cause was not checked when the run was on another series, and lists no figure as affected', () => {
+    const text = renderRecord({ ...data(10), dbHitCause: { checked: false, series: '2026' } });
+    expect(text).toContain('has not been checked on Neo4j 2026');
+    expect(text).not.toContain('Affected:');
+  });
+
+  it('says the record was rendered again from stored data only when asked to', () => {
+    expect(renderRecord(data(10))).not.toContain('Rendered again');
+    expect(renderRecord(data(10), { fromStored: true })).toContain('Rendered again from the stored run of 2026-11-07, not from a new run.');
   });
 });
