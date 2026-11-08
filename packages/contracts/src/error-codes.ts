@@ -35,7 +35,7 @@ export const partialDetailsSchema = z
   .refine(({ retained, requested }) => retained < requested, { message: 'retained must be below requested' });
 
 /** Why a source is unavailable, sent in the details of `SOURCE_UNAVAILABLE`; each has its own sentence and says whether a retry can help (`SOURCE_UNAVAILABLE_ENTRIES`). */
-export const SOURCE_UNAVAILABLE_REASONS = ['unreachable', 'authentication', 'refused', 'index-unavailable', 'index-building', 'index-failed', 'index-list-unreadable'] as const;
+export const SOURCE_UNAVAILABLE_REASONS = ['unreachable', 'authentication', 'refused', 'index-unavailable', 'index-building', 'index-failed', 'index-list-unreadable', 'repeated-timeouts'] as const;
 
 export type SourceUnavailableReason = (typeof SOURCE_UNAVAILABLE_REASONS)[number];
 

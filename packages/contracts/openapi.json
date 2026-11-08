@@ -233,11 +233,20 @@
             }
           },
           "503": {
-            "description": "The source is busy, or stopped answering during the schema reads",
+            "description": "The source is busy, or stopped answering during the schema reads; after repeated timeouts details.retryAfterMs and the Retry-After header (whole seconds) say how long to wait",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
                 }
               }
             }
@@ -362,11 +371,20 @@
             }
           },
           "503": {
-            "description": "The source is not available, or is busy",
+            "description": "The source is not available, or is busy; after repeated timeouts details.retryAfterMs and the Retry-After header (whole seconds) say how long to wait",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
                 }
               }
             }
@@ -470,11 +488,20 @@
             }
           },
           "503": {
-            "description": "The source is not available, or is busy",
+            "description": "The source is not available, or is busy; after repeated timeouts details.retryAfterMs and the Retry-After header (whole seconds) say how long to wait",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
                 }
               }
             }
@@ -667,11 +694,20 @@
             }
           },
           "503": {
-            "description": "The source is not available, or is busy",
+            "description": "The source is not available, or is busy; after repeated timeouts details.retryAfterMs and the Retry-After header (whole seconds) say how long to wait",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
                 }
               }
             }
@@ -842,11 +878,20 @@
             }
           },
           "503": {
-            "description": "The source is not available, or is busy",
+            "description": "The source is not available, or is busy; after repeated timeouts details.retryAfterMs and the Retry-After header (whole seconds) say how long to wait",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
                 }
               }
             }
@@ -960,11 +1005,20 @@
             }
           },
           "503": {
-            "description": "The source is not available",
+            "description": "The source is not available; after repeated timeouts details.retryAfterMs and the Retry-After header (whole seconds) say how long to wait",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
                 }
               }
             }
@@ -1058,11 +1112,20 @@
             }
           },
           "503": {
-            "description": "The source is not available, or is busy",
+            "description": "The source is not available, or is busy; after repeated timeouts details.retryAfterMs and the Retry-After header (whole seconds) say how long to wait",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
                 }
               }
             }
@@ -1156,11 +1219,20 @@
             }
           },
           "503": {
-            "description": "The source is not available",
+            "description": "The source is not available; after repeated timeouts details.retryAfterMs and the Retry-After header (whole seconds) say how long to wait",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
                 }
               }
             }
@@ -1274,11 +1346,20 @@
             }
           },
           "503": {
-            "description": "The source is not available, or is busy",
+            "description": "The source is not available, or is busy; after repeated timeouts details.retryAfterMs and the Retry-After header (whole seconds) say how long to wait",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
                 }
               }
             }
@@ -2624,6 +2705,53 @@
                       "reason": {
                         "type": "string",
                         "const": "index-list-unreadable"
+                      }
+                    },
+                    "required": [
+                      "reason"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "code",
+                  "message",
+                  "retryable",
+                  "traceId",
+                  "details"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "const": "SOURCE_UNAVAILABLE"
+                  },
+                  "message": {
+                    "type": "string",
+                    "const": "The source has timed out repeatedly and is being left to recover. Try again shortly."
+                  },
+                  "retryable": {
+                    "type": "boolean",
+                    "const": true
+                  },
+                  "traceId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "details": {
+                    "type": "object",
+                    "properties": {
+                      "reason": {
+                        "type": "string",
+                        "const": "repeated-timeouts"
+                      },
+                      "retryAfterMs": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
                       }
                     },
                     "required": [

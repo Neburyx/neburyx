@@ -80,6 +80,7 @@ describe('a failure that says nothing about the source', () => {
     ['a full pool', () => rig({ beginError: neo4jError('N/A', 'Connection acquisition timed out in 2000 ms. Pool status: Active conn count = 1.') }), 'SOURCE_UNAVAILABLE'],
     ['a closed executor', () => rig({ rows: [SERVER_ROW] }), 'SOURCE_UNAVAILABLE'],
     ['a coordinator that refuses admission', () => rig({ rows: [SERVER_ROW] }, ENV, { coordinator: { acquireRead: () => Promise.resolve({ status: 'unavailable' }) } }), 'SOURCE_UNAVAILABLE'],
+    ['an open breaker', () => rig({ rows: [SERVER_ROW] }, ENV, { coordinator: { acquireRead: () => Promise.resolve({ status: 'unavailable', reason: 'repeated-timeouts', retryAfterMs: 9000 }) } }), 'SOURCE_UNAVAILABLE'],
     ['a busy coordinator', () => rig({ rows: [SERVER_ROW] }, ENV, { coordinator: { acquireRead: () => Promise.resolve({ status: 'busy' }) } }), 'SOURCE_BUSY'],
     ['a policy that denies the principal', () => rig({ rows: [SERVER_ROW] }, ENV, { policy: { authorizeSource: () => Promise.resolve({ allowed: false, reason: 'denied' }) } }), 'ACCESS_DENIED'],
     ['an unexpected driver error', () => rig({ beginError: neo4jError('Neo.ClientError.Statement.SyntaxError', message) }), 'INTERNAL_ERROR'],

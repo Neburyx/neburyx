@@ -191,7 +191,7 @@ describe('fixed hash vectors', () => {
   });
 
   it('gives a fixed digest for a fixed mapping, so the hash cannot change silently', () => {
-    expect(hashOf(baseSource())).toBe('a6498b3c7bccf5194ad815dd0f19d0f0e9437ddf81862901237ec7edf1c3d3da');
+    expect(hashOf(baseSource())).toBe('2f749361bcfd8bd49d520edf9e4bf5bdcda6b0e33c26b0ead12fce769781bb29');
   });
 });
 
@@ -219,8 +219,8 @@ describe('the demo case in the config hash', () => {
   });
 
   it('leaves the hash of a source without a demo case as it was before the key existed', () => {
-    expect(hashOf(baseSource())).toBe('a6498b3c7bccf5194ad815dd0f19d0f0e9437ddf81862901237ec7edf1c3d3da');
-    expect(hashOf(baseSource({ synthetic: true }))).toBe('35b8c39c3783fef20ac6e54b9451456eb66ec6374d28abe48558dd83fa424e03');
+    expect(hashOf(baseSource())).toBe('2f749361bcfd8bd49d520edf9e4bf5bdcda6b0e33c26b0ead12fce769781bb29');
+    expect(hashOf(baseSource({ synthetic: true }))).toBe('2f9b2eb37687ba53bf38c7b9b2474c77b1915f12330df6bffac1f07547b55c76');
   });
 });
 

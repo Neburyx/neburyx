@@ -7,7 +7,7 @@ const [ANA, BEN, CAL] = [person('ana'), person('ben'), person('cal')];
 const LIMITS = { userConcurrency: 1, sourceConcurrency: 1, queueWaitMs: 2000 };
 
 const ask = (slots: ReturnType<typeof createReadSlots>, principal: Principal, overrides: Partial<ReadAccessRequest> = {}): Promise<ReadAdmission> =>
-  slots.acquireRead({ principal, sourceId: 'source-a', limits: LIMITS, leaseTtlMs: 15_000, ...overrides });
+  slots.acquireRead({ principal, sourceId: 'source-a', limits: LIMITS, role: 'data', leaseTtlMs: 15_000, ...overrides });
 const flush = () => vi.advanceTimersByTimeAsync(0);
 const statuses = (admissions: readonly Promise<ReadAdmission>[]): string[] => {
   const order: string[] = [];

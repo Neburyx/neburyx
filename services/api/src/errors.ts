@@ -10,7 +10,7 @@ export type IndexRefusalReason = 'index-unavailable' | 'index-building' | 'index
  * of a read the adapter could not run, `read-cut` on the `INTERNAL_ERROR` of a read of a template that is not paged and returned more rows than its limit, or `unreadable-node` on the
  * `INTERNAL_ERROR` of an entity read whose row the normalizer left out.
  */
-export type ErrorReason = UnavailableReason | IndexRefusalReason | 'read-failed' | 'read-cut' | 'unreadable-node';
+export type ErrorReason = UnavailableReason | IndexRefusalReason | 'repeated-timeouts' | 'read-failed' | 'read-cut' | 'unreadable-node';
 
 /** The reason a `SOURCE_UNAVAILABLE` gives the person: the adapter's `database`, `pool-full` and `closed`, any other tag and none are `unreachable`, and `credentials` is `authentication`. */
 export function unavailableReasonOf(reason: ErrorReason | undefined): SourceUnavailableReason {
@@ -19,6 +19,7 @@ export function unavailableReasonOf(reason: ErrorReason | undefined): SourceUnav
     case 'credentials':
       return 'authentication';
     case 'refused':
+    case 'repeated-timeouts':
     case 'index-unavailable':
     case 'index-building':
     case 'index-failed':
@@ -58,7 +59,9 @@ export function errorResponse(code: ErrorCode, traceId: string, details?: unknow
   const allowed = allowedDetails(code, details);
   if (code === 'SOURCE_UNAVAILABLE') {
     const reason = allowed?.reason ?? 'unreachable';
-    return { error: { code, ...SOURCE_UNAVAILABLE_ENTRIES[reason], traceId, details: { reason } } };
+    // only the breaker's reason has a wait to give
+    const wait = reason === 'repeated-timeouts' ? allowed?.retryAfterMs : undefined;
+    return { error: { code, ...SOURCE_UNAVAILABLE_ENTRIES[reason], traceId, details: { reason, ...(wait === undefined ? {} : { retryAfterMs: wait }) } } };
   }
   const { message, retryable } = ERROR_TABLE[code];
   return { error: { code, message, retryable, traceId, ...(allowed ? { details: allowed } : {}) } };
@@ -85,7 +88,10 @@ export function codeForFailure(error: unknown): ErrorCode {
 export function detailsOf(error: unknown): unknown {
   try {
     if (!(error instanceof AppError)) return undefined;
-    return error.code === 'SOURCE_UNAVAILABLE' ? { reason: unavailableReasonOf(error.reason) } : error.details;
+    if (error.code !== 'SOURCE_UNAVAILABLE') return error.details;
+    const reason = unavailableReasonOf(error.reason);
+    const wait = reason === 'repeated-timeouts' && typeof error.details === 'object' && error.details !== null && 'retryAfterMs' in error.details ? error.details.retryAfterMs : undefined;
+    return { reason, ...(wait === undefined ? {} : { retryAfterMs: wait }) };
   } catch {
     return undefined;
   }

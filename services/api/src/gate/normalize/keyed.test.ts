@@ -38,7 +38,7 @@ const row = (...values: unknown[]) => ({ values });
 const place = { sourceId: 'request-source', entityType: 'phone' };
 
 function redacted(result: ReturnType<typeof normalizeRows>, mask: boolean, model = modelOf()) {
-  const gateContext: GateContext = { traceId: 't', principal: LOCAL_PRINCIPAL, system: false, sourceId: 'request-source', budgets: DEFAULT_BUDGETS, allowlist: EMPTY_ALLOWLIST, policyVersion: 'none', mask, model, deadlineAt: 0 };
+  const gateContext: GateContext = { traceId: 't', principal: LOCAL_PRINCIPAL, system: false, role: 'data', sourceId: 'request-source', budgets: DEFAULT_BUDGETS, allowlist: EMPTY_ALLOWLIST, policyVersion: 'none', mask, model, deadlineAt: 0 };
   const [item] = redactItems([{ ...result }], gateContext);
   return item as unknown as ReturnType<typeof normalizeRows>;
 }

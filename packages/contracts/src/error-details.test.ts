@@ -13,6 +13,7 @@ describe('allowedDetails', () => {
   it('keeps only the named field of a code', () => {
     expect(allowedDetails('QUERY_BUDGET_EXCEEDED', { maxPage: 50, retryAfterMs: 5, query: 'MATCH (n)' })).toEqual({ maxPage: 50 });
     expect(allowedDetails('RATE_LIMITED', { retryAfterMs: 2000, maxPage: 50 })).toEqual({ retryAfterMs: 2000 });
+    expect(allowedDetails('SOURCE_UNAVAILABLE', { reason: 'repeated-timeouts', retryAfterMs: 2000, maxPage: 50 })).toEqual({ reason: 'repeated-timeouts', retryAfterMs: 2000 });
   });
 
   it('keeps the timeout of a query that timed out and drops anything else', () => {

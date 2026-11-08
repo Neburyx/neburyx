@@ -33,7 +33,7 @@ interface Pool {
   readonly waiters: Waiter[];
 }
 
-const realTimer: SetTimer = (run, ms) => {
+export const realTimer: SetTimer = (run, ms) => {
   const handle = setTimeout(run, ms);
   handle.unref();
   return { cancel: () => clearTimeout(handle) };

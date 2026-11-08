@@ -87,7 +87,7 @@ function isApiPath(url: string): boolean {
 
 function sendApiError(reply: FastifyReply, request: FastifyRequest, code: ErrorCode, details?: unknown): FastifyReply {
   const body = errorResponse(code, request.id, details);
-  const waitMs = code === 'RATE_LIMITED' ? body.error.details?.retryAfterMs : undefined;
+  const waitMs = code === 'RATE_LIMITED' || code === 'SOURCE_UNAVAILABLE' ? body.error.details?.retryAfterMs : undefined;
   if (waitMs !== undefined) reply.header('retry-after', String(Math.ceil(waitMs / 1000)));
   return reply
     .header(TRACE_HEADER, request.id)

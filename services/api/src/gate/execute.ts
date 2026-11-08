@@ -1,5 +1,5 @@
 import { AppError, RequestCancelled } from '../errors.js';
-import type { Coordinator, ReadLease } from '../seams/seams.js';
+import type { Coordinator, ReadLease, ReadOutcome } from '../seams/seams.js';
 import { exhaustive } from './exhaustive.js';
 import type { ExecuteOutcome, ReadExecutor } from './executor.js';
 import type { Rendered } from './render.js';
@@ -19,9 +19,9 @@ export interface ExecuteResult {
   readonly plan?: Plan;
 }
 
-async function releaseLease(lease: ReadLease, logger: GateLogger): Promise<void> {
+async function releaseLease(lease: ReadLease, logger: GateLogger, outcome?: ReadOutcome): Promise<void> {
   try {
-    await lease.release();
+    await lease.release(outcome);
   } catch {
     // a lease that cannot be released expires on its own; the read's outcome must not change
     logger.warn({ event: 'gate.lease_release_failed' }, 'gate lease release failed');
@@ -52,6 +52,8 @@ export async function acquireLease(deps: Pick<ExecuteDeps, 'coordinator' | 'cloc
     principal: context.principal,
     sourceId: context.sourceId,
     limits: { userConcurrency: context.system ? sourceConcurrency : userConcurrency, sourceConcurrency, queueWaitMs: Math.min(queueWaitMs, left) },
+    role: context.role,
+    breaker: context.budgets.breaker,
     leaseTtlMs: left + timeoutMs,
     ...(context.signal === undefined ? {} : { signal: context.signal }),
   });
@@ -59,7 +61,7 @@ export async function acquireLease(deps: Pick<ExecuteDeps, 'coordinator' | 'cloc
     case 'busy':
       throw new AppError('SOURCE_BUSY');
     case 'unavailable':
-      throw new AppError('SOURCE_UNAVAILABLE');
+      throw new AppError('SOURCE_UNAVAILABLE', admission.retryAfterMs === undefined ? undefined : { retryAfterMs: admission.retryAfterMs }, admission.reason);
     case 'cancelled':
       throw new RequestCancelled();
     case 'granted':
@@ -78,15 +80,30 @@ export async function acquireLease(deps: Pick<ExecuteDeps, 'coordinator' | 'cloc
 export interface SharedLease {
   readonly lease: ReadLease;
   readonly closings: Promise<void>[];
+  /** What the circuit breaker is told when the lease is released: the worst end of the reads under it (timeout, then other, then answered); none yet counts as other. */
+  outcome?: ReadOutcome;
+}
+
+const WORSE: Readonly<Record<ReadOutcome, number>> = { answered: 0, other: 1, timeout: 2 };
+
+/**
+ * How a read ended for the circuit breaker. A timeout counts only when the source was given a real chance: the read ran with at least the lesser of the source's timeout and what the request
+ * deadline leaves after the longest queue wait. A stop by a deadline nearer than that says nothing about the source.
+ */
+function outcomeOf(outcome: ExecuteOutcome, context: GateContext, startedAt: number): ReadOutcome {
+  if (outcome.status === 'rows') return 'answered';
+  if (outcome.status !== 'timeout') return 'other';
+  const { timeoutMs, requestTimeoutMs, queueWaitMs } = context.budgets;
+  return context.deadlineAt - startedAt >= Math.min(timeoutMs, requestTimeoutMs - queueWaitMs) ? 'timeout' : 'other';
 }
 
 /** Releases a lease once every read under it has its connection back; the answer is not held up by it. */
-export async function releaseWhenClosed(lease: ReadLease, closings: readonly Promise<void>[], logger: GateLogger): Promise<void> {
+export async function releaseWhenClosed(lease: ReadLease, closings: readonly Promise<void>[], logger: GateLogger, outcome: ReadOutcome = 'other'): Promise<void> {
   if (closings.length === 0) {
-    await releaseLease(lease, logger);
+    await releaseLease(lease, logger, outcome);
     return;
   }
-  void Promise.all(closings).then(() => releaseLease(lease, logger));
+  void Promise.all(closings).then(() => releaseLease(lease, logger, outcome));
 }
 
 /** Runs one read. Without a lease it takes and releases its own; with a shared one (a request that reads several pages under one lease) it uses it and hands its connection's return to the owner. */
@@ -102,6 +119,7 @@ export async function executeRead(
   let closed: Promise<void> | undefined;
   let outcome: ExecuteOutcome;
   let startedAt: number;
+  let ended: ReadOutcome = 'other';
   try {
     if (cancelled(context)) throw new RequestCancelled();
     startedAt = deps.clock();
@@ -124,11 +142,13 @@ export async function executeRead(
         closed = given;
       },
     });
+    ended = outcomeOf(outcome, context, startedAt);
   } finally {
     // the lease is kept until the read's connection is back, without holding up the answer
     if (shared !== undefined) {
       if (closed !== undefined) shared.closings.push(closed);
-    } else await releaseWhenClosed(lease, closed === undefined ? [] : [closed], deps.logger);
+      shared.outcome = shared.outcome === undefined || WORSE[ended] > WORSE[shared.outcome] ? ended : shared.outcome;
+    } else await releaseWhenClosed(lease, closed === undefined ? [] : [closed], deps.logger, ended);
   }
   switch (outcome.status) {
     case 'timeout':

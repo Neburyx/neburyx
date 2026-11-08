@@ -45,7 +45,7 @@ describe('the Community audit sink', () => {
 });
 
 describe('the Community coordinator', () => {
-  const request = { principal: LOCAL_IDENTITY.principal, sourceId: 'source-a', limits: { userConcurrency: 2, sourceConcurrency: 32, queueWaitMs: 50 }, leaseTtlMs: 60_000 };
+  const request = { principal: LOCAL_IDENTITY.principal, sourceId: 'source-a', limits: { userConcurrency: 2, sourceConcurrency: 32, queueWaitMs: 50 }, role: 'data' as const, leaseTtlMs: 60_000 };
 
   it('is the read slots: a third read of one person waits, and is refused as busy when no slot frees', async () => {
     const { coordinator } = communitySeams();

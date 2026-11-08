@@ -63,6 +63,7 @@ function budgetsFrom(source: SourceModel): Budgets {
     userConcurrency: source.budgets.userConcurrency,
     sourceConcurrency: source.budgets.sourceConcurrency,
     queueWaitMs: source.budgets.queueWaitMs,
+    breaker: { failures: source.budgets.breakerFailures, windowMs: source.budgets.breakerWindowMs, cooldownMs: source.budgets.breakerCooldownMs },
   };
 }
 

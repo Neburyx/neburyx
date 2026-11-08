@@ -80,6 +80,8 @@ nothing is read; a read that got its user's slot and not the source slot gives t
 in the order they came. The slots live in the API process (`src/seams/read-slots.ts`, behind the gate's coordinator); each
 process that builds a gate has its own, so a `test-source` run has slots of its own, apart from the running server's.
 
+**Circuit breaker.** Behind the read slots, a breaker per source opens when `breaker_failures` (default 5, 1 to 100) reads time out within `breaker_window_ms` (default 60,000) and stays open for `breaker_cooldown_ms` (default 30,000; both times 1,000 to 600,000 ms); an open breaker refuses a read before it asks for a slot with `SOURCE_UNAVAILABLE`, the reason `repeated-timeouts` and a retry-after, then one trial read decides. See [docs/circuit-breaker.md](../../docs/circuit-breaker.md).
+
 One read is one of these, and takes one pair of slots: a search group or one more page of it (exact, related, evidence, or the
 starts-with group of a type-ahead search, which has no more pages); the facet read; an entity load; a degree preview that is not answered from the cache (a cached one reads
 nothing and takes no slot); one expansion, for all its neighbor types, whose pages are read one after another under the one

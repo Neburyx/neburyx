@@ -23,8 +23,8 @@ function recordingAudit(): AuditSink & { readonly events: AuditEvent[] } {
 
 const denyingPolicy: PolicyProvider = { authorizeSource: () => Promise.resolve({ allowed: false, reason: 'no grant' }) };
 
-function expectedEvent(action: string, result: AuditEvent['result']): AuditEvent {
-  return { actorId: LOCAL_PRINCIPAL.id, actorRole: LOCAL_PRINCIPAL.role, action, result, sourceId: SOURCE_A, traceId: 'tr-test' };
+function expectedEvent(action: string, result: AuditEvent['result'], detail?: AuditEvent['detail']): AuditEvent {
+  return { actorId: LOCAL_PRINCIPAL.id, actorRole: LOCAL_PRINCIPAL.role, action, result, sourceId: SOURCE_A, traceId: 'tr-test', ...(detail === undefined ? {} : { detail }) };
 }
 
 interface FailureCase {
@@ -35,6 +35,7 @@ interface FailureCase {
   readonly result: AuditEvent['result'];
   readonly action: string;
   readonly reached: readonly GateStage[];
+  readonly detail?: AuditEvent['detail'];
 }
 
 const failures: readonly FailureCase[] = [
@@ -73,6 +74,7 @@ const failures: readonly FailureCase[] = [
     options: (audit) => ({ seams: { audit }, executor: new TestExecutor(() => Promise.resolve({ status: 'timeout' })) }),
     code: 'QUERY_TIMEOUT',
     result: 'failed',
+    detail: { reason: 'timeout' },
     action: 'test.read',
     reached: ['resolve', 'validate', 'authorize', 'execute'],
   },
@@ -120,7 +122,7 @@ describe('a failure at any stage', () => {
     expect(outcome).toMatchObject({ code: failure.code });
     expect(observer.events.map((event) => event.stage)).toEqual([...failure.reached, 'audit']);
     expect(observer.events.filter((event) => event.outcome === 'failed').map((event) => event.stage)).toEqual([failure.reached.at(-1)]);
-    expect(audit.events).toEqual([expectedEvent(failure.action, failure.result)]);
+    expect(audit.events).toEqual([expectedEvent(failure.action, failure.result, failure.detail)]);
   });
 });
 

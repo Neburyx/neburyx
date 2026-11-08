@@ -13,6 +13,7 @@ const context = (system: boolean): GateContext => ({
   traceId: 'tr-budget',
   principal: LOCAL_PRINCIPAL,
   system,
+  role: system ? 'background' : 'data',
   sourceId: 'alpha',
   budgets: { ...DEFAULT_BUDGETS, timeoutMs: BUDGET_MS },
   allowlist: EMPTY_ALLOWLIST,

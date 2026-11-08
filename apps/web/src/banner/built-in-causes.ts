@@ -1,6 +1,7 @@
 import { partialDetailsSchema } from '@neburyx/contracts';
 import { createBannerController, type BannerController, type BannerDescriber } from './banner-controller.js';
 import { registerRateLimitedCause } from './rate-limited-cause.js';
+import { registerSourceUnavailableCause } from './source-unavailable-cause.js';
 import { BUSY_CHIP, BUSY_SIDE_LABEL, BUSY_TEXT, busyHeadline, PARTIAL_CHIP, PARTIAL_TEXT, RETRY, TIMED_OUT_CHIP, TIMED_OUT_SIDE_LABEL, TIMED_OUT_TEXT, timedOutHeadline } from './copy.js';
 
 export const PARTIAL_BANNER_ID = 'partial';
@@ -60,6 +61,7 @@ export function registerBuiltInBannerCauses(controller: BannerController): void 
   controller.registerCause('SOURCE_BUSY', describeBusy);
   controller.registerCause('QUERY_TIMEOUT', describeTimedOut);
   registerRateLimitedCause(controller);
+  registerSourceUnavailableCause(controller);
 }
 
 export function createBuiltInBannerController(): BannerController {

@@ -16,6 +16,7 @@ export const SOURCE_UNAVAILABLE_ENTRIES: Readonly<Record<SourceUnavailableReason
   'index-building': { message: 'A needed index is still building, so the read is slow. Try again later.', retryable: true },
   'index-failed': { message: 'A needed index failed, so the read was not run.', retryable: false },
   'index-list-unreadable': { message: "The source's indexes could not be listed, so the read was not run.", retryable: false },
+  'repeated-timeouts': { message: 'The source has timed out repeatedly and is being left to recover. Try again shortly.', retryable: true },
 };
 
 export const ERROR_TABLE: Readonly<Record<ErrorCode, ErrorEntry>> = {

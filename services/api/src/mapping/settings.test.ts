@@ -101,6 +101,14 @@ describe('budgets', () => {
     expectRefused(baseSource({ budgets: { max_hops: 'two' } }), 'sources[0].budgets.max_hops', 'must be number');
   });
 
+  it('reads the breaker rule, and refuses each of its keys outside its bound with the key named', () => {
+    expect(firstSource(load(baseSource({ budgets: { breaker_failures: 2, breaker_window_ms: 1000, breaker_cooldown_ms: 600_000 } }))).budgets).toMatchObject({ breakerFailures: 2, breakerWindowMs: 1000, breakerCooldownMs: 600_000 });
+    expectRefused(baseSource({ budgets: { breaker_failures: 0 } }), 'sources[0].budgets.breaker_failures', 'must be at least 1');
+    expectRefused(baseSource({ budgets: { breaker_failures: 101 } }), 'sources[0].budgets.breaker_failures', 'must be at most 100');
+    expectRefused(baseSource({ budgets: { breaker_window_ms: 999 } }), 'sources[0].budgets.breaker_window_ms', 'must be at least 1000');
+    expectRefused(baseSource({ budgets: { breaker_cooldown_ms: 600_001 } }), 'sources[0].budgets.breaker_cooldown_ms', 'must be at most 600000');
+  });
+
   it('refuses an unknown budget key', () => {
     expectRefused(baseSource({ budgets: { burst: 5 } }), 'sources[0].budgets.burst', 'is not a known key');
   });
@@ -119,6 +127,9 @@ describe('budgets', () => {
       userConcurrency: 2,
       sourceConcurrency: 32,
       queueWaitMs: 2000,
+      breakerFailures: 5,
+      breakerWindowMs: 60_000,
+      breakerCooldownMs: 30_000,
       heavyOpThreshold: 500,
       requestsPerMinute: 120,
     });

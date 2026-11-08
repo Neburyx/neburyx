@@ -11,7 +11,7 @@ const DEE = user('dee');
 const LIMITS = { userConcurrency: 2, sourceConcurrency: 32, queueWaitMs: 2000 };
 
 function ask(slots: ReadSlots, principal: Principal, overrides: Partial<ReadAccessRequest> = {}): Promise<ReadAdmission> {
-  return slots.acquireRead({ principal, sourceId: 'source-a', limits: LIMITS, leaseTtlMs: 15_000, ...overrides });
+  return slots.acquireRead({ principal, sourceId: 'source-a', limits: LIMITS, role: 'data', leaseTtlMs: 15_000, ...overrides });
 }
 
 async function leaseOf(admission: Promise<ReadAdmission>): Promise<ReadLease> {

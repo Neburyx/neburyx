@@ -17,7 +17,7 @@ const SOURCE_MS = 5000;
 const REQUEST_MS = 10_000;
 const budgets = { ...DEFAULT_BUDGETS, timeoutMs: SOURCE_MS, requestTimeoutMs: REQUEST_MS };
 
-const contextOf = (): GateContext => ({ traceId: 'tr-limit', principal: LOCAL_PRINCIPAL, system: false, sourceId: 'alpha', budgets, allowlist: EMPTY_ALLOWLIST, policyVersion: 'none', mask: false, model: EMPTY_MODEL, deadlineAt: 0 });
+const contextOf = (): GateContext => ({ traceId: 'tr-limit', principal: LOCAL_PRINCIPAL, system: false, role: 'data', sourceId: 'alpha', budgets, allowlist: EMPTY_ALLOWLIST, policyVersion: 'none', mask: false, model: EMPTY_MODEL, deadlineAt: 0 });
 
 async function limitOf(promise: Promise<unknown>): Promise<unknown> {
   const error: unknown = await promise.then(
@@ -185,7 +185,7 @@ describe('an abort and a timeout in a fixed order, with the real executor over a
     expect(leases).toEqual({ taken: 1, released: 1 });
   });
 
-  it('timeout first (the guard at the deadline, the read having had the whole timeout), then the abort: QUERY_TIMEOUT naming the source’s timeout, one failed audit event with no detail, no second close, the lease released once', async () => {
+  it('timeout first (the guard at the deadline, the read having had the whole timeout), then the abort: QUERY_TIMEOUT naming the source’s timeout, one failed audit event with the reason timeout, no second close, the lease released once', async () => {
     const { gate, events, leases, session } = rigged();
     const controller = new AbortController();
     const answer = limitOf(gate.run(gateRequest({ sourceId: 'alpha', signal: controller.signal })));
@@ -198,7 +198,7 @@ describe('an abort and a timeout in a fixed order, with the real executor over a
     expect(closes).toBe(1);
     expect(events).toHaveLength(1);
     expect(events[0]?.result).toBe('failed');
-    expect(events[0]?.detail).toBeUndefined();
+    expect(events[0]?.detail).toEqual({ reason: 'timeout' });
     expect(leases).toEqual({ taken: 1, released: 1 });
   });
 });

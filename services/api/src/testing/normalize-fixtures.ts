@@ -66,6 +66,7 @@ export const redactContext = (model: NormalizeModel, mask: boolean): GateContext
   traceId: 'tr-test',
   principal: LOCAL_PRINCIPAL,
   system: false,
+  role: 'data',
   sourceId: 'alpha',
   budgets: DEFAULT_BUDGETS,
   allowlist: EMPTY_ALLOWLIST,

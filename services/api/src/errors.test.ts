@@ -228,6 +228,11 @@ describe('the reason of an unavailable source', () => {
       expect(validateErrorResponse(body)).toBe(true);
       if (tag !== reason) expect(JSON.stringify(body)).not.toContain(tag);
     }
+    const waiting = errorResponse('SOURCE_UNAVAILABLE', 'tr-3', detailsOf(new AppError('SOURCE_UNAVAILABLE', { retryAfterMs: 12_000 }, 'repeated-timeouts')));
+    expect(waiting).toEqual({ error: { code: 'SOURCE_UNAVAILABLE', ...SOURCE_UNAVAILABLE_ENTRIES['repeated-timeouts'], traceId: 'tr-3', details: { reason: 'repeated-timeouts', retryAfterMs: 12_000 } } });
+    expect(validateErrorResponse(waiting)).toBe(true);
+    // no other reason carries a wait, whatever the details say
+    expect(errorResponse('SOURCE_UNAVAILABLE', 'tr-4', detailsOf(new AppError('SOURCE_UNAVAILABLE', { retryAfterMs: 12_000 }, 'database'))).error.details).toEqual({ reason: 'unreachable' });
     expect(errorResponse('SOURCE_UNAVAILABLE', 'tr-2')).toEqual({ error: { code: 'SOURCE_UNAVAILABLE', ...SOURCE_UNAVAILABLE_ENTRIES.unreachable, traceId: 'tr-2', details: { reason: 'unreachable' } } });
   });
 });

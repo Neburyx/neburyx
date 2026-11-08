@@ -8,4 +8,5 @@ export const DEFAULT_BUDGETS: Budgets = {
   userConcurrency: 2,
   sourceConcurrency: 32,
   queueWaitMs: 2000,
+  breaker: { failures: 5, windowMs: 60_000, cooldownMs: 30_000 },
 };

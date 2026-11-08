@@ -25,7 +25,7 @@ const unavailableVariants = SOURCE_UNAVAILABLE_REASONS.map((reason) =>
     message: z.literal(SOURCE_UNAVAILABLE_ENTRIES[reason].message),
     retryable: z.literal(SOURCE_UNAVAILABLE_ENTRIES[reason].retryable),
     traceId: z.string().min(1),
-    details: z.strictObject({ reason: z.literal(reason) }),
+    details: z.strictObject({ reason: z.literal(reason), ...(reason === 'repeated-timeouts' ? { retryAfterMs: errorDetailsSchema.shape.retryAfterMs } : {}) }),
   }),
 );
 

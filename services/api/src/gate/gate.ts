@@ -2,7 +2,7 @@ import { AppError, RequestCancelled } from '../errors.js';
 import { makeToken } from '../reference/token.js';
 import { mapPositionReferences } from './cursor/references.js';
 import { AdapterError } from '../sources/errors.js';
-import type { AuditEvent } from '../seams/seams.js';
+import type { AuditEvent, ReadRole } from '../seams/seams.js';
 import { auditResultFor, FALLBACK_AUDIT_ACTION } from './audit.js';
 import { authorizeRequest } from './authorize.js';
 import { acquireLease, executeRead, releaseWhenClosed, type ExecuteResult, type SharedLease } from './execute.js';
@@ -30,12 +30,13 @@ async function inStage<T>(deps: GateDeps, progress: Progress, stage: GateStage, 
   }
 }
 
-function resolveContext(deps: GateDeps, request: GateRequest, system: boolean): GateContext {
+function resolveContext(deps: GateDeps, request: GateRequest, system: boolean, role: ReadRole): GateContext {
   const budgets = deps.budgetsFor(request.sourceId);
   return {
     traceId: request.traceId,
     principal: request.principal,
     system,
+    role,
     sourceId: request.sourceId,
     budgets,
     allowlist: deps.allowlistFor(request.sourceId),
@@ -54,7 +55,7 @@ async function guardIndexes(deps: GateDeps, request: GateRequest, context: GateC
   if (request.indexes === 'unverified') return;
   if (request.indexes !== undefined && 'failure' in request.indexes) throw request.indexes.failure;
   const given = request.indexes !== undefined && request.indexes.sourceId === request.sourceId ? request.indexes : undefined;
-  const snapshot = given ?? (await readIndexSnapshot((read) => runGate(deps, { ...read, principal: SYSTEM_PRINCIPAL }, true), { traceId: request.traceId, sourceId: request.sourceId, ...(request.signal === undefined ? {} : { signal: request.signal }) }));
+  const snapshot = given ?? (await readIndexSnapshot((read) => runGate(deps, { ...read, principal: SYSTEM_PRINCIPAL }, true, 'index'), { traceId: request.traceId, sourceId: request.sourceId, ...(request.signal === undefined ? {} : { signal: request.signal }) }));
   if (snapshot === 'unverified') return;
   const gap = worstGapOf(needs.flatMap((need): IndexGap[] => {
     const found = gapOf(snapshot, need, context.allowlist);
@@ -87,8 +88,8 @@ async function finishPage(deps: GateDeps, progress: Progress, request: GateReque
   });
 }
 
-async function runStages(deps: GateDeps, request: GateRequest, system: boolean, progress: Progress): Promise<GatePage> {
-  const context = await inStage(deps, progress, 'resolve', () => resolveContext(deps, request, system));
+async function runStages(deps: GateDeps, request: GateRequest, system: boolean, role: ReadRole, progress: Progress): Promise<GatePage> {
+  const context = await inStage(deps, progress, 'resolve', () => resolveContext(deps, request, system, role));
   const validated = await inStage(deps, progress, 'validate', () => {
     const found = findTemplate(deps.catalog, request);
     progress.action = found.auditAction;
@@ -111,7 +112,7 @@ async function runManyStages(deps: GateDeps, requests: readonly GateRequest[], p
   if (first === undefined) return [];
   // one authorize stage covers the request, so every page of it is read with the same template, for the same source, person and masking
   if (requests.some((request) => request.templateId !== first.templateId || request.sourceId !== first.sourceId || request.principal.id !== first.principal.id || (request.mask ?? false) !== (first.mask ?? false))) throw new AppError('INVALID_REQUEST');
-  const context = await inStage(deps, progress, 'resolve', () => resolveContext(deps, first, false));
+  const context = await inStage(deps, progress, 'resolve', () => resolveContext(deps, first, false, 'data'));
   const validated = await inStage(deps, progress, 'validate', () =>
     requests.map((request) => {
       const found = findTemplate(deps.catalog, request);
@@ -130,7 +131,7 @@ async function runManyStages(deps: GateDeps, requests: readonly GateRequest[], p
     let indexes = first.indexes;
     for (const entry of reads) {
       if (indexes === undefined && (entry.template.indexNeeds?.(entry.params, context.allowlist) ?? []).length > 0) {
-        indexes = await readIndexSnapshot((read) => runGate(deps, { ...read, principal: SYSTEM_PRINCIPAL }, true), { traceId: first.traceId, sourceId: first.sourceId, ...(first.signal === undefined ? {} : { signal: first.signal }) });
+        indexes = await readIndexSnapshot((read) => runGate(deps, { ...read, principal: SYSTEM_PRINCIPAL }, true, 'index'), { traceId: first.traceId, sourceId: first.sourceId, ...(first.signal === undefined ? {} : { signal: first.signal }) });
       }
     }
     if (reads.length === 0) return validated.map(() => ({ rows: [], hasMore: false }));
@@ -148,7 +149,7 @@ async function runManyStages(deps: GateDeps, requests: readonly GateRequest[], p
       }
       return out;
     } finally {
-      await releaseWhenClosed(shared.lease, shared.closings, deps.logger);
+      await releaseWhenClosed(shared.lease, shared.closings, deps.logger, shared.outcome);
     }
   });
   const pages: GatePage[] = [];
@@ -169,7 +170,7 @@ async function recordAudit(deps: GateDeps, request: GateRequest, progress: Progr
     result: auditResultFor(failure),
     sourceId: request.sourceId,
     traceId: request.traceId,
-    ...(failure instanceof RequestCancelled ? { detail: { reason: 'cancelled' as const } } : {}),
+    ...(failure instanceof RequestCancelled ? { detail: { reason: 'cancelled' as const } } : failure?.code === 'QUERY_TIMEOUT' ? { detail: { reason: 'timeout' as const } } : {}),
   };
   try {
     await deps.seams.audit.record(event);
@@ -190,17 +191,17 @@ function asAppError(deps: GateDeps, error: unknown, stage: GateStage): AppError 
 
 type Attempt = { readonly status: 'page'; readonly page: GatePage } | { readonly status: 'failure'; readonly failure: AppError | RequestCancelled };
 
-async function attempt(deps: GateDeps, request: GateRequest, system: boolean, progress: Progress): Promise<Attempt> {
+async function attempt(deps: GateDeps, request: GateRequest, system: boolean, role: ReadRole, progress: Progress): Promise<Attempt> {
   try {
-    return { status: 'page', page: await runStages(deps, request, system, progress) };
+    return { status: 'page', page: await runStages(deps, request, system, role, progress) };
   } catch (error) {
     return { status: 'failure', failure: asAppError(deps, error, progress.stage) };
   }
 }
 
-async function runGate(deps: GateDeps, request: GateRequest, system: boolean): Promise<GatePage> {
+async function runGate(deps: GateDeps, request: GateRequest, system: boolean, role: ReadRole): Promise<GatePage> {
   const progress: Progress = { stage: 'resolve', action: FALLBACK_AUDIT_ACTION };
-  const outcome = await attempt(deps, request, system, progress);
+  const outcome = await attempt(deps, request, system, role, progress);
   // decided from the catalog entry of the requested template, so it holds whatever stage the run fails in
   const audited = !(system && deps.catalog.find(request.templateId)?.auditSystemRuns === false);
   switch (outcome.status) {
@@ -233,17 +234,17 @@ async function runManyGate(deps: GateDeps, requests: readonly GateRequest[]): Pr
 
 export function createGates(deps: GateDeps): { readonly gate: Gate; readonly system: SystemRunner; readonly indexes: IndexReader } {
   return {
-    gate: { run: (request) => runGate(deps, request, false), runMany: (requests) => runManyGate(deps, requests) },
+    gate: { run: (request) => runGate(deps, request, false, 'data'), runMany: (requests) => runManyGate(deps, requests) },
     indexes: {
       async read(request) {
         const decision = await deps.seams.policy.authorizeSource({ principal: request.principal, sourceId: request.sourceId });
         if (!decision.allowed) return 'unverified';
-        return readIndexSnapshot((read) => runGate(deps, { ...read, principal: SYSTEM_PRINCIPAL }, true), request);
+        return readIndexSnapshot((read) => runGate(deps, { ...read, principal: SYSTEM_PRINCIPAL }, true, 'index'), request);
       },
     },
     system: {
       run: (request) =>
-        runGate(deps, { traceId: request.traceId, principal: SYSTEM_PRINCIPAL, sourceId: request.sourceId, templateId: request.templateId, params: request.params, limit: request.limit }, true),
+        runGate(deps, { traceId: request.traceId, principal: SYSTEM_PRINCIPAL, sourceId: request.sourceId, templateId: request.templateId, params: request.params, limit: request.limit }, true, 'background'),
     },
   };
 }

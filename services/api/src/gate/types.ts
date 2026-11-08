@@ -5,7 +5,7 @@ import type { IndexEntry } from './templates/schema-indexes.js';
 import type { NormalizeContext, NormalizeModel } from './normalize/model.js';
 import type { AppError } from '../errors.js';
 import type { DegreeDeclaration } from '../mapping/model.js';
-import type { Principal } from '../seams/seams.js';
+import type { BreakerLimits, Principal, ReadRole } from '../seams/seams.js';
 
 export const GATE_STAGES = ['resolve', 'validate', 'authorize', 'execute', 'normalize', 'redact', 'audit'] as const;
 export type GateStage = (typeof GATE_STAGES)[number];
@@ -188,6 +188,8 @@ export interface Budgets {
   readonly userConcurrency: number;
   readonly sourceConcurrency: number;
   readonly queueWaitMs: number;
+  /** The source's circuit breaker rule. */
+  readonly breaker: BreakerLimits;
 }
 
 export interface GateRequest {
@@ -211,6 +213,8 @@ export interface GateContext {
   readonly traceId: string;
   readonly principal: Principal;
   readonly system: boolean;
+  /** What the read is for, which decides whether it may be the trial read of a recovering source. */
+  readonly role: ReadRole;
   readonly sourceId: string;
   readonly budgets: Budgets;
   readonly allowlist: SourceAllowlist;

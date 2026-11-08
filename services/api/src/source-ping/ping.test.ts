@@ -79,6 +79,7 @@ describe('a run that says nothing about the source', () => {
   const SKIPPED: readonly (readonly [string, () => ReturnType<typeof pingOver>])[] = [
     ['a busy coordinator', () => pingOver(answering(), { ...auditing().seams, coordinator: { acquireRead: () => Promise.resolve({ status: 'busy' }) } })],
     ['a coordinator that refuses admission', () => pingOver(answering(), { ...auditing().seams, coordinator: { acquireRead: () => Promise.resolve({ status: 'unavailable' }) } })],
+    ['an open breaker', () => pingOver(answering(), { ...auditing().seams, coordinator: { acquireRead: () => Promise.resolve({ status: 'unavailable', reason: 'repeated-timeouts', retryAfterMs: 20_000 }) } })],
     ['a full pool', () => pingOver(new TestExecutor(() => Promise.resolve({ status: 'unavailable', reason: 'pool-full' })))],
     ['a closed executor', () => pingOver(new TestExecutor(() => Promise.resolve({ status: 'unavailable', reason: 'closed' })))],
     ['an executor that throws', () => pingOver(new TestExecutor(() => Promise.reject(new Error('boom'))))],

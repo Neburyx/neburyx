@@ -53,3 +53,9 @@ const whatRuns = (kind: RequestKind, title: string | undefined): string => {
 export const runningHeadline = (kind: RequestKind, title: string | undefined, elapsedMs: number, limitMs: number | undefined): string =>
   `${whatRuns(kind, title)} · ${elapsedSeconds(elapsedMs)} s${limitMs === undefined ? '' : ` / ${limitSeconds(limitMs)} s timeout`}`;
 export const runningSideLabel = (limitMs: number): string => `${limitSeconds(limitMs)} s bounded request`;
+export const UNAVAILABLE_CHIP = 'Unavailable';
+export const UNAVAILABLE_TEXT = 'Filters and saved view preserved; retry does not discard the graph.';
+export const UNAVAILABLE_SIDE_LABEL = '0 new data retrieved';
+export const unavailableHeadline = (source: string): string => `${source} unavailable. The loaded graph remains available.`;
+export const REPEATED_TIMEOUTS_CHIP = 'Repeated timeouts';
+export const repeatedTimeoutsHeadline = (source: string): string => `${source} unavailable after repeated timeouts. The loaded graph remains available.`;

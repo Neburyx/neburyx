@@ -101,6 +101,9 @@ export interface BudgetsModel {
   readonly userConcurrency: number;
   readonly sourceConcurrency: number;
   readonly queueWaitMs: number;
+  readonly breakerFailures: number;
+  readonly breakerWindowMs: number;
+  readonly breakerCooldownMs: number;
   readonly heavyOpThreshold: number;
   readonly requestsPerMinute: number;
 }

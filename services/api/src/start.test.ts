@@ -264,7 +264,7 @@ describe('the source gate at start-up', () => {
     if (result.exitCode !== 0) throw new Error('the server did not start');
     const coordinator = parts.opened[0]?.seams.coordinator;
     expect(seamsOf(result.app).coordinator).toBe(coordinator);
-    const request = { principal: LOCAL_IDENTITY.principal, sourceId: 'demo', limits: { userConcurrency: 1, sourceConcurrency: 1, queueWaitMs: 20 }, leaseTtlMs: 60_000 };
+    const request = { principal: LOCAL_IDENTITY.principal, sourceId: 'demo', limits: { userConcurrency: 1, sourceConcurrency: 1, queueWaitMs: 20 }, role: 'data' as const, leaseTtlMs: 60_000 };
     const first = await coordinator?.acquireRead(request);
     await expect(coordinator?.acquireRead(request)).resolves.toEqual({ status: 'busy' });
     if (first?.status === 'granted') await first.lease.release();

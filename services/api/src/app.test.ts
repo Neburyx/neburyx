@@ -226,6 +226,6 @@ describe('the seams', () => {
   it('hands out a stub coordinator, which answers busy', async () => {
     const server = await appWith({ ...communitySeams(), coordinator: busyCoordinator });
     expect(seamsOf(server).coordinator).toBe(busyCoordinator);
-    expect(await seamsOf(server).coordinator.acquireRead({ principal: LOCAL_IDENTITY.principal, sourceId: 'source-a', limits: { userConcurrency: 2, sourceConcurrency: 32, queueWaitMs: 2000 }, leaseTtlMs: 15_000 })).toEqual({ status: 'busy' });
+    expect(await seamsOf(server).coordinator.acquireRead({ principal: LOCAL_IDENTITY.principal, sourceId: 'source-a', limits: { userConcurrency: 2, sourceConcurrency: 32, queueWaitMs: 2000 }, role: 'data', leaseTtlMs: 15_000 })).toEqual({ status: 'busy' });
   });
 });

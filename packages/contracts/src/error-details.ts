@@ -6,7 +6,7 @@ type DetailKey = keyof typeof errorDetailsSchema.shape;
 export const ERROR_DETAIL_KEYS: Readonly<Record<ErrorCode, readonly DetailKey[]>> = {
   QUERY_BUDGET_EXCEEDED: ['maxPage'],
   QUERY_TIMEOUT: ['timeoutMs'],
-  SOURCE_UNAVAILABLE: ['reason'],
+  SOURCE_UNAVAILABLE: ['reason', 'retryAfterMs'],
   SOURCE_BUSY: [],
   RATE_LIMITED: ['retryAfterMs'],
   ACCESS_DENIED: [],

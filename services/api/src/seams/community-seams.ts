@@ -1,3 +1,4 @@
+import { withBreaker } from './breaker.js';
 import { createReadSlots } from './read-slots.js';
 import type { AuditSink, PolicyProvider, Seams } from './seams.js';
 
@@ -14,6 +15,6 @@ export function communitySeams(): Seams {
   return {
     policy: communityPolicy,
     audit: communityAudit,
-    coordinator: createReadSlots(),
+    coordinator: withBreaker(createReadSlots()),
   };
 }
