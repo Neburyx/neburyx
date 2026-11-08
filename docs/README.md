@@ -11,4 +11,5 @@ Public technical documentation. Pre-release placeholder: the technical architect
 - [fuzz-suite.md](fuzz-suite.md): the input fuzz suite, what it proves about statement text and refusals, a recorded run and how to replay a failure.
 - [circuit-breaker.md](circuit-breaker.md): the rule that stops a source being asked when its reads keep timing out, how it recovers, what a person sees and the three settings.
 - [source-state.md](source-state.md): which stored check decides the state a source shows when several API copies run, and what stays different between copies.
+- [concurrency.md](concurrency.md): the read-slot, request-rate and breaker limits with their numbers, and what the concurrency suite proves about them.
 - [benchmarks/](benchmarks/README.md): the supernode benchmark, what it measures, how to run it and the last record.

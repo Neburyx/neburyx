@@ -43,8 +43,8 @@ interface Call {
 const COUNTED: Readonly<Record<string, Call>> = {
   'entity open': { method: 'GET', url: (s) => `/v1/entities/${s}/node_a/H-1` },
   'entity lookup': { method: 'POST', url: () => '/v1/entities/lookup', payload: (s) => ({ sourceId: s, ref }) },
-  search: { method: 'POST', url: () => '/v1/search/entities', payload: (s) => ({ sourceId: s, text: 'abc' }) },
-  'search more': { method: 'POST', url: () => '/v1/search/entities/more', payload: (s) => ({ sourceId: s, text: 'abc', group: 'exact', cursor: 'x' }) },
+  search: { method: 'POST', url: () => '/v1/search/entities', payload: (s) => ({ sourceId: s, text: 'needle-text' }) },
+  'search more': { method: 'POST', url: () => '/v1/search/entities/more', payload: (s) => ({ sourceId: s, text: 'needle-text', group: 'exact', cursor: 'x' }) },
   'degree preview': { method: 'POST', url: () => '/v1/graph/preview-expansion', payload: (s) => ({ sourceId: s, ref }) },
   coverage: { method: 'POST', url: () => '/v1/graph/coverage', payload: (s) => ({ sourceId: s, entities: [{ ref: element(s), loadedRelationships: 0, loadedQuality: 'exact' }] }) },
   expand: { method: 'POST', url: () => '/v1/graph/expand', payload: (s) => ({ sourceId: s, ref, neighborTypes: ['node_b'] }) },
@@ -154,7 +154,7 @@ describe('requests that are not counted', () => {
 
   it('counts a request that passes the schema and is refused by the gate\'s own validation (a cursor that is not one)', async () => {
     const { app, limiter } = await started();
-    const answer = await app.inject({ method: 'POST', url: '/v1/search/entities/more', payload: { sourceId: 'demo', text: 'abc', group: 'exact', cursor: 'not-a-cursor' } });
+    const answer = await app.inject({ method: 'POST', url: '/v1/search/entities/more', payload: { sourceId: 'demo', text: 'needle-text', group: 'exact', cursor: 'not-a-cursor' } });
     expect(answer.statusCode).toBeGreaterThanOrEqual(400);
     expect(answer.statusCode).not.toBe(429);
     expect([...limiter.inspect().values()]).toEqual([1]);
@@ -192,7 +192,7 @@ describe('requests that are not counted', () => {
     const entry = lines.map((line) => JSON.parse(line) as Record<string, unknown>).find((each) => each['event'] === 'request.rate_limited');
     expect(entry).toMatchObject({ level: 30, sourceId: 'demo', retryAfterMs: expect.any(Number) as number });
     expect(entry?.['traceId']).toMatch(/^tr-/);
-    expect(lines.join('\n')).not.toContain('abc');
+    expect(lines.join('\n')).not.toContain('needle-text');
     await app.close();
   });
 

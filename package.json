@@ -13,7 +13,7 @@
     "test": "pnpm --filter @neburyx/contracts --filter @neburyx/test-containers --filter @neburyx/test-neo4j build && pnpm -r test",
     "test:contract": "pnpm --filter @neburyx/contracts --filter @neburyx/test-containers --filter @neburyx/test-neo4j build && pnpm -r --if-present test:contract",
     "test:integration": "pnpm --filter @neburyx/contracts --filter @neburyx/test-containers --filter @neburyx/test-neo4j build && pnpm --filter @neburyx/api build && pnpm --filter @neburyx/api test:integration",
-    "test:neo4j": "pnpm --filter @neburyx/contracts --filter @neburyx/test-containers --filter @neburyx/test-neo4j build && pnpm --filter @neburyx/api test:neo4j && pnpm --filter @neburyx/demo-graph test:neo4j && pnpm --filter @neburyx/cancellation-suite test:neo4j",
+    "test:neo4j": "pnpm --filter @neburyx/contracts --filter @neburyx/test-containers --filter @neburyx/test-neo4j build && pnpm --filter @neburyx/api test:neo4j && pnpm --filter @neburyx/demo-graph test:neo4j && pnpm --filter @neburyx/cancellation-suite test:neo4j && pnpm --filter @neburyx/concurrency-suite test:neo4j",
     "test:supernodes": "pnpm --filter @neburyx/contracts --filter @neburyx/test-containers --filter @neburyx/test-neo4j build && pnpm --filter @neburyx/api test:supernodes",
     "bench:render": "pnpm --filter @neburyx/contracts --filter @neburyx/test-containers --filter @neburyx/test-neo4j build && pnpm --filter @neburyx/api bench:render",
     "bench:supernode": "pnpm --filter @neburyx/contracts --filter @neburyx/test-containers --filter @neburyx/test-neo4j build && pnpm --filter @neburyx/api bench:supernode",

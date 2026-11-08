@@ -7,19 +7,24 @@ import { personalise } from './rig.js';
 const BUDGET_MS = 1000;
 let rig: Neo4jRig;
 
-beforeAll(async () => {
-  rig = await startNeo4jRig({ size: 1000, timeoutMs: BUDGET_MS });
-}, 600_000);
+/** A rig of its own for each case; the outage case keeps the product's default budget, since a budget chosen to force a timeout is not the one an outage case should be read under. */
+function ownRig(timeoutMs: number | undefined, size: number): void {
+  beforeAll(async () => {
+    rig = await startNeo4jRig({ size, timeoutMs });
+  }, 600_000);
 
-afterAll(async () => {
-  if (rig === undefined) return;
-  expect(await leftoversOf(rig)).toEqual([]);
-});
+  afterAll(async () => {
+    if (rig === undefined) return;
+    expect(await leftoversOf(rig)).toEqual([]);
+  }, 600_000);
+}
 
 const last = () => rig.responses[rig.responses.length - 1];
 const traceOfRead = (): string => rig.executor.calls.filter((call) => call.templateId === EXPAND_NEIGHBORS_ID).at(-1)?.traceId ?? '';
 
 describe('the source port closed in the middle of a read', () => {
+  ownRig(undefined, 1000);
+
   it('answers SOURCE_UNAVAILABLE as retryable, leaves the client as it was, and a retry merges the page once the port is open', async ({ annotate }) => {
     rig.slow(true);
     const baseline = rig.state.loadedGraph().nodes.length;
@@ -39,11 +44,14 @@ describe('the source port closed in the middle of a read', () => {
     await pollUntil(() => Promise.resolve(rig.state.loadedGraph().nodes.length > baseline), 30_000, 25);
     await annotate(`after the retry: ${JSON.stringify(rig.responses.slice(-2).map((r) => [r.status, (r.body as { error?: { code?: string; details?: unknown } }).error]))} banner ${JSON.stringify(rig.showing())}`);
     expect(rig.state.loadedGraph().nodes.length).toBeGreaterThan(baseline);
+    expect(rig.requests.filter((request) => request.includes('/v1/graph/expand'))).toHaveLength(2);
   });
 });
 
 describe('a read forced past a 1,000 ms budget, through the API and the real adapter', () => {
-  it('answers QUERY_TIMEOUT naming 1,000 ms, leaves the client as it was, lists no transaction of the read on the server, and the source serves the next read', async () => {
+  ownRig(BUDGET_MS, 10);
+
+  it('answers QUERY_TIMEOUT naming 1,000 ms, leaves the client as it was, lists no transaction of the read on the server, and the source serves the next read', async ({ annotate }) => {
     rig.slow(true);
     personalise(rig);
     const before = rig.snapshot();
@@ -55,6 +63,8 @@ describe('a read forced past a 1,000 ms budget, through the API and the real ada
     await pollUntil(() => Promise.resolve(rig.slots.inspect().sources.size === 0), 5000, 25);
     expect(rig.slots.inspect().sources.size).toBe(0);
     rig.slow(false);
-    expect(await rig.expand.expand(rig.hub, ['leaf'])).toBe('sent');
+    const next = await rig.expand.expand(rig.hub, ['leaf']);
+    await annotate(`the next read: ${next} ${JSON.stringify(last()?.body).slice(0, 400)}`);
+    expect(next).toBe('sent');
   });
 });
