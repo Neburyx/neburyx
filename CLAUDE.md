@@ -26,6 +26,7 @@ safe on very high-degree nodes. The repo is **pre-release**: the build tooling, 
 | `tools/dev` | The `pnpm dev` command: runs the app locally against your own Neo4j and Postgres, starting no container (see `docs/run-locally.md`) |
 | `tools/renderer-spike` | Harness that draws one synthetic graph with two graph renderers and measures frame rate, node movement on incremental layout, grouping and keyboard access (see its README) |
 | `tools/ux` | Browser tests (Playwright, Chromium) of the web app on a built copy with a small synthetic API: shells, keyboard paths, canvas behaviour, a benchmark guard (see its README) |
+| `tools/cancellation-suite` | Tests of what a cancel, a timeout and a source outage leave of the client: the real API and the real web client and stores in one process, over a scripted source (in `pnpm test`) and over a real Neo4j (in `pnpm test:neo4j`); compares the whole client state before and after (see its README) |
 | `tools/driver-check` | By-hand check of how `neo4j-driver` and Neo4j behave on a transaction timeout and on a close mid-query (see its README) |
 | `docs/` | Public technical documentation |
 
@@ -70,7 +71,7 @@ Node 24 LTS (`.nvmrc`; with nvm, `nvm use`) and pnpm through Corepack, at the ve
 | Unit tests (include the input fuzz suite, [docs/fuzz-suite.md](docs/fuzz-suite.md)) | `pnpm test` |
 | Contract test | `pnpm test:contract` |
 | Integration tests (a Postgres container; needs Docker) | `pnpm test:integration` |
-| Neo4j tests, the adapter's and the demo graph tool's (run against a Neo4j Enterprise 5.26 server you own, not in CI; `NBX_EE_URI`, `NBX_EE_USER` and `NBX_EE_PASSWORD` in the environment or in `~/.config/neburyx/dev-neo4j.env`; each file makes and drops its own `nbx-test-` database; see `packages/test-neo4j/README.md`) | `pnpm test:neo4j` |
+| Neo4j tests, the adapter's, the demo graph tool's and the cancellation suite's (run against a Neo4j Enterprise 5.26 server you own, not in CI; `NBX_EE_URI`, `NBX_EE_USER` and `NBX_EE_PASSWORD` in the environment or in `~/.config/neburyx/dev-neo4j.env`; each file makes and drops its own `nbx-test-` database; see `packages/test-neo4j/README.md`) | `pnpm test:neo4j` |
 | Supernode suite alone (anchors of 1,000, 10,000 and 100,000 relationships built once in a `nbx-test-` database of the Neo4j server that `test:neo4j` uses; payload bounds, count labels, stable load-more, the cost of each page, written to the file `NBX_SUPERNODE_RECORD` names; also run by `test:neo4j`; takes about 12 minutes on the dev 5.26 server; see `docs/benchmarks/README.md`) | `pnpm test:supernodes` |
 | Build a pack's demo graph into a demo Neo4j (see `tools/demo-graph/README.md`) | `pnpm demo-graph build --pack banking-fraud --uri bolt://localhost:7687` |
 | Image tests (builds the image and runs it; needs Docker, takes minutes) | `pnpm test:image` |

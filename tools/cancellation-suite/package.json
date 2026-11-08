@@ -1,0 +1,20 @@
+{
+  "name": "@neburyx/cancellation-suite",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run --passWithNoTests",
+    "test:neo4j": "vitest run --config vitest.neo4j.config.ts --reporter=verbose"
+  },
+  "dependencies": {
+    "@neburyx/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@neburyx/test-neo4j": "workspace:*",
+    "@types/node": "24.19.2",
+    "typescript": "6.0.3",
+    "vitest": "5.0.5"
+  }
+}

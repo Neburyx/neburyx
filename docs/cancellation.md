@@ -12,6 +12,10 @@ The browser aborts the request. The API sees the connection close before it wrot
 
 The route writes no answer and the audit records the read as failed with the reason `cancelled`. The page keeps what it had: nothing is merged, the loaded graph and the filters are as they were, and **Run again** sends the same request.
 
+## How the whole path is tested
+
+A suite in [`tools/cancellation-suite`](../tools/cancellation-suite/README.md) runs the real API and the real web client and stores in one process and compares the whole client state (the investigation, the view with its hidden items and selection, the loaded graph, the paging progress of each node and what the API saved) before and after. It cancels a running expansion, a request that waits for a slot, a request between the pages of an expansion, a load more and a degree preview. It places the cancel at five points on the path of one answer, from the source's answer to after the client has finished the request, and checks that an answer is merged only when the request ended before the cancel and that the API audits what it did. Over a scripted source it runs in `pnpm test`, so in CI. Over a real Neo4j it cancels the expansion of a node of 100,000 relationships and checks that the server's transaction is gone, that no read slot is held and that the next read is served; that part runs with `pnpm test:neo4j` and is not in CI.
+
 ## What is not promised
 
 No time is promised for the source to stop. Closing the session stopped the work in every test below, but how soon the source stops depends on the server, its load and the network between the two. The guaranteed stop of every read is the server-side transaction timeout of the source (5 seconds by default, 10 at most; see [query-timeout.md](query-timeout.md)). The figures in the [supernode benchmark](benchmarks/supernode.md) are observed times, not limits.

@@ -26,6 +26,10 @@ On a Neo4j Enterprise 5.26.32 server, with the Neo4j driver 6.3: a read that run
 
 The check runs with `pnpm test:neo4j` against a server you own and is not in CI.
 
+## How the whole path is tested
+
+The suite in [`tools/cancellation-suite`](../tools/cancellation-suite/README.md) also times out an expansion and compares the whole client state before and after: the answer is `QUERY_TIMEOUT` with the limit, the banner shows Timed out with Retry, an expansion of three neighbor types whose second read times out merges none of its pages, a load more keeps its cursor, a cancel that races a timeout answer stays Cancelled, a retry merges the page once, and the shared deadline of 10 seconds is the limit named when it stops a read that started with less than the source's timeout. It does the same for a source that stops answering in the middle. Over a scripted source these cases run in `pnpm test`, so in CI. Over a real Neo4j, a read forced past a budget of 1,000 ms answers `QUERY_TIMEOUT` naming it, and a source port closed in the middle of a read answers `SOURCE_UNAVAILABLE` as retryable and a retry merges the page once the port is open; the forced read swaps a slow statement into the adapter's call, so it is not the expansion's own statement. Those run with `pnpm test:neo4j` and are not in CI.
+
 ## Not verified
 
 - Behind a proxy or a load balancer.
