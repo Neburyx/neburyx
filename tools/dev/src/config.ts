@@ -7,6 +7,7 @@ export type ConfigKey = (typeof CONFIG_KEYS)[number];
 export type DevConfig = Readonly<Record<ConfigKey, string>>;
 
 export const CONFIG_VARIABLE = 'NEBURYX_DEV_CONFIG';
+const VARIABLE_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const DEFAULT_PATH = ['.config', 'neburyx', 'dev.env'] as const;
 
 export class ConfigUnusable extends Error {
@@ -39,7 +40,13 @@ export function loadDevConfig(env: Readonly<Record<string, string | undefined>>,
   if ((mode & ~0o600) !== 0) throw new ConfigUnusable(`the settings file ${path} has mode 0${mode.toString(8)}, wider than 0600; run chmod 600 on it`);
   const fromFile = parseEnvFile(files.read(path));
   const unknown = [...fromFile.keys()].filter((name) => !(CONFIG_KEYS as readonly string[]).includes(name));
-  if (unknown.length > 0) throw new ConfigUnusable(`the settings file ${path} holds settings pnpm dev does not know: ${unknown.join(', ')}`);
+  if (unknown.length > 0) {
+    // A stray line such as a connection string parses with a "name" that holds its text, so only a real variable name is shown.
+    const named = unknown.filter((name) => VARIABLE_NAME.test(name));
+    const stray = unknown.length - named.length;
+    const parts = [...(named.length > 0 ? [named.join(', ')] : []), ...(stray > 0 ? [`${stray} line${stray === 1 ? '' : 's'} that ${stray === 1 ? 'is' : 'are'} not NAME=value`] : [])];
+    throw new ConfigUnusable(`the settings file ${path} holds settings pnpm dev does not know: ${parts.join(' and ')}`);
+  }
 
   const values: Partial<Record<ConfigKey, string>> = {};
   const missing: ConfigKey[] = [];

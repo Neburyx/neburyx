@@ -31,7 +31,7 @@ The report is written once, after everything finished and the browser and server
 `--target product` measures the web app's own canvas instead of a spike adapter: pan and zoom at 300 drawn elements (the development fixture: 120 entities and 180 relationships), against the frame-rate target recorded with the renderer decision.
 
 ```bash
-pnpm dev                                    # or any development build of apps/web that is already running
+pnpm dev                                    # or any development build of apps/web that is already running; use the web address it prints
 pnpm --filter @neburyx/renderer-spike spike --target product --url http://127.0.0.1:5173 --out report-4x.json --cpu-throttle 4
 ```
 

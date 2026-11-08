@@ -101,6 +101,13 @@ describe('the settings file of pnpm dev', () => {
     expect(error.message).not.toContain('envsecret');
   });
 
+  it('shows no text of a stray line that is not NAME=value, such as a connection string', () => {
+    const { files } = rig({ [DEFAULT]: `${FILE_TEXT}postgres://user:envsecret@db.example.test/x?sslmode=require\n` });
+    const error = failure(() => loadDevConfig({ HOME }, files));
+    expect(error.message).toContain('1 line that is not NAME=value');
+    for (const secret of [...SECRETS, 'user', 'sslmode']) expect(error.message).not.toContain(secret);
+  });
+
   it.each([0o640, 0o604, 0o644, 0o660, 0o666, 0o700, 0o755])('refuses a file with mode %o, before reading it, and shows no value', (mode) => {
     const { files, reads } = rig({ [DEFAULT]: FILE_TEXT }, { [DEFAULT]: mode });
     const error = failure(() => loadDevConfig({ HOME }, files));
