@@ -1,12 +1,56 @@
 # Run it locally
 
-One command brings the whole app up on your machine, against a synthetic demo graph, so you can try a change in a browser.
+One command runs the app on your machine in watch mode, against a Neo4j and a Postgres that you run yourself. It starts no container and never calls Docker.
+
+For a trial that needs no setup of your own, use the demo environment instead: [`deploy/demo`](../deploy/demo/README.md) brings up the product and two synthetic demo graphs.
 
 ## What you need
 
 - Node 24 (`.nvmrc`; with nvm, `nvm use`) and pnpm through Corepack (`corepack enable`).
-- Docker with Compose v2. The demo stack uses about 4 GB of memory while the graphs load; give Docker more than that.
-- Nothing listening on fixed ports: Docker chooses the host ports of the databases, and the tool chooses free ports for the API and the web app. Everything listens on `127.0.0.1` only.
+- A Neo4j you can reach, a mapping file for it, and a login for it. Use a read-only login.
+- A Postgres 16 with the `pg_trgm` extension available, with the database and two logins set up as described below.
+- Nothing listening on fixed ports: the tool chooses free ports for the API and the web app. Both listen on `127.0.0.1` only.
+
+## The settings file
+
+`pnpm dev` reads its settings from a file outside the repository: `~/.config/neburyx/dev.env`, or the file that `NEBURYX_DEV_CONFIG` names (an absolute path). Make it readable by you only:
+
+```bash
+mkdir -p ~/.config/neburyx
+touch ~/.config/neburyx/dev.env
+chmod 600 ~/.config/neburyx/dev.env
+```
+
+It holds `KEY=value` lines; a line that starts with `#` is a comment. All five keys are required:
+
+```
+# The mapping file of the source you want to explore.
+NEBURYX_DEV_MAPPING=<absolute path of the mapping file>
+# An env file holding the logins the mapping names with username_env and password_env.
+NEBURYX_DEV_MAPPING_ENV=<absolute path of that env file>
+# The app login's connection string, which the API uses.
+NEBURYX_DEV_DATABASE_URL=<connection string>
+# The migration login's connection string.
+NEBURYX_DEV_DATABASE_MIGRATION_URL=<connection string>
+# The app login's role name.
+NEBURYX_DEV_DATABASE_APP_ROLE=<role name>
+```
+
+- A non-empty value in the environment wins over the file's: `NEBURYX_DEV_DATABASE_APP_ROLE=other pnpm dev` uses `other`.
+- The file is required. If it is missing, if a key is in neither the file nor the environment, if the file holds a key the tool does not know, or if its mode is wider than `0600`, `pnpm dev` stops before it builds or starts anything and says which. It never falls back to anything else, and it never prints a value from the file.
+- The env file in `NEBURYX_DEV_MAPPING_ENV` has the same mode rule. What it may hold, and what the tool refuses, is in [`tools/dev/README.md`](../tools/dev/README.md).
+
+## Set up the Postgres once
+
+The database and the two logins must exist first. [`tools/dev/external-postgres.sql`](../tools/dev/external-postgres.sql) creates a database `neburyx_dev`, a migration login that owns it and an app login, with the passwords as `psql` variables:
+
+```bash
+psql -v ON_ERROR_STOP=1 -v migration_password=… -v app_password=… -f tools/dev/external-postgres.sql
+```
+
+It needs a login to run it that is a superuser or has the `CREATEROLE` and `CREATEDB` attributes (the file grants that login the right to set the role of the new migration login, which Postgres 16 requires to give it the database); the product itself needs no superuser. The data on your Postgres is never removed by this tool.
+
+Give the connection strings and the mapping's `uri` an address rather than a name that takes a while to resolve: the API's readiness check allows 2 seconds, and a `.local` name can take about 5 seconds to resolve on macOS.
 
 ## Start
 
@@ -18,48 +62,21 @@ pnpm dev
 
 `pnpm dev`:
 
-1. creates `.env` in the repository root with random passwords and a cursor key if there is none (mode `0600`, never committed, never overwritten, never edited; a damaged `.env` stops the command and names the key);
-2. builds the demo graph tool, the contracts, the API and the web app;
-3. starts Postgres and the two demo Neo4j containers from `deploy/demo` (project `neburyx-dev`), loads the demo graphs, and migrates the database;
-4. writes `.dev/neburyx.yaml`, the mapping of the two demo sources made from the packs in `domain-packs/` with each source's address pointing at its container;
-5. runs the API and the web dev server, with their compilers in watch mode.
+1. reads and checks the settings file;
+2. builds the contracts, the API and the web app;
+3. migrates the database with the migration login;
+4. runs the API with the app login and the logins of your mapping, and the web dev server, with their compilers in watch mode.
 
-It prints the addresses. Open the web app one; `GET /v1/sources` on the API lists both demo sources as `connected` and `synthetic`. A change to a source file of the contracts, the API or the web app reaches the running app without restarting the command. The web app's `/dev/fixture` page (development builds only) lists the configured sources, shows the profile of the one you choose and loads a synthetic graph drawn from that profile into the client.
+It prints the addresses. Open the web app one; `GET /v1/sources` on the API lists the sources of your mapping. A change to a source file of the contracts, the API or the web app reaches the running app without restarting the command. The command does not check that the source login is read-only; use `test-source` for that (see the repository's `CLAUDE.md`).
 
-The demo servers are Neo4j Community, which cannot list privileges, so `test-source` reports `Read-only: not verified` for them, and the demo logins are not read-only logins.
+## Stop
 
-## Run again, stop, remove
-
-- Run `pnpm dev` again: the existing `.env` is reused and the databases are started again. The demo graphs are loaded again each time.
+- Ctrl-C stops the API, the web server and the compilers. Nothing else was started, so nothing is left behind.
 - Only one copy runs at a time on a machine, from any checkout: a lock in the temporary folder refuses a second copy and names the checkout and the process. If it says the lock cannot be read, or a takeover was under way and none is, delete the file or folder it names.
-- Ctrl-C stops the API, the web server and the compilers and leaves the containers running, so the next start is quick.
-- `pnpm dev:down` (after stopping `pnpm dev`) removes the containers and volumes and the `.dev` folder, and keeps `.env`. Run with nothing running, it exits 0.
 
-## Use a Postgres you already run
+## If you used an earlier version
 
-Set these in the shell before `pnpm dev` (not in a file you commit):
-
-| Variable | Value |
-|---|---|
-| `NEBURYX_DEV_DATABASE_URL` | the app login's connection string, which the API uses |
-| `NEBURYX_DEV_DATABASE_MIGRATION_URL` | the migration login's connection string |
-| `NEBURYX_DEV_DATABASE_APP_ROLE` | the app login's role name |
-
-With all three set, no Postgres container is started and the demo graphs are still started. With only some set, the command stops and names the missing ones. It never prints a connection string, an address or a password of your server.
-
-The database and the two logins must exist first. [`tools/dev/external-postgres.sql`](../tools/dev/external-postgres.sql) creates a database `neburyx_dev`, a migration login that owns it and an app login, with the passwords as `psql` variables:
-
-```bash
-psql -v ON_ERROR_STOP=1 -v migration_password=… -v app_password=… -f tools/dev/external-postgres.sql
-```
-
-It needs Postgres 16 with the `pg_trgm` extension available, and a login to run it that is a superuser or has the `CREATEROLE` and `CREATEDB` attributes (the file grants that login the right to set the role of the new migration login, which Postgres 16 requires to give it the database); the product itself needs no superuser. `pnpm dev:down` never connects to your server.
-
-Give the connection strings an address rather than a name that takes a while to resolve: the API's readiness check allows 2 seconds, and a `.local` name can take about 5 seconds to resolve on macOS, which makes `/readyz` report the database as unreachable even though it is not.
-
-## Use a mapping of your own
-
-To run the app against a Neo4j you can reach with a mapping you wrote, instead of the two demo graphs, set `NEBURYX_DEV_MAPPING` and `NEBURYX_DEV_MAPPING_ENV` (both or neither). What each does, and what the command refuses, is in [`tools/dev/README.md`](../tools/dev/README.md).
+Earlier versions of `pnpm dev` started demo containers (the Docker Compose project `neburyx-dev`) and kept generated passwords in a `.env` in the repository root. Neither is used any more, and the command no longer removes them. If you have them, remove the project's containers and volumes with Docker's own commands (they carry the label `com.docker.compose.project=neburyx-dev`), and delete the old `.env` and `.dev` folder in the repository root.
 
 ## Checks that go with it
 

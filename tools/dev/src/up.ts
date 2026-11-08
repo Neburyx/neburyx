@@ -1,39 +1,20 @@
 import { join } from 'node:path';
-import { Compose, DEMO_GRAPHS, StepFailed, Stopped } from './compose.js';
-import { apiEnvironment, baseEnvironment, demoLogins, dockerEnvironment, migrationEnvironment, webEnvironment } from './environments.js';
+import { loadDevConfig } from './config.js';
+import { apiEnvironment, baseEnvironment, migrationEnvironment, webEnvironment } from './environments.js';
 import type { Run } from './exec.js';
 import { externalDatabase } from './external.js';
+import type { Files } from './files.js';
 import { Lock, type LockOptions } from './lock.js';
-import { devMapping, startsNoContainers } from './mapping.js';
-import { formatSettings, generateSettings, invalidKeys, parseEnvFile, settingsOf, type Random, type Settings } from './settings.js';
+import { devMapping } from './mapping.js';
+import { StepFailed, Stopped } from './steps.js';
 import type { Supervision } from './supervisor.js';
-
-export class SettingsInvalid extends Error {
-  readonly keys: readonly string[];
-
-  constructor(keys: readonly string[]) {
-    super(`.env has missing or unusable settings: ${keys.join(', ')}; the file is left as it is`);
-    this.name = 'SettingsInvalid';
-    this.keys = keys;
-  }
-}
-
-export interface Files {
-  exists(path: string): boolean;
-  read(path: string): string;
-  /** The permission bits of the file. */
-  mode(path: string): number;
-  write(path: string, text: string, mode: number): void;
-  mkdir(path: string): void;
-  remove(path: string): void;
-}
 
 export interface Dependencies {
   readonly root: string;
   readonly run: Run;
   readonly env: Readonly<Record<string, string | undefined>>;
   readonly out: (text: string) => void;
-  readonly random: Random;
+  readonly random: (bytes: number) => Buffer;
   readonly files: Files;
   readonly nodePath: string;
   readonly freePort: () => Promise<number>;
@@ -43,43 +24,26 @@ export interface Dependencies {
 }
 
 export const BUILDS: readonly { readonly name: string; readonly filter: string }[] = [
-  { name: 'the demo graph tool', filter: '@neburyx/demo-graph' },
   { name: 'the contracts', filter: '@neburyx/contracts' },
   { name: 'the API', filter: '@neburyx/api' },
   { name: 'the web app', filter: '@neburyx/web' },
 ];
 
-const LOCAL_APP_ROLE = 'neburyx_app';
-const LOCAL_MIGRATION_ROLE = 'neburyx_migrate';
-const LOCAL_DATABASE = 'neburyx';
-const PACKS = 'banking-fraud,insurance-claims';
-const DEMO_GRAPH_TOOL = '@neburyx/demo-graph';
+const CURSOR_KEY_BYTES = 32;
 
-export function loadSettings(deps: Pick<Dependencies, 'root' | 'files' | 'random'>): Settings {
-  const path = join(deps.root, '.env');
-  if (!deps.files.exists(path)) {
-    const created = generateSettings(deps.random);
-    deps.files.write(path, formatSettings(created), 0o600);
-    return created;
-  }
-  const values = parseEnvFile(deps.files.read(path));
-  const invalid = invalidKeys(values);
-  if (invalid.length > 0) throw new SettingsInvalid(invalid);
-  return settingsOf(values);
-}
-
-function lockOptions(deps: Dependencies) {
-  return { repository: deps.root, ...deps.lock };
-}
-
+/**
+ * Runs the app against the Neo4j and Postgres the developer's settings file names. It starts no container and calls no container
+ * tool. The settings are checked first: when any is missing or unusable nothing is locked, built or started.
+ */
 export async function up(deps: Dependencies): Promise<number> {
-  const lock = Lock.acquire(lockOptions(deps));
+  const config = loadDevConfig(deps.env, deps.files);
+  const own = devMapping(config, deps.files);
+  const database = externalDatabase(config);
+
+  const lock = Lock.acquire({ repository: deps.root, ...deps.lock });
   const stopping = new AbortController();
   void deps.stopRequested.then(() => stopping.abort());
   try {
-    const external = externalDatabase(deps.env);
-    const own = devMapping(deps.env, deps.files);
-    const settings = loadSettings(deps);
     const base = baseEnvironment(deps.env);
     const step = async (name: string, command: string, args: readonly string[], env = base, cwd = deps.root): Promise<void> => {
       if (stopping.signal.aborted) throw new Stopped();
@@ -88,39 +52,13 @@ export async function up(deps: Dependencies): Promise<number> {
       if (result.code !== 0) throw new StepFailed(name, `exit code ${result.code}`);
     };
 
-    for (const build of BUILDS.filter((candidate) => own === undefined || candidate.filter !== DEMO_GRAPH_TOOL)) await step(`building ${build.name}`, 'pnpm', ['--filter', build.filter, 'build']);
-
-    const compose = new Compose(deps.run, deps.root, dockerEnvironment(deps.env), stopping.signal);
-    const addresses: string[] = [];
-    if (own === undefined) {
-      const [firstGraph] = DEMO_GRAPHS;
-      if (firstGraph === undefined) throw new Error('no demo graph');
-      await compose.build(firstGraph.loader);
-      await compose.upHealthy([...(external === undefined ? ['db'] : []), ...DEMO_GRAPHS.map((graph) => graph.service)]);
-      for (const graph of DEMO_GRAPHS) await compose.runLoader(graph.loader);
-    } else if (external === undefined) {
-      await compose.upHealthy(['db']);
-    }
-
-    const databasePort = external === undefined ? await compose.port('db', 5432) : 0;
-    if (own === undefined) for (const graph of DEMO_GRAPHS) addresses.push(`${graph.sourceId}=bolt://127.0.0.1:${await compose.port(graph.service, 7687)}`);
-
-    const appUrl = external?.appUrl ?? `postgres://${LOCAL_APP_ROLE}:${settings.NEBURYX_DB_APP_PASSWORD}@127.0.0.1:${databasePort}/${LOCAL_DATABASE}`;
-    const migrationUrl = external?.migrationUrl ?? `postgres://${LOCAL_MIGRATION_ROLE}:${settings.NEBURYX_DB_MIGRATION_PASSWORD}@127.0.0.1:${databasePort}/${LOCAL_DATABASE}`;
-    const appRole = external?.appRole ?? LOCAL_APP_ROLE;
-
-    const devFolder = join(deps.root, '.dev');
-    const mappingPath = own?.mappingPath ?? join(devFolder, 'neburyx.yaml');
-    if (own === undefined) {
-      deps.files.mkdir(devFolder);
-      await step('writing the mapping', deps.nodePath, [join(deps.root, 'tools/demo-graph/dist/main.js'), 'combine', '--packs', PACKS, '--addresses', addresses.join(','), '--out', mappingPath]);
-    }
-    await step('migrating the database', deps.nodePath, [join(deps.root, 'services/api/dist/cli.js'), 'migrate'], migrationEnvironment(base, migrationUrl, appRole));
+    for (const build of BUILDS) await step(`building ${build.name}`, 'pnpm', ['--filter', build.filter, 'build']);
+    await step('migrating the database', deps.nodePath, [join(deps.root, 'services/api/dist/cli.js'), 'migrate'], migrationEnvironment(base, database.migrationUrl, database.appRole));
 
     const apiPort = await deps.freePort();
     const webPort = await deps.freePort();
     const apiUrl = `http://127.0.0.1:${apiPort}`;
-    deps.out(`web app:  http://127.0.0.1:${webPort}\napi:      ${apiUrl}\nsources:  ${apiUrl}/v1/sources (${own === undefined ? 'both demo sources, synthetic; read-only is not verified on the Community demo servers' : 'the sources of the mapping you chose; this command does not check that their logins are read-only'})\nstop with Ctrl-C${own !== undefined && external !== undefined ? '' : '; remove the containers with pnpm dev:down'}`);
+    deps.out(`web app:  http://127.0.0.1:${webPort}\napi:      ${apiUrl}\nsources:  ${apiUrl}/v1/sources (the sources of the mapping you chose; this command does not check that their logins are read-only)\nstop with Ctrl-C`);
 
     const watchTsc = (name: string, folder: string) => ({ name, command: 'pnpm', args: ['exec', 'tsc', '-p', 'tsconfig.build.json', '--watch', '--preserveWatchOutput'], cwd: join(deps.root, folder), env: base });
     return await deps.supervise({
@@ -134,7 +72,7 @@ export async function up(deps: Dependencies): Promise<number> {
         command: deps.nodePath,
         args: [join(deps.root, 'services/api/dist/main.js')],
         cwd: deps.root,
-        env: apiEnvironment(base, { databaseUrl: appUrl, mappingPath, port: apiPort, webRoot: join(deps.root, 'apps/web/dist'), settings, sourceLogins: own?.logins ?? demoLogins(settings) }),
+        env: apiEnvironment(base, { databaseUrl: database.appUrl, mappingPath: own.mappingPath, port: apiPort, webRoot: join(deps.root, 'apps/web/dist'), cursorKey: deps.random(CURSOR_KEY_BYTES).toString('base64'), sourceLogins: own.logins }),
         healthUrl: `${apiUrl}/healthz`,
         watch: [join(deps.root, 'services/api/dist'), join(deps.root, 'packages/contracts/dist')],
       },
@@ -144,26 +82,10 @@ export async function up(deps: Dependencies): Promise<number> {
     });
   } catch (error) {
     if (error instanceof Stopped) {
-      deps.out(startsNoContainers(deps.env) ? 'stopped' : 'stopped; the containers keep running');
+      deps.out('stopped');
       return 0;
     }
     throw error;
-  } finally {
-    lock.release();
-  }
-}
-
-export async function down(deps: Dependencies): Promise<number> {
-  const lock = Lock.acquire(lockOptions(deps));
-  try {
-    if (startsNoContainers(deps.env)) {
-      deps.out('NEBURYX_DEV_MAPPING, NEBURYX_DEV_MAPPING_ENV and the NEBURYX_DEV_DATABASE_* settings are set: pnpm dev starts no container in that mode, so there is nothing to remove. No container or volume is removed, nothing in the repository is touched, and no connection is made to any server. Unset them to remove the demo containers of an earlier run.');
-      return 0;
-    }
-    await new Compose(deps.run, deps.root, dockerEnvironment(deps.env)).down();
-    deps.files.remove(join(deps.root, '.dev'));
-    deps.out('the development containers and volumes are removed; .env is kept');
-    return 0;
   } finally {
     lock.release();
   }

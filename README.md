@@ -39,4 +39,4 @@ pnpm lint
 pnpm test
 ```
 
-To run the app on your machine against the demo graphs, run `pnpm dev` (see [Run it locally](docs/run-locally.md)).
+To run the app on your machine against your own Neo4j and Postgres, run `pnpm dev` (see [Run it locally](docs/run-locally.md)). For a trial that needs no setup of your own, use the demo environment in `deploy/demo`.

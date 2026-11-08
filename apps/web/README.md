@@ -8,7 +8,7 @@ The web client: React and TypeScript, built with Vite.
 - `src/dev/` holds development tools that a production build leaves out: a page at `/dev/fixture` that reads the configured sources, lets you choose one and fills the client state with a synthetic graph drawn from that source's profile. The tools exist only when the build is not a production build (the `__DEV_TOOLS__` flag in `vite.config.ts`); a test builds for production and checks that none of them is in the output.
 
 ```bash
-pnpm dev                              # the whole stack against the demo graphs (see docs/run-locally.md)
+pnpm dev                              # the whole stack against your own Neo4j and Postgres (see docs/run-locally.md)
 pnpm --filter @neburyx/web test       # unit and component tests
 pnpm --filter @neburyx/web build      # type-check and build
 ```

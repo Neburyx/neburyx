@@ -49,7 +49,7 @@ export class Lock {
     this.holder = holder;
   }
 
-  /** One lock for the machine, because the Compose project is one per machine. */
+  /** One lock for the machine, because two copies would fight over the same database and the same ports. */
   static acquire(options: LockOptions): Lock {
     const folder = options.folder ?? tmpdir();
     const path = join(folder, 'neburyx-dev.lock');
