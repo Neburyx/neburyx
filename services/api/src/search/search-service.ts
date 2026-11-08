@@ -1,7 +1,7 @@
 import { evidenceHitsOf, evidenceRowsOf, planEvidence } from './evidence-group.js';
 import { FAILED_FACETS, facetsOf, planFacets } from './facets-group.js';
 import { SEARCH_GROUP_CAP, SEARCH_GROUP_FAILURE_CODES, SEARCH_MATCH_MODES, SEARCH_PAGED_GROUPS, type DisabledType, type ErrorCode, type Facets, type GraphNode, type GroupFailure, type SearchFailureGroup, type SearchGroup, type SearchMatchMode, type SearchMoreResult, type SearchPagedGroup, type SearchResult, type StartsWithGroup, type UnreferencedHit, relationshipsOf } from '@neburyx/contracts';
-import { AppError } from '../errors.js';
+import { AppError, RequestCancelled } from '../errors.js';
 import { exhaustive } from '../gate/exhaustive.js';
 import { propertyIndexOf } from '../gate/index-guard.js';
 import { matchedPropertiesOf } from './matched-properties.js';
@@ -29,6 +29,8 @@ export interface SearchRequest {
   readonly entityTypes?: readonly string[];
   /** Narrows the search to the groups of these match modes (OR); a group that is not chosen is not read; absent means all. */
   readonly matchModes?: readonly SearchMatchMode[];
+  /** Aborted when the client gives up the request. */
+  readonly signal?: AbortSignal;
 }
 
 /** The next page of one group of a search, from the cursor that group's last page gave; the text, the mask and the entity types are those of that search. */
@@ -41,6 +43,8 @@ export interface SearchMoreRequest {
   readonly group: SearchGroup;
   readonly cursor: string;
   readonly entityTypes?: readonly string[];
+  /** Aborted when the client gives up the request. */
+  readonly signal?: AbortSignal;
 }
 
 export interface SearchService {
@@ -77,10 +81,12 @@ function candidatesOf(source: SourceModel, group: Group, mask: boolean): Candida
  * The indexes of the request, or the failure of the read: the failure is not thrown here but handed to the gate run, which fails with that same error inside its audited stages
  * (after authorization) and makes no data statement, so the one failure is the one the search answers.
  */
-async function readOrFail(reader: IndexReader | undefined, request: Pick<SearchRequest, 'traceId' | 'principal' | 'sourceId'>): Promise<IndexSnapshot | 'unverified' | IndexReadFailure | undefined> {
+async function readOrFail(reader: IndexReader | undefined, request: Pick<SearchRequest, 'traceId' | 'principal' | 'sourceId' | 'signal'>): Promise<IndexSnapshot | 'unverified' | IndexReadFailure | undefined> {
   try {
-    return await reader?.read({ traceId: request.traceId, principal: request.principal, sourceId: request.sourceId });
+    return await reader?.read({ traceId: request.traceId, principal: request.principal, sourceId: request.sourceId, ...(request.signal === undefined ? {} : { signal: request.signal }) });
   } catch (error) {
+    // a cancelled request fails as a whole; it is never handed to a read as the schema's failure
+    if (error instanceof RequestCancelled) throw error;
     if (error instanceof AppError) return { failure: error };
     throw error;
   }
@@ -145,7 +151,7 @@ interface GroupOutcome {
 const isGroupFailureCode = (code: ErrorCode): code is GroupFailure['code'] => SEARCH_GROUP_FAILURE_CODES.some((candidate) => candidate === code);
 
 function failureOf(group: SearchFailureGroup, error: unknown): GroupFailure | undefined {
-  if (!(error instanceof AppError) || !isGroupFailureCode(error.code)) return undefined;
+  if (error instanceof RequestCancelled || !(error instanceof AppError) || !isGroupFailureCode(error.code)) return undefined;
   const timeoutMs = error.code === 'QUERY_TIMEOUT' ? timeoutOf(error.details) : undefined;
   return { group, code: error.code, ...(timeoutMs === undefined ? {} : { timeoutMs }) };
 }
@@ -282,6 +288,7 @@ export function createSearchService(deps: { readonly gate: Gate; readonly mappin
           params,
           limit: cap,
           mask: request.mask,
+          ...(request.signal === undefined ? {} : { signal: request.signal }),
           ...(snapshot === undefined ? {} : { indexes: snapshot }),
         });
       const run = (templateId: string, targets: readonly object[]): Promise<GatePage> => runWith(templateId, { text: request.text, targets });
@@ -311,6 +318,9 @@ export function createSearchService(deps: { readonly gate: Gate; readonly mappin
         startsWithRead ? run(SEARCH_PREFIX_ID, exactTargets.map((target) => ({ ...target, match: 'value' as const }))) : none,
         facetPlan === undefined || facetPlan.probes.length === 0 ? none : runWith(SEARCH_FACETS_ID, { text: request.text, probes: facetPlan.probes }),
       ]);
+      // a cancelled request fails as a whole, whichever read saw it: it is never one group's failure
+      const cancelled = settled.find((outcome) => outcome.status === 'rejected' && outcome.reason instanceof RequestCancelled);
+      if (cancelled?.status === 'rejected') throw cancelled.reason;
       rest.forEach((group, index) => {
         const outcome = settled[index];
         if (outcome !== undefined) outcomes[group] = outcome;
@@ -425,6 +435,7 @@ export function createSearchService(deps: { readonly gate: Gate; readonly mappin
           limit: Math.min(SEARCH_GROUP_CAP, source.budgets.maxPage),
           cursor: request.cursor,
           mask: request.mask,
+          ...(request.signal === undefined ? {} : { signal: request.signal }),
           ...(snapshot === undefined ? {} : { indexes: snapshot }),
         });
       } catch (error) {

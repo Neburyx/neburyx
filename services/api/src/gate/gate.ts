@@ -1,4 +1,4 @@
-import { AppError } from '../errors.js';
+import { AppError, RequestCancelled } from '../errors.js';
 import { makeToken } from '../reference/token.js';
 import { mapPositionReferences } from './cursor/references.js';
 import { AdapterError } from '../sources/errors.js';
@@ -43,6 +43,7 @@ function resolveContext(deps: GateDeps, request: GateRequest, system: boolean): 
     mask: !system && request.mask === true,
     model: deps.modelFor(request.sourceId),
     deadlineAt: deps.clock() + budgets.requestTimeoutMs,
+    ...(request.signal === undefined ? {} : { signal: request.signal }),
   };
 }
 
@@ -53,7 +54,7 @@ async function guardIndexes(deps: GateDeps, request: GateRequest, context: GateC
   if (request.indexes === 'unverified') return;
   if (request.indexes !== undefined && 'failure' in request.indexes) throw request.indexes.failure;
   const given = request.indexes !== undefined && request.indexes.sourceId === request.sourceId ? request.indexes : undefined;
-  const snapshot = given ?? (await readIndexSnapshot((read) => runGate(deps, { ...read, principal: SYSTEM_PRINCIPAL }, true), { traceId: request.traceId, sourceId: request.sourceId }));
+  const snapshot = given ?? (await readIndexSnapshot((read) => runGate(deps, { ...read, principal: SYSTEM_PRINCIPAL }, true), { traceId: request.traceId, sourceId: request.sourceId, ...(request.signal === undefined ? {} : { signal: request.signal }) }));
   if (snapshot === 'unverified') return;
   const gap = worstGapOf(needs.flatMap((need): IndexGap[] => {
     const found = gapOf(snapshot, need, context.allowlist);
@@ -97,6 +98,7 @@ async function runStages(deps: GateDeps, request: GateRequest, system: boolean, 
   await inStage(deps, progress, 'authorize', () => authorizeRequest(deps.seams.policy, context, template));
   const result = await inStage(deps, progress, 'execute', async (): Promise<ExecuteResult> => {
     if (template.readsNothing?.(params, context.allowlist) === true) return { rows: [], hasMore: false };
+    if (context.signal?.aborted === true) throw new RequestCancelled();
     if (!system) await guardIndexes(deps, request, context, template, params);
     return refuseCut(deps, template, await executeRead({ coordinator: deps.seams.coordinator, executor: deps.executor, clock: deps.clock, logger: deps.logger }, context, template, rendered, request.limit));
   });
@@ -123,11 +125,12 @@ async function runManyStages(deps: GateDeps, requests: readonly GateRequest[], p
   const results = await inStage(deps, progress, 'execute', async (): Promise<readonly ExecuteResult[]> => {
     const reads = validated.filter((entry) => entry.template.readsNothing?.(entry.params, context.allowlist) !== true);
     const executeDeps = { coordinator: deps.seams.coordinator, executor: deps.executor, clock: deps.clock, logger: deps.logger };
+    if (reads.length > 0 && context.signal?.aborted === true) throw new RequestCancelled();
     // the schema is read once for the request, before the data lease is taken, so that no two leases are held at once
     let indexes = first.indexes;
     for (const entry of reads) {
       if (indexes === undefined && (entry.template.indexNeeds?.(entry.params, context.allowlist) ?? []).length > 0) {
-        indexes = await readIndexSnapshot((read) => runGate(deps, { ...read, principal: SYSTEM_PRINCIPAL }, true), { traceId: first.traceId, sourceId: first.sourceId });
+        indexes = await readIndexSnapshot((read) => runGate(deps, { ...read, principal: SYSTEM_PRINCIPAL }, true), { traceId: first.traceId, sourceId: first.sourceId, ...(first.signal === undefined ? {} : { signal: first.signal }) });
       }
     }
     if (reads.length === 0) return validated.map(() => ({ rows: [], hasMore: false }));
@@ -158,7 +161,7 @@ async function runManyStages(deps: GateDeps, requests: readonly GateRequest[], p
   return pages;
 }
 
-async function recordAudit(deps: GateDeps, request: GateRequest, progress: Progress, failure: AppError | undefined): Promise<void> {
+async function recordAudit(deps: GateDeps, request: GateRequest, progress: Progress, failure: AppError | RequestCancelled | undefined): Promise<void> {
   const event: AuditEvent = {
     actorId: request.principal.id,
     actorRole: request.principal.role,
@@ -166,6 +169,7 @@ async function recordAudit(deps: GateDeps, request: GateRequest, progress: Progr
     result: auditResultFor(failure),
     sourceId: request.sourceId,
     traceId: request.traceId,
+    ...(failure instanceof RequestCancelled ? { detail: { reason: 'cancelled' as const } } : {}),
   };
   try {
     await deps.seams.audit.record(event);
@@ -177,14 +181,14 @@ async function recordAudit(deps: GateDeps, request: GateRequest, progress: Progr
   }
 }
 
-function asAppError(deps: GateDeps, error: unknown, stage: GateStage): AppError {
-  if (error instanceof AppError) return error;
+function asAppError(deps: GateDeps, error: unknown, stage: GateStage): AppError | RequestCancelled {
+  if (error instanceof AppError || error instanceof RequestCancelled) return error;
   deps.logger.warn({ event: 'gate.internal_error', stage }, 'gate stage failed unexpectedly');
   // the tag tells a read the adapter could not run (already logged with the server code) from any other internal failure
   return error instanceof AdapterError && error.code === 'READ_FAILED' && stage === 'execute' ? new AppError('INTERNAL_ERROR', undefined, 'read-failed') : new AppError('INTERNAL_ERROR');
 }
 
-type Attempt = { readonly status: 'page'; readonly page: GatePage } | { readonly status: 'failure'; readonly failure: AppError };
+type Attempt = { readonly status: 'page'; readonly page: GatePage } | { readonly status: 'failure'; readonly failure: AppError | RequestCancelled };
 
 async function attempt(deps: GateDeps, request: GateRequest, system: boolean, progress: Progress): Promise<Attempt> {
   try {

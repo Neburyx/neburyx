@@ -96,3 +96,53 @@ describe('the record of the supernode benchmark', () => {
     expect(renderRecord({ ...data(10), serverIsLoopback: false })).not.toContain('a remote server');
   });
 });
+
+describe('the cancel section of the record', () => {
+  const withCancel = (): RunData => ({
+    ...data(2999),
+    cancel: {
+      intervalMs: 25,
+      timeoutMs: 5000,
+      cells: [
+        { size: 1000, attempts: 10, gone: undefined, finishedFirst: 10, notGone: 0, uncancelled: { samples: 5, p50: 4, p95: 6, max: 7 } },
+        { size: 100_000, attempts: 10, gone: { samples: 9, p50: 12, p95: 60, max: 70 }, finishedFirst: 1, notGone: 0, uncancelled: { samples: 5, p50: 1400, p95: 1500, max: 1600 } },
+      ],
+    },
+  });
+
+  it('is added after the earlier sections and leaves them as they were', () => {
+    const before = renderRecord(data(2999));
+    const after = renderRecord(withCancel());
+    expect(after).toContain('## Cancel');
+    expect(after.replace(/\n## Cancel[\s\S]*?(?=\n## Not measured)/, '')).toBe(before);
+  });
+
+  it('states the interval, that the figures are observed times and not promises, and counts a read that finished first on its own', () => {
+    const text = renderRecord(withCancel());
+    expect(text).toContain('about every 25 ms');
+    expect(text).toContain('observed times and not promises');
+    expect(text).toContain('| 1,000 | 0 of 10 | none | none | none | 10 | 0 | 4.0 |');
+    expect(text).toContain('| 100,000 | 9 of 10 | 12.0 | 60.0 | 70.0 | 1 | 0 | 1400 |');
+  });
+
+  it('states what the cancel measurement ran on when the data names it', () => {
+    const base = withCancel();
+    const noted: RunData = { ...base, cancel: base.cancel === undefined ? undefined : { ...base.cancel, note: 'Taken before a rebase.' } };
+    expect(renderRecord(noted)).toContain('- Taken before a rebase.');
+    expect(renderRecord(withCancel())).not.toContain('Taken before');
+  });
+
+  it('reports a transaction that was not gone and gives no time for it', () => {
+    const stuck: RunData = { ...data(2999), cancel: { intervalMs: 25, timeoutMs: 5000, cells: [{ size: 100_000, attempts: 3, gone: undefined, finishedFirst: 0, notGone: 3, uncancelled: { samples: 5, p50: 1400, p95: 1500, max: 1600 } }] } };
+    expect(renderRecord(stuck)).toContain('| 100,000 | 0 of 3 | none | none | none | 0 | 3 | 1400 |');
+  });
+
+  it('is the stored record when the stored data is rendered again', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { resolve, dirname } = await import('node:path');
+    const { fileURLToPath } = await import('node:url');
+    const directory = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../../docs/benchmarks');
+    const stored = JSON.parse(readFileSync(resolve(directory, 'supernode.json'), 'utf8')) as RunData;
+    expect(renderRecord(stored)).toBe(readFileSync(resolve(directory, 'supernode.md'), 'utf8'));
+  });
+});

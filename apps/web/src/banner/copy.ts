@@ -16,3 +16,35 @@ export const rateLimitedHeadline = (seconds: number): string => (seconds > 0 ? `
 export const RATE_LIMITED_TEXT = 'Loaded graph and filters preserved; nothing was read. The wait is set by the server.';
 export const rateLimitedSideLabel = (seconds: number): string => (seconds > 0 ? `Retry after ${seconds} s` : 'Retry now');
 export const rateLimitedRetry = (seconds: number): string => (seconds > 0 ? `Retry in ${seconds} s` : RETRY);
+export const RUNNING_CHIP = 'Running';
+export const RUNNING_TEXT = 'Loaded graph and filters preserved.';
+export const CANCELLED_CHIP = 'Cancelled';
+export const CANCELLED_TEXT = 'Loaded graph and filters preserved; no complete-result claim.';
+export const CANCELLED_SIDE_LABEL = '0 new relationships added';
+export const PREVIEW_CANCELLED_SIDE_LABEL = 'Nothing added';
+export const PREVIEW_CANCELLED_HEADLINE = 'Cancelled. Nothing was added to the graph.';
+export const RUN_AGAIN = 'Run again';
+export const cancelledHeadline = (): string => 'Cancelled. No new relationships added.';
+
+export type RequestKind = 'expand' | 'more' | 'start-over' | 'preview';
+
+const elapsedSeconds = (ms: number): string => (Math.round(ms / 100) / 10).toFixed(1);
+const limitSeconds = (ms: number): string => String(Math.round(ms / 100) / 10);
+const whatRuns = (kind: RequestKind, title: string | undefined): string => {
+  const of = title === undefined ? '' : ` ${title}`;
+  switch (kind) {
+    case 'expand':
+      return `Expanding${of === '' ? ' relationships' : of}`;
+    case 'more':
+      return `Loading more relationships${title === undefined ? '' : ` of ${title}`}`;
+    case 'start-over':
+      return `Starting over${of === '' ? ' an expansion' : of}`;
+    case 'preview':
+      return `Counting relationships${title === undefined ? '' : ` of ${title}`}`;
+    default:
+      return 'Running';
+  }
+};
+export const runningHeadline = (kind: RequestKind, title: string | undefined, elapsedMs: number, limitMs: number | undefined): string =>
+  `${whatRuns(kind, title)} · ${elapsedSeconds(elapsedMs)} s${limitMs === undefined ? '' : ` / ${limitSeconds(limitMs)} s timeout`}`;
+export const runningSideLabel = (limitMs: number): string => `${limitSeconds(limitMs)} s bounded request`;

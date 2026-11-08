@@ -20,6 +20,8 @@ export interface DegreePreviewRequest {
   readonly entityType: string;
   readonly stableId: string;
   readonly mask: boolean;
+  /** Aborted when the client gives up the request. */
+  readonly signal?: AbortSignal;
 }
 
 export interface DegreePreviewService {
@@ -118,6 +120,7 @@ async function readThroughGate(gate: Gate, request: DegreePreviewRequest, templa
       params: { entityType: request.entityType, stableId: request.stableId },
       limit: ONE_ROW,
       mask: request.mask,
+      ...(request.signal === undefined ? {} : { signal: request.signal }),
     });
     const [item] = page.items;
     if (!isDegreeItem(item)) throw new AppError('INTERNAL_ERROR');

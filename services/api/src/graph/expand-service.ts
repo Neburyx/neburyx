@@ -23,6 +23,8 @@ export interface ExpandServiceRequest {
   readonly limit?: number;
   readonly cursors?: Readonly<Record<string, string>>;
   readonly mask: boolean;
+  /** Aborted when the client gives up the request. */
+  readonly signal?: AbortSignal;
 }
 
 export interface ExpandService {
@@ -88,6 +90,7 @@ export function createExpandService(deps: { readonly gate: Gate; readonly mappin
           params: { entityType: request.entityType, stableId: request.stableId, neighborType: plan.neighborType, ...(plan.relTypes === undefined ? {} : { relTypes: plan.relTypes }), direction: request.direction, sort: 'observed' },
           limit,
           mask: request.mask,
+          ...(request.signal === undefined ? {} : { signal: request.signal }),
           ...(cursor === undefined ? {} : { cursor }),
         };
       });
@@ -104,7 +107,7 @@ export function createExpandService(deps: { readonly gate: Gate; readonly mappin
         return item;
       });
       const anchorFound = items.some((item) => item.anchorFound);
-      const anchor: GraphNode[] = anchorFound ? [] : [await deps.entities.read({ traceId: request.traceId, principal: request.principal, sourceId: request.sourceId, entityType: request.entityType, stableId: request.stableId, mask: request.mask })];
+      const anchor: GraphNode[] = anchorFound ? [] : [await deps.entities.read({ traceId: request.traceId, principal: request.principal, sourceId: request.sourceId, entityType: request.entityType, stableId: request.stableId, mask: request.mask, ...(request.signal === undefined ? {} : { signal: request.signal }) })];
       const byType = new Map(reading.map((plan, index) => [plan.neighborType, { item: items[index], page: pages[index] }] as const));
       const expandPages: ExpandPage[] = plans.map((plan) => {
         const read = byType.get(plan.neighborType);

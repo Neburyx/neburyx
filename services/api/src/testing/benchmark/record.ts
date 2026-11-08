@@ -1,6 +1,6 @@
 import type { Cell, PreviewCell } from './measure.js';
 import type { Profile } from './profile.js';
-import type { Sample } from './stats.js';
+import type { Sample, Summary } from './stats.js';
 import { MEMBERS_PER_NEIGHBOR, PAGE, SAMPLES_PER_POSITION, type ReadSet } from './plan.js';
 
 export const TARGET_MS = 3000;
@@ -11,6 +11,31 @@ export interface Stopped {
   readonly readSet: ReadSet;
   readonly atRow: number;
   readonly notReached: readonly string[];
+}
+
+/** One size of the cancel measurement: the aborts of a running expand, by what was observed, and how long the same read takes when it is not aborted. */
+export interface CancelCell {
+  readonly size: number;
+  /** Reads started and aborted once their transaction was listed as running. */
+  readonly attempts: number;
+  /** Times from the abort to the first look that found the transaction gone; absent when no attempt was caught running. */
+  readonly gone: Summary | undefined;
+  /** Attempts whose read ended before it could be aborted; they have no time. */
+  readonly finishedFirst: number;
+  /** Attempts whose transaction was still listed when the wait of the source's timeout ended; they have no time. */
+  readonly notGone: number;
+  /** The same read, not aborted, answered in this many milliseconds. */
+  readonly uncancelled: Summary;
+}
+
+export interface CancelRecord {
+  /** How often the list of running transactions was looked at, in milliseconds. */
+  readonly intervalMs: number;
+  /** The source's transaction timeout, which a transaction that is not gone is waited for. */
+  readonly timeoutMs: number;
+  /** What the cancel measurement ran on, when that is not the code the record is read with (for example, taken before a later change to the code it reads through). */
+  readonly note?: string;
+  readonly cells: readonly CancelCell[];
 }
 
 export interface RunData {
@@ -26,6 +51,8 @@ export interface RunData {
   readonly stopped: readonly Stopped[];
   readonly previews: readonly PreviewCell[];
   readonly profiles: readonly Profile[];
+  /** The measurement of a cancelled read, added by a run of its own; absent from a record made before it. */
+  readonly cancel?: CancelRecord;
 }
 
 /** A cell whose failed calls are more than a twentieth of its samples has a p95 that is a failed call's length, which is only a lower bound of what the call would have taken. */
@@ -67,6 +94,29 @@ const NAMES: Readonly<Record<ReadSet, string>> = {
   plain: 'plain (one type with no ID and no time; one relationship to each neighbor, the shape of the banking demo pack\'s 100,000-neighbor node)',
   all: 'all four types together (the read of "expand neighbors" for one neighbor type)',
 };
+
+function cancelLines(cancel: CancelRecord): string[] {
+  const lines = [
+    '',
+    '## Cancel',
+    '',
+    ...(cancel.note === undefined ? [] : [`- ${cancel.note}`, '']),
+    `A running expand (the first page of the "all four types" read set) is aborted once the server lists its transaction as running, and the server's list of running transactions is then looked at, about every ${cancel.intervalMs} ms, until the transaction is no longer listed. The time is the first look that found it gone, counted from the abort, so it is exact only to within one look and the round trip of that look. These are observed times and not promises: the guaranteed stop of a read is the server's transaction timeout (${(cancel.timeoutMs / 1000).toFixed(0)} s here, TAS §13).`,
+    '',
+    '| Relationships | Aborted while running | Transaction gone: p50 (ms) | p95 (ms) | max (ms) | Finished before the abort | Still listed after the timeout | The same read, not aborted: p50 (ms) |',
+    '|---|---|---|---|---|---|---|---|',
+  ];
+  for (const cell of cancel.cells) {
+    const caught = cell.attempts - cell.finishedFirst - cell.notGone;
+    const figures = cell.gone === undefined ? ['none', 'none', 'none'] : [ms(cell.gone.p50), ms(cell.gone.p95), ms(cell.gone.max)];
+    lines.push(`| ${cell.size.toLocaleString('en-US')} | ${caught} of ${cell.attempts} | ${figures.join(' | ')} | ${cell.finishedFirst} | ${cell.notGone} | ${ms(cell.uncancelled.p50)} |`);
+  }
+  lines.push(
+    '',
+    'A read that finished before it could be aborted has no time and is counted on its own. A read that is short (a few milliseconds, as at 1,000 relationships) cannot be told from one that ended by itself, so only the sizes where the uncancelled read is much longer than the time to gone show a stop that the abort caused.',
+  );
+  return lines;
+}
 
 export function renderRecord(data: RunData): string {
   const verdict = verdictOf(data.cells, data.stopped);
@@ -120,6 +170,7 @@ export function renderRecord(data: RunData): string {
   }
   lines.push('### Degree preview (bounded read)', '', '| Relationships | Count labels | Samples | Failures | p50 (ms) | p95 (ms) | max (ms) |', '|---|---|---|---|---|---|---|');
   for (const preview of data.previews) lines.push(`| ${preview.size.toLocaleString('en-US')} | ${preview.quality} | ${preview.samples} | ${preview.failures} | ${ms(preview.p50)} | ${ms(preview.p95)} | ${ms(preview.max)} |`);
+  if (data.cancel !== undefined) lines.push(...cancelLines(data.cancel));
   lines.push('', '## Not measured', '', '- Neo4j 2026.x and other editions: only the dev server was measured. A 2026.x run needs the series check of the test helper (`testing/neo4j-server.ts`) widened and a server of that series.', `- The banking demo pack's own node (the plain read set has its shape and size), concurrent readers, ${data.serverIsLoopback ? 'a remote server, ' : ''}a cold server, the cost of a cancelled read and the CI supernode suite.`, '');
   return lines.join('\n');
 }

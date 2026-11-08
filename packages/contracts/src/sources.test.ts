@@ -14,6 +14,14 @@ const item = {
   demoCase: null,
 };
 
+describe('the timeout of a source in the list', () => {
+  it('is accepted as a positive whole number of milliseconds, and an answer without it still parses', () => {
+    expect(sourceSummarySchema.safeParse({ ...item, timeoutMs: 5000 }).success).toBe(true);
+    expect(sourceSummarySchema.safeParse(item).success).toBe(true);
+    for (const timeoutMs of [0, -1, 1.5, '5000', null]) expect(sourceSummarySchema.safeParse({ ...item, timeoutMs }).success).toBe(false);
+  });
+});
+
 describe('source list contract', () => {
   it('accepts a list with one source and a null next cursor', () => {
     expect(sourcesResponseSchema.safeParse({ items: [item], nextCursor: null }).success).toBe(true);

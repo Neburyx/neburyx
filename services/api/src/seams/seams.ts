@@ -22,6 +22,8 @@ export interface AuditEvent {
   readonly result: AuditResult;
   readonly sourceId?: string;
   readonly traceId: string;
+  /** Per-action fields of the event; the Community sink keeps none. */
+  readonly detail?: { readonly reason: 'cancelled' };
 }
 
 export interface AuditSink {
@@ -44,6 +46,8 @@ export interface ReadAccessRequest {
   readonly limits: ReadLimits;
   /** How long a granted lease may be held before it frees itself: a duration, so that a store shared by several copies can count it on its own clock. */
   readonly leaseTtlMs: number;
+  /** Aborted when the request is cancelled: a read that waits for a slot then leaves the queue and is answered `cancelled`, holding nothing. */
+  readonly signal?: AbortSignal;
 }
 
 export interface ReadLease {
@@ -54,6 +58,7 @@ export interface ReadLease {
 export type ReadAdmission =
   | { readonly status: 'granted'; readonly lease: ReadLease }
   | { readonly status: 'busy' }
+  | { readonly status: 'cancelled' }
   | { readonly status: 'unavailable' };
 
 export interface Coordinator {

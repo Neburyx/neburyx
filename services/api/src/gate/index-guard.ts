@@ -45,7 +45,7 @@ export function worstGapOf(gaps: readonly IndexGap[]): IndexGap | undefined {
 }
 
 export interface SchemaRead {
-  (request: { readonly traceId: string; readonly sourceId: string; readonly templateId: string; readonly params: unknown; readonly limit: number }): Promise<GatePage>;
+  (request: { readonly traceId: string; readonly sourceId: string; readonly templateId: string; readonly params: unknown; readonly limit: number; readonly signal?: AbortSignal }): Promise<GatePage>;
 }
 
 const ONE_ROW = 1;
@@ -55,10 +55,10 @@ const ONE_ROW = 1;
  * unprotected. Any other failure of the read is an error and no data read follows: a timeout, a busy or unavailable source, or an answer that cannot be read or is truncated
  * (`SOURCE_UNAVAILABLE` tagged `index-list-unreadable`).
  */
-export async function readIndexSnapshot(run: SchemaRead, request: { readonly traceId: string; readonly sourceId: string }): Promise<IndexSnapshot | 'unverified'> {
+export async function readIndexSnapshot(run: SchemaRead, request: { readonly traceId: string; readonly sourceId: string; readonly signal?: AbortSignal }): Promise<IndexSnapshot | 'unverified'> {
   let page: GatePage;
   try {
-    page = await run({ traceId: request.traceId, sourceId: request.sourceId, templateId: SCHEMA_INDEXES_ID, params: {}, limit: ONE_ROW });
+    page = await run({ traceId: request.traceId, sourceId: request.sourceId, templateId: SCHEMA_INDEXES_ID, params: {}, limit: ONE_ROW, ...(request.signal === undefined ? {} : { signal: request.signal }) });
   } catch (error) {
     if (error instanceof AppError && error.code === 'SOURCE_UNAVAILABLE' && error.reason === 'refused') return 'unverified';
     throw error;

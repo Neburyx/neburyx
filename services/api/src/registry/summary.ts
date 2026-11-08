@@ -49,6 +49,7 @@ export function summariesOf(rows: readonly SourceRow[], mapping: MappingModel, l
         lastTest: report === undefined ? null : lastTestOf(report),
         mappingSummary: mappingSummaryOf(source),
         demoCase: demoCaseOf(source, references),
+        timeoutMs: source.budgets.timeoutMs,
       },
     ];
   });

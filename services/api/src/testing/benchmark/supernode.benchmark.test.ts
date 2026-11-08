@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { measureCold, measurePreview, measureReadSet, type Cell, type PreviewCell } from './measure.js';
 import { READ_SETS, SIZES } from './plan.js';
+import { measureCancel } from './cancel-measure.js';
 import { profileReadSet, type Profile } from './profile.js';
 import { renderRecord, type RunData, type Stopped } from './record.js';
 import { startRig, stopRig, type Rig } from './rig.js';
@@ -54,6 +55,7 @@ describe('the supernode benchmark', () => {
       stopped,
       previews,
       profiles,
+      cancel: await measureCancel(rig),
     };
     mkdirSync(RECORD_DIRECTORY, { recursive: true });
     writeFileSync(resolve(RECORD_DIRECTORY, 'supernode.json'), `${JSON.stringify(data, null, 2)}\n`);

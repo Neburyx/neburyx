@@ -40,6 +40,7 @@ describe('GET /v1/sources', () => {
         lastTest: null,
         mappingSummary: { entityTypes: 2, relationshipTypes: 1, derivedRules: 0 },
         demoCase: null,
+        timeoutMs: 5000,
       })),
       nextCursor: null,
     });

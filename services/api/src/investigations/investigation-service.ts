@@ -18,6 +18,8 @@ export interface OpenCall {
   readonly principal: Principal;
   /** The entity is already a reference: the route turns a raw value into one before the service runs. */
   readonly request: ReferenceOpenRequest;
+  /** Aborted when the client gives up the request. */
+  readonly signal?: AbortSignal;
 }
 
 export interface OpenAnswer {
@@ -86,12 +88,12 @@ function answerOf(investigation: Investigation, created: boolean, entity: GraphN
 }
 
 export function createInvestigationService(deps: InvestigationServiceDeps): InvestigationService {
-  const readEntity = (call: OpenCall) => deps.entities.read({ traceId: call.traceId, principal: call.principal, sourceId: call.request.sourceId, entityType: call.request.entity.entityType, stableId: call.request.entity.stableId, mask: call.request.mask === true });
+  const readEntity = (call: OpenCall) => deps.entities.read({ traceId: call.traceId, principal: call.principal, sourceId: call.request.sourceId, entityType: call.request.entity.entityType, stableId: call.request.entity.stableId, mask: call.request.mask === true, ...(call.signal === undefined ? {} : { signal: call.signal }) });
 
   /** What follows the type's name in a generated title: the stable ID of a type that is not keyed, and for a keyed type the node's masked display title, so that neither the value nor its token is in a title. */
   async function titleSubjectOf(call: OpenCall, type: EntityModel, entity: GraphNode): Promise<string> {
     if (!isKeyed(type)) return call.request.entity.stableId;
-    return call.request.mask === true ? entity.display.title : (await deps.entities.read({ traceId: call.traceId, principal: call.principal, sourceId: call.request.sourceId, entityType: call.request.entity.entityType, stableId: call.request.entity.stableId, mask: true })).display.title;
+    return call.request.mask === true ? entity.display.title : (await deps.entities.read({ traceId: call.traceId, principal: call.principal, sourceId: call.request.sourceId, entityType: call.request.entity.entityType, stableId: call.request.entity.stableId, mask: true, ...(call.signal === undefined ? {} : { signal: call.signal }) })).display.title;
   }
 
   async function create(call: OpenCall, source: SourceModel, type: EntityModel): Promise<OpenAnswer> {

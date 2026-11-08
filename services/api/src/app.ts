@@ -10,7 +10,8 @@ import Fastify, {
   type FastifyRequest,
   LogController,
 } from 'fastify';
-import { AppError, codeForFailure, detailsOf, errorResponse, errorStatus } from './errors.js';
+import { setMaxListeners } from 'node:events';
+import { AppError, RequestCancelled, codeForFailure, detailsOf, errorResponse, errorStatus } from './errors.js';
 import type { AppStore } from './app-store.js';
 import { deriveReferenceKeys, type ReferenceKeys } from './reference/keys.js';
 import { canonicalLookup, canonicalOpen } from './reference/resolve.js';
@@ -114,8 +115,22 @@ export function seamsOf(app: FastifyInstance): Seams {
   return seams;
 }
 
+const SIGNAL_LISTENERS = 32;
+
 export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
   const completed = new WeakSet<FastifyRequest>();
+  const cancels = new WeakMap<FastifyRequest, AbortController>();
+  /** Aborted when the client closes the connection before the answer is written; the request stream's own close also fires once the body is read, so it is the response's close that counts. */
+  const controllerOf = (request: FastifyRequest): AbortController => {
+    const found = cancels.get(request);
+    if (found !== undefined) return found;
+    const held = new AbortController();
+    // one request has a handful of reads at once (a search makes up to seven), each with a listener in the slot queue and one in the adapter, removed when it ends: the default of ten is below that
+    setMaxListeners(SIGNAL_LISTENERS, held.signal);
+    cancels.set(request, held);
+    return held;
+  };
+  const signalOf = (request: FastifyRequest): AbortSignal => controllerOf(request).signal;
   const unmatched = new WeakSet<FastifyRequest>();
   const waiting = new WeakSet<Socket>();
   const inFlight = new WeakMap<Socket, { readonly request: FastifyRequest; readonly reply: FastifyReply }[]>();
@@ -239,7 +254,11 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
   app.addHook('onRequest', async (request, reply) => {
     inFlight.set(request.raw.socket, [...(inFlight.get(request.raw.socket) ?? []), { request, reply }]);
     reply.header(TRACE_HEADER, request.id);
-    reply.raw.once('close', () => logCompleted(request, reply, !reply.raw.writableFinished));
+    reply.raw.once('close', () => {
+      const aborted = !reply.raw.writableFinished;
+      if (aborted) controllerOf(request).abort();
+      logCompleted(request, reply, aborted);
+    });
     const servedByApiRoute = request.routeOptions.url?.startsWith(API_PREFIX) ?? false;
     if (isApiPath(request.url) && !servedByApiRoute) {
       unmatched.add(request);
@@ -253,6 +272,11 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
   });
 
   app.setErrorHandler(async (error, request, reply) => {
+    if (error instanceof RequestCancelled) {
+      // the client is gone: there is nobody to answer, and the one log line is the request's completion
+      reply.hijack();
+      return;
+    }
     const code = codeForFailure(error);
     if (code === 'INTERNAL_ERROR') {
       request.log.error({ event: 'request.failed', errorKind: UNHANDLED_ERROR_KIND }, 'request failed');
@@ -324,7 +348,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       const query = entityQuerySchema.safeParse(request.query);
       if (!path.success || !query.success) throw new AppError('INVALID_REQUEST');
       const identity = await options.store.current();
-      const node = await entities.read({ traceId: request.id, principal: identity.principal, ...path.data, mask: query.data.mask === 'true', rate: 'count' });
+      const node = await entities.read({ traceId: request.id, principal: identity.principal, ...path.data, mask: query.data.mask === 'true', rate: 'count', signal: signalOf(request) });
       return nodeSchema.parse(node);
     });
 
@@ -333,7 +357,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       if (!noQuerySchema.safeParse(request.query).success || !body.success) throw new AppError('INVALID_REQUEST');
       const identity = await options.store.current();
       const lookup = canonicalLookup(mapping, referenceKeys, body.data);
-      const node = await entities.read({ traceId: request.id, principal: identity.principal, sourceId: body.data.sourceId, ...lookup, mask: body.data.mask === true, rate: 'count' });
+      const node = await entities.read({ traceId: request.id, principal: identity.principal, sourceId: body.data.sourceId, ...lookup, mask: body.data.mask === true, rate: 'count', signal: signalOf(request) });
       return nodeSchema.parse(node);
     });
 
@@ -343,7 +367,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       if (!noQuerySchema.safeParse(request.query).success || !body.success) throw new AppError('INVALID_REQUEST');
       const identity = await options.store.current();
       const narrowing = body.data.typeahead === true ? {} : { ...(body.data.entityTypes === undefined ? {} : { entityTypes: body.data.entityTypes }), ...(body.data.matchModes === undefined ? {} : { matchModes: body.data.matchModes }) };
-      const result = await searching.search({ traceId: request.id, principal: identity.principal, sourceId: body.data.sourceId, text: body.data.text, mask: body.data.mask === true, typeahead: body.data.typeahead === true, ...narrowing });
+      const result = await searching.search({ traceId: request.id, principal: identity.principal, sourceId: body.data.sourceId, text: body.data.text, mask: body.data.mask === true, typeahead: body.data.typeahead === true, signal: signalOf(request), ...narrowing });
       return searchResultSchema.parse(result);
     });
 
@@ -352,7 +376,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       if (!noQuerySchema.safeParse(request.query).success || !body.success) throw new AppError('INVALID_REQUEST');
       const identity = await options.store.current();
       const { sourceId, text, group, cursor, entityTypes } = body.data;
-      const page = await searching.more({ traceId: request.id, principal: identity.principal, sourceId, text, group, cursor, mask: body.data.mask === true, ...(entityTypes === undefined ? {} : { entityTypes }) });
+      const page = await searching.more({ traceId: request.id, principal: identity.principal, sourceId, text, group, cursor, mask: body.data.mask === true, signal: signalOf(request), ...(entityTypes === undefined ? {} : { entityTypes }) });
       return searchMoreResultSchema.parse(page);
     });
 
@@ -363,7 +387,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       const body = degreePreviewRequestSchema.safeParse(request.body);
       if (!noQuerySchema.safeParse(request.query).success || !body.success) throw new AppError('INVALID_REQUEST');
       const identity = await options.store.current();
-      const preview = await degrees.preview({ traceId: request.id, principal: identity.principal, sourceId: body.data.sourceId, ...body.data.ref, mask: body.data.mask === true });
+      const preview = await degrees.preview({ traceId: request.id, principal: identity.principal, sourceId: body.data.sourceId, ...body.data.ref, mask: body.data.mask === true, signal: signalOf(request) });
       return degreePreviewSchema.parse(preview);
     });
 
@@ -382,7 +406,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       if (!noQuerySchema.safeParse(request.query).success || !body.success) throw new AppError('INVALID_REQUEST');
       const identity = await options.store.current();
       const { sourceId, ref, relTypes, neighborTypes, direction, limit, cursors, mask } = body.data;
-      const answer = await expansions.expand({ traceId: request.id, principal: identity.principal, sourceId, entityType: ref.entityType, stableId: ref.stableId, ...(relTypes === undefined ? {} : { relTypes }), neighborTypes, direction: direction ?? 'both', ...(limit === undefined ? {} : { limit }), ...(cursors === undefined ? {} : { cursors }), mask: mask === true });
+      const answer = await expansions.expand({ traceId: request.id, principal: identity.principal, sourceId, entityType: ref.entityType, stableId: ref.stableId, ...(relTypes === undefined ? {} : { relTypes }), neighborTypes, direction: direction ?? 'both', signal: signalOf(request), ...(limit === undefined ? {} : { limit }), ...(cursors === undefined ? {} : { cursors }), mask: mask === true });
       return expandResponseSchema.parse(answer);
     });
 
@@ -391,7 +415,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       const body = openInvestigationRequestSchema.safeParse(request.body);
       if (!noQuerySchema.safeParse(request.query).success || !body.success) throw new AppError('INVALID_REQUEST');
       const identity = await options.store.current();
-      const answer = await investigations.open({ traceId: request.id, principal: identity.principal, request: canonicalOpen(mapping, referenceKeys, body.data) });
+      const answer = await investigations.open({ traceId: request.id, principal: identity.principal, request: canonicalOpen(mapping, referenceKeys, body.data), signal: signalOf(request) });
       return reply
         .code(answer.created ? 201 : 200)
         .header('etag', `"${answer.body.investigation.version}"`)

@@ -40,6 +40,8 @@ export const sourceSummaryFieldsSchema = z.strictObject({
   lastTest: lastTestSchema.nullable(),
   mappingSummary: mappingSummarySchema,
   demoCase: demoCaseSchema.nullable(),
+  /** The source's server-side transaction timeout in milliseconds (its `timeout_ms`), which a running request is shown against. Absent in an answer from before the field existed. */
+  timeoutMs: z.number().int().positive().optional(),
 });
 
 export const sourceSummarySchema = sourceSummaryFieldsSchema.refine((source) => source.demoCase === null || source.synthetic, { message: 'only a synthetic source has a demo case', path: ['demoCase'] });

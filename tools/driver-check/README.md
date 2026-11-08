@@ -26,9 +26,9 @@ valid but a container, session or driver could not be cleaned up (the problems a
 in the report; remove a leftover container by hand). The numbers (3,000 nodes, the two timeouts, the 30 s settle limit, the 15 s tail) are
 test values, not product limits.
 
-Not tested: terminating a transaction as a read-only principal (Neo4j Community has no role-based
-access control); whether a write sent in a read-access session is refused; behaviour behind a
-proxy or in a cluster.
+Not tested here: terminating a transaction as a read-only principal (Neo4j Community has no role-based
+access control); behaviour behind a proxy or in a cluster. The cases that need Neo4j Enterprise, and what
+was tested through the product, are in [docs/cancellation.md](../../docs/cancellation.md).
 
 Run it from a clean state and let it finish: it takes about a minute per case. The Neo4j server
 image is pulled only to run the check on the developer's machine and is not shipped.

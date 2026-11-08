@@ -16,6 +16,8 @@ export interface EntityReadRequest {
   readonly mask: boolean;
   /** Set by the route that is the request's own; an inner read for another request leaves it out. */
   readonly rate?: 'count';
+  /** Aborted when the client gives up the request. */
+  readonly signal?: AbortSignal;
 }
 
 export interface EntityReader {
@@ -54,6 +56,7 @@ async function readThroughGate(gate: Gate, request: EntityReadRequest) {
       params: { entityType: request.entityType, stableId: request.stableId },
       limit: ONE_ROW,
       mask: request.mask,
+      ...(request.signal === undefined ? {} : { signal: request.signal }),
     });
   } catch (error) {
     if (error instanceof AppError && error.code === 'ACCESS_DENIED') throw new AppError('NOT_FOUND');

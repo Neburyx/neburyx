@@ -195,6 +195,8 @@ export interface GateRequest {
   readonly mask?: boolean;
   /** The indexes of the source as the caller read them for this request, so that a request that makes several runs reads the schema once; a snapshot of another source is not used; `'unverified'` says the caller tried and the read could not say, so the gate does not read again; an `IndexReadFailure` says the read failed, and the run fails with that same error inside its own audited stages, with no data statement. */
   readonly indexes?: IndexSnapshot | 'unverified' | IndexReadFailure;
+  /** Aborted when the client gives up the request; the gate then stops the read and answers nothing. */
+  readonly signal?: AbortSignal;
 }
 
 export interface GateContext {
@@ -211,6 +213,8 @@ export interface GateContext {
   /** What the normalize stage needs of the source's mapping. */
   readonly model: NormalizeModel;
   readonly deadlineAt: number;
+  /** The request's abort signal, passed on to the read; the gate never closes a session itself. */
+  readonly signal?: AbortSignal;
 }
 
 export interface GatePage {
@@ -246,7 +250,7 @@ export interface Gate {
  * source, whatever its checks showed. `'unverified'` when no read is made (the principal is refused, and the run that follows is refused by its own rules) or the login may not list indexes. Any other failure of the read is thrown.
  */
 export interface IndexReader {
-  read(request: { readonly traceId: string; readonly principal: Principal; readonly sourceId: string }): Promise<IndexSnapshot | 'unverified'>;
+  read(request: { readonly traceId: string; readonly principal: Principal; readonly sourceId: string; readonly signal?: AbortSignal }): Promise<IndexSnapshot | 'unverified'>;
 }
 
 export interface SystemRequest {

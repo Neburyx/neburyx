@@ -116,6 +116,20 @@ The statement the gate renders has several branches, each of which matches the r
 | 10,000 | lowerBound / lowerBound / lowerBound / lowerBound | 30 | 0 | 34.5 | 44.8 | 47.9 |
 | 100,000 | lowerBound / lowerBound / lowerBound / lowerBound | 30 | 0 | 45.1 | 89.5 | 94.5 |
 
+## Cancel
+
+- This measurement was taken on the code of commit 293557f with the cancel change on top, before that change was rebased onto the commits that add the heavy-operation warning, the request rate limit and the precomputed degree counts. It was not repeated after the rebase.
+
+A running expand (the first page of the "all four types" read set) is aborted once the server lists its transaction as running, and the server's list of running transactions is then looked at, about every 25 ms, until the transaction is no longer listed. The time is the first look that found it gone, counted from the abort, so it is exact only to within one look and the round trip of that look. These are observed times and not promises: the guaranteed stop of a read is the server's transaction timeout (5 s here, TAS §13).
+
+| Relationships | Aborted while running | Transaction gone: p50 (ms) | p95 (ms) | max (ms) | Finished before the abort | Still listed after the timeout | The same read, not aborted: p50 (ms) |
+|---|---|---|---|---|---|---|---|
+| 1,000 | 20 of 20 | 10.0 | 45.5 | 47.1 | 0 | 0 | 65.3 |
+| 10,000 | 20 of 20 | 10.6 | 49.7 | 50.1 | 0 | 0 | 211 |
+| 100,000 | 20 of 20 | 9.4 | 11.3 | 11.6 | 0 | 0 | 970 |
+
+A read that finished before it could be aborted has no time and is counted on its own. A read that is short (a few milliseconds, as at 1,000 relationships) cannot be told from one that ended by itself, so only the sizes where the uncancelled read is much longer than the time to gone show a stop that the abort caused.
+
 ## Not measured
 
 - Neo4j 2026.x and other editions: only the dev server was measured. A 2026.x run needs the series check of the test helper (`testing/neo4j-server.ts`) widened and a server of that series.

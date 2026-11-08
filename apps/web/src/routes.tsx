@@ -25,6 +25,7 @@ import { createExpandStore } from './api/expand-store.js';
 import type { ClientState } from './state/client-state.js';
 import type { BannerController } from './banner/banner-controller.js';
 import { bannerReporter } from './banner/banner-reporter.js';
+import { createRequestTracker } from './banner/request-tracker.js';
 import { sourceNameOf } from './shell/current-source.js';
 import { StartPage } from './first-run/start-page.js';
 import { RecentProvider } from './home/recent-context.js';
@@ -101,9 +102,17 @@ export function appRoutes(client: ApiClient, state: ClientState, banner?: Banner
   const profile = createProfileStore(client, state.investigation);
   const person = (): string => answeredData(shellData.getState().me)?.principal.id ?? '';
   const report = banner === undefined ? undefined : bannerReporter(banner, (sourceId) => sourceNameOf(answeredData(shellData.getState().sources)?.items ?? [], sourceId));
-  const previews = createPreviewStore(client, person, report);
+  const sourceItems = () => answeredData(shellData.getState().sources)?.items ?? [];
+  const tracker =
+    banner === undefined
+      ? undefined
+      : createRequestTracker(banner, {
+          titleOf: (ref) => state.loadedGraph().nodes.find((node) => node.ref.sourceId === ref.sourceId && node.ref.entityType === ref.entityType && node.ref.stableId === ref.stableId)?.display.title,
+          timeoutOf: (sourceId) => sourceItems().find((source) => source.id === sourceId)?.timeoutMs,
+        });
+  const previews = createPreviewStore(client, person, report, tracker);
   const coverage = createCoverageStore(client, person, report);
-  const expansions = createExpandStore(client, state, person, report, banner === undefined ? undefined : createHeavyGuard(previews, banner, state));
+  const expansions = createExpandStore(client, state, person, report, banner === undefined ? undefined : createHeavyGuard(previews, banner, state), tracker);
   const recent = createRecentInvestigations(client);
   const presence = createWorkspacePresence();
   return [

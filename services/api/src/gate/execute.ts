@@ -1,4 +1,4 @@
-import { AppError } from '../errors.js';
+import { AppError, RequestCancelled } from '../errors.js';
 import type { Coordinator, ReadLease } from '../seams/seams.js';
 import { exhaustive } from './exhaustive.js';
 import type { ExecuteOutcome, ReadExecutor } from './executor.js';
@@ -28,6 +28,9 @@ async function releaseLease(lease: ReadLease, logger: GateLogger): Promise<void>
   }
 }
 
+/** Read afresh at each use: a signal can abort between two awaits. */
+const cancelled = (context: GateContext): boolean => context.signal?.aborted === true;
+
 /** The timeout is the source's server-side transaction timeout, which is what the person is told; it holds no address, query or value. */
 const timedOut = (context: GateContext): AppError => new AppError('QUERY_TIMEOUT', { timeoutMs: context.budgets.timeoutMs });
 
@@ -36,8 +39,9 @@ const timedOut = (context: GateContext): AppError => new AppError('QUERY_TIMEOUT
  * request's deadline. A lease lives at most the time left to the deadline, which bounds the read, plus the source's timeout, the longest the adapter waits for a session to close.
  * A read of the system runner is held by the source limit alone, so that the one system principal is not a funnel for every person's schema read.
  */
-export async function acquireLease(deps: Pick<ExecuteDeps, 'coordinator' | 'clock'>, context: GateContext): Promise<ReadLease> {
+export async function acquireLease(deps: Pick<ExecuteDeps, 'coordinator' | 'clock' | 'logger'>, context: GateContext): Promise<ReadLease> {
   const left = context.deadlineAt - deps.clock();
+  if (cancelled(context)) throw new RequestCancelled();
   if (left <= 0) throw timedOut(context);
   const { userConcurrency, sourceConcurrency, queueWaitMs, timeoutMs } = context.budgets;
   const admission = await deps.coordinator.acquireRead({
@@ -45,13 +49,21 @@ export async function acquireLease(deps: Pick<ExecuteDeps, 'coordinator' | 'cloc
     sourceId: context.sourceId,
     limits: { userConcurrency: context.system ? sourceConcurrency : userConcurrency, sourceConcurrency, queueWaitMs: Math.min(queueWaitMs, left) },
     leaseTtlMs: left + timeoutMs,
+    ...(context.signal === undefined ? {} : { signal: context.signal }),
   });
   switch (admission.status) {
     case 'busy':
       throw new AppError('SOURCE_BUSY');
     case 'unavailable':
       throw new AppError('SOURCE_UNAVAILABLE');
+    case 'cancelled':
+      throw new RequestCancelled();
     case 'granted':
+      // a grant that lands in the abort's tick is given back here, once, and the read never starts
+      if (cancelled(context)) {
+        await releaseLease(admission.lease, deps.logger);
+        throw new RequestCancelled();
+      }
       return admission.lease;
     default:
       return exhaustive(admission);
@@ -86,6 +98,7 @@ export async function executeRead(
   let closed: Promise<void> | undefined;
   let outcome: ExecuteOutcome;
   try {
+    if (cancelled(context)) throw new RequestCancelled();
     if (deps.clock() >= context.deadlineAt) throw timedOut(context);
     outcome = await deps.executor.execute({
       sourceId: context.sourceId,
@@ -100,6 +113,7 @@ export async function executeRead(
       rowLimit: limit + 1,
       deadlineAt: context.deadlineAt,
       traceId: context.traceId,
+      ...(context.signal === undefined ? {} : { signal: context.signal }),
       onClosed: (given) => {
         closed = given;
       },
@@ -113,6 +127,8 @@ export async function executeRead(
   switch (outcome.status) {
     case 'timeout':
       throw timedOut(context);
+    case 'cancelled':
+      throw new RequestCancelled();
     case 'unavailable':
       throw new AppError('SOURCE_UNAVAILABLE', undefined, outcome.reason);
     case 'rows':

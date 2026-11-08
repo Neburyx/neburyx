@@ -42,6 +42,17 @@ export class AppError extends Error {
   }
 }
 
+/**
+ * The request was cancelled by the client (its connection closed before the answer). It is not an `AppError` and has no error code: nobody is left to read an answer, so the route writes none,
+ * and the gate passes it on unchanged and audits it as a failed read.
+ */
+export class RequestCancelled extends Error {
+  constructor() {
+    super('REQUEST_CANCELLED');
+    this.name = 'RequestCancelled';
+  }
+}
+
 /** The body of an error. A `SOURCE_UNAVAILABLE` always carries its reason, taken from the details (`unreachable` when they name none), with that reason's sentence and retry flag. */
 export function errorResponse(code: ErrorCode, traceId: string, details?: unknown): ErrorResponse {
   const allowed = allowedDetails(code, details);

@@ -1,0 +1,146 @@
+import { rmSync } from 'node:fs';
+import { request as httpRequest } from 'node:http';
+import { afterAll, describe, expect, it } from 'vitest';
+import { buildApp } from '../app.js';
+import type { ExecuteCall, ExecuteOutcome } from '../gate/executor.js';
+import { createLogger } from '../logger.js';
+import { parseMapping } from '../mapping/load.js';
+import { communitySeams } from '../seams/community-seams.js';
+import type { AuditEvent } from '../seams/seams.js';
+import { memoryAppStore } from '../testing/app-store.js';
+import { entityRows } from '../testing/entity-fixtures.js';
+import { plainNode } from '../testing/normalize-fixtures.js';
+import { TestExecutor } from '../testing/gate.js';
+import { baseSource, fileOf } from '../testing/mapping.js';
+import { portOf } from '../testing/raw-request.js';
+import { facetRowOf, onlineIndexesOf, schemaAnswer, withSchema } from '../testing/search-fixtures.js';
+import { testSourceGate } from '../testing/source-gate.js';
+import { makeWebRoot } from '../testing/web-root.js';
+
+const webRoot = makeWebRoot();
+afterAll(() => rmSync(webRoot, { recursive: true, force: true }));
+
+const mapping = parseMapping(
+  fileOf(
+    baseSource({
+      id: 'demo',
+      entities: [
+        { type: 'hub', label: 'Hub', stable_id: 'hubId', search: ['hubId'] },
+        { type: 'leaf', label: 'Leaf', stable_id: 'leafId' },
+      ],
+      relationships: [{ type: 'LINKED', from: 'hub', to: 'leaf', stable_id: 'relId' }],
+    }),
+  ),
+  'neburyx.yaml',
+);
+
+const ref = { entityType: 'hub', stableId: 'H-1' };
+const ROUTES: readonly { readonly name: string; readonly method: 'GET' | 'POST'; readonly path: string; readonly body?: unknown }[] = [
+  { name: 'entity load', method: 'GET', path: '/v1/entities/demo/hub/H-1' },
+  { name: 'entity lookup', method: 'POST', path: '/v1/entities/lookup', body: { sourceId: 'demo', ref } },
+  { name: 'search', method: 'POST', path: '/v1/search/entities', body: { sourceId: 'demo', text: 'abc' } },
+  { name: 'degree preview', method: 'POST', path: '/v1/graph/preview-expansion', body: { sourceId: 'demo', ref } },
+  { name: 'expand', method: 'POST', path: '/v1/graph/expand', body: { sourceId: 'demo', ref, neighborTypes: ['leaf'] } },
+  { name: 'open investigation', method: 'POST', path: '/v1/investigations', body: { sourceId: 'demo', entity: { sourceId: 'demo', ...ref } } },
+];
+
+/** Every data read waits until its call's signal aborts, as the adapter ends a cancelled read; the schema read answers at once. */
+async function listening() {
+  const [source] = mapping.sources;
+  if (source === undefined) throw new Error('the mapping has no source');
+  const mode = { answering: false };
+  const hubs = Array.from({ length: 30 }, (_, index) => plainNode(['Hub'], { hubId: `H-${index}` }, `4:s:${index}`));
+  const respond = (call: ExecuteCall): Promise<ExecuteOutcome> => {
+    if (mode.answering) return Promise.resolve(call.templateId === 'search-facets' ? facetRowOf(call, hubs.length) : entityRows(...hubs.slice(0, call.rowLimit)));
+    return new Promise((resolve) => call.signal?.addEventListener('abort', () => resolve({ status: 'cancelled' }), { once: true }));
+  };
+  const executor = new TestExecutor(withSchema(() => schemaAnswer(onlineIndexesOf(source)), respond));
+  const events: AuditEvent[] = [];
+  const defaults = communitySeams();
+  const seams = { policy: defaults.policy, coordinator: defaults.coordinator, audit: { record: (event: AuditEvent) => (events.push(event), Promise.resolve()) } };
+  const parts = testSourceGate(mapping, { executor, seams });
+  const lines: string[] = [];
+  const app = await buildApp({ webRoot, logger: createLogger({ write: (line: string) => void lines.push(line) }), store: memoryAppStore(), mapping, gate: parts.gate, seams });
+  await app.listen({ port: 0, host: '127.0.0.1' });
+  return { app, executor, events, lines, mode };
+}
+
+/** The cursor of the next page of the exact group of a search, from a search whose group has more hits than a page. */
+async function nextCursorOf(listened: Awaited<ReturnType<typeof listening>>): Promise<string> {
+  listened.mode.answering = true;
+  const answer = await fetch(`http://127.0.0.1:${portOf(listened.app)}/v1/search/entities`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sourceId: 'demo', text: 'H-' }) });
+  const body = (await answer.json()) as { exactNextCursor?: string };
+  listened.mode.answering = false;
+  if (body.exactNextCursor === undefined) throw new Error('the search gave no cursor for a next page');
+  return body.exactNextCursor;
+}
+
+const until = async (check: () => boolean): Promise<void> => {
+  for (let waited = 0; !check() && waited < 3000; waited += 5) await new Promise((resolve) => setTimeout(resolve, 5));
+  expect(check()).toBe(true);
+};
+
+describe('a request that reads the source, when the client closes the connection', () => {
+  it('stops the read of search more', async () => {
+    const listened = await listening();
+    const { app, executor, events } = listened;
+    const cursor = await nextCursorOf(listened);
+    const before = executor.calls.length;
+    const text = JSON.stringify({ sourceId: 'demo', text: 'H-', group: 'exact', cursor });
+    const request = httpRequest({ host: '127.0.0.1', port: portOf(app), path: '/v1/search/entities/more', method: 'POST', headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(text) } });
+    request.on('error', () => undefined);
+    request.end(text);
+    await until(() => executor.calls.slice(before).some((call) => call.templateId !== 'schema-indexes'));
+    const reading = executor.calls.slice(before).filter((call) => call.templateId !== 'schema-indexes');
+    request.destroy();
+    await until(() => reading.every((call) => call.signal?.aborted === true));
+    await until(() => events.some((event) => event.detail?.reason === 'cancelled'));
+    await app.close();
+  });
+
+  it.each(ROUTES)('stops the read of $name, audits it failed with the reason cancelled, and writes no error', async ({ method, path, body }) => {
+    const { app, executor, events, lines } = await listening();
+    const text = body === undefined ? undefined : JSON.stringify(body);
+    const request = httpRequest({ host: '127.0.0.1', port: portOf(app), path, method, headers: text === undefined ? {} : { 'content-type': 'application/json', 'content-length': Buffer.byteLength(text) } });
+    request.on('error', () => undefined);
+    request.end(text);
+    const isData = (call: ExecuteCall): boolean => call.templateId !== 'schema-indexes';
+    await until(() => executor.calls.some(isData));
+    const reading = executor.calls.filter(isData);
+    request.destroy();
+    await until(() => reading.every((call) => call.signal?.aborted === true));
+    await until(() => events.some((event) => event.detail?.reason === 'cancelled'));
+    expect(events.filter((event) => event.detail !== undefined).map((event) => event.result)).toEqual(['failed']);
+    await until(() => lines.some((line) => line.includes('request.completed')));
+    expect(lines.join('\n')).not.toContain('request.failed');
+    expect(lines.join('\n')).not.toContain('gate.internal_error');
+    // nothing further is read once the request is cancelled
+    const readsAtCancel = executor.calls.length;
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(executor.calls).toHaveLength(readsAtCancel);
+    await app.close();
+  });
+});
+
+describe('the source test and the graph coverage routes', () => {
+  it('are not cancelled by this: the tester is called with no signal, and coverage reads no source', async () => {
+    const { app, executor } = await listening();
+    const calls: object[] = [];
+    const other = await buildApp({
+      webRoot,
+      logger: createLogger({ write: () => undefined }),
+      store: memoryAppStore(),
+      mapping,
+      gate: testSourceGate(mapping, { executor }).gate,
+      sourceTester: { run: (request) => (calls.push(request), Promise.reject(new Error('stop'))) },
+    });
+    await other.inject({ method: 'POST', url: '/v1/sources/demo/test' });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).not.toHaveProperty('signal');
+    const coverage = await other.inject({ method: 'POST', url: '/v1/graph/coverage', payload: { sourceId: 'demo', entities: [] } });
+    expect(coverage.statusCode).toBeLessThan(500);
+    expect(executor.calls).toEqual([]);
+    await other.close();
+    await app.close();
+  });
+});

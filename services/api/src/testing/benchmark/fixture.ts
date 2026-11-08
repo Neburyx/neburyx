@@ -54,14 +54,14 @@ async function buildAnchor(server: RunningNeo4j, size: number): Promise<void> {
 }
 
 /** Makes the constraints and indexes the mapping asks for (the anchor's stable ID, the neighbor's, and each relationship ID), awaits them, builds the three anchors and checks the counts it built; a count that differs fails the run, since a figure about the wrong graph is worse than none. */
-export async function buildSupernodes(server: RunningNeo4j): Promise<void> {
+export async function buildSupernodes(server: RunningNeo4j, sizes: readonly number[] = SIZES): Promise<void> {
   await runAdmin(server, 'CREATE CONSTRAINT bench_hub FOR (n:BenchHub) REQUIRE n.hubId IS UNIQUE');
   await runAdmin(server, 'CREATE INDEX bench_leaf FOR (n:BenchLeaf) ON (n.leafId)');
   await runAdmin(server, 'CREATE CONSTRAINT bench_linked FOR ()-[r:LINKED]-() REQUIRE r.relId IS UNIQUE');
   await runAdmin(server, 'CREATE CONSTRAINT bench_tied FOR ()-[r:TIED]-() REQUIRE r.tieId IS UNIQUE');
   await runAdmin(server, 'CALL db.awaitIndexes(300)');
-  for (const size of SIZES) await buildAnchor(server, size);
-  for (const size of SIZES) {
+  for (const size of sizes) await buildAnchor(server, size);
+  for (const size of sizes) {
     checkBuilt(size, await countsOf(server, size));
   }
 }

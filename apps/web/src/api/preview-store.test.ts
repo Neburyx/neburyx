@@ -129,4 +129,25 @@ describe('the preview store with a failure reporter', () => {
     store.forNode(ref('W-1'), false);
     expect(store.answers.getState()).toBe(1);
   });
+
+  it('lets a check that waits for the menu\'s preview go on with no preview when the person cancels that preview', async () => {
+    const { pending, store } = rig();
+    const request = store.forNode(ref('W-1'), false);
+    const waiting = store.settle(ref('W-1'), false);
+    await settle();
+    request.cancel();
+    await expect(waiting).resolves.toBeUndefined();
+    expect(pending).toHaveLength(1);
+  });
+
+  it('reads once more, quietly, for a check of a node whose menu preview was cancelled, and keeps nothing of that read', async () => {
+    const { pending, store } = rig();
+    store.forNode(ref('W-1'), false).cancel();
+    const checking = store.settle(ref('W-1'), false);
+    await settle();
+    expect(pending).toHaveLength(2);
+    pending[1]?.answer({ ok: true, value: previewOf('W-1') });
+    await expect(checking).resolves.toEqual(previewOf('W-1'));
+    expect(store.held(ref('W-1'), false)).toBeUndefined();
+  });
 });

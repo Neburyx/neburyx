@@ -3,6 +3,8 @@ import type { ClientState } from '../state/client-state.js';
 import { DEFAULT_FILTER_HASH, DEFAULT_POLICY_VERSION, edgeKey, elementKey, queryKeyText, type QueryKey } from '../state/keys.js';
 import { createStore, readable, type ReadableStore } from '../state/store.js';
 import type { ApiClient, ApiFailure } from './client.js';
+import type { RequestTracker } from '../banner/request-tracker.js';
+import type { RequestKind } from '../banner/copy.js';
 import type { FailureReporter } from './failure-reporter.js';
 import { UNEXPECTED } from './use-request.js';
 import { BOUNDED_LIMIT } from './heavy-estimate.js';
@@ -65,6 +67,8 @@ export type ExpansionAction =
   | { readonly kind: 'restart'; readonly type: string }
   | ({ readonly kind: 'pages'; readonly first: readonly string[]; readonly more: readonly string[]; readonly relTypes: readonly string[] | undefined } & Passed);
 
+const requestKindOf = (action: ExpansionAction): RequestKind => (action.kind === 'more' || (action.kind === 'pages' && action.first.length === 0) ? 'more' : action.kind === 'restart' ? 'start-over' : 'expand');
+
 const firstTypesOf = (action: ExpansionAction): readonly string[] => (action.kind === 'first' ? action.types : action.kind === 'restart' ? [action.type] : action.kind === 'pages' ? action.first : []);
 const moreTypesOf = (action: ExpansionAction): readonly string[] => (action.kind === 'more' ? [action.type] : action.kind === 'pages' ? action.more : []);
 const askedTypesOf = (action: ExpansionAction): readonly string[] => [...firstTypesOf(action), ...moreTypesOf(action)];
@@ -118,11 +122,12 @@ function neighborTypeOf(edge: GraphEdge, ref: ElementRef): string {
  * The expansions a person asked for in this session, outside React so that a menu that closes does not stop one. One request is one node's pages for the asked types and either adds all of its answer to the
  * loaded graph or nothing; an answer that arrives after the investigation or the masking changed, or after a newer ask for the same node, is dropped.
  */
-export function createExpandStore(client: ApiClient, state: ClientState, person: () => string, report?: FailureReporter, heavy?: HeavyGuard): ExpandStore {
+export function createExpandStore(client: ApiClient, state: ClientState, person: () => string, report?: FailureReporter, heavy?: HeavyGuard, tracker?: RequestTracker): ExpandStore {
   const store = createStore<ReadonlyMap<string, NodeExpansion>>(new Map());
   const notes = createStore<readonly string[]>([]);
   const chains = new Map<string, Map<string, Chain>>();
   const newest = new Map<string, number>();
+  const controllers = new Map<string, AbortController>();
   const last = new Map<string, ExpansionAction>();
   const placed = new Map<string, QueryKey>();
   const ceilings = new Map<string, number>();
@@ -286,15 +291,27 @@ export function createExpandStore(client: ApiClient, state: ClientState, person:
       ...(state.mask.getState() ? { mask: true } : {}),
       ...(Object.keys(cursors).length === 0 ? {} : { cursors }),
     };
+    // a newer ask for the node stops the older one's fetch, and the person's Cancel stops this one; either way nothing of the answer is merged
+    controllers.get(nodeKey)?.abort();
+    const controller = new AbortController();
+    controllers.set(nodeKey, controller);
+    const tracked = tracker?.begin({ kind: requestKindOf(action), ref, cancel: () => controller.abort(), again: () => void run(ref, action) });
     let result;
     try {
-      result = await client.expandNeighbors(request);
+      result = await client.expandNeighbors(request, controller.signal);
     } catch {
       result = UNEXPECTED;
+    } finally {
+      tracked?.finish();
+      if (controllers.get(nodeKey) === controller) controllers.delete(nodeKey);
     }
     if (newest.get(nodeKey) !== mine || epochOf() !== epoch) return 'stale';
+    if (tracked?.cancelled === true || (!result.ok && result.failure.code === 'ABORTED')) {
+      // the node goes back to what it was, with the cursors it had, and an answer that came after the cancel is dropped
+      write(nodeKey, { ...before, status: 'idle', failure: undefined, failedAction: undefined });
+      return 'sent';
+    }
     if (!result.ok) {
-      if (result.failure.code === 'ABORTED') return 'sent';
       const maxPage = result.failure.code === 'QUERY_BUDGET_EXCEEDED' && 'details' in result.failure ? result.failure.details?.maxPage : undefined;
       if (maxPage !== undefined) ceilings.set(ref.sourceId, maxPage);
       const lowered = maxPage !== undefined && before.chosenPageSize !== undefined && before.chosenPageSize > maxPage ? maxPage : before.chosenPageSize;

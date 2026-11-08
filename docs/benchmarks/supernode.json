@@ -1378,5 +1378,66 @@
       "consumedMs": 851,
       "indexSeek": true
     }
-  ]
+  ],
+  "cancel": {
+    "intervalMs": 25,
+    "timeoutMs": 5000,
+    "note": "This measurement was taken on the code of commit 293557f with the cancel change on top, before that change was rebased onto the commits that add the heavy-operation warning, the request rate limit and the precomputed degree counts. It was not repeated after the rebase.",
+    "cells": [
+      {
+        "size": 1000,
+        "attempts": 20,
+        "gone": {
+          "samples": 20,
+          "p50": 9.982041999999637,
+          "p95": 45.46137500000077,
+          "max": 47.132917000000816
+        },
+        "finishedFirst": 0,
+        "notGone": 0,
+        "uncancelled": {
+          "samples": 5,
+          "p50": 65.27899999999863,
+          "p95": 1271.5720000000001,
+          "max": 1271.5720000000001
+        }
+      },
+      {
+        "size": 10000,
+        "attempts": 20,
+        "gone": {
+          "samples": 20,
+          "p50": 10.621000000001004,
+          "p95": 49.7455829999999,
+          "max": 50.12916699999914
+        },
+        "finishedFirst": 0,
+        "notGone": 0,
+        "uncancelled": {
+          "samples": 5,
+          "p50": 210.9159579999996,
+          "p95": 512.1575830000002,
+          "max": 512.1575830000002
+        }
+      },
+      {
+        "size": 100000,
+        "attempts": 20,
+        "gone": {
+          "samples": 20,
+          "p50": 9.416083000000071,
+          "p95": 11.250291000000288,
+          "max": 11.614458000000013
+        },
+        "finishedFirst": 0,
+        "notGone": 0,
+        "uncancelled": {
+          "samples": 5,
+          "p50": 970.2352920000012,
+          "p95": 1285.1389579999995,
+          "max": 1285.1389579999995
+        }
+      }
+    ]
+  }
 }

@@ -42,15 +42,22 @@ async function editionOf(server: RunningNeo4j): Promise<string> {
   }
 }
 
-/** Connects to the dev server, builds the three anchors and the gate that reads them with the run's reader login. A failure after the database was made drops it. */
-export async function startRig(): Promise<Rig> {
+export interface RigOptions {
+  /** The anchors to build; all three by default. */
+  readonly sizes?: readonly number[];
+  /** Makes the hub type searchable on its stable ID, for a rig that cancels a search. */
+  readonly searchable?: boolean;
+}
+
+/** Connects to the dev server, builds the anchors asked for (all three by default) and the gate that reads them with the run's reader login. A failure after the database was made drops it. */
+export async function startRig(options: RigOptions = {}): Promise<Rig> {
   const server = await startNeo4j();
   try {
     const edition = await editionOf(server);
-    await buildSupernodes(server);
+    await buildSupernodes(server, options.sizes);
     const defaults = communitySeams();
     const { codec, positionOf } = recordingCodec();
-    const parts = createSourceGate({ cursors: codec, mapping: { sources: [sourceFor(server, { entities: ENTITIES, relationships: RELATIONSHIPS })] }, env: envFor(server), seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit }, logger: { warn: () => undefined } });
+    const parts = createSourceGate({ cursors: codec, mapping: { sources: [sourceFor(server, { entities: options.searchable === true ? ENTITIES.map((entity) => (entity.type === 'hub' ? { ...entity, search: ['hubId'] } : entity)) : ENTITIES, relationships: RELATIONSHIPS })] }, env: envFor(server), seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit }, logger: { warn: () => undefined } });
     return { server, parts, edition, positionOf };
   } catch (error) {
     await server.stop().catch(() => undefined);

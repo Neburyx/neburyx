@@ -6,4 +6,5 @@ Public technical documentation. Pre-release placeholder: the technical architect
 - [coding-guidelines.md](coding-guidelines.md): how code is written here (TypeScript rules, comments, tests, API and web client).
 - [architecture-checks.md](architecture-checks.md): the checks that fail the build (nothing outside the gate reaches the adapter; no domain words in code) and what they cannot see.
 - [api-conventions.md](api-conventions.md): the rules every endpoint follows: pagination, field limits, idempotency keys, concurrency and the permission each route declares.
+- [cancellation.md](cancellation.md): what happens when a request is cancelled, what is not promised, what was tested and what was not verified.
 - [benchmarks/](benchmarks/README.md): the supernode benchmark, what it measures, how to run it and the last record.

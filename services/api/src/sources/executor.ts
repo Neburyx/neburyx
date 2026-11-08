@@ -30,6 +30,15 @@ const ROLLBACK_WAIT_MS = 1000;
 
 const unavailable = (reason: UnavailableReason): ExecuteOutcome => ({ status: 'unavailable', reason });
 const TIMEOUT: ExecuteOutcome = { status: 'timeout' };
+const CANCELLED: ExecuteOutcome = { status: 'cancelled' };
+
+const startNow = (work: () => Promise<void>): Promise<void> => {
+  try {
+    return Promise.resolve(work());
+  } catch (error) {
+    return Promise.reject(error);
+  }
+};
 
 export function createNeo4jExecutor(options: Neo4jExecutorOptions): Neo4jExecutor {
   const clock = options.clock ?? Date.now;
@@ -39,14 +48,15 @@ export function createNeo4jExecutor(options: Neo4jExecutorOptions): Neo4jExecuto
   const pending = new Set<Promise<void>>();
   let closing: Promise<void> | undefined;
 
-  function cleanUp(source: SourceModel, work: () => Promise<void>): Promise<void> {
+  /** Runs a piece of cleanup, bounded by the source's timeout; `now` starts the work in this call and not in the next microtask, for a close that must be asked before the caller goes on. */
+  function cleanUp(source: SourceModel, work: () => Promise<void>, now = false): Promise<void> {
     const run = (async () => {
       let timer: ReturnType<typeof setTimeout> | undefined;
       const tooSlow = new Promise<'slow'>((resolve) => {
         timer = setTimeout(() => resolve('slow'), source.budgets.timeoutMs);
       });
-      const done = Promise.resolve()
-        .then(work)
+      const started = now ? startNow(work) : Promise.resolve().then(work);
+      const done = started
         .then(
           () => 'done' as const,
           () => 'failed' as const,
@@ -112,19 +122,22 @@ export function createNeo4jExecutor(options: Neo4jExecutorOptions): Neo4jExecuto
       let session: SourceSession | undefined;
       let transaction: SourceTransaction | undefined;
 
-      const settle = (finish: () => void): void => {
+      const settle = (finish: () => void, cancelled = false): void => {
         if (settled) return;
         settled = true;
         clearTimeout(guard);
+        call.signal?.removeEventListener('abort', onAbort);
         const toClose = session;
         const toRollBack = transaction;
         // said before the outcome, so the gate keeps the read's slots until its connection is back and a slot holder does not wait for a connection
         if (toClose !== undefined) {
-          const closed = cleanUp(source, () => endRead(source, toClose, toRollBack));
+          // a cancel closes the session at once, with no rollback first: a rollback of a running query does not free the caller (TAS §13), and the session's close stops the query
+          const closed = cancelled ? cleanUp(source, () => toClose.close(), true) : cleanUp(source, () => endRead(source, toClose, toRollBack));
           call.onClosed?.(closed);
         }
         finish();
       };
+      const onAbort = (): void => settle(() => resolve(CANCELLED), true);
       const fail = (error: unknown): void => {
         settle(() => {
           const kind = classify(error);
@@ -144,6 +157,7 @@ export function createNeo4jExecutor(options: Neo4jExecutorOptions): Neo4jExecuto
       };
 
       guard = setTimeout(() => settle(() => resolve(TIMEOUT)), remainingMs);
+      call.signal?.addEventListener('abort', onAbort, { once: true });
       try {
         session = driver.session({ database: source.database, defaultAccessMode: 'READ', fetchSize: call.rowLimit });
         const timeout = Math.max(1, Math.floor(Math.min(call.timeoutMs, remainingMs)));
@@ -177,6 +191,7 @@ export function createNeo4jExecutor(options: Neo4jExecutorOptions): Neo4jExecuto
       if (mode !== 'READ') throw new AdapterError('NOT_READ_ONLY');
       const source = sources.get(call.sourceId);
       if (closing !== undefined || source === undefined) return unavailable('closed');
+      if (call.signal?.aborted === true) return CANCELLED;
       const remainingMs = call.deadlineAt - clock();
       if (remainingMs <= 0) return TIMEOUT;
       let driver: SourceDriver | undefined;

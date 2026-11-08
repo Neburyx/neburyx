@@ -40,6 +40,7 @@ const realTimer: SetTimer = (run, ms) => {
 };
 
 const BUSY: ReadAdmission = { status: 'busy' };
+const CANCELLED: ReadAdmission = { status: 'cancelled' };
 
 /**
  * The in-process read slots of one API copy: a user's slot on the source, then the source's slot, both within one wait. Waiters are served in the order they came; a read refused as busy
@@ -114,6 +115,8 @@ export function createReadSlots(options: ReadSlotsOptions = {}): ReadSlots {
     acquireRead(request) {
       const { limits, sourceId } = request;
       const userKey = JSON.stringify([sourceId, request.principal.id]);
+      const { signal } = request;
+      if (signal?.aborted === true) return Promise.resolve(CANCELLED);
       const user = poolOf(users, userKey);
       return new Promise<ReadAdmission>((resolve) => {
         let waiting: { readonly pool: Pool; readonly waiter: Waiter } | undefined;
@@ -122,6 +125,7 @@ export function createReadSlots(options: ReadSlotsOptions = {}): ReadSlots {
         const settle = (admission: ReadAdmission): void => {
           settled = true;
           wait.cancel();
+          signal?.removeEventListener('abort', onAbort);
           resolve(admission);
         };
         // the source's pool is looked up when the user's slot is held, never before, so it is the one in the table and not one dropped while this read waited
@@ -145,9 +149,10 @@ export function createReadSlots(options: ReadSlotsOptions = {}): ReadSlots {
           const queued = take(source, limits.sourceConcurrency, onSource(source));
           if (queued !== undefined) waiting = { pool: source, waiter: queued };
         };
-        const wait = setTimer(() => {
-          if (settled) return;
+        // ends a read that is still queued, without an admission: out of the queue it stands in, the user's slot given back if it holds one
+        const leave = (admission: ReadAdmission): void => {
           settled = true;
+          signal?.removeEventListener('abort', onAbort);
           if (waiting !== undefined) {
             const { pool, waiter } = waiting;
             pool.waiters.splice(pool.waiters.indexOf(waiter), 1);
@@ -156,8 +161,17 @@ export function createReadSlots(options: ReadSlotsOptions = {}): ReadSlots {
             forget(pool === user ? users : sources, pool === user ? userKey : sourceId, pool);
           }
           if (holdsUser) give(users, userKey, user);
-          resolve(BUSY);
+          resolve(admission);
+        };
+        const wait = setTimer(() => {
+          if (!settled) leave(BUSY);
         }, limits.queueWaitMs);
+        function onAbort(): void {
+          if (settled) return;
+          wait.cancel();
+          leave(CANCELLED);
+        }
+        signal?.addEventListener('abort', onAbort, { once: true });
         const queued = take(user, limits.userConcurrency, onUser);
         if (queued !== undefined) waiting = { pool: user, waiter: queued };
       });
