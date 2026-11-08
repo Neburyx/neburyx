@@ -68,7 +68,7 @@ export function createExpandService(deps: { readonly gate: Gate; readonly mappin
   const allowlists = new Map(deps.mapping.sources.map((source) => [source.id, allowlistFromMapping(source)]));
   return {
     async expand(request) {
-      await deps.access.require({ traceId: request.traceId, principal: request.principal, sourceId: request.sourceId, auditAction: expandNeighborsTemplate.auditAction });
+      await deps.access.require({ traceId: request.traceId, principal: request.principal, sourceId: request.sourceId, auditAction: expandNeighborsTemplate.auditAction, rate: 'count' });
       const source = deps.mapping.sources.find((candidate) => candidate.id === request.sourceId);
       const allowlist = allowlists.get(request.sourceId);
       if (source === undefined || allowlist === undefined || !allowlist.entityLabels.has(request.entityType)) throw new AppError('INVALID_REQUEST');

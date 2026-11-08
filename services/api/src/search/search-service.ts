@@ -245,7 +245,7 @@ export function createSearchService(deps: { readonly gate: Gate; readonly mappin
   const clock = deps.clock ?? Date.now;
   return {
     async search(request) {
-      await deps.access.require({ traceId: request.traceId, principal: request.principal, sourceId: request.sourceId, auditAction: searchExactTemplate.auditAction });
+      await deps.access.require({ traceId: request.traceId, principal: request.principal, sourceId: request.sourceId, auditAction: searchExactTemplate.auditAction, rate: 'count' });
       const source = deps.mapping.sources.find((candidate) => candidate.id === request.sourceId);
       if (source === undefined) throw new AppError('NOT_FOUND');
       const startedAt = clock();
@@ -398,7 +398,7 @@ export function createSearchService(deps: { readonly gate: Gate; readonly mappin
     },
 
     async more(request) {
-      await deps.access.require({ traceId: request.traceId, principal: request.principal, sourceId: request.sourceId, auditAction: searchExactTemplate.auditAction });
+      await deps.access.require({ traceId: request.traceId, principal: request.principal, sourceId: request.sourceId, auditAction: searchExactTemplate.auditAction, rate: 'count' });
       const source = deps.mapping.sources.find((candidate) => candidate.id === request.sourceId);
       if (source === undefined) throw new AppError('NOT_FOUND');
       const { group } = request;

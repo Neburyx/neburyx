@@ -60,7 +60,7 @@ export interface BannerController {
 
 const EMPTY: BannerView = { banner: undefined, announcement: undefined };
 
-const announcementOf = (state: BannerState): Announcement => ({ tone: state.tone, text: `${state.chip}. ${state.headline}. ${state.text}` });
+const announcementOf = (state: BannerState): Announcement => ({ tone: state.tone, text: `${state.chip}. ${state.headline.replace(/\.$/, '')}. ${state.text}` });
 
 export function createBannerController(): BannerController {
   const store = createStore<BannerView>(EMPTY);

@@ -75,6 +75,21 @@ describe('budgets', () => {
     expectRefused(baseSource({ budgets: { heavy_op_threshold: 0 } }), 'sources[0].budgets.heavy_op_threshold', 'must be at least 1');
   });
 
+  it('accepts a request rate of one and any larger whole number up to the safe-integer limit', () => {
+    expect(firstSource(load(baseSource({ budgets: { requests_per_minute: 1 } }))).budgets.requestsPerMinute).toBe(1);
+    expect(firstSource(load(baseSource({ budgets: { requests_per_minute: 1_000_000 } }))).budgets.requestsPerMinute).toBe(1_000_000);
+    expect(firstSource(load(baseSource({ budgets: { requests_per_minute: Number.MAX_SAFE_INTEGER } }))).budgets.requestsPerMinute).toBe(Number.MAX_SAFE_INTEGER);
+  });
+
+  it('refuses a request rate of zero, a negative one, a fraction, a string and one past the safe-integer limit', () => {
+    const field = 'sources[0].budgets.requests_per_minute';
+    expectRefused(baseSource({ budgets: { requests_per_minute: 0 } }), field, 'must be at least 1');
+    expectRefused(baseSource({ budgets: { requests_per_minute: -5 } }), field, 'must be at least 1');
+    expectRefused(baseSource({ budgets: { requests_per_minute: 2.5 } }), field, 'must be int');
+    expectRefused(baseSource({ budgets: { requests_per_minute: 'many' } }), field, 'must be number');
+    expectRefused(baseSource({ budgets: { requests_per_minute: Number.MAX_SAFE_INTEGER + 2 } }), field, 'must be at most 9007199254740991');
+  });
+
   it('refuses a budget that is not an integer', () => {
     expectRefused(baseSource({ budgets: { max_hops: 2.5 } }), 'sources[0].budgets.max_hops', 'must be int');
     expectRefused(baseSource({ budgets: { max_hops: 'two' } }), 'sources[0].budgets.max_hops', 'must be number');
@@ -99,6 +114,7 @@ describe('budgets', () => {
       sourceConcurrency: 32,
       queueWaitMs: 2000,
       heavyOpThreshold: 500,
+      requestsPerMinute: 120,
     });
     expect(BUDGET_DEFAULTS.maxPage).toBe(50);
   });

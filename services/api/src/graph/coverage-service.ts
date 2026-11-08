@@ -34,7 +34,7 @@ export function createCoverageService(deps: CoverageDeps): CoverageService {
     async coverage(call) {
       if (call.entities.some((entity) => entity.ref.sourceId !== call.sourceId)) throw new AppError('SOURCE_MISMATCH');
       if (new Set(call.entities.map((entity) => `${entity.ref.entityType}\u0000${entity.ref.stableId}`)).size !== call.entities.length) throw new AppError('INVALID_REQUEST');
-      await deps.access.require({ traceId: call.traceId, principal: call.principal, sourceId: call.sourceId, auditAction: degreePreviewBoundedTemplate.auditAction });
+      await deps.access.require({ traceId: call.traceId, principal: call.principal, sourceId: call.sourceId, auditAction: degreePreviewBoundedTemplate.auditAction, rate: 'count' });
       const source = deps.mapping.sources.find((candidate) => candidate.id === call.sourceId);
       if (source === undefined || call.entities.some((entity) => !source.entities.some((known) => known.type === entity.ref.entityType))) throw new AppError('NOT_FOUND');
       const cache = deps.cache;

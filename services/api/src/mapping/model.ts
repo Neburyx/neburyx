@@ -102,6 +102,7 @@ export interface BudgetsModel {
   readonly sourceConcurrency: number;
   readonly queueWaitMs: number;
   readonly heavyOpThreshold: number;
+  readonly requestsPerMinute: number;
 }
 
 export interface DemoCaseModel {

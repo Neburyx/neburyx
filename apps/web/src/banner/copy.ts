@@ -11,3 +11,8 @@ export const HEAVY_CHIP = 'Heavy operation';
 export const HEAVY_SIDE_LABEL = 'Estimated matches';
 export const REFINE_FILTERS = 'Refine filters';
 export const continueWith = (limit: number): string => `Continue with ${limit}`;
+export const RATE_LIMITED_CHIP = 'Rate limited';
+export const rateLimitedHeadline = (seconds: number): string => (seconds > 0 ? `Too many requests. Retry after ${seconds} s.` : 'Too many requests. You can retry now.');
+export const RATE_LIMITED_TEXT = 'Loaded graph and filters preserved; nothing was read. The wait is set by the server.';
+export const rateLimitedSideLabel = (seconds: number): string => (seconds > 0 ? `Retry after ${seconds} s` : 'Retry now');
+export const rateLimitedRetry = (seconds: number): string => (seconds > 0 ? `Retry in ${seconds} s` : RETRY);

@@ -98,6 +98,20 @@ while the session of the page before is still closing), so a read that has its s
 close that was given up, the pool is the backstop. A lease whose release is lost frees itself after the time left to the request's deadline plus the source's
 `timeout_ms`.
 
+**Request rate.** Apart from the slots, a person may make `requests_per_minute` requests to a source in any 60 seconds
+(default 120, a whole number from 1; a source sets its own in `budgets`). The window slides: it holds the time of each request
+that was admitted in the last 60 seconds. The request over the limit answers `RATE_LIMITED` (429, retryable) before anything is
+read, with `details.retryAfterMs`, the time until the oldest counted request is 60 seconds old, and a `Retry-After` header in
+whole seconds; a request sent after that wait is admitted. A refused request is not counted, so waiting that long is always
+enough. It paces and never caps: nothing is counted over a day or a session. The count is kept per person and per source in the
+API process, so each process that serves requests has its own, and a restart empties it. These nine requests count, one each
+however many reads they make: opening an entity (by path or by lookup), a search and each further page of one, a degree preview,
+the coverage count, an expansion, opening an investigation, and `POST /v1/sources/:id/test`. A request counts once the person is
+known to be allowed to read the source and its body is valid, so an unknown source, a source the person may not read and a
+malformed request answer as they did and are not counted. The list of investigations, an investigation read, the person, the
+sources and their profiles, the health probes and the product's own reads (schema reads, pings, start-up checks, the
+`test-source` command) are not counted. Changing `requests_per_minute` changes the source's `configHash`, as every budget does.
+
 **Neo4j tests.** `pnpm test:neo4j` runs the `*.neo4j.test.ts` files against a Neo4j Enterprise 5.26 server that you own, not in CI
 (`packages/test-neo4j/README.md` has the three variables, the login it needs and what the tests create). Each file makes
 its own database and drops it. Sources are read with a login of the run that can only read that database, so a report

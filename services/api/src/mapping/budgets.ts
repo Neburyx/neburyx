@@ -11,6 +11,7 @@ export const BUDGET_DEFAULTS: BudgetsModel = {
   sourceConcurrency: 32,
   queueWaitMs: 2000,
   heavyOpThreshold: 500,
+  requestsPerMinute: 120,
 };
 
 export const MIN_DEFAULT_PAGE = 10;
@@ -39,6 +40,7 @@ export const budgetsSchema = z.strictObject({
   source_concurrency: bounded(1, CEILINGS.sourceConcurrency).optional(),
   queue_wait_ms: bounded(1, CEILINGS.queueWaitMs).optional(),
   heavy_op_threshold: z.number().int().min(1).optional(),
+  requests_per_minute: z.number().int().min(1).optional(),
 });
 
 export type RawBudgets = z.infer<typeof budgetsSchema>;
@@ -54,5 +56,6 @@ export function resolveBudgets(raw: RawBudgets | undefined): BudgetsModel {
     sourceConcurrency: raw?.source_concurrency ?? BUDGET_DEFAULTS.sourceConcurrency,
     queueWaitMs: raw?.queue_wait_ms ?? BUDGET_DEFAULTS.queueWaitMs,
     heavyOpThreshold: raw?.heavy_op_threshold ?? BUDGET_DEFAULTS.heavyOpThreshold,
+    requestsPerMinute: raw?.requests_per_minute ?? BUDGET_DEFAULTS.requestsPerMinute,
   };
 }

@@ -69,7 +69,7 @@ function previewOf(request: DegreePreviewRequest, source: SourceModel, pairs: re
 export function createDegreePreviewService(deps: { readonly gate: Gate; readonly mapping: MappingModel; readonly access: SourceAccess; readonly entities: EntityReader; readonly verdicts: DegreeVerdicts; readonly cache?: { readonly store: DegreeCache; readonly audit: AuditSink; readonly logger: { warn(fields: object, message: string): void } } }): DegreePreviewService {
   return {
     async preview(request) {
-      await deps.access.require({ traceId: request.traceId, principal: request.principal, sourceId: request.sourceId, auditAction: degreePreviewBoundedTemplate.auditAction });
+      await deps.access.require({ traceId: request.traceId, principal: request.principal, sourceId: request.sourceId, auditAction: degreePreviewBoundedTemplate.auditAction, rate: 'count' });
       const source = deps.mapping.sources.find((candidate) => candidate.id === request.sourceId);
       if (source === undefined || !source.entities.some((entity) => entity.type === request.entityType)) throw new AppError('NOT_FOUND');
       const pairs = degreePairsOf(source.relationships, request.entityType);

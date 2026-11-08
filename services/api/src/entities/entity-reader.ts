@@ -14,6 +14,8 @@ export interface EntityReadRequest {
   readonly entityType: string;
   readonly stableId: string;
   readonly mask: boolean;
+  /** Set by the route that is the request's own; an inner read for another request leaves it out. */
+  readonly rate?: 'count';
 }
 
 export interface EntityReader {

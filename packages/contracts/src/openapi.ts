@@ -24,6 +24,8 @@ export interface OpenApiDocument {
   readonly components: { readonly schemas: { readonly CoverageRequest: Record<string, unknown>; readonly CoverageResponse: Record<string, unknown>; readonly DegreePreview: Record<string, unknown>; readonly DegreePreviewRequest: Record<string, unknown>; readonly EntityLookupRequest: Record<string, unknown>; readonly ErrorResponse: Record<string, unknown>; readonly ExpandRequest: Record<string, unknown>; readonly ExpandResponse: Record<string, unknown>; readonly GraphNode: Record<string, unknown>; readonly HealthResponse: Record<string, unknown>; readonly InvestigationListResponse: Record<string, unknown>; readonly InvestigationResponse: Record<string, unknown>; readonly MeResponse: Record<string, unknown>; readonly OpenInvestigationRequest: Record<string, unknown>; readonly OpenInvestigationResponse: Record<string, unknown>; readonly ReadyResponse: Record<string, unknown>; readonly SearchMoreRequest: Record<string, unknown>; readonly SearchMoreResult: Record<string, unknown>; readonly SearchRequest: Record<string, unknown>; readonly SearchResult: Record<string, unknown>; readonly SourceProfile: Record<string, unknown>; readonly SourceTestReport: Record<string, unknown>; readonly SourcesResponse: Record<string, unknown> } };
 }
 
+const RETRY_AFTER_HEADER = { 'Retry-After': { description: 'Whole seconds to wait', schema: { type: 'integer', minimum: 1 } } };
+
 function schemaJson(schema: z.ZodType): Record<string, unknown> {
   const { $schema: _dialect, ...json } = z.toJSONSchema(schema, { target: 'draft-2020-12' });
   return json;
@@ -126,8 +128,8 @@ export function buildOpenApiDocument(
           responses: {
             '200': { description: 'The report of the run', content: jsonBody('SourceTestReport') },
             '400': { description: 'A body or a query parameter was sent', content: jsonBody('ErrorResponse') },
-            '403': { description: 'The policy does not allow this principal to read the source', content: jsonBody('ErrorResponse') },
-            '404': { description: 'No configured source has this id', content: jsonBody('ErrorResponse') },
+            '404': { description: 'No configured source has this id, or the person may not read it (one answer for both)', content: jsonBody('ErrorResponse') },
+            '429': { description: 'Too many requests from this person to this source in the last minute: nothing was read; details.retryAfterMs and the Retry-After header (whole seconds) say how long to wait', headers: RETRY_AFTER_HEADER, content: jsonBody('ErrorResponse') },
             '500': { description: 'The run could not be completed', content: jsonBody('ErrorResponse') },
             '503': { description: 'The source is busy, or stopped answering during the schema reads', content: jsonBody('ErrorResponse') },
             '504': { description: 'The source did not answer a schema read in time', content: jsonBody('ErrorResponse') },
@@ -150,6 +152,7 @@ export function buildOpenApiDocument(
             '200': { description: 'The entity', content: jsonBody('GraphNode') },
             '400': { description: 'A query parameter other than mask was sent, the stable ID is too long, or the entity type is not in the mapping', content: jsonBody('ErrorResponse') },
             '404': { description: 'No configured source has this id, the person may not read it (one answer for these), or the source holds no such entity', content: jsonBody('ErrorResponse') },
+            '429': { description: 'Too many requests from this person to this source in the last minute: nothing was read; details.retryAfterMs and the Retry-After header (whole seconds) say how long to wait', headers: RETRY_AFTER_HEADER, content: jsonBody('ErrorResponse') },
             '500': { description: 'The read could not be completed', content: jsonBody('ErrorResponse') },
             '503': { description: 'The source is not available, or is busy', content: jsonBody('ErrorResponse') },
             '504': { description: 'The source did not answer in time', content: jsonBody('ErrorResponse') },
@@ -168,6 +171,7 @@ export function buildOpenApiDocument(
             '400': { description: 'The body is not valid, or the reference or the masked value is refused (one answer for all)', content: jsonBody('ErrorResponse') },
             '404': { description: 'No such entity, or the source is not configured or may not be read (one answer for all)', content: jsonBody('ErrorResponse') },
             '415': { description: 'The body is not JSON', content: jsonBody('ErrorResponse') },
+            '429': { description: 'Too many requests from this person to this source in the last minute: nothing was read; details.retryAfterMs and the Retry-After header (whole seconds) say how long to wait', headers: RETRY_AFTER_HEADER, content: jsonBody('ErrorResponse') },
             '500': { description: 'The entity could not be read', content: jsonBody('ErrorResponse') },
             '503': { description: 'The source is not available, or is busy', content: jsonBody('ErrorResponse') },
             '504': { description: 'The source did not answer in time', content: jsonBody('ErrorResponse') },
@@ -202,6 +206,7 @@ export function buildOpenApiDocument(
             '400': { description: 'The body or the query is not valid, the entity type is not in the mapping, or the entity names another source than the request', content: jsonBody('ErrorResponse') },
             '404': { description: 'No configured source has this id, the person may not read it (one answer for these), or the source holds no such entity', content: jsonBody('ErrorResponse') },
             '415': { description: 'The body is not JSON', content: jsonBody('ErrorResponse') },
+            '429': { description: 'Too many requests from this person to this source in the last minute: nothing was read; details.retryAfterMs and the Retry-After header (whole seconds) say how long to wait', headers: RETRY_AFTER_HEADER, content: jsonBody('ErrorResponse') },
             '500': { description: 'The investigation could not be written', content: jsonBody('ErrorResponse') },
             '503': { description: 'The source is not available, or is busy', content: jsonBody('ErrorResponse') },
             '504': { description: 'The source did not answer in time', content: jsonBody('ErrorResponse') },
@@ -235,6 +240,7 @@ export function buildOpenApiDocument(
             '400': { description: 'The body or the query is not valid, or the text is not 1 to 200 characters (2 to 200 with typeahead)', content: jsonBody('ErrorResponse') },
             '404': { description: 'No configured source has this id, or the person may not read it (one answer for both)', content: jsonBody('ErrorResponse') },
             '415': { description: 'The body is not JSON', content: jsonBody('ErrorResponse') },
+            '429': { description: 'Too many requests from this person to this source in the last minute: nothing was read; details.retryAfterMs and the Retry-After header (whole seconds) say how long to wait', headers: RETRY_AFTER_HEADER, content: jsonBody('ErrorResponse') },
             '500': { description: 'The search could not run', content: jsonBody('ErrorResponse') },
             '503': { description: 'The source is not available, or is busy', content: jsonBody('ErrorResponse') },
             '504': { description: 'The source did not answer in time', content: jsonBody('ErrorResponse') },
@@ -254,6 +260,7 @@ export function buildOpenApiDocument(
             '404': { description: 'No configured source has this id, or the person may not read it (one answer for both)', content: jsonBody('ErrorResponse') },
             '409': { description: 'The cursor is not valid for this request (CURSOR_INVALIDATED): search again', content: jsonBody('ErrorResponse') },
             '415': { description: 'The body is not JSON', content: jsonBody('ErrorResponse') },
+            '429': { description: 'Too many requests from this person to this source in the last minute: nothing was read; details.retryAfterMs and the Retry-After header (whole seconds) say how long to wait', headers: RETRY_AFTER_HEADER, content: jsonBody('ErrorResponse') },
             '500': { description: 'The page could not be read', content: jsonBody('ErrorResponse') },
             '503': { description: 'The source is not available', content: jsonBody('ErrorResponse') },
           },
@@ -271,6 +278,7 @@ export function buildOpenApiDocument(
             '400': { description: 'The body is not valid', content: jsonBody('ErrorResponse') },
             '404': { description: 'The node is not in the source, or the source is not configured or may not be read (one answer for all)', content: jsonBody('ErrorResponse') },
             '415': { description: 'The body is not JSON', content: jsonBody('ErrorResponse') },
+            '429': { description: 'Too many requests from this person to this source in the last minute: nothing was read; details.retryAfterMs and the Retry-After header (whole seconds) say how long to wait', headers: RETRY_AFTER_HEADER, content: jsonBody('ErrorResponse') },
             '500': { description: 'The preview could not run, or the source answered with something unreadable', content: jsonBody('ErrorResponse') },
             '503': { description: 'The source is not available, or is busy', content: jsonBody('ErrorResponse') },
             '504': { description: 'The source did not answer in time', content: jsonBody('ErrorResponse') },
@@ -289,6 +297,7 @@ export function buildOpenApiDocument(
             '400': { description: 'The body is not valid, or names an entity of another source', content: jsonBody('ErrorResponse') },
             '404': { description: 'An entity type is not in the mapping, or the source is not configured or may not be read (one answer for all)', content: jsonBody('ErrorResponse') },
             '415': { description: 'The body is not JSON', content: jsonBody('ErrorResponse') },
+            '429': { description: 'Too many requests from this person to this source in the last minute: nothing was read; details.retryAfterMs and the Retry-After header (whole seconds) say how long to wait', headers: RETRY_AFTER_HEADER, content: jsonBody('ErrorResponse') },
             '503': { description: 'The source is not available', content: jsonBody('ErrorResponse') },
           },
         },
@@ -307,6 +316,7 @@ export function buildOpenApiDocument(
             '409': { description: 'A cursor is altered, expired or for another request (CURSOR_INVALIDATED)', content: jsonBody('ErrorResponse') },
             '415': { description: 'The body is not JSON', content: jsonBody('ErrorResponse') },
             '422': { description: 'The page size is over the source maximum (QUERY_BUDGET_EXCEEDED)', content: jsonBody('ErrorResponse') },
+            '429': { description: 'Too many requests from this person to this source in the last minute: nothing was read; details.retryAfterMs and the Retry-After header (whole seconds) say how long to wait', headers: RETRY_AFTER_HEADER, content: jsonBody('ErrorResponse') },
             '500': { description: 'The expansion could not run, or the source answered with something unreadable', content: jsonBody('ErrorResponse') },
             '503': { description: 'The source is not available, or is busy', content: jsonBody('ErrorResponse') },
             '504': { description: 'The source did not answer in time', content: jsonBody('ErrorResponse') },

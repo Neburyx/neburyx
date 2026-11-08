@@ -1,5 +1,6 @@
 import { partialDetailsSchema } from '@neburyx/contracts';
 import { createBannerController, type BannerController, type BannerDescriber } from './banner-controller.js';
+import { registerRateLimitedCause } from './rate-limited-cause.js';
 import { BUSY_CHIP, BUSY_SIDE_LABEL, BUSY_TEXT, busyHeadline, PARTIAL_CHIP, PARTIAL_TEXT, RETRY } from './copy.js';
 
 export const PARTIAL_BANNER_ID = 'partial';
@@ -40,6 +41,7 @@ export const describeBusy: BannerDescriber = (_failure, context) => {
 export function registerBuiltInBannerCauses(controller: BannerController): void {
   controller.registerCause('PARTIAL_RESULT', describePartial);
   controller.registerCause('SOURCE_BUSY', describeBusy);
+  registerRateLimitedCause(controller);
 }
 
 export function createBuiltInBannerController(): BannerController {

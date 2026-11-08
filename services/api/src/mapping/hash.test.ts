@@ -191,7 +191,7 @@ describe('fixed hash vectors', () => {
   });
 
   it('gives a fixed digest for a fixed mapping, so the hash cannot change silently', () => {
-    expect(hashOf(baseSource())).toBe('7f64d76ec7da1d267bcd7e31efdbfbebc0169b61472d7db802e5e503b979acba');
+    expect(hashOf(baseSource())).toBe('a6498b3c7bccf5194ad815dd0f19d0f0e9437ddf81862901237ec7edf1c3d3da');
   });
 });
 
@@ -219,7 +219,14 @@ describe('the demo case in the config hash', () => {
   });
 
   it('leaves the hash of a source without a demo case as it was before the key existed', () => {
-    expect(hashOf(baseSource())).toBe('7f64d76ec7da1d267bcd7e31efdbfbebc0169b61472d7db802e5e503b979acba');
-    expect(hashOf(baseSource({ synthetic: true }))).toBe('fb2ec3f7cb9a4a89ccbe5ab5fa4ff677cfe0eebf99e332668ce412f9498f98b6');
+    expect(hashOf(baseSource())).toBe('a6498b3c7bccf5194ad815dd0f19d0f0e9437ddf81862901237ec7edf1c3d3da');
+    expect(hashOf(baseSource({ synthetic: true }))).toBe('35b8c39c3783fef20ac6e54b9451456eb66ec6374d28abe48558dd83fa424e03');
+  });
+});
+
+describe('the request rate in the config hash', () => {
+  it('changes the hash of its source, as every other budget does', () => {
+    expect(hashOf(baseSource({ budgets: { requests_per_minute: 30 } }))).not.toBe(hashOf(baseSource()));
+    expect(hashOf(baseSource({ budgets: { requests_per_minute: 120 } }))).toBe(hashOf(baseSource()));
   });
 });

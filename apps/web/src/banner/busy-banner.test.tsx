@@ -90,7 +90,7 @@ describe('the Busy banner of an expansion', () => {
     act(() => void expand.expand(ref('a', 'type-a', 'n1'), ['type-a']));
     await act(async () => expansions[0]?.answer({ ok: false, failure: busy() }));
     const polite = document.querySelector('[aria-live="polite"]');
-    expect(polite?.textContent).toBe('Busy. Demo source is busy. No read slot freed within the wait.. Loaded graph and filters preserved; nothing was read. Retry when ready.');
+    expect(polite?.textContent).toBe('Busy. Demo source is busy. No read slot freed within the wait. Loaded graph and filters preserved; nothing was read. Retry when ready.');
     const user = userEvent.setup();
     await user.tab();
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Retry' }));

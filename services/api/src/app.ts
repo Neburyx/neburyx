@@ -24,6 +24,7 @@ import { createSearchService } from './search/search-service.js';
 import { createInvestigationService } from './investigations/investigation-service.js';
 import { createStoredReferences } from './investigations/stored-references.js';
 import { createSourceAccess } from './investigations/source-access.js';
+import { createRequestLimiter, type RequestLimiter } from './rate/request-limiter.js';
 import type { Gate, IndexReader } from './gate/types.js';
 import type { JobRunner } from './jobs/runner.js';
 import type { MappingModel } from './mapping/model.js';
@@ -58,9 +59,13 @@ export interface AppOptions {
   readonly stopPing?: (() => void) | undefined;
   readonly drainPing?: (() => Promise<void>) | undefined;
   readonly closeSources?: (() => Promise<void>) | undefined;
+  /** The request rate of this copy; a test passes one with its own clock. */
+  readonly limiter?: RequestLimiter;
 }
 
 const API_PREFIX = '/v1';
+/** The audit action of a denied test of a source through the route. */
+const SOURCE_TEST_AUDIT_ACTION = 'source.test';
 /** The router answers a path parameter longer than its limit as an unknown route (404). No limit here leaves the length of a stable ID to its schema, which answers INVALID_REQUEST, and the length of the whole request line to the HTTP parser. */
 const NO_PATH_PARAMETER_LIMIT = Number.MAX_SAFE_INTEGER;
 const noQuerySchema = z.strictObject({});
@@ -80,10 +85,13 @@ function isApiPath(url: string): boolean {
 }
 
 function sendApiError(reply: FastifyReply, request: FastifyRequest, code: ErrorCode, details?: unknown): FastifyReply {
+  const body = errorResponse(code, request.id, details);
+  const waitMs = code === 'RATE_LIMITED' ? body.error.details?.retryAfterMs : undefined;
+  if (waitMs !== undefined) reply.header('retry-after', String(Math.ceil(waitMs / 1000)));
   return reply
     .header(TRACE_HEADER, request.id)
     .code(errorStatus(code))
-    .send(errorResponse(code, request.id, details));
+    .send(body);
 }
 
 const apiRoutes = new WeakMap<FastifyInstance, { readonly method: string; readonly url: string }[]>();
@@ -268,6 +276,9 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
   });
 
   const mapping: MappingModel = options.mapping ?? { sources: [] };
+  const limiter = options.limiter ?? createRequestLimiter();
+  app.addHook('onClose', async () => limiter.close());
+  const access = createSourceAccess({ mapping, seams: options.seams ?? communitySeams(), logger: options.logger, limiter });
 
   app.get('/v1/me', { exposeHeadRoute: false, config: { permission: 'principal' } }, async () => {
     const [identity, rows] = await Promise.all([options.store.current(), options.store.listSources()]);
@@ -300,12 +311,12 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
     if (!params.success) throw new AppError('INVALID_REQUEST');
     if (options.sourceTester === undefined) throw new AppError('INTERNAL_ERROR');
     const identity = await options.store.current();
+    await access.require({ traceId: request.id, principal: identity.principal, sourceId: params.data.id, auditAction: SOURCE_TEST_AUDIT_ACTION, rate: 'count' });
     const report = await options.sourceTester.run({ traceId: request.id, principal: identity.principal, sourceId: params.data.id });
     return sourceTestReportSchema.parse(report);
   });
 
   if (options.gate !== undefined) {
-    const access = createSourceAccess({ mapping, seams: options.seams ?? communitySeams(), logger: options.logger });
     const referenceKeys = options.referenceKeys ?? deriveReferenceKeys(randomBytes(32));
     const entities = createEntityReader({ gate: options.gate, mapping, access });
     app.get('/v1/entities/:sourceId/:entityType/:stableId', { exposeHeadRoute: false, config: { permission: 'principal' } }, async (request) => {
@@ -313,7 +324,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       const query = entityQuerySchema.safeParse(request.query);
       if (!path.success || !query.success) throw new AppError('INVALID_REQUEST');
       const identity = await options.store.current();
-      const node = await entities.read({ traceId: request.id, principal: identity.principal, ...path.data, mask: query.data.mask === 'true' });
+      const node = await entities.read({ traceId: request.id, principal: identity.principal, ...path.data, mask: query.data.mask === 'true', rate: 'count' });
       return nodeSchema.parse(node);
     });
 
@@ -322,7 +333,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       if (!noQuerySchema.safeParse(request.query).success || !body.success) throw new AppError('INVALID_REQUEST');
       const identity = await options.store.current();
       const lookup = canonicalLookup(mapping, referenceKeys, body.data);
-      const node = await entities.read({ traceId: request.id, principal: identity.principal, sourceId: body.data.sourceId, ...lookup, mask: body.data.mask === true });
+      const node = await entities.read({ traceId: request.id, principal: identity.principal, sourceId: body.data.sourceId, ...lookup, mask: body.data.mask === true, rate: 'count' });
       return nodeSchema.parse(node);
     });
 

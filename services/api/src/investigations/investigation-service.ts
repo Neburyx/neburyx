@@ -122,6 +122,7 @@ export function createInvestigationService(deps: InvestigationServiceDeps): Inve
       deps.references.authenticate(request.sourceId, request.entity.entityType, request.entity.stableId);
       // the reuse query runs before the type is checked against the mapping, so a type the mapping does not name must at least be text PostgreSQL holds
       if (!isStorableText(request.entity.entityType)) throw new AppError('INVALID_REQUEST');
+      deps.access.admit({ traceId: call.traceId, principal: call.principal, sourceId: request.sourceId });
       const reusable = async (stored: string) => (request.caseRef === undefined ? undefined : deps.store.findReusableInvestigation({ ownerId: call.principal.id, sourceId: request.sourceId, caseRef: request.caseRef, entityType: request.entity.entityType, stableId: stored }));
       // the entity is found under the form it is stored in now, and under the form it had before the mapping changed whether the type is keyed
       let existing: InvestigationRow | undefined;

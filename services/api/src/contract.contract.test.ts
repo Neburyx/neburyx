@@ -465,3 +465,38 @@ describe('the running API against the committed openapi.json', () => {
     expect(await checkErrorResponses(server, loadCommittedDocument(), cases)).toEqual([]);
   });
 });
+
+describe('the request rate in the committed openapi.json', () => {
+  const counted = [
+    '/v1/entities/{sourceId}/{entityType}/{stableId}',
+    '/v1/entities/lookup',
+    '/v1/search/entities',
+    '/v1/search/entities/more',
+    '/v1/graph/preview-expansion',
+    '/v1/graph/coverage',
+    '/v1/graph/expand',
+    '/v1/investigations',
+    '/v1/sources/{id}/test',
+  ];
+
+  it('documents a 429 with a Retry-After header on each of the nine routes that count', () => {
+    const document = loadCommittedDocument();
+    for (const path of counted) {
+      const item = document.paths[path] as Record<string, { responses: Record<string, { headers?: Record<string, unknown> }> }>;
+      const operation = path === '/v1/investigations' ? item['post'] : (item['get'] ?? item['post']);
+      expect(operation?.responses['429']?.headers, path).toHaveProperty('Retry-After');
+    }
+  });
+
+  it('answers a real refusal that matches ErrorResponse, with the status of the code and a Retry-After in whole seconds', async () => {
+    const mapping = parseMapping(fileOf(baseSource({ id: 'demo', budgets: { requests_per_minute: 1 } })), 'neburyx.yaml');
+    const executor = new TestExecutor(() => Promise.resolve(entityRows(plainNode(['NodeA'], { id: 'A-1' }))));
+    const server = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store: memoryAppStore(), mapping, sourceTester: fakeSourceTester(mapping).tester, gate: testSourceGate(mapping, { executor }).gate });
+    await server.inject({ method: 'GET', url: '/v1/entities/demo/node_a/A-1' });
+    const refused = await server.inject({ method: 'GET', url: '/v1/entities/demo/node_a/A-1' });
+    expect(refused.statusCode).toBe(429);
+    expect(refused.headers['retry-after']).toMatch(/^[1-9]\d*$/);
+    const cases: readonly ErrorCase[] = [{ method: 'GET', url: '/v1/entities/demo/node_a/A-1' }];
+    expect(await checkErrorResponses(server, loadCommittedDocument(), cases)).toEqual([]);
+  });
+});
