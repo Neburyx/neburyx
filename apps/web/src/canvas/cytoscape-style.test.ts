@@ -54,9 +54,9 @@ describe('the zoomed-out view', () => {
     expect(styleOf('node.far[?selected], node.far[?focused]')).toEqual({ 'background-image-opacity': [1, 1, 1] });
   });
 
-  it('leaves a relationship without its label below the limit, with a class and not the library\'s own size limit (which counts a rounded texture scale including the display\'s pixel ratio), and not for a selected one', () => {
-    expect(styleOf('edge.far')).toEqual({ label: '' });
-    expect(styleOf('edge.far[?selected], edge.far[?focused]')).toEqual({ label: 'data(label)' });
+  it('leaves a relationship with only its count badge below the limit, with a class and not the library\'s own size limit (which counts a rounded texture scale including the display\'s pixel ratio), and gives the whole label to one that is selected, joins a selected entity or has the walk\'s ring', () => {
+    expect(styleOf('edge.far')).toEqual({ label: 'data(badge)' });
+    expect(styleOf('edge.far[?selected], edge.far[?focused], edge.far[?touched]')).toEqual({ label: 'data(label)' });
     expect(styleOf('edge')?.['min-zoomed-font-size']).toBeUndefined();
     expect(STYLE.some((rule) => 'style' in rule && Reflect.get(rule.style, 'min-zoomed-font-size') !== undefined)).toBe(false);
   });

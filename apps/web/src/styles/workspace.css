@@ -569,6 +569,10 @@
   --icon: url('../assets/lucide/eye-off.svg');
 }
 
+.icon-pin {
+  --icon: url('../assets/lucide/pin.svg');
+}
+
 .icon-focus {
   --icon: url('../assets/lucide/focus.svg');
 }

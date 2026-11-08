@@ -11,27 +11,31 @@ test.describe('above the caption limit', () => {
     expect(await zoomOf(page), 'the sample opens above the limit').toBeGreaterThan(CAPTION_LIMIT);
     const now = await drawing(page);
     expect(now.nodes.every((node) => node.captionShown && node.glyphShown), 'every caption and glyph is drawn').toBe(true);
-    const labelled = now.edges.filter((edge) => edge.label !== '');
-    expect(labelled.map((edge) => edge.label).sort(), 'the relationships that carry a label').toEqual(['SHARED_GADGET · derived', 'USES_GADGET · 42 · exact']);
-    expect(labelled.every((edge) => edge.labelShown), 'every label is drawn').toBe(true);
+    expect(now.edges, 'every relationship is drawn').toHaveLength(13);
+    expect(now.edges.every((edge) => edge.label !== '' && edge.labelShown), 'every relationship, stored or not, draws its label').toBe(true);
+    expect(now.edges.map((edge) => edge.label), 'a derived one and an aggregate carry more than the type').toEqual(expect.arrayContaining(['SHARED_GADGET · derived', 'USES_GADGET · 42 · exact']));
     const at = await screenOf(page, 'holder');
     await page.mouse.move(at.x, at.y);
     await expect(tip(page)).toHaveCount(0);
+    const from = await screenOf(page, 'led-1');
+    const to = await screenOf(page, 'gad-1');
+    await page.mouse.move((from.x + to.x) / 2, (from.y + to.y) / 2);
+    await page.waitForTimeout(200);
+    await expect(tip(page), 'no tip above the limit: the label is drawn').toHaveCount(0);
   });
 });
 
 test.describe('below the caption limit', () => {
-  /** The relationships that carry a label while the captions are read, by id: below the limit their drawn label is empty, so they are named before the zoom. */
-  let labelledIds: string[] = [];
+  /** The count badge of the one aggregate of more than one relationship: the only label drawn below the limit while nothing is selected. */
+  const BADGE = '42 · exact';
+  const shownLabels = async (page: Page): Promise<string[]> => (await drawing(page)).edges.filter((edge) => edge.labelShown).map((edge) => edge.label);
 
   test.beforeEach(async ({ page }) => {
     await openSample(page);
-    labelledIds = (await drawing(page)).edges.filter((edge) => edge.label !== '').map((edge) => edge.id);
-    expect(labelledIds, 'two relationships carry a label').toHaveLength(2);
     await zoomPast(page, 'below');
   });
 
-  test('leaves out every entity caption and the two relationship labels, and keeps every glyph, every line and the pin badge', async ({ page }) => {
+  test('leaves out every entity caption and every relationship label but the count badge of an aggregate of more than one, and keeps every glyph, every line and the pin badge', async ({ page }) => {
     expect(await zoomOf(page)).toBeLessThan(CAPTION_LIMIT);
     const now = await drawing(page);
     expect(now.nodes, 'every entity is still drawn').toHaveLength(10);
@@ -40,10 +44,7 @@ test.describe('below the caption limit', () => {
     expect(now.nodes.filter((node) => node.badgeShown), 'the pinned entity, and only it, keeps its badge').toHaveLength(1);
     expect(now.edges, 'every relationship is still drawn').toHaveLength(13);
     expect(now.edges.every((edge) => edge.width > 0 && edge.lineShown), 'every line is drawn: a width, and neither hidden nor transparent').toBe(true);
-    const labelled = now.edges.filter((edge) => labelledIds.includes(edge.id));
-    expect(labelled, 'the same two relationships are still drawn').toHaveLength(2);
-    expect(labelled.some((edge) => edge.labelShown), 'a label is drawn').toBe(false);
-    expect(now.edges.some((edge) => edge.labelShown), 'a label of any relationship is drawn').toBe(false);
+    expect(await shownLabels(page), 'only the count badge is drawn').toEqual([BADGE]);
   });
 
   test('keeps the label of a walked relationship and of a selected one, and no other', async ({ page }) => {
@@ -53,13 +54,23 @@ test.describe('below the caption limit', () => {
       await page.keyboard.press('Tab');
       if (((await announcement(page).textContent()) ?? '').startsWith('USES_GADGET · 42 · exact')) break;
     }
-    const shownLabels = async (): Promise<string[]> => (await drawing(page)).edges.filter((edge) => edge.labelShown).map((edge) => edge.label);
-    await expect.poll(shownLabels, { message: 'the walked relationship keeps its label' }).toEqual(['USES_GADGET · 42 · exact']);
+    await expect.poll(() => shownLabels(page), { message: 'the walked relationship keeps its whole label' }).toEqual(['USES_GADGET · 42 · exact']);
     await page.keyboard.press('Space');
     await page.keyboard.press('Escape');
-    await expect.poll(shownLabels, { message: 'the selected relationship keeps its label' }).toEqual(['USES_GADGET · 42 · exact']);
+    await expect.poll(() => shownLabels(page), { message: 'the selected relationship keeps its label' }).toEqual(['USES_GADGET · 42 · exact']);
     await page.keyboard.press('Escape');
-    await expect.poll(shownLabels, { message: 'cleared, no label is drawn' }).toEqual([]);
+    await expect.poll(() => shownLabels(page), { message: 'cleared, only the count badge is drawn' }).toEqual([BADGE]);
+  });
+
+  test('draws the label of every relationship that joins a selected entity, and takes them back when the selection is cleared', async ({ page }) => {
+    await focusCanvas(page);
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Space');
+    await page.keyboard.press('Escape');
+    await expect.poll(async () => (await shownLabels(page)).length, { message: 'the selected holder draws the labels of the relationships it joins' }).toBeGreaterThan(1);
+    expect(await shownLabels(page)).toContain(BADGE);
+    await page.keyboard.press('Escape');
+    await expect.poll(() => shownLabels(page)).toEqual([BADGE]);
   });
 
   test('keeps the caption of a selected entity and of the walk\'s element, and draws each of several selected', async ({ page }) => {
@@ -87,7 +98,7 @@ test.describe('below the caption limit', () => {
     expect((box?.y ?? 0) + (box?.height ?? 0), 'the tip ends inside the canvas').toBeLessThanOrEqual((canvas?.y ?? 0) + (canvas?.height ?? 0));
   });
 
-  test('tells a relationship that has a label by it, and tells nothing for one that has none', async ({ page }) => {
+  test('tells every relationship by its label under the pointer, a stored one by its type', async ({ page }) => {
     const from = await screenOf(page, 'led-1');
     const to = await screenOf(page, 'gad-1');
     await page.mouse.move((from.x + to.x) / 2, (from.y + to.y) / 2);
@@ -98,8 +109,8 @@ test.describe('below the caption limit', () => {
     await page.mouse.move(a.x + 400, a.y + 300);
     await expect(tip(page)).toHaveCount(0);
     await page.mouse.move((a.x + b.x) / 2, (a.y + b.y) / 2);
-    await page.waitForTimeout(200);
-    await expect(tip(page), 'a stored relationship has no label to tell').toHaveCount(0);
+    await expect(tip(page), 'a stored relationship tells its type').toHaveCount(1);
+    expect((await tipLines(page))[0], 'the type of the stored relationship').toMatch(/^[A-Z_]+$/);
   });
 
   test('goes with a zoom, with a pan of the empty canvas, with the grab of an entity and with the pointer leaving, and comes back with the next entity entered', async ({ page }) => {

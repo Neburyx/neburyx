@@ -123,6 +123,20 @@ describe('collapsing a node', () => {
     expect(nodes()).toEqual(['A', 'B', 'D']);
   });
 
+  it('keeps a pinned neighbor loaded, in place and pinned when its loader is collapsed, and unpinning it later does not unload it', async () => {
+    const { store, reply, state, nodes } = rig();
+    reply(A, { neighbors: [B, C] });
+    await store.expand(A, ['kind-b']);
+    state.presentation.setPosition(elementKey(B), { x: 40, y: 50 });
+    state.presentation.pin([elementKey(B)]);
+    store.collapse(A);
+    expect(nodes()).toEqual(['A', 'B']);
+    expect(state.presentation.view.getState().pins.has(elementKey(B))).toBe(true);
+    expect(state.presentation.view.getState().positions.get(elementKey(B))).toEqual({ x: 40, y: 50 });
+    state.presentation.unpin([elementKey(B)]);
+    expect(nodes()).toEqual(['A', 'B']);
+  });
+
   it('keeps a neighbor that was itself expanded, with what it loaded, and does not cascade', async () => {
     const { store, reply, nodes, edges } = rig();
     reply(A, { neighbors: [B, C] });

@@ -26,19 +26,56 @@ async function rigWithChain() {
 }
 
 describe('the neighborhood focus on the canvas', () => {
-  it('draws the focused entity and its neighbors with their aggregate nodes and none of an entity set aside, and asks for nothing', async () => {
+  it('draws the focused entity and its neighbors and no aggregate node while focus is on, draws them all again on leaving, and asks for nothing', async () => {
     const rig = await rigWithChain();
     const requests = [rig.previews.length, rig.expansions.length];
     expect(lastScene(rig)?.entities.filter((entity) => entity.remainder === true).map((entity) => entity.id)).toEqual([aggregateKey(n1, 'kind-b'), aggregateKey(n3, 'kind-b')]);
     act(() => rig.state.focusOn(n1));
     expect(lastScene(rig)?.entities.filter((entity) => entity.remainder !== true).map((entity) => entity.id)).toEqual([n1, n2]);
-    expect(lastScene(rig)?.entities.filter((entity) => entity.remainder === true).map((entity) => entity.id)).toEqual([aggregateKey(n1, 'kind-b')]);
-    expect(rig.state.presentation.view.getState().sceneItems).toEqual([aggregateKey(n1, 'kind-b')]);
+    expect(lastScene(rig)?.entities.filter((entity) => entity.remainder === true)).toEqual([]);
+    const drawn = new Set(lastScene(rig)?.entities.map((entity) => entity.id));
+    expect(lastScene(rig)?.relationships.filter((link) => !drawn.has(link.from) || !drawn.has(link.to))).toEqual([]);
+    expect(rig.state.presentation.view.getState().sceneItems).toEqual([]);
     act(() => rig.state.focusOn(n3));
     expect(lastScene(rig)?.entities.filter((entity) => entity.remainder !== true).map((entity) => entity.id)).toEqual([n2, n3, n4]);
     act(() => rig.state.presentation.leaveFocus());
     expect(lastScene(rig)?.entities.filter((entity) => entity.remainder !== true)).toHaveLength(4);
+    expect(lastScene(rig)?.entities.filter((entity) => entity.remainder === true).map((entity) => entity.id)).toEqual([aggregateKey(n1, 'kind-b'), aggregateKey(n3, 'kind-b')]);
     expect([rig.previews.length, rig.expansions.length]).toEqual(requests);
+  });
+
+  it('keeps drawing no placeholder when the loaded graph changes inside focus, and on leaving draws those of the graph as it is then, with no count changed', async () => {
+    const rig = await rigWithChain();
+    const loadedCount = (): number => rig.state.investigation.getState().nodeRefs.length;
+    const requests = [rig.previews.length, rig.expansions.length];
+    act(() => rig.state.focusOn(n1));
+    await rig.open('n2');
+    await answerPreview(rig.previews[2], preview);
+    const remainders = () => lastScene(rig)?.entities.filter((entity) => entity.remainder === true).map((entity) => entity.id);
+    expect(remainders()).toEqual([]);
+    expect(rig.state.presentation.view.getState().sceneItems).toEqual([]);
+    expect(loadedCount()).toBe(4);
+    act(() => rig.state.presentation.leaveFocus());
+    expect(remainders()).toEqual([aggregateKey(n1, 'kind-b'), aggregateKey(n2, 'kind-b'), aggregateKey(n3, 'kind-b')]);
+    act(() => rig.state.focusOn(n1));
+    act(() => rig.state.setLoaded(rig.state.investigation.getState().resultKeys, rig.state.investigation.getState().nodeRefs.filter((candidate) => elementKey(candidate) !== n3), rig.state.investigation.getState().edgeRefs.filter((candidate) => 'stableId' in candidate && candidate.stableId === 'e1')));
+    expect(remainders()).toEqual([]);
+    act(() => rig.state.presentation.leaveFocus());
+    expect(remainders()).toEqual([aggregateKey(n1, 'kind-b'), aggregateKey(n2, 'kind-b')]);
+    expect(loadedCount()).toBe(3);
+    expect([rig.previews.length, rig.expansions.length]).toEqual([(requests[0] ?? 0) + 1, requests[1]]);
+  });
+
+  it('moves the walk off a placeholder when focus starts, and holds no placeholder in the walk order', async () => {
+    const rig = await rigWithChain();
+    act(() => rig.state.presentation.walkTo(aggregateKey(n1, 'kind-b')));
+    expect(rig.state.presentation.view.getState().focused).toBe(aggregateKey(n1, 'kind-b'));
+    act(() => rig.state.focusOn(n1));
+    expect(rig.state.presentation.view.getState().focused).toBeUndefined();
+    const order = walkOrder(rig.state.visibleGraph(), rig.state.presentation.view.getState().sceneItems);
+    expect(order).not.toContain(aggregateKey(n1, 'kind-b'));
+    expect(order).not.toContain(aggregateKey(n3, 'kind-b'));
+    expect(order).toContain(n2);
   });
 
   it('leaves the walk, select all and invert selection with the drawn entities only', async () => {

@@ -58,22 +58,22 @@ describe('the selection action stand-ins', () => {
   it('fill the places of the actions that are not built yet, in the order of the design', () => {
     const registry = createSelectionActionRegistry();
     registerStandInActions(registry);
-    expect(labels(registry)).toEqual(['Expand', 'Paths between', 'Group', 'Pin', 'Hide']);
+    expect(labels(registry)).toEqual(['Expand', 'Paths between', 'Group', 'Hide']);
   });
 
   it('leave a place that is taken alone, add nothing twice and do not throw', () => {
     const registry = createSelectionActionRegistry();
-    registry.register({ id: 'stand-in-pin', label: 'Real pin', icon: null, run: () => undefined });
+    registry.register({ id: 'stand-in-group', label: 'Real group', icon: null, run: () => undefined });
     expect(() => registerStandInActions(registry)).not.toThrow();
     registerStandInActions(registry);
-    expect(labels(registry)).toEqual(['Expand', 'Paths between', 'Group', 'Hide', 'Real pin']);
+    expect(labels(registry)).toEqual(['Expand', 'Paths between', 'Hide', 'Real group']);
   });
 
   it('are taken out by the function they return, and only what they put in', () => {
     const registry = createSelectionActionRegistry();
-    registry.register({ id: 'stand-in-pin', label: 'Real pin', icon: null, run: () => undefined });
+    registry.register({ id: 'stand-in-group', label: 'Real group', icon: null, run: () => undefined });
     registerStandInActions(registry)();
-    expect(labels(registry)).toEqual(['Real pin']);
+    expect(labels(registry)).toEqual(['Real group']);
   });
 });
 
@@ -126,11 +126,11 @@ describe('the menu item stand-ins', () => {
   const idsOf = (registry: MenuRegistry, kind: MenuTargetKind): string[] => (registry.view.getState().get(kind) ?? []).map((item) => item.id);
   const labelsOf = (registry: MenuRegistry, kind: MenuTargetKind): string[] => (registry.view.getState().get(kind) ?? []).map((item) => (typeof item.label === 'string' ? item.label : '(from the target)'));
 
-  it('leave the menus of production as they are before they are installed: the canvas menu holds its seven items, the entity menu its six, the relationship menu none', () => {
+  it('leave the menus of production as they are before they are installed: the canvas menu holds its seven items, the entity menu its seven, the relationship menu none', () => {
     const registry = createMenuRegistry();
     registerBuiltInMenuItems(registry);
     expect(idsOf(registry, 'canvas')).toEqual(['fit-to-view', 'select-all', 'invert-selection', 'show-hidden', 'leave-focus', 'layout', 'show-legend']);
-    expect(idsOf(registry, 'node')).toEqual(['expand-neighbors', 'expand-by-neighbor-type', 'expand-by-type', 'collapse', 'focus-neighborhood', 'invert-selection', 'hide-from-view']);
+    expect(idsOf(registry, 'node')).toEqual(['expand-neighbors', 'expand-by-neighbor-type', 'expand-by-type', 'collapse', 'focus-neighborhood', 'invert-selection', 'pin-position', 'hide-from-view']);
     expect(idsOf(registry, 'relationship')).toEqual([]);
   });
 
@@ -140,7 +140,7 @@ describe('the menu item stand-ins', () => {
     registerStandInMenuItems(registry);
     expect(labelsOf(registry, 'canvas')).toEqual(['Fit to view', 'Select all', 'Invert selection', '(from the target)', 'Leave focus', 'Group all by type', 'Ungroup all', 'Layout', '(from the target)', 'Export view…']);
     expect(labelsOf(registry, 'node')).toEqual([
-      'Expand neighbors', 'Expand by neighbor type', 'Expand by type', 'Collapse', 'Focus neighborhood', 'Find paths from here…', 'Find paths to…', 'Run pattern', 'Select neighbors', 'Invert selection', 'Group by type', 'Pin position', 'Hide from view', 'Copy ID', 'Copy properties', 'Open source record',
+      'Expand neighbors', 'Expand by neighbor type', 'Expand by type', 'Collapse', 'Focus neighborhood', 'Find paths from here…', 'Find paths to…', 'Run pattern', 'Select neighbors', 'Invert selection', 'Group by type', '(from the target)', 'Hide from view', 'Copy ID', 'Copy properties', 'Open source record',
     ]);
     expect(labelsOf(registry, 'relationship')).toEqual([
       'Why is this relationship here?', 'View supporting records', 'Highlight endpoints', 'Select both endpoints', 'Find paths between endpoints', 'Hide this relationship', '(from the target)', '(from the target)', 'Copy relationship ID', 'Copy properties', 'Open source record',
@@ -192,7 +192,7 @@ describe('the menu item stand-ins', () => {
     expect(registry.view.getState().get('canvas')?.find((item) => item.id === 'stand-in-export-view')?.label).toBe('Real export');
     remove();
     expect(idsOf(registry, 'canvas')).toEqual(['fit-to-view', 'select-all', 'invert-selection', 'show-hidden', 'leave-focus', 'layout', 'stand-in-export-view', 'show-legend']);
-    expect(idsOf(registry, 'node')).toEqual(['expand-neighbors', 'expand-by-neighbor-type', 'expand-by-type', 'collapse', 'focus-neighborhood', 'invert-selection', 'hide-from-view']);
+    expect(idsOf(registry, 'node')).toEqual(['expand-neighbors', 'expand-by-neighbor-type', 'expand-by-type', 'collapse', 'focus-neighborhood', 'invert-selection', 'pin-position', 'hide-from-view']);
   });
 });
 

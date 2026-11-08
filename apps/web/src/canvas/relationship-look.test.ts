@@ -17,18 +17,18 @@ const aggregate = (type: string, memberCount: Count, semantics: GraphEdge['seman
 const count = (value: number | undefined, quality: Count['quality']): Count => (value === undefined ? { quality, scope: 'x' } : { value, quality, scope: 'x' });
 
 describe('the look of a relationship', () => {
-  it('has no label for a stored relationship that is not an aggregate, until it is selected', () => {
-    expect(relationshipLook(stored('USES'))).toEqual({ aggregate: false, origin: 'stored', label: undefined });
+  it('carries its type as the label for a stored relationship that is not an aggregate, with no count badge', () => {
+    expect(relationshipLook(stored('USES'))).toEqual({ aggregate: false, origin: 'stored', label: 'USES' });
   });
 
-  it('carries its type as the label when an entity it joins is selected, and nothing else changes', () => {
-    expect(relationshipLook(stored('USES'), true)).toEqual({ aggregate: false, origin: 'stored', label: 'USES' });
-    expect(relationshipLook(stored('USES'), false)).toEqual({ aggregate: false, origin: 'stored', label: undefined });
+  it('marks a relationship whose end is selected as touched, and changes nothing else', () => {
+    expect(relationshipLook(stored('USES'), true)).toEqual({ aggregate: false, origin: 'stored', label: 'USES', touched: true });
+    expect(relationshipLook(stored('USES'), false)).toEqual({ aggregate: false, origin: 'stored', label: 'USES' });
   });
 
   it('keeps the label of a derived, an unknown-origin and an aggregate relationship whether or not an entity it joins is selected', () => {
     const unknown: GraphEdge = { ...stored('USES'), semantics: 'unknown' };
-    for (const edgeOf of [derived('SHARES'), unknown, aggregate('OWNS', count(42, 'exact'))]) expect(relationshipLook(edgeOf, true)).toEqual(relationshipLook(edgeOf, false));
+    for (const edgeOf of [derived('SHARES'), unknown, aggregate('OWNS', count(42, 'exact'))]) expect(relationshipLook(edgeOf, true)).toEqual({ ...relationshipLook(edgeOf, false), touched: true });
   });
 
   it('labels a derived relationship with its type and "derived"', () => {
@@ -40,13 +40,13 @@ describe('the look of a relationship', () => {
     expect(look).toEqual({ aggregate: false, origin: 'unknown', label: 'USES · origin unknown' });
   });
 
-  it.each<[string, Count, string]>([
-    ['exact', count(42, 'exact'), 'USES · 42 · exact'],
-    ['estimated', count(42, 'estimated'), 'USES · ~ 42 (estimated)'],
-    ['lower bound', count(3281, 'lowerBound'), 'USES · ≥ 3,281 · lower bound'],
-    ['unknown', count(undefined, 'unknown'), 'USES'],
-  ])('labels a stored aggregate with a %s count', (_name, memberCount, label) => {
-    expect(relationshipLook(aggregate('USES', memberCount))).toEqual({ aggregate: true, origin: 'stored', label });
+  it.each<[string, Count, string, string | undefined]>([
+    ['exact', count(42, 'exact'), 'USES · 42 · exact', '42 · exact'],
+    ['estimated', count(42, 'estimated'), 'USES · ~ 42 (estimated)', '~ 42 (estimated)'],
+    ['lower bound', count(3281, 'lowerBound'), 'USES · ≥ 3,281 · lower bound', '≥ 3,281 · lower bound'],
+    ['unknown', count(undefined, 'unknown'), 'USES', undefined],
+  ])('labels a stored aggregate with a %s count, and keeps the count as its badge when the count is known', (_name, memberCount, label, badge) => {
+    expect(relationshipLook(aggregate('USES', memberCount))).toEqual({ aggregate: true, origin: 'stored', label, ...(badge === undefined ? {} : { badge }) });
   });
 
   describe('the canvas label of an aggregate of one member', () => {
@@ -59,13 +59,13 @@ describe('the look of a relationship', () => {
       expect(relationshipLook(aggregate('SENT', count(1, 'exact'), 'unknown'))).toMatchObject({ label: 'SENT · origin unknown' });
     });
 
-    it.each<[string, Count, string]>([
-      ['2 exact', count(2, 'exact'), 'SENT · 2 · exact'],
-      ['0 exact', count(0, 'exact'), 'SENT · 0 · exact'],
-      ['1 as a lower bound', count(1, 'lowerBound'), 'SENT · ≥ 1 · lower bound'],
-      ['1 as an estimate', count(1, 'estimated'), 'SENT · ~ 1 (estimated)'],
-    ])('keeps the count of %s in the label, with no separate tip', (_name, memberCount, label) => {
-      expect(relationshipLook(aggregate('SENT', memberCount))).toEqual({ aggregate: true, origin: 'stored', label });
+    it.each<[string, Count, string, string]>([
+      ['2 exact', count(2, 'exact'), 'SENT · 2 · exact', '2 · exact'],
+      ['0 exact', count(0, 'exact'), 'SENT · 0 · exact', '0 · exact'],
+      ['1 as a lower bound', count(1, 'lowerBound'), 'SENT · ≥ 1 · lower bound', '≥ 1 · lower bound'],
+      ['1 as an estimate', count(1, 'estimated'), 'SENT · ~ 1 (estimated)', '~ 1 (estimated)'],
+    ])('keeps the count of %s in the label and as the badge, with no separate tip', (_name, memberCount, label, badge) => {
+      expect(relationshipLook(aggregate('SENT', memberCount))).toEqual({ aggregate: true, origin: 'stored', label, badge });
     });
 
     it('is still an aggregate, and is marked as standing for one relationship, so its line is as thin as a stored one', () => {
@@ -103,5 +103,17 @@ describe('the look of a relationship', () => {
     const kinds = [stored('T'), derived('T'), aggregate('T', count(1, 'exact')), { ...stored('T'), semantics: 'unknown' as const }].map((item) => relationshipLook(item));
     const signature = (look: ReturnType<typeof relationshipLook>) => `${look.origin}|${look.aggregate}|${look.label ?? '-'}`;
     expect(new Set(kinds.map(signature)).size).toBe(4);
+  });
+
+  it('has no count badge for an aggregate of exactly one relationship, for a count that is unknown, or for a relationship that is not an aggregate', () => {
+    expect(relationshipLook(aggregate('SENT', count(1, 'exact'))).badge).toBeUndefined();
+    expect(relationshipLook(aggregate('SENT', count(undefined, 'unknown'))).badge).toBeUndefined();
+    expect(relationshipLook(derived('SHARES')).badge).toBeUndefined();
+    expect(relationshipLook(stored('USES')).badge).toBeUndefined();
+  });
+
+  it('keeps the origin word in the label of every relationship that is not stored, so the marker follows the label', () => {
+    expect(relationshipLook(derived('SHARES')).label).toBe('SHARES · derived');
+    expect(relationshipLook({ ...stored('USES'), semantics: 'unknown' }).label).toBe('USES · origin unknown');
   });
 });

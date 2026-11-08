@@ -2,6 +2,7 @@ import { applyClick, openContextMenu } from '../canvas/apply-click.js';
 import { directionOf, MOVE_STEP, MOVE_STEP_FAR, moveSelected, type Schedule } from '../canvas/arrow-move.js';
 import { focusKeyAction, runFocusKey } from '../canvas/focus-commands.js';
 import { hideEntities, selectedEntities } from '../canvas/hide-commands.js';
+import { togglePin } from '../canvas/pin-commands.js';
 import { runSelectionCommand, type SelectionCommandId } from '../canvas/selection-commands.js';
 import { stepWalk, walkOrder } from '../canvas/walk.js';
 import { isEdgeKey } from '../state/keys.js';
@@ -130,6 +131,16 @@ export function registerBuiltInKeyBindings(registry: KeyBindingRegistry, schedul
       scope: 'workspace',
       when: ({ state }) => state.presentation.view.getState().openMenu === undefined && focusKeyAction(state) !== undefined,
       run: ({ state, canvas }) => runFocusKey(state, canvas),
+    }),
+    registry.register({
+      id: 'pin',
+      keys: ['p'],
+      label: 'Pin position',
+      group: 'actions',
+      order: 10,
+      scope: 'workspace',
+      when: ({ state }) => state.presentation.view.getState().openMenu === undefined && selectedEntities(state).length > 0,
+      run: ({ state }) => togglePin(state, selectedEntities(state)),
     }),
     registry.register({
       id: 'hide',

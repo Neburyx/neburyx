@@ -34,7 +34,7 @@ interface CaptionJob {
   readonly pinned: boolean;
 }
 
-const edgeData = (look: RelationshipLook) => ({ aggregate: look.aggregate, single: look.single === true, origin: look.origin, label: look.label ?? '', tip: look.tip ?? '' });
+const edgeData = (look: RelationshipLook) => ({ aggregate: look.aggregate, single: look.single === true, origin: look.origin, label: look.label ?? '', badge: look.badge ?? '', touched: look.touched === true, tip: look.tip ?? '' });
 
 
 // Cytoscape keeps the object it is given as the node's position and writes to it, so every position is copied in.
@@ -125,11 +125,11 @@ export const STYLE: StylesheetJson = [
   },
   // an aggregate of exactly one relationship is as thin as a stored relationship: a bold line claims more than one
   { selector: 'edge[?aggregate][?single]', style: { width: EDGE_WIDTH } },
-  // Below the zoom where captions are read an entity is drawn with its glyph and badge only, and a relationship without its label, except a selected one; the one under the pointer is told in the page's own text (the hover tip).
+  // Below the zoom where captions are read an entity is drawn with its glyph and badge only, and a relationship without its label, except one that is selected, joins a selected entity or has the walk's ring, and an aggregate's count; the one under the pointer is told in the page's own text (the hover tip).
   { selector: 'node.far', style: { 'background-image-opacity': [1, 0, 1] } },
   { selector: 'node.far[?selected], node.far[?focused]', style: { 'background-image-opacity': [1, 1, 1] } },
-  { selector: 'edge.far', style: { label: '' } },
-  { selector: 'edge.far[?selected], edge.far[?focused]', style: { label: 'data(label)' } },
+  { selector: 'edge.far', style: { label: 'data(badge)' } },
+  { selector: 'edge.far[?selected], edge.far[?focused], edge.far[?touched]', style: { label: 'data(label)' } },
   { selector: 'edge[?selected]', style: { 'line-color': SELECTED_COLOR, 'target-arrow-color': SELECTED_COLOR, width: EDGE_WIDTH + SELECTED_LINE_EXTRA } },
   { selector: 'edge[?selected][?aggregate]', style: { width: AGGREGATE_WIDTH + SELECTED_LINE_EXTRA } },
   { selector: 'edge[?selected][?aggregate][?single]', style: { width: EDGE_WIDTH + SELECTED_LINE_EXTRA } },

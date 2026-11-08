@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { canvasOf, menuOf, positions } from './support/workspace.ts';
+import { canvasOf, drawing, menuOf, positions } from './support/workspace.ts';
 
 const total = { value: 4, quality: 'exact', scope: 'relationships' };
 
@@ -107,5 +107,47 @@ test.describe('collapse', () => {
 
     await expect(panel.getByRole('button', { name: 'Collapse', exact: true })).toHaveAttribute('aria-disabled', 'true');
     await expect(panel.getByText('Nothing was loaded from this node.')).toBeVisible();
+  });
+  test('keeps a pinned entity where it was through an expansion', async ({ page }) => {
+    await openOneEntity(page);
+    await canvasOf(page).focus();
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Space');
+    await page.keyboard.press('p');
+    await expect.poll(async () => (await drawing(page)).nodes.filter((node) => node.badgeShown).length).toBe(1);
+    const before = await positions(page);
+    await choose(page, 'Expand by type');
+    const panel = page.getByRole('complementary', { name: 'Expand relationships' });
+    await panel.getByRole('button', { name: /^Load .* per type$/ }).click();
+    await expect(canvasOf(page)).toHaveAttribute('data-drawn-entities', '3');
+    const after = await positions(page);
+    for (const [id, at] of Object.entries(before)) expect(after[id], 'the pinned entity did not move').toEqual(at);
+  });
+
+  test('draws no placeholder and no link to one while focus is on, and draws them again on leaving focus', async ({ page }) => {
+    await openOneEntity(page);
+    await canvasOf(page).focus();
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Space');
+    await choose(page, 'Expand by type');
+    const panel = page.getByRole('complementary', { name: 'Expand relationships' });
+    await panel.getByRole('button', { name: /^Load .* per type$/ }).click();
+    await expect(canvasOf(page)).toHaveAttribute('data-drawn-entities', '3');
+    const placeholders = async () => ((await drawing(page)) as unknown as { remainders: unknown[] }).remainders.length;
+    expect(await placeholders()).toBeGreaterThan(0);
+    const reads = sourceReads.length;
+    await canvasOf(page).focus();
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Space');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('f');
+    await expect(page.getByRole('button', { name: 'Leave focus' })).toBeVisible();
+    await expect.poll(placeholders).toBe(0);
+    const drawn = await drawing(page);
+    const ids = new Set(drawn.nodes.map((node) => node.id));
+    expect(drawn.edges.every((edge) => ids.has(edge.source) && ids.has(edge.target)), 'every drawn link joins two drawn entities').toBe(true);
+    await page.getByRole('button', { name: 'Leave focus' }).click();
+    await expect.poll(placeholders).toBeGreaterThan(0);
+    expect(sourceReads.length, 'focus reads nothing from the source').toBe(reads);
   });
 });

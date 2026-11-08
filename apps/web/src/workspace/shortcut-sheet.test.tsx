@@ -51,7 +51,7 @@ describe('the sheet of keyboard shortcuts', () => {
     expect(columns()).toEqual({
       TOOLS: ['Select V', 'Pan H', 'Box select B', 'Search ⌘K', 'Legend L'],
       SELECTION: ['Select all ⌘A', 'Invert selection ⇧⌘I', 'Clear Esc', 'Expand E', 'Focus F', 'Move selected entities ←↑↓→', 'Move by 50 ⇧←↑↓→', 'Select the element Enter Space', 'Add to the selection ⇧Enter ⇧Space'],
-      ACTIONS: ['Hide ⌫'],
+      ACTIONS: ['Pin position P', 'Hide ⌫'],
       VIEW: ['Fit to view ⌘0', 'Keyboard shortcuts ⌘/', 'Walk the canvas Enter Space', 'Next element Tab', 'Previous element ⇧Tab', 'Leave the walk Esc', 'Open context menu Menu ⇧F10'],
     });
   });
@@ -87,9 +87,9 @@ describe('the sheet of keyboard shortcuts', () => {
     act(() => {
       remove = keys.register({ id: 'extra', keys: ['x'], label: 'Extra', group: 'actions', order: 10, scope: 'workspace', run: () => undefined });
     });
-    expect(columns()['ACTIONS']).toEqual(['Extra X', 'Hide ⌫']);
+    expect(columns()['ACTIONS']).toEqual(['Pin position P', 'Extra X', 'Hide ⌫']);
     act(() => remove());
-    expect(columns()['ACTIONS']).toEqual(['Hide ⌫']);
+    expect(columns()['ACTIONS']).toEqual(['Pin position P', 'Hide ⌫']);
   });
 
   it('keeps the Tab key inside, makes the page behind inert, runs no other binding, and takes the inert mark off when it closes', async () => {
@@ -133,16 +133,15 @@ describe('the sheet of keyboard shortcuts', () => {
     press('Escape', {}, dialog());
     press('e');
     press('f');
-    press('p');
     press('P', { shiftKey: true });
     press('k', { metaKey: true });
     press('c', { metaKey: true });
     press('e', { metaKey: true });
     press('C', { metaKey: true, shiftKey: true });
-    expect(log.sort()).toEqual(['copy-id', 'copy-properties', 'export-view', 'find-paths', 'pin', 'search']);
+    expect(log.sort()).toEqual(['copy-id', 'copy-properties', 'export-view', 'find-paths', 'search']);
     act(() => removeStandIns());
     opener();
-    expect(columns()['ACTIONS']).toEqual(['Hide ⌫']);
+    expect(columns()['ACTIONS']).toEqual(['Pin position P', 'Hide ⌫']);
   });
 
   it('lists the two bindings of a registry of two and no others, which no component writes into itself', () => {

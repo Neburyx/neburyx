@@ -111,7 +111,6 @@ const STAND_IN_ACTIONS: readonly SelectionAction[] = [
   { id: 'stand-in-expand', order: SELECTION_ACTION_ORDER.expand, label: 'Expand', icon: icon('expand'), run: () => undefined },
   { id: 'stand-in-paths', order: SELECTION_ACTION_ORDER.pathsBetween, label: 'Paths between', icon: icon('paths'), run: () => undefined },
   { id: 'stand-in-group', order: SELECTION_ACTION_ORDER.group, label: 'Group', icon: icon('group'), run: () => undefined },
-  { id: 'stand-in-pin', order: SELECTION_ACTION_ORDER.pin, label: 'Pin', icon: icon('pin'), run: () => undefined },
   { id: 'stand-in-hide', order: SELECTION_ACTION_ORDER.hide, label: 'Hide', icon: icon('hide'), run: () => undefined },
 ];
 
@@ -191,7 +190,6 @@ const STAND_IN_MENU_ITEMS: readonly (readonly [MenuTargetKind, MenuItem])[] = [
   ['node', command('stand-in-select-neighbors', 'Select neighbors', 'select', NODE_GROUP.selection, NODE_ORDER.selectNeighbors)],
   ['node', command('stand-in-invert', 'Invert selection', 'invert', NODE_GROUP.selection, NODE_ORDER.invertSelection, { binding: 'invert-selection' })],
   ['node', parent('stand-in-group-by-type', 'Group by type', 'group', NODE_GROUP.selection, NODE_ORDER.groupByType)],
-  ['node', command('stand-in-pin', 'Pin position', 'pin', NODE_GROUP.selection, NODE_ORDER.pinPosition, { binding: 'pin' })],
   ['node', command('stand-in-hide', 'Hide from view', 'hide', NODE_GROUP.selection, NODE_ORDER.hideFromView, { binding: 'hide' })],
   ['node', command('stand-in-copy-id', 'Copy ID', 'copy', NODE_GROUP.copy, NODE_ORDER.copyId, { binding: 'copy-id' })],
   ['node', command('stand-in-copy-properties', 'Copy properties', 'copy', NODE_GROUP.copy, NODE_ORDER.copyProperties, { binding: 'copy-properties' })],
@@ -223,7 +221,6 @@ const STAND_IN_KEYS: readonly { readonly id: string; readonly keys: string; read
   { id: 'search', keys: 'mod+k', label: 'Search', group: 'tools', order: 40 },
   { id: 'expand', keys: 'e', label: 'Expand', group: 'selection', order: 40 },
   { id: 'focus', keys: 'f', label: 'Focus', group: 'selection', order: 50 },
-  { id: 'pin', keys: 'p', label: 'Pin position', group: 'actions', order: 10 },
   { id: 'hide', keys: 'delete', label: 'Hide', group: 'actions', order: 20 },
   { id: 'copy-id', keys: 'mod+c', label: 'Copy ID', group: 'actions', order: 30 },
   { id: 'find-paths', keys: 'shift+p', label: 'Find paths', group: 'actions', order: 40 },

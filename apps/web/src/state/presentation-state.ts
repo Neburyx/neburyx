@@ -156,6 +156,8 @@ export interface PresentationActions {
   /** Stores the positions of several entities as one update; with `announcement` the update also carries what a screen reader is told, as a new announcement even when the text is the same as the last. */
   setPositions(positions: ReadonlyMap<string, Position>, announcement?: string): void;
   pin(keys: readonly string[]): void;
+  /** Releases the named pins; keys that are not pinned are ignored. */
+  unpin(keys: readonly string[]): void;
   /** Hides entities (refused for a key that is not a loaded entity), and takes them, and the keys in `alsoDeselect` (the relationships that touch them), out of the selection; the walk forgets a focus on them and a panel or menu about one closes. */
   hide(keys: readonly string[], alsoDeselect?: readonly string[]): void;
   /** Puts the focus on an entity (refused for a key that is not a loaded entity, or is hidden). `gone` holds the keys the focus sets aside (entities and the relationships that touch them): they leave the selection, the walk forgets one, and a menu or panel about one closes. The viewport from before the first entry is held: `viewport` when given (what the canvas shows), otherwise the one the store holds. */
@@ -244,6 +246,12 @@ export function createPresentationStore(known: KnownElements): PresentationStore
     pin(keys) {
       requireKnown(keys, known.isNode);
       store.setState({ ...store.getState(), pins: new Set([...store.getState().pins, ...keys]) });
+    },
+    unpin(keys) {
+      const { pins } = store.getState();
+      const released = keys.filter((key) => pins.has(key));
+      if (released.length === 0) return;
+      store.setState({ ...store.getState(), pins: new Set([...pins].filter((key) => !released.includes(key))) });
     },
     hide(keys, alsoDeselect = []) {
       requireKnown(keys, known.isNode);

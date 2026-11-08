@@ -39,6 +39,7 @@ export function SelectionBar() {
   const profile = useProfileWhenProvided();
   const mask = useSessionMask();
   const selection = useStoreSelector(state.presentation.view, (current) => current.selection);
+  useStoreSelector(state.presentation.view, (current) => current.pins);
   const requests = useRef(0);
   const [actionNote, setActionNote] = useState<{ readonly selection: ReadonlySet<string>; readonly text: string } | undefined>(undefined);
   const [copy, setCopy] = useState<{ readonly selection: ReadonlySet<string>; readonly status: CopyStatus } | undefined>(undefined);
@@ -72,15 +73,24 @@ export function SelectionBar() {
     <div ref={bar} className="selection-bar" role="toolbar" aria-label="Selection actions">
       <span className="selection-count">{formatNumber(selected.length)} selected</span>
       <span className="selection-separator" aria-hidden="true" />
-      {actions.map((action) => (
-        <button key={action.id} type="button" className="selection-action" title={action.label} onClick={() => {
-            const note = action.run(selected);
-            setActionNote(typeof note === 'string' ? { selection, text: note } : undefined);
-          }}>
-          {action.icon}
-          <span className="selection-action-label">{action.label}</span>
-        </button>
-      ))}
+      {actions.map((action) => {
+        const label = typeof action.label === 'function' ? action.label(selected, state) : action.label;
+        return (
+          <button
+            key={action.id}
+            type="button"
+            className="selection-action"
+            title={label}
+            onClick={() => {
+              const note = action.run(selected);
+              setActionNote(typeof note === 'string' ? { selection, text: note } : undefined);
+            }}
+          >
+            {action.icon}
+            <span className="selection-action-label">{label}</span>
+          </button>
+        );
+      })}
       <button type="button" className="selection-action" title="Copy IDs" onClick={() => void copyIds()}>
         <span className="icon icon-copy" aria-hidden="true" />
         <span className="selection-action-label">Copy IDs</span>

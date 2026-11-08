@@ -6,7 +6,12 @@ export type Origin = GraphEdge['semantics'];
 export interface RelationshipLook {
   readonly aggregate: boolean;
   readonly origin: Origin;
+  /** What the canvas draws on the line when labels are read: the type for every relationship, then the count of an aggregate (not an exact 1), then the origin when it is not stored. Absent only for the link from an entity to its aggregate nodes. */
   readonly label: string | undefined;
+  /** The count alone of an aggregate that may stand for more than one relationship, which stays drawn when labels are not read; absent for every other relationship and when the count is unknown. */
+  readonly badge?: string;
+  /** An entity the relationship joins is selected, so its label is drawn even when labels are not read. */
+  readonly touched?: true;
   /** The label with its member count, when the canvas label leaves out a count that says nothing (an exact 1); read in the hover tip. Absent when it is the label. */
   readonly tip?: string;
   /** An aggregate that stands for exactly one relationship: drawn as thin as a stored relationship, since its width would claim more. Absent for every other relationship, and for an aggregate that may hold more than one (a count above one, a lower bound, an estimate or no count). */
@@ -49,14 +54,14 @@ export function relationshipParts(edge: GraphEdge): RelationshipParts {
 /** A member count of exactly one, exact, says nothing more than the line itself: the canvas label leaves it out (the tip, the menu header and the walk keep it). */
 const isNeedlessCount = (edge: GraphEdge): boolean => edge.memberCount?.quality === 'exact' && edge.memberCount.value === 1;
 
-/** The line style follows the origin and the width follows whether it stands for more than one relationship; the label is the type, then the count of an aggregate (not an exact 1), then the origin when it is not stored. A stored relationship that is not an aggregate carries its type as a label only while an entity it joins is selected. */
+/** The line style follows the origin and the width follows whether it stands for more than one relationship; the label is the type, then the count of an aggregate (not an exact 1), then the origin when it is not stored. Every relationship carries one: the canvas draws it on hover, when an end is selected and at or above the zoom where captions are read, and below that zoom keeps only an aggregate's count. */
 export function relationshipLook(edge: GraphEdge, touchesSelection = false): RelationshipLook {
   const aggregate = 'aggregate' in edge.ref;
   const { type, count, origin } = relationshipParts(edge);
   const full = [type, count, origin].filter((part) => part !== undefined).join(' · ');
   const left = aggregate && isNeedlessCount(edge);
   const shown = left ? [type, origin].filter((part) => part !== undefined).join(' · ') : full;
-  const always = aggregate || edge.semantics !== 'stored';
-  const label = always ? shown : touchesSelection ? edge.type : undefined;
-  return { aggregate, origin: edge.semantics, label, ...(left && always ? { tip: full } : {}), ...(aggregate && isNeedlessCount(edge) ? { single: true as const } : {}) };
+  const label = shown;
+  const showsCount = aggregate && !isNeedlessCount(edge) && count !== undefined;
+  return { aggregate, origin: edge.semantics, label, ...(touchesSelection ? { touched: true as const } : {}), ...(showsCount ? { badge: count } : {}), ...(left ? { tip: full } : {}), ...(aggregate && isNeedlessCount(edge) ? { single: true as const } : {}) };
 }

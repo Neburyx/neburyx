@@ -12,7 +12,7 @@ import { KEY_SCOPE_ATTRIBUTE } from '../workspace/key-binding-handler.js';
 import { formatNumber, notDrawnLine } from '../workspace/scope-text.js';
 import { buildScene } from './build-scene.js';
 import { useAggregateNodes } from './use-aggregate-nodes.js';
-import { aggregateKey, parseAggregateKey } from '../workspace/aggregate-nodes.js';
+import { aggregateKey, parseAggregateKey, type AggregateNode } from '../workspace/aggregate-nodes.js';
 import { layoutEntities, placeNewEntities } from './incremental-layout.js';
 import { describeWalked } from './walk.js';
 import { useCanvasCommandsHandle } from './canvas-commands.js';
@@ -25,6 +25,7 @@ import type { CanvasEvents, CanvasRenderer, EntityMove, RightClick, Scene } from
 export const RENDERER_UNAVAILABLE = 'RENDERER_UNAVAILABLE';
 export const WALK_SENTENCE = 'Press Enter or Space to walk the entities and relationships, Escape to leave the walk.';
 
+const NO_AGGREGATES: readonly AggregateNode[] = [];
 const counted = (value: number, one: string, many: string): string => `${formatNumber(value)} ${value === 1 ? one : many}`;
 
 /** A drag of an entity that is no longer held, or that was pinned meanwhile, is stale and changes nothing. */
@@ -67,11 +68,13 @@ export function GraphCanvas({ profile, view = 'fit' }: { readonly profile?: Sour
   );
   const allAggregates = useAggregateNodes(loadedGraph, profile);
   const offEntityTypes = useStoreSelector(state.presentation.view, (current) => current.typeFilter.offEntityTypes);
+  const inFocus = useStoreSelector(state.presentation.view, (current) => current.neighborhoodFocus !== undefined);
   const aggregates = useMemo(() => {
+    if (inFocus) return NO_AGGREGATES;
     if (graph === loadedGraph && offEntityTypes.size === 0) return allAggregates;
     const drawnNodes = new Set(graph.nodes.map((node) => elementKey(node.ref)));
     return allAggregates.filter((aggregate) => drawnNodes.has(aggregate.nodeKey) && !offEntityTypes.has(aggregate.neighborType));
-  }, [allAggregates, graph, loadedGraph, offEntityTypes]);
+  }, [allAggregates, graph, loadedGraph, offEntityTypes, inFocus]);
   const drawn = useMemo(() => buildScene(graph, placed.size === 0 ? positions : new Map([...positions, ...placed]), profile, selection, tool, source, view, pins, walking ? focused : undefined, true, aggregates), [graph, positions, placed, profile, selection, tool, source, view, pins, walking, focused, aggregates]);
   // A menu holding the focus only takes the ring off the walk element: the scene is the same one, so the drawing that follows is not a sign that the renderer works again.
   const scene = useMemo(() => ({ ...drawn, focusRing: !menuOpen }), [drawn, menuOpen]);

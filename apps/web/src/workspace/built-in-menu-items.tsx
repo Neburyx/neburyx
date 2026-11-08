@@ -1,4 +1,5 @@
 import { enterFocus, leaveFocusAndFocusCanvas } from '../canvas/focus-commands.js';
+import { pinTargetsOf, togglePin, willUnpin } from '../canvas/pin-commands.js';
 import { drawnEntityKeys, hideEntities, hideTargetsOf, showHiddenAndFocusCanvas } from '../canvas/hide-commands.js';
 import { runSelectionCommand } from '../canvas/selection-commands.js';
 import { LayoutList } from './layout-list.js';
@@ -89,6 +90,16 @@ export function registerBuiltInMenuItems(registry: MenuRegistry): () => void {
       order: MENU_ORDER.node.invertSelection,
       binding: 'invert-selection',
       run: (context) => runSelectionCommand(context.state, 'invert-selection'),
+    }),
+    registry.register('node', {
+      id: 'pin-position',
+      label: (context) => (willUnpin(context.state, pinTargetsOf(context.state, context.selection, context.key)) ? 'Unpin position' : 'Pin position'),
+      icon: <span className="icon icon-pin" aria-hidden="true" />,
+      group: MENU_GROUP.node.selection,
+      order: MENU_ORDER.node.pinPosition,
+      binding: 'pin',
+      state: (context) => (pinTargetsOf(context.state, context.selection, context.key).length === 0 ? 'disabled' : 'enabled'),
+      run: (context) => togglePin(context.state, pinTargetsOf(context.state, context.selection, context.key)),
     }),
     registry.register('node', {
       id: 'hide-from-view',

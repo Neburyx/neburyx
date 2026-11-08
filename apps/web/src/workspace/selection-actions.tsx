@@ -1,9 +1,11 @@
 import { createContext, useContext, type ReactNode } from 'react';
+import type { ClientState } from '../state/client-state.js';
 import { createStore, readable, useStoreSelector, type ReadableStore } from '../state/store.js';
 
 export interface SelectionAction {
   readonly id: string;
-  readonly label: string;
+  /** The text of the button; a function reads it from the drawn selected entities and the state each time the bar is drawn (the bar redraws when the pins change). */
+  readonly label: string | ((selection: readonly string[], state: ClientState) => string);
   readonly icon: ReactNode;
   /** Where the action stands on the bar, lowest first; one without sorts after those that have one, in the order registered. */
   readonly order?: number;

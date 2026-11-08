@@ -451,6 +451,31 @@ describe('the entities dragged on the graph canvas', () => {
     act(() => state.replacePins([nodeKey('n1')]));
     expect([...(factory.made[0]?.scenes.at(-1)?.pinned ?? [])]).toEqual([nodeKey('n1')]);
   });
+
+  it('counts as pinned and draws as pinned only the entities that are drawn: not one that is hidden or set aside by focus, and again on show and on leaving focus', () => {
+    const state = createClientState();
+    load(state, 4, 3);
+    state.presentation.setPositions(new Map([[nodeKey('n0'), { x: 0, y: 0 }], [nodeKey('n1'), { x: 300, y: 0 }], [nodeKey('n2'), { x: 600, y: 0 }], [nodeKey('n3'), { x: 900, y: 0 }]]));
+    state.replacePins([nodeKey('n0'), nodeKey('n1')]);
+    const factory = stubFactory();
+    view(state, factory.create);
+    const pinnedNow = (): string[] => [...(factory.made[0]?.scenes.at(-1)?.pinned ?? [])].sort();
+    const described = (): string => document.getElementById(screen.getByLabelText('Graph canvas').getAttribute('aria-describedby') ?? '')?.textContent ?? '';
+    expect(pinnedNow()).toEqual([nodeKey('n0'), nodeKey('n1')]);
+    expect(described()).toContain('2 pinned');
+    act(() => state.hide([nodeKey('n1')]));
+    expect(pinnedNow()).toEqual([nodeKey('n0')]);
+    expect(described()).toContain('1 pinned');
+    act(() => state.presentation.showAllHidden());
+    expect(described()).toContain('2 pinned');
+    act(() => state.focusOn(nodeKey('n2')));
+    expect(pinnedNow()).toEqual([nodeKey('n1')]);
+    expect(described()).toContain('1 pinned');
+    act(() => state.presentation.leaveFocus());
+    expect(pinnedNow()).toEqual([nodeKey('n0'), nodeKey('n1')]);
+    expect(described()).toContain('2 pinned');
+    expect(state.presentation.view.getState().positions.get(nodeKey('n1'))).toEqual({ x: 300, y: 0 });
+  });
 });
 
 describe('the development mark of the graph canvas', () => {
@@ -665,20 +690,20 @@ describe('the pinned entities in the canvas description', () => {
 });
 
 describe('the labels of stored relationships on the graph canvas', () => {
-  it('reach the renderer while an entity they join is selected, and go when the selection is cleared', () => {
+  it('always reach the renderer, marked as touched only while an entity they join is selected', () => {
     const state = createClientState();
     load(state, 3, 1);
     const factory = stubFactory();
     view(state, factory.create);
-    const labels = () => factory.made[0]?.scenes.at(-1)?.relationships.map((relationship) => relationship.look.label);
-    expect(labels()).toEqual([undefined]);
+    const labels = () => factory.made[0]?.scenes.at(-1)?.relationships.map((relationship) => [relationship.look.label, relationship.look.touched === true]);
+    expect(labels()).toEqual([['rel-a', false]]);
     act(() => state.presentation.select([nodeKey('n0')]));
-    expect(labels()).toEqual(['rel-a']);
+    expect(labels()).toEqual([['rel-a', true]]);
     act(() => state.presentation.select([nodeKey('n2')]));
-    expect(labels()).toEqual([undefined]);
+    expect(labels()).toEqual([['rel-a', false]]);
     act(() => state.presentation.select([nodeKey('n1')]));
     act(() => runSelectionCommand(state, 'clear-selection'));
-    expect(labels()).toEqual([undefined]);
+    expect(labels()).toEqual([['rel-a', false]]);
   });
 });
 

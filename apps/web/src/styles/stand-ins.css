@@ -76,10 +76,6 @@
   --icon: url('../assets/lucide/group.svg');
 }
 
-.icon-stand-in-pin {
-  --icon: url('../assets/lucide/pin.svg');
-}
-
 .icon-stand-in-hide {
   --icon: url('../assets/lucide/eye-off.svg');
 }
@@ -150,10 +146,6 @@
 
 .icon-stand-in-menu-invert {
   --icon: url('../assets/lucide/contrast.svg');
-}
-
-.icon-stand-in-menu-pin {
-  --icon: url('../assets/lucide/pin.svg');
 }
 
 .icon-stand-in-menu-hide {
