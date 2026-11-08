@@ -11,6 +11,7 @@ import type { AuditEvent, Seams } from '../seams/seams.js';
 import { memoryAppStore } from './app-store.js';
 import { entityRows, plainNode } from './entity-fixtures.js';
 import { TestExecutor } from './gate.js';
+import { RELATED_CONTEXT_ID } from '../gate/templates/related-context.js';
 import { facetRowOf, withOnlineIndexes } from './search-fixtures.js';
 import { baseSource, fileOf } from './mapping.js';
 import { testSourceGate } from './source-gate.js';
@@ -46,6 +47,8 @@ export interface SearchAppOptions {
   readonly rows?: readonly Record<string, unknown>[];
   readonly mapping?: MappingModel;
   readonly respond?: (call: ExecuteCall) => Promise<ExecuteOutcome>;
+  /** Answers the relationship context read, which `respond` is not asked; absent, it finds no relationship. */
+  readonly context?: (call: ExecuteCall) => Promise<ExecuteOutcome>;
   /** True when `respond` answers the schema read itself; otherwise every index of the mapping is online. */
   readonly ownSchema?: boolean;
   readonly policy?: Seams['policy'];
@@ -59,7 +62,8 @@ export async function startSearchApp(options: SearchAppOptions = {}) {
   const mapping = options.mapping ?? searchMappingOf();
   const first = mapping.sources[0];
   if (first === undefined) throw new Error('the mapping has no source');
-  const data = options.respond ?? answering(options.rows ?? [widget(1)]);
+  const answer = options.respond ?? answering(options.rows ?? [widget(1)]);
+  const data = (call: ExecuteCall): Promise<ExecuteOutcome> => (call.templateId === RELATED_CONTEXT_ID ? (options.context ?? (() => Promise.resolve<ExecuteOutcome>({ status: 'rows', rows: [] })))(call) : answer(call));
   const executor = new TestExecutor(options.ownSchema === true ? data : withOnlineIndexes(first, data));
   const events: AuditEvent[] = [];
   const defaults = communitySeams();
@@ -88,4 +92,5 @@ export const prefixCalls = (executor: TestExecutor) => executor.calls.filter((ca
 export const searchCalls = (executor: TestExecutor) => executor.calls.filter((call) => call.templateId === 'entity-search');
 export const relatedCalls = (executor: TestExecutor) => executor.calls.filter((call) => call.templateId === 'entity-related');
 export const facetCalls = (executor: TestExecutor) => executor.calls.filter((call) => call.templateId === 'search-facets');
+export const contextCalls = (executor: TestExecutor) => executor.calls.filter((call) => call.templateId === 'entity-related-context');
 export const evidenceCalls = (executor: TestExecutor) => executor.calls.filter((call) => call.templateId === 'relationship-evidence');

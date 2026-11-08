@@ -1,6 +1,7 @@
+import { contextParamsOf, contextsOf, contextWillRead, planContext, type ContextPlan } from './context-group.js';
 import { evidenceHitsOf, evidenceRowsOf, planEvidence } from './evidence-group.js';
 import { FAILED_FACETS, facetsOf, planFacets } from './facets-group.js';
-import { SEARCH_GROUP_CAP, SEARCH_GROUP_FAILURE_CODES, SEARCH_MATCH_MODES, SEARCH_PAGED_GROUPS, type DisabledType, type ErrorCode, type Facets, type GraphNode, type GroupFailure, type SearchFailureGroup, type SearchGroup, type SearchMatchMode, type SearchMoreResult, type SearchPagedGroup, type SearchResult, type StartsWithGroup, type UnreferencedHit, relationshipsOf } from '@neburyx/contracts';
+import { SEARCH_GROUP_CAP, SEARCH_GROUP_FAILURE_CODES, SEARCH_MATCH_MODES, SEARCH_PAGED_GROUPS, type DisabledType, type ErrorCode, type Facets, type GraphNode, type GroupFailure, type RelationshipContext, type SearchFailureGroup, type SearchGroup, type SearchMatchMode, type SearchMoreResult, type SearchPagedGroup, type SearchResult, type StartsWithGroup, type UnreferencedHit, relationshipsOf } from '@neburyx/contracts';
 import { AppError, RequestCancelled } from '../errors.js';
 import { exhaustive } from '../gate/exhaustive.js';
 import { propertyIndexOf } from '../gate/index-guard.js';
@@ -12,6 +13,7 @@ import { SEARCH_EVIDENCE_ID, type EvidenceTarget } from '../gate/templates/searc
 import { SEARCH_FACETS_ID } from '../gate/templates/search-facets.js';
 import { SEARCH_PREFIX_ID } from '../gate/templates/search-prefix.js';
 import { SEARCH_RELATED_ID } from '../gate/templates/search-related.js';
+import { RELATED_CONTEXT_ID } from '../gate/templates/related-context.js';
 import type { SourceAccess } from '../investigations/source-access.js';
 import type { Gate, GatePage, GateRequest, IndexReader, IndexReadFailure, IndexSnapshot } from '../gate/types.js';
 import type { MappingModel, SourceModel } from '../mapping/model.js';
@@ -43,6 +45,8 @@ export interface SearchMoreRequest {
   readonly group: SearchGroup;
   readonly cursor: string;
   readonly entityTypes?: readonly string[];
+  /** For the `related` group only: the references of the exact matches the person holds, at most the cap, so the page's records can show how they are related to them; the server checks that they are references of the source, not that they are exact matches of this search. */
+  readonly exactRefs?: readonly GraphNode['ref'][];
   /** Aborted when the client gives up the request. */
   readonly signal?: AbortSignal;
 }
@@ -203,6 +207,12 @@ const entityKey = (node: GraphNode): string => JSON.stringify([node.ref.entityTy
 
 /** The cursor of a page's next page, as a field of its group: absent when the read found no more. */
 const nextOf = (page: GatePage | undefined): { readonly nextCursor?: string } => (page?.nextCursor === undefined ? {} : { nextCursor: page.nextCursor });
+
+/** The relationship context of a hit as the hit holds it: absent when it has none. */
+const contextField = (context: RelationshipContext | undefined): { readonly context?: RelationshipContext } => (context === undefined ? {} : { context });
+
+/** The types whose pairs were left out of the context read for want of an online `stable_id` index; absent when there is none. */
+const contextDisabledField = (plan: ContextPlan | undefined): { readonly context?: { readonly disabledTypes: DisabledType[] } } => (plan === undefined || plan.disabledTypes.length === 0 ? {} : { context: { disabledTypes: [...plan.disabledTypes] } });
 
 type FacetCount<Scope extends string> = { readonly value: number; readonly quality: 'exact' | 'lowerBound'; readonly scope: Scope } | { readonly quality: 'unknown'; readonly scope: Scope };
 
@@ -373,6 +383,19 @@ export function createSearchService(deps: { readonly gate: Gate; readonly mappin
       const relatedUnreferenced = relatedItem?.unreferenced ?? [];
       const read = [exactItem, relatedItem, evidenceItem].filter((item) => item !== undefined);
       const dropped = droppedOf(read);
+      // the relationship context is read once, after the groups settled, for the hits and exact matches this answer holds; a failure of its own keeps every hit and says the context was not read
+      const contextPlan = typeahead || failed.has('exact') || failed.has('related') ? undefined : planContext(source, related, exact, planSnapshot, cap);
+      let contextFailure: GroupFailure | undefined;
+      let contexts: ReadonlyMap<number, RelationshipContext> = new Map();
+      if (contextPlan !== undefined && contextWillRead(contextPlan)) {
+        try {
+          contexts = contextsOf(contextPlan, (await runWith(RELATED_CONTEXT_ID, contextParamsOf(contextPlan))).items);
+        } catch (error) {
+          if (error instanceof RequestCancelled) throw error;
+          contextFailure = failureOf('context', error);
+          if (contextFailure === undefined) throw error;
+        }
+      }
       return {
         sourceId: request.sourceId,
         exact,
@@ -383,12 +406,13 @@ export function createSearchService(deps: { readonly gate: Gate; readonly mappin
         ...(exactPage?.nextCursor === undefined ? {} : { exactNextCursor: exactPage.nextCursor }),
         disabledTypes: modeOn('exact') ? exactPlan.disabled.filter((entry) => typeOn(entry.entityType)) : [],
         related: {
-          hits: related.map((node) => ({ node, matchedProperties: matchedPropertiesOf(node, relatedTargets, request.text) })),
+          hits: related.map((node, place) => ({ node, matchedProperties: matchedPropertiesOf(node, relatedTargets, request.text), ...contextField(contexts.get(place)) })),
           ...unreferencedField(relatedUnreferenced),
           count: countOf(related.length + relatedUnreferenced.length, relatedPage, RELATED_SCOPE, failed.has('related')),
           searchable: relatedTargets.length > 0,
           disabledTypes: modeOn('related') ? relatedPlan.disabled.filter((entry) => typeOn(entry.entityType)) : [],
           ...nextOf(relatedPage),
+          ...contextDisabledField(contextPlan),
         },
         evidence: {
           hits: evidence,
@@ -397,7 +421,7 @@ export function createSearchService(deps: { readonly gate: Gate; readonly mappin
           disabledRelationshipTypes: modeOn('evidence') ? evidencePlan.disabled : [],
           ...nextOf(evidencePage),
         },
-        failures: facetsFailure === undefined || !facetsRead ? failures : [...failures, facetsFailure],
+        failures: [...failures, ...(facetsFailure === undefined || !facetsRead ? [] : [facetsFailure]), ...(contextFailure === undefined ? [] : [contextFailure])],
         dropped,
         // only the exact and related groups list their unreferenced hits; an end of an evidence relationship with no stable ID is left out with its relationship
         warnings: warningsOf(dropped, exactUnreferenced.length + relatedUnreferenced.length),
@@ -415,6 +439,10 @@ export function createSearchService(deps: { readonly gate: Gate; readonly mappin
       // the startsWith group is capped and has no next page
       if (!isPagedGroup(group)) throw new AppError('INVALID_REQUEST');
       if ((request.entityTypes ?? []).some((type) => !source.entities.some((entity) => entity.type === type))) throw new AppError('INVALID_REQUEST');
+      // the exact matches the page's records are paired with are refused before any read: only the related group takes them, at most the cap of them, each a reference of an entity type of this source
+      const exactRefs = request.exactRefs ?? [];
+      const pageCap = Math.min(SEARCH_GROUP_CAP, source.budgets.maxPage);
+      if (exactRefs.length > 0 && (group !== 'related' || exactRefs.length > pageCap || exactRefs.some((ref) => ref.sourceId !== request.sourceId || !source.entities.some((entity) => entity.type === ref.entityType)))) throw new AppError('INVALID_REQUEST');
       const typeOn = (type: string): boolean => request.entityTypes === undefined || request.entityTypes.includes(type);
       // the page is planned as the first page was, from a fresh read of the schema: the same masking, the same properties and the same forms, so its parameters are the ones the cursor is bound to
       const exactCandidates = group === 'exact' ? candidatesOf(source, 'exact', request.mask) : [];
@@ -452,9 +480,49 @@ export function createSearchService(deps: { readonly gate: Gate; readonly mappin
       const dropped = droppedOf([item]);
       // an evidence page lists no unreferenced record: an end with no stable ID is left out with its relationship
       const warnings = hits.group === 'evidence' ? warningsOf(dropped) : item.warnings;
-      return { ...hits, sourceId: request.sourceId, count: countOf(page.held, page, scope, false), dropped, warnings, ...nextOf(page) };
+      const withContext = hits.group === 'related' && exactRefs.length > 0 ? await contextOfPage(deps.gate, request, source, snapshot, planSnapshot, hits, exactRefs) : hits;
+      return { ...withContext, sourceId: request.sourceId, count: countOf(page.held, page, scope, false), dropped, warnings, ...nextOf(page) };
     },
   };
+}
+
+type RelatedPage = Extract<PageHits, { group: 'related' }>;
+
+/**
+ * The relationship context of the records of a related page against the exact matches the person holds: one read through the gate, under the same masking and schema snapshot as the page. A failure
+ * of its own keeps the records and is named in `contextFailure`; a failure that means the same for every read, and a cancel, fail the request.
+ */
+async function contextOfPage(
+  gate: Gate,
+  request: SearchMoreRequest,
+  source: SourceModel,
+  snapshot: IndexSnapshot | 'unverified' | IndexReadFailure | undefined,
+  planSnapshot: IndexSnapshot | undefined,
+  hits: RelatedPage,
+  exactRefs: readonly GraphNode['ref'][],
+): Promise<RelatedPage & { readonly contextFailure?: GroupFailure; readonly context?: { readonly disabledTypes: DisabledType[] } }> {
+  const plan = planContext(source, hits.hits.map((hit) => hit.node), exactRefs.map((ref) => ({ ref })), planSnapshot, Math.min(SEARCH_GROUP_CAP, source.budgets.maxPage));
+  if (!contextWillRead(plan)) return { ...hits, ...contextDisabledField(plan) };
+  try {
+    const page = await runSearch(gate, {
+      traceId: request.traceId,
+      principal: request.principal,
+      sourceId: request.sourceId,
+      templateId: RELATED_CONTEXT_ID,
+      params: contextParamsOf(plan),
+      limit: Math.min(SEARCH_GROUP_CAP, source.budgets.maxPage),
+      mask: request.mask,
+      ...(request.signal === undefined ? {} : { signal: request.signal }),
+      ...(snapshot === undefined ? {} : { indexes: snapshot }),
+    });
+    const contexts = contextsOf(plan, page.items);
+    return { ...hits, hits: hits.hits.map((hit, place) => ({ ...hit, ...contextField(contexts.get(place)) })), ...contextDisabledField(plan) };
+  } catch (error) {
+    if (error instanceof RequestCancelled) throw error;
+    const contextFailure = failureOf('context', error);
+    if (contextFailure === undefined) throw error;
+    return { ...hits, contextFailure, ...contextDisabledField(plan) };
+  }
 }
 
 const isPagedGroup = (group: SearchGroup): group is SearchPagedGroup => SEARCH_PAGED_GROUPS.some((candidate) => candidate === group);

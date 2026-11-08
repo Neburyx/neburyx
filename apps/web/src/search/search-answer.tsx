@@ -1,7 +1,7 @@
-import type { GraphNode, SearchResult, SourceProfile } from '@neburyx/contracts';
+import type { GraphNode, RelatedHit, SearchResult, SourceProfile } from '@neburyx/contracts';
 import { elementKey } from '../state/keys.js';
 import { countText, evidenceText, matchesText, relatedText, secondsText } from './count-label.js';
-import { FILTERS_COPY, groupFailedText, groupNotReadSummary, hiddenBySelection, notSearchedLines, referencesLine, RETRY, SEARCH_COPY, showingResultsFor } from './copy.js';
+import { contextNotReadLine, FILTERS_COPY, groupFailedText, relationshipContextLine, groupNotReadSummary, hiddenBySelection, notSearchedLines, referencesLine, RETRY, SEARCH_COPY, showingResultsFor } from './copy.js';
 import { EvidenceNotes, EvidenceSection, evidenceRowsOf } from './evidence-section.js';
 import { ResultRow } from './result-row.js';
 import { ShowMore } from './show-more.js';
@@ -19,6 +19,8 @@ function uniqueBy<Hit>(hits: readonly Hit[], keyOf: (hit: Hit) => string): Hit[]
     return true;
   });
 }
+
+const relationshipProp = (relationship: string | undefined): { readonly relationship?: string } => (relationship === undefined ? {} : { relationship });
 
 export interface AnswerProps {
   readonly result: SearchResult;
@@ -46,10 +48,18 @@ export function SearchAnswer({ result, answeredText, currentText, profile, busy,
   const typeOf = (entityType: string) => profile.entityTypes.find((type) => type.type === entityType);
   const typeName = (entityType: string): string => typeOf(entityType)?.displayName ?? entityType;
   const states = statesOf(result, mask);
-  const failureOf = (group: 'exact' | 'related' | 'evidence') => result.failures.find((failure) => failure.group === group);
+  const failureOf = (group: 'exact' | 'related' | 'evidence' | 'context') => result.failures.find((failure) => failure.group === group);
+  // a relationship context line names the exact match by the title it has in this answer; one that names a record the page does not hold gets no line
+  const exactTitles = new Map(exact.map((node) => [elementKey(node.ref), node.display.title]));
+  const relationshipOf = (context: RelatedHit['context']): string | undefined => {
+    const title = context === undefined ? undefined : exactTitles.get(elementKey(context.with));
+    return context === undefined || title === undefined ? undefined : relationshipContextLine(context.relationshipType, context.direction, title);
+  };
   const exactFailure = failureOf('exact');
   const relatedFailure = failureOf('related');
   const evidenceFailure = failureOf('evidence');
+  const contextFailure = failureOf('context') ?? pages.related.contextFailure;
+  const contextNotRead = [...new Set([...(result.related.context?.disabledTypes ?? []), ...pages.related.contextDisabled].map((entry) => entry.entityType))].map((entityType) => ({ key: `context:${entityType}`, text: contextNotReadLine(typeName(entityType)) }));
   const failureLine = (failure: NonNullable<typeof exactFailure>) => (
     <p key={failure.group} role="alert" className="search-group-failure">
       {groupFailedText(failure.group, failure.code, failure.timeoutMs)}
@@ -73,9 +83,10 @@ export function SearchAnswer({ result, answeredText, currentText, profile, busy,
       {result.related.hits.length + (result.related.unreferenced?.length ?? 0) === 0 ? null : <p className="search-note">{SEARCH_COPY.relatedNote}</p>}
       {(['exact', 'related'] as const).map((group) => {
         const lines = notSearchedLines(group === 'exact' ? result.disabledTypes : result.related.disabledTypes, (entityType) => typeOf(entityType)?.displayName ?? entityType, group);
-        return lines.length === 0 ? null : (
+        const shownLines = group === 'related' ? [...lines, ...contextNotRead] : lines;
+        return shownLines.length === 0 ? null : (
           <ul className="search-notes" key={group}>
-            {lines.map((line) => (
+            {shownLines.map((line) => (
               <li key={line.key}>{line.text}</li>
             ))}
           </ul>
@@ -138,14 +149,15 @@ export function SearchAnswer({ result, answeredText, currentText, profile, busy,
         </section>
       )}
       {relatedFailure === undefined ? null : failureLine(relatedFailure)}
+      {contextFailure === undefined ? null : failureLine(contextFailure)}
       {related.length + relatedUnreferenced.length === 0 ? null : (
         <section aria-labelledby="search-related-title">
           <h2 id="search-related-title">
             {SEARCH_COPY.relatedTitle} ({countText(pages.related.count)})
           </h2>
           <ul className="search-hits">
-            {related.map(({ node, matchedProperties }, index) => (
-              <ResultRow key={elementKey(node.ref)} node={node} type={typeOf(node.ref.entityType)} busy={busy} context={referencesLine(answeredText, matchedProperties)} focus={index === pages.related.focusAt} onOpen={onOpen} />
+            {related.map(({ node, matchedProperties, context }, index) => (
+              <ResultRow key={elementKey(node.ref)} node={node} type={typeOf(node.ref.entityType)} busy={busy} {...relationshipProp(relationshipOf(context))} context={referencesLine(answeredText, matchedProperties)} focus={index === pages.related.focusAt} onOpen={onOpen} />
             ))}
             {relatedUnreferenced.map((hit, index) => (
               <UnreferencedRow key={`unreferenced:${index}`} hit={hit} typeName={typeName(hit.entityType)} className="search-hit" focus={index === pages.related.unreferencedFocusAt} />

@@ -3,6 +3,7 @@ import { AppError } from '../errors.js';
 import { MAX_EVIDENCE_PROPERTIES, MAX_FACET_PROBES, MAX_REFERENCE_PROPERTIES, MAX_SEARCH_PROPERTIES } from '../mapping/model.js';
 import { declarationsOf, degreePairsOf } from './templates/degree-pairs.js';
 import { expandBranchesOf, expandStatementOf, type ExpandDirection } from './templates/expand-statement.js';
+import { CONTEXT_BRANCHES, contextBranchesOf, relatedContextStatementOf, type ContextBranch } from './templates/related-context-statement.js';
 import type { GateParameter, Params, SourceAllowlist, Template } from './types.js';
 
 /**
@@ -12,7 +13,7 @@ import type { GateParameter, Params, SourceAllowlist, Template } from './types.j
  * `@facetProbes(probes)` writes the whole statement of the facet probes (see `Template.facetProbes`).
  * `@degreeCounts(kind)` writes the whole statement of a degree read for the entity type the parameter `kind` names (see `Template.degreeCounts`).
  */
-const MARKER = /@(entity|relationship|stableId|searchBranches|facetProbes|degreeCounts|expandNeighbors)\(([A-Za-z][A-Za-z0-9]*)\)/g;
+const MARKER = /@(entity|relationship|stableId|searchBranches|facetProbes|degreeCounts|expandNeighbors|relatedContext)\(([A-Za-z][A-Za-z0-9]*)\)/g;
 /**
  * The placeholders of a branch text: for a target of an entity type the label of the type and the property (`@label`, `@property`) and, in a search branch, the entity type of the target
  * (`@entityType`, written as the parameter `$branchEntityTypes[<branch position>]`); for a target of a relationship mapping row the relationship type, the labels of its two entity types and the property (`@type`, `@fromLabel`, `@toLabel`, `@property`).
@@ -35,12 +36,12 @@ export function quoteName(name: string): string {
 /** The list parameter the gate fills with the entity type of each search branch, in branch order, from the validated targets; no request or template sets it. */
 export const BRANCH_ENTITY_TYPES = 'branchEntityTypes';
 
-export type MarkerKind = 'entity' | 'relationship' | 'stableId' | 'searchBranches' | 'facetProbes' | 'degreeCounts' | 'expandNeighbors';
+export type MarkerKind = 'entity' | 'relationship' | 'stableId' | 'searchBranches' | 'facetProbes' | 'degreeCounts' | 'expandNeighbors' | 'relatedContext';
 
 export function markersOf(cypher: string): { readonly kind: MarkerKind; readonly name: string }[] {
   return [...cypher.matchAll(MARKER)].flatMap((match) => {
     const [, kind, name] = match;
-    return (kind === 'entity' || kind === 'relationship' || kind === 'stableId' || kind === 'searchBranches' || kind === 'facetProbes' || kind === 'degreeCounts' || kind === 'expandNeighbors') && name !== undefined ? [{ kind, name }] : [];
+    return (kind === 'entity' || kind === 'relationship' || kind === 'stableId' || kind === 'searchBranches' || kind === 'facetProbes' || kind === 'degreeCounts' || kind === 'expandNeighbors' || kind === 'relatedContext') && name !== undefined ? [{ kind, name }] : [];
   });
 }
 
@@ -228,6 +229,29 @@ function expandNeighborsOf(template: Template, params: Params, allowlist: Source
   return expandStatementOf(allowlist, anchor, neighbor, branches);
 }
 
+const contextRefSchema = z.looseObject({ entityType: z.string() });
+
+/**
+ * The statement of a relationship context read and the branches its parameter holds: the lists of hits and of exact matches, each at most the limit, name entity types of the mapping, and the statement
+ * is written from the mapping rows that join a type of one list to a type of the other. A request with no row that joins them has nothing to read.
+ */
+function relatedContextOf(template: Template, params: Params, allowlist: SourceAllowlist, limit: number): { readonly cypher: string; readonly branches: readonly ContextBranch[] } {
+  const spec = template.relatedContext;
+  if (spec === undefined) return { cypher: '', branches: [] };
+  const hits = z.array(contextRefSchema).max(limit).safeParse(params[spec.hitsParam]);
+  const exact = z.array(contextRefSchema).max(limit).safeParse(params[spec.exactParam]);
+  if (!hits.success || !exact.success) throw new AppError('INVALID_REQUEST');
+  const hitTypes = new Set(hits.data.map((entry) => entry.entityType));
+  const exactTypes = new Set(exact.data.map((entry) => entry.entityType));
+  if ([...hitTypes, ...exactTypes].some((type) => !allowlist.entityLabels.has(type))) throw new AppError('INVALID_REQUEST');
+  const branches = hits.data.length === 0 || exact.data.length === 0 ? [] : contextBranchesOf(allowlist, hitTypes, exactTypes);
+  if (branches.length === 0) {
+    if (template.readsNothing?.(params, allowlist) === true) return { cypher: '', branches: [] };
+    throw new AppError('INVALID_REQUEST');
+  }
+  return { cypher: relatedContextStatementOf(allowlist, branches), branches };
+}
+
 export interface Rendered {
   readonly cypher: string;
   readonly parameters: Params;
@@ -251,16 +275,18 @@ export function renderTemplate(template: Template, params: Params, allowlist: So
   const probes = facetProbesOf(template, params, allowlist);
   const degrees = degreeCountsOf(template, params, allowlist);
   const expansion = expandNeighborsOf(template, params, allowlist);
+  const context = relatedContextOf(template, params, allowlist, limit);
   const cypher = template.cypher.replace(MARKER, (_whole, kind: string, name: string) => {
     if (kind === 'searchBranches') return branches;
     if (kind === 'facetProbes') return probes;
     if (kind === 'degreeCounts') return degrees;
     if (kind === 'expandNeighbors') return expansion;
+    if (kind === 'relatedContext') return context.cypher;
     const replacement = replacements.get(`${kind}:${name}`) ?? '';
     return kind === 'relationship' ? replacement : quoteName(replacement);
   });
   const markerNames = new Set([...template.entityParams, ...template.relationshipParams, ...(template.searchBranches === undefined ? [] : [template.searchBranches.param]), ...(template.facetProbes === undefined ? [] : [template.facetProbes.param]), ...(template.degreeCounts === undefined ? [] : [template.degreeCounts.param]), ...(template.expandNeighbors === undefined ? [] : [template.expandNeighbors.relTypesParam, template.expandNeighbors.directionParam])]);
   const kept = Object.entries(params).filter(([key]) => !markerNames.has(key));
   const cap: [string, unknown][] = template.degreeCounts?.form === 'bounded' || template.facetProbes !== undefined ? [['countCap', countCap]] : [];
-  return { cypher, parameters: Object.fromEntries([...kept, ['limit', limit], ...cap, ...gateValuesOf(template, allowlist), ...branchEntityTypesOf(template, params)]) };
+  return { cypher, parameters: Object.fromEntries([...kept, ['limit', limit], ...cap, ...gateValuesOf(template, allowlist), ...branchEntityTypesOf(template, params), ...(template.relatedContext === undefined ? [] : [[CONTEXT_BRANCHES, context.branches.map((branch) => ({ hitType: branch.hitType, exactType: branch.exactType, type: branch.type, direction: branch.direction }))] as [string, unknown]])]) };
 }

@@ -375,8 +375,8 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       const body = searchMoreRequestSchema.safeParse(request.body);
       if (!noQuerySchema.safeParse(request.query).success || !body.success) throw new AppError('INVALID_REQUEST');
       const identity = await options.store.current();
-      const { sourceId, text, group, cursor, entityTypes } = body.data;
-      const page = await searching.more({ traceId: request.id, principal: identity.principal, sourceId, text, group, cursor, mask: body.data.mask === true, signal: signalOf(request), ...(entityTypes === undefined ? {} : { entityTypes }) });
+      const { sourceId, text, group, cursor, entityTypes, exactRefs } = body.data;
+      const page = await searching.more({ traceId: request.id, principal: identity.principal, sourceId, text, group, cursor, mask: body.data.mask === true, signal: signalOf(request), ...(entityTypes === undefined ? {} : { entityTypes }), ...(exactRefs === undefined ? {} : { exactRefs }) });
       return searchMoreResultSchema.parse(page);
     });
 

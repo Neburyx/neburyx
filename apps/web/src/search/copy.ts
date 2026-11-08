@@ -51,15 +51,25 @@ export const observedText = (observedAt: string): string => `observed ${observed
 export const evidenceRuleText = (ruleId: string, ruleVersion: number): string => `Used by rule ${ruleId} v${ruleVersion}`;
 export const EXACT_MASKED = 'Exact matches cannot be searched while personal data is masked. Turn masking off to search personal data.';
 export const RELATED_MASKED = 'Related records cannot be searched while personal data is masked. Turn masking off to search personal data.';
-const PAGE_GROUP_NAMES = { exact: 'Exact matches', related: 'Related records', evidence: 'Evidence records', startsWith: 'Matches that start with the text', facets: 'Facet counts' } as const;
-const PAGE_GROUP_NOT_READ = { exact: 'exact matches not read', related: 'related records not read', evidence: 'evidence records not read', startsWith: 'matches that start with the text not read', facets: 'facet counts not read' } as const;
+const PAGE_GROUP_NAMES = { exact: 'Exact matches', related: 'Related records', evidence: 'Evidence records', startsWith: 'Matches that start with the text', facets: 'Facet counts', context: 'Relationship context' } as const;
+const PAGE_GROUP_NOT_READ = { exact: 'exact matches not read', related: 'related records not read', evidence: 'evidence records not read', startsWith: 'matches that start with the text not read', facets: 'facet counts not read', context: 'relationship context not read' } as const;
 export const groupNotReadSummary = (group: SearchFailureGroup): string => PAGE_GROUP_NOT_READ[group];
 export function groupFailedText(group: SearchFailureGroup, code: string, timeoutMs: number | undefined): string {
   const name = PAGE_GROUP_NAMES[group];
+  if (group === 'context') return code === 'QUERY_TIMEOUT' ? (timeoutMs === undefined ? `${name} not read: the source did not answer in time.` : `${name} not read: the source did not answer within ${secondsOf(timeoutMs)} s.`) : `${name} not read (${code}).`;
   if (code === 'QUERY_TIMEOUT') return timeoutMs === undefined ? `${name} were not read: the source did not answer in time.` : `${name} were not read: the source did not answer within ${secondsOf(timeoutMs)} s.`;
   return `${name} were not read (${code}).`;
 }
 export const RETRY = 'Retry';
+
+/**
+ * The relationship context line of a related record: "<TYPE> <title of the exact match>" for a relationship that leaves the record and "<TYPE> from <title>" for one that enters it, with the
+ * type as the source stores it and the title the exact match has in the answer.
+ */
+export const relationshipContextLine = (relationshipType: string, direction: 'out' | 'in', title: string): string => (direction === 'out' ? `${relationshipType} ${title}` : `${relationshipType} from ${title}`);
+
+/** The line for a type whose pairs the relationship context read left out because its stable-ID index is not online. */
+export const contextNotReadLine = (typeName: string): string => `Relationship context not read for ${typeName}`;
 
 const INDEX_GAP_TEXT: Readonly<Record<DisabledType['reason'], string>> = { 'index-unavailable': 'no online index', 'index-building': 'index is building', 'index-failed': 'index failed' };
 const NOT_SEARCHED = 'Not searched';
@@ -171,7 +181,7 @@ export function startsWithText(count: Count): string | undefined {
 
 export const addedNote = (title: string): string => `Added ${title}.`;
 
-const GROUP_NAMES = { exact: 'exact ID matches', related: 'related records', evidence: 'evidence records', startsWith: 'matches that start with the text', facets: 'facet counts' } as const;
+const GROUP_NAMES = { exact: 'exact ID matches', related: 'related records', evidence: 'evidence records', startsWith: 'matches that start with the text', facets: 'facet counts', context: 'relationship context' } as const;
 
 export const groupNotRead = (group: keyof typeof GROUP_NAMES): string => `${GROUP_NAMES[group]} not read`;
 

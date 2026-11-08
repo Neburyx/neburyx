@@ -1,4 +1,4 @@
-import { FACET_SCOPES, relationshipsOf, type AggregateEvidenceHit, type AggregateMember, type EvidenceHit, type EvidenceRecord, type Facets, type GraphNode, type OpenInvestigationRequest, type OpenInvestigationResponse, type SearchMatchMode, type SearchRequest, type SearchResult, type SourceProfile, type StoredEvidenceHit } from '@neburyx/contracts';
+import { FACET_SCOPES, relationshipsOf, type AggregateEvidenceHit, type AggregateMember, type EvidenceHit, type EvidenceRecord, type Facets, type GraphNode, type OpenInvestigationRequest, type OpenInvestigationResponse, type RelationshipContext, type SearchMatchMode, type SearchRequest, type SearchResult, type SourceProfile, type StoredEvidenceHit } from '@neburyx/contracts';
 import type { ApiClient, ApiResult } from '../api/client.js';
 import { testProfile } from '../dev/test-profile.js';
 import { nodeOf } from '../investigations/test-data.js';
@@ -35,8 +35,8 @@ export function answerOf(sourceId: string, exact: readonly GraphNode[], override
   };
 }
 
-export function relatedOf(nodes: readonly GraphNode[], count?: SearchResult['related']['count'], matched: Readonly<Record<string, readonly string[]>> = {}): SearchResult['related'] {
-  return { hits: nodes.map((node) => ({ node, matchedProperties: [...(matched[node.ref.stableId] ?? [])] })), count: count ?? { value: nodes.length, quality: 'exact', scope: 'search:related' }, searchable: true, disabledTypes: [] };
+export function relatedOf(nodes: readonly GraphNode[], count?: SearchResult['related']['count'], matched: Readonly<Record<string, readonly string[]>> = {}, contexts: Readonly<Record<string, RelationshipContext>> = {}): SearchResult['related'] {
+  return { hits: nodes.map((node) => ({ node, matchedProperties: [...(matched[node.ref.stableId] ?? [])], ...(contexts[node.ref.stableId] === undefined ? {} : { context: contexts[node.ref.stableId] }) })), count: count ?? { value: nodes.length, quality: 'exact', scope: 'search:related' }, searchable: true, disabledTypes: [] };
 }
 
 export function withRelated(sourceId: string, exact: readonly GraphNode[], related: readonly GraphNode[], count?: SearchResult['related']['count'], overrides: Partial<SearchResult> = {}): ApiResult<SearchResult> {

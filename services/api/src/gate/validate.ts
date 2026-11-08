@@ -45,8 +45,30 @@ export function readPosition(template: Template, position: CursorPosition, conte
   }
 }
 
+/** The lists of references a template names, with the token in each element of a keyed entity type replaced by the value it stands for; an element that is not an object with an entity type and a stable ID is left for the schema to refuse. */
+function readReferenceLists(names: readonly string[], params: object, context: GateContext, references: ReferenceKeys): unknown {
+  const lists = Object.fromEntries(
+    names.map((name) => {
+      const list: unknown = Object.getOwnPropertyDescriptor(params, name)?.value;
+      if (!Array.isArray(list)) return [name, list];
+      return [
+        name,
+        list.map((entry: unknown) => {
+          if (typeof entry !== 'object' || entry === null) return entry;
+          const entityType: unknown = Object.getOwnPropertyDescriptor(entry, 'entityType')?.value;
+          const stableId: unknown = Object.getOwnPropertyDescriptor(entry, 'stableId')?.value;
+          if (typeof entityType !== 'string' || typeof stableId !== 'string' || context.model.entitiesByType.get(entityType)?.keyed !== true) return entry;
+          return { ...entry, stableId: readToken(references, { sourceId: context.sourceId, entityType }, stableId) };
+        }),
+      ];
+    }),
+  );
+  return { ...params, ...lists };
+}
+
 /** The parameters with the token of a keyed entity type's stable ID replaced by the value it stands for; any other parameters are returned as they are, for the schema to check. */
 function readReferences(template: Template, params: unknown, context: GateContext, references: ReferenceKeys): unknown {
+  if (typeof params === 'object' && params !== null && template.referenceLists !== undefined) return readReferenceLists(template.referenceLists, params, context, references);
   const names = template.referenceParams;
   if (names === undefined || typeof params !== 'object' || params === null) return params;
   const entityType: unknown = Object.getOwnPropertyDescriptor(params, names.entityType)?.value;

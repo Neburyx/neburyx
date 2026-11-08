@@ -290,13 +290,13 @@ describe(`masking in the related group on ${NEO4J_SERIES}`, () => {
 });
 
 describe(`the reads of a search counted through the seam, on ${NEO4J_SERIES}`, () => {
-  it('costs one read for each group, one for the facets and one for the schema, and records one audit event for each group and for the facets', async () => {
+  it('costs one read for each group, one for the facets and one for the schema, and records one audit event for each group, for the facets and for the relationship context run, which reads nothing here because the mapping has no relationship row', async () => {
     reads = 0;
     events.length = 0;
     const from = statements.length;
     await search('REF-1');
     expect(reads).toBe(4);
     expect(statements.slice(from).map((statement) => statement.templateId).sort()).toEqual(['entity-related', 'entity-search', 'schema-indexes', 'search-facets']);
-    expect(events.filter((event) => event.action.startsWith('entity.search')).map((event) => `${event.action} ${event.result}`).sort()).toEqual(['entity.search success', 'entity.search_facets success', 'entity.search_related success']);
+    expect(events.filter((event) => event.action.startsWith('entity.search')).map((event) => `${event.action} ${event.result}`).sort()).toEqual(['entity.search success', 'entity.search_context success', 'entity.search_facets success', 'entity.search_related success']);
   });
 });

@@ -252,9 +252,9 @@ describe('the facets beside a group that Show more extended', () => {
     const kit = moreKit(async () => ok(firstPage({ facets: facetsOf({ total: [25, 'lowerBound'], types: [['kind-a', [25, 'lowerBound']]], modes: [['exact', [25, 'lowerBound']], ['related', 0]] }) })), async () => ok(exactPage(25, 25, 'cursor-2')));
     renderApp(searchAt('demo', 'needle'), kit.client);
     const filters = await screen.findByRole('complementary', { name: 'Filters' });
-    expect(within(filters).getByText('≥ 25 results · lower bound')).toBeDefined();
+    expect(within(filters).getByText('≥ 25 entities · lower bound')).toBeDefined();
     await userEvent.setup().click(within(main()).getByRole('button', { name: 'Show more: Exact matches' }));
-    expect(await within(filters).findByText('≥ 50 results · lower bound')).toBeDefined();
-    expect(within(filters).queryByText('≥ 25 results · lower bound')).toBeNull();
+    expect(await within(filters).findByText('≥ 50 entities · lower bound')).toBeDefined();
+    expect(within(filters).queryByText('≥ 25 entities · lower bound')).toBeNull();
   });
 });

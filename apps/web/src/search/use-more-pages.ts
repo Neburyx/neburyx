@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Count, EvidenceHit, GraphNode, GroupFailure, RelatedHit, SearchMoreRequest, SearchMoreResult, SearchPagedGroup, SearchResult, UnreferencedHit } from '@neburyx/contracts';
+import type { Count, DisabledType, EvidenceHit, GraphNode, GroupFailure, RelatedHit, SearchMoreRequest, SearchMoreResult, SearchPagedGroup, SearchResult, UnreferencedHit } from '@neburyx/contracts';
 import type { ApiClient, ApiFailure, ApiResult } from '../api/client.js';
 import { UNEXPECTED } from '../api/use-request.js';
 
@@ -13,6 +13,7 @@ interface HitsOf {
 }
 
 const NO_UNREFERENCED: readonly UnreferencedHit[] = [];
+const NO_DISABLED: readonly DisabledType[] = [];
 
 /** Why the last Show more of a group added nothing: the read of its page failed (`group`), the request failed (`request`), or the cursor no longer fits the search (`invalidated`). */
 export type PageProblem = { readonly kind: 'group'; readonly failure: GroupFailure } | { readonly kind: 'request'; readonly failure: ApiFailure } | { readonly kind: 'invalidated' };
@@ -27,6 +28,9 @@ interface Stored<Hit> {
   readonly problem: PageProblem | undefined;
   readonly focusAt: number | undefined;
   readonly unreferencedFocusAt: number | undefined;
+  /** The relationship context of the related group's later pages: the failure of the last page whose context read failed, and the types left out of the reads. */
+  readonly contextFailure?: GroupFailure | undefined;
+  readonly contextDisabled?: readonly DisabledType[] | undefined;
 }
 
 export interface GroupPages<Hit> {
@@ -44,6 +48,10 @@ export interface GroupPages<Hit> {
   readonly focusAt: number | undefined;
   /** The position, among the group's unreferenced hits, of the first of the last page added, when that page added no other hit: it takes the focus then. */
   readonly unreferencedFocusAt: number | undefined;
+  /** The failure of the relationship context read of a page already read, kept while the answer is shown: those pages' records have no context line. */
+  readonly contextFailure: GroupFailure | undefined;
+  /** The types the later pages' context reads left out for want of a stable-ID index. */
+  readonly contextDisabled: readonly DisabledType[];
 }
 
 export interface SearchShown {
@@ -101,6 +109,8 @@ function pagesOf<Hit>(result: SearchResult, group: PagedGroup, stored: Stored<Hi
     problem: stored?.problem,
     focusAt: stored?.focusAt,
     unreferencedFocusAt: stored?.unreferencedFocusAt,
+    contextFailure: stored?.contextFailure,
+    contextDisabled: stored?.contextDisabled ?? NO_DISABLED,
   };
 }
 
@@ -111,6 +121,11 @@ interface PageHits<Hit> {
 }
 
 /** The stored pages of a group with the answer of its next page added: its hits appended, or the problem it had. */
+/** The types left out of the context reads so far, each once. */
+function mergedDisabled(before: readonly DisabledType[], added: readonly DisabledType[]): readonly DisabledType[] {
+  return [...before, ...added.filter((entry) => !before.some((known) => known.entityType === entry.entityType && known.property === entry.property))];
+}
+
 function withAnswer<Hit>(held: Stored<Hit>, answer: ApiResult<SearchMoreResult>, hitsOf: (page: SearchMoreResult) => PageHits<Hit> | undefined, first: FirstPage): Stored<Hit> {
   if (!answer.ok) return { ...held, loading: false, problem: answer.failure.code === 'CURSOR_INVALIDATED' ? { kind: 'invalidated' } : { kind: 'request', failure: answer.failure } };
   const page = answer.value;
@@ -127,6 +142,8 @@ function withAnswer<Hit>(held: Stored<Hit>, answer: ApiResult<SearchMoreResult>,
     problem: undefined,
     focusAt: added.hits.length === 0 ? (onlyUnreferenced ? undefined : held.focusAt) : first.held + held.more.length,
     unreferencedFocusAt: onlyUnreferenced ? first.unreferenced + held.unreferenced.length : undefined,
+    contextFailure: (page.group === 'related' ? page.contextFailure : undefined) ?? held.contextFailure,
+    contextDisabled: mergedDisabled(held.contextDisabled ?? NO_DISABLED, page.group === 'related' ? (page.context?.disabledTypes ?? NO_DISABLED) : NO_DISABLED),
   };
 }
 
@@ -186,11 +203,15 @@ export function useMorePages(client: ApiClient, shown: SearchShown | undefined, 
         problem: undefined,
         focusAt: previous?.focusAt,
         unreferencedFocusAt: previous?.unreferencedFocusAt,
+        contextFailure: previous?.contextFailure,
+        contextDisabled: previous?.contextDisabled ?? NO_DISABLED,
       });
       put((groups) => withGroup(groups, group, { exact: loading, related: loading, evidence: loading }));
       const controller = new AbortController();
       controllers.current.add(controller);
-      const request: SearchMoreRequest = { sourceId: current.sourceId, text: current.text, group, cursor, ...(current.mask ? { mask: true } : {}), ...(current.entityTypes.length === 0 ? {} : { entityTypes: [...current.entityTypes] }) };
+      // a page of the related group asks for the relationship context of its records against the exact matches held, at most the cap of them
+      const exactRefs = group === 'related' ? [...result.exact, ...(held.exact?.more ?? [])].slice(0, result.cap).map((node) => node.ref) : [];
+      const request: SearchMoreRequest = { sourceId: current.sourceId, text: current.text, group, cursor, ...(current.mask ? { mask: true } : {}), ...(current.entityTypes.length === 0 ? {} : { entityTypes: [...current.entityTypes] }), ...(exactRefs.length === 0 ? {} : { exactRefs }) };
       const send = async (): Promise<ApiResult<SearchMoreResult>> => {
         try {
           return await client.searchMore(request, controller.signal);
@@ -218,7 +239,7 @@ export function useMorePages(client: ApiClient, shown: SearchShown | undefined, 
   const result = shown?.result;
   const current = shown !== undefined && shown.identity === asked;
   if (result === undefined) {
-    const none = { more: [], unreferenced: NO_UNREFERENCED, nextCursor: undefined, count: { quality: 'unknown' as const, scope: 'search:none' }, loading: false, problem: undefined, focusAt: undefined, unreferencedFocusAt: undefined };
+    const none = { more: [], unreferenced: NO_UNREFERENCED, nextCursor: undefined, count: { quality: 'unknown' as const, scope: 'search:none' }, loading: false, problem: undefined, focusAt: undefined, unreferencedFocusAt: undefined, contextFailure: undefined, contextDisabled: NO_DISABLED };
     return { exact: none, related: none, evidence: none, current, showMore };
   }
   return {

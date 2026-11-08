@@ -26,7 +26,7 @@ describe('the Filters of the Search results page', () => {
     expect(panel.getAllByRole('group').map((group) => group.querySelector('legend')?.textContent)).toEqual(['Entity type', 'Match mode']);
     expect(panel.getAllByRole('checkbox').map((box) => box.closest('label')?.textContent)).toEqual(['KIND-A3', 'KIND-B2', 'Exact ID4', 'Referenced ID1', 'Evidence record7']);
     expect(panel.getAllByRole('checkbox').every((box) => box instanceof HTMLInputElement && !box.checked)).toBe(true);
-    expect(panel.getByText('5 results')).toBeDefined();
+    expect(panel.getByText('5 entities · 7 supporting relationships')).toBeDefined();
   });
 
   it('says a count as the page says every count: the number, "≥ 25 · lower bound" or "0", and the total the same, and says the returned value for a smaller cap', async () => {
@@ -36,12 +36,12 @@ describe('the Filters of the Search results page', () => {
     expect(panel.getByText('≥ 25 · lower bound')).toBeDefined();
     expect(panel.getByText('≥ 10 · lower bound')).toBeDefined();
     expect(panel.getByText('0')).toBeDefined();
-    expect(panel.getByText('≥ 25 results · lower bound')).toBeDefined();
+    expect(panel.getByText('≥ 25 entities · lower bound')).toBeDefined();
   });
 
   it('says one result in the singular, and adds no count together', async () => {
     await render(() => withFacets('demo', [hit('demo', 'AC-1')], facetsOf({ total: 1, types: [['kind-a', 1], ['kind-b', 1]] })));
-    expect(within(filters()).getByText('1 result')).toBeDefined();
+    expect(within(filters()).getByText('1 entity')).toBeDefined();
   });
 
   it('shows no Reset while nothing is chosen, and the boxes of the address checked', async () => {
@@ -104,7 +104,7 @@ describe('the Filters when the facet read failed', () => {
     let calls = 0;
     const kit = searchKit(['demo'], async () => (calls++ === 0 ? withFacets('demo', [hit('demo', 'AC-1')], FULL) : failedAnswer()), { types: TYPES });
     renderApp(searchAt('demo', 'AC'), kit.client);
-    await screen.findByText('5 results');
+    await screen.findByText('5 entities · 7 supporting relationships');
     await userEvent.setup().click(within(filters()).getByRole('checkbox', { name: /KIND-A/ }));
     await screen.findByText('Counts not read');
     const panel = within(filters());
@@ -127,5 +127,45 @@ describe('when there is nothing to filter', () => {
     renderApp(searchAt('demo', 'AC'), kit.client);
     await within(main()).findByText('Searching…');
     expect(screen.queryByRole('complementary', { name: 'Filters' })).toBeNull();
+  });
+});
+
+describe('the total of the Filters says what it counts', () => {
+  const total = (entities: number | readonly [number, 'lowerBound'], evidence: number | readonly [number, 'lowerBound'] | undefined) =>
+    facetsOf({ total: entities, types: [['kind-a', 0]], modes: evidence === undefined ? [['exact', 0]] : [['exact', 0], ['evidence', evidence]] });
+
+  it('reads "0 entities · 25 supporting relationships" for a text that finds only evidence records, and never "0 results"', async () => {
+    await render(() => withFacets('demo', [], total(0, 25)));
+    expect(within(filters()).getByText('0 entities · 25 supporting relationships')).toBeDefined();
+    expect(within(filters()).queryByText(/results/)).toBeNull();
+  });
+
+  it('says a lower bound of evidence records as a lower bound', async () => {
+    await render(() => withFacets('demo', [], total(0, [25, 'lowerBound'])));
+    expect(within(filters()).getByText('0 entities · ≥ 25 supporting relationships · lower bound')).toBeDefined();
+  });
+
+  it('adds the evidence part after the entities, whatever the entity total, in the singular and as a lower bound', async () => {
+    await render(() => withFacets('demo', [hit('demo', 'AC-1')], total(1, 1)));
+    expect(within(filters()).getByText('1 entity · 1 supporting relationship')).toBeDefined();
+  });
+
+  it.each([
+    ['an evidence count of zero', total(3, 0), '3 entities'],
+    ['no evidence entry (the mode was not searched)', total(3, undefined), '3 entities'],
+  ])('shows the entity part only for %s', async (_name, facets, text) => {
+    await render(() => withFacets('demo', [hit('demo', 'AC-1')], facets));
+    expect(within(filters()).getByText(text)).toBeDefined();
+  });
+
+  it('shows the entity part only when the evidence count was not read', async () => {
+    const unread = { ...facetsOf({ total: 3, types: [['kind-a', 0]] }), matchMode: [{ mode: 'evidence' as const, count: { quality: 'unknown' as const, scope: 'search:facet:matchMode' as const } }] };
+    await render(() => withFacets('demo', [hit('demo', 'AC-1')], unread));
+    expect(within(filters()).getByText('3 entities')).toBeDefined();
+  });
+
+  it('is the answer\'s total under a selection, which does not change what it counts', async () => {
+    await render(() => withFacets('demo', [], total(0, 25)), '&mode=evidence');
+    expect(within(filters()).getByText('0 entities · 25 supporting relationships')).toBeDefined();
   });
 });

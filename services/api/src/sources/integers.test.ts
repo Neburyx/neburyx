@@ -36,6 +36,14 @@ describe('prepareParameters', () => {
     expect(prepared['s']).toBe('3');
   });
 
+  it('turns a tagged 64-bit integer inside a list of references into a driver integer of its exact value, and leaves the other values of the list as they are', () => {
+    const prepared = prepareParameters({ hits: [{ entityType: 'piece', stableId: '9007199254740993', stableInteger: { $type: 'integer', value: '9007199254740993' } }, { entityType: 'piece', stableId: 'A-1', stableInteger: null, n: 3 }] }, []);
+    const [first, second] = prepared['hits'] as { stableInteger: unknown; n?: unknown; stableId: string }[];
+    expect(neo4j.isInt(first?.stableInteger) && first.stableInteger.toString()).toBe('9007199254740993');
+    expect(first?.stableId).toBe('9007199254740993');
+    expect(second).toEqual({ entityType: 'piece', stableId: 'A-1', stableInteger: null, n: 3 });
+  });
+
   it('keeps a parameter named like an object property as an own key', () => {
     const prepared = prepareParameters(JSON.parse('{"__proto__": 1, "limit": 1}'), ['__proto__']);
     expect(Object.hasOwn(prepared, '__proto__')).toBe(true);

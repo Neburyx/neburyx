@@ -32,14 +32,18 @@ describe('the source status line', () => {
     expect(within(line()).queryByText(/connected/)).toBeNull();
   });
 
+  const ADVICE = 'MADE_FROM: advice: a uniqueness constraint on the stable id property `linkId` is needed for paging without a repeat or a gap';
+
   it.each([
-    ['unavailable', 'TLS handshake failed', 'Source a · read-only · unavailable · TLS handshake failed'],
+    ['unavailable', 'TLS handshake failed', 'Source a · read-only · unavailable'],
     ['unavailable', null, 'Source a · read-only · unavailable'],
-    ['degraded', 'estimated degree counts', 'Source a · read-only · degraded · estimated degree counts'],
+    ['degraded', 'estimated degree counts', 'Source a · read-only · degraded'],
+    ['degraded', ADVICE, 'Source a · read-only · degraded'],
     ['degraded', null, 'Source a · read-only · degraded'],
-  ] as const)('shows a %s source with the reason %s', async (state, reason, text) => {
+  ] as const)('shows a %s source as its alias, read-only and its state, and never the reason %s', async (state, reason, text) => {
     renderApp('/', clientWith({ me: me(), sources: [source('a', { state, stateReason: reason })] }));
     expect(await within(line()).findByText((_content, element) => element?.tagName === 'P' && element.textContent === `● ${text}`)).toBeTruthy();
+    if (reason !== null) expect(within(line()).queryByText(reason, { exact: false })).toBeNull();
   });
 
   it('shows a loading state while the sources are awaited', () => {

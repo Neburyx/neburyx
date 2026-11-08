@@ -5145,6 +5145,33 @@
               "type": "string",
               "minLength": 1
             }
+          },
+          "exactRefs": {
+            "maxItems": 25,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "sourceId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "entityType": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "stableId": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "sourceId",
+                "entityType",
+                "stableId"
+              ],
+              "additionalProperties": false
+            }
           }
         },
         "required": [
@@ -5279,7 +5306,8 @@
                       "related",
                       "evidence",
                       "startsWith",
-                      "facets"
+                      "facets",
+                      "context"
                     ]
                   },
                   "code": {
@@ -5658,7 +5686,8 @@
                       "related",
                       "evidence",
                       "startsWith",
-                      "facets"
+                      "facets",
+                      "context"
                     ]
                   },
                   "code": {
@@ -5835,6 +5864,51 @@
                         "type": "string",
                         "minLength": 1
                       }
+                    },
+                    "context": {
+                      "type": "object",
+                      "properties": {
+                        "relationshipType": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "direction": {
+                          "type": "string",
+                          "enum": [
+                            "out",
+                            "in"
+                          ]
+                        },
+                        "with": {
+                          "type": "object",
+                          "properties": {
+                            "sourceId": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "entityType": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "stableId": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "required": [
+                            "sourceId",
+                            "entityType",
+                            "stableId"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "relationshipType",
+                        "direction",
+                        "with"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -5920,6 +5994,84 @@
                   ],
                   "additionalProperties": false
                 }
+              },
+              "contextFailure": {
+                "type": "object",
+                "properties": {
+                  "group": {
+                    "type": "string",
+                    "enum": [
+                      "exact",
+                      "related",
+                      "evidence",
+                      "startsWith",
+                      "facets",
+                      "context"
+                    ]
+                  },
+                  "code": {
+                    "type": "string",
+                    "enum": [
+                      "QUERY_TIMEOUT",
+                      "SOURCE_BUSY",
+                      "RATE_LIMITED",
+                      "INTERNAL_ERROR"
+                    ]
+                  },
+                  "timeoutMs": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "group",
+                  "code"
+                ],
+                "additionalProperties": false
+              },
+              "context": {
+                "type": "object",
+                "properties": {
+                  "disabledTypes": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "entityType": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "property": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "reason": {
+                          "type": "string",
+                          "enum": [
+                            "index-unavailable",
+                            "index-building",
+                            "index-failed"
+                          ]
+                        },
+                        "typeSearched": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "entityType",
+                        "property",
+                        "reason",
+                        "typeSearched"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "disabledTypes"
+                ],
+                "additionalProperties": false
               }
             },
             "required": [
@@ -6054,7 +6206,8 @@
                       "related",
                       "evidence",
                       "startsWith",
-                      "facets"
+                      "facets",
+                      "context"
                     ]
                   },
                   "code": {
@@ -6953,6 +7106,51 @@
                         "type": "string",
                         "minLength": 1
                       }
+                    },
+                    "context": {
+                      "type": "object",
+                      "properties": {
+                        "relationshipType": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "direction": {
+                          "type": "string",
+                          "enum": [
+                            "out",
+                            "in"
+                          ]
+                        },
+                        "with": {
+                          "type": "object",
+                          "properties": {
+                            "sourceId": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "entityType": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "stableId": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "required": [
+                            "sourceId",
+                            "entityType",
+                            "stableId"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "relationshipType",
+                        "direction",
+                        "with"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -7128,6 +7326,49 @@
               "nextCursor": {
                 "type": "string",
                 "minLength": 1
+              },
+              "context": {
+                "type": "object",
+                "properties": {
+                  "disabledTypes": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "entityType": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "property": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "reason": {
+                          "type": "string",
+                          "enum": [
+                            "index-unavailable",
+                            "index-building",
+                            "index-failed"
+                          ]
+                        },
+                        "typeSearched": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "entityType",
+                        "property",
+                        "reason",
+                        "typeSearched"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "disabledTypes"
+                ],
+                "additionalProperties": false
               }
             },
             "required": [
@@ -7558,7 +7799,8 @@
                     "related",
                     "evidence",
                     "startsWith",
-                    "facets"
+                    "facets",
+                    "context"
                   ]
                 },
                 "code": {

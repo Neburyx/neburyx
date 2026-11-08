@@ -459,6 +459,57 @@ describe('the failure of the facet read in the search result', () => {
   });
 });
 
+describe('the relationship context of the related hits in the search result', () => {
+  const ref = node.ref;
+  const hit = { node: { ...node, ref: { ...ref, stableId: 'RL-1' } }, matchedProperties: ['batchRef'] };
+  const related = (hits: unknown[], extra: Record<string, unknown> = {}) => ({ hits, count: { value: hits.length, quality: 'exact', scope: 'search:related' }, searchable: true, disabledTypes: [], ...extra });
+  const context = { relationshipType: 'OWNS', direction: 'out', with: ref };
+  const contextFailure = { group: 'context', code: 'QUERY_TIMEOUT', timeoutMs: 5000 };
+  const parse = (override: Record<string, unknown>) => searchResultSchema.safeParse({ ...result, ...override }).success;
+
+  it('accepts a related hit with a context that names an exact match, in either direction, and one with none', () => {
+    expect(parse({ related: related([{ ...hit, context }]) })).toBe(true);
+    expect(parse({ related: related([{ ...hit, context: { ...context, direction: 'in' } }]) })).toBe(true);
+    expect(parse({ related: related([hit]) })).toBe(true);
+  });
+
+  it.each([
+    ['a context that names a record the answer does not hold as an exact match', { related: related([{ ...hit, context: { ...context, with: { ...ref, stableId: 'OTHER' } } }]) }],
+    ['a direction that is neither out nor in', { related: related([{ ...hit, context: { ...context, direction: 'both' } }]) }],
+    ['a context with a field the contract does not name', { related: related([{ ...hit, context: { ...context, title: 'AC-1' } }]) }],
+    ['a context with no relationship type', { related: related([{ ...hit, context: { direction: 'out', with: ref } }]) }],
+  ])('refuses %s', (_name, override) => {
+    expect(parse(override)).toBe(false);
+  });
+
+  it('accepts the types left out of the context read, and refuses an empty list of them', () => {
+    const left = { entityType: 'widget', property: 'widgetId', reason: 'index-unavailable', typeSearched: false };
+    expect(parse({ related: related([hit], { context: { disabledTypes: [left] } }) })).toBe(true);
+    expect(parse({ related: related([hit], { context: { disabledTypes: [] } }) })).toBe(false);
+  });
+
+  it('accepts a failed context read named once, beside hits that hold no context, and counts it as no result group', () => {
+    expect(parse({ related: related([hit]), failures: [contextFailure] })).toBe(true);
+    expect(parse({ related: related([hit]), failures: [{ group: 'context', code: 'INTERNAL_ERROR' }] })).toBe(true);
+  });
+
+  it.each([
+    ['a failed context read beside a hit that holds a context', { related: related([{ ...hit, context }]), failures: [contextFailure] }],
+    ['a failed context read when the related group holds no hit', { related: related([]), failures: [contextFailure] }],
+    ['a failed context read when the exact group holds no hit', { exact: [], counts: { exact: { value: 0, quality: 'exact', scope: 'search:exact' } }, related: related([hit]), failures: [contextFailure] }],
+    ['the context failure named twice', { related: related([hit]), failures: [contextFailure, contextFailure] }],
+    ['a context failure with a code that belongs to the whole search', { related: related([hit]), failures: [{ group: 'context', code: 'SOURCE_UNAVAILABLE' }] }],
+  ])('refuses %s', (_name, override) => {
+    expect(parse(override)).toBe(false);
+  });
+
+  it('does not count a failed context read among the result groups that failed', () => {
+    const onlyExact = { related: related([], { searchable: false }), evidence: { ...result.evidence, searchable: false } };
+    expect(parse({ ...onlyExact, failures: [contextFailure] })).toBe(false);
+    expect(parse({ related: related([hit]), failures: [{ group: 'related', code: 'SOURCE_BUSY' }, contextFailure] })).toBe(false);
+  });
+});
+
 describe('the selection of a search request', () => {
   const accepts = (body: Record<string, unknown>) => searchRequestSchema.safeParse({ sourceId: 'demo', text: 'ab', ...body }).success;
 
@@ -530,6 +581,54 @@ describe('the request for the next page of a group', () => {
     ['a field the contract does not name', { limit: 50 }],
   ])('refuses %s', (_name, change) => {
     expect(searchMoreRequestSchema.safeParse({ ...body, ...change }).success).toBe(false);
+  });
+});
+
+describe('the exact matches a request for the next page of the related group carries', () => {
+  const body = { sourceId: 'demo', text: 'AC-1', group: 'related', cursor: 'v1.a.b' };
+  const refs = (count: number) => Array.from({ length: count }, (_, index) => ({ ...node.ref, stableId: `AC-${index}` }));
+
+  it('accepts none, one and as many as the cap for the related group', () => {
+    expect(searchMoreRequestSchema.safeParse(body).success).toBe(true);
+    expect(searchMoreRequestSchema.safeParse({ ...body, exactRefs: [] }).success).toBe(true);
+    expect(searchMoreRequestSchema.safeParse({ ...body, exactRefs: refs(SEARCH_GROUP_CAP) }).success).toBe(true);
+  });
+
+  it.each([
+    ['more than the cap', { exactRefs: refs(SEARCH_GROUP_CAP + 1) }],
+    ['the exact group', { group: 'exact', exactRefs: refs(1) }],
+    ['the evidence group', { group: 'evidence', exactRefs: refs(1) }],
+    ['a reference with a field the contract does not name', { exactRefs: [{ ...node.ref, title: 'AC-1' }] }],
+    ['a reference with no stable ID', { exactRefs: [{ sourceId: 'demo', entityType: 'widget' }] }],
+  ])('refuses %s', (_name, change) => {
+    expect(searchMoreRequestSchema.safeParse({ ...body, ...change }).success).toBe(false);
+  });
+});
+
+describe('the relationship context of a page of the related group', () => {
+  const hit = { node, matchedProperties: [] };
+  const page = { sourceId: 'demo', group: 'related', hits: [hit], count: { value: 1, quality: 'exact', scope: 'search:related' }, dropped: result.dropped, warnings: [] };
+  const failure = { group: 'context', code: 'QUERY_TIMEOUT', timeoutMs: 5000 };
+
+  it('accepts a page that keeps its hits, count and cursor beside the failure of its context read, and the types left out of the read', () => {
+    expect(searchMoreResultSchema.safeParse({ ...page, contextFailure: failure }).success).toBe(true);
+    expect(searchMoreResultSchema.safeParse({ ...page, count: { value: 1, quality: 'lowerBound', scope: 'search:related' }, nextCursor: 'v1.a.b', contextFailure: failure }).success).toBe(true);
+    expect(searchMoreResultSchema.safeParse({ ...page, context: { disabledTypes: [{ entityType: 'widget', property: 'widgetId', reason: 'index-unavailable', typeSearched: false }] } }).success).toBe(true);
+  });
+
+  it.each([
+    ['a context failure named for another group', { contextFailure: { ...failure, group: 'related' } }],
+    ['a context failure beside a hit that holds a context', { hits: [{ ...hit, context: { relationshipType: 'OWNS', direction: 'out', with: node.ref } }], contextFailure: failure }],
+    ['a context failure with no hit', { hits: [], count: { value: 0, quality: 'exact', scope: 'search:related' }, contextFailure: failure }],
+    ['a context failure beside the failure of the page', { hits: [], count: { quality: 'unknown', scope: 'search:related' }, failure: { group: 'related', code: 'SOURCE_BUSY' }, contextFailure: failure }],
+    ['a context failure with a code of the whole request', { contextFailure: { ...failure, code: 'SOURCE_UNAVAILABLE' } }],
+    ['an empty list of left-out types', { context: { disabledTypes: [] } }],
+  ])('refuses %s', (_name, change) => {
+    expect(searchMoreResultSchema.safeParse({ ...page, ...change }).success).toBe(false);
+  });
+
+  it('refuses a context failure on the page of another group', () => {
+    expect(searchMoreResultSchema.safeParse({ sourceId: 'demo', group: 'exact', nodes: [node], count: { value: 1, quality: 'exact', scope: 'search:exact' }, dropped: result.dropped, warnings: [], contextFailure: failure }).success).toBe(false);
   });
 });
 

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { aggregateSchema, countSchema, nodeSchema, propertySchema, storedEdgeRefSchema } from './graph.js';
+import { aggregateSchema, countSchema, elementRefSchema, nodeSchema, propertySchema, storedEdgeRefSchema } from './graph.js';
 
 /** A stable ID can be one character, so an exact search takes one; the minimum of 2 belongs to type-ahead. */
 export const MIN_SEARCH_TEXT_LENGTH = 1;
@@ -21,8 +21,8 @@ export const SEARCH_PAGED_GROUPS = ['exact', 'related', 'evidence'] as const;
 /** The match modes a facet counts, and the groups a selection can choose: the order the page shows them. */
 export const SEARCH_MATCH_MODES = ['exact', 'related', 'evidence'] as const;
 
-/** What a failure can name: a result group, or the facet read, which is not a result group and is never counted as one. */
-export const SEARCH_FAILURE_GROUPS = [...SEARCH_GROUPS, 'facets'] as const;
+/** What a failure can name: a result group, or the facet read or the relationship context read, neither of which is a result group and is never counted as one. */
+export const SEARCH_FAILURE_GROUPS = [...SEARCH_GROUPS, 'facets', 'context'] as const;
 
 /** The scopes of the counts of the facets: the entries of the entity-type facet, of the match-mode facet and the total. */
 export const FACET_SCOPES = { entityType: 'search:facet:entityType', matchMode: 'search:facet:matchMode', total: 'search:facet:total' } as const;
@@ -139,11 +139,19 @@ export const unreferencedHitSchema = z.strictObject({
 /** The unreferenced hits of a group's page, in the order they were read; present only when there is one. The group's `dropped['no-stable-id']` is their number. */
 const unreferencedListSchema = z.array(unreferencedHitSchema).min(1).optional();
 
+/**
+ * How a related record is related to the record searched for: one stored relationship between the two, read from the related record's side. `direction` is `out` when the relationship leaves the related
+ * record and `in` when it enters it; `with` is the reference of the exact match it is related to, which the answer also holds in `exact`. It holds no property value of either record.
+ */
+export const relationshipContextSchema = z.strictObject({ relationshipType: z.string().min(1), direction: z.enum(['out', 'in']), with: elementRefSchema });
+
 /** A record that holds the searched ID in a `reference` property. The related read adds nothing to `exact` or to its count; an entity that is also an exact match through its own `search` property is in both groups. */
 export const relatedHitSchema = z.strictObject({
   node: nodeSchema,
   /** The `reference` properties of the record that hold the typed text, as the search matched them; empty when none can be named. */
   matchedProperties: z.array(z.string().min(1)),
+  /** The relationship context of the record, absent when it has none to show (no stored relationship to an exact match, or the context was not read). */
+  context: relationshipContextSchema.optional(),
 });
 
 /** The related records of a search: the records whose `reference` properties hold the typed text, from one read of their own. */
@@ -156,6 +164,8 @@ export const relatedGroupSchema = z.strictObject({
   searchable: z.boolean(),
   disabledTypes: disabledTypesSchema,
   nextCursor: nextCursorSchema.optional(),
+  /** The relationship context of the group: present only when a type's pairs were left out of the context read because its `stable_id` index is not online (the `property` is that index's property, the reason why). */
+  context: z.strictObject({ disabledTypes: disabledTypesSchema }).optional(),
 });
 
 const rowSchema = { relationshipType: z.string().min(1), from: z.string().min(1), to: z.string().min(1) };
@@ -258,9 +268,17 @@ export const searchResultSchema = z
   })
   .superRefine((result, context) => {
     const failedAll = new Set(result.failures.map((failure) => failure.group));
-    const failed = new Set([...failedAll].filter((group) => group !== 'facets'));
+    const failed = new Set([...failedAll].filter((group) => group !== 'facets' && group !== 'context'));
+    const exactKeys = new Set(result.exact.map((node) => JSON.stringify([node.ref.sourceId, node.ref.entityType, node.ref.stableId])));
+    const contexts = result.related.hits.flatMap((hit) => (hit.context === undefined ? [] : [hit.context]));
+    if (contexts.some((entry) => !exactKeys.has(JSON.stringify([entry.with.sourceId, entry.with.entityType, entry.with.stableId])))) context.addIssue({ code: 'custom', message: 'a relationship context names an exact match of the answer', path: ['related', 'hits'] });
+    if (failedAll.has('context')) {
+      if (result.exact.length === 0 || result.related.hits.length === 0) context.addIssue({ code: 'custom', message: 'a relationship context read that failed was made, so the exact and related groups hold hits', path: ['failures'] });
+      if (contexts.length > 0) context.addIssue({ code: 'custom', message: 'a hit holds no relationship context when its read failed', path: ['related', 'hits'] });
+    }
     if (failedAll.size !== result.failures.length) context.addIssue({ code: 'custom', message: 'a group fails once', path: ['failures'] });
     const read = (result.searchable ? 1 : 0) + (result.related.searchable ? 1 : 0) + (result.evidence.searchable ? 1 : 0) + (result.startsWith !== undefined && result.searchable ? 1 : 0);
+    if (result.related.context !== undefined && result.related.context.disabledTypes.length === 0) context.addIssue({ code: 'custom', message: 'the relationship context lists disabled types only when there is one', path: ['related', 'context'] });
     if (failed.size > 0 && failed.size >= read) context.addIssue({ code: 'custom', message: 'when every group read failed the search failed as a whole and has no answer', path: ['failures'] });
     const unread = [
       ...(failed.has('exact') && !result.searchable ? ['exact'] : []),
@@ -319,13 +337,22 @@ export const searchResultSchema = z
  * came from; a cursor of another group, text, selection, source or person is refused as `CURSOR_INVALIDATED`. The entity types narrow the `exact` and `related` groups as in the search. The `startsWith`
  * group has no next page, so it is not a group of this request.
  */
-export const searchMoreRequestSchema = z.strictObject({
-  ...requestBase,
-  text: searchTextSchema,
-  group: z.enum(SEARCH_PAGED_GROUPS),
-  cursor: nextCursorSchema,
-  entityTypes: selection.entityTypes,
-});
+export const searchMoreRequestSchema = z
+  .strictObject({
+    ...requestBase,
+    text: searchTextSchema,
+    group: z.enum(SEARCH_PAGED_GROUPS),
+    cursor: nextCursorSchema,
+    entityTypes: selection.entityTypes,
+    /**
+     * Only for the `related` group: the references of the exact matches the person holds, at most the cap, so the page's records can show how they are related to them. The server checks that they are
+     * references of entities of the source, not that they are exact matches of this search. Absent or empty, the page's records hold no relationship context.
+     */
+    exactRefs: z.array(elementRefSchema).max(SEARCH_GROUP_CAP).optional(),
+  })
+  .superRefine((request, context) => {
+    if (request.exactRefs !== undefined && request.group !== 'related') context.addIssue({ code: 'custom', message: 'only the related group takes exact matches', path: ['exactRefs'] });
+  });
 
 const moreBase = {
   sourceId: z.string().min(1),
@@ -346,10 +373,24 @@ const moreBase = {
 export const searchMoreResultSchema = z
   .discriminatedUnion('group', [
     z.strictObject({ ...moreBase, group: z.literal('exact'), nodes: z.array(nodeSchema), unreferenced: unreferencedListSchema }),
-    z.strictObject({ ...moreBase, group: z.literal('related'), hits: z.array(relatedHitSchema), unreferenced: unreferencedListSchema }),
+    z.strictObject({
+      ...moreBase,
+      group: z.literal('related'),
+      hits: z.array(relatedHitSchema),
+      unreferenced: unreferencedListSchema,
+      /** The read of the relationship context of this page failed with a code of its own: the page keeps its hits, count and cursor, and no hit holds a context. `failure` keeps its meaning. */
+      contextFailure: groupFailureSchema.optional(),
+      /** The types whose pairs this page's context read left out because their `stable_id` index is not online, as the first page names them; absent when there is none. */
+      context: z.strictObject({ disabledTypes: disabledTypesSchema }).optional(),
+    }),
     z.strictObject({ ...moreBase, group: z.literal('evidence'), hits: z.array(evidenceHitSchema) }),
   ])
   .superRefine((result, context) => {
+    if ('contextFailure' in result && result.contextFailure !== undefined) {
+      if (result.contextFailure.group !== 'context') context.addIssue({ code: 'custom', message: 'a context failure is named for the context read', path: ['contextFailure', 'group'] });
+      if (result.failure !== undefined || result.hits.length === 0 || result.hits.some((hit) => hit.context !== undefined)) context.addIssue({ code: 'custom', message: 'a page whose context read failed keeps its hits, holds no context and did not fail itself', path: ['contextFailure'] });
+    }
+    if ('context' in result && result.context !== undefined && result.context.disabledTypes.length === 0) context.addIssue({ code: 'custom', message: 'the relationship context lists disabled types only when there is one', path: ['context'] });
     const held = ('nodes' in result ? result.nodes.length : result.group === 'evidence' ? relationshipsOf(result.hits) : result.hits.length) + ('unreferenced' in result ? (result.unreferenced?.length ?? 0) : 0);
     if (result.failure !== undefined) {
       if (result.failure.group !== result.group) context.addIssue({ code: 'custom', message: 'a page fails for its own group', path: ['failure', 'group'] });
@@ -366,6 +407,7 @@ export type SearchMoreResult = z.infer<typeof searchMoreResultSchema>;
 export type SearchResult = z.infer<typeof searchResultSchema>;
 export type DisabledType = z.infer<typeof disabledTypeSchema>;
 export type RelatedHit = z.infer<typeof relatedHitSchema>;
+export type RelationshipContext = z.infer<typeof relationshipContextSchema>;
 export type UnreferencedHit = z.infer<typeof unreferencedHitSchema>;
 export type RelatedGroup = z.infer<typeof relatedGroupSchema>;
 export type EvidenceHit = z.infer<typeof evidenceHitSchema>;

@@ -1,6 +1,7 @@
 import type { CurrentSource } from './current-source.js';
 
-export function SourceStatusText({ current }: { readonly current: CurrentSource }) {
+/** The status of the source: its alias, read-only and its state, and with `reason` (the default) the reason of the state too; the sidebar leaves it out, the Sources page and the workspace header hold it. */
+export function SourceStatusText({ current, reason = true }: { readonly current: CurrentSource; readonly reason?: boolean }) {
   switch (current.kind) {
     case 'none':
       return <p>No source connected</p>;
@@ -10,7 +11,7 @@ export function SourceStatusText({ current }: { readonly current: CurrentSource 
         <p>
           <span aria-hidden="true">● </span>
           {current.source.alias} · read-only · {current.source.state}
-          {current.source.stateReason === null ? '' : ` · ${current.source.stateReason}`}
+          {!reason || current.source.stateReason === null ? '' : ` · ${current.source.stateReason}`}
         </p>
       );
     case 'bound-unknown':

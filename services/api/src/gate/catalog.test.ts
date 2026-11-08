@@ -155,12 +155,12 @@ describe('what a template that is not paged returns', () => {
   const single = variant({ id: 'single', cypher: 'MATCH (n:@entity(kind)) RETURN count(n) AS c', paged: false });
 
   it("is refused when it declares none of rows: 'one', cutMeans: 'duplicate' and cutMeans: 'lowerBound', as for a read of two rows with no declaration", () => {
-    expect(failure(single)).toBe("the template single is not paged and does not declare exactly one of rows: 'one', cutMeans: 'duplicate' or cutMeans: 'lowerBound'");
+    expect(failure(single)).toBe("the template single is not paged and does not declare exactly one of rows: 'one', rows: 'bounded', cutMeans: 'duplicate' or cutMeans: 'lowerBound'");
   });
 
   it('is refused when it declares both rows and cutMeans', () => {
-    expect(failure({ ...single, rows: 'one', cutMeans: 'duplicate' })).toBe("the template single is not paged and does not declare exactly one of rows: 'one', cutMeans: 'duplicate' or cutMeans: 'lowerBound'");
-    expect(failure({ ...single, rows: 'one', cutMeans: 'lowerBound' })).toBe("the template single is not paged and does not declare exactly one of rows: 'one', cutMeans: 'duplicate' or cutMeans: 'lowerBound'");
+    expect(failure({ ...single, rows: 'one', cutMeans: 'duplicate' })).toBe("the template single is not paged and does not declare exactly one of rows: 'one', rows: 'bounded', cutMeans: 'duplicate' or cutMeans: 'lowerBound'");
+    expect(failure({ ...single, rows: 'one', cutMeans: 'lowerBound' })).toBe("the template single is not paged and does not declare exactly one of rows: 'one', rows: 'bounded', cutMeans: 'duplicate' or cutMeans: 'lowerBound'");
   });
 
   it('is accepted with one of them', () => {
@@ -179,9 +179,9 @@ describe('what a template that is not paged returns', () => {
 describe('the templates of the shipped catalog', () => {
   const templates = defaultCatalogTemplates();
 
-  it('page every read that returns a list but the capped type-ahead prefix read, and declare every other one as one aggregate row, as the reads whose extra row means a duplicate, or as the capped read', () => {
+  it('page every read that returns a list but the capped type-ahead prefix read, and declare every other one as one aggregate row, as bounded by its input, as the reads whose extra row means a duplicate, or as the capped read', () => {
     const cutOf = (cut: string | undefined): string => (cut === 'duplicate' ? 'cut means a duplicate' : cut === 'lowerBound' ? 'cut means a lower bound' : 'undeclared');
-    const declared = Object.fromEntries(templates.map((template) => [template.id, template.paged ? 'paged' : template.rows === 'one' ? 'one row' : cutOf(template.cutMeans)]));
+    const declared = Object.fromEntries(templates.map((template) => [template.id, template.paged ? 'paged' : template.rows === 'one' ? 'one row' : template.rows === 'bounded' ? 'bounded by its input' : cutOf(template.cutMeans)]));
     expect(declared).toEqual({
       connectivity: 'one row',
       capabilities: 'one row',
@@ -199,6 +199,7 @@ describe('the templates of the shipped catalog', () => {
       'relationship-evidence': 'paged',
       'search-facets': 'one row',
       'entity-search-prefix': 'cut means a lower bound',
+      'entity-related-context': 'bounded by its input',
     });
   });
 

@@ -47,6 +47,19 @@ evidence group.
   `RATE_LIMITED` or `INTERNAL_ERROR`) is answered with `200`, the `failure`, no hit and an `unknown` count, and the cursor that
   was sent can be sent again. A value so common that sorting its matches passes the source's transaction timeout fails its
   page this way. Any other failure fails the request with its own status and code.
+- **Relationship context.** A record in the `related` group may hold `context: { relationshipType, direction, with }`: one stored
+  relationship between it and one of the answer's exact matches, read from the record's side (`out` when the relationship
+  leaves it, `in` when it enters it; `with` is the exact match's reference). It carries no property value, so a client names
+  the exact match by the title the answer already shows. It is read once for the answer's hits and exact matches (each at
+  most the page size), after the groups, only when both hold a hit and each entity type's `stable_id` has an online index; a
+  type whose index is not online is named in `related.context.disabledTypes` and its pairs are left out. A record with no
+  such relationship holds no `context`, which says nothing about relationships to exact matches beyond the first page. A
+  read that fails with a code of its own is named as the failure group `context` (never a result group): every hit stays,
+  none holds a context, and a retry repeats the whole search. `POST /v1/search/entities/more` for the `related` group may
+  carry `exactRefs` (the references of up to the page size exact matches the client holds, none for another group); the
+  page then holds its records' contexts against them, a failed context read is named in `contextFailure` (the page keeps its
+  hits, count and cursor), and the server checks that the references belong to the source, not that they are exact matches
+  of the search.
 - **Type-ahead.** The `startsWith` group is read once, cut at the page and not sorted, so a short common prefix never makes the
   source read every match. It has no next page: its count is a `lowerBound` when the read was cut, and `/more` refuses the
   group with `INVALID_REQUEST`.

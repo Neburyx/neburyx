@@ -1,6 +1,7 @@
 import { searchResultSchema, type SearchResult } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
 import { AppError } from '../errors.js';
+import { relatedContextTemplate } from '../gate/templates/related-context.js';
 import { createTemplateCatalog } from '../gate/catalog.js';
 import type { ExecuteCall, ExecuteOutcome } from '../gate/executor.js';
 import { schemaIndexesTemplate } from '../gate/templates/schema-indexes.js';
@@ -52,7 +53,7 @@ describe('an evidence read that fails while the other groups answer', () => {
     expect(answer.evidence).toMatchObject({ hits: [], searchable: true, count: { quality: 'unknown', scope: 'search:evidence' } });
     expect(answer.evidence.count).not.toHaveProperty('value');
     expect(answer.failures).toEqual([{ group: 'evidence', code: 'QUERY_TIMEOUT', timeoutMs: 5000 }]);
-    expect(searchEvents(events)).toEqual(['entity.search success', 'entity.search_evidence failed', 'entity.search_facets success', 'entity.search_related success']);
+    expect(searchEvents(events)).toEqual(['entity.search success', 'entity.search_context success', 'entity.search_evidence failed', 'entity.search_facets success', 'entity.search_related success']);
     expect(JSON.stringify([answer.failures, events])).not.toContain(TEXT);
     expect(lines.join('\n')).not.toContain(TEXT);
   });
@@ -64,7 +65,7 @@ describe('an evidence read that fails while the other groups answer', () => {
 
   it('answers a rate limit raised inside the evidence run as a failure of that group only, audited as failed', async () => {
     const limited = { ...searchEvidenceTemplate, normalize: (): never => { throw new AppError('RATE_LIMITED'); } };
-    const catalog = createTemplateCatalog({ templates: [schemaIndexesTemplate, searchExactTemplate, searchRelatedTemplate, searchFacetsTemplate, limited] });
+    const catalog = createTemplateCatalog({ templates: [schemaIndexesTemplate, searchExactTemplate, searchRelatedTemplate, searchFacetsTemplate, relatedContextTemplate, limited] });
     const { response, events } = await searched({ catalog });
     expect(answerOf(response.json()).failures).toEqual([{ group: 'evidence', code: 'RATE_LIMITED' }]);
     expect(events.filter((event) => event.action === 'entity.search_evidence')).toEqual([expect.objectContaining({ result: 'failed' })]);

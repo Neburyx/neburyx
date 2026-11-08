@@ -6,6 +6,9 @@ const ALWAYS_INTEGER = ['limit', 'countCap'];
 
 function driverValue(key: string, value: unknown, integerNames: ReadonlySet<string>): unknown {
   if (isTaggedInteger(value)) return neo4j.int(value.value);
+  // a list of references holds the tagged integer of each ID inside its elements
+  if (Array.isArray(value)) return value.map((entry: unknown) => driverValue(key, entry, new Set()));
+  if (typeof value === 'object' && value !== null && Object.getPrototypeOf(value) === Object.prototype) return Object.fromEntries(Object.entries(value).map(([name, entry]) => [name, driverValue(name, entry, new Set())]));
   return integerNames.has(key) && typeof value === 'number' && Number.isSafeInteger(value) ? neo4j.int(value) : value;
 }
 

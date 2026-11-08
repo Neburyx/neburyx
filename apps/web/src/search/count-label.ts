@@ -25,11 +25,22 @@ export function evidenceText(count: Count): string | undefined {
   return count.quality === 'exact' ? `${text} supporting ${count.value === 1 ? 'relationship' : 'relationships'}` : `≥ ${count.value} supporting relationships · lower bound`;
 }
 
-/** The total of the entities a text matches as the Filters say it: "3 results", "1 result", "≥ 25 results · lower bound"; nothing for a total that was not read. */
-export function resultsText(count: Count): string | undefined {
+/** The total of the entities a text matches as the Filters say it: "3 entities", "1 entity", "≥ 25 entities · lower bound"; nothing for a total that was not read. */
+export function entitiesText(count: Count): string | undefined {
   if (count.value === undefined) return undefined;
-  if (count.quality === 'exact') return `${count.value} ${count.value === 1 ? 'result' : 'results'}`;
-  return count.quality === 'lowerBound' ? `≥ ${count.value} results · lower bound` : undefined;
+  if (count.quality === 'exact') return `${count.value} ${count.value === 1 ? 'entity' : 'entities'}`;
+  return count.quality === 'lowerBound' ? `≥ ${count.value} entities · lower bound` : undefined;
+}
+
+/**
+ * What the total beside the Filters counts: the entities the text matches and, when the evidence records it finds are supporting relationships, how many, so a text that finds only evidence records does not read
+ * as nothing found. The evidence part is left out when its count is zero or was not read.
+ */
+export function totalText(entities: Count, evidence: Count | undefined): string | undefined {
+  const entitiesPart = entitiesText(entities);
+  if (entitiesPart === undefined) return undefined;
+  const evidencePart = evidence === undefined || evidence.value === undefined || evidence.value === 0 ? undefined : evidenceText(evidence);
+  return evidencePart === undefined ? entitiesPart : `${entitiesPart} · ${evidencePart}`;
 }
 
 export const secondsText = (elapsedMs: number): string => `${(elapsedMs / 1000).toFixed(2)} s`;

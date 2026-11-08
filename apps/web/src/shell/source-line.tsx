@@ -16,7 +16,7 @@ export function SourceLine() {
 
   return (
     <section aria-label="Source">
-      {current === undefined ? failure === undefined ? <p role="status">Loading</p> : null : <SourceStatusText current={current} />}
+      {current === undefined ? failure === undefined ? <p role="status">Loading</p> : null : <SourceStatusText current={current} reason={false} />}
       {failure === undefined ? null : <Unreachable failure={failure} />}
     </section>
   );

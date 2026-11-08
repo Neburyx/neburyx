@@ -22,6 +22,7 @@ import { searchPrefixTemplate } from './templates/search-prefix.js';
 import { searchEvidenceTemplate } from './templates/search-evidence.js';
 import { searchFacetsTemplate } from './templates/search-facets.js';
 import { searchRelatedTemplate } from './templates/search-related.js';
+import { relatedContextTemplate } from './templates/related-context.js';
 import { privilegesTemplate } from './templates/privileges.js';
 import { schemaIndexesTemplate } from './templates/schema-indexes.js';
 import { schemaTokensTemplate } from './templates/schema-tokens.js';
@@ -46,7 +47,7 @@ export interface AssembleOptions {
 }
 
 export function defaultCatalogTemplates(): readonly TemplateDefinition[] {
-  return [connectivityTemplate, capabilitiesTemplate, privilegesTemplate, schemaTokensTemplate, schemaIndexesTemplate, stableIdDuplicatesTemplate, degreeProbeTemplate, degreePreviewBoundedTemplate, degreePreviewCheapTemplate, entityLoadTemplate, expandNeighborsTemplate, searchExactTemplate, searchRelatedTemplate, searchEvidenceTemplate, searchFacetsTemplate, searchPrefixTemplate];
+  return [connectivityTemplate, capabilitiesTemplate, privilegesTemplate, schemaTokensTemplate, schemaIndexesTemplate, stableIdDuplicatesTemplate, degreeProbeTemplate, degreePreviewBoundedTemplate, degreePreviewCheapTemplate, entityLoadTemplate, expandNeighborsTemplate, searchExactTemplate, searchRelatedTemplate, searchEvidenceTemplate, searchFacetsTemplate, searchPrefixTemplate, relatedContextTemplate];
 }
 
 export function defaultCatalog(): TemplateCatalog {

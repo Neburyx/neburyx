@@ -4,6 +4,7 @@ import { NEO4J_SERIES, runAdmin, runAll } from '../../testing/neo4j-server.js';
 import { gateRequest } from '../../testing/gate.js';
 import { itemsOf, madeRecordCount, removeMadeRecords, startPackServers, withMadeRecords, type PackServer } from '../../testing/normalization-capture.js';
 import { ENTITY_LOAD_ID } from '../templates/entity-load.js';
+import { RELATED_CONTEXT_ID } from '../templates/related-context.js';
 import { normalizeModelOf } from './model.js';
 import { normalizeRows } from './index.js';
 import { normalizedOf } from '../../testing/search-fixtures.js';
@@ -193,3 +194,49 @@ describe(`a node whose stable ID is a float, read through the real adapter and t
     }
   });
 });
+
+describe.each(PACKS)(`the relationship context read of the %s pack on ${image}`, (pack) => {
+  it('answers for a stored relationship of the demo graph only the positions, the type and the direction, the same masked and unmasked, with no value of either record', async () => {
+    const target = servers.find((candidate) => candidate.pack === pack);
+    if (target === undefined) throw new Error('no server');
+    const entityOf = (type: string) => target.source.entities.find((candidate) => candidate.type === type);
+    const row = target.source.relationships.find((candidate) => {
+      const from = entityOf(candidate.from);
+      const to = entityOf(candidate.to);
+      return from !== undefined && to !== undefined && !isKeyed(from) && !isKeyed(to) && candidate.from !== candidate.to;
+    });
+    if (row === undefined) throw new Error('the pack maps no relationship between two plain entity types');
+    const [from, to] = [entityOf(row.from), entityOf(row.to)];
+    if (from === undefined || to === undefined) throw new Error('no entity type');
+    const { rows } = await target.expand({ entityType: row.from, stableId: await anyStableId(target, row.from), neighborType: row.to });
+    const pair = rows.flatMap((captured) => {
+      const [a, m] = [captured['a'], captured['m']];
+      const stable = (node: unknown, property: string): string | undefined => {
+        const properties = typeof node === 'object' && node !== null && 'properties' in node ? (node.properties as Record<string, unknown>) : {};
+        const value = properties[property];
+        return typeof value === 'string' || typeof value === 'number' ? String(value) : undefined;
+      };
+      const [hitId, exactId] = [stable(a, from.stableId), stable(m, to.stableId)];
+      return hitId === undefined || exactId === undefined ? [] : [{ hitId, exactId }];
+    })[0];
+    if (pair === undefined) throw new Error('the demo graph holds no relationship of the row');
+    const ask = (mask: boolean) =>
+      target.gate.run(gateRequest({ sourceId: target.source.id, templateId: RELATED_CONTEXT_ID, params: { hits: [{ sourceId: target.source.id, entityType: row.from, stableId: pair.hitId }], exact: [{ sourceId: target.source.id, entityType: row.to, stableId: pair.exactId }] }, limit: 25, mask }));
+    const [unmasked, masked] = [await ask(false), await ask(true)];
+    expect(masked.items).toEqual(unmasked.items);
+    const [item] = unmasked.items;
+    expect(item).toEqual({ context: [{ hit: 0, exact: 0, relationshipType: row.type, direction: 'out' }] });
+    expect(JSON.stringify(unmasked)).not.toContain(pair.hitId);
+    expect(JSON.stringify(unmasked)).not.toContain(pair.exactId);
+  });
+});
+
+async function anyStableId(target: PackServer, entityType: string): Promise<string> {
+  const entity = target.source.entities.find((candidate) => candidate.type === entityType);
+  if (entity === undefined) throw new Error('no entity type');
+  const items = await itemsOf(target, 'capture-node', { entityType });
+  const found = items.flatMap((item) => Object.values(item)).find((value): value is { properties: Record<string, unknown> } => typeof value === 'object' && value !== null && 'properties' in value);
+  const value = found?.properties[entity.stableId];
+  if (typeof value !== 'string' && typeof value !== 'number') throw new Error('the demo graph has no node of the type');
+  return String(value);
+}

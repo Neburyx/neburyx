@@ -51,7 +51,7 @@ describe('POST /v1/search/entities with related records', () => {
     const text = 'X-1';
     const { app, events, lines } = await started();
     await postSearch(app, { sourceId: 'demo', text });
-    expect(events.map((event) => `${event.action} ${event.result}`).sort()).toEqual(['entity.search success', 'entity.search_facets success', 'entity.search_related success', 'source.schema_indexes success']);
+    expect(events.map((event) => `${event.action} ${event.result}`).sort()).toEqual(['entity.search success', 'entity.search_context success', 'entity.search_facets success', 'entity.search_related success', 'source.schema_indexes success']);
     expect(JSON.stringify(events)).not.toContain(text);
     expect(lines.join('\n')).not.toContain(text);
     await app.close();

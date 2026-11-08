@@ -49,7 +49,7 @@ describe('a facet read that fails while the groups answer', () => {
     expect(answer.related.count).toEqual({ value: 2, quality: 'exact', scope: 'search:related' });
     expect(answer.evidence.count).toEqual({ value: 1, quality: 'exact', scope: 'search:evidence' });
     expect(answer.filters).toEqual({ entityTypes: [], matchModes: [] });
-    expect(searchEvents(events)).toEqual(['entity.search success', 'entity.search_evidence success', 'entity.search_facets failed', 'entity.search_related success']);
+    expect(searchEvents(events)).toEqual(['entity.search success', 'entity.search_context success', 'entity.search_evidence success', 'entity.search_facets failed', 'entity.search_related success']);
     expect(JSON.stringify([answer.failures, events])).not.toContain(TEXT);
     expect(lines.join('\n')).not.toContain(TEXT);
   });

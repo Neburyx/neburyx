@@ -22,12 +22,12 @@ test.describe('the Filters of the Search results page', () => {
     await expect(entry(page, /Exact ID/).locator('xpath=ancestor::label')).toContainText('5');
     await expect(entry(page, /Referenced ID/).locator('xpath=ancestor::label')).toContainText('0');
     await expect(entry(page, /Evidence record/).locator('xpath=ancestor::label')).toContainText('0');
-    await expect(panel(page).getByText('5 results')).toBeVisible();
+    await expect(panel(page).getByText('5 entities')).toBeVisible();
     await expect(panel(page).getByRole('button', { name: 'Reset' })).toHaveCount(0);
   });
 
   test('reads 24, 25 and 26 matches as 24, 25 and "≥ 25 · lower bound", in the entries and in the total', async ({ page }) => {
-    for (const [text, count, total] of [['many-24', '24', '24 results'], ['many-25', '25', '25 results'], ['many-26', '≥ 25 · lower bound', '≥ 25 results · lower bound']] as const) {
+    for (const [text, count, total] of [['many-24', '24', '24 entities'], ['many-25', '25', '25 entities'], ['many-26', '≥ 25 · lower bound', '≥ 25 entities · lower bound']] as const) {
       await searchFor(page, text);
       await expect(entry(page, /Account/).locator('xpath=ancestor::label')).toContainText(count);
       await expect(entry(page, /Exact ID/).locator('xpath=ancestor::label')).toContainText(count);
@@ -72,7 +72,7 @@ test.describe('the Filters of the Search results page', () => {
     await entry(page, /Customer/).click();
     await expect(page.locator('.search-hit')).toHaveCount(2);
     await expect(entry(page, /Account/).locator('xpath=ancestor::label')).toContainText('3');
-    await expect(panel(page).getByText('5 results')).toBeVisible();
+    await expect(panel(page).getByText('5 entities')).toBeVisible();
     await entry(page, /Referenced ID/).click();
     await expect(page.getByText('Exact matches are hidden by the selection.')).toBeVisible();
     await panel(page).getByRole('button', { name: 'Reset' }).click();

@@ -98,6 +98,7 @@ export {
   groupFailureSchema,
   relatedGroupSchema,
   relatedHitSchema,
+  relationshipContextSchema,
   searchMoreRequestSchema,
   searchMoreResultSchema,
   searchRequestSchema,
@@ -114,4 +115,4 @@ export { EXPAND_DIRECTIONS, EXPAND_SORTS, expandPageSchema, expandRequestSchema,
 export type { ExpandPage, ExpandRequest, ExpandResponse } from './expand.js';
 export type { EntityLookupRequest } from './entities.js';
 export type { DegreeByType, DegreePreview, DegreePreviewRequest, DegreeWarning } from './degree-preview.js';
-export type { AggregateEvidenceHit, AggregateMember, DisabledRelationship, DisabledType, EvidenceGroup, EvidenceHit, EvidenceRecord, Facets, GroupFailure, RelatedGroup, RelatedHit, SearchFailureGroup, SearchFilters, SearchGroup, SearchMatchMode, SearchMoreRequest, SearchMoreResult, SearchPagedGroup, SearchRequest, SearchResult, StartsWithGroup, StoredEvidenceHit, UnreferencedHit } from './search.js';
+export type { AggregateEvidenceHit, AggregateMember, DisabledRelationship, DisabledType, EvidenceGroup, EvidenceHit, EvidenceRecord, Facets, GroupFailure, RelatedGroup, RelatedHit, RelationshipContext, SearchFailureGroup, SearchFilters, SearchGroup, SearchMatchMode, SearchMoreRequest, SearchMoreResult, SearchPagedGroup, SearchRequest, SearchResult, StartsWithGroup, StoredEvidenceHit, UnreferencedHit } from './search.js';

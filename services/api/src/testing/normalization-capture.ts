@@ -9,6 +9,7 @@ import { assembleGate } from '../gate/assemble.js';
 import { createTemplateCatalog, type TemplateDefinition } from '../gate/catalog.js';
 import { entityLoadTemplate } from '../gate/templates/entity-load.js';
 import { expandNeighborsTemplate } from '../gate/templates/expand-neighbors.js';
+import { relatedContextTemplate } from '../gate/templates/related-context.js';
 import { schemaIndexesTemplate } from '../gate/templates/schema-indexes.js';
 import type { ExecuteCall, ExecuteOutcome, ReadExecutor } from '../gate/executor.js';
 import { EXPAND_NEIGHBORS_ID } from '../gate/templates/expand-neighbors.js';
@@ -129,7 +130,7 @@ export async function startPackServers(): Promise<PackServer[]> {
       seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit },
       executor: recording,
       logger: { warn: () => undefined },
-      catalog: createTemplateCatalog({ templates: [...CAPTURE_TEMPLATES, entityLoadTemplate, expandNeighborsTemplate, schemaIndexesTemplate] }),
+      catalog: createTemplateCatalog({ templates: [...CAPTURE_TEMPLATES, entityLoadTemplate, expandNeighborsTemplate, relatedContextTemplate, schemaIndexesTemplate] }),
     });
     const expand = async (params: Record<string, string>, mask = false) => {
       recorded.length = 0;

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { CONTEXT_BRANCHES } from './templates/related-context-statement.js';
 import { BRANCH_ENTITY_TYPES, BRANCH_MARKER, hasStrayMarkerCharacter, markersOf } from './render.js';
 import { GATE_PARAMETERS, type Template, type TemplateCatalog } from './types.js';
 
@@ -12,7 +13,7 @@ export class CatalogError extends Error {
 }
 
 /** Parameters the gate fills in, which a template may not declare: the page limit, the verified cursor position and the entity type of each search branch. */
-const RESERVED = ['limit', 'cursor', BRANCH_ENTITY_TYPES] as const;
+const RESERVED = ['limit', 'cursor', BRANCH_ENTITY_TYPES, CONTEXT_BRANCHES] as const;
 const BRANCH_ENTITY_TYPES_REFERENCE = new RegExp(`\\$${BRANCH_ENTITY_TYPES}(?![\\w])`);
 
 const article = (kind: string): string => (kind === 'entity' ? 'an' : 'a');
@@ -64,7 +65,7 @@ function checkMarkers(definition: TemplateDefinition, shape: Shape): void {
   const degree = markersOf(definition.cypher).filter((marker) => marker.kind === 'degreeCounts');
   // a degree statement reads the entity type's label and stable ID property, so its parameter counts as used by an entity marker and a stable id marker
   const used = [
-    ...markersOf(definition.cypher).filter((marker) => marker.kind !== 'searchBranches' && marker.kind !== 'facetProbes' && marker.kind !== 'degreeCounts' && marker.kind !== 'expandNeighbors'),
+    ...markersOf(definition.cypher).filter((marker) => marker.kind !== 'searchBranches' && marker.kind !== 'facetProbes' && marker.kind !== 'degreeCounts' && marker.kind !== 'expandNeighbors' && marker.kind !== 'relatedContext'),
     ...markersOf(definition.cypher).filter((marker) => marker.kind === 'expandNeighbors').flatMap((marker) => [{ kind: 'entity' as const, name: marker.name }, { kind: 'stableId' as const, name: marker.name }]),
     ...degree.flatMap((marker) => [{ kind: 'entity' as const, name: marker.name }, { kind: 'stableId' as const, name: marker.name }]),
   ];
@@ -215,6 +216,27 @@ function checkExpandNeighbors(definition: TemplateDefinition, shape: Shape): voi
   if (definition.indexNeeds === undefined || definition.readsNothing === undefined || definition.usedProperties === undefined || definition.nextPosition === undefined) throw new CatalogError(definition.id, 'declares an expansion and does not name its indexes, its empty case, its properties and its next position');
 }
 
+/**
+ * The relationship context template's own declaration: its Cypher is exactly the one `@relatedContext(<hits parameter>)` marker, its schema has both list parameters, it is not paged, it is bounded by its
+ * input (`rows: 'bounded'`), it names the stable-ID indexes it needs, says when it reads nothing and lists its reference lists, and its statement is the only one of its kind.
+ */
+function checkRelatedContext(definition: TemplateDefinition, shape: Shape): void {
+  const used = markersOf(definition.cypher).filter((marker) => marker.kind === 'relatedContext');
+  const spec = definition.relatedContext;
+  if (spec === undefined) {
+    if (used.length > 0) throw new CatalogError(definition.id, 'uses the related context marker without declaring a related context');
+    return;
+  }
+  if (used.length !== 1 || used[0]?.name !== spec.hitsParam || definition.cypher !== `@relatedContext(${spec.hitsParam})`) throw new CatalogError(definition.id, 'declares a related context and its Cypher is not exactly its one related context marker');
+  if (shape.properties.get(spec.hitsParam) !== 'array' || shape.properties.get(spec.exactParam) !== 'array') throw new CatalogError(definition.id, 'declares a related context for parameters its schema does not have as lists');
+  if (definition.searchBranches !== undefined || definition.facetProbes !== undefined || definition.degreeCounts !== undefined || definition.expandNeighbors !== undefined || definition.paged || definition.profile === true || definition.rows !== 'bounded') {
+    throw new CatalogError(definition.id, "declares a related context and is also another kind of template, paged, profiled or not declared rows: 'bounded'");
+  }
+  if (definition.indexNeeds === undefined || definition.readsNothing === undefined) throw new CatalogError(definition.id, 'declares a related context and does not name its indexes and its empty case');
+  if (![spec.hitsParam, spec.exactParam].every((name) => definition.referenceLists?.includes(name) === true)) throw new CatalogError(definition.id, 'declares a related context and does not list its two parameters as reference lists');
+  if (definition.referenceParams !== undefined) throw new CatalogError(definition.id, 'declares reference lists and reference parameters, of which the gate reads back one kind only');
+}
+
 /** A template that reads a node by its reference names two parameters its schema has: the entity type (a declared entity parameter) and the stable ID. */
 function checkReferenceParams(definition: TemplateDefinition, shape: Shape): void {
   const names = definition.referenceParams;
@@ -226,7 +248,7 @@ function checkReferenceParams(definition: TemplateDefinition, shape: Shape): voi
 function checkRows(definition: TemplateDefinition): void {
   const declared = (definition.rows === undefined ? 0 : 1) + (definition.cutMeans === undefined ? 0 : 1);
   if (definition.paged && declared > 0) throw new CatalogError(definition.id, 'is paged and declares rows or cutMeans');
-  if (!definition.paged && declared !== 1) throw new CatalogError(definition.id, "is not paged and does not declare exactly one of rows: 'one', cutMeans: 'duplicate' or cutMeans: 'lowerBound'");
+  if (!definition.paged && declared !== 1) throw new CatalogError(definition.id, "is not paged and does not declare exactly one of rows: 'one', rows: 'bounded', cutMeans: 'duplicate' or cutMeans: 'lowerBound'");
 }
 
 function build(definition: TemplateDefinition): Template {
@@ -243,6 +265,7 @@ function build(definition: TemplateDefinition): Template {
   checkFacetProbes(definition, shape);
   checkDegreeCounts(definition, shape);
   checkExpandNeighbors(definition, shape);
+  checkRelatedContext(definition, shape);
   checkReferenceParams(definition, shape);
   checkGateParameters(definition, shape);
   const integerParameters = [...shape.properties].flatMap(([name, type]) => (type === 'integer' ? [name] : []));

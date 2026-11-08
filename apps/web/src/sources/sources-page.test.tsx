@@ -97,6 +97,13 @@ describe('the Sources page', () => {
     expect(row(1).textContent).toBe('betaUnknownRead-only');
   });
 
+  it('shows the whole reason of a source, the long advice about relationship IDs too, on its row', async () => {
+    const advice = 'MADE_FROM: advice: a uniqueness constraint on the stable id property `linkId` is needed for paging without a repeat or a gap';
+    renderApp('/sources', clientWith({ me: me(), sources: [source('a', { alias: 'alpha', state: 'degraded', stateReason: advice })] }));
+    await within(main()).findByRole('list', { name: 'Configured sources' });
+    expect(within(row(0)).getByText(advice)).toBeTruthy();
+  });
+
   it.each([
     ['connected', 'Connected', 'pill-connected'],
     ['unavailable', 'Unavailable', 'pill-unavailable'],

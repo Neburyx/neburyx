@@ -52,7 +52,7 @@ describe('buildOpenApiDocument', () => {
       additionalProperties: false,
       properties: {
         exact: { type: 'array' },
-        failures: { type: 'array', items: { properties: { group: { enum: ['exact', 'related', 'evidence', 'startsWith', 'facets'] } } } },
+        failures: { type: 'array', items: { properties: { group: { enum: ['exact', 'related', 'evidence', 'startsWith', 'facets', 'context'] } } } },
         evidence: { type: 'object', additionalProperties: false, properties: { hits: { type: 'array' }, searchable: { type: 'boolean' }, disabledRelationshipTypes: { type: 'array' } } },
         related: { type: 'object', additionalProperties: false, properties: { hits: { type: 'array' }, searchable: { type: 'boolean' }, disabledTypes: { type: 'array' } } },
         startsWith: {

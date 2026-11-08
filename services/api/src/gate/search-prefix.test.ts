@@ -232,7 +232,7 @@ describe('the declaration of the prefix template', () => {
   it("is refused when it is paged, or declares another meaning of its cut than a lower bound", () => {
     expect(failure({ paged: true })).toBe('the template entity-search-prefix is paged and declares rows or cutMeans');
     expect(failure({ cutMeans: 'duplicate' })).toBe("the template entity-search-prefix has search branches and is neither paged by element ID nor declared cutMeans: 'lowerBound'");
-    expect(failure({ cutMeans: undefined })).toBe("the template entity-search-prefix is not paged and does not declare exactly one of rows: 'one', cutMeans: 'duplicate' or cutMeans: 'lowerBound'");
+    expect(failure({ cutMeans: undefined })).toBe("the template entity-search-prefix is not paged and does not declare exactly one of rows: 'one', rows: 'bounded', cutMeans: 'duplicate' or cutMeans: 'lowerBound'");
   });
 
   it('answers a read cut at its limit with hasMore and no cursor, and no INTERNAL_ERROR', async () => {

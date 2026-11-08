@@ -72,12 +72,12 @@ export interface Template {
   readonly scope: TemplateScope;
   readonly paged: boolean;
   /**
-   * What a template that is not paged returns, which it must declare: `one` for a read of a single aggregate row, `cutMeans: 'duplicate'` for a read whose row beyond the limit only says that another record has the
+   * What a template that is not paged returns, which it must declare: `one` for a read of a single aggregate row, `bounded` for a read whose rows its input bounds (the relationship context read: at most one row for each hit it is given, and the limit is not below that number), so a row beyond the limit is a defect that is refused, `cutMeans: 'duplicate'` for a read whose row beyond the limit only says that another record has the
    * same stable ID (the entity read, and the degree read anchored as it is), `cutMeans: 'lowerBound'` for a capped read whose cut means only that there are more matches than it returns (the type-ahead
    * prefix read): it is answered with `hasMore` and no cursor, and its count is a lower bound of the rows held. A read of a template that declares none of them and returns more rows than its limit is
    * refused, so a larger result is never cut silently.
    */
-  readonly rows?: 'one';
+  readonly rows?: 'one' | 'bounded';
   readonly cutMeans?: 'duplicate' | 'lowerBound';
   readonly entityParams: readonly string[];
   readonly relationshipParams: readonly string[];
@@ -121,6 +121,14 @@ export interface Template {
    * used), and one for each row without a `stable_id` that returns one aggregate for each neighbor. Every name is quoted from the allowlist; the request holds no name, only values.
    */
   readonly expandNeighbors?: { readonly anchorParam: string; readonly neighborParam: string; readonly relTypesParam: string; readonly directionParam: string };
+  /**
+   * The relationship context template's own declaration, for no other template: a statement that looks for one stored relationship between each of a list of hits and each of a list of exact matches (both lists of references of
+   * entities of the source). The Cypher is the one marker `@relatedContext(<hits parameter>)`, and the gate writes the whole statement from the mapping rows that join the entity types present in the two lists: one branch for each
+   * row and direction, each binding both ends by their stable ID before the relationship pattern. Every name is quoted from the allowlist and the request holds values only.
+   */
+  readonly relatedContext?: { readonly hitsParam: string; readonly exactParam: string };
+  /** The names of list parameters whose elements are `{ entityType, stableId }` references: for an entity type whose references are keyed the gate reads the token in each element's stable ID before the parameters are checked. */
+  readonly referenceLists?: readonly string[];
   /**
    * For a paged template whose cursor position holds the stable ID of an entity: the names of the position fields that carry an entity type and its stable ID. For a keyed entity type the cursor holds the token of the
    * ID and the gate reads it back before the keyset parameters are built, so a cursor never exposes a personal value and the order stays that of the real value.

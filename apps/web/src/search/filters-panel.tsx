@@ -1,5 +1,5 @@
 import type { Facets, SearchMatchMode, SourceProfile } from '@neburyx/contracts';
-import { countText, resultsText } from './count-label.js';
+import { countText, totalText } from './count-label.js';
 import { FILTERS_COPY, MATCH_MODE_LABELS, RETRY } from './copy.js';
 import { isNarrowed, withEntityType, withMatchMode, type Selection } from './selection.js';
 
@@ -33,7 +33,7 @@ export function FiltersPanel({ facets, counted, selection, profile, loading, onC
       {FILTERS_COPY.reset}
     </button>
   ) : null;
-  const total = counted ? resultsText(facets.total) : undefined;
+  const total = counted ? totalText(facets.total, facets.matchMode.find((entry) => entry.mode === 'evidence')?.count) : undefined;
   return (
     <aside className="search-filters" aria-label={FILTERS_COPY.title} aria-busy={loading}>
       <p className="search-filters-title">{FILTERS_COPY.title}</p>

@@ -112,11 +112,11 @@ export const REACH: Readonly<Record<string, (page: Page) => Promise<void>>> = {
   'Search results with filters': async (page) => {
     await searchFor(page, 'mix-3-2');
     await expect(page.getByRole('complementary', { name: 'Filters' })).toBeVisible();
-    await expect(page.getByText('5 results')).toBeVisible();
+    await expect(page.getByText('5 entities')).toBeVisible();
   },
   'Search results with a capped filter count': async (page) => {
     await searchFor(page, 'many-26');
-    await expect(page.getByRole('complementary', { name: 'Filters' }).getByText('≥ 25 results · lower bound')).toBeVisible();
+    await expect(page.getByRole('complementary', { name: 'Filters' }).getByText('≥ 25 entities · lower bound')).toBeVisible();
   },
   'Search results with more matches to show': async (page) => {
     await searchFor(page, 'many-30');

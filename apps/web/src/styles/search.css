@@ -103,9 +103,19 @@
 
 .search-hit-type,
 .search-hit-summary,
+.search-hit-relationship,
 .search-hit-context {
   color: var(--color-text-muted);
   font-size: var(--font-size-small);
+}
+
+.search-hit-relationship {
+  flex-basis: 100%;
+  font-weight: 600;
+}
+
+.search-hit-relationship + .search-hit-context {
+  flex-basis: 100%;
 }
 
 .search-empty h2,
