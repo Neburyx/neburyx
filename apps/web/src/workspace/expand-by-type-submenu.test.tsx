@@ -30,6 +30,7 @@ const previewOf = (overrides: Partial<DegreePreview> = {}): DegreePreview => ({
   ],
   warnings: [],
   pageSize: 25,
+  heavyOpThreshold: 500,
   ...overrides,
 });
 

@@ -19,6 +19,7 @@ test.describe('the Expand relationships panel', () => {
           byNeighborType: [{ entityType: body.ref.entityType, count: bound(3300) }, { entityType: 'another', count: exact(12) }],
           warnings: [],
           pageSize: 25,
+          heavyOpThreshold: 500,
         },
       });
     });

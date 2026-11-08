@@ -18,7 +18,7 @@ test.describe('the scope lines', () => {
     await page.route((url) => url.pathname === '/v1/graph/preview-expansion', async (route) => {
       previewed += 1;
       const body = route.request().postDataJSON() as { sourceId: string; ref: { entityType: string; stableId: string } };
-      await route.fulfill({ json: { ref: { sourceId: body.sourceId, ...body.ref }, total, byType: [], byNeighborType: [{ entityType: body.ref.entityType, count: total }], warnings: [], pageSize: 25 } });
+      await route.fulfill({ json: { ref: { sourceId: body.sourceId, ...body.ref }, total, byType: [], byNeighborType: [{ entityType: body.ref.entityType, count: total }], warnings: [], pageSize: 25, heavyOpThreshold: 500 } });
     });
     await page.route((url) => url.pathname === '/v1/graph/coverage', async (route) => {
       asked.push(route.request().postDataJSON() as CoverageBody);

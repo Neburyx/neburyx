@@ -4,7 +4,11 @@ import type { DegreePreview, ExpandRequest, ExpandResponse, GraphEdge } from '@n
 import type { ApiResult } from '../api/client.js';
 import { createExpandStore } from '../api/expand-store.js';
 import { fakeClient } from '../api/fake-client.js';
+import { createHeavyGuard } from '../api/heavy-guard.js';
 import { createPreviewStore } from '../api/preview-store.js';
+import { BannerProvider } from '../banner/banner-context.js';
+import { createBuiltInBannerController } from '../banner/built-in-causes.js';
+import { StatusBanner } from '../banner/status-banner.js';
 import type { RightClick } from '../canvas/scene.js';
 import { createClientState } from '../state/client-state.js';
 import { edgeRef, node, ref } from '../state/test-data.js';
@@ -36,6 +40,7 @@ export const previewOf = (overrides: Partial<DegreePreview> = {}): DegreePreview
   ],
   warnings: [],
   pageSize: 25,
+  heavyOpThreshold: 500,
   ...overrides,
 });
 
@@ -62,7 +67,7 @@ export const response = (overrides: Partial<ExpandResponse> = {}): ExpandRespons
   ...overrides,
 });
 
-export function panelRig(options: { readonly ids?: readonly string[] } = {}) {
+export function panelRig(options: { readonly ids?: readonly string[]; readonly heavy?: boolean } = {}) {
   const previews: Ask<{ sourceId: string; ref: { entityType: string; stableId: string }; mask?: boolean }, DegreePreview>[] = [];
   const expansions: Ask<ExpandRequest, ExpandResponse>[] = [];
   const client = fakeClient({
@@ -72,7 +77,8 @@ export function panelRig(options: { readonly ids?: readonly string[] } = {}) {
   const state = createClientState();
   loadGraph(state, (options.ids ?? ['n1', 'n2']).map((id) => node('a', id)), []);
   const previewStore = createPreviewStore(client, () => 'person-1');
-  const expand = createExpandStore(client, state, () => 'person-1');
+  const banner = createBuiltInBannerController();
+  const expand = createExpandStore(client, state, () => 'person-1', undefined, options.heavy === true ? createHeavyGuard(previewStore, banner, state) : undefined);
   const panels = createPanelRegistryFor(state);
   const unbind = bindSupernodePanel(state, panels);
   const menus = withBuiltIns();
@@ -82,7 +88,10 @@ export function panelRig(options: { readonly ids?: readonly string[] } = {}) {
     </PanelsProvider>
   ), (tree) => (
     <PreviewProvider store={previewStore}>
-      <ExpandProvider store={expand}>{tree}</ExpandProvider>
+      <BannerProvider controller={banner}>
+        {options.heavy === true ? <StatusBanner /> : null}
+        <ExpandProvider store={expand}>{tree}</ExpandProvider>
+      </BannerProvider>
     </PreviewProvider>
   ));
   const rightClick = (id: string): void => shown.rightClick({ target: { kind: 'node', key: nodeKey(id) }, x: 50, y: 60 } satisfies RightClick);
@@ -91,7 +100,7 @@ export function panelRig(options: { readonly ids?: readonly string[] } = {}) {
     await userEvent.setup().click(screen.getByRole('menuitem', { name: 'Expand by type' }));
     await act(async () => undefined);
   };
-  return { state, panels, unbind, menus, previews, expansions, expand, rightClick, open, shown };
+  return { state, panels, unbind, menus, previews, expansions, expand, previewStore, banner, rightClick, open, shown };
 }
 
 export const panel = () => screen.queryByRole('complementary', { name: 'Expand relationships' });

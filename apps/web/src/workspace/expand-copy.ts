@@ -20,6 +20,7 @@ export const loadedText = (count: number): string => `${count.toLocaleString('en
 export const PAGED_NOTE = 'More can be loaded page by page.';
 export const NO_NEIGHBOR_TYPES = 'This item has no mapped neighbor types to expand.';
 export const expandingText = (count: number): string => `Expanding ${count} ${count === 1 ? 'item' : 'items'}`;
+export const failedBeforeText = (count: number): string => `${count} selected ${count === 1 ? 'node' : 'nodes'} failed to expand before this one.`;
 export const cannotExpandText = (count: number): string => `${count} ${count === 1 ? 'item cannot' : 'items cannot'} be expanded: no stable ID.`;
 export const PANEL_TITLE = 'Expand relationships';
 export const EXPAND_BY_NEIGHBOR_TYPE = 'Expand by neighbor type';

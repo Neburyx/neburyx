@@ -13,7 +13,7 @@ test.describe('the neighbor types submenu', () => {
     await page.route((url) => url.pathname === '/v1/graph/preview-expansion', async (route) => {
       const body = route.request().postDataJSON() as { sourceId: string; ref: { entityType: string; stableId: string } };
       if (slow) await new Promise<void>((resolve) => (release = resolve));
-      await route.fulfill({ json: { ref: { sourceId: body.sourceId, ...body.ref }, total: count, byType: [], byNeighborType: [{ entityType: body.ref.entityType, count }], warnings: [], pageSize: 25 } });
+      await route.fulfill({ json: { ref: { sourceId: body.sourceId, ...body.ref }, total: count, byType: [], byNeighborType: [{ entityType: body.ref.entityType, count }], warnings: [], pageSize: 25, heavyOpThreshold: 500 } });
     });
   });
 

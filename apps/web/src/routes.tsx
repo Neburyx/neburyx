@@ -20,6 +20,7 @@ import { createPreviewStore } from './api/preview-store.js';
 import { CoverageProvider } from './workspace/coverage-context.js';
 import { PreviewProvider } from './workspace/preview-context.js';
 import { ExpandProvider } from './workspace/expand-context.js';
+import { createHeavyGuard } from './api/heavy-guard.js';
 import { createExpandStore } from './api/expand-store.js';
 import type { ClientState } from './state/client-state.js';
 import type { BannerController } from './banner/banner-controller.js';
@@ -102,7 +103,7 @@ export function appRoutes(client: ApiClient, state: ClientState, banner?: Banner
   const report = banner === undefined ? undefined : bannerReporter(banner, (sourceId) => sourceNameOf(answeredData(shellData.getState().sources)?.items ?? [], sourceId));
   const previews = createPreviewStore(client, person, report);
   const coverage = createCoverageStore(client, person, report);
-  const expansions = createExpandStore(client, state, person, report);
+  const expansions = createExpandStore(client, state, person, report, banner === undefined ? undefined : createHeavyGuard(previews, banner, state));
   const recent = createRecentInvestigations(client);
   const presence = createWorkspacePresence();
   return [

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { createDegreeCache, type DegreeCacheKey } from './degree-cache.js';
 
 const key = (overrides: Partial<DegreeCacheKey> = {}): DegreeCacheKey => ({ sourceId: 'alpha', configHash: 'h1', principalId: 'p1', entityType: 'person', stableId: 'P-1', mask: false, verdictRevision: 0, ...overrides });
-const preview = (stableId: string): DegreePreview => ({ ref: { sourceId: 'alpha', entityType: 'person', stableId }, total: { value: 0, quality: 'exact', scope: 'x' }, byType: [], byNeighborType: [], warnings: [], pageSize: 25 });
+const preview = (stableId: string): DegreePreview => ({ ref: { sourceId: 'alpha', entityType: 'person', stableId }, total: { value: 0, quality: 'exact', scope: 'x' }, byType: [], byNeighborType: [], warnings: [], pageSize: 25, heavyOpThreshold: 500 });
 const clockAt = () => {
   let now = 0;
   return { now: () => now, advance: (ms: number) => void (now += ms) };

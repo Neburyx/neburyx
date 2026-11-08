@@ -5,6 +5,8 @@ import { createStore, readable, type ReadableStore } from '../state/store.js';
 import type { ApiClient, ApiFailure } from './client.js';
 import type { FailureReporter } from './failure-reporter.js';
 import { UNEXPECTED } from './use-request.js';
+import { BOUNDED_LIMIT } from './heavy-estimate.js';
+import type { HeavyGuard } from './heavy-guard.js';
 
 /** What the client knows of the pages of one neighbor type of one node: how many of its relationships are on the canvas, where the next page starts, and whether that cursor can still be used. */
 export interface TypeProgress {
@@ -14,6 +16,9 @@ export interface TypeProgress {
   /** The server refused the cursor (it expired, or the policy changed): the type continues only from its first page. */
   readonly restartNeeded: boolean;
 }
+
+const notAskedAfterFailure = (count: number): string => `${count} selected ${count === 1 ? 'node was' : 'nodes were'} not asked after the failure.`;
+const notAskedAfterMasking = (count: number): string => `${count} selected ${count === 1 ? 'node was' : 'nodes were'} not asked because the masking changed.`;
 
 /** The most a page may hold until a source says otherwise; the server's `max_page` may be lower, and a refusal that names it lowers this for the source. */
 export const PAGE_CEILING = 50;
@@ -37,7 +42,28 @@ export interface NodeExpansion {
   readonly failedAction: ExpansionAction | undefined;
 }
 
-export type ExpansionAction = { readonly kind: 'first'; readonly types: readonly string[]; readonly relTypes?: readonly string[] | undefined } | { readonly kind: 'more'; readonly type: string } | { readonly kind: 'restart'; readonly type: string } | { readonly kind: 'pages'; readonly first: readonly string[]; readonly more: readonly string[]; readonly relTypes: readonly string[] | undefined };
+/** What a request did: `sent` a request left and was answered, `failed` it left and failed, `held` the heavy-operation warning stopped it and waits for the person, `stale` a newer ask or a change of investigation or masking made it moot. */
+export type ExpandOutcome = 'sent' | 'held' | 'stale' | 'failed';
+
+/** A selection that is expanded node after node: how many of its nodes are still to be asked, the held one included, and the rest of the run, which goes on once the held node has been let through. */
+export interface ExpandBatch {
+  readonly waiting: number;
+  /** The person let the held node through: a heavy node of the rest goes ahead at its own bounded limit and is not held again. */
+  readonly bounded?: boolean;
+  readonly after: () => Promise<unknown>;
+}
+
+/** `checked` marks an ask that has passed the heavy-operation check, so a retry of it is not checked again; `limit` is the bounded page *Continue* chose, kept by that retry. */
+interface Passed {
+  readonly checked?: true;
+  readonly limit?: number | undefined;
+}
+
+export type ExpansionAction =
+  | ({ readonly kind: 'first'; readonly types: readonly string[]; readonly relTypes?: readonly string[] | undefined; readonly batch?: ExpandBatch | undefined } & Passed)
+  | { readonly kind: 'more'; readonly type: string }
+  | { readonly kind: 'restart'; readonly type: string }
+  | ({ readonly kind: 'pages'; readonly first: readonly string[]; readonly more: readonly string[]; readonly relTypes: readonly string[] | undefined } & Passed);
 
 const firstTypesOf = (action: ExpansionAction): readonly string[] => (action.kind === 'first' ? action.types : action.kind === 'restart' ? [action.type] : action.kind === 'pages' ? action.first : []);
 const moreTypesOf = (action: ExpansionAction): readonly string[] => (action.kind === 'more' ? [action.type] : action.kind === 'pages' ? action.more : []);
@@ -57,19 +83,19 @@ export interface ExpandStore {
   readonly notes: ReadableStore<readonly string[]>;
   report(note: string): void;
   /** Loads the first page of each neighbor type, over the relationship types given (all sourced types when none), as one request; it begins a new chain for each type. */
-  expand(ref: ElementRef, neighborTypes: readonly string[], relTypes?: readonly string[]): Promise<void>;
+  expand(ref: ElementRef, neighborTypes: readonly string[], relTypes?: readonly string[], batch?: ExpandBatch): Promise<ExpandOutcome>;
   /** The page size the person may choose for the source: whole, from 1 to this. */
   ceilingOf(sourceId: string): number;
   /** Checks a page size and, when it is acceptable, keeps it for the node; nothing is kept and the reason is returned otherwise. */
   setPageSize(ref: ElementRef, value: number): PageSizeCheck;
   /** The relationship types the loaded chain of a neighbor type was started with; undefined for all sourced types or when there is no chain. */
   relTypesOf(ref: ElementRef, neighborType: string): readonly string[] | undefined;
-  loadMore(ref: ElementRef, neighborType: string): Promise<void>;
-  startOver(ref: ElementRef, neighborType: string): Promise<void>;
+  loadMore(ref: ElementRef, neighborType: string): Promise<ExpandOutcome>;
+  startOver(ref: ElementRef, neighborType: string): Promise<ExpandOutcome>;
   /** Asks again for what failed last for the node. */
-  retry(ref: ElementRef): Promise<void>;
+  retry(ref: ElementRef): Promise<ExpandOutcome>;
   /** One request for the panel: the first page of the types in `first` and the next page of those in `more` (each with the cursor it was given), over the relationship types given. */
-  load(ref: ElementRef, plan: { readonly first: readonly string[]; readonly more: readonly string[]; readonly relTypes: readonly string[] | undefined }): Promise<void>;
+  load(ref: ElementRef, plan: { readonly first: readonly string[]; readonly more: readonly string[]; readonly relTypes: readonly string[] | undefined }): Promise<ExpandOutcome>;
 }
 
 const idle = (epoch: string): NodeExpansion => ({ epoch, status: 'idle', failure: undefined, types: new Map(), pageSize: undefined, chosenPageSize: undefined, duplicates: false, warnings: [], failedAction: undefined });
@@ -92,7 +118,7 @@ function neighborTypeOf(edge: GraphEdge, ref: ElementRef): string {
  * The expansions a person asked for in this session, outside React so that a menu that closes does not stop one. One request is one node's pages for the asked types and either adds all of its answer to the
  * loaded graph or nothing; an answer that arrives after the investigation or the masking changed, or after a newer ask for the same node, is dropped.
  */
-export function createExpandStore(client: ApiClient, state: ClientState, person: () => string, report?: FailureReporter): ExpandStore {
+export function createExpandStore(client: ApiClient, state: ClientState, person: () => string, report?: FailureReporter, heavy?: HeavyGuard): ExpandStore {
   const store = createStore<ReadonlyMap<string, NodeExpansion>>(new Map());
   const notes = createStore<readonly string[]>([]);
   const chains = new Map<string, Map<string, Chain>>();
@@ -177,16 +203,71 @@ export function createExpandStore(client: ApiClient, state: ClientState, person:
     return { duplicates: [...new Set(duplicates)] };
   };
 
-  async function run(ref: ElementRef, action: ExpansionAction): Promise<void> {
+  async function run(ref: ElementRef, action: ExpansionAction): Promise<ExpandOutcome> {
     const nodeKey = elementKey(ref);
     const epoch = epochOf();
     touch(ref);
+    heavy?.release(ref);
     const mine = (newest.get(nodeKey) ?? 0) + 1;
     newest.set(nodeKey, mine);
     last.set(nodeKey, action);
     notes.setState([]);
     const before = read(nodeKey);
     write(nodeKey, { ...before, status: 'loading', failure: undefined, failedAction: undefined });
+    if (heavy !== undefined && (action.kind === 'first' || action.kind === 'pages') && action.checked !== true) {
+      const asked = firstTypesOf(action);
+      if (asked.length > 0) {
+        const mask = state.mask.getState();
+        const decision = await heavy.decide({ ref, neighborTypes: asked, relTypes: action.relTypes }, mask);
+        if (newest.get(nodeKey) !== mine || epochOf() !== epoch) return 'stale';
+        const limit = decision.kind === 'heavy' ? Math.min(BOUNDED_LIMIT, before.chosenPageSize ?? before.pageSize ?? decision.pageSize, ceilingOf(ref.sourceId)) : undefined;
+        if (decision.kind === 'heavy' && limit !== undefined && action.kind === 'first' && action.batch?.bounded === true) {
+          // the person let a held node through: the rest of the selection goes ahead, each heavy node at its own bounded page
+          action = { ...action, checked: true, limit };
+          last.set(nodeKey, action);
+        } else if (decision.kind === 'heavy' && limit !== undefined) {
+          write(nodeKey, { ...read(nodeKey), status: 'idle', failure: undefined, failedAction: undefined });
+          let used = false;
+          const maskAtHold = mask;
+          const heldAction = action;
+          heavy.hold({
+            ref,
+            decision,
+            limit,
+            types: askedTypesOf(heldAction).length,
+            waiting: heldAction.kind === 'first' ? (heldAction.batch?.waiting ?? 1) : 1,
+            proceed() {
+              if (used) return;
+              const batch = heldAction.kind === 'first' ? heldAction.batch : undefined;
+              if (epochOf() !== epoch || newest.get(nodeKey) !== mine) {
+                if (batch !== undefined && state.mask.getState() !== maskAtHold) notes.setState([notAskedAfterMasking(batch.waiting)]);
+                return;
+              }
+              used = true;
+              void run(ref, { ...heldAction, checked: true, limit, ...(heldAction.kind === 'first' && batch !== undefined ? { batch: { ...batch, bounded: true } } : {}) }).then(async (outcome) => {
+                const rest = (batch?.waiting ?? 1) - 1;
+                if (batch === undefined || rest < 1) return;
+                if (outcome === 'failed') {
+                  notes.setState([notAskedAfterFailure(rest)]);
+                  return;
+                }
+                if (epochOf() !== epoch) {
+                  if (state.mask.getState() !== maskAtHold) notes.setState([notAskedAfterMasking(rest)]);
+                  return;
+                }
+                await batch.after();
+              });
+            },
+          });
+          return 'held';
+        }
+        if (action.checked !== true) {
+          // an ask that passed is not checked again when the banner's Retry or a retry sends it once more
+          action = { ...action, checked: true };
+          last.set(nodeKey, action);
+        }
+      }
+    }
     const types = askedTypesOf(action);
     const cursors = Object.fromEntries(moreTypesOf(action).flatMap((type) => {
       const cursor = before.types.get(type)?.cursor;
@@ -194,13 +275,14 @@ export function createExpandStore(client: ApiClient, state: ClientState, person:
     }));
     // the cursor binds the relationship types, so a continuation asks for the ones its chain began with
     const relTypes = action.kind === 'first' || action.kind === 'pages' ? action.relTypes : chainsOf(nodeKey).get(action.type)?.relTypes;
+    const boundedLimit = action.kind === 'first' || action.kind === 'pages' ? action.limit : undefined;
     const request: ExpandRequest = {
       sourceId: ref.sourceId,
       ref: { entityType: ref.entityType, stableId: ref.stableId },
       neighborTypes: [...types],
       direction: 'both',
       ...(relTypes === undefined || relTypes.length === 0 ? {} : { relTypes: [...relTypes], sort: 'observed' as const }),
-      ...(before.chosenPageSize === undefined ? {} : { limit: before.chosenPageSize }),
+      ...(boundedLimit === undefined && before.chosenPageSize === undefined ? {} : { limit: boundedLimit ?? before.chosenPageSize }),
       ...(state.mask.getState() ? { mask: true } : {}),
       ...(Object.keys(cursors).length === 0 ? {} : { cursors }),
     };
@@ -210,22 +292,22 @@ export function createExpandStore(client: ApiClient, state: ClientState, person:
     } catch {
       result = UNEXPECTED;
     }
-    if (newest.get(nodeKey) !== mine || epochOf() !== epoch) return;
+    if (newest.get(nodeKey) !== mine || epochOf() !== epoch) return 'stale';
     if (!result.ok) {
-      if (result.failure.code === 'ABORTED') return;
+      if (result.failure.code === 'ABORTED') return 'sent';
       const maxPage = result.failure.code === 'QUERY_BUDGET_EXCEEDED' && 'details' in result.failure ? result.failure.details?.maxPage : undefined;
       if (maxPage !== undefined) ceilings.set(ref.sourceId, maxPage);
       const lowered = maxPage !== undefined && before.chosenPageSize !== undefined && before.chosenPageSize > maxPage ? maxPage : before.chosenPageSize;
       // shown elsewhere (the banner): the node goes back to what it was, and the banner's Retry asks the same again
       if (report?.(result.failure, ref.sourceId, () => void run(ref, action)) === true) {
         write(nodeKey, { ...before, chosenPageSize: lowered, status: 'idle', failure: undefined, failedAction: undefined });
-        return;
+        return 'failed';
       }
       const restart = moreTypesOf(action).length > 0 && result.failure.code === 'CURSOR_INVALIDATED';
       const progress = new Map(before.types);
       if (restart) for (const type of moreTypesOf(action)) progress.set(type, { ...(before.types.get(type) ?? { loaded: 0, hasMore: true, cursor: undefined }), restartNeeded: true });
       write(nodeKey, { ...before, chosenPageSize: lowered, status: 'failed', failure: result.failure, types: progress, failedAction: action });
-      return;
+      return 'failed';
     }
     const { duplicates } = merge(ref, result.value, action, nodeKey);
     if (duplicates.length > 0) patchDuplicates(duplicates);
@@ -235,6 +317,7 @@ export function createExpandStore(client: ApiClient, state: ClientState, person:
       progress.set(page.neighborType, { loaded: chain?.all.size ?? 0, hasMore: page.hasMore, cursor: page.nextCursor, restartNeeded: false });
     }
     write(nodeKey, { epoch, status: 'idle', failure: undefined, types: progress, pageSize: result.value.pageSize, chosenPageSize: before.chosenPageSize, duplicates: before.duplicates || duplicates.length > 0, warnings: result.value.warnings, failedAction: undefined });
+    return 'sent';
   }
 
   return {
@@ -244,7 +327,7 @@ export function createExpandStore(client: ApiClient, state: ClientState, person:
     touched: touchedView,
     touch,
     report: (note) => notes.setState([note]),
-    expand: (ref, neighborTypes, relTypes) => run(ref, { kind: 'first', types: neighborTypes, relTypes }),
+    expand: (ref, neighborTypes, relTypes, batch) => run(ref, { kind: 'first', types: neighborTypes, relTypes, batch }),
     load: (ref, plan) => run(ref, { kind: 'pages', first: plan.first, more: plan.more, relTypes: plan.relTypes }),
     ceilingOf,
     setPageSize(ref, value) {
@@ -261,7 +344,7 @@ export function createExpandStore(client: ApiClient, state: ClientState, person:
     startOver: (ref, neighborType) => run(ref, { kind: 'restart', type: neighborType }),
     retry: async (ref) => {
       const action = last.get(elementKey(ref));
-      if (action !== undefined) await run(ref, action);
+      return action === undefined ? 'stale' : run(ref, action);
     },
   };
 }

@@ -18,8 +18,7 @@ import { makeWebRoot } from '../testing/web-root.js';
 const webRoot = makeWebRoot();
 afterAll(() => rmSync(webRoot, { recursive: true, force: true }));
 
-const mapping = parseMapping(
-  fileOf(
+const sourceOf = (extra: Record<string, unknown> = {}) =>
     baseSource({
       id: 'demo',
       entities: [
@@ -35,21 +34,24 @@ const mapping = parseMapping(
         { type: 'KNOWS', from: 'gadget', to: 'widget' },
         { type: 'TWINNED', from: 'twin_a', to: 'twin_b' },
       ],
-    }),
-  ),
-  'neburyx.yaml',
-);
+      ...extra,
+    });
+const mapping = parseMapping(fileOf(sourceOf()), 'neburyx.yaml');
+const defaultMapping = mapping;
+const mappingWithThreshold = parseMapping(fileOf(sourceOf({ budgets: { heavy_op_threshold: 40 } })), 'neburyx.yaml');
 
 interface Options {
   readonly degrees?: (call: ExecuteCall) => ExecuteOutcome;
   readonly nodes?: ExecuteOutcome;
   readonly indexes?: (online: readonly IndexRow[]) => readonly IndexRow[];
   readonly deny?: boolean;
+  readonly mapping?: typeof mapping;
 }
 
 const rowOf = (...counts: number[]): ExecuteOutcome => ({ status: 'rows', rows: [{ ...Object.fromEntries(counts.map((count, index) => [`c${index}`, count])) }] });
 
 async function started(options: Options = {}) {
+  const mapping = options.mapping ?? defaultMapping;
   const [source] = mapping.sources;
   if (source === undefined) throw new Error('the mapping has no source');
   const answer = (call: ExecuteCall): Promise<ExecuteOutcome> => {
@@ -92,6 +94,27 @@ describe('POST /v1/graph/preview-expansion', () => {
       { entityType: 'gadget', count: { quality: 'unknown', scope: 'degree:neighbor:gadget:mapped-relationship-ends' } },
       { entityType: 'widget', count: { quality: 'unknown', scope: 'degree:neighbor:widget:mapped-relationship-ends' } },
     ]);
+    await app.close();
+  });
+
+  it('carries the source\'s warning threshold: 500 when the budgets name none, the configured one otherwise, and for a node whose entity type has no mapped relationship', async () => {
+    const plain = await started();
+    expect(degreePreviewSchema.parse((await post(plain.app, widget)).json()).heavyOpThreshold).toBe(500);
+    await plain.app.close();
+    const set = await started({ mapping: mappingWithThreshold, degrees: () => rowOf(2, 3, 4) });
+    expect(degreePreviewSchema.parse((await post(set.app, widget)).json()).heavyOpThreshold).toBe(40);
+    expect(degreePreviewSchema.parse((await post(set.app, { sourceId: 'demo', ref: { entityType: 'island', stableId: 'I-1' } })).json()).heavyOpThreshold).toBe(40);
+    await set.app.close();
+  });
+
+  it('carries the same threshold from the cache and for a masked request, with nothing else changed by the mask', async () => {
+    const { app } = await started({ mapping: mappingWithThreshold, degrees: () => rowOf(2, 3, 4) });
+    const first = degreePreviewSchema.parse((await post(app, widget)).json());
+    const again = degreePreviewSchema.parse((await post(app, widget)).json());
+    const masked = degreePreviewSchema.parse((await post(app, { ...widget, mask: true })).json());
+    expect(again).toEqual(first);
+    expect(masked.heavyOpThreshold).toBe(40);
+    expect({ ...masked, heavyOpThreshold: 0 }).toEqual({ ...first, heavyOpThreshold: 0 });
     await app.close();
   });
 

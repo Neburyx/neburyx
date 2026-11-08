@@ -266,6 +266,7 @@ const PREVIEW = {
   byNeighborType: [{ entityType: 'gadget', count: { value: 3, quality: 'exact', scope: 'degree:neighbor:gadget:mapped-relationship-ends' } }],
   warnings: [],
   pageSize: 25,
+  heavyOpThreshold: 500,
 };
 const PREVIEW_REQUEST = { sourceId: 'demo', ref: { entityType: 'widget', stableId: 'W-1' } };
 
@@ -283,6 +284,7 @@ describe('the API client, previewing the degree of a node', () => {
 
   it.each([
     ['an answer that does not parse', { ...PREVIEW, total: 3 }],
+    ['an answer with no warning threshold', { ...PREVIEW, heavyOpThreshold: undefined }],
     ['a valid answer for another source', { ...PREVIEW, ref: { ...PREVIEW.ref, sourceId: 'other' } }],
     ['a valid answer for another node', { ...PREVIEW, ref: { ...PREVIEW.ref, stableId: 'W-2' } }],
     ['a valid answer for another entity type', { ...PREVIEW, ref: { ...PREVIEW.ref, entityType: 'gadget' } }],

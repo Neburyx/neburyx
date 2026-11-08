@@ -10,6 +10,7 @@ const preview = {
   byNeighborType: [{ entityType: 'gadget', count: exact(3, 'degree:neighbor:gadget') }],
   warnings: [],
   pageSize: 25,
+  heavyOpThreshold: 500,
 };
 
 describe('the degree preview request', () => {
@@ -49,6 +50,11 @@ describe('the degree preview response', () => {
     ['a pair with no neighbor type', { ...preview, byType: [{ ...preview.byType[0], neighborTypes: [] }] }],
     ['a warning code that is not named', { ...preview, warnings: [{ code: 'other', reason: 'x' }] }],
     ['a field the schema does not name', { ...preview, extra: 1 }],
+    ['no heavyOpThreshold', { ...preview, heavyOpThreshold: undefined }],
+    ['a heavyOpThreshold of zero', { ...preview, heavyOpThreshold: 0 }],
+    ['a negative heavyOpThreshold', { ...preview, heavyOpThreshold: -5 }],
+    ['a fractional heavyOpThreshold', { ...preview, heavyOpThreshold: 2.5 }],
+    ['a heavyOpThreshold that is text', { ...preview, heavyOpThreshold: '500' }],
   ])('refuses %s', (_name, body) => {
     expect(degreePreviewSchema.safeParse(body).success).toBe(false);
   });

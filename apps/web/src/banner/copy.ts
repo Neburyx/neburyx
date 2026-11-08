@@ -7,3 +7,7 @@ export const busyHeadline = (source: string): string => `${source} is busy. No r
 export const BUSY_TEXT = 'Loaded graph and filters preserved; nothing was read. Retry when ready.';
 export const BUSY_SIDE_LABEL = 'No read slot freed';
 export const RETRY = 'Retry';
+export const HEAVY_CHIP = 'Heavy operation';
+export const HEAVY_SIDE_LABEL = 'Estimated matches';
+export const REFINE_FILTERS = 'Refine filters';
+export const continueWith = (limit: number): string => `Continue with ${limit}`;

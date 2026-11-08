@@ -39,8 +39,8 @@ function neighborTypesOf(source: SourceModel, entityType: string, pair: DegreePa
   return [...new Set(ends)];
 }
 
-function emptyPreviewOf(request: DegreePreviewRequest, pageSize: number): DegreePreview {
-  return { ref: { sourceId: request.sourceId, entityType: request.entityType, stableId: request.stableId }, total: { value: 0, quality: 'exact', scope: TOTAL_SCOPE }, byType: [], byNeighborType: [], warnings: [], pageSize };
+function emptyPreviewOf(request: DegreePreviewRequest, pageSize: number, heavyOpThreshold: number): DegreePreview {
+  return { ref: { sourceId: request.sourceId, entityType: request.entityType, stableId: request.stableId }, total: { value: 0, quality: 'exact', scope: TOTAL_SCOPE }, byType: [], byNeighborType: [], warnings: [], pageSize, heavyOpThreshold };
 }
 
 function previewOf(request: DegreePreviewRequest, source: SourceModel, pairs: readonly DegreePair[], item: Extract<DegreeItem, { found: true }>, capped: boolean): DegreePreview {
@@ -58,6 +58,7 @@ function previewOf(request: DegreePreviewRequest, source: SourceModel, pairs: re
     byNeighborType: neighborCountsOf(byType),
     warnings: [...cappedWarnings, ...duplicate],
     pageSize: source.budgets.defaultPage,
+    heavyOpThreshold: source.budgets.heavyOpThreshold,
   };
 }
 
@@ -76,7 +77,7 @@ export function createDegreePreviewService(deps: { readonly gate: Gate; readonly
         await recordHit(deps.cache, request, pairs.length === 0 ? entityLoadTemplate.auditAction : degreePreviewBoundedTemplate.auditAction);
         return held;
       }
-      const answered = pairs.length === 0 ? await emptyPreview(deps.entities, request, source.budgets.defaultPage) : await countedPreview(deps, request, source, pairs);
+      const answered = pairs.length === 0 ? await emptyPreview(deps.entities, request, source.budgets.defaultPage, source.budgets.heavyOpThreshold) : await countedPreview(deps, request, source, pairs);
       // an answer read under a verdict that has since changed is returned to its caller and not kept
       if (deps.cache !== undefined && deps.verdicts.revisionOf(request.sourceId) === revision) deps.cache.store.set(key, answered);
       return answered;
@@ -85,10 +86,10 @@ export function createDegreePreviewService(deps: { readonly gate: Gate; readonly
 }
 
 /** An entity type with no mapped relationship has nothing to count, but the node must exist, which the entity read tells. */
-async function emptyPreview(entities: EntityReader, request: DegreePreviewRequest, pageSize: number): Promise<DegreePreview> {
+async function emptyPreview(entities: EntityReader, request: DegreePreviewRequest, pageSize: number, heavyOpThreshold: number): Promise<DegreePreview> {
   const node = await entities.read(request);
   const duplicate = node.qualityFlags.includes('duplicate-stable-id') ? [{ code: 'duplicate-stable-id' as const, reason: DUPLICATE_REASON }] : [];
-  return { ...emptyPreviewOf(request, pageSize), warnings: duplicate };
+  return { ...emptyPreviewOf(request, pageSize, heavyOpThreshold), warnings: duplicate };
 }
 
 async function countedPreview(deps: { readonly gate: Gate; readonly verdicts: DegreeVerdicts }, request: DegreePreviewRequest, source: SourceModel, pairs: readonly DegreePair[]): Promise<DegreePreview> {

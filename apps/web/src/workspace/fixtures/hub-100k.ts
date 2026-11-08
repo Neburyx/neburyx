@@ -11,6 +11,7 @@ export const hubPreview: DegreePreview = {
   byNeighborType: [{ entityType: 'leaf', count: { value: 500, quality: 'lowerBound', scope: 'degree:leaf' } }],
   warnings: [{ code: 'counts-capped', reason: 'Counts stop at 500 for this node' }],
   pageSize: 25,
+  heavyOpThreshold: 500,
 };
 
 /**
@@ -31,6 +32,7 @@ export const busyHubPreview: DegreePreview = {
   ],
   warnings: [],
   pageSize: 25,
+  heavyOpThreshold: 500,
 };
 
 const leafNode = (id: string) => ({

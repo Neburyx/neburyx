@@ -62,7 +62,7 @@ function harness(options: { readonly nodes?: readonly string[]; readonly links?:
 const lines = () => within(screen.getByRole('group', { name: 'Graph scope' })).getAllByText(/./).map((line) => line.textContent);
 const secondLine = () => lines()[1];
 const answer = (ask: Ask | undefined, result: ApiResult<CoverageResponse>) => act(async () => ask?.answer(result));
-const previewOf = (): DegreePreview => ({ ref: ref('a', 'type-a', 'n1'), total: { value: 1, quality: 'exact', scope: 'x' }, byType: [], byNeighborType: [], warnings: [], pageSize: 25 });
+const previewOf = (): DegreePreview => ({ ref: ref('a', 'type-a', 'n1'), total: { value: 1, quality: 'exact', scope: 'x' }, byType: [], byNeighborType: [], warnings: [], pageSize: 25, heavyOpThreshold: 500 });
 
 describe('the second scope line, with the count the server computed', () => {
   it.each([

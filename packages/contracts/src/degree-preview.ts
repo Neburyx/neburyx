@@ -30,6 +30,8 @@ export const degreePreviewSchema = z.strictObject({
   warnings: z.array(degreeWarningSchema),
   /** The number of relationships an expansion loads for each type when the request names no page size: the source's default page. */
   pageSize: z.number().int().positive(),
+  /** The source's `heavy_op_threshold`: an expansion estimated above it is warned about before it is sent (the warning never refuses). */
+  heavyOpThreshold: z.number().int().positive(),
 });
 
 export type DegreePreviewRequest = z.infer<typeof degreePreviewRequestSchema>;

@@ -34,7 +34,7 @@ export function SupernodePanel() {
     if (opened !== undefined) expansions?.touch(opened);
     // the menu that opened the panel gives the focus back to the canvas after it ran; the panel takes it after that
     root.current?.querySelector<HTMLElement>(`[${FOCUS_ATTRIBUTE}]`)?.focus();
-  }, [openedFor, expansions]);
+  }, [open, openedFor, expansions]);
   const close = (): void => {
     state.presentation.setSupernodePanel(undefined);
     focusCanvas();

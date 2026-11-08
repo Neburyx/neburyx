@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { notRetrievedOf, type CoveragePart } from './coverage-sum.js';
 
 const preview = (total: Count | undefined): DegreePreview | undefined =>
-  total === undefined ? undefined : { ref: { sourceId: 'demo', entityType: 'widget', stableId: 'W' }, total, byType: [], byNeighborType: [], warnings: [], pageSize: 25 };
+  total === undefined ? undefined : { ref: { sourceId: 'demo', entityType: 'widget', stableId: 'W' }, total, byType: [], byNeighborType: [], warnings: [], pageSize: 25, heavyOpThreshold: 500 };
 const count = (value: number, quality: Exclude<Count['quality'], 'unknown'>): Count => ({ value, quality, scope: 'degree:total' });
 const part = (total: Count | undefined, loadedRelationships = 0, loadedQuality: CoveragePart['loadedQuality'] = 'exact'): CoveragePart => ({ preview: preview(total), loadedRelationships, loadedQuality });
 const answer = (value: number, quality: Count['quality']): Count => ({ value, quality, scope: COVERAGE_SCOPE });
