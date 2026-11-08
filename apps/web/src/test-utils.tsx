@@ -106,6 +106,7 @@ export interface StubRenderer extends CanvasRenderer {
   readonly restores: Array<Viewport | undefined>;
   readonly zooms: number[];
   readonly centered: string[];
+  readonly shown: Viewport[];
   fits: number;
   disposed: number;
 }
@@ -131,6 +132,7 @@ export function stubRenderer(options: StubOptions = {}): StubRenderer {
     restores: [],
     zooms: [],
     centered: [],
+    shown: [],
     fits: 0,
     disposed: 0,
     mount(container, events, viewport) {
@@ -147,6 +149,9 @@ export function stubRenderer(options: StubOptions = {}): StubRenderer {
       stub.scenes.push(scene);
       stub.restores.push(restore);
       drawn = scene;
+    },
+    show(viewport) {
+      stub.shown.push(viewport);
     },
     fit() {
       if (options.failCommands === true) throw new Error('cannot fit');

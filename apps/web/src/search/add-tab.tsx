@@ -1,6 +1,9 @@
 import { useEffect, useState, type RefObject } from 'react';
 import { useApiClient } from '../api/client-context.js';
 import type { ApiClient } from '../api/client.js';
+import { leaveFocus } from '../canvas/focus-commands.js';
+import { FOCUS_LEFT } from '../state/presentation-state.js';
+import { neighborhoodOf } from '../state/loaded-graph.js';
 import { useCanvasCommands } from '../canvas/canvas-commands.js';
 import { useProfile } from '../canvas/profile-context.js';
 import { answeredData, useShellData } from '../shell/shell-data.js';
@@ -46,15 +49,16 @@ function TypeaheadBox({ client, sourceId, mask, box }: { readonly client: ApiCli
   }, [centerAfterShown, drawn, canvas]);
   const find = (node: GraphNode): void => {
     const key = elementKey(node.ref);
-    if (state.presentation.view.getState().hidden.has(key)) {
-      state.presentation.select([key]);
-      state.presentation.showHidden([key]);
-      state.presentation.announceMove(`Shown again: ${node.display.title}`);
-      setCenterAfterShown(key);
-      return;
-    }
+    const { neighborhoodFocus, hidden } = state.presentation.view.getState();
+    const outside = neighborhoodFocus !== undefined && !neighborhoodOf(graph, neighborhoodFocus).has(key);
     state.presentation.select([key]);
-    canvas?.centerOn(key);
+    if (outside) leaveFocus(state);
+    if (hidden.has(key)) {
+      state.presentation.showHidden([key]);
+      state.presentation.announceMove(`${outside ? `${FOCUS_LEFT} ` : ''}Shown again: ${node.display.title}`);
+      setCenterAfterShown(key);
+    } else if (outside) setCenterAfterShown(key);
+    else canvas?.centerOn(key);
   };
   return (
     <>

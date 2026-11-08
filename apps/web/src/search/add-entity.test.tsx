@@ -85,6 +85,61 @@ describe('adding one entity from the Add from source tab', () => {
     expect(parts.state.presentation.view.getState().moveNote?.text).toBe('Shown again: Title ACC-100');
   });
 
+  it('leaves focus first when Find is chosen on a loaded entity that focus sets aside, then selects and centres it', async () => {
+    const parts = await panelWorkspace({ nodes: [node('a', 'ACC-1'), first] });
+    parts.state.focusOn(keyOf(node('a', 'ACC-1')));
+    await searchFor('ACC');
+    act(() => parts.searches[0]?.answer({ ok: true, value: searchAnswer('a', [first], [second]) }));
+    await settle();
+    fireEvent.click(screen.getByRole('button', { name: 'On canvas: Title ACC-100' }));
+    await settle();
+    expect(parts.state.presentation.view.getState().neighborhoodFocus).toBeUndefined();
+    expect([...parts.state.presentation.view.getState().selection]).toEqual([keyOf(first)]);
+    expect(parts.renderer()?.centered).toEqual([keyOf(first)]);
+    expect(parts.state.presentation.view.getState().moveNote?.text).toBe('Focus left.');
+  });
+
+  it('keeps focus when Find is chosen on an entity inside it, and shows a hidden one inside it again', async () => {
+    const parts = await panelWorkspace({ nodes: [node('a', 'ACC-1'), first], edges: [{ ...edge('a', 'e1', 'ACC-1', 'ACC-100'), from: node('a', 'ACC-1').ref, to: first.ref }] });
+    parts.state.focusOn(keyOf(node('a', 'ACC-1')));
+    parts.state.hide([keyOf(first)]);
+    await searchFor('ACC');
+    act(() => parts.searches[0]?.answer({ ok: true, value: searchAnswer('a', [first], [second]) }));
+    await settle();
+    fireEvent.click(screen.getByRole('button', { name: 'On canvas: Title ACC-100' }));
+    await settle();
+    expect(parts.state.presentation.view.getState().neighborhoodFocus).toBe(keyOf(node('a', 'ACC-1')));
+    expect(parts.state.presentation.view.getState().hidden.size).toBe(0);
+    expect([...parts.state.presentation.view.getState().selection]).toEqual([keyOf(first)]);
+    expect(parts.state.presentation.view.getState().moveNote?.text).toBe('Shown again: Title ACC-100');
+  });
+
+  it('leaves focus and shows a hidden entity again when Find is chosen on a hidden entity that focus sets aside', async () => {
+    const parts = await panelWorkspace({ nodes: [node('a', 'ACC-1'), first] });
+    parts.state.focusOn(keyOf(node('a', 'ACC-1')));
+    parts.state.hide([keyOf(first)]);
+    await searchFor('ACC');
+    act(() => parts.searches[0]?.answer({ ok: true, value: searchAnswer('a', [first], [second]) }));
+    await settle();
+    fireEvent.click(screen.getByRole('button', { name: 'On canvas: Title ACC-100' }));
+    await settle();
+    expect(parts.state.presentation.view.getState().neighborhoodFocus).toBeUndefined();
+    expect(parts.state.presentation.view.getState().hidden.size).toBe(0);
+    expect(parts.renderer()?.centered).toEqual([keyOf(first)]);
+    expect(parts.state.presentation.view.getState().moveNote?.text).toBe('Focus left. Shown again: Title ACC-100');
+  });
+
+  it('leaves focus when an entity is added while focus is on, since it would be loaded and not drawn', async () => {
+    const parts = await withRows();
+    parts.state.focusOn(keyOf(node('a', 'ACC-1')));
+    fireEvent.click(addButton('Title ACC-100'));
+    act(() => parts.loads[0]?.answer({ ok: true, value: first }));
+    await settle();
+    expect(loadedRefs(parts)).toEqual(['ACC-1', 'ACC-100']);
+    expect(parts.state.presentation.view.getState().neighborhoodFocus).toBeUndefined();
+    expect(parts.state.visibleGraph().nodes).toHaveLength(2);
+  });
+
   it('sends one entity read and adds one entity when Add is pressed twice before the answer', async () => {
     const parts = await withRows();
     fireEvent.click(addButton('Title ACC-100'));

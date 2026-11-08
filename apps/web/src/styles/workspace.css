@@ -569,6 +569,10 @@
   --icon: url('../assets/lucide/eye-off.svg');
 }
 
+.icon-focus {
+  --icon: url('../assets/lucide/focus.svg');
+}
+
 .icon-show {
   --icon: url('../assets/lucide/eye.svg');
 }
@@ -737,12 +741,13 @@
 
 .selection-bar {
   position: absolute;
-  top: var(--selection-bar-top);
-  left: 50%;
-  transform: translateX(-50%);
+  top: var(--selection-bar-place-top, var(--selection-bar-top));
+  left: var(--selection-bar-place-left, 50%);
+  transform: translateX(var(--selection-bar-place-shift, -50%));
   display: flex;
   width: max-content;
-  max-width: calc(100% - var(--space-32));
+  max-width: var(--selection-bar-place-max, calc(100% - var(--space-32)));
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-4);
   padding: var(--space-6) var(--space-8) var(--space-6) var(--space-14);
@@ -753,6 +758,14 @@
   color: var(--color-text-strong);
   font-size: var(--font-size-small);
   line-height: normal;
+}
+
+.selection-bar[data-compact] .selection-action-label {
+  position: absolute;
+  width: var(--border-width);
+  height: var(--border-width);
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
 }
 
 .selection-count {

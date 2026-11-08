@@ -1,5 +1,6 @@
 import type { ClientState } from '../state/client-state.js';
 import { elementKey } from '../state/keys.js';
+import { FOCUS_LEFT } from '../state/presentation-state.js';
 import { formatNumber } from '../workspace/scope-text.js';
 
 export const hiddenAnnouncement = (count: number): string => `Hid ${formatNumber(count)} ${count === 1 ? 'entity' : 'entities'}. Show them again from the scope line.`;
@@ -11,8 +12,10 @@ export function hideEntities(state: ClientState, keys: readonly string[]): void 
   const drawn = drawnEntityKeys(state);
   const entities = [...new Set(keys)].filter((key) => drawn.has(key));
   if (entities.length === 0) return;
+  const focusBefore = state.presentation.view.getState().neighborhoodFocus;
   state.hide(entities);
-  state.presentation.announceMove(hiddenAnnouncement(entities.length));
+  const ended = focusBefore !== undefined && state.presentation.view.getState().neighborhoodFocus === undefined;
+  state.presentation.announceMove(ended ? `${hiddenAnnouncement(entities.length)} ${FOCUS_LEFT}` : hiddenAnnouncement(entities.length));
 }
 
 /** What a menu opened on `key` hides: every selected entity when the entity is one of them, otherwise the entity alone. */

@@ -3,8 +3,8 @@ import { StateError } from './errors.js';
 import { createInvestigationStore, type InvestigationRecord, type InvestigationState, type LoadedInvestigation } from './investigation-state.js';
 import { createJobStore, type JobState } from './job-state.js';
 import { edgeKey, elementKey, type QueryKey } from './keys.js';
-import { deriveLoadedGraph, visibleGraph, type LoadedGraph } from './loaded-graph.js';
-import { createPresentationStore, type PresentationActions, type PresentationSnapshot } from './presentation-state.js';
+import { deriveLoadedGraph, excludedKeys, neighborhoodOf, visibleGraph, type LoadedGraph } from './loaded-graph.js';
+import { createPresentationStore, type PresentationActions, type PresentationSnapshot, type Viewport } from './presentation-state.js';
 import { createServerStore, type GraphResult, type ServerState } from './server-state.js';
 import { createStore, readable, type ReadableStore } from './store.js';
 
@@ -15,7 +15,7 @@ export interface ClientState {
   readonly server: ReadableStore<ServerState> & { get(key: QueryKey): GraphResult | undefined };
   readonly investigation: ReadableStore<InvestigationState>;
   /** Hiding goes through `hide` of the state, which also takes the relationships of the hidden entities out of the selection. */
-  readonly presentation: Omit<PresentationActions, 'hide'>;
+  readonly presentation: Omit<PresentationActions, 'hide' | 'focusOn'>;
   readonly jobs: ReadableStore<JobState>;
   /** Whether the session asks for the personal-data fields to be masked; every read of the session carries it. */
   readonly mask: ReadableStore<boolean>;
@@ -38,6 +38,8 @@ export interface ClientState {
   visibleGraph(): LoadedGraph;
   /** Hides entities; the selected relationships that touch them leave the selection with them. */
   hide(keys: readonly string[]): void;
+  /** Puts the neighborhood focus on an entity; refused with `UNKNOWN_ELEMENT` for a key that is not a loaded, shown entity. Runs no source read. */
+  focusOn(key: string, viewport?: Viewport): void;
 }
 
 const readFor = (keys: readonly QueryKey[], mask: boolean): boolean => keys.every((key) => key.mask === mask);
@@ -71,11 +73,11 @@ export function createClientState(): ClientState {
     isNode: (key) => nodeKeys().has(key),
     isElement: (key) => nodeKeys().has(key) || edgeKeys().has(key),
   });
-  const { view, setTool, setOpenTool, setOpenMenu, select, setPosition, setPositions, pin, setPanelSize, clearPanelSize, setPanelCollapsed, clearPanelCollapsed, setLegendOpen, setSearchOpen, setSearchTab, requestSearch, setSheetOpen, setSupernodePanel, setSceneItems, walkTo, endWalk, forgetFocused, announceMove, setViewport, showAllHidden, showHidden } = presentation;
+  const { view, setTool, setOpenTool, setOpenMenu, select, setPosition, setPositions, pin, setPanelSize, clearPanelSize, setPanelCollapsed, clearPanelCollapsed, setLegendOpen, setSearchOpen, setSearchTab, requestSearch, setSheetOpen, setSupernodePanel, setSceneItems, walkTo, endWalk, forgetFocused, announceMove, setViewport, showAllHidden, showHidden, leaveFocus } = presentation;
   return {
     server: { ...server.view, get: server.get },
     investigation: investigation.view,
-    presentation: { view, setTool, setOpenTool, setOpenMenu, select, setPosition, setPositions, pin, setPanelSize, clearPanelSize, setPanelCollapsed, clearPanelCollapsed, setLegendOpen, setSearchOpen, setSearchTab, requestSearch, setSheetOpen, setSupernodePanel, setSceneItems, walkTo, endWalk, forgetFocused, announceMove, setViewport, showAllHidden, showHidden },
+    presentation: { view, setTool, setOpenTool, setOpenMenu, select, setPosition, setPositions, pin, setPanelSize, clearPanelSize, setPanelCollapsed, clearPanelCollapsed, setLegendOpen, setSearchOpen, setSearchTab, requestSearch, setSheetOpen, setSupernodePanel, setSceneItems, walkTo, endWalk, forgetFocused, announceMove, setViewport, showAllHidden, showHidden, leaveFocus },
     jobs: createJobStore(),
     mask: readable(mask),
     setMask: (next) => mask.setState(next),
@@ -145,7 +147,18 @@ export function createClientState(): ClientState {
     },
     replacePins: (keys) => presentation.replacePins(keys),
     loadedGraph: () => deriveLoadedGraph(server.view.getState(), investigation.view.getState()),
-    visibleGraph: () => visibleGraph(deriveLoadedGraph(server.view.getState(), investigation.view.getState()), presentation.view.getState().hidden),
+    visibleGraph: () => {
+      const { hidden, neighborhoodFocus } = presentation.view.getState();
+      const graph = deriveLoadedGraph(server.view.getState(), investigation.view.getState());
+      return visibleGraph(graph, excludedKeys(graph, { hidden, neighborhoodFocus }));
+    },
+    focusOn(key, viewport) {
+      const graph = deriveLoadedGraph(server.view.getState(), investigation.view.getState());
+      const near = neighborhoodOf(graph, key);
+      const goneNodes = new Set(graph.nodes.map((node) => elementKey(node.ref)).filter((candidate) => !near.has(candidate)));
+      const goneEdges = graph.edges.filter((edge) => goneNodes.has(elementKey(edge.from)) || goneNodes.has(elementKey(edge.to))).map((edge) => edgeKey(edge.ref));
+      presentation.focusOn(key, [...goneNodes, ...goneEdges], viewport);
+    },
     hide(keys) {
       const hiding = new Set(keys);
       const touching = deriveLoadedGraph(server.view.getState(), investigation.view.getState()).edges.filter((edge) => hiding.has(elementKey(edge.from)) || hiding.has(elementKey(edge.to))).map((edge) => edgeKey(edge.ref));

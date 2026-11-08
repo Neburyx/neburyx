@@ -1,4 +1,5 @@
-import { hideEntities, hideTargetsOf, showHiddenAndFocusCanvas } from '../canvas/hide-commands.js';
+import { enterFocus, leaveFocusAndFocusCanvas } from '../canvas/focus-commands.js';
+import { drawnEntityKeys, hideEntities, hideTargetsOf, showHiddenAndFocusCanvas } from '../canvas/hide-commands.js';
 import { runSelectionCommand } from '../canvas/selection-commands.js';
 import { LayoutList } from './layout-list.js';
 import { nodeRefOfKey } from '../state/keys.js';
@@ -69,6 +70,18 @@ export function registerBuiltInMenuItems(registry: MenuRegistry): () => void {
       },
     }),
     registry.register('node', {
+      id: 'focus-neighborhood',
+      label: 'Focus neighborhood',
+      icon: <span className="icon icon-focus" aria-hidden="true" />,
+      group: MENU_GROUP.node.expand,
+      order: MENU_ORDER.node.focusNeighborhood,
+      binding: 'focus',
+      state: (context) => (context.key === undefined || context.key === context.state.presentation.view.getState().neighborhoodFocus || !drawnEntityKeys(context.state).has(context.key) ? 'disabled' : 'enabled'),
+      run: (context) => {
+        if (context.key !== undefined) enterFocus(context.state, context.key, context.canvas);
+      },
+    }),
+    registry.register('node', {
       id: 'invert-selection',
       label: 'Invert selection',
       icon: <span className="icon icon-invert" aria-hidden="true" />,
@@ -121,6 +134,15 @@ export function registerBuiltInMenuItems(registry: MenuRegistry): () => void {
       order: MENU_ORDER.canvas.showHidden,
       state: (context) => (context.state.presentation.view.getState().hidden.size === 0 ? 'disabled' : 'enabled'),
       run: (context) => showHiddenAndFocusCanvas(context.state),
+    }),
+    registry.register('canvas', {
+      id: 'leave-focus',
+      label: 'Leave focus',
+      icon: <span className="icon icon-focus" aria-hidden="true" />,
+      group: MENU_GROUP.canvas.view,
+      order: MENU_ORDER.canvas.leaveFocus,
+      state: (context) => (context.state.presentation.view.getState().neighborhoodFocus === undefined ? 'disabled' : 'enabled'),
+      run: (context) => leaveFocusAndFocusCanvas(context.state),
     }),
     registry.register('canvas', {
       id: 'layout',

@@ -4,12 +4,13 @@ import { createStore, readable, useStoreSelector, type ReadableStore } from '../
 import type { RequestState } from '../api/use-request.js';
 import { useClientState, useLoadedGraph, useSessionMask } from '../state/context.js';
 import { elementKey } from '../state/keys.js';
-import { partitionEdges, type LoadedGraph } from '../state/loaded-graph.js';
+import { neighborhoodOf, outsideFocusKeys, partitionEdges, type LoadedGraph } from '../state/loaded-graph.js';
 import { coverageEntitiesOf } from './coverage-input.js';
 import { useCoverageStoreWhenProvided } from './coverage-context.js';
 import { usePreviewAnswers } from './preview-context.js';
 import { showHiddenAndFocusCanvas } from '../canvas/hide-commands.js';
-import { hiddenByFiltersLine, hiddenFromViewLine, formatNumber, loadedLine, notDrawnLine, remainderLine, shownCount, UNKNOWN_REMAINDER } from './scope-text.js';
+import { leaveFocusAndFocusCanvas } from '../canvas/focus-commands.js';
+import { hiddenByFiltersLine, hiddenFromViewLine, outsideFocusLine, formatNumber, loadedLine, notDrawnLine, remainderLine, shownCount, UNKNOWN_REMAINDER } from './scope-text.js';
 
 const NOTHING_ASKED: ReadableStore<RequestState<Count>> = readable(createStore<RequestState<Count>>({ phase: 'idle' }));
 
@@ -28,7 +29,7 @@ function useNotRetrieved(): Count {
 /** No type filter exists yet, so nothing is filtered out of what is loaded. */
 const NOTHING_FILTERED: ReadonlySet<string> = new Set();
 
-export function GraphScopeLines({ graph, hidden, filtered, notRetrieved, onShowHidden }: { readonly graph: LoadedGraph; readonly hidden: ReadonlySet<string>; readonly filtered: ReadonlySet<string>; readonly notRetrieved: Count; readonly onShowHidden?: () => void }) {
+export function GraphScopeLines({ graph, hidden, filtered, outside = NOTHING_FILTERED, onLeaveFocus, notRetrieved, onShowHidden }: { readonly graph: LoadedGraph; readonly hidden: ReadonlySet<string>; readonly filtered: ReadonlySet<string>; readonly outside?: ReadonlySet<string>; readonly onLeaveFocus?: () => void; readonly notRetrieved: Count; readonly onShowHidden?: () => void }) {
   const loaded = graph.nodes.map((node) => elementKey(node.ref));
   const hiddenCount = loaded.filter((key) => hidden.has(key)).length;
   const show =
@@ -45,6 +46,14 @@ export function GraphScopeLines({ graph, hidden, filtered, notRetrieved, onShowH
         {show === null ? null : <> · {show}</>}
       </Fragment>
     ),
+    onLeaveFocus === undefined ? undefined : (
+      <Fragment key="focus">
+        {outsideFocusLine(outside.size)} ·{' '}
+        <button type="button" className="graph-scope-show" onClick={onLeaveFocus}>
+          Leave focus
+        </button>
+      </Fragment>
+    ),
     hiddenByFiltersLine(loaded.filter((key) => filtered.has(key)).length),
     notDrawnLine(partitionEdges(graph).notDrawable.length),
   ].filter((part) => part !== undefined);
@@ -53,7 +62,7 @@ export function GraphScopeLines({ graph, hidden, filtered, notRetrieved, onShowH
       <p>
         {parts.flatMap((part, at) => (at === 0 ? [part] : [' · ', part]))}
       </p>
-      <p>{remainderLine(shownCount(loaded, hidden, filtered), notRetrieved)}</p>
+      <p>{remainderLine(shownCount(loaded, hidden, filtered, outside), notRetrieved)}</p>
     </div>
   );
 }
@@ -61,5 +70,9 @@ export function GraphScopeLines({ graph, hidden, filtered, notRetrieved, onShowH
 export function GraphScope() {
   const state = useClientState();
   const hidden = useStoreSelector(state.presentation.view, (current) => current.hidden);
-  return <GraphScopeLines graph={useLoadedGraph()} hidden={hidden} filtered={NOTHING_FILTERED} notRetrieved={useNotRetrieved()} onShowHidden={() => showHiddenAndFocusCanvas(state)} />;
+  const neighborhoodFocus = useStoreSelector(state.presentation.view, (current) => current.neighborhoodFocus);
+  const graph = useLoadedGraph();
+  const focusing = neighborhoodFocus !== undefined && neighborhoodOf(graph, neighborhoodFocus).size > 0;
+  const outside = useMemo(() => outsideFocusKeys(graph, neighborhoodFocus, hidden), [graph, neighborhoodFocus, hidden]);
+  return <GraphScopeLines graph={graph} hidden={hidden} filtered={NOTHING_FILTERED} outside={outside} notRetrieved={useNotRetrieved()} onShowHidden={() => showHiddenAndFocusCanvas(state)} onLeaveFocus={focusing ? () => leaveFocusAndFocusCanvas(state) : undefined} />;
 }

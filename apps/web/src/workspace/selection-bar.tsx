@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { useProfileWhenProvided } from '../canvas/profile-context.js';
 import { useClientState, useSessionMask, useVisibleGraph } from '../state/context.js';
 import { drawnKeys } from '../state/loaded-graph.js';
@@ -8,6 +8,7 @@ import { copyText, CLIPBOARD_UNAVAILABLE } from './clipboard.js';
 import { idsOfSelection } from './copy-ids.js';
 import { formatNumber } from './scope-text.js';
 import { useSelectionActions } from './selection-actions.js';
+import { keepBarClear } from './selection-bar-keep-clear.js';
 
 const MIN_ITEMS = 2;
 
@@ -43,7 +44,10 @@ export function SelectionBar() {
   const [copy, setCopy] = useState<{ readonly selection: ReadonlySet<string>; readonly status: CopyStatus } | undefined>(undefined);
   const drawn = drawnKeys(graph);
   const selected = [...selection].filter((key) => drawn.has(key));
-  if (selected.length < MIN_ITEMS) return null;
+  const bar = useRef<HTMLDivElement>(null);
+  const shown = selected.length >= MIN_ITEMS;
+  useLayoutEffect(() => (shown && bar.current !== null ? keepBarClear(bar.current) : undefined), [shown, selected.length]);
+  if (!shown) return null;
   const status = copy?.selection === selection ? copy.status : undefined;
 
   const copyIds = async (): Promise<void> => {
@@ -65,21 +69,21 @@ export function SelectionBar() {
   };
 
   return (
-    <div className="selection-bar" role="toolbar" aria-label="Selection actions">
+    <div ref={bar} className="selection-bar" role="toolbar" aria-label="Selection actions">
       <span className="selection-count">{formatNumber(selected.length)} selected</span>
       <span className="selection-separator" aria-hidden="true" />
       {actions.map((action) => (
-        <button key={action.id} type="button" className="selection-action" onClick={() => {
+        <button key={action.id} type="button" className="selection-action" title={action.label} onClick={() => {
             const note = action.run(selected);
             setActionNote(typeof note === 'string' ? { selection, text: note } : undefined);
           }}>
           {action.icon}
-          {action.label}
+          <span className="selection-action-label">{action.label}</span>
         </button>
       ))}
-      <button type="button" className="selection-action" onClick={() => void copyIds()}>
+      <button type="button" className="selection-action" title="Copy IDs" onClick={() => void copyIds()}>
         <span className="icon icon-copy" aria-hidden="true" />
-        Copy IDs
+        <span className="selection-action-label">Copy IDs</span>
       </button>
       <span className="selection-separator" aria-hidden="true" />
       <button type="button" className="selection-action selection-clear" aria-label="Clear selection" onClick={() => runSelectionCommand(state, 'clear-selection')}>

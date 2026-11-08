@@ -217,7 +217,7 @@ test.describe('the sheet of shortcuts', () => {
   test('has stand-in rows that work from their keys, and the keys in the menus equal the bound keys', async ({ page }) => {
     const mod = await modifier(page);
     const root = page.locator('html');
-    for (const [press, id] of [[`${mod}+k`, 'search'], ['f', 'focus'], ['p', 'pin'], [`${mod}+c`, 'copy-id'], ['Shift+p', 'find-paths'], [`${mod}+e`, 'export-view'], [`${mod}+Shift+c`, 'copy-properties']] as const) {
+    for (const [press, id] of [[`${mod}+k`, 'search'], ['p', 'pin'], [`${mod}+c`, 'copy-id'], ['Shift+p', 'find-paths'], [`${mod}+e`, 'export-view'], [`${mod}+Shift+c`, 'copy-properties']] as const) {
       await page.keyboard.press(press);
       await expect(root, `${press} reaches its stand-in`).toHaveAttribute('data-last-stand-in-key', id);
     }
@@ -229,7 +229,7 @@ test.describe('the sheet of shortcuts', () => {
     await page.keyboard.press('Escape');
     await focusCanvas(page);
     await page.keyboard.press('ContextMenu');
-    expect(await menuHints(page), 'the hints of the canvas menu').toEqual(expected([['Fit to view', 'mod+0'], ['Select all', 'mod+a'], ['Invert selection', 'mod+shift+i'], ['Show hidden entities (0)', ''], ['Group all by type', ''], ['Ungroup all', ''], ['Layout', ''], ['Show legend', 'l'], ['Export view…', 'mod+e']]));
+    expect(await menuHints(page), 'the hints of the canvas menu').toEqual(expected([['Fit to view', 'mod+0'], ['Select all', 'mod+a'], ['Invert selection', 'mod+shift+i'], ['Show hidden entities (0)', ''], ['Leave focus', ''], ['Group all by type', ''], ['Ungroup all', ''], ['Layout', ''], ['Show legend', 'l'], ['Export view…', 'mod+e']]));
     await page.keyboard.press('Escape');
     await page.keyboard.press('Enter');
     await page.keyboard.press('ContextMenu');

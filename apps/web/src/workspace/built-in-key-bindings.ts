@@ -1,5 +1,6 @@
 import { applyClick, openContextMenu } from '../canvas/apply-click.js';
 import { directionOf, MOVE_STEP, MOVE_STEP_FAR, moveSelected, type Schedule } from '../canvas/arrow-move.js';
+import { focusKeyAction, runFocusKey } from '../canvas/focus-commands.js';
 import { hideEntities, selectedEntities } from '../canvas/hide-commands.js';
 import { runSelectionCommand, type SelectionCommandId } from '../canvas/selection-commands.js';
 import { stepWalk, walkOrder } from '../canvas/walk.js';
@@ -119,6 +120,16 @@ export function registerBuiltInKeyBindings(registry: KeyBindingRegistry, schedul
         const [key] = selectedNodes(state.presentation.view.getState().selection);
         if (key !== undefined) expansion?.expandNode(key);
       },
+    }),
+    registry.register({
+      id: 'focus',
+      keys: ['f'],
+      label: 'Focus',
+      group: 'selection',
+      order: 50,
+      scope: 'workspace',
+      when: ({ state }) => state.presentation.view.getState().openMenu === undefined && focusKeyAction(state) !== undefined,
+      run: ({ state, canvas }) => runFocusKey(state, canvas),
     }),
     registry.register({
       id: 'hide',

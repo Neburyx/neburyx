@@ -38,8 +38,9 @@ function applyMove(state: ClientState, move: EntityMove): void {
 }
 
 function applyBox(state: ClientState, box: BoxSelection): void {
-  // an aggregate node in the box is ignored: the loaded items in it are selected
-  replaceSelection(state, selectionAfterBox(state.presentation.view.getState().selection, { ...box, ids: box.ids.filter((id) => parseAggregateKey(id) === undefined) }));
+  // an aggregate node in the box is ignored: the loaded items in it are selected; so is anything that is not drawn
+  const drawn = drawnKeys(state.visibleGraph());
+  replaceSelection(state, selectionAfterBox(state.presentation.view.getState().selection, { ...box, ids: box.ids.filter((id) => parseAggregateKey(id) === undefined && drawn.has(id)) }));
 }
 
 export function GraphCanvas({ profile, view = 'fit' }: { readonly profile?: SourceProfile | undefined; readonly view?: Scene['view'] }) {
@@ -57,13 +58,19 @@ export function GraphCanvas({ profile, view = 'fit' }: { readonly profile?: Sour
   const moveNote = useStoreSelector(state.presentation.view, (current) => current.moveNote);
   const menuOpen = useStoreSelector(state.presentation.view, (current) => current.openMenu !== undefined);
   const source = useStoreSelector(state.investigation, (current) => current.sourceId);
+  const viewChange = useStoreSelector(state.presentation.view, (current) => current.viewChange);
+  // A request for the view (fit it, or show the viewport from before focus) is served after the drawing it comes with; one held at mount is not served.
+  const requestServed = useRef(viewChange);
   const placed = useMemo(
     () => placeNewEntities({ ids: loadedGraph.nodes.map((node) => elementKey(node.ref)), links: loadedGraph.edges.map((edge) => [elementKey(edge.from), elementKey(edge.to)] as const), positions }),
     [loadedGraph, positions],
   );
   const allAggregates = useAggregateNodes(loadedGraph, profile);
-  const hiddenKeys = useStoreSelector(state.presentation.view, (current) => current.hidden);
-  const aggregates = useMemo(() => (hiddenKeys.size === 0 ? allAggregates : allAggregates.filter((aggregate) => !hiddenKeys.has(aggregate.nodeKey))), [allAggregates, hiddenKeys]);
+  const aggregates = useMemo(() => {
+    if (graph === loadedGraph) return allAggregates;
+    const drawnNodes = new Set(graph.nodes.map((node) => elementKey(node.ref)));
+    return allAggregates.filter((aggregate) => drawnNodes.has(aggregate.nodeKey));
+  }, [allAggregates, graph, loadedGraph]);
   const drawn = useMemo(() => buildScene(graph, placed.size === 0 ? positions : new Map([...positions, ...placed]), profile, selection, tool, source, view, pins, walking ? focused : undefined, true, aggregates), [graph, positions, placed, profile, selection, tool, source, view, pins, walking, focused, aggregates]);
   // A menu holding the focus only takes the ring off the walk element: the scene is the same one, so the drawing that follows is not a sign that the renderer works again.
   const scene = useMemo(() => ({ ...drawn, focusRing: !menuOpen }), [drawn, menuOpen]);
@@ -159,6 +166,12 @@ export function GraphCanvas({ profile, view = 'fit' }: { readonly profile?: Sour
       if (!current) return;
       try {
         renderer.draw(scene, state.presentation.view.getState().viewport);
+        const asked = state.presentation.view.getState().viewChange;
+        if (asked !== undefined && asked !== requestServed.current) {
+          requestServed.current = asked;
+          if (asked.show === 'fit' || asked.show.viewport === undefined) renderer.fit();
+          else renderer.show(asked.show.viewport);
+        }
         const ringOnly = lastDrawn.current === drawn;
         lastDrawn.current = drawn;
         beforeLayout.current = undefined;
@@ -182,7 +195,7 @@ export function GraphCanvas({ profile, view = 'fit' }: { readonly profile?: Sour
     return () => {
       current = false;
     };
-  }, [renderer, scene, drawn, placed, state]);
+  }, [renderer, scene, drawn, placed, state, viewChange]);
 
   return (
     <>

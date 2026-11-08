@@ -101,7 +101,7 @@ describe('the Layout item of the canvas menu', () => {
     rightClick(onCanvas(10, 10));
     const user = userEvent.setup();
     const spy = vi.spyOn(available(commands.current), 'layout');
-    for (let step = 0; step < 4; step += 1) await user.keyboard('{ArrowDown}');
+    for (let step = 0; step < 5; step += 1) await user.keyboard('{ArrowDown}');
     expect(document.activeElement).toBe(layoutRow());
     await user.keyboard('{ArrowRight}');
     expect(document.activeElement).toBe(forceRow());
@@ -145,7 +145,7 @@ describe('the state of the Layout item', () => {
     return found;
   };
   const contextOf = (state: ReturnType<typeof createClientState>, canvas: CanvasCommands | undefined): MenuContext => ({ kind: 'canvas', key: undefined, selection: [], state, canvas });
-  const commands: CanvasCommands = { fit: () => undefined, zoomBy: () => undefined, layout: () => undefined, centerOn: () => undefined, anchorOf: () => undefined };
+  const commands: CanvasCommands = { fit: () => undefined, zoomBy: () => undefined, layout: () => undefined, centerOn: () => undefined, anchorOf: () => undefined, viewport: () => ({ zoom: 1, x: 0, y: 0 }) };
 
   it('is enabled when entities are loaded and the canvas commands are there, and disabled when none is loaded or the commands are not available', () => {
     const loaded = createClientState();

@@ -78,12 +78,17 @@ export function hiddenFromViewLine(hidden: number): string | undefined {
   return hidden === 0 ? undefined : `${formatNumber(hidden)} hidden from view`;
 }
 
+/** The loaded entities outside the neighborhood focus is on, not counting those hidden by hand; shown whenever focus is on, even at 0, so the way out stays. */
+export function outsideFocusLine(outside: number): string {
+  return `${formatNumber(outside)} outside focus`;
+}
+
 /** The entities loaded that a filter hides; nothing when none are hidden. */
 export function hiddenByFiltersLine(filtered: number): string | undefined {
   return filtered === 0 ? undefined : `${formatNumber(filtered)} hidden by filters`;
 }
 
-/** What is left to show of the loaded entities: those neither hidden by hand nor by a filter; an entity that is both counts once, and a key that is not loaded counts for nothing. */
-export function shownCount(loaded: readonly string[], hidden: ReadonlySet<string>, filtered: ReadonlySet<string>): number {
-  return loaded.filter((key) => !hidden.has(key) && !filtered.has(key)).length;
+/** What is left to show of the loaded entities: those neither hidden by hand, nor by a filter, nor outside the neighborhood focus is on; an entity that is both counts once, and a key that is not loaded counts for nothing. */
+export function shownCount(loaded: readonly string[], hidden: ReadonlySet<string>, filtered: ReadonlySet<string>, outside: ReadonlySet<string> = new Set()): number {
+  return loaded.filter((key) => !hidden.has(key) && !filtered.has(key) && !outside.has(key)).length;
 }

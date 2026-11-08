@@ -42,6 +42,12 @@ export interface PresentationState {
   readonly pins: ReadonlySet<string>;
   /** The keys of the entities hidden from the view: still loaded, not drawn. Part of the view that is saved. */
   readonly hidden: ReadonlySet<string>;
+  /** The key of the entity the neighborhood focus is on: only it and its loaded neighbors are drawn. Session state: kept when an investigation is set aside and resumed, and not part of a saved view. */
+  readonly neighborhoodFocus: string | undefined;
+  /** The viewport from before the first entry into focus, put back when focus ends; present exactly while focus is on. */
+  readonly focusReturn: { readonly viewport: Viewport | undefined } | undefined;
+  /** What the canvas is asked to do with its view after the next drawing: fit it to what is drawn (focus was put on an entity), or show the viewport from before focus. A new object for each request, so each is served once. Not saved with a view. */
+  readonly viewChange: ViewChange | undefined;
   readonly panelSizes: ReadonlyMap<string, number>;
   /** A panel is collapsed under the registration number it was collapsed with, so a panel taken out and registered again opens expanded. Not saved with a view. */
   readonly collapsedPanels: ReadonlyMap<string, number>;
@@ -71,12 +77,28 @@ export interface PresentationState {
   readonly openMenu: OpenMenu | undefined;
 }
 
+export interface ViewChange {
+  readonly show: 'fit' | { readonly viewport: Viewport | undefined };
+}
+
+/** What a screen reader is told when focus ends. */
+export const FOCUS_LEFT = 'Focus left.';
+
+/** The fields that end the focus: the viewport from before it comes back, and the canvas is asked to show it. */
+function endedFocus(current: PresentationState): Pick<PresentationState, 'neighborhoodFocus' | 'focusReturn' | 'viewport' | 'viewChange'> {
+  const held = current.focusReturn?.viewport;
+  return { neighborhoodFocus: undefined, focusReturn: undefined, viewport: held, viewChange: { show: { viewport: held } } };
+}
+
 export const INITIAL_PRESENTATION: PresentationState = {
   tool: 'select',
   selection: new Set(),
   positions: new Map(),
   pins: new Set(),
   hidden: new Set(),
+  neighborhoodFocus: undefined,
+  focusReturn: undefined,
+  viewChange: undefined,
   panelSizes: new Map(),
   collapsedPanels: new Map(),
   legendOpen: false,
@@ -112,6 +134,10 @@ export interface PresentationActions {
   pin(keys: readonly string[]): void;
   /** Hides entities (refused for a key that is not a loaded entity), and takes them, and the keys in `alsoDeselect` (the relationships that touch them), out of the selection; the walk forgets a focus on them and a panel or menu about one closes. */
   hide(keys: readonly string[], alsoDeselect?: readonly string[]): void;
+  /** Puts the focus on an entity (refused for a key that is not a loaded entity, or is hidden). `gone` holds the keys the focus sets aside (entities and the relationships that touch them): they leave the selection, the walk forgets one, and a menu or panel about one closes. The viewport from before the first entry is held: `viewport` when given (what the canvas shows), otherwise the one the store holds. */
+  focusOn(key: string, gone: readonly string[], viewport?: Viewport): void;
+  /** Ends the focus and puts back the viewport from before it was first set. */
+  leaveFocus(): void;
   /** Shows the named hidden entities again, and no others. */
   showHidden(keys: readonly string[]): void;
   /** Shows every hidden entity again. */
@@ -142,7 +168,7 @@ export interface PresentationActions {
   setViewport(viewport: Viewport): void;
 }
 
-export type PresentationSnapshot = Pick<PresentationState, 'selection' | 'positions' | 'pins' | 'hidden' | 'viewport'>;
+export type PresentationSnapshot = Pick<PresentationState, 'selection' | 'positions' | 'pins' | 'hidden' | 'neighborhoodFocus' | 'focusReturn' | 'viewport'>;
 
 export interface PresentationStore extends PresentationActions {
   reset(): void;
@@ -191,8 +217,10 @@ export function createPresentationStore(known: KnownElements): PresentationStore
       const current = store.getState();
       const gone = new Set([...keys, ...alsoDeselect]);
       const focusGone = current.focused !== undefined && gone.has(current.focused);
+      const endsFocus = current.neighborhoodFocus !== undefined && gone.has(current.neighborhoodFocus);
       store.setState({
         ...current,
+        ...(endsFocus ? endedFocus(current) : {}),
         hidden: new Set([...current.hidden, ...keys]),
         selection: new Set([...current.selection].filter((key) => !gone.has(key))),
         focused: focusGone ? undefined : current.focused,
@@ -200,6 +228,28 @@ export function createPresentationStore(known: KnownElements): PresentationStore
         openMenu: current.openMenu?.key !== undefined && gone.has(current.openMenu.key) ? undefined : current.openMenu,
         moveNote: undefined,
       });
+    },
+    focusOn(key, gone, shown) {
+      requireKnown([key], known.isNode);
+      const current = store.getState();
+      if (current.hidden.has(key)) throw new StateError('UNKNOWN_ELEMENT');
+      const leaving = new Set(gone);
+      store.setState({
+        ...current,
+        neighborhoodFocus: key,
+        focusReturn: current.focusReturn ?? { viewport: shown ?? current.viewport },
+        viewChange: { show: 'fit' },
+        selection: new Set([...current.selection].filter((candidate) => !leaving.has(candidate))),
+        focused: current.focused !== undefined && leaving.has(current.focused) ? undefined : current.focused,
+        supernodePanel: current.supernodePanel !== undefined && leaving.has(current.supernodePanel.key) ? undefined : current.supernodePanel,
+        openMenu: current.openMenu?.key !== undefined && leaving.has(current.openMenu.key) ? undefined : current.openMenu,
+        moveNote: undefined,
+      });
+    },
+    leaveFocus() {
+      const current = store.getState();
+      if (current.neighborhoodFocus === undefined) return;
+      store.setState({ ...current, ...endedFocus(current) });
     },
     showHidden(keys) {
       const current = store.getState();
@@ -296,12 +346,22 @@ export function createPresentationStore(known: KnownElements): PresentationStore
       const hidden = [...current.hidden].filter(known.isNode);
       const focused = current.focused !== undefined && (known.isElement(current.focused) || current.sceneItems.includes(current.focused)) ? current.focused : undefined;
       const supernodePanel = current.supernodePanel !== undefined && known.isNode(current.supernodePanel.key) ? current.supernodePanel : undefined;
-      if (selection.length === current.selection.size && positions.length === current.positions.size && pins.length === current.pins.size && hidden.length === current.hidden.size && focused === current.focused && supernodePanel === current.supernodePanel) return;
-      store.setState({ ...current, selection: new Set(selection), positions: new Map(positions), pins: new Set(pins), hidden: new Set(hidden), focused, supernodePanel });
+      const focusLost = current.neighborhoodFocus !== undefined && !known.isNode(current.neighborhoodFocus);
+      if (!focusLost && selection.length === current.selection.size && positions.length === current.positions.size && pins.length === current.pins.size && hidden.length === current.hidden.size && focused === current.focused && supernodePanel === current.supernodePanel) return;
+      store.setState({
+        ...current,
+        ...(focusLost ? { ...endedFocus(current), moveNote: { text: FOCUS_LEFT, serial: (current.moveNote?.serial ?? 0) + 1 } } : {}),
+        selection: new Set(selection),
+        positions: new Map(positions),
+        pins: new Set(pins),
+        hidden: new Set(hidden),
+        focused,
+        supernodePanel,
+      });
     },
     snapshot() {
-      const { selection, positions, pins, hidden, viewport } = store.getState();
-      return { selection, positions, pins, hidden, viewport };
+      const { selection, positions, pins, hidden, neighborhoodFocus, focusReturn, viewport } = store.getState();
+      return { selection, positions, pins, hidden, neighborhoodFocus, focusReturn, viewport };
     },
     restore(snapshot) {
       store.setState({ ...store.getState(), ...snapshot, walking: false, focused: undefined, moveNote: undefined, openMenu: undefined });

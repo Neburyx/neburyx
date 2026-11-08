@@ -4,6 +4,7 @@ import type { ApiClient, ApiFailure, ApiResult } from '../api/client.js';
 import { UNEXPECTED } from '../api/use-request.js';
 import type { ExpandStore } from '../api/expand-store.js';
 import { useExpandStoreWhenProvided } from '../workspace/expand-context.js';
+import { leaveFocus } from '../canvas/focus-commands.js';
 import type { ClientState } from '../state/client-state.js';
 import { DEFAULT_FILTER_HASH, DEFAULT_POLICY_VERSION, elementKey, type QueryKey } from '../state/keys.js';
 
@@ -30,6 +31,8 @@ function place(state: ClientState, sourceId: string, principalId: string, mask: 
   const key = addedKey(current.id, sourceId, principalId, node, mask);
   state.putResult(key, { sourceId, nodes: [node], edges: [] });
   state.setLoaded([...current.resultKeys, key], [...current.nodeRefs, node.ref], [...current.edgeRefs]);
+  // An entity added while focus is on is joined to none, so it would be loaded and not drawn: focus ends first.
+  if (state.presentation.view.getState().neighborhoodFocus !== undefined) leaveFocus(state);
 }
 
 /** Work started here is aborted when the component using it goes away; its parent keys it by the context, so an answer that arrives after a change adds nothing. */

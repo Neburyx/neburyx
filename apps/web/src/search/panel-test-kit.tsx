@@ -1,7 +1,7 @@
 import { createBuiltInBannerController } from '../banner/built-in-causes.js';
 import { act, fireEvent, screen } from '@testing-library/react';
 import { vi } from 'vitest';
-import type { GraphNode, SearchMoreRequest, SearchMoreResult, SearchRequest, SearchResult } from '@neburyx/contracts';
+import type { GraphEdge, GraphNode, SearchMoreRequest, SearchMoreResult, SearchRequest, SearchResult } from '@neburyx/contracts';
 import type { ApiClient, ApiFailure, ApiResult } from '../api/client.js';
 import { fakeClient } from '../api/fake-client.js';
 import { createClientState, type ClientState } from '../state/client-state.js';
@@ -80,10 +80,10 @@ export interface PanelWorkspace {
 }
 
 /** The workspace with the Search panel open on the Add from source tab, under fake timers; a graph is loaded unless `bound` is false. */
-export async function panelWorkspace(options: { readonly bound?: boolean; readonly mask?: boolean; readonly nodes?: readonly GraphNode[] } = {}): Promise<PanelWorkspace> {
+export async function panelWorkspace(options: { readonly bound?: boolean; readonly mask?: boolean; readonly nodes?: readonly GraphNode[]; readonly edges?: readonly GraphEdge[] } = {}): Promise<PanelWorkspace> {
   const { client, searches, pages, loads } = holding();
   const state = createClientState();
-  if (options.bound !== false) loadGraph(state, [...(options.nodes ?? [node('a', 'ACC-1')])], []);
+  if (options.bound !== false) loadGraph(state, [...(options.nodes ?? [node('a', 'ACC-1')])], [...(options.edges ?? [])]);
   if (options.mask === true) state.setMask(true);
   const slots = createSlotRegistry();
   registerBuiltInSlots(slots);

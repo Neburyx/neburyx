@@ -624,6 +624,9 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
       }
       if (scene.entities.length > 0) fitted = true;
     },
+    show(viewport) {
+      showViewport(requireCore(), viewport);
+    },
     fit() {
       const cy = requireCore();
       if (cy.nodes().empty()) return;

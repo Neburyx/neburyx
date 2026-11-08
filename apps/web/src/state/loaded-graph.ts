@@ -66,24 +66,73 @@ export function partitionEdges(graph: LoadedGraph): EdgePartition {
   return { drawable, notDrawable };
 }
 
+/** The entity focus is on and its neighbors: the loaded entities joined to it by a loaded relationship in either direction. Empty when `focus` is not a loaded entity. */
+export function neighborhoodOf(graph: LoadedGraph, focus: string): ReadonlySet<string> {
+  const loaded = new Set(graph.nodes.map((node) => elementKey(node.ref)));
+  if (!loaded.has(focus)) return new Set();
+  const near = new Set([focus]);
+  for (const edge of graph.edges) {
+    const from = elementKey(edge.from);
+    const to = elementKey(edge.to);
+    if (from === focus && loaded.has(to)) near.add(to);
+    else if (to === focus && loaded.has(from)) near.add(from);
+  }
+  return near;
+}
+
+/** The loaded entities outside the focused entity's neighborhood that are not hidden by hand; none when focus is off or not loaded. */
+export function outsideFocusKeys(graph: LoadedGraph, focus: string | undefined, hidden: ReadonlySet<string>): ReadonlySet<string> {
+  if (focus === undefined) return new Set();
+  const near = neighborhoodOf(graph, focus);
+  if (near.size === 0) return new Set();
+  return new Set(graph.nodes.map((node) => elementKey(node.ref)).filter((key) => !near.has(key) && !hidden.has(key)));
+}
+
+export interface Exclusion {
+  readonly hidden: ReadonlySet<string>;
+  readonly neighborhoodFocus: string | undefined;
+  readonly filtered?: ReadonlySet<string> | undefined;
+}
+
+interface ExcludedEntry extends Exclusion {
+  readonly result: ReadonlySet<string>;
+}
+
+const excluded = new WeakMap<LoadedGraph, ExcludedEntry>();
+
+/** Every entity key the canvas leaves out: hidden by hand, hidden by a filter, or outside the neighborhood focus is on. The same inputs give the same set object, so what is derived from it is shared. */
+export function excludedKeys(graph: LoadedGraph, exclusion: Exclusion): ReadonlySet<string> {
+  const { hidden, neighborhoodFocus, filtered } = exclusion;
+  const near = neighborhoodFocus === undefined ? undefined : neighborhoodOf(graph, neighborhoodFocus);
+  const focusing = near !== undefined && near.size > 0;
+  if (!focusing && (filtered === undefined || filtered.size === 0)) return hidden;
+  const known = excluded.get(graph);
+  if (known !== undefined && known.hidden === hidden && known.neighborhoodFocus === neighborhoodFocus && known.filtered === filtered) return known.result;
+  const result = new Set(hidden);
+  for (const key of filtered ?? []) result.add(key);
+  if (focusing) for (const node of graph.nodes) if (!near.has(elementKey(node.ref))) result.add(elementKey(node.ref));
+  excluded.set(graph, { hidden, neighborhoodFocus, filtered, result });
+  return result;
+}
+
 const visibleGraphs = new WeakMap<LoadedGraph, WeakMap<ReadonlySet<string>, LoadedGraph>>();
 
-/** What is drawn of the loaded graph: the entities that are not hidden and the relationships that touch none of them. The counts stay those of the loaded graph, because hiding removes nothing from the investigation. The same two inputs give the same object. */
-export function visibleGraph(graph: LoadedGraph, hidden: ReadonlySet<string>): LoadedGraph {
-  if (hidden.size === 0) return graph;
+/** What is drawn of the loaded graph: the entities that are not excluded (see `excludedKeys`) and the relationships that touch none of the excluded. The counts stay those of the loaded graph, because hiding removes nothing from the investigation. The same two inputs give the same object. */
+export function visibleGraph(graph: LoadedGraph, left: ReadonlySet<string>): LoadedGraph {
+  if (left.size === 0) return graph;
   let byHidden = visibleGraphs.get(graph);
   if (byHidden === undefined) {
     byHidden = new WeakMap();
     visibleGraphs.set(graph, byHidden);
   }
-  const known = byHidden.get(hidden);
+  const known = byHidden.get(left);
   if (known !== undefined) return known;
   const visible: LoadedGraph = {
     ...graph,
-    nodes: graph.nodes.filter((node) => !hidden.has(elementKey(node.ref))),
-    edges: graph.edges.filter((edge) => !hidden.has(elementKey(edge.from)) && !hidden.has(elementKey(edge.to))),
+    nodes: graph.nodes.filter((node) => !left.has(elementKey(node.ref))),
+    edges: graph.edges.filter((edge) => !left.has(elementKey(edge.from)) && !left.has(elementKey(edge.to))),
   };
-  byHidden.set(hidden, visible);
+  byHidden.set(left, visible);
   return visible;
 }
 

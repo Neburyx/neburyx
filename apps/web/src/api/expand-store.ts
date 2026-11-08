@@ -1,6 +1,8 @@
 import type { ElementRef, ExpandRequest, ExpandResponse, GraphEdge } from '@neburyx/contracts';
 import type { ClientState } from '../state/client-state.js';
 import { DEFAULT_FILTER_HASH, DEFAULT_POLICY_VERSION, edgeKey, elementKey, queryKeyText, type QueryKey } from '../state/keys.js';
+import { outsideFocusNote } from '../canvas/focus-note.js';
+import { drawnKeys, outsideFocusKeys } from '../state/loaded-graph.js';
 import { createStore, readable, type ReadableStore } from '../state/store.js';
 import type { ApiClient, ApiFailure } from './client.js';
 import type { RequestTracker } from '../banner/request-tracker.js';
@@ -270,7 +272,14 @@ export function createExpandStore(client: ApiClient, state: ClientState, person:
       state.putResult(queryKey, { sourceId: ref.sourceId, nodes: freshNodes, edges: fresh });
       state.setLoaded([...current.resultKeys, queryKey], [...current.nodeRefs, ...freshNodes.map((node) => node.ref)], [...current.edgeRefs, ...fresh.map((edge) => edge.ref)]);
       for (const edge of fresh) placed.set(edgeKey(edge.ref), queryKey);
-      state.presentation.select([...freshNodes.map((node) => elementKey(node.ref)), ...fresh.map((edge) => edgeKey(edge.ref))]);
+      const drawn = drawnKeys(state.visibleGraph());
+      state.presentation.select([...freshNodes.map((node) => elementKey(node.ref)), ...fresh.map((edge) => edgeKey(edge.ref))].filter((key) => drawn.has(key)));
+      const { neighborhoodFocus, hidden } = state.presentation.view.getState();
+      if (neighborhoodFocus !== undefined) {
+        const outside = outsideFocusKeys(state.loadedGraph(), neighborhoodFocus, hidden);
+        const note = outsideFocusNote(freshNodes.filter((node) => outside.has(elementKey(node.ref))).length, freshNodes.length);
+        if (note !== undefined) state.presentation.announceMove(note);
+      }
     }
     return { duplicates: [...new Set(duplicates)] };
   };
