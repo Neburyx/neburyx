@@ -570,6 +570,10 @@
   --icon: url('../assets/lucide/maximize-2.svg');
 }
 
+.icon-collapse {
+  --icon: url('../assets/lucide/minimize-2.svg');
+}
+
 .neighbor-types-notes {
   display: flex;
   flex-direction: column;
@@ -1353,6 +1357,13 @@
 
 .supernode-card-loaded {
   color: var(--color-text-muted);
+}
+
+.supernode-card-actions {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-8);
+  margin: 0;
 }
 
 .supernode-card-types {

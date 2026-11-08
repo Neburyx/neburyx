@@ -20,6 +20,7 @@ export const MENU_ORDER = {
     expandNeighbors: 10,
     expandByNeighborType: 20,
     expandByType: 25,
+    collapse: 27,
     focusNeighborhood: 30,
     findPathsFromHere: 10,
     findPathsTo: 20,

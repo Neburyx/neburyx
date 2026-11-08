@@ -31,13 +31,13 @@ describe('the node card', () => {
     expect(card().getByText('≥ 3,300 · lower bound')).not.toBeNull();
   });
 
-  it('does not say SUPERNODE when every type fits one page, and has no Collapse button', async () => {
+  it('does not say SUPERNODE when every type fits one page, and its Collapse is off', async () => {
     const { open, previews } = panelRig();
     await open();
     await answerPreview(previews[0], previewOf({ total: count(15, 'exact'), byNeighborType: [{ entityType: 'kind-b', count: count(15, 'exact') }] }));
     expect(card().getByText('TYPE-A')).not.toBeNull();
     expect(card().queryByText(/SUPERNODE/)).toBeNull();
-    expect(card().queryByRole('button', { name: /collapse/i })).toBeNull();
+    expect(card().getByRole('button', { name: 'Collapse' })).toHaveProperty('ariaDisabled', 'true');
   });
 
   it('follows what is loaded, and loads the next page of a type with the cursor it was given until its pages end', async () => {

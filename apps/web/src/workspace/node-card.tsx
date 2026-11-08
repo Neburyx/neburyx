@@ -1,10 +1,11 @@
+import { useId } from 'react';
 import type { ElementRef } from '@neburyx/contracts';
 import { FALLBACK_PAGE_SIZE } from '../api/expand-store.js';
 import { useProfileWhenProvided } from '../canvas/profile-context.js';
 import { useLoadedGraph, useSessionMask } from '../state/context.js';
 import { useStoreSelector } from '../state/store.js';
 import { degreeCountText } from './degree-text.js';
-import { LEFT_OUT_NOTE, SEPARATE_READS, START_OVER, SUPERNODE, TOTAL_NO_COUNT, loadMoreLabel, loadMoreOverAllLabel } from './expand-copy.js';
+import { COLLAPSE, COLLAPSE_LOADING, COLLAPSE_NOTHING, LEFT_OUT_NOTE, SEPARATE_READS, START_OVER, SUPERNODE, TOTAL_NO_COUNT, loadMoreLabel, loadMoreOverAllLabel } from './expand-copy.js';
 import { neighborTypesOf, useExpandStore } from './expand-context.js';
 import { isSupernode, loadedCountText, loadedOf, notLoadedOf, notLoadedText } from './node-counts.js';
 import { allNeighborTypes } from './supernode-options.js';
@@ -20,6 +21,9 @@ export function NodeCard({ node }: { readonly node: ElementRef }) {
   const request = previews.forNode(node, mask);
   const state = useStoreSelector(request, (current) => current);
   const expansion = useStoreSelector(expansions.view, () => expansions.of(node));
+  useStoreSelector(expansions.records, (version) => version);
+  const collapsible = expansions.collapsibility(node);
+  const reasonId = useId();
   const preview = state.phase === 'ready' ? state.data : undefined;
   const loaded = loadedOf(graph, node);
   const typeName = (profile?.entityTypes.find((entry) => entry.type === node.entityType)?.displayName ?? node.entityType).toUpperCase();
@@ -84,6 +88,22 @@ export function NodeCard({ node }: { readonly node: ElementRef }) {
           );
         })}
       </ul>
+      <p className="supernode-card-actions">
+        <button
+          type="button"
+          className="neighbor-types-link"
+          aria-disabled={collapsible === 'yes' ? undefined : true}
+          aria-describedby={collapsible === 'yes' ? undefined : reasonId}
+          onClick={() => (collapsible === 'yes' ? void expansions.collapse(node) : undefined)}
+        >
+          {COLLAPSE}
+        </button>
+        {collapsible === 'yes' ? null : (
+          <span id={reasonId} className="neighbor-types-note">
+            {collapsible === 'loading' ? COLLAPSE_LOADING : COLLAPSE_NOTHING}
+          </span>
+        )}
+      </p>
     </section>
   );
 }

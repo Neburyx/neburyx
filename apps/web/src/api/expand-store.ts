@@ -98,8 +98,30 @@ export interface ExpandStore {
   startOver(ref: ElementRef, neighborType: string): Promise<ExpandOutcome>;
   /** Asks again for what failed last for the node. */
   retry(ref: ElementRef): Promise<ExpandOutcome>;
+  /** Whether the node's expansion can be taken back now: `yes`, `loading` while an ask for it is running, `nothing` when no element is held because of it (never expanded, collapsed, or the investigation or masking changed). */
+  collapsibility(ref: ElementRef): Collapsibility;
+  /** Takes back the node's expansion: removes the elements only it brought to the canvas and nothing else keeps, clears what the store holds of its paging, and sends no request. */
+  collapse(ref: ElementRef): Collapsibility | 'collapsed';
+  /** Tells the store that the person asked for an entity by a route other than an expansion, so no collapse removes it. */
+  keep(ref: ElementRef): void;
+  /** Changes when the keeper record changes, for components that show whether a node can be collapsed. */
+  readonly records: ReadableStore<number>;
   /** One request for the panel: the first page of the types in `first` and the next page of those in `more` (each with the cursor it was given), over the relationship types given. */
   load(ref: ElementRef, plan: { readonly first: readonly string[]; readonly more: readonly string[]; readonly relTypes: readonly string[] | undefined }): Promise<ExpandOutcome>;
+}
+
+export type Collapsibility = 'yes' | 'loading' | 'nothing';
+
+/** What is on the canvas because of expansions, in one epoch: for each element the nodes whose uncollapsed expansions returned it, and the elements nothing may remove. */
+interface Keepers {
+  readonly epoch: string;
+  readonly nodes: Map<string, Set<string>>;
+  readonly edges: Map<string, Set<string>>;
+  readonly edgeEnds: Map<string, readonly [string, string]>;
+  /** By expanding node: the elements it is a keeper of. */
+  readonly of: Map<string, { readonly nodes: Set<string>; readonly edges: Set<string> }>;
+  readonly keptNodes: Set<string>;
+  readonly keptEdges: Set<string>;
 }
 
 const idle = (epoch: string): NodeExpansion => ({ epoch, status: 'idle', failure: undefined, types: new Map(), pageSize: undefined, chosenPageSize: undefined, duplicates: false, warnings: [], failedAction: undefined });
@@ -127,10 +149,38 @@ export function createExpandStore(client: ApiClient, state: ClientState, person:
   const notes = createStore<readonly string[]>([]);
   const chains = new Map<string, Map<string, Chain>>();
   const newest = new Map<string, number>();
+  const collapses = new Map<string, number>();
   const controllers = new Map<string, AbortController>();
   const last = new Map<string, ExpansionAction>();
   const placed = new Map<string, QueryKey>();
   const ceilings = new Map<string, number>();
+  let keepers: Keepers | undefined;
+  const records = createStore<number>(0);
+  const recordsChanged = (): void => records.setState(records.getState() + 1);
+  /** The record of this epoch; cleared, never brought back, when the epoch changes. */
+  const recordOf = (): Keepers => {
+    const epoch = epochOf();
+    if (keepers?.epoch !== epoch) keepers = { epoch, nodes: new Map(), edges: new Map(), edgeEnds: new Map(), of: new Map(), keptNodes: new Set(), keptEdges: new Set() };
+    return keepers;
+  };
+  // the record is cleared the moment the epoch changes, so it is not there when the epoch comes back
+  state.mask.subscribe(() => recordOf());
+  state.investigation.subscribe(() => recordOf());
+  const holds = (record: Keepers, nodeKey: string): boolean => {
+    const own = record.of.get(nodeKey);
+    return own !== undefined && own.nodes.size + own.edges.size > 0;
+  };
+  const addKeeper = (record: Keepers, table: Map<string, Set<string>>, side: 'nodes' | 'edges', key: string, holder: string): void => {
+    table.set(key, (table.get(key) ?? new Set()).add(holder));
+    const own = record.of.get(holder) ?? { nodes: new Set<string>(), edges: new Set<string>() };
+    own[side].add(key);
+    record.of.set(holder, own);
+  };
+  const keepNode = (record: Keepers, key: string): void => {
+    record.keptNodes.add(key);
+    for (const holder of record.nodes.get(key) ?? []) record.of.get(holder)?.nodes.delete(key);
+    record.nodes.delete(key);
+  };
   const touchedHeld = createStore<{ readonly epoch: string; readonly keys: ReadonlySet<string> }>({ epoch: '', keys: new Set() });
   const NONE: ReadonlySet<string> = new Set();
   const touchedView: ReadableStore<ReadonlySet<string>> = { getState: () => (touchedHeld.getState().epoch === epochOf() ? touchedHeld.getState().keys : NONE), subscribe: touchedHeld.subscribe };
@@ -198,6 +248,23 @@ export function createExpandStore(client: ApiClient, state: ClientState, person:
       chain.all.add(key);
       chain.chain.add(key);
     }
+    const record = recordOf();
+    for (const node of answer.nodes) {
+      const key = elementKey(node.ref);
+      if (key === nodeKey || record.keptNodes.has(key)) continue;
+      if (heldNodes.has(key) && !record.nodes.has(key)) record.keptNodes.add(key);
+      else addKeeper(record, record.nodes, 'nodes', key, nodeKey);
+    }
+    for (const edge of answer.edges) {
+      const key = edgeKey(edge.ref);
+      if (record.keptEdges.has(key)) continue;
+      if (heldEdges.has(key) && !record.edges.has(key)) record.keptEdges.add(key);
+      else {
+        addKeeper(record, record.edges, 'edges', key, nodeKey);
+        record.edgeEnds.set(key, [elementKey(edge.from), elementKey(edge.to)]);
+      }
+    }
+    recordsChanged();
     const queryKey: QueryKey = { sourceId: ref.sourceId, principalId: person(), policyVersion: DEFAULT_POLICY_VERSION, filterHash: DEFAULT_FILTER_HASH, params: JSON.stringify(['expanded', current.id, nodeKey, ++counter]), mask: state.mask.getState() };
     if (freshNodes.length > 0 || fresh.length > 0) {
       state.putResult(queryKey, { sourceId: ref.sourceId, nodes: freshNodes, edges: fresh });
@@ -295,7 +362,10 @@ export function createExpandStore(client: ApiClient, state: ClientState, person:
     controllers.get(nodeKey)?.abort();
     const controller = new AbortController();
     controllers.set(nodeKey, controller);
-    const tracked = tracker?.begin({ kind: requestKindOf(action), ref, cancel: () => controller.abort(), again: () => void run(ref, action) });
+    // a banner's Retry made before a collapse of the node does not outlive it
+    const collapsedAt = collapses.get(nodeKey) ?? 0;
+    const stillMine = (): boolean => (collapses.get(nodeKey) ?? 0) === collapsedAt;
+    const tracked = tracker?.begin({ kind: requestKindOf(action), ref, cancel: () => controller.abort(), again: () => (stillMine() ? void run(ref, action) : undefined) });
     let result;
     try {
       result = await client.expandNeighbors(request, controller.signal);
@@ -316,7 +386,7 @@ export function createExpandStore(client: ApiClient, state: ClientState, person:
       if (maxPage !== undefined) ceilings.set(ref.sourceId, maxPage);
       const lowered = maxPage !== undefined && before.chosenPageSize !== undefined && before.chosenPageSize > maxPage ? maxPage : before.chosenPageSize;
       // shown elsewhere (the banner): the node goes back to what it was, and the banner's Retry asks the same again
-      if (report?.(result.failure, ref.sourceId, () => void run(ref, action)) === true) {
+      if (report?.(result.failure, ref.sourceId, () => (stillMine() ? void run(ref, action) : undefined)) === true) {
         write(nodeKey, { ...before, chosenPageSize: lowered, status: 'idle', failure: undefined, failedAction: undefined });
         return 'failed';
       }
@@ -337,9 +407,74 @@ export function createExpandStore(client: ApiClient, state: ClientState, person:
     return 'sent';
   }
 
+  const collapsibility = (ref: ElementRef): Collapsibility => {
+    const nodeKey = elementKey(ref);
+    if (read(nodeKey).status === 'loading') return 'loading';
+    return holds(recordOf(), nodeKey) ? 'yes' : 'nothing';
+  };
+
+  function collapse(ref: ElementRef): Collapsibility | 'collapsed' {
+    const nodeKey = elementKey(ref);
+    const verdict = collapsibility(ref);
+    if (verdict !== 'yes') return verdict;
+    const record = recordOf();
+    const own = record.of.get(nodeKey);
+    record.of.delete(nodeKey);
+    const pins = state.presentation.view.getState().pins;
+    const leaving = new Set<string>();
+    const leavingEdges = new Set<string>();
+    for (const key of own?.nodes ?? []) {
+      const rest = record.nodes.get(key);
+      rest?.delete(nodeKey);
+      if (rest !== undefined && rest.size > 0) continue;
+      record.nodes.delete(key);
+      if (pins.has(key) || holds(record, key)) record.keptNodes.add(key);
+      else leaving.add(key);
+    }
+    for (const key of own?.edges ?? []) {
+      const rest = record.edges.get(key);
+      rest?.delete(nodeKey);
+      if (rest !== undefined && rest.size > 0) continue;
+      record.edges.delete(key);
+      leavingEdges.add(key);
+    }
+    for (const [key, ends] of record.edgeEnds) if (!leavingEdges.has(key) && ends.some((end) => leaving.has(end))) leavingEdges.add(key);
+    for (const key of leavingEdges) {
+      for (const holder of record.edges.get(key) ?? []) record.of.get(holder)?.edges.delete(key);
+      record.edges.delete(key);
+      record.edgeEnds.delete(key);
+      placed.delete(key);
+    }
+    const current = state.investigation.getState();
+    state.setLoaded(
+      current.resultKeys,
+      current.nodeRefs.filter((held) => !leaving.has(elementKey(held))),
+      current.edgeRefs.filter((held) => !leavingEdges.has(edgeKey(held))),
+    );
+    // what the node's chains, retry and failure held is gone; the page size the person chose and the aggregates (touched) stay
+    chains.delete(`${epochOf()}|${nodeKey}`);
+    last.delete(nodeKey);
+    newest.set(nodeKey, (newest.get(nodeKey) ?? 0) + 1);
+    collapses.set(nodeKey, (collapses.get(nodeKey) ?? 0) + 1);
+    heavy?.release(ref);
+    write(nodeKey, { ...idle(epochOf()), chosenPageSize: read(nodeKey).chosenPageSize });
+    recordsChanged();
+    return 'collapsed';
+  }
+
   return {
     view: readable(store),
     of: (ref) => read(elementKey(ref)),
+    collapsibility,
+    collapse,
+    records: readable(records),
+    keep(ref) {
+      const record = recordOf();
+      const key = elementKey(ref);
+      if (!record.nodes.has(key)) return;
+      keepNode(record, key);
+      recordsChanged();
+    },
     notes: readable(notes),
     touched: touchedView,
     touch,

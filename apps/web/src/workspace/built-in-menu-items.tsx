@@ -1,7 +1,7 @@
 import { runSelectionCommand } from '../canvas/selection-commands.js';
 import { LayoutList } from './layout-list.js';
 import { nodeRefOfKey } from '../state/keys.js';
-import { EXPAND_BY_NEIGHBOR_TYPE, EXPAND_BY_TYPE } from './expand-copy.js';
+import { COLLAPSE, EXPAND_BY_NEIGHBOR_TYPE, EXPAND_BY_TYPE } from './expand-copy.js';
 import { ExpandByTypeSubmenu } from './expand-by-type-submenu.js';
 import { MENU_GROUP, MENU_ORDER, type MenuContext, type MenuRegistry, type SubmenuProps } from './menu-registry.js';
 
@@ -50,6 +50,21 @@ export function registerBuiltInMenuItems(registry: MenuRegistry): () => void {
       state: (context) => (context.key !== undefined && nodeRefOfKey(context.key) !== undefined ? 'enabled' : 'disabled'),
       run: (context) => {
         if (context.key !== undefined) context.state.presentation.setSupernodePanel({ key: context.key });
+      },
+    }),
+    registry.register('node', {
+      id: 'collapse',
+      label: COLLAPSE,
+      icon: <span className="icon icon-collapse" aria-hidden="true" />,
+      group: MENU_GROUP.node.expand,
+      order: MENU_ORDER.node.collapse,
+      state: (context) => {
+        const ref = context.key === undefined ? undefined : nodeRefOfKey(context.key);
+        return ref !== undefined && context.expansion?.store.collapsibility(ref) === 'yes' ? 'enabled' : 'disabled';
+      },
+      run: (context) => {
+        const ref = context.key === undefined ? undefined : nodeRefOfKey(context.key);
+        if (ref !== undefined) context.expansion?.store.collapse(ref);
       },
     }),
     registry.register('canvas', {

@@ -232,7 +232,7 @@ test.describe('the sheet of shortcuts', () => {
     await page.keyboard.press('Escape');
     await page.keyboard.press('Enter');
     await page.keyboard.press('ContextMenu');
-    expect(await menuHints(page), 'the hints of the entity menu').toEqual(expected([['Expand neighbors', 'e'], ['Expand by neighbor type', ''], ['Expand by type', ''], ['Focus neighborhood', 'f'], ['Find paths from here…', 'shift+p'], ['Find paths to…', ''], ['Run pattern', ''], ['Select neighbors', ''], ['Invert selection', 'mod+shift+i'], ['Group by type', ''], ['Pin position', 'p'], ['Hide from view', 'delete'], ['Copy ID', 'mod+c'], ['Copy properties', 'mod+shift+c'], ['Open source record', '']]));
+    expect(await menuHints(page), 'the hints of the entity menu').toEqual(expected([['Expand neighbors', 'e'], ['Expand by neighbor type', ''], ['Expand by type', ''], ['Collapse', ''], ['Focus neighborhood', 'f'], ['Find paths from here…', 'shift+p'], ['Find paths to…', ''], ['Run pattern', ''], ['Select neighbors', ''], ['Invert selection', 'mod+shift+i'], ['Group by type', ''], ['Pin position', 'p'], ['Hide from view', 'delete'], ['Copy ID', 'mod+c'], ['Copy properties', 'mod+shift+c'], ['Open source record', '']]));
     await page.keyboard.press('Escape');
     for (let step = 0; step < 40; step += 1) {
       await page.keyboard.press('Tab');
