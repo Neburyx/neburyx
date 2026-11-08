@@ -306,8 +306,10 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
     cy.viewport({ zoom: viewport.zoom, pan: { x: viewport.x, y: viewport.y } });
   };
 
-  const fitEntities = (cy: Core): void => {
-    const viewport = fitViewport(cy.nodes().boundingBox({}), sizeOf(cy), FIT_PADDING);
+  const fitEntities = (cy: Core, entitiesOnly = false): void => {
+    const entities = cy.nodes('[!remainder]');
+    const counted = entitiesOnly && !entities.empty() ? entities : cy.nodes();
+    const viewport = fitViewport(counted.boundingBox({}), sizeOf(cy), FIT_PADDING);
     if (viewport !== undefined) showViewport(cy, viewport);
   };
 
@@ -627,10 +629,10 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
     show(viewport) {
       showViewport(requireCore(), viewport);
     },
-    fit() {
+    fit(entitiesOnly) {
       const cy = requireCore();
       if (cy.nodes().empty()) return;
-      fitEntities(cy);
+      fitEntities(cy, entitiesOnly === true);
     },
     anchorOf(key) {
       const cy = requireCore();

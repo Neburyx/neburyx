@@ -36,9 +36,12 @@ test.describe('focus neighborhood', () => {
 
   test('puts focus on the selected entity with F, counts what is outside, and leaves it from the scope line', async ({ page }) => {
     const before = (await drawing(page)).nodes.length;
+    for (let step = 0; step < 3; step += 1) await page.getByRole('button', { name: 'Zoom out' }).click();
+    await expect(page.getByText('51%', { exact: true })).toBeVisible();
     const zoomBefore = await zoomOf(page);
     await select(page);
     await page.keyboard.press('f');
+    await expect.poll(() => zoomOf(page)).toBeGreaterThan(zoomBefore);
     await expect(lines(page).first()).toContainText('outside focus');
     await expect(page.getByRole('button', { name: 'Leave focus' })).toBeVisible();
     const during = (await drawing(page)).nodes.length;

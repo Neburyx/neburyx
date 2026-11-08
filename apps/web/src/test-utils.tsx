@@ -108,6 +108,8 @@ export interface StubRenderer extends CanvasRenderer {
   readonly centered: string[];
   readonly shown: Viewport[];
   fits: number;
+  /** How many of the fits left the aggregate nodes out. */
+  entityFits: number;
   disposed: number;
 }
 
@@ -134,6 +136,7 @@ export function stubRenderer(options: StubOptions = {}): StubRenderer {
     centered: [],
     shown: [],
     fits: 0,
+    entityFits: 0,
     disposed: 0,
     mount(container, events, viewport) {
       if (options.failOn === 'mount') throw new Error('no drawing surface');
@@ -153,9 +156,10 @@ export function stubRenderer(options: StubOptions = {}): StubRenderer {
     show(viewport) {
       stub.shown.push(viewport);
     },
-    fit() {
+    fit(entitiesOnly) {
       if (options.failCommands === true) throw new Error('cannot fit');
       stub.fits += 1;
+      if (entitiesOnly === true) stub.entityFits += 1;
     },
     centerOn(key) {
       if (options.failCommands === true) throw new Error('cannot centre');

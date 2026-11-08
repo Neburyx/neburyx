@@ -62,6 +62,7 @@ describe('the neighborhood focus on the canvas', () => {
     const start = fits();
     act(() => rig.state.focusOn(n1));
     expect(fits()).toBe(start + 1);
+    expect(renderer?.entityFits).toBe(1);
     act(() => rig.state.focusOn(n2));
     expect(fits()).toBe(start + 2);
     act(() => rig.state.presentation.leaveFocus());

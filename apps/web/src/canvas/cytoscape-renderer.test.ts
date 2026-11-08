@@ -767,6 +767,25 @@ describe('zoom and fit in the Cytoscape renderer', () => {
     expect(((lone?.x1 ?? 0) + (lone?.x2 ?? 0)) / 2).toBeCloseTo(SIZE.width / 2, 3);
   });
 
+  it('closes in on the entities when asked to fit them alone, leaving the aggregate nodes out, and never beyond 100% for one', () => {
+    const renderer = sized();
+    const base = scene([['a', { x: 0, y: 0 }], ['r', { x: 0, y: 6000 }]]);
+    renderer.draw({ ...base, entities: base.entities.map((entity) => (entity.id === 'r' ? { ...entity, remainder: true } : entity)) });
+    renderer.fit();
+    const all = renderer.inspect().viewport.zoom;
+    renderer.fit(true);
+    const only = renderer.inspect().viewport.zoom;
+    expect(all).toBeLessThan(FIT_ZOOM_MAX);
+    expect(only).toBe(FIT_ZOOM_MAX);
+    const spreadOut = sized();
+    const two = scene([['a', { x: 0, y: 0 }], ['b', { x: 3000, y: 0 }], ['r', { x: 0, y: 9000 }]]);
+    spreadOut.draw({ ...two, entities: two.entities.map((entity) => (entity.id === 'r' ? { ...entity, remainder: true } : entity)) });
+    spreadOut.fit(true);
+    const zoom = spreadOut.inspect().viewport.zoom;
+    spreadOut.fit();
+    expect(zoom).toBeGreaterThan(spreadOut.inspect().viewport.zoom);
+  });
+
   it('fits a lone entity at 100%, lets the hand zoom go on to the maximum, and brings the view back to 100% on the fit command', () => {
     const renderer = sized();
     renderer.draw(scene([['a', { x: 0, y: 0 }]]));

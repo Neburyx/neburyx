@@ -99,8 +99,8 @@ export interface CanvasRenderer {
   draw(scene: Scene, restore?: Viewport): void;
   /** Shows the viewport at once, with every position as it is. */
   show(viewport: Viewport): void;
-  /** Shows every drawn entity; does nothing when none is drawn. */
-  fit(): void;
+  /** Shows every drawn entity; does nothing when none is drawn. With `entitiesOnly`, the aggregate nodes (what is not loaded) do not count, so the view closes in on the entities. */
+  fit(entitiesOnly?: boolean): void;
   /** Multiplies the zoom around the centre of the canvas, within the zoom limits. */
   zoomBy(factor: number): void;
   /** Pans so the item is at the centre of the canvas, with the zoom and every position as they are; does nothing for a key that is not drawn. */

@@ -169,7 +169,8 @@ export function GraphCanvas({ profile, view = 'fit' }: { readonly profile?: Sour
         const asked = state.presentation.view.getState().viewChange;
         if (asked !== undefined && asked !== requestServed.current) {
           requestServed.current = asked;
-          if (asked.show === 'fit' || asked.show.viewport === undefined) renderer.fit();
+          if (asked.show === 'fit') renderer.fit(true);
+          else if (asked.show.viewport === undefined) renderer.fit();
           else renderer.show(asked.show.viewport);
         }
         const ringOnly = lastDrawn.current === drawn;
