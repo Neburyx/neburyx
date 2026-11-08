@@ -7,6 +7,8 @@ import { createClientState } from '../state/client-state.js';
 import { item, load, nodeKey, onCanvas, show, withBuiltIns } from './context-menu-kit.js';
 import { stateOf, type MenuContext } from './menu-registry.js';
 import { LayoutList } from './layout-list.js';
+import { PHYSICS_MAX_ENTITIES } from '../canvas/layout-constants.js';
+import { ClientStateProvider } from '../state/context.js';
 
 function available(commands: CanvasCommands | undefined): CanvasCommands {
   if (commands === undefined) throw new Error('the canvas commands are not available');
@@ -36,16 +38,16 @@ function open(options: { readonly pins?: readonly string[] } = {}) {
 
 const positionsOf = (state: ReturnType<typeof createClientState>): Map<string, { x: number; y: number }> => new Map(state.presentation.view.getState().positions);
 const layoutRow = (): HTMLElement => item('Layout');
-const forceRow = (): HTMLElement => screen.getByRole('menuitem', { name: 'Force' });
+const forceRow = (): HTMLElement => screen.getByRole('menuitemradio', { name: 'Force' });
 
 describe('the Layout item of the canvas menu', () => {
-  it('is a row with a chevron that opens, beside it, a list with one row, "Force", on a press, and not on a disabled one', async () => {
+  it('is a row with a chevron that opens, beside it, a list with the four layouts and the Physics switch, Force marked, on a press, and not on a disabled one', async () => {
     const { rightClick } = open();
     rightClick(onCanvas(10, 10));
     expect(layoutRow().getAttribute('aria-haspopup')).toBe('menu');
-    expect(screen.queryByRole('menuitem', { name: 'Force' })).toBeNull();
+    expect(screen.queryByRole('menuitemradio', { name: 'Force' })).toBeNull();
     await userEvent.setup().click(layoutRow());
-    expect(screen.getAllByRole('menuitem', { name: 'Force' })).toHaveLength(1);
+    expect(screen.getAllByRole('menuitemradio', { name: 'Force' })).toHaveLength(1);
     expect(forceRow().closest('.context-submenu')).not.toBeNull();
   });
 
@@ -54,7 +56,7 @@ describe('the Layout item of the canvas menu', () => {
     rightClick(onCanvas(10, 10));
     await userEvent.setup().click(layoutRow());
     const named = screen.getByRole('menu', { name: 'Layout' });
-    expect(within(named).getByRole('menuitem', { name: 'Force' })).toBe(forceRow());
+    expect(within(named).getByRole('menuitemradio', { name: 'Force' })).toBe(forceRow());
     expect(screen.getByRole('menu', { name: 'Canvas' })).not.toBe(named);
     expect(layoutRow().getAttribute('aria-expanded')).toBe('true');
   });
@@ -66,7 +68,7 @@ describe('the Layout item of the canvas menu', () => {
     shown.rightClick(onCanvas(10, 10));
     expect(layoutRow().getAttribute('aria-disabled')).toBe('true');
     await userEvent.setup().click(layoutRow());
-    expect(screen.queryByRole('menuitem', { name: 'Force' })).toBeNull();
+    expect(screen.queryByRole('menuitemradio', { name: 'Force' })).toBeNull();
   });
 
   it('runs the one layout command when Force is chosen, closes the whole menu and puts every unpinned entity at the position the layout gives it, leaving the pinned ones', async () => {
@@ -106,12 +108,12 @@ describe('the Layout item of the canvas menu', () => {
     await user.keyboard('{ArrowRight}');
     expect(document.activeElement).toBe(forceRow());
     await user.keyboard('{Escape}');
-    expect(screen.queryByRole('menuitem', { name: 'Force' })).toBeNull();
+    expect(screen.queryByRole('menuitemradio', { name: 'Force' })).toBeNull();
     expect(screen.getByRole('menu')).not.toBeNull();
     expect(document.activeElement).toBe(layoutRow());
     await user.keyboard('{ArrowRight}');
     await user.keyboard('{ArrowLeft}');
-    expect(screen.queryByRole('menuitem', { name: 'Force' })).toBeNull();
+    expect(screen.queryByRole('menuitemradio', { name: 'Force' })).toBeNull();
     expect(document.activeElement).toBe(layoutRow());
     await user.keyboard('{Enter}');
     expect(document.activeElement).toBe(forceRow());
@@ -119,6 +121,25 @@ describe('the Layout item of the canvas menu', () => {
     expect(spy).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('menu')).toBeNull();
     expect(document.activeElement).toBe(outside);
+  });
+});
+
+describe('the layout control', () => {
+  it('names the layout in its label, and choosing another changes the label', async () => {
+    const { state } = open();
+    const user = userEvent.setup();
+    expect(screen.getByRole('button', { name: 'Layout: Force' }).textContent).toBe('Force ▾');
+    await user.click(screen.getByRole('button', { name: 'Layout: Force' }));
+    await user.click(screen.getByRole('menuitemradio', { name: 'Grid' }));
+    expect(state.presentation.view.getState().layout).toBe('grid');
+    expect(screen.getByRole('button', { name: 'Layout: Grid' }).textContent).toBe('Grid ▾');
+  });
+
+  it('is disabled when nothing is loaded', () => {
+    const state = createClientState();
+    load(state, []);
+    show(state);
+    expect(screen.getByRole('button', { name: 'Layout: Force' }).hasAttribute('disabled')).toBe(true);
   });
 });
 
@@ -163,7 +184,7 @@ describe('a layout that fails', () => {
     const { state, rightClick } = open();
     const before = positionsOf(state);
     rightClick(onCanvas(10, 10));
-    vi.spyOn(state.presentation, 'setPositions').mockImplementation(() => {
+    vi.spyOn(state.presentation, 'applyLayout').mockImplementation(() => {
       throw new Error('cannot store');
     });
     const user = userEvent.setup();
@@ -210,28 +231,91 @@ describe('a layout that fails', () => {
 });
 
 describe('the list of layouts on its own', () => {
-  it('shows one row, Force, that calls what it was given with the layout, and does nothing and says it is disabled when it is disabled', async () => {
-    const chosen = vi.fn();
-    const { rerender } = render(<LayoutList disabled={false} onChoose={chosen} />);
-    const user = userEvent.setup();
-    await user.click(screen.getByRole('menuitem', { name: 'Force' }));
-    expect(chosen).toHaveBeenCalledWith('force');
-    rerender(<LayoutList disabled onChoose={chosen} />);
-    expect(screen.getByRole('menuitem', { name: 'Force' }).getAttribute('aria-disabled')).toBe('true');
-    await user.click(screen.getByRole('menuitem', { name: 'Force' }));
-    expect(chosen).toHaveBeenCalledTimes(1);
+  const inList = (state: ReturnType<typeof createClientState>, props: { readonly disabled: boolean; readonly run?: () => void; readonly done?: () => void }) => (
+    <ClientStateProvider state={state}>
+      <LayoutList disabled={props.disabled} run={props.run ?? (() => undefined)} done={props.done ?? (() => undefined)} />
+    </ClientStateProvider>
+  );
+
+  it('shows Force, Hierarchical, Radial and Grid with the current one marked, and Force is the layout in a new session', () => {
+    const state = createClientState();
+    render(inList(state, { disabled: false }));
+    const rows = screen.getAllByRole('menuitemradio');
+    expect(rows.map((row) => row.textContent)).toEqual(['Force', 'Hierarchical', 'Radial', 'Grid']);
+    expect(rows.map((row) => row.getAttribute('aria-checked'))).toEqual(['true', 'false', 'false', 'false']);
   });
 
-  it('keeps the focus on the one row for the arrow keys, Home and End, and does not throw', async () => {
-    render(<LayoutList disabled={false} onChoose={() => undefined} />);
-    const row = screen.getByRole('menuitem', { name: 'Force' });
-    act(() => row.focus());
+  it('keeps the choice in the presentation state, runs the layout and closes, and does nothing and says it is disabled when it is disabled', async () => {
+    const state = createClientState();
+    const run = vi.fn();
+    const done = vi.fn();
+    const { rerender } = render(inList(state, { disabled: false, run, done }));
     const user = userEvent.setup();
-    for (const key of ['{ArrowDown}', '{ArrowUp}', '{Home}', '{End}']) {
-      await user.keyboard(key);
-      expect(document.activeElement).toBe(row);
-    }
-    expect(within(document.body).getAllByRole('menuitem')).toHaveLength(1);
+    await user.click(screen.getByRole('menuitemradio', { name: 'Grid' }));
+    expect(state.presentation.view.getState().layout).toBe('grid');
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(done).toHaveBeenCalledTimes(1);
+    rerender(inList(state, { disabled: true, run, done }));
+    expect(screen.getByRole('menuitemradio', { name: 'Radial' }).getAttribute('aria-disabled')).toBe('true');
+    await user.click(screen.getByRole('menuitemradio', { name: 'Radial' }));
+    await user.click(screen.getByRole('menuitemcheckbox', { name: /Physics/ }));
+    expect(state.presentation.view.getState().layout).toBe('grid');
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the direction rows only under Hierarchical, and runs the layout again with the direction chosen', async () => {
+    const state = createClientState();
+    const run = vi.fn();
+    render(inList(state, { disabled: false, run }));
+    expect(screen.queryByRole('menuitemradio', { name: 'Left to right' })).toBeNull();
+    act(() => state.presentation.setLayout('hierarchical'));
+    expect(screen.getAllByRole('menuitemradio').map((row) => row.textContent)).toEqual(['Force', 'Hierarchical', 'Radial', 'Grid', 'Top to bottom', 'Left to right']);
+    expect(screen.getByRole('menuitemradio', { name: 'Top to bottom' }).getAttribute('aria-checked')).toBe('true');
+    await userEvent.setup().click(screen.getByRole('menuitemradio', { name: 'Left to right' }));
+    expect(state.presentation.view.getState().layoutDirection).toBe('right');
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  it('switches physics on and off under Force, and under another layout disables the row with its line and changes nothing', async () => {
+    const state = createClientState();
+    render(inList(state, { disabled: false }));
+    const user = userEvent.setup();
+    const row = () => screen.getByRole('menuitemcheckbox', { name: /Physics/ });
+    expect(row().getAttribute('aria-checked')).toBe('false');
+    await user.click(row());
+    expect(state.presentation.view.getState().physics).toBe(true);
+    await user.click(row());
+    expect(state.presentation.view.getState().physics).toBe(false);
+    act(() => state.presentation.setLayout('grid'));
+    expect(row().getAttribute('aria-disabled')).toBe('true');
+    expect(row().textContent).toContain('Physics works with Force');
+    await user.click(row());
+    expect(state.presentation.view.getState().physics).toBe(false);
+  });
+
+  it('disables the Physics row with its line above the cap, and leaves the setting as it was', () => {
+    const state = createClientState();
+    load(state, Array.from({ length: PHYSICS_MAX_ENTITIES + 1 }, (_unused, index) => `n${index}`));
+    state.presentation.setPhysics(true);
+    render(inList(state, { disabled: false }));
+    const row = screen.getByRole('menuitemcheckbox', { name: /Physics/ });
+    expect(row.getAttribute('aria-disabled')).toBe('true');
+    expect(row.textContent).toContain(`Physics is off above ${PHYSICS_MAX_ENTITIES} entities`);
+    expect(state.presentation.view.getState().physics).toBe(true);
+  });
+
+  it('moves the focus with the arrow keys, Home and End over every row, wrapping at the ends', async () => {
+    render(inList(createClientState(), { disabled: false }));
+    const rows = [...document.body.querySelectorAll<HTMLElement>('[role^="menuitem"]')];
+    act(() => rows[0]?.focus());
+    const user = userEvent.setup();
+    await user.keyboard('{ArrowUp}');
+    expect(document.activeElement).toBe(rows[rows.length - 1]);
+    await user.keyboard('{ArrowDown}');
+    expect(document.activeElement).toBe(rows[0]);
+    await user.keyboard('{End}');
+    expect(document.activeElement).toBe(rows[rows.length - 1]);
+    await user.keyboard('{Home}');
+    expect(document.activeElement).toBe(rows[0]);
   });
 });
-

@@ -156,7 +156,7 @@ describe('the layout control of the zoom controls', () => {
     return { factory, commands };
   }
   const control = (): HTMLButtonElement => button('Layout: Force');
-  const rows = (): HTMLElement[] => screen.queryAllByRole('menuitem');
+  const rows = (): HTMLElement[] => [...document.querySelectorAll<HTMLElement>('[role^="menuitem"]')];
   const loadedState = (nodes = 12): ClientState => {
     const state = createClientState();
     load(state, nodes);
@@ -189,11 +189,11 @@ describe('the layout control of the zoom controls', () => {
     ['Enter', async () => { act(() => control().focus()); await userEvent.setup().keyboard('{Enter}'); }],
     ['Space', async () => { act(() => control().focus()); await userEvent.setup().keyboard(' '); }],
     ['ArrowDown', async () => { act(() => control().focus()); await userEvent.setup().keyboard('{ArrowDown}'); }],
-  ])('opens the list on %s, with the focus on its one row, Force', async (_name, open) => {
+  ])('opens the list on %s, with the focus on its first row, Force', async (_name, open) => {
     mount(loadedState());
     await open();
     expect(screen.getByRole('menu', { name: 'Layout' })).not.toBeNull();
-    expect(rows().map((row) => row.textContent)).toEqual(['Force']);
+    expect(rows().map((row) => row.textContent)).toEqual(['Force', 'Hierarchical', 'Radial', 'Grid', 'Physics']);
     expect(document.activeElement).toBe(rows()[0]);
     expect(control().getAttribute('aria-expanded')).toBe('true');
   });
@@ -204,7 +204,7 @@ describe('the layout control of the zoom controls', () => {
     const user = userEvent.setup();
     const spy = vi.spyOn(available(commands.current), 'layout');
     await user.click(control());
-    await user.click(screen.getByRole('menuitem', { name: 'Force' }));
+    await user.click(screen.getByRole('menuitemradio', { name: 'Force' }));
     expect(spy).toHaveBeenCalledTimes(1);
     expect(rows()).toEqual([]);
     expect(document.activeElement).toBe(control());
@@ -222,9 +222,10 @@ describe('the layout control of the zoom controls', () => {
     mount(loadedState());
     await userEvent.setup().click(control());
     const user = userEvent.setup();
-    for (const key of ['{ArrowDown}', '{ArrowUp}', '{Home}', '{End}']) {
+    const list = rows();
+    for (const [key, expected] of [['{ArrowDown}', list[1]], ['{ArrowUp}', list[0]], ['{ArrowUp}', list[list.length - 1]], ['{Home}', list[0]], ['{End}', list[list.length - 1]]] as const) {
       await user.keyboard(key);
-      expect(document.activeElement).toBe(rows()[0]);
+      expect(document.activeElement).toBe(expected);
     }
   });
 
@@ -251,7 +252,7 @@ describe('the layout control of the zoom controls', () => {
     const user = userEvent.setup();
     await user.click(control());
     fireEvent.pointerDown(screen.getByRole('menu', { name: 'Layout' }));
-    expect(rows()).toHaveLength(1);
+    expect(rows().length).toBeGreaterThan(0);
     await user.click(control());
     expect(rows()).toEqual([]);
   });
@@ -260,13 +261,13 @@ describe('the layout control of the zoom controls', () => {
     const state = loadedState();
     mount(state);
     await userEvent.setup().click(control());
-    expect(rows()).toHaveLength(1);
+    expect(rows().length).toBeGreaterThan(0);
     act(() => state.setLoaded([key('a')], [], []));
     expect(rows()).toEqual([]);
     act(() => load(state, 12));
     expect(rows()).toEqual([]);
     expect(control().getAttribute('aria-expanded')).toBe('false');
-    expect(document.activeElement).not.toBe(screen.queryByRole('menuitem', { name: 'Force' }));
+    expect(document.activeElement).not.toBe(screen.queryByRole('menuitemradio', { name: 'Force' }));
   });
 
   it('names its menu "Layout" and holds the row Force in it', async () => {
@@ -274,14 +275,14 @@ describe('the layout control of the zoom controls', () => {
     await userEvent.setup().click(control());
     const menus = screen.getAllByRole('menu');
     expect(menus).toHaveLength(1);
-    expect(within(screen.getByRole('menu', { name: 'Layout' })).getByRole('menuitem', { name: 'Force' })).toBe(rows()[0]);
+    expect(within(screen.getByRole('menu', { name: 'Layout' })).getByRole('menuitemradio', { name: 'Force' })).toBe(rows()[0]);
   });
 
   it('closes when the commands become unavailable or nothing is loaded while it is open', async () => {
     const state = loadedState();
     mount(state);
     await userEvent.setup().click(control());
-    expect(rows()).toHaveLength(1);
+    expect(rows().length).toBeGreaterThan(0);
     act(() => state.setLoaded([key('a')], [], []));
     expect(rows()).toEqual([]);
   });

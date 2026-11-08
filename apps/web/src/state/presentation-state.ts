@@ -1,3 +1,4 @@
+import { DEFAULT_DIRECTION, DEFAULT_LAYOUT, type LayoutDirection, type LayoutId } from './layout-choice.js';
 import { StateError } from './errors.js';
 import { nodeRefOfKey } from './keys.js';
 import { createStore, readable, type ReadableStore } from './store.js';
@@ -52,6 +53,11 @@ export interface MappedTypes {
 
 export interface PresentationState {
   readonly tool: PointerTool;
+  /** How the loaded graph is arranged when a person lays it out, and which way a hierarchical layout runs. Part of the view that is saved. */
+  readonly layout: LayoutId;
+  readonly layoutDirection: LayoutDirection;
+  /** Whether the force layout keeps running, so that a dragged entity pulls its neighbors. Part of the view that is saved. */
+  readonly physics: boolean;
   readonly selection: ReadonlySet<string>;
   readonly positions: ReadonlyMap<string, Position>;
   readonly pins: ReadonlySet<string>;
@@ -113,6 +119,9 @@ function endedFocus(current: PresentationState): Pick<PresentationState, 'neighb
 
 export const INITIAL_PRESENTATION: PresentationState = {
   tool: 'select',
+  layout: DEFAULT_LAYOUT,
+  layoutDirection: DEFAULT_DIRECTION,
+  physics: false,
   selection: new Set(),
   positions: new Map(),
   pins: new Set(),
@@ -152,7 +161,12 @@ export interface PresentationActions {
   setOpenTool(open: OpenTool | undefined): void;
   setOpenMenu(open: OpenMenu | undefined): void;
   select(keys: readonly string[]): void;
+  setLayout(layout: LayoutId): void;
+  setLayoutDirection(direction: LayoutDirection): void;
+  setPhysics(on: boolean): void;
   setPosition(key: string, position: Position): void;
+  /** Stores the positions a layout run gave and asks the canvas to fit the view to what is drawn once they are drawn. */
+  applyLayout(positions: ReadonlyMap<string, Position>): void;
   /** Stores the positions of several entities as one update; with `announcement` the update also carries what a screen reader is told, as a new announcement even when the text is the same as the last. */
   setPositions(positions: ReadonlyMap<string, Position>, announcement?: string): void;
   pin(keys: readonly string[]): void;
@@ -199,7 +213,7 @@ export interface PresentationActions {
   setViewport(viewport: Viewport): void;
 }
 
-export type PresentationSnapshot = Pick<PresentationState, 'selection' | 'positions' | 'pins' | 'hidden' | 'typeFilter' | 'neighborhoodFocus' | 'focusReturn' | 'viewport'>;
+export type PresentationSnapshot = Pick<PresentationState, 'layout' | 'layoutDirection' | 'physics' | 'selection' | 'positions' | 'pins' | 'hidden' | 'typeFilter' | 'neighborhoodFocus' | 'focusReturn' | 'viewport'>;
 
 export interface PresentationStore extends PresentationActions {
   reset(): void;
@@ -237,6 +251,20 @@ export function createPresentationStore(known: KnownElements): PresentationStore
     setPosition(key, position) {
       requireKnown([key], known.isNode);
       store.setState({ ...store.getState(), positions: new Map(store.getState().positions).set(key, position) });
+    },
+    setLayout(layout) {
+      store.setState({ ...store.getState(), layout });
+    },
+    setLayoutDirection(direction) {
+      store.setState({ ...store.getState(), layoutDirection: direction });
+    },
+    setPhysics(on) {
+      store.setState({ ...store.getState(), physics: on });
+    },
+    applyLayout(positions) {
+      requireKnown([...positions.keys()], known.isNode);
+      const current = store.getState();
+      store.setState({ ...current, positions: positions.size === 0 ? current.positions : new Map([...current.positions, ...positions]), viewChange: { show: 'fit' } });
     },
     setPositions(positions, announcement) {
       requireKnown([...positions.keys()], known.isNode);
@@ -470,8 +498,8 @@ export function createPresentationStore(known: KnownElements): PresentationStore
       });
     },
     snapshot() {
-      const { selection, positions, pins, hidden, typeFilter, neighborhoodFocus, focusReturn, viewport } = store.getState();
-      return { selection, positions, pins, hidden, typeFilter, neighborhoodFocus, focusReturn, viewport };
+      const { layout, layoutDirection, physics, selection, positions, pins, hidden, typeFilter, neighborhoodFocus, focusReturn, viewport } = store.getState();
+      return { layout, layoutDirection, physics, selection, positions, pins, hidden, typeFilter, neighborhoodFocus, focusReturn, viewport };
     },
     restore(snapshot) {
       store.setState({ ...store.getState(), ...snapshot, walking: false, focused: undefined, moveNote: undefined, openMenu: undefined });

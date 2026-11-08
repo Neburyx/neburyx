@@ -276,9 +276,15 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
     nextFrame(paintQueuedCaptions);
   };
 
+  // Where the positions come from while the live layout runs: the entities in it are not moved to the scene's positions by a drawing.
+  let live: Map<string, Position> | undefined;
+  let onDragging: ((id: string, position: Position | undefined) => void) | undefined;
+  let onDragCancelled: ((id: string, start: Position) => void) | undefined;
+
   const cancelDrag = (): void => {
     if (core === undefined || dragging === undefined || dragging.cancelled) return;
     dragging.cancelled = true;
+    onDragCancelled?.(dragging.id, { ...dragging.start });
     core.getElementById(dragging.id).position({ ...dragging.start });
   };
 
@@ -319,6 +325,8 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
   return {
     mount(container, events, viewport) {
       if (core !== undefined) throw new Error('the renderer is already mounted');
+      onDragging = events.dragging;
+      onDragCancelled = events.dragCancelled;
       const created = cytoscape({ container, headless: container === undefined, styleEnabled: true, style: STYLE, layout: { name: 'preset' }, minZoom: ZOOM_MIN, maxZoom: ZOOM_MAX, ...POINTER });
       const report = (): void => {
         if (core === created) events.viewport({ zoom: created.zoom(), x: created.pan().x, y: created.pan().y });
@@ -476,9 +484,11 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
       created.on('grab', (event) => {
         const node = event.target;
         dragging = { id: node.id(), start: { x: node.position('x'), y: node.position('y') }, tool, pinned: drawnPinned, cancelled: false };
+        onDragging?.(node.id(), { ...dragging.start });
       });
       created.on('drag', () => {
         if (dragging?.cancelled === true) created.getElementById(dragging.id).position({ ...dragging.start });
+        else if (dragging !== undefined) onDragging?.(dragging.id, { x: created.getElementById(dragging.id).position('x'), y: created.getElementById(dragging.id).position('y') });
       });
       created.on('dragfree', (event) => {
         const drag = dragging;
@@ -486,8 +496,10 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
         if (drag === undefined || drag.cancelled || event.target.id() !== drag.id) return;
         if (!insideCanvas(event.renderedPosition)) {
           event.target.position({ ...drag.start });
+          onDragCancelled?.(drag.id, { ...drag.start });
           return;
         }
+        onDragging?.(drag.id, undefined);
         const position = { x: event.target.position('x'), y: event.target.position('y') };
         if (position.x !== drag.start.x || position.y !== drag.start.y) events.move({ id: drag.id, position });
       });
@@ -513,6 +525,9 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
       window.addEventListener('blur', cancelBox);
       window.addEventListener('blur', cancelDrag);
       teardown = () => {
+        onDragging = undefined;
+        onDragCancelled = undefined;
+        live = undefined;
         restoreNativeMenu?.();
         stopFollowing?.();
         container?.removeEventListener('pointercancel', cancelBox);
@@ -565,7 +580,7 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
           const existing = cy.getElementById(entity.id);
           if (!existing.empty()) retained += 1;
           if (existing.empty()) cy.add({ group: 'nodes', data: { id: entity.id }, position: { ...entity.position }, ...(far ? { classes: 'far' } : {}) });
-          else if ((dragging === undefined || dragging.cancelled || dragging.id !== entity.id) && (existing.position('x') !== entity.position.x || existing.position('y') !== entity.position.y)) existing.position({ ...entity.position });
+          else if ((dragging === undefined || dragging.cancelled || dragging.id !== entity.id) && !live?.has(entity.id) && (existing.position('x') !== entity.position.x || existing.position('y') !== entity.position.y)) existing.position({ ...entity.position });
           const node = cy.getElementById(entity.id);
           const remainder = entity.remainder === true;
           if (node.data('remainder') !== remainder) node.data('remainder', remainder);
@@ -696,6 +711,21 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
     viewport() {
       const cy = requireCore();
       return { zoom: cy.zoom(), x: cy.pan().x, y: cy.pan().y };
+    },
+    placeLive(positions) {
+      const cy = requireCore();
+      live ??= new Map();
+      cy.batch(() => {
+        for (const [id, position] of positions) {
+          const node = cy.getElementById(id);
+          if (node.empty() || (dragging?.id === id && !dragging.cancelled)) continue;
+          node.position({ ...position });
+          live?.set(id, position);
+        }
+      });
+    },
+    endLive() {
+      live = undefined;
     },
     positions() {
       return new Map(requireCore().nodes('[!remainder]').map((node) => [node.id(), { x: node.position('x'), y: node.position('y') }]));

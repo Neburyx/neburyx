@@ -14,10 +14,8 @@ function LayoutSubmenu({ context, close }: SubmenuProps) {
   return (
     <LayoutList
       disabled={!canLayOut(context)}
-      onChoose={() => {
-        context.canvas?.layout();
-        close();
-      }}
+      run={() => context.canvas?.layout()}
+      done={close}
     />
   );
 }

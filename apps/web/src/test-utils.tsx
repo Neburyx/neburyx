@@ -108,6 +108,11 @@ export interface StubRenderer extends CanvasRenderer {
   readonly zooms: number[];
   readonly centered: string[];
   readonly shown: Viewport[];
+  /** The positions given to `placeLive`, in order, and how many times `endLive` was called. */
+  readonly lives: Array<ReadonlyMap<string, { x: number; y: number }>>;
+  liveEnds: number;
+  /** Makes `placeLive` throw. */
+  failLive?: boolean;
   fits: number;
   /** How many of the fits left the aggregate nodes out. */
   entityFits: number;
@@ -137,6 +142,8 @@ export function stubRenderer(options: StubOptions = {}): StubRenderer {
     centered: [],
     shown: [],
     fits: 0,
+    lives: [],
+    liveEnds: 0,
     entityFits: 0,
     disposed: 0,
     mount(container, events, viewport) {
@@ -161,6 +168,13 @@ export function stubRenderer(options: StubOptions = {}): StubRenderer {
       if (options.failCommands === true) throw new Error('cannot fit');
       stub.fits += 1;
       if (entitiesOnly === true) stub.entityFits += 1;
+    },
+    placeLive(positions) {
+      if (stub.failLive === true) throw new Error('cannot place');
+      stub.lives.push(new Map(positions));
+    },
+    endLive() {
+      stub.liveEnds += 1;
     },
     centerOn(key) {
       if (options.failCommands === true) throw new Error('cannot centre');

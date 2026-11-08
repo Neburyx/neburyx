@@ -1707,3 +1707,64 @@ describe('the aggregate nodes the Cytoscape renderer draws', () => {
     expect(renderer.inspect().remainders).toEqual([]);
   });
 });
+
+describe('the live positions and drag reports of the Cytoscape renderer', () => {
+  function rig() {
+    const drags: Array<readonly [string, { x: number; y: number } | undefined]> = [];
+    const cancelled: Array<readonly [string, { x: number; y: number }]> = [];
+    let core: Core | undefined;
+    const renderer = createCytoscapeRenderer({ nextFrame: (callback) => callback(), onCore: (made) => void (core = made), canvasSize: () => ({ width: 1000, height: 800 }) });
+    renderer.mount(undefined, { ...NO_EVENTS, dragging: (id, position) => void drags.push([id, position]), dragCancelled: (id, start) => void cancelled.push([id, start]) }, undefined);
+    const entity = (id: string) => {
+      if (core === undefined) throw new Error('no core');
+      return core.getElementById(id);
+    };
+    return { renderer, drags, cancelled, entity };
+  }
+  const two = (): Scene => scene([['a', { x: 0, y: 0 }], ['b', { x: 300, y: 0 }]], [['ab', 'a', 'b']]);
+
+  it('moves the named entities at once, and a drawing leaves them there until the live positions end, then puts every entity where its scene says', () => {
+    const { renderer, entity } = rig();
+    renderer.draw(two());
+    renderer.placeLive(new Map([['a', { x: 50, y: 60 }]]));
+    expect(entity('a').position()).toEqual({ x: 50, y: 60 });
+    renderer.draw(two());
+    expect(entity('a').position()).toEqual({ x: 50, y: 60 });
+    expect(entity('b').position()).toEqual({ x: 300, y: 0 });
+    renderer.endLive();
+    renderer.draw(two());
+    expect(entity('a').position()).toEqual({ x: 0, y: 0 });
+  });
+
+  it('does not move the entity that is being dragged, and ignores one that is not drawn', () => {
+    const { renderer, entity } = rig();
+    renderer.draw(two());
+    entity('a').emit('grab');
+    entity('a').position({ x: 10, y: 10 });
+    renderer.placeLive(new Map([['a', { x: 99, y: 99 }], ['gone', { x: 1, y: 1 }]]));
+    expect(entity('a').position()).toEqual({ x: 10, y: 10 });
+  });
+
+  it('reports the grab, each step of the drag and the release, and a cancelled drag with the place it was grabbed at', () => {
+    const { renderer, drags, cancelled, entity } = rig();
+    renderer.draw(two());
+    entity('a').emit('grab');
+    entity('a').position({ x: 20, y: 30 });
+    entity('a').emit('drag');
+    emitAt(entity('a'), 'dragfree', { x: 500, y: 400 });
+    expect(drags).toEqual([['a', { x: 0, y: 0 }], ['a', { x: 20, y: 30 }], ['a', undefined]]);
+    drags.length = 0;
+    entity('a').emit('grab');
+    entity('a').position({ x: 70, y: 70 });
+    emitAt(entity('a'), 'dragfree', { x: 5000, y: 5000 });
+    expect(cancelled).toEqual([['a', { x: 20, y: 30 }]]);
+    expect(drags.map(([, position]) => position)).not.toContain(undefined);
+  });
+
+  it('forgets the live positions when it is taken apart', () => {
+    const { renderer } = rig();
+    renderer.draw(two());
+    renderer.placeLive(new Map([['a', { x: 5, y: 5 }]]));
+    expect(() => renderer.dispose()).not.toThrow();
+  });
+});

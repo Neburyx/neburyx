@@ -13,8 +13,13 @@ import { formatNumber, notDrawnLine } from '../workspace/scope-text.js';
 import { buildScene } from './build-scene.js';
 import { useAggregateNodes } from './use-aggregate-nodes.js';
 import { aggregateKey, parseAggregateKey, type AggregateNode } from '../workspace/aggregate-nodes.js';
-import { layoutEntities, placeNewEntities } from './incremental-layout.js';
+import { placeNewEntities } from './incremental-layout.js';
+import { runLayout } from './run-layout.js';
+import { selectedEntities } from './hide-commands.js';
 import { describeWalked } from './walk.js';
+import { PHYSICS_MAX_ENTITIES } from './layout-constants.js';
+import { usePhysics } from './use-physics.js';
+import type { PhysicsLoop } from './physics-loop.js';
 import { useCanvasCommandsHandle } from './canvas-commands.js';
 import { captionFontsReady, loadCaptionFonts } from './fonts.js';
 import { useCreateRenderer } from './renderer-context.js';
@@ -53,6 +58,8 @@ export function GraphCanvas({ profile, view = 'fit' }: { readonly profile?: Sour
   const positions = useStoreSelector(state.presentation.view, (current) => current.positions);
   const selection = useStoreSelector(state.presentation.view, (current) => current.selection);
   const pins = useStoreSelector(state.presentation.view, (current) => current.pins);
+  const physicsOn = useStoreSelector(state.presentation.view, (current) => current.physics && current.layout === 'force');
+  const withinPhysicsCap = graph.nodes.length <= PHYSICS_MAX_ENTITIES;
   const tool = useStoreSelector(state.presentation.view, (current) => current.tool);
   const walking = useStoreSelector(state.presentation.view, (current) => current.walking);
   const focused = useStoreSelector(state.presentation.view, (current) => current.focused);
@@ -95,6 +102,7 @@ export function GraphCanvas({ profile, view = 'fit' }: { readonly profile?: Sour
     if (walking && !menuOpen && document.activeElement !== container.current) state.presentation.endWalk();
   }, [walking, menuOpen, state]);
   const container = useRef<HTMLDivElement>(null);
+  const physicsLoop = useRef<PhysicsLoop | undefined>(undefined);
   const [renderer, setRenderer] = useState<CanvasRenderer | undefined>(undefined);
   const [failed, setFailed] = useState(false);
   const descriptionId = useId();
@@ -119,6 +127,8 @@ export function GraphCanvas({ profile, view = 'fit' }: { readonly profile?: Sour
         box: whileMounted((box) => applyBox(state, box)),
         contextMenu: whileMounted((request) => openContextMenu(state, request)),
         move: whileMounted((move) => applyMove(state, move)),
+        dragging: whileMounted((id, position) => physicsLoop.current?.drag(id, position)),
+        dragCancelled: whileMounted((id, start) => physicsLoop.current?.cancelDrag(id, start)),
         failed: whileMounted(() => setFailed(true)),
       };
       created.mount(container.current ?? undefined, events, state.presentation.view.getState().viewport);
@@ -140,25 +150,33 @@ export function GraphCanvas({ profile, view = 'fit' }: { readonly profile?: Sour
     };
   }, [createRenderer]);
 
+  usePhysics({ state, renderer, enabled: physicsOn && withinPhysicsCap && !failed, graph, pins, scene, onFailure: () => setFailed(true), loopRef: physicsLoop });
+
   // The positions the entities had before the last layout run, until the drawing of its result has succeeded: a drawing that fails puts them back.
   const beforeLayout = useRef<ReadonlyMap<string, Position> | undefined>(undefined);
   // After a layout whose drawing failed has been rolled back, the drawing of the restored positions must not clear the notice.
   const keepNotice = useRef(false);
   const layoutNow = useCallback((): void => {
     const loaded = state.visibleGraph();
-    const { positions: stored, pins: held } = state.presentation.view.getState();
-    const next = layoutEntities({
+    const { positions: stored, pins: held, layout, layoutDirection } = state.presentation.view.getState();
+    const next = runLayout({
+      layout,
+      direction: layoutDirection,
+      selected: selectedEntities(state),
       ids: loaded.nodes.map((node) => elementKey(node.ref)),
       links: partitionEdges(loaded).drawable.map((edge) => [elementKey(edge.from), elementKey(edge.to)] as const),
       positions: stored,
       pinned: held,
     });
-    if (next.size === 0) return;
+    if (next.size === 0) {
+      state.presentation.applyLayout(next);
+      return;
+    }
     beforeLayout.current = new Map([...next.keys()].flatMap((id) => {
       const position = stored.get(id);
       return position === undefined ? [] : [[id, position] as const];
     }));
-    state.presentation.setPositions(next);
+    state.presentation.applyLayout(next);
   }, [state]);
 
   useEffect(() => (renderer === undefined || failed ? undefined : commands.attach(renderer, () => setFailed(true), layoutNow)), [renderer, failed, commands, layoutNow]);
@@ -189,6 +207,8 @@ export function GraphCanvas({ profile, view = 'fit' }: { readonly profile?: Sour
         const previous = beforeLayout.current;
         beforeLayout.current = undefined;
         if (previous !== undefined) {
+          // the fit that came with the layout is not served after the rollback
+          requestServed.current = state.presentation.view.getState().viewChange;
           keepNotice.current = true;
           state.presentation.setPositions(previous);
         }

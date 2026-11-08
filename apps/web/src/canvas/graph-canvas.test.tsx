@@ -1,6 +1,6 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { StrictMode } from 'react';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { testProfile } from '../dev/test-profile.js';
 import { createClientState, type ClientState } from '../state/client-state.js';
 import { ClientStateProvider } from '../state/context.js';
@@ -12,6 +12,7 @@ import { GraphCanvas, RENDERER_UNAVAILABLE, WALK_SENTENCE } from './graph-canvas
 import { RendererProvider } from './renderer-context.js';
 import { layoutEntities } from './incremental-layout.js';
 import { partitionEdges } from '../state/loaded-graph.js';
+import { PHYSICS_MAX_ENTITIES } from './layout-constants.js';
 import { INSPECT_DRAWING, MARK_EVENT, READ_POSITIONS } from '../dev/canvas-readout.js';
 import { runSelectionCommand } from './selection-commands.js';
 import type { CanvasEvents, CreateRenderer } from './scene.js';
@@ -814,5 +815,302 @@ describe('the graph canvas on Explore', () => {
     expect(screen.getByRole('alert').textContent).toBe(RENDERER_UNAVAILABLE);
     expect(screen.getByRole('link', { name: 'Home' })).toBeTruthy();
     expect(await screen.findByText('Local workspace')).toBeTruthy();
+  });
+});
+
+describe('the layouts of the graph canvas', () => {
+  function withCommands(state: ClientState, factory = stubFactory()) {
+    let commands: ReturnType<typeof useCanvasCommands>;
+    function Capture() {
+      commands = useCanvasCommands();
+      return null;
+    }
+    render(
+      <ClientStateProvider state={state}>
+        <RendererProvider createRenderer={factory.create}>
+          <GraphCanvas profile={undefined} />
+          <Capture />
+        </RendererProvider>
+      </ClientStateProvider>,
+    );
+    return { run: () => act(() => commands?.layout()), factory };
+  }
+  const positionsOf = (state: ClientState): Map<string, { x: number; y: number }> => new Map(state.presentation.view.getState().positions);
+
+  it('fit the view once each time a layout is chosen or run again, and not when entities are placed on their own', () => {
+    for (const layout of ['force', 'hierarchical', 'radial', 'grid'] as const) {
+      const state = createClientState();
+      load(state, 8, 9);
+      const { run, factory } = withCommands(state);
+      const before = factory.made[0]?.fits ?? 0;
+      act(() => state.presentation.setLayout(layout));
+      run();
+      expect(factory.made[0]?.fits, layout).toBe(before + 1);
+      run();
+      expect(factory.made[0]?.fits, layout).toBe(before + 2);
+      act(() => state.presentation.setPositions(new Map([[nodeKey('n1'), { x: 5, y: 5 }]])));
+      expect(factory.made[0]?.fits, layout).toBe(before + 2);
+    }
+  });
+
+  it('give every unpinned entity a grid cell without overlap, leave the pinned ones, and leave out the hidden, the filtered and the ones outside the focus', () => {
+    const state = createClientState();
+    load(state, 14, 10);
+    state.replacePins([nodeKey('n0')]);
+    const { run } = withCommands(state);
+    act(() => state.hide([nodeKey('n3')]));
+    act(() => state.presentation.setLayout('grid'));
+    const before = positionsOf(state);
+    run();
+    const after = positionsOf(state);
+    expect(after.get(nodeKey('n0'))).toEqual(before.get(nodeKey('n0')));
+    expect(after.get(nodeKey('n3'))).toEqual(before.get(nodeKey('n3')));
+    const shown = [...after].filter(([id]) => id !== nodeKey('n3'));
+    for (let a = 0; a < shown.length; a += 1) {
+      for (let b = a + 1; b < shown.length; b += 1) {
+        const first = shown[a]?.[1] ?? { x: 0, y: 0 };
+        const second = shown[b]?.[1] ?? { x: 0, y: 0 };
+        expect(Math.abs(first.x - second.x) >= 160 || Math.abs(first.y - second.y) >= 94, `${shown[a]?.[0]} ${shown[b]?.[0]}`).toBe(true);
+      }
+    }
+    act(() => state.focusOn(nodeKey('n5')));
+    const inFocus = positionsOf(state);
+    act(() => state.presentation.setLayout('radial'));
+    run();
+    for (const [id, position] of positionsOf(state)) {
+      const was = inFocus.get(id);
+      if (!state.visibleGraph().nodes.some((node) => elementKey(node.ref) === id)) expect(position, id).toEqual(was);
+    }
+  });
+
+  it('put the previous positions back and show the notice when the drawing of a grid fails', () => {
+    const state = createClientState();
+    load(state, 6, 5);
+    const { run, factory } = withCommands(state);
+    act(() => state.presentation.setLayout('grid'));
+    const before = positionsOf(state);
+    const renderer = factory.made[0];
+    if (renderer === undefined) throw new Error('no renderer');
+    const draw = renderer.draw.bind(renderer);
+    let failures = 1;
+    renderer.draw = (scene, restore) => {
+      if (failures > 0) {
+        failures -= 1;
+        throw new Error('cannot draw');
+      }
+      draw(scene, restore);
+    };
+    const fitsBefore = renderer.fits;
+    run();
+    expect(screen.getByRole('alert').textContent).toBe(RENDERER_UNAVAILABLE);
+    expect(positionsOf(state)).toEqual(before);
+    expect(renderer.fits, 'the view is not fitted after a layout whose drawing failed').toBe(fitsBefore);
+  });
+
+  it('fit the view even when every entity is pinned and nothing moves', () => {
+    const state = createClientState();
+    load(state, 4, 3);
+    state.replacePins(['n0', 'n1', 'n2', 'n3'].map(nodeKey));
+    const { run, factory } = withCommands(state);
+    const before = state.presentation.view.getState().positions;
+    const fits = factory.made[0]?.fits ?? 0;
+    run();
+    expect(factory.made[0]?.fits).toBe(fits + 1);
+    expect(state.presentation.view.getState().positions).toBe(before);
+  });
+});
+
+describe('the live physics of the graph canvas', () => {
+  function live(options: { pins?: string[] } = {}) {
+    const state = createClientState();
+    load(state, 6, 5);
+    if (options.pins !== undefined) state.replacePins(options.pins.map(nodeKey));
+    const factory = stubFactory();
+    view(state, factory.create);
+    const renderer = factory.made[0];
+    if (renderer === undefined) throw new Error('no renderer');
+    const events = renderer.events[0];
+    if (events?.dragging === undefined) throw new Error('no drag events');
+    const frame = (count = 1): void => {
+      act(() => {
+        vi.advanceTimersByTime(17 * count);
+      });
+    };
+    return { state, renderer, dragging: events.dragging, events, frame };
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    Reflect.deleteProperty(document, 'visibilityState');
+  });
+
+  it('runs no frame while physics is off, even when an entity is dragged', () => {
+    const { renderer, dragging, frame } = live();
+    dragging(nodeKey('n0'), { x: 800, y: 800 });
+    frame(5);
+    expect(renderer.lives).toHaveLength(0);
+  });
+
+  it('pulls the neighbors of a dragged entity once physics is on, never moves a pinned one, goes idle when they settle and stores the positions once', () => {
+    const { state, renderer, dragging, frame } = live({ pins: ['n5'] });
+    const pinnedAt = state.presentation.view.getState().positions.get(nodeKey('n5'));
+    act(() => state.presentation.setPhysics(true));
+    frame(400);
+    const idle = renderer.lives.length;
+    const settledEnds = renderer.liveEnds;
+    frame(20);
+    expect(renderer.lives.length).toBe(idle);
+    const first = renderer.lives[0]?.get(nodeKey('n1'));
+    dragging(nodeKey('n0'), { x: 3000, y: 3000 });
+    frame(60);
+    const during = renderer.lives[renderer.lives.length - 1];
+    expect(renderer.lives.length).toBeGreaterThan(idle);
+    expect(during?.get(nodeKey('n1'))).not.toEqual(first);
+    expect(during?.has(nodeKey('n0'))).toBe(false);
+    for (const given of renderer.lives) if (given.has(nodeKey('n5'))) expect(given.get(nodeKey('n5'))).toEqual(pinnedAt);
+    dragging(nodeKey('n0'), undefined);
+    act(() => state.presentation.setPosition(nodeKey('n0'), { x: 3000, y: 3000 }));
+    frame(600);
+    expect(renderer.liveEnds).toBeGreaterThan(settledEnds);
+    expect(state.presentation.view.getState().positions.get(nodeKey('n0'))).toEqual({ x: 3000, y: 3000 });
+    expect(state.presentation.view.getState().positions.get(nodeKey('n5'))).toEqual(pinnedAt);
+  });
+
+  it('stops when physics is switched off and keeps the positions of that frame', () => {
+    const { state, renderer, dragging, frame } = live();
+    act(() => state.presentation.setPhysics(true));
+    dragging(nodeKey('n0'), { x: 2500, y: 0 });
+    frame(10);
+    const lastFrame = renderer.lives[renderer.lives.length - 1];
+    act(() => state.presentation.setPhysics(false));
+    const count = renderer.lives.length;
+    frame(10);
+    expect(renderer.lives.length).toBe(count);
+    expect(state.presentation.view.getState().positions.get(nodeKey('n1'))).toEqual(lastFrame?.get(nodeKey('n1')));
+  });
+
+  it('computes no frame while the tab is hidden, and goes on when it is visible', () => {
+    const { state, renderer, dragging, frame } = live();
+    act(() => state.presentation.setPhysics(true));
+    dragging(nodeKey('n0'), { x: 2500, y: 0 });
+    frame(2);
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+    act(() => void document.dispatchEvent(new Event('visibilitychange')));
+    const count = renderer.lives.length;
+    frame(10);
+    expect(renderer.lives.length).toBe(count);
+    Reflect.deleteProperty(document, 'visibilityState');
+    act(() => void document.dispatchEvent(new Event('visibilitychange')));
+    frame(3);
+    expect(renderer.lives.length).toBeGreaterThan(count);
+  });
+
+  it('runs no frame under a layout other than Force, and picks up again with Force', () => {
+    const { state, renderer, dragging, frame } = live();
+    act(() => {
+      state.presentation.setLayout('grid');
+      state.presentation.setPhysics(true);
+    });
+    dragging(nodeKey('n0'), { x: 2500, y: 0 });
+    frame(10);
+    expect(renderer.lives).toHaveLength(0);
+    act(() => state.presentation.setLayout('force'));
+    frame(3);
+    expect(renderer.lives.length).toBeGreaterThan(0);
+  });
+
+  it('leaves out an entity that is hidden, and wakes when a position is stored from outside', () => {
+    const { state, renderer, frame } = live();
+    act(() => state.hide([nodeKey('n3')]));
+    act(() => state.presentation.setPhysics(true));
+    frame(400);
+    for (const given of renderer.lives) expect(given.has(nodeKey('n3'))).toBe(false);
+    const idle = renderer.lives.length;
+    act(() => state.presentation.setPosition(nodeKey('n1'), { x: 1200, y: 1200 }));
+    frame(5);
+    expect(renderer.lives.length).toBeGreaterThan(idle);
+  });
+
+  it('stops and shows the notice when a frame cannot be drawn', () => {
+    const { state, renderer, frame } = live();
+    renderer.failLive = true;
+    act(() => state.presentation.setPhysics(true));
+    frame(3);
+    expect(screen.getByRole('alert').textContent).toBe(RENDERER_UNAVAILABLE);
+    const count = renderer.lives.length;
+    frame(10);
+    expect(renderer.lives.length).toBe(count);
+  });
+
+  it('cancels the loop when the canvas goes away', () => {
+    const { state, renderer, frame } = live();
+    act(() => state.presentation.setPhysics(true));
+    frame(2);
+    cleanup();
+    const count = renderer.lives.length;
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+    expect(renderer.lives.length).toBe(count);
+  });
+
+  it('runs no frame above the cap, and says so in the list', () => {
+    const state = createClientState();
+    load(state, PHYSICS_MAX_ENTITIES + 1, 5);
+    const factory = stubFactory();
+    view(state, factory.create);
+    act(() => state.presentation.setPhysics(true));
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(factory.made[0]?.lives).toHaveLength(0);
+  });
+
+  it('leaves out the entities outside the focus, and wakes for the entities an expansion adds', () => {
+    const { state, renderer, frame } = live();
+    act(() => state.presentation.setPhysics(true));
+    frame(400);
+    act(() => state.focusOn(nodeKey('n0')));
+    frame(400);
+    const idle = renderer.lives.length;
+    const outside = state.loadedGraph().nodes.map((node) => elementKey(node.ref)).filter((id) => !state.visibleGraph().nodes.some((node) => elementKey(node.ref) === id));
+    expect(outside.length).toBeGreaterThan(0);
+    for (const given of renderer.lives.slice(idle > 0 ? -1 : 0)) for (const id of outside) expect(given.has(id), id).toBe(false);
+    act(() => state.presentation.leaveFocus());
+    const wakeFrom = renderer.lives.length;
+    const ids = Array.from({ length: 9 }, (_unused, index) => `n${index}`);
+    act(() => state.setLoaded([key('a', 'seed-1')], ids.map((id) => ref('a', 'type-a', id)), []));
+    frame(5);
+    expect(renderer.lives.length).toBeGreaterThanOrEqual(wakeFrom);
+  });
+
+  it('wakes for a position stored with an announcement, as an arrow-key move stores it, and keeps a pinned entity where it is', () => {
+    const { state, renderer, frame } = live({ pins: ['n2'] });
+    act(() => state.presentation.setPhysics(true));
+    frame(400);
+    const idle = renderer.lives.length;
+    act(() => state.presentation.setPositions(new Map([[nodeKey('n1'), { x: 2400, y: 2400 }]]), 'Moved.'));
+    frame(5);
+    expect(renderer.lives.length).toBeGreaterThan(idle);
+    const pinnedAt = state.presentation.view.getState().positions.get(nodeKey('n2'));
+    for (const given of renderer.lives.slice(idle)) if (given.has(nodeKey('n2'))) expect(given.get(nodeKey('n2'))).toEqual(pinnedAt);
+  });
+
+  it('puts an entity whose drag was cancelled back at its start, and writes no other position for it', () => {
+    const { state, renderer, events, frame } = live();
+    act(() => state.presentation.setPhysics(true));
+    frame(400);
+    const start = state.presentation.view.getState().positions.get(nodeKey('n1')) ?? { x: 0, y: 0 };
+    act(() => {
+      events.dragging?.(nodeKey('n1'), { x: start.x + 4000, y: start.y + 4000 });
+      events.dragCancelled?.(nodeKey('n1'), start);
+    });
+    frame(600);
+    const stored = state.presentation.view.getState().positions.get(nodeKey('n1'));
+    expect(Math.abs((stored?.x ?? 0) - start.x)).toBeLessThan(1000);
+    for (const given of renderer.lives) expect(given.get(nodeKey('n1'))?.x ?? 0).toBeLessThan(start.x + 2000);
   });
 });

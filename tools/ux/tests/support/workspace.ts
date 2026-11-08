@@ -179,3 +179,26 @@ export async function openOneEntity(page: Page, source: string, id: string): Pro
   await expect(page).toHaveURL(/\/explore\/[0-9a-f-]{36}$/);
   await expect(canvasOf(page)).toHaveAttribute('data-drawn-entities', '1');
 }
+
+/** Zooms in until entities are big enough to grab, then returns the page position of the unpinned entity nearest the middle of the canvas, and its key. */
+export async function grabbablePoint(page: Page): Promise<{ readonly key: string; readonly x: number; readonly y: number }> {
+  const zoomIn = page.getByRole('button', { name: 'Zoom in' });
+  for (let press = 0; press < 12 && (await zoomOf(page)) < 0.8; press += 1) await zoomIn.click();
+  await page.waitForTimeout(300);
+  const canvas = canvasOf(page);
+  const box = await canvas.boundingBox();
+  if (box === null) throw new Error('NO_CANVAS');
+  const [zoom, panX, panY] = await canvas.evaluate((element) => [Number(element.dataset['zoom']), Number(element.dataset['panX']), Number(element.dataset['panY'])]);
+  const held = new Set((await drawing(page)).nodes.filter((node) => node.badgeShown).map((node) => node.id));
+  const drawn = await positions(page);
+  let best: { key: string; x: number; y: number; apart: number } | undefined;
+  for (const [key, at] of Object.entries(drawn)) {
+    if (held.has(key)) continue;
+    const x = box.x + at.x * (zoom ?? 1) + (panX ?? 0);
+    const y = box.y + at.y * (zoom ?? 1) + (panY ?? 0);
+    const apart = Math.hypot(x - (box.x + box.width / 2), y - (box.y + box.height / 2));
+    if (apart < (best?.apart ?? Infinity)) best = { key, x, y, apart };
+  }
+  if (best === undefined) throw new Error('NO_ENTITY');
+  return best;
+}

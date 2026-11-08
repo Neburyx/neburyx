@@ -88,6 +88,10 @@ export interface CanvasEvents {
   readonly contextMenu: (request: RightClick) => void;
   /** An entity was dragged and released inside the canvas; a drag that was interrupted reports nothing. */
   readonly move: (move: EntityMove) => void;
+  /** An entity is being dragged (its position as it moves), or the drag ended or was interrupted (undefined). */
+  readonly dragging?: (id: string, position: Position | undefined) => void;
+  /** A drag was interrupted (a pin, a blur, a drop outside the canvas): the entity is back at where it was grabbed. */
+  readonly dragCancelled?: (id: string, start: Position) => void;
   /** Work the renderer does after `draw` has returned (the captions) failed: the drawing stays as it is. */
   readonly failed: () => void;
 }
@@ -107,6 +111,10 @@ export interface CanvasRenderer {
   centerOn(key: string): void;
   /** Where an item is on the page, as the browser's window counts it: an entity's centre, a relationship's midpoint, or with no key the centre of the canvas; undefined when the item is not drawn or nothing is mounted. */
   anchorOf(key: string | undefined): { readonly x: number; readonly y: number } | undefined;
+  /** Moves the drawn entities to these places at once, without a drawing of a scene; a drawing leaves the entities named here where they are until `endLive`. Throws when it cannot. */
+  placeLive(positions: ReadonlyMap<string, Position>): void;
+  /** Lets a drawing put every entity where its scene says again. */
+  endLive(): void;
   describe(): DrawnCounts;
   positions(): ReadonlyMap<string, Position>;
   viewport(): Viewport;

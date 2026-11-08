@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from
 import { useCanvasCommands, type CanvasCommands } from '../canvas/canvas-commands.js';
 import { ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from '../canvas/zoom.js';
 import { useClientState, useVisibleGraph } from '../state/context.js';
+import { layoutLabel } from '../state/layout-choice.js';
 import { useStoreSelector } from '../state/store.js';
 import { LayoutList } from './layout-list.js';
 import { placeAbove, type Placement } from './menu-placement.js';
@@ -14,6 +15,8 @@ function LayoutControl({ commands, hasEntities }: { readonly commands: CanvasCom
   const [, remeasure] = useState(0);
   const button = useRef<HTMLButtonElement>(null);
   const holder = useRef<HTMLDivElement>(null);
+  const state = useClientState();
+  const chosen = layoutLabel(useStoreSelector(state.presentation.view, (current) => current.layout));
   const usable = commands !== undefined && hasEntities;
   const shown = open && usable;
 
@@ -52,7 +55,7 @@ function LayoutControl({ commands, hasEntities }: { readonly commands: CanvasCom
   const placed = placement !== undefined;
   useEffect(() => {
     if (!shown || !placed) return;
-    holder.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
+    holder.current?.querySelector<HTMLElement>('[role^="menuitem"]')?.focus();
   }, [shown, placed]);
 
   const close = (restoreFocus: boolean): void => {
@@ -76,7 +79,7 @@ function LayoutControl({ commands, hasEntities }: { readonly commands: CanvasCom
         type="button"
         ref={button}
         className="zoom-button zoom-button-layout"
-        aria-label="Layout: Force"
+        aria-label={`Layout: ${chosen}`}
         aria-haspopup="menu"
         aria-expanded={shown}
         disabled={!usable}
@@ -87,17 +90,15 @@ function LayoutControl({ commands, hasEntities }: { readonly commands: CanvasCom
           setOpen(true);
         }}
       >
-        <span aria-hidden="true">Force ▾</span>
+        <span aria-hidden="true">{chosen} ▾</span>
       </button>
       {shown ? (
         <div className="layout-popup" ref={holder} style={placement === undefined ? { left: 0, top: 0, visibility: 'hidden' } : { left: placement.left, top: placement.top }}>
           <div className="menu-panel" onKeyDown={onPopupKeyDown}>
             <LayoutList
               disabled={!usable}
-              onChoose={() => {
-                commands?.layout();
-                close(true);
-              }}
+              run={() => commands?.layout()}
+              done={() => close(true)}
             />
           </div>
         </div>

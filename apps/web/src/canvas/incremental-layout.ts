@@ -338,3 +338,17 @@ export function layoutEntities({ ids, links, positions, pinned }: LayoutInput): 
   }
   return new Map(free.map((id) => [id, cleared.get(id) ?? { x: 0, y: 0 }]));
 }
+
+/** The wanted positions in the given order, each moved to the nearest free spot when its box would overlap a fixed entity's box or a box placed before it. */
+export function clearOfFixed(order: readonly string[], wanted: ReadonlyMap<string, Position>, fixed: ReadonlyMap<string, Position>): Map<string, Position> {
+  const grid = new BoxGrid();
+  for (const position of fixed.values()) grid.add(position);
+  const cleared = new Map<string, Position>();
+  for (const id of order) {
+    const asked = wanted.get(id) ?? { x: 0, y: 0 };
+    const spot = grid.free(asked) ? asked : (nearestFree(grid, asked, () => true, SEARCH_LIMIT) ?? asked);
+    grid.add(spot);
+    cleared.set(id, spot);
+  }
+  return cleared;
+}

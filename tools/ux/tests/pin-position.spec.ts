@@ -88,7 +88,7 @@ test.describe('pin position', () => {
     await canvasOf(page).focus();
     await page.keyboard.press('ContextMenu');
     await menuOf(page).first().getByRole('menuitem', { name: 'Layout' }).hover();
-    await page.getByRole('menuitem', { name: /Force/ }).click();
+    await page.getByRole('menuitemradio', { name: /Force/ }).click();
     const held = (await drawing(page)).nodes.filter((node) => node.badgeShown).map((node) => node.id);
     const moved = async (): Promise<number> => {
       const now = await positions(page);

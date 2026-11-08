@@ -123,9 +123,9 @@ describe('Esc belongs to what holds the focus', () => {
     act(() => state.presentation.select([nodeKey('n1')]));
     const user = userEvent.setup();
     await user.click(screen.getByRole('button', { name: 'Layout: Force' }));
-    expect(screen.getByRole('menuitem', { name: 'Force' })).toBeTruthy();
+    expect(screen.getByRole('menuitemradio', { name: 'Force' })).toBeTruthy();
     await user.keyboard('{Escape}');
-    expect(screen.queryByRole('menuitem', { name: 'Force' })).toBeNull();
+    expect(screen.queryByRole('menuitemradio', { name: 'Force' })).toBeNull();
     expect(selected(state)).toEqual([nodeKey('n1')]);
   });
 
