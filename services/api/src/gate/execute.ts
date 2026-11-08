@@ -31,8 +31,12 @@ async function releaseLease(lease: ReadLease, logger: GateLogger): Promise<void>
 /** Read afresh at each use: a signal can abort between two awaits. */
 const cancelled = (context: GateContext): boolean => context.signal?.aborted === true;
 
-/** The timeout is the source's server-side transaction timeout, which is what the person is told; it holds no address, query or value. */
-const timedOut = (context: GateContext): AppError => new AppError('QUERY_TIMEOUT', { timeoutMs: context.budgets.timeoutMs });
+/**
+ * The limit the person is told is the one that stopped the read: the source's server-side transaction timeout, or the request's deadline when that was nearer (the deadline passed before the read could start,
+ * or the read was given less time than the source's timeout because of it). It holds no address, query or value.
+ */
+const timedOut = (context: GateContext, byDeadline = false): AppError =>
+  new AppError('QUERY_TIMEOUT', { timeoutMs: byDeadline ? context.budgets.requestTimeoutMs : context.budgets.timeoutMs });
 
 /**
  * The lease of a read: granted by the coordinator within the source's slot limits, or the failure the person is told (the source is busy, or unavailable). The wait never runs past the
@@ -42,7 +46,7 @@ const timedOut = (context: GateContext): AppError => new AppError('QUERY_TIMEOUT
 export async function acquireLease(deps: Pick<ExecuteDeps, 'coordinator' | 'clock' | 'logger'>, context: GateContext): Promise<ReadLease> {
   const left = context.deadlineAt - deps.clock();
   if (cancelled(context)) throw new RequestCancelled();
-  if (left <= 0) throw timedOut(context);
+  if (left <= 0) throw timedOut(context, true);
   const { userConcurrency, sourceConcurrency, queueWaitMs, timeoutMs } = context.budgets;
   const admission = await deps.coordinator.acquireRead({
     principal: context.principal,
@@ -97,9 +101,11 @@ export async function executeRead(
   const lease = shared?.lease ?? (await acquireLease(deps, context));
   let closed: Promise<void> | undefined;
   let outcome: ExecuteOutcome;
+  let startedAt: number;
   try {
     if (cancelled(context)) throw new RequestCancelled();
-    if (deps.clock() >= context.deadlineAt) throw timedOut(context);
+    startedAt = deps.clock();
+    if (startedAt >= context.deadlineAt) throw timedOut(context, true);
     outcome = await deps.executor.execute({
       sourceId: context.sourceId,
       templateId: template.id,
@@ -126,7 +132,8 @@ export async function executeRead(
   }
   switch (outcome.status) {
     case 'timeout':
-      throw timedOut(context);
+      // the adapter gives the read the lesser of the source's timeout and the time left to the deadline, so a read started with less left than the timeout was stopped by the deadline
+      throw timedOut(context, context.deadlineAt - startedAt < context.budgets.timeoutMs);
     case 'cancelled':
       throw new RequestCancelled();
     case 'unavailable':

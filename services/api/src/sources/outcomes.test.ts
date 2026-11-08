@@ -25,6 +25,12 @@ describe('a read that runs out of time', () => {
     },
   );
 
+  it('does not answer timeout for a transaction error of another family', async () => {
+    useClock();
+    const { executor } = rig({ streamError: neo4jError('Neo.ClientError.Transaction.TransactionNotFound') });
+    await expect(executor.execute(callFor())).rejects.toBeInstanceOf(AdapterError);
+  });
+
   it('answers timeout from the guard when the deadline arrives while the query is still running, and starts closing the session', async () => {
     useClock();
     const { executor, fake } = rig({ manual: true });

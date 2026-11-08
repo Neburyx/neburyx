@@ -212,6 +212,10 @@ describe('POST /v1/graph/preview-expansion', () => {
     expect(response.statusCode).toBe(status);
     expect(response.json().error).toMatchObject({ code, retryable: true });
     expect(response.json()).not.toHaveProperty('byType');
+    if (code === 'QUERY_TIMEOUT') {
+      expect(response.json().error.details).toEqual({ timeoutMs: 5000 });
+      expect(response.body).not.toMatch(/MATCH|bolt:/);
+    }
     expect(events.filter((event) => event.action === 'entity.degree_preview').map((event) => event.result)).toEqual(['failed']);
     await app.close();
   });

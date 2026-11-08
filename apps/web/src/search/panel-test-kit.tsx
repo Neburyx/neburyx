@@ -1,3 +1,4 @@
+import { createBuiltInBannerController } from '../banner/built-in-causes.js';
 import { act, fireEvent, screen } from '@testing-library/react';
 import { vi } from 'vitest';
 import type { GraphNode, SearchMoreRequest, SearchMoreResult, SearchRequest, SearchResult } from '@neburyx/contracts';
@@ -73,6 +74,9 @@ export interface PanelWorkspace {
   readonly state: ClientState;
   readonly renderer: () => StubRenderer | undefined;
   readonly router: ReturnType<typeof renderApp>['router'];
+  /** What was reported to the banner controller of the workspace. */
+  readonly reported: ReturnType<typeof vi.spyOn>;
+  readonly banner: ReturnType<typeof createBuiltInBannerController>;
 }
 
 /** The workspace with the Search panel open on the Add from source tab, under fake timers; a graph is loaded unless `bound` is false. */
@@ -87,11 +91,13 @@ export async function panelWorkspace(options: { readonly bound?: boolean; readon
   registerBuiltInTools(tools);
   registerSearchTool(tools, state);
   const factory = stubFactory();
-  const view = renderApp('/explore', client, state, slots, factory.create, undefined, tools, undefined, createPanelRegistryFor(state));
+  const banner = createBuiltInBannerController();
+  const reported = vi.spyOn(banner, 'showFailure');
+  const view = renderApp('/explore', client, state, slots, factory.create, undefined, tools, undefined, createPanelRegistryFor(state), undefined, banner);
   await settle();
   fireEvent.click(screen.getByRole('button', { name: 'Search' }));
   fireEvent.click(screen.getByRole('tab', { name: 'Add from source' }));
-  return { client, searches, pages, loads, state, router: view.router, renderer: () => factory.made[0] };
+  return { client, searches, pages, loads, state, router: view.router, renderer: () => factory.made[0], reported, banner };
 }
 
 export function inputOf(element: HTMLElement): HTMLInputElement {

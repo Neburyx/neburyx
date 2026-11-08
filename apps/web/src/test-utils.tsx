@@ -15,6 +15,7 @@ import { ClientStateProvider } from './state/context.js';
 import { bindBannerToInvestigation } from './banner/bind-investigation.js';
 import { BannerProvider } from './banner/banner-context.js';
 import { createBannerController, type BannerController } from './banner/banner-controller.js';
+import { createBuiltInBannerController } from './banner/built-in-causes.js';
 import { ProfileProvider } from './canvas/profile-context.js';
 import { createProfileStore, type ProfileState, type ProfileStore } from './canvas/profile-store.js';
 import { RendererProvider } from './canvas/renderer-context.js';
@@ -195,6 +196,12 @@ export function builtInKeyBindings(platform: 'mac' | 'other' = 'mac'): KeyBindin
   const registry = createKeyBindingRegistry(platform);
   registerBuiltInKeyBindings(registry);
   return registry;
+}
+
+/** The app with the banner controller the product builds, and a spy on what is reported to it, for a test that a feature does not use the banner. */
+export function renderAppWithCauses(path: Parameters<typeof renderApp>[0], client: ApiClient, state?: ClientState) {
+  const view = renderApp(path, client, state, undefined, undefined, undefined, undefined, undefined, undefined, undefined, createBuiltInBannerController());
+  return { ...view, reported: vi.spyOn(view.banner, 'showFailure') };
 }
 
 export function renderApp(path: string | { readonly pathname: string; readonly search?: string; readonly state?: unknown }, client: ApiClient, state: ClientState = createClientState(), slots: SlotRegistry = createSlotRegistry(), createRenderer: CreateRenderer = stubFactory().create, selectionActions: SelectionActionRegistry = createSelectionActionRegistry(), tools: ToolRegistry = createToolRegistry(), menus: MenuRegistry = createMenuRegistry(), panels: PanelRegistry = createPanelRegistryFor(state), keyBindings: KeyBindingRegistry = builtInKeyBindings(), banner: BannerController = createBannerController()): { readonly banner: BannerController; readonly router: ReturnType<typeof createMemoryRouter>; readonly state: ClientState; readonly slots: SlotRegistry; readonly tools: ToolRegistry; readonly panels: PanelRegistry; readonly keyBindings: KeyBindingRegistry; readonly container: HTMLElement; readonly unmount: () => void } {

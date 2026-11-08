@@ -14,7 +14,7 @@ The route writes no answer and the audit records the read as failed with the rea
 
 ## What is not promised
 
-No time is promised for the source to stop. Closing the session stopped the work in every test below, but how soon the source stops depends on the server, its load and the network between the two. The guaranteed stop of every read is the server-side transaction timeout of the source (5 seconds by default, 10 at most). The figures in the [supernode benchmark](benchmarks/supernode.md) are observed times, not limits.
+No time is promised for the source to stop. Closing the session stopped the work in every test below, but how soon the source stops depends on the server, its load and the network between the two. The guaranteed stop of every read is the server-side transaction timeout of the source (5 seconds by default, 10 at most; see [query-timeout.md](query-timeout.md)). The figures in the [supernode benchmark](benchmarks/supernode.md) are observed times, not limits.
 
 ## What was tested
 

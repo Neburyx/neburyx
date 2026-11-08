@@ -98,6 +98,8 @@ describe('Show more in the Add from source tab', () => {
     act(() => parts.pages[0]?.answer({ ok: false, failure: TIMEOUT }));
     await settle();
     expect(screen.getByRole('alert').textContent).toContain('More exact matches were not read');
+    expect(screen.queryByRole('region', { name: 'Request status' })).toBeNull();
+    expect(parts.reported).not.toHaveBeenCalled();
     expect(within(screen.getByRole('list', { name: 'Exact ID matches' })).getAllByRole('listitem')).toHaveLength(2);
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
     expect(parts.pages.map((sent) => sent.request.cursor)).toEqual(['exact-1', 'exact-1']);

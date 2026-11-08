@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import type { GroupFailure, SearchResult } from '@neburyx/contracts';
 import type { ApiResult } from '../api/client.js';
 import { createClientState } from '../state/client-state.js';
-import { renderApp } from '../test-utils.js';
+import { renderApp, renderAppWithCauses } from '../test-utils.js';
 import { answerOf, deferred, hit, relatedOf, searchAt, searchKit } from './search-test-kit.js';
 
 const main = () => screen.getByRole('main');
@@ -26,9 +26,10 @@ const exactFailed = (failure: Partial<GroupFailure> = {}, relatedHits = [hit('de
 describe('a group whose read failed', () => {
   it('keeps the exact group with its count, says in a line that the related records were not read, and says in the summary that the group is missing, never as zero', async () => {
     const kit = searchKit(['demo'], async () => ok(relatedFailed()));
-    renderApp(searchAt('demo', 'AC-1'), kit.client);
+    const view = renderAppWithCauses(searchAt('demo', 'AC-1'), kit.client);
     expect(await screen.findByRole('heading', { level: 2, name: 'Exact ID match (1)' })).toBeDefined();
     expect(within(main()).getByRole('alert').textContent).toBe('Related records were not read: the source did not answer within 5 s.');
+    expect(view.reported).not.toHaveBeenCalled();
     expect(within(main()).getByText('1 exact match · related records not read · 0.18 s')).toBeDefined();
     expect(screen.queryByText(/0 related/)).toBeNull();
     expect(screen.queryByRole('heading', { level: 2, name: /Related records/ })).toBeNull();

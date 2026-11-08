@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import type { SearchResult } from '@neburyx/contracts';
 import type { ApiResult } from '../api/client.js';
-import { renderApp } from '../test-utils.js';
+import { renderApp, renderAppWithCauses } from '../test-utils.js';
 import { answerOf, deferred, hit, searchKit, searchAt } from './search-test-kit.js';
 
 const main = () => screen.getByRole('main');
@@ -37,11 +37,22 @@ describe('a search that timed out', () => {
 
   it('says the timeout without a number when the error does not carry one, and in seconds with a fraction when it is not whole', async () => {
     const kit = searchKit(['demo'], async () => server('QUERY_TIMEOUT'));
-    renderApp(searchAt('demo', 'first'), kit.client);
+    const first = renderAppWithCauses(searchAt('demo', 'first'), kit.client);
     expect(await screen.findByText('Search timed out')).toBeDefined();
     const other = searchKit(['demo'], async () => server('QUERY_TIMEOUT', { timeoutMs: 2500 }));
-    renderApp(searchAt('demo', 'first'), other.client);
+    const second = renderAppWithCauses(searchAt('demo', 'first'), other.client);
     expect(await screen.findByText('Search timed out after 2.5 s')).toBeDefined();
+    expect(first.reported).not.toHaveBeenCalled();
+    expect(second.reported).not.toHaveBeenCalled();
+  });
+
+  it('has a banner controller that records what is reported to it, so the checks above can fail', async () => {
+    const kit = searchKit(['demo'], async () => server('QUERY_TIMEOUT', { timeoutMs: 5000 }));
+    const view = renderAppWithCauses(searchAt('demo', 'first'), kit.client);
+    expect(await screen.findByText('Search timed out after 5 s')).toBeDefined();
+    act(() => void view.banner.showFailure({ code: 'QUERY_TIMEOUT', message: 'x', retryable: true, traceId: 'tr-1', details: { timeoutMs: 5000 } }, { source: 'Demo source' }));
+    expect(view.reported).toHaveBeenCalledTimes(1);
+    expect(view.banner.view.getState().banner?.chip).toBe('Timed out');
   });
 
   it('repeats the same search once with the same source, text and mask when Retry is pressed, and on success replaces the notice and the results', async () => {

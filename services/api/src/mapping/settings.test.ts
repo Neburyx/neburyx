@@ -66,6 +66,12 @@ describe('budgets', () => {
     expectRefused(baseSource({ budgets: { [key]: ceiling + 1 } }), `sources[0].budgets.${key}`, `must be at most ${ceiling}`);
   });
 
+  it('refuses a negative timeout and gives a source that names none the default of 5 s', () => {
+    expectRefused(baseSource({ budgets: { timeout_ms: -1 } }), 'sources[0].budgets.timeout_ms', 'must be at least 1');
+    expect(firstSource(load(baseSource())).budgets.timeoutMs).toBe(5000);
+    expect(firstSource(load(baseSource({ budgets: { max_page: 20 } }))).budgets.timeoutMs).toBe(5000);
+  });
+
   it('accepts a heavy-operation threshold of one and any larger integer', () => {
     expect(firstSource(load(baseSource({ budgets: { heavy_op_threshold: 1 } }))).budgets.heavyOpThreshold).toBe(1);
     expect(firstSource(load(baseSource({ budgets: { heavy_op_threshold: 100_000 } }))).budgets.heavyOpThreshold).toBe(100_000);

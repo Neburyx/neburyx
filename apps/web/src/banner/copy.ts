@@ -7,6 +7,9 @@ export const busyHeadline = (source: string): string => `${source} is busy. No r
 export const BUSY_TEXT = 'Loaded graph and filters preserved; nothing was read. Retry when ready.';
 export const BUSY_SIDE_LABEL = 'No read slot freed';
 export const RETRY = 'Retry';
+export const TIMED_OUT_CHIP = 'Timed out';
+export const TIMED_OUT_TEXT = 'Loaded graph and filters preserved; nothing was merged. Retry when ready.';
+export const TIMED_OUT_SIDE_LABEL = 'Nothing merged';
 export const HEAVY_CHIP = 'Heavy operation';
 export const HEAVY_SIDE_LABEL = 'Estimated matches';
 export const REFINE_FILTERS = 'Refine filters';
@@ -30,6 +33,8 @@ export type RequestKind = 'expand' | 'more' | 'start-over' | 'preview';
 
 const elapsedSeconds = (ms: number): string => (Math.round(ms / 100) / 10).toFixed(1);
 const limitSeconds = (ms: number): string => String(Math.round(ms / 100) / 10);
+export const timedOutHeadline = (source: string, limitMs: number): string => `${source} did not answer within ${limitSeconds(limitMs)} s.`;
+
 const whatRuns = (kind: RequestKind, title: string | undefined): string => {
   const of = title === undefined ? '' : ` ${title}`;
   switch (kind) {

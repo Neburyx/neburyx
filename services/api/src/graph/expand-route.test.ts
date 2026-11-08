@@ -135,8 +135,9 @@ describe('POST /v1/graph/expand', () => {
     const { app, lease, events } = await started({ answer: (call) => (call.parameters['neighborType'] === 'other' ? { status: 'timeout' } : { status: 'rows', rows: storedRows(2) }) });
     const response = await post(app, request({ neighborTypes: ['leaf', 'other'] }));
     expect(response.statusCode).toBe(504);
-    expect(response.json()).toMatchObject({ error: { code: 'QUERY_TIMEOUT' } });
+    expect(response.json()).toMatchObject({ error: { code: 'QUERY_TIMEOUT', retryable: true, details: { timeoutMs: 5000 } } });
     expect(response.json()).not.toHaveProperty('pages');
+    expect(response.body).not.toMatch(/PARTIAL_RESULT|MATCH|bolt:|neighborType/);
     expect(lease.held).toBe(0);
     expect(events.filter((event) => event.action === 'graph.expand')).toEqual([expect.objectContaining({ result: 'failed' })]);
     await app.close();

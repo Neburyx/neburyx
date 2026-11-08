@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import type { GraphNode, SearchMoreRequest, SearchMoreResult, SearchResult } from '@neburyx/contracts';
 import type { ApiClient, ApiResult } from '../api/client.js';
 import { createClientState } from '../state/client-state.js';
-import { renderApp } from '../test-utils.js';
+import { renderApp, renderAppWithCauses } from '../test-utils.js';
 import { answerOf, deferred, evidenceHit, evidenceOf, facetsOf, hit, relatedOf, searchAt, searchKit, type SearchKit } from './search-test-kit.js';
 
 const main = () => screen.getByRole('main');
@@ -148,10 +148,11 @@ describe('Show more that fails', () => {
         ? ok<SearchMoreResult>({ sourceId: 'demo', group: 'exact', nodes: [], count: { quality: 'unknown', scope: 'search:exact' }, dropped: DROPPED, warnings: [], failure: { group: 'exact', code: 'QUERY_TIMEOUT', timeoutMs: 5000 } })
         : ok(exactPage(25, 3)),
     );
-    renderApp(searchAt('demo', 'needle'), kit.client);
+    const view = renderAppWithCauses(searchAt('demo', 'needle'), kit.client);
     const user = userEvent.setup();
     await user.click(await within(main()).findByRole('button', { name: 'Show more: Exact matches' }));
     expect((await within(main()).findByRole('alert')).textContent).toBe('More exact matches were not read: the source did not answer within 5 s.');
+    expect(view.reported).not.toHaveBeenCalled();
     expect(within(main()).getAllByRole('button', { name: /^Open in graph/ })).toHaveLength(25);
     expect(screen.getByRole('heading', { level: 2, name: 'Exact ID match (≥ 25 · lower bound)' })).toBeDefined();
     await user.click(within(main()).getByRole('button', { name: 'Retry' }));

@@ -135,6 +135,8 @@ describe('adding one entity from the Add from source tab', () => {
     expect(parts.state.presentation.view.getState().positions).toEqual(before.positions);
     expect([...parts.state.presentation.view.getState().selection]).toEqual(before.selection);
     expect(screen.getAllByRole('alert').length).toBeGreaterThan(0);
+    expect(screen.queryByRole('region', { name: 'Request status' })).toBeNull();
+    expect(parts.reported).not.toHaveBeenCalled();
     fireEvent.click(addButton('Title ACC-100'));
     expect(parts.loads).toHaveLength(2);
   });
@@ -286,5 +288,13 @@ describe('adding one entity from the Add from source tab', () => {
     spy.mockRestore();
     fireEvent.click(addButton('Title ACC-100'));
     expect(parts.loads).toHaveLength(1);
+  });
+});
+
+describe('the workspace of the Add tab', () => {
+  it('shows a Timed out banner when something reports a timeout to it, so the absence of one in the failures above is a real check', async () => {
+    const parts = await panelWorkspace();
+    act(() => void parts.banner.showFailure({ code: 'QUERY_TIMEOUT', message: 'x', retryable: true, traceId: 'tr-1', details: { timeoutMs: 5000 } }, { source: 'Demo source' }));
+    expect(screen.getByRole('region', { name: 'Request status' })).toBeDefined();
   });
 });

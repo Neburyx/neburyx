@@ -21,7 +21,7 @@ import { StatusBanner } from './status-banner.js';
 afterEach(() => cleanup());
 
 const busy = (traceId = 'tr-busy'): ApiFailure => ({ code: 'SOURCE_BUSY', message: 'The data source is busy. Try again shortly.', retryable: true, traceId });
-const timedOut: ApiFailure = { code: 'QUERY_TIMEOUT', message: 'x', retryable: true, traceId: 'tr-t', details: { timeoutMs: 5000 } };
+const otherFailure: ApiFailure = { code: 'INTERNAL_ERROR', message: 'x', retryable: false, traceId: 'tr-t' };
 
 const page = (neighbor: string): ExpandResponse => ({
   ref: ref('a', 'type-a', 'n1'),
@@ -185,9 +185,9 @@ describe('failures that do not show the Busy banner', () => {
   it('leaves another code to the node, as before', async () => {
     const { expand, expansions } = rig();
     act(() => void expand.expand(ref('a', 'type-a', 'n1'), ['type-a']));
-    await act(async () => expansions[0]?.answer({ ok: false, failure: timedOut }));
+    await act(async () => expansions[0]?.answer({ ok: false, failure: otherFailure }));
     expect(screen.queryByRole('region', { name: 'Request status' })).toBeNull();
-    expect(screen.getByRole('alert').textContent).toBe('QUERY_TIMEOUT · trace tr-t');
+    expect(screen.getByRole('alert').textContent).toBe('INTERNAL_ERROR · trace tr-t');
   });
 
   it('leaves a failure the client made itself to the node, as before', async () => {

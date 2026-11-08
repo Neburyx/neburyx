@@ -7,4 +7,5 @@ Public technical documentation. Pre-release placeholder: the technical architect
 - [architecture-checks.md](architecture-checks.md): the checks that fail the build (nothing outside the gate reaches the adapter; no domain words in code) and what they cannot see.
 - [api-conventions.md](api-conventions.md): the rules every endpoint follows: pagination, field limits, idempotency keys, concurrency and the permission each route declares.
 - [cancellation.md](cancellation.md): what happens when a request is cancelled, what is not promised, what was tested and what was not verified.
+- [query-timeout.md](query-timeout.md): the limit on every read, what a timed-out request answers and shows, what was measured and what was not verified.
 - [benchmarks/](benchmarks/README.md): the supernode benchmark, what it measures, how to run it and the last record.
