@@ -4,6 +4,7 @@ import { useProfile } from '../canvas/profile-context.js';
 import { CanvasRegions } from './canvas-regions.js';
 import { ContextMenu } from './context-menu.js';
 import { ExpandSelectionAction } from './expand-selection-action.js';
+import { HideSelectionAction } from './hide-selection-action.js';
 import { ExpansionStatus } from './expansion-status.js';
 import { DockColumn, FloatingPanels } from './panel-host.js';
 import { GraphScope } from './graph-scope.js';
@@ -33,6 +34,7 @@ export function WorkspaceShell({ canvasView, notice, status, busy = false }: { r
             <GraphCanvas profile={profile} view={canvasView} />
             <GraphScope />
             <ExpandSelectionAction />
+            <HideSelectionAction />
             <SelectionBar />
             <ExpansionStatus />
             <ContextMenu />

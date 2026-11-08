@@ -57,7 +57,7 @@ describe('the menu from the keyboard', () => {
     const { rightClick } = open(registry);
     rightClick(onCanvas(10, 10));
     expect(screen.getByRole('menu', { name: 'Canvas' })).not.toBeNull();
-    expect(screen.getAllByRole('menuitem')).toHaveLength(6);
+    expect(screen.getAllByRole('menuitem')).toHaveLength(7);
     expect(screen.getAllByRole('separator')).toHaveLength(2);
     expect(focusedName()).toBe('Fit to view');
   });
@@ -85,11 +85,11 @@ describe('the menu from the keyboard', () => {
     rightClick(onCanvas(10, 10));
     const user = userEvent.setup();
     const down: (string | null)[] = [];
-    for (let step = 0; step < 4; step += 1) {
+    for (let step = 0; step < 5; step += 1) {
       await user.keyboard('{ArrowDown}');
       down.push(focusedName());
     }
-    expect(down).toEqual(['Select all', 'Invert selection', 'Layout', 'Show legend']);
+    expect(down).toEqual(['Select all', 'Invert selection', 'Show hidden entities (0)', 'Layout', 'Show legend']);
     await user.keyboard('{ArrowUp}');
     expect(focusedName()).toBe('Layout');
     await user.keyboard('{Home}');

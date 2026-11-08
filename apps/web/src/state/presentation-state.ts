@@ -40,6 +40,8 @@ export interface PresentationState {
   readonly selection: ReadonlySet<string>;
   readonly positions: ReadonlyMap<string, Position>;
   readonly pins: ReadonlySet<string>;
+  /** The keys of the entities hidden from the view: still loaded, not drawn. Part of the view that is saved. */
+  readonly hidden: ReadonlySet<string>;
   readonly panelSizes: ReadonlyMap<string, number>;
   /** A panel is collapsed under the registration number it was collapsed with, so a panel taken out and registered again opens expanded. Not saved with a view. */
   readonly collapsedPanels: ReadonlyMap<string, number>;
@@ -74,6 +76,7 @@ export const INITIAL_PRESENTATION: PresentationState = {
   selection: new Set(),
   positions: new Map(),
   pins: new Set(),
+  hidden: new Set(),
   panelSizes: new Map(),
   collapsedPanels: new Map(),
   legendOpen: false,
@@ -107,6 +110,12 @@ export interface PresentationActions {
   /** Stores the positions of several entities as one update; with `announcement` the update also carries what a screen reader is told, as a new announcement even when the text is the same as the last. */
   setPositions(positions: ReadonlyMap<string, Position>, announcement?: string): void;
   pin(keys: readonly string[]): void;
+  /** Hides entities (refused for a key that is not a loaded entity), and takes them, and the keys in `alsoDeselect` (the relationships that touch them), out of the selection; the walk forgets a focus on them and a panel or menu about one closes. */
+  hide(keys: readonly string[], alsoDeselect?: readonly string[]): void;
+  /** Shows the named hidden entities again, and no others. */
+  showHidden(keys: readonly string[]): void;
+  /** Shows every hidden entity again. */
+  showAllHidden(): void;
   setPanelSize(panel: string, size: number): void;
   clearPanelSize(panel: string): void;
   setLegendOpen(open: boolean): void;
@@ -133,7 +142,7 @@ export interface PresentationActions {
   setViewport(viewport: Viewport): void;
 }
 
-export type PresentationSnapshot = Pick<PresentationState, 'selection' | 'positions' | 'pins' | 'viewport'>;
+export type PresentationSnapshot = Pick<PresentationState, 'selection' | 'positions' | 'pins' | 'hidden' | 'viewport'>;
 
 export interface PresentationStore extends PresentationActions {
   reset(): void;
@@ -176,6 +185,30 @@ export function createPresentationStore(known: KnownElements): PresentationStore
     pin(keys) {
       requireKnown(keys, known.isNode);
       store.setState({ ...store.getState(), pins: new Set([...store.getState().pins, ...keys]) });
+    },
+    hide(keys, alsoDeselect = []) {
+      requireKnown(keys, known.isNode);
+      const current = store.getState();
+      const gone = new Set([...keys, ...alsoDeselect]);
+      const focusGone = current.focused !== undefined && gone.has(current.focused);
+      store.setState({
+        ...current,
+        hidden: new Set([...current.hidden, ...keys]),
+        selection: new Set([...current.selection].filter((key) => !gone.has(key))),
+        focused: focusGone ? undefined : current.focused,
+        supernodePanel: current.supernodePanel !== undefined && gone.has(current.supernodePanel.key) ? undefined : current.supernodePanel,
+        openMenu: current.openMenu?.key !== undefined && gone.has(current.openMenu.key) ? undefined : current.openMenu,
+        moveNote: undefined,
+      });
+    },
+    showHidden(keys) {
+      const current = store.getState();
+      if (!keys.some((key) => current.hidden.has(key))) return;
+      store.setState({ ...current, hidden: new Set([...current.hidden].filter((key) => !keys.includes(key))) });
+    },
+    showAllHidden() {
+      if (store.getState().hidden.size === 0) return;
+      store.setState({ ...store.getState(), hidden: new Set() });
     },
     replacePins(keys) {
       requireKnown(keys, known.isNode);
@@ -260,14 +293,15 @@ export function createPresentationStore(known: KnownElements): PresentationStore
       const selection = [...current.selection].filter(known.isElement);
       const positions = [...current.positions].filter(([key]) => known.isNode(key));
       const pins = [...current.pins].filter(known.isNode);
+      const hidden = [...current.hidden].filter(known.isNode);
       const focused = current.focused !== undefined && (known.isElement(current.focused) || current.sceneItems.includes(current.focused)) ? current.focused : undefined;
       const supernodePanel = current.supernodePanel !== undefined && known.isNode(current.supernodePanel.key) ? current.supernodePanel : undefined;
-      if (selection.length === current.selection.size && positions.length === current.positions.size && pins.length === current.pins.size && focused === current.focused && supernodePanel === current.supernodePanel) return;
-      store.setState({ ...current, selection: new Set(selection), positions: new Map(positions), pins: new Set(pins), focused, supernodePanel });
+      if (selection.length === current.selection.size && positions.length === current.positions.size && pins.length === current.pins.size && hidden.length === current.hidden.size && focused === current.focused && supernodePanel === current.supernodePanel) return;
+      store.setState({ ...current, selection: new Set(selection), positions: new Map(positions), pins: new Set(pins), hidden: new Set(hidden), focused, supernodePanel });
     },
     snapshot() {
-      const { selection, positions, pins, viewport } = store.getState();
-      return { selection, positions, pins, viewport };
+      const { selection, positions, pins, hidden, viewport } = store.getState();
+      return { selection, positions, pins, hidden, viewport };
     },
     restore(snapshot) {
       store.setState({ ...store.getState(), ...snapshot, walking: false, focused: undefined, moveNote: undefined, openMenu: undefined });

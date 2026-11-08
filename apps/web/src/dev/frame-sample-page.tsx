@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ProfileProvider } from '../canvas/profile-context.js';
 import type { ProfileState, ProfileStore } from '../canvas/profile-store.js';
 import type { ClientState } from '../state/client-state.js';
@@ -59,11 +59,9 @@ function floatingSide(search: string): 'left' | 'right' | false {
 export function FrameSamplePage() {
   const [state] = useState(() => titledSample(window.location.search));
   const [profile] = useState(knownProfile);
-  const [actions] = useState(() => {
-    const registry = createSelectionActionRegistry();
-    registerStandInActions(registry);
-    return registry;
-  });
+  const [actions] = useState(() => createSelectionActionRegistry());
+  // after the children's effects, so that a real action is registered first and its place is left alone
+  useEffect(() => registerStandInActions(actions), [actions]);
   const [slots] = useState(() => {
     const registry = createSlotRegistry();
     registerBuiltInSlots(registry);

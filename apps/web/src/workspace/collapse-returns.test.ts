@@ -62,7 +62,7 @@ function rig(nodes: readonly ElementRef[] = [A], previewed: readonly ElementRef[
   const notRetrieved = (): Count => (state.loadedGraph().nodes.some((entry) => !held.has(elementKey(entry.ref))) ? { quality: 'unknown', scope: 'x' } : { value: 100, quality: 'lowerBound', scope: 'x' });
   const lines = () => {
     const graph = state.loadedGraph();
-    return [loadedLine(graph), remainderLine(shownCount(graph.nodes.length, 0), notRetrieved()), JSON.stringify(coverageEntitiesOf(graph))];
+    return [loadedLine(graph), remainderLine(shownCount(graph.nodes.map((entry) => elementKey(entry.ref)), new Set(), new Set()), notRetrieved()), JSON.stringify(coverageEntitiesOf(graph))];
   };
   return { asked, state, store, aggregates, lines, held };
 }

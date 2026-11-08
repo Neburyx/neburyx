@@ -1,6 +1,6 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import type { ClientState } from './client-state.js';
-import { deriveLoadedGraph, type LoadedGraph } from './loaded-graph.js';
+import { deriveLoadedGraph, visibleGraph, type LoadedGraph } from './loaded-graph.js';
 import { useStoreSelector } from './store.js';
 
 const ClientStateContext = createContext<ClientState | undefined>(undefined);
@@ -25,4 +25,12 @@ export function useLoadedGraph(): LoadedGraph {
   const server = useStoreSelector(state.server, (current) => current);
   const investigation = useStoreSelector(state.investigation, (current) => current);
   return useMemo(() => deriveLoadedGraph(server, investigation), [server, investigation]);
+}
+
+/** The loaded graph without the entities hidden from the view, and the relationships that touch them. */
+export function useVisibleGraph(): LoadedGraph {
+  const state = useClientState();
+  const graph = useLoadedGraph();
+  const hidden = useStoreSelector(state.presentation.view, (current) => current.hidden);
+  return useMemo(() => visibleGraph(graph, hidden), [graph, hidden]);
 }

@@ -1,11 +1,11 @@
-import { useState, type RefObject } from 'react';
+import { useEffect, useState, type RefObject } from 'react';
 import { useApiClient } from '../api/client-context.js';
 import type { ApiClient } from '../api/client.js';
 import { useCanvasCommands } from '../canvas/canvas-commands.js';
 import { useProfile } from '../canvas/profile-context.js';
 import { answeredData, useShellData } from '../shell/shell-data.js';
 import { elementKey } from '../state/keys.js';
-import { useClientState, useLoadedGraph, useSessionMask } from '../state/context.js';
+import { useClientState, useLoadedGraph, useSessionMask, useVisibleGraph } from '../state/context.js';
 import { useStoreSelector } from '../state/store.js';
 import { AddResults } from './add-results.js';
 import { addedNote, SEARCH_PANEL_COPY, TOO_LONG } from './copy.js';
@@ -37,9 +37,24 @@ function TypeaheadBox({ client, sourceId, mask, box }: { readonly client: ApiCli
   const principalId = answeredData(shell.me)?.principal.id;
   const adding = useAddEntity(client, state, sourceId, principalId, mask);
   const alias = answeredData(shell.sources)?.items.find((item) => item.id === sourceId)?.alias ?? sourceId;
+  const [centerAfterShown, setCenterAfterShown] = useState<string | undefined>(undefined);
+  const drawn = useVisibleGraph();
+  useEffect(() => {
+    if (centerAfterShown === undefined || !drawn.nodes.some((candidate) => elementKey(candidate.ref) === centerAfterShown)) return;
+    canvas?.centerOn(centerAfterShown);
+    setCenterAfterShown(undefined);
+  }, [centerAfterShown, drawn, canvas]);
   const find = (node: GraphNode): void => {
-    state.presentation.select([elementKey(node.ref)]);
-    canvas?.centerOn(elementKey(node.ref));
+    const key = elementKey(node.ref);
+    if (state.presentation.view.getState().hidden.has(key)) {
+      state.presentation.select([key]);
+      state.presentation.showHidden([key]);
+      state.presentation.announceMove(`Shown again: ${node.display.title}`);
+      setCenterAfterShown(key);
+      return;
+    }
+    state.presentation.select([key]);
+    canvas?.centerOn(key);
   };
   return (
     <>

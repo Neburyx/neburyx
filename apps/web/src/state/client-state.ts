@@ -3,7 +3,7 @@ import { StateError } from './errors.js';
 import { createInvestigationStore, type InvestigationRecord, type InvestigationState, type LoadedInvestigation } from './investigation-state.js';
 import { createJobStore, type JobState } from './job-state.js';
 import { edgeKey, elementKey, type QueryKey } from './keys.js';
-import { deriveLoadedGraph, type LoadedGraph } from './loaded-graph.js';
+import { deriveLoadedGraph, visibleGraph, type LoadedGraph } from './loaded-graph.js';
 import { createPresentationStore, type PresentationActions, type PresentationSnapshot } from './presentation-state.js';
 import { createServerStore, type GraphResult, type ServerState } from './server-state.js';
 import { createStore, readable, type ReadableStore } from './store.js';
@@ -14,7 +14,8 @@ export type Activation = 'current' | 'resumed' | 'fresh';
 export interface ClientState {
   readonly server: ReadableStore<ServerState> & { get(key: QueryKey): GraphResult | undefined };
   readonly investigation: ReadableStore<InvestigationState>;
-  readonly presentation: PresentationActions;
+  /** Hiding goes through `hide` of the state, which also takes the relationships of the hidden entities out of the selection. */
+  readonly presentation: Omit<PresentationActions, 'hide'>;
   readonly jobs: ReadableStore<JobState>;
   /** Whether the session asks for the personal-data fields to be masked; every read of the session carries it. */
   readonly mask: ReadableStore<boolean>;
@@ -33,6 +34,10 @@ export interface ClientState {
   setLoaded(resultKeys: readonly QueryKey[], nodeRefs: readonly ElementRef[], edgeRefs: readonly EdgeRef[]): void;
   replacePins(keys: readonly string[]): void;
   loadedGraph(): LoadedGraph;
+  /** What is drawn of the loaded graph: without the hidden entities and the relationships that touch them. */
+  visibleGraph(): LoadedGraph;
+  /** Hides entities; the selected relationships that touch them leave the selection with them. */
+  hide(keys: readonly string[]): void;
 }
 
 const readFor = (keys: readonly QueryKey[], mask: boolean): boolean => keys.every((key) => key.mask === mask);
@@ -66,11 +71,11 @@ export function createClientState(): ClientState {
     isNode: (key) => nodeKeys().has(key),
     isElement: (key) => nodeKeys().has(key) || edgeKeys().has(key),
   });
-  const { view, setTool, setOpenTool, setOpenMenu, select, setPosition, setPositions, pin, setPanelSize, clearPanelSize, setPanelCollapsed, clearPanelCollapsed, setLegendOpen, setSearchOpen, setSearchTab, requestSearch, setSheetOpen, setSupernodePanel, setSceneItems, walkTo, endWalk, forgetFocused, announceMove, setViewport } = presentation;
+  const { view, setTool, setOpenTool, setOpenMenu, select, setPosition, setPositions, pin, setPanelSize, clearPanelSize, setPanelCollapsed, clearPanelCollapsed, setLegendOpen, setSearchOpen, setSearchTab, requestSearch, setSheetOpen, setSupernodePanel, setSceneItems, walkTo, endWalk, forgetFocused, announceMove, setViewport, showAllHidden, showHidden } = presentation;
   return {
     server: { ...server.view, get: server.get },
     investigation: investigation.view,
-    presentation: { view, setTool, setOpenTool, setOpenMenu, select, setPosition, setPositions, pin, setPanelSize, clearPanelSize, setPanelCollapsed, clearPanelCollapsed, setLegendOpen, setSearchOpen, setSearchTab, requestSearch, setSheetOpen, setSupernodePanel, setSceneItems, walkTo, endWalk, forgetFocused, announceMove, setViewport },
+    presentation: { view, setTool, setOpenTool, setOpenMenu, select, setPosition, setPositions, pin, setPanelSize, clearPanelSize, setPanelCollapsed, clearPanelCollapsed, setLegendOpen, setSearchOpen, setSearchTab, requestSearch, setSheetOpen, setSupernodePanel, setSceneItems, walkTo, endWalk, forgetFocused, announceMove, setViewport, showAllHidden, showHidden },
     jobs: createJobStore(),
     mask: readable(mask),
     setMask: (next) => mask.setState(next),
@@ -140,5 +145,11 @@ export function createClientState(): ClientState {
     },
     replacePins: (keys) => presentation.replacePins(keys),
     loadedGraph: () => deriveLoadedGraph(server.view.getState(), investigation.view.getState()),
+    visibleGraph: () => visibleGraph(deriveLoadedGraph(server.view.getState(), investigation.view.getState()), presentation.view.getState().hidden),
+    hide(keys) {
+      const hiding = new Set(keys);
+      const touching = deriveLoadedGraph(server.view.getState(), investigation.view.getState()).edges.filter((edge) => hiding.has(elementKey(edge.from)) || hiding.has(elementKey(edge.to))).map((edge) => edgeKey(edge.ref));
+      presentation.hide(keys, touching);
+    },
   };
 }

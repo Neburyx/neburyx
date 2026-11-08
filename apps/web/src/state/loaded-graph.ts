@@ -66,6 +66,27 @@ export function partitionEdges(graph: LoadedGraph): EdgePartition {
   return { drawable, notDrawable };
 }
 
+const visibleGraphs = new WeakMap<LoadedGraph, WeakMap<ReadonlySet<string>, LoadedGraph>>();
+
+/** What is drawn of the loaded graph: the entities that are not hidden and the relationships that touch none of them. The counts stay those of the loaded graph, because hiding removes nothing from the investigation. The same two inputs give the same object. */
+export function visibleGraph(graph: LoadedGraph, hidden: ReadonlySet<string>): LoadedGraph {
+  if (hidden.size === 0) return graph;
+  let byHidden = visibleGraphs.get(graph);
+  if (byHidden === undefined) {
+    byHidden = new WeakMap();
+    visibleGraphs.set(graph, byHidden);
+  }
+  const known = byHidden.get(hidden);
+  if (known !== undefined) return known;
+  const visible: LoadedGraph = {
+    ...graph,
+    nodes: graph.nodes.filter((node) => !hidden.has(elementKey(node.ref))),
+    edges: graph.edges.filter((edge) => !hidden.has(elementKey(edge.from)) && !hidden.has(elementKey(edge.to))),
+  };
+  byHidden.set(hidden, visible);
+  return visible;
+}
+
 /** The keys of every element the canvas draws: each loaded entity and each relationship between two loaded entities. */
 export function drawnKeys(graph: LoadedGraph): ReadonlySet<string> {
   return new Set([...graph.nodes.map((node) => elementKey(node.ref)), ...partitionEdges(graph).drawable.map((edge) => edgeKey(edge.ref))]);

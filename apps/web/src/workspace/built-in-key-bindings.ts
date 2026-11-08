@@ -1,5 +1,6 @@
 import { applyClick, openContextMenu } from '../canvas/apply-click.js';
 import { directionOf, MOVE_STEP, MOVE_STEP_FAR, moveSelected, type Schedule } from '../canvas/arrow-move.js';
+import { hideEntities, selectedEntities } from '../canvas/hide-commands.js';
 import { runSelectionCommand, type SelectionCommandId } from '../canvas/selection-commands.js';
 import { stepWalk, walkOrder } from '../canvas/walk.js';
 import { isEdgeKey } from '../state/keys.js';
@@ -26,7 +27,7 @@ const notWalking = (context: KeyContext): boolean => !walking(context);
 
 /** With nothing left to walk to the walk is over and the key is the browser's. */
 function walkStep({ state }: KeyContext, direction: 1 | -1): 'unhandled' | undefined {
-  const target = stepWalk(walkOrder(state.loadedGraph(), state.presentation.view.getState().sceneItems), state.presentation.view.getState().focused, direction);
+  const target = stepWalk(walkOrder(state.visibleGraph(), state.presentation.view.getState().sceneItems), state.presentation.view.getState().focused, direction);
   if (target === undefined) {
     state.presentation.endWalk();
     return 'unhandled';
@@ -83,7 +84,7 @@ export function registerBuiltInKeyBindings(registry: KeyBindingRegistry, schedul
       scope: 'canvas',
       when: notWalking,
       run: ({ state }) => {
-        const order = walkOrder(state.loadedGraph(), state.presentation.view.getState().sceneItems);
+        const order = walkOrder(state.visibleGraph(), state.presentation.view.getState().sceneItems);
         const { focused } = state.presentation.view.getState();
         const start = focused !== undefined && order.includes(focused) ? focused : order[0];
         if (start !== undefined) state.presentation.walkTo(start);
@@ -118,6 +119,17 @@ export function registerBuiltInKeyBindings(registry: KeyBindingRegistry, schedul
         const [key] = selectedNodes(state.presentation.view.getState().selection);
         if (key !== undefined) expansion?.expandNode(key);
       },
+    }),
+    registry.register({
+      id: 'hide',
+      keys: ['delete', 'backspace'],
+      label: 'Hide',
+      shownAs: { mac: ['⌫'], other: ['Del'] },
+      group: 'actions',
+      order: 20,
+      scope: 'workspace',
+      when: ({ state }) => state.presentation.view.getState().openMenu === undefined && selectedEntities(state).length > 0,
+      run: ({ state }) => hideEntities(state, selectedEntities(state)),
     }),
     registry.register({
       id: 'shortcuts',

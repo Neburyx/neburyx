@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { useCanvasCommands } from '../canvas/canvas-commands.js';
 import { useProfile } from '../canvas/profile-context.js';
-import { useClientState, useLoadedGraph } from '../state/context.js';
+import { useClientState, useVisibleGraph } from '../state/context.js';
 import type { SearchTab } from '../state/presentation-state.js';
 import { useStoreSelector } from '../state/store.js';
 import { AddFromSourceTab } from './add-tab.js';
@@ -15,7 +15,7 @@ const TAB_ORDER: readonly SearchTab[] = ['canvas', 'source'];
 
 function OnCanvasTab({ box, id, labelledBy, hidden }: { readonly box: React.RefObject<HTMLInputElement | null>; readonly id: string; readonly labelledBy: string; readonly hidden: boolean }) {
   const state = useClientState();
-  const graph = useLoadedGraph();
+  const graph = useVisibleGraph();
   const profile = useProfile();
   const canvas = useCanvasCommands();
   const [text, setText] = useState('');
@@ -51,7 +51,7 @@ function OnCanvasTab({ box, id, labelledBy, hidden }: { readonly box: React.RefO
 
 export function SearchPanel() {
   const state = useClientState();
-  const graph = useLoadedGraph();
+  const graph = useVisibleGraph();
   const epoch = useContextEpoch(state);
   const root = useRef<HTMLDivElement>(null);
   const collapsed = useStoreSelector(state.presentation.view, (current) => current.collapsedPanels.get(SEARCH_PANEL_ID));

@@ -200,7 +200,7 @@ test.describe('the sheet of shortcuts', () => {
       row('Select', 'v'), row('Pan', 'h'), row('Box select', 'b'), row('Search', 'mod+k'), row('Legend', 'l'),
       row('Select all', 'mod+a'), row('Invert selection', 'mod+shift+i'), row('Clear', 'escape'), row('Expand', 'e'), row('Focus', 'f'),
       'Move selected entities ←↑↓→', `Move by 50 ${mac ? '⇧←↑↓→' : 'Shift+←↑↓→'}`, row('Select the element', 'enter', 'space'), row('Add to the selection', 'shift+enter', 'shift+space'),
-      row('Pin position', 'p'), row('Hide', 'delete'), row('Copy ID', 'mod+c'), row('Find paths', 'shift+p'), row('Export view', 'mod+e'), row('Copy properties', 'mod+shift+c'),
+      row('Pin position', 'p'), `Hide ${mac ? '⌫' : 'Del'}`, row('Copy ID', 'mod+c'), row('Find paths', 'shift+p'), row('Export view', 'mod+e'), row('Copy properties', 'mod+shift+c'),
       row('Fit to view', 'mod+0'), row('Keyboard shortcuts', 'mod+/'), row('Walk the canvas', 'enter', 'space'), row('Next element', 'tab'), row('Previous element', 'shift+tab'), row('Leave the walk', 'escape'), row('Open context menu', 'contextmenu', 'shift+f10'),
     ]);
     for (const direction of ['Tab', 'Shift+Tab']) {
@@ -217,10 +217,11 @@ test.describe('the sheet of shortcuts', () => {
   test('has stand-in rows that work from their keys, and the keys in the menus equal the bound keys', async ({ page }) => {
     const mod = await modifier(page);
     const root = page.locator('html');
-    for (const [press, id] of [[`${mod}+k`, 'search'], ['f', 'focus'], ['p', 'pin'], ['Delete', 'hide'], [`${mod}+c`, 'copy-id'], ['Shift+p', 'find-paths'], [`${mod}+e`, 'export-view'], [`${mod}+Shift+c`, 'copy-properties']] as const) {
+    for (const [press, id] of [[`${mod}+k`, 'search'], ['f', 'focus'], ['p', 'pin'], [`${mod}+c`, 'copy-id'], ['Shift+p', 'find-paths'], [`${mod}+e`, 'export-view'], [`${mod}+Shift+c`, 'copy-properties']] as const) {
       await page.keyboard.press(press);
       await expect(root, `${press} reaches its stand-in`).toHaveAttribute('data-last-stand-in-key', id);
     }
+    const withHideHint = (rows: Array<readonly [string, string]>): Array<readonly [string, string]> => rows.map(([label, hint]) => (label === 'Hide from view' ? ([label, mod === 'Meta' ? '⌫' : 'Del'] as const) : ([label, hint] as const)));
     const expected = (rows: ReadonlyArray<readonly [string, string]>): Array<readonly [string, string]> => rows.map(([label, spec]) => [label, spec === '' ? '' : shownKey(mod, spec)] as const);
     await page.getByRole('button', { name: 'Explore' }).focus();
     await page.keyboard.press('Enter');
@@ -228,11 +229,11 @@ test.describe('the sheet of shortcuts', () => {
     await page.keyboard.press('Escape');
     await focusCanvas(page);
     await page.keyboard.press('ContextMenu');
-    expect(await menuHints(page), 'the hints of the canvas menu').toEqual(expected([['Fit to view', 'mod+0'], ['Select all', 'mod+a'], ['Invert selection', 'mod+shift+i'], ['Group all by type', ''], ['Ungroup all', ''], ['Layout', ''], ['Show legend', 'l'], ['Export view…', 'mod+e']]));
+    expect(await menuHints(page), 'the hints of the canvas menu').toEqual(expected([['Fit to view', 'mod+0'], ['Select all', 'mod+a'], ['Invert selection', 'mod+shift+i'], ['Show hidden entities (0)', ''], ['Group all by type', ''], ['Ungroup all', ''], ['Layout', ''], ['Show legend', 'l'], ['Export view…', 'mod+e']]));
     await page.keyboard.press('Escape');
     await page.keyboard.press('Enter');
     await page.keyboard.press('ContextMenu');
-    expect(await menuHints(page), 'the hints of the entity menu').toEqual(expected([['Expand neighbors', 'e'], ['Expand by neighbor type', ''], ['Expand by type', ''], ['Collapse', ''], ['Focus neighborhood', 'f'], ['Find paths from here…', 'shift+p'], ['Find paths to…', ''], ['Run pattern', ''], ['Select neighbors', ''], ['Invert selection', 'mod+shift+i'], ['Group by type', ''], ['Pin position', 'p'], ['Hide from view', 'delete'], ['Copy ID', 'mod+c'], ['Copy properties', 'mod+shift+c'], ['Open source record', '']]));
+    expect(await menuHints(page), 'the hints of the entity menu').toEqual(withHideHint(expected([['Expand neighbors', 'e'], ['Expand by neighbor type', ''], ['Expand by type', ''], ['Collapse', ''], ['Focus neighborhood', 'f'], ['Find paths from here…', 'shift+p'], ['Find paths to…', ''], ['Run pattern', ''], ['Select neighbors', ''], ['Invert selection', 'mod+shift+i'], ['Group by type', ''], ['Pin position', 'p'], ['Hide from view', 'delete'], ['Copy ID', 'mod+c'], ['Copy properties', 'mod+shift+c'], ['Open source record', '']])));
     await page.keyboard.press('Escape');
     for (let step = 0; step < 40; step += 1) {
       await page.keyboard.press('Tab');
@@ -240,6 +241,6 @@ test.describe('the sheet of shortcuts', () => {
     }
     await page.keyboard.press('ContextMenu');
     await expect(menuOf(page)).toHaveCount(1);
-    expect(await menuHints(page), 'the hints of the relationship menu').toEqual(expected([['Why is this relationship here?', ''], ['View supporting records', ''], ['Highlight endpoints', ''], ['Select both endpoints', ''], ['Find paths between endpoints', ''], ['Hide this relationship', 'delete'], ['Hide all HAS_LINE', ''], ['Show only HAS_LINE', ''], ['Copy relationship ID', 'mod+c'], ['Copy properties', 'mod+shift+c'], ['Open source record', '']]));
+    expect(await menuHints(page), 'the hints of the relationship menu').toEqual(expected([['Why is this relationship here?', ''], ['View supporting records', ''], ['Highlight endpoints', ''], ['Select both endpoints', ''], ['Find paths between endpoints', ''], ['Hide this relationship', ''], ['Hide all HAS_LINE', ''], ['Show only HAS_LINE', ''], ['Copy relationship ID', 'mod+c'], ['Copy properties', 'mod+shift+c'], ['Open source record', '']]));
   });
 });

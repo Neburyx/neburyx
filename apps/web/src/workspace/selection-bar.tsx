@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { useProfileWhenProvided } from '../canvas/profile-context.js';
-import { useClientState, useLoadedGraph, useSessionMask } from '../state/context.js';
+import { useClientState, useSessionMask, useVisibleGraph } from '../state/context.js';
 import { drawnKeys } from '../state/loaded-graph.js';
 import { useStoreSelector } from '../state/store.js';
 import { runSelectionCommand } from '../canvas/selection-commands.js';
@@ -33,7 +33,7 @@ const statusText = (status: CopyStatus): string => {
 
 export function SelectionBar() {
   const state = useClientState();
-  const graph = useLoadedGraph();
+  const graph = useVisibleGraph();
   const actions = useSelectionActions();
   const profile = useProfileWhenProvided();
   const mask = useSessionMask();

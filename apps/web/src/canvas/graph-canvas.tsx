@@ -2,7 +2,7 @@ import type { SourceProfile } from '@neburyx/contracts';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { ClientState } from '../state/client-state.js';
 import type { Position } from '../state/presentation-state.js';
-import { useClientState, useLoadedGraph } from '../state/context.js';
+import { useClientState, useLoadedGraph, useVisibleGraph } from '../state/context.js';
 import { INSPECT_DRAWING, writeReadout } from '../dev/canvas-readout.js';
 import { StateError } from '../state/errors.js';
 import { drawnKeys, partitionEdges } from '../state/loaded-graph.js';
@@ -46,7 +46,8 @@ export function GraphCanvas({ profile, view = 'fit' }: { readonly profile?: Sour
   const createRenderer = useCreateRenderer();
   const commands = useCanvasCommandsHandle();
   const state = useClientState();
-  const graph = useLoadedGraph();
+  const loadedGraph = useLoadedGraph();
+  const graph = useVisibleGraph();
   const positions = useStoreSelector(state.presentation.view, (current) => current.positions);
   const selection = useStoreSelector(state.presentation.view, (current) => current.selection);
   const pins = useStoreSelector(state.presentation.view, (current) => current.pins);
@@ -57,10 +58,12 @@ export function GraphCanvas({ profile, view = 'fit' }: { readonly profile?: Sour
   const menuOpen = useStoreSelector(state.presentation.view, (current) => current.openMenu !== undefined);
   const source = useStoreSelector(state.investigation, (current) => current.sourceId);
   const placed = useMemo(
-    () => placeNewEntities({ ids: graph.nodes.map((node) => elementKey(node.ref)), links: graph.edges.map((edge) => [elementKey(edge.from), elementKey(edge.to)] as const), positions }),
-    [graph, positions],
+    () => placeNewEntities({ ids: loadedGraph.nodes.map((node) => elementKey(node.ref)), links: loadedGraph.edges.map((edge) => [elementKey(edge.from), elementKey(edge.to)] as const), positions }),
+    [loadedGraph, positions],
   );
-  const aggregates = useAggregateNodes(graph, profile);
+  const allAggregates = useAggregateNodes(loadedGraph, profile);
+  const hiddenKeys = useStoreSelector(state.presentation.view, (current) => current.hidden);
+  const aggregates = useMemo(() => (hiddenKeys.size === 0 ? allAggregates : allAggregates.filter((aggregate) => !hiddenKeys.has(aggregate.nodeKey))), [allAggregates, hiddenKeys]);
   const drawn = useMemo(() => buildScene(graph, placed.size === 0 ? positions : new Map([...positions, ...placed]), profile, selection, tool, source, view, pins, walking ? focused : undefined, true, aggregates), [graph, positions, placed, profile, selection, tool, source, view, pins, walking, focused, aggregates]);
   // A menu holding the focus only takes the ring off the walk element: the scene is the same one, so the drawing that follows is not a sign that the renderer works again.
   const scene = useMemo(() => ({ ...drawn, focusRing: !menuOpen }), [drawn, menuOpen]);
@@ -131,7 +134,7 @@ export function GraphCanvas({ profile, view = 'fit' }: { readonly profile?: Sour
   // After a layout whose drawing failed has been rolled back, the drawing of the restored positions must not clear the notice.
   const keepNotice = useRef(false);
   const layoutNow = useCallback((): void => {
-    const loaded = state.loadedGraph();
+    const loaded = state.visibleGraph();
     const { positions: stored, pins: held } = state.presentation.view.getState();
     const next = layoutEntities({
       ids: loaded.nodes.map((node) => elementKey(node.ref)),

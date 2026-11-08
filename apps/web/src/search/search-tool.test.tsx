@@ -140,6 +140,17 @@ describe('the Search tool and its panel', () => {
     expect(document.activeElement).toBe(searchTool());
   });
 
+  it('counts and lists only the entities that are drawn, so a hidden one is neither found on the canvas nor counted', async () => {
+    const { state, user } = await workspace();
+    await user.click(searchTool());
+    act(() => state.hide([elementKey(node('a', 'ACC-48291').ref)]));
+    expect(screen.getByRole('tab', { name: 'On canvas · 1' })).toBeDefined();
+    await user.type(box(), 'acc');
+    expect(screen.queryByRole('button', { name: /ACC-48291/ })).toBeNull();
+    act(() => state.presentation.showAllHidden());
+    expect(screen.getByRole('tab', { name: 'On canvas · 2' })).toBeDefined();
+  });
+
   it('shows the number of entities drawn on the first tab, and follows the graph as an entity is loaded', async () => {
     const { state, user } = await workspace();
     await user.click(searchTool());

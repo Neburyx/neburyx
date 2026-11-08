@@ -5,9 +5,14 @@ export interface SelectionAction {
   readonly id: string;
   readonly label: string;
   readonly icon: ReactNode;
+  /** Where the action stands on the bar, lowest first; one without sorts after those that have one, in the order registered. */
+  readonly order?: number;
   /** Receives the keys of the selected items in selection order; text it returns is shown beside the action. */
   readonly run: (selection: readonly string[]) => void | string;
 }
+
+/** Where each action stands on the bar (ui-spec §8.3): Expand, Paths between, Group, Pin, Hide, then Copy IDs, which the bar itself draws last. */
+export const SELECTION_ACTION_ORDER = { expand: 10, pathsBetween: 20, group: 30, pin: 40, hide: 50 } as const;
 
 export class ActionError extends Error {
   readonly code = 'ACTION_TAKEN';
@@ -27,7 +32,7 @@ export interface SelectionActionRegistry {
 export function createSelectionActionRegistry(): SelectionActionRegistry {
   const store = createStore<readonly SelectionAction[]>([]);
   const registrations: Array<{ readonly token: symbol; readonly action: SelectionAction }> = [];
-  const publish = (): void => store.setState(registrations.map((registration) => registration.action));
+  const publish = (): void => store.setState(registrations.map((registration, at) => ({ action: registration.action, at })).sort((a, b) => (a.action.order ?? Infinity) - (b.action.order ?? Infinity) || a.at - b.at).map(({ action }) => action));
   return {
     view: readable(store),
     register(action) {

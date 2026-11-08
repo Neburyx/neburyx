@@ -1,13 +1,15 @@
-import { useMemo } from 'react';
+import { Fragment, useMemo, type ReactNode } from 'react';
 import type { Count } from '@neburyx/contracts';
 import { createStore, readable, useStoreSelector, type ReadableStore } from '../state/store.js';
 import type { RequestState } from '../api/use-request.js';
-import { useLoadedGraph, useSessionMask } from '../state/context.js';
+import { useClientState, useLoadedGraph, useSessionMask } from '../state/context.js';
+import { elementKey } from '../state/keys.js';
 import { partitionEdges, type LoadedGraph } from '../state/loaded-graph.js';
 import { coverageEntitiesOf } from './coverage-input.js';
 import { useCoverageStoreWhenProvided } from './coverage-context.js';
 import { usePreviewAnswers } from './preview-context.js';
-import { hiddenByFiltersLine, loadedLine, notDrawnLine, remainderLine, shownCount, UNKNOWN_REMAINDER } from './scope-text.js';
+import { showHiddenAndFocusCanvas } from '../canvas/hide-commands.js';
+import { hiddenByFiltersLine, hiddenFromViewLine, formatNumber, loadedLine, notDrawnLine, remainderLine, shownCount, UNKNOWN_REMAINDER } from './scope-text.js';
 
 const NOTHING_ASKED: ReadableStore<RequestState<Count>> = readable(createStore<RequestState<Count>>({ phase: 'idle' }));
 
@@ -23,19 +25,41 @@ function useNotRetrieved(): Count {
   return state.phase === 'ready' ? state.data : UNKNOWN_REMAINDER;
 }
 
-/** No filter or hide exists yet, so nothing is filtered out of what is loaded. */
-const NOTHING_FILTERED = 0;
+/** No type filter exists yet, so nothing is filtered out of what is loaded. */
+const NOTHING_FILTERED: ReadonlySet<string> = new Set();
 
-export function GraphScopeLines({ graph, filtered, notRetrieved }: { readonly graph: LoadedGraph; readonly filtered: number; readonly notRetrieved: Count }) {
-  const parts = [loadedLine(graph), hiddenByFiltersLine(filtered, graph.nodes.length), notDrawnLine(partitionEdges(graph).notDrawable.length)].filter((part) => part !== undefined);
+export function GraphScopeLines({ graph, hidden, filtered, notRetrieved, onShowHidden }: { readonly graph: LoadedGraph; readonly hidden: ReadonlySet<string>; readonly filtered: ReadonlySet<string>; readonly notRetrieved: Count; readonly onShowHidden?: () => void }) {
+  const loaded = graph.nodes.map((node) => elementKey(node.ref));
+  const hiddenCount = loaded.filter((key) => hidden.has(key)).length;
+  const show =
+    hiddenCount === 0 || onShowHidden === undefined ? null : (
+      <button type="button" className="graph-scope-show" aria-label={`Show ${formatNumber(hiddenCount)} hidden ${hiddenCount === 1 ? 'entity' : 'entities'}`} onClick={onShowHidden}>
+        Show {formatNumber(hiddenCount)}
+      </button>
+    );
+  const parts: ReactNode[] = [
+    loadedLine(graph),
+    hiddenFromViewLine(hiddenCount) === undefined ? undefined : (
+      <Fragment key="hidden">
+        {hiddenFromViewLine(hiddenCount)}
+        {show === null ? null : <> · {show}</>}
+      </Fragment>
+    ),
+    hiddenByFiltersLine(loaded.filter((key) => filtered.has(key)).length),
+    notDrawnLine(partitionEdges(graph).notDrawable.length),
+  ].filter((part) => part !== undefined);
   return (
     <div className="graph-scope" role="group" aria-label="Graph scope">
-      <p>{parts.join(' · ')}</p>
-      <p>{remainderLine(shownCount(graph.nodes.length, filtered), notRetrieved)}</p>
+      <p>
+        {parts.flatMap((part, at) => (at === 0 ? [part] : [' · ', part]))}
+      </p>
+      <p>{remainderLine(shownCount(loaded, hidden, filtered), notRetrieved)}</p>
     </div>
   );
 }
 
 export function GraphScope() {
-  return <GraphScopeLines graph={useLoadedGraph()} filtered={NOTHING_FILTERED} notRetrieved={useNotRetrieved()} />;
+  const state = useClientState();
+  const hidden = useStoreSelector(state.presentation.view, (current) => current.hidden);
+  return <GraphScopeLines graph={useLoadedGraph()} hidden={hidden} filtered={NOTHING_FILTERED} notRetrieved={useNotRetrieved()} onShowHidden={() => showHiddenAndFocusCanvas(state)} />;
 }

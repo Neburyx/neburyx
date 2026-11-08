@@ -136,6 +136,16 @@ describe('the shared control styles', () => {
     for (const [label, foreground, background] of pairs) expect(contrast(at(foreground), at(background)), label).toBeGreaterThanOrEqual(MIN_TEXT_CONTRAST);
   });
 
+  it('keep the muted text of the graph scope lines at 4.5 to 1 on their backdrop, the surface at 85 % over black, the darkest thing that can lie behind it', () => {
+    const colours = tokenColours();
+    const surface = colours.get('color-surface');
+    const muted = colours.get('color-workspace-muted');
+    if (surface === undefined || muted === undefined) throw new Error('the tokens are not six-digit colours');
+    const over = [1, 3, 5].map((index) => Math.round(0.85 * parseInt(surface.slice(index, index + 2), 16)).toString(16).padStart(2, '0')).join('');
+    expect(sheet('workspace.css')).toMatch(/\.graph-scope \{[^}]*background: color-mix\(in srgb, var\(--color-surface\) 85%, transparent\);/s);
+    expect(contrast(muted, `#${over}`)).toBeGreaterThanOrEqual(MIN_TEXT_CONTRAST);
+  });
+
   it('leave the check of the browser\'s default look as the only pass: no stylesheet has a colour-scheme rule, and one that adds it must extend that check for a dark pass first', () => {
     const found = readdirSync(DIRECTORY).filter((name) => name.endsWith('.css')).filter((name) => /prefers-color-scheme|data-theme/.test(sheet(name)));
     expect(found, 'a dark scheme needs a dark pass of tools/ux/tests/default-look.spec.ts and a contrast test of its pairs').toEqual([]);

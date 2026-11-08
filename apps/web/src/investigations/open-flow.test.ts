@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createClientState } from '../state/client-state.js';
 import { StateError } from '../state/errors.js';
+import { elementKey } from '../state/keys.js';
 import { edge } from '../state/test-data.js';
 import { INVESTIGATION_A, INVESTIGATION_B, investigationOf, knowing, nodeOf, openedOf, type KnownInvestigation } from './test-data.js';
 import { openById, openEntity, openedKey } from './open-flow.js';
@@ -29,6 +30,20 @@ describe('opening an investigation by its identifier', () => {
     expect(await openById(client, state, INVESTIGATION_A, CONTEXT)).toMatchObject({ kind: 'shown', activation: 'resumed' });
     expect(await openById(client, state, INVESTIGATION_A, CONTEXT)).toMatchObject({ kind: 'shown', activation: 'current' });
     expect(JSON.stringify(calls)).toBe(reads);
+  });
+
+  it('keeps what an investigation has hidden when it is set aside and resumed, and shows nothing hidden in the one opened in its place', async () => {
+    const { client } = knowing([A, B]);
+    const state = createClientState();
+    await openById(client, state, INVESTIGATION_A, CONTEXT);
+    const [shown] = state.loadedGraph().nodes;
+    if (shown === undefined) throw new Error('nothing loaded');
+    state.hide([elementKey(shown.ref)]);
+    await openById(client, state, INVESTIGATION_B, CONTEXT);
+    expect(state.presentation.view.getState().hidden.size).toBe(0);
+    expect(await openById(client, state, INVESTIGATION_A, CONTEXT)).toMatchObject({ kind: 'shown', activation: 'resumed' });
+    expect([...state.presentation.view.getState().hidden]).toEqual([elementKey(shown.ref)]);
+    expect(state.visibleGraph().nodes).toEqual([]);
   });
 
   it.each(['removed', 'repointed'] as const)('reads no entity and shows nothing when the source is %s', async (sourceState) => {

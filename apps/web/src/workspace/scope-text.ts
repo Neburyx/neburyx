@@ -73,12 +73,17 @@ export function notDrawnLine(count: number): string | undefined {
   return `${formatNumber(count)} ${count === 1 ? 'relationship' : 'relationships'} not drawn (entity not loaded)`;
 }
 
-/** The entities loaded that a filter hides, never more than are loaded; nothing when none are hidden. */
-export function hiddenByFiltersLine(filtered: number, loaded: number): string | undefined {
-  const hidden = Math.min(filtered, loaded);
-  return hidden === 0 ? undefined : `${formatNumber(hidden)} hidden by filters`;
+/** The loaded entities the person has hidden from the view; nothing when none are. */
+export function hiddenFromViewLine(hidden: number): string | undefined {
+  return hidden === 0 ? undefined : `${formatNumber(hidden)} hidden from view`;
 }
 
-export function shownCount(loaded: number, filtered: number): number {
-  return Math.max(0, loaded - filtered);
+/** The entities loaded that a filter hides; nothing when none are hidden. */
+export function hiddenByFiltersLine(filtered: number): string | undefined {
+  return filtered === 0 ? undefined : `${formatNumber(filtered)} hidden by filters`;
+}
+
+/** What is left to show of the loaded entities: those neither hidden by hand nor by a filter; an entity that is both counts once, and a key that is not loaded counts for nothing. */
+export function shownCount(loaded: readonly string[], hidden: ReadonlySet<string>, filtered: ReadonlySet<string>): number {
+  return loaded.filter((key) => !hidden.has(key) && !filtered.has(key)).length;
 }

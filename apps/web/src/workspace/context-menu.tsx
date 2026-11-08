@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { useCanvasCommands } from '../canvas/canvas-commands.js';
 import { useProfile } from '../canvas/profile-context.js';
-import { useClientState, useLoadedGraph } from '../state/context.js';
+import { useClientState, useVisibleGraph } from '../state/context.js';
 import { drawnKeys } from '../state/loaded-graph.js';
 import type { OpenMenu } from '../state/presentation-state.js';
 import { useStoreSelector } from '../state/store.js';
@@ -32,7 +32,7 @@ export function ContextMenu() {
   const expansion = useExpansionControls();
   const open = useStoreSelector(state.presentation.view, (current) => current.openMenu);
   const items = useMenuItems(open?.kind);
-  const graph = useLoadedGraph();
+  const graph = useVisibleGraph();
   const profile = useProfile();
   const bindings = useKeyBindings();
   const headingId = useId();

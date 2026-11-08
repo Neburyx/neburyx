@@ -167,6 +167,18 @@ describe('the stylesheets', () => {
     expect(workspace).toMatch(/\.graph-scope \{[^}]*top: var\(--scope-top\);[^}]*left: var\(--scope-left\);[^}]*gap: var\(--space-3\);[^}]*font-size: var\(--font-size-small\);[^}]*line-height: var\(--line-height-workspace\);/s);
   });
 
+  it('put the graph scope lines on a quiet backdrop that lets the pointer through, except on the control that shows hidden entities again', () => {
+    const workspace = readFileSync(join(DIRECTORY, 'workspace.css'), 'utf8');
+    const rule = /\.graph-scope \{([^}]*)\}/s.exec(workspace)?.[1] ?? '';
+    expect(rule).toContain('border: var(--border-width) solid var(--color-workspace-border);');
+    expect(rule).toContain('border-radius: var(--radius-small);');
+    expect(rule).toContain('pointer-events: none;');
+    expect(rule).toContain('width: fit-content;');
+    expect(rule).toContain('max-width: calc(100% - var(--scope-left) * 2);');
+    expect(rule).not.toMatch(/box-shadow|backdrop-filter/);
+    expect(workspace).toMatch(/\.graph-scope-show \{[^}]*pointer-events: auto;/s);
+  });
+
   it('let the occupant of the floating layer take the pointer while the empty layer lets it through, and cap the source status so a long name is cut before any control is clipped', () => {
     const workspace = readFileSync(join(DIRECTORY, 'workspace.css'), 'utf8');
     expect(workspace).toMatch(/\.region-floating \{[^}]*pointer-events: none;/s);

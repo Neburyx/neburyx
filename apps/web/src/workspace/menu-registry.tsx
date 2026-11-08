@@ -15,7 +15,7 @@ export const MENU_GROUP = {
 } as const;
 
 export const MENU_ORDER = {
-  canvas: { fit: 10, selectAll: 20, invertSelection: 30, groupAll: 10, ungroupAll: 20, layout: 10, showLegend: 20, exportView: 10 },
+  canvas: { fit: 10, selectAll: 20, invertSelection: 30, showHidden: 40, groupAll: 10, ungroupAll: 20, layout: 10, showLegend: 20, exportView: 10 },
   node: {
     expandNeighbors: 10,
     expandByNeighborType: 20,

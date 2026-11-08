@@ -1,11 +1,11 @@
 import type { ClientState } from '../state/client-state.js';
-import { elementKey } from '../state/keys.js';
+import { drawnEntityKeys } from './hide-commands.js';
 
 export const SELECTION_COMMAND_IDS = ['select-all', 'invert-selection', 'clear-selection'] as const;
 
 export type SelectionCommandId = (typeof SELECTION_COMMAND_IDS)[number];
 
-const drawnEntities = (state: ClientState): string[] => state.loadedGraph().nodes.map((node) => elementKey(node.ref));
+const drawnEntities = (state: ClientState): string[] => [...drawnEntityKeys(state)];
 
 /** The one definition of each command; the tool strip, the key bindings and the canvas menu run them by id. Relationships are never selected by a command. */
 const SELECTION_COMMANDS: Readonly<Record<SelectionCommandId, (state: ClientState) => void>> = {

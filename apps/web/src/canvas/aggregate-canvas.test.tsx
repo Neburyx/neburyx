@@ -1,9 +1,9 @@
 import { act, cleanup, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { elementKey } from '../state/keys.js';
-import { ref } from '../state/test-data.js';
+import { edge, node, ref } from '../state/test-data.js';
 import { aggregateKey } from '../workspace/aggregate-nodes.js';
-import { nodeKey } from '../workspace/context-menu-kit.js';
+import { loadGraph, nodeKey } from '../workspace/context-menu-kit.js';
 import { answerPreview, count, inPanel, panelRig, previewOf } from '../workspace/supernode-kit.js';
 import { registerBuiltInKeyBindings } from '../workspace/built-in-key-bindings.js';
 import { createKeyListener } from '../workspace/key-binding-handler.js';
@@ -53,6 +53,31 @@ describe('the aggregate nodes on the canvas', () => {
     expect(remainders(rig)).toHaveLength(2);
     act(() => rig.state.setMask(true));
     expect(remainders(rig)).toEqual([]);
+  });
+
+  it('are not drawn for a node that is hidden, leave the walk and the scene items with it, and come back when it is shown', async () => {
+    const rig = await drawn();
+    expect(remainders(rig)).toHaveLength(2);
+    act(() => rig.state.hide([n1]));
+    expect(remainders(rig)).toEqual([]);
+    expect(rig.state.presentation.view.getState().sceneItems).toEqual([]);
+    act(() => rig.state.presentation.showAllHidden());
+    expect(remainders(rig)).toHaveLength(2);
+  });
+
+  it('keep the loaded figures of another entity when a hidden entity is one of its loaded neighbors, since hidden entities stay loaded', async () => {
+    const rig = panelRig();
+    loadGraph(rig.state, [node('a', 'n1'), node('a', 'n2')], [edge('a', 'e1', 'n1', 'n2')]);
+    await rig.open('n1');
+    await rig.open('n2');
+    const both = previewOf({ byNeighborType: [{ entityType: 'type-a', count: count(15, 'exact') }] });
+    await answerPreview(rig.previews[0], both);
+    await answerPreview(rig.previews[1], both);
+    const figures = (): Array<readonly [string, string | undefined]> => remainders(rig).map((entity) => [entity.id, entity.look.line2]);
+    const before = figures();
+    expect(before.map(([, line2]) => line2)).toEqual(['1 / 15', '1 / 15']);
+    act(() => rig.state.hide([n1]));
+    expect(figures()).toEqual(before.filter(([id]) => id !== aggregateKey(n1, 'type-a')));
   });
 
   it('are told in the description of the canvas, and not counted among the entities', async () => {

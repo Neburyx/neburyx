@@ -13,6 +13,7 @@ import { coverageEntitiesOf } from './coverage-input.js';
 import { GraphScope, GraphScopeLines } from './graph-scope.js';
 import { PreviewProvider } from './preview-context.js';
 import { deriveLoadedGraph } from '../state/loaded-graph.js';
+import { elementKey } from '../state/keys.js';
 
 afterEach(() => cleanup());
 
@@ -245,9 +246,10 @@ describe('the scope lines with a filtered count', () => {
     load(state, ids(nodes), Array.from({ length: edges }, (_unused, index): [string, string, string] => [`e${index}`, 'n0', 'n0']));
     return deriveLoadedGraph(state.server.getState(), state.investigation.getState());
   };
-  const linesOf = (filtered: number, loaded = graphOf(10, 13), notRetrieved = counted(5, 'exact')) => {
+  const firstKeys = (loaded: ReturnType<typeof graphOf>, count: number): ReadonlySet<string> => new Set(loaded.nodes.slice(0, count).map((node) => elementKey(node.ref)));
+  const linesOf = (filtered: number, loaded = graphOf(10, 13), notRetrieved = counted(5, 'exact'), hidden: ReadonlySet<string> = new Set()) => {
     cleanup();
-    render(<GraphScopeLines graph={loaded} filtered={filtered} notRetrieved={notRetrieved} />);
+    render(<GraphScopeLines graph={loaded} hidden={hidden} filtered={firstKeys(loaded, filtered)} notRetrieved={notRetrieved} />);
     return lines();
   };
 
@@ -261,6 +263,13 @@ describe('the scope lines with a filtered count', () => {
 
   it('reads shown 0 and the loaded count, never a negative number, when more is filtered than is loaded', () => {
     expect(linesOf(25)).toEqual(['10 entities · 13 relationships · loaded · exact · 10 hidden by filters', '0 shown · 5 not yet retrieved (exact)']);
+  });
+
+  it('counts an entity that is hidden and filtered once, and never counts a hidden key that is not loaded', () => {
+    const loaded = graphOf(10, 13);
+    const keys = [...firstKeys(loaded, 5)];
+    // filtered: the first 2; hidden: the first 3 plus a key that is not loaded; the union of loaded keys is 3
+    expect(linesOf(2, loaded, counted(5, 'exact'), new Set([...keys.slice(0, 3), 'node:gone']))[1]).toBe('7 shown · 5 not yet retrieved (exact)');
   });
 
   it('says every part in words, so no quality rests on colour', () => {

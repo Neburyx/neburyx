@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { useCanvasCommands, type CanvasCommands } from '../canvas/canvas-commands.js';
 import { ZOOM_MAX, ZOOM_MIN, ZOOM_STEP } from '../canvas/zoom.js';
-import { useClientState, useLoadedGraph } from '../state/context.js';
+import { useClientState, useVisibleGraph } from '../state/context.js';
 import { useStoreSelector } from '../state/store.js';
 import { LayoutList } from './layout-list.js';
 import { placeAbove, type Placement } from './menu-placement.js';
@@ -110,7 +110,7 @@ export function ZoomControls() {
   const state = useClientState();
   const commands = useCanvasCommands();
   const zoom = useStoreSelector(state.presentation.view, (current) => current.viewport?.zoom) ?? NEUTRAL_ZOOM;
-  const hasEntities = useLoadedGraph().nodes.length > 0;
+  const hasEntities = useVisibleGraph().nodes.length > 0;
   return (
     <div className="zoom-controls" role="group" aria-label="Zoom">
       <button type="button" className="zoom-button" aria-label="Zoom out" disabled={commands === undefined || zoom <= ZOOM_MIN} onClick={() => commands?.zoomBy(1 / ZOOM_STEP)}>

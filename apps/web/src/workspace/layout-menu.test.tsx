@@ -101,7 +101,7 @@ describe('the Layout item of the canvas menu', () => {
     rightClick(onCanvas(10, 10));
     const user = userEvent.setup();
     const spy = vi.spyOn(available(commands.current), 'layout');
-    for (let step = 0; step < 3; step += 1) await user.keyboard('{ArrowDown}');
+    for (let step = 0; step < 4; step += 1) await user.keyboard('{ArrowDown}');
     expect(document.activeElement).toBe(layoutRow());
     await user.keyboard('{ArrowRight}');
     expect(document.activeElement).toBe(forceRow());

@@ -33,7 +33,7 @@ const counted = (value: number, one: string, many: string): string => `${value} 
 /** The entities an arrow key would move: the selected ones that are still loaded (one that went between a press and its frame is not one), and the pinned ones among them, which stay. */
 function selectedEntities(state: ClientState): { readonly movable: readonly string[]; readonly pinned: number } {
   const { selection, pins, positions } = state.presentation.view.getState();
-  const loaded = new Set(state.loadedGraph().nodes.map((node) => elementKey(node.ref)));
+  const loaded = new Set(state.visibleGraph().nodes.map((node) => elementKey(node.ref)));
   const held = [...selection].filter((key) => loaded.has(key));
   return { movable: held.filter((key) => !pins.has(key) && positions.has(key)), pinned: held.filter((key) => pins.has(key)).length };
 }

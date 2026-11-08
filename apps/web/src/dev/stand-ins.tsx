@@ -1,7 +1,7 @@
 import { useState, type ComponentType } from 'react';
 import { Link } from 'react-router';
 import { EXPLORE_PATH } from '../shell/navigation.js';
-import type { SelectionAction, SelectionActionRegistry } from '../workspace/selection-actions.js';
+import { SELECTION_ACTION_ORDER, type SelectionAction, type SelectionActionRegistry } from '../workspace/selection-actions.js';
 import type { PanelEntry, PanelRegistry } from '../workspace/panel-registry.js';
 import type { SlotName, SlotRegistry } from '../workspace/slots.js';
 import { edgeKey } from '../state/keys.js';
@@ -108,17 +108,18 @@ export function registerFixtureControls(registry: SlotRegistry, controls: readon
 const icon = (name: string) => <span className={`icon icon-stand-in-${name}`} aria-hidden="true" />;
 
 const STAND_IN_ACTIONS: readonly SelectionAction[] = [
-  { id: 'stand-in-expand', label: 'Expand', icon: icon('expand'), run: () => undefined },
-  { id: 'stand-in-paths', label: 'Paths between', icon: icon('paths'), run: () => undefined },
-  { id: 'stand-in-group', label: 'Group', icon: icon('group'), run: () => undefined },
-  { id: 'stand-in-pin', label: 'Pin', icon: icon('pin'), run: () => undefined },
-  { id: 'stand-in-hide', label: 'Hide', icon: icon('hide'), run: () => undefined },
+  { id: 'stand-in-expand', order: SELECTION_ACTION_ORDER.expand, label: 'Expand', icon: icon('expand'), run: () => undefined },
+  { id: 'stand-in-paths', order: SELECTION_ACTION_ORDER.pathsBetween, label: 'Paths between', icon: icon('paths'), run: () => undefined },
+  { id: 'stand-in-group', order: SELECTION_ACTION_ORDER.group, label: 'Group', icon: icon('group'), run: () => undefined },
+  { id: 'stand-in-pin', order: SELECTION_ACTION_ORDER.pin, label: 'Pin', icon: icon('pin'), run: () => undefined },
+  { id: 'stand-in-hide', order: SELECTION_ACTION_ORDER.hide, label: 'Hide', icon: icon('hide'), run: () => undefined },
 ];
 
-/** Puts a stand-in for each selection action that is not built yet, leaves the places that are taken, and returns the function that takes out what it put in. */
+/** Puts a stand-in for each selection action that is not built yet, leaves the places that are taken (by an action of the same ID, or at the same place on the bar), and returns the function that takes out what it put in. */
 export function registerStandInActions(registry: SelectionActionRegistry): () => void {
-  const taken = new Set(registry.view.getState().map((action) => action.id));
-  const removals = STAND_IN_ACTIONS.filter((action) => !taken.has(action.id)).map((action) => registry.register(action));
+  const held = registry.view.getState();
+  const taken = new Set(held.flatMap((action) => [action.id, ...(action.order === undefined ? [] : [`order:${action.order}`])]));
+  const removals = STAND_IN_ACTIONS.filter((action) => !taken.has(action.id) && !taken.has(`order:${action.order}`)).map((action) => registry.register(action));
   return () => {
     for (const remove of removals) remove();
   };
@@ -200,7 +201,7 @@ const STAND_IN_MENU_ITEMS: readonly (readonly [MenuTargetKind, MenuItem])[] = [
   ['relationship', command('stand-in-highlight', 'Highlight endpoints', 'focus', RELATIONSHIP_GROUP.endpoints, RELATIONSHIP_ORDER.highlightEndpoints)],
   ['relationship', command('stand-in-select-endpoints', 'Select both endpoints', 'select', RELATIONSHIP_GROUP.endpoints, RELATIONSHIP_ORDER.selectBothEndpoints)],
   ['relationship', command('stand-in-paths-between', 'Find paths between endpoints', 'route', RELATIONSHIP_GROUP.endpoints, RELATIONSHIP_ORDER.findPathsBetween)],
-  ['relationship', command('stand-in-hide-this', 'Hide this relationship', 'hide', RELATIONSHIP_GROUP.visibility, RELATIONSHIP_ORDER.hideThis, { binding: 'hide' })],
+  ['relationship', command('stand-in-hide-this', 'Hide this relationship', 'hide', RELATIONSHIP_GROUP.visibility, RELATIONSHIP_ORDER.hideThis)],
   ['relationship', command('stand-in-hide-all', (context) => `Hide all ${typeOf(context)}`, 'hide', RELATIONSHIP_GROUP.visibility, RELATIONSHIP_ORDER.hideAllOfType)],
   ['relationship', command('stand-in-show-only', (context) => `Show only ${typeOf(context)}`, 'show', RELATIONSHIP_GROUP.visibility, RELATIONSHIP_ORDER.showOnlyType)],
   ['relationship', command('stand-in-copy-relationship-id', 'Copy relationship ID', 'copy', RELATIONSHIP_GROUP.copy, RELATIONSHIP_ORDER.copyRelationshipId, { binding: 'copy-id' })],

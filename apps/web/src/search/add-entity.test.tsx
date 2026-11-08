@@ -71,6 +71,20 @@ describe('adding one entity from the Add from source tab', () => {
     expect(parts.loads).toEqual([]);
   });
 
+  it('shows a hidden entity again, one only, when Find is chosen on it, and selects, centres and announces it', async () => {
+    const parts = await panelWorkspace({ nodes: [node('a', 'ACC-1'), first] });
+    parts.state.hide([keyOf(first), keyOf(node('a', 'ACC-1'))]);
+    await searchFor('ACC');
+    act(() => parts.searches[0]?.answer({ ok: true, value: searchAnswer('a', [first], [second]) }));
+    await settle();
+    fireEvent.click(screen.getByRole('button', { name: 'On canvas: Title ACC-100' }));
+    await settle();
+    expect([...parts.state.presentation.view.getState().hidden]).toEqual([keyOf(node('a', 'ACC-1'))]);
+    expect([...parts.state.presentation.view.getState().selection]).toEqual([keyOf(first)]);
+    expect(parts.renderer()?.centered).toEqual([keyOf(first)]);
+    expect(parts.state.presentation.view.getState().moveNote?.text).toBe('Shown again: Title ACC-100');
+  });
+
   it('sends one entity read and adds one entity when Add is pressed twice before the answer', async () => {
     const parts = await withRows();
     fireEvent.click(addButton('Title ACC-100'));

@@ -1,3 +1,4 @@
+import { hideEntities, hideTargetsOf, showHiddenAndFocusCanvas } from '../canvas/hide-commands.js';
 import { runSelectionCommand } from '../canvas/selection-commands.js';
 import { LayoutList } from './layout-list.js';
 import { nodeRefOfKey } from '../state/keys.js';
@@ -5,7 +6,7 @@ import { COLLAPSE, EXPAND_BY_NEIGHBOR_TYPE, EXPAND_BY_TYPE } from './expand-copy
 import { ExpandByTypeSubmenu } from './expand-by-type-submenu.js';
 import { MENU_GROUP, MENU_ORDER, type MenuContext, type MenuRegistry, type SubmenuProps } from './menu-registry.js';
 
-const canLayOut = (context: MenuContext): boolean => context.canvas !== undefined && context.state.loadedGraph().nodes.length > 0;
+const canLayOut = (context: MenuContext): boolean => context.canvas !== undefined && context.state.visibleGraph().nodes.length > 0;
 
 function LayoutSubmenu({ context, close }: SubmenuProps) {
   return (
@@ -67,6 +68,24 @@ export function registerBuiltInMenuItems(registry: MenuRegistry): () => void {
         if (ref !== undefined) context.expansion?.store.collapse(ref);
       },
     }),
+    registry.register('node', {
+      id: 'invert-selection',
+      label: 'Invert selection',
+      icon: <span className="icon icon-invert" aria-hidden="true" />,
+      group: MENU_GROUP.node.selection,
+      order: MENU_ORDER.node.invertSelection,
+      binding: 'invert-selection',
+      run: (context) => runSelectionCommand(context.state, 'invert-selection'),
+    }),
+    registry.register('node', {
+      id: 'hide-from-view',
+      label: 'Hide from view',
+      icon: <span className="icon icon-hide" aria-hidden="true" />,
+      group: MENU_GROUP.node.selection,
+      order: MENU_ORDER.node.hideFromView,
+      binding: 'hide',
+      run: (context) => hideEntities(context.state, hideTargetsOf(context.selection, context.key)),
+    }),
     registry.register('canvas', {
       id: 'fit-to-view',
       label: 'Fit to view',
@@ -93,6 +112,15 @@ export function registerBuiltInMenuItems(registry: MenuRegistry): () => void {
       order: MENU_ORDER.canvas.invertSelection,
       binding: 'invert-selection',
       run: (context) => runSelectionCommand(context.state, 'invert-selection'),
+    }),
+    registry.register('canvas', {
+      id: 'show-hidden',
+      label: (context) => `Show hidden entities (${context.state.presentation.view.getState().hidden.size})`,
+      icon: <span className="icon icon-show" aria-hidden="true" />,
+      group: MENU_GROUP.canvas.view,
+      order: MENU_ORDER.canvas.showHidden,
+      state: (context) => (context.state.presentation.view.getState().hidden.size === 0 ? 'disabled' : 'enabled'),
+      run: (context) => showHiddenAndFocusCanvas(context.state),
     }),
     registry.register('canvas', {
       id: 'layout',

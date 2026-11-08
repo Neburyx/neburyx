@@ -41,7 +41,7 @@ export function openContextMenu(state: ClientState, request: RightClick): void {
     state.presentation.setOpenMenu({ kind: 'canvas', key: undefined, x, y });
     return;
   }
-  if (!drawnKeys(state.loadedGraph()).has(target.key)) return;
+  if (!drawnKeys(state.visibleGraph()).has(target.key)) return;
   if (!state.presentation.view.getState().selection.has(target.key)) state.presentation.select([target.key]);
   state.presentation.setOpenMenu({ kind: target.kind, key: target.key, x, y });
 }

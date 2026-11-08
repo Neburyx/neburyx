@@ -34,8 +34,8 @@ describe('the canvas menu', () => {
     const { rightClick } = show(state);
     rightClick(onCanvas(10, 10));
     const rows = within(menu()).getAllByRole('menuitem');
-    expect(rows.map((row) => row.textContent)).toEqual(['Fit to view⌘0', 'Select all⌘A', 'Invert selection⇧⌘I', 'Layout', 'Show legendL']);
-    expect(rows.map((row) => row.querySelector('.menu-label')?.textContent)).toEqual(['Fit to view', 'Select all', 'Invert selection', 'Layout', 'Show legend']);
+    expect(rows.map((row) => row.textContent)).toEqual(['Fit to view⌘0', 'Select all⌘A', 'Invert selection⇧⌘I', 'Show hidden entities (0)', 'Layout', 'Show legendL']);
+    expect(rows.map((row) => row.querySelector('.menu-label')?.textContent)).toEqual(['Fit to view', 'Select all', 'Invert selection', 'Show hidden entities (0)', 'Layout', 'Show legend']);
     expect(within(menu()).queryAllByRole('separator')).toHaveLength(1);
     expect(item('Fit to view')).toBe(rows[0]);
   });
@@ -285,11 +285,11 @@ describe('the menu of an entity', () => {
     menus.register('node', { id: 'entity-item', label: 'Entity item', icon: null, group: 10, order: 10, run: () => undefined });
     const { rightClick } = show(state, {}, menus);
     rightClick(rightClickOn('node', nodeKey('n1')));
-    expect(within(screen.getByRole('menu', { name: 'n1' })).getAllByRole('menuitem').map((row) => row.querySelector('.menu-label')?.textContent)).toEqual(['Expand neighbors', 'Entity item', 'Expand by neighbor type', 'Expand by type', 'Collapse']);
+    expect(within(screen.getByRole('menu', { name: 'n1' })).getAllByRole('menuitem').map((row) => row.querySelector('.menu-label')?.textContent)).toEqual(['Expand neighbors', 'Entity item', 'Expand by neighbor type', 'Expand by type', 'Collapse', 'Invert selection', 'Hide from view']);
     rightClick(rightClickOn('relationship', edgeKey(stored.ref)));
     expect(within(screen.getByRole('menu')).queryAllByRole('menuitem')).toEqual([]);
     rightClick(onCanvas(5, 5));
-    expect(within(menu()).getAllByRole('menuitem').map((row) => row.querySelector('.menu-label')?.textContent)).toEqual(['Fit to view', 'Select all', 'Invert selection', 'Layout', 'Show legend']);
+    expect(within(menu()).getAllByRole('menuitem').map((row) => row.querySelector('.menu-label')?.textContent)).toEqual(['Fit to view', 'Select all', 'Invert selection', 'Show hidden entities (0)', 'Layout', 'Show legend']);
   });
 
   it('shows only the header of an entity menu when nothing is registered at all', () => {
