@@ -79,6 +79,8 @@ The catalog also refuses a template that does not say what its row limit means. 
 
 The gate's index guard reads the schema through the system runner only, with the one fixed `schema-indexes` template, for a template that declares `indexNeeds`; the reader the gate hands out (`IndexReader`) runs nothing else, and only for a principal the policy allows, whatever the source's last check showed. The `Gate` itself has the one member `run`.
 
+The checks read the code. The [input fuzz suite](fuzz-suite.md) tests the same rule at run time: it sends hostile requests and shows that every statement the executor sees is a fixed template with allowlisted names.
+
 ## What is scanned
 
 The adapter check reads files under `services/`, `packages/` and `apps/`.

@@ -16,7 +16,9 @@ import { SEARCH_RELATED_ID } from '../gate/templates/search-related.js';
 import { RELATED_CONTEXT_ID } from '../gate/templates/related-context.js';
 import type { SourceAccess } from '../investigations/source-access.js';
 import type { Gate, GatePage, GateRequest, IndexReader, IndexReadFailure, IndexSnapshot } from '../gate/types.js';
-import type { MappingModel, SourceModel } from '../mapping/model.js';
+import { isKeyed, type MappingModel, type SourceModel } from '../mapping/model.js';
+import type { ReferenceKeys } from '../reference/keys.js';
+import { readToken } from '../reference/token.js';
 import type { Principal } from '../seams/seams.js';
 
 export interface SearchRequest {
@@ -257,7 +259,7 @@ function startsWithOf(source: SourceModel, item: Normalized | undefined, page: G
   return { nodes, ...unreferencedField(unreferenced), count: countOf(nodes.length + unreferenced.length, page, STARTS_WITH_SCOPE, failed), dropped, warnings: item === undefined ? [] : item.warnings };
 }
 
-export function createSearchService(deps: { readonly gate: Gate; readonly mapping: MappingModel; readonly access: SourceAccess; readonly indexes?: IndexReader; readonly clock?: () => number }): SearchService {
+export function createSearchService(deps: { readonly gate: Gate; readonly mapping: MappingModel; readonly access: SourceAccess; readonly indexes?: IndexReader; readonly references?: ReferenceKeys; readonly clock?: () => number }): SearchService {
   const clock = deps.clock ?? Date.now;
   return {
     async search(request) {
@@ -443,6 +445,13 @@ export function createSearchService(deps: { readonly gate: Gate; readonly mappin
       const exactRefs = request.exactRefs ?? [];
       const pageCap = Math.min(SEARCH_GROUP_CAP, source.budgets.maxPage);
       if (exactRefs.length > 0 && (group !== 'related' || exactRefs.length > pageCap || exactRefs.some((ref) => ref.sourceId !== request.sourceId || !source.entities.some((entity) => entity.type === ref.entityType)))) throw new AppError('INVALID_REQUEST');
+      // a reference of a keyed entity type must be a token made for this source and type: read here, before any read, so a forged one is refused whether or not the page has records to pair it with
+      for (const ref of exactRefs) {
+        const entity = source.entities.find((candidate) => candidate.type === ref.entityType);
+        if (entity === undefined || !isKeyed(entity)) continue;
+        if (deps.references === undefined) throw new AppError('INVALID_REQUEST');
+        readToken(deps.references, { sourceId: request.sourceId, entityType: ref.entityType }, ref.stableId);
+      }
       const typeOn = (type: string): boolean => request.entityTypes === undefined || request.entityTypes.includes(type);
       // the page is planned as the first page was, from a fresh read of the schema: the same masking, the same properties and the same forms, so its parameters are the ones the cursor is bound to
       const exactCandidates = group === 'exact' ? candidatesOf(source, 'exact', request.mask) : [];

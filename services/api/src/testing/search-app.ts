@@ -10,7 +10,7 @@ import { communitySeams } from '../seams/community-seams.js';
 import type { AuditEvent, Seams } from '../seams/seams.js';
 import { memoryAppStore } from './app-store.js';
 import { entityRows, plainNode } from './entity-fixtures.js';
-import { TestExecutor } from './gate.js';
+import { TEST_REFERENCE_KEYS, TestExecutor } from './gate.js';
 import { RELATED_CONTEXT_ID } from '../gate/templates/related-context.js';
 import { facetRowOf, withOnlineIndexes } from './search-fixtures.js';
 import { baseSource, fileOf } from './mapping.js';
@@ -74,9 +74,10 @@ export async function startSearchApp(options: SearchAppOptions = {}) {
     seams,
     ...(options.redact === undefined ? {} : { redact: options.redact }),
     ...(options.catalog === undefined ? {} : { catalog: options.catalog }),
+    referenceKeys: TEST_REFERENCE_KEYS,
   });
   const store = memoryAppStore();
-  const app = await buildApp({ webRoot, logger: createLogger({ write: (line: string) => void lines.push(line) }), store, mapping, seams: { ...defaults, ...seams }, gate: parts.gate, indexes: parts.indexes });
+  const app = await buildApp({ webRoot, logger: createLogger({ write: (line: string) => void lines.push(line) }), store, mapping, seams: { ...defaults, ...seams }, gate: parts.gate, indexes: parts.indexes, referenceKeys: TEST_REFERENCE_KEYS });
   return { app, executor, events, lines, gate: parts.gate, mapping, store };
 }
 

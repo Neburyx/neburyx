@@ -361,7 +361,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       return nodeSchema.parse(node);
     });
 
-    const searching = createSearchService({ gate: options.gate, mapping, access, ...(options.indexes === undefined ? {} : { indexes: options.indexes }) });
+    const searching = createSearchService({ gate: options.gate, mapping, access, references: referenceKeys, ...(options.indexes === undefined ? {} : { indexes: options.indexes }) });
     app.post('/v1/search/entities', { config: { permission: 'principal' } }, async (request) => {
       const body = searchRequestSchema.safeParse(request.body);
       if (!noQuerySchema.safeParse(request.query).success || !body.success) throw new AppError('INVALID_REQUEST');

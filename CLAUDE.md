@@ -67,7 +67,7 @@ Node 24 LTS (`.nvmrc`; with nvm, `nvm use`) and pnpm through Corepack, at the ve
 | Build | `pnpm build` |
 | Type-check | `pnpm typecheck` |
 | Lint | `pnpm lint` |
-| Unit tests | `pnpm test` |
+| Unit tests (include the input fuzz suite, [docs/fuzz-suite.md](docs/fuzz-suite.md)) | `pnpm test` |
 | Contract test | `pnpm test:contract` |
 | Integration tests (a Postgres container; needs Docker) | `pnpm test:integration` |
 | Neo4j tests, the adapter's and the demo graph tool's (run against a Neo4j Enterprise 5.26 server you own, not in CI; `NBX_EE_URI`, `NBX_EE_USER` and `NBX_EE_PASSWORD` in the environment or in `~/.config/neburyx/dev-neo4j.env`; each file makes and drops its own `nbx-test-` database; see `packages/test-neo4j/README.md`) | `pnpm test:neo4j` |
