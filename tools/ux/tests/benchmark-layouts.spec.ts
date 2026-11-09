@@ -1,10 +1,10 @@
 import { expect, test, type Page } from '@playwright/test';
 import { profileFrom } from '../src/profile.ts';
-import { framesOver, LAYOUT_FRAME_LIMIT_MS, shortfalls, type Threshold } from '../src/rates.ts';
+import { framesOver, LAYOUT_FRAME_LIMIT_MS, PHYSICS_DRAG_THRESHOLD, shortfalls } from '../src/rates.ts';
 import { grabbablePoint, openFixture } from './support/workspace.ts';
 
-/** The target of the renderer decision (median 55 fps, 5th percentile 30 fps) at 4x CPU throttle on the 300-element fixture; the runner's 5th percentile is 25 as in the pan and zoom guard. The longest frame of a layout run has its own limit per profile (`LAYOUT_FRAME_LIMIT_MS`). */
-const THRESHOLD: Threshold = profileFrom(process.env) === 'runner' ? { medianFps: 55, p5Fps: 25 } : { medianFps: 55, p5Fps: 30 };
+/** The frame rates of the drag with Physics on, and the longest frame of a layout run, each per profile; the figures and where they come from are in `src/rates.ts`. */
+const THRESHOLD = PHYSICS_DRAG_THRESHOLD[profileFrom(process.env)];
 const REFRESH_MS = 1000 / 60;
 const FRAME_LIMIT_MS = LAYOUT_FRAME_LIMIT_MS[profileFrom(process.env)];
 

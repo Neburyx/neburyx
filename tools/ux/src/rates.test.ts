@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { framesOver, LAYOUT_FRAME_LIMIT_MS, shortfalls } from './rates.ts';
+import { framesOver, LAYOUT_FRAME_LIMIT_MS, PHYSICS_DRAG_THRESHOLD, shortfalls } from './rates.ts';
 
 const FLOOR = { medianFps: 55, p5Fps: 30 };
 
@@ -25,5 +25,20 @@ describe('the longest frame accepted while a layout runs', () => {
     expect(framesOver([16.7, 250, 301], LAYOUT_FRAME_LIMIT_MS.runner)).toEqual([301]);
     expect(framesOver([16.7, 100], LAYOUT_FRAME_LIMIT_MS.laptop)).toEqual([]);
     expect(framesOver([], LAYOUT_FRAME_LIMIT_MS.runner)).toEqual([]);
+  });
+});
+
+describe('the frame rates accepted while dragging with Physics on', () => {
+  it('are the renderer decision\'s on a laptop, and just under the CI figure (15 and 12) on the runner', () => {
+    expect(PHYSICS_DRAG_THRESHOLD.laptop).toEqual({ medianFps: 55, p5Fps: 30 });
+    expect(PHYSICS_DRAG_THRESHOLD.runner).toEqual({ medianFps: 12, p5Fps: 10 });
+    expect(shortfalls([{ medianFps: 15, p5Fps: 12 }], PHYSICS_DRAG_THRESHOLD.runner)).toEqual([]);
+  });
+
+  it('still fail a run below them, on either profile', () => {
+    expect(shortfalls([{ medianFps: 11, p5Fps: 12 }], PHYSICS_DRAG_THRESHOLD.runner)).toHaveLength(1);
+    expect(shortfalls([{ medianFps: 15, p5Fps: 9 }], PHYSICS_DRAG_THRESHOLD.runner)).toHaveLength(1);
+    expect(shortfalls([{ medianFps: 20, p5Fps: 15 }], PHYSICS_DRAG_THRESHOLD.laptop)).toHaveLength(2);
+    expect(shortfalls([{ medianFps: 60, p5Fps: 30 }], PHYSICS_DRAG_THRESHOLD.laptop)).toEqual([]);
   });
 });

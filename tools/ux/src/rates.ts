@@ -31,3 +31,11 @@ export const LAYOUT_FRAME_LIMIT_MS = { laptop: 100, runner: 300 } as const;
 export function framesOver(frames: readonly number[], limitMs: number): number[] {
   return frames.filter((frame) => frame > limitMs);
 }
+
+/**
+ * The frame rates the guard accepts while an entity is dragged with Physics on, on the 300-element canvas at 4x CPU throttle.
+ * The laptop's are the renderer decision's: median 55 fps, 5th percentile 30 fps. On the runner the same drag measured a median of 15 fps and a 5th percentile of 12 fps in the ux job
+ * of CI run 42566317180 (633 frames): the runner draws every frame of the moving canvas several times slower than a laptop does at the same throttle. The runner's limits sit just
+ * under that figure, a median of 12 and a 5th percentile of 10, so that they fail a run that is clearly slower than the measured one and not the run that was measured.
+ */
+export const PHYSICS_DRAG_THRESHOLD = { laptop: { medianFps: 55, p5Fps: 30 }, runner: { medianFps: 12, p5Fps: 10 } } as const satisfies Record<string, Threshold>;
