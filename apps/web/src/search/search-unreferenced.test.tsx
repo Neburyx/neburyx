@@ -46,7 +46,7 @@ describe('a hit with no usable stable ID on the Search results page', () => {
 
   it('is added from the next page in the order it falls on, with the count the answer gives', async () => {
     const first = answerOf('demo', [hit('demo', 'W-1')], { exactUnreferenced: [unreferenced('Lamp')], counts: { exact: { value: 2, quality: 'lowerBound', scope: 'search:exact' } }, exactNextCursor: 'cursor-1' });
-    const page: SearchMoreResult = { sourceId: 'demo', group: 'exact', nodes: [], unreferenced: [unreferenced('Desk')], count: { value: 3, quality: 'exact', scope: 'search:exact' }, dropped: { ...DROPPED, 'no-stable-id': 1 }, warnings: [] };
+    const page: SearchMoreResult = { sourceId: 'demo', group: 'exact', nodes: [], matches: [], unreferenced: [unreferenced('Desk')], count: { value: 3, quality: 'exact', scope: 'search:exact' }, dropped: { ...DROPPED, 'no-stable-id': 1 }, warnings: [] };
     renderApp(searchAt('demo', 'needle'), kitWith(first, async () => ok(page)));
     await within(main()).findByRole('listitem', { name: `Lamp, widget: ${UNREFERENCED_TEXT}` });
     await userEvent.setup().click(within(main()).getByRole('button', { name: 'Show more: Exact matches' }));

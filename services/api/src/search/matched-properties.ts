@@ -1,4 +1,4 @@
-import type { GraphNode } from '@neburyx/contracts';
+import type { ExactMatch, GraphNode } from '@neburyx/contracts';
 import { integerCandidateOf, type TaggedInteger } from '../gate/templates/stable-id.js';
 import type { SearchTarget } from '../gate/templates/search-exact.js';
 
@@ -24,4 +24,8 @@ export function matchedPropertiesOf(node: GraphNode, targets: readonly SearchTar
       return target.match === 'value' && property.dataClass === 'number' && integer !== null && holdsInteger(property.value, integer);
     })
     .map((target) => target.property);
+}
+
+export function exactMatchesOf(nodes: readonly GraphNode[], targets: readonly SearchTarget[], text: string): ExactMatch[] {
+  return nodes.map((node) => ({ ref: node.ref, matchedProperties: matchedPropertiesOf(node, targets, text) }));
 }

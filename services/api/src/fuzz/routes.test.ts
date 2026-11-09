@@ -2,7 +2,7 @@ import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import { closedSetOf, statementProblems } from '../testing/fuzz-closed-set.js';
 import { CYPHER_FRAGMENTS, FIELD_NAMES, TEMPLATE_NATIVE, fuzzParams, hostileText, textLeaves, wrongType } from '../testing/fuzz-corpus.js';
-import { FUZZ_SOURCE, FUZZ_TEXT, allowedNames, startFuzzRig } from '../testing/fuzz-rig.js';
+import { FUZZ_ENTITIES, FUZZ_SOURCE, FUZZ_TEXT, allowedNames, startFuzzRig } from '../testing/fuzz-rig.js';
 
 const names = new Set([...allowedNames(), 'widget', 'gadget', 'phone', 'MADE_FROM', 'USES', FUZZ_SOURCE, 'exact', 'related', 'evidence', 'out', 'in', 'both']);
 const known = new Set([...names, ...FIELD_NAMES, ...TEMPLATE_NATIVE]);
@@ -200,5 +200,45 @@ describe('page size', () => {
     const refs = Array.from({ length: 26 }, (_, index) => ({ sourceId: FUZZ_SOURCE, entityType: 'widget', stableId: `W-${index}` }));
     expect(codeOf((await rig.post('/v1/search/entities/more', { ...more, exactRefs: refs })).body)).toBe('INVALID_REQUEST');
     expect(rig.executor.calls).toEqual([]);
+  });
+});
+
+
+describe('the matched properties in the exact group of an answer', () => {
+  const searchProperties = new Set(FUZZ_ENTITIES.flatMap((entity) => entity.search));
+  const namesOf = (body: string, field: 'exactMatches' | 'matches'): string[] => {
+    const entries = (JSON.parse(body) as Record<string, { matchedProperties: string[] }[]>)[field] ?? [];
+    return entries.flatMap((entry) => entry.matchedProperties);
+  };
+
+  it('names only search properties of the mapping, whatever the text and the mask', async () => {
+    await fc.assert(
+      fc.asyncProperty(hostileText(known), fc.boolean(), async (text, mask) => {
+        rig.reset();
+        const body = { sourceId: FUZZ_SOURCE, text: text === '' ? 'x' : [...text].slice(0, 200).join(''), ...(mask ? { mask } : {}) };
+        const response = await rig.post('/v1/search/entities', body);
+        if (response.statusCode !== 200) return;
+        const names = namesOf(response.body, 'exactMatches');
+        for (const name of names) expect(searchProperties.has(name), name).toBe(true);
+      }),
+      fuzzParams(100),
+    );
+  });
+
+  it('names the property that held the text on the first page and on the next page, none of them personal data when masked', async () => {
+    rig.reset();
+    const first = await rig.post('/v1/search/entities', { sourceId: FUZZ_SOURCE, text: FUZZ_TEXT });
+    const firstNames = namesOf(first.body, 'exactMatches');
+    expect(firstNames.length).toBeGreaterThan(0);
+    for (const name of firstNames) expect(searchProperties.has(name), name).toBe(true);
+    const cursor = (JSON.parse(first.body) as { exactNextCursor?: string }).exactNextCursor;
+    expect(cursor).toBeDefined();
+    const next = await rig.post('/v1/search/entities/more', { sourceId: FUZZ_SOURCE, text: FUZZ_TEXT, group: 'exact', cursor });
+    expect(next.statusCode).toBe(200);
+    const nextNames = namesOf(next.body, 'matches');
+    expect(nextNames.length).toBeGreaterThan(0);
+    for (const name of nextNames) expect(searchProperties.has(name), name).toBe(true);
+    const masked = await rig.post('/v1/search/entities', { sourceId: FUZZ_SOURCE, text: FUZZ_TEXT, mask: true });
+    expect(namesOf(masked.body, 'exactMatches')).not.toContain('ownerName');
   });
 });

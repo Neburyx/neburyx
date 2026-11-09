@@ -5,7 +5,7 @@ import { SEARCH_GROUP_CAP, SEARCH_GROUP_FAILURE_CODES, SEARCH_MATCH_MODES, SEARC
 import { AppError, RequestCancelled } from '../errors.js';
 import { exhaustive } from '../gate/exhaustive.js';
 import { propertyIndexOf } from '../gate/index-guard.js';
-import { matchedPropertiesOf } from './matched-properties.js';
+import { exactMatchesOf, matchedPropertiesOf } from './matched-properties.js';
 import { DROP_REASONS, warningsOf, type Dropped } from '../gate/normalize/drops.js';
 import { isNormalizedEvidence, type Normalized, type RelationshipEvidence } from '../gate/normalize/index.js';
 import { SEARCH_EXACT_ID, searchExactTemplate, type SearchTarget } from '../gate/templates/search-exact.js';
@@ -401,6 +401,7 @@ export function createSearchService(deps: { readonly gate: Gate; readonly mappin
       return {
         sourceId: request.sourceId,
         exact,
+        exactMatches: exactMatchesOf(exact, exactTargets, request.text),
         ...(exactUnreferenced.length === 0 ? {} : { exactUnreferenced: [...exactUnreferenced] }),
         cap,
         searchable: exactTargets.length > 0,
@@ -561,19 +562,21 @@ function moreTargetsOf(
 }
 
 type PageHits =
-  | Pick<Extract<SearchMoreResult, { group: 'exact' }>, 'group' | 'nodes' | 'unreferenced'>
+  | Pick<Extract<SearchMoreResult, { group: 'exact' }>, 'group' | 'nodes' | 'matches' | 'unreferenced'>
   | Pick<Extract<SearchMoreResult, { group: 'related' }>, 'group' | 'hits' | 'unreferenced'>
   | Pick<Extract<SearchMoreResult, { group: 'evidence' }>, 'group' | 'hits'>;
 
 function emptyPageOf(group: SearchPagedGroup): PageHits {
-  return group === 'related' || group === 'evidence' ? { group, hits: [] } : { group, nodes: [] };
+  return group === 'related' || group === 'evidence' ? { group, hits: [] } : { group, nodes: [], matches: [] };
 }
 
 /** The hits of one group's page in that group's own shape, in the order the first page puts them in. */
 function hitsOf(group: SearchPagedGroup, source: SourceModel, item: Normalized, targets: readonly SearchTarget[] | readonly EvidenceTarget[], text: string): PageHits {
   switch (group) {
-    case 'exact':
-      return { group, nodes: inOrder(source, item.nodes), ...unreferencedField(item.unreferenced) };
+    case 'exact': {
+      const nodes = inOrder(source, item.nodes);
+      return { group, nodes, matches: exactMatchesOf(nodes, targets.filter((target): target is SearchTarget => 'entityType' in target), text), ...unreferencedField(item.unreferenced) };
+    }
     case 'related':
       return {
         group,

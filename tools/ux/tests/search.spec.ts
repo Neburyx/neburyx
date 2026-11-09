@@ -20,6 +20,7 @@ test.describe('searching for an entity', () => {
     await expect(page.getByRole('heading', { level: 1, name: 'Search results' })).toBeVisible();
     await expect(groupTitle(page, 'Exact ID match (1)')).toBeVisible();
     await expect(page.getByText('1 exact match · 0.18 s')).toBeVisible();
+    await expect(page.getByText('Matches AC-1 in code')).toBeVisible();
     await expect(page.getByText(`Searches only configured, indexed properties in ${SOURCE}.`)).toBeVisible();
     await page.getByRole('button', { name: /^Open in graph/ }).click();
     await expect(page).toHaveURL(/\/explore\/[0-9a-f-]{36}$/);
@@ -186,7 +187,7 @@ test.describe('two configured sources', () => {
       searched.push(body.sourceId);
       if (body.sourceId !== SECOND) return route.fallback();
       const node = { ref: { sourceId: SECOND, entityType: 'account', stableId: body.text }, display: { title: `second ${body.text}`, type: 'account' }, properties: [], qualityFlags: [], provenanceRefs: [], authorization: { canInspect: true, canExport: true } };
-      return route.fulfill({ json: { sourceId: SECOND, exact: [node], cap: 25, searchable: true, counts: { exact: { value: 1, quality: 'exact', scope: 'search:exact' } }, disabledTypes: [], related: { hits: [], count: { value: 0, quality: 'exact', scope: 'search:related' }, searchable: false, disabledTypes: [] }, evidence: { hits: [], count: { value: 0, quality: 'exact', scope: 'search:evidence' }, searchable: false, disabledRelationshipTypes: [] }, failures: [], dropped: { 'not-mapped': 0, 'ambiguous-type': 0, 'no-stable-id': 0 }, warnings: [], elapsedMs: 120, facets: { searchable: false }, filters: { entityTypes: [], matchModes: [] } } });
+      return route.fulfill({ json: { sourceId: SECOND, exact: [node], exactMatches: [{ ref: node.ref, matchedProperties: ['code'] }], cap: 25, searchable: true, counts: { exact: { value: 1, quality: 'exact', scope: 'search:exact' } }, disabledTypes: [], related: { hits: [], count: { value: 0, quality: 'exact', scope: 'search:related' }, searchable: false, disabledTypes: [] }, evidence: { hits: [], count: { value: 0, quality: 'exact', scope: 'search:evidence' }, searchable: false, disabledRelationshipTypes: [] }, failures: [], dropped: { 'not-mapped': 0, 'ambiguous-type': 0, 'no-stable-id': 0 }, warnings: [], elapsedMs: 120, facets: { searchable: false }, filters: { entityTypes: [], matchModes: [] } } });
     });
     await searchFor(page, 'AC-1');
     const selector = page.getByRole('combobox', { name: 'Source' });

@@ -16,6 +16,8 @@ Files are in `services/api/src/fuzz/`, with the rig in `services/api/src/testing
 
 A test feeds the check a statement built from text and shows it fails.
 
+**The matched properties.** The exact group of a search answer and of a next page names the `search` properties that held the typed text (`exactMatches` and `matches`). `fuzz/routes.test.ts` sends hostile texts, masked and not, and checks that every name is a `search` property of the mapping; the answer adds no statement, so the closed set is the one above.
+
 **The refusals.** Each of these is a property over generated input, with the codes the API returns:
 
 | Input | Answer |

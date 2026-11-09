@@ -19,6 +19,7 @@ const exactPage = (from: number, count: number, nextCursor?: string): SearchMore
   sourceId: 'demo',
   group: 'exact',
   nodes: hits(from, count),
+  matches: hits(from, count).map((node) => ({ ref: node.ref, matchedProperties: [] })),
   count: nextCursor === undefined ? { value: from + count, quality: 'exact', scope: 'search:exact' } : lowerBound(from + count),
   ...(nextCursor === undefined ? {} : { nextCursor }),
   dropped: DROPPED,
@@ -145,7 +146,7 @@ describe('Show more that fails', () => {
     let calls = 0;
     const kit = moreKit(async () => ok(firstPage()), async () =>
       calls++ === 0
-        ? ok<SearchMoreResult>({ sourceId: 'demo', group: 'exact', nodes: [], count: { quality: 'unknown', scope: 'search:exact' }, dropped: DROPPED, warnings: [], failure: { group: 'exact', code: 'QUERY_TIMEOUT', timeoutMs: 5000 } })
+        ? ok<SearchMoreResult>({ sourceId: 'demo', group: 'exact', nodes: [], matches: [], count: { quality: 'unknown', scope: 'search:exact' }, dropped: DROPPED, warnings: [], failure: { group: 'exact', code: 'QUERY_TIMEOUT', timeoutMs: 5000 } })
         : ok(exactPage(25, 3)),
     );
     const view = renderAppWithCauses(searchAt('demo', 'needle'), kit.client);
@@ -256,5 +257,27 @@ describe('the facets beside a group that Show more extended', () => {
     await userEvent.setup().click(within(main()).getByRole('button', { name: 'Show more: Exact matches' }));
     expect(await within(filters).findByText('≥ 50 entities · lower bound')).toBeDefined();
     expect(within(filters).queryByText('≥ 25 entities · lower bound')).toBeNull();
+  });
+});
+
+describe('the matched properties of the hits Show more added', () => {
+  const named = (from: number, count: number, property: string) => hits(from, count).map((node) => ({ ref: node.ref, matchedProperties: [property] }));
+
+  it('shows the line on the rows of the next page as on the first, and keeps the first entry of a hit that a later page brings again', async () => {
+    const first = firstPage({ exactMatches: named(0, 25, 'primaryRef') });
+    const next: SearchMoreResult = { sourceId: 'demo', group: 'exact', nodes: hits(24, 2), matches: named(24, 2, 'legacyRef'), count: { value: 26, quality: 'exact', scope: 'search:exact' }, dropped: DROPPED, warnings: [] };
+    const kit = moreKit(async () => ok(first), async () => ok(next));
+    renderApp(searchAt('demo', 'needle'), kit.client);
+    await screen.findByRole('heading', { level: 2, name: /Exact ID match/ });
+    await userEvent.setup().click(showMore());
+    const rowOf = (title: string): HTMLElement => {
+      const row = within(main()).getByText(title).closest('li');
+      if (row === null) throw new Error(`no row for ${title}`);
+      return row;
+    };
+    await waitFor(() => expect(within(main()).getByText('Title W-25')).toBeDefined());
+    expect(within(rowOf('Title W-25')).getByText('Matches needle in legacyRef')).toBeDefined();
+    expect(within(rowOf('Title W-24')).getByText('Matches needle in primaryRef')).toBeDefined();
+    expect(within(rowOf('Title W-00')).getByText('Matches needle in primaryRef')).toBeDefined();
   });
 });

@@ -198,9 +198,10 @@ describe('the API client, testing a source', () => {
 
 describe('the API client, searching a source', () => {
   const node = (sourceId: string) => ({ ref: { sourceId, entityType: 'kind-a', stableId: 'AC-1' }, display: { title: 'AC-1', type: 'kind-a' }, properties: [], qualityFlags: [], provenanceRefs: [], authorization: { canInspect: true, canExport: true } });
-  const answer = (sourceId: string, hits: readonly unknown[]) => ({
+  const answer = (sourceId: string, hits: readonly ReturnType<typeof node>[]) => ({
     sourceId,
     exact: hits,
+    exactMatches: hits.map((entity) => ({ ref: entity.ref, matchedProperties: [] })),
     cap: 25,
     searchable: true,
     counts: { exact: { value: hits.length, quality: 'exact', scope: 'search:exact' } },

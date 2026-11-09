@@ -1,4 +1,5 @@
-import type { Count, DisabledType, EvidenceRecord, SearchFailureGroup, SearchPagedGroup } from '@neburyx/contracts';
+import type { Count, DisabledType, EvidenceRecord, ExactMatch, SearchFailureGroup, SearchPagedGroup } from '@neburyx/contracts';
+import { elementKey } from '../state/keys.js';
 
 export const SEARCH_COPY = {
   title: 'Search results',
@@ -28,6 +29,17 @@ export const captionOf = (source: string): string => `Searches only configured, 
 export const unknownSourceText = (sourceId: string): string => `The source “${sourceId}” is not configured.`;
 export const REFERENCED_ID = 'Referenced ID';
 export const referencesLine = (text: string, properties: readonly string[]): string => (properties.length === 0 ? REFERENCED_ID : `References ${text} in ${properties.join(', ')}`);
+/** The line of an exact hit: the `search` properties that hold the typed text; none when the server could not name one. */
+export const matchesLine = (text: string, properties: readonly string[] | undefined): string | undefined => (properties === undefined || properties.length === 0 ? undefined : `Matches ${text} in ${properties.join(', ')}`);
+/** The properties of each exact hit by its key, the first entry kept when a later page brings the hit again. */
+export function matchedByKey(entries: readonly ExactMatch[]): ReadonlyMap<string, readonly string[]> {
+  const byKey = new Map<string, readonly string[]>();
+  for (const entry of entries) {
+    const key = elementKey(entry.ref);
+    if (!byKey.has(key)) byKey.set(key, entry.matchedProperties);
+  }
+  return byKey;
+}
 export const showingResultsFor = (text: string): string => `Showing results for “${text}”.`;
 
 export const TOO_LONG = 'Use at most 200 characters.';

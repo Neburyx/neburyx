@@ -28,7 +28,7 @@ function paged(): SearchResult {
 
 /** A page of the exact group, its count as the server gives it: the hits of every page so far, the first page's two and these. */
 function page(added: readonly GraphNode[], hits: readonly UnreferencedHit[] = []): SearchMoreResult {
-  return { sourceId: 'a', group: 'exact', nodes: [...added], count: { value: FIRST_PAGE_HELD + added.length + hits.length, quality: 'exact', scope: 'search:exact' }, dropped: DROPPED, warnings: [], ...(hits.length === 0 ? {} : { unreferenced: [...hits] }) };
+  return { sourceId: 'a', group: 'exact', nodes: [...added], matches: added.map((node) => ({ ref: node.ref, matchedProperties: [] })), count: { value: FIRST_PAGE_HELD + added.length + hits.length, quality: 'exact', scope: 'search:exact' }, dropped: DROPPED, warnings: [], ...(hits.length === 0 ? {} : { unreferenced: [...hits] }) };
 }
 
 async function answered(result: SearchResult = paged(), text = 'ACC'): Promise<PanelWorkspace> {
@@ -153,5 +153,34 @@ describe('a hit with no usable stable ID in the Add from source tab', () => {
       expect(within(row).queryByRole('button')).toBeNull();
     }
     expect(screen.queryByText('No matching entities')).toBeNull();
+  });
+});
+
+describe('the matched properties in the exact results of the Add from source tab', () => {
+  const named = (list: readonly GraphNode[], properties: readonly string[]) => list.map((node) => ({ ref: node.ref, matchedProperties: [...properties] }));
+  const rowOf = (title: string): HTMLElement => {
+    const row = screen.getByText(title).closest('li');
+    if (row === null) throw new Error(`no row for ${title}`);
+    return row;
+  };
+
+  it('says which properties held the typed text on each exact row, and nothing on a row whose entry names none or on a starts-with row', async () => {
+    const exact = nodes('ACC-1', 0, 3);
+    const entries = [...named(exact.slice(0, 1), ['primaryRef']), ...named(exact.slice(1, 2), ['primaryRef', 'legacyRef']), ...named(exact.slice(2), [])];
+    await answered(searchAnswer('a', exact, nodes('ACC-2', 0, 1), { exactMatches: entries }), 'ACC');
+    expect(within(rowOf('Title ACC-1-0')).getByText('Matches ACC in primaryRef')).toBeDefined();
+    expect(within(rowOf('Title ACC-1-1')).getByText('Matches ACC in primaryRef, legacyRef')).toBeDefined();
+    expect(within(rowOf('Title ACC-1-2')).queryByText(/^Matches /)).toBeNull();
+    expect(within(rowOf('Title ACC-2-0')).queryByText(/^Matches /)).toBeNull();
+  });
+
+  it('shows the line on the rows a next page adds', async () => {
+    const parts = await answered(searchAnswer('a', nodes('ACC-1', 0, 1), nodes('ACC-2', 0, 1), { exactMatches: named(nodes('ACC-1', 0, 1), ['primaryRef']), counts: { exact: lowerBound(1, 'search:exact') }, exactNextCursor: 'exact-1' }), 'ACC');
+    fireEvent.click(button(EXACT_MORE));
+    const added = nodes('ACC-1', 1, 1);
+    act(() => parts.pages[0]?.answer({ ok: true, value: { sourceId: 'a', group: 'exact', nodes: added, matches: named(added, ['legacyRef']), count: { value: 2, quality: 'exact', scope: 'search:exact' }, dropped: DROPPED, warnings: [] } }));
+    await settle();
+    expect(within(rowOf('Title ACC-1-1')).getByText('Matches ACC in legacyRef')).toBeDefined();
+    expect(within(rowOf('Title ACC-1-0')).getByText('Matches ACC in primaryRef')).toBeDefined();
   });
 });

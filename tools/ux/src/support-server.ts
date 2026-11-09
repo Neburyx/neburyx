@@ -2,7 +2,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { extname, join, normalize, sep } from 'node:path';
-import { DEFAULT_INVESTIGATION_LIST_LIMIT, investigationListCountsSchema, investigationListQuerySchema, type Investigation, type LastTest, openInvestigationRequestSchema, SEARCH_GROUP_CAP, searchMoreRequestSchema, searchMoreResultSchema, searchRequestSchema, searchResultSchema, type SourceSummary, sourceSummaryFieldsSchema, sourceSummarySchema, type SourceTestReport, valueOfPathSegment } from '@neburyx/contracts';
+import { DEFAULT_INVESTIGATION_LIST_LIMIT, investigationListCountsSchema, nodeSchema, investigationListQuerySchema, type Investigation, type LastTest, openInvestigationRequestSchema, SEARCH_GROUP_CAP, searchMoreRequestSchema, searchMoreResultSchema, searchRequestSchema, searchResultSchema, type SourceSummary, sourceSummaryFieldsSchema, sourceSummarySchema, type SourceTestReport, valueOfPathSegment } from '@neburyx/contracts';
 
 interface SupportProfile {
   readonly sourceId: string;
@@ -419,6 +419,7 @@ function createSearch(options: SupportServerOptions) {
       const answer = searchResultSchema.parse({
         sourceId,
         exact: nodes,
+        exactMatches: nodes.map((entity) => ({ ref: nodeSchema.parse(entity).ref, matchedProperties: ['code'] })),
         cap: SEARCH_GROUP_CAP,
         searchable: modeOn('exact'),
         counts: { exact: modeOn('exact') ? exactCount : { value: 0, quality: 'exact', scope: 'search:exact' } },
@@ -464,10 +465,12 @@ function createSearch(options: SupportServerOptions) {
       const found = Number(total[1]);
       const to = Math.min(from + SEARCH_GROUP_CAP, found);
       const more = to < found;
+      const pageNodes = Array.from({ length: to - from }, (_, index) => node(sourceId, SEARCH_TYPE, `${parsed.data.text}-${String(from + index + 1).padStart(2, '0')}`));
       const page = searchMoreResultSchema.parse({
         sourceId,
         group: 'exact',
-        nodes: Array.from({ length: to - from }, (_, index) => node(sourceId, SEARCH_TYPE, `${parsed.data.text}-${String(from + index + 1).padStart(2, '0')}`)),
+        nodes: pageNodes,
+        matches: pageNodes.map((entity) => ({ ref: nodeSchema.parse(entity).ref, matchedProperties: ['code'] })),
         count: { value: to, quality: more ? 'lowerBound' : 'exact', scope: 'search:exact' },
         ...(more ? { nextCursor: `many:${parsed.data.text}:${to}` } : {}),
         dropped: { 'not-mapped': 0, 'ambiguous-type': 0, 'no-stable-id': 0 },

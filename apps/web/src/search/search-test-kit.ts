@@ -20,6 +20,7 @@ export function answerOf(sourceId: string, exact: readonly GraphNode[], override
   return {
     sourceId,
     exact: [...exact],
+    exactMatches: exact.map((node) => ({ ref: node.ref, matchedProperties: [] })),
     cap: 25,
     searchable: true,
     counts: { exact: { value: exact.length, quality: 'exact', scope: 'search:exact' } },

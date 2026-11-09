@@ -31,12 +31,17 @@ types' `search` properties), `related` (their `reference` properties) and `evide
 properties), with facet counts. With `typeahead: true` it adds a `startsWith` group and reads neither the related nor the
 evidence group.
 
+- **Matched properties.** The answer holds `exactMatches`, one entry `{ ref, matchedProperties }` for each entity of `exact`, in the same
+  order: the `search` properties of the entity's type that hold the typed text, in the order of the mapping, or none when the answer
+  cannot name one. A name is never a value, a property returned masked is never named, and a personal-data property is named only
+  when the search is not masked. A related hit carries its `reference` properties the same way in `matchedProperties`.
 - **Pages.** A group shows at most 25 hits (or the source's `max_page` when that is lower). A group whose read found more holds
   a cursor (`exactNextCursor` for the exact group, `nextCursor` in `related` and `evidence`) and its count is a `lowerBound` of
   the hits held; a group with no more has no cursor and an `exact` count.
 - **The next page.** `POST /v1/search/entities/more` with `{ sourceId, text, group, cursor, mask?, entityTypes? }`, where
   `group` is `exact`, `related` or `evidence`, reads the next page of that group only, with the same masking, the same searched
-  properties and the same index plan as the first page (the source's indexes are read again). The answer holds the page's hits,
+  properties and the same index plan as the first page (the source's indexes are read again). The answer holds the page's hits (for
+  the exact group, `nodes` and `matches`, the matched properties of each node as in `exactMatches`),
   `count`, `nextCursor`, `dropped` and `warnings`. `count` is the group's count: every hit of the pages read so far, this one
   included, a `lowerBound` while `nextCursor` is present and `exact` on the last page; a client shows it as it is. Pages follow the source's element ID order, so no hit is on two pages and none is skipped, and a
   node found through two properties is listed once.

@@ -165,6 +165,34 @@ describe('the next pages of one group', () => {
     await app.close();
   });
 
+  it('names, for each node of an exact page, the search properties that held the text, as the first page does', async () => {
+    const { app } = await started();
+    const answer = await firstPage(app);
+    expect(answer.exactMatches.every((entry) => entry.matchedProperties.join() === (entry.ref.stableId === 'W-0' ? 'nickname,ownerName' : 'nickname'))).toBe(true);
+    const page = await more(app, { group: 'exact', cursor: answer.exactNextCursor });
+    if (page.group !== 'exact') throw new Error('not the exact group');
+    expect(page.matches.map((entry) => entry.ref)).toEqual(page.nodes.map((node) => node.ref));
+    expect(page.matches.every((entry) => entry.matchedProperties.join() === 'nickname')).toBe(true);
+    await app.close();
+  });
+
+  it('names no personal-data property on an exact page of a masked search', async () => {
+    const { app } = await started();
+    const answer = await firstPage(app, { mask: true });
+    expect(answer.exactMatches.flatMap((entry) => entry.matchedProperties)).not.toContain('ownerName');
+    const page = await more(app, { group: 'exact', cursor: answer.exactNextCursor, mask: true });
+    expect(page.group === 'exact' && page.matches.flatMap((entry) => entry.matchedProperties)).not.toContain('ownerName');
+    await app.close();
+  });
+
+  it('gives no matches on a page of the related or the evidence group', async () => {
+    const { app } = await started();
+    const answer = await firstPage(app);
+    expect(await more(app, { group: 'related', cursor: answer.related.nextCursor })).not.toHaveProperty('matches');
+    expect(await more(app, { group: 'evidence', cursor: answer.evidence.nextCursor })).not.toHaveProperty('matches');
+    await app.close();
+  });
+
   it('gives the startsWith group of a type-ahead search a lower-bound count and no cursor when its capped read is cut', async () => {
     const { app, executor } = await started();
     const response = await postSearch(app, { sourceId: 'demo', text: 'nee', typeahead: true });
@@ -265,7 +293,7 @@ describe('a page whose read fails', () => {
     const { app, events } = await started((call) => (failing && call.templateId === 'entity-search' && call.parameters['cursor'] !== null ? Promise.resolve({ status: 'timeout' }) : model(call)));
     const answer = await firstPage(app);
     const failed = await more(app, { group: 'exact', cursor: answer.exactNextCursor });
-    expect(failed).toEqual({ sourceId: 'demo', group: 'exact', nodes: [], count: { quality: 'unknown', scope: 'search:exact' }, dropped: { 'not-mapped': 0, 'ambiguous-type': 0, 'no-stable-id': 0 }, warnings: [], failure: { group: 'exact', code: 'QUERY_TIMEOUT', timeoutMs: 5000 } });
+    expect(failed).toEqual({ sourceId: 'demo', group: 'exact', nodes: [], matches: [], count: { quality: 'unknown', scope: 'search:exact' }, dropped: { 'not-mapped': 0, 'ambiguous-type': 0, 'no-stable-id': 0 }, warnings: [], failure: { group: 'exact', code: 'QUERY_TIMEOUT', timeoutMs: 5000 } });
     expect(events.filter((event) => event.action === 'entity.search').map((event) => event.result)).toContain('failed');
     failing = false;
     const retried = await more(app, { group: 'exact', cursor: answer.exactNextCursor });

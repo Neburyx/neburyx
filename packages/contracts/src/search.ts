@@ -145,6 +145,12 @@ const unreferencedListSchema = z.array(unreferencedHitSchema).min(1).optional();
  */
 export const relationshipContextSchema = z.strictObject({ relationshipType: z.string().min(1), direction: z.enum(['out', 'in']), with: elementRefSchema });
 
+const sameRef = (left: z.infer<typeof elementRefSchema>, right: z.infer<typeof elementRefSchema> | undefined): boolean =>
+  right !== undefined && left.sourceId === right.sourceId && left.entityType === right.entityType && left.stableId === right.stableId;
+
+/** The `search` properties of one entity of the exact group that hold the typed text, as the search matched them; empty when none can be named. The entry holds the entity's reference and property names only, never a value. */
+export const exactMatchSchema = z.strictObject({ ref: elementRefSchema, matchedProperties: z.array(z.string().min(1)) });
+
 /** A record that holds the searched ID in a `reference` property. The related read adds nothing to `exact` or to its count; an entity that is also an exact match through its own `search` property is in both groups. */
 export const relatedHitSchema = z.strictObject({
   node: nodeSchema,
@@ -242,6 +248,8 @@ export const searchResultSchema = z
   .strictObject({
     sourceId: z.string().min(1),
     exact: z.array(nodeSchema),
+    /** One entry for each entity of `exact`, in the same order: the `search` properties that hold the typed text. */
+    exactMatches: z.array(exactMatchSchema),
     /** The unreferenced hits of the exact group; `counts.exact` includes them. */
     exactUnreferenced: unreferencedListSchema,
     /** The most hits the group shows for this source: 25, or the source's `max_page` when that is lower. */
@@ -269,6 +277,9 @@ export const searchResultSchema = z
   .superRefine((result, context) => {
     const failedAll = new Set(result.failures.map((failure) => failure.group));
     const failed = new Set([...failedAll].filter((group) => group !== 'facets' && group !== 'context'));
+    if (result.exactMatches.length !== result.exact.length || result.exactMatches.some((entry, place) => !sameRef(entry.ref, result.exact[place]?.ref))) {
+      context.addIssue({ code: 'custom', message: 'the matched properties are one entry for each exact match, in the same order', path: ['exactMatches'] });
+    }
     const exactKeys = new Set(result.exact.map((node) => JSON.stringify([node.ref.sourceId, node.ref.entityType, node.ref.stableId])));
     const contexts = result.related.hits.flatMap((hit) => (hit.context === undefined ? [] : [hit.context]));
     if (contexts.some((entry) => !exactKeys.has(JSON.stringify([entry.with.sourceId, entry.with.entityType, entry.with.stableId])))) context.addIssue({ code: 'custom', message: 'a relationship context names an exact match of the answer', path: ['related', 'hits'] });
@@ -372,7 +383,7 @@ const moreBase = {
 /** The next page of one group, in that group's own shape: entities for `exact`, related records for `related`, supporting relationships for `evidence`. */
 export const searchMoreResultSchema = z
   .discriminatedUnion('group', [
-    z.strictObject({ ...moreBase, group: z.literal('exact'), nodes: z.array(nodeSchema), unreferenced: unreferencedListSchema }),
+    z.strictObject({ ...moreBase, group: z.literal('exact'), nodes: z.array(nodeSchema), matches: z.array(exactMatchSchema), unreferenced: unreferencedListSchema }),
     z.strictObject({
       ...moreBase,
       group: z.literal('related'),
@@ -386,6 +397,9 @@ export const searchMoreResultSchema = z
     z.strictObject({ ...moreBase, group: z.literal('evidence'), hits: z.array(evidenceHitSchema) }),
   ])
   .superRefine((result, context) => {
+    if (result.group === 'exact' && (result.matches.length !== result.nodes.length || result.matches.some((entry, place) => !sameRef(entry.ref, result.nodes[place]?.ref)))) {
+      context.addIssue({ code: 'custom', message: 'the matched properties are one entry for each node of the page, in the same order', path: ['matches'] });
+    }
     if ('contextFailure' in result && result.contextFailure !== undefined) {
       if (result.contextFailure.group !== 'context') context.addIssue({ code: 'custom', message: 'a context failure is named for the context read', path: ['contextFailure', 'group'] });
       if (result.failure !== undefined || result.hits.length === 0 || result.hits.some((hit) => hit.context !== undefined)) context.addIssue({ code: 'custom', message: 'a page whose context read failed keeps its hits, holds no context and did not fail itself', path: ['contextFailure'] });
@@ -406,6 +420,7 @@ export type SearchMoreRequest = z.infer<typeof searchMoreRequestSchema>;
 export type SearchMoreResult = z.infer<typeof searchMoreResultSchema>;
 export type SearchResult = z.infer<typeof searchResultSchema>;
 export type DisabledType = z.infer<typeof disabledTypeSchema>;
+export type ExactMatch = z.infer<typeof exactMatchSchema>;
 export type RelatedHit = z.infer<typeof relatedHitSchema>;
 export type RelationshipContext = z.infer<typeof relationshipContextSchema>;
 export type UnreferencedHit = z.infer<typeof unreferencedHitSchema>;

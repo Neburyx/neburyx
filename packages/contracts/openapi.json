@@ -6295,6 +6295,49 @@
                   "additionalProperties": false
                 }
               },
+              "matches": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "ref": {
+                      "type": "object",
+                      "properties": {
+                        "sourceId": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "entityType": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "stableId": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "sourceId",
+                        "entityType",
+                        "stableId"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "matchedProperties": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    }
+                  },
+                  "required": [
+                    "ref",
+                    "matchedProperties"
+                  ],
+                  "additionalProperties": false
+                }
+              },
               "unreferenced": {
                 "minItems": 1,
                 "type": "array",
@@ -6379,7 +6422,8 @@
               "dropped",
               "warnings",
               "group",
-              "nodes"
+              "nodes",
+              "matches"
             ],
             "additionalProperties": false
           },
@@ -7588,6 +7632,49 @@
                 "qualityFlags",
                 "provenanceRefs",
                 "authorization"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "exactMatches": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "ref": {
+                  "type": "object",
+                  "properties": {
+                    "sourceId": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "entityType": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "stableId": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "sourceId",
+                    "entityType",
+                    "stableId"
+                  ],
+                  "additionalProperties": false
+                },
+                "matchedProperties": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              },
+              "required": [
+                "ref",
+                "matchedProperties"
               ],
               "additionalProperties": false
             }
@@ -9282,6 +9369,7 @@
         "required": [
           "sourceId",
           "exact",
+          "exactMatches",
           "cap",
           "searchable",
           "counts",

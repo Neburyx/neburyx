@@ -59,7 +59,7 @@ describe('Show more under the related group, with relationship context', () => {
   it('sends no exactRefs for the exact or the evidence group', async () => {
     const kit = searchKit(['demo'], async () => ok(answerOf('demo', [exact], { counts: { exact: { value: 25, quality: 'lowerBound', scope: 'search:exact' } }, exactNextCursor: 'cursor-e' })));
     const requests: SearchMoreRequest[] = [];
-    const client: ApiClient = { ...kit.client, searchMore: async (request) => (requests.push(request), ok({ sourceId: 'demo', group: 'exact', nodes: [], count: { value: 1, quality: 'exact', scope: 'search:exact' }, dropped: DROPPED, warnings: [] } as SearchMoreResult)) };
+    const client: ApiClient = { ...kit.client, searchMore: async (request) => (requests.push(request), ok({ sourceId: 'demo', group: 'exact', nodes: [], matches: [], count: { value: 1, quality: 'exact', scope: 'search:exact' }, dropped: DROPPED, warnings: [] } as SearchMoreResult)) };
     renderApp(searchAt('demo', 'AC-1'), client);
     await userEvent.setup().click(await screen.findByRole('button', { name: 'Show more: Exact matches' }));
     await waitFor(() => expect(requests).toHaveLength(1));

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Count, DisabledType, EvidenceHit, GraphNode, GroupFailure, RelatedHit, SearchMoreRequest, SearchMoreResult, SearchPagedGroup, SearchResult, UnreferencedHit } from '@neburyx/contracts';
+import type { Count, DisabledType, EvidenceHit, ExactMatch, GraphNode, GroupFailure, RelatedHit, SearchMoreRequest, SearchMoreResult, SearchPagedGroup, SearchResult, UnreferencedHit } from '@neburyx/contracts';
 import type { ApiClient, ApiFailure, ApiResult } from '../api/client.js';
 import { UNEXPECTED } from '../api/use-request.js';
 
@@ -13,6 +13,7 @@ interface HitsOf {
 }
 
 const NO_UNREFERENCED: readonly UnreferencedHit[] = [];
+const NO_MATCHES: readonly ExactMatch[] = [];
 const NO_DISABLED: readonly DisabledType[] = [];
 
 /** Why the last Show more of a group added nothing: the read of its page failed (`group`), the request failed (`request`), or the cursor no longer fits the search (`invalidated`). */
@@ -20,6 +21,8 @@ export type PageProblem = { readonly kind: 'group'; readonly failure: GroupFailu
 
 interface Stored<Hit> {
   readonly more: readonly Hit[];
+  /** The matched properties of the exact group's later hits; empty for the other groups. */
+  readonly matches: readonly ExactMatch[];
   readonly unreferenced: readonly UnreferencedHit[];
   readonly nextCursor: string | undefined;
   /** The group's count as the last page read gave it: the server counts the hits of every page so far, so it is shown as it is; absent until a page is read. */
@@ -36,6 +39,8 @@ interface Stored<Hit> {
 export interface GroupPages<Hit> {
   /** The hits of the pages read after the first, in the order they came. */
   readonly more: readonly Hit[];
+  /** The matched properties of the exact group's hits of those pages; empty for the other groups. */
+  readonly matches: readonly ExactMatch[];
   /** The hits with no usable stable ID of the pages read after the first, in the order they came. */
   readonly unreferenced: readonly UnreferencedHit[];
   /** The cursor of the next page; absent when the group has no more. */
@@ -102,6 +107,7 @@ function pagesOf<Hit>(result: SearchResult, group: PagedGroup, stored: Stored<Hi
   const first = firstOf(result, group);
   return {
     more: stored?.more ?? [],
+    matches: stored?.matches ?? NO_MATCHES,
     unreferenced: stored?.unreferenced ?? NO_UNREFERENCED,
     nextCursor: stored === undefined ? first.cursor : stored.nextCursor,
     count: stored?.count ?? first.count,
@@ -117,6 +123,7 @@ function pagesOf<Hit>(result: SearchResult, group: PagedGroup, stored: Stored<Hi
 /** The hits a page of a group holds, in that group's shape, and its unreferenced hits. */
 interface PageHits<Hit> {
   readonly hits: readonly Hit[];
+  readonly matches: readonly ExactMatch[];
   readonly unreferenced: readonly UnreferencedHit[];
 }
 
@@ -135,6 +142,7 @@ function withAnswer<Hit>(held: Stored<Hit>, answer: ApiResult<SearchMoreResult>,
   const onlyUnreferenced = added.hits.length === 0 && added.unreferenced.length > 0;
   return {
     more: [...held.more, ...added.hits],
+    matches: [...held.matches, ...added.matches],
     unreferenced: [...held.unreferenced, ...added.unreferenced],
     nextCursor: page.nextCursor,
     count: page.count,
@@ -148,9 +156,9 @@ function withAnswer<Hit>(held: Stored<Hit>, answer: ApiResult<SearchMoreResult>,
 }
 
 const unreferencedOf = (page: SearchMoreResult): readonly UnreferencedHit[] => ('unreferenced' in page ? (page.unreferenced ?? NO_UNREFERENCED) : NO_UNREFERENCED);
-const nodesOf = (page: SearchMoreResult): PageHits<GraphNode> | undefined => (page.group === 'exact' ? { hits: page.nodes, unreferenced: unreferencedOf(page) } : undefined);
-const relatedOf = (page: SearchMoreResult): PageHits<RelatedHit> | undefined => (page.group === 'related' ? { hits: page.hits, unreferenced: unreferencedOf(page) } : undefined);
-const evidenceOf = (page: SearchMoreResult): PageHits<EvidenceHit> | undefined => (page.group === 'evidence' ? { hits: page.hits, unreferenced: NO_UNREFERENCED } : undefined);
+const nodesOf = (page: SearchMoreResult): PageHits<GraphNode> | undefined => (page.group === 'exact' ? { hits: page.nodes, matches: page.matches, unreferenced: unreferencedOf(page) } : undefined);
+const relatedOf = (page: SearchMoreResult): PageHits<RelatedHit> | undefined => (page.group === 'related' ? { hits: page.hits, matches: NO_MATCHES, unreferenced: unreferencedOf(page) } : undefined);
+const evidenceOf = (page: SearchMoreResult): PageHits<EvidenceHit> | undefined => (page.group === 'evidence' ? { hits: page.hits, matches: NO_MATCHES, unreferenced: NO_UNREFERENCED } : undefined);
 
 /** The groups with one of them changed. */
 function withGroup(groups: Groups, group: PagedGroup, change: { readonly [Group in PagedGroup]: (stored: Stored<HitsOf[Group]> | undefined) => Stored<HitsOf[Group]> }): Groups {
@@ -196,6 +204,7 @@ export function useMorePages(client: ApiClient, shown: SearchShown | undefined, 
       const put = (change: (groups: Groups) => Groups): void => setStored((previous) => ({ result, groups: change(previous.result === result ? previous.groups : {}) }));
       const loading = <Hit>(previous: Stored<Hit> | undefined): Stored<Hit> => ({
         more: previous?.more ?? [],
+        matches: previous?.matches ?? NO_MATCHES,
         unreferenced: previous?.unreferenced ?? NO_UNREFERENCED,
         nextCursor: cursor,
         count: previous?.count,
@@ -239,7 +248,7 @@ export function useMorePages(client: ApiClient, shown: SearchShown | undefined, 
   const result = shown?.result;
   const current = shown !== undefined && shown.identity === asked;
   if (result === undefined) {
-    const none = { more: [], unreferenced: NO_UNREFERENCED, nextCursor: undefined, count: { quality: 'unknown' as const, scope: 'search:none' }, loading: false, problem: undefined, focusAt: undefined, unreferencedFocusAt: undefined, contextFailure: undefined, contextDisabled: NO_DISABLED };
+    const none = { more: [], matches: NO_MATCHES, unreferenced: NO_UNREFERENCED, nextCursor: undefined, count: { quality: 'unknown' as const, scope: 'search:none' }, loading: false, problem: undefined, focusAt: undefined, unreferencedFocusAt: undefined, contextFailure: undefined, contextDisabled: NO_DISABLED };
     return { exact: none, related: none, evidence: none, current, showMore };
   }
   return {

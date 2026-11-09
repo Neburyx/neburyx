@@ -1,7 +1,7 @@
 import type { GraphNode, RelatedHit, SearchResult, SourceProfile } from '@neburyx/contracts';
 import { elementKey } from '../state/keys.js';
 import { countText, evidenceText, matchesText, relatedText, secondsText } from './count-label.js';
-import { contextNotReadLine, FILTERS_COPY, groupFailedText, relationshipContextLine, groupNotReadSummary, hiddenBySelection, notSearchedLines, referencesLine, RETRY, SEARCH_COPY, showingResultsFor } from './copy.js';
+import { contextNotReadLine, FILTERS_COPY, groupFailedText, relationshipContextLine, groupNotReadSummary, hiddenBySelection, notSearchedLines, matchedByKey, matchesLine, referencesLine, RETRY, SEARCH_COPY, showingResultsFor } from './copy.js';
 import { EvidenceNotes, EvidenceSection, evidenceRowsOf } from './evidence-section.js';
 import { ResultRow } from './result-row.js';
 import { ShowMore } from './show-more.js';
@@ -20,6 +20,7 @@ function uniqueBy<Hit>(hits: readonly Hit[], keyOf: (hit: Hit) => string): Hit[]
   });
 }
 
+const contextProp = (context: string | undefined): { readonly context?: string } => (context === undefined ? {} : { context });
 const relationshipProp = (relationship: string | undefined): { readonly relationship?: string } => (relationship === undefined ? {} : { relationship });
 
 export interface AnswerProps {
@@ -40,6 +41,7 @@ export interface AnswerProps {
 export function SearchAnswer({ result, answeredText, currentText, profile, busy, mask, onOpen, onRetry, onReset, pages }: AnswerProps) {
   const count = pages.exact.count;
   const exact = uniqueBy([...result.exact, ...pages.exact.more], (node) => elementKey(node.ref));
+  const matched = matchedByKey([...result.exactMatches, ...pages.exact.matches]);
   const related = uniqueBy([...result.related.hits, ...pages.related.more], (hit) => elementKey(hit.node.ref));
   const evidence = evidenceRowsOf([...result.evidence.hits, ...pages.evidence.more], pages.evidence.nextCursor !== undefined, pages.evidence.focusAt);
   const exactUnreferenced = [...(result.exactUnreferenced ?? []), ...pages.exact.unreferenced];
@@ -138,7 +140,7 @@ export function SearchAnswer({ result, answeredText, currentText, profile, busy,
           </h2>
           <ul className="search-hits">
             {exact.map((node, index) => (
-              <ResultRow key={elementKey(node.ref)} node={node} type={typeOf(node.ref.entityType)} busy={busy} focus={index === pages.exact.focusAt} onOpen={onOpen} />
+              <ResultRow key={elementKey(node.ref)} node={node} type={typeOf(node.ref.entityType)} busy={busy} {...contextProp(matchesLine(answeredText, matched.get(elementKey(node.ref))))} focus={index === pages.exact.focusAt} onOpen={onOpen} />
             ))}
             {exactUnreferenced.map((hit, index) => (
               // an unreferenced hit has no key of its own; its place in the group's list is stable, since pages are only appended
