@@ -29,6 +29,7 @@ const mapping = parseMapping(
         { type: 'leaf', label: 'Leaf', stable_id: 'leafId' },
       ],
       relationships: [{ type: 'LINKED', from: 'hub', to: 'leaf', stable_id: 'relId' }],
+      derived: [{ id: 'shared-leaf', from: 'hub', to: 'hub', via: ['LINKED', 'leaf', 'LINKED'], rule_version: 1 }],
     }),
   ),
   'neburyx.yaml',
@@ -40,6 +41,7 @@ const ROUTES: readonly { readonly name: string; readonly method: 'GET' | 'POST';
   { name: 'entity lookup', method: 'POST', path: '/v1/entities/lookup', body: { sourceId: 'demo', ref } },
   { name: 'search', method: 'POST', path: '/v1/search/entities', body: { sourceId: 'demo', text: 'abc' } },
   { name: 'degree preview', method: 'POST', path: '/v1/graph/preview-expansion', body: { sourceId: 'demo', ref } },
+  { name: 'derived neighbors', method: 'POST', path: '/v1/graph/derived-neighbors', body: { sourceId: 'demo', ref } },
   { name: 'expand', method: 'POST', path: '/v1/graph/expand', body: { sourceId: 'demo', ref, neighborTypes: ['leaf'] } },
   { name: 'open investigation', method: 'POST', path: '/v1/investigations', body: { sourceId: 'demo', entity: { sourceId: 'demo', ...ref } } },
 ];

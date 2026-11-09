@@ -90,5 +90,12 @@ export function allowlistFromMapping(source: SourceModel): SourceAllowlist {
     for (const property of [...relationship.evidence, ...(relationship.observedAt === undefined ? [] : [relationship.observedAt]), ...(relationship.stableId === undefined ? [] : [relationship.stableId])]) properties.add(property);
     if (relationship.evidence.length > 0) evidenceRows.push({ type: relationship.type, from: relationship.from, to: relationship.to, properties: [...relationship.evidence] });
   }
-  return { entityLabels, relationshipTypes, stableIds, searchProperties, referenceProperties, degreeProperties, evidenceRows, relationshipRows, properties, filterableProperties, sortableProperties };
+  const derivedRules = source.derived.map((rule) => {
+    for (const name of [...rule.via, ...(rule.stopListProperty === undefined ? [] : [rule.stopListProperty])]) {
+      const problem = nameProblem(name);
+      if (problem !== undefined) throw new SourceGateError(source.id, `name in derived rule ${rule.id}`, name, problem);
+    }
+    return { id: rule.id, from: rule.from, to: rule.to, via: [...rule.via], ...(rule.stopListProperty === undefined ? {} : { stopListProperty: rule.stopListProperty }) };
+  });
+  return { entityLabels, relationshipTypes, stableIds, searchProperties, referenceProperties, degreeProperties, evidenceRows, relationshipRows, derivedRules, properties, filterableProperties, sortableProperties };
 }

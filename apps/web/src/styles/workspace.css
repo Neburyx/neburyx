@@ -1930,3 +1930,9 @@
   overflow: hidden;
   clip: rect(0, 0, 0, 0);
 }
+
+.inspector-derived {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}

@@ -15,6 +15,7 @@ import { capabilitiesTemplate } from './templates/capabilities.js';
 import { connectivityTemplate } from './templates/connectivity.js';
 import { degreePreviewBoundedTemplate, degreePreviewCheapTemplate } from './templates/degree-preview.js';
 import { degreeProbeTemplate } from './templates/degree-probe.js';
+import { derivedRuleRunTemplate } from './templates/derived-rule-run.js';
 import { entityLoadTemplate } from './templates/entity-load.js';
 import { expandCountTemplate } from './templates/expand-count.js';
 import { expandNeighborsTemplate } from './templates/expand-neighbors.js';
@@ -48,7 +49,7 @@ export interface AssembleOptions {
 }
 
 export function defaultCatalogTemplates(): readonly TemplateDefinition[] {
-  return [connectivityTemplate, capabilitiesTemplate, privilegesTemplate, schemaTokensTemplate, schemaIndexesTemplate, stableIdDuplicatesTemplate, degreeProbeTemplate, degreePreviewBoundedTemplate, degreePreviewCheapTemplate, entityLoadTemplate, expandNeighborsTemplate, expandCountTemplate, searchExactTemplate, searchRelatedTemplate, searchEvidenceTemplate, searchFacetsTemplate, searchPrefixTemplate, relatedContextTemplate];
+  return [connectivityTemplate, capabilitiesTemplate, privilegesTemplate, schemaTokensTemplate, schemaIndexesTemplate, stableIdDuplicatesTemplate, degreeProbeTemplate, degreePreviewBoundedTemplate, degreePreviewCheapTemplate, entityLoadTemplate, expandNeighborsTemplate, expandCountTemplate, searchExactTemplate, searchRelatedTemplate, searchEvidenceTemplate, searchFacetsTemplate, searchPrefixTemplate, relatedContextTemplate, derivedRuleRunTemplate];
 }
 
 export function defaultCatalog(): TemplateCatalog {

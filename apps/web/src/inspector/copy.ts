@@ -35,3 +35,5 @@ export const TO_THIS_ENTITY = 'to this entity';
 export function leftOutText(count: number): string {
   return `${count} loaded ${count === 1 ? 'relationship is' : 'relationships are'} hidden or filtered out of the view`;
 }
+export const COUNTING_DERIVED = 'Counting rule-derived neighbors…';
+export const LINKED = 'Linked';

@@ -22,6 +22,7 @@ const unmappedType = fc.oneof(hostileText(names).filter((text) => text !== ''), 
 
 describe('an entity type the mapping does not name', () => {
   const routes: readonly { name: string; code: string; send: (entityType: string) => Promise<{ body: string }> }[] = [
+    { name: 'derived neighbors', code: 'NOT_FOUND', send: (entityType) => rig.post('/v1/graph/derived-neighbors', { sourceId: FUZZ_SOURCE, ref: { entityType, stableId: 'W-1' } }) },
     { name: 'degree preview', code: 'NOT_FOUND', send: (entityType) => rig.post('/v1/graph/preview-expansion', { sourceId: FUZZ_SOURCE, ref: { entityType, stableId: 'W-1' } }) },
     { name: 'coverage', code: 'NOT_FOUND', send: (entityType) => rig.post('/v1/graph/coverage', { sourceId: FUZZ_SOURCE, entities: [{ ref: { sourceId: FUZZ_SOURCE, entityType, stableId: 'W-1' }, loadedRelationships: 1, loadedQuality: 'exact' }] }) },
     { name: 'expand (ref)', code: 'INVALID_REQUEST', send: (entityType) => rig.post('/v1/graph/expand', { sourceId: FUZZ_SOURCE, ref: { entityType, stableId: 'W-1' }, neighborTypes: ['gadget'] }) },

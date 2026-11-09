@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import type { Socket } from 'node:net';
 import fastifyStatic from '@fastify/static';
-import { type ErrorCode, coverageRequestSchema, coverageResponseSchema, degreePreviewRequestSchema, entityLookupRequestSchema, degreePreviewSchema, entityPathSchema, entityQuerySchema, expandRequestSchema, expandResponseSchema, healthResponseSchema, investigationListQuerySchema, investigationListResponseSchema, investigationResponseSchema, meResponseSchema, nodeSchema, openInvestigationRequestSchema, openInvestigationResponseSchema, readyResponseSchema, searchMoreRequestSchema, searchMoreResultSchema, searchRequestSchema, searchResultSchema, sourceProfileSchema, sourceTestReportSchema, sourcesResponseSchema } from '@neburyx/contracts';
+import { type ErrorCode, derivedNeighborsRequestSchema, derivedNeighborsResponseSchema, coverageRequestSchema, coverageResponseSchema, degreePreviewRequestSchema, entityLookupRequestSchema, degreePreviewSchema, entityPathSchema, entityQuerySchema, expandRequestSchema, expandResponseSchema, healthResponseSchema, investigationListQuerySchema, investigationListResponseSchema, investigationResponseSchema, meResponseSchema, nodeSchema, openInvestigationRequestSchema, openInvestigationResponseSchema, readyResponseSchema, searchMoreRequestSchema, searchMoreResultSchema, searchRequestSchema, searchResultSchema, sourceProfileSchema, sourceTestReportSchema, sourcesResponseSchema } from '@neburyx/contracts';
 import { z } from 'zod';
 import Fastify, {
   type FastifyBaseLogger,
@@ -17,6 +17,7 @@ import { deriveReferenceKeys, type ReferenceKeys } from './reference/keys.js';
 import { canonicalLookup, canonicalOpen } from './reference/resolve.js';
 import { createCoverageService } from './graph/coverage-service.js';
 import { createDegreePreviewService } from './graph/degree-preview-service.js';
+import { createDerivedNeighborsService } from './graph/derived-neighbors-service.js';
 import { createExpandService } from './graph/expand-service.js';
 import { createDegreeCache, type DegreeCacheOptions } from './graph/degree-cache.js';
 import { NO_DEGREE_VERDICTS, type DegreeVerdicts } from './source-test/usability.js';
@@ -389,6 +390,15 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       const identity = await options.store.current();
       const preview = await degrees.preview({ traceId: request.id, principal: identity.principal, sourceId: body.data.sourceId, ...body.data.ref, mask: body.data.mask === true, signal: signalOf(request) });
       return degreePreviewSchema.parse(preview);
+    });
+
+    const derivedNeighbors = createDerivedNeighborsService({ gate: options.gate, mapping, access, entities });
+    app.post('/v1/graph/derived-neighbors', { config: { permission: 'principal' } }, async (request) => {
+      const body = derivedNeighborsRequestSchema.safeParse(request.body);
+      if (!noQuerySchema.safeParse(request.query).success || !body.success) throw new AppError('INVALID_REQUEST');
+      const identity = await options.store.current();
+      const answer = await derivedNeighbors.derive({ traceId: request.id, principal: identity.principal, sourceId: body.data.sourceId, ...body.data.ref, mask: body.data.mask === true, signal: signalOf(request) });
+      return derivedNeighborsResponseSchema.parse(answer);
     });
 
     const coverage = createCoverageService({ mapping, access, verdicts: options.degreeVerdicts ?? NO_DEGREE_VERDICTS, audit: auditSink, logger: options.logger, ...(degreeCache === undefined ? {} : { cache: degreeCache }) });

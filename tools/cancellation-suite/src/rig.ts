@@ -2,6 +2,7 @@ import { rmSync } from 'node:fs';
 import type { ElementRef, GraphEdge, GraphNode } from '@neburyx/contracts';
 import { createApiClient, type ApiClient } from '../../../apps/web/src/api/client.js';
 import { createExpandStore, type ExpandStore } from '../../../apps/web/src/api/expand-store.js';
+import { createDerivedStore, type DerivedStore } from '../../../apps/web/src/api/derived-store.js';
 import { createPreviewStore, type PreviewStore } from '../../../apps/web/src/api/preview-store.js';
 import { bannerReporter } from '../../../apps/web/src/banner/banner-reporter.js';
 import { bindBannerToInvestigation } from '../../../apps/web/src/banner/bind-investigation.js';
@@ -31,6 +32,8 @@ import { assembleGate } from '../../../services/api/src/gate/assemble.js';
 import { makeWebRoot } from '../../../services/api/src/testing/web-root.js';
 
 export const SOURCE = 'demo';
+/** The rule of the mapping that starts from the hub. */
+export const RULE = 'shared-leaf';
 export const HUB: ElementRef = ref(SOURCE, 'hub', 'H-1');
 /** A second node to expand, so that two requests are not one node's newer ask replacing its older. */
 export const HUB_TWO: ElementRef = ref(SOURCE, 'hub', 'H-2');
@@ -52,6 +55,7 @@ const mappingWith = (budgets: Record<string, number> | undefined) => parseMappin
         { type: 'HAS', from: 'hub', to: 'part', stable_id: 'relId' },
         { type: 'HOLDS', from: 'hub', to: 'item', stable_id: 'relId' },
       ],
+      derived: [{ id: RULE, from: 'hub', to: 'hub', via: ['LINKED', 'leaf', 'LINKED'], rule_version: 1 }],
     }),
   ),
   'neburyx.yaml',
@@ -124,6 +128,7 @@ export interface Rig {
   readonly client: ApiClient;
   readonly expand: ExpandStore;
   readonly preview: PreviewStore;
+  readonly derived: DerivedStore;
   readonly banner: ReturnType<typeof createBuiltInBannerController>;
   readonly tracker: ReturnType<typeof createRequestTracker>;
   readonly events: AuditEvent[];
@@ -258,6 +263,7 @@ export async function startOn(backing: Backing, options: { readonly delayMs?: nu
   };
   const expand = createExpandStore(client, state, () => 'person-1', report, undefined, tracker);
   const preview = createPreviewStore(client, () => 'person-1', report, tracker);
+  const derived = createDerivedStore(client, state, () => 'person-1', () => state.investigation.getState().id ?? '');
   const showing = () => {
     const current = banner.view.getState().banner;
     return current === undefined ? undefined : { id: current.id, headline: current.headline, actions: current.actions.map((action) => action.id) };
@@ -284,7 +290,7 @@ export async function startOn(backing: Backing, options: { readonly delayMs?: nu
     action.run();
   };
   return {
-    state, client, expand, preview, banner, tracker, events, executor, nextRead, drain, loaded, hub: backing.hub, slots, saved, requests, bodies, order, at, cancelNow, responses, advance: (ms: number) => void (time.now += ms), showing, pressCancel, snapshot,
+    state, client, expand, preview, derived, banner, tracker, events, executor, nextRead, drain, loaded, hub: backing.hub, slots, saved, requests, bodies, order, at, cancelNow, responses, advance: (ms: number) => void (time.now += ms), showing, pressCancel, snapshot,
     logged: () => lines.map((line) => JSON.parse(line) as Record<string, unknown>),
     close: async () => {
       app.server.closeAllConnections();

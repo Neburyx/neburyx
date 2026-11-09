@@ -4,6 +4,7 @@ import {
   degreePreviewSchema,
   errorBodySchema,
   errorResponseSchema,
+  derivedNeighborsResponseSchema,
   expandResponseSchema,
   investigationListResponseSchema,
   investigationResponseSchema,
@@ -24,6 +25,8 @@ import {
   type ElementRef,
   type ErrorResponse,
   type ExpandRequest,
+  type DerivedNeighborsRequest,
+  type DerivedNeighborsResponse,
   type ExpandResponse,
   type GraphNode,
   type InvestigationListResponse,
@@ -85,6 +88,8 @@ export interface ApiClient {
   graphCoverage(request: CoverageRequest, signal?: AbortSignal): Promise<ApiResult<CoverageResponse>>;
   /** One page of the neighbors of a node for each asked neighbor type; the answer names the node and the source asked for and holds nothing of another source, or it is refused. */
   expandNeighbors(request: ExpandRequest, signal?: AbortSignal): Promise<ApiResult<ExpandResponse>>;
+  /** The rule-derived neighbors of a node, one result for each rule of the source whose first type is the node's; the answer names the node and the source asked for and holds nothing of another source, or it is refused. */
+  derivedNeighbors(request: DerivedNeighborsRequest, signal?: AbortSignal): Promise<ApiResult<DerivedNeighborsResponse>>;
 }
 
 function sameRef(left: ElementRef, right: ElementRef): boolean {
@@ -201,6 +206,13 @@ export function createApiClient(fetcher: Fetcher = (input, init) => fetch(input,
       const asked = expansion.neighborTypes;
       const sameTypes = answer.pages.length === asked.length && answer.pages.every((page, index) => page.neighborType === asked[index]);
       return !sameRef(answer.ref, { sourceId: expansion.sourceId, ...expansion.ref }) || named.some((sourceId) => sourceId !== expansion.sourceId) || !sameTypes ? failed('SCHEMA_MISMATCH') : result;
+    },
+    derivedNeighbors: async (derived, signal) => {
+      const result = await request(fetcher, '/v1/graph/derived-neighbors', derivedNeighborsResponseSchema, signal, 'POST', derived);
+      if (!result.ok) return result;
+      const answer = result.value;
+      const named = answer.results.flatMap((entry) => [...entry.nodes.map((node) => node.ref.sourceId), ...entry.edges.flatMap((edge) => sourcesOfEdge(edge))]);
+      return !sameRef(answer.ref, { sourceId: derived.sourceId, ...derived.ref }) || named.some((sourceId) => sourceId !== derived.sourceId) ? failed('SCHEMA_MISMATCH') : result;
     },
     listInvestigations: (limit, signal) => request(fetcher, `/v1/investigations?limit=${limit}&sort=lastEdited`, investigationListResponseSchema, signal),
     getInvestigation: async (id, signal) => {

@@ -65,7 +65,8 @@ function checkMarkers(definition: TemplateDefinition, shape: Shape): void {
   const degree = markersOf(definition.cypher).filter((marker) => marker.kind === 'degreeCounts');
   // a degree statement reads the entity type's label and stable ID property, so its parameter counts as used by an entity marker and a stable id marker
   const used = [
-    ...markersOf(definition.cypher).filter((marker) => marker.kind !== 'searchBranches' && marker.kind !== 'facetProbes' && marker.kind !== 'degreeCounts' && marker.kind !== 'expandNeighbors' && marker.kind !== 'relatedContext'),
+    ...markersOf(definition.cypher).filter((marker) => marker.kind !== 'searchBranches' && marker.kind !== 'facetProbes' && marker.kind !== 'degreeCounts' && marker.kind !== 'expandNeighbors' && marker.kind !== 'relatedContext' && marker.kind !== 'derivedRule'),
+    ...markersOf(definition.cypher).filter((marker) => marker.kind === 'derivedRule').flatMap(() => (definition.derivedRule === undefined ? [] : [{ kind: 'entity' as const, name: definition.derivedRule.entityTypeParam }, { kind: 'stableId' as const, name: definition.derivedRule.entityTypeParam }])),
     ...markersOf(definition.cypher).filter((marker) => marker.kind === 'expandNeighbors').flatMap((marker) => [{ kind: 'entity' as const, name: marker.name }, { kind: 'stableId' as const, name: marker.name }]),
     ...degree.flatMap((marker) => [{ kind: 'entity' as const, name: marker.name }, { kind: 'stableId' as const, name: marker.name }]),
   ];
@@ -240,6 +241,25 @@ function checkRelatedContext(definition: TemplateDefinition, shape: Shape): void
   if (definition.referenceParams !== undefined) throw new CatalogError(definition.id, 'declares reference lists and reference parameters, of which the gate reads back one kind only');
 }
 
+/**
+ * The rule run template's own declaration: its Cypher is exactly the one `@derivedRule(<rule parameter>)` marker, its schema has the rule ID and the entity type as text, it is not paged and not
+ * profiled, its cut means a lower bound, it names the stable-ID index it needs and the properties it uses, and the gate fills `limit` for it (the schema has no limit of its own).
+ */
+function checkDerivedRule(definition: TemplateDefinition, shape: Shape): void {
+  const used = markersOf(definition.cypher).filter((marker) => marker.kind === 'derivedRule');
+  const spec = definition.derivedRule;
+  if (spec === undefined) {
+    if (used.length > 0) throw new CatalogError(definition.id, 'uses the derived rule marker without declaring a rule run');
+    return;
+  }
+  if (used.length !== 1 || used[0]?.name !== spec.ruleParam || definition.cypher !== `@derivedRule(${spec.ruleParam})`) throw new CatalogError(definition.id, 'declares a rule run and its Cypher is not exactly its one derived rule marker');
+  if (shape.properties.get(spec.ruleParam) !== 'string' || shape.properties.get(spec.entityTypeParam) !== 'string' || !definition.entityParams.includes(spec.entityTypeParam)) throw new CatalogError(definition.id, 'declares a rule run for parameters its schema does not have as text or its entity parameters do not declare');
+  if (definition.searchBranches !== undefined || definition.facetProbes !== undefined || definition.degreeCounts !== undefined || definition.expandNeighbors !== undefined || definition.relatedContext !== undefined || definition.paged || definition.profile === true || definition.cutMeans !== 'lowerBound') {
+    throw new CatalogError(definition.id, "declares a rule run and is also another kind of template, paged, profiled or not declared cutMeans: 'lowerBound'");
+  }
+  if (definition.indexNeeds === undefined || definition.usedProperties === undefined) throw new CatalogError(definition.id, 'declares a rule run and does not name its indexes and the properties it uses');
+}
+
 /** A template that reads a node by its reference names two parameters its schema has: the entity type (a declared entity parameter) and the stable ID. */
 function checkReferenceParams(definition: TemplateDefinition, shape: Shape): void {
   const names = definition.referenceParams;
@@ -269,6 +289,7 @@ function build(definition: TemplateDefinition): Template {
   checkDegreeCounts(definition, shape);
   checkExpandNeighbors(definition, shape);
   checkRelatedContext(definition, shape);
+  checkDerivedRule(definition, shape);
   checkReferenceParams(definition, shape);
   checkGateParameters(definition, shape);
   const integerParameters = [...shape.properties].flatMap(([name, type]) => (type === 'integer' ? [name] : []));

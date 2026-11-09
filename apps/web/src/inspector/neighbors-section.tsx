@@ -28,6 +28,7 @@ export function NeighborsSection({ entity }: { readonly entity: ElementRef }) {
     if (request?.getState().phase === 'idle') request.reload();
   }, [request]);
   if (previews === undefined || request === undefined) return null;
+  const extra = <div key="rows">{rows.map(({ id, content: Row }) => <Row key={id} entity={entity} />)}</div>;
   const displayName = (type: string): string => profile?.entityTypes.find((entry) => entry.type === type)?.displayName ?? type;
   if (state.phase === 'failed') {
     return (
@@ -39,6 +40,7 @@ export function NeighborsSection({ entity }: { readonly entity: ElementRef }) {
             {RETRY}
           </button>
         ) : null}
+        {extra}
       </section>
     );
   }
@@ -50,6 +52,7 @@ export function NeighborsSection({ entity }: { readonly entity: ElementRef }) {
         <button type="button" className="neighbor-types-link" onClick={request.reload}>
           {RETRY}
         </button>
+        {extra}
       </section>
     );
   }
@@ -58,6 +61,7 @@ export function NeighborsSection({ entity }: { readonly entity: ElementRef }) {
       <section className="inspector-section" aria-label={SOURCED_NEIGHBORS}>
         <h3 className="inspector-section-title">{SOURCED_NEIGHBORS}</h3>
         <p role="status">{COUNTING_NEIGHBORS}</p>
+        {extra}
       </section>
     );
   }
@@ -78,9 +82,7 @@ export function NeighborsSection({ entity }: { readonly entity: ElementRef }) {
           </div>
         ))}
       </dl>
-      {rows.map(({ id, content: Row }) => (
-        <Row key={id} entity={entity} />
-      ))}
+      {extra}
       <p className="inspector-scope">{scopeLineText(preview.total, loaded.total)}</p>
     </section>
   );

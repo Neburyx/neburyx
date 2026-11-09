@@ -1,9 +1,10 @@
 import { act, render, screen, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { vi } from 'vitest';
-import type { DegreePreview, GraphNode, GraphProperty, SourceProfile } from '@neburyx/contracts';
+import type { DegreePreview, DerivedNeighborsResponse, GraphNode, GraphProperty, SourceProfile } from '@neburyx/contracts';
 import type { ApiClient, ApiFailure, ApiResult } from '../api/client.js';
 import { fakeClient } from '../api/fake-client.js';
+import { createDerivedStore } from '../api/derived-store.js';
 import { createPreviewStore } from '../api/preview-store.js';
 import { ProfileProvider } from '../canvas/profile-context.js';
 import { testProfile } from '../dev/test-profile.js';
@@ -14,6 +15,7 @@ import { staticProfile } from '../test-utils.js';
 import { loadGraph, show, withBuiltIns } from '../workspace/context-menu-kit.js';
 import { FloatingPanels } from '../workspace/panel-host.js';
 import { createPanelRegistryFor, PanelsProvider } from '../workspace/panel-registry.js';
+import { DerivedProvider } from '../workspace/derived-context.js';
 import { PreviewProvider } from '../workspace/preview-context.js';
 import type { MenuRegistry } from '../workspace/menu-registry.js';
 import { createSelectionActionRegistry, SelectionActionsProvider, type SelectionAction } from '../workspace/selection-actions.js';
@@ -47,6 +49,8 @@ export interface RigOptions {
   readonly actions?: readonly SelectionAction[];
   readonly state?: ClientState;
   readonly menus?: MenuRegistry;
+  /** The rules the profile lists; none by default, and then the inspector asks for no derived neighbors. */
+  readonly derivedRules?: SourceProfile['derivedRules'];
 }
 
 /** The workspace with the inspector bound: a loaded graph, a profile, selection actions, and a client whose entity and preview reads wait for the test to answer. */
@@ -54,12 +58,18 @@ export function inspectorRig(options: RigOptions = {}) {
   const entityReads: Ask<GraphNode>[] = [];
   const entityCalls: Array<{ readonly id: string; readonly mask: boolean; readonly signal: AbortSignal | undefined }> = [];
   const previews: Ask<DegreePreview>[] = [];
+  const derived: Ask<DerivedNeighborsResponse>[] = [];
+  const derivedCalls: Array<{ readonly id: string; readonly mask: boolean; readonly signal: AbortSignal | undefined }> = [];
   const client: ApiClient = fakeClient({
     getEntity: (reference, opts, signal) => {
       entityCalls.push({ id: reference.stableId, mask: opts?.mask === true, signal });
       return new Promise((resolve) => void entityReads.push({ answer: resolve }));
     },
     previewExpansion: () => new Promise((resolve) => void previews.push({ answer: resolve })),
+    derivedNeighbors: (request, signal) => {
+      derivedCalls.push({ id: request.ref.stableId, mask: request.mask === true, signal });
+      return new Promise((resolve) => void derived.push({ answer: resolve }));
+    },
   });
   const state = options.state ?? createClientState();
   loadGraph(state, options.nodes ?? [entity('n1', [property('holder', 'Jordan')]), entity('n2')], []);
@@ -70,7 +80,9 @@ export function inspectorRig(options: RigOptions = {}) {
   for (const action of options.actions ?? []) actions.register(action);
   const reads = createEntityReadStore(client, () => 'person-1', () => state.investigation.getState().id ?? 'draft');
   const previewStore = createPreviewStore(client, () => 'person-1');
-  const profile = 'profile' in options ? options.profile : profileOf();
+  const derivedStore = createDerivedStore(client, state, () => 'person-1', () => state.investigation.getState().id ?? 'draft');
+  const base = 'profile' in options ? options.profile : profileOf();
+  const profile = base === undefined ? base : { ...base, derivedRules: [...(options.derivedRules ?? [])] };
   const menus = options.menus ?? withBuiltIns();
   const shown = show(state, {}, menus, (
     <ProfileProvider store={staticProfile('a', profile)}>
@@ -81,11 +93,13 @@ export function inspectorRig(options: RigOptions = {}) {
   ), (tree: ReactNode) => (
     <SelectionActionsProvider registry={actions}>
       <PreviewProvider store={previewStore}>
-        <EntityReadProvider store={reads}>{tree}</EntityReadProvider>
+        <DerivedProvider store={derivedStore}>
+          <EntityReadProvider store={reads}>{tree}</EntityReadProvider>
+        </DerivedProvider>
       </PreviewProvider>
     </SelectionActionsProvider>
   ));
-  return { state, panels, menus, shown, client, previewStore, entityReads, entityCalls, previews, inspector: bound.inspector, unbind: () => (bound.unbind(), unbindLegend()) };
+  return { state, panels, menus, shown, client, previewStore, derivedStore, entityReads, entityCalls, previews, derived, derivedCalls, inspector: bound.inspector, unbind: () => (bound.unbind(), unbindLegend()) };
 }
 
 export const select = (state: ClientState, ...ids: string[]): void => void act(() => state.presentation.select(ids.map(keyOf)));

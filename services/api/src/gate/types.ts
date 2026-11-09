@@ -127,6 +127,12 @@ export interface Template {
    * row and direction, each binding both ends by their stable ID before the relationship pattern. Every name is quoted from the allowlist and the request holds values only.
    */
   readonly relatedContext?: { readonly hitsParam: string; readonly exactParam: string };
+  /**
+   * The rule run template's own declaration, for no other template: a statement that finds the other ends of one derived rule of the mapping from one node and, for each, the first chain of nodes and relationships that
+   * supports it. The Cypher is the one marker `@derivedRule(<rule parameter>)`; the rule is named by ID in the request and checked against the mapping's rules, and the gate writes the whole statement from the rule's chain
+   * (every label and relationship type quoted from the allowlist). It reads at most `$limit + 1` other ends.
+   */
+  readonly derivedRule?: { readonly ruleParam: string; readonly entityTypeParam: string };
   /** The names of list parameters whose elements are `{ entityType, stableId }` references: for an entity type whose references are keyed the gate reads the token in each element's stable ID before the parameters are checked. */
   readonly referenceLists?: readonly string[];
   /**
@@ -165,6 +171,8 @@ export interface SourceAllowlist {
   readonly referenceProperties: ReadonlyMap<string, readonly string[]>;
   /** The evidence properties of each relationship mapping row that has any, with or without a `stable_id`, in the mapping's order: the rows an evidence read may name. */
   readonly evidenceRows: readonly { readonly type: string; readonly from: string; readonly to: string; readonly properties: readonly string[] }[];
+  /** The derived rules of the mapping, in its order: the chains a rule run may follow. */
+  readonly derivedRules?: readonly { readonly id: string; readonly from: string; readonly to: string; readonly via: readonly string[]; readonly stopListProperty?: string }[];
   /** The relationship rows of the mapping, in its order: the pairs a degree read counts. */
   readonly relationshipRows: readonly { readonly type: string; readonly from: string; readonly to: string; readonly stableId?: string; readonly observedAt?: string; readonly filterable?: readonly string[]; readonly sortable?: readonly string[] }[];
   /** The `filterable` properties of each entity type, by type, in the mapping's order; a type with none is absent. */

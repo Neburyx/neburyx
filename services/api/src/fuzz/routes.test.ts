@@ -35,6 +35,7 @@ const ROUTES: readonly Route[] = [
   { name: 'lookup by reference', url: '/v1/entities/lookup', body: { sourceId: FUZZ_SOURCE, ref: REF }, required: [['sourceId'], ['ref'], ['ref', 'entityType'], ['ref', 'stableId']], capped: [{ path: ['ref', 'stableId'], over: 266_692 }] },
   { name: 'lookup by value', url: '/v1/entities/lookup', body: { sourceId: FUZZ_SOURCE, value: { entityType: 'widget', value: 'W-1' } }, required: [['sourceId'], ['value'], ['value', 'entityType'], ['value', 'value']], capped: [{ path: ['value', 'value'], over: 100_001 }] },
   { name: 'degree preview', url: '/v1/graph/preview-expansion', body: { sourceId: FUZZ_SOURCE, ref: REF }, required: [['sourceId'], ['ref'], ['ref', 'entityType'], ['ref', 'stableId']], capped: [{ path: ['ref', 'stableId'], over: 266_692 }] },
+  { name: 'derived neighbors', url: '/v1/graph/derived-neighbors', body: { sourceId: FUZZ_SOURCE, ref: REF }, required: [['sourceId'], ['ref'], ['ref', 'entityType'], ['ref', 'stableId']], capped: [{ path: ['ref', 'stableId'], over: 266_692 }] },
   { name: 'coverage', url: '/v1/graph/coverage', body: { sourceId: FUZZ_SOURCE, entities: [{ ref: { sourceId: FUZZ_SOURCE, ...REF }, loadedRelationships: 1, loadedQuality: 'exact' }] }, required: [['sourceId'], ['entities']], capped: [] },
   { name: 'expand', url: '/v1/graph/expand', body: { sourceId: FUZZ_SOURCE, ref: REF, neighborTypes: ['gadget'] }, required: [['sourceId'], ['ref'], ['ref', 'entityType'], ['ref', 'stableId'], ['neighborTypes']], capped: [] },
 ];
@@ -105,6 +106,7 @@ describe('free-text fields', () => {
     { name: 'type-ahead text', build: (text) => ({ url: '/v1/search/entities', body: { sourceId: FUZZ_SOURCE, text, typeahead: true } }), parameter: 'text', minLength: 2, maxLength: 200 },
     { name: 'stable ID of a reference (lookup)', build: (text) => ({ url: '/v1/entities/lookup', body: { sourceId: FUZZ_SOURCE, ref: { entityType: 'widget', stableId: text } } }), parameter: 'stableId', minLength: 1, maxLength: 100_000 },
     { name: 'stable ID of a reference (degree preview)', build: (text) => ({ url: '/v1/graph/preview-expansion', body: { sourceId: FUZZ_SOURCE, ref: { entityType: 'widget', stableId: text } } }), parameter: 'stableId', minLength: 1, maxLength: 100_000 },
+    { name: 'stable ID of a reference (derived neighbors)', build: (text) => ({ url: '/v1/graph/derived-neighbors', body: { sourceId: FUZZ_SOURCE, ref: { entityType: 'widget', stableId: text } } }), parameter: 'stableId', minLength: 1, maxLength: 100_000 },
     { name: 'stable ID of a reference (expand)', build: (text) => ({ url: '/v1/graph/expand', body: { sourceId: FUZZ_SOURCE, ref: { entityType: 'widget', stableId: text }, neighborTypes: ['gadget'] } }), parameter: 'stableId', minLength: 1, maxLength: 100_000 },
     { name: 'value of a lookup', build: (text) => ({ url: '/v1/entities/lookup', body: { sourceId: FUZZ_SOURCE, value: { entityType: 'widget', value: text } } }), parameter: 'stableId', minLength: 1, maxLength: 100_000 },
   ];
@@ -155,7 +157,7 @@ describe('free-text fields', () => {
 
 describe('the stable ID of a type that is not keyed', () => {
   it('is read by the gate only up to 100,000 units: a longer one passes the route schema (cap 266,691, sized for a token) and is refused at validate, before any read', async () => {
-    for (const url of ['/v1/graph/preview-expansion', '/v1/entities/lookup']) {
+    for (const url of ['/v1/graph/preview-expansion', '/v1/graph/derived-neighbors', '/v1/entities/lookup']) {
       for (const length of [100_001, 266_691]) {
         rig.reset();
         const response = await rig.post(url, { sourceId: FUZZ_SOURCE, ref: { entityType: 'widget', stableId: 'q'.repeat(length) } });

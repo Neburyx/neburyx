@@ -44,6 +44,7 @@ const forged = fc
 type Send = (stableId: string) => Promise<{ readonly body: string }>;
 const refPositions: readonly (readonly [string, Send])[] = [
   ['expand ref', (stableId) => rig.post('/v1/graph/expand', { sourceId: FUZZ_SOURCE, ref: { entityType: 'phone', stableId }, neighborTypes: ['widget'] })],
+  ['derived neighbors ref', (stableId) => rig.post('/v1/graph/derived-neighbors', { sourceId: FUZZ_SOURCE, ref: { entityType: 'phone', stableId } })],
   ['degree preview ref', (stableId) => rig.post('/v1/graph/preview-expansion', { sourceId: FUZZ_SOURCE, ref: { entityType: 'phone', stableId } })],
   ['lookup ref', (stableId) => rig.post('/v1/entities/lookup', { sourceId: FUZZ_SOURCE, ref: { entityType: 'phone', stableId } })],
   ['entity path', async (stableId) => ({ body: (await rig.app.inject({ method: 'GET', url: `/v1/entities/${FUZZ_SOURCE}/phone/${encodeURIComponent(stableId.replace(/[\ud800-\udfff]/g, '\ufffd'))}` })).body })],

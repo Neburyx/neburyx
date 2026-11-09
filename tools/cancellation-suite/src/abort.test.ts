@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { HUB, HUB_THREE, HUB_TWO, NEIGHBOR_TYPES, personalise, startRig, until, type Rig } from './rig.js';
+import { HUB, HUB_THREE, HUB_TWO, NEIGHBOR_TYPES, personalise, RULE, startRig, until, type Rig } from './rig.js';
 import { elementKey } from '../../../apps/web/src/state/keys.js';
 import { cancelledHeadline } from '../../../apps/web/src/banner/copy.js';
 import { EXPAND_NEIGHBORS_ID } from '../../../services/api/src/gate/templates/expand-neighbors.js';
@@ -119,6 +119,27 @@ describe('cancelling a running expansion', () => {
     await asked;
     expect(rig.saved()).toBe(savedBefore);
     expect(rig.requests.filter((request) => request.includes('/v1/investigations'))).toEqual([]);
+  });
+});
+
+describe('cancelling the read of the rule-derived neighbors', () => {
+  it('aborts the read, audits it failed with the reason cancelled, holds no answer, adds nothing to the view and leaves the client as it was', async () => {
+    rig = await startRig();
+    personalise(rig);
+    const before = rig.snapshot();
+    const request = rig.derived.forNode(HUB, false);
+    const read = await rig.nextRead();
+    expect(read.call.templateId).toBe('derived-rule-run');
+    request.cancel();
+    await until(() => read.call.signal?.aborted === true, 'the read to be aborted');
+    read.answerRows();
+    await until(() => rig.events.some((event) => event.action === 'entity.derived_rule_run'), 'the audit event');
+    expect(rig.events.find((each) => each.action === 'entity.derived_rule_run')).toMatchObject({ result: 'failed', detail: { reason: 'cancelled' } });
+    await until(() => rig.slots.inspect().sources.size === 0 && rig.slots.inspect().users.size === 0, 'the read slots to be free');
+    expect(request.getState().phase).toBe('idle');
+    expect(rig.derived.held(HUB, RULE)).toBeUndefined();
+    expect(rig.derived.show(HUB, RULE)).toBeUndefined();
+    expect(rig.snapshot()).toBe(before);
   });
 });
 

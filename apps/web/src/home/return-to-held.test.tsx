@@ -33,6 +33,7 @@ function recording(client: ApiClient) {
     previewExpansion: (request, signal) => (calls.push('previewExpansion'), client.previewExpansion(request, signal)),
     expandNeighbors: (request, signal) => (calls.push('expandNeighbors'), client.expandNeighbors(request, signal)),
     graphCoverage: (request, signal) => client.graphCoverage(request, signal),
+    derivedNeighbors: (request, signal) => (calls.push('derivedNeighbors'), client.derivedNeighbors(request, signal)),
   };
   return { client: wrapped, calls };
 }

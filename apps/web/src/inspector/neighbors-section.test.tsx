@@ -107,11 +107,11 @@ describe('the sourced neighbors section', () => {
     const rig = inspectorRig();
     select(rig.state, 'n1');
     await answer(rig, previewOf());
-    expect(section().querySelectorAll('.inspector-derived')).toHaveLength(0);
-    act(() => void rig.inspector.neighborRows.register({ id: 'derived', order: 10, content: ({ entity: reference }) => <p className="inspector-derived">{`derived for ${reference.stableId}`}</p> }));
-    const rows = [...section().querySelectorAll('.inspector-row, .inspector-derived')].map((node) => node.className);
-    expect(rows.at(-1)).toBe('inspector-derived');
-    expect(section().textContent).toContain('derived for n1');
+    expect(section().querySelectorAll('.inspector-extra')).toHaveLength(0);
+    act(() => void rig.inspector.neighborRows.register({ id: 'extra', order: 10, content: ({ entity: reference }) => <p className="inspector-extra">{`extra row for ${reference.stableId}`}</p> }));
+    const rows = [...section().querySelectorAll('.inspector-row, .inspector-extra')].map((node) => node.className);
+    expect(rows.at(-1)).toBe('inspector-extra');
+    expect(section().textContent).toContain('extra row for n1');
     expect(keyOf('n1')).toBeTruthy();
   });
 });

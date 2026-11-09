@@ -2,14 +2,15 @@ import { OverviewTab } from './overview-tab.js';
 import { PropertiesTab } from './properties-tab.js';
 import { RelationshipsTab } from './relationships-tab.js';
 import { RELATIONSHIPS } from './copy.js';
+import { DerivedNeighborRows } from './derived-rows.js';
 import type { ClientState } from '../state/client-state.js';
 import type { PanelRegistry } from '../workspace/panel-registry.js';
 import { bindInspector } from './inspector-binder.js';
 import { createInspector, type Inspector } from './inspector.js';
 
-/** The tabs this feature draws; the Evidence tab is registered by the feature that builds it. */
+/** The tabs and neighbor rows the inspector draws; the Evidence tab is registered by the feature that builds it. */
 export function registerBuiltInInspectorTabs(inspector: Inspector): () => void {
-  const removers = [inspector.tabs.register({ id: 'overview', label: 'Overview', order: 10, content: OverviewTab }), inspector.tabs.register({ id: 'relationships', label: RELATIONSHIPS, order: 15, content: RelationshipsTab }), inspector.tabs.register({ id: 'properties', label: 'Properties', order: 20, content: PropertiesTab })];
+  const removers = [inspector.tabs.register({ id: 'overview', label: 'Overview', order: 10, content: OverviewTab }), inspector.tabs.register({ id: 'relationships', label: RELATIONSHIPS, order: 15, content: RelationshipsTab }), inspector.tabs.register({ id: 'properties', label: 'Properties', order: 20, content: PropertiesTab }), inspector.neighborRows.register({ id: 'derived', order: 100, content: DerivedNeighborRows })];
   return () => {
     for (const remove of removers) remove();
   };

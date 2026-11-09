@@ -8,6 +8,7 @@ import { readyResponseSchema } from './ready.js';
 import { sourceProfileSchema } from './profile.js';
 import { coverageRequestSchema, coverageResponseSchema } from './coverage.js';
 import { degreePreviewRequestSchema, degreePreviewSchema } from './degree-preview.js';
+import { derivedNeighborsRequestSchema, derivedNeighborsResponseSchema } from './derived-neighbors.js';
 import { entityLookupRequestSchema } from './entities.js';
 import { expandRequestSchema, expandResponseSchema } from './expand.js';
 import { searchMoreRequestSchema, searchMoreResultSchema, searchRequestSchema, searchResultSchema } from './search.js';
@@ -21,7 +22,7 @@ export interface OpenApiDocument {
   readonly openapi: string;
   readonly info: { readonly title: string; readonly version: string };
   readonly paths: Readonly<Record<string, unknown>>;
-  readonly components: { readonly schemas: { readonly CoverageRequest: Record<string, unknown>; readonly CoverageResponse: Record<string, unknown>; readonly DegreePreview: Record<string, unknown>; readonly DegreePreviewRequest: Record<string, unknown>; readonly EntityLookupRequest: Record<string, unknown>; readonly ErrorResponse: Record<string, unknown>; readonly ExpandRequest: Record<string, unknown>; readonly ExpandResponse: Record<string, unknown>; readonly GraphNode: Record<string, unknown>; readonly HealthResponse: Record<string, unknown>; readonly InvestigationListResponse: Record<string, unknown>; readonly InvestigationResponse: Record<string, unknown>; readonly MeResponse: Record<string, unknown>; readonly OpenInvestigationRequest: Record<string, unknown>; readonly OpenInvestigationResponse: Record<string, unknown>; readonly ReadyResponse: Record<string, unknown>; readonly SearchMoreRequest: Record<string, unknown>; readonly SearchMoreResult: Record<string, unknown>; readonly SearchRequest: Record<string, unknown>; readonly SearchResult: Record<string, unknown>; readonly SourceProfile: Record<string, unknown>; readonly SourceTestReport: Record<string, unknown>; readonly SourcesResponse: Record<string, unknown> } };
+  readonly components: { readonly schemas: { readonly CoverageRequest: Record<string, unknown>; readonly CoverageResponse: Record<string, unknown>; readonly DegreePreview: Record<string, unknown>; readonly DegreePreviewRequest: Record<string, unknown>; readonly DerivedNeighborsRequest: Record<string, unknown>; readonly DerivedNeighborsResponse: Record<string, unknown>; readonly EntityLookupRequest: Record<string, unknown>; readonly ErrorResponse: Record<string, unknown>; readonly ExpandRequest: Record<string, unknown>; readonly ExpandResponse: Record<string, unknown>; readonly GraphNode: Record<string, unknown>; readonly HealthResponse: Record<string, unknown>; readonly InvestigationListResponse: Record<string, unknown>; readonly InvestigationResponse: Record<string, unknown>; readonly MeResponse: Record<string, unknown>; readonly OpenInvestigationRequest: Record<string, unknown>; readonly OpenInvestigationResponse: Record<string, unknown>; readonly ReadyResponse: Record<string, unknown>; readonly SearchMoreRequest: Record<string, unknown>; readonly SearchMoreResult: Record<string, unknown>; readonly SearchRequest: Record<string, unknown>; readonly SearchResult: Record<string, unknown>; readonly SourceProfile: Record<string, unknown>; readonly SourceTestReport: Record<string, unknown>; readonly SourcesResponse: Record<string, unknown> } };
 }
 
 const RETRY_AFTER_HEADER = { 'Retry-After': { description: 'Whole seconds to wait', schema: { type: 'integer', minimum: 1 } } };
@@ -52,6 +53,8 @@ export function buildOpenApiDocument(
   investigationList: z.ZodType = investigationListResponseSchema,
   degreePreviewRequest: z.ZodType = degreePreviewRequestSchema,
   degreePreview: z.ZodType = degreePreviewSchema,
+  derivedNeighborsRequest: z.ZodType = derivedNeighborsRequestSchema,
+  derivedNeighborsResponse: z.ZodType = derivedNeighborsResponseSchema,
   entityLookupRequest: z.ZodType = entityLookupRequestSchema,
   expandRequest: z.ZodType = expandRequestSchema,
   expandResponse: z.ZodType = expandResponseSchema,
@@ -285,6 +288,25 @@ export function buildOpenApiDocument(
           },
         },
       },
+      '/v1/graph/derived-neighbors': {
+        post: {
+          operationId: 'derivedNeighbors',
+          summary: 'The rule-derived neighbors of an entity, counted and returned in one bounded read',
+          requestBody: { required: true, content: jsonBody('DerivedNeighborsRequest') },
+          description:
+            'Runs each derived rule of the mapping whose from type is the entity type of the node, in mapping order, in one read through the gate (one read for each rule, under one read slot): the other ends the rule finds, at most 25 (fewer when the source lowered max_page below 25), each with the first chain of nodes and relationships that supports it. The answer holds one result for each rule: the rule ID and version from the mapping, the count, and the other ends, the middle entities, the derived edges and the supporting edges of the derived edges that were counted. The count is exact when the run read every other end the rule gives, and a lowerBound (the number that remained) when it stopped at the cap (25, or the lower max_page of the source); a derived edge whose end or whose supporting edge the person may not see is neither counted nor returned, and a count that stopped at the cap is never exact after such an edge was dropped. A relationship type of the chain with no stable ID supports as an aggregate edge whose member count is a lowerBound. An entity type with no rule gives an empty list of results and reads nothing. When no rule finds anything, the answer is confirmed by one entity read through the gate (with its own audit event, and under its own read slot after the first is released), so that an exact zero for an entity that exists is told apart from a node that is not there. A node that is not in the source, is of another entity type, or is in a source that is not configured or that the person may not read is NOT_FOUND, one answer for all. mask is part of the request because the nodes follow it; while it is true a rule whose stop-list property is personal data is INVALID_REQUEST. No stable ID or count is logged.',
+          responses: {
+            '200': { description: 'The results of the rules', content: jsonBody('DerivedNeighborsResponse') },
+            '400': { description: 'The body is not valid, or a rule uses a personal property while masking is asked', content: jsonBody('ErrorResponse') },
+            '404': { description: 'The node is not in the source, or the source is not configured or may not be read (one answer for all)', content: jsonBody('ErrorResponse') },
+            '415': { description: 'The body is not JSON', content: jsonBody('ErrorResponse') },
+            '429': { description: 'Too many requests from this person to this source in the last minute: nothing was read; details.retryAfterMs and the Retry-After header (whole seconds) say how long to wait', content: jsonBody('ErrorResponse') },
+            '500': { description: 'The read could not run, or the source answered with something unreadable', content: jsonBody('ErrorResponse') },
+            '503': { description: 'The source is not available, or is busy; after repeated timeouts details.retryAfterMs and the Retry-After header (whole seconds) say how long to wait', content: jsonBody('ErrorResponse') },
+            '504': { description: 'The source did not answer in time', content: jsonBody('ErrorResponse') },
+          },
+        },
+      },
       '/v1/graph/coverage': {
         post: {
           operationId: 'graphCoverage',
@@ -338,7 +360,7 @@ export function buildOpenApiDocument(
       },
     },
     components: {
-      schemas: { CoverageRequest: schemaJson(coverageRequest), CoverageResponse: schemaJson(coverageResponse), DegreePreview: schemaJson(degreePreview), DegreePreviewRequest: schemaJson(degreePreviewRequest), EntityLookupRequest: schemaJson(entityLookupRequest), ErrorResponse: schemaJson(errorResponse), ExpandRequest: schemaJson(expandRequest), ExpandResponse: schemaJson(expandResponse), GraphNode: schemaJson(graphNode), HealthResponse: schemaJson(healthResponse), InvestigationListResponse: schemaJson(investigationList), InvestigationResponse: schemaJson(investigationResponse), MeResponse: schemaJson(meResponse), OpenInvestigationRequest: schemaJson(openInvestigationRequest), OpenInvestigationResponse: schemaJson(openInvestigationResponse), ReadyResponse: schemaJson(readyResponse), SearchMoreRequest: schemaJson(searchMoreRequest), SearchMoreResult: schemaJson(searchMoreResult), SearchRequest: schemaJson(searchRequest), SearchResult: schemaJson(searchResult), SourceProfile: schemaJson(sourceProfile), SourceTestReport: schemaJson(sourceTestReport), SourcesResponse: schemaJson(sourcesResponse) },
+      schemas: { CoverageRequest: schemaJson(coverageRequest), CoverageResponse: schemaJson(coverageResponse), DegreePreview: schemaJson(degreePreview), DegreePreviewRequest: schemaJson(degreePreviewRequest), DerivedNeighborsRequest: schemaJson(derivedNeighborsRequest), DerivedNeighborsResponse: schemaJson(derivedNeighborsResponse), EntityLookupRequest: schemaJson(entityLookupRequest), ErrorResponse: schemaJson(errorResponse), ExpandRequest: schemaJson(expandRequest), ExpandResponse: schemaJson(expandResponse), GraphNode: schemaJson(graphNode), HealthResponse: schemaJson(healthResponse), InvestigationListResponse: schemaJson(investigationList), InvestigationResponse: schemaJson(investigationResponse), MeResponse: schemaJson(meResponse), OpenInvestigationRequest: schemaJson(openInvestigationRequest), OpenInvestigationResponse: schemaJson(openInvestigationResponse), ReadyResponse: schemaJson(readyResponse), SearchMoreRequest: schemaJson(searchMoreRequest), SearchMoreResult: schemaJson(searchMoreResult), SearchRequest: schemaJson(searchRequest), SearchResult: schemaJson(searchResult), SourceProfile: schemaJson(sourceProfile), SourceTestReport: schemaJson(sourceTestReport), SourcesResponse: schemaJson(sourcesResponse) },
     },
   };
 }

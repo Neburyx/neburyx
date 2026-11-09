@@ -16,9 +16,11 @@ import { createTestRuns } from './sources/test-runs.js';
 import { TestRunsProvider } from './sources/test-runs-context.js';
 import { answeredData, createShellData, ShellDataProvider } from './shell/shell-data.js';
 import { createCoverageStore } from './api/coverage-store.js';
+import { createDerivedStore } from './api/derived-store.js';
 import { createPreviewStore } from './api/preview-store.js';
 import { CoverageProvider } from './workspace/coverage-context.js';
 import { createEntityReadStore, EntityReadProvider } from './inspector/entity-read.js';
+import { DerivedProvider } from './workspace/derived-context.js';
 import { PreviewProvider } from './workspace/preview-context.js';
 import { ExpandProvider } from './workspace/expand-context.js';
 import { createHeavyGuard } from './api/heavy-guard.js';
@@ -112,6 +114,7 @@ export function appRoutes(client: ApiClient, state: ClientState, banner?: Banner
           timeoutOf: (sourceId) => sourceItems().find((source) => source.id === sourceId)?.timeoutMs,
         });
   const previews = createPreviewStore(client, person, report, tracker);
+  const derived = createDerivedStore(client, state, person, () => state.investigation.getState().id ?? '');
   const entityReads = createEntityReadStore(client, person, () => state.investigation.getState().id ?? '');
   const coverage = createCoverageStore(client, person, report);
   const expansions = createExpandStore(client, state, person, report, banner === undefined ? undefined : createHeavyGuard(previews, banner, state), tracker);
@@ -126,6 +129,7 @@ export function appRoutes(client: ApiClient, state: ClientState, banner?: Banner
             <ShellDataProvider store={shellData}>
               <ProfileProvider store={profile}>
                 <PreviewProvider store={previews}>
+                <DerivedProvider store={derived}>
                 <EntityReadProvider store={entityReads}>
                 <CoverageProvider store={coverage}>
                 <ExpandProvider store={expansions}>
@@ -140,6 +144,7 @@ export function appRoutes(client: ApiClient, state: ClientState, banner?: Banner
                 </ExpandProvider>
                 </CoverageProvider>
                 </EntityReadProvider>
+                </DerivedProvider>
                 </PreviewProvider>
               </ProfileProvider>
             </ShellDataProvider>

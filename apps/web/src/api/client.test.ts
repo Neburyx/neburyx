@@ -319,3 +319,34 @@ describe('graphCoverage', () => {
     expect(await createApiClient(respondWith({ notRetrieved: { value: 5, quality: 'unknown', scope: 'x' } })).graphCoverage(REQUEST)).toEqual({ ok: false, failure: { code: 'SCHEMA_MISMATCH' } });
   });
 });
+
+const DERIVED_REF = { sourceId: 'demo', entityType: 'widget', stableId: 'W-1' };
+const DERIVED_NODE = { ref: { ...DERIVED_REF, stableId: 'W-2' }, display: { title: 'W-2', type: 'widget' }, properties: [], qualityFlags: [], provenanceRefs: [], authorization: { canInspect: true, canExport: true } };
+const DERIVED_ANSWER = { ref: DERIVED_REF, results: [{ ruleId: 'shared', ruleVersion: 1, count: { value: 0, quality: 'exact', scope: 'derived:neighbors' }, nodes: [], edges: [], warnings: [] }] };
+
+describe('the API client, asking for the rule-derived neighbors of a node', () => {
+  it('posts the request to the derived neighbors path and parses the answer', async () => {
+    const seen: { input: string; init?: Parameters<Fetcher>[1] }[] = [];
+    const client = createApiClient(async (input, init) => {
+      seen.push({ input, ...(init === undefined ? {} : { init }) });
+      return new Response(JSON.stringify(DERIVED_ANSWER));
+    });
+    expect(await client.derivedNeighbors({ ...PREVIEW_REQUEST, mask: true })).toEqual({ ok: true, value: DERIVED_ANSWER });
+    expect(seen[0]?.input).toBe('/v1/graph/derived-neighbors');
+    expect(JSON.parse(seen[0]?.init?.body ?? '{}')).toEqual({ ...PREVIEW_REQUEST, mask: true });
+  });
+
+  it('accepts a result whose nodes are of the source asked', async () => {
+    const body = { ...DERIVED_ANSWER, results: [{ ...DERIVED_ANSWER.results[0], nodes: [DERIVED_NODE] }] };
+    expect(await createApiClient(respondWith(body)).derivedNeighbors(PREVIEW_REQUEST)).toEqual({ ok: true, value: body });
+  });
+
+  it.each([
+    ['an answer that does not parse', { ...DERIVED_ANSWER, results: 3 }],
+    ['a valid answer for another source', { ...DERIVED_ANSWER, ref: { ...DERIVED_REF, sourceId: 'other' } }],
+    ['a valid answer for another node', { ...DERIVED_ANSWER, ref: { ...DERIVED_REF, stableId: 'W-9' } }],
+    ['a result with a node of another source', { ...DERIVED_ANSWER, results: [{ ...DERIVED_ANSWER.results[0], nodes: [{ ...DERIVED_NODE, ref: { ...DERIVED_NODE.ref, sourceId: 'other' } }] }] }],
+  ])('refuses %s as a schema mismatch', async (_name, body) => {
+    expect(await createApiClient(respondWith(body)).derivedNeighbors(PREVIEW_REQUEST)).toEqual({ ok: false, failure: { code: 'SCHEMA_MISMATCH' } });
+  });
+});

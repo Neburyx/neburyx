@@ -25,14 +25,14 @@ A test feeds the check a statement built from text and shows it fails.
 | Wrong type, missing key, extra key, text one over its cap (search text 201 characters, lookup value 100,001 units, reference 266,692 units, path segment 401 units), control character or lone surrogate in a path segment, malformed JSON, body over 1 MiB | `INVALID_REQUEST`, no read |
 | Content type that is not JSON (plain text is read as a string and refused as `INVALID_REQUEST`) | `UNSUPPORTED_MEDIA_TYPE` |
 | Unknown source | `NOT_FOUND` |
-| Entity type the mapping does not name | `NOT_FOUND` on degree preview and coverage; `INVALID_REQUEST` on expand, search, lookup and the entity read |
+| Entity type the mapping does not name | `NOT_FOUND` on degree preview, derived neighbors and coverage; `INVALID_REQUEST` on expand, search, lookup and the entity read |
 | Coverage: no entries, more than 500, a duplicate | `INVALID_REQUEST`; a ref of another source: `SOURCE_MISMATCH`; coverage never reads the source |
 | Expand `limit` below 1, a fraction, beyond the safe integers | `INVALID_REQUEST` |
 | Expand `filters` or `rank` that name an operator, a target, an order or a kind outside the closed sets, a property the mapping does not declare (for every asked neighbor type and every row read), more than 6 conditions, an `in` of more than 20 values, a range with no end, values of mixed kinds, a number beyond 2^53, or temporal text that is not ISO; a condition or rank on a personal-data property while masking is asked | `INVALID_REQUEST`, no read |
 | Expand `filters` or `rank` changed, or taken off, when continuing with a cursor | `CURSOR_INVALIDATED` |
 | Expand `limit` above the source's `max_page` (default 50) | `QUERY_BUDGET_EXCEEDED`, with `maxPage` |
 | Search more with a `limit`, more than 25 exact references, or references of another source, of an unmapped type, or sent to a group other than `related` | `INVALID_REQUEST`, no read |
-| A stable ID of a keyed entity type that is not a token this server made for that source and type (forged, truncated, extended, another spelling, another source or type), in expand, preview, lookup, the entity path and the exact references of search more | `INVALID_REQUEST`, no read |
+| A stable ID of a keyed entity type that is not a token this server made for that source and type (forged, truncated, extended, another spelling, another source or type), in expand, preview, derived neighbors, lookup, the entity path and the exact references of search more | `INVALID_REQUEST`, no read |
 | A cursor that is edited, truncated, extended, of another version or spelling, signed right over a wrong payload, signed right for another source, principal, policy version, template, template version, sort or bound parameter, sent to another search group, expired, or minted before the policy version changed | `CURSOR_INVALIDATED`, with one body for all of them, and no read (search more: only the index-snapshot read it makes before it hands the cursor to the gate) |
 
 Free text is accepted, and must reach the executor as a parameter only: search text, the stable ID of a type that is not keyed, and a lookup value (for a type that is not keyed, or a keyed type when unmasked). So are strings at their caps, with the body inside the 1 MiB bound.
@@ -50,6 +50,7 @@ Run on the commit that added this page, with `NBX_FUZZ_RECORD` set to a file; th
 | `POST /v1/search/entities/more` | `CURSOR_INVALIDATED` 1938, `INVALID_REQUEST` 330, `served` 312 |
 | `POST /v1/entities/lookup` | `INVALID_REQUEST` 487, `served` 361, `NOT_FOUND` 10 |
 | `POST /v1/graph/preview-expansion` | `INVALID_REQUEST` 210, `NOT_FOUND` 205 |
+| `POST /v1/graph/derived-neighbors` | `INVALID_REQUEST` 206, `served` 151, `NOT_FOUND` 60 (recorded when the route was added; the other rows are from the commit that added this page) |
 | `POST /v1/graph/coverage` | `INVALID_REQUEST` 182, `NOT_FOUND` 64, `SOURCE_MISMATCH` 47, `served` 2 |
 
 7,612 requests, 7,249 statements seen by the executor, at most 24 distinct statements in a file, all in the closed set. The oversized-page case is `fuzz/routes.test.ts`, "answers QUERY_BUDGET_EXCEEDED, naming the maximum".

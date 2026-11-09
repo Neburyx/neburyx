@@ -109,6 +109,8 @@ export {
   typeaheadTextSchema,
   unreferencedHitSchema,
 } from './search.js';
+export { DERIVED_NEIGHBOR_CAP, derivedNeighborsRequestSchema, derivedNeighborsResponseSchema, derivedNeighborsResultSchema } from './derived-neighbors.js';
+export type { DerivedNeighborsRequest, DerivedNeighborsResponse, DerivedNeighborsResult } from './derived-neighbors.js';
 export { DEGREE_DIRECTIONS, DEGREE_WARNING_CODES, degreeByNeighborTypeSchema, degreeByTypeSchema, degreePreviewRequestSchema, degreePreviewSchema, degreeWarningSchema } from './degree-preview.js';
 export { COVERAGE_MAX_ENTITIES, COVERAGE_SCOPE, LOADED_QUALITIES, combineCoverage, coverageEntitySchema, coverageRequestSchema, coverageResponseSchema } from './coverage.js';
 export type { CoverageEntity, CoverageRequest, CoverageResponse } from './coverage.js';
