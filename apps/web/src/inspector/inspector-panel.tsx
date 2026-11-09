@@ -23,7 +23,8 @@ function InspectorPanel({ inspector }: { readonly inspector: Inspector }) {
   const profile = useProfileWhenProvided();
   const tabs = useInspectorTabs(inspector.tabs);
   const [chosen, setChosen] = useState<string | undefined>(undefined);
-  const key = inspectedKey(selection, visible);
+  const anchor = useStoreSelector(inspector.anchor, (current) => current);
+  const key = inspectedKey(selection, visible, anchor);
   const ref = key === undefined ? undefined : nodeRefOfKey(key);
   const node = key === undefined ? undefined : loaded.nodes.find((candidate) => elementKey(candidate.ref) === key);
   const read = useEntityRead(ref, mask);
@@ -64,7 +65,7 @@ function InspectorPanel({ inspector }: { readonly inspector: Inspector }) {
         ))}
       </div>
       <div id="inspector-tabpanel" role="tabpanel" aria-labelledby={tab === undefined ? undefined : `inspector-tab-${tab.id}`} className="inspector-body">
-        {Content === undefined ? null : <Content node={shown} entity={ref} read={read} />}
+        {Content === undefined ? null : <Content key={key} node={shown} entity={ref} read={read} />}
       </div>
     </div>
   );

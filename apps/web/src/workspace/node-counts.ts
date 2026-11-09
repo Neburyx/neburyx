@@ -4,6 +4,7 @@ import { formatNumber } from './scope-text.js';
 
 const LOADED_SCOPE = 'loaded in this view';
 const REMAINDER_SCOPE = 'not loaded';
+const DIRECTIONS_SCOPE = 'in every direction';
 
 const sameNode = (a: ElementRef, b: ElementRef): boolean => a.entityType === b.entityType && a.stableId === b.stableId;
 
@@ -11,7 +12,7 @@ const sameNode = (a: ElementRef, b: ElementRef): boolean => a.entityType === b.e
  * Adds contributions to a loaded count: the sum of their values, and its quality is estimated when any contribution is estimated (a mix of lower-bound and estimated counts promises neither a floor nor a figure), else a lower bound when any
  * is a lower bound or has no value (those count the members known, plus one for a count with none), else exact.
  */
-function sumOf(contributions: readonly Count[]): Count {
+export function sumOf(contributions: readonly Count[]): Count {
   let value = 0;
   let estimated = false;
   let bound = false;
@@ -88,4 +89,43 @@ export function notLoadedText(count: Count | undefined): string {
 export function isSupernode(preview: DegreePreview | undefined): boolean {
   if (preview === undefined) return false;
   return preview.byNeighborType.some(({ count }) => count.quality === 'lowerBound' || count.quality === 'unknown' || (count.value !== undefined && count.value > preview.pageSize));
+}
+
+/** A count as a number with its quality in front: "22", "~ 22", "≥ 22"; nothing for a count with no value. */
+export function countNumber(count: Count): string {
+  if (count.value === undefined) return '';
+  const number = formatNumber(count.value);
+  return count.quality === 'estimated' ? `~ ${number}` : count.quality === 'lowerBound' ? `≥ ${number}` : number;
+}
+
+/** The scope line of an entity's sourced neighbors: what is loaded of the source's total and what is not. Both numbers keep their quality; with either missing no number is drawn. */
+export function scopeLineText(total: Count | undefined, loaded: Count): string {
+  if (total?.value === undefined || loaded.value === undefined) return 'not loaded: no count';
+  return `${countNumber(loaded)} of ${countNumber(total)} sourced neighbors on canvas · ${notLoadedText(notLoadedOf(total, loaded))}`;
+}
+
+/** The counts of the same relationship type in the directions a degree preview lists, as one: no number when any has none, estimated when any is estimated, else a lower bound when any is, else exact. Nothing for none. */
+export function combineDegreeCounts(counts: readonly Count[]): Count | undefined {
+  if (counts.length === 0) return undefined;
+  let value = 0;
+  let estimated = false;
+  let bound = false;
+  for (const part of counts) {
+    if (part.value === undefined) return { quality: 'unknown', scope: DIRECTIONS_SCOPE };
+    value += part.value;
+    if (part.quality === 'estimated') estimated = true;
+    else if (part.quality !== 'exact') bound = true;
+  }
+  return { value, quality: estimated ? 'estimated' : bound ? 'lowerBound' : 'exact', scope: DIRECTIONS_SCOPE };
+}
+
+/** The stored relationships of the node in the loaded graph by relationship type, each plain relationship once and an aggregate by its member count; derived and unknown-origin relationships are not counted. */
+export function loadedByRelationshipType(graph: LoadedGraph, node: ElementRef): ReadonlyMap<string, Count> {
+  const parts = new Map<string, Count[]>();
+  for (const edge of graph.edges) {
+    if (edge.semantics !== 'stored' || (!sameNode(edge.from, node) && !sameNode(edge.to, node))) continue;
+    const contribution: Count = 'aggregate' in edge.ref ? (edge.memberCount ?? { quality: 'unknown', scope: LOADED_SCOPE }) : { value: 1, quality: 'exact', scope: LOADED_SCOPE };
+    parts.set(edge.type, [...(parts.get(edge.type) ?? []), contribution]);
+  }
+  return new Map([...parts].map(([type, held]) => [type, sumOf(held)]));
 }

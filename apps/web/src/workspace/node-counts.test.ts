@@ -2,7 +2,7 @@ import type { Count, GraphEdge } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
 import type { LoadedGraph } from '../state/loaded-graph.js';
 import { ref } from '../state/test-data.js';
-import { isSupernode, loadedCountText, loadedOf, notLoadedOf, notLoadedText } from './node-counts.js';
+import { combineDegreeCounts, isSupernode, loadedByRelationshipType, loadedCountText, loadedOf, notLoadedOf, notLoadedText, scopeLineText } from './node-counts.js';
 import { count, previewOf } from './supernode-kit.js';
 
 const node = ref('a', 'type-a', 'n1');
@@ -124,5 +124,42 @@ describe('when the card says SUPERNODE', () => {
 
   it('is not said before there is a preview', () => {
     expect(isSupernode(undefined)).toBe(false);
+  });
+});
+
+describe('the scope line of an entity\'s sourced neighbors', () => {
+  const exact = (value: number): Count => ({ value, quality: 'exact', scope: 'x' });
+  it('keeps the quality of the loaded and of the total, and draws no number when either has none', () => {
+    expect(scopeLineText(exact(22), exact(4))).toBe('4 of 22 sourced neighbors on canvas · 18 not loaded');
+    expect(scopeLineText(exact(22), { value: 4, quality: 'lowerBound', scope: 'x' })).toBe('≥ 4 of 22 sourced neighbors on canvas · not loaded: no count');
+    expect(scopeLineText(exact(22), { value: 4, quality: 'estimated', scope: 'x' })).toBe('~ 4 of 22 sourced neighbors on canvas · not loaded: no count');
+    expect(scopeLineText({ value: 30, quality: 'lowerBound', scope: 'x' }, exact(4))).toBe('4 of ≥ 30 sourced neighbors on canvas · ≥ 26 not loaded (lower bound)');
+    expect(scopeLineText({ quality: 'unknown', scope: 'x' }, exact(4))).toBe('not loaded: no count');
+    expect(scopeLineText(undefined, exact(4))).toBe('not loaded: no count');
+  });
+});
+
+describe('the count of a relationship type over the directions of a degree preview', () => {
+  const part = (value: number | undefined, quality: Count['quality']): Count => (value === undefined ? { quality: 'unknown', scope: 'x' } : { value, quality, scope: 'x' });
+  it('adds the directions and keeps the weakest quality', () => {
+    expect(combineDegreeCounts([part(2, 'exact'), part(1, 'exact')])).toMatchObject({ value: 3, quality: 'exact' });
+    expect(combineDegreeCounts([part(2, 'exact'), part(1, 'lowerBound')])).toMatchObject({ value: 3, quality: 'lowerBound' });
+    expect(combineDegreeCounts([part(2, 'lowerBound'), part(1, 'estimated')])).toMatchObject({ value: 3, quality: 'estimated' });
+  });
+  it('has no value when any direction has none, and is nothing for no direction', () => {
+    expect(combineDegreeCounts([part(2, 'exact'), part(undefined, 'unknown')])?.value).toBeUndefined();
+    expect(combineDegreeCounts([part(undefined, 'unknown')])?.quality).toBe('unknown');
+    expect(combineDegreeCounts([])).toBeUndefined();
+  });
+});
+
+describe('the loaded count by relationship type', () => {
+  it('counts the stored relationships of the node by type, an aggregate by its members, and not a derived or unknown-origin one', () => {
+    const derived = plain('3', 'n3', 'kind-b', { type: 'USES', semantics: 'derived', derivation: { ruleId: 'r', ruleVersion: 1, supportingEdgeRefs: [] } });
+    const graph = graphOf([plain('1', 'n2', 'kind-b', { type: 'OWNS' }), plain('2', 'n3', 'kind-b', { type: 'OWNS' }), derived, plain('4', 'n4', 'kind-b', { type: 'LINKED', semantics: 'unknown' }), aggregate('n5', count(7, 'lowerBound'), { type: 'SENT' })]);
+    const counted = loadedByRelationshipType(graph, node);
+    expect([...counted.keys()].sort()).toEqual(['OWNS', 'SENT']);
+    expect(counted.get('OWNS')).toMatchObject({ value: 2, quality: 'exact' });
+    expect(counted.get('SENT')).toMatchObject({ value: 7, quality: 'lowerBound' });
   });
 });

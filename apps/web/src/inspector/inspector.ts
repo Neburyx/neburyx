@@ -8,16 +8,22 @@ export interface Inspector {
   readonly neighborRows: NeighborRowRegistry;
   /** The entity whose inspector the person closed; it stays closed until the selection changes to another single entity. */
   readonly dismissed: ReadableStore<string | undefined>;
+  /** The entity the inspector last showed; it stays the shown entity while one of its drawn relationships is the one selected element. Set by the binder. */
+  readonly anchor: ReadableStore<string | undefined>;
+  setAnchor(key: string | undefined): void;
   dismiss(key: string): void;
   clearDismissal(): void;
 }
 
 export function createInspector(): Inspector {
   const dismissed = createStore<string | undefined>(undefined);
+  const anchor = createStore<string | undefined>(undefined);
   return {
     tabs: createInspectorTabRegistry(),
     neighborRows: createNeighborRowRegistry(),
     dismissed: readable(dismissed),
+    anchor: readable(anchor),
+    setAnchor: (key) => anchor.setState(key),
     dismiss: (key) => dismissed.setState(key),
     clearDismissal: () => dismissed.setState(undefined),
   };

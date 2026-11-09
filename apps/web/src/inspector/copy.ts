@@ -21,3 +21,15 @@ export const QUALITY_LABELS: ReadonlyMap<string, { readonly label: string; reado
   ['missing-property', { label: 'Some mapped properties are missing', sentence: undefined }],
   ['title-incomplete', { label: 'The title is incomplete', sentence: undefined }],
 ]);
+export const RELATIONSHIPS = 'Relationships';
+export const NO_RELATIONSHIPS_DRAWN = 'No relationships of this entity are drawn.';
+export const SHOW_MORE = 'Show more';
+export const RULE_DERIVED_GROUP = 'Rule-derived';
+export const ORIGIN_NOT_STATED_GROUP = 'Origin not stated';
+export const RULE_DERIVED = 'rule-derived';
+export const FROM_THIS_ENTITY = 'from this entity';
+export const TO_THIS_ENTITY = 'to this entity';
+
+export function leftOutText(count: number): string {
+  return `${count} loaded ${count === 1 ? 'relationship is' : 'relationships are'} hidden or filtered out of the view`;
+}

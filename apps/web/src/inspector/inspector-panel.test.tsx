@@ -98,18 +98,20 @@ describe('the inspector panel', () => {
     expect(inspector()).toBeNull();
   });
 
-  it('draws the Overview and Properties tabs, marks the selected one and moves between them with the arrow keys', async () => {
+  it('draws the Overview, Relationships and Properties tabs in that order, marks the selected one and moves between them with the arrow keys', async () => {
     const rig = inspectorRig({ nodes: [entity('n1', [property('holder', 'Jordan')])] });
     select(rig.state, 'n1');
     const tabs = screen.getAllByRole('tab');
-    expect(tabs.map((tab) => tab.textContent)).toEqual(['Overview', 'Properties']);
+    expect(tabs.map((tab) => tab.textContent)).toEqual(['Overview', 'Relationships', 'Properties']);
     expect(tabs[0]?.getAttribute('aria-selected')).toBe('true');
     const user = userEvent.setup();
     tabs[0]?.focus();
     await user.keyboard('{ArrowRight}');
+    expect(screen.getByRole('tab', { name: 'Relationships' })).toBe(document.activeElement);
+    await user.keyboard('{ArrowRight}');
     expect(screen.getByRole('tab', { name: 'Properties' }).getAttribute('aria-selected')).toBe('true');
     expect(screen.getByRole('tab', { name: 'Properties' })).toBe(document.activeElement);
-    await user.keyboard('{ArrowLeft}');
+    await user.keyboard('{ArrowLeft}{ArrowLeft}');
     expect(screen.getByRole('tab', { name: 'Overview' }).getAttribute('aria-selected')).toBe('true');
   });
 
@@ -118,11 +120,11 @@ describe('the inspector panel', () => {
     select(rig.state, 'n1');
     let remove = (): void => undefined;
     act(() => {
-      remove = rig.inspector.tabs.register({ id: 'relationships', label: 'Relationships', order: 15, content: () => <p>Later</p> });
+      remove = rig.inspector.tabs.register({ id: 'evidence', label: 'Evidence', order: 40, content: () => <p>Later</p> });
     });
-    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Overview', 'Relationships', 'Properties']);
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Overview', 'Relationships', 'Properties', 'Evidence']);
     act(() => remove());
-    expect(screen.getAllByRole('tab')).toHaveLength(2);
+    expect(screen.getAllByRole('tab')).toHaveLength(3);
   });
 
   it('lays the Legend left of the inspector while both are open and puts it back when the inspector closes', () => {

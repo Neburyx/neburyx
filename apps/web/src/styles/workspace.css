@@ -1764,6 +1764,8 @@
 .inspector-body,
 .inspector-overview,
 .inspector-properties,
+.inspector-relationships,
+.relationship-group,
 .inspector-section {
   display: flex;
   flex-direction: column;
@@ -1814,4 +1816,49 @@
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+.relationship-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.relationship-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-8);
+  width: 100%;
+  padding: var(--space-4);
+  border: none;
+  border-radius: var(--space-4);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.relationship-row:has(> :nth-child(2)) {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+}
+
+.relationship-row:has(> :nth-child(2)) > :first-child {
+  color: var(--color-text-muted);
+}
+
+.relationship-row:hover {
+  background: var(--color-surface-muted);
+}
+
+.relationship-row[aria-current='true'] {
+  background: var(--color-accent-surface);
+}
+
+.relationship-row:focus-visible {
+  outline: var(--border-width) solid var(--color-focus);
+  outline-offset: calc(var(--border-width) * -1);
 }

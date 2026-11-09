@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import type { Count, DegreePreview, ElementRef } from '@neburyx/contracts';
+import type { DegreePreview, ElementRef } from '@neburyx/contracts';
 import type { RequestState } from '../api/use-request.js';
 import { useProfileWhenProvided } from '../canvas/profile-context.js';
 import { FailureNotice, canRetry } from '../failure-notice.js';
@@ -7,21 +7,13 @@ import { useLoadedGraph, useSessionMask } from '../state/context.js';
 import { createStore, readable, useStoreSelector } from '../state/store.js';
 import { RETRY } from '../workspace/expand-copy.js';
 import { degreeCountText } from '../workspace/degree-text.js';
-import { loadedOf, notLoadedOf, notLoadedText } from '../workspace/node-counts.js';
+import { loadedOf, scopeLineText } from '../workspace/node-counts.js';
 import { usePreviewStoreWhenProvided } from '../workspace/preview-context.js';
-import { formatNumber } from '../workspace/scope-text.js';
 import { COUNTING_NEIGHBORS, NOT_COUNTED, SOURCED_NEIGHBORS } from './copy.js';
 import { useInspector } from './inspector.js';
 import { useOrdered } from './ordered-registry.js';
 
 const NO_REQUEST = readable(createStore<RequestState<DegreePreview>>({ phase: 'idle' }));
-
-/** A total as a number with its quality in front: "22", "~ 22", "≥ 22". */
-function totalNumber(total: Count): string {
-  if (total.value === undefined) return '';
-  const number = formatNumber(total.value);
-  return total.quality === 'estimated' ? `~ ${number}` : total.quality === 'lowerBound' ? `≥ ${number}` : number;
-}
 
 export function NeighborsSection({ entity }: { readonly entity: ElementRef }) {
   const previews = usePreviewStoreWhenProvided();
@@ -72,8 +64,6 @@ export function NeighborsSection({ entity }: { readonly entity: ElementRef }) {
   const preview = state.data;
   if (preview.byNeighborType.length === 0) return null;
   const loaded = loadedOf(graph, entity);
-  const remainder = notLoadedOf(preview.total, loaded.total);
-  const known = preview.total.value !== undefined && loaded.total.value !== undefined;
   return (
     <section className="inspector-section" aria-label={SOURCED_NEIGHBORS}>
       <h3 className="inspector-section-title">
@@ -91,9 +81,7 @@ export function NeighborsSection({ entity }: { readonly entity: ElementRef }) {
       {rows.map(({ id, content: Row }) => (
         <Row key={id} entity={entity} />
       ))}
-      <p className="inspector-scope">
-        {known ? `${formatNumber(loaded.total.value ?? 0)} of ${totalNumber(preview.total)} sourced neighbors on canvas · ${notLoadedText(remainder)}` : 'not loaded: no count'}
-      </p>
+      <p className="inspector-scope">{scopeLineText(preview.total, loaded.total)}</p>
     </section>
   );
 }

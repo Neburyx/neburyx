@@ -8,7 +8,7 @@ import { inspectedKey } from './inspected.js';
 const epochOf = (state: ClientState): string => JSON.stringify([state.investigation.getState().id, state.mask.getState()]);
 
 /**
- * Keeps the inspector's panel registered exactly while one drawn entity is selected and the person has not closed its inspector. It lives outside React, so leaving the page keeps nothing behind. A change of investigation,
+ * Keeps the inspector's panel registered exactly while one drawn entity is selected (or one of its drawn relationships, once it was shown) and the person has not closed its inspector. It lives outside React, so leaving the page keeps nothing behind. A change of investigation,
  * source or masking closes the inspector of the entity it showed.
  */
 export function bindInspector(state: ClientState, panels: PanelRegistry, inspector: Inspector): () => void {
@@ -16,7 +16,8 @@ export function bindInspector(state: ClientState, panels: PanelRegistry, inspect
   let epoch = epochOf(state);
   const Content = inspectorContent(inspector);
   const sync = (): void => {
-    const shown = inspectedKey(state.presentation.view.getState().selection, state.visibleGraph());
+    const shown = inspectedKey(state.presentation.view.getState().selection, state.visibleGraph(), inspector.anchor.getState());
+    if (inspector.anchor.getState() !== shown) inspector.setAnchor(shown);
     const now = epochOf(state);
     if (now !== epoch) {
       epoch = now;
