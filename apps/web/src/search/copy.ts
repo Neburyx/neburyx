@@ -60,7 +60,7 @@ export const membersText = (count: Count): string | undefined => {
 };
 export const memberText = (elementId: string): string => `Element ID ${elementId}`;
 export const observedText = (observedAt: string): string => `observed ${observedAt}`;
-export const evidenceRuleText = (ruleId: string, ruleVersion: number): string => `Used by rule ${ruleId} v${ruleVersion}`;
+export const evidenceRuleText = (ruleId: string, ruleVersion: number): string => `Rule ${ruleId} v${ruleVersion} uses this relationship type`;
 export const EXACT_MASKED = 'Exact matches cannot be searched while personal data is masked. Turn masking off to search personal data.';
 export const RELATED_MASKED = 'Related records cannot be searched while personal data is masked. Turn masking off to search personal data.';
 const PAGE_GROUP_NAMES = { exact: 'Exact matches', related: 'Related records', evidence: 'Evidence records', startsWith: 'Matches that start with the text', facets: 'Facet counts', context: 'Relationship context' } as const;

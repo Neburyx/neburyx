@@ -55,6 +55,15 @@ describe('an aggregate of relationships with no stable ID in the evidence group'
     expect(within(row).getByText('Element ID 5:n:2 · 1 record: REC-1')).toBeDefined();
   });
 
+  it('counts an aggregate of 3 members as 3 relationships and names the rule that uses its type', async () => {
+    const hit = { ...aggregateHit(['5:n:1', '5:n:2', '5:n:3']), rules: [{ ruleId: 'SD-01', ruleVersion: 2 }] };
+    renderApp(searchAt('demo', 'REC-1'), answering(evidenceOf([hit], { value: 3, quality: 'exact', scope: 'search:evidence' })).client);
+    const [row] = rowsOf(await region('3'));
+    if (row === undefined) throw new Error('no row');
+    expect(within(row).getByText('3 relationships')).toBeDefined();
+    expect(within(row).getByText('Rule SD-01 v2 uses this relationship type')).toBeDefined();
+  });
+
   it('offers nothing to open, copy or view for the aggregate or a member, and says why: its element ID is text', async () => {
     unregister = registerViewEvidence(() => undefined);
     renderApp(searchAt('demo', 'REC-1'), answering(evidenceOf([evidenceHit('L-1'), aggregateHit(['5:n:1'])])).client);

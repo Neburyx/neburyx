@@ -40,9 +40,9 @@ describe('the evidence group on the Search results page', () => {
     renderApp(searchAt('demo', 'REC-1'), kit.client);
     const [first, second] = within(await screen.findByRole('region', { name: 'Evidence records · Supporting relationships (2)' })).getAllByRole('listitem');
     if (first === undefined || second === undefined) throw new Error('the group holds fewer than two rows');
-    expect(within(first).getByText('Used by rule SD-01 v1')).toBeDefined();
-    expect(within(first).getByText('Used by rule SD-02 v4')).toBeDefined();
-    expect(within(second).queryByText(/Used by rule/)).toBeNull();
+    expect(within(first).getAllByText(/^Rule .* uses this relationship type$/).map((line) => line.textContent)).toEqual(['Rule SD-01 v1 uses this relationship type', 'Rule SD-02 v4 uses this relationship type']);
+    expect(within(second).queryByText(/uses this relationship type/)).toBeNull();
+    expect(within(screen.getByRole('region', { name: 'Evidence records · Supporting relationships (2)' })).queryByText(/Used by rule|is used by|supports|derives/i)).toBeNull();
   });
 
   it('holds hits of two relationship types in the one group, each row naming its own type, and counts the rows', async () => {

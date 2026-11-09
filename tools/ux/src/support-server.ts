@@ -324,6 +324,10 @@ function evidenceGroup(sourceId: string, text: string): unknown {
     const more = found > SEARCH_GROUP_CAP;
     return { hits: [aggregateOf(sourceId, text, 0, shown, more)], count: { value: shown, quality: more ? 'lowerBound' : 'exact', scope: 'search:evidence' }, searchable: true, disabledRelationshipTypes: [], ...(more ? { nextCursor: `agg:${text}:${shown}` } : {}) };
   }
+  if (text.startsWith('evold')) {
+    const supports = { sourceId, type: 'LINKS', from: SEARCH_TYPE, to: SEARCH_TYPE, stableId: `legacy-${text}` };
+    return { hits: [{ supports, records: [{ sourceRecordId: `REC-${text}` }], rules: [] }], count: { value: 1, quality: 'exact', scope: 'search:evidence' }, searchable: true, disabledRelationshipTypes: [] };
+  }
   if (text.startsWith('evx')) {
     const supports = { sourceId, type: 'LINKS', from: SEARCH_TYPE, to: SEARCH_TYPE, stableId: `${text}-l01` };
     return { hits: [{ supports, records: [{ sourceRecordId: `REC-${text}` }, { property: 'docId', unreadable: true }], rules: [] }], count: { value: 1, quality: 'exact', scope: 'search:evidence' }, searchable: true, disabledRelationshipTypes: [] };

@@ -272,6 +272,16 @@ describe('the support server, searching', () => {
   const searchOf = async (base: string, body: unknown) =>
     fetch(`${base}/v1/search/entities`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
 
+  it('answers a text `evold-N` with one evidence hit whose stable ID starts with `legacy`, and the edge read of it holds no records', async () => {
+    const base = await start();
+    const answer = searchResultSchema.parse(await (await searchOf(base, { sourceId: 'demo', text: 'evold-1' })).json());
+    const [hit] = answer.evidence.hits;
+    if (hit === undefined || !('supports' in hit)) throw new Error('no stored hit');
+    expect(hit.supports.stableId).toBe('legacy-evold-1');
+    const detail = edgeDetailSchema.parse(await (await fetch(`${base}/v1/edges/${edgeRefSegmentOf(hit.supports)}`)).json());
+    expect(detail.evidence).toEqual({ status: 'not-available', code: 'EVIDENCE_NOT_AVAILABLE' });
+  });
+
   it('answers one match for a text, with an exact count, that the contract accepts', async () => {
     const base = await start();
     const reply = await searchOf(base, { sourceId: 'demo', text: 'AC-1' });
