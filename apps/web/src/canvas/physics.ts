@@ -7,6 +7,10 @@ export interface PhysicsInput {
   readonly positions: ReadonlyMap<string, Position>;
   /** Entities that never move. */
   readonly pinned: ReadonlySet<string>;
+  /** The entities that may move; the others are held where they are (they still push and pull). Every free entity when absent. */
+  readonly movable?: ReadonlySet<string> | undefined;
+  /** The strength the forces start at; the reheat strength when absent, none for a model that has nothing to move. */
+  readonly heat?: number | undefined;
 }
 
 export interface PhysicsModel {
@@ -19,8 +23,14 @@ export interface PhysicsModel {
   /** Holds an entity at a place (it is being dragged): it exerts its force and does not move. */
   hold(id: string, at: Position): void;
   release(id: string): void;
-  /** Puts an entity somewhere the model did not take it, and wakes it. */
+  /** Puts an entity somewhere the model did not take it; it does not heat the forces. */
   moveTo(id: string, at: Position): void;
+  /** Lets every free entity move. */
+  thaw(): void;
+  /** Lets these entities move. */
+  unfreeze(ids: Iterable<string>): void;
+  /** Raises the strength of the forces to at least `heat`, and counts the model as not settled. */
+  heatTo(heat: number): void;
   has(id: string): boolean;
   /** How many entities the model holds. */
   readonly size: number;
@@ -33,7 +43,7 @@ const cellKey = (x: number, y: number): number => Math.floor(x / CELL) * 100_003
  * A damped spring model of the force layout: a relationship pulls its two ends toward the ideal length, entities within reach push each other apart, and pinned or held entities do not move.
  * Nothing is random: two entities at the same spot are pushed apart by their order.
  */
-export function createPhysics({ ids, links, positions, pinned }: PhysicsInput): PhysicsModel {
+export function createPhysics({ ids, links, positions, pinned, movable, heat }: PhysicsInput): PhysicsModel {
   const count = ids.length;
   const at = new Map(ids.map((id, index) => [id, index]));
   const xs = new Float64Array(count);
@@ -49,6 +59,8 @@ export function createPhysics({ ids, links, positions, pinned }: PhysicsInput): 
     ys[index] = position?.y ?? 0;
     if (pinned.has(id)) fixed[index] = 1;
   });
+  const frozen = new Uint8Array(count);
+  if (movable !== undefined) ids.forEach((id, index) => void (frozen[index] = movable.has(id) ? 0 : 1));
   const pairs: number[] = [];
   const seen = new Set<number>();
   for (const [from, to] of links) {
@@ -65,7 +77,7 @@ export function createPhysics({ ids, links, positions, pinned }: PhysicsInput): 
   const held = new Set<number>();
   let calm = 0;
   // The forces cool: a disturbance starts them at the reheat strength and they fall to nothing, so the loop always ends.
-  let alpha = PHYSICS_REHEAT;
+  let alpha = heat ?? PHYSICS_REHEAT;
   const reach = REPULSION_REACH * REPULSION_REACH;
   const squared = IDEAL_LENGTH * IDEAL_LENGTH;
 
@@ -124,7 +136,7 @@ export function createPhysics({ ids, links, positions, pinned }: PhysicsInput): 
       alpha *= PHYSICS_ALPHA_DECAY;
       let fastest = 0;
       for (let index = 0; index < count; index += 1) {
-        if (fixed[index] === 1 || held.has(index)) {
+        if (fixed[index] === 1 || frozen[index] === 1 || held.has(index)) {
           vx[index] = 0;
           vy[index] = 0;
           continue;
@@ -175,7 +187,19 @@ export function createPhysics({ ids, links, positions, pinned }: PhysicsInput): 
       vx[index] = 0;
       vy[index] = 0;
       calm = 0;
-      alpha = PHYSICS_REHEAT;
+    },
+    thaw() {
+      frozen.fill(0);
+    },
+    unfreeze(names) {
+      for (const name of names) {
+        const index = at.get(name);
+        if (index !== undefined) frozen[index] = 0;
+      }
+    },
+    heatTo(strength) {
+      alpha = Math.max(alpha, strength);
+      calm = 0;
     },
     has: (id) => at.has(id),
     size: count,

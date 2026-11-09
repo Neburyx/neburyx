@@ -1,5 +1,5 @@
 import type { Position } from '../state/presentation-state.js';
-import { physicsStride } from './layout-constants.js';
+import { PHYSICS_CHANGE_REHEAT, PHYSICS_MAX_MS, physicsStride } from './layout-constants.js';
 import { createPhysics, type PhysicsInput, type PhysicsModel } from './physics.js';
 
 /** An aggregate node follows the entity it belongs to at the offset it had. */
@@ -22,10 +22,23 @@ export interface Clock {
   request(frame: () => void): number;
   cancel(handle: number): void;
   visible(): boolean;
+  /** Milliseconds on a clock that only goes forward. */
+  now(): number;
 }
 
 export interface PhysicsGraph extends PhysicsInput {
   readonly followers: readonly Follower[];
+}
+
+function adjacency(ids: readonly string[], links: PhysicsGraph['links']): Map<string, readonly string[]> {
+  const known = new Set(ids);
+  const sets = new Map<string, Set<string>>(ids.map((id) => [id, new Set()]));
+  for (const [from, to] of links) {
+    if (from === to || !known.has(from) || !known.has(to)) continue;
+    sets.get(from)?.add(to);
+    sets.get(to)?.add(from);
+  }
+  return new Map([...sets].map(([id, set]) => [id, [...set]]));
 }
 
 const same = (a: Position | undefined, b: Position | undefined): boolean => a !== undefined && b !== undefined && Math.abs(a.x - b.x) < 0.01 && Math.abs(a.y - b.y) < 0.01;
@@ -40,6 +53,9 @@ export class PhysicsLoop {
   private awake = false;
   private stopped = false;
   private broken = false;
+  private deadline = 0;
+  private neighbours = new Map<string, readonly string[]>();
+  private known = new Set<string>();
   private readonly dragged = new Set<string>();
   /** Entities let go of by a drag: they stay where they were dropped until another entity is grabbed. */
   private readonly dropped = new Set<string>();
@@ -64,13 +80,36 @@ export class PhysicsLoop {
     const now = this.model?.positions();
     const positions = new Map(graph.positions);
     if (now !== undefined) for (const id of graph.ids) if (this.model?.has(id) === true && !graph.pinned.has(id)) positions.set(id, now.get(id) ?? positions.get(id) ?? { x: 0, y: 0 });
-    this.model = createPhysics({ ids: graph.ids, links: graph.links, positions, pinned: graph.pinned });
+    const before = this.model === undefined ? undefined : { known: this.known, neighbours: this.neighbours };
+    const around = adjacency(graph.ids, graph.links);
+    // After a change only the entities that came, and the ones next to what came or went, move; the rest stay where they are. The first model, and one made during a drag, moves every free entity.
+    let movable: Set<string> | undefined;
+    if (before !== undefined && this.dragged.size === 0) {
+      movable = new Set();
+      const present = new Set(graph.ids);
+      for (const id of graph.ids) {
+        if (before.known.has(id)) continue;
+        movable.add(id);
+        for (const other of around.get(id) ?? []) movable.add(other);
+      }
+      for (const id of before.known) {
+        if (present.has(id)) continue;
+        for (const other of before.neighbours.get(id) ?? []) if (present.has(other)) movable.add(other);
+      }
+    }
+    const heat = movable === undefined ? undefined : movable.size === 0 ? 0 : PHYSICS_CHANGE_REHEAT;
+    this.model = createPhysics({ ids: graph.ids, links: graph.links, positions, pinned: graph.pinned, movable, heat });
     for (const id of [...this.dragged, ...this.dropped]) if (this.model.has(id)) this.model.hold(id, positions.get(id) ?? { x: 0, y: 0 });
     this.followers = graph.followers;
     this.stored = new Map(graph.positions);
     this.lastDrawn = new Map(positions);
+    this.known = new Set(graph.ids);
+    this.neighbours = around;
     this.stopped = this.broken;
-    this.wake();
+    if (heat !== 0) {
+      this.disturb();
+      this.wake();
+    }
   }
 
   /** Stored positions changed from outside the loop (a keyboard move, a drop, a layout run): the entities are put there. */
@@ -81,11 +120,15 @@ export class PhysicsLoop {
     for (const [id, place] of changed) {
       if (!model.has(id) || same(model.position(id), place)) continue;
       model.moveTo(id, place);
+      model.unfreeze([id, ...(this.neighbours.get(id) ?? [])]);
       if (this.dragged.has(id) || this.dropped.has(id)) model.hold(id, place);
       this.stored.set(id, place);
       any = true;
     }
-    if (any) this.wake();
+    if (!any) return;
+    model.heatTo(PHYSICS_CHANGE_REHEAT);
+    this.disturb();
+    this.wake();
   }
 
   /** A drag was interrupted: the entity is back at its start and is not held. */
@@ -94,6 +137,7 @@ export class PhysicsLoop {
     this.dropped.delete(id);
     this.model?.release(id);
     this.model?.moveTo(id, start);
+    this.disturb();
     this.wake();
   }
 
@@ -102,15 +146,18 @@ export class PhysicsLoop {
     if (at === undefined) {
       this.dragged.delete(id);
       this.dropped.add(id);
+      this.disturb();
       this.wake();
       return;
     }
     if (!this.dragged.has(id)) {
+      model?.thaw();
       for (const other of this.dropped) if (other !== id) model?.release(other);
       this.dropped.clear();
     }
     this.dragged.add(id);
     model?.hold(id, at);
+    this.disturb();
     this.wake();
   }
 
@@ -132,6 +179,10 @@ export class PhysicsLoop {
     this.handle = undefined;
   }
 
+  private disturb(): void {
+    this.deadline = this.clock.now() + PHYSICS_MAX_MS;
+  }
+
   private wake(): void {
     this.awake = true;
     if (this.stopped || this.model === undefined || this.handle !== undefined || !this.clock.visible()) return;
@@ -145,7 +196,9 @@ export class PhysicsLoop {
     const stride = physicsStride(model.size);
     model.step();
     this.frames += 1;
-    const due = this.frames % stride === 0 || model.settled;
+    // whatever the frame rate, the motion ends a fixed time after the last disturbance, unless an entity is being dragged
+    const finished = model.settled || (this.dragged.size === 0 && this.clock.now() >= this.deadline);
+    const due = this.frames % stride === 0 || finished;
     const drawn = due ? this.placed(model) : new Map<string, Position>();
     try {
       if (due) this.host.place(drawn);
@@ -156,7 +209,7 @@ export class PhysicsLoop {
       return;
     }
     if (due) this.lastDrawn = new Map([...this.lastDrawn, ...drawn]);
-    if (model.settled) {
+    if (finished) {
       this.awake = false;
       this.commit();
       return;

@@ -2,11 +2,13 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Position } from '../state/presentation-state.js';
 import { PhysicsLoop, type Clock, type PhysicsHost } from './physics-loop.js';
 import { keys } from './layout-test-kit.js';
-import { PHYSICS_FULL_RATE_ENTITIES } from './layout-constants.js';
+import { PHYSICS_FULL_RATE_ENTITIES, PHYSICS_MAX_MS } from './layout-constants.js';
 
 function fakeClock() {
   let next = 1;
   let visible = true;
+  let time = 0;
+  let frameMs = 16.7;
   const waiting = new Map<number, () => void>();
   const clock: Clock = {
     request: (frame) => {
@@ -17,6 +19,7 @@ function fakeClock() {
     },
     cancel: (handle) => void waiting.delete(handle),
     visible: () => visible,
+    now: () => time,
   };
   return {
     clock,
@@ -25,8 +28,12 @@ function fakeClock() {
       const [handle, frame] = [...waiting][0] ?? [];
       if (handle === undefined || frame === undefined) return false;
       waiting.delete(handle);
+      time += frameMs;
       frame();
       return true;
+    },
+    slow: (ms: number) => {
+      frameMs = ms;
     },
     hide: () => {
       visible = false;
@@ -244,5 +251,69 @@ describe('the live force loop', () => {
     fake.tick();
     loop.configure(graph);
     expect(fake.pending()).toBe(0);
+  });
+
+  const around = (count: number) => {
+    const ids = keys(count);
+    return { ids, links: ids.slice(1).map((id, index) => [ids[index] ?? '', id] as [string, string]), positions: new Map(ids.map((id, index) => [id, { x: index * 220, y: (index % 2) * 7 }] as const)) };
+  };
+
+  it('moves only the entities that came and the ones next to them after a change, and holds every other entity where it is', () => {
+    const fake = fakeClock();
+    const frames: ReadonlyMap<string, Position>[] = [];
+    const loop = new PhysicsLoop({ place: (given) => void frames.push(given), commit: () => undefined, failed: () => undefined }, fake.clock);
+    const { ids, links, positions } = around(8);
+    loop.configure({ ids, links, positions, pinned: new Set(), followers: [] });
+    run(fake);
+    const settled = frames[frames.length - 1] ?? new Map<string, Position>();
+    const more = [...ids, 'new1'];
+    const moreLinks: [string, string][] = [...links, ['n003', 'new1']];
+    loop.configure({ ids: more, links: moreLinks, positions: new Map([...settled, ['new1', { x: 600, y: 120 }]]), pinned: new Set(), followers: [] });
+    const before = frames.length;
+    run(fake);
+    expect(frames.length).toBeGreaterThan(before);
+    const last = frames[frames.length - 1];
+    for (const id of ids) {
+      if (id === 'n003' || id === 'n002' || id === 'n004') continue;
+      expect(last?.get(id), id).toEqual(settled.get(id));
+    }
+    expect(last?.get('new1')).not.toEqual({ x: 600, y: 120 });
+  });
+
+  it('does not heat anything for a change that moves nothing, such as an entity that is gone from the end of nowhere', () => {
+    const { ids, links, positions } = around(5);
+    const fake = fakeClock();
+    const loop = new PhysicsLoop({ place: () => undefined, commit: () => undefined, failed: () => undefined }, fake.clock);
+    loop.configure({ ids, links, positions, pinned: new Set(), followers: [] });
+    run(fake);
+    loop.configure({ ids, links, positions, pinned: new Set(['n001']), followers: [] });
+    expect(fake.pending()).toBe(0);
+  });
+
+  it('moves every free entity again when an entity is dragged', () => {
+    const fake = fakeClock();
+    const frames: ReadonlyMap<string, Position>[] = [];
+    const loop = new PhysicsLoop({ place: (given) => void frames.push(given), commit: () => undefined, failed: () => undefined }, fake.clock);
+    const { ids, links, positions } = around(8);
+    loop.configure({ ids, links, positions, pinned: new Set(), followers: [] });
+    run(fake);
+    const settled = frames[frames.length - 1] ?? new Map<string, Position>();
+    loop.configure({ ids: [...ids, 'new1'], links: [...links, ['n000', 'new1']], positions: new Map([...settled, ['new1', { x: 0, y: 200 }]]), pinned: new Set(), followers: [] });
+    run(fake);
+    const held = frames[frames.length - 1]?.get('n006');
+    expect(held).toEqual(settled.get('n006'));
+    loop.drag('n007', { x: 5000, y: 0 });
+    for (let frame = 0; frame < 30; frame += 1) fake.tick();
+    expect(frames[frames.length - 1]?.get('n006')).not.toEqual(held);
+  });
+
+  it('ends within the time limit of the last change whatever the frame rate', () => {
+    const fake = fakeClock();
+    fake.slow(100);
+    const { ids, links, positions } = around(6);
+    const loop = new PhysicsLoop({ place: () => undefined, commit: () => undefined, failed: () => undefined }, fake.clock);
+    loop.configure({ ids, links, positions, pinned: new Set(), followers: [] });
+    const frames = run(fake);
+    expect(frames).toBeLessThanOrEqual(Math.ceil(PHYSICS_MAX_MS / 100) + 1);
   });
 });

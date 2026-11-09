@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createPhysics } from './physics.js';
 import { allFinite, keys } from './layout-test-kit.js';
-import { IDEAL_LENGTH } from './layout-constants.js';
+import { IDEAL_LENGTH, PHYSICS_CHANGE_REHEAT } from './layout-constants.js';
 
 const line = (count: number) => {
   const ids = keys(count);
@@ -73,5 +73,22 @@ describe('the live force model', () => {
     model.step();
     expect(model.has('ghost')).toBe(false);
     expect([...model.positions().keys()]).toEqual(['a', 'b']);
+  });
+
+  it('holds the entities that may not move, lets them go again, and starts a change gentler than a drag', () => {
+    const { ids, links, positions } = line(4);
+    const held = createPhysics({ ids, links, positions, pinned: new Set(), movable: new Set(['n003']) });
+    for (let frame = 0; frame < 20; frame += 1) held.step();
+    expect(held.position('n000')).toEqual(positions.get('n000'));
+    expect(held.position('n003')).not.toEqual(positions.get('n003'));
+    held.thaw();
+    held.heatTo(0.5);
+    for (let frame = 0; frame < 20; frame += 1) held.step();
+    expect(held.position('n000')).not.toEqual(positions.get('n000'));
+    const gentle = createPhysics({ ids, links, positions, pinned: new Set(), heat: PHYSICS_CHANGE_REHEAT });
+    const strong = createPhysics({ ids, links, positions, pinned: new Set() });
+    expect(gentle.step()).toBeLessThan(strong.step());
+    const none = createPhysics({ ids, links, positions, pinned: new Set(), movable: new Set(), heat: 0 });
+    expect(none.settled).toBe(true);
   });
 });

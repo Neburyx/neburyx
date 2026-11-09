@@ -9,6 +9,7 @@ export const browserClock: Clock = {
   request: (frame) => requestAnimationFrame(frame),
   cancel: (handle) => cancelAnimationFrame(handle),
   visible: () => document.visibilityState !== 'hidden',
+  now: () => performance.now(),
 };
 
 interface UsePhysics {

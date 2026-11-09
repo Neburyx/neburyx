@@ -32,6 +32,9 @@ export const PHYSICS_REST_FRAMES = 8;
 export const PHYSICS_REHEAT = 0.7;
 export const PHYSICS_ALPHA_DECAY = 0.975;
 export const PHYSICS_ALPHA_MIN = 0.02;
+/** After a change to the graph (not a drag) the forces start at a gentler strength, and whatever the frame rate the motion ends this many milliseconds after the last disturbance. */
+export const PHYSICS_CHANGE_REHEAT = 0.3;
+export const PHYSICS_MAX_MS = 1500;
 /**
  * Live physics on a large canvas, from the frame rates measured at 4x CPU throttle on the 120-entity fixture grown by 25 at a time, dragging one entity:
  * up to 300 entities a frame is drawn at median 59.9 fps and 5th percentile 59.5 fps; 445 entities hold the same drawn every second frame; 595 and 995 fall below a 5th percentile of 30 fps even drawn every third frame.
