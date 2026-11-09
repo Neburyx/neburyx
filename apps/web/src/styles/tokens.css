@@ -96,6 +96,7 @@
   --shadow-floating: 0 4px 10px rgba(38, 49, 73, 0.07);
   --shadow-dock-panel: 0 4px 20px rgba(38, 49, 73, 0.07);
   --selection-icon-size: 15px;
+  --copy-target-size: 24px;
   --selection-separator-height: 18px;
   --selection-box-border-width: 1.2px;
   --zoom-gap: 12px;

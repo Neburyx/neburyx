@@ -7,10 +7,12 @@ export const UNAVAILABLE = 'unavailable';
 export const NO_KEY_PROPERTIES = 'No key properties are mapped for this type.';
 export const SOURCE_RECORDS = 'Source records';
 export const NO_ZONE = '(no time zone)';
-export const COPY = 'Copy';
+export const COPY_ALL_LABEL = 'Copy all properties';
+
+export function copyLabel(property: string): string {
+  return `Copy ${property}`;
+}
 export const COPY_ALL = 'Copy all';
-export const COPIED = 'Copied';
-export const COULD_NOT_COPY = 'Could not copy';
 export const COUNTING_NEIGHBORS = 'Counting neighbors…';
 export const NOT_COUNTED = 'Neighbors were not counted.';
 export const SOURCED_NEIGHBORS = 'Sourced neighbors';
