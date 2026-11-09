@@ -28,11 +28,11 @@
         "status",
         "accountKind"
       ],
+      "sortable": [],
       "pii": [
         "holderName",
         "phone"
-      ],
-      "sortable": []
+      ]
     },
     {
       "type": "customer",
@@ -53,12 +53,12 @@
         "fullName"
       ],
       "filterable": [],
+      "sortable": [],
       "pii": [
         "fullName",
         "dateOfBirth",
         "phone"
-      ],
-      "sortable": []
+      ]
     },
     {
       "type": "device",
@@ -80,8 +80,8 @@
       "filterable": [
         "platform"
       ],
-      "pii": [],
-      "sortable": []
+      "sortable": [],
+      "pii": []
     },
     {
       "type": "ip_address",
@@ -103,8 +103,8 @@
       "filterable": [
         "network"
       ],
-      "pii": [],
-      "sortable": []
+      "sortable": [],
+      "pii": []
     },
     {
       "type": "transaction",
@@ -129,10 +129,8 @@
         "channel",
         "amount"
       ],
-      "pii": [],
-      "sortable": [
-        "amount"
-      ]
+      "sortable": [],
+      "pii": []
     },
     {
       "type": "merchant",
@@ -155,8 +153,8 @@
       "filterable": [
         "category"
       ],
-      "pii": [],
-      "sortable": []
+      "sortable": [],
+      "pii": []
     }
   ],
   "relationshipTypes": [
@@ -167,8 +165,8 @@
       "aggregate": true,
       "observedAt": null,
       "filterable": [],
-      "evidence": [],
-      "sortable": []
+      "sortable": [],
+      "evidence": []
     },
     {
       "type": "USES_DEVICE",
@@ -179,10 +177,10 @@
       "filterable": [
         "channel"
       ],
+      "sortable": [],
       "evidence": [
         "sourceRecordId"
-      ],
-      "sortable": []
+      ]
     },
     {
       "type": "CONNECTS_FROM",
@@ -191,10 +189,10 @@
       "aggregate": false,
       "observedAt": "lastSeen",
       "filterable": [],
+      "sortable": [],
       "evidence": [
         "sourceRecordId"
-      ],
-      "sortable": []
+      ]
     },
     {
       "type": "INITIATED",
@@ -203,8 +201,8 @@
       "aggregate": false,
       "observedAt": "initiatedAt",
       "filterable": [],
-      "evidence": [],
-      "sortable": []
+      "sortable": [],
+      "evidence": []
     },
     {
       "type": "PAID_TO",
@@ -213,8 +211,8 @@
       "aggregate": true,
       "observedAt": null,
       "filterable": [],
-      "evidence": [],
-      "sortable": []
+      "sortable": [],
+      "evidence": []
     },
     {
       "type": "TRANSFERRED_TO",
@@ -223,8 +221,8 @@
       "aggregate": true,
       "observedAt": null,
       "filterable": [],
-      "evidence": [],
-      "sortable": []
+      "sortable": [],
+      "evidence": []
     }
   ],
   "derivedRules": [
