@@ -179,6 +179,16 @@ Every edit of a resource that has a `version` is guarded, so a stale edit never 
 
 An endpoint with no version until its feature adds one follows these rules from then on.
 
+## Reading one stored edge
+
+`GET /v1/edges/{ref}` reads one stored relationship (an edge the mapping gives a `stable_id`) with its source records, through the gate, as the calling principal. `{ref}` is one percent-encoded path segment of at most 2,048 characters:
+the unpadded base64url text of the JSON of the stored edge reference `{ sourceId, type, from, to, stableId }` (`from` and `to` are entity type names; a client writes the keys in that order with no whitespace, and any key order is accepted). The source is the one the
+reference names. `mask=true` is the only query parameter; any other, or a mask that is not `true` or `false`, is `INVALID_REQUEST`.
+
+- A segment that is not that text, a reference with an unknown or missing key, a reference of the aggregate or derived form, or an edge type, entity types or `stable_id` the mapping does not hold is `INVALID_REQUEST`, and nothing is read. An unknown source, a source the person may not read and an edge the source does not hold are the same `NOT_FOUND`.
+- The read is one fixed template of at most two rows, matched by the relationship's `stable_id` (as the text and, when canonical, as the integer too); the second row only says that another relationship has the same type, ends and ID, and the answer then carries the quality flag `conflicting-duplicate`. It needs an online index on the `stable_id` property and is refused without one (`SOURCE_UNAVAILABLE` with an `index-` reason). It takes a read slot, counts against the request rate and trips the circuit breaker like every other read.
+- The answer is `200` with the type, the two ends (reference, title and entity type; a title is masked when `mask` asks), the time the mapping's `observed_at` gives as the source gave it, the mapped properties the edge holds other than its stable ID and observed time (which have their own fields), its quality flags and `evidence`. `evidence` is `{ status: "available", records }`, each record `{ sourceRecordId, linkable }` or `{ property, unreadable: true }`, or `{ status: "not-available", code: "EVIDENCE_NOT_AVAILABLE" }` when the source kept no record for the edge. That code is a state of an ordinary answer and is never returned as an error response. `linkable` is `true` only when the mapping gives the evidence a link; no URL and no element ID is ever sent. There is no confidence or score.
+
 ## Permission per route
 
 Every route says who may call it, in its route options:

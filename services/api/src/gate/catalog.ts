@@ -65,7 +65,7 @@ function checkMarkers(definition: TemplateDefinition, shape: Shape): void {
   const degree = markersOf(definition.cypher).filter((marker) => marker.kind === 'degreeCounts');
   // a degree statement reads the entity type's label and stable ID property, so its parameter counts as used by an entity marker and a stable id marker
   const used = [
-    ...markersOf(definition.cypher).filter((marker) => marker.kind !== 'searchBranches' && marker.kind !== 'facetProbes' && marker.kind !== 'degreeCounts' && marker.kind !== 'expandNeighbors' && marker.kind !== 'relatedContext' && marker.kind !== 'derivedRule'),
+    ...markersOf(definition.cypher).filter((marker) => marker.kind !== 'searchBranches' && marker.kind !== 'facetProbes' && marker.kind !== 'degreeCounts' && marker.kind !== 'expandNeighbors' && marker.kind !== 'relatedContext' && marker.kind !== 'edgeLoad' && marker.kind !== 'derivedRule'),
     ...markersOf(definition.cypher).filter((marker) => marker.kind === 'derivedRule').flatMap(() => (definition.derivedRule === undefined ? [] : [{ kind: 'entity' as const, name: definition.derivedRule.entityTypeParam }, { kind: 'stableId' as const, name: definition.derivedRule.entityTypeParam }])),
     ...markersOf(definition.cypher).filter((marker) => marker.kind === 'expandNeighbors').flatMap((marker) => [{ kind: 'entity' as const, name: marker.name }, { kind: 'stableId' as const, name: marker.name }]),
     ...degree.flatMap((marker) => [{ kind: 'entity' as const, name: marker.name }, { kind: 'stableId' as const, name: marker.name }]),
@@ -260,6 +260,25 @@ function checkDerivedRule(definition: TemplateDefinition, shape: Shape): void {
   if (definition.indexNeeds === undefined || definition.usedProperties === undefined) throw new CatalogError(definition.id, 'declares a rule run and does not name its indexes and the properties it uses');
 }
 
+/**
+ * The edge template's own declaration: its Cypher is exactly the one `@edgeLoad(<type parameter>)` marker, its schema has the three text parameters it names and the stable ID (its integer form is derived from it), it is not paged, its cut means a duplicate,
+ * and it names the index of the relationship's `stable_id` it needs, and the properties it uses.
+ */
+function checkEdgeLoad(definition: TemplateDefinition, shape: Shape): void {
+  const used = markersOf(definition.cypher).filter((marker) => marker.kind === 'edgeLoad');
+  const spec = definition.edgeLoad;
+  if (spec === undefined) {
+    if (used.length > 0) throw new CatalogError(definition.id, 'uses the edge load marker without declaring an edge load');
+    return;
+  }
+  if (used.length !== 1 || used[0]?.name !== spec.typeParam || definition.cypher !== `@edgeLoad(${spec.typeParam})`) throw new CatalogError(definition.id, 'declares an edge load and its Cypher is not exactly its one edge load marker');
+  if (![spec.typeParam, spec.fromParam, spec.toParam].every((name) => shape.properties.get(name) === 'string') || !shape.properties.has('stableId')) throw new CatalogError(definition.id, 'declares an edge load for parameters its schema does not have');
+  if (definition.searchBranches !== undefined || definition.facetProbes !== undefined || definition.degreeCounts !== undefined || definition.expandNeighbors !== undefined || definition.relatedContext !== undefined || definition.paged || definition.profile === true || definition.cutMeans !== 'duplicate') {
+    throw new CatalogError(definition.id, "declares an edge load and is also another kind of template, paged, profiled or not declared cutMeans: 'duplicate'");
+  }
+  if (definition.indexNeeds === undefined || definition.usedProperties === undefined) throw new CatalogError(definition.id, 'declares an edge load and does not name its index and its properties');
+}
+
 /** A template that reads a node by its reference names two parameters its schema has: the entity type (a declared entity parameter) and the stable ID. */
 function checkReferenceParams(definition: TemplateDefinition, shape: Shape): void {
   const names = definition.referenceParams;
@@ -290,6 +309,7 @@ function build(definition: TemplateDefinition): Template {
   checkExpandNeighbors(definition, shape);
   checkRelatedContext(definition, shape);
   checkDerivedRule(definition, shape);
+  checkEdgeLoad(definition, shape);
   checkReferenceParams(definition, shape);
   checkGateParameters(definition, shape);
   const integerParameters = [...shape.properties].flatMap(([name, type]) => (type === 'integer' ? [name] : []));

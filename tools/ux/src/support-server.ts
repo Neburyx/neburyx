@@ -2,7 +2,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { extname, join, normalize, sep } from 'node:path';
-import { DEFAULT_INVESTIGATION_LIST_LIMIT, investigationListCountsSchema, nodeSchema, investigationListQuerySchema, type Investigation, type LastTest, openInvestigationRequestSchema, SEARCH_GROUP_CAP, searchMoreRequestSchema, searchMoreResultSchema, searchRequestSchema, searchResultSchema, type SourceSummary, sourceSummaryFieldsSchema, sourceSummarySchema, type SourceTestReport, valueOfPathSegment } from '@neburyx/contracts';
+import { DEFAULT_INVESTIGATION_LIST_LIMIT, parseEdgeRefSegment, investigationListCountsSchema, nodeSchema, investigationListQuerySchema, type Investigation, type LastTest, openInvestigationRequestSchema, SEARCH_GROUP_CAP, searchMoreRequestSchema, searchMoreResultSchema, searchRequestSchema, searchResultSchema, type SourceSummary, sourceSummaryFieldsSchema, sourceSummarySchema, type SourceTestReport, type StoredEdgeRef, valueOfPathSegment } from '@neburyx/contracts';
 
 interface SupportProfile {
   readonly sourceId: string;
@@ -145,6 +145,24 @@ function createSources(options: SupportServerOptions) {
 
 const NOT_FOUND = { error: { code: 'NOT_FOUND', message: 'Not found.', retryable: false, traceId: 'tr-support' } };
 const MISMATCH = { error: { code: 'SOURCE_MISMATCH', message: 'The request mixes more than one source.', retryable: false, traceId: 'tr-support' } };
+/** The synthetic answer for a stored edge: two ends named after their entity types and one source record (none for a stable ID that starts with `legacy`). */
+function edge(ref: StoredEdgeRef | undefined, response: ServerResponse): void {
+  if (ref === undefined) return json(response, 400, INVALID);
+  const end = (entityType: string) => ({ ref: { sourceId: ref.sourceId, entityType, stableId: `${entityType}-1` }, title: `${entityType}-1`, type: entityType });
+  const records = ref.stableId.startsWith('legacy') ? undefined : [{ sourceRecordId: `REC-${ref.stableId}`, linkable: false }];
+  return json(response, 200, {
+    ref,
+    type: ref.type,
+    semantics: 'stored',
+    from: end(ref.from),
+    to: end(ref.to),
+    observedAt: '2026-10-21T08:15:00Z',
+    properties: [],
+    qualityFlags: [],
+    evidence: records === undefined ? { status: 'not-available', code: 'EVIDENCE_NOT_AVAILABLE' } : { status: 'available', records },
+  });
+}
+
 const INVALID = { error: { code: 'INVALID_REQUEST', message: 'The request is not valid.', retryable: false, traceId: 'tr-support' } };
 
 interface StoredInvestigation {
@@ -541,6 +559,7 @@ export function createSupportServer(options: SupportServerOptions): Server {
           const stableId = valueOfPathSegment(third);
           return entityType === undefined || stableId === undefined ? json(response, 400, INVALID) : investigations.entity(first, entityType, stableId, response);
         }
+        if (kind === 'edges' && parts.length === 4 && first !== undefined) return edge(parseEdgeRefSegment(first), response);
         if (kind === 'investigations' && parts.length === 3) return investigations.list(new URL(request.url ?? '/', 'http://localhost').searchParams, response);
         if (kind === 'investigations' && parts.length === 4 && first !== undefined) return investigations.read(first, response);
         if (kind === 'sources' && parts.length === 3) return sources.list(response);

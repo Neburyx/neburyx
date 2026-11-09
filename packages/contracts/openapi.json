@@ -792,6 +792,129 @@
         }
       }
     },
+    "/v1/edges/{ref}": {
+      "get": {
+        "operationId": "getEdge",
+        "summary": "Read one stored edge of a source with its evidence",
+        "description": "Reads one stored relationship by its reference through the gate, as the calling principal, in one fixed read of at most two rows. {ref} is one percent-encoded path segment of at most 2048 characters: the unpadded base64url text of the JSON of the stored edge reference { sourceId, type, from, to, stableId } (the keys in that order, no whitespace; any key order is accepted). The source is the one the reference names. The answer holds the type, the two ends (their reference, title and entity type), the time the mapping's observed_at gives, the mapped properties the edge holds other than its stable ID and observed time, which have their own fields, its quality flags and evidence. evidence is { status: available, records } with each record { sourceRecordId, linkable } or { property, unreadable: true }, or { status: not-available, code: EVIDENCE_NOT_AVAILABLE } when the source kept no record for the edge; that is a state of an ordinary answer and never an error response. linkable is true only when the mapping gives the evidence a link; no URL is ever sent. mask asks for the personal-data fields to be masked, and the end titles with them. There is no confidence or score.",
+        "parameters": [
+          {
+            "name": "ref",
+            "in": "path",
+            "required": true,
+            "description": "At most 2048 characters",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            }
+          },
+          {
+            "name": "mask",
+            "in": "query",
+            "required": false,
+            "description": "true to mask the personal-data fields",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The edge and its evidence",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EdgeDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A query parameter other than mask was sent, the segment is not the base64url text of a stored edge reference, or is longer than the bound, the reference is of another form, or the mapping has no such edge type between those entity types with a stable ID",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No configured source has the reference's id, the person may not read it (one answer for these), or the source holds no such edge",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests from this person to this source in the last minute: nothing was read; details.retryAfterMs and the Retry-After header (whole seconds) say how long to wait",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The read could not be completed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The source is not available, or is busy; after repeated timeouts details.retryAfterMs and the Retry-After header (whole seconds) say how long to wait",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The source did not answer in time",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/search/entities": {
       "post": {
         "operationId": "searchEntities",
@@ -2757,6 +2880,284 @@
         "required": [
           "ref",
           "results"
+        ],
+        "additionalProperties": false
+      },
+      "EdgeDetail": {
+        "type": "object",
+        "properties": {
+          "ref": {
+            "type": "object",
+            "properties": {
+              "sourceId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "type": {
+                "type": "string",
+                "minLength": 1
+              },
+              "from": {
+                "type": "string",
+                "minLength": 1
+              },
+              "to": {
+                "type": "string",
+                "minLength": 1
+              },
+              "stableId": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "sourceId",
+              "type",
+              "from",
+              "to",
+              "stableId"
+            ],
+            "additionalProperties": false
+          },
+          "type": {
+            "type": "string",
+            "minLength": 1
+          },
+          "semantics": {
+            "type": "string",
+            "const": "stored"
+          },
+          "from": {
+            "type": "object",
+            "properties": {
+              "ref": {
+                "type": "object",
+                "properties": {
+                  "sourceId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "entityType": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "stableId": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "sourceId",
+                  "entityType",
+                  "stableId"
+                ],
+                "additionalProperties": false
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "ref",
+              "title",
+              "type"
+            ],
+            "additionalProperties": false
+          },
+          "to": {
+            "type": "object",
+            "properties": {
+              "ref": {
+                "type": "object",
+                "properties": {
+                  "sourceId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "entityType": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "stableId": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "sourceId",
+                  "entityType",
+                  "stableId"
+                ],
+                "additionalProperties": false
+              },
+              "title": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "ref",
+              "title",
+              "type"
+            ],
+            "additionalProperties": false
+          },
+          "observedAt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "properties": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "value": {},
+                "dataClass": {
+                  "type": "string",
+                  "enum": [
+                    "text",
+                    "number",
+                    "boolean",
+                    "date",
+                    "dateTime",
+                    "localDateTime",
+                    "time",
+                    "localTime",
+                    "duration",
+                    "point",
+                    "list",
+                    "other",
+                    "unknown",
+                    "name",
+                    "email",
+                    "phone"
+                  ]
+                },
+                "masked": {
+                  "type": "boolean"
+                },
+                "maskedBy": {
+                  "type": "string",
+                  "enum": [
+                    "policy",
+                    "request"
+                  ]
+                }
+              },
+              "required": [
+                "key",
+                "dataClass",
+                "masked"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "qualityFlags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "evidence": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "const": "available"
+                  },
+                  "records": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "sourceRecordId": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "linkable": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "sourceRecordId",
+                            "linkable"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "property": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "unreadable": {
+                              "type": "boolean",
+                              "const": true
+                            }
+                          },
+                          "required": [
+                            "property",
+                            "unreadable"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "status",
+                  "records"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "const": "not-available"
+                  },
+                  "code": {
+                    "type": "string",
+                    "const": "EVIDENCE_NOT_AVAILABLE"
+                  }
+                },
+                "required": [
+                  "status",
+                  "code"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "required": [
+          "ref",
+          "type",
+          "semantics",
+          "from",
+          "to",
+          "properties",
+          "qualityFlags",
+          "evidence"
         ],
         "additionalProperties": false
       },

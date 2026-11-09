@@ -166,6 +166,7 @@ export function ContextMenu() {
   const header = menuHeader(shown, graph, profile);
   const hintOf = (id: string | undefined): string | undefined => (id === undefined ? undefined : bindings.find((candidate) => candidate.id === id)?.shown[0]);
   const contextNow = (): MenuContext => contextFor(shown);
+  const listed = items.filter((item) => stateOf(item, contextNow()) !== 'hidden');
   const labelOf = (item: RegisteredMenuItem): string => (typeof item.label === 'function' ? item.label(contextNow()) : item.label);
   const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>): void => {
     pointerDown.current = false;
@@ -225,13 +226,13 @@ export function ContextMenu() {
             <p className="menu-header-detail">{header.detail}</p>
           </div>
         )}
-        {items.map((item, at) => {
+        {listed.map((item, at) => {
           const status = stateOf(item, contextNow());
           const inert = status !== 'enabled';
           const opensSubmenu = item.submenu !== undefined;
           return (
             <Fragment key={item.id}>
-              {at > 0 && items[at - 1]?.group !== item.group ? <div className="menu-separator" role="separator" /> : null}
+              {at > 0 && listed[at - 1]?.group !== item.group ? <div className="menu-separator" role="separator" /> : null}
               <button
                 type="button"
                 role="menuitem"
@@ -261,9 +262,9 @@ export function ContextMenu() {
                 {item.icon}
                 <span className="menu-label">{labelOf(item)}</span>
                 {opensSubmenu ? <span className="icon icon-chevron" aria-hidden="true" /> : null}
-                {hintOf(item.binding) === undefined || opensSubmenu ? null : (
+                {(hintOf(item.binding) ?? item.hint) === undefined || opensSubmenu ? null : (
                   <span className="menu-hint" aria-hidden="true">
-                    {hintOf(item.binding)}
+                    {hintOf(item.binding) ?? item.hint}
                   </span>
                 )}
               </button>

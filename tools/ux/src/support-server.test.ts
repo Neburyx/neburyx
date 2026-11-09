@@ -3,7 +3,7 @@ import type { Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { investigationListResponseSchema, investigationResponseSchema, meResponseSchema, openInvestigationResponseSchema, searchMoreResultSchema, searchResultSchema, sourceProfileSchema, sourcesResponseSchema, sourceTestReportSchema } from '@neburyx/contracts';
+import { edgeDetailSchema, edgeRefSegmentOf, investigationListResponseSchema, investigationResponseSchema, meResponseSchema, openInvestigationResponseSchema, searchMoreResultSchema, searchResultSchema, sourceProfileSchema, sourcesResponseSchema, sourceTestReportSchema } from '@neburyx/contracts';
 import { createSupportServer } from './support-server.ts';
 
 const committed: unknown = JSON.parse(readFileSync(new URL('../fixtures/profile.json', import.meta.url), 'utf8'));
@@ -145,6 +145,15 @@ describe('the investigations the support server holds', () => {
     expect(opened).toMatchObject({ created: true, entity: { ref: { sourceId: 'demo', entityType: 'thing', stableId: 'T-1' } } });
     expect(investigationResponseSchema.parse(await (await fetch(`${base}/v1/investigations/${opened.investigation.id}`)).json())).toMatchObject({ investigation: { id: opened.investigation.id, sourceState: 'available' } });
     expect(await (await fetch(`${base}/v1/entities/demo/thing/T-1`)).json()).toMatchObject({ ref: { stableId: 'T-1' } });
+  });
+
+  it('answers a stored edge from its reference segment, with no record for a legacy ID, and refuses a segment that is not a reference', async () => {
+    const base = await startWithTypes();
+    const ref = { sourceId: 'demo', type: 'LINKS', from: 'thing', to: 'other', stableId: 'L-1' };
+    const detail = edgeDetailSchema.parse(await (await fetch(`${base}/v1/edges/${edgeRefSegmentOf(ref)}`)).json());
+    expect(detail.evidence).toEqual({ status: 'available', records: [{ sourceRecordId: 'REC-L-1', linkable: false }] });
+    expect(edgeDetailSchema.parse(await (await fetch(`${base}/v1/edges/${edgeRefSegmentOf({ ...ref, stableId: 'legacy-1' })}`)).json()).evidence).toEqual({ status: 'not-available', code: 'EVIDENCE_NOT_AVAILABLE' });
+    expect((await fetch(`${base}/v1/edges/not-a-reference`)).status).toBe(400);
   });
 
   it('resumes the investigation of the same case reference, and makes a new one without it', async () => {

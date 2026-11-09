@@ -133,6 +133,12 @@ export interface Template {
    * (every label and relationship type quoted from the allowlist). It reads at most `$limit + 1` other ends.
    */
   readonly derivedRule?: { readonly ruleParam: string; readonly entityTypeParam: string };
+  /**
+   * The edge template's own declaration, for no other template: a statement that reads one stored edge by its type, the entity types of its two ends and its stable ID. The Cypher is the one marker
+   * `@edgeLoad(<type parameter>)`, and the gate writes the whole statement from the mapping row that joins the two types by the type and holds a `stable_id`; every name is quoted from the allowlist and the
+   * request holds values only. The stable ID is the parameter `stableId` (and `stableInteger`, the integer it can be).
+   */
+  readonly edgeLoad?: { readonly typeParam: string; readonly fromParam: string; readonly toParam: string };
   /** The names of list parameters whose elements are `{ entityType, stableId }` references: for an entity type whose references are keyed the gate reads the token in each element's stable ID before the parameters are checked. */
   readonly referenceLists?: readonly string[];
   /**

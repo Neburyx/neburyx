@@ -1,3 +1,4 @@
+import { edgeRefSegmentOf } from '@neburyx/contracts';
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import { closedSetOf, statementProblems } from '../testing/fuzz-closed-set.js';
@@ -32,6 +33,8 @@ describe('an entity type the mapping does not name', () => {
     { name: 'lookup by reference', code: 'INVALID_REQUEST', send: (entityType) => rig.post('/v1/entities/lookup', { sourceId: FUZZ_SOURCE, ref: { entityType, stableId: 'W-1' } }) },
     { name: 'lookup by value', code: 'INVALID_REQUEST', send: (entityType) => rig.post('/v1/entities/lookup', { sourceId: FUZZ_SOURCE, value: { entityType, value: 'W-1' } }) },
     { name: 'entity GET', code: 'INVALID_REQUEST', send: async (entityType) => ({ body: (await rig.app.inject({ method: 'GET', url: `/v1/entities/${FUZZ_SOURCE}/${encodeURIComponent(entityType)}/W-1` })).body }) },
+    { name: 'edge GET (type)', code: 'INVALID_REQUEST', send: async (name) => ({ body: (await rig.app.inject({ method: 'GET', url: `/v1/edges/${edgeRefSegmentOf({ sourceId: FUZZ_SOURCE, type: name, from: 'widget', to: 'gadget', stableId: 'L-1' })}` })).body }) },
+    { name: 'edge GET (end type)', code: 'INVALID_REQUEST', send: async (entityType) => ({ body: (await rig.app.inject({ method: 'GET', url: `/v1/edges/${edgeRefSegmentOf({ sourceId: FUZZ_SOURCE, type: 'MADE_FROM', from: entityType, to: 'gadget', stableId: 'L-1' })}` })).body }) },
   ];
 
   for (const route of routes) {

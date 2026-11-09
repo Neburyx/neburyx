@@ -1,7 +1,7 @@
 import { act, render, screen, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { vi } from 'vitest';
-import type { DegreePreview, DerivedNeighborsResponse, GraphNode, GraphProperty, SourceProfile } from '@neburyx/contracts';
+import type { DegreePreview, DerivedNeighborsResponse, EdgeDetail, GraphNode, GraphProperty, SourceProfile } from '@neburyx/contracts';
 import type { ApiClient, ApiFailure, ApiResult } from '../api/client.js';
 import { fakeClient } from '../api/fake-client.js';
 import { createDerivedStore } from '../api/derived-store.js';
@@ -13,7 +13,7 @@ import { elementKey } from '../state/keys.js';
 import { node, ref } from '../state/test-data.js';
 import { staticProfile } from '../test-utils.js';
 import { loadGraph, show, withBuiltIns } from '../workspace/context-menu-kit.js';
-import { FloatingPanels } from '../workspace/panel-host.js';
+import { DockColumn, FloatingPanels } from '../workspace/panel-host.js';
 import { createPanelRegistryFor, PanelsProvider } from '../workspace/panel-registry.js';
 import { DerivedProvider } from '../workspace/derived-context.js';
 import { PreviewProvider } from '../workspace/preview-context.js';
@@ -22,6 +22,9 @@ import { createSelectionActionRegistry, SelectionActionsProvider, type Selection
 import { bindLegend } from '../workspace/legend-binder.js';
 import { bindBuiltInInspector } from './built-in-tabs.js';
 import { createEntityReadStore, EntityReadProvider } from './entity-read.js';
+import { bindBuiltInEvidence } from '../evidence/built-in.js';
+import { createEdgeReadStore, EdgeReadProvider } from '../evidence/edge-read.js';
+import { createShellData, ShellDataProvider } from '../shell/shell-data.js';
 
 export const TYPE = 'type-a';
 export const keyOf = (id: string): string => elementKey(ref('a', TYPE, id));
@@ -51,6 +54,10 @@ export interface RigOptions {
   readonly menus?: MenuRegistry;
   /** The rules the profile lists; none by default, and then the inspector asks for no derived neighbors. */
   readonly derivedRules?: SourceProfile['derivedRules'];
+  /** Binds the relationship evidence too: its panel in the dock, its menu items and the inspector's Evidence tab. */
+  readonly evidence?: boolean;
+  /** Client reads beyond the ones the rig answers itself. */
+  readonly client?: Partial<ApiClient>;
 }
 
 /** The workspace with the inspector bound: a loaded graph, a profile, selection actions, and a client whose entity and preview reads wait for the test to answer. */
@@ -60,7 +67,13 @@ export function inspectorRig(options: RigOptions = {}) {
   const previews: Ask<DegreePreview>[] = [];
   const derived: Ask<DerivedNeighborsResponse>[] = [];
   const derivedCalls: Array<{ readonly id: string; readonly mask: boolean; readonly signal: AbortSignal | undefined }> = [];
+  const edgeReads: Ask<EdgeDetail>[] = [];
+  const edgeCalls: Array<{ readonly id: string; readonly mask: boolean; readonly signal: AbortSignal | undefined }> = [];
   const client: ApiClient = fakeClient({
+    getEdge: (reference, opts, signal) => {
+      edgeCalls.push({ id: reference.stableId, mask: opts?.mask === true, signal });
+      return new Promise((resolve) => void edgeReads.push({ answer: resolve }));
+    },
     getEntity: (reference, opts, signal) => {
       entityCalls.push({ id: reference.stableId, mask: opts?.mask === true, signal });
       return new Promise((resolve) => void entityReads.push({ answer: resolve }));
@@ -70,12 +83,15 @@ export function inspectorRig(options: RigOptions = {}) {
       derivedCalls.push({ id: request.ref.stableId, mask: request.mask === true, signal });
       return new Promise((resolve) => void derived.push({ answer: resolve }));
     },
+    ...options.client,
   });
   const state = options.state ?? createClientState();
   loadGraph(state, options.nodes ?? [entity('n1', [property('holder', 'Jordan')]), entity('n2')], []);
   const panels = createPanelRegistryFor(state);
   const unbindLegend = bindLegend(state, panels);
   const bound = bindBuiltInInspector(state, panels);
+  const menus = options.menus ?? withBuiltIns();
+  const evidenceBound = options.evidence === true ? bindBuiltInEvidence(state, panels, bound.inspector, menus) : undefined;
   const actions = createSelectionActionRegistry();
   for (const action of options.actions ?? []) actions.register(action);
   const reads = createEntityReadStore(client, () => 'person-1', () => state.investigation.getState().id ?? 'draft');
@@ -83,23 +99,29 @@ export function inspectorRig(options: RigOptions = {}) {
   const derivedStore = createDerivedStore(client, state, () => 'person-1', () => state.investigation.getState().id ?? 'draft');
   const base = 'profile' in options ? options.profile : profileOf();
   const profile = base === undefined ? base : { ...base, derivedRules: [...(options.derivedRules ?? [])] };
-  const menus = options.menus ?? withBuiltIns();
+  const edgeStore = createEdgeReadStore(client, () => 'person-1', () => state.investigation.getState().id ?? 'draft');
+  const shell = createShellData(client);
   const shown = show(state, {}, menus, (
     <ProfileProvider store={staticProfile('a', profile)}>
       <PanelsProvider registry={panels}>
         <FloatingPanels />
+        <DockColumn />
       </PanelsProvider>
     </ProfileProvider>
   ), (tree: ReactNode) => (
     <SelectionActionsProvider registry={actions}>
       <PreviewProvider store={previewStore}>
         <DerivedProvider store={derivedStore}>
-          <EntityReadProvider store={reads}>{tree}</EntityReadProvider>
+        <ShellDataProvider store={shell}>
+          <EntityReadProvider store={reads}>
+            <EdgeReadProvider store={edgeStore}>{tree}</EdgeReadProvider>
+          </EntityReadProvider>
+        </ShellDataProvider>
         </DerivedProvider>
       </PreviewProvider>
     </SelectionActionsProvider>
   ));
-  return { state, panels, menus, shown, client, previewStore, derivedStore, entityReads, entityCalls, previews, derived, derivedCalls, inspector: bound.inspector, unbind: () => (bound.unbind(), unbindLegend()) };
+  return { state, panels, menus, shown, client, previewStore, derivedStore, entityReads, entityCalls, previews, derived, derivedCalls, edgeReads, edgeCalls, inspector: bound.inspector, evidence: evidenceBound?.evidence, unbind: () => (evidenceBound?.unbind(), bound.unbind(), unbindLegend()) };
 }
 
 export const select = (state: ClientState, ...ids: string[]): void => void act(() => state.presentation.select(ids.map(keyOf)));

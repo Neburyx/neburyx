@@ -5,6 +5,7 @@ import type { ApiClient, ApiResult } from '../api/client.js';
 import { useRequest } from '../api/use-request.js';
 import { canRetry, FailureNotice } from '../failure-notice.js';
 import { SOURCE_NOT_AVAILABLE_TEXT } from '../investigations/messages.js';
+import { SearchEvidenceHost } from '../evidence/search-host.js';
 import { PageHeading } from '../shell/page-heading.js';
 import { useSessionMask } from '../state/context.js';
 import { captionOf, SEARCH_COPY, TOO_LONG } from './copy.js';
@@ -127,7 +128,9 @@ export function SearchWorkspace({ client, source, sources, principalId, text }: 
           </div>
         )
       ) : codePoints(text) < MIN_SEARCH_TEXT_LENGTH ? null : (
-        <SearchResults key={`${source.id}\u0000${mask}`} client={client} source={source} principalId={principalId} profile={profileData} text={text} mask={mask} selection={selection} onSelect={select} busy={busy} repeats={repeats} onOpen={open} />
+        <SearchEvidenceHost key={`${source.id}\u0000${mask}`} mask={mask}>
+          <SearchResults key={`${source.id}\u0000${mask}`} client={client} source={source} principalId={principalId} profile={profileData} text={text} mask={mask} selection={selection} onSelect={select} busy={busy} repeats={repeats} onOpen={open} />
+        </SearchEvidenceHost>
       )}
     </section>
   );

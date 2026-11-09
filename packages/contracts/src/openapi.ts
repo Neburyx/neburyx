@@ -9,6 +9,7 @@ import { sourceProfileSchema } from './profile.js';
 import { coverageRequestSchema, coverageResponseSchema } from './coverage.js';
 import { degreePreviewRequestSchema, degreePreviewSchema } from './degree-preview.js';
 import { derivedNeighborsRequestSchema, derivedNeighborsResponseSchema } from './derived-neighbors.js';
+import { edgeDetailSchema } from './edge-detail.js';
 import { entityLookupRequestSchema } from './entities.js';
 import { expandRequestSchema, expandResponseSchema } from './expand.js';
 import { searchMoreRequestSchema, searchMoreResultSchema, searchRequestSchema, searchResultSchema } from './search.js';
@@ -22,7 +23,7 @@ export interface OpenApiDocument {
   readonly openapi: string;
   readonly info: { readonly title: string; readonly version: string };
   readonly paths: Readonly<Record<string, unknown>>;
-  readonly components: { readonly schemas: { readonly CoverageRequest: Record<string, unknown>; readonly CoverageResponse: Record<string, unknown>; readonly DegreePreview: Record<string, unknown>; readonly DegreePreviewRequest: Record<string, unknown>; readonly DerivedNeighborsRequest: Record<string, unknown>; readonly DerivedNeighborsResponse: Record<string, unknown>; readonly EntityLookupRequest: Record<string, unknown>; readonly ErrorResponse: Record<string, unknown>; readonly ExpandRequest: Record<string, unknown>; readonly ExpandResponse: Record<string, unknown>; readonly GraphNode: Record<string, unknown>; readonly HealthResponse: Record<string, unknown>; readonly InvestigationListResponse: Record<string, unknown>; readonly InvestigationResponse: Record<string, unknown>; readonly MeResponse: Record<string, unknown>; readonly OpenInvestigationRequest: Record<string, unknown>; readonly OpenInvestigationResponse: Record<string, unknown>; readonly ReadyResponse: Record<string, unknown>; readonly SearchMoreRequest: Record<string, unknown>; readonly SearchMoreResult: Record<string, unknown>; readonly SearchRequest: Record<string, unknown>; readonly SearchResult: Record<string, unknown>; readonly SourceProfile: Record<string, unknown>; readonly SourceTestReport: Record<string, unknown>; readonly SourcesResponse: Record<string, unknown> } };
+  readonly components: { readonly schemas: { readonly CoverageRequest: Record<string, unknown>; readonly CoverageResponse: Record<string, unknown>; readonly DegreePreview: Record<string, unknown>; readonly DegreePreviewRequest: Record<string, unknown>; readonly DerivedNeighborsRequest: Record<string, unknown>; readonly DerivedNeighborsResponse: Record<string, unknown>; readonly EdgeDetail: Record<string, unknown>; readonly EntityLookupRequest: Record<string, unknown>; readonly ErrorResponse: Record<string, unknown>; readonly ExpandRequest: Record<string, unknown>; readonly ExpandResponse: Record<string, unknown>; readonly GraphNode: Record<string, unknown>; readonly HealthResponse: Record<string, unknown>; readonly InvestigationListResponse: Record<string, unknown>; readonly InvestigationResponse: Record<string, unknown>; readonly MeResponse: Record<string, unknown>; readonly OpenInvestigationRequest: Record<string, unknown>; readonly OpenInvestigationResponse: Record<string, unknown>; readonly ReadyResponse: Record<string, unknown>; readonly SearchMoreRequest: Record<string, unknown>; readonly SearchMoreResult: Record<string, unknown>; readonly SearchRequest: Record<string, unknown>; readonly SearchResult: Record<string, unknown>; readonly SourceProfile: Record<string, unknown>; readonly SourceTestReport: Record<string, unknown>; readonly SourcesResponse: Record<string, unknown> } };
 }
 
 const RETRY_AFTER_HEADER = { 'Retry-After': { description: 'Whole seconds to wait', schema: { type: 'integer', minimum: 1 } } };
@@ -62,6 +63,7 @@ export function buildOpenApiDocument(
   coverageResponse: z.ZodType = coverageResponseSchema,
   searchMoreRequest: z.ZodType = searchMoreRequestSchema,
   searchMoreResult: z.ZodType = searchMoreResultSchema,
+  edgeDetail: z.ZodType = edgeDetailSchema,
 ): OpenApiDocument {
   return {
     openapi: '3.1.0',
@@ -231,6 +233,27 @@ export function buildOpenApiDocument(
           },
         },
       },
+      '/v1/edges/{ref}': {
+        get: {
+          operationId: 'getEdge',
+          summary: 'Read one stored edge of a source with its evidence',
+          description:
+            'Reads one stored relationship by its reference through the gate, as the calling principal, in one fixed read of at most two rows. {ref} is one percent-encoded path segment of at most 2048 characters: the unpadded base64url text of the JSON of the stored edge reference { sourceId, type, from, to, stableId } (the keys in that order, no whitespace; any key order is accepted). The source is the one the reference names. The answer holds the type, the two ends (their reference, title and entity type), the time the mapping\'s observed_at gives, the mapped properties the edge holds other than its stable ID and observed time, which have their own fields, its quality flags and evidence. evidence is { status: available, records } with each record { sourceRecordId, linkable } or { property, unreadable: true }, or { status: not-available, code: EVIDENCE_NOT_AVAILABLE } when the source kept no record for the edge; that is a state of an ordinary answer and never an error response. linkable is true only when the mapping gives the evidence a link; no URL is ever sent. mask asks for the personal-data fields to be masked, and the end titles with them. There is no confidence or score.',
+          parameters: [
+            { name: 'ref', in: 'path', required: true, description: 'At most 2048 characters', schema: { type: 'string', minLength: 1, maxLength: 2048 } },
+            { name: 'mask', in: 'query', required: false, description: 'true to mask the personal-data fields', schema: { type: 'string', enum: ['true', 'false'] } },
+          ],
+          responses: {
+            '200': { description: 'The edge and its evidence', content: jsonBody('EdgeDetail') },
+            '400': { description: 'A query parameter other than mask was sent, the segment is not the base64url text of a stored edge reference, or is longer than the bound, the reference is of another form, or the mapping has no such edge type between those entity types with a stable ID', content: jsonBody('ErrorResponse') },
+            '404': { description: 'No configured source has the reference\'s id, the person may not read it (one answer for these), or the source holds no such edge', content: jsonBody('ErrorResponse') },
+            '429': { description: 'Too many requests from this person to this source in the last minute: nothing was read; details.retryAfterMs and the Retry-After header (whole seconds) say how long to wait', headers: RETRY_AFTER_HEADER, content: jsonBody('ErrorResponse') },
+            '500': { description: 'The read could not be completed', content: jsonBody('ErrorResponse') },
+            '503': { description: 'The source is not available, or is busy; after repeated timeouts details.retryAfterMs and the Retry-After header (whole seconds) say how long to wait', content: jsonBody('ErrorResponse'), headers: RETRY_AFTER_HEADER },
+            '504': { description: 'The source did not answer in time', content: jsonBody('ErrorResponse') },
+          },
+        },
+      },
       '/v1/search/entities': {
         post: {
           operationId: 'searchEntities',
@@ -360,7 +383,7 @@ export function buildOpenApiDocument(
       },
     },
     components: {
-      schemas: { CoverageRequest: schemaJson(coverageRequest), CoverageResponse: schemaJson(coverageResponse), DegreePreview: schemaJson(degreePreview), DegreePreviewRequest: schemaJson(degreePreviewRequest), DerivedNeighborsRequest: schemaJson(derivedNeighborsRequest), DerivedNeighborsResponse: schemaJson(derivedNeighborsResponse), EntityLookupRequest: schemaJson(entityLookupRequest), ErrorResponse: schemaJson(errorResponse), ExpandRequest: schemaJson(expandRequest), ExpandResponse: schemaJson(expandResponse), GraphNode: schemaJson(graphNode), HealthResponse: schemaJson(healthResponse), InvestigationListResponse: schemaJson(investigationList), InvestigationResponse: schemaJson(investigationResponse), MeResponse: schemaJson(meResponse), OpenInvestigationRequest: schemaJson(openInvestigationRequest), OpenInvestigationResponse: schemaJson(openInvestigationResponse), ReadyResponse: schemaJson(readyResponse), SearchMoreRequest: schemaJson(searchMoreRequest), SearchMoreResult: schemaJson(searchMoreResult), SearchRequest: schemaJson(searchRequest), SearchResult: schemaJson(searchResult), SourceProfile: schemaJson(sourceProfile), SourceTestReport: schemaJson(sourceTestReport), SourcesResponse: schemaJson(sourcesResponse) },
+      schemas: { CoverageRequest: schemaJson(coverageRequest), CoverageResponse: schemaJson(coverageResponse), DegreePreview: schemaJson(degreePreview), DegreePreviewRequest: schemaJson(degreePreviewRequest), DerivedNeighborsRequest: schemaJson(derivedNeighborsRequest), DerivedNeighborsResponse: schemaJson(derivedNeighborsResponse), EdgeDetail: schemaJson(edgeDetail), EntityLookupRequest: schemaJson(entityLookupRequest), ErrorResponse: schemaJson(errorResponse), ExpandRequest: schemaJson(expandRequest), ExpandResponse: schemaJson(expandResponse), GraphNode: schemaJson(graphNode), HealthResponse: schemaJson(healthResponse), InvestigationListResponse: schemaJson(investigationList), InvestigationResponse: schemaJson(investigationResponse), MeResponse: schemaJson(meResponse), OpenInvestigationRequest: schemaJson(openInvestigationRequest), OpenInvestigationResponse: schemaJson(openInvestigationResponse), ReadyResponse: schemaJson(readyResponse), SearchMoreRequest: schemaJson(searchMoreRequest), SearchMoreResult: schemaJson(searchMoreResult), SearchRequest: schemaJson(searchRequest), SearchResult: schemaJson(searchResult), SourceProfile: schemaJson(sourceProfile), SourceTestReport: schemaJson(sourceTestReport), SourcesResponse: schemaJson(sourcesResponse) },
     },
   };
 }

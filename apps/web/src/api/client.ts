@@ -2,6 +2,8 @@ import {
   canCarryInPath,
   coverageResponseSchema,
   degreePreviewSchema,
+  edgeDetailSchema,
+  edgeRefSegmentOf,
   errorBodySchema,
   errorResponseSchema,
   derivedNeighborsResponseSchema,
@@ -21,6 +23,7 @@ import {
   type CoverageResponse,
   type DegreePreview,
   type DegreePreviewRequest,
+  type EdgeDetail,
   type EntityLookupRequest,
   type ElementRef,
   type ErrorResponse,
@@ -41,6 +44,7 @@ import {
   type SourceProfile,
   type SourcesResponse,
   type SourceTestReport,
+  type StoredEdgeRef,
 } from '@neburyx/contracts';
 import type { z } from 'zod';
 import { sourcesOfEdge } from '../state/keys.js';
@@ -71,6 +75,8 @@ export interface ApiClient {
   testSource(sourceId: string, signal?: AbortSignal): Promise<ApiResult<SourceTestReport>>;
   /** One entity of a source, without its neighbors; `mask` asks for the personal-data fields to be masked. */
   getEntity(ref: ElementRef, options?: { readonly mask?: boolean }, signal?: AbortSignal): Promise<ApiResult<GraphNode>>;
+  /** One stored edge of a source with its evidence, by the reference the client holds; `mask` asks for the end titles to be masked. The answer names the edge asked for, or it is refused. */
+  getEdge(ref: StoredEdgeRef, options?: { readonly mask?: boolean }, signal?: AbortSignal): Promise<ApiResult<EdgeDetail>>;
   /** One entity of a source by a reference or a raw value in a request body, for an ID that a path cannot carry; a raw value of a keyed type is accepted only unmasked. */
   lookupEntity(request: EntityLookupRequest, signal?: AbortSignal): Promise<ApiResult<GraphNode>>;
   /** Opens an entity as an investigation: creates one, or resumes the caller's own for the same case reference. */
@@ -90,6 +96,10 @@ export interface ApiClient {
   expandNeighbors(request: ExpandRequest, signal?: AbortSignal): Promise<ApiResult<ExpandResponse>>;
   /** The rule-derived neighbors of a node, one result for each rule of the source whose first type is the node's; the answer names the node and the source asked for and holds nothing of another source, or it is refused. */
   derivedNeighbors(request: DerivedNeighborsRequest, signal?: AbortSignal): Promise<ApiResult<DerivedNeighborsResponse>>;
+}
+
+function sameStoredRef(left: StoredEdgeRef, right: StoredEdgeRef): boolean {
+  return left.sourceId === right.sourceId && left.type === right.type && left.from === right.from && left.to === right.to && left.stableId === right.stableId;
 }
 
 function sameRef(left: ElementRef, right: ElementRef): boolean {
@@ -153,6 +163,10 @@ export function createApiClient(fetcher: Fetcher = (input, init) => fetch(input,
     testSource: async (sourceId, signal) => {
       const result = await request(fetcher, `/v1/sources/${encodeURIComponent(sourceId)}/test`, sourceTestReportSchema, signal, 'POST');
       return result.ok && result.value.sourceId !== sourceId ? failed('SCHEMA_MISMATCH') : result;
+    },
+    getEdge: async (ref, options, signal) => {
+      const result = await request(fetcher, `/v1/edges/${encodeURIComponent(edgeRefSegmentOf(ref))}${options?.mask === true ? '?mask=true' : ''}`, edgeDetailSchema, signal);
+      return result.ok && !sameStoredRef(result.value.ref, ref) ? failed('SCHEMA_MISMATCH') : result;
     },
     lookupEntity: async (lookup, signal) => {
       const result = await request(fetcher, '/v1/entities/lookup', nodeSchema, signal, 'POST', lookup);

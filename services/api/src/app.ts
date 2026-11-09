@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import type { Socket } from 'node:net';
 import fastifyStatic from '@fastify/static';
-import { type ErrorCode, derivedNeighborsRequestSchema, derivedNeighborsResponseSchema, coverageRequestSchema, coverageResponseSchema, degreePreviewRequestSchema, entityLookupRequestSchema, degreePreviewSchema, entityPathSchema, entityQuerySchema, expandRequestSchema, expandResponseSchema, healthResponseSchema, investigationListQuerySchema, investigationListResponseSchema, investigationResponseSchema, meResponseSchema, nodeSchema, openInvestigationRequestSchema, openInvestigationResponseSchema, readyResponseSchema, searchMoreRequestSchema, searchMoreResultSchema, searchRequestSchema, searchResultSchema, sourceProfileSchema, sourceTestReportSchema, sourcesResponseSchema } from '@neburyx/contracts';
+import { type ErrorCode, derivedNeighborsRequestSchema, derivedNeighborsResponseSchema, coverageRequestSchema, coverageResponseSchema, degreePreviewRequestSchema, edgeDetailSchema, edgePathSchema, entityLookupRequestSchema, degreePreviewSchema, entityPathSchema, entityQuerySchema, expandRequestSchema, expandResponseSchema, healthResponseSchema, investigationListQuerySchema, investigationListResponseSchema, investigationResponseSchema, meResponseSchema, nodeSchema, parseEdgeRefSegment, openInvestigationRequestSchema, openInvestigationResponseSchema, readyResponseSchema, searchMoreRequestSchema, searchMoreResultSchema, searchRequestSchema, searchResultSchema, sourceProfileSchema, sourceTestReportSchema, sourcesResponseSchema } from '@neburyx/contracts';
 import { z } from 'zod';
 import Fastify, {
   type FastifyBaseLogger,
@@ -21,6 +21,7 @@ import { createDerivedNeighborsService } from './graph/derived-neighbors-service
 import { createExpandService } from './graph/expand-service.js';
 import { createDegreeCache, type DegreeCacheOptions } from './graph/degree-cache.js';
 import { NO_DEGREE_VERDICTS, type DegreeVerdicts } from './source-test/usability.js';
+import { createEdgeReader } from './edges/edge-reader.js';
 import { createEntityReader } from './entities/entity-reader.js';
 import { createSearchService } from './search/search-service.js';
 import { createInvestigationService } from './investigations/investigation-service.js';
@@ -351,6 +352,17 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       const identity = await options.store.current();
       const node = await entities.read({ traceId: request.id, principal: identity.principal, ...path.data, mask: query.data.mask === 'true', rate: 'count', signal: signalOf(request) });
       return nodeSchema.parse(node);
+    });
+
+    const edges = createEdgeReader({ gate: options.gate, mapping, access });
+    app.get('/v1/edges/:ref', { exposeHeadRoute: false, config: { permission: 'principal' } }, async (request) => {
+      const path = edgePathSchema.safeParse(request.params);
+      const query = entityQuerySchema.safeParse(request.query);
+      const ref = path.success ? parseEdgeRefSegment(path.data.ref) : undefined;
+      if (!path.success || !query.success || ref === undefined) throw new AppError('INVALID_REQUEST');
+      const identity = await options.store.current();
+      const detail = await edges.read({ traceId: request.id, principal: identity.principal, ref, mask: query.data.mask === 'true', rate: 'count', signal: signalOf(request) });
+      return edgeDetailSchema.parse(detail);
     });
 
     app.post('/v1/entities/lookup', { config: { permission: 'principal' } }, async (request) => {

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { CatalogError, createTemplateCatalog, type TemplateDefinition } from './catalog.js';
 import { connectivityTemplate } from './templates/connectivity.js';
+import { edgeLoadTemplate } from './templates/edge-load.js';
 import { defaultCatalogTemplates } from './assemble.js';
 import { integerTemplate, markerTemplate, nodesTemplate } from '../testing/gate-fixtures.js';
 
@@ -193,6 +194,7 @@ describe('the templates of the shipped catalog', () => {
       'degree-preview-bounded': 'cut means a duplicate',
       'degree-preview-cheap': 'cut means a duplicate',
       'entity-load': 'cut means a duplicate',
+      'edge-load': 'cut means a duplicate',
       'expand-neighbors': 'paged',
       'expand-count': 'one row',
       'entity-search': 'paged',
@@ -207,5 +209,41 @@ describe('the templates of the shipped catalog', () => {
 
   it('are accepted by the catalog', () => {
     expect(() => createTemplateCatalog({ templates })).not.toThrow();
+  });
+});
+
+describe('the edge load declaration', () => {
+  const failure = (definition: Partial<TemplateDefinition>): string | undefined => {
+    try {
+      createTemplateCatalog({ templates: [{ ...edgeLoadTemplate, ...definition }] });
+      return undefined;
+    } catch (error) {
+      return error instanceof CatalogError ? error.message : 'not a CatalogError';
+    }
+  };
+
+  it('is accepted as shipped', () => {
+    expect(failure({})).toBeUndefined();
+  });
+
+  it('is refused when the Cypher is more than its one marker', () => {
+    expect(failure({ cypher: '@edgeLoad(type) LIMIT 5' })).toBe('the template edge-load declares an edge load and its Cypher is not exactly its one edge load marker');
+  });
+
+  it('is refused when the marker is used without the declaration', () => {
+    expect(failure({ edgeLoad: undefined })).toBe('the template edge-load uses the edge load marker without declaring an edge load');
+  });
+
+  it('is refused when it is paged, or says a cut means something else than a duplicate', () => {
+    expect(failure({ paged: true })).toBe('the template edge-load is paged and declares rows or cutMeans');
+    expect(failure({ cutMeans: 'lowerBound' })).toContain('declares an edge load and is also another kind of template');
+  });
+
+  it('is refused when it does not name its index and its properties', () => {
+    expect(failure({ indexNeeds: undefined })).toBe('the template edge-load declares an edge load and does not name its index and its properties');
+  });
+
+  it('is refused when its schema lacks a parameter it names', () => {
+    expect(failure({ edgeLoad: { typeParam: 'type', fromParam: 'from', toParam: 'missing' } })).toBe('the template edge-load declares an edge load for parameters its schema does not have');
   });
 });

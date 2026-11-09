@@ -350,3 +350,48 @@ describe('the API client, asking for the rule-derived neighbors of a node', () =
     expect(await createApiClient(respondWith(body)).derivedNeighbors(PREVIEW_REQUEST)).toEqual({ ok: false, failure: { code: 'SCHEMA_MISMATCH' } });
   });
 });
+
+describe('the API client, reading one stored edge', () => {
+  const REF = { sourceId: 'source-a', type: 'MADE_FROM', from: 'widget', to: 'gadget', stableId: 'L-1' };
+  const END = (stableId: string, entityType: string) => ({ ref: { sourceId: 'source-a', entityType, stableId }, title: stableId, type: entityType });
+  const DETAIL = { ref: REF, type: 'MADE_FROM', semantics: 'stored', from: END('W-1', 'widget'), to: END('GT-1', 'gadget'), properties: [], qualityFlags: [], evidence: { status: 'not-available', code: 'EVIDENCE_NOT_AVAILABLE' } };
+
+  it('asks for the one segment of the reference, with mask when asked, and returns the edge', async () => {
+    const asked: string[] = [];
+    const client = createApiClient(async (input) => {
+      asked.push(input);
+      return new Response(JSON.stringify(DETAIL));
+    });
+    expect(await client.getEdge(REF)).toEqual({ ok: true, value: DETAIL });
+    await client.getEdge(REF, { mask: true });
+    expect(asked[0]).toMatch(/^\/v1\/edges\/[A-Za-z0-9_-]+$/);
+    expect(asked[1]).toBe(`${asked[0]}?mask=true`);
+  });
+
+  it('refuses an answer for another edge', async () => {
+    const client = createApiClient(respondWith({ ...DETAIL, ref: { ...REF, stableId: 'L-2' } }));
+    expect(await client.getEdge(REF)).toEqual({ ok: false, failure: { code: 'SCHEMA_MISMATCH' } });
+  });
+
+  it('refuses an answer that has a score or the wrong shape', async () => {
+    expect(await createApiClient(respondWith({ ...DETAIL, confidence: 0.9 })).getEdge(REF)).toEqual({ ok: false, failure: { code: 'SCHEMA_MISMATCH' } });
+    expect(await createApiClient(respondWith({ ...DETAIL, evidence: { status: 'available', records: [] } })).getEdge(REF)).toEqual({ ok: false, failure: { code: 'SCHEMA_MISMATCH' } });
+  });
+
+  it('gives the API error as it came, and no value', async () => {
+    const client = createApiClient(async () => new Response(JSON.stringify({ error: { code: 'NOT_FOUND', message: ERROR_TABLE.NOT_FOUND.message, retryable: false, traceId: 'tr-1' } }), { status: 404 }));
+    expect(await client.getEdge(REF)).toEqual({ ok: false, failure: { code: 'NOT_FOUND', message: ERROR_TABLE.NOT_FOUND.message, retryable: false, traceId: 'tr-1' } });
+  });
+
+  it('answers ABORTED without a request when the signal is already aborted', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    let asked = 0;
+    const client = createApiClient(async () => {
+      asked += 1;
+      return new Response('{}');
+    });
+    expect(await client.getEdge(REF, undefined, controller.signal)).toEqual({ ok: false, failure: { code: 'ABORTED' } });
+    expect(asked).toBe(0);
+  });
+});

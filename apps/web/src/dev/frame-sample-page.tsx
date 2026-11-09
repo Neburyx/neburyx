@@ -13,7 +13,11 @@ import { registerBuiltInKeyBindings } from '../workspace/built-in-key-bindings.j
 import { createKeyBindingRegistry, KeyBindingsProvider } from '../workspace/key-binding-registry.js';
 import { createMenuRegistry, MenuProvider } from '../workspace/menu-registry.js';
 import { createSelectionActionRegistry, SelectionActionsProvider } from '../workspace/selection-actions.js';
+import { bindBuiltInEvidence } from '../evidence/built-in.js';
+import { createEdgeReadStore, EdgeReadProvider } from '../evidence/edge-read.js';
 import { bindBuiltInInspector } from '../inspector/built-in-tabs.js';
+import { createShellData, ShellDataProvider } from '../shell/shell-data.js';
+import { sampleClient } from './sample-client.js';
 import { bindLegend } from '../workspace/legend-binder.js';
 import { bindSupernodePanel } from '../workspace/supernode-panel-binder.js';
 import { createPanelRegistryFor, PanelsProvider } from '../workspace/panel-registry.js';
@@ -58,6 +62,11 @@ function floatingSide(search: string): 'left' | 'right' | false {
   return value === 'left' ? 'left' : 'right';
 }
 
+/** `?evidence=on` binds the relationship evidence panel, which takes the dock, so the dock test panel is left out; its reads are answered by the sample's own client. */
+function evidenceOn(search: string): boolean {
+  return new URLSearchParams(search).get('evidence') === 'on';
+}
+
 /** The workspace with the Explore design's graph, drawn at the design's own positions, for putting the canvas beside the design. */
 export function FrameSamplePage() {
   const [state] = useState(() => titledSample(window.location.search));
@@ -78,21 +87,23 @@ export function FrameSamplePage() {
     registerStandInTools(registry);
     return registry;
   });
-  const [menus] = useState(() => {
-    const registry = createMenuRegistry();
-    registerBuiltInMenuItems(registry);
-    registerStandInMenuItems(registry);
-    return registry;
-  });
-  const [panels] = useState(() => {
+  const [registries] = useState(() => {
     const registry = createPanelRegistryFor(state);
     bindLegend(state, registry);
     bindSupernodePanel(state, registry);
     bindFiltersPanel(state, registry);
-    bindBuiltInInspector(state, registry);
-    registerStandInPanels(registry, { floating: floatingSide(window.location.search), dock: new URLSearchParams(window.location.search).get('dock') !== 'none' });
-    return registry;
+    const { inspector } = bindBuiltInInspector(state, registry);
+    const menuRegistry = createMenuRegistry();
+    registerBuiltInMenuItems(menuRegistry);
+    if (evidenceOn(window.location.search)) bindBuiltInEvidence(state, registry, inspector, menuRegistry);
+    registerStandInMenuItems(menuRegistry);
+    registerStandInPanels(registry, { floating: floatingSide(window.location.search), dock: new URLSearchParams(window.location.search).get('dock') !== 'none' && !evidenceOn(window.location.search) });
+    return [registry, menuRegistry] as const;
   });
+  const [panels, menus] = registries;
+  const [client] = useState(sampleClient);
+  const [edgeReads] = useState(() => createEdgeReadStore(client, () => 'frame-sample', () => 'frame-sample'));
+  const [shell] = useState(() => (evidenceOn(window.location.search) ? createShellData(client) : undefined));
   const [keyBindings] = useState(() => {
     const registry = createKeyBindingRegistry();
     registerBuiltInKeyBindings(registry);
@@ -108,7 +119,15 @@ export function FrameSamplePage() {
               <PanelsProvider registry={panels}>
                 <KeyBindingsProvider registry={keyBindings}>
                   <ProfileProvider store={profile}>
-                    <WorkspaceShell canvasView="as-drawn" />
+                    {shell === undefined ? (
+                      <WorkspaceShell canvasView="as-drawn" />
+                    ) : (
+                      <ShellDataProvider store={shell}>
+                        <EdgeReadProvider store={edgeReads}>
+                          <WorkspaceShell canvasView="as-drawn" />
+                        </EdgeReadProvider>
+                      </ShellDataProvider>
+                    )}
                   </ProfileProvider>
                 </KeyBindingsProvider>
               </PanelsProvider>

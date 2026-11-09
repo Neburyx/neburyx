@@ -19,6 +19,7 @@ import { createCoverageStore } from './api/coverage-store.js';
 import { createDerivedStore } from './api/derived-store.js';
 import { createPreviewStore } from './api/preview-store.js';
 import { CoverageProvider } from './workspace/coverage-context.js';
+import { createEdgeReadStore, dropReadsOnNewEpoch, EdgeReadProvider } from './evidence/edge-read.js';
 import { createEntityReadStore, EntityReadProvider } from './inspector/entity-read.js';
 import { DerivedProvider } from './workspace/derived-context.js';
 import { PreviewProvider } from './workspace/preview-context.js';
@@ -116,6 +117,8 @@ export function appRoutes(client: ApiClient, state: ClientState, banner?: Banner
   const previews = createPreviewStore(client, person, report, tracker);
   const derived = createDerivedStore(client, state, person, () => state.investigation.getState().id ?? '');
   const entityReads = createEntityReadStore(client, person, () => state.investigation.getState().id ?? '');
+  const edgeReads = createEdgeReadStore(client, person, () => state.investigation.getState().id ?? '');
+  dropReadsOnNewEpoch(state, edgeReads);
   const coverage = createCoverageStore(client, person, report);
   const expansions = createExpandStore(client, state, person, report, banner === undefined ? undefined : createHeavyGuard(previews, banner, state), tracker);
   const recent = createRecentInvestigations(client);
@@ -131,6 +134,7 @@ export function appRoutes(client: ApiClient, state: ClientState, banner?: Banner
                 <PreviewProvider store={previews}>
                 <DerivedProvider store={derived}>
                 <EntityReadProvider store={entityReads}>
+                <EdgeReadProvider store={edgeReads}>
                 <CoverageProvider store={coverage}>
                 <ExpandProvider store={expansions}>
                 <TestRunsProvider runs={testRuns}>
@@ -143,6 +147,7 @@ export function appRoutes(client: ApiClient, state: ClientState, banner?: Banner
                 </TestRunsProvider>
                 </ExpandProvider>
                 </CoverageProvider>
+                </EdgeReadProvider>
                 </EntityReadProvider>
                 </DerivedProvider>
                 </PreviewProvider>

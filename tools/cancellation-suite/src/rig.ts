@@ -78,6 +78,11 @@ export const rowFor = (neighborType: string, n = 1): Record<string, unknown> => 
   return { a: hubNode, m: neighbor, rel: plainRelationship(kind.rel, hubNode, neighbor, { relId: `${neighborType}-r${n}` }, `rel-${neighborType}-${n}`), phase: 2, ts: null, id: `${neighborType}-r${n}`, rtype: kind.rel, dir: 'out', ntype: null, flag: null, members: null, first: null };
 };
 
+/** The stored edge of the hub to its first leaf, as an edge read of `EDGE_REF` finds it. */
+const leafNode = plainNode(['Leaf'], { leafId: 'L-0' }, 'e-leaf-0');
+const EDGE_ROW = { r: plainRelationship('LINKED', hubNode, leafNode, { relId: 'r-edge' }, 'rel-edge'), a: hubNode, b: leafNode };
+export const EDGE_REF = { sourceId: SOURCE, type: 'LINKED', from: 'hub', to: 'leaf', stableId: 'r-edge' } as const;
+
 /** What the scripted source does with the next expansion read: wait for the test, then answer. */
 export interface Read {
   readonly call: ExecuteCall;
@@ -100,7 +105,7 @@ function scriptedSource(mapping: ReturnType<typeof mappingWith>) {
     const neighborType = String(call.parameters['neighborType']);
     return new Promise<ExecuteOutcome>((resolve) => {
       const degrees = Object.fromEntries(Array.from({ length: DEGREE_COLUMNS }, (_, index) => [`c${index}`, 1]));
-      const rows = (count: number): readonly Record<string, unknown>[] => (call.templateId === EXPAND_NEIGHBORS_ID ? Array.from({ length: count }, (_, index) => rowFor(neighborType, index + 1)) : call.templateId.startsWith('degree-preview') ? [degrees] : []);
+      const rows = (count: number): readonly Record<string, unknown>[] => (call.templateId === EXPAND_NEIGHBORS_ID ? Array.from({ length: count }, (_, index) => rowFor(neighborType, index + 1)) : call.templateId.startsWith('degree-preview') ? [degrees] : call.templateId === 'edge-load' ? [EDGE_ROW] : []);
       const read: Read = { call, neighborType, answerRows: (count = 1) => resolve({ status: 'rows', rows: rows(count) }), fail: resolve };
       call.signal?.addEventListener('abort', () => resolve({ status: 'cancelled' }), { once: true });
       if (draining) return read.answerRows();

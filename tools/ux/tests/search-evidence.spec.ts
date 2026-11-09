@@ -26,11 +26,12 @@ test.describe('evidence records', () => {
     await expect(rows.nth(1)).not.toContainText('Used by rule');
   });
 
-  test('draws no View evidence action while no evidence panel is registered, and a row has nothing else to focus', async ({ page }) => {
+  test('draws one View evidence action on each row, the only control of the row', async ({ page }) => {
     await searchFor(page, 'ev-2');
     await expect(groupTitle(page, 'Evidence records · Supporting relationships (2)')).toBeVisible();
-    await expect(page.getByRole('button', { name: /View evidence/ })).toHaveCount(0);
-    await expect(page.getByRole('region', { name: /^Evidence records/ }).getByRole('button')).toHaveCount(0);
+    const region = page.getByRole('region', { name: /^Evidence records/ });
+    await expect(region.getByRole('button', { name: /^View evidence/ })).toHaveCount(2);
+    await expect(region.getByRole('button')).toHaveCount(2);
   });
 
   test('reads 26 supporting relationships as "≥ 25 · lower bound" and shows 25 rows', async ({ page }) => {

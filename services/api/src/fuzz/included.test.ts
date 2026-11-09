@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import config from '../../vitest.config.js';
 
 const folder = dirname(fileURLToPath(import.meta.url));
-const EXPECTED = ['cursors.test.ts', 'expand.test.ts', 'names.test.ts', 'routes.test.ts', 'tokens.test.ts'];
+const EXPECTED = ['cursors.test.ts', 'edges.test.ts', 'expand.test.ts', 'names.test.ts', 'routes.test.ts', 'tokens.test.ts'];
 
 /** The glob patterns of the unit job that keep a file out; a fuzz file must match none of them. */
 function excludedBy(file: string): string[] {

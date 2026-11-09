@@ -426,6 +426,9 @@ describe('the running API against the committed openapi.json', () => {
     { method: 'GET', url: '/v1/entities/demo/node_a/A-1?limit=1' },
     { method: 'GET', url: '/v1/entities/demo/not_a_type/A-1' },
     { method: 'GET', url: '/v1/entities/demo/node_a/%zz' },
+    { method: 'GET', url: '/v1/edges/ab+c' },
+    { method: 'GET', url: `/v1/edges/${'a'.repeat(2049)}` },
+    { method: 'GET', url: '/v1/edges/e30?limit=1' },
     { method: 'POST', url: '/v1/investigations', payload: '{}', headers: { 'content-type': 'application/json' } },
     { method: 'POST', url: '/v1/investigations', payload: JSON.stringify({ sourceId: 'demo', entity: { sourceId: 'other', entityType: 'node_a', stableId: 'A-1' } }), headers: { 'content-type': 'application/json' } },
     { method: 'POST', url: '/v1/investigations', payload: 'x', headers: { 'content-type': 'application/x-unsupported' } },
@@ -470,6 +473,7 @@ describe('the request rate in the committed openapi.json', () => {
   const counted = [
     '/v1/entities/{sourceId}/{entityType}/{stableId}',
     '/v1/entities/lookup',
+    '/v1/edges/{ref}',
     '/v1/search/entities',
     '/v1/search/entities/more',
     '/v1/graph/preview-expansion',

@@ -1,3 +1,4 @@
+import { edgeRefSegmentOf } from '@neburyx/contracts';
 import { FUZZ_SOURCE, FUZZ_TEXT, allowedNames, type FuzzRig } from './fuzz-rig.js';
 
 /** The names a statement quotes in backticks. */
@@ -102,6 +103,10 @@ async function buildClosedSet(rig: FuzzRig): Promise<{ readonly statements: Set<
     await app.inject({ method: 'GET', url: `/v1/entities/${FUZZ_SOURCE}/${entityType}/${stableId}` });
     keep();
   }
+  for (const mask of [undefined, 'true', 'false']) {
+    await app.inject({ method: 'GET', url: `/v1/edges/${edgeRefSegmentOf({ sourceId: FUZZ_SOURCE, type: 'MADE_FROM', from: 'widget', to: 'gadget', stableId: 'L-1' })}${mask === undefined ? '' : `?mask=${mask}`}` });
+    keep();
+  }
   for (const token of keys.slice(0, 1)) {
     await post('/v1/graph/preview-expansion', { sourceId: FUZZ_SOURCE, ref: { entityType: token.entityType, stableId: token.stableId } });
     keep();
@@ -125,7 +130,7 @@ async function buildClosedSet(rig: FuzzRig): Promise<{ readonly statements: Set<
       keep();
     }
   }
-  return { statements, values: ['W-1', 'GD-0', FUZZ_TEXT, 'ne', '+1-212-555-01', ...cursors, ...expandCursors.map((entry) => entry.cursor), ...keys.map((entry) => entry.stableId)] };
+  return { statements, values: ['W-1', 'GD-0', 'L-1', FUZZ_TEXT, 'ne', '+1-212-555-01', ...cursors, ...expandCursors.map((entry) => entry.cursor), ...keys.map((entry) => entry.stableId)] };
 }
 
 const escaped = (value: string): string => value.replace(/[.*+?^${}()|[\]\\-]/g, '\\$&');

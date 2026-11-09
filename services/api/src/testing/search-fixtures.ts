@@ -209,10 +209,10 @@ export function withSchema(indexes: () => ExecuteOutcome, data: (call: ExecuteCa
   return (call) => (call.templateId === 'schema-indexes' ? Promise.resolve(indexes()) : data(call));
 }
 
-/** Every index the mapping's reads need, online: a constraint on each stable ID and a RANGE index on each search and reference property, and one on each evidence property of a relationship. */
+/** Every index the mapping's reads need, online: a constraint on each stable ID and a RANGE index on each search and reference property, and one on each evidence property and each stable ID of a relationship. */
 export function onlineIndexesOf(source: SourceModel): IndexRow[] {
   const nodes = source.entities.flatMap((entity) => [rangeIndex(entity.label, entity.stableId, 'ONLINE', true), ...[...new Set([...entity.search, ...entity.reference])].filter((property) => property !== entity.stableId).map((property) => rangeIndex(entity.label, property))]);
-  const relationships = source.relationships.flatMap((row) => [...new Set(row.evidence)].map((property) => relationshipRangeIndex(row.type, property)));
+  const relationships = source.relationships.flatMap((row) => [...new Set([...row.evidence, ...(row.stableId === undefined ? [] : [row.stableId])])].map((property) => relationshipRangeIndex(row.type, property)));
   return [...nodes, ...relationships];
 }
 

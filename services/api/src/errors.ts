@@ -7,10 +7,10 @@ export type UnavailableReason = (typeof UNAVAILABLE_REASONS)[number];
 export type IndexRefusalReason = 'index-unavailable' | 'index-building' | 'index-failed' | 'index-list-unreadable';
 /**
  * What an `AppError` may be tagged with: an unavailable reason, an index refusal reason on the `SOURCE_UNAVAILABLE` of a read refused before any data was read, `read-failed` on the `INTERNAL_ERROR`
- * of a read the adapter could not run, `read-cut` on the `INTERNAL_ERROR` of a read of a template that is not paged and returned more rows than its limit, or `unreadable-node` on the
+ * of a read the adapter could not run, `read-cut` on the `INTERNAL_ERROR` of a read of a template that is not paged and returned more rows than its limit, or `unreadable-node` or `unreadable-edge` on the
  * `INTERNAL_ERROR` of an entity read whose row the normalizer left out.
  */
-export type ErrorReason = UnavailableReason | IndexRefusalReason | 'repeated-timeouts' | 'read-failed' | 'read-cut' | 'unreadable-node';
+export type ErrorReason = UnavailableReason | IndexRefusalReason | 'repeated-timeouts' | 'read-failed' | 'read-cut' | 'unreadable-node' | 'unreadable-edge';
 
 /** The reason a `SOURCE_UNAVAILABLE` gives the person: the adapter's `database`, `pool-full` and `closed`, any other tag and none are `unreachable`, and `credentials` is `authentication`. */
 export function unavailableReasonOf(reason: ErrorReason | undefined): SourceUnavailableReason {

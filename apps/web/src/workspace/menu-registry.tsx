@@ -50,7 +50,7 @@ export interface MenuContext {
   readonly expansion?: ExpansionControls | undefined;
 }
 
-export type MenuItemState = 'enabled' | 'disabled';
+export type MenuItemState = 'enabled' | 'disabled' | 'hidden';
 
 /** What a submenu's content is given: the menu context, and a function that closes the whole menu. */
 export interface SubmenuProps {
@@ -71,7 +71,9 @@ export interface MenuItemShape {
   readonly order: number;
   /** The id of the registered key binding whose keys the row shows as its hint: the hint is the binding's, so it cannot name a key that does nothing. */
   readonly binding?: string;
-  /** Enabled when not given; a function is asked each time the menu is drawn, with what the menu is about. A disabled item is shown, does nothing and never opens a submenu. */
+  /** A key shown as the row's hint when no binding gives one: for a key that does what the hint says in the menu itself, such as Enter on the focused row. */
+  readonly hint?: string;
+  /** Enabled when not given; a function is asked each time the menu is drawn, with what the menu is about. A disabled item is shown, does nothing and never opens a submenu; a hidden item is not listed. */
   readonly state?: MenuItemState | ((context: MenuContext) => MenuItemState);
 }
 
