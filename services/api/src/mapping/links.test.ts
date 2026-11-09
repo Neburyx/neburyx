@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { baseSource, expectRefused, firstSource, issuesOf, fileOf, load, type Json } from '../testing/mapping.js';
-import { checkLink, type LinkRules } from './links.js';
+import { checkLink, LINK_TEMPLATE_MAX_LENGTH, type LinkRules } from './links.js';
 
 const entityRules: LinkRules = { kind: 'entity', allowed: ['id', 'id/part', 'id?part', 'id#part', 'a&b'], allowedDescription: 'the stable ID property', piiProperties: [] };
 const evidenceRules: LinkRules = { kind: 'evidence', allowed: ['recordId', 'batchId', 'id/part', 'id?part', 'id#part'], allowedDescription: 'one of the evidence properties', piiProperties: [] };
@@ -134,5 +134,33 @@ describe('links in a mapping file', () => {
   it('does not repeat the host of a refused template in the message', () => {
     const issues = issuesOf(fileOf(entityWith('http://private-host.example.test/items/{id}')));
     expect(JSON.stringify(issues)).not.toContain('private-host');
+  });
+});
+
+describe('links the template rules refuse (unsafe text)', () => {
+  it.each([
+    ['user-info before the host', 'https://user@records.example.test/items/{id}', 'has user-info before the host'],
+    ['a password in the user-info', 'https://user:secret@records.example.test/items/{id}', 'has user-info before the host'],
+    ['a space', 'https://records.example.test/items {id}', 'whitespace, control character or backslash'],
+    ['a newline', 'https://records.example.test/items/{id}\nx', 'whitespace, control character or backslash'],
+    ['a tab', 'https://records.example.test/\titems/{id}', 'whitespace, control character or backslash'],
+    ['a backslash', 'https://records.example.test\\evil.test/items/{id}', 'whitespace, control character or backslash'],
+    ['a NUL', 'https://records.example.test/items/{id}\u0000', 'whitespace, control character or backslash'],
+    ['more characters than the limit', `https://records.example.test/${'a'.repeat(LINK_TEMPLATE_MAX_LENGTH)}/{id}`, 'is longer than'],
+  ])('refuses %s without echoing the template', (_name, template, reason) => {
+    const reasons = reasonsOf(template, entityRules);
+    expect(reasons.join(' ')).toContain(reason);
+    expect(reasons.join(' ')).not.toContain('records.example.test');
+  });
+
+  it('keeps a template of exactly the limit', () => {
+    const template = `https://records.example.test/${'a'.repeat(LINK_TEMPLATE_MAX_LENGTH - 'https://records.example.test//{id}'.length)}/{id}`;
+    expect(template.length).toBe(LINK_TEMPLATE_MAX_LENGTH);
+    expect(checkLink(template, entityRules).status).toBe('valid');
+  });
+
+  it('reports a refused template against the key of the mapping and loads the mapping without the link', () => {
+    expectRefused(entityWith('https://user@records.example.test/items/{id}'), 'sources[0].entities[0].link', 'user-info');
+    expectRefused(relationshipWith('https://records.example.test/r/{recordId}\\x'), 'sources[0].relationships[0].evidence_link', 'backslash');
   });
 });

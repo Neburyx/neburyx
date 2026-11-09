@@ -1,5 +1,6 @@
 import type { EdgeRef, GraphProperty, StoredEdgeDetail } from '@neburyx/contracts';
 import { propertyText } from '../inspector/property-text.js';
+import { recordLinkHref, SourceRecordLink } from '../workspace/source-link.js';
 import { evidenceRecordText } from '../search/copy.js';
 import { useEdgeRead, type EdgeRead } from './edge-read.js';
 import { EvidenceFailure } from './failure-view.js';
@@ -42,7 +43,9 @@ function StoredEvidenceTab(props: EvidenceKindProps) {
           <p>{SUPPORTING_RECORDS}</p>
           <ul>
             {detail.evidence.records.map((record) => (
-              <li key={'unreadable' in record ? record.property : record.sourceRecordId}>{evidenceRecordText(record)}</li>
+              <li key={'unreadable' in record ? record.property : record.sourceRecordId}>
+                {!('unreadable' in record) && record.linkable ? <SourceRecordLink href={recordLinkHref(detail.ref, record.sourceRecordId, props.mask)}>{record.sourceRecordId}</SourceRecordLink> : evidenceRecordText(record)}
+              </li>
             ))}
           </ul>
         </div>

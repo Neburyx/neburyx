@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { jsonOfSegment, segmentOfJson } from './ref-segment.js';
 import { aggregateSchema, countSchema, elementRefSchema, propertySchema, storedEdgeRefSchema, type ElementRef, type StoredEdgeRef } from './graph.js';
 
 /** The longest `{ref}` segment of `GET /v1/edges/{ref}`: a stored reference is about 300 characters as JSON and a third more as base64url. */
@@ -94,24 +95,6 @@ export type EdgeDetail = z.infer<typeof edgeDetailSchema>;
 /** The key order of the reference in the segment, so a client builds the same text for the same reference. */
 const SEGMENT_KEYS = ['sourceId', 'type', 'from', 'to', 'stableId'] as const;
 
-const BASE64URL = /^[A-Za-z0-9_-]+$/;
-
-function bytesToBase64Url(bytes: Uint8Array): string {
-  let binary = '';
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
-}
-
-function base64UrlToBytes(value: string): Uint8Array | undefined {
-  if (!BASE64URL.test(value) || value.length % 4 === 1) return undefined;
-  const padded = value.replaceAll('-', '+').replaceAll('_', '/').padEnd(Math.ceil(value.length / 4) * 4, '=');
-  try {
-    return Uint8Array.from(atob(padded), (character) => character.charCodeAt(0));
-  } catch {
-    return undefined;
-  }
-}
-
 const orderedEnd = (ref: ElementRef): ElementRef => ({ sourceId: ref.sourceId, entityType: ref.entityType, stableId: ref.stableId });
 
 /** The path segment of a stored or derived edge reference: the unpadded base64url text of its JSON, the keys in a fixed order and no whitespace. The caller percent-encodes it for a URL. */
@@ -119,20 +102,13 @@ export function edgeRefSegmentOf(ref: EdgeReadRef): string {
   const ordered = 'derived' in ref
     ? { sourceId: ref.sourceId, derived: { ruleId: ref.derived.ruleId, from: orderedEnd(ref.derived.from), to: orderedEnd(ref.derived.to) } }
     : Object.fromEntries(SEGMENT_KEYS.map((key) => [key, ref[key]]));
-  return bytesToBase64Url(new TextEncoder().encode(JSON.stringify(ordered)));
+  return segmentOfJson(ordered);
 }
 
 /** The stored or derived reference a segment holds, or undefined for anything else: text over the bound, a character outside the unpadded base64url alphabet, text that is not JSON, an aggregate reference or JSON the reference schemas refuse. */
 export function parseEdgeRefSegment(segment: string): EdgeReadRef | undefined {
-  if (segment.length === 0 || segment.length > MAX_EDGE_REF_SEGMENT) return undefined;
-  const bytes = base64UrlToBytes(segment);
-  if (bytes === undefined) return undefined;
-  let json: unknown;
-  try {
-    json = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
-  } catch {
-    return undefined;
-  }
+  const json = jsonOfSegment(segment, MAX_EDGE_REF_SEGMENT);
+  if (json === undefined) return undefined;
   const stored = storedEdgeRefSchema.safeParse(json);
   if (stored.success) return stored.data;
   const derived = derivedEdgeRefSchema.safeParse(json);

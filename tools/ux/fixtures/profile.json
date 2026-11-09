@@ -40,7 +40,8 @@
         "status",
         "accountKind",
         "openedOn"
-      ]
+      ],
+      "recordLink": "none"
     },
     {
       "type": "customer",
@@ -74,7 +75,8 @@
         "dateOfBirth",
         "phone",
         "segment"
-      ]
+      ],
+      "recordLink": "always"
     },
     {
       "type": "device",
@@ -102,7 +104,8 @@
         "fingerprint",
         "platform",
         "firstSeen"
-      ]
+      ],
+      "recordLink": "none"
     },
     {
       "type": "ip_address",
@@ -129,7 +132,8 @@
       "properties": [
         "address",
         "network"
-      ]
+      ],
+      "recordLink": "none"
     },
     {
       "type": "transaction",
@@ -162,7 +166,8 @@
         "status",
         "channel",
         "amount"
-      ]
+      ],
+      "recordLink": "none"
     },
     {
       "type": "merchant",
@@ -191,7 +196,8 @@
         "merchantId",
         "name",
         "category"
-      ]
+      ],
+      "recordLink": "none"
     }
   ],
   "relationshipTypes": [
@@ -205,7 +211,8 @@
       "filterable": [],
       "sortable": [],
       "evidence": [],
-      "properties": []
+      "properties": [],
+      "recordLink": false
     },
     {
       "type": "USES_DEVICE",
@@ -226,7 +233,8 @@
         "lastSeen",
         "sourceRecordId",
         "channel"
-      ]
+      ],
+      "recordLink": true
     },
     {
       "type": "CONNECTS_FROM",
@@ -244,7 +252,8 @@
         "eventId",
         "lastSeen",
         "sourceRecordId"
-      ]
+      ],
+      "recordLink": true
     },
     {
       "type": "INITIATED",
@@ -259,7 +268,8 @@
       "properties": [
         "eventId",
         "initiatedAt"
-      ]
+      ],
+      "recordLink": false
     },
     {
       "type": "PAID_TO",
@@ -271,7 +281,8 @@
       "filterable": [],
       "sortable": [],
       "evidence": [],
-      "properties": []
+      "properties": [],
+      "recordLink": false
     },
     {
       "type": "TRANSFERRED_TO",
@@ -283,7 +294,8 @@
       "filterable": [],
       "sortable": [],
       "evidence": [],
-      "properties": []
+      "properties": [],
+      "recordLink": false
     }
   ],
   "derivedRules": [

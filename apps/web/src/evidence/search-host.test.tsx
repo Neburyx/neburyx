@@ -78,4 +78,18 @@ describe('the evidence panel on the Search page', () => {
     await act(async () => asked[0]?.answer({ ok: false, failure: { code: 'NOT_FOUND', message: 'x', retryable: false, traceId: 'tr-1' } }));
     expect(within(screen.getByRole('complementary', { name: 'Relationship evidence' })).getByRole('alert').textContent).toContain('NOT_FOUND');
   });
+
+  it('links a linkable record of its panel with the masking the panel was read with', async () => {
+    const { asked, state } = rigged();
+    act(() => state.setMask(true));
+    await userEvent.setup().click(await screen.findByRole('button', { name: BUTTON }));
+    const [call] = asked;
+    expect(call?.mask).toBe(true);
+    const ref: StoredEdgeRef = { sourceId: 'demo', type: 'MADE_FROM', from: 'kind-a', to: 'kind-a', stableId: 'L-1' };
+    const end = (id: string) => ({ ref: { sourceId: 'demo', entityType: 'kind-a', stableId: id }, title: id, type: 'kind-a' });
+    await act(async () => call?.answer({ ok: true, value: { ref, type: 'MADE_FROM', semantics: 'stored', from: end('a'), to: end('b'), properties: [], qualityFlags: [], evidence: { status: 'available', records: [{ sourceRecordId: 'REC-1', linkable: true }] } } }));
+    const link = within(screen.getByRole('complementary', { name: 'Relationship evidence' })).getByRole('link', { name: 'REC-1' });
+    expect(link.getAttribute('href')).toContain('record=REC-1&mask=true');
+    expect(link.getAttribute('rel')).toBe('noopener noreferrer');
+  });
 });

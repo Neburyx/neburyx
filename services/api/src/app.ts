@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import type { Socket } from 'node:net';
 import fastifyStatic from '@fastify/static';
-import { type ErrorCode, derivedNeighborsRequestSchema, derivedNeighborsResponseSchema, coverageRequestSchema, coverageResponseSchema, degreePreviewRequestSchema, edgeDetailSchema, edgePathSchema, entityLookupRequestSchema, degreePreviewSchema, entityPathSchema, entityQuerySchema, expandRequestSchema, expandResponseSchema, healthResponseSchema, investigationListQuerySchema, investigationListResponseSchema, investigationResponseSchema, meResponseSchema, nodeSchema, parseEdgeRefSegment, openInvestigationRequestSchema, openInvestigationResponseSchema, readyResponseSchema, searchMoreRequestSchema, searchMoreResultSchema, searchRequestSchema, searchResultSchema, sourceProfileSchema, sourceTestReportSchema, sourcesResponseSchema } from '@neburyx/contracts';
+import { type ErrorCode, derivedNeighborsRequestSchema, derivedNeighborsResponseSchema, coverageRequestSchema, coverageResponseSchema, degreePreviewRequestSchema, edgeDetailSchema, edgePathSchema, entityLookupRequestSchema, degreePreviewSchema, entityPathSchema, entityQuerySchema, expandRequestSchema, expandResponseSchema, healthResponseSchema, investigationListQuerySchema, investigationListResponseSchema, investigationResponseSchema, meResponseSchema, nodeSchema, parseEdgeRefSegment, parseSourceLinkSegment, sourceLinkPathSchema, sourceLinkQuerySchema, openInvestigationRequestSchema, openInvestigationResponseSchema, readyResponseSchema, searchMoreRequestSchema, searchMoreResultSchema, searchRequestSchema, searchResultSchema, sourceProfileSchema, sourceTestReportSchema, sourcesResponseSchema } from '@neburyx/contracts';
 import { z } from 'zod';
 import Fastify, {
   type FastifyBaseLogger,
@@ -23,6 +23,8 @@ import { createDegreeCache, type DegreeCacheOptions } from './graph/degree-cache
 import { NO_DEGREE_VERDICTS, type DegreeVerdicts } from './source-test/usability.js';
 import { createEdgeReader } from './edges/edge-reader.js';
 import { createEntityReader } from './entities/entity-reader.js';
+import { asksForJsonOnly, REFUSAL_PAGE_CSP, refusalPage } from './source-links/refusal-page.js';
+import { createSourceLinkService } from './source-links/source-link-service.js';
 import { createSearchService } from './search/search-service.js';
 import { createInvestigationService } from './investigations/investigation-service.js';
 import { createStoredReferences } from './investigations/stored-references.js';
@@ -363,6 +365,24 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       const identity = await options.store.current();
       const detail = await edges.read({ traceId: request.id, principal: identity.principal, ref, mask: query.data.mask === 'true', rate: 'count', signal: signalOf(request) });
       return edgeDetailSchema.parse(detail);
+    });
+
+    const sourceLinks = createSourceLinkService({ mapping, access, entities, edges, audit: (options.seams ?? communitySeams()).audit, references: referenceKeys, logger: options.logger });
+    app.get('/v1/source-links/:ref', { exposeHeadRoute: false, config: { permission: 'principal' } }, async (request, reply) => {
+      const path = sourceLinkPathSchema.safeParse(request.params);
+      const query = sourceLinkQuerySchema.safeParse(request.query);
+      const link = path.success ? parseSourceLinkSegment(path.data.ref) : undefined;
+      if (!path.success || !query.success || link === undefined || (link.form === 'entity') === (query.data.record !== undefined)) throw new AppError('INVALID_REQUEST');
+      const identity = await options.store.current();
+      reply.header('cache-control', 'no-store').header('referrer-policy', 'no-referrer');
+      let address: string;
+      try {
+        address = await sourceLinks.open({ traceId: request.id, principal: identity.principal, link, record: query.data.record, mask: query.data.mask === 'true', headers: request.headers, signal: signalOf(request) });
+      } catch (error) {
+        if (!(error instanceof AppError) || error.code !== 'NOT_FOUND' || asksForJsonOnly(request.headers.accept)) throw error;
+        return reply.code(404).header('content-type', 'text/html; charset=utf-8').header('content-security-policy', REFUSAL_PAGE_CSP).header('x-content-type-options', 'nosniff').send(refusalPage(request.id));
+      }
+      return reply.code(302).header('location', address).send();
     });
 
     app.post('/v1/entities/lookup', { config: { permission: 'principal' } }, async (request) => {

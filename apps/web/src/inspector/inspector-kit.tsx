@@ -124,7 +124,7 @@ export function inspectorRig(options: RigOptions = {}) {
         </DerivedProvider>
       </PreviewProvider>
     </SelectionActionsProvider>
-  ));
+  ), profile ?? undefined);
   return { state, panels, menus, shown, client, previewStore, derivedStore, entityReads, entityCalls, previews, derived, derivedCalls, edgeReads, edgeCalls, inspector: bound.inspector, evidence: evidenceBound?.evidence, compare: compareBound?.compare, actions, unbind: () => (compareBound?.unbind(), evidenceBound?.unbind(), bound.unbind(), unbindLegend()) };
 }
 

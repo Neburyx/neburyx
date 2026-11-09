@@ -29,6 +29,8 @@ export interface RelationshipEvidence {
   readonly elementId: string;
   readonly of: { readonly stored: StoredEdgeRef } | { readonly aggregate: { readonly type: string; readonly from: ElementRef; readonly to: ElementRef } };
   readonly records: readonly EvidenceRecord[];
+  /** For a stored edge: the evidence properties that hold each record's text, by that text; a record is listed once, under the first, and this keeps the others. */
+  readonly carriers?: Readonly<Record<string, readonly string[]>>;
   readonly observedAt?: string;
 }
 
@@ -69,6 +71,15 @@ function evidenceRecordsOf(row: RelationshipNormalizer, relationship: PlainRelat
     seen.add(text);
     return [{ sourceRecordId: text }];
   });
+}
+
+function evidenceCarriersOf(row: RelationshipNormalizer, relationship: PlainRelationship): Record<string, string[]> {
+  const carriers: Record<string, string[]> = Object.create(null);
+  for (const property of row.evidence) {
+    const text = evidenceText(ownValue(relationship.properties, property));
+    if (text !== undefined && text !== '') carriers[text] = [...(carriers[text] ?? []), property];
+  }
+  return carriers;
 }
 
 function storedEdge(context: NormalizeContext, row: RelationshipNormalizer, relationship: PlainRelationship, stableId: string, from: ElementRef, to: ElementRef, direction: EdgeDirection): GraphEdge {
@@ -177,7 +188,7 @@ export function normalizeEdges(
       if (known === undefined) {
         const edge = storedEdge(context, row, relationship, stableId, start.ref, end.ref, directionOf(relationship));
         slots.set(key, { kind: 'stored', first: relationship.elementId, edge });
-        if ('stableId' in edge.ref) evidence.push({ elementId: relationship.elementId, of: { stored: edge.ref }, records: evidenceRecordsOf(row, relationship), ...timeOf(row, relationship) });
+        if ('stableId' in edge.ref) evidence.push({ elementId: relationship.elementId, of: { stored: edge.ref }, records: evidenceRecordsOf(row, relationship), carriers: evidenceCarriersOf(row, relationship), ...timeOf(row, relationship) });
       }
       // a different relationship with the same type, ends and stable ID is not hidden: the first edge stays and says so
       else if (known.kind === 'stored' && !known.edge.qualityFlags.includes('conflicting-duplicate')) slots.set(key, { kind: 'stored', first: known.first, edge: { ...known.edge, qualityFlags: [...known.edge.qualityFlags, 'conflicting-duplicate'] } });

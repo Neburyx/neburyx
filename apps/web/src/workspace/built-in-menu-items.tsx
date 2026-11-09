@@ -6,6 +6,7 @@ import { LayoutList } from './layout-list.js';
 import { nodeRefOfKey } from '../state/keys.js';
 import { COLLAPSE, EXPAND_BY_NEIGHBOR_TYPE, EXPAND_BY_TYPE } from './expand-copy.js';
 import { ExpandByTypeSubmenu } from './expand-by-type-submenu.js';
+import { offersEntityLink, openSourceLink, entityLinkHref, OPEN_SOURCE_RECORD } from './source-link.js';
 import { MENU_GROUP, MENU_ORDER, type MenuContext, type MenuRegistry, type SubmenuProps } from './menu-registry.js';
 
 const canLayOut = (context: MenuContext): boolean => context.canvas !== undefined && context.state.visibleGraph().nodes.length > 0;
@@ -107,6 +108,21 @@ export function registerBuiltInMenuItems(registry: MenuRegistry): () => void {
       order: MENU_ORDER.node.hideFromView,
       binding: 'hide',
       run: (context) => hideEntities(context.state, hideTargetsOf(context.selection, context.key)),
+    }),
+    registry.register('node', {
+      id: 'open-source-record',
+      label: OPEN_SOURCE_RECORD,
+      icon: <span className="icon icon-open-record" aria-hidden="true" />,
+      group: MENU_GROUP.node.copy,
+      order: MENU_ORDER.node.openSourceRecord,
+      state: (context) => {
+        const ref = context.key === undefined ? undefined : nodeRefOfKey(context.key);
+        return ref !== undefined && offersEntityLink(context.profile, ref, context.state.mask.getState()) ? 'enabled' : 'hidden';
+      },
+      run: (context) => {
+        const ref = context.key === undefined ? undefined : nodeRefOfKey(context.key);
+        if (ref !== undefined) openSourceLink(entityLinkHref(ref, context.state.mask.getState()));
+      },
     }),
     registry.register('canvas', {
       id: 'fit-to-view',

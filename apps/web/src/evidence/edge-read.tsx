@@ -71,6 +71,11 @@ export function EdgeReadProvider({ store, children }: { readonly store: EdgeRead
   return <EdgeReadContext.Provider value={store}>{children}</EdgeReadContext.Provider>;
 }
 
+/** The evidence reads of the session, when this part of the app is drawn with them. */
+export function useEdgeReadStore(): EdgeReadStore | undefined {
+  return useContext(EdgeReadContext);
+}
+
 const NO_READ = readable(createStore<RequestState<EdgeDetail>>({ phase: 'idle' }));
 
 export interface EdgeRead {

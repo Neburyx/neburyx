@@ -71,6 +71,15 @@ The type is then *keyed*. What changes:
 - An ID with a NUL or an unpaired surrogate, of any type, can be looked up, opened as an investigation, stored and read back exactly.
 - A source link on a keyed type holds the value itself, so it is refused unless the mapping says so with `link_carries_value: true`, and it is built only while masking is off.
 
+## Links to a source record
+
+An entity type may set `link`, and a relationship type with `evidence` may set `evidence_link`, to a template that opens the record in your own system. The product opens it through its own `GET /v1/source-links/{ref}`, which checks access, audits the click and redirects; it never sends the address to the browser page, and without a template the ID is plain text and no entry shows.
+
+- The scheme is `https` and the host is fixed in the template. The one placeholder, `{property}`, is the type's `stable_id` (`link`) or one of its `evidence` properties (`evidence_link`), a whole path segment or query value, never in the scheme, host or fragment and never a `pii` property.
+- A template has no user-info, no whitespace, control character or backslash outside its placeholder, and at most 2,048 characters (the current default; the limit is not final). The mapping check and `test-source` report a template that breaks a rule against its key and never print it.
+- The value is percent-encoded. A value that is only dots, one with an unpaired surrogate, and one that makes the address longer than the current default of 4,096 characters give no link.
+- An evidence record opens only if it is held by the property the placeholder names.
+
 ## A relationship type that is paged
 
 Expanding a node reads its relationships page by page, newest first. How a relationship type is paged depends on its mapping:

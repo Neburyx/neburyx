@@ -98,6 +98,7 @@ describe('the profile of a configured source', () => {
       sortable: ['size'],
       pii: ['name'],
       properties: ['id', 'name', 'code', 'ref', 'status', 'size'],
+      recordLink: 'always',
     });
   });
 
@@ -105,6 +106,13 @@ describe('the profile of a configured source', () => {
     const source = fullSource('demo', { entities: [{ type: 'node_a', label: 'NodeA', stable_id: 'phoneId', pii: [{ property: 'phoneId', class: 'phone' }] }, { type: 'node_b', label: 'NodeB', stable_id: 'key' }], relationships: [], derived: [], patterns: [] });
     const { body } = await profileOf(await appFor(mappingOf(source)));
     expect(body.entityTypes.map((entry) => [entry.type, entry.keyed, entry.stableIdProperty])).toEqual([['node_a', true, 'phoneId'], ['node_b', false, 'key']]);
+  });
+
+  it('marks a keyed type that opts in as linked only while unmasked', async () => {
+    const source = fullSource('demo', { entities: [{ type: 'node_a', label: 'NodeA', stable_id: 'idNo', pii: [{ property: 'idNo', class: 'text' }], link: 'https://records.example.test/{idNo}', link_carries_value: true }], relationships: [], derived: [], patterns: [] });
+    const { body } = await profileOf(await appFor(mappingOf(source)));
+    expect(body.entityTypes.map((entry) => entry.recordLink)).toEqual(['unmasked']);
+    expect(JSON.stringify(body)).not.toContain('records.example.test');
   });
 
   it('describes an entity type that omits display and title with the defaults of the mapping', async () => {
@@ -125,6 +133,7 @@ describe('the profile of a configured source', () => {
       sortable: [],
       pii: [],
       properties: ['key'],
+      recordLink: 'none',
     });
   });
 
@@ -140,8 +149,8 @@ describe('the profile of a configured source', () => {
   it('marks a relationship type with a stable id as stored and one without as aggregate', async () => {
     const { body } = await profileOf(await appFor(mappingOf(fullSource())));
     expect(body.relationshipTypes).toEqual([
-      { type: 'EVENT', from: 'node_a', to: 'node_b', aggregate: false, observedAt: 'seenAt', stableIdProperty: 'entryId', filterable: ['kind'], sortable: ['rank'], evidence: ['recordId'], properties: ['entryId', 'seenAt', 'recordId', 'kind'] },
-      { type: 'LINKS', from: 'node_b', to: 'node_a', aggregate: true, observedAt: null, filterable: [], sortable: [], evidence: [], properties: [], stableIdProperty: null },
+      { type: 'EVENT', from: 'node_a', to: 'node_b', aggregate: false, observedAt: 'seenAt', stableIdProperty: 'entryId', filterable: ['kind'], sortable: ['rank'], evidence: ['recordId'], properties: ['entryId', 'seenAt', 'recordId', 'kind'], recordLink: true },
+      { type: 'LINKS', from: 'node_b', to: 'node_a', aggregate: true, observedAt: null, filterable: [], sortable: [], evidence: [], properties: [], stableIdProperty: null, recordLink: false },
     ]);
   });
 

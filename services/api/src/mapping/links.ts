@@ -6,6 +6,11 @@ const SAMPLE_VALUES = ['x', 'other.example.test'] as const;
 // Stands in for a placeholder while the address is split, so a property name holding / ? # or & cannot change the structure.
 const TOKEN = '';
 
+/** The longest link template, in characters. TBD (needs a decision): a placeholder until the limit is agreed. */
+export const LINK_TEMPLATE_MAX_LENGTH = 2048;
+
+const UNSAFE_CHARACTER = /[\s\u0000-\u001f\u007f\\]/;
+
 export interface LinkRules {
   readonly kind: LinkKind;
   readonly allowed: readonly string[];
@@ -56,8 +61,10 @@ function hasFixedHost(masked: string): boolean {
 
 export function checkLink(template: string, rules: LinkRules): LinkCheck {
   if (template.includes(TOKEN)) return { status: 'invalid', reasons: ['has a character that is not allowed'] };
+  if (template.length > LINK_TEMPLATE_MAX_LENGTH) return { status: 'invalid', reasons: [`is longer than ${LINK_TEMPLATE_MAX_LENGTH} characters`] };
   const names = [...template.matchAll(PLACEHOLDER)].map((match) => match[1] ?? '');
   const masked = template.replace(PLACEHOLDER, TOKEN);
+  if (UNSAFE_CHARACTER.test(masked)) return { status: 'invalid', reasons: ['has a whitespace, control character or backslash outside its placeholder'] };
   const parts = ABSOLUTE_URL.exec(masked);
   if (parts === null) return { status: 'invalid', reasons: ['is not an absolute https address'] };
   const reasons: string[] = [];
@@ -70,6 +77,7 @@ export function checkLink(template: string, rules: LinkRules): LinkCheck {
   }
   if (placeholder === '') reasons.push('has an empty placeholder');
   if (parts[2] === '') reasons.push('has no host');
+  if (parts[2]?.includes('@') === true) reasons.push('has user-info before the host');
   reasons.push(...checkPosition(parts));
   if (!rules.allowed.includes(placeholder)) reasons.push(`has placeholder ${placeholder}, which is not ${rules.allowedDescription}`);
   if (rules.piiProperties.includes(placeholder)) reasons.push(`has placeholder ${placeholder}, which is marked pii`);

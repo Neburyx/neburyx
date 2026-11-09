@@ -232,6 +232,7 @@ const COUNTED_ROUTES = [
   'GET /v1/entities/:sourceId/:entityType/:stableId',
   'POST /v1/entities/lookup',
   'GET /v1/edges/:ref',
+  'GET /v1/source-links/:ref',
   'POST /v1/search/entities',
   'POST /v1/search/entities/more',
   'POST /v1/graph/preview-expansion',

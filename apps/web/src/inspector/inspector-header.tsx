@@ -7,12 +7,13 @@ import { copiedIdOf } from '../workspace/copy-ids.js';
 import { useMenuItems } from '../workspace/menu-registry.js';
 import { useSelectionActions } from '../workspace/selection-actions.js';
 import { MORE_ACTIONS } from './copy.js';
+import { entityLinkHref, offersEntityLink, OPEN_SOURCE_RECORD, SourceRecordLink } from '../workspace/source-link.js';
 import { propertyText } from './property-text.js';
 
 const HEADER_ACTIONS: readonly string[] = ['expand', 'pin', 'hide'];
 const HIDE_ACTION = 'hide';
-/** The node menu's items that the header's buttons already are. */
-const HEADER_MENU_ITEMS: readonly string[] = ['expand-neighbors', 'pin-position', 'hide-from-view'];
+/** The node menu's items that the header's controls already are. */
+const HEADER_MENU_ITEMS: readonly string[] = ['expand-neighbors', 'pin-position', 'hide-from-view', 'open-source-record'];
 
 function focusCanvas(): void {
   document.querySelector<HTMLElement>('.graph-canvas')?.focus({ preventScroll: true });
@@ -47,6 +48,7 @@ export function InspectorHeader({ node, keyOf, typeName, closeLabel, onClose }: 
           <p className="inspector-caption">{typeName}</p>
           <h2 className="inspector-title">{node.display.title}</h2>
           <code className="inspector-ref">{id}</code>
+          {offersEntityLink(profile, node.ref, mask) ? <SourceRecordLink href={entityLinkHref(node.ref, mask)} className="inspector-open-record">{OPEN_SOURCE_RECORD}</SourceRecordLink> : null}
         </div>
         <button type="button" className="legend-close" aria-label={closeLabel} onClick={onClose}>
           <span className="icon icon-clear" aria-hidden="true" />

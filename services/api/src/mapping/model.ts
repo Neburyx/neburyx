@@ -1,4 +1,5 @@
 import type { IconKey, PiiClass, PresetTemplate } from '@neburyx/contracts';
+import { buildLinkAddress } from './link-address.js';
 
 /** The most properties a source may list under `search` in all its entity types: each is a branch of the one search read. */
 export const MAX_SEARCH_PROPERTIES = 100;
@@ -54,12 +55,12 @@ export interface EntityModel {
   };
 }
 
-/** The link of an entity for a request: none when the type has none, and none for a keyed type while masked, since its link holds the value. Built from the raw value, which the caller read from the reference on the server. */
+/** The link of an entity for a request: none when the type has none, none when the address cannot be built, and none for a keyed type while masked, since its link holds the value. Built from the raw value, which the caller read from the reference on the server. */
 export function entityLinkFor(entity: Pick<EntityModel, 'link' | 'pii' | 'stableId'>, value: string, mask: boolean): string | undefined {
   const { link } = entity;
   if (link === undefined) return undefined;
   if (isKeyed(entity) && (mask || link.carriesValue !== true)) return undefined;
-  return link.template.replace(`{${link.placeholder}}`, () => encodeURIComponent(value));
+  return buildLinkAddress(link, value);
 }
 
 /** True when the stable ID property is also a `pii` property: the reference of such a node is a keyed token, never the value. Derived, so it is not part of the model and the configuration hash. */

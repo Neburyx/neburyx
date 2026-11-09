@@ -1,4 +1,6 @@
 import { createContext, useContext, type ComponentType, type ReactNode } from 'react';
+import type { SourceProfile } from '@neburyx/contracts';
+import type { EdgeReadStore } from '../evidence/edge-read.js';
 import type { CanvasCommands } from '../canvas/canvas-commands.js';
 import type { ClientState } from '../state/client-state.js';
 import type { MenuTargetKind } from '../state/presentation-state.js';
@@ -48,6 +50,10 @@ export interface MenuContext {
   readonly canvas: CanvasCommands | undefined;
   /** What expanding a node needs; absent where the app is drawn without expansions. */
   readonly expansion?: ExpansionControls | undefined;
+  /** The profile of the bound source, once it has been read. */
+  readonly profile?: SourceProfile | undefined;
+  /** The evidence reads the session holds, so an item can use an answer that is already there and start none. */
+  readonly edgeReads?: EdgeReadStore | undefined;
 }
 
 export type MenuItemState = 'enabled' | 'disabled' | 'hidden';

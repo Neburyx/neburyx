@@ -40,7 +40,14 @@ export function sampleProfile(search: string): SourceProfile {
   const template = base.entityTypes[0];
   const more = template === undefined ? [] : Array.from({ length: extra }, (_unused, index) => ({ ...template, type: `kind-${index}`, label: `Kind ${index}`, displayName: `Kind ${index}` }));
   const entityTypes = [...base.entityTypes, ...more].map((type, index) => (index === 0 && params.get('legendLabel') === 'long' ? { ...type, label: 'W'.repeat(LONG_LABEL_LENGTH), displayName: 'W'.repeat(LONG_LABEL_LENGTH) } : type));
-  return { ...base, entityTypes };
+  if (params.get('links') !== 'on') return { ...base, entityTypes };
+  const linked = entityTypes.map((type) => (type.type === 'holder' ? { ...type, recordLink: 'always' as const } : type));
+  return { ...base, entityTypes: linked, relationshipTypes: [{ type: 'HAS_LINE', from: 'holder', to: 'line', aggregate: false, observedAt: null, stableIdProperty: 'id', filterable: [], sortable: [], evidence: ['recordId'], properties: ['id', 'recordId'], recordLink: true }] };
+}
+
+/** `?links=on` gives the holder type and the HAS_LINE relationship a source record link, and its records answer as linkable. */
+function linksOn(search: string): boolean {
+  return new URLSearchParams(search).get('links') === 'on';
 }
 
 function knownProfile(): ProfileStore {
@@ -108,7 +115,7 @@ export function FrameSamplePage() {
     return [registry, menuRegistry] as const;
   });
   const [panels, menus] = registries;
-  const [client] = useState(sampleClient);
+  const [client] = useState(() => sampleClient(linksOn(window.location.search)));
   const [edgeReads] = useState(() => createEdgeReadStore(client, () => 'frame-sample', () => 'frame-sample'));
   const [shell] = useState(() => (evidenceOn(window.location.search) ? createShellData(client) : undefined));
   const [keyBindings] = useState(() => {

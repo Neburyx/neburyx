@@ -48,7 +48,8 @@ const shown = (keys: KeyBindingRegistry, id: string): string | undefined => keys
 
 /** Every row that names a binding shows that binding's keys as its hint, and every row that names none shows no hint. */
 function expectHintsToBeBindings(menu: HTMLElement, kind: MenuTargetKind, menus: MenuRegistry, keys: KeyBindingRegistry): number {
-  const items = (menus.view.getState().get(kind) ?? []).filter((item) => item.submenu === undefined);
+  // the source-record items are hidden here: the page has no profile that gives their types a link
+  const items = (menus.view.getState().get(kind) ?? []).filter((item) => item.submenu === undefined && item.id !== 'open-source-record');
   const rows = [...menu.querySelectorAll('[role="menuitem"]')].filter((row) => row.getAttribute('aria-haspopup') === null);
   expect(rows).toHaveLength(items.length);
   let checked = 0;

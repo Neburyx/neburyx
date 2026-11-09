@@ -8,7 +8,7 @@ import type { RightClick } from '../canvas/scene.js';
 import { testProfile } from '../dev/test-profile.js';
 import type { ClientState } from '../state/client-state.js';
 import { ClientStateProvider } from '../state/context.js';
-import type { GraphEdge, GraphNode } from '@neburyx/contracts';
+import type { GraphEdge, GraphNode, SourceProfile } from '@neburyx/contracts';
 import { elementKey } from '../state/keys.js';
 import { key, ref, result } from '../state/test-data.js';
 import { builtInKeyBindings, staticProfile, stubFactory, type StubOptions } from '../test-utils.js';
@@ -33,14 +33,14 @@ export interface Shown {
   readonly rightClick: (request: RightClick) => void;
 }
 
-export function show(state: ClientState, options: StubOptions = {}, menus: MenuRegistry = withBuiltIns(), extra: ReactNode = null, wrap: (tree: ReactNode) => ReactNode = (tree) => tree): Shown {
+export function show(state: ClientState, options: StubOptions = {}, menus: MenuRegistry = withBuiltIns(), extra: ReactNode = null, wrap: (tree: ReactNode) => ReactNode = (tree) => tree, profile: SourceProfile = testProfile('a', ['type-a'])): Shown {
   const factory = stubFactory(options);
   const outside = vi.fn<() => void>();
   const tree = (
     <ClientStateProvider state={state}>
       <MenuProvider registry={menus}>
         <KeyBindingsProvider registry={builtInKeyBindings()}>
-          <ProfileProvider store={staticProfile('a', testProfile('a', ['type-a']))}>
+          <ProfileProvider store={staticProfile('a', profile)}>
             <RendererProvider createRenderer={factory.create}>
               <GraphCanvas />
               <ZoomControls />

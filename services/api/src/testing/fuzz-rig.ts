@@ -20,13 +20,13 @@ import { makeWebRoot } from './web-root.js';
 export const FUZZ_SOURCE = 'demo';
 
 export const FUZZ_ENTITIES = [
-  { type: 'widget', label: 'Widget', stable_id: 'widgetId', search: ['widgetId', 'nickname', 'ownerName'], reference: ['batchRef'], pii: [{ property: 'ownerName', class: 'name' }] },
+  { type: 'widget', label: 'Widget', stable_id: 'widgetId', search: ['widgetId', 'nickname', 'ownerName'], reference: ['batchRef'], pii: [{ property: 'ownerName', class: 'name' }], link: 'https://records.fuzz.test/w/{widgetId}' },
   { type: 'gadget', label: 'Gadget', stable_id: 'gadgetId', search: ['gadgetId', 'region'], filterable: ['tier', 'weight'], sortable: ['weight'] },
   { type: 'phone', label: 'Handle', stable_id: 'phoneNumber', search: ['phoneNumber'], pii: [{ property: 'phoneNumber', class: 'phone' }] },
   { type: 'holder', label: 'Holder', stable_id: 'holderCode', search: ['holderCode'], pii: [{ property: 'holderCode', class: 'text' }] },
 ];
 export const FUZZ_RELATIONSHIPS = [
-  { type: 'MADE_FROM', from: 'widget', to: 'gadget', stable_id: 'linkId', evidence: ['recordId'], observed_at: 'seenAt', filterable: ['grade'], sortable: ['grade'] },
+  { type: 'MADE_FROM', from: 'widget', to: 'gadget', stable_id: 'linkId', evidence: ['recordId'], evidence_link: 'https://records.fuzz.test/r/{recordId}', observed_at: 'seenAt', filterable: ['grade'], sortable: ['grade'] },
   { type: 'USES', from: 'widget', to: 'phone', observed_at: 'seenAt' },
 ];
 

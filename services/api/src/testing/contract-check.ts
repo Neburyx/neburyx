@@ -23,6 +23,7 @@ export type ErrorCase =
 export interface OperationExample {
   readonly url: string;
   readonly payload?: string;
+  readonly headers?: Readonly<Record<string, string>>;
 }
 
 const METHODS = [
@@ -41,6 +42,7 @@ const PRODUCT_EXAMPLES: Readonly<Record<string, OperationExample>> = {
   'POST /v1/sources/{id}/test': { url: '/v1/sources/demo/test' },
   'GET /v1/entities/{sourceId}/{entityType}/{stableId}': { url: '/v1/entities/demo/node_a/A-1' },
   'GET /v1/edges/{ref}': { url: `/v1/edges/${Buffer.from(JSON.stringify({ sourceId: 'demo', type: 'LINKS', from: 'node_a', to: 'node_b', stableId: 'L-1' })).toString('base64url')}` },
+  'GET /v1/source-links/{ref}': { url: `/v1/source-links/${Buffer.from(JSON.stringify({ sourceId: 'demo', entityType: 'node_a', stableId: 'A-1' })).toString('base64url')}`, headers: { accept: 'application/json' } },
   'POST /v1/investigations': { url: '/v1/investigations', payload: JSON.stringify({ sourceId: 'demo', entity: { sourceId: 'demo', entityType: 'node_a', stableId: 'A-1' } }) },
   'GET /v1/investigations/{id}': { url: '/v1/investigations/0192f000-0000-7000-8000-000000000001' },
 };
@@ -195,7 +197,7 @@ export async function checkOperations(
         failures.push({ route, problem: 'the operation has no example request' });
         continue;
       }
-      const response = await app.inject({ method: httpMethod, url: example.url, payload: example.payload });
+      const response = await app.inject({ method: httpMethod, url: example.url, payload: example.payload, headers: example.headers });
       const status = String(response.statusCode);
       const key = Object.hasOwn(operation.data.responses, status) ? status : 'default';
       const described = responseSchema.safeParse(operation.data.responses[key]);

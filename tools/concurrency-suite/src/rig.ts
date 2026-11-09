@@ -3,7 +3,7 @@ import { expect } from 'vitest';
 import { Agent, request as httpRequest } from 'node:http';
 import { buildApp } from '../../../services/api/src/app.js';
 import type { ExecuteCall, ExecuteOutcome } from '../../../services/api/src/gate/executor.js';
-import { edgeRefSegmentOf } from '@neburyx/contracts';
+import { edgeRefSegmentOf, sourceLinkSegmentOf } from '@neburyx/contracts';
 import { EDGE_LOAD_ID } from '../../../services/api/src/gate/templates/edge-load.js';
 import { ENTITY_LOAD_ID } from '../../../services/api/src/gate/templates/entity-load.js';
 import type { Gate } from '../../../services/api/src/gate/types.js';
@@ -27,7 +27,15 @@ import { makeWebRoot } from '../../../services/api/src/testing/web-root.js';
 export const SOURCE = 'demo';
 const edgePathOf = (sourceId: string): string => `/v1/edges/${edgeRefSegmentOf({ sourceId, type: 'LINKS', from: 'node_a', to: 'node_b', stableId: 'L-1' })}`;
 export const OTHER_SOURCE = 'other';
+const LINKED_ENTITIES = [
+  { type: 'node_a', label: 'NodeA', stable_id: 'id', link: 'https://records.example.test/{id}' },
+  { type: 'node_b', label: 'NodeB', stable_id: 'key' },
+];
+const linkPathOf = (sourceId: string): string => `/v1/source-links/${sourceLinkSegmentOf({ form: 'entity', ref: { sourceId, entityType: 'node_a', stableId: 'H-1' } })}`;
 const START = 1_000_000;
+
+/** The body of an answer, empty for a redirect. */
+const parsedBody = (text: string): HttpAnswer['body'] => (text === '' ? {} : JSON.parse(text));
 
 /** What the scripted source does with a data read: keep it until the test says, or answer at once. */
 export type Mode = 'hold' | 'answer' | 'timeout';
@@ -82,8 +90,8 @@ const NODE_B = plainNode(['NodeB'], { key: 'K-1' }, '4:fixture:2');
 const EDGE_ROWS: ExecuteOutcome = { status: 'rows', rows: [{ r: plainRelationship('LINKS', NODE, NODE_B, { relId: 'L-1' }), a: NODE, b: NODE_B }] };
 export const EDGE_PATH = `/v1/edges/${edgeRefSegmentOf({ sourceId: SOURCE, type: 'LINKS', from: 'node_a', to: 'node_b', stableId: 'L-1' })}`;
 
-/** Which read route `http` calls: the entity read, or the stored edge read. */
-export type Route = 'entity' | 'edge';
+/** Which read route `http` calls: the entity read, the stored edge read, or the source link of the entity. */
+export type Route = 'entity' | 'edge' | 'link';
 
 /** Fake timers: set at a time of the shared clock, fired in order of time and then of setting. */
 function timers(clock: { now: number }) {
@@ -110,7 +118,7 @@ export const flush = async (turns = 20): Promise<void> => {
  */
 export async function startRig(options: RigOptions = {}): Promise<Rig> {
   const mapping = parseMapping(
-    fileOf(baseSource({ id: SOURCE, relationships: [{ type: 'LINKS', from: 'node_a', to: 'node_b', stable_id: 'relId' }], ...(options.budgets === undefined ? {} : { budgets: options.budgets }) }), baseSource({ id: OTHER_SOURCE, relationships: [{ type: 'LINKS', from: 'node_a', to: 'node_b', stable_id: 'relId' }], ...(options.otherBudgets === undefined ? {} : { budgets: options.otherBudgets }) })),
+    fileOf(baseSource({ id: SOURCE, entities: LINKED_ENTITIES, relationships: [{ type: 'LINKS', from: 'node_a', to: 'node_b', stable_id: 'relId' }], ...(options.budgets === undefined ? {} : { budgets: options.budgets }) }), baseSource({ id: OTHER_SOURCE, entities: LINKED_ENTITIES, relationships: [{ type: 'LINKS', from: 'node_a', to: 'node_b', stable_id: 'relId' }], ...(options.otherBudgets === undefined ? {} : { budgets: options.otherBudgets }) })),
     'neburyx.yaml',
   );
   const clock = { now: START };
@@ -181,12 +189,12 @@ export async function startRig(options: RigOptions = {}): Promise<Rig> {
     startedAt: (sourceId) => startedBySource.get(sourceId) ?? 0,
     http: (sourceId = SOURCE, route = 'entity') =>
       new Promise<HttpAnswer>((resolve, reject) => {
-        const call = httpRequest(`${base}${route === 'edge' ? edgePathOf(sourceId) : `/v1/entities/${sourceId}/node_a/H-1`}`, { agent: sockets }, (response) => {
+        const call = httpRequest(`${base}${route === 'edge' ? edgePathOf(sourceId) : route === 'link' ? linkPathOf(sourceId) : `/v1/entities/${sourceId}/node_a/H-1`}`, { agent: sockets }, (response) => {
           const chunks: Buffer[] = [];
           response.on('data', (chunk: Buffer) => chunks.push(chunk));
           response.on('end', () => {
             const retryAfter = response.headers['retry-after'];
-            resolve({ status: response.statusCode ?? 0, body: JSON.parse(Buffer.concat(chunks).toString('utf8')) as HttpAnswer['body'], retryAfter: typeof retryAfter === 'string' ? retryAfter : null });
+            resolve({ status: response.statusCode ?? 0, body: parsedBody(Buffer.concat(chunks).toString('utf8')), retryAfter: typeof retryAfter === 'string' ? retryAfter : null });
           });
         });
         call.on('error', reject);

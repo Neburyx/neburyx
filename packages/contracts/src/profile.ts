@@ -24,6 +24,8 @@ export const entityTypeProfileSchema = z.strictObject({
   pii: nameList,
   /** Every property the mapping names for the type, in the order a record is projected to; names only, no values. */
   properties: nameList,
+  /** Whether "Open source record" is offered: never, always, or only while the request is not masked (a keyed type whose mapping opts in). A flag only; the template is never sent. Absent means none. */
+  recordLink: z.enum(['none', 'always', 'unmasked']).optional(),
 });
 
 export const relationshipTypeProfileSchema = z.strictObject({
@@ -40,6 +42,8 @@ export const relationshipTypeProfileSchema = z.strictObject({
   evidence: nameList,
   /** Every property the mapping names for the relationship type, in the order a record is projected to; names only, no values. */
   properties: nameList,
+  /** True when the row has an evidence link, so a stored relationship's records may be opened. A flag only; the template is never sent. Absent means false. */
+  recordLink: z.boolean().optional(),
 });
 
 export const derivedRuleProfileSchema = z.strictObject({

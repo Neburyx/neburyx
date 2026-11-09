@@ -25,6 +25,7 @@ export function buildSourceProfile(source: SourceModel): SourceProfile {
       sortable: [...(entity.sortable ?? [])],
       pii: [...entity.pii],
       properties: entityProjection(entity),
+      recordLink: entity.link === undefined ? 'none' : isKeyed(entity) ? 'unmasked' : 'always',
     })),
     relationshipTypes: source.relationships.map((relationship) => ({
       type: relationship.type,
@@ -37,6 +38,7 @@ export function buildSourceProfile(source: SourceModel): SourceProfile {
       sortable: [...(relationship.sortable ?? [])],
       evidence: [...relationship.evidence],
       properties: relationshipProjection(relationship),
+      recordLink: relationship.evidenceLink !== undefined && !relationship.aggregate,
     })),
     derivedRules: source.derived.map((rule) => ({ id: rule.id, from: rule.from, to: rule.to, via: [...rule.via], ruleVersion: rule.ruleVersion })),
     presets: source.presets.map((preset) => ({

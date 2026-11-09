@@ -1,5 +1,5 @@
 import { rmSync } from 'node:fs';
-import { derivedEdgeDetailSchema, edgeRefSegmentOf, type DerivedEdgeRef } from '@neburyx/contracts';
+import { derivedEdgeDetailSchema, edgeRefSegmentOf, sourceLinkSegmentOf, type DerivedEdgeRef } from '@neburyx/contracts';
 import { afterAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../app.js';
 import type { ExecuteCall, ExecuteOutcome } from '../gate/executor.js';
@@ -27,6 +27,7 @@ const mappingOf = (overrides: Record<string, unknown> = {}) => parseMapping(file
 interface Options {
   readonly rows?: readonly Record<string, unknown>[];
   readonly outcome?: ExecuteOutcome;
+  readonly answer?: (call: ExecuteCall) => ExecuteOutcome;
   readonly deny?: boolean;
   readonly mapping?: ReturnType<typeof mappingOf>;
   readonly hideStableId?: string;
@@ -37,7 +38,7 @@ async function started(options: Options = {}) {
   const mapping = options.mapping ?? mappingOf();
   const [source] = mapping.sources;
   if (source === undefined) throw new Error('the mapping has no source');
-  const answer = (_call: ExecuteCall): Promise<ExecuteOutcome> => Promise.resolve(options.outcome ?? { status: 'rows', rows: options.rows ?? [] });
+  const answer = (call: ExecuteCall): Promise<ExecuteOutcome> => Promise.resolve(options.answer?.(call) ?? options.outcome ?? { status: 'rows', rows: options.rows ?? [] });
   const executor = new TestExecutor(withSchema(() => schemaAnswer(onlineIndexesOf(source)), answer));
   const events: AuditEvent[] = [];
   const defaults = communitySeams();
@@ -91,6 +92,29 @@ describe('GET /v1/edges/{ref} for a derived relationship', () => {
       { status: 'available', records: [{ sourceRecordId: 'AUTH-1', linkable: false }] },
       { status: 'available', records: [{ sourceRecordId: 'AUTH-2', linkable: false }] },
     ]);
+  });
+
+  it('marks a support record linkable only when the property the link names holds it and an address can be built, and opens it through the support\'s own stored reference', async () => {
+    const mapping = mappingOf({ relationships: [{ type: 'USES_TOOL', from: 'maker', to: 'tool', stable_id: 'useId', evidence: ['recordId', 'docId'], evidence_link: 'https://records.example.test/r/{recordId}' }] });
+    const a = account('A-1');
+    const b = account('A-2');
+    const d = device('D-1');
+    const first = plainRelationship('USES_TOOL', a, d, { useId: 'U-1', recordId: 'AUTH-1', docId: 'DOC-1' });
+    const second = plainRelationship('USES_TOOL', b, d, { useId: 'U-2', recordId: '..' });
+    const row = pathOf(a, [
+      { relationship: first, end: d },
+      { relationship: second, end: b },
+    ]);
+    const edgeRow = (relationship: Record<string, unknown>) => ({ status: 'rows' as const, rows: [{ r: relationship, a, b: d }] });
+    const { app } = await started({ rows: [row], mapping, answer: (call) => (call.templateId === 'edge-load' ? edgeRow(first) : { status: 'rows', rows: [row] }) });
+    const body = derivedEdgeDetailSchema.parse((await get(app, urlOf(REF))).json());
+    const [one, two] = body.supports.groups[0]?.supports ?? [];
+    expect(one?.evidence).toEqual({ status: 'available', records: [{ sourceRecordId: 'AUTH-1', linkable: true }, { sourceRecordId: 'DOC-1', linkable: false }] });
+    expect(two?.evidence).toEqual({ status: 'available', records: [{ sourceRecordId: '..', linkable: false }] });
+    if (one === undefined || !('stableId' in one.ref)) throw new Error('the first support is a stored relationship');
+    const opened = await get(app, `/v1/source-links/${encodeURIComponent(sourceLinkSegmentOf({ form: 'stored', ref: one.ref }))}?record=AUTH-1`);
+    expect(opened.statusCode).toBe(302);
+    expect(opened.headers['location']).toBe('https://records.example.test/r/AUTH-1');
   });
 
   it('shows a support with no stable ID as an aggregate with the no-stable-id state and no member value', async () => {

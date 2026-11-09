@@ -1,5 +1,6 @@
 import { rmSync } from 'node:fs';
 import { request as httpRequest } from 'node:http';
+import { sourceLinkSegmentOf } from '@neburyx/contracts';
 import { afterAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../app.js';
 import type { ExecuteCall, ExecuteOutcome } from '../gate/executor.js';
@@ -25,7 +26,7 @@ const mapping = parseMapping(
     baseSource({
       id: 'demo',
       entities: [
-        { type: 'hub', label: 'Hub', stable_id: 'hubId', search: ['hubId'] },
+        { type: 'hub', label: 'Hub', stable_id: 'hubId', search: ['hubId'], link: 'https://records.example.test/{hubId}' },
         { type: 'leaf', label: 'Leaf', stable_id: 'leafId' },
       ],
       relationships: [{ type: 'LINKED', from: 'hub', to: 'leaf', stable_id: 'relId' }],
@@ -43,6 +44,7 @@ const ROUTES: readonly { readonly name: string; readonly method: 'GET' | 'POST';
   { name: 'degree preview', method: 'POST', path: '/v1/graph/preview-expansion', body: { sourceId: 'demo', ref } },
   { name: 'derived neighbors', method: 'POST', path: '/v1/graph/derived-neighbors', body: { sourceId: 'demo', ref } },
   { name: 'expand', method: 'POST', path: '/v1/graph/expand', body: { sourceId: 'demo', ref, neighborTypes: ['leaf'] } },
+  { name: 'source link', method: 'GET', path: `/v1/source-links/${sourceLinkSegmentOf({ form: 'entity', ref: { sourceId: 'demo', ...ref } })}` },
   { name: 'open investigation', method: 'POST', path: '/v1/investigations', body: { sourceId: 'demo', entity: { sourceId: 'demo', ...ref } } },
 ];
 

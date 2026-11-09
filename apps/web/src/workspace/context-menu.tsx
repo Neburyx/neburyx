@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { useEdgeReadStore } from '../evidence/edge-read.js';
 import { useCanvasCommands } from '../canvas/canvas-commands.js';
 import { useProfile } from '../canvas/profile-context.js';
 import { useClientState, useVisibleGraph } from '../state/context.js';
@@ -36,6 +37,7 @@ export function ContextMenu() {
   const items = useMemo(() => (leaveOut === undefined ? registered : registered.filter((item) => !leaveOut.includes(item.id))), [registered, leaveOut]);
   const graph = useVisibleGraph();
   const profile = useProfile();
+  const edgeReads = useEdgeReadStore();
   const bindings = useKeyBindings();
   const headingId = useId();
   const targetGone = open !== undefined && open.key !== undefined && !drawnKeys(graph).has(open.key);
@@ -46,7 +48,7 @@ export function ContextMenu() {
   const [placement, setPlacement] = useState<Placement | undefined>(undefined);
   const [, remeasure] = useState(0);
   const [submenuOpen, setSubmenuOpen] = useState<SubmenuOpen | undefined>(undefined);
-  const contextFor = (menu: OpenMenu): MenuContext => ({ kind: menu.kind, key: menu.key, selection: [...state.presentation.view.getState().selection], state, canvas, expansion });
+  const contextFor = (menu: OpenMenu): MenuContext => ({ kind: menu.kind, key: menu.key, selection: [...state.presentation.view.getState().selection], state, canvas, expansion, profile, edgeReads });
   const parent = submenuOpen === undefined || submenuOpen.menu !== shown ? undefined : items.find((item) => item.id === submenuOpen.id && item.registration === submenuOpen.registration && item.submenu !== undefined && stateOf(item, contextFor(submenuOpen.menu)) === 'enabled');
   const activeSubmenu = parent === undefined || submenuOpen === undefined ? undefined : { item: parent, row: submenuOpen.row, takeFocus: submenuOpen.takeFocus, ring: submenuOpen.ring };
   const pointerDown = useRef(false);

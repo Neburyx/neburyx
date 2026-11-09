@@ -271,7 +271,7 @@ describe('the evidence of each relationship, for the evidence search', () => {
     const [p1, p2] = [person('p1'), person('p2')] as const;
     const knows = plainRelationship('KNOWS', p1, p2, { linkId: 'L-1', recordId: 'R-1', docId: 'R-1' }, 's1');
     const result = normalizeWithEvidence(evidenceContext, [row(p1, knows, p2), row(p1, { ...knows }, p2)]);
-    expect(result.evidence).toEqual([{ elementId: 's1', of: { stored: { sourceId: 'request-source', type: 'KNOWS', from: 'person', to: 'person', stableId: 'L-1' } }, records: [{ sourceRecordId: 'R-1' }] }]);
+    expect(result.evidence).toEqual([{ elementId: 's1', of: { stored: { sourceId: 'request-source', type: 'KNOWS', from: 'person', to: 'person', stableId: 'L-1' } }, records: [{ sourceRecordId: 'R-1' }], carriers: { 'R-1': ['recordId', 'docId'] } }]);
   });
 
   it.each([

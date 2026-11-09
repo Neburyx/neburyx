@@ -131,6 +131,23 @@
   --icon: url('../assets/lucide/circle-help.svg');
 }
 
+.icon-open-record {
+  --icon: url('../assets/lucide/external-link.svg');
+}
+
+.source-record-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  color: var(--color-text-strong);
+}
+
+.inspector-open-record {
+  display: flex;
+  width: fit-content;
+  margin-top: var(--space-4);
+}
+
 .icon-supporting {
   --icon: url('../assets/lucide/external-link.svg');
 }

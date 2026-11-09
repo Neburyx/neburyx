@@ -7,6 +7,7 @@ import { DERIVED_EDGE_SUPPORT_ID, derivedEdgeSupportTemplate } from '../gate/tem
 import { EDGE_LOAD_ID, edgeLoadTemplate } from '../gate/templates/edge-load.js';
 import type { Gate } from '../gate/types.js';
 import type { SourceAccess } from '../investigations/source-access.js';
+import { buildLinkAddress } from '../mapping/link-address.js';
 import type { MappingModel } from '../mapping/model.js';
 import type { Principal } from '../seams/seams.js';
 
@@ -92,9 +93,11 @@ export function createEdgeReader(deps: { readonly gate: Gate; readonly mapping: 
     if (!isNormalized(item)) throw new AppError('INTERNAL_ERROR');
     const edge = item.edges.find((candidate) => 'stableId' in candidate.ref);
     if (edge === undefined || !('stableId' in edge.ref)) throw new AppError('NOT_FOUND');
-    const records = (isNormalizedEvidence(item) ? item.evidence : []).find((candidate) => 'stored' in candidate.of)?.records ?? [];
+    const storedEvidence = (isNormalizedEvidence(item) ? item.evidence : []).find((candidate) => 'stored' in candidate.of);
+    const records = storedEvidence?.records ?? [];
     const row = deps.mapping.sources.find((source) => source.id === ref.sourceId)?.relationships.find((candidate) => candidate.type === ref.type && candidate.from === ref.from && candidate.to === ref.to);
-    const linkable = row?.evidenceLink !== undefined;
+    const linkTemplate = row?.evidenceLink;
+    const linkable = (text: string): boolean => linkTemplate !== undefined && storedEvidence?.carriers?.[text]?.includes(linkTemplate.placeholder) === true && buildLinkAddress(linkTemplate, text) !== undefined;
     return {
       ref: edge.ref,
       type: edge.type,
@@ -104,7 +107,7 @@ export function createEdgeReader(deps: { readonly gate: Gate; readonly mapping: 
       ...(edge.observedAt === undefined ? {} : { observedAt: edge.observedAt }),
       properties: edge.properties.filter((property) => property.key !== row?.stableId && property.key !== row?.observedAt),
       qualityFlags: edge.qualityFlags,
-      evidence: records.length === 0 ? { status: 'not-available', code: EVIDENCE_NOT_AVAILABLE } : { status: 'available', records: records.map((record) => ('unreadable' in record ? record : { sourceRecordId: record.sourceRecordId, linkable })) },
+      evidence: records.length === 0 ? { status: 'not-available', code: EVIDENCE_NOT_AVAILABLE } : { status: 'available', records: records.map((record) => ('unreadable' in record ? record : { sourceRecordId: record.sourceRecordId, linkable: linkable(record.sourceRecordId) })) },
     };
   }
 
@@ -130,13 +133,15 @@ export function createEdgeReader(deps: { readonly gate: Gate; readonly mapping: 
       if ('aggregate' in edge.ref) return { ref: edge.ref, type: edge.ref.aggregate.type, ...ends, evidence: { status: NO_STABLE_ID } };
       if (!('stableId' in edge.ref)) throw new AppError('INTERNAL_ERROR', undefined, 'unreadable-edge');
       const stored = edge.ref;
-      const records = item.evidence.find((candidate) => 'stored' in candidate.of && canonicalJson(candidate.of.stored) === canonicalJson(stored))?.records ?? [];
-      const linkable = relationshipRows.find((candidate) => candidate.type === stored.type && candidate.from === stored.from && candidate.to === stored.to)?.evidenceLink !== undefined;
+      const supportEvidence = item.evidence.find((candidate) => 'stored' in candidate.of && canonicalJson(candidate.of.stored) === canonicalJson(stored));
+      const records = supportEvidence?.records ?? [];
+      const supportLink = relationshipRows.find((candidate) => candidate.type === stored.type && candidate.from === stored.from && candidate.to === stored.to)?.evidenceLink;
+      const linkable = (text: string): boolean => supportLink !== undefined && supportEvidence?.carriers?.[text]?.includes(supportLink.placeholder) === true && buildLinkAddress(supportLink, text) !== undefined;
       return {
         ref: stored,
         type: edge.type,
         ...ends,
-        evidence: records.length === 0 ? { status: 'not-available', code: EVIDENCE_NOT_AVAILABLE } : { status: 'available', records: records.map((record) => ('unreadable' in record ? record : { sourceRecordId: record.sourceRecordId, linkable })) },
+        evidence: records.length === 0 ? { status: 'not-available', code: EVIDENCE_NOT_AVAILABLE } : { status: 'available', records: records.map((record) => ('unreadable' in record ? record : { sourceRecordId: record.sourceRecordId, linkable: linkable(record.sourceRecordId) })) },
       };
     };
     const groups: DerivedSupportGroup[] = item.chains.map((chain) => ({ middle: chain.middle.map((middle) => endOf(item.nodes, middle)), supports: chain.supports.map(supportOf) }));

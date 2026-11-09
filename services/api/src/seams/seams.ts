@@ -23,7 +23,7 @@ export interface AuditEvent {
   readonly sourceId?: string;
   readonly traceId: string;
   /** Per-action fields of the event; the Community sink keeps none. */
-  readonly detail?: { readonly reason: 'cancelled' | 'timeout' };
+  readonly detail?: { readonly reason: 'cancelled' | 'timeout'; readonly target?: never; readonly type?: never } | { readonly target: 'entity' | 'evidence'; readonly type: string; readonly reason?: never };
 }
 
 export interface AuditSink {

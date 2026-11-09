@@ -254,6 +254,28 @@ export function buildOpenApiDocument(
           },
         },
       },
+      '/v1/source-links/{ref}': {
+        get: {
+          operationId: 'openSourceLink',
+          summary: 'Open the source record of an entity, or one record of a stored edge, in the organization\'s own system',
+          description:
+            'Re-checks the person\'s access by reading the entity (or the stored edge) through the gate, audits the click under the action source.link before it answers, and redirects to the mapping\'s link template with the ID percent-encoded. {ref} is one percent-encoded path segment of at most 2048 characters: the unpadded base64url text of the JSON of { sourceId, entityType, stableId } for an entity (a keyed type\'s stableId is its token), or of the stored edge reference for an edge, in which case record names the record to open. The address is never in a body: it is the Location of the redirect, which has an empty body, Cache-Control: no-store and Referrer-Policy: no-referrer. Every refusal after the segment parses is the same 404: a source that is not configured or not readable, a type or row with no link template, a keyed type while masked or without the opt-in, an entity or edge the source does not have, a record the edge does not carry in the property the template names, an address that cannot be built, and a request that another site started (Sec-Fetch-Site neither same-origin nor none) or that is a prefetch (Sec-Purpose or Purpose). An aggregate or derived reference is a 400. If the audit write fails no redirect is sent.',
+          parameters: [
+            { name: 'ref', in: 'path', required: true, description: 'At most 2048 characters', schema: { type: 'string', minLength: 1, maxLength: 2048 } },
+            { name: 'mask', in: 'query', required: false, description: 'true for a masked request: a keyed type then has no link', schema: { type: 'string', enum: ['true', 'false'] } },
+            { name: 'record', in: 'query', required: false, description: 'For a stored edge only (and required then): the source record ID to open; at most 100000 characters', schema: { type: 'string', minLength: 1, maxLength: 100000 } },
+          ],
+          responses: {
+            '302': { description: 'The address of the source record in Location; no body', headers: { Location: { description: 'The address, the only place it appears', schema: { type: 'string' } }, 'Cache-Control': { description: 'no-store', schema: { type: 'string' } }, 'Referrer-Policy': { description: 'no-referrer', schema: { type: 'string' } } } },
+            '400': { description: 'A query parameter other than mask and record was sent, record is missing for a stored edge or sent for an entity, record is empty or too long, or the segment is too long, is not base64url JSON, or is not an entity or stored edge reference (an aggregate or derived reference included)', content: jsonBody('ErrorResponse') },
+            '404': { description: 'One answer for every refusal: no link for this element, or no such element, source or record, or the person may not read it. A request that does not ask for JSON alone gets a short page (text/html, the same words for every reason, with the trace ID, a Content-Security-Policy that allows no script, Cache-Control: no-store); one with Accept: application/json and no text/html gets the JSON error', content: { ...jsonBody('ErrorResponse'), 'text/html': { schema: { type: 'string' } } } },
+            '429': { description: 'Too many requests from this person to this source in the last minute: nothing was read; details.retryAfterMs and the Retry-After header (whole seconds) say how long to wait', headers: RETRY_AFTER_HEADER, content: jsonBody('ErrorResponse') },
+            '500': { description: 'The read could not be completed, or the audit event could not be written', content: jsonBody('ErrorResponse') },
+            '503': { description: 'The source is not available, or is busy; after repeated timeouts details.retryAfterMs and the Retry-After header (whole seconds) say how long to wait', content: jsonBody('ErrorResponse'), headers: RETRY_AFTER_HEADER },
+            '504': { description: 'The source did not answer in time', content: jsonBody('ErrorResponse') },
+          },
+        },
+      },
       '/v1/search/entities': {
         post: {
           operationId: 'searchEntities',

@@ -1,4 +1,4 @@
-import { edgeRefSegmentOf } from '@neburyx/contracts';
+import { edgeRefSegmentOf, sourceLinkSegmentOf } from '@neburyx/contracts';
 import { FUZZ_SOURCE, FUZZ_TEXT, allowedNames, type FuzzRig } from './fuzz-rig.js';
 
 /** The names a statement quotes in backticks. */
@@ -112,6 +112,10 @@ async function buildClosedSet(rig: FuzzRig): Promise<{ readonly statements: Set<
     await app.inject({ method: 'GET', url: `/v1/edges/${edgeRefSegmentOf(ref)}${mask === undefined ? '' : `?mask=${mask}`}` });
     keep();
   }
+  await app.inject({ method: 'GET', url: `/v1/source-links/${sourceLinkSegmentOf({ form: 'entity', ref: { sourceId: FUZZ_SOURCE, entityType: 'widget', stableId: 'W-1' } })}` });
+  keep();
+  await app.inject({ method: 'GET', url: `/v1/source-links/${sourceLinkSegmentOf({ form: 'stored', ref: { sourceId: FUZZ_SOURCE, type: 'MADE_FROM', from: 'widget', to: 'gadget', stableId: 'L-1' } })}?record=R-1` });
+  keep();
   for (const token of keys.slice(0, 1)) {
     await post('/v1/graph/preview-expansion', { sourceId: FUZZ_SOURCE, ref: { entityType: token.entityType, stableId: token.stableId } });
     keep();
