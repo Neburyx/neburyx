@@ -160,7 +160,7 @@ describe('the Expand relationships panel under the filters', () => {
 describe('the relationship type of the panel under the filters', () => {
   const rich = (() => {
     const base = testProfile('a', ['type-a', 'type-b', 'type-c']);
-    const row = (type: string, from: string, to: string) => ({ type, from, to, aggregate: false, observedAt: null, filterable: [], sortable: [], evidence: [] });
+    const row = (type: string, from: string, to: string) => ({ type, from, to, aggregate: false, observedAt: null, filterable: [], sortable: [], evidence: [], properties: [], stableIdProperty: null });
     return { ...base, relationshipTypes: [row('link-a', 'type-a', 'type-b'), row('link-c', 'type-a', 'type-c'), row('link-d', 'type-a', 'type-b')] };
   })();
 

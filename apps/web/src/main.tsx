@@ -20,6 +20,7 @@ import { createKeyBindingRegistry } from './workspace/key-binding-registry.js';
 import { createMenuRegistry } from './workspace/menu-registry.js';
 import { createSelectionActionRegistry } from './workspace/selection-actions.js';
 import { bindBuiltInEvidence } from './evidence/built-in.js';
+import { bindBuiltInCompare } from './compare/built-in.js';
 import { bindBuiltInInspector } from './inspector/built-in-tabs.js';
 import { bindLegend } from './workspace/legend-binder.js';
 import { bindSupernodePanel } from './workspace/supernode-panel-binder.js';
@@ -41,6 +42,7 @@ import './styles/base.css';
 import './styles/controls.css';
 import './styles/workspace.css';
 import './styles/evidence.css';
+import './styles/compare.css';
 import './styles/sources.css';
 import './styles/search.css';
 import './styles/filters.css';
@@ -66,12 +68,14 @@ registerSearchTool(tools, state);
 registerFiltersTool(tools, state);
 const menus = createMenuRegistry();
 registerBuiltInMenuItems(menus);
-bindBuiltInEvidence(state, panels, inspector, menus);
+const selectionActions = createSelectionActionRegistry();
+const { evidence } = bindBuiltInEvidence(state, panels, inspector, menus);
+bindBuiltInCompare(state, panels, menus, selectionActions, evidence);
 const keyBindings = createKeyBindingRegistry();
 registerBuiltInKeyBindings(keyBindings);
 const router = createBrowserRouter(appRoutes(createApiClient(), state, banner));
 createRoot(root).render(
   <StrictMode>
-    <App router={router} state={state} banner={banner} slots={slots} selectionActions={createSelectionActionRegistry()} tools={tools} menus={menus} panels={panels} keyBindings={keyBindings} createRenderer={createCytoscapeRenderer} />
+    <App router={router} state={state} banner={banner} slots={slots} selectionActions={selectionActions} tools={tools} menus={menus} panels={panels} keyBindings={keyBindings} createRenderer={createCytoscapeRenderer} />
   </StrictMode>,
 );

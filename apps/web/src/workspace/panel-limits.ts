@@ -12,14 +12,14 @@ export interface WidthLimits {
 }
 
 /** The maximum wins when the space left is below the minimum, so a narrow window never makes a panel wider than it can be. A width that has not been measured yet puts no limit on the space. */
-function limitsIn(space: number | undefined): WidthLimits {
-  const max = Math.max(0, Math.min(PANEL_MAX_WIDTH, Math.floor(space ?? Infinity)));
+function limitsIn(space: number | undefined, widest: number = PANEL_MAX_WIDTH): WidthLimits {
+  const max = Math.max(0, Math.min(widest, Math.floor(space ?? Infinity)));
   return { min: Math.min(PANEL_MIN_WIDTH, max), max };
 }
 
-/** Half of the workspace less the two gaps beside the panel, so at least half of the workspace stays canvas. */
-export function dockLimits(workspaceWidth: number | undefined): WidthLimits {
-  return limitsIn(workspaceWidth === undefined ? undefined : Math.floor(workspaceWidth / 2) - 2 * PANEL_GAP);
+/** Half of the workspace less the two gaps beside the panel, so at least half of the workspace stays canvas; a panel may name a widest width of its own in place of the usual one. */
+export function dockLimits(workspaceWidth: number | undefined, widest?: number): WidthLimits {
+  return limitsIn(workspaceWidth === undefined ? undefined : Math.floor(workspaceWidth / 2) - 2 * PANEL_GAP, widest);
 }
 
 /** The canvas less the distance from the side the panel hangs from and the gap on its other side. */

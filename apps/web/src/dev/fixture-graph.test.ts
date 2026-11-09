@@ -64,12 +64,12 @@ describe('the fixture graph', () => {
     const noRelationships: SourceProfile = { ...testProfile(), relationshipTypes: [] };
     expect(() => generateFixtureGraph(noRelationships, 1)).toThrowError(FixtureError);
     expect(() => generateFixtureGraph(noRelationships, 1)).toThrowError(expect.objectContaining({ code: 'NO_RELATIONSHIP_TYPES' }));
-    const dangling: SourceProfile = { ...testProfile(), relationshipTypes: [{ type: 'link-x', from: 'nope', to: 'kind-a', aggregate: false, observedAt: null, filterable: [], sortable: [], evidence: [] }] };
+    const dangling: SourceProfile = { ...testProfile(), relationshipTypes: [{ type: 'link-x', from: 'nope', to: 'kind-a', aggregate: false, observedAt: null, filterable: [], sortable: [], evidence: [], properties: [], stableIdProperty: null }] };
     expect(() => generateFixtureGraph(dangling, 1)).toThrowError(expect.objectContaining({ code: 'NO_RELATIONSHIP_TYPES' }));
   });
 
   it('works for a profile with one entity type only when its relationships join that type', () => {
-    const profile: SourceProfile = { ...testProfile('s', ['only']), relationshipTypes: [{ type: 'self', from: 'only', to: 'only', aggregate: false, observedAt: null, filterable: [], sortable: [], evidence: [] }], derivedRules: [] };
+    const profile: SourceProfile = { ...testProfile('s', ['only']), relationshipTypes: [{ type: 'self', from: 'only', to: 'only', aggregate: false, observedAt: null, filterable: [], sortable: [], evidence: [], properties: [], stableIdProperty: null }], derivedRules: [] };
     const graph = generateFixtureGraph(profile, 1);
     expect(graph.nodes.length + graph.edges.length).toBe(FIXTURE_ELEMENTS);
   });
@@ -101,14 +101,14 @@ describe('the size of the fixture graph', () => {
   });
 
   it('is 300 with one aggregate relationship type between two types of 60 nodes each, the pairs being enough', () => {
-    const profile: SourceProfile = { ...testProfile('s', ['one', 'two']), relationshipTypes: [{ type: 'only-aggregate', from: 'one', to: 'two', aggregate: true, observedAt: null, filterable: [], sortable: [], evidence: [] }], derivedRules: [] };
+    const profile: SourceProfile = { ...testProfile('s', ['one', 'two']), relationshipTypes: [{ type: 'only-aggregate', from: 'one', to: 'two', aggregate: true, observedAt: null, filterable: [], sortable: [], evidence: [], properties: [], stableIdProperty: null }], derivedRules: [] };
     const graph = generateFixtureGraph(profile, 2);
     expect(graph.nodes.length + graph.edges.length).toBe(FIXTURE_ELEMENTS);
   });
 
   it('is refused by name when the distinct relationships the profile allows are too few, instead of coming out smaller than 300', () => {
     const types = Array.from({ length: 130 }, (_item, index) => `kind-${index}`);
-    const profile: SourceProfile = { ...testProfile('s', types), relationshipTypes: [{ type: 'only-aggregate', from: 'kind-0', to: 'kind-1', aggregate: true, observedAt: null, filterable: [], sortable: [], evidence: [] }], derivedRules: [] };
+    const profile: SourceProfile = { ...testProfile('s', types), relationshipTypes: [{ type: 'only-aggregate', from: 'kind-0', to: 'kind-1', aggregate: true, observedAt: null, filterable: [], sortable: [], evidence: [], properties: [], stableIdProperty: null }], derivedRules: [] };
     expect(() => generateFixtureGraph(profile, 1)).toThrowError(expect.objectContaining({ code: 'PROFILE_TOO_SMALL' }));
   });
 
@@ -129,10 +129,10 @@ describe('an addition to the fixture graph', () => {
   const richProfile = (): SourceProfile => ({
     ...testProfile('source-a', ['kind-a', 'kind-b', 'kind-c', 'kind-d']),
     relationshipTypes: [
-      { type: 'link-ab', from: 'kind-a', to: 'kind-b', aggregate: false, observedAt: null, filterable: [], sortable: [], evidence: [] },
-      { type: 'link-bc', from: 'kind-b', to: 'kind-c', aggregate: false, observedAt: null, filterable: [], sortable: [], evidence: [] },
-      { type: 'link-cc', from: 'kind-c', to: 'kind-c', aggregate: false, observedAt: null, filterable: [], sortable: [], evidence: [] },
-      { type: 'link-ad', from: 'kind-a', to: 'kind-d', aggregate: true, observedAt: null, filterable: [], sortable: [], evidence: [] },
+      { type: 'link-ab', from: 'kind-a', to: 'kind-b', aggregate: false, observedAt: null, filterable: [], sortable: [], evidence: [], properties: [], stableIdProperty: null },
+      { type: 'link-bc', from: 'kind-b', to: 'kind-c', aggregate: false, observedAt: null, filterable: [], sortable: [], evidence: [], properties: [], stableIdProperty: null },
+      { type: 'link-cc', from: 'kind-c', to: 'kind-c', aggregate: false, observedAt: null, filterable: [], sortable: [], evidence: [], properties: [], stableIdProperty: null },
+      { type: 'link-ad', from: 'kind-a', to: 'kind-d', aggregate: true, observedAt: null, filterable: [], sortable: [], evidence: [], properties: [], stableIdProperty: null },
     ],
   });
   const endpointsFit = (profile: SourceProfile, addition: ReturnType<typeof generateAddition>, existing: readonly { readonly ref: { readonly entityType: string; readonly stableId: string } }[]) => {

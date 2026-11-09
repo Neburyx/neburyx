@@ -14,6 +14,7 @@ import { createKeyBindingRegistry, KeyBindingsProvider } from '../workspace/key-
 import { createMenuRegistry, MenuProvider } from '../workspace/menu-registry.js';
 import { createSelectionActionRegistry, SelectionActionsProvider } from '../workspace/selection-actions.js';
 import { bindBuiltInEvidence } from '../evidence/built-in.js';
+import { bindBuiltInCompare } from '../compare/built-in.js';
 import { createEdgeReadStore, EdgeReadProvider } from '../evidence/edge-read.js';
 import { bindBuiltInInspector } from '../inspector/built-in-tabs.js';
 import { createShellData, ShellDataProvider } from '../shell/shell-data.js';
@@ -67,6 +68,11 @@ function evidenceOn(search: string): boolean {
   return new URLSearchParams(search).get('evidence') === 'on';
 }
 
+/** `?compare=on` binds the comparison: Compare on the selection bar and in the menus, and its panel in the dock, so the dock test panel is left out. */
+function compareOn(search: string): boolean {
+  return new URLSearchParams(search).get('compare') === 'on';
+}
+
 /** The workspace with the Explore design's graph, drawn at the design's own positions, for putting the canvas beside the design. */
 export function FrameSamplePage() {
   const [state] = useState(() => titledSample(window.location.search));
@@ -95,9 +101,10 @@ export function FrameSamplePage() {
     const { inspector } = bindBuiltInInspector(state, registry);
     const menuRegistry = createMenuRegistry();
     registerBuiltInMenuItems(menuRegistry);
-    if (evidenceOn(window.location.search)) bindBuiltInEvidence(state, registry, inspector, menuRegistry);
+    const evidenceBound = evidenceOn(window.location.search) ? bindBuiltInEvidence(state, registry, inspector, menuRegistry) : undefined;
+    if (compareOn(window.location.search)) bindBuiltInCompare(state, registry, menuRegistry, actions, evidenceBound?.evidence);
     registerStandInMenuItems(menuRegistry);
-    registerStandInPanels(registry, { floating: floatingSide(window.location.search), dock: new URLSearchParams(window.location.search).get('dock') !== 'none' && !evidenceOn(window.location.search) });
+    registerStandInPanels(registry, { floating: floatingSide(window.location.search), dock: new URLSearchParams(window.location.search).get('dock') !== 'none' && !evidenceOn(window.location.search) && !compareOn(window.location.search) });
     return [registry, menuRegistry] as const;
   });
   const [panels, menus] = registries;

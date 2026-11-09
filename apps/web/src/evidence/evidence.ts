@@ -15,6 +15,8 @@ export interface Evidence {
   /** Moves an open panel to another relationship, as the selection does; it never opens a closed panel and never takes focus. */
   follow(ref: EdgeRef): void;
   close(): void;
+  /** Runs before a panel opens by choice, so what else holds the dock can let go of it. */
+  onOpening(listener: () => void): () => void;
 }
 
 function focusCanvas(): void {
@@ -26,6 +28,7 @@ export function createEvidence(): Evidence {
   const target = createStore<EdgeRef | undefined>(undefined);
   const choices = createStore(0);
   let opener: HTMLElement | null = null;
+  const listeners = new Set<() => void>();
   const offers = (ref: EdgeRef): boolean => kindOf(kinds.view.getState(), ref) !== undefined;
   return {
     kinds,
@@ -34,6 +37,7 @@ export function createEvidence(): Evidence {
     offers,
     open(ref, from = null) {
       if (!offers(ref)) return false;
+      for (const listener of [...listeners]) listener();
       opener = from ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
       target.setState(ref);
       choices.setState(choices.getState() + 1);
@@ -48,6 +52,10 @@ export function createEvidence(): Evidence {
       target.setState(undefined);
       if (back !== null && back.isConnected) back.focus();
       else focusCanvas();
+    },
+    onOpening(listener) {
+      listeners.add(listener);
+      return () => void listeners.delete(listener);
     },
   };
 }

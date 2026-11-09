@@ -10881,6 +10881,13 @@
                     "type": "string",
                     "minLength": 1
                   }
+                },
+                "properties": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  }
                 }
               },
               "required": [
@@ -10897,7 +10904,8 @@
                 "searchable",
                 "filterable",
                 "sortable",
-                "pii"
+                "pii",
+                "properties"
               ],
               "additionalProperties": false
             }
@@ -10933,6 +10941,17 @@
                     }
                   ]
                 },
+                "stableIdProperty": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
                 "filterable": {
                   "type": "array",
                   "items": {
@@ -10954,6 +10973,13 @@
                     "type": "string",
                     "minLength": 1
                   }
+                },
+                "properties": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  }
                 }
               },
               "required": [
@@ -10962,9 +10988,11 @@
                 "to",
                 "aggregate",
                 "observedAt",
+                "stableIdProperty",
                 "filterable",
                 "sortable",
-                "evidence"
+                "evidence",
+                "properties"
               ],
               "additionalProperties": false
             }

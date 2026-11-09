@@ -1,0 +1,189 @@
+.compare-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+  min-width: 0;
+  padding: var(--space-12);
+  color: var(--color-text-strong);
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-legend);
+}
+
+.panel-dock .panel-frame:has(> .panel[data-panel='compare']) {
+  flex: 1 1 auto;
+}
+
+.compare-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.compare-header p,
+.compare-notes p,
+.compare-note,
+.compare-left h3 {
+  margin: 0;
+}
+
+.compare-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-10);
+}
+
+.compare-title {
+  margin: 0;
+  font-size: var(--legend-heading-size);
+  line-height: var(--line-height-compact);
+  font-weight: var(--font-weight-semibold);
+}
+
+.compare-summary,
+.compare-count,
+.compare-note,
+.compare-notes {
+  color: var(--color-text-muted);
+}
+
+.compare-tools {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-12);
+}
+
+.compare-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6);
+  cursor: pointer;
+}
+
+.compare-scroll {
+  overflow: auto;
+  max-width: 100%;
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.compare-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+}
+
+.compare-table th,
+.compare-table td {
+  min-width: var(--compare-column-min);
+  padding: var(--space-6) var(--space-8);
+  border-bottom: var(--border-width) solid var(--color-border);
+  text-align: left;
+  vertical-align: top;
+  font-weight: inherit;
+  overflow-wrap: anywhere;
+  background: var(--color-surface);
+}
+
+.compare-table .compare-corner,
+.compare-table .compare-row-head {
+  min-width: 0;
+  white-space: nowrap;
+  overflow-wrap: normal;
+}
+
+.compare-corner,
+.compare-row-head {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--color-surface-muted);
+}
+
+.compare-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.compare-table thead .compare-corner {
+  z-index: 3;
+}
+
+.compare-column-head {
+  display: table-cell;
+}
+
+.compare-column-title {
+  display: block;
+  font-weight: var(--font-weight-semibold);
+}
+
+.compare-column-caption,
+.compare-column-reference {
+  display: block;
+  color: var(--color-text-muted);
+}
+
+.compare-column-reference {
+  font-family: var(--font-mono);
+}
+
+.compare-row-label {
+  display: block;
+  font-weight: var(--font-weight-semibold);
+}
+
+.compare-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  font-size: var(--font-size-caption);
+}
+
+.compare-mark[data-status='differs'] {
+  color: var(--color-accent);
+  font-weight: var(--font-weight-semibold);
+}
+
+.compare-mark[data-status='cannot'] {
+  color: var(--color-text-muted);
+}
+
+.compare-flag {
+  display: block;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-caption);
+}
+
+.compare-cell[data-kind='not-mapped'] .compare-cell-text,
+.compare-cell[data-kind='not-stated'] .compare-cell-text,
+.compare-cell[data-kind='varies'] .compare-cell-text,
+.compare-cell[data-kind='unavailable'] .compare-cell-text,
+.compare-cell[data-kind='empty'] .compare-cell-text {
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+.compare-row[data-status='differs'] .compare-cell {
+  background: var(--color-accent-surface);
+}
+
+.compare-left h3 {
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-semibold);
+}
+
+.compare-left ul {
+  margin: 0;
+  padding-left: var(--space-16);
+}
+
+.icon-compare {
+  --icon: url('../assets/lucide/table-2.svg');
+}
+
+.icon-compare-mark {
+  --icon: url('../assets/lucide/circle-dot.svg');
+}

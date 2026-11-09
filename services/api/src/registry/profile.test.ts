@@ -6,7 +6,8 @@ import { buildApp, registeredRoutesOf } from '../app.js';
 import type { AppStore } from '../app-store.js';
 import { createLogger } from '../logger.js';
 import { parseMapping } from '../mapping/load.js';
-import type { MappingModel } from '../mapping/model.js';
+import type { MappingModel, SourceModel } from '../mapping/model.js';
+import { normalizeModelOf } from '../gate/normalize/model.js';
 import { baseSource, fileOf, type Json } from '../testing/mapping.js';
 import { memoryStoreWith } from '../testing/app-store.js';
 import { makeWebRoot } from '../testing/web-root.js';
@@ -96,6 +97,7 @@ describe('the profile of a configured source', () => {
       filterable: ['status'],
       sortable: ['size'],
       pii: ['name'],
+      properties: ['id', 'name', 'code', 'ref', 'status', 'size'],
     });
   });
 
@@ -122,6 +124,7 @@ describe('the profile of a configured source', () => {
       filterable: [],
       sortable: [],
       pii: [],
+      properties: ['key'],
     });
   });
 
@@ -137,9 +140,24 @@ describe('the profile of a configured source', () => {
   it('marks a relationship type with a stable id as stored and one without as aggregate', async () => {
     const { body } = await profileOf(await appFor(mappingOf(fullSource())));
     expect(body.relationshipTypes).toEqual([
-      { type: 'EVENT', from: 'node_a', to: 'node_b', aggregate: false, observedAt: 'seenAt', filterable: ['kind'], sortable: ['rank'], evidence: ['recordId'] },
-      { type: 'LINKS', from: 'node_b', to: 'node_a', aggregate: true, observedAt: null, filterable: [], sortable: [], evidence: [] },
+      { type: 'EVENT', from: 'node_a', to: 'node_b', aggregate: false, observedAt: 'seenAt', stableIdProperty: 'entryId', filterable: ['kind'], sortable: ['rank'], evidence: ['recordId'], properties: ['entryId', 'seenAt', 'recordId', 'kind'] },
+      { type: 'LINKS', from: 'node_b', to: 'node_a', aggregate: true, observedAt: null, filterable: [], sortable: [], evidence: [], properties: [], stableIdProperty: null },
     ]);
+  });
+
+  it('lists, for each type, the properties the mapping names for it in the order a record is projected to, as names only', async () => {
+    const { body, text } = await profileOf(await appFor(mappingOf(fullSource())));
+    expect(body.entityTypes.map((entry) => entry.properties)).toEqual([['id', 'name', 'code', 'ref', 'status', 'size'], ['key']]);
+    expect(body.relationshipTypes.map((entry) => entry.properties)).toEqual([['entryId', 'seenAt', 'recordId', 'kind'], []]);
+    expect(text).not.toContain('PRIVATE_LINK_PATH');
+  });
+
+  it('gives the properties from the function that builds the projection of each type, so the profile and a projected record cannot differ', async () => {
+    const mapping = mappingOf(fullSource());
+    const { body } = await profileOf(await appFor(mapping));
+    const model = normalizeModelOf(mapping.sources[0] as SourceModel);
+    for (const entry of body.entityTypes) expect(entry.properties, entry.type).toEqual(model.entitiesByType.get(entry.type)?.projection);
+    for (const entry of body.relationshipTypes) expect(entry.properties, entry.type).toEqual(model.relationships.find((row) => row.type === entry.type)?.projection);
   });
 
   it('holds the derived rules and the pattern presets', async () => {

@@ -1,5 +1,6 @@
 import type { PiiClass } from '@neburyx/contracts';
 import { isKeyed, type DegreeDeclaration, type SourceModel } from '../../mapping/model.js';
+import { entityProjection, relationshipProjection } from '../../mapping/projection.js';
 import type { ReferenceKeys } from '../../reference/keys.js';
 
 /** What the normalizer needs to know of one entity type of a source: how to recognise it, name it, and which properties of it are shown. */
@@ -83,16 +84,7 @@ export function normalizeModelOf(source: SourceModel): NormalizeModel {
       keyed: isKeyed(entity),
       title: entity.title,
       titleProperties: entity.titleProperties,
-      projection: unique([
-        entity.stableId,
-        ...entity.titleProperties,
-        ...entity.search,
-        ...entity.reference,
-        ...entity.pii,
-        ...entity.filterable,
-        ...entity.display.keyProperties,
-        ...(entity.display.stateProperty === undefined ? [] : [entity.display.stateProperty]),
-      ]),
+      projection: entityProjection(entity),
       expected: unique([...entity.titleProperties, ...entity.display.keyProperties]),
       pii: entity.pii,
       piiClasses: entity.piiClasses ?? {},
@@ -109,7 +101,7 @@ export function normalizeModelOf(source: SourceModel): NormalizeModel {
       ...(relationship.stableId === undefined ? {} : { stableId: relationship.stableId }),
       ...(relationship.observedAt === undefined ? {} : { observedAt: relationship.observedAt }),
       evidence: relationship.evidence,
-      projection: unique([...(relationship.stableId === undefined ? [] : [relationship.stableId]), ...(relationship.observedAt === undefined ? [] : [relationship.observedAt]), ...relationship.evidence, ...relationship.filterable]),
+      projection: relationshipProjection(relationship),
     }),
   );
   const derived = source.derived.map((rule): DerivedNormalizer => ({ id: rule.id, from: rule.from, to: rule.to, via: rule.via, version: rule.ruleVersion }));

@@ -2,6 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { dockLimits, drawnWidth, floatingLimits, floatingPlacement, isPanelSize } from './panel-limits.js';
 
 describe('the dock limits', () => {
+  it('take a widest width of the panel in place of 480 and keep it within half of the workspace', () => {
+    expect(dockLimits(1440, 720)).toEqual({ min: 240, max: 688 });
+    expect(dockLimits(1280, 720)).toEqual({ min: 240, max: 608 });
+    expect(dockLimits(1800, 720)).toEqual({ min: 240, max: 720 });
+    expect(dockLimits(1440)).toEqual({ min: 240, max: 480 });
+  });
+
   it('are 240 to 480 in a wide window', () => {
     expect(dockLimits(1440)).toEqual({ min: 240, max: 480 });
   });

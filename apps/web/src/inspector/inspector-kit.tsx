@@ -23,6 +23,7 @@ import { bindLegend } from '../workspace/legend-binder.js';
 import { bindBuiltInInspector } from './built-in-tabs.js';
 import { createEntityReadStore, EntityReadProvider } from './entity-read.js';
 import { bindBuiltInEvidence } from '../evidence/built-in.js';
+import { bindBuiltInCompare } from '../compare/built-in.js';
 import { createEdgeReadStore, EdgeReadProvider } from '../evidence/edge-read.js';
 import { createShellData, ShellDataProvider } from '../shell/shell-data.js';
 
@@ -56,6 +57,8 @@ export interface RigOptions {
   readonly derivedRules?: SourceProfile['derivedRules'];
   /** Binds the relationship evidence too: its panel in the dock, its menu items and the inspector's Evidence tab. */
   readonly evidence?: boolean;
+  /** Binds the comparison too: its panel in the dock, Compare on the selection bar and in the menus. */
+  readonly compare?: boolean;
   /** Client reads beyond the ones the rig answers itself. */
   readonly client?: Partial<ApiClient>;
 }
@@ -93,6 +96,7 @@ export function inspectorRig(options: RigOptions = {}) {
   const menus = options.menus ?? withBuiltIns();
   const evidenceBound = options.evidence === true ? bindBuiltInEvidence(state, panels, bound.inspector, menus) : undefined;
   const actions = createSelectionActionRegistry();
+  const compareBound = options.compare === true ? bindBuiltInCompare(state, panels, menus, actions, evidenceBound?.evidence) : undefined;
   for (const action of options.actions ?? []) actions.register(action);
   const reads = createEntityReadStore(client, () => 'person-1', () => state.investigation.getState().id ?? 'draft');
   const previewStore = createPreviewStore(client, () => 'person-1');
@@ -121,7 +125,7 @@ export function inspectorRig(options: RigOptions = {}) {
       </PreviewProvider>
     </SelectionActionsProvider>
   ));
-  return { state, panels, menus, shown, client, previewStore, derivedStore, entityReads, entityCalls, previews, derived, derivedCalls, edgeReads, edgeCalls, inspector: bound.inspector, evidence: evidenceBound?.evidence, unbind: () => (evidenceBound?.unbind(), bound.unbind(), unbindLegend()) };
+  return { state, panels, menus, shown, client, previewStore, derivedStore, entityReads, entityCalls, previews, derived, derivedCalls, edgeReads, edgeCalls, inspector: bound.inspector, evidence: evidenceBound?.evidence, compare: compareBound?.compare, actions, unbind: () => (compareBound?.unbind(), evidenceBound?.unbind(), bound.unbind(), unbindLegend()) };
 }
 
 export const select = (state: ClientState, ...ids: string[]): void => void act(() => state.presentation.select(ids.map(keyOf)));

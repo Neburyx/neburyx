@@ -14,6 +14,8 @@ export interface PanelEntry {
   readonly placement: PanelPlacement;
   /** The width when none was stored; the panel is drawn within the limits of the moment. */
   readonly initialWidth?: number;
+  /** The widest the panel may be drawn in the dock, in place of the usual maximum; it is still held to half the workspace. */
+  readonly maxWidth?: number;
   readonly content: ComponentType;
 }
 

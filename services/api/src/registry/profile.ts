@@ -1,5 +1,6 @@
 import type { SourceProfile } from '@neburyx/contracts';
 import { isKeyed, type SourceModel } from '../mapping/model.js';
+import { entityProjection, relationshipProjection } from '../mapping/projection.js';
 import { canonicalBind, sortedEntries } from './canonical.js';
 import { mappingExcerptOf } from './excerpt.js';
 
@@ -23,6 +24,7 @@ export function buildSourceProfile(source: SourceModel): SourceProfile {
       filterable: [...entity.filterable],
       sortable: [...(entity.sortable ?? [])],
       pii: [...entity.pii],
+      properties: entityProjection(entity),
     })),
     relationshipTypes: source.relationships.map((relationship) => ({
       type: relationship.type,
@@ -30,9 +32,11 @@ export function buildSourceProfile(source: SourceModel): SourceProfile {
       to: relationship.to,
       aggregate: relationship.aggregate,
       observedAt: relationship.observedAt ?? null,
+      stableIdProperty: relationship.stableId ?? null,
       filterable: [...relationship.filterable],
       sortable: [...(relationship.sortable ?? [])],
       evidence: [...relationship.evidence],
+      properties: relationshipProjection(relationship),
     })),
     derivedRules: source.derived.map((rule) => ({ id: rule.id, from: rule.from, to: rule.to, via: [...rule.via], ruleVersion: rule.ruleVersion })),
     presets: source.presets.map((preset) => ({

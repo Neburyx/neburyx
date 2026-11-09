@@ -69,8 +69,8 @@ describe('the properties the panel offers', () => {
     ...base,
     entityTypes: [entity('type-a', {}), entity('type-b', { filterable: ['band', 'secret'], sortable: ['size', 'secret'], pii: ['secret'] }), entity('type-c', { filterable: ['band'], sortable: [] })],
     relationshipTypes: [
-      { type: 'link-a', from: 'type-a', to: 'type-b', aggregate: false, observedAt: 'seenAt', filterable: ['score'], sortable: ['points'], evidence: [] },
-      { type: 'link-c', from: 'type-a', to: 'type-c', aggregate: true, observedAt: null, filterable: ['score', 'weight'], sortable: [], evidence: [] },
+      { type: 'link-a', from: 'type-a', to: 'type-b', aggregate: false, observedAt: 'seenAt', filterable: ['score'], sortable: ['points'], evidence: [], properties: [], stableIdProperty: null },
+      { type: 'link-c', from: 'type-a', to: 'type-c', aggregate: true, observedAt: null, filterable: ['score', 'weight'], sortable: [], evidence: [], properties: [], stableIdProperty: null },
     ],
   };
 

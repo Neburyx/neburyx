@@ -22,6 +22,8 @@ export const entityTypeProfileSchema = z.strictObject({
   /** Properties an expansion may rank by. */
   sortable: nameList.default([]),
   pii: nameList,
+  /** Every property the mapping names for the type, in the order a record is projected to; names only, no values. */
+  properties: nameList,
 });
 
 export const relationshipTypeProfileSchema = z.strictObject({
@@ -30,10 +32,14 @@ export const relationshipTypeProfileSchema = z.strictObject({
   to: name,
   aggregate: z.boolean(),
   observedAt: name.nullable(),
+  /** The property that holds a relationship's stable ID; none for a type whose relationships are one aggregate. */
+  stableIdProperty: name.nullable(),
   filterable: nameList,
   /** Properties an expansion may rank by; the row's `observedAt` is sortable and filterable without being listed. */
   sortable: nameList.default([]),
   evidence: nameList,
+  /** Every property the mapping names for the relationship type, in the order a record is projected to; names only, no values. */
+  properties: nameList,
 });
 
 export const derivedRuleProfileSchema = z.strictObject({

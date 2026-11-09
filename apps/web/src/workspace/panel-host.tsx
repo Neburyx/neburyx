@@ -81,7 +81,7 @@ function DockPanel({ panel }: { readonly panel: RegisteredPanel }) {
   const { collapsed, toggle } = useCollapsed(panel);
   const [column, setColumn] = useState<HTMLElement | null>(null);
   const { width: workspaceWidth } = useElementSize(column?.parentElement ?? null);
-  const limits = dockLimits(workspaceWidth);
+  const limits = dockLimits(workspaceWidth, panel.maxWidth);
   const width = collapsed ? PANEL_RAIL_WIDTH : drawnWidth(sizes.get(panel.id), panel.initialWidth, limits);
   return (
     <aside ref={setColumn} className="panel-dock" aria-label={panel.title} style={{ width: width + 2 * PANEL_GAP }}>

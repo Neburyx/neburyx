@@ -25,7 +25,7 @@ const entity = (type: string, extra: object) => ({ ...(base.entityTypes.find((en
 const profile = {
   ...base,
   entityTypes: [entity('type-a', {}), entity('type-b', { filterable: ['band', 'size', 'secret'], sortable: ['size', 'secret'], pii: ['secret'] })],
-  relationshipTypes: [{ type: 'link-a', from: 'type-a', to: 'type-b', aggregate: false, observedAt: 'seenAt', filterable: ['score'], sortable: ['points'], evidence: [] }],
+  relationshipTypes: [{ type: 'link-a', from: 'type-a', to: 'type-b', aggregate: false, observedAt: 'seenAt', filterable: ['score'], sortable: ['points'], evidence: [], properties: [], stableIdProperty: null }],
 };
 
 function rig() {

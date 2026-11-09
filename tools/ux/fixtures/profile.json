@@ -32,6 +32,14 @@
       "pii": [
         "holderName",
         "phone"
+      ],
+      "properties": [
+        "accountId",
+        "holderName",
+        "phone",
+        "status",
+        "accountKind",
+        "openedOn"
       ]
     },
     {
@@ -58,6 +66,14 @@
         "fullName",
         "dateOfBirth",
         "phone"
+      ],
+      "properties": [
+        "customerId",
+        "fullName",
+        "authId",
+        "dateOfBirth",
+        "phone",
+        "segment"
       ]
     },
     {
@@ -81,7 +97,12 @@
         "platform"
       ],
       "sortable": [],
-      "pii": []
+      "pii": [],
+      "properties": [
+        "fingerprint",
+        "platform",
+        "firstSeen"
+      ]
     },
     {
       "type": "ip_address",
@@ -104,7 +125,11 @@
         "network"
       ],
       "sortable": [],
-      "pii": []
+      "pii": [],
+      "properties": [
+        "address",
+        "network"
+      ]
     },
     {
       "type": "transaction",
@@ -130,7 +155,14 @@
         "amount"
       ],
       "sortable": [],
-      "pii": []
+      "pii": [],
+      "properties": [
+        "transactionId",
+        "paymentRef",
+        "status",
+        "channel",
+        "amount"
+      ]
     },
     {
       "type": "merchant",
@@ -154,7 +186,12 @@
         "category"
       ],
       "sortable": [],
-      "pii": []
+      "pii": [],
+      "properties": [
+        "merchantId",
+        "name",
+        "category"
+      ]
     }
   ],
   "relationshipTypes": [
@@ -164,9 +201,11 @@
       "to": "account",
       "aggregate": true,
       "observedAt": null,
+      "stableIdProperty": null,
       "filterable": [],
       "sortable": [],
-      "evidence": []
+      "evidence": [],
+      "properties": []
     },
     {
       "type": "USES_DEVICE",
@@ -174,12 +213,19 @@
       "to": "device",
       "aggregate": false,
       "observedAt": "lastSeen",
+      "stableIdProperty": "eventId",
       "filterable": [
         "channel"
       ],
       "sortable": [],
       "evidence": [
         "sourceRecordId"
+      ],
+      "properties": [
+        "eventId",
+        "lastSeen",
+        "sourceRecordId",
+        "channel"
       ]
     },
     {
@@ -188,9 +234,15 @@
       "to": "ip_address",
       "aggregate": false,
       "observedAt": "lastSeen",
+      "stableIdProperty": "eventId",
       "filterable": [],
       "sortable": [],
       "evidence": [
+        "sourceRecordId"
+      ],
+      "properties": [
+        "eventId",
+        "lastSeen",
         "sourceRecordId"
       ]
     },
@@ -200,9 +252,14 @@
       "to": "transaction",
       "aggregate": false,
       "observedAt": "initiatedAt",
+      "stableIdProperty": "eventId",
       "filterable": [],
       "sortable": [],
-      "evidence": []
+      "evidence": [],
+      "properties": [
+        "eventId",
+        "initiatedAt"
+      ]
     },
     {
       "type": "PAID_TO",
@@ -210,9 +267,11 @@
       "to": "merchant",
       "aggregate": true,
       "observedAt": null,
+      "stableIdProperty": null,
       "filterable": [],
       "sortable": [],
-      "evidence": []
+      "evidence": [],
+      "properties": []
     },
     {
       "type": "TRANSFERRED_TO",
@@ -220,9 +279,11 @@
       "to": "account",
       "aggregate": true,
       "observedAt": null,
+      "stableIdProperty": null,
       "filterable": [],
       "sortable": [],
-      "evidence": []
+      "evidence": [],
+      "properties": []
     }
   ],
   "derivedRules": [

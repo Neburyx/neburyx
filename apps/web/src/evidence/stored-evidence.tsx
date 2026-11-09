@@ -59,7 +59,7 @@ const HAS_OFFSET = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:
 const NO_OFFSET = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/;
 
 /** A date-time the source gave with an offset is a point in time and is shown in UTC; one with no offset names no instant and is shown as read with its note; anything else (a date, text) is shown as read. */
-function observedProperty(value: string): GraphProperty {
+export function observedProperty(value: string): GraphProperty {
   const dataClass = HAS_OFFSET.test(value) ? 'dateTime' : NO_OFFSET.test(value) ? 'localDateTime' : 'text';
   return { key: OBSERVED_LABEL, value, dataClass, masked: false };
 }
