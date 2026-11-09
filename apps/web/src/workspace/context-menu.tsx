@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { Fragment, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { useCanvasCommands } from '../canvas/canvas-commands.js';
 import { useProfile } from '../canvas/profile-context.js';
 import { useClientState, useVisibleGraph } from '../state/context.js';
@@ -31,7 +31,9 @@ export function ContextMenu() {
   const canvas = useCanvasCommands();
   const expansion = useExpansionControls();
   const open = useStoreSelector(state.presentation.view, (current) => current.openMenu);
-  const items = useMenuItems(open?.kind);
+  const registered = useMenuItems(open?.kind);
+  const leaveOut = open?.leaveOut;
+  const items = useMemo(() => (leaveOut === undefined ? registered : registered.filter((item) => !leaveOut.includes(item.id))), [registered, leaveOut]);
   const graph = useVisibleGraph();
   const profile = useProfile();
   const bindings = useKeyBindings();

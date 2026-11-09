@@ -18,6 +18,7 @@ import { answeredData, createShellData, ShellDataProvider } from './shell/shell-
 import { createCoverageStore } from './api/coverage-store.js';
 import { createPreviewStore } from './api/preview-store.js';
 import { CoverageProvider } from './workspace/coverage-context.js';
+import { createEntityReadStore, EntityReadProvider } from './inspector/entity-read.js';
 import { PreviewProvider } from './workspace/preview-context.js';
 import { ExpandProvider } from './workspace/expand-context.js';
 import { createHeavyGuard } from './api/heavy-guard.js';
@@ -111,6 +112,7 @@ export function appRoutes(client: ApiClient, state: ClientState, banner?: Banner
           timeoutOf: (sourceId) => sourceItems().find((source) => source.id === sourceId)?.timeoutMs,
         });
   const previews = createPreviewStore(client, person, report, tracker);
+  const entityReads = createEntityReadStore(client, person, () => state.investigation.getState().id ?? '');
   const coverage = createCoverageStore(client, person, report);
   const expansions = createExpandStore(client, state, person, report, banner === undefined ? undefined : createHeavyGuard(previews, banner, state), tracker);
   const recent = createRecentInvestigations(client);
@@ -124,6 +126,7 @@ export function appRoutes(client: ApiClient, state: ClientState, banner?: Banner
             <ShellDataProvider store={shellData}>
               <ProfileProvider store={profile}>
                 <PreviewProvider store={previews}>
+                <EntityReadProvider store={entityReads}>
                 <CoverageProvider store={coverage}>
                 <ExpandProvider store={expansions}>
                 <TestRunsProvider runs={testRuns}>
@@ -136,6 +139,7 @@ export function appRoutes(client: ApiClient, state: ClientState, banner?: Banner
                 </TestRunsProvider>
                 </ExpandProvider>
                 </CoverageProvider>
+                </EntityReadProvider>
                 </PreviewProvider>
               </ProfileProvider>
             </ShellDataProvider>

@@ -19,6 +19,7 @@ import { registerBuiltInKeyBindings } from './workspace/built-in-key-bindings.js
 import { createKeyBindingRegistry } from './workspace/key-binding-registry.js';
 import { createMenuRegistry } from './workspace/menu-registry.js';
 import { createSelectionActionRegistry } from './workspace/selection-actions.js';
+import { bindBuiltInInspector } from './inspector/built-in-tabs.js';
 import { bindLegend } from './workspace/legend-binder.js';
 import { bindSupernodePanel } from './workspace/supernode-panel-binder.js';
 import { createPanelRegistryFor } from './workspace/panel-registry.js';
@@ -56,6 +57,7 @@ bindLegend(state, panels);
 bindSearchPanel(state, panels);
 bindFiltersPanel(state, panels);
 bindSupernodePanel(state, panels);
+bindBuiltInInspector(state, panels);
 const tools = createToolRegistry();
 registerBuiltInTools(tools);
 registerSearchTool(tools, state);

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { canvasOf, menuOf, openSample } from './support/workspace.ts';
+import { apartFromInspector, canvasOf, menuOf, openSample } from './support/workspace.ts';
 
 const lines = (page: Page) => page.locator('.graph-scope p');
 const bar = (page: Page) => page.getByRole('toolbar', { name: 'Selection actions' });
@@ -36,7 +36,7 @@ test.describe('hide from view', () => {
     await expect(lines(page).first()).not.toContainText('hidden from view');
     await expect(lines(page).nth(1)).toContainText('10 shown');
     await expect(canvasOf(page)).toBeFocused();
-    expect(requests).toEqual([]);
+    expect(apartFromInspector(requests)).toEqual([]);
   });
 
   test('hides by the node menu and by the action bar to the same result, and keeps the pointer on the canvas under the backdrop', async ({ page }) => {
@@ -54,6 +54,6 @@ test.describe('hide from view', () => {
 
     expect(await page.locator('.graph-scope').evaluate((element) => getComputedStyle(element).pointerEvents)).toBe('none');
     expect(await page.locator('.graph-scope-show').evaluate((element) => getComputedStyle(element).pointerEvents)).toBe('auto');
-    expect(requests).toEqual([]);
+    expect(apartFromInspector(requests)).toEqual([]);
   });
 });

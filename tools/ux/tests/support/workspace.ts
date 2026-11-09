@@ -202,3 +202,23 @@ export async function grabbablePoint(page: Page): Promise<{ readonly key: string
   if (best === undefined) throw new Error('NO_ENTITY');
   return best;
 }
+
+/**
+ * What selecting entities asks of the API for the inspector: one entity read and one degree preview for each entity that was selected on its own, `selected` in all. A spec that says nothing else was asked leaves
+ * out exactly those; one more read of either kind stays in the list and fails it.
+ */
+export function apartFromInspector(requests: readonly string[], selected = 1): string[] {
+  let reads = selected;
+  let previews = selected;
+  return requests.filter((request) => {
+    if (request.startsWith('GET /v1/entities/') && reads > 0) {
+      reads -= 1;
+      return false;
+    }
+    if (request === 'POST /v1/graph/preview-expansion' && previews > 0) {
+      previews -= 1;
+      return false;
+    }
+    return true;
+  });
+}

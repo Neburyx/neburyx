@@ -27,6 +27,8 @@ export interface OpenMenu {
   readonly key: string | undefined;
   readonly x: number;
   readonly y: number;
+  /** IDs of items the menu leaves out, for a menu opened beside buttons that already do what those items do. */
+  readonly leaveOut?: readonly string[];
 }
 
 /** A flyout is open for the registration of a tool, so a tool taken out and registered again does not bring back a flyout that was open before. */

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { canvasOf, openSample } from './support/workspace.ts';
+import { apartFromInspector, canvasOf, openSample } from './support/workspace.ts';
 
 const lines = (page: Page) => page.locator('.graph-scope p');
 const panel = (page: Page) => page.getByRole('group', { name: 'Entity types' });
@@ -35,7 +35,7 @@ test.describe('type filters', () => {
     await expect(canvasOf(page)).toHaveAttribute('data-drawn-entities', '10');
     await expect(lines(page).first()).not.toContainText('hidden by filters');
     await expect(chips.first()).toBeFocused();
-    expect(requests).toEqual([]);
+    expect(apartFromInspector(requests)).toEqual([]);
   });
 
   test('reaches a chip by Tab, and counts an entity hidden by hand and filtered once', async ({ page }) => {
@@ -58,7 +58,7 @@ test.describe('type filters', () => {
     expect(byHand).toBe(1);
     expect(byHand + byFilters + drawn).toBe(10);
     await expect(lines(page).nth(1)).toContainText(`${drawn} shown`);
-    expect(requests).toEqual([]);
+    expect(apartFromInspector(requests)).toEqual([]);
   });
 
   test('closes on Escape and gives the focus back to its button, and keeps what was switched off', async ({ page }) => {
@@ -69,7 +69,7 @@ test.describe('type filters', () => {
     await expect(filtersButton(page)).toBeFocused();
     await expect(filtersButton(page)).toHaveAttribute('aria-pressed', 'false');
     await expect(canvasOf(page)).toHaveAttribute('data-drawn-entities', '8');
-    expect(requests).toEqual([]);
+    expect(apartFromInspector(requests)).toEqual([]);
   });
 
   test('draws one tool active at a time when the Explore flyout opens over the panel', async ({ page }) => {

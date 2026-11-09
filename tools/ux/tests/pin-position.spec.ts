@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { canvasOf, drawing, menuOf, openSample, positions } from './support/workspace.ts';
+import { apartFromInspector, canvasOf, drawing, menuOf, openSample, positions } from './support/workspace.ts';
 
 async function selectFirst(page: Page): Promise<void> {
   await canvasOf(page).focus();
@@ -64,7 +64,7 @@ test.describe('pin position', () => {
     expect((await positions(page))[pinned], 'unpinning moved nothing').toEqual(before[pinned]);
     await dragBy(page, pinned, 90);
     await expect.poll(async () => JSON.stringify((await positions(page))[pinned])).not.toBe(JSON.stringify(before[pinned]));
-    expect(requests).toEqual([]);
+    expect(apartFromInspector(requests)).toEqual([]);
   });
 
   test('pins and unpins the selection with P and from the bar, and a pinned entity stays through a layout', async ({ page }) => {
@@ -97,6 +97,6 @@ test.describe('pin position', () => {
     await expect.poll(moved, { message: 'the layout ran: an unpinned entity moved' }).toBeGreaterThan(0);
     const after = await positions(page);
     for (const id of held) expect(after[id], 'a pinned entity stays through the layout').toEqual(before[id]);
-    expect(requests).toEqual([]);
+    expect(apartFromInspector(requests)).toEqual([]);
   });
 });

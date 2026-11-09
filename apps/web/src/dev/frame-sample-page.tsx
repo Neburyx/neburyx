@@ -13,6 +13,7 @@ import { registerBuiltInKeyBindings } from '../workspace/built-in-key-bindings.j
 import { createKeyBindingRegistry, KeyBindingsProvider } from '../workspace/key-binding-registry.js';
 import { createMenuRegistry, MenuProvider } from '../workspace/menu-registry.js';
 import { createSelectionActionRegistry, SelectionActionsProvider } from '../workspace/selection-actions.js';
+import { bindBuiltInInspector } from '../inspector/built-in-tabs.js';
 import { bindLegend } from '../workspace/legend-binder.js';
 import { bindSupernodePanel } from '../workspace/supernode-panel-binder.js';
 import { createPanelRegistryFor, PanelsProvider } from '../workspace/panel-registry.js';
@@ -88,6 +89,7 @@ export function FrameSamplePage() {
     bindLegend(state, registry);
     bindSupernodePanel(state, registry);
     bindFiltersPanel(state, registry);
+    bindBuiltInInspector(state, registry);
     registerStandInPanels(registry, { floating: floatingSide(window.location.search), dock: new URLSearchParams(window.location.search).get('dock') !== 'none' });
     return registry;
   });

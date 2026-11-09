@@ -13,7 +13,7 @@ export interface CopiedIds {
  * What Copy IDs copies for an entity: its stable ID, and for a keyed entity (one whose stable ID is personal data) the value of its stable-ID property when the view is unmasked, and the reference when it is
  * masked, since the value is then masked. The client never reads the text of a reference.
  */
-function copiedIdOf(node: GraphNode, profile: SourceProfile | undefined, mask: boolean): string {
+export function copiedIdOf(node: GraphNode, profile: SourceProfile | undefined, mask: boolean): string {
   const type = profile?.entityTypes.find((candidate) => candidate.type === node.ref.entityType);
   if (type?.keyed !== true || mask) return node.ref.stableId;
   const value = node.properties.find((property) => property.key === type.stableIdProperty)?.value;

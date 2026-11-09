@@ -162,11 +162,14 @@ function node(sourceId: string, entityType: string, stableId: string): unknown {
     ref: { sourceId, entityType, stableId },
     display: { title: `${entityType} ${stableId}`, type: entityType },
     properties: [],
-    qualityFlags: [],
+    qualityFlags: stableId.startsWith(DUPLICATE_ID_PREFIX) ? ['duplicate-stable-id'] : [],
     provenanceRefs: [],
     authorization: { canInspect: true, canExport: true },
   };
 }
+
+/** An entity whose ID starts with this is read with the quality flag of an ID that the source holds twice. */
+const DUPLICATE_ID_PREFIX = 'dup-';
 
 /** An investigation opened with a case reference that starts with this is new when it is opened, and once it exists reads back, and is resumed, as one whose source now points at another database. */
 const REPOINTED_CASE_REF = 'repointed';

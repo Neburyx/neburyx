@@ -77,6 +77,17 @@ describe('GET /v1/entities/{sourceId}/{entityType}/{stableId}', () => {
     await app.close();
   });
 
+  it('answers 200 with the quality flag duplicate-stable-id in the body when the source holds two nodes with the stable ID, and no flag for one', async () => {
+    const duplicated = await started(entityRows(ACCOUNT, ACCOUNT));
+    const flagged = nodeSchema.parse((await get(duplicated.app, '/v1/entities/demo/widget/AC-1')).json());
+    expect(flagged.qualityFlags).toContain('duplicate-stable-id');
+    await duplicated.app.close();
+    const single = await started();
+    const plain = nodeSchema.parse((await get(single.app, '/v1/entities/demo/widget/AC-1')).json());
+    expect(plain.qualityFlags).not.toContain('duplicate-stable-id');
+    await single.app.close();
+  });
+
   it('writes the type label and the stable ID property only from the mapping, and sends the ID as a parameter', async () => {
     const { app, executor } = await started();
     await get(app, '/v1/entities/demo/widget/AC-1');

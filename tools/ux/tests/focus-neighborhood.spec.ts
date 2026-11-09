@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { canvasOf, drawing, menuOf, openSample, zoomOf } from './support/workspace.ts';
+import { apartFromInspector, canvasOf, drawing, menuOf, openSample, zoomOf } from './support/workspace.ts';
 
 const lines = (page: Page) => page.locator('.graph-scope p');
 const bar = (page: Page) => page.getByRole('toolbar', { name: 'Selection actions' });
@@ -54,7 +54,7 @@ test.describe('focus neighborhood', () => {
     await expect(canvasOf(page)).toBeFocused();
     expect((await drawing(page)).nodes.length).toBe(before);
     expect(await zoomOf(page)).toBeCloseTo(zoomBefore, 5);
-    expect(requests).toEqual([]);
+    expect(apartFromInspector(requests)).toEqual([]);
   });
 
   test('works from the node menu, leaves from the canvas menu, and leaves with F', async ({ page }) => {
@@ -73,7 +73,7 @@ test.describe('focus neighborhood', () => {
     await page.keyboard.press('Escape');
     await page.keyboard.press('f');
     await expect(lines(page).first()).not.toContainText('outside focus');
-    expect(requests).toEqual([]);
+    expect(apartFromInspector(requests)).toEqual([]);
   });
 });
 

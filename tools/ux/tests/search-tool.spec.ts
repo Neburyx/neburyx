@@ -95,7 +95,8 @@ test.describe('the Search tool on the canvas', () => {
     await expect(page.getByRole('button', { name: 'On canvas: account AC-1' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Add account AC-1', exact: true })).toHaveCount(0);
     await page.getByRole('button', { name: 'On canvas: account AC-1' }).click();
-    expect(reads).toEqual([]);
+    // selecting the entity opens its inspector, which reads it once; nothing adds it
+    expect(reads).toEqual([expect.stringMatching(/\/AC-1$/)]);
     await expect(canvasOf(page)).toHaveAttribute('data-drawn-entities', '1');
   });
 });
