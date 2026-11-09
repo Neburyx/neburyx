@@ -34,7 +34,7 @@ Measured with the browser at 4× CPU throttle, dragging one entity, on the synth
 | 301 to 450 | every second frame | the same at 445 entities |
 | above 450 | the switch is disabled ("Physics is off above 450 entities") | 595 and 995 entities fell below a 5th percentile of 30 fps even drawn every third frame |
 
-The browser benchmark (`tools/ux/tests/benchmark-layouts.spec.ts`) guards the 300-element case: no frame over 100 ms while a layout runs, and a median of 55 fps and a 5th percentile of 30 fps (25 on the CI runner) while dragging with Physics on. The measurement is of the browser's frame rate on one machine; it says nothing about other hardware.
+The browser benchmark (`tools/ux/tests/benchmark-layouts.spec.ts`) guards the 300-element case: no frame over 100 ms on a laptop (300 ms on the CI runner) while a layout runs, and a median of 55 fps and a 5th percentile of 30 fps (25 on the CI runner) while dragging with Physics on. Computing a layout takes about 2 ms (Force about 10 ms) for that canvas; the longest frame is the drawing of every entity again, which is why the runner's limit is the pan and zoom guard's 300 ms (`tools/ux/src/rates.ts` holds the figures). The measurement is of the browser's frame rate on one machine; it says nothing about other hardware.
 
 ## What is saved
 
