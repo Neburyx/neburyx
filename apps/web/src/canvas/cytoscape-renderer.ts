@@ -13,6 +13,8 @@ import { createBoxOverlay } from './box-overlay.js';
 import { fitViewport, type Size } from './fit.js';
 import { followSize } from './follow-size.js';
 import { suppressNativeMenu } from './native-menu.js';
+import { detectPlatform, type Platform } from '../workspace/key-spec.js';
+import { modifierOf } from './selection-gestures.js';
 import { ZOOM_MAX, ZOOM_MIN } from './zoom.js';
 import type { CanvasRenderer, DrawnCounts, Inspection, Scene } from './scene.js';
 
@@ -150,6 +152,8 @@ export interface CytoscapeRendererOptions {
   readonly onCore?: (core: RendererCore) => void;
   /** The area the drawing is fitted into; by default the canvas element's, which a headless drawing has none of. */
   readonly canvasSize?: () => Size;
+  /** The platform the modifier keys of a click are read for (⌘ toggles on a Mac, Ctrl elsewhere; a Ctrl+click on a Mac is the right-click); by default the browser's. */
+  readonly platform?: () => Platform;
 }
 
 const browserFrame = (callback: () => void): void => {
@@ -407,6 +411,13 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
       });
       created.on('zoom', () => syncFar(created));
       syncTipNow = syncTip;
+      // A menu is asked for by a right-click and, on a Mac, by a click with Ctrl held; never while a box is being drawn.
+      const requestMenu = (target: Core | EdgeSingular | NodeSingular, pointer: MouseEvent): void => {
+        if (gesture.active) return;
+        const at = { x: pointer.clientX, y: pointer.clientY };
+        if (target === created) events.contextMenu({ target: undefined, ...at });
+        else if ('isNode' in target) events.contextMenu({ target: { kind: target.isNode() ? 'node' : 'relationship', key: target.id() }, ...at });
+      };
       let ignoreTap = false;
       created.on('tap', (event) => {
         if (ignoreTap) {
@@ -414,9 +425,17 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
           return;
         }
         const { target } = event;
-        const shift = event.originalEvent instanceof MouseEvent && event.originalEvent.shiftKey;
-        if (target === created) events.click({ target: undefined, shift });
-        else if ('isNode' in target) events.click({ target: target.id(), shift });
+        const original = event.originalEvent instanceof MouseEvent ? event.originalEvent : undefined;
+        const shift = original?.shiftKey === true;
+        const modifier = original === undefined ? 'none' : modifierOf(original, (options.platform ?? detectPlatform)());
+        if (modifier === 'menu') {
+          // on a Mac the system's right-click arrives as a left press with Ctrl held, which the library reports as a tap
+          if (original !== undefined) requestMenu(target, original);
+          return;
+        }
+        const toggle = modifier === 'toggle' ? { toggle: true } : {};
+        if (target === created) events.click({ target: undefined, shift, ...toggle });
+        else if ('isNode' in target) events.click({ target: target.id(), shift, ...toggle });
       });
       const overlay = container === undefined ? undefined : createBoxOverlay(container);
       const noOverlay: BoxOverlay = { show: () => undefined, hide: () => undefined };
@@ -508,10 +527,7 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
       });
       created.on('cxttap', (event) => {
         const { target, originalEvent } = event;
-        if (gesture.active || !(originalEvent instanceof MouseEvent)) return;
-        const at = { x: originalEvent.clientX, y: originalEvent.clientY };
-        if (target === created) events.contextMenu({ target: undefined, ...at });
-        else if ('isNode' in target) events.contextMenu({ target: { kind: target.isNode() ? 'node' : 'relationship', key: target.id() }, ...at });
+        if (originalEvent instanceof MouseEvent) requestMenu(target, originalEvent);
       });
       const restoreNativeMenu = container === undefined ? undefined : suppressNativeMenu(container);
       container?.addEventListener('pointercancel', cancelBox);

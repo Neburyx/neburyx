@@ -111,6 +111,15 @@ describe('the aggregate nodes on the canvas', () => {
     expect(inPanel().getAllByRole('checkbox').map((row) => [row.textContent, row.getAttribute('aria-checked')])).toEqual([['kind-b15 · exact', 'false'], ['type-c≥ 3,300 · lower bound', 'true']]);
   });
 
+  it('open the panel and select nothing when clicked with the toggle modifier held, as a plain click does', async () => {
+    const rig = await drawn();
+    act(() => rig.state.presentation.setSupernodePanel(undefined));
+    const selected = rig.state.presentation.view.getState().selection;
+    act(() => events(rig).click({ target: aggregateKey(n1, 'type-c'), shift: false, toggle: true }));
+    expect(rig.state.presentation.view.getState().supernodePanel).toEqual({ key: n1, neighborType: 'type-c' });
+    expect(rig.state.presentation.view.getState().selection).toBe(selected);
+  });
+
   it('give the menu of their node on a right click', async () => {
     const rig = await drawn();
     act(() => events(rig).contextMenu({ target: { kind: 'node', key: aggregateKey(n1, 'kind-b') }, x: 10, y: 10 }));

@@ -4,10 +4,12 @@ import { useClientState } from '../state/context.js';
 import { useStoreSelector } from '../state/store.js';
 import { KEY_SCOPE_ATTRIBUTE } from './key-binding-handler.js';
 import { useKeyBindingRegistry, useKeyBindings, type KeyGroup } from './key-binding-registry.js';
-import { matchesKeys } from './key-spec.js';
+import { matchesKeys, type Platform } from './key-spec.js';
 
 export const SHEET_TITLE = 'Keyboard shortcuts';
 export const SHEET_FOOTNOTE = 'Shortcuts work on the selected node or relationship. Nothing loads until you choose it.';
+/** The sentence about the pointer, after the footnote: ⌘ on a Mac, Ctrl elsewhere (a click gesture is not a key binding, so it is not a row). */
+export const clickNote = (platform: Platform): string => `Click with ${platform === 'mac' ? '⌘' : 'Ctrl'} held or Shift to add or remove one item.`;
 export const SHORTCUTS_BINDING_ID = 'shortcuts';
 
 const GROUPS: readonly { readonly id: KeyGroup; readonly title: string }[] = [
@@ -112,7 +114,9 @@ function Sheet() {
             );
           })}
         </div>
-        <p className="sheet-footnote">{SHEET_FOOTNOTE}</p>
+        <p className="sheet-footnote">
+          <span>{SHEET_FOOTNOTE}</span> <span>{clickNote(registry.platform)}</span>
+        </p>
       </div>
     </div>
   );

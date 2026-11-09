@@ -203,6 +203,7 @@ test.describe('the sheet of shortcuts', () => {
       row('Pin position', 'p'), `Hide ${mac ? '⌫' : 'Del'}`, row('Copy ID', 'mod+c'), row('Find paths', 'shift+p'), row('Export view', 'mod+e'), row('Copy properties', 'mod+shift+c'),
       row('Fit to view', 'mod+0'), row('Keyboard shortcuts', 'mod+/'), row('Walk the canvas', 'enter', 'space'), row('Next element', 'tab'), row('Previous element', 'shift+tab'), row('Leave the walk', 'escape'), row('Open context menu', 'contextmenu', 'shift+f10'),
     ]);
+    await expect(dialog.locator('.sheet-footnote'), 'the footnote names the click that adds and removes one item').toContainText(`Click with ${mac ? '⌘' : 'Ctrl'} held or Shift to add or remove one item.`);
     for (const direction of ['Tab', 'Shift+Tab']) {
       for (let press = 0; press < 4; press += 1) {
         await page.keyboard.press(direction);

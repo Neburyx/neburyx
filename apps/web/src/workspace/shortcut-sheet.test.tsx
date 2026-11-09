@@ -9,7 +9,7 @@ import { registerBuiltInSlots } from './built-in-slots.js';
 import { registerBuiltInTools } from './built-in-tools.js';
 import { load, nodeKey } from './context-menu-kit.js';
 import { createKeyBindingRegistry, KeyBindingsProvider, type KeyBindingRegistry } from './key-binding-registry.js';
-import { SHEET_FOOTNOTE, ShortcutSheet } from './shortcut-sheet.js';
+import { clickNote, SHEET_FOOTNOTE, ShortcutSheet } from './shortcut-sheet.js';
 import { createSlotRegistry } from './slots.js';
 import { createToolRegistry } from './tool-registry.js';
 
@@ -54,6 +54,20 @@ describe('the sheet of keyboard shortcuts', () => {
       ACTIONS: ['Pin position P', 'Hide ⌫'],
       VIEW: ['Fit to view ⌘0', 'Keyboard shortcuts ⌘/', 'Walk the canvas Enter Space', 'Next element Tab', 'Previous element ⇧Tab', 'Leave the walk Esc', 'Open context menu Menu ⇧F10'],
     });
+  });
+
+  it.each([
+    ['mac', 'Click with ⌘ held or Shift to add or remove one item.', 'metaKey'],
+    ['other', 'Click with Ctrl held or Shift to add or remove one item.', 'ctrlKey'],
+  ] as const)('adds, on %s, the sentence about the click that adds or removes one item to the footnote, and no row', async (platform, sentence, modifier) => {
+    const keys = builtInKeyBindings(platform);
+    workspace(keys);
+    await act(async () => void (await Promise.resolve()));
+    press('/', { [modifier]: true });
+    expect(clickNote(platform)).toBe(sentence);
+    expect(screen.getByText(sentence)).toBeTruthy();
+    expect(screen.getByText(SHEET_FOOTNOTE)).toBeTruthy();
+    expect(Object.values(columns()).flat().some((row) => row.includes('Click with'))).toBe(false);
   });
 
   it('closes on ⌘/ again, on Esc and on the close button, without clearing the selection, and gives the focus back to the control that had it', async () => {
