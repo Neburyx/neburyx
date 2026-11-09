@@ -35,6 +35,8 @@ describe('an entity type the mapping does not name', () => {
     { name: 'entity GET', code: 'INVALID_REQUEST', send: async (entityType) => ({ body: (await rig.app.inject({ method: 'GET', url: `/v1/entities/${FUZZ_SOURCE}/${encodeURIComponent(entityType)}/W-1` })).body }) },
     { name: 'edge GET (type)', code: 'INVALID_REQUEST', send: async (name) => ({ body: (await rig.app.inject({ method: 'GET', url: `/v1/edges/${edgeRefSegmentOf({ sourceId: FUZZ_SOURCE, type: name, from: 'widget', to: 'gadget', stableId: 'L-1' })}` })).body }) },
     { name: 'edge GET (end type)', code: 'INVALID_REQUEST', send: async (entityType) => ({ body: (await rig.app.inject({ method: 'GET', url: `/v1/edges/${edgeRefSegmentOf({ sourceId: FUZZ_SOURCE, type: 'MADE_FROM', from: entityType, to: 'gadget', stableId: 'L-1' })}` })).body }) },
+    { name: 'edge GET (derived end type)', code: 'INVALID_REQUEST', send: async (entityType) => ({ body: (await rig.app.inject({ method: 'GET', url: `/v1/edges/${edgeRefSegmentOf({ sourceId: FUZZ_SOURCE, derived: { ruleId: 'shared-gadget', from: { sourceId: FUZZ_SOURCE, entityType, stableId: 'W-1' }, to: { sourceId: FUZZ_SOURCE, entityType: 'widget', stableId: 'W-2' } } })}` })).body }) },
+    { name: 'edge GET (derived rule)', code: 'INVALID_REQUEST', send: async (name) => ({ body: (await rig.app.inject({ method: 'GET', url: `/v1/edges/${edgeRefSegmentOf({ sourceId: FUZZ_SOURCE, derived: { ruleId: name, from: { sourceId: FUZZ_SOURCE, entityType: 'widget', stableId: 'W-1' }, to: { sourceId: FUZZ_SOURCE, entityType: 'widget', stableId: 'W-2' } } })}` })).body }) },
   ];
 
   for (const route of routes) {

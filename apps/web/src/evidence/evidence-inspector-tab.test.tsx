@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
 import { stored } from '../inspector/relationship-kit.js';
 import { select } from '../inspector/inspector-kit.js';
-import { answerEdge, detailOf, evidenceRig, inPanel, OWNS, panel, SENT, SUMMED } from './evidence-kit.js';
+import { answerEdge, detailOf, evidenceRig, inPanel, OWNS, panel, SENT, SHARED, SUMMED } from './evidence-kit.js';
 import { edgeKey } from '../state/keys.js';
 
 afterEach(cleanup);
@@ -28,11 +28,22 @@ describe('the inspector Evidence tab', () => {
     rig.unbind();
   });
 
+  it('lists a derived relationship after the stored ones, whatever the order they were loaded in, and opens its evidence from the row', async () => {
+    const rig = evidenceRig({}, [SHARED, OWNS, SENT, SUMMED]);
+    select(rig.state, 'n1');
+    await act(async () => tab().click());
+    expect(rowNames()).toEqual(['OWNS, Title n2 · Kind A', 'SENT, Title n3 · Kind A', 'SHARED, Title n3 · Kind A']);
+    await act(async () => screen.getByRole('button', { name: 'SHARED, Title n3 · Kind A' }).click());
+    expect(panel()).not.toBeNull();
+    expect(rig.edgeCalls).toHaveLength(1);
+    rig.unbind();
+  });
+
   it('says so when the entity has no drawn stored relationship', async () => {
     const rig = evidenceRig({}, [SUMMED]);
     select(rig.state, 'n1');
     await act(async () => tab().click());
-    expect(screen.getByText('No stored relationships of this entity are drawn.')).toBeTruthy();
+    expect(screen.getByText('No stored or derived relationships of this entity are drawn.')).toBeTruthy();
     rig.unbind();
   });
 

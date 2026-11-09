@@ -40,8 +40,8 @@ export {
   testOutcomeSchema,
 } from './source-test.js';
 export type { DegreeBasis, DegreeChecks, DegreeType, MappingCheck, MappingChecks, MappingFinding, SourceTestReport, TestOutcome } from './source-test.js';
-export { EVIDENCE_NOT_AVAILABLE, MAX_EDGE_REF_SEGMENT, edgeDetailSchema, edgeEndSchema, edgeEvidenceRecordSchema, edgeEvidenceSchema, edgePathSchema, edgeRefSegmentOf, parseEdgeRefSegment } from './edge-detail.js';
-export type { EdgeDetail, EdgeEnd, EdgeEvidence, EdgeEvidenceRecord } from './edge-detail.js';
+export { EVIDENCE_NOT_AVAILABLE, MAX_EDGE_REF_SEGMENT, NO_STABLE_ID, aggregateEdgeRefSchema, derivedEdgeDetailSchema, derivedEdgeRefSchema, derivedSupportGroupSchema, derivedSupportSchema, derivedSupportsSchema, edgeDetailSchema, storedEdgeDetailSchema, edgeEndSchema, edgeEvidenceRecordSchema, edgeEvidenceSchema, edgePathSchema, edgeRefSegmentOf, parseEdgeRefSegment } from './edge-detail.js';
+export type { DerivedEdgeDetail, DerivedEdgeRef, DerivedSupport, DerivedSupportGroup, EdgeDetail, EdgeReadRef, StoredEdgeDetail, EdgeEnd, EdgeEvidence, EdgeEvidenceRecord } from './edge-detail.js';
 export { COUNT_QUALITIES, DATA_CLASSES, aggregateSchema, countSchema, edgeRefSchema, edgeSchema, elementRefSchema, nodeSchema, propertySchema, storedEdgeRefSchema } from './graph.js';
 export type { Count, DataClass, EdgeRef, ElementRef, GraphEdge, GraphNode, GraphProperty, StoredEdgeRef } from './graph.js';
 export { canCarryInPath, MAX_REFERENCE_TEXT_CHARACTERS, MAX_REFERENCE_VALUE_CHARACTERS, MAX_PATH_REFERENCE_LENGTH, MAX_STABLE_ID_LENGTH, entityLookupRequestSchema, entityPathSchema, referenceTextSchema, referenceValueSchema, entityQuerySchema, pathSegmentOf, stableIdSchema, valueOfPathSegment } from './entities.js';

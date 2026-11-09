@@ -107,6 +107,11 @@ async function buildClosedSet(rig: FuzzRig): Promise<{ readonly statements: Set<
     await app.inject({ method: 'GET', url: `/v1/edges/${edgeRefSegmentOf({ sourceId: FUZZ_SOURCE, type: 'MADE_FROM', from: 'widget', to: 'gadget', stableId: 'L-1' })}${mask === undefined ? '' : `?mask=${mask}`}` });
     keep();
   }
+  for (const mask of [undefined, 'true', 'false']) {
+    const ref = { sourceId: FUZZ_SOURCE, derived: { ruleId: 'shared-gadget', from: { sourceId: FUZZ_SOURCE, entityType: 'widget', stableId: 'W-1' }, to: { sourceId: FUZZ_SOURCE, entityType: 'widget', stableId: 'W-2' } } };
+    await app.inject({ method: 'GET', url: `/v1/edges/${edgeRefSegmentOf(ref)}${mask === undefined ? '' : `?mask=${mask}`}` });
+    keep();
+  }
   for (const token of keys.slice(0, 1)) {
     await post('/v1/graph/preview-expansion', { sourceId: FUZZ_SOURCE, ref: { entityType: token.entityType, stableId: token.stableId } });
     keep();

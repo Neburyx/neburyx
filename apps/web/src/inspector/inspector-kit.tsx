@@ -74,7 +74,7 @@ export function inspectorRig(options: RigOptions = {}) {
   const edgeCalls: Array<{ readonly id: string; readonly mask: boolean; readonly signal: AbortSignal | undefined }> = [];
   const client: ApiClient = fakeClient({
     getEdge: (reference, opts, signal) => {
-      edgeCalls.push({ id: reference.stableId, mask: opts?.mask === true, signal });
+      edgeCalls.push({ id: 'stableId' in reference ? reference.stableId : reference.derived.ruleId, mask: opts?.mask === true, signal });
       return new Promise((resolve) => void edgeReads.push({ answer: resolve }));
     },
     getEntity: (reference, opts, signal) => {

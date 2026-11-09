@@ -44,6 +44,7 @@ interface Call {
 const COUNTED: Readonly<Record<string, Call>> = {
   'entity open': { method: 'GET', url: (s) => `/v1/entities/${s}/node_a/H-1` },
   'edge read': { method: 'GET', url: (s) => `/v1/edges/${edgeRefSegmentOf({ sourceId: s, type: 'LINKS', from: 'node_a', to: 'node_b', stableId: 'L-1' })}` },
+  'derived edge read': { method: 'GET', url: (s) => `/v1/edges/${edgeRefSegmentOf({ sourceId: s, derived: { ruleId: 'R', from: { sourceId: s, entityType: 'node_a', stableId: 'H-1' }, to: { sourceId: s, entityType: 'node_a', stableId: 'H-2' } } })}` },
   'entity lookup': { method: 'POST', url: () => '/v1/entities/lookup', payload: (s) => ({ sourceId: s, ref }) },
   search: { method: 'POST', url: () => '/v1/search/entities', payload: (s) => ({ sourceId: s, text: 'needle-text' }) },
   'search more': { method: 'POST', url: () => '/v1/search/entities/more', payload: (s) => ({ sourceId: s, text: 'needle-text', group: 'exact', cursor: 'x' }) },

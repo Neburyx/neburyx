@@ -87,6 +87,21 @@ const derivedRow = (index: number) => {
   };
 };
 
+const supportRow = (index: number) => {
+  const other = plainNode(['Widget'], { widgetId: 'W-2' }, 'e-w2');
+  const via = neighbor(`gs${index}`);
+  return {
+    p: {
+      $type: 'path',
+      start: widget,
+      segments: [
+        { relationship: plainRelationship('MADE_FROM', widget, via, { linkId: `rs${index}a` }, `rel-s${index}a`), end: via },
+        { relationship: plainRelationship('MADE_FROM', other, via, { linkId: `rs${index}b` }, `rel-s${index}b`), end: other },
+      ],
+    },
+  };
+};
+
 const phoneRow = (index: number) => {
   const handle = plainNode(['Handle'], { phoneNumber: `+1-212-555-01${String(99 - index).padStart(2, '0')}` }, `e-phone-${index}`);
   return { a: widget, m: handle, rel: null, phase: 1, ts: when, id: `+1-212-555-01${String(99 - index).padStart(2, '0')}`, rtype: 'USES', dir: 'out', ntype: 'phone', flag: null, members: 2, first: when };
@@ -96,6 +111,7 @@ const phoneRow = (index: number) => {
 function respond(call: ExecuteCall): Promise<ExecuteOutcome> {
   if (call.templateId.startsWith('entity-search') || call.templateId === 'search-facets' || call.templateId === 'relationship-evidence' || call.templateId === 'entity-related') return searchModel(call);
   if (call.templateId === 'entity-load') return Promise.resolve({ status: 'rows', rows: call.cypher.includes('`Widget`') ? [{ n: widget, id: 'W-1' }] : call.cypher.includes('`Handle`') ? [{ n: plainNode(['Handle'], { phoneNumber: call.parameters['stableId'] }, 'e-phone-x'), id: 'p' }] : [] });
+  if (call.templateId === 'derived-edge-support') return Promise.resolve({ status: 'rows', rows: Array.from({ length: Math.min(call.rowLimit, 3) }, (_, index) => supportRow(index)) });
   if (call.templateId === 'derived-rule-run') return Promise.resolve({ status: 'rows', rows: Array.from({ length: Math.min(call.rowLimit, 3) }, (_, index) => derivedRow(index)) });
   if (call.templateId.startsWith('expand')) return Promise.resolve({ status: 'rows', rows: Array.from({ length: call.rowLimit }, (_, index) => (call.parameters['neighborType'] === 'phone' ? phoneRow(index) : expandRow(index))) });
   return Promise.resolve({ status: 'rows', rows: [] });

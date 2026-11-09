@@ -1,4 +1,4 @@
-import { edgeRefSegmentOf, MAX_EDGE_REF_SEGMENT, type StoredEdgeRef } from '@neburyx/contracts';
+import { edgeRefSegmentOf, MAX_EDGE_REF_SEGMENT, type DerivedEdgeRef, type StoredEdgeRef } from '@neburyx/contracts';
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import { closedSetOf, statementProblems } from '../testing/fuzz-closed-set.js';
@@ -110,6 +110,49 @@ describe('GET /v1/edges/{ref}', () => {
         expect(rig.executor.calls).toEqual([]);
       }),
       fuzzParams(60),
+    );
+  });
+});
+
+const DERIVED: DerivedEdgeRef = { sourceId: FUZZ_SOURCE, derived: { ruleId: 'shared-gadget', from: { sourceId: FUZZ_SOURCE, entityType: 'widget', stableId: 'W-1' }, to: { sourceId: FUZZ_SOURCE, entityType: 'widget', stableId: 'W-2' } } };
+
+describe('GET /v1/edges/{ref} for a derived reference', () => {
+  it('serves its benign reference, so the refusals below are the mutations and not the reference', async () => {
+    rig.reset();
+    expect(codeOf((await get(`/v1/edges/${edgeRefSegmentOf(DERIVED)}`)).body)).not.toBe('INVALID_REQUEST');
+    rig.reset();
+  });
+
+  it('answers INVALID_REQUEST and reads nothing for a reference with a missing, mistyped or extra key at any level', async () => {
+    const mutation = fc.record({ level: fc.constantFrom('top', 'derived', 'from', 'to'), key: fc.constantFrom('sourceId', 'derived', 'ruleId', 'from', 'to', 'entityType', 'stableId'), how: fc.constantFrom('remove', 'retype', 'extra'), extra: hostileText(known) });
+    await fc.assert(
+      fc.asyncProperty(mutation, async ({ level, key, how, extra }) => {
+        rig.reset();
+        const body = structuredClone(DERIVED) as unknown as Record<string, Record<string, Record<string, unknown>>>;
+        const holder = (level === 'top' ? body : level === 'derived' ? body['derived'] : body['derived']?.[level]) as Record<string, unknown> | undefined;
+        fc.pre(holder !== undefined && (how === 'extra' || key in holder));
+        if (how === 'remove') delete holder?.[key];
+        else if (how === 'retype') {
+          if (holder !== undefined) holder[key] = 7;
+        } else if (holder !== undefined) holder[extra] = 'x';
+        const response = await get(`/v1/edges/${Buffer.from(JSON.stringify(body)).toString('base64url')}`);
+        expect(codeOf(response.body)).toBe('INVALID_REQUEST');
+        expect(rig.executor.calls).toEqual([]);
+      }),
+      fuzzParams(100),
+    );
+  });
+
+  it('writes no statement outside the closed set and none that holds a piece of the reference, for any stable ID', async () => {
+    await fc.assert(
+      fc.asyncProperty(hostileText(known).filter((text) => text !== ''), async (stableId) => {
+        rig.reset();
+        const ref = { ...DERIVED, derived: { ...DERIVED.derived, to: { ...DERIVED.derived.to, stableId } } };
+        const response = await get(`/v1/edges/${encodeURIComponent(edgeRefSegmentOf(ref))}`);
+        expect(['INVALID_REQUEST', 'NOT_FOUND', undefined]).toContain(codeOf(response.body));
+        expect(statementProblems(rig, closed, [stableId].filter((text) => !known.has(text) && text.length >= 4))).toEqual([]);
+      }),
+      fuzzParams(80),
     );
   });
 });

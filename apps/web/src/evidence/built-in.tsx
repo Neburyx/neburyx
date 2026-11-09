@@ -8,6 +8,7 @@ import type { PanelRegistry } from '../workspace/panel-registry.js';
 import { VIEW_SUPPORTING_RECORDS, WHY_HERE } from './copy.js';
 import { bindEvidencePanel } from './evidence-binder.js';
 import { evidenceTabFor } from './evidence-tab.js';
+import { derivedEvidenceKind } from './derived-evidence.js';
 import { createEvidence, type Evidence } from './evidence.js';
 import { storedEvidenceKind } from './stored-evidence.js';
 
@@ -37,11 +38,12 @@ function registerMenuItems(menus: MenuRegistry, evidence: Evidence): () => void 
   };
 }
 
-/** The relationship evidence of a workspace: the kind for stored relationships, the docked panel, the two menu items and the inspector's Evidence tab. The function returned takes all of it away. */
+/** The relationship evidence of a workspace: the kinds for stored and derived relationships, the docked panel, the two menu items and the inspector's Evidence tab. The function returned takes all of it away. */
 export function bindBuiltInEvidence(state: ClientState, panels: PanelRegistry, inspector: Inspector, menus: MenuRegistry): { readonly evidence: Evidence; readonly unbind: () => void } {
   const evidence = createEvidence();
   const removals = [
     evidence.kinds.register(storedEvidenceKind),
+    evidence.kinds.register(derivedEvidenceKind),
     inspector.tabs.register({ id: 'evidence', label: 'Evidence', order: EVIDENCE_TAB_ORDER, content: evidenceTabFor(evidence) }),
     registerMenuItems(menus, evidence),
     bindEvidencePanel(state, panels, evidence),

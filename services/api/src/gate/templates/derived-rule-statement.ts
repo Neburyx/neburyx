@@ -14,7 +14,7 @@ export function ruleOf(allowlist: SourceAllowlist, ruleId: unknown, entityType: 
 /** The entity types of the middle of the rule's chain, in order: every other entry of `via`, starting with the second. */
 export const middleTypesOf = (rule: Rule): readonly string[] => rule.via.filter((_entry, index) => index % 2 === 1);
 
-function chainOf(rule: Rule, allowlist: SourceAllowlist, path: boolean): string {
+export function chainOf(rule: Rule, allowlist: SourceAllowlist, path: boolean): string {
   const typeNames = [...middleTypesOf(rule), rule.to];
   const labels = typeNames.map((type) => allowlist.entityLabels.get(type));
   if (labels.some((label) => label === undefined) || rule.via.length !== 2 * typeNames.length - 1) throw new AppError('INVALID_REQUEST');
@@ -28,7 +28,7 @@ function chainOf(rule: Rule, allowlist: SourceAllowlist, path: boolean): string 
   return path ? `p = ${pattern}` : pattern;
 }
 
-function conditionOf(rule: Rule): string {
+export function conditionOf(rule: Rule): string {
   const stops = rule.stopListProperty === undefined ? [] : middleTypesOf(rule).map((_type, index) => `coalesce(m${index + 1}.${quoteName(rule.stopListProperty ?? '')}, false) <> true`);
   return ['b <> a', ...stops].join(' AND ');
 }
@@ -47,6 +47,27 @@ export function derivedRuleStatementOf(allowlist: SourceAllowlist, rule: Rule): 
     `MATCH (a:${quoteName(label)}) WHERE a.${quoteName(stableId)} IN [$stableId, $stableInteger] WITH a ORDER BY elementId(a) LIMIT 1`,
     `CALL { WITH a MATCH ${chainOf(rule, allowlist, false)} WHERE ${condition} RETURN DISTINCT b LIMIT $limit + 1 }`,
     `CALL { WITH a, b MATCH ${chainOf(rule, allowlist, true)} WHERE ${condition} RETURN p LIMIT 1 }`,
+    'RETURN p',
+  ].join('\n');
+}
+
+/**
+ * The statement of the supports of one derived relationship: both ends are found by their stable IDs (the first node by element ID, as the entity read finds it), then at most `$limit + 1` distinct tuples of middle
+ * entities of the rule's chain between them, and for each tuple the first chain as one path. Parallel relationships between the same middle entities are one tuple, so they cannot use the bound. The end references are the
+ * parameter `$ends`, a list of two (the rule's `from`, then its `to`); the first `CALL` is lazy and the second is bounded by its `LIMIT 1`.
+ */
+export function derivedSupportStatementOf(allowlist: SourceAllowlist, rule: Rule): string {
+  const [fromLabel, toLabel] = [allowlist.entityLabels.get(rule.from), allowlist.entityLabels.get(rule.to)];
+  const [fromId, toId] = [allowlist.stableIds.get(rule.from), allowlist.stableIds.get(rule.to)];
+  if (fromLabel === undefined || toLabel === undefined || fromId === undefined || toId === undefined) throw new AppError('INVALID_REQUEST');
+  const middles = middleTypesOf(rule).map((_type, index) => `m${index + 1}`);
+  const condition = conditionOf(rule);
+  const bound = ['a', 'b', ...middles].join(', ');
+  return [
+    `MATCH (a:${quoteName(fromLabel)}) WHERE a.${quoteName(fromId)} IN [$ends[0].stableId, $ends[0].stableInteger] WITH a ORDER BY elementId(a) LIMIT 1`,
+    `MATCH (b:${quoteName(toLabel)}) WHERE b.${quoteName(toId)} IN [$ends[1].stableId, $ends[1].stableInteger] WITH a, b ORDER BY elementId(b) LIMIT 1`,
+    `CALL { WITH a, b MATCH ${chainOf(rule, allowlist, false)} WHERE ${condition} RETURN DISTINCT ${middles.join(', ')} LIMIT $limit + 1 }`,
+    `CALL { WITH ${bound} MATCH ${chainOf(rule, allowlist, true)} RETURN p LIMIT 1 }`,
     'RETURN p',
   ].join('\n');
 }

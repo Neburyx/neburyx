@@ -1,5 +1,5 @@
 import { rmSync } from 'node:fs';
-import { edgeDetailSchema, edgeRefSegmentOf, MAX_EDGE_REF_SEGMENT, type StoredEdgeRef } from '@neburyx/contracts';
+import { storedEdgeDetailSchema, edgeRefSegmentOf, MAX_EDGE_REF_SEGMENT, type StoredEdgeRef } from '@neburyx/contracts';
 import { afterAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../app.js';
 import type { ExecuteCall, ExecuteOutcome } from '../gate/executor.js';
@@ -64,7 +64,7 @@ describe('GET /v1/edges/{ref}', () => {
     const { app, edgeCalls, events } = await started();
     const response = await get(app, urlOf(REF));
     expect(response.statusCode).toBe(200);
-    const detail = edgeDetailSchema.parse(response.json());
+    const detail = storedEdgeDetailSchema.parse(response.json());
     expect(detail.ref).toEqual(REF);
     expect(detail.type).toBe('MADE_FROM');
     expect(detail.semantics).toBe('stored');
@@ -81,7 +81,7 @@ describe('GET /v1/edges/{ref}', () => {
 
   it('says linkable only when the mapping gives the evidence a link, and sends no URL', async () => {
     const plain = await started({ answer: rows(row('PLAIN', { linkId: 'L-1', recordId: 'R-1' })) });
-    const detail = edgeDetailSchema.parse((await get(plain.app, urlOf({ ...REF, type: 'PLAIN' }))).json());
+    const detail = storedEdgeDetailSchema.parse((await get(plain.app, urlOf({ ...REF, type: 'PLAIN' }))).json());
     expect(detail.evidence).toEqual({ status: 'available', records: [{ sourceRecordId: 'R-1', linkable: false }] });
     expect(JSON.stringify(detail)).not.toContain('audit.example.test');
     await plain.app.close();
@@ -92,23 +92,23 @@ describe('GET /v1/edges/{ref}', () => {
 
   it('masks the title of an end when asked, and sends no personal value either way in a property', async () => {
     const { app } = await started();
-    const masked = edgeDetailSchema.parse((await get(app, urlOf(REF, '?mask=true'))).json());
+    const masked = storedEdgeDetailSchema.parse((await get(app, urlOf(REF, '?mask=true'))).json());
     expect(JSON.stringify(masked)).not.toContain('Ana Silva');
-    const plain = edgeDetailSchema.parse((await get(app, urlOf(REF))).json());
+    const plain = storedEdgeDetailSchema.parse((await get(app, urlOf(REF))).json());
     expect(plain.from.title).toBe('Ana Silva');
     await app.close();
   });
 
   it('lists the readable and the unreadable record, once each', async () => {
     const { app } = await started({ answer: rows(row('MADE_FROM', { linkId: 'L-1', recordId: 'R-1', docId: [1, 2] })) });
-    const detail = edgeDetailSchema.parse((await get(app, urlOf(REF))).json());
+    const detail = storedEdgeDetailSchema.parse((await get(app, urlOf(REF))).json());
     expect(detail.evidence).toEqual({ status: 'available', records: [{ sourceRecordId: 'R-1', linkable: true }, { property: 'docId', unreadable: true }] });
     await app.close();
   });
 
   it('answers 200 with the first edge flagged when the source holds two with the same type, ends and stable ID', async () => {
     const { app } = await started({ answer: rows(row('MADE_FROM', { linkId: 'L-1', recordId: 'R-1' }, '5:s:1'), row('MADE_FROM', { linkId: 'L-1', recordId: 'R-2' }, '5:s:2')) });
-    const detail = edgeDetailSchema.parse((await get(app, urlOf(REF))).json());
+    const detail = storedEdgeDetailSchema.parse((await get(app, urlOf(REF))).json());
     expect(detail.qualityFlags).toContain('conflicting-duplicate');
     expect(detail.evidence).toEqual({ status: 'available', records: [{ sourceRecordId: 'R-1', linkable: true }] });
     await app.close();
@@ -124,7 +124,7 @@ describe('an edge with no retained records', () => {
     const { app } = await started({ answer: rows(row(type, { ...properties, seenAt: '2026-10-21T08:15:00Z' })) });
     const response = await get(app, urlOf({ ...REF, type }));
     expect(response.statusCode).toBe(200);
-    const detail = edgeDetailSchema.parse(response.json());
+    const detail = storedEdgeDetailSchema.parse(response.json());
     expect(detail.evidence).toEqual({ status: 'not-available', code: 'EVIDENCE_NOT_AVAILABLE' });
     expect(detail.observedAt).toBe(type === 'MADE_FROM' ? '2026-10-21T08:15:00Z' : undefined);
     expect(detail.properties.map((property) => property.key)).not.toContain('linkId');
@@ -250,7 +250,7 @@ describe('a read that cannot be answered', () => {
 describe('what the answer holds beside the evidence', () => {
   it('leaves the stable ID and the observed time to their own fields and keeps the other mapped properties', async () => {
     const { app } = await started({ answer: rows(row('MADE_FROM', { linkId: 'L-1', recordId: 'R-1', seenAt: '2026-10-21T08:15:00Z', docId: 'D-1' })) });
-    const detail = edgeDetailSchema.parse((await get(app, urlOf(REF))).json());
+    const detail = storedEdgeDetailSchema.parse((await get(app, urlOf(REF))).json());
     expect(detail.observedAt).toBe('2026-10-21T08:15:00Z');
     expect(detail.properties.map((property) => property.key)).toEqual(['recordId', 'docId']);
     await app.close();

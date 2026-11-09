@@ -1,7 +1,7 @@
 import { act, renderHook, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { SearchResult, StoredEdgeRef } from '@neburyx/contracts';
+import type { EdgeReadRef, SearchResult, StoredEdgeRef } from '@neburyx/contracts';
 import type { ApiResult } from '../api/client.js';
 import { createClientState } from '../state/client-state.js';
 import { renderApp } from '../test-utils.js';
@@ -124,7 +124,7 @@ describe('View evidence', () => {
   });
 
   it('can be reached and pressed by the keyboard, and opens the panel on the reference of the hit with one read of it', async () => {
-    const asked: StoredEdgeRef[] = [];
+    const asked: EdgeReadRef[] = [];
     const kit = searchKit(['demo'], async () => withEvidence('demo', [], [evidenceHit('L-1')]));
     renderApp(searchAt('demo', 'REC-1'), { ...kit.client, getEdge: async (ref) => (asked.push(ref), { ok: false, failure: { code: 'NETWORK_UNAVAILABLE' } }) });
     const user = userEvent.setup();

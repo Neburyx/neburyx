@@ -29,6 +29,15 @@ export function chain(from: string, to: string, via = 'D-1', extra: Record<strin
   ]);
 }
 
+/** A redact stage that takes one supporting edge of a stable ID out of the result, both of its ends staying, so that a derived edge it supports must be dropped. */
+export function hidingEdgeRedact(stableId: string, redact: (items: readonly Item[], context: GateContext) => readonly Item[]): (items: readonly Item[], context: GateContext) => readonly Item[] {
+  const without = (item: Item): Item => {
+    const edges = item['edges'];
+    return Array.isArray(edges) ? { ...item, edges: edges.filter((edge: { ref: { stableId?: string } }) => edge.ref.stableId !== stableId) } : item;
+  };
+  return (items, context) => redact(items.map(without), context);
+}
+
 /** A redact stage that takes the node of one stable ID out of the result before the gate's own, as a policy that hides it would, so that the derived edges that end at it must be dropped. */
 export function hidingRedact(stableId: string, redact: (items: readonly Item[], context: GateContext) => readonly Item[]): (items: readonly Item[], context: GateContext) => readonly Item[] {
   const without = (item: Item): Item => {

@@ -8,7 +8,7 @@ import { edgeKey, elementKey } from '../state/keys.js';
 import { partitionEdges } from '../state/loaded-graph.js';
 import { useStoreSelector } from '../state/store.js';
 import { usePreviewStoreWhenProvided } from '../workspace/preview-context.js';
-import { NO_STORED_RELATIONSHIPS_DRAWN } from './copy.js';
+import { NO_EVIDENCE_RELATIONSHIPS_DRAWN } from './copy.js';
 import type { Evidence } from './evidence.js';
 
 /** The inspector's Evidence tab: the stored relationships of the entity that are drawn, each a way to open its evidence. Client data only. */
@@ -34,16 +34,16 @@ export function evidenceTabFor(evidence: Evidence): ComponentType<InspectorTabPr
     const key = elementKey(entity);
     const byKey = new Map(visible.nodes.map((node) => [elementKey(node.ref), node]));
     const rows = partitionEdges(visible).drawable.flatMap((edge) => {
-      if (!('stableId' in edge.ref) || (elementKey(edge.from) !== key && elementKey(edge.to) !== key)) return [];
+      if (!evidence.offers(edge.ref) || (elementKey(edge.from) !== key && elementKey(edge.to) !== key)) return [];
       const other = byKey.get(elementKey(edge.from) === key ? elementKey(edge.to) : elementKey(edge.from));
       return other === undefined ? [] : [{ key: edgeKey(edge.ref), ref: edge.ref, type: edge.type, other }];
-    });
+    }).sort((left, right) => Number('derived' in left.ref) - Number('derived' in right.ref));
     const typeName = (type: string): string => profile?.entityTypes.find((entry) => entry.type === type)?.displayName ?? type;
     const shown = pages * pageSize;
     const current = target === undefined ? undefined : edgeKey(target);
     return (
       <div className="inspector-relationships">
-        {rows.length === 0 ? <p>{NO_STORED_RELATIONSHIPS_DRAWN}</p> : null}
+        {rows.length === 0 ? <p>{NO_EVIDENCE_RELATIONSHIPS_DRAWN}</p> : null}
         <ul className="relationship-rows">
           {rows.slice(0, shown).map((row, index) => (
             <li key={row.key}>

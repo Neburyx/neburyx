@@ -2,7 +2,7 @@ import { act, cleanup, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
 import { edgeKey } from '../state/keys.js';
-import { answerEdge, detailOf, evidenceRig, inPanel, OWNS, panel, SUMMED } from './evidence-kit.js';
+import { answerEdge, derivedDetailOf, detailOf, evidenceRig, inPanel, OWNS, panel, SHARED, SUMMED } from './evidence-kit.js';
 
 afterEach(cleanup);
 
@@ -15,6 +15,19 @@ describe('the relationship menu', () => {
     const rig = evidenceRig();
     openMenu(rig);
     expect(names()).toEqual(['Why is this relationship here?↵', 'View supporting records']);
+    rig.unbind();
+  });
+
+  it('lists both items for a derived relationship, opens the panel on it with Enter and reads it once', async () => {
+    const rig = evidenceRig({}, [OWNS, SHARED, SUMMED]);
+    openMenu(rig, SHARED);
+    expect(names()).toEqual(['Why is this relationship here?↵', 'View supporting records']);
+    await act(async () => undefined);
+    await userEvent.keyboard('{Enter}');
+    expect(panel()).not.toBeNull();
+    expect(rig.edgeCalls).toHaveLength(1);
+    await answerEdge(rig.edgeReads[0], derivedDetailOf());
+    expect(inPanel().getByText('No confidence score')).toBeTruthy();
     rig.unbind();
   });
 

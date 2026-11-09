@@ -70,12 +70,16 @@ function maskUnreferenced(hit: UnreferencedHit, entity: EntityNormalizer): Unref
 /** A reference as text that does not depend on the order of its fields. */
 const keyOf = canonicalJson;
 
-/** A derived edge is shown only when both its ends are nodes of the result and every edge that supports it is an edge of the result. */
+/** A derived edge is shown only when both its ends are nodes of the result, every edge that supports it is an edge of the result, and both ends of each of those edges (the entities in the middle of its chain) are nodes of the result. */
 function withoutHiddenDerived(result: Normalized): Normalized {
   const shownNodes = new Set(result.nodes.map((node) => keyOf(node.ref)));
-  const shownEdges = new Set(result.edges.filter((edge) => edge.semantics !== 'derived').map((edge) => keyOf(edge.ref)));
+  const supports = new Map(result.edges.filter((edge) => edge.semantics !== 'derived').map((edge) => [keyOf(edge.ref), edge]));
+  const supportShown = (ref: Normalized['edges'][number]['ref']): boolean => {
+    const support = supports.get(keyOf(ref));
+    return support !== undefined && shownNodes.has(keyOf(support.from)) && shownNodes.has(keyOf(support.to));
+  };
   const edges = result.edges.filter(
-    (edge) => edge.semantics !== 'derived' || (shownNodes.has(keyOf(edge.from)) && shownNodes.has(keyOf(edge.to)) && (edge.derivation?.supportingEdgeRefs ?? []).every((ref) => shownEdges.has(keyOf(ref)))),
+    (edge) => edge.semantics !== 'derived' || (shownNodes.has(keyOf(edge.from)) && shownNodes.has(keyOf(edge.to)) && (edge.derivation?.supportingEdgeRefs ?? []).every(supportShown)),
   );
   const hidden = result.edges.length - edges.length;
   if (hidden === 0) return result;

@@ -1,16 +1,16 @@
 import type { EdgeRef, ElementRef, GraphEdge } from '@neburyx/contracts';
-import { withDerivedEdges, type DerivedClaim } from './derived.js';
+import { withDerivedEdge, withDerivedEdges, type DerivedClaim } from './derived.js';
 import { warningsOf } from './drops.js';
-import { isPlainRelationship, type PlainRelationship } from './edge.js';
-import { normalizeRows, type Normalized, type NormalizeContext } from './index.js';
+import { isPlainRelationship, type PlainRelationship, type RelationshipEvidence } from './edge.js';
+import { normalizeRows, normalizeWithEvidence, type Normalized, type NormalizedEvidence, type NormalizeContext } from './index.js';
 import { isPlainNode, normalizeNode, type PlainNode } from './node.js';
 
-interface PlainPath {
+export interface PlainPath {
   readonly start: PlainNode;
   readonly segments: readonly { readonly relationship: PlainRelationship; readonly end: PlainNode }[];
 }
 
-function pathOf(row: Readonly<Record<string, unknown>>): PlainPath | undefined {
+export function pathOf(row: Readonly<Record<string, unknown>>): PlainPath | undefined {
   const value = row['p'];
   if (typeof value !== 'object' || value === null || !('start' in value) || !('segments' in value) || !Array.isArray(value.segments)) return undefined;
   if (!isPlainNode(value.start)) return undefined;
@@ -32,7 +32,7 @@ function joins(edge: GraphEdge, one: ElementRef, other: ElementRef): boolean {
 }
 
 /** The entity type of each node of a path, in order, from the rule: its `from`, the middle entity types of the chain, and its `to`. */
-function typesOf(via: readonly string[], from: string, to: string): readonly string[] {
+export function typesOf(via: readonly string[], from: string, to: string): readonly string[] {
   return [from, ...via.filter((_entry, index) => index % 2 === 1), to];
 }
 
@@ -40,7 +40,7 @@ function typesOf(via: readonly string[], from: string, to: string): readonly str
  * The claim of one path: the rule, the two ends and the supporting edges in chain order, each found among the edges that this one path normalizes to (so a stored support is the relationship the path followed,
  * and an aggregate is the one of its type and ends). A path with a node or a relationship the normalizer left out has no claim.
  */
-function claimOf(context: NormalizeContext, ruleId: string, types: readonly string[], path: PlainPath, edges: readonly GraphEdge[]): DerivedClaim | undefined {
+export function claimOf(context: NormalizeContext, ruleId: string, types: readonly string[], path: PlainPath, edges: readonly GraphEdge[]): DerivedClaim | undefined {
   const nodes = [path.start, ...path.segments.map((segment) => segment.end)];
   const refs: ElementRef[] = [];
   for (const [index, plain] of nodes.entries()) {
@@ -61,7 +61,7 @@ function claimOf(context: NormalizeContext, ruleId: string, types: readonly stri
   return from === undefined || to === undefined ? undefined : { ruleId, from, to, supports };
 }
 
-function expectedOf(paths: readonly PlainPath[], types: readonly string[]): ReadonlyMap<string, readonly string[]> {
+export function expectedOf(paths: readonly PlainPath[], types: readonly string[]): ReadonlyMap<string, readonly string[]> {
   const expected = new Map<string, readonly string[]>();
   for (const path of paths) {
     const nodes = [path.start, ...path.segments.map((segment) => segment.end)];
@@ -99,4 +99,60 @@ export function normalizeDerivedRun(context: NormalizeContext, rows: readonly Re
   if (lost === 0) return result;
   const dropped = { ...result.dropped, 'not-mapped': result.dropped['not-mapped'] + lost };
   return { ...result, dropped, warnings: warningsOf(dropped, result.unreferenced.length) };
+}
+
+/** One chain of the supports of a derived edge: the middle entities in the order of the chain and the supporting edges. */
+export interface SupportChain {
+  readonly middle: readonly ElementRef[];
+  readonly supports: readonly EdgeRef[];
+}
+
+/** The normalized supports of a derived relationship: the nodes and edges of every chain, the one derived edge they support, the chains and the evidence of the stored supports. */
+export interface NormalizedSupports extends NormalizedEvidence {
+  readonly chains: readonly SupportChain[];
+  /** The paths of the read that gave no chain: the normalizer could not account for them, or they did not follow the rule. */
+  readonly lost: number;
+}
+
+export const isNormalizedSupports = (item: Normalized): item is NormalizedSupports => 'chains' in item && Array.isArray(item.chains);
+
+/**
+ * The supports of one derived relationship: every path of the read, normalized, then the one derived edge that all the chains that follow the rule support. A path the normalizer cannot account for is counted as not
+ * mapped and its chain left out; the chains that remain are listed in the order of the read, each with the middle entities between the ends.
+ */
+export function normalizeDerivedSupport(context: NormalizeContext, rows: readonly Readonly<Record<string, unknown>>[]): NormalizedSupports {
+  const rule = context.model.derived.find((candidate) => candidate.id === context.params?.['ruleId']);
+  if (rule === undefined) return { ...normalizeWithEvidence(context, []), chains: [], lost: 0 };
+  const shown = { ...context, hasMore: true };
+  const types = typesOf(rule.via, rule.from, rule.to);
+  const found = rows.flatMap((row) => {
+    const path = pathOf(row);
+    return path === undefined ? [] : [{ row, path }];
+  });
+  const normalized = normalizeWithEvidence(shown, rows, expectedOf(found.map((entry) => entry.path), types));
+  const claims: DerivedClaim[] = [];
+  const chains: SupportChain[] = [];
+  const evidence: RelationshipEvidence[] = [];
+  let lost = 0;
+  for (const { row, path } of found) {
+    const alone = normalizeWithEvidence(shown, [row], expectedOf([path], types));
+    const claim = claimOf(shown, rule.id, types, path, alone.edges);
+    if (claim === undefined) {
+      lost += 1;
+      continue;
+    }
+    claims.push(claim);
+    evidence.push(...alone.evidence);
+    const nodes = [path.start, ...path.segments.map((segment) => segment.end)];
+    const middle = nodes.slice(1, -1).flatMap((plain, index) => {
+      const result = normalizeNode(shown, plain, types[index + 1]);
+      return 'node' in result ? [result.node.ref] : [];
+    });
+    chains.push({ middle, supports: claim.supports });
+  }
+  const result = withDerivedEdge(shown, normalized, claims);
+  const dropped = { ...result.dropped, 'not-mapped': result.dropped['not-mapped'] + lost };
+  const accepted = result.edges.find((edge) => edge.semantics === 'derived')?.derivation?.supportingEdgeRefs ?? [];
+  const kept = chains.filter((chain) => chain.supports.every((ref) => accepted.some((candidate) => JSON.stringify(candidate) === JSON.stringify(ref))));
+  return { ...result, dropped, warnings: warningsOf(dropped, result.unreferenced.length), evidence, chains: kept, lost: found.length - kept.length + (rows.length - found.length) };
 }

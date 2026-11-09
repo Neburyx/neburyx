@@ -22,7 +22,7 @@ function typeOf(edge: GraphEdge): string {
 }
 
 /** The chain of the rule: the supports are the rule's relationship types in order, and they join `from` to `to` through the rule's entity types, each in either direction. */
-function followsRule(rule: DerivedNormalizer, claim: DerivedClaim, supports: readonly GraphEdge[]): boolean {
+export function followsRule(rule: DerivedNormalizer, claim: DerivedClaim, supports: readonly GraphEdge[]): boolean {
   const hops = (rule.via.length + 1) / 2;
   if (!Number.isInteger(hops) || supports.length !== hops) return false;
   if (claim.from.entityType !== rule.from || claim.to.entityType !== rule.to) return false;
@@ -72,4 +72,38 @@ export function withDerivedEdges(context: NormalizeContext, normalized: Normaliz
     });
   }
   return { ...normalized, edges, dropped, warnings: warningsOf(dropped, normalized.unreferenced.length) };
+}
+
+/**
+ * The one derived edge of a pair of entities from every chain that supports it. Each chain is checked on its own as `withDerivedEdges` checks one; a chain that does not follow the rule is counted as not mapped and left
+ * out, and the edge names the de-duplicated supports of the chains that hold, in the order of the chains. With no chain that holds there is no edge.
+ */
+export function withDerivedEdge(context: NormalizeContext, normalized: Normalized, claims: readonly DerivedClaim[]): Normalized {
+  const dropped = { ...noDrops(), ...normalized.dropped };
+  const held: DerivedClaim[] = [];
+  for (const claim of claims) {
+    const rule = context.model.derived.find((candidate) => candidate.id === claim.ruleId);
+    const supports = claim.supports.map((ref) => normalized.edges.find((edge) => sameRef(edge.ref, ref)));
+    if (rule === undefined || supports.some((support) => support === undefined) || !followsRule(rule, claim, supports as GraphEdge[])) dropped['not-mapped'] += 1;
+    else held.push(claim);
+  }
+  const first = held[0];
+  const rule = first === undefined ? undefined : context.model.derived.find((candidate) => candidate.id === first.ruleId);
+  if (first === undefined || rule === undefined || held.some((claim) => !sameEntity(claim.from, first.from) || !sameEntity(claim.to, first.to))) return { ...normalized, dropped, warnings: warningsOf(dropped, normalized.unreferenced.length) };
+  const named = new Map<string, EdgeRef>();
+  for (const claim of held) for (const ref of claim.supports) named.set(JSON.stringify(ref), ref);
+  const ref: EdgeRef = { sourceId: context.sourceId, derived: { ruleId: rule.id, from: first.from, to: first.to } };
+  const edge: GraphEdge = {
+    ref,
+    from: first.from,
+    to: first.to,
+    type: rule.id,
+    direction: 'from-to',
+    semantics: 'derived',
+    derivation: { ruleId: rule.id, ruleVersion: rule.version, supportingEdgeRefs: [...named.values()] },
+    properties: [],
+    evidenceRefs: [],
+    qualityFlags: [],
+  };
+  return { ...normalized, edges: [...normalized.edges.filter((existing) => !sameRef(existing.ref, ref)), edge], dropped, warnings: warningsOf(dropped, normalized.unreferenced.length) };
 }

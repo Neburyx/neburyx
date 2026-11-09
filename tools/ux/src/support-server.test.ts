@@ -3,7 +3,7 @@ import type { Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { edgeDetailSchema, edgeRefSegmentOf, investigationListResponseSchema, investigationResponseSchema, meResponseSchema, openInvestigationResponseSchema, searchMoreResultSchema, searchResultSchema, sourceProfileSchema, sourcesResponseSchema, sourceTestReportSchema } from '@neburyx/contracts';
+import { storedEdgeDetailSchema, edgeRefSegmentOf, investigationListResponseSchema, investigationResponseSchema, meResponseSchema, openInvestigationResponseSchema, searchMoreResultSchema, searchResultSchema, sourceProfileSchema, sourcesResponseSchema, sourceTestReportSchema } from '@neburyx/contracts';
 import { createSupportServer } from './support-server.ts';
 
 const committed: unknown = JSON.parse(readFileSync(new URL('../fixtures/profile.json', import.meta.url), 'utf8'));
@@ -150,9 +150,9 @@ describe('the investigations the support server holds', () => {
   it('answers a stored edge from its reference segment, with no record for a legacy ID, and refuses a segment that is not a reference', async () => {
     const base = await startWithTypes();
     const ref = { sourceId: 'demo', type: 'LINKS', from: 'thing', to: 'other', stableId: 'L-1' };
-    const detail = edgeDetailSchema.parse(await (await fetch(`${base}/v1/edges/${edgeRefSegmentOf(ref)}`)).json());
+    const detail = storedEdgeDetailSchema.parse(await (await fetch(`${base}/v1/edges/${edgeRefSegmentOf(ref)}`)).json());
     expect(detail.evidence).toEqual({ status: 'available', records: [{ sourceRecordId: 'REC-L-1', linkable: false }] });
-    expect(edgeDetailSchema.parse(await (await fetch(`${base}/v1/edges/${edgeRefSegmentOf({ ...ref, stableId: 'legacy-1' })}`)).json()).evidence).toEqual({ status: 'not-available', code: 'EVIDENCE_NOT_AVAILABLE' });
+    expect(storedEdgeDetailSchema.parse(await (await fetch(`${base}/v1/edges/${edgeRefSegmentOf({ ...ref, stableId: 'legacy-1' })}`)).json()).evidence).toEqual({ status: 'not-available', code: 'EVIDENCE_NOT_AVAILABLE' });
     expect((await fetch(`${base}/v1/edges/not-a-reference`)).status).toBe(400);
   });
 
@@ -278,7 +278,7 @@ describe('the support server, searching', () => {
     const [hit] = answer.evidence.hits;
     if (hit === undefined || !('supports' in hit)) throw new Error('no stored hit');
     expect(hit.supports.stableId).toBe('legacy-evold-1');
-    const detail = edgeDetailSchema.parse(await (await fetch(`${base}/v1/edges/${edgeRefSegmentOf(hit.supports)}`)).json());
+    const detail = storedEdgeDetailSchema.parse(await (await fetch(`${base}/v1/edges/${edgeRefSegmentOf(hit.supports)}`)).json());
     expect(detail.evidence).toEqual({ status: 'not-available', code: 'EVIDENCE_NOT_AVAILABLE' });
   });
 

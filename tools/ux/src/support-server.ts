@@ -2,7 +2,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { extname, join, normalize, sep } from 'node:path';
-import { DEFAULT_INVESTIGATION_LIST_LIMIT, parseEdgeRefSegment, investigationListCountsSchema, nodeSchema, investigationListQuerySchema, type Investigation, type LastTest, openInvestigationRequestSchema, SEARCH_GROUP_CAP, searchMoreRequestSchema, searchMoreResultSchema, searchRequestSchema, searchResultSchema, type SourceSummary, sourceSummaryFieldsSchema, sourceSummarySchema, type SourceTestReport, type StoredEdgeRef, valueOfPathSegment } from '@neburyx/contracts';
+import { DEFAULT_INVESTIGATION_LIST_LIMIT, parseEdgeRefSegment, investigationListCountsSchema, nodeSchema, investigationListQuerySchema, type Investigation, type LastTest, openInvestigationRequestSchema, SEARCH_GROUP_CAP, searchMoreRequestSchema, searchMoreResultSchema, searchRequestSchema, searchResultSchema, type SourceSummary, sourceSummaryFieldsSchema, sourceSummarySchema, type SourceTestReport, type EdgeReadRef, valueOfPathSegment } from '@neburyx/contracts';
 
 interface SupportProfile {
   readonly sourceId: string;
@@ -146,8 +146,9 @@ function createSources(options: SupportServerOptions) {
 const NOT_FOUND = { error: { code: 'NOT_FOUND', message: 'Not found.', retryable: false, traceId: 'tr-support' } };
 const MISMATCH = { error: { code: 'SOURCE_MISMATCH', message: 'The request mixes more than one source.', retryable: false, traceId: 'tr-support' } };
 /** The synthetic answer for a stored edge: two ends named after their entity types and one source record (none for a stable ID that starts with `legacy`). */
-function edge(ref: StoredEdgeRef | undefined, response: ServerResponse): void {
+function edge(ref: EdgeReadRef | undefined, response: ServerResponse): void {
   if (ref === undefined) return json(response, 400, INVALID);
+  if ('derived' in ref) return json(response, 404, NOT_FOUND);
   const end = (entityType: string) => ({ ref: { sourceId: ref.sourceId, entityType, stableId: `${entityType}-1` }, title: `${entityType}-1`, type: entityType });
   const records = ref.stableId.startsWith('legacy') ? undefined : [{ sourceRecordId: `REC-${ref.stableId}`, linkable: false }];
   return json(response, 200, {

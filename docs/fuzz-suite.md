@@ -25,7 +25,7 @@ A test feeds the check a statement built from text and shows it fails.
 | Wrong type, missing key, extra key, text one over its cap (search text 201 characters, lookup value 100,001 units, reference 266,692 units, path segment 401 units), control character or lone surrogate in a path segment, malformed JSON, body over 1 MiB | `INVALID_REQUEST`, no read |
 | Content type that is not JSON (plain text is read as a string and refused as `INVALID_REQUEST`) | `UNSUPPORTED_MEDIA_TYPE` |
 | Unknown source | `NOT_FOUND` |
-| `GET /v1/edges/{ref}`: a segment that is not the unpadded base64url text of a stored reference (hostile text, a reference with a missing, mistyped or extra key, a segment one over 2,048 characters), any query parameter but `mask`, or an edge type or entity type the mapping does not name | `INVALID_REQUEST`, no read |
+| `GET /v1/edges/{ref}`: a segment that is not the unpadded base64url text of a stored or derived reference (hostile text, a reference with a missing, mistyped or extra key at any level, a segment one over 2,048 characters), any query parameter but `mask`, or an edge type, rule, or entity type the mapping does not name | `INVALID_REQUEST`, no read |
 | Entity type the mapping does not name | `NOT_FOUND` on degree preview, derived neighbors and coverage; `INVALID_REQUEST` on expand, search, lookup and the entity read |
 | Coverage: no entries, more than 500, a duplicate | `INVALID_REQUEST`; a ref of another source: `SOURCE_MISMATCH`; coverage never reads the source |
 | Expand `limit` below 1, a fraction, beyond the safe integers | `INVALID_REQUEST` |

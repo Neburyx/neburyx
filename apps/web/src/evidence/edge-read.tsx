@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import type { EdgeDetail, StoredEdgeRef } from '@neburyx/contracts';
+import { edgeRefSegmentOf, type EdgeDetail, type EdgeReadRef } from '@neburyx/contracts';
 import type { ApiClient, ApiFailure } from '../api/client.js';
 import { createRequestStore, type RequestStore } from '../api/request-store.js';
 import type { RequestState } from '../api/use-request.js';
@@ -8,14 +8,14 @@ import { createStore, readable, useStoreSelector } from '../state/store.js';
 
 export interface EdgeReadStore {
   /** The read of a stored edge under a masking setting in the investigation that asked: made once and kept; ask again with its `reload`. */
-  forEdge(ref: StoredEdgeRef, mask: boolean): RequestStore<EdgeDetail>;
+  forEdge(ref: EdgeReadRef, mask: boolean): RequestStore<EdgeDetail>;
   /** Says one more part of the panel wants the read; the function it returns says that part is gone. The read in flight is cancelled only when no part wants it any more. */
-  hold(ref: StoredEdgeRef, mask: boolean): () => void;
+  hold(ref: EdgeReadRef, mask: boolean): () => void;
   /** Cancels every read in flight and drops every held read. */
   clear(): void;
 }
 
-const keyOf = (person: string, investigation: string, ref: StoredEdgeRef, mask: boolean): string => JSON.stringify([person, investigation, ref.sourceId, ref.type, ref.from, ref.to, ref.stableId, mask]);
+const keyOf = (person: string, investigation: string, ref: EdgeReadRef, mask: boolean): string => JSON.stringify([person, investigation, edgeRefSegmentOf(ref), mask]);
 
 /** The edge reads of a person's session, each under the person, investigation, reference and masking setting that asked, so an answer for one edge is never shown for another. The Search page, which has no investigation, passes an empty one. */
 export function createEdgeReadStore(client: ApiClient, person: () => string, investigation: () => string): EdgeReadStore {
@@ -85,7 +85,7 @@ export interface EdgeRead {
 const DO_NOTHING = (): void => undefined;
 
 /** The read of the edge the panel shows. It is asked for while the panel shows the edge and an ask in flight is cancelled when the panel moves on; with no store provided it never asks. */
-export function useEdgeRead(ref: StoredEdgeRef, mask: boolean): EdgeRead {
+export function useEdgeRead(ref: EdgeReadRef, mask: boolean): EdgeRead {
   const store = useContext(EdgeReadContext);
   const request = store?.forEdge(ref, mask);
   const state = useStoreSelector(request ?? NO_READ, (current) => current);

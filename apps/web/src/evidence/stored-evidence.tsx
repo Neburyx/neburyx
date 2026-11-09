@@ -1,4 +1,4 @@
-import type { EdgeRef, GraphProperty } from '@neburyx/contracts';
+import type { EdgeRef, GraphProperty, StoredEdgeDetail } from '@neburyx/contracts';
 import { propertyText } from '../inspector/property-text.js';
 import { evidenceRecordText } from '../search/copy.js';
 import { useEdgeRead, type EdgeRead } from './edge-read.js';
@@ -8,9 +8,14 @@ import type { EvidenceKind, EvidenceKindProps } from './evidence-kinds.js';
 
 const isStored = (ref: EdgeRef): ref is Extract<EdgeRef, { stableId: string }> => 'stableId' in ref;
 
-function useStoredRead({ edge, mask }: EvidenceKindProps): EdgeRead {
+interface StoredRead extends Omit<EdgeRead, 'detail'> {
+  readonly detail: StoredEdgeDetail | undefined;
+}
+
+function useStoredRead({ edge, mask }: EvidenceKindProps): StoredRead {
   if (!isStored(edge)) throw new Error('the stored evidence is shown for a stored reference only');
-  return useEdgeRead(edge, mask);
+  const read = useEdgeRead(edge, mask);
+  return { ...read, detail: read.detail?.semantics === 'stored' ? read.detail : undefined };
 }
 
 /** The line that names the ends of the relationship in the panel's heading: the titles the read gave, once it has. */
