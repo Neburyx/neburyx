@@ -113,6 +113,12 @@ function respond(call: ExecuteCall): Promise<ExecuteOutcome> {
   if (call.templateId === 'entity-load') return Promise.resolve({ status: 'rows', rows: call.cypher.includes('`Widget`') ? [{ n: widget, id: 'W-1' }] : call.cypher.includes('`Handle`') ? [{ n: plainNode(['Handle'], { phoneNumber: call.parameters['stableId'] }, 'e-phone-x'), id: 'p' }] : [] });
   if (call.templateId === 'derived-edge-support') return Promise.resolve({ status: 'rows', rows: Array.from({ length: Math.min(call.rowLimit, 3) }, (_, index) => supportRow(index)) });
   if (call.templateId === 'derived-rule-run') return Promise.resolve({ status: 'rows', rows: Array.from({ length: Math.min(call.rowLimit, 3) }, (_, index) => derivedRow(index)) });
+  if (call.templateId === 'aggregate-sample') {
+    const ends = call.parameters['ends'];
+    const value = Array.isArray(ends) && typeof ends[1] === 'object' && ends[1] !== null && 'stableId' in ends[1] ? String(ends[1].stableId) : '+1-212-555-0100';
+    return Promise.resolve({ status: 'rows', rows: [{ a: widget, b: plainNode(['Handle'], { phoneNumber: value }, 'e-phone-agg'), sample: Array.from({ length: Math.min(call.rowLimit, 3) }, () => ({ t: when })) }] });
+  }
+  if (call.templateId === 'aggregate-summary') return Promise.resolve({ status: 'rows', rows: [{ members: 3, first: when, last: when }] });
   if (call.templateId.startsWith('expand')) return Promise.resolve({ status: 'rows', rows: Array.from({ length: call.rowLimit }, (_, index) => (call.parameters['neighborType'] === 'phone' ? phoneRow(index) : expandRow(index))) });
   return Promise.resolve({ status: 'rows', rows: [] });
 }

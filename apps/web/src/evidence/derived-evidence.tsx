@@ -4,6 +4,7 @@ import { evidenceRecordText } from '../search/copy.js';
 import { useEdgeRead, type EdgeRead } from './edge-read.js';
 import { EvidenceFailure } from './failure-view.js';
 import {
+  aggregateEvidenceLabel,
   derivationSentence,
   DERIVED_RELATIONSHIP,
   FROM_LABEL,
@@ -12,6 +13,7 @@ import {
   NO_STABLE_ID_TEXT,
   NOT_AVAILABLE_BADGE,
   NOT_AVAILABLE_ROW,
+  OPEN_AGGREGATE_EVIDENCE,
   READING_EVIDENCE,
   RULE_LABEL,
   RULE_VERSION_LABEL,
@@ -45,10 +47,24 @@ function useTypeNames(): (end: EdgeEnd) => string {
   return (end) => profile?.entityTypes.find((entry) => entry.type === end.ref.entityType)?.displayName ?? end.type;
 }
 
-function SupportEvidence({ support }: { readonly support: DerivedSupport }) {
+function SupportEvidence({ support, open }: { readonly support: DerivedSupport; readonly open: EvidenceKindProps['open'] }) {
   const { evidence } = support;
   if (evidence.status === 'available') return <span className="evidence-support-records">{evidence.records.map(evidenceRecordText).join(', ')}</span>;
-  if (evidence.status === 'no-stable-id') return <span className="evidence-support-note">{NO_STABLE_ID_TEXT}</span>;
+  if (evidence.status === 'no-stable-id') {
+    return (
+      <span className="evidence-support-note">
+        {NO_STABLE_ID_TEXT}
+        {open === undefined ? null : (
+          <>
+            {' '}
+            <button type="button" className="neighbor-types-link" aria-label={aggregateEvidenceLabel(support.type, support.from.title, support.to.title)} onClick={() => open(support.ref)}>
+              {OPEN_AGGREGATE_EVIDENCE}
+            </button>
+          </>
+        )}
+      </span>
+    );
+  }
   return (
     <span className="evidence-support-note">
       <span className="evidence-badge">{NOT_AVAILABLE_BADGE}</span> {NOT_AVAILABLE_ROW}
@@ -96,7 +112,7 @@ function DerivedEvidenceTab(props: EvidenceKindProps) {
                   <ul className="evidence-group-supports">
                     {group.supports.map((support) => (
                       <li key={JSON.stringify(support.ref)}>
-                        <span className="evidence-support-edge">{`${support.type}: ${support.from.title} → ${support.to.title}`}</span> <SupportEvidence support={support} />
+                        <span className="evidence-support-edge">{`${support.type}: ${support.from.title} → ${support.to.title}`}</span> <SupportEvidence support={support} open={props.open} />
                       </li>
                     ))}
                   </ul>

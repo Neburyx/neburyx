@@ -12,6 +12,8 @@ export interface Evidence {
   offers(ref: EdgeRef): boolean;
   /** Opens the panel on a relationship by choice; false, and nothing opens, when no kind offers it. `opener` is where focus goes back to when the panel closes. */
   open(ref: EdgeRef, opener?: HTMLElement | null): boolean;
+  /** Opens the panel on another relationship from inside the open panel, by choice: focus goes into the panel and, when it closes, back to the control that opened it first. */
+  reopen(ref: EdgeRef): boolean;
   /** Moves an open panel to another relationship, as the selection does; it never opens a closed panel and never takes focus. */
   follow(ref: EdgeRef): void;
   close(): void;
@@ -39,6 +41,12 @@ export function createEvidence(): Evidence {
       if (!offers(ref)) return false;
       for (const listener of [...listeners]) listener();
       opener = from ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
+      target.setState(ref);
+      choices.setState(choices.getState() + 1);
+      return true;
+    },
+    reopen(ref) {
+      if (target.getState() === undefined || !offers(ref)) return false;
       target.setState(ref);
       choices.setState(choices.getState() + 1);
       return true;

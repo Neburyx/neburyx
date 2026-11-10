@@ -205,6 +205,8 @@ describe('the templates of the shipped catalog', () => {
       'entity-related-context': 'bounded by its input',
       'derived-rule-run': 'cut means a lower bound',
       'derived-edge-support': 'cut means a lower bound',
+      'aggregate-sample': 'one row',
+      'aggregate-summary': 'one row',
     });
   });
 

@@ -4,6 +4,7 @@ import { AppError } from '../errors.js';
 import { MAX_EVIDENCE_PROPERTIES, MAX_FACET_PROBES, MAX_REFERENCE_PROPERTIES, MAX_SEARCH_PROPERTIES } from '../mapping/model.js';
 import { declarationsOf, degreePairsOf } from './templates/degree-pairs.js';
 import { expandBranchesOf, expandCountStatementOf, expandStatementOf, undeclaredFilter, undeclaredRank, type ExpandDirection } from './templates/expand-statement.js';
+import { aggregateStatementOf } from './templates/aggregate-statement.js';
 import { derivedRuleStatementOf, derivedSupportStatementOf, ruleOf } from './templates/derived-rule-statement.js';
 import { CONTEXT_BRANCHES, contextBranchesOf, relatedContextStatementOf, type ContextBranch } from './templates/related-context-statement.js';
 import type { GateParameter, Params, SourceAllowlist, Template } from './types.js';
@@ -16,7 +17,7 @@ import type { GateParameter, Params, SourceAllowlist, Template } from './types.j
  * `@degreeCounts(kind)` writes the whole statement of a degree read for the entity type the parameter `kind` names (see `Template.degreeCounts`).
  * `@edgeLoad(type)` writes the whole statement of the read of one stored edge (see `Template.edgeLoad`).
  */
-const MARKER = /@(entity|relationship|stableId|searchBranches|facetProbes|degreeCounts|expandNeighbors|relatedContext|derivedRule|derivedSupport|edgeLoad)\(([A-Za-z][A-Za-z0-9]*)\)/g;
+const MARKER = /@(entity|relationship|stableId|searchBranches|facetProbes|degreeCounts|expandNeighbors|relatedContext|derivedRule|derivedSupport|edgeLoad|aggregateRead)\(([A-Za-z][A-Za-z0-9]*)\)/g;
 /**
  * The placeholders of a branch text: for a target of an entity type the label of the type and the property (`@label`, `@property`) and, in a search branch, the entity type of the target
  * (`@entityType`, written as the parameter `$branchEntityTypes[<branch position>]`); for a target of a relationship mapping row the relationship type, the labels of its two entity types and the property (`@type`, `@fromLabel`, `@toLabel`, `@property`).
@@ -39,12 +40,12 @@ export function quoteName(name: string): string {
 /** The list parameter the gate fills with the entity type of each search branch, in branch order, from the validated targets; no request or template sets it. */
 export const BRANCH_ENTITY_TYPES = 'branchEntityTypes';
 
-export type MarkerKind = 'entity' | 'relationship' | 'stableId' | 'searchBranches' | 'facetProbes' | 'degreeCounts' | 'expandNeighbors' | 'relatedContext' | 'derivedRule' | 'derivedSupport' | 'edgeLoad';
+export type MarkerKind = 'entity' | 'relationship' | 'stableId' | 'searchBranches' | 'facetProbes' | 'degreeCounts' | 'expandNeighbors' | 'relatedContext' | 'derivedRule' | 'derivedSupport' | 'edgeLoad' | 'aggregateRead';
 
 export function markersOf(cypher: string): { readonly kind: MarkerKind; readonly name: string }[] {
   return [...cypher.matchAll(MARKER)].flatMap((match) => {
     const [, kind, name] = match;
-    return (kind === 'entity' || kind === 'relationship' || kind === 'stableId' || kind === 'searchBranches' || kind === 'facetProbes' || kind === 'degreeCounts' || kind === 'expandNeighbors' || kind === 'relatedContext' || kind === 'derivedRule' || kind === 'derivedSupport' || kind === 'edgeLoad') && name !== undefined ? [{ kind, name }] : [];
+    return (kind === 'entity' || kind === 'relationship' || kind === 'stableId' || kind === 'searchBranches' || kind === 'facetProbes' || kind === 'degreeCounts' || kind === 'expandNeighbors' || kind === 'relatedContext' || kind === 'derivedRule' || kind === 'derivedSupport' || kind === 'edgeLoad' || kind === 'aggregateRead') && name !== undefined ? [{ kind, name }] : [];
   });
 }
 
@@ -299,6 +300,15 @@ function edgeLoadOf(template: Template, params: Params, allowlist: SourceAllowli
   return `MATCH (a:${quoteName(fromLabel)})-[r:${quoteName(row.type)}]->(b:${quoteName(toLabel)}) WHERE r.${quoteName(row.stableId)} IN [$stableId, $stableInteger] RETURN r, a, b ORDER BY elementId(r) LIMIT $limit + 1`;
 }
 
+/** The statement of one aggregate read (see `Template.aggregateRead`): the mapping row that joins the two ends' entity types by the type is looked up in the allowlist, and a request that names none is refused before any read. */
+function aggregateReadOf(template: Template, params: Params, allowlist: SourceAllowlist): string {
+  const spec = template.aggregateRead;
+  if (spec === undefined) return '';
+  const ends = params[spec.endsParam];
+  const [from, to] = Array.isArray(ends) ? ends.map((end: unknown) => (typeof end === 'object' && end !== null && 'entityType' in end ? end.entityType : undefined)) : [];
+  return aggregateStatementOf(allowlist, params[spec.typeParam], from, to, spec.form);
+}
+
 export interface Rendered {
   readonly cypher: string;
   readonly parameters: Params;
@@ -326,6 +336,7 @@ export function renderTemplate(template: Template, params: Params, allowlist: So
   const derivation = derivedRuleOf(template, params, allowlist);
   const support = derivedSupportOf(template, params, allowlist);
   const edge = edgeLoadOf(template, params, allowlist);
+  const aggregate = aggregateReadOf(template, params, allowlist);
   const cypher = template.cypher.replace(MARKER, (_whole, kind: string, name: string) => {
     if (kind === 'searchBranches') return branches;
     if (kind === 'facetProbes') return probes;
@@ -333,12 +344,13 @@ export function renderTemplate(template: Template, params: Params, allowlist: So
     if (kind === 'expandNeighbors') return expansion;
     if (kind === 'relatedContext') return context.cypher;
     if (kind === 'edgeLoad') return edge;
+    if (kind === 'aggregateRead') return aggregate;
     if (kind === 'derivedRule') return derivation;
     if (kind === 'derivedSupport') return support;
     const replacement = replacements.get(`${kind}:${name}`) ?? '';
     return kind === 'relationship' ? replacement : quoteName(replacement);
   });
-  const markerNames = new Set([...template.entityParams, ...template.relationshipParams, ...(template.searchBranches === undefined ? [] : [template.searchBranches.param]), ...(template.facetProbes === undefined ? [] : [template.facetProbes.param]), ...(template.degreeCounts === undefined ? [] : [template.degreeCounts.param]), ...(template.expandNeighbors === undefined ? [] : [template.expandNeighbors.relTypesParam, template.expandNeighbors.directionParam]), ...(template.derivedRule === undefined ? [] : [template.derivedRule.ruleParam]), ...(template.derivedSupport === undefined ? [] : [template.derivedSupport.ruleParam]), ...(template.edgeLoad === undefined ? [] : [template.edgeLoad.typeParam, template.edgeLoad.fromParam, template.edgeLoad.toParam])]);
+  const markerNames = new Set([...template.entityParams, ...template.relationshipParams, ...(template.searchBranches === undefined ? [] : [template.searchBranches.param]), ...(template.facetProbes === undefined ? [] : [template.facetProbes.param]), ...(template.degreeCounts === undefined ? [] : [template.degreeCounts.param]), ...(template.expandNeighbors === undefined ? [] : [template.expandNeighbors.relTypesParam, template.expandNeighbors.directionParam]), ...(template.derivedRule === undefined ? [] : [template.derivedRule.ruleParam]), ...(template.derivedSupport === undefined ? [] : [template.derivedSupport.ruleParam]), ...(template.edgeLoad === undefined ? [] : [template.edgeLoad.typeParam, template.edgeLoad.fromParam, template.edgeLoad.toParam]), ...(template.aggregateRead === undefined ? [] : [template.aggregateRead.typeParam])]);
   const kept = Object.entries(params).filter(([key]) => !markerNames.has(key));
   const cap: [string, unknown][] = template.degreeCounts?.form === 'bounded' || template.facetProbes !== undefined ? [['countCap', countCap]] : [];
   return { cypher, parameters: Object.fromEntries([...kept, ['limit', limit], ...cap, ...gateValuesOf(template, allowlist), ...branchEntityTypesOf(template, params), ...(template.relatedContext === undefined ? [] : [[CONTEXT_BRANCHES, context.branches.map((branch) => ({ hitType: branch.hitType, exactType: branch.exactType, type: branch.type, direction: branch.direction }))] as [string, unknown]])]) };

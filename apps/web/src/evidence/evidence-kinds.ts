@@ -6,6 +6,8 @@ export interface EvidenceKindProps {
   readonly edge: EdgeRef;
   /** Whether the personal-data fields are masked; the host knows, since the panel is also drawn on a page with no workspace. */
   readonly mask: boolean;
+  /** Opens the panel on another relationship from inside it, by choice; absent in a host that cannot (the Search page). Focus goes back, on close, to what opened the panel first. */
+  readonly open?: (ref: EdgeRef) => void;
 }
 
 /** One kind of relationship evidence: what recognizes its references, the line that names its ends, and the content of the panel's Evidence and Properties sub-tabs for it. */

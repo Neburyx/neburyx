@@ -149,6 +149,7 @@ const MISMATCH = { error: { code: 'SOURCE_MISMATCH', message: 'The request mixes
 function edge(ref: EdgeReadRef | undefined, response: ServerResponse): void {
   if (ref === undefined) return json(response, 400, INVALID);
   if ('derived' in ref) return json(response, 404, NOT_FOUND);
+  if ('aggregate' in ref) return aggregateEdge(ref, response);
   const end = (entityType: string) => ({ ref: { sourceId: ref.sourceId, entityType, stableId: `${entityType}-1` }, title: `${entityType}-1`, type: entityType });
   const records = ref.stableId.startsWith('legacy') ? undefined : [{ sourceRecordId: `REC-${ref.stableId}`, linkable: false }];
   return json(response, 200, {
@@ -161,6 +162,24 @@ function edge(ref: EdgeReadRef | undefined, response: ServerResponse): void {
     properties: [],
     qualityFlags: [],
     evidence: records === undefined ? { status: 'not-available', code: 'EVIDENCE_NOT_AVAILABLE' } : { status: 'available', records },
+  });
+}
+
+/** The synthetic answer for an aggregate: three members, an observed range and two sampled members newest first. */
+function aggregateEdge(ref: Extract<EdgeReadRef, { aggregate: unknown }>, response: ServerResponse): void {
+  const end = (entity: { readonly entityType: string; readonly stableId: string }) => ({ ref: { sourceId: ref.sourceId, entityType: entity.entityType, stableId: entity.stableId }, title: entity.stableId, type: entity.entityType });
+  return json(response, 200, {
+    ref,
+    type: ref.aggregate.type,
+    semantics: 'aggregate',
+    from: end(ref.aggregate.from),
+    to: end(ref.aggregate.to),
+    members: { value: 3, quality: 'exact', scope: 'aggregate:members' },
+    observedFirst: '2026-01-01T10:00:00Z',
+    observedLast: '2026-01-03T10:00:00Z',
+    sample: { order: 'observed-newest', rows: [3, 2].map((day) => ({ observedAt: `2026-01-0${day}T10:00:00Z`, properties: [] })), more: 1 },
+    qualityFlags: [],
+    warnings: [],
   });
 }
 

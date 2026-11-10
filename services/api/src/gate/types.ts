@@ -145,6 +145,13 @@ export interface Template {
    * request holds values only. The stable ID is the parameter `stableId` (and `stableInteger`, the integer it can be).
    */
   readonly edgeLoad?: { readonly typeParam: string; readonly fromParam: string; readonly toParam: string };
+  /**
+   * The aggregate templates' own declaration, for no other template: a statement that reads the relationships of one type between two entities that no stable ID tells apart (for a type that has a `stable_id`, those whose ID cannot be used).
+   * The Cypher is the one marker `@aggregateRead(<type parameter>)`; the type is named in the request and checked, with the entity types of the two ends (the list parameter `endsParam`, the mapping row's `from`, then its `to`), against the mapping,
+   * and the gate writes the whole statement from that row. `sample` returns one row holding both ends and at most `$limit` members as their observed time and mapped properties only (never a relationship, so no element ID); `summary` returns one row
+   * with the count and the earliest and latest observed time of every member. Every name is quoted from the allowlist and the request holds values only.
+   */
+  readonly aggregateRead?: { readonly typeParam: string; readonly endsParam: string; readonly form: 'sample' | 'summary' };
   /** The names of list parameters whose elements are `{ entityType, stableId }` references: for an entity type whose references are keyed the gate reads the token in each element's stable ID before the parameters are checked. */
   readonly referenceLists?: readonly string[];
   /**

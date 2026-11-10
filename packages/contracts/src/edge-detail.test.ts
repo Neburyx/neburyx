@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { derivedEdgeDetailSchema, edgeDetailSchema, edgeRefSegmentOf, EVIDENCE_NOT_AVAILABLE, MAX_EDGE_REF_SEGMENT, parseEdgeRefSegment } from './edge-detail.js';
+import { AGGREGATE_MEMBERS_SCOPE, AGGREGATE_SAMPLE_SIZE, aggregateEdgeDetailSchema, derivedEdgeDetailSchema, edgeDetailSchema, edgeRefSegmentOf, EVIDENCE_NOT_AVAILABLE, MAX_EDGE_REF_SEGMENT, parseEdgeRefSegment } from './edge-detail.js';
 
 const REF = { sourceId: 'demo', type: 'MADE_FROM', from: 'widget', to: 'gadget', stableId: 'L-1' };
 const END = (stableId: string, entityType: string) => ({ ref: { sourceId: 'demo', entityType, stableId }, title: stableId, type: entityType });
@@ -34,7 +34,10 @@ describe('the segment of a stored edge reference', () => {
     ['bytes that are not UTF-8', 'gP8'],
     ['an unknown key', encode('{"sourceId":"demo","type":"T","from":"a","to":"b","stableId":"1","x":1}')],
     ['a missing key', encode('{"sourceId":"demo","type":"T","from":"a","to":"b"}')],
-    ['an aggregate reference', encode('{"sourceId":"demo","aggregate":{"type":"T","from":{"sourceId":"demo","entityType":"a","stableId":"1"},"to":{"sourceId":"demo","entityType":"b","stableId":"2"}}}')],
+    ['an aggregate reference with an extra field', encode('{"sourceId":"demo","aggregate":{"type":"T","from":{"sourceId":"demo","entityType":"a","stableId":"1"},"to":{"sourceId":"demo","entityType":"b","stableId":"2"}},"x":1}')],
+    ['an aggregate reference whose end is not an element reference', encode('{"sourceId":"demo","aggregate":{"type":"T","from":"a","to":{"sourceId":"demo","entityType":"b","stableId":"2"}}}')],
+    ['an aggregate reference with no type', encode('{"sourceId":"demo","aggregate":{"from":{"sourceId":"demo","entityType":"a","stableId":"1"},"to":{"sourceId":"demo","entityType":"b","stableId":"2"}}}')],
+    ['a stored and an aggregate shape mixed', encode('{"sourceId":"demo","type":"T","from":"a","to":"b","stableId":"1","aggregate":{}}')],
     ['a derived reference with an extra field', encode('{"sourceId":"demo","derived":{"ruleId":"R","from":{"sourceId":"demo","entityType":"a","stableId":"1"},"to":{"sourceId":"demo","entityType":"b","stableId":"2"},"x":1}}')],
     ['a derived reference with a missing end', encode('{"sourceId":"demo","derived":{"ruleId":"R","from":{"sourceId":"demo","entityType":"a","stableId":"1"}}}')],
     ['a number', encode('1')],
@@ -151,5 +154,87 @@ describe('the derived edge detail', () => {
     expect(derivedEdgeDetailSchema.safeParse({ ...DERIVED, supports: { ...DERIVED.supports, count: { value: 1, quality: 'lowerBound', scope: 'derived:supports' } } }).success).toBe(true);
     expect(derivedEdgeDetailSchema.safeParse({ ...DERIVED, supports: { ...DERIVED.supports, count: { value: 1, quality: 'estimated', scope: 'x' } } }).success).toBe(false);
     expect(derivedEdgeDetailSchema.safeParse({ ...DERIVED, supports: { ...DERIVED.supports, count: { quality: 'unknown', scope: 'x' } } }).success).toBe(false);
+  });
+});
+
+const AGGREGATE_REF = { sourceId: 'demo', aggregate: { type: 'PAID', from: END('W-1', 'widget').ref, to: END('GT-1', 'gadget').ref } };
+const rowsOf = (count: number) => Array.from({ length: count }, (_, index) => ({ observedAt: `2026-01-${String(index + 1).padStart(2, '0')}T00:00:00Z`, properties: [{ key: 'remark', value: 'web', dataClass: 'text' as const, masked: false }] }));
+const AGGREGATE = {
+  ref: AGGREGATE_REF,
+  type: 'PAID',
+  semantics: 'aggregate' as const,
+  from: END('W-1', 'widget'),
+  to: END('GT-1', 'gadget'),
+  members: { value: 42, quality: 'exact' as const, scope: AGGREGATE_MEMBERS_SCOPE },
+  observedFirst: '2026-01-01T00:00:00Z',
+  observedLast: '2026-02-01T00:00:00Z',
+  sample: { order: 'observed-newest' as const, rows: rowsOf(3), more: 39 },
+  qualityFlags: [],
+  warnings: [],
+};
+
+describe('the segment of an aggregate edge reference', () => {
+  it('round-trips, with the keys in a fixed order whatever the order of the object', () => {
+    const segment = edgeRefSegmentOf(AGGREGATE_REF);
+    const shuffled = { aggregate: { to: { stableId: 'GT-1', entityType: 'gadget', sourceId: 'demo' }, from: AGGREGATE_REF.aggregate.from, type: 'PAID' }, sourceId: 'demo' };
+    expect(edgeRefSegmentOf(shuffled)).toBe(segment);
+    expect(atob(segment.replaceAll('-', '+').replaceAll('_', '/').padEnd(Math.ceil(segment.length / 4) * 4, '='))).toBe(
+      '{"sourceId":"demo","aggregate":{"type":"PAID","from":{"sourceId":"demo","entityType":"widget","stableId":"W-1"},"to":{"sourceId":"demo","entityType":"gadget","stableId":"GT-1"}}}',
+    );
+    expect(parseEdgeRefSegment(segment)).toEqual(AGGREGATE_REF);
+    expect(segment.length).toBeLessThanOrEqual(MAX_EDGE_REF_SEGMENT);
+  });
+});
+
+describe('the aggregate edge detail', () => {
+  const keys = (value: object) => Object.keys(value).sort();
+
+  it('holds exactly the closed set of keys at each level', () => {
+    expect(keys(aggregateEdgeDetailSchema.shape)).toEqual(['from', 'members', 'observedFirst', 'observedLast', 'qualityFlags', 'ref', 'sample', 'semantics', 'to', 'type', 'warnings']);
+    expect(keys(aggregateEdgeDetailSchema.shape.sample.shape)).toEqual(['more', 'order', 'rows']);
+    expect(keys(aggregateEdgeDetailSchema.shape.sample.shape.rows.element.shape)).toEqual(['observedAt', 'properties']);
+  });
+
+  it.each([
+    ['an element id on the answer', { ...AGGREGATE, elementId: '4:abc:1' }],
+    ['a member reference in the sample', { ...AGGREGATE, sample: { ...AGGREGATE.sample, rows: [{ ...rowsOf(1)[0], ref: AGGREGATE_REF.aggregate.from }] } }],
+    ['a url in the sample', { ...AGGREGATE, sample: { ...AGGREGATE.sample, rows: [{ ...rowsOf(1)[0], url: 'https://example.test/x' }] } }],
+    ['a field in the sample', { ...AGGREGATE, sample: { ...AGGREGATE.sample, id: 'x' } }],
+  ])('refuses %s', (_name, detail) => {
+    expect(aggregateEdgeDetailSchema.safeParse(detail).success).toBe(false);
+  });
+
+  it('accepts an exact count whose more is the members not shown, and refuses any other', () => {
+    expect(aggregateEdgeDetailSchema.safeParse(AGGREGATE).success).toBe(true);
+    expect(aggregateEdgeDetailSchema.safeParse({ ...AGGREGATE, sample: { ...AGGREGATE.sample, more: 38 } }).success).toBe(false);
+    expect(aggregateEdgeDetailSchema.safeParse({ ...AGGREGATE, sample: { order: 'source-order', rows: rowsOf(3) } }).success).toBe(false);
+  });
+
+  it('accepts an unknown count only with no number, no more and no observed range', () => {
+    const unknown = { ...AGGREGATE, members: { quality: 'unknown' as const, scope: AGGREGATE_MEMBERS_SCOPE }, observedFirst: undefined, observedLast: undefined, sample: { order: 'source-order' as const, rows: rowsOf(3) } };
+    expect(aggregateEdgeDetailSchema.safeParse(unknown).success).toBe(true);
+    expect(aggregateEdgeDetailSchema.safeParse({ ...unknown, sample: { ...unknown.sample, more: 0 } }).success).toBe(false);
+    expect(aggregateEdgeDetailSchema.safeParse({ ...unknown, observedLast: '2026-02-01T00:00:00Z' }).success).toBe(false);
+    expect(aggregateEdgeDetailSchema.safeParse({ ...unknown, members: { value: 3, quality: 'unknown', scope: AGGREGATE_MEMBERS_SCOPE } }).success).toBe(false);
+  });
+
+  it.each([
+    ['a lower bound', { value: 42, quality: 'lowerBound', scope: AGGREGATE_MEMBERS_SCOPE }],
+    ['an estimate', { value: 42, quality: 'estimated', scope: AGGREGATE_MEMBERS_SCOPE }],
+    ['another scope', { value: 42, quality: 'exact', scope: 'expand:neighbors' }],
+  ])('refuses a count that is %s', (_name, members) => {
+    expect(aggregateEdgeDetailSchema.safeParse({ ...AGGREGATE, members }).success).toBe(false);
+  });
+
+  it('refuses more rows than the sample size and accepts that many', () => {
+    const full = { ...AGGREGATE, members: { value: 100, quality: 'exact' as const, scope: AGGREGATE_MEMBERS_SCOPE } };
+    expect(aggregateEdgeDetailSchema.safeParse({ ...full, sample: { order: 'source-order', rows: rowsOf(AGGREGATE_SAMPLE_SIZE), more: 75 } }).success).toBe(true);
+    expect(aggregateEdgeDetailSchema.safeParse({ ...full, sample: { order: 'source-order', rows: rowsOf(AGGREGATE_SAMPLE_SIZE + 1), more: 74 } }).success).toBe(false);
+  });
+
+  it('is told apart from a stored and a derived answer by its semantics', () => {
+    expect(edgeDetailSchema.parse(AGGREGATE).semantics).toBe('aggregate');
+    expect(edgeDetailSchema.parse(DETAIL).semantics).toBe('stored');
+    expect(edgeDetailSchema.safeParse({ ...AGGREGATE, semantics: 'stored' }).success).toBe(false);
   });
 });

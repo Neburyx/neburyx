@@ -29,7 +29,7 @@ function EvidenceDock({ evidence }: { readonly evidence: Evidence }) {
   const choice = useStoreSelector(evidence.choices, (current) => current);
   const selection = useStoreSelector(state.presentation.view, (current) => current.selection);
   if (edge === undefined) return null;
-  return <EvidencePanelView edge={edge} kinds={evidence.kinds} mask={mask} selected={selection.size === 1 && selection.has(edgeKey(edge))} choice={choice} onClose={evidence.close} />;
+  return <EvidencePanelView edge={edge} kinds={evidence.kinds} mask={mask} selected={selection.size === 1 && selection.has(edgeKey(edge))} choice={choice} onClose={evidence.close} onOpen={(ref) => void evidence.reopen(ref)} />;
 }
 
 /**

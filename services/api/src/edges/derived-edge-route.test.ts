@@ -209,7 +209,7 @@ describe('the refusals of a derived relationship', () => {
     expect(withoutTrace(response.body)).toBe(withoutTrace((await get((await started({ rows: [] })).app, urlOf(REF))).body));
   });
 
-  it('is INVALID_REQUEST, and reads nothing, for a rule not in the mapping, ends of the wrong types, the same entity at both ends, an end of another source and an aggregate reference', async () => {
+  it('is INVALID_REQUEST, and reads nothing, for a rule not in the mapping, ends of the wrong types, the same entity at both ends and an end of another source', async () => {
     const { app, executor } = await started({ rows: chains(1) });
     const refs = [
       { ...REF, derived: { ...REF.derived, ruleId: 'unknown' } },
@@ -218,9 +218,6 @@ describe('the refusals of a derived relationship', () => {
       { ...REF, derived: { ...REF.derived, to: { ...end('A-2'), sourceId: 'other' } } },
     ];
     for (const ref of refs) expect((await get(app, urlOf(ref))).statusCode).toBe(400);
-    const aggregate = { sourceId: 'demo', aggregate: { type: 'USES_TOOL', from: end('A-1'), to: end('T-1', 'tool') } };
-    const segment = Buffer.from(JSON.stringify(aggregate)).toString('base64url');
-    expect((await get(app, `/v1/edges/${segment}`)).statusCode).toBe(400);
     expect(reads(executor)).toHaveLength(0);
   });
 });

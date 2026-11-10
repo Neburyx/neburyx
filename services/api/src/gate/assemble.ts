@@ -17,6 +17,7 @@ import { degreePreviewBoundedTemplate, degreePreviewCheapTemplate } from './temp
 import { degreeProbeTemplate } from './templates/degree-probe.js';
 import { derivedEdgeSupportTemplate } from './templates/derived-edge-support.js';
 import { derivedRuleRunTemplate } from './templates/derived-rule-run.js';
+import { aggregateSampleTemplate, aggregateSummaryTemplate } from './templates/aggregate-evidence.js';
 import { edgeLoadTemplate } from './templates/edge-load.js';
 import { entityLoadTemplate } from './templates/entity-load.js';
 import { expandCountTemplate } from './templates/expand-count.js';
@@ -51,7 +52,7 @@ export interface AssembleOptions {
 }
 
 export function defaultCatalogTemplates(): readonly TemplateDefinition[] {
-  return [connectivityTemplate, capabilitiesTemplate, privilegesTemplate, schemaTokensTemplate, schemaIndexesTemplate, stableIdDuplicatesTemplate, degreeProbeTemplate, degreePreviewBoundedTemplate, degreePreviewCheapTemplate, entityLoadTemplate, edgeLoadTemplate, expandNeighborsTemplate, expandCountTemplate, searchExactTemplate, searchRelatedTemplate, searchEvidenceTemplate, searchFacetsTemplate, searchPrefixTemplate, relatedContextTemplate, derivedRuleRunTemplate, derivedEdgeSupportTemplate];
+  return [connectivityTemplate, capabilitiesTemplate, privilegesTemplate, schemaTokensTemplate, schemaIndexesTemplate, stableIdDuplicatesTemplate, degreeProbeTemplate, degreePreviewBoundedTemplate, degreePreviewCheapTemplate, entityLoadTemplate, edgeLoadTemplate, expandNeighborsTemplate, expandCountTemplate, searchExactTemplate, searchRelatedTemplate, searchEvidenceTemplate, searchFacetsTemplate, searchPrefixTemplate, relatedContextTemplate, derivedRuleRunTemplate, derivedEdgeSupportTemplate, aggregateSampleTemplate, aggregateSummaryTemplate];
 }
 
 export function defaultCatalog(): TemplateCatalog {

@@ -77,15 +77,57 @@ export const derivedEdgeDetailSchema = z
     path: ['supports', 'count'],
   });
 
-export const edgeDetailSchema = z.discriminatedUnion('semantics', [storedEdgeDetailSchema, derivedEdgeDetailSchema]);
+/** The most members an aggregate answer samples; a source that lowered `max_page` lowers it. */
+export const AGGREGATE_SAMPLE_SIZE = 25;
+
+/** The scope of an aggregate's member count: every relationship of the type between the two ends, whatever filters a view applied. */
+export const AGGREGATE_MEMBERS_SCOPE = 'aggregate:members';
+
+/** `observed-newest`: the rows are newest first by observed time. `source-order`: the first members the source returned, in no order the product chose, which says nothing about time. */
+export const AGGREGATE_SAMPLE_ORDERS = ['observed-newest', 'source-order'] as const;
+
+/** One sampled member: its observed time and its mapped properties. It has no identifier, reference or link. */
+export const aggregateSampleRowSchema = z.strictObject({ observedAt: text.optional(), properties: z.array(propertySchema) });
+
+/** What `GET /v1/edges/{ref}` answers for an aggregate edge. The count is `exact` or `unknown` (no number, the first and last observed time and `more` then absent); the sample is bounded and never paged. */
+export const aggregateEdgeDetailSchema = z
+  .strictObject({
+    ref: aggregateEdgeRefSchema,
+    type: text,
+    semantics: z.literal('aggregate'),
+    from: edgeEndSchema,
+    to: edgeEndSchema,
+    members: countSchema,
+    observedFirst: text.optional(),
+    observedLast: text.optional(),
+    sample: z.strictObject({ order: z.enum(AGGREGATE_SAMPLE_ORDERS), rows: z.array(aggregateSampleRowSchema).max(AGGREGATE_SAMPLE_SIZE), more: z.number().int().nonnegative().optional() }),
+    qualityFlags: z.array(z.string()),
+    warnings: z.array(z.string()),
+  })
+  .refine((detail) => detail.members.scope === AGGREGATE_MEMBERS_SCOPE && (detail.members.quality === 'exact' || detail.members.quality === 'unknown'), {
+    message: 'the member count is exact or unknown and has the aggregate scope',
+    path: ['members'],
+  })
+  .refine(
+    (detail) =>
+      detail.members.quality === 'exact'
+        ? detail.members.value !== undefined && detail.sample.more === detail.members.value - detail.sample.rows.length
+        : detail.sample.more === undefined && detail.observedFirst === undefined && detail.observedLast === undefined,
+    { message: 'an exact count has more equal to the members not shown; an unknown count has no more and no observed range', path: ['sample', 'more'] },
+  );
+
+export const edgeDetailSchema = z.discriminatedUnion('semantics', [storedEdgeDetailSchema, derivedEdgeDetailSchema, aggregateEdgeDetailSchema]);
 
 export type StoredEdgeDetail = z.infer<typeof storedEdgeDetailSchema>;
 export type DerivedEdgeDetail = z.infer<typeof derivedEdgeDetailSchema>;
 export type DerivedEdgeRef = z.infer<typeof derivedEdgeRefSchema>;
+export type AggregateEdgeRef = z.infer<typeof aggregateEdgeRefSchema>;
+export type AggregateEdgeDetail = z.infer<typeof aggregateEdgeDetailSchema>;
+export type AggregateSampleRow = z.infer<typeof aggregateSampleRowSchema>;
 export type DerivedSupport = z.infer<typeof derivedSupportSchema>;
 export type DerivedSupportGroup = z.infer<typeof derivedSupportGroupSchema>;
-/** A reference `GET /v1/edges/{ref}` answers: a stored or a derived one. */
-export type EdgeReadRef = StoredEdgeRef | DerivedEdgeRef;
+/** A reference `GET /v1/edges/{ref}` answers: a stored, a derived or an aggregate one. */
+export type EdgeReadRef = StoredEdgeRef | DerivedEdgeRef | AggregateEdgeRef;
 
 export type EdgeEnd = z.infer<typeof edgeEndSchema>;
 export type EdgeEvidenceRecord = z.infer<typeof edgeEvidenceRecordSchema>;
@@ -97,22 +139,26 @@ const SEGMENT_KEYS = ['sourceId', 'type', 'from', 'to', 'stableId'] as const;
 
 const orderedEnd = (ref: ElementRef): ElementRef => ({ sourceId: ref.sourceId, entityType: ref.entityType, stableId: ref.stableId });
 
-/** The path segment of a stored or derived edge reference: the unpadded base64url text of its JSON, the keys in a fixed order and no whitespace. The caller percent-encodes it for a URL. */
+/** The path segment of a stored, derived or aggregate edge reference: the unpadded base64url text of its JSON, the keys in a fixed order and no whitespace. The caller percent-encodes it for a URL. */
 export function edgeRefSegmentOf(ref: EdgeReadRef): string {
   const ordered = 'derived' in ref
     ? { sourceId: ref.sourceId, derived: { ruleId: ref.derived.ruleId, from: orderedEnd(ref.derived.from), to: orderedEnd(ref.derived.to) } }
-    : Object.fromEntries(SEGMENT_KEYS.map((key) => [key, ref[key]]));
+    : 'aggregate' in ref
+      ? { sourceId: ref.sourceId, aggregate: { type: ref.aggregate.type, from: orderedEnd(ref.aggregate.from), to: orderedEnd(ref.aggregate.to) } }
+      : Object.fromEntries(SEGMENT_KEYS.map((key) => [key, ref[key]]));
   return segmentOfJson(ordered);
 }
 
-/** The stored or derived reference a segment holds, or undefined for anything else: text over the bound, a character outside the unpadded base64url alphabet, text that is not JSON, an aggregate reference or JSON the reference schemas refuse. */
+/** The stored, derived or aggregate reference a segment holds, or undefined for anything else: text over the bound, a character outside the unpadded base64url alphabet, text that is not JSON, or JSON the reference schemas refuse. */
 export function parseEdgeRefSegment(segment: string): EdgeReadRef | undefined {
   const json = jsonOfSegment(segment, MAX_EDGE_REF_SEGMENT);
   if (json === undefined) return undefined;
   const stored = storedEdgeRefSchema.safeParse(json);
   if (stored.success) return stored.data;
   const derived = derivedEdgeRefSchema.safeParse(json);
-  return derived.success ? derived.data : undefined;
+  if (derived.success) return derived.data;
+  const aggregate = aggregateEdgeRefSchema.safeParse(json);
+  return aggregate.success ? aggregate.data : undefined;
 }
 
 /** What the path of the route holds: the one segment, parsed by `parseEdgeRefSegment` in the route. */

@@ -1,6 +1,7 @@
 import { act, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { EdgeRef } from '@neburyx/contracts';
+import { createEvidence } from './evidence.js';
 import { createEvidenceKindRegistry, kindOf } from './evidence-kinds.js';
 import { storedEvidenceKind } from './stored-evidence.js';
 import { answerEdge, detailOf, evidenceRig, failEdge, inPanel, keyOf, openOn, OWNS, panel, SENT, SUMMED, selectEdge } from './evidence-kit.js';
@@ -69,9 +70,11 @@ describe('the relationship evidence panel', () => {
 
   it('is offered for no relationship that no kind builds, and opens nothing for it', () => {
     const rig = evidenceRig();
-    expect(rig.evidence.offers(SUMMED.ref)).toBe(false);
+    const bare = createEvidence();
+    expect(bare.offers(SUMMED.ref)).toBe(false);
+    expect(rig.evidence.offers(SUMMED.ref)).toBe(true);
     let opened = true;
-    act(() => void (opened = rig.evidence.open(SUMMED.ref)));
+    act(() => void (opened = bare.open(SUMMED.ref)));
     expect(opened).toBe(false);
     expect(panel()).toBeNull();
     expect(rig.edgeCalls).toEqual([]);
@@ -96,7 +99,7 @@ describe('the relationship evidence panel', () => {
     rig.unbind();
   });
 
-  it('keeps the same relationship and reads nothing more when the selection becomes none, an entity, several or an aggregate', async () => {
+  it('keeps the same relationship and reads nothing more when the selection becomes none, an entity or several', async () => {
     const rig = evidenceRig();
     selectEdge(rig, OWNS);
     openOn(rig, OWNS);
@@ -107,7 +110,6 @@ describe('the relationship evidence panel', () => {
     act(() => rig.state.presentation.select([keyOf('n1'), keyOf('n2')]));
     expect(inPanel().getByText('R-e1')).toBeTruthy();
     act(() => rig.state.presentation.select([keyOf('n1')]));
-    selectEdge(rig, SUMMED);
     expect(inPanel().getByText('R-e1')).toBeTruthy();
     expect(rig.edgeCalls).toHaveLength(1);
     rig.unbind();

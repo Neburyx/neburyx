@@ -1,5 +1,5 @@
 import { act, screen, within } from '@testing-library/react';
-import type { DerivedEdgeDetail, EdgeDetail, GraphEdge, StoredEdgeDetail } from '@neburyx/contracts';
+import type { AggregateEdgeDetail, DerivedEdgeDetail, EdgeDetail, GraphEdge, StoredEdgeDetail } from '@neburyx/contracts';
 import { failure, entity, inspectorRig, keyOf, type Ask, type RigOptions } from '../inspector/inspector-kit.js';
 import { aggregateEdge, at, derivedEdge, stored } from '../inspector/relationship-kit.js';
 import { TYPE } from '../inspector/inspector-kit.js';
@@ -76,6 +76,28 @@ export function derivedDetailOf(overrides: Partial<DerivedEdgeDetail> = {}): Der
         { middle: [end('m1')], supports: [storedSupport('s1', 'n1', 'm1', [{ sourceRecordId: 'AUTH-1', linkable: false }, { sourceRecordId: 'AUTH-2', linkable: false }]), storedSupport('s2', 'n3', 'm1', [])] },
         { middle: [end('m2')], supports: [storedSupport('s3', 'n1', 'm2'), aggregate] },
       ],
+    },
+    qualityFlags: [],
+    warnings: [],
+    ...overrides,
+  };
+}
+
+/** The answer for the aggregate of the rig (PAID, n2 to n3): an exact count of 42, three sampled members newest first and the rest as more. */
+export function aggregateDetailOf(overrides: Partial<AggregateEdgeDetail> = {}): AggregateEdgeDetail {
+  return {
+    ref: { sourceId: 'a', aggregate: { type: 'PAID', from: at('n2'), to: at('n3') } },
+    type: 'PAID',
+    semantics: 'aggregate',
+    from: end('n2'),
+    to: end('n3'),
+    members: { value: 42, quality: 'exact', scope: 'aggregate:members' },
+    observedFirst: '2026-01-01T10:00:00Z',
+    observedLast: '2026-01-28T10:00:00Z',
+    sample: {
+      order: 'observed-newest',
+      rows: [28, 27, 26].map((day) => ({ observedAt: `2026-01-${day}T10:00:00Z`, properties: [{ key: 'remark', value: 'web', dataClass: 'text' as const, masked: false }] })),
+      more: 39,
     },
     qualityFlags: [],
     warnings: [],

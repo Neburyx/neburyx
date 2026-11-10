@@ -100,10 +100,10 @@ const orderOf = (rank: ExpandRank | undefined): Order =>
   rank === undefined ? { rank, after: '<', direction: 'DESC', kind: 'tk', value: 'ts' } : { rank, after: rank.order === 'asc' ? '>' : '<', direction: rank.order === 'asc' ? 'ASC' : 'DESC', kind: 'sk', value: 'sv' };
 
 /** The kinds of sort value that the order can compare, and the rank each has: values of different kinds are never compared, the kind's rank orders them. Any other value is read as no sort value. */
-const supported = (value: string): string =>
+export const supported = (value: string): string =>
   `(${['ZONED DATETIME', 'LOCAL DATETIME', 'DATE', 'ZONED TIME', 'LOCAL TIME', 'INTEGER', 'FLOAT', 'STRING'].map((kind) => `${value} IS :: ${kind} NOT NULL`).join(' OR ')})`;
 
-const kindRank = (value: string): string =>
+export const kindRank = (value: string): string =>
   `CASE WHEN ${value} IS :: ZONED DATETIME NOT NULL THEN 1 WHEN ${value} IS :: LOCAL DATETIME NOT NULL THEN 2 WHEN ${value} IS :: DATE NOT NULL THEN 3 WHEN ${value} IS :: ZONED TIME NOT NULL THEN 4 WHEN ${value} IS :: LOCAL TIME NOT NULL THEN 5 WHEN ${value} IS :: INTEGER NOT NULL OR ${value} IS :: FLOAT NOT NULL THEN 6 ELSE 7 END`;
 
 const SORT_VALUE_OF_CURSOR =
@@ -116,7 +116,7 @@ function afterCursor(phase: number, dated: boolean, sort: string, id: string, rt
   return `($cursor IS NULL OR ${phase} > $cursor.phase OR (${phase} = $cursor.phase AND ${same}))`;
 }
 
-const usable = (id: string): string => `((${id} IS :: STRING NOT NULL AND ${id} <> '') OR ${id} IS :: INTEGER NOT NULL)`;
+export const usable = (id: string): string => `((${id} IS :: STRING NOT NULL AND ${id} <> '') OR ${id} IS :: INTEGER NOT NULL)`;
 
 const patternOf = (branch: ExpandBranch, neighborLabel: string): string =>
   branch.direction === 'out' ? `(a)-[r:${quoteName(branch.type)}]->(m:${quoteName(neighborLabel)})` : `(a)<-[r:${quoteName(branch.type)}]-(m:${quoteName(neighborLabel)})`;

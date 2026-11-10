@@ -65,7 +65,7 @@ function checkMarkers(definition: TemplateDefinition, shape: Shape): void {
   const degree = markersOf(definition.cypher).filter((marker) => marker.kind === 'degreeCounts');
   // a degree statement reads the entity type's label and stable ID property, so its parameter counts as used by an entity marker and a stable id marker
   const used = [
-    ...markersOf(definition.cypher).filter((marker) => marker.kind !== 'searchBranches' && marker.kind !== 'facetProbes' && marker.kind !== 'degreeCounts' && marker.kind !== 'expandNeighbors' && marker.kind !== 'relatedContext' && marker.kind !== 'edgeLoad' && marker.kind !== 'derivedRule' && marker.kind !== 'derivedSupport'),
+    ...markersOf(definition.cypher).filter((marker) => marker.kind !== 'searchBranches' && marker.kind !== 'facetProbes' && marker.kind !== 'degreeCounts' && marker.kind !== 'expandNeighbors' && marker.kind !== 'relatedContext' && marker.kind !== 'edgeLoad' && marker.kind !== 'derivedRule' && marker.kind !== 'derivedSupport' && marker.kind !== 'aggregateRead'),
     ...markersOf(definition.cypher).filter((marker) => marker.kind === 'derivedRule').flatMap(() => (definition.derivedRule === undefined ? [] : [{ kind: 'entity' as const, name: definition.derivedRule.entityTypeParam }, { kind: 'stableId' as const, name: definition.derivedRule.entityTypeParam }])),
     ...markersOf(definition.cypher).filter((marker) => marker.kind === 'expandNeighbors').flatMap((marker) => [{ kind: 'entity' as const, name: marker.name }, { kind: 'stableId' as const, name: marker.name }]),
     ...degree.flatMap((marker) => [{ kind: 'entity' as const, name: marker.name }, { kind: 'stableId' as const, name: marker.name }]),
@@ -299,6 +299,25 @@ function checkEdgeLoad(definition: TemplateDefinition, shape: Shape): void {
   if (definition.indexNeeds === undefined || definition.usedProperties === undefined) throw new CatalogError(definition.id, 'declares an edge load and does not name its index and its properties');
 }
 
+/**
+ * The aggregate templates' own declaration: its Cypher is exactly the one `@aggregateRead(<type parameter>)` marker, its schema has the type as text and the two ends as a list that it reads back as references, it returns one row
+ * (`rows: 'one'`), it is not paged and not profiled, and it names the stable-ID indexes it needs and the properties it uses.
+ */
+function checkAggregateRead(definition: TemplateDefinition, shape: Shape): void {
+  const used = markersOf(definition.cypher).filter((marker) => marker.kind === 'aggregateRead');
+  const spec = definition.aggregateRead;
+  if (spec === undefined) {
+    if (used.length > 0) throw new CatalogError(definition.id, 'uses the aggregate read marker without declaring an aggregate read');
+    return;
+  }
+  if (used.length !== 1 || used[0]?.name !== spec.typeParam || definition.cypher !== `@aggregateRead(${spec.typeParam})`) throw new CatalogError(definition.id, 'declares an aggregate read and its Cypher is not exactly its one aggregate read marker');
+  if (shape.properties.get(spec.typeParam) !== 'string' || shape.properties.get(spec.endsParam) !== 'array' || definition.referenceLists?.includes(spec.endsParam) !== true) throw new CatalogError(definition.id, 'declares an aggregate read for parameters its schema does not have as text and a list, or does not list the ends as reference lists');
+  if (definition.searchBranches !== undefined || definition.facetProbes !== undefined || definition.degreeCounts !== undefined || definition.expandNeighbors !== undefined || definition.relatedContext !== undefined || definition.derivedRule !== undefined || definition.edgeLoad !== undefined || definition.paged || definition.profile === true || definition.rows !== 'one') {
+    throw new CatalogError(definition.id, "declares an aggregate read and is also another kind of template, paged, profiled or not declared rows: 'one'");
+  }
+  if (definition.indexNeeds === undefined || definition.usedProperties === undefined) throw new CatalogError(definition.id, 'declares an aggregate read and does not name its indexes and the properties it uses');
+}
+
 /** A template that reads a node by its reference names two parameters its schema has: the entity type (a declared entity parameter) and the stable ID. */
 function checkReferenceParams(definition: TemplateDefinition, shape: Shape): void {
   const names = definition.referenceParams;
@@ -331,6 +350,7 @@ function build(definition: TemplateDefinition): Template {
   checkDerivedRule(definition, shape);
   checkDerivedSupport(definition, shape);
   checkEdgeLoad(definition, shape);
+  checkAggregateRead(definition, shape);
   checkReferenceParams(definition, shape);
   checkGateParameters(definition, shape);
   const integerParameters = [...shape.properties].flatMap(([name, type]) => (type === 'integer' ? [name] : []));

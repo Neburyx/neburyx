@@ -50,3 +50,32 @@ export function groupsCountText(value: number, quality: 'exact' | 'lowerBound'):
   const unit = value === 1 ? 'group' : 'groups';
   return quality === 'exact' ? `${value} ${unit} · exact` : `≥ ${value} ${unit} · lower bound`;
 }
+
+export const AGGREGATE_RELATIONSHIP = 'Aggregate relationship';
+export const NO_STABLE_ID_SENTENCE = 'The source has no stable ID for this relationship type.';
+export const FIRST_OBSERVED_LABEL = 'First observed';
+export const LAST_OBSERVED_LABEL = 'Last observed';
+export const MEMBERS_LABEL = 'Members';
+export const SAMPLE_ORDER_LABEL = 'Sample order';
+export const MEMBERS_NOT_COUNTED = 'Members · not counted';
+export const OPEN_AGGREGATE_EVIDENCE = 'Evidence';
+export const EMPTY_MEMBER = 'No observed time or mapped property to show';
+
+/** The sentence for an aggregate of a type that has a stable ID in the mapping but whose relationships here have none the source can use. */
+export const unusableIdSentence = (type: string): string => `These ${type} relationships have no usable stable ID in the source.`;
+
+/** The line that says what the member count covers: every relationship of the type between the two ends, whatever filters the view applied. */
+export const membersScopeLine = (type: string): string => `Counts every ${type} relationship between these two, whatever the view's filters.`;
+
+export const membersText = (value: number): string => `${MEMBERS_LABEL} ${value.toLocaleString('en-US')} · exact`;
+
+/** The heading of the sample, which names the order that was used and says "most recent" only when the rows are ordered by observed time. */
+export function sampleHeading(order: 'observed-newest' | 'source-order', shown: number): string {
+  return order === 'observed-newest' ? `Sample · first ${shown} by most recent observed time` : `Sample · ${shown} ${shown === 1 ? 'member' : 'members'}, in the source's order`;
+}
+
+export const sampleOrderText = (order: 'observed-newest' | 'source-order'): string => (order === 'observed-newest' ? 'Most recent observed time first' : "The source's order");
+
+export const moreInSampleLine = (more: number): string => `… ${more.toLocaleString('en-US')} more in this sample. There is no paging.`;
+
+export const aggregateEvidenceLabel = (type: string, from: string, to: string): string => `Evidence of ${type}: ${from} → ${to}`;

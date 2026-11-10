@@ -21,12 +21,14 @@ export interface EvidencePanelViewProps {
   /** Whether the relationship shown is the one selected on the canvas, which the caption says. */
   readonly selected: boolean;
   readonly onClose: () => void;
+  /** Opens the panel on another relationship, as the host does when a relationship is chosen. */
+  readonly onOpen?: (ref: EdgeRef) => void;
   /** Changes each time the person chooses to open the panel; the panel then takes focus. Left as it is, it takes none. */
   readonly choice: number;
 }
 
 /** The relationship evidence panel as every host draws it: the heading, the ends, the sub-tabs and the content of the kind that builds this relationship's evidence. */
-export function EvidencePanelView({ edge, kinds, mask, selected, onClose, choice }: EvidencePanelViewProps) {
+export function EvidencePanelView({ edge, kinds, mask, selected, onClose, onOpen, choice }: EvidencePanelViewProps) {
   const registered = useEvidenceKinds(kinds);
   const kind = kindOf(registered, edge);
   const [tab, setTab] = useState<TabId>('evidence');
@@ -47,7 +49,7 @@ export function EvidencePanelView({ edge, kinds, mask, selected, onClose, choice
     setTab(next.id);
     queueMicrotask(() => document.getElementById(`evidence-tab-${next.id}`)?.focus());
   };
-  const props = { edge, mask };
+  const props = { edge, mask, ...(onOpen === undefined ? {} : { open: onOpen }) };
   return (
     <div
       className="evidence-panel"

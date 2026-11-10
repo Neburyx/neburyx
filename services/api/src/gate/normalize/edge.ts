@@ -44,7 +44,7 @@ type Slot =
 export type EdgeDirection = GraphEdge['direction'];
 
 /** The time of a stored edge as the source gave it: a temporal value as its text, text as it is. */
-function observedText(value: unknown): string | undefined {
+export function observedText(value: unknown): string | undefined {
   const described = describeValue(value);
   return described.value === undefined || typeof described.value !== 'string' || described.value === '' ? undefined : described.value;
 }

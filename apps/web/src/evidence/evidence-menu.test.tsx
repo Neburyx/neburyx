@@ -31,10 +31,12 @@ describe('the relationship menu', () => {
     rig.unbind();
   });
 
-  it('lists neither for a relationship no evidence kind builds', () => {
+  it('lists both for an aggregate relationship, whose evidence a kind builds', () => {
     const rig = evidenceRig();
     openMenu(rig, SUMMED);
-    expect(screen.queryByRole('menu')?.querySelectorAll('[role="menuitem"]').length ?? 0).toBe(0);
+    const labels = [...(screen.queryByRole('menu')?.querySelectorAll('[role="menuitem"]') ?? [])].map((item) => item.textContent ?? '');
+    expect(labels.some((label) => label.includes('Why is this relationship here?'))).toBe(true);
+    expect(labels.some((label) => label.includes('View supporting records'))).toBe(true);
     rig.unbind();
   });
 

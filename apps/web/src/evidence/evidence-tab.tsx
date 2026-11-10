@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ComponentType } from 'react';
+import type { EdgeRef } from '@neburyx/contracts';
 import { FALLBACK_PAGE_SIZE } from '../api/expand-store.js';
 import { useProfileWhenProvided } from '../canvas/profile-context.js';
 import { SHOW_MORE } from '../inspector/copy.js';
@@ -10,6 +11,8 @@ import { useStoreSelector } from '../state/store.js';
 import { usePreviewStoreWhenProvided } from '../workspace/preview-context.js';
 import { NO_EVIDENCE_RELATIONSHIPS_DRAWN } from './copy.js';
 import type { Evidence } from './evidence.js';
+
+const formRank = (ref: EdgeRef): number => ('derived' in ref ? 2 : 'aggregate' in ref ? 1 : 0);
 
 /** The inspector's Evidence tab: the stored relationships of the entity that are drawn, each a way to open its evidence. Client data only. */
 export function evidenceTabFor(evidence: Evidence): ComponentType<InspectorTabProps> {
@@ -37,7 +40,7 @@ export function evidenceTabFor(evidence: Evidence): ComponentType<InspectorTabPr
       if (!evidence.offers(edge.ref) || (elementKey(edge.from) !== key && elementKey(edge.to) !== key)) return [];
       const other = byKey.get(elementKey(edge.from) === key ? elementKey(edge.to) : elementKey(edge.from));
       return other === undefined ? [] : [{ key: edgeKey(edge.ref), ref: edge.ref, type: edge.type, other }];
-    }).sort((left, right) => Number('derived' in left.ref) - Number('derived' in right.ref));
+    }).sort((left, right) => formRank(left.ref) - formRank(right.ref));
     const typeName = (type: string): string => profile?.entityTypes.find((entry) => entry.type === type)?.displayName ?? type;
     const shown = pages * pageSize;
     const current = target === undefined ? undefined : edgeKey(target);

@@ -1,8 +1,10 @@
-import { DERIVED_NEIGHBOR_CAP, EVIDENCE_NOT_AVAILABLE, NO_STABLE_ID, type DerivedEdgeDetail, type DerivedEdgeRef, type DerivedSupport, type DerivedSupportGroup, type EdgeDetail, type EdgeEnd, type EdgeReadRef, type ElementRef, type GraphEdge, type GraphNode, type StoredEdgeDetail, type StoredEdgeRef } from '@neburyx/contracts';
+import { AGGREGATE_MEMBERS_SCOPE, AGGREGATE_SAMPLE_SIZE, DERIVED_NEIGHBOR_CAP, EVIDENCE_NOT_AVAILABLE, NO_STABLE_ID, type AggregateEdgeDetail, type AggregateEdgeRef, type DerivedEdgeDetail, type DerivedEdgeRef, type DerivedSupport, type DerivedSupportGroup, type EdgeDetail, type EdgeEnd, type EdgeReadRef, type ElementRef, type GraphEdge, type GraphNode, type StoredEdgeDetail, type StoredEdgeRef } from '@neburyx/contracts';
 import { AppError } from '../errors.js';
+import { isAggregateSample, isAggregateSummary } from '../gate/normalize/aggregate.js';
 import { isNormalizedSupports } from '../gate/normalize/derived-run.js';
 import { isNormalizedEvidence, type Normalized } from '../gate/normalize/index.js';
 import { canonicalJson } from '../gate/cursor/binding.js';
+import { AGGREGATE_SAMPLE_ID, AGGREGATE_SUMMARY_ID, aggregateSampleTemplate } from '../gate/templates/aggregate-evidence.js';
 import { DERIVED_EDGE_SUPPORT_ID, derivedEdgeSupportTemplate } from '../gate/templates/derived-edge-support.js';
 import { EDGE_LOAD_ID, edgeLoadTemplate } from '../gate/templates/edge-load.js';
 import type { Gate } from '../gate/types.js';
@@ -25,6 +27,7 @@ export interface EdgeReadRequest {
 export interface EdgeReader {
   read(request: EdgeReadRequest & { readonly ref: StoredEdgeRef }): Promise<StoredEdgeDetail>;
   read(request: EdgeReadRequest & { readonly ref: DerivedEdgeRef }): Promise<DerivedEdgeDetail>;
+  read(request: EdgeReadRequest & { readonly ref: AggregateEdgeRef }): Promise<AggregateEdgeDetail>;
   read(request: EdgeReadRequest): Promise<EdgeDetail>;
 }
 
@@ -62,6 +65,29 @@ async function readThroughGate(gate: Gate, request: EdgeReadRequest & { readonly
 }
 
 const SUPPORTS_SCOPE = 'derived:supports';
+
+export const COUNT_TIMED_OUT_WARNING = "The member count and observed range could not be read within the source's time limit.";
+export const COUNT_BUSY_WARNING = 'The member count and observed range could not be read because the source was busy.';
+export const COUNT_CHANGED_WARNING = 'The member count changed while the sample was read, so it is not shown.';
+
+/** One of the two reads of an aggregate through the gate; a read the gate refuses answers `NOT_FOUND`, as the stored read does. */
+async function readAggregateThroughGate(gate: Gate, request: EdgeReadRequest, ref: AggregateEdgeRef, templateId: string, limit: number) {
+  try {
+    return await gate.run({
+      traceId: request.traceId,
+      principal: request.principal,
+      sourceId: ref.sourceId,
+      templateId,
+      params: { type: ref.aggregate.type, ends: [ref.aggregate.from, ref.aggregate.to] },
+      limit,
+      mask: request.mask,
+      ...(request.signal === undefined ? {} : { signal: request.signal }),
+    });
+  } catch (error) {
+    if (error instanceof AppError && error.code === 'ACCESS_DENIED') throw new AppError('NOT_FOUND');
+    throw error;
+  }
+}
 
 const sameEntity = (left: ElementRef, right: ElementRef): boolean => sameRef(left, right);
 
@@ -159,9 +185,55 @@ export function createEdgeReader(deps: { readonly gate: Gate; readonly mapping: 
     };
   }
 
+  async function readAggregate(request: EdgeReadRequest & { readonly ref: AggregateEdgeRef }): Promise<AggregateEdgeDetail> {
+    const { ref } = request;
+    await deps.access.require({ traceId: request.traceId, principal: request.principal, sourceId: ref.sourceId, auditAction: aggregateSampleTemplate.auditAction, ...(request.rate === undefined ? {} : { rate: request.rate }) });
+    const { type, from, to } = ref.aggregate;
+    const source = deps.mapping.sources.find((candidate) => candidate.id === ref.sourceId);
+    const row = source?.relationships.find((candidate) => candidate.type === type && candidate.from === from.entityType && candidate.to === to.entityType);
+    if (source === undefined || row === undefined || from.sourceId !== ref.sourceId || to.sourceId !== ref.sourceId) throw new AppError('INVALID_REQUEST');
+    // the sample is the size of the effective cap: a source that lowered `max_page` lowers it, a raised one does not raise it
+    const sampleSize = Math.min(AGGREGATE_SAMPLE_SIZE, source.budgets.maxPage);
+    const sampled = (await readAggregateThroughGate(deps.gate, request, ref, AGGREGATE_SAMPLE_ID, sampleSize)).items[0];
+    if (sampled === undefined) throw new AppError('NOT_FOUND');
+    if (!isAggregateSample(sampled)) throw new AppError('INTERNAL_ERROR');
+    const { rows, order } = sampled.aggregateSample;
+    if (rows.length === 0) throw new AppError('NOT_FOUND');
+    // an end the redact stage took out of the result is one the person may not see: the same answer as a missing one
+    if (!sampled.nodes.some((node) => sameRef(node.ref, from)) || !sampled.nodes.some((node) => sameRef(node.ref, to))) throw new AppError('NOT_FOUND');
+    let summary: { readonly members?: number; readonly first?: string; readonly last?: string; readonly mixed: boolean } | undefined;
+    let warning: string | undefined;
+    try {
+      const item = (await readAggregateThroughGate(deps.gate, request, ref, AGGREGATE_SUMMARY_ID, 1)).items[0];
+      if (item !== undefined && !isAggregateSummary(item)) throw new AppError('INTERNAL_ERROR');
+      summary = item?.aggregateSummary;
+    } catch (error) {
+      if (!(error instanceof AppError) || (error.code !== 'QUERY_TIMEOUT' && error.code !== 'SOURCE_BUSY')) throw error;
+      warning = error.code === 'QUERY_TIMEOUT' ? COUNT_TIMED_OUT_WARNING : COUNT_BUSY_WARNING;
+    }
+    const counted = summary?.members !== undefined && summary.members >= rows.length ? summary.members : undefined;
+    if (warning === undefined && counted === undefined) warning = COUNT_CHANGED_WARNING;
+    const flags = row.stableId === undefined ? [] : [NO_STABLE_ID];
+    const range = counted === undefined || summary === undefined ? {} : { ...(summary.first === undefined ? {} : { observedFirst: summary.first }), ...(summary.last === undefined ? {} : { observedLast: summary.last }) };
+    return {
+      ref,
+      type,
+      semantics: 'aggregate',
+      from: endOf(sampled.nodes, from),
+      to: endOf(sampled.nodes, to),
+      members: counted === undefined ? { quality: 'unknown', scope: AGGREGATE_MEMBERS_SCOPE } : { value: counted, quality: 'exact', scope: AGGREGATE_MEMBERS_SCOPE },
+      ...range,
+      sample: { order, rows: rows.map((member) => ({ ...(member.observedAt === undefined ? {} : { observedAt: member.observedAt }), properties: [...member.properties] })), ...(counted === undefined ? {} : { more: counted - rows.length }) },
+      qualityFlags: [...flags, ...(counted !== undefined && summary?.mixed === true ? ['mixed-time-kinds'] : [])],
+      warnings: [...sampled.warnings, ...(warning === undefined ? [] : [warning])],
+    };
+  }
+
   const reader = {
     read(request: EdgeReadRequest): Promise<EdgeDetail> {
-      return 'derived' in request.ref ? readDerived({ ...request, ref: request.ref }) : readStored({ ...request, ref: request.ref });
+      if ('derived' in request.ref) return readDerived({ ...request, ref: request.ref });
+      if ('aggregate' in request.ref) return readAggregate({ ...request, ref: request.ref });
+      return readStored({ ...request, ref: request.ref });
     },
   };
   return reader as EdgeReader;

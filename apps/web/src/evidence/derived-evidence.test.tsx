@@ -114,9 +114,9 @@ describe('the derived relationship in the panel', () => {
     rig.unbind();
   });
 
-  it('is not offered for an aggregate relationship, which no kind builds yet', () => {
+  it('is offered for an aggregate relationship as it is for a derived one', () => {
     const rig = rigWith();
-    expect(rig.evidence.offers(SUMMED.ref)).toBe(false);
+    expect(rig.evidence.offers(SUMMED.ref)).toBe(true);
     expect(rig.evidence.offers(SHARED.ref)).toBe(true);
     screen.queryByRole('complementary');
     rig.unbind();
