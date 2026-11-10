@@ -1,6 +1,7 @@
 import type { NamedView } from '@neburyx/contracts';
 import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import { useApiClient } from '../api/client-context.js';
+import { BANNER_REGION_CLASS } from '../banner/status-banner.js';
 import { useClientState } from '../state/context.js';
 import { useStoreSelector } from '../state/store.js';
 import { VIEWS_CONTROL } from './copy.js';
@@ -13,7 +14,7 @@ const BANNER_GAP_PX = 8;
 
 /** Where the panel starts when a banner is showing: below it, so the banner's own actions stay in reach. */
 function clearanceBelowBanner(): number | undefined {
-  const bottoms = [...document.querySelectorAll<HTMLElement>('.banner-region')].filter((region) => (region.textContent ?? '').trim() !== '').map((region) => region.getBoundingClientRect().bottom);
+  const bottoms = [...document.querySelectorAll<HTMLElement>(`.${BANNER_REGION_CLASS}`)].filter((region) => (region.textContent ?? '').trim() !== '').map((region) => region.getBoundingClientRect().bottom);
   const lowest = Math.max(0, ...bottoms);
   return lowest > 0 ? Math.ceil(lowest) + BANNER_GAP_PX : undefined;
 }
@@ -79,7 +80,7 @@ export function ViewsControl() {
         <span aria-hidden="true"> ▾</span>
       </button>
       {open ? (
-        <div className="views-panel" role="dialog" aria-labelledby={titleId} tabIndex={-1} ref={panel} style={top === undefined ? undefined : ({ top } satisfies CSSProperties)} onKeyDown={onKeyDown}>
+        <div className="views-panel" role="dialog" aria-labelledby={titleId} tabIndex={-1} ref={panel} style={top === undefined ? undefined : ({ '--views-panel-top': `${top}px` } as CSSProperties)} onKeyDown={onKeyDown}>
           <ViewsPanel list={list} titleId={titleId} onRestore={setRestoring} readOnly={readOnly} />
         </div>
       ) : null}

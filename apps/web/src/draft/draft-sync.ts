@@ -458,6 +458,12 @@ export function createDraftSync(options: DraftSyncOptions): DraftSync {
 
   async function hold(options: { readonly discardPending?: boolean } = {}): Promise<HoldOutcome> {
     const discard = options.discardPending === true;
+    const waiting = shownSession();
+    // a write that stores the draft under the current mapping is held until the banner has been shown; a view must be made from the draft stored under it, so the write goes first
+    if (!discard && waiting !== undefined && waiting.session.rehashHeld) {
+      waiting.session.rehashHeld = false;
+      waiting.session.lastJson = undefined;
+    }
     for (let round = 0; round < 3; round += 1) {
       if (writing && inFlight !== undefined) await inFlight;
       if (discard || !isDirty()) break;

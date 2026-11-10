@@ -40,7 +40,7 @@ export interface Rig {
 }
 
 /** A workspace that shows one investigation, with a client that answers every draft write and view save from the rules of the API unless told otherwise. */
-export function rig(options: { readonly saveView?: (call: SaveViewCall) => ApiResult<SaveViewResponse>; readonly saveDraft?: ApiClient['saveDraft']; readonly notes?: string | null; readonly base?: ApiClient; readonly listViews?: ApiClient['listViews']; readonly renameView?: ApiClient['renameView']; readonly overrides?: Partial<ApiClient> } = {}): Rig {
+export function rig(options: { readonly saveView?: (call: SaveViewCall) => ApiResult<SaveViewResponse>; readonly saveDraft?: ApiClient['saveDraft']; readonly notes?: string | null; readonly base?: ApiClient; readonly listViews?: ApiClient['listViews']; readonly renameView?: ApiClient['renameView']; readonly overrides?: Partial<ApiClient>; readonly rehash?: boolean } = {}): Rig {
   const state = createClientState();
   state.bindSource('demo');
   const read = result('demo', ['A']);
@@ -64,7 +64,7 @@ export function rig(options: { readonly saveView?: (call: SaveViewCall) => ApiRe
     ...(options.renameView === undefined ? {} : { renameView: options.renameView }),
     ...options.overrides,
   };
-  draftSyncOf(state, client).adopt(INVESTIGATION_ID, { version: 1, notes: options.notes ?? null, basedOnViewId: null, writable: true });
+  draftSyncOf(state, client).adopt(INVESTIGATION_ID, { version: 1, notes: options.notes ?? null, basedOnViewId: null, writable: true, ...(options.rehash === true ? { rehash: true } : {}) });
   return { state, client, saves, drafts };
 }
 

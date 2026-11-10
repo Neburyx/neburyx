@@ -131,7 +131,7 @@ describe('a refusal because the investigation was closed in another tab', () => 
 });
 
 describe('the Views panel and the banner above the canvas', () => {
-  it('starts below the banner when one is showing, so the banner actions stay in reach, and at its usual place when none is', async () => {
+  it('starts below the banner when one is showing, so the banner actions stay in reach, with its height limit moving with it, and at its usual place when none is', async () => {
     const user = userEvent.setup();
     shown(true);
     const region = document.createElement('div');
@@ -141,11 +141,11 @@ describe('the Views panel and the banner above the canvas', () => {
     document.body.append(region);
     try {
       await user.click(await screen.findByRole('button', { name: /^Views/ }));
-      expect((await screen.findByRole('dialog', { name: /^Views/ })).style.top).toBe('104px');
+      expect((await screen.findByRole('dialog', { name: /^Views/ })).style.getPropertyValue('--views-panel-top')).toBe('104px');
       await user.keyboard('{Escape}');
       region.textContent = '';
       await user.click(screen.getByRole('button', { name: /^Views/ }));
-      expect(screen.getByRole('dialog', { name: /^Views/ }).style.top).toBe('');
+      expect(screen.getByRole('dialog', { name: /^Views/ }).style.getPropertyValue('--views-panel-top')).toBe('');
     } finally {
       region.remove();
     }

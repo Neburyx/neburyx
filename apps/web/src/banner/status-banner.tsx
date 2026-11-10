@@ -2,6 +2,9 @@ import { useEffect, useLayoutEffect, useRef } from 'react';
 import { useBanner, useBannerView, useClearBannerOnLeave } from './banner-context.js';
 import { BANNER_LABEL, DISMISS } from './copy.js';
 
+/** The class of the element that holds the banner; the panels that open under the header measure it to start below it. */
+export const BANNER_REGION_CLASS = 'banner-region';
+
 export function StatusBanner() {
   const { banner, announcement } = useBannerView();
   useClearBannerOnLeave();
@@ -23,7 +26,7 @@ export function StatusBanner() {
     }, 0);
   };
   return (
-    <div className="banner-region" ref={region} tabIndex={-1} onClickCapture={markActivation}>
+    <div className={BANNER_REGION_CLASS} ref={region} tabIndex={-1} onClickCapture={markActivation}>
       <div aria-live="polite" aria-atomic="true" className="visually-hidden">
         {announcement?.tone === 'danger' ? null : announcement?.text}
       </div>

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { AUTOSAVE_DELAY_MS, draftSyncOf } from '../draft/draft-sync.js';
+import { AUTOSAVE_DELAY_MS, RETRY_DELAYS_MS, draftSyncOf } from '../draft/draft-sync.js';
 import { createClientState } from '../state/client-state.js';
 import { elementKey } from '../state/keys.js';
 import { ref } from '../state/test-data.js';
@@ -51,6 +51,31 @@ describe('saving the draft as a named view', () => {
     move(state, 9);
     await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
     expect(state.investigation.getState().record?.save).toEqual({ kind: 'unsaved' });
+  });
+
+  it('writes the draft under the current mapping before a view is made from it, when that write is still held back by the mapping banner', async () => {
+    const { state, client, saves, drafts } = rig({ rehash: true });
+    expect(drafts).toEqual([]);
+    expect(await saveNamedView(client, state, { name: TITLE, notes: null })).toEqual({ kind: 'saved' });
+    expect(drafts).toEqual([{ version: 1, notes: null }]);
+    expect(saves[0]?.draftVersion).toBe(2);
+  });
+
+  it('shows the failure and creates no view when the write that was held back fails, and writes it again later', async () => {
+    let failing = true;
+    const { state, client, saves, drafts } = rig({
+      rehash: true,
+      saveDraft: async (_id, version, body) => {
+        if (failing) return failure('INTERNAL_ERROR');
+        drafts.push({ version, notes: body.notes });
+        return { ok: true, value: { version: version + 1, save: { state: 'unsaved', savedAt: null }, notes: body.notes } };
+      },
+    });
+    expect(await saveNamedView(client, state, { name: TITLE, notes: null })).toEqual({ kind: 'failed' });
+    expect(saves).toEqual([]);
+    failing = false;
+    await vi.advanceTimersByTimeAsync(RETRY_DELAYS_MS[0] ?? 3000);
+    expect(drafts).toHaveLength(1);
   });
 
   it('keeps a change made while the save was in flight, and writes it once the save is over', async () => {
