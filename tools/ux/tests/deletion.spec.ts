@@ -129,7 +129,10 @@ test.describe('deleting a named view', () => {
         const row = rows.nth(index);
         const open = await row.getByRole('button', { name: /^Open/ }).boundingBox();
         const remove = await row.getByRole('button', { name: /^Delete “/ }).boundingBox();
-        if (open === null || remove === null) throw new Error('a button has no box');
+        const cell = await row.locator('td.investigations-actions').boundingBox();
+        if (open === null || remove === null || cell === null) throw new Error('a button or the cell has no box');
+        expect(open.x).toBeGreaterThanOrEqual(cell.x);
+        expect(remove.x + remove.width).toBeLessThanOrEqual(cell.x + cell.width + 1);
         expect(Math.abs(open.y - remove.y)).toBeLessThan(2);
         expect(remove.x).toBeGreaterThan(open.x + open.width);
       }

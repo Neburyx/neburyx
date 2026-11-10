@@ -109,22 +109,22 @@ export function SavedViewsTab({ onViewDeleted }: { /** A view was deleted from t
                     </td>
                     <td className="investigations-actions">
                       <div className="investigations-view-actions">
-                      <button type="button" className="secondary" data-view-open={view.id} aria-label={openView(view.name, view.investigation.title)} onClick={() => void navigate(`${EXPLORE_PATH}/${view.investigation.id}`, { state: intentOf(view) })}>
-                        Open
-                      </button>
-                      <button
-                        type="button"
-                        className="secondary"
-                        aria-label={deleteViewLabel(view.name, view.investigation.title)}
-                        aria-describedby={view.investigation.status === 'open' ? undefined : `${reasonId}-${view.id}`}
-                        disabled={view.investigation.status !== 'open'}
-                        onClick={(event) => {
-                          deleteButton.current = event.currentTarget;
-                          setDeleting(view);
-                        }}
-                      >
-                        {VIEW_DELETE_ACTION}
-                      </button>
+                        <button type="button" className="secondary" data-view-open={view.id} aria-label={openView(view.name, view.investigation.title)} onClick={() => void navigate(`${EXPLORE_PATH}/${view.investigation.id}`, { state: intentOf(view) })}>
+                          Open
+                        </button>
+                        <button
+                          type="button"
+                          className="secondary"
+                          aria-label={deleteViewLabel(view.name, view.investigation.title)}
+                          aria-describedby={view.investigation.status === 'open' ? undefined : `${reasonId}-${view.id}`}
+                          disabled={view.investigation.status !== 'open'}
+                          onClick={(event) => {
+                            deleteButton.current = event.currentTarget;
+                            setDeleting(view);
+                          }}
+                        >
+                          {VIEW_DELETE_ACTION}
+                        </button>
                       </div>
                     </td>
                   </tr>
