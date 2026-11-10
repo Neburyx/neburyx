@@ -772,7 +772,8 @@ describe('restoring a named view against Postgres', () => {
     const restored = restoreViewResponseSchema.parse((await parts.restore(saved.view.id, draftVersion)).json());
     const unchanged = await parts.put({ layout: restored.draft.layout, queryContext: restored.draft.queryContext, notes: 'first note' }, restored.draft.version);
     expect(unchanged.json().save).toEqual({ state: 'saved', savedAt: saved.save.savedAt });
-    const changed = await parts.put({ layout: restored.draft.layout, queryContext: restored.draft.queryContext, notes: 'edited' }, restored.draft.version);
+    // the view was saved under an older mapping, so the write of the same content only moves the hash and raises the version
+    const changed = await parts.put({ layout: restored.draft.layout, queryContext: restored.draft.queryContext, notes: 'edited' }, unchanged.json().version);
     expect(changed.statusCode).toBe(200);
     expect(changed.json().save).toEqual({ state: 'unsaved', savedAt: null });
     await parts.app.close();

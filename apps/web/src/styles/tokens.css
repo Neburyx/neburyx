@@ -180,6 +180,7 @@
 
   --focus-outline: var(--focus-width) solid var(--color-focus);
   --color-view-scrim: rgba(38, 41, 51, 0.4);
+  --header-button-height: 32px;
   --view-dialog-top: 115px;
   --view-dialog-width: 520px;
   --view-input-height: 36px;
