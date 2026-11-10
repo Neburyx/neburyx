@@ -49,7 +49,7 @@ describe('a closed or archived investigation in the header and the Views panel',
     await user.click(await screen.findByRole('button', { name: /^Views/ }));
     const panel = within(await screen.findByRole('dialog', { name: /^Views/ }));
     await panel.findByRole('heading', { name: 'Views · 2' });
-    const reason = panel.getByText('Reopen to restore or rename views.');
+    const reason = panel.getByText('Reopen to restore, rename or delete views.');
     expect(reason.id).not.toBe('');
     const actions = [...panel.getAllByRole('button', { name: /^Restore / }), ...panel.getAllByRole('button', { name: /^Rename / })];
     expect(actions).toHaveLength(4);
@@ -73,7 +73,7 @@ describe('a closed or archived investigation in the header and the Views panel',
     await user.click(await screen.findByRole('button', { name: /^Views/ }));
     const panel = within(await screen.findByRole('dialog', { name: /^Views/ }));
     await panel.findByRole('heading', { name: 'Views · 2' });
-    expect(panel.queryByText('Reopen to restore or rename views.')).toBeNull();
+    expect(panel.queryByText('Reopen to restore, rename or delete views.')).toBeNull();
     expect(panel.getByRole('button', { name: 'Rename View 2' }).getAttribute('aria-describedby')).toBeNull();
   });
 

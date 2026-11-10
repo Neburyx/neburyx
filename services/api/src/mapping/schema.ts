@@ -3,6 +3,7 @@ import { addressableTextOfAtMost, iconKeySchema, MAX_CASE_REF_LENGTH, MAX_STABLE
 import { z } from 'zod';
 import { isWellFormed } from '../reference/well-formed.js';
 import { budgetsSchema } from './budgets.js';
+import { retentionSchema } from './retention.js';
 
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const SOURCE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
@@ -176,7 +177,7 @@ const sourceSchema = z.strictObject({
   style_rules: z.array(z.unknown().refine(isPlainData, { message: 'is not plain data (text, numbers, true or false, lists and maps)' })).optional(),
 });
 
-export const mappingFileSchema = z.strictObject({ sources: z.array(sourceSchema) });
+export const mappingFileSchema = z.strictObject({ sources: z.array(sourceSchema), retention: retentionSchema.optional() });
 
 export type RawMappingFile = z.infer<typeof mappingFileSchema>;
 export type RawSource = z.infer<typeof sourceSchema>;

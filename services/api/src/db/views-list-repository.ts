@@ -68,7 +68,7 @@ export async function listOwnedViews(pool: pg.Pool, query: OwnedViewListQuery): 
        JOIN investigations i ON i.id = v.investigation_id
        JOIN sources s ON s.id = i.source_id
        JOIN users u ON u.id = v.created_by
-       WHERE v.kind = 'named' AND i.owner_id = $1 AND i.source_id = ANY($2::text[]) AND i.deleted_at IS NULL
+       WHERE v.kind = 'named' AND v.deleted_at IS NULL AND i.owner_id = $1 AND i.source_id = ANY($2::text[]) AND i.deleted_at IS NULL
          AND ($3::text IS NULL OR (v.created_at, v.id) < ($3::timestamptz, $4::uuid))
        ORDER BY v.created_at DESC, v.id DESC
        LIMIT $5`,
@@ -76,7 +76,7 @@ export async function listOwnedViews(pool: pg.Pool, query: OwnedViewListQuery): 
     );
     const counted = await client.query<{ total: number }>(
       `SELECT count(*)::int AS total FROM saved_views v JOIN investigations i ON i.id = v.investigation_id
-       WHERE v.kind = 'named' AND i.owner_id = $1 AND i.source_id = ANY($2::text[]) AND i.deleted_at IS NULL`,
+       WHERE v.kind = 'named' AND v.deleted_at IS NULL AND i.owner_id = $1 AND i.source_id = ANY($2::text[]) AND i.deleted_at IS NULL`,
       [query.ownerId, [...query.sourceIds]],
     );
     await client.query('COMMIT');

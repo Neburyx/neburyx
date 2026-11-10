@@ -120,6 +120,9 @@ describe('the investigations and saved_views tables', () => {
       'created_at timestamp with time zone not null',
       'updated_at timestamp with time zone not null',
       'version integer not null',
+      'deleted_at timestamp with time zone null',
+      'deleted_by uuid null',
+      'deletion_note text null',
     ]);
   });
 
@@ -168,6 +171,20 @@ describe('the investigations and saved_views tables', () => {
     expect(await attempt(database.ownerUrl, view({ kind: `'snapshot'` }))).toMatch(/saved_views_kind_known/);
     expect(await attempt(database.ownerUrl, view({ kind: `'named'` }))).toMatch(/saved_views_named_has_name/);
     expect(await attempt(database.ownerUrl, view({ kind: `'named'`, name: `'First look'` }))).toBe('allowed');
+  });
+
+  it('refuse a half-marked deletion, a note without a deletion, a note over 10,000 characters and a deleted draft, and keep what is not deleted', async () => {
+    const database = await seeded();
+    await rows(database.ownerUrl, investigation());
+    await rows(database.ownerUrl, view());
+    const named = (columns: Readonly<Record<string, string>>) => view({ id: `'${NAMED}'`, kind: `'named'`, name: `'First look'`, ...columns });
+    expect(await attempt(database.ownerUrl, named({ deleted_at: 'now()' }))).toMatch(/saved_views_deletion_whole/);
+    expect(await attempt(database.ownerUrl, named({ deleted_by: `'${OWNER}'` }))).toMatch(/saved_views_deletion_whole/);
+    expect(await attempt(database.ownerUrl, named({ deletion_note: `'why'` }))).toMatch(/saved_views_deletion_note_needs_deletion/);
+    expect(await attempt(database.ownerUrl, named({ deleted_at: 'now()', deleted_by: `'${OWNER}'`, deletion_note: `repeat('😀', 10001)` }))).toMatch(/saved_views_deletion_note_length/);
+    expect(await attempt(database.ownerUrl, `UPDATE saved_views SET deleted_at = now(), deleted_by = '${OWNER}' WHERE id = '${DRAFT}'`)).toMatch(/saved_views_only_named_deleted/);
+    expect(await attempt(database.ownerUrl, named({ deleted_at: 'now()', deleted_by: `'${OWNER}'`, deletion_note: `repeat('😀', 10000)` }))).toBe('allowed');
+    expect((await rows(database.ownerUrl, `SELECT deleted_at, deleted_by, deletion_note FROM saved_views WHERE id = '${DRAFT}'`))[0]).toEqual({ deleted_at: null, deleted_by: null, deletion_note: null });
   });
 
   it('refuse a starting entity with only one of its two parts', async () => {

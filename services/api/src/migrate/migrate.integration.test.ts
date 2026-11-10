@@ -113,6 +113,7 @@ describe('a job queue step that fails after the application migrations were appl
       { name: '0009-reference-key' },
       { name: '0010-reference-length' },
       { name: '0011-saved-views-listing' },
+      { name: '0012-saved-views-deletion' },
     ]);
     expect(await attempt(database.appUrl, 'SELECT * FROM kysely_migration')).toMatch(/permission denied/);
     await vi.waitFor(

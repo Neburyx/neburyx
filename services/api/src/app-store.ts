@@ -4,9 +4,9 @@ import { checkMigrations, pingDatabase } from './db/readiness-repository.js';
 import { migrationFileNames } from './migrate/provider.js';
 import { PROBE_STEP_MS, READINESS_LIMIT_MS, runReadiness } from './health/readiness.js';
 import { readIdentity, seedFirstStart } from './db/identity-repository.js';
-import { changeInvestigationStatus, createInvestigation, findReusableInvestigation, readInvestigation, readLibrary, renameInvestigation, saveDraft, type InvestigationStore } from './db/investigations-repository.js';
+import { changeInvestigationStatus, createInvestigation, deleteInvestigation, purgeExpiredInvestigations, restoreInvestigation, findReusableInvestigation, readInvestigation, readLibrary, renameInvestigation, saveDraft, type InvestigationStore } from './db/investigations-repository.js';
 import { listOwnedViews, type OwnedViewStore } from './db/views-list-repository.js';
-import { listNamedViews, renameNamedView, restoreNamedView, saveNamedView, type ViewStore } from './db/views-repository.js';
+import { deleteNamedView, listNamedViews, renameNamedView, restoreNamedView, saveNamedView, type ViewStore } from './db/views-repository.js';
 import { referenceKeyOf } from './db/reference-key-repository.js';
 import type { SourceHashes } from './source-state/decide.js';
 import { applyPingState, hasActiveSource, latestChecksFor, latestQualifyingChecks, markSourceUnchecked, recordSourceCheck, type CheckedSource, type PingStateChange, type QualifyingCheck, type SourceCheck } from './db/source-checks-repository.js';
@@ -81,6 +81,10 @@ export function createAppStore(url: string, onConnectionError: () => void, optio
     listNamedViews: (query) => listNamedViews(pool, query),
     listOwnedViews: (query) => listOwnedViews(pool, query),
     renameNamedView: (rename) => renameNamedView(pool, rename),
+    deleteNamedView: (deletion) => deleteNamedView(pool, deletion),
+    purgeExpiredInvestigations: (beforeDelete) => purgeExpiredInvestigations(pool, beforeDelete),
+    deleteInvestigation: (change) => deleteInvestigation(pool, change),
+    restoreInvestigation: (change) => restoreInvestigation(pool, change),
     restoreNamedView: (restore) => restoreNamedView(pool, restore),
     readLibrary: (read) => readLibrary(pool, read),
     readiness: () => runReadiness({ ping: () => pingDatabase(probes), migrations: shippedMigrations }, READINESS_LIMIT_MS),

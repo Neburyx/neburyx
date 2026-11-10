@@ -22,7 +22,7 @@ function io(store: AppStore): { readonly io: StartIo; readonly errors: string[];
   const errors: string[] = [];
   const logs: Record<string, unknown>[] = [];
   const logger = pino({ level: 'info' }, { write: (line: string) => logs.push(JSON.parse(line)) });
-  return { errors, logs, io: { stderr: { write: (text) => errors.push(text) }, logger, defaultWebRoot: webRoot, openStore: () => store, portOverride: 0 } };
+  return { errors, logs, io: { stderr: { write: (text) => errors.push(text) }, logger, defaultWebRoot: webRoot, openStore: () => store, tasks: [], portOverride: 0 } };
 }
 
 function mappingFile(...ids: string[]): string {

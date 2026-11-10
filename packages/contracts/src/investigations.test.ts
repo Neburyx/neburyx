@@ -73,35 +73,35 @@ const countsOf = (investigations: number, sources: number) => ({ investigations:
 
 describe('the list of investigations', () => {
   it.each([
-    ['an unsaved row', { items: [listed], nextCursor: null, matching: matchingOf(1), counts: countsOf(1, 1) }],
-    ['a row whose counts were made under another policy version', { items: [{ ...listed, nodeCount: null, edgeCount: null }], nextCursor: null, matching: matchingOf(1), counts: countsOf(1, 1) }],
-    ['a saved row with the time of its view', { items: [{ ...listed, save: { state: 'saved', savedAt: '2026-11-05T10:05:00.000Z' } }], nextCursor: 'next', matching: matchingOf(8), counts: countsOf(7, 3) }],
-    ['no rows', { items: [], nextCursor: null, matching: matchingOf(0), counts: countsOf(0, 0) }],
-    ['named views with the time of the newest', { items: [], nextCursor: null, matching: matchingOf(0), counts: { ...countsOf(0, 0), savedViews: { count: { value: 3, quality: 'exact', scope: 'named-views' }, lastEditedAt: '2026-11-05T12:30:00.000Z' } } }],
-    ['a row of a source taken out of the configuration', { items: [{ ...listed, sourceState: 'removed' }], nextCursor: null, matching: matchingOf(0), counts: countsOf(1, 1) }],
+    ['an unsaved row', { items: [listed], nextCursor: null, matching: matchingOf(1), retention: { deletedInvestigationsDays: 30 }, counts: countsOf(1, 1) }],
+    ['a row whose counts were made under another policy version', { items: [{ ...listed, nodeCount: null, edgeCount: null }], nextCursor: null, matching: matchingOf(1), retention: { deletedInvestigationsDays: 30 }, counts: countsOf(1, 1) }],
+    ['a saved row with the time of its view', { items: [{ ...listed, save: { state: 'saved', savedAt: '2026-11-05T10:05:00.000Z' } }], nextCursor: 'next', matching: matchingOf(8), retention: { deletedInvestigationsDays: 30 }, counts: countsOf(7, 3) }],
+    ['no rows', { items: [], nextCursor: null, matching: matchingOf(0), retention: { deletedInvestigationsDays: 30 }, counts: countsOf(0, 0) }],
+    ['named views with the time of the newest', { items: [], nextCursor: null, matching: matchingOf(0), retention: { deletedInvestigationsDays: 30 }, counts: { ...countsOf(0, 0), savedViews: { count: { value: 3, quality: 'exact', scope: 'named-views' }, lastEditedAt: '2026-11-05T12:30:00.000Z' } } }],
+    ['a row of a source taken out of the configuration', { items: [{ ...listed, sourceState: 'removed' }], nextCursor: null, matching: matchingOf(0), retention: { deletedInvestigationsDays: 30 }, counts: countsOf(1, 1) }],
   ])('accepts %s', (_name, answer) => {
     expect(investigationListResponseSchema.safeParse(answer).success).toBe(true);
   });
 
   it.each([
-    ['a row without its source alias', { items: [{ ...investigation, save: listed.save }], nextCursor: null, matching: matchingOf(0), counts: countsOf(1, 1) }],
-    ['a saved row with no time', { items: [{ ...listed, save: { state: 'saved', savedAt: null } }], nextCursor: null, matching: matchingOf(0), counts: countsOf(1, 1) }],
-    ['an unsaved row with a time', { items: [{ ...listed, save: { state: 'unsaved', savedAt: '2026-11-05T10:05:00.000Z' } }], nextCursor: null, matching: matchingOf(0), counts: countsOf(1, 1) }],
-    ['an answer without nextCursor', { items: [], matching: matchingOf(0), counts: countsOf(0, 0) }],
-    ['an answer that still says hasMore', { items: [], hasMore: false, nextCursor: null, matching: matchingOf(0), counts: countsOf(0, 0) }],
+    ['a row without its source alias', { items: [{ ...investigation, save: listed.save }], nextCursor: null, matching: matchingOf(0), retention: { deletedInvestigationsDays: 30 }, counts: countsOf(1, 1) }],
+    ['a saved row with no time', { items: [{ ...listed, save: { state: 'saved', savedAt: null } }], nextCursor: null, matching: matchingOf(0), retention: { deletedInvestigationsDays: 30 }, counts: countsOf(1, 1) }],
+    ['an unsaved row with a time', { items: [{ ...listed, save: { state: 'unsaved', savedAt: '2026-11-05T10:05:00.000Z' } }], nextCursor: null, matching: matchingOf(0), retention: { deletedInvestigationsDays: 30 }, counts: countsOf(1, 1) }],
+    ['an answer without nextCursor', { items: [], matching: matchingOf(0), retention: { deletedInvestigationsDays: 30 }, counts: countsOf(0, 0) }],
+    ['an answer that still says hasMore', { items: [], hasMore: false, nextCursor: null, matching: matchingOf(0), retention: { deletedInvestigationsDays: 30 }, counts: countsOf(0, 0) }],
     ['an answer without the matching count', { items: [], nextCursor: null, counts: countsOf(0, 0) }],
     ['a matching count that is not exact', { items: [], nextCursor: null, matching: { value: 1, quality: 'lowerBound', scope: 'investigations-matching' }, counts: countsOf(0, 0) }],
-    ['a row without its counts', { items: [{ investigation, sourceAlias: 'Demo source', save: listed.save }], nextCursor: null, matching: matchingOf(1), counts: countsOf(1, 1) }],
+    ['a row without its counts', { items: [{ investigation, sourceAlias: 'Demo source', save: listed.save }], nextCursor: null, matching: matchingOf(1), retention: { deletedInvestigationsDays: 30 }, counts: countsOf(1, 1) }],
     ['an answer without counts', { items: [], nextCursor: null, matching: matchingOf(0) }],
-    ['counts without the sources', { items: [], nextCursor: null, matching: matchingOf(0), counts: { investigations: countsOf(0, 0).investigations, savedViews: countsOf(0, 0).savedViews } }],
-    ['counts without the saved views', { items: [], nextCursor: null, matching: matchingOf(0), counts: { investigations: countsOf(0, 0).investigations, sources: countsOf(0, 0).sources } }],
-    ['saved views with a time that is not a time', { items: [], nextCursor: null, matching: matchingOf(0), counts: { ...countsOf(0, 0), savedViews: { ...countsOf(0, 0).savedViews, lastEditedAt: 'yesterday' } } }],
-    ['saved views whose count is not exact', { items: [], nextCursor: null, matching: matchingOf(0), counts: { ...countsOf(0, 0), savedViews: { count: { value: 2, quality: 'estimated', scope: 'named-views' }, lastEditedAt: null } } }],
-    ['a count that is not exact', { items: [], nextCursor: null, matching: matchingOf(0), counts: { ...countsOf(0, 0), investigations: { value: 3, quality: 'lowerBound', scope: 'investigations' } } }],
-    ['a count with another scope', { items: [], nextCursor: null, matching: matchingOf(0), counts: { ...countsOf(0, 0), sources: { value: 0, quality: 'exact', scope: 'investigations' } } }],
-    ['a count with no value', { items: [], nextCursor: null, matching: matchingOf(0), counts: { ...countsOf(0, 0), sources: { quality: 'unknown', scope: 'investigation-sources' } } }],
-    ['a negative count', { items: [], nextCursor: null, matching: matchingOf(0), counts: { ...countsOf(0, 0), investigations: { value: -1, quality: 'exact', scope: 'investigations' } } }],
-    ['an extra count', { items: [], nextCursor: null, matching: matchingOf(0), counts: { ...countsOf(0, 0), patterns: { value: 0, quality: 'exact', scope: 'patterns' } } }],
+    ['counts without the sources', { items: [], nextCursor: null, matching: matchingOf(0), retention: { deletedInvestigationsDays: 30 }, counts: { investigations: countsOf(0, 0).investigations, savedViews: countsOf(0, 0).savedViews } }],
+    ['counts without the saved views', { items: [], nextCursor: null, matching: matchingOf(0), retention: { deletedInvestigationsDays: 30 }, counts: { investigations: countsOf(0, 0).investigations, sources: countsOf(0, 0).sources } }],
+    ['saved views with a time that is not a time', { items: [], nextCursor: null, matching: matchingOf(0), retention: { deletedInvestigationsDays: 30 }, counts: { ...countsOf(0, 0), savedViews: { ...countsOf(0, 0).savedViews, lastEditedAt: 'yesterday' } } }],
+    ['saved views whose count is not exact', { items: [], nextCursor: null, matching: matchingOf(0), retention: { deletedInvestigationsDays: 30 }, counts: { ...countsOf(0, 0), savedViews: { count: { value: 2, quality: 'estimated', scope: 'named-views' }, lastEditedAt: null } } }],
+    ['a count that is not exact', { items: [], nextCursor: null, matching: matchingOf(0), retention: { deletedInvestigationsDays: 30 }, counts: { ...countsOf(0, 0), investigations: { value: 3, quality: 'lowerBound', scope: 'investigations' } } }],
+    ['a count with another scope', { items: [], nextCursor: null, matching: matchingOf(0), retention: { deletedInvestigationsDays: 30 }, counts: { ...countsOf(0, 0), sources: { value: 0, quality: 'exact', scope: 'investigations' } } }],
+    ['a count with no value', { items: [], nextCursor: null, matching: matchingOf(0), retention: { deletedInvestigationsDays: 30 }, counts: { ...countsOf(0, 0), sources: { quality: 'unknown', scope: 'investigation-sources' } } }],
+    ['a negative count', { items: [], nextCursor: null, matching: matchingOf(0), retention: { deletedInvestigationsDays: 30 }, counts: { ...countsOf(0, 0), investigations: { value: -1, quality: 'exact', scope: 'investigations' } } }],
+    ['an extra count', { items: [], nextCursor: null, matching: matchingOf(0), retention: { deletedInvestigationsDays: 30 }, counts: { ...countsOf(0, 0), patterns: { value: 0, quality: 'exact', scope: 'patterns' } } }],
   ])('refuses %s', (_name, answer) => {
     expect(investigationListResponseSchema.safeParse(answer).success).toBe(false);
   });

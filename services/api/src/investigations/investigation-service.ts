@@ -1,4 +1,4 @@
-import { DEFAULT_INVESTIGATION_LIST_LIMIT, MAX_DRAFT_DOCUMENT_BYTES, MAX_INVESTIGATION_LIST_LIMIT, investigationResponseSchema, layoutDocumentSchema, MAX_TITLE_LENGTH, queryContextDocumentSchema, type GraphNode, type Investigation, type InvestigationListResponse, type DraftWriteRequest, type DraftWriteResponse, type InvestigationResponse, type InvestigationSourceState, type MappingChange, type ReferenceOpenRequest, type OpenDraft, type OpenInvestigationResponse, type RenameResponse, type StatusChangeResponse, type Investigation as InvestigationShown } from '@neburyx/contracts';
+import { DEFAULT_INVESTIGATION_LIST_LIMIT, MAX_DRAFT_DOCUMENT_BYTES, MAX_INVESTIGATION_LIST_LIMIT, investigationResponseSchema, layoutDocumentSchema, MAX_TITLE_LENGTH, queryContextDocumentSchema, type GraphNode, type Investigation, type InvestigationListResponse, type DraftWriteRequest, type DraftWriteResponse, type InvestigationResponse, type InvestigationSourceState, type MappingChange, type ReferenceOpenRequest, type OpenDraft, type OpenInvestigationResponse, type RenameResponse, type StatusChangeResponse, type DeleteInvestigationResponse, type Investigation as InvestigationShown } from '@neburyx/contracts';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { AppError } from '../errors.js';
@@ -15,7 +15,9 @@ import { droppedFiltersOf, unmappedItemsOf, withoutDropped } from './mapping-cha
 import type { StoredReferences } from './stored-references.js';
 import { readOnlyRefusal, readOnlyStatusOf } from './read-only.js';
 import { auditActionOf } from './status-change.js';
+import { retentionOf } from '../mapping/retention.js';
 import { COMMUNITY_POLICY_VERSION, contentHashOf, defaultTitle, initialDraftDocuments } from './draft.js';
+import type { ListPosition } from '../db/investigations-repository.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -44,6 +46,10 @@ export interface InvestigationService {
   rename(call: { readonly id: string; readonly principal: Principal; readonly expectedVersion: number; readonly title: string }): Promise<RenameResponse>;
   /** Closes, archives or reopens the investigation, with one audit event, recorded after the commit; if the event cannot be recorded the change is kept and the call answers `INTERNAL_ERROR`. */
   changeStatus(call: { readonly traceId: string; readonly id: string; readonly principal: Principal; readonly expectedVersion: number; readonly status: InvestigationShown['status'] }): Promise<StatusChangeResponse>;
+  /** Deletes the investigation, whatever its status, when `expectedVersion` is its version, restorable until the answer's `purgeAfter`; with one audit event inside the transaction, so a sink that rejects it leaves nothing written and the call answers `INTERNAL_ERROR`. An investigation that is not the caller's, unknown or already deleted is `NOT_FOUND`. */
+  delete(call: { readonly traceId: string; readonly id: string; readonly principal: Principal; readonly expectedVersion: number }): Promise<DeleteInvestigationResponse>;
+  /** Restores a deleted investigation that has not reached its purge date, when `expectedVersion` is its version, and answers it as `read` does. One that is not deleted, is past `purge_after` or is not the caller's is `NOT_FOUND`. */
+  restore(call: { readonly traceId: string; readonly id: string; readonly principal: Principal; readonly expectedVersion: number }): Promise<InvestigationResponse>;
 }
 
 export interface InvestigationListCall {
@@ -51,11 +57,14 @@ export interface InvestigationListCall {
   readonly limit?: number | undefined;
   readonly cursor?: string | undefined;
   readonly status?: InvestigationShown['status'] | undefined;
+  /** Lists the caller's deleted investigations that can still be restored; a `status` is then refused. */
+  readonly deleted?: boolean | undefined;
   readonly sourceId?: string | undefined;
   readonly text?: string | undefined;
 }
 
 const LIST_TARGET = 'GET /v1/investigations';
+const DELETED_LIST_SORT = 'deleted-desc';
 const LIST_SORT = 'last-edited-desc';
 const listPositionSchema = z.strictObject({ editedKey: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/), id: z.string().regex(UUID) });
 
@@ -150,6 +159,66 @@ export function createInvestigationService(deps: InvestigationServiceDeps): Inve
     return { created, body: answerOf(shown(deps.mapping, deps.references, row), created, entity, await draftOf(row, call.principal.id)) };
   }
 
+  /** The event is recorded before the commit, so a sink that cannot take it stops the write and nothing is left behind. */
+  const recordInTransaction = (event: Parameters<AuditSink['record']>[0]): Promise<void> =>
+    deps.audit.record(event).catch(() => {
+      throw new AppError('INTERNAL_ERROR');
+    });
+
+  async function listDeletedOf(call: { readonly principal: Principal; readonly limit: number; readonly position: ListPosition | undefined; readonly binding: CursorBinding; readonly retention: { readonly deletedInvestigationsDays: number }; readonly sourceId: string | undefined; readonly text: string | undefined }): Promise<InvestigationListResponse> {
+    const { principal, limit, binding } = call;
+    // the policy may read the store, so no connection is held while it answers: both lists of sources are read and decided first, and the snapshot then reads the rows, `matching` and the counts of those sources together
+    const sourceIds = await deps.access.readable({ principal, sourceIds: await deps.store.readLibrary((reader) => reader.listDeletedInvestigationSourceIds(principal.id)) });
+    const liveSourceIds = await deps.access.readable({ principal, sourceIds: await deps.store.readLibrary((reader) => reader.listInvestigationSourceIds(principal.id)) });
+    return deps.store.readLibrary(async (reader) => {
+      const filters = { ownerId: principal.id, sourceIds, sourceId: call.sourceId, text: call.text };
+      const found = await reader.listDeletedInvestigations({ ...filters, limit: limit + 1, after: call.position });
+      const matching = await reader.countDeletedMatching(filters);
+      const counts = await reader.countInvestigations({ ownerId: principal.id, sourceIds: liveSourceIds });
+      const views = await reader.countNamedViews({ ownerId: principal.id, sourceIds: liveSourceIds });
+      const page = found.slice(0, limit);
+      const last = page.at(-1);
+      return {
+        retention: call.retention,
+        items: page.map((row: ListedInvestigation) => ({ ...shown(deps.mapping, deps.references, row), startingEntity: row.startingEntityType === null ? null : { entityType: row.startingEntityType }, sourceAlias: row.sourceAlias, save: row.save, nodeCount: null, edgeCount: null, ...(row.deletedAt === undefined ? {} : { deletedAt: row.deletedAt }), ...(row.purgeAfter === undefined ? {} : { purgeAfter: row.purgeAfter }) })),
+        nextCursor: found.length > limit && last !== undefined ? deps.cursors.mint(binding, { editedKey: last.lastEditedKey, id: last.id }) : null,
+        matching: { value: matching, quality: 'exact' as const, scope: 'investigations-matching' as const },
+        counts: {
+          investigations: { value: counts.investigations, quality: 'exact' as const, scope: 'investigations' as const },
+          sources: { value: counts.sources, quality: 'exact' as const, scope: 'investigation-sources' as const },
+          savedViews: { count: { value: views.views, quality: 'exact' as const, scope: 'named-views' as const }, lastEditedAt: views.lastEditedAt },
+        },
+      };
+    });
+  }
+
+  async function readStored(id: string, principal: Principal): Promise<InvestigationResponse> {
+    const stored = await deps.store.readInvestigation(id, principal.id);
+    if (stored === undefined) throw new AppError('NOT_FOUND');
+    const sourceId = stored.investigation.sourceId;
+    const investigation = shown(deps.mapping, deps.references, stored.investigation);
+    const storedLayout = layoutDocumentSchema.parse(stored.draft.layout);
+    const storedContext = queryContextDocumentSchema.parse(stored.draft.queryContext);
+    const layout = deps.references.layout(sourceId, storedLayout);
+    let queryContext = deps.references.queryContext(sourceId, storedContext);
+    const source = investigation.sourceState === 'available' ? deps.mapping.sources.find((candidate) => candidate.id === sourceId) : undefined;
+    // the check compares the mapping only: nothing is read from the source, and a source that was removed or re-pointed is not judged here
+    const unmapped = source === undefined ? undefined : unmappedItemsOf(source, layout, queryContext);
+    let mappingChange: MappingChange | undefined;
+    if (source !== undefined && stored.draft.mappingHash !== source.configHash) {
+      const droppedFilters = droppedFiltersOf(source, storedContext.filters);
+      queryContext = withoutDropped(queryContext, droppedFilters);
+      mappingChange = { droppedFilters };
+    }
+    return investigationResponseSchema.parse({
+      investigation,
+      draft: { version: stored.draft.version, layout, queryContext, notes: stored.draft.notes, basedOnViewId: stored.draft.basedOnViewId },
+      save: stored.savedAt === null ? { state: 'unsaved', savedAt: null } : { state: 'saved', savedAt: stored.savedAt },
+      ...(unmapped === undefined ? {} : { unmapped }),
+      ...(mappingChange === undefined ? {} : { mappingChange }),
+    });
+  }
+
   return {
     async open(call) {
       const { request } = call;
@@ -178,16 +247,19 @@ export function createInvestigationService(deps: InvestigationServiceDeps): Inve
       const title = isKeyed(type) && investigation.title === (type.display.name ?? type.label) ? defaultTitle(type.display.name ?? type.label, await titleSubjectOf(call, type, entity), MAX_TITLE_LENGTH) : investigation.title;
       return { created: false, body: answerOf({ ...investigation, title }, false, entity, await draftOf(existing, call.principal.id)) };
     },
-    async list({ principal, limit = DEFAULT_INVESTIGATION_LIST_LIMIT, cursor, status = 'open', sourceId, text }) {
+    async list({ principal, limit = DEFAULT_INVESTIGATION_LIST_LIMIT, cursor, status, deleted = false, sourceId, text }) {
+      if (status !== undefined && deleted) throw new AppError('INVALID_REQUEST');
       if (limit < 1) throw new AppError('INVALID_REQUEST');
       if (limit > MAX_INVESTIGATION_LIST_LIMIT) throw new AppError('QUERY_BUDGET_EXCEEDED', { maxPage: MAX_INVESTIGATION_LIST_LIMIT });
-      const binding: CursorBinding = { source: null, principal: principal.id, policyVersion: COMMUNITY_POLICY_VERSION, filterHash: createHash('sha256').update(JSON.stringify([status, sourceId ?? null, text ?? null])).digest('hex'), sort: LIST_SORT, target: LIST_TARGET, targetVersion: '1' };
+      const retention = { deletedInvestigationsDays: retentionOf(deps.mapping).deletedInvestigationsDays };
+      const binding: CursorBinding = { source: null, principal: principal.id, policyVersion: COMMUNITY_POLICY_VERSION, filterHash: createHash('sha256').update(JSON.stringify([deleted ? 'deleted' : (status ?? 'open'), sourceId ?? null, text ?? null])).digest('hex'), sort: deleted ? DELETED_LIST_SORT : LIST_SORT, target: LIST_TARGET, targetVersion: '1' };
       const position = cursor === undefined ? undefined : listPositionSchema.safeParse(deps.cursors.verify(cursor, binding));
       if (position !== undefined && !position.success) throw new AppError('CURSOR_INVALIDATED');
+      if (deleted) return listDeletedOf({ principal, limit, position: position?.data, binding, retention, sourceId, text });
       // the policy may read the store, so no connection is held while it answers: the sources are read and decided first, and the snapshot then reads the rows, `matching` and the counts of those sources together
       const sourceIds = await deps.access.readable({ principal, sourceIds: await deps.store.readLibrary((reader) => reader.listInvestigationSourceIds(principal.id)) });
       return deps.store.readLibrary(async (reader) => {
-        const filters = { ownerId: principal.id, sourceIds, status, sourceId, text };
+        const filters = { ownerId: principal.id, sourceIds, status: status ?? 'open', sourceId, text };
         const found = await reader.listInvestigations({ ...filters, limit: limit + 1, after: position?.data });
         const matching = await reader.countMatching(filters);
         const counts = await reader.countInvestigations({ ownerId: principal.id, sourceIds });
@@ -199,6 +271,7 @@ export function createInvestigationService(deps: InvestigationServiceDeps): Inve
           return { ...shown(deps.mapping, deps.references, row), sourceAlias: row.sourceAlias, save: row.save, nodeCount: countsShown ? row.nodeCount : null, edgeCount: countsShown ? row.edgeCount : null };
         });
         return {
+          retention,
           items,
           nextCursor: found.length > limit && last !== undefined ? deps.cursors.mint(binding, { editedKey: last.lastEditedKey, id: last.id }) : null,
           matching: { value: matching, quality: 'exact' as const, scope: 'investigations-matching' as const },
@@ -269,30 +342,32 @@ export function createInvestigationService(deps: InvestigationServiceDeps): Inve
     },
     async read({ id, principal }) {
       if (!UUID.test(id)) throw new AppError('NOT_FOUND');
-      const stored = await deps.store.readInvestigation(id, principal.id);
-      if (stored === undefined) throw new AppError('NOT_FOUND');
-      const sourceId = stored.investigation.sourceId;
-      const investigation = shown(deps.mapping, deps.references, stored.investigation);
-      const storedLayout = layoutDocumentSchema.parse(stored.draft.layout);
-      const storedContext = queryContextDocumentSchema.parse(stored.draft.queryContext);
-      const layout = deps.references.layout(sourceId, storedLayout);
-      let queryContext = deps.references.queryContext(sourceId, storedContext);
-      const source = investigation.sourceState === 'available' ? deps.mapping.sources.find((candidate) => candidate.id === sourceId) : undefined;
-      // the check compares the mapping only: nothing is read from the source, and a source that was removed or re-pointed is not judged here
-      const unmapped = source === undefined ? undefined : unmappedItemsOf(source, layout, queryContext);
-      let mappingChange: MappingChange | undefined;
-      if (source !== undefined && stored.draft.mappingHash !== source.configHash) {
-        const droppedFilters = droppedFiltersOf(source, storedContext.filters);
-        queryContext = withoutDropped(queryContext, droppedFilters);
-        mappingChange = { droppedFilters };
-      }
-      return investigationResponseSchema.parse({
-        investigation,
-        draft: { version: stored.draft.version, layout, queryContext, notes: stored.draft.notes, basedOnViewId: stored.draft.basedOnViewId },
-        save: stored.savedAt === null ? { state: 'unsaved', savedAt: null } : { state: 'saved', savedAt: stored.savedAt },
-        ...(unmapped === undefined ? {} : { unmapped }),
-        ...(mappingChange === undefined ? {} : { mappingChange }),
+      return readStored(id, principal);
+    },
+    async delete({ traceId, id, principal, expectedVersion }) {
+      if (!UUID.test(id)) throw new AppError('NOT_FOUND');
+      const result = await deps.store.deleteInvestigation({
+        investigationId: id,
+        ownerId: principal.id,
+        expectedVersion,
+        retentionDays: retentionOf(deps.mapping).deletedInvestigationsDays,
+        beforeCommit: (row) => recordInTransaction({ actorId: principal.id, actorRole: principal.role, action: 'investigation.delete', traceId, result: 'success', sourceId: row.sourceId }),
       });
+      if (result.outcome === 'not-found') throw new AppError('NOT_FOUND');
+      if (result.outcome === 'conflict') throw new AppError('CONFLICT');
+      return { id: result.row.id, version: result.row.version, deletedAt: result.deletedAt, purgeAfter: result.purgeAfter };
+    },
+    async restore({ traceId, id, principal, expectedVersion }) {
+      if (!UUID.test(id)) throw new AppError('NOT_FOUND');
+      const result = await deps.store.restoreInvestigation({
+        investigationId: id,
+        ownerId: principal.id,
+        expectedVersion,
+        beforeCommit: (row) => recordInTransaction({ actorId: principal.id, actorRole: principal.role, action: 'investigation.restore', traceId, result: 'success', sourceId: row.sourceId }),
+      });
+      if (result.outcome === 'not-found') throw new AppError('NOT_FOUND');
+      if (result.outcome === 'conflict') throw new AppError('CONFLICT');
+      return readStored(id, principal);
     },
   };
 }

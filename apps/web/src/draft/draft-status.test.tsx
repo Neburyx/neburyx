@@ -8,14 +8,14 @@ import { StatusBanner } from '../banner/status-banner.js';
 import { createClientState } from '../state/client-state.js';
 import { elementKey } from '../state/keys.js';
 import { key, ref, result } from '../state/test-data.js';
-import { CHANGES_NOT_BEING_SAVED, CHANGES_NOT_SAVED, CHANGES_STILL_NOT_SAVED, CONFLICT_HEADLINE, CONFLICT_TEXT } from './copy.js';
+import { INVESTIGATION_DELETED_NOT_SAVED, CHANGES_NOT_BEING_SAVED, CHANGES_NOT_SAVED, CHANGES_STILL_NOT_SAVED, CONFLICT_HEADLINE, CONFLICT_TEXT } from './copy.js';
 import { ApiClientProvider } from '../api/client-context.js';
 import { ClientStateProvider } from '../state/context.js';
 import { DraftAnnouncer, DraftConflictBanner, DraftStatusLine, LeaveGuard } from './draft-status.js';
 import { draftSyncOf, AUTOSAVE_DELAY_MS, createDraftSync, RETRY_STEADY_MS, STALLED_AFTER_MS } from './draft-sync.js';
 
 const ID = '0192f000-0000-7000-8000-0000000000a1';
-const failure = (code: 'INTERNAL_ERROR' | 'CONFLICTED_VIEW_VERSION' | 'INVALID_REQUEST') => ({ ok: false as const, failure: { code, message: 'x', retryable: false, traceId: 't' } });
+const failure = (code: 'INTERNAL_ERROR' | 'CONFLICTED_VIEW_VERSION' | 'INVALID_REQUEST' | 'NOT_FOUND') => ({ ok: false as const, failure: { code, message: 'x', retryable: false, traceId: 't' } });
 
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => {
@@ -48,6 +48,15 @@ function started(answer: () => ReturnType<typeof failure> | { ok: true; value: {
 const announcer = (): string => document.querySelector('[role="status"].visually-hidden')?.textContent ?? '';
 
 describe('the status of a draft that is not saved', () => {
+  it('says once that the investigation was deleted, with no Save again, after the server answers NOT_FOUND', async () => {
+    const { move } = started(() => failure('NOT_FOUND'));
+    await move();
+    await act(async () => vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS));
+    expect(announcer()).toBe(INVESTIGATION_DELETED_NOT_SAVED);
+    expect(screen.getByText(INVESTIGATION_DELETED_NOT_SAVED, { selector: '.draft-status' })).toBeDefined();
+    expect(screen.queryByRole('button', { name: 'Save again' })).toBeNull();
+  });
+
   it('says nothing while the draft is saved', async () => {
     const { move } = started(() => ({ ok: true, value: { version: 2, save: { state: 'unsaved', savedAt: null }, notes: null } }));
     await move();

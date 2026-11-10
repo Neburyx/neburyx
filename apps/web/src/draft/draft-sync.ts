@@ -20,6 +20,8 @@ export type DraftStatus =
   | { readonly kind: 'idle' }
   | { readonly kind: 'failing'; readonly stalled: boolean }
   | { readonly kind: 'rejected' }
+  /** The investigation was deleted (in another tab): nothing more is sent. */
+  | { readonly kind: 'deleted' }
   | { readonly kind: 'conflict' };
 
 const IDLE: DraftStatus = { kind: 'idle' };
@@ -109,6 +111,8 @@ export interface DraftSync {
   stateOf(investigationId: string): DraftAccepted | undefined;
   /** Starts writing the draft of an investigation that is shown: from now on its changes are saved. */
   adopt(investigationId: string, session: DraftSession): void;
+  /** Stops writing the draft of an investigation that no longer exists (it was deleted): what waits, and what would be sent as the page is left, is dropped. */
+  discard(investigationId: string): void;
   /** Writes at once what is waiting. */
   flush(): void;
   /** Sends the write that stores the draft of this investigation under the current mapping, which `adopt` held back with `rehash`. */
@@ -146,11 +150,12 @@ const realTimers: Timers = { setTimeout: (run, ms) => setTimeout(run, ms), clear
 
 type WriteResult = 'saved' | 'conflict' | 'failed' | 'skipped';
 
-type Verdict = 'conflict' | 'read-only' | 'retry' | 'rejected';
+type Verdict = 'conflict' | 'read-only' | 'retry' | 'rejected' | 'deleted';
 
 function verdictOf(failure: ApiFailure): Verdict {
   if (failure.code === 'CONFLICTED_VIEW_VERSION') return 'conflict';
   if (failure.code === 'CONFLICT' && 'details' in failure && failure.details?.reason === 'investigation-read-only') return 'read-only';
+  if (failure.code === 'NOT_FOUND') return 'deleted';
   if (failure.code === 'SCHEMA_MISMATCH') return 'rejected';
   if (!(failure.code in ERROR_TABLE)) return 'retry';
   const status = ERROR_TABLE[failure.code as ErrorCode].status;
@@ -330,10 +335,12 @@ export function createDraftSync(options: DraftSyncOptions): DraftSync {
       sendDeferred();
       return 'failed';
     }
-    if (verdict === 'rejected') {
+    if (verdict === 'rejected' || verdict === 'deleted') {
+      // an investigation that is gone takes no more writes, whatever the canvas does, and holds nobody back from leaving
+      if (verdict === 'deleted') session.writable = false;
       cancel();
       endFailing();
-      setStatus({ kind: 'rejected' });
+      setStatus({ kind: verdict });
       return 'failed';
     }
     if (!retrying) {
@@ -574,6 +581,12 @@ export function createDraftSync(options: DraftSyncOptions): DraftSync {
       if (state.investigation.getState().id !== investigationId || !held.writable || held.conflicted) return;
       held.lastJson = undefined;
       schedule(0);
+    },
+    discard(investigationId) {
+      const held = sessions.get(investigationId);
+      if (held !== undefined) held.writable = false;
+      if (state.investigation.getState().id === investigationId) cancel();
+      refreshUnsaved();
     },
     flush,
     leaving: readable(leaving),

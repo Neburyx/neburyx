@@ -22,6 +22,7 @@ async function serve(env: Readonly<Record<string, string>>): Promise<{ readonly 
       defaultWebRoot: webRoot,
       portOverride: 0,
       openStore: memoryAppStore,
+      tasks: [],
     },
   );
   expect(result.exitCode).toBe(0);

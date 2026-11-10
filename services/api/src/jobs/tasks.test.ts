@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { registeredTasks, TaskConfigError, validateTasks, type Task } from './tasks.js';
+import { TaskConfigError, validateTasks, type Task } from './tasks.js';
 
 const task = (name: string, schedule?: string): Task => ({ name, run: () => Promise.resolve(), ...(schedule === undefined ? {} : { schedule }) });
 
@@ -19,9 +19,5 @@ describe('validateTasks', () => {
     const failure = (): void => validateTasks([task('expire', schedule)]);
     expect(failure).toThrow(TaskConfigError);
     expect(failure).toThrow('invalid configuration: task expire has a schedule that is not a valid cron expression');
-  });
-
-  it('ships with no task registered', () => {
-    expect(registeredTasks).toEqual([]);
   });
 });

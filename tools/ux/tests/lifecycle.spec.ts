@@ -20,7 +20,7 @@ test.describe('closing, archiving, reopening and renaming an investigation', () 
     await expect(banner(page)).toHaveCount(0);
     await menuButton(page).focus();
     await page.keyboard.press('Enter');
-    await expect(page.getByRole('menuitem')).toHaveText(['Rename', 'Close', 'Archive']);
+    await expect(page.getByRole('menuitem')).toHaveText(['Rename', 'Close', 'Archive', 'Delete']);
     await page.keyboard.press('ArrowDown');
     await page.keyboard.press('Enter');
     await expect(header(page).getByText('Closed · read-only')).toBeVisible();
@@ -40,7 +40,7 @@ test.describe('closing, archiving, reopening and renaming an investigation', () 
     await expect(banner(page)).toHaveCount(0);
     await expect(header(page).getByText('Unsaved')).toBeVisible();
     await menuButton(page).click();
-    await expect(page.getByRole('menuitem')).toHaveText(['Rename', 'Close', 'Archive']);
+    await expect(page.getByRole('menuitem')).toHaveText(['Rename', 'Close', 'Archive', 'Delete']);
   });
 
   test('shows an archived investigation with its banner and no action, and a disabled Rename in its menu', async ({ page }) => {

@@ -2,7 +2,7 @@ import type { InvestigationListItem, InvestigationListResponse, OwnedView } from
 import type { ApiClient, ApiResult, InvestigationPageQuery } from '../api/client.js';
 import { fakeClient } from '../api/fake-client.js';
 import { testProfile } from '../dev/test-profile.js';
-import { investigationOf, listItemOf, nodeOf, readOf } from '../investigations/test-data.js';
+import { investigationOf, investigationOfRow, listItemOf, nodeOf, readOf } from '../investigations/test-data.js';
 import { me, source } from '../test-utils.js';
 
 export const idOf = (index: number): string => `0192f000-0000-7000-8000-${String(index).padStart(12, '0')}`;
@@ -35,12 +35,15 @@ export interface Recorded {
   readonly readRefs: { sourceId: string; refs: number }[];
   readonly views: { cursor?: string | undefined }[];
   readonly statusChanges: { id: string; status: string; version: number }[];
+  readonly deletes: { id: string; version: number }[];
+  readonly restores: { id: string; version: number }[];
 }
 
 export function listResponse(items: readonly InvestigationListItem[], matching: number, nextCursor: string | null, savedViews = 0): InvestigationListResponse {
   return {
     items: [...items],
     nextCursor,
+    retention: { deletedInvestigationsDays: 30 },
     matching: { value: matching, quality: 'exact', scope: 'investigations-matching' },
     counts: {
       investigations: { value: matching, quality: 'exact', scope: 'investigations' },
@@ -52,12 +55,12 @@ export function listResponse(items: readonly InvestigationListItem[], matching: 
 
 const matches = (item: InvestigationListItem, query: InvestigationPageQuery): boolean => {
   const text = query.text?.toLowerCase();
-  return item.status === (query.status ?? 'open') && (query.sourceId === undefined || item.sourceId === query.sourceId) && (text === undefined || item.title.toLowerCase().includes(text) || (item.caseRef?.toLowerCase().includes(text) ?? false));
+  return (query.deleted === true ? item.deletedAt !== undefined : item.deletedAt === undefined && item.status === (query.status ?? 'open')) && (query.sourceId === undefined || item.sourceId === query.sourceId) && (text === undefined || item.title.toLowerCase().includes(text) || (item.caseRef?.toLowerCase().includes(text) ?? false));
 };
 
 /** A client over a list held in memory: the list route pages by an offset cursor and filters as the server does; every call is recorded. */
 export function pagedClient(all: readonly InvestigationListItem[], views: readonly OwnedView[] = [], overrides: Partial<ApiClient> = {}): { readonly client: ApiClient; readonly recorded: Recorded } {
-  const recorded: Recorded = { pages: [], readRefs: [], views: [], statusChanges: [] };
+  const recorded: Recorded = { pages: [], readRefs: [], views: [], statusChanges: [], deletes: [], restores: [] };
   const data = [...all];
   const client = fakeClient({
     getMe: async () => ({ ok: true, value: me() }),
@@ -85,16 +88,32 @@ export function pagedClient(all: readonly InvestigationListItem[], views: readon
     getInvestigation: async (id) => {
       const found = data.find((item) => item.id === id);
       if (found === undefined) return { ok: false, failure: { code: 'NOT_FOUND', message: 'Not found.', retryable: false, traceId: 'tr-1' } };
-      const { sourceAlias: _alias, save: _save, nodeCount: _nodes, edgeCount: _edges, ...investigation } = found;
-      return { ok: true, value: readOf(investigation) };
+      return { ok: true, value: readOf(investigationOfRow(found)) };
     },
     changeInvestigationStatus: async (id, status, version) => {
       recorded.statusChanges.push({ id, status, version });
       const found = data.find((item) => item.id === id);
       if (found === undefined) return { ok: false, failure: { code: 'NOT_FOUND', message: 'Not found.', retryable: false, traceId: 'tr-2' } };
       data[data.indexOf(found)] = { ...found, status, version: version + 1 };
-      const { sourceAlias: _alias, save: _save, nodeCount: _nodes, edgeCount: _edges, ...investigation } = found;
+      const investigation = investigationOfRow(found);
       return { ok: true, value: { investigation: { ...investigation, status, version: version + 1, closedAt: null, archivedAt: null } } };
+    },
+    deleteInvestigation: async (id, version) => {
+      recorded.deletes.push({ id, version });
+      const found = data.find((item) => item.id === id);
+      if (found === undefined || found.deletedAt !== undefined) return { ok: false, failure: { code: 'NOT_FOUND', message: 'Not found.', retryable: false, traceId: 'tr-3' } };
+      const deletedAt = '2026-11-10T10:00:00.000Z';
+      const purgeAfter = '2026-12-10T10:00:00.000Z';
+      data[data.indexOf(found)] = { ...found, version: version + 1, deletedAt, purgeAfter };
+      return { ok: true, value: { id, version: version + 1, deletedAt, purgeAfter } };
+    },
+    restoreInvestigation: async (id, version) => {
+      recorded.restores.push({ id, version });
+      const found = data.find((item) => item.id === id);
+      if (found === undefined || found.deletedAt === undefined) return { ok: false, failure: { code: 'NOT_FOUND', message: 'Not found.', retryable: false, traceId: 'tr-4' } };
+      const { deletedAt: _deleted, purgeAfter: _purge, ...restored } = found;
+      data[data.indexOf(found)] = { ...restored, version: version + 1 };
+      return { ok: true, value: readOf({ ...investigationOfRow(restored), version: version + 1 }) };
     },
     ...overrides,
   });

@@ -1,3 +1,4 @@
+import { investigationOfRow } from '../investigations/test-data.js';
 import { act, configure, screen } from '@testing-library/react';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { InvestigationListItem, SourceProfile } from '@neburyx/contracts';
@@ -20,7 +21,7 @@ function profileWith(overrides: Partial<SourceProfile> = {}, sourceId = 'source-
 
 async function shown(items: InvestigationListItem[], overrides = {}) {
   const parts = knowing(
-    items.map((item) => known(item)),
+    items.map((item) => known(investigationOfRow(item))),
     { listInvestigations: async () => ({ ok: true, value: listOf(items) }), getProfile: async (sourceId: string) => ({ ok: true, value: profileWith({}, sourceId) }), ...overrides },
   );
   renderApp('/', parts.client);

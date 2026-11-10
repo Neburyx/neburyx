@@ -141,7 +141,7 @@ describe('the list of the caller\'s investigations', () => {
 
   it('answers an empty list with no rows and no more', async () => {
     const { list } = await started();
-    expect((await list()).body).toEqual({ items: [], nextCursor: null, matching: { value: 0, quality: 'exact', scope: 'investigations-matching' }, counts: counts(0, 0) });
+    expect((await list()).body).toEqual({ retention: { deletedInvestigationsDays: 30 }, items: [], nextCursor: null, matching: { value: 0, quality: 'exact', scope: 'investigations-matching' }, counts: counts(0, 0) });
   });
 
   it('answers 500 INTERNAL_ERROR when the investigations cannot be read', async () => {

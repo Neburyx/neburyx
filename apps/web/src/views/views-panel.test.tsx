@@ -48,7 +48,7 @@ describe('the Views panel', () => {
     shown(viewsServer([]));
     const view = within(await open(user));
     expect(view.getByRole('heading', { name: 'Views · 0' })).toBeTruthy();
-    expect(view.getByRole('status').textContent).toBe('No named views yet.');
+    expect(view.getByText('No named views yet.').getAttribute('role')).toBe('status');
     expect(view.queryByRole('list')).toBeNull();
   });
 
@@ -189,11 +189,11 @@ describe('the Views panel', () => {
     await open(user);
     const names: string[] = [];
     (panel() as HTMLElement).focus();
-    for (let press = 0; press < 4; press += 1) {
+    for (let press = 0; press < 6; press += 1) {
       await user.tab();
       names.push(document.activeElement?.getAttribute('aria-label') ?? '');
     }
-    expect(names).toEqual(['Restore Shared device ring into draft', 'Rename Shared device ring', 'Restore Before expanding the IP address into draft', 'Rename Before expanding the IP address']);
+    expect(names).toEqual(['Restore Shared device ring into draft', 'Rename Shared device ring', 'Delete Shared device ring', 'Restore Before expanding the IP address into draft', 'Rename Before expanding the IP address', 'Delete Before expanding the IP address']);
   });
 
   it('closes on a press outside the panel', async () => {

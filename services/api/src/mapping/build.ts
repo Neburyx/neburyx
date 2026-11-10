@@ -1,3 +1,4 @@
+import { resolveRetention } from './retention.js';
 import type { PresetTemplate } from '@neburyx/contracts';
 import { resolveBudgets } from './budgets.js';
 import { hashSource } from './hash.js';
@@ -322,5 +323,5 @@ export function buildMapping(raw: RawMappingFile): { readonly model: MappingMode
   const report: Report = (segments, reason) => issues.push({ segments, reason });
   reportDuplicates(raw.sources, (source) => [source.id], (i) => ['sources', i, 'id'], 'source', report);
   const sources = raw.sources.map((source, index) => buildSource(source, index, report));
-  return issues.length > 0 ? { issues } : { model: { sources } };
+  return issues.length > 0 ? { issues } : { model: { sources, retention: resolveRetention(raw.retention) } };
 }

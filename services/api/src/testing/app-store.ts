@@ -6,8 +6,8 @@ import type { SourceRow } from '../db/sources-repository.js';
 import type { Identity } from '../identity/identity.js';
 import { readOnlyStatusOf } from '../investigations/read-only.js';
 import { planStatusChange } from '../investigations/status-change.js';
-import { validatedDraft, type CreatedInvestigation, type DraftRow, type DraftWriteResult, type StatusChangeResult, type TitleChangeResult, type InvestigationRow, type ListedInvestigation, type MatchQuery, type NewDraft, type NewInvestigation, type ReusableQuery, type StoredInvestigation } from '../db/investigations-repository.js';
-import type { ViewListResult, ViewRenameResult, ViewRestoreResult, ViewSaveResult } from '../db/views-repository.js';
+import { validatedDraft, type DeleteResult, type RestoreResult, type CreatedInvestigation, type DraftRow, type DraftWriteResult, type StatusChangeResult, type TitleChangeResult, type InvestigationRow, type ListedInvestigation, type MatchQuery, type NewDraft, type NewInvestigation, type ReusableQuery, type StoredInvestigation } from '../db/investigations-repository.js';
+import type { ViewDeleteResult, ViewListResult, ViewRenameResult, ViewRestoreResult, ViewSaveResult } from '../db/views-repository.js';
 import type { SourceModel } from '../mapping/model.js';
 import { decideSourceState, type StoredCheck } from '../source-state/decide.js';
 
@@ -40,6 +40,8 @@ export interface MemoryNamedView {
   readonly contentHash: string;
   readonly createdAt: string;
   readonly version: number;
+  readonly deletedAt?: string;
+  readonly deletionNote?: string | null;
 }
 
 export interface MemoryAppStore extends AppStore {
@@ -79,6 +81,10 @@ export function memoryStoreWith(options: MemoryAppStoreOptions): MemoryAppStore 
   const investigations: InvestigationRow[] = [];
   const drafts: (DraftRow & { readonly investigationId: string; contentHash?: string })[] = [];
   const namedViews: MemoryNamedView[] = [];
+  const deletedAt = new Map<string, { readonly deletedAt: string; readonly purgeAfter: string }>();
+  const liveOf = (id: string, ownerId: string): InvestigationRow | undefined => (deletedAt.has(id) ? undefined : investigations.find((row) => row.id === id && row.ownerId === ownerId));
+  const isDeletedView = (view: MemoryNamedView): boolean => view.deletedAt !== undefined;
+  let deletions = 0;
   return {
     checks,
     namedViews,
@@ -152,14 +158,14 @@ export function memoryStoreWith(options: MemoryAppStoreOptions): MemoryAppStore 
     },
     findReusableInvestigation: (query) => Promise.resolve(reusableOf(investigations, query)),
     readInvestigation: (id, ownerId): Promise<StoredInvestigation | undefined> => {
-      const investigation = investigations.find((row) => row.id === id && row.ownerId === ownerId);
+      const investigation = liveOf(id, ownerId);
       const draft = drafts.find((candidate) => candidate.investigationId === id);
-      const based = draft === undefined ? undefined : namedViews.find((view) => view.id === draft.basedOnViewId && view.investigationId === id);
+      const based = draft === undefined ? undefined : namedViews.find((view) => view.id === draft.basedOnViewId && view.investigationId === id && !isDeletedView(view));
       const savedAt = based !== undefined && draft?.contentHash === based.contentHash ? based.createdAt : null;
-      return Promise.resolve(investigation === undefined || draft === undefined ? undefined : { investigation, draft, savedAt });
+      return Promise.resolve(investigation === undefined || draft === undefined ? undefined : { investigation, draft: { ...draft, basedOnViewId: namedViews.some((view) => view.id === draft.basedOnViewId && isDeletedView(view)) ? null : draft.basedOnViewId }, savedAt });
     },
     saveDraft: (write): Promise<DraftWriteResult> => {
-      const investigation = investigations.find((row) => row.id === write.investigationId && row.ownerId === write.ownerId);
+      const investigation = liveOf(write.investigationId, write.ownerId);
       const draft = drafts.find((candidate) => candidate.investigationId === write.investigationId);
       if (investigation === undefined || draft === undefined) return Promise.resolve({ outcome: 'not-found' });
       const readOnly = readOnlyStatusOf(investigation.status);
@@ -177,7 +183,7 @@ export function memoryStoreWith(options: MemoryAppStoreOptions): MemoryAppStore 
       return Promise.resolve({ outcome: 'saved', version: saved.version, save: { state: 'unsaved', savedAt: null } });
     },
     renameInvestigation: (change): Promise<TitleChangeResult> => {
-      const held = investigations.find((row) => row.id === change.investigationId && row.ownerId === change.ownerId);
+      const held = liveOf(change.investigationId, change.ownerId);
       if (held === undefined) return Promise.resolve({ outcome: 'not-found' });
       const readOnly = readOnlyStatusOf(held.status);
       if (readOnly !== undefined) return Promise.resolve({ outcome: 'read-only', status: readOnly });
@@ -188,7 +194,7 @@ export function memoryStoreWith(options: MemoryAppStoreOptions): MemoryAppStore 
       return Promise.resolve({ outcome: 'renamed', row });
     },
     changeInvestigationStatus: async (change): Promise<StatusChangeResult> => {
-      const held = investigations.find((row) => row.id === change.investigationId && row.ownerId === change.ownerId);
+      const held = liveOf(change.investigationId, change.ownerId);
       if (held === undefined) return { outcome: 'not-found' };
       const plan = planStatusChange(held.status, change.status);
       if (plan === 'unchanged') return { outcome: 'unchanged', row: held };
@@ -202,7 +208,7 @@ export function memoryStoreWith(options: MemoryAppStoreOptions): MemoryAppStore 
       return { outcome: 'changed', row };
     },
     saveNamedView: (save): Promise<ViewSaveResult> => {
-      const investigation = investigations.find((row) => row.id === save.investigationId && row.ownerId === save.ownerId);
+      const investigation = liveOf(save.investigationId, save.ownerId);
       const draft = drafts.find((candidate) => candidate.investigationId === save.investigationId);
       if (investigation === undefined || draft === undefined) return Promise.resolve({ outcome: 'not-found' });
       const frozen = readOnlyStatusOf(investigation.status);
@@ -226,11 +232,11 @@ export function memoryStoreWith(options: MemoryAppStoreOptions): MemoryAppStore 
       });
     },
     listNamedViews: (query): Promise<ViewListResult> => {
-      const investigation = investigations.find((row) => row.id === query.investigationId && row.ownerId === query.ownerId);
+      const investigation = liveOf(query.investigationId, query.ownerId);
       const draft = drafts.find((candidate) => candidate.investigationId === query.investigationId);
       if (investigation === undefined || draft === undefined) return Promise.resolve({ outcome: 'not-found' });
       const keyOf = (view: MemoryNamedView): string => `${view.createdAt.slice(0, -1)}000Z`;
-      const all = namedViews.filter((view) => view.investigationId === query.investigationId).sort((left, right) => (keyOf(left) === keyOf(right) ? (left.id < right.id ? 1 : -1) : keyOf(left) < keyOf(right) ? 1 : -1));
+      const all = namedViews.filter((view) => view.investigationId === query.investigationId && !isDeletedView(view)).sort((left, right) => (keyOf(left) === keyOf(right) ? (left.id < right.id ? 1 : -1) : keyOf(left) < keyOf(right) ? 1 : -1));
       const after = query.after;
       const rest = after === undefined ? all : all.filter((view) => keyOf(view) < after.createdKey || (keyOf(view) === after.createdKey && view.id < after.id));
       const page = rest.slice(0, query.limit);
@@ -246,8 +252,9 @@ export function memoryStoreWith(options: MemoryAppStoreOptions): MemoryAppStore 
     listOwnedViews: (query) => {
       const keyOf = (view: MemoryNamedView): string => `${view.createdAt.slice(0, -1)}000Z`;
       const owned = namedViews
+        .filter((view) => !isDeletedView(view))
         .flatMap((view) => {
-          const investigation = investigations.find((row) => row.id === view.investigationId && row.ownerId === query.ownerId && query.sourceIds.includes(row.sourceId));
+          const investigation = investigations.find((row) => !deletedAt.has(row.id) && row.id === view.investigationId && row.ownerId === query.ownerId && query.sourceIds.includes(row.sourceId));
           return investigation === undefined ? [] : [{ view, investigation }];
         })
         .sort((left, right) => (keyOf(left.view) === keyOf(right.view) ? (left.view.id < right.view.id ? 1 : -1) : keyOf(left.view) < keyOf(right.view) ? 1 : -1));
@@ -270,8 +277,8 @@ export function memoryStoreWith(options: MemoryAppStoreOptions): MemoryAppStore 
       });
     },
     renameNamedView: (rename): Promise<ViewRenameResult> => {
-      const investigation = investigations.find((row) => row.id === rename.investigationId && row.ownerId === rename.ownerId);
-      const view = namedViews.find((candidate) => candidate.id === rename.viewId && candidate.investigationId === rename.investigationId);
+      const investigation = liveOf(rename.investigationId, rename.ownerId);
+      const view = namedViews.find((candidate) => candidate.id === rename.viewId && candidate.investigationId === rename.investigationId && !isDeletedView(candidate));
       if (investigation === undefined || view === undefined) return Promise.resolve({ outcome: 'not-found' });
       const frozen = readOnlyStatusOf(investigation.status);
       if (frozen !== undefined) return Promise.resolve({ outcome: 'read-only', status: frozen });
@@ -281,9 +288,9 @@ export function memoryStoreWith(options: MemoryAppStoreOptions): MemoryAppStore 
       return Promise.resolve({ outcome: 'renamed', view: { id: renamed.id, name: renamed.name, notes: renamed.notes, savedBy: { name: LOCAL_IDENTITY.principal.displayName }, createdAt: renamed.createdAt, version: renamed.version } });
     },
     restoreNamedView: (restore): Promise<ViewRestoreResult> => {
-      const investigation = investigations.find((row) => row.id === restore.investigationId && row.ownerId === restore.ownerId);
+      const investigation = liveOf(restore.investigationId, restore.ownerId);
       const draft = drafts.find((candidate) => candidate.investigationId === restore.investigationId);
-      const view = namedViews.find((candidate) => candidate.id === restore.viewId && candidate.investigationId === restore.investigationId);
+      const view = namedViews.find((candidate) => candidate.id === restore.viewId && candidate.investigationId === restore.investigationId && !isDeletedView(candidate));
       if (investigation === undefined || draft === undefined || view === undefined) return Promise.resolve({ outcome: 'not-found' });
       const frozen = readOnlyStatusOf(investigation.status);
       if (frozen !== undefined) return Promise.resolve({ outcome: 'read-only', status: frozen });
@@ -292,9 +299,66 @@ export function memoryStoreWith(options: MemoryAppStoreOptions): MemoryAppStore 
       if (draft.contentHash !== view.contentHash) investigations[investigations.indexOf(investigation)] = { ...investigation, lastEditedAt: new Date(Date.parse(investigation.lastEditedAt) + 1000).toISOString() };
       return Promise.resolve({ outcome: 'restored', savedAt: view.createdAt, draft: { version: draft.version + 1, layout: view.layout, queryContext: view.queryContext, notes: view.notes, basedOnViewId: view.id } });
     },
+    purgeExpiredInvestigations: async (beforeDelete) => {
+      const expired = investigations.filter((row) => (deletedAt.get(row.id)?.purgeAfter ?? '9999') <= new Date(Date.UTC(2026, 10, 7, 12, 0, deletions)).toISOString());
+      for (const row of expired) {
+        await beforeDelete({ id: row.id, sourceId: row.sourceId });
+        investigations.splice(investigations.indexOf(row), 1);
+        deletedAt.delete(row.id);
+        drafts.splice(0, drafts.length, ...drafts.filter((draft) => draft.investigationId !== row.id));
+        namedViews.splice(0, namedViews.length, ...namedViews.filter((view) => view.investigationId !== row.id));
+      }
+      return expired.length;
+    },
+    deleteNamedView: (deletion): Promise<ViewDeleteResult> => {
+      const investigation = liveOf(deletion.investigationId, deletion.ownerId);
+      const view = namedViews.find((candidate) => candidate.id === deletion.viewId && candidate.investigationId === deletion.investigationId && !isDeletedView(candidate));
+      const draft = drafts.find((candidate) => candidate.investigationId === deletion.investigationId);
+      if (investigation === undefined || view === undefined || draft === undefined) return Promise.resolve({ outcome: 'not-found' });
+      const frozen = readOnlyStatusOf(investigation.status);
+      if (frozen !== undefined) return Promise.resolve({ outcome: 'read-only', status: frozen });
+      if (view.version !== deletion.expectedVersion) return Promise.resolve({ outcome: 'conflict' });
+      const when = new Date(Date.UTC(2026, 10, 7, 12, 0, deletions++)).toISOString();
+      const marked = { ...view, version: view.version + 1, deletedAt: when, deletionNote: deletion.note };
+      namedViews[namedViews.indexOf(view)] = marked;
+      const based = namedViews.find((candidate) => candidate.id === draft.basedOnViewId && !isDeletedView(candidate));
+      const saved = based !== undefined && based.contentHash === draft.contentHash;
+      return Promise.resolve({
+        outcome: 'deleted',
+        id: view.id,
+        version: marked.version,
+        deletedAt: when,
+        draft: { version: draft.version, basedOnViewId: based?.id ?? null },
+        save: saved && based !== undefined ? { state: 'saved', savedAt: based.createdAt } : { state: 'unsaved', savedAt: null },
+        count: namedViews.filter((candidate) => candidate.investigationId === deletion.investigationId && !isDeletedView(candidate)).length,
+      });
+    },
+    deleteInvestigation: async (change): Promise<DeleteResult> => {
+      const held = liveOf(change.investigationId, change.ownerId);
+      if (held === undefined) return { outcome: 'not-found' };
+      if (held.version !== change.expectedVersion) return { outcome: 'conflict' };
+      const at = new Date(Date.UTC(2026, 10, 7, 12, 0, deletions++));
+      const row = { ...held, version: held.version + 1 };
+      await change.beforeCommit(row);
+      const purgeAfter = new Date(at.getTime() + change.retentionDays * 86_400_000);
+      investigations[investigations.indexOf(held)] = row;
+      deletedAt.set(held.id, { deletedAt: at.toISOString(), purgeAfter: purgeAfter.toISOString() });
+      return { outcome: 'deleted', row, deletedAt: at.toISOString(), purgeAfter: purgeAfter.toISOString() };
+    },
+    restoreInvestigation: async (change): Promise<RestoreResult> => {
+      const held = investigations.find((row) => row.id === change.investigationId && row.ownerId === change.ownerId);
+      const marks = deletedAt.get(change.investigationId);
+      if (held === undefined || marks === undefined || marks.purgeAfter <= new Date(Date.UTC(2026, 10, 7, 12, 0, deletions)).toISOString()) return { outcome: 'not-found' };
+      if (held.version !== change.expectedVersion) return { outcome: 'conflict' };
+      const row = { ...held, version: held.version + 1 };
+      await change.beforeCommit(row);
+      investigations[investigations.indexOf(held)] = row;
+      deletedAt.delete(held.id);
+      return { outcome: 'restored', row };
+    },
     // The double has no named views: every draft is unsaved. The Postgres suite proves the saved rule.
     readLibrary: (read) => {
-      const snapshot = [...investigations];
+      const snapshot = investigations.filter((row) => !deletedAt.has(row.id));
       const matching = (query: MatchQuery): InvestigationRow[] => {
         const fragment = query.text?.toLowerCase();
         return snapshot.filter(
@@ -330,6 +394,23 @@ export function memoryStoreWith(options: MemoryAppStoreOptions): MemoryAppStore 
         countNamedViews: () => {
           if (options.failCounts === true) return Promise.reject(new Error('the counts could not be read'));
           return Promise.resolve({ views: 0, lastEditedAt: null });
+        },
+        listDeletedInvestigationSourceIds: (ownerId) => Promise.resolve([...new Set(investigations.filter((row) => row.ownerId === ownerId && deletedAt.has(row.id)).map((row) => row.sourceId))]),
+        listDeletedInvestigations: (query) => {
+          const fragment = query.text?.toLowerCase();
+          const listed: ListedInvestigation[] = investigations
+            .flatMap((row) => {
+              const marks = deletedAt.get(row.id);
+              return marks === undefined || row.ownerId !== query.ownerId || !query.sourceIds.includes(row.sourceId) || (query.sourceId !== undefined && row.sourceId !== query.sourceId) || (fragment !== undefined && !row.title.toLowerCase().includes(fragment) && !(row.caseRef?.toLowerCase().includes(fragment) ?? false)) ? [] : [{ row, marks }];
+            })
+            .map(({ row, marks }) => ({ ...row, deletedAt: marks.deletedAt, purgeAfter: marks.purgeAfter, sourceAlias: rows.find((source) => source.id === row.sourceId)?.alias ?? row.sourceId, save: { state: 'unsaved' as const, savedAt: null }, nodeCount: 0, edgeCount: 0, countsPolicyVersion: 'none', lastEditedKey: `${marks.deletedAt.slice(0, -1)}000Z` }))
+            .sort((left, right) => (left.lastEditedKey < right.lastEditedKey ? 1 : left.lastEditedKey > right.lastEditedKey ? -1 : left.id < right.id ? 1 : -1))
+            .filter((row) => query.after === undefined || row.lastEditedKey < query.after.editedKey || (row.lastEditedKey === query.after.editedKey && row.id < query.after.id));
+          return Promise.resolve(listed.slice(0, query.limit));
+        },
+        countDeletedMatching: (query) => {
+          const fragment = query.text?.toLowerCase();
+          return Promise.resolve(investigations.filter((row) => deletedAt.has(row.id) && row.ownerId === query.ownerId && query.sourceIds.includes(row.sourceId) && (query.sourceId === undefined || row.sourceId === query.sourceId) && (fragment === undefined || row.title.toLowerCase().includes(fragment) || (row.caseRef?.toLowerCase().includes(fragment) ?? false))).length);
         },
       });
     },

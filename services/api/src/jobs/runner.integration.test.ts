@@ -8,6 +8,7 @@ import { runCli } from '../testing/cli.js';
 import { rows } from '../testing/database.js';
 import { startPostgres, type TestDatabase, type TestPostgres } from '../testing/postgres.js';
 import { startApi, stopApi, webRoot } from '../testing/start-api.js';
+import { maintenanceTasks } from './maintenance.js';
 import type { Task } from './tasks.js';
 
 let postgres: TestPostgres;
@@ -73,6 +74,54 @@ describe('the job runner of the API', () => {
       await vi.waitFor(async () => expect(await listeners(database)).toBeGreaterThan(0), WAIT);
       await enqueue(database, 'record', { n: 7 });
       await vi.waitFor(() => expect(received).toEqual([{ n: 7 }]), WAIT);
+    } finally {
+      await stopApi(result);
+    }
+  });
+
+  it('starts the shipped purge with its schedule known to the runner, and a queued job removes an expired deleted investigation and nothing else', async () => {
+    const database = await migrated();
+    const owner = '0192f000-0000-7000-8000-000000000001';
+    await rows(database.ownerUrl, `INSERT INTO users (id, issuer, subject, display_name) VALUES ($1, 'issuer', 'one', 'One')`, [owner]);
+    await rows(database.ownerUrl, `INSERT INTO sources (id, alias, connector, uri, database, secret_ref, config_hash, identity_hash) VALUES ('alpha', 'alpha', 'neo4j', 'bolt://x', 'neo4j', 'a:b', 'h', 'i')`);
+    const insert = (id: string, extra: string) => rows(database.ownerUrl, `INSERT INTO investigations (id, source_id, source_identity_hash, owner_id, title ${extra.split('|')[0] ?? ''}) VALUES ($1, 'alpha', 'i', $2, 'T' ${extra.split('|')[1] ?? ''})`, [id, owner]);
+    await insert('0192f000-0000-7000-8000-0000000000a1', `, deleted_at, purge_after, deleted_by| , now() - interval '2 days', now() - interval '1 second', '${owner}'`);
+    await insert('0192f000-0000-7000-8000-0000000000a2', `, deleted_at, purge_after, deleted_by| , now(), now() + interval '1 day', '${owner}'`);
+    await insert('0192f000-0000-7000-8000-0000000000a3', '|');
+    const { result } = await startApi({ DATABASE_URL: database.appUrl }, undefined, {});
+    if (result.exitCode !== 0) throw new Error('the API did not start');
+    try {
+      await vi.waitFor(async () => expect((await rows(database.ownerUrl, 'SELECT identifier FROM graphile_worker._private_known_crontabs')).map((row) => row['identifier'])).toContain('purge-deleted-investigations'), WAIT);
+      await enqueue(database, 'purge-deleted-investigations');
+      await vi.waitFor(async () => expect((await rows(database.ownerUrl, 'SELECT id FROM investigations ORDER BY id')).map((row) => row['id'])).toEqual(['0192f000-0000-7000-8000-0000000000a2', '0192f000-0000-7000-8000-0000000000a3']), WAIT);
+      expect(await queued(database)).toEqual([]);
+    } finally {
+      await stopApi(result);
+    }
+  });
+
+  it('logs a failed purge when the audit sink rejects, keeps the API serving, and purges on the next job', async () => {
+    const database = await migrated();
+    const lines: string[] = [];
+    let sinkCalls = 0;
+    let purged = 0;
+    const logger = createLogger({ write: (chunk: string) => lines.push(chunk) });
+    const tasks = maintenanceTasks({
+      store: { purgeExpiredInvestigations: async (beforeDelete) => (await beforeDelete({ id: 'x', sourceId: 'demo' }), ++purged) },
+      audit: { record: () => (++sinkCalls === 1 ? Promise.reject(new Error('the sink is down')) : Promise.resolve()) },
+      logger,
+    });
+    const { result } = await startApi({ DATABASE_URL: database.appUrl }, undefined, { tasks, logger });
+    if (result.exitCode !== 0) throw new Error('the API did not start');
+    try {
+      await vi.waitFor(async () => expect(await listeners(database)).toBeGreaterThan(0), WAIT);
+      await enqueue(database, 'purge-deleted-investigations');
+      await vi.waitFor(() => expect(lines.join('')).toContain('"event":"job.failed"'), WAIT);
+      expect(lines.join('')).toContain('"task":"purge-deleted-investigations"');
+      expect((await result.app.inject({ method: 'GET', url: '/healthz' })).statusCode).toBe(200);
+      expect(purged).toBe(0);
+      await enqueue(database, 'purge-deleted-investigations');
+      await vi.waitFor(() => expect(purged).toBe(1), WAIT);
     } finally {
       await stopApi(result);
     }

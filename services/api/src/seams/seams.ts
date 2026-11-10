@@ -17,7 +17,8 @@ export type AuditResult = 'success' | 'denied' | 'partial' | 'refused' | 'failed
 
 export interface AuditEvent {
   readonly actorId: string;
-  readonly actorRole: Principal['role'];
+  /** `system` for work no person started, such as the purge of deleted investigations. */
+  readonly actorRole: Principal['role'] | 'system';
   readonly action: string;
   readonly result: AuditResult;
   readonly sourceId?: string;

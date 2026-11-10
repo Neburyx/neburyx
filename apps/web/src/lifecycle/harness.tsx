@@ -1,4 +1,5 @@
 import { act, render } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
 import type { Investigation, StatusChangeResponse } from '@neburyx/contracts';
 import type { ApiClient, ApiFailure, ApiResult } from '../api/client.js';
@@ -52,7 +53,7 @@ export interface Rendered {
 }
 
 /** The header identity with the menu slot, the status banner and the read-only sync, over a fake client. */
-export function renderLifecycle(state: ClientState, overrides: Partial<ApiClient> = {}): Rendered {
+export function renderLifecycle(state: ClientState, overrides: Partial<ApiClient> = {}, extra?: ReactNode): Rendered {
   const banner = createBannerController();
   const slots = createSlotRegistry();
   const client = fakeClient(overrides);
@@ -65,6 +66,7 @@ export function renderLifecycle(state: ClientState, overrides: Partial<ApiClient
             <InvestigationIdentity />
             <StatusBanner />
             <ReadOnlyBannerSync client={client} />
+            {extra}
           </SlotsProvider>
         </BannerProvider>
       </ClientStateProvider>

@@ -67,6 +67,7 @@ export const investigationListQuerySchema = z.strictObject({
   cursor: z.string().min(1).max(2048).optional(),
   sort: z.enum(INVESTIGATION_LIST_SORTS).optional(),
   status: z.enum(INVESTIGATION_STATUSES).optional(),
+  deleted: z.enum(['true', 'false']).optional(),
   source: text.optional(),
   q: listFilterTextSchema.optional(),
 });
@@ -75,7 +76,10 @@ export const investigationListQuerySchema = z.strictObject({
 export const investigationSaveSchema = z.discriminatedUnion('state', [z.strictObject({ state: z.literal('saved'), savedAt: z.iso.datetime() }), z.strictObject({ state: z.literal('unsaved'), savedAt: z.null() })]);
 
 /** `sourceAlias` is kept for a source taken out of the configuration. */
-export const investigationListItemSchema = investigationSchema.extend({ sourceAlias: text, save: investigationSaveSchema, nodeCount: z.number().int().nonnegative().nullable(), edgeCount: z.number().int().nonnegative().nullable() });
+/** The starting entity of a list row; a deleted row holds its type only, since nothing is read for it and its identifier is not shown. */
+const listStartingEntitySchema = z.strictObject({ entityType: text, stableId: text.optional() });
+
+export const investigationListItemSchema = investigationSchema.omit({ startingEntity: true }).extend({ startingEntity: listStartingEntitySchema.nullable(), sourceAlias: text, save: investigationSaveSchema, nodeCount: z.number().int().nonnegative().nullable(), edgeCount: z.number().int().nonnegative().nullable(), deletedAt: z.iso.datetime().optional(), purgeAfter: z.iso.datetime().optional() });
 
 const exactCountOf = <S extends string>(scope: S) => z.strictObject({ value: z.number().int().nonnegative(), quality: z.literal('exact'), scope: z.literal(scope) });
 
@@ -86,8 +90,11 @@ export const investigationListCountsSchema = z.strictObject({
   savedViews: z.strictObject({ count: exactCountOf('named-views'), lastEditedAt: z.iso.datetime().nullable() }),
 });
 
+/** How long a deleted investigation stays restorable, from the configuration. */
+export const retentionShownSchema = z.strictObject({ deletedInvestigationsDays: z.number().int().min(1) });
+
 /** `matching` is the exact number of investigations the filters select, taken with the page. */
-export const investigationListResponseSchema = z.strictObject({ items: z.array(investigationListItemSchema), nextCursor: z.string().nullable(), counts: investigationListCountsSchema, matching: exactCountOf('investigations-matching') });
+export const investigationListResponseSchema = z.strictObject({ items: z.array(investigationListItemSchema), nextCursor: z.string().nullable(), counts: investigationListCountsSchema, matching: exactCountOf('investigations-matching'), retention: retentionShownSchema });
 
 /** `POST /v1/investigations`: open an entity as an investigation. The entity names its own source so a reference to another source is refused, not read. */
 const openRequestBase = { sourceId: text, caseRef: caseRefSchema.optional(), mask: z.boolean().optional() };
@@ -176,6 +183,12 @@ export const statusChangeRequestSchema = z.strictObject({ status: z.enum(INVESTI
 /** The investigation after a status change, with when it was closed and archived (`null` while it is not). */
 export const statusChangeResponseSchema = z.strictObject({ investigation: investigationSchema.extend({ closedAt: z.iso.datetime().nullable(), archivedAt: z.iso.datetime().nullable() }) });
 
+/** `DELETE /v1/investigations/{id}`: the guard is the investigation's `version` in `If-Match`. `purgeAfter` is the last moment the investigation can be restored. */
+export const deleteInvestigationResponseSchema = z.strictObject({ id: z.uuid(), version: z.number().int().min(1), deletedAt: z.iso.datetime(), purgeAfter: z.iso.datetime() });
+
+/** `POST /v1/investigations/{id}/restore`: the investigation's own version goes in the body as `expectedVersion`. */
+export const restoreInvestigationRequestSchema = z.strictObject({ expectedVersion: z.number().int().min(1) });
+
 /** Why a saved property filter is no longer kept after the mapping changed. A filter has exactly one reason, the first that holds in this order. A type filter is never dropped: the state saved for a type is kept for when the mapping has it again. */
 export const DROPPED_FILTER_REASONS = ['property-removed', 'now-personal', 'not-filterable'] as const;
 
@@ -200,6 +213,8 @@ export type LayoutDocument = z.infer<typeof layoutDocumentSchema>;
 export type QueryContextDocument = z.infer<typeof queryContextDocumentSchema>;
 export type DraftWriteRequest = z.infer<typeof draftWriteRequestSchema>;
 export type DraftWriteResponse = z.infer<typeof draftWriteResponseSchema>;
+export type DeleteInvestigationResponse = z.infer<typeof deleteInvestigationResponseSchema>;
+export type RestoreInvestigationRequest = z.infer<typeof restoreInvestigationRequestSchema>;
 export type RenameRequest = z.infer<typeof renameRequestSchema>;
 export type RenameResponse = z.infer<typeof renameResponseSchema>;
 export type StatusChangeRequest = z.infer<typeof statusChangeRequestSchema>;

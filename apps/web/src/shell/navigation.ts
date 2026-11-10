@@ -1,5 +1,6 @@
 export const EXPLORE_PATH = '/explore';
 export const SOURCES_PATH = '/sources';
+export const INVESTIGATIONS_PATH = '/investigations';
 
 export interface NavigationItem {
   readonly to: string;

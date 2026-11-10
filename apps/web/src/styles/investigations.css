@@ -267,3 +267,21 @@
   width: var(--space-12);
   height: var(--space-12);
 }
+
+.investigations-chip {
+  height: var(--button-height);
+  padding: 0 var(--space-12);
+  border: var(--border-width) solid var(--color-control-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--font-size-small);
+  cursor: pointer;
+}
+
+.investigations-chip[aria-pressed='true'] {
+  border-color: var(--color-accent);
+  background: var(--color-accent-surface);
+  color: var(--color-text-strong);
+}

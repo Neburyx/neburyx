@@ -142,13 +142,13 @@ test.describe('saving, listing, restoring and renaming named views', () => {
     await expect(saveButton(page)).toBeDisabled();
     await viewsButton(page).click();
     const views = panel(page);
-    await expect(views).toContainText('Reopen to restore or rename views.');
+    await expect(views).toContainText('Reopen to restore, rename or delete views.');
     const restore = views.getByRole('button', { name: 'Restore First look into draft' });
     const rename = views.getByRole('button', { name: 'Rename First look' });
     await expect(restore).toBeDisabled();
     await expect(rename).toBeDisabled();
     const reason = (await restore.getAttribute('aria-describedby')) ?? '';
-    expect(await page.evaluate((id) => document.getElementById(id)?.textContent ?? '', reason)).toBe('Reopen to restore or rename views.');
+    expect(await page.evaluate((id) => document.getElementById(id)?.textContent ?? '', reason)).toBe('Reopen to restore, rename or delete views.');
     for (let press = 0; press < 8; press += 1) {
       await page.keyboard.press('Tab');
       await expect(restore).not.toBeFocused();

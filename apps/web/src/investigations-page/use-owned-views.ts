@@ -11,6 +11,10 @@ export interface OwnedViewsState {
   readonly failure: { readonly where: 'first' | 'more'; readonly failure: ApiFailure } | undefined;
   /** The first view of the page last appended, which takes the focus once it is drawn. */
   readonly focusId: string | undefined;
+  /** What the last delete came to, until the list is read again. */
+  readonly note: string | undefined;
+  /** The note belongs to the read that follows it (a view changed or deleted elsewhere), so that read keeps it. */
+  readonly keepNote?: boolean;
 }
 
 type Action =
@@ -19,22 +23,35 @@ type Action =
   | { readonly type: 'more-started' }
   | { readonly type: 'more-answered'; readonly items: readonly OwnedView[]; readonly count: number; readonly nextCursor: string | null }
   | { readonly type: 'failed'; readonly where: 'first' | 'more'; readonly failure: ApiFailure }
+  | { readonly type: 'remove-row'; readonly id: string; readonly note: string }
+  | { readonly type: 'note'; readonly note: string }
   | { readonly type: 'focus-taken' };
 
-const INITIAL: OwnedViewsState = { items: undefined, count: undefined, nextCursor: null, loading: true, loadingMore: false, failure: undefined, focusId: undefined };
+const INITIAL: OwnedViewsState = { items: undefined, count: undefined, nextCursor: null, loading: true, loadingMore: false, failure: undefined, focusId: undefined, note: undefined };
+
+/** `focusId` when the view that left was the last one: the caption of the table takes the focus. */
+export const NO_VIEW_LEFT = '';
 
 export function reduceViews(state: OwnedViewsState, action: Action): OwnedViewsState {
   switch (action.type) {
     case 'first-started':
       return { ...state, loading: true, loadingMore: false, failure: undefined };
     case 'first-answered':
-      return { items: action.items, count: action.count, nextCursor: action.nextCursor, loading: false, loadingMore: false, failure: undefined, focusId: undefined };
+      return { items: action.items, count: action.count, nextCursor: action.nextCursor, loading: false, loadingMore: false, failure: undefined, focusId: undefined, note: state.keepNote === true ? state.note : undefined };
     case 'more-started':
       return { ...state, loadingMore: true, failure: undefined };
     case 'more-answered':
       return { ...state, items: [...(state.items ?? []), ...action.items], count: action.count, nextCursor: action.nextCursor, loadingMore: false, failure: undefined, focusId: action.items[0]?.id };
     case 'failed':
       return { ...state, loading: false, loadingMore: false, failure: { where: action.where, failure: action.failure } };
+    case 'remove-row': {
+      const rows = state.items ?? [];
+      const at = rows.findIndex((view) => view.id === action.id);
+      const neighbour = rows[at + 1] ?? rows[at - 1];
+      return { ...state, items: rows.filter((view) => view.id !== action.id), count: state.count === undefined ? undefined : Math.max(0, state.count - 1), focusId: neighbour?.id ?? NO_VIEW_LEFT, note: action.note };
+    }
+    case 'note':
+      return { ...state, note: action.note, keepNote: true };
     case 'focus-taken':
       return { ...state, focusId: undefined };
     default: {
@@ -49,6 +66,9 @@ export interface OwnedViews {
   readonly showMore: () => void;
   readonly retry: () => void;
   readonly focusTaken: () => void;
+  /** A view was deleted from here: it leaves the list, the count goes down by one (the next read corrects it) and the note is said. */
+  readonly removeRow: (id: string, note: string) => void;
+  readonly setNote: (note: string) => void;
 }
 
 /** The pages of the caller's named views across their investigations, newest first. */
@@ -93,5 +113,12 @@ export function useOwnedViews(client: ApiClient): OwnedViews {
     });
   }, [client, loadFirst]);
 
-  return { state, showMore, retry: loadFirst, focusTaken: useCallback(() => dispatch({ type: 'focus-taken' }), []) };
+  return {
+    state,
+    showMore,
+    retry: loadFirst,
+    focusTaken: useCallback(() => dispatch({ type: 'focus-taken' }), []),
+    removeRow: useCallback((id, note) => dispatch({ type: 'remove-row', id, note }), []),
+    setNote: useCallback((note) => dispatch({ type: 'note', note }), []),
+  };
 }

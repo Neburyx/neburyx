@@ -34,3 +34,10 @@ export const TITLE_EMPTY = 'Enter a name.';
 export const TITLE_TOO_LONG = 'Use 200 characters or fewer.';
 export const TITLE_INVALID = 'Remove the characters that cannot be stored.';
 export const RENAMING = 'Renaming…';
+
+export const DELETE = 'Delete';
+export const DELETE_TITLE = 'Delete this investigation?';
+export const DELETE_TEXT = 'It leaves your lists now and can be restored from the Deleted list until its purge date. After that it is deleted for good, with its named views and notes.';
+export const DELETE_INVESTIGATION = 'Delete investigation';
+export const DELETING = 'Deleting…';
+export const investigationDeleted = (until: string): string => `Investigation deleted. Restorable until ${until} UTC.`;

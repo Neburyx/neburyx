@@ -13,7 +13,7 @@ export interface ContractFailure {
 
 export type ErrorCase =
   | {
-      readonly method: 'GET' | 'POST' | 'PUT' | 'HEAD';
+      readonly method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'HEAD';
       readonly url: string;
       readonly payload?: string;
       readonly headers?: Readonly<Record<string, string>>;
@@ -46,6 +46,9 @@ const PRODUCT_EXAMPLES: Readonly<Record<string, OperationExample>> = {
   'POST /v1/investigations': { url: '/v1/investigations', payload: JSON.stringify({ sourceId: 'demo', entity: { sourceId: 'demo', entityType: 'node_a', stableId: 'A-1' } }) },
   'GET /v1/investigations/{id}': { url: '/v1/investigations/0192f000-0000-7000-8000-000000000001' },
   'PUT /v1/investigations/{id}': { url: '/v1/investigations/0192f000-0000-7000-8000-000000000001', payload: '{}', headers: { 'content-type': 'application/json' } },
+  'DELETE /v1/investigations/{id}': { url: '/v1/investigations/0192f000-0000-7000-8000-000000000001', headers: { 'if-match': '"1"' } },
+  'POST /v1/investigations/{id}/restore': { url: '/v1/investigations/0192f000-0000-7000-8000-000000000001/restore', payload: '{}', headers: { 'content-type': 'application/json' } },
+  'POST /v1/investigations/{id}/views/{viewId}/delete': { url: '/v1/investigations/0192f000-0000-7000-8000-000000000001/views/0192f000-0000-7000-8000-0000000000b1/delete', payload: '{}', headers: { 'content-type': 'application/json', 'if-match': '"1"' } },
   'POST /v1/investigations/{id}/status': { url: '/v1/investigations/0192f000-0000-7000-8000-000000000001/status', payload: '{}', headers: { 'content-type': 'application/json' } },
   'GET /v1/investigations/{id}/views': { url: '/v1/investigations/0192f000-0000-7000-8000-000000000001/views' },
   'PUT /v1/investigations/{id}/views/{viewId}': { url: '/v1/investigations/0192f000-0000-7000-8000-000000000001/views/0192f000-0000-7000-8000-0000000000b1', payload: '{}', headers: { 'content-type': 'application/json', 'if-match': '"1"' } },

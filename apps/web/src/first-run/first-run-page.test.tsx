@@ -15,7 +15,7 @@ function show(sources: readonly SourceSummary[]) {
   const calls = { open: 0, list: 0, sources: 0 };
   const parts = knowing([], {
     getSources: async () => (calls.sources++, { ok: true, value: { items: [...sources], nextCursor: null } }),
-    listInvestigations: async () => (calls.list++, { ok: true, value: { items: [], nextCursor: null, matching: { value: 0, quality: 'exact', scope: 'investigations-matching' }, counts: { investigations: { value: 0, quality: 'exact', scope: 'investigations' }, sources: { value: 0, quality: 'exact', scope: 'investigation-sources' }, savedViews: { count: { value: 0, quality: 'exact', scope: 'named-views' }, lastEditedAt: null } } } }),
+    listInvestigations: async () => (calls.list++, { ok: true, value: { retention: { deletedInvestigationsDays: 30 }, items: [], nextCursor: null, matching: { value: 0, quality: 'exact', scope: 'investigations-matching' }, counts: { investigations: { value: 0, quality: 'exact', scope: 'investigations' }, sources: { value: 0, quality: 'exact', scope: 'investigation-sources' }, savedViews: { count: { value: 0, quality: 'exact', scope: 'named-views' }, lastEditedAt: null } } } }),
     openInvestigation: async () => (calls.open++, { ok: false, failure: { code: 'NETWORK_UNAVAILABLE' } }),
   });
   const view = renderApp('/', parts.client);

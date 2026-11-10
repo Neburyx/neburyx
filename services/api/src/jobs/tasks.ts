@@ -15,8 +15,6 @@ export class TaskConfigError extends Error {
   }
 }
 
-export const registeredTasks: readonly Task[] = [];
-
 export function cronItemsOf(tasks: readonly Task[]): readonly CronItem[] {
   return tasks.flatMap((task) => (task.schedule === undefined ? [] : [{ task: task.name, match: task.schedule, identifier: task.name }]));
 }

@@ -36,6 +36,8 @@
     { "name": "Explore with its read failed", "route": "explore/:investigationId" },
     { "name": "Explore with the investigation menu open", "route": "explore/:investigationId" },
     { "name": "Explore with the rename dialog open", "route": "explore/:investigationId" },
+    { "name": "Explore with the delete dialog open", "route": "explore/:investigationId" },
+    { "name": "Explore with the delete view dialog open", "route": "explore/:investigationId" },
     { "name": "Explore with a closed investigation", "route": "explore/:investigationId" },
     { "name": "Explore without an investigation", "route": "explore" },
     { "name": "The deep-link page failed", "route": ":sourceId/entity/:entityType/:stableId" },
@@ -43,6 +45,9 @@
     { "name": "Investigations with rows", "route": "investigations" },
     { "name": "Investigations with a row menu open", "route": "investigations" },
     { "name": "Investigations with the Saved views tab", "route": "investigations" },
+    { "name": "Investigations with the Deleted view", "route": "investigations" },
+    { "name": "Investigations with a delete dialog open", "route": "investigations" },
+    { "name": "Investigations with the delete view dialog open", "route": "investigations" },
     { "name": "Investigations with the list read failed", "route": "investigations" },
     { "name": "The not-found page", "route": "*" },
     { "name": "First run", "route": "" }

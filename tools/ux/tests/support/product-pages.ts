@@ -98,6 +98,31 @@ export const REACH: Readonly<Record<string, (page: Page) => Promise<void>>> = {
     await page.goto('/investigations?tab=views');
     await expect(page.getByRole('button', { name: /^Open “Saved state/ }).first()).toBeVisible();
   },
+  'Investigations with the Deleted view': async (page) => {
+    await page.request.post('/__support/forget-investigations');
+    await page.request.post('/__support/seed-investigations', { data: { count: 3, sourceId: 'banking-demo', viewEvery: 0 } });
+    await page.goto('/investigations');
+    await page.getByRole('button', { name: 'Actions for Case 1', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Delete' }).click();
+    await page.getByRole('dialog', { name: 'Delete this investigation?' }).getByRole('button', { name: 'Delete investigation' }).click();
+    await page.getByRole('button', { name: 'Deleted' }).click();
+    await expect(page.getByRole('button', { name: 'Restore Case 1' })).toBeVisible();
+  },
+  'Investigations with a delete dialog open': async (page) => {
+    await page.request.post('/__support/forget-investigations');
+    await page.request.post('/__support/seed-investigations', { data: { count: 3, sourceId: 'banking-demo', viewEvery: 0 } });
+    await page.goto('/investigations');
+    await page.getByRole('button', { name: 'Actions for Case 1', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Delete' }).click();
+    await expect(page.getByRole('dialog', { name: 'Delete this investigation?' })).toBeVisible();
+  },
+  'Investigations with the delete view dialog open': async (page) => {
+    await page.request.post('/__support/forget-investigations');
+    await page.request.post('/__support/seed-investigations', { data: { count: 3, sourceId: 'banking-demo', viewEvery: 1 } });
+    await page.goto('/investigations?tab=views');
+    await page.getByRole('button', { name: /^Delete “Saved state 1”/ }).click();
+    await expect(page.getByRole('dialog', { name: /^Delete “Saved state 1” from/ })).toBeVisible();
+  },
   'Investigations with the list read failed': async (page) => {
     await abort(page, (url) => url.pathname === '/v1/investigations');
     await page.goto('/investigations');
@@ -272,6 +297,21 @@ export const REACH: Readonly<Record<string, (page: Page) => Promise<void>>> = {
     await page.getByRole('button', { name: 'Investigation menu' }).click();
     await page.getByRole('menuitem', { name: 'Rename' }).click();
     await expect(page.getByRole('dialog', { name: 'Rename investigation' })).toBeVisible();
+  },
+  'Explore with the delete dialog open': async (page) => {
+    await openEntity(page, 'banking-demo', `PD-${unique()}`);
+    await page.getByRole('button', { name: 'Investigation menu' }).click();
+    await page.getByRole('menuitem', { name: 'Delete' }).click();
+    await expect(page.getByRole('dialog', { name: 'Delete this investigation?' })).toBeVisible();
+  },
+  'Explore with the delete view dialog open': async (page) => {
+    await openEntity(page, 'banking-demo', `PV-${unique()}`);
+    await page.getByRole('banner', { name: 'Investigation' }).getByRole('button', { name: 'Save' }).click();
+    await page.getByRole('dialog', { name: 'Save investigation' }).getByLabel('Name').fill('First look');
+    await page.getByRole('dialog', { name: 'Save investigation' }).getByRole('button', { name: 'Save investigation' }).click();
+    await page.getByRole('banner', { name: 'Investigation' }).getByRole('button', { name: /^Views/ }).click();
+    await page.getByRole('dialog', { name: /^Views/ }).getByRole('button', { name: 'Delete First look' }).click();
+    await expect(page.getByRole('dialog', { name: 'Delete “First look”?' })).toBeVisible();
   },
   'Explore with a closed investigation': async (page) => {
     await openEntity(page, 'banking-demo', `PC-${unique()}`);

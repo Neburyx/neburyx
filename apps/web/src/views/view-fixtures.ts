@@ -80,6 +80,8 @@ export interface ViewsServer {
   readonly renamed: { readonly viewId: string; readonly version: number; readonly name: string }[];
   readonly listViews: ApiClient['listViews'];
   readonly renameView: ApiClient['renameView'];
+  readonly deleted: { readonly viewId: string; readonly version: number; readonly note: string | null }[];
+  readonly deleteView: ApiClient['deleteView'];
 }
 
 /** A server that holds named views, newest first, and answers pages of `pageSize` by a cursor that is the offset of the next row. */
@@ -87,10 +89,21 @@ export function viewsServer(views: readonly NamedView[], pageSize = 25): ViewsSe
   const held = [...views];
   const listed: { cursor: string | undefined }[] = [];
   const renamed: { viewId: string; version: number; name: string }[] = [];
+  const deleted: { viewId: string; version: number; note: string | null }[] = [];
   return {
     views: held,
     listed,
     renamed,
+    deleted,
+    deleteView: async (_id, viewId, version, note) => {
+      deleted.push({ viewId, version, note });
+      const index = held.findIndex((view) => view.id === viewId);
+      const view = held[index];
+      if (view === undefined) return failure('NOT_FOUND');
+      if (view.version !== version) return failure('CONFLICTED_VIEW_VERSION');
+      held.splice(index, 1);
+      return { ok: true, value: { id: viewId, version: version + 1, deletedAt: '2026-11-10T10:00:00.000Z', draft: { version: 2, basedOnViewId: null }, save: { state: 'unsaved', savedAt: null }, count: { value: held.length, quality: 'exact', scope: 'named-views' } } };
+    },
     listViews: async (_id, page) => {
       listed.push({ cursor: page.cursor });
       const start = page.cursor === undefined ? 0 : Number(page.cursor.replace('c', ''));

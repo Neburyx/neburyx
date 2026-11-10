@@ -4,7 +4,8 @@ import { useApiClient } from '../api/client-context.js';
 import { BANNER_REGION_CLASS } from '../banner/status-banner.js';
 import { useClientState } from '../state/context.js';
 import { useStoreSelector } from '../state/store.js';
-import { VIEWS_CONTROL } from './copy.js';
+import { VIEWS_CONTROL, VIEW_ALREADY_DELETED, VIEW_DELETED, RENAME_CONFLICT, deleteViewTitle } from './copy.js';
+import { DeleteViewDialog } from './delete-view-dialog.js';
 import { RestoreConfirm } from './restore-confirm.js';
 import { viewListOf } from './view-list.js';
 import { ViewsPanel } from './views-panel.js';
@@ -31,6 +32,10 @@ export function ViewsControl() {
   const [open, setOpen] = useState(false);
   const [top, setTop] = useState<number | undefined>(undefined);
   const [restoring, setRestoring] = useState<NamedView | undefined>(undefined);
+  const [deleting, setDeleting] = useState<NamedView | undefined>(undefined);
+  const [message, setMessage] = useState<string | undefined>(undefined);
+  const [focusAfter, setFocusAfter] = useState<string | undefined>(undefined);
+  const trigger = useRef<HTMLElement | null>(null);
   const button = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLDivElement>(null);
   const titleId = useId();
@@ -40,6 +45,8 @@ export function ViewsControl() {
     if (!open) return undefined;
     void list.load();
     const onPress = (event: PointerEvent): void => {
+      // a dialog opened from the panel is outside it, and a press in the dialog must not close the panel under it
+      if (document.querySelector('[role="dialog"][aria-modal="true"]') !== null) return;
       const target = event.target;
       if (target instanceof Node && (panel.current?.contains(target) === true || button.current?.contains(target) === true)) return;
       setOpen(false);
@@ -65,13 +72,24 @@ export function ViewsControl() {
   useEffect(() => {
     setOpen(false);
     setRestoring(undefined);
+    setDeleting(undefined);
+    setMessage(undefined);
   }, [investigationId]);
 
   if (!shown) return null;
   const close = (): void => {
     setOpen(false);
     setRestoring(undefined);
+    setDeleting(undefined);
+    setMessage(undefined);
     button.current?.focus();
+  };
+  // the view that takes the focus once the row is gone: the next one, else the one before it, else the note of the empty panel
+  const neighbourOf = (view: NamedView): string => {
+    const shown = list.state.getState();
+    const items = shown.kind === 'ready' ? shown.items : [];
+    const at = items.findIndex((candidate) => candidate.id === view.id);
+    return (items[at + 1] ?? items[at - 1])?.id ?? 'empty';
   };
   // React's CSSProperties type has no custom properties, so the cast
   const panelStyle = top === undefined ? undefined : ({ '--views-panel-top': `${top}px` } as CSSProperties);
@@ -88,10 +106,32 @@ export function ViewsControl() {
       </button>
       {open ? (
         <div className="views-panel" role="dialog" aria-labelledby={titleId} tabIndex={-1} ref={panel} style={panelStyle} onKeyDown={onKeyDown}>
-          <ViewsPanel list={list} titleId={titleId} onRestore={setRestoring} readOnly={readOnly} />
+          <ViewsPanel list={list} titleId={titleId} onRestore={setRestoring} onDelete={(view, from) => {
+            trigger.current = from;
+            setMessage(undefined);
+            setDeleting(view);
+          }} message={message} focusAfter={focusAfter} onFocused={() => setFocusAfter(undefined)} readOnly={readOnly} />
         </div>
       ) : null}
       {restoring === undefined ? null : <RestoreConfirm view={restoring} onClose={close} />}
+      {deleting === undefined ? null : (
+        <DeleteViewDialog
+          title={deleteViewTitle(deleting.name)}
+          send={async (note) => {
+            const target = neighbourOf(deleting);
+            const outcome = await list.remove(deleting.id, note);
+            if (outcome.kind === 'deleted') setFocusAfter(target);
+            return outcome;
+          }}
+          onDeleted={() => setMessage(VIEW_DELETED)}
+          onChangedElsewhere={() => setMessage(RENAME_CONFLICT)}
+          onGone={() => setMessage(VIEW_ALREADY_DELETED)}
+          onClose={() => {
+            setDeleting(undefined);
+            if (trigger.current?.isConnected === true) trigger.current.focus();
+          }}
+        />
+      )}
     </div>
   );
 }

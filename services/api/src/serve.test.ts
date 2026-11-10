@@ -44,6 +44,7 @@ const io = (stderr: string[] = []): Parameters<typeof serve>[1] => ({
   logger: pino({ level: 'silent' }),
   defaultWebRoot: webRoot,
   openStore: memoryAppStore,
+  tasks: [],
   portOverride: 0,
 });
 

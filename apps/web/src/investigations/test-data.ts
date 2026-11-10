@@ -32,6 +32,7 @@ export function listOf(items: readonly InvestigationListItem[], hasMore = false,
   return {
     items: [...items],
     nextCursor: hasMore ? 'next-page' : null,
+    retention: { deletedInvestigationsDays: 30 },
     matching: { value: all.length, quality: 'exact', scope: 'investigations-matching' },
     counts: {
       investigations: { value: all.length, quality: 'exact', scope: 'investigations' },
@@ -120,3 +121,9 @@ export function failsThenWaits(): Pick<ApiClient, 'listInvestigations'> {
 
 /** The ID an open request names its entity by, whichever form it came in. */
 export const entityIdOf = (entity: OpenInvestigationRequest['entity']): string => ('stableId' in entity ? entity.stableId : entity.value);
+
+/** A list row as the investigation it describes: the fields only a list row has are dropped and the starting entity holds its identifier. */
+export function investigationOfRow(row: InvestigationListItem): Investigation {
+  const { sourceAlias: _alias, save: _save, nodeCount: _nodes, edgeCount: _edges, deletedAt: _deleted, purgeAfter: _purge, startingEntity, ...investigation } = row;
+  return { ...investigation, startingEntity: startingEntity === null ? null : { entityType: startingEntity.entityType, stableId: startingEntity.stableId ?? 'unknown' } };
+}

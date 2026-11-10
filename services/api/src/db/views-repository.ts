@@ -1,6 +1,7 @@
-import { layoutDocumentSchema, queryContextDocumentSchema, type LayoutDocument, type NamedView, type QueryContextDocument } from '@neburyx/contracts';
+import { layoutDocumentSchema, queryContextDocumentSchema, type InvestigationSave, type LayoutDocument, type NamedView, type QueryContextDocument } from '@neburyx/contracts';
 import type pg from 'pg';
 import { readOnlyStatusOf, type ReadOnlyStatus } from '../investigations/read-only.js';
+import { lockLiveInvestigation } from './locks.js';
 
 /** What a view save writes. `contentHashOf` is given the draft as it is stored, with the `ai_notes` it holds, and returns the hash of the draft once it carries the new notes. */
 export interface ViewSave {
@@ -53,7 +54,7 @@ const LOCK_DRAFT = `SELECT i.status AS investigation_status, draft.id, draft.ver
      FROM saved_views draft
      JOIN investigations i ON i.id = draft.investigation_id AND i.owner_id = draft.created_by
      WHERE i.id = $1 AND i.owner_id = $2 AND i.deleted_at IS NULL AND draft.kind = 'draft'
-     FOR UPDATE OF i, draft`;
+     FOR UPDATE OF draft`;
 
 /** Where a page of views starts: after the view made at `createdKey`, microsecond text as the database holds it, with this `id`. */
 export interface ViewPosition {
@@ -104,7 +105,33 @@ export type ViewRestoreResult =
   | { readonly outcome: 'read-only'; readonly status: ReadOnlyStatus }
   | { readonly outcome: 'not-found' };
 
+export interface ViewDelete {
+  readonly investigationId: string;
+  readonly viewId: string;
+  readonly ownerId: string;
+  readonly expectedVersion: number;
+  /** Why, as the person typed it; `null` when there is no note. Kept with the deleted view and returned by no read. */
+  readonly note: string | null;
+}
+
+export type ViewDeleteResult =
+  | {
+      readonly outcome: 'deleted';
+      readonly id: string;
+      readonly version: number;
+      readonly deletedAt: string;
+      readonly draft: { readonly version: number; readonly basedOnViewId: string | null };
+      readonly save: InvestigationSave;
+      /** The investigation's named views that are not deleted. */
+      readonly count: number;
+    }
+  | { readonly outcome: 'conflict' }
+  | { readonly outcome: 'read-only'; readonly status: ReadOnlyStatus }
+  | { readonly outcome: 'not-found' };
+
 export interface ViewStore {
+  /** Marks a named view deleted when `expectedVersion` is its version, taking the investigation's row, then the draft's, then the view's, so it waits for no writer that holds a later one of them. The draft is not written. */
+  deleteNamedView(deletion: ViewDelete): Promise<ViewDeleteResult>;
   saveNamedView(save: ViewSave): Promise<ViewSaveResult>;
   /** The investigation's named views, newest first by (time, id), with the exact number of them and what the draft is based on, all read at one snapshot. */
   listNamedViews(query: ViewListQuery): Promise<ViewListResult>;
@@ -119,6 +146,7 @@ export async function saveNamedView(pool: pg.Pool, save: ViewSave): Promise<View
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    await lockLiveInvestigation(client, save.investigationId, save.ownerId);
     const found = await client.query<HeldDraft>(LOCK_DRAFT, [save.investigationId, save.ownerId]);
     const [held] = found.rows;
     if (held === undefined) {
@@ -205,7 +233,7 @@ export async function listNamedViews(pool: pg.Pool, query: ViewListQuery): Promi
       `SELECT named.id AS based_on_view_id, draft.updated_at
        FROM saved_views draft
        JOIN investigations i ON i.id = draft.investigation_id AND i.owner_id = draft.created_by
-       LEFT JOIN saved_views named ON named.id = draft.based_on_view_id AND named.kind = 'named'
+       LEFT JOIN saved_views named ON named.id = draft.based_on_view_id AND named.kind = 'named' AND named.deleted_at IS NULL
        WHERE i.id = $1 AND i.owner_id = $2 AND i.deleted_at IS NULL AND draft.kind = 'draft'`,
       [query.investigationId, query.ownerId],
     );
@@ -218,12 +246,12 @@ export async function listNamedViews(pool: pg.Pool, query: ViewListQuery): Promi
     const page = await client.query<ListedView>(
       `SELECT v.id, v.name, v.notes, v.created_at, ${CREATED_KEY} AS created_key, v.version, u.display_name
        FROM saved_views v JOIN users u ON u.id = v.created_by
-       WHERE v.investigation_id = $1 AND v.kind = 'named' AND ($2::text IS NULL OR (v.created_at, v.id) < ($2::timestamptz, $3::uuid))
+       WHERE v.investigation_id = $1 AND v.kind = 'named' AND v.deleted_at IS NULL AND ($2::text IS NULL OR (v.created_at, v.id) < ($2::timestamptz, $3::uuid))
        ORDER BY v.created_at DESC, v.id DESC
        LIMIT $4`,
       [query.investigationId, after?.createdKey ?? null, after?.id ?? null, query.limit + 1],
     );
-    const counted = await client.query<{ total: number }>(`SELECT count(*)::int AS total FROM saved_views WHERE investigation_id = $1 AND kind = 'named'`, [query.investigationId]);
+    const counted = await client.query<{ total: number }>(`SELECT count(*)::int AS total FROM saved_views WHERE investigation_id = $1 AND kind = 'named' AND deleted_at IS NULL`, [query.investigationId]);
     await client.query('COMMIT');
     const shown = page.rows.slice(0, query.limit);
     const last = shown.at(-1);
@@ -246,10 +274,11 @@ export async function renameNamedView(pool: pg.Pool, rename: ViewRename): Promis
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    await lockLiveInvestigation(client, rename.investigationId, rename.ownerId);
     const found = await client.query<{ version: number; investigation_status: 'open' | 'closed' | 'archived' }>(
       `SELECT v.version, i.status AS investigation_status FROM saved_views v JOIN investigations i ON i.id = v.investigation_id
-       WHERE v.id = $1 AND v.investigation_id = $2 AND v.kind = 'named' AND i.owner_id = $3 AND i.deleted_at IS NULL
-       FOR UPDATE OF v, i`,
+       WHERE v.id = $1 AND v.investigation_id = $2 AND v.kind = 'named' AND v.deleted_at IS NULL AND i.owner_id = $3 AND i.deleted_at IS NULL
+       FOR UPDATE OF v`,
       [rename.viewId, rename.investigationId, rename.ownerId],
     );
     const [held] = found.rows;
@@ -293,15 +322,16 @@ export async function restoreNamedView(pool: pg.Pool, restore: ViewRestore): Pro
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    await lockLiveInvestigation(client, restore.investigationId, restore.ownerId);
     const draft = await client.query<{ id: string; version: number; content_hash: string; investigation_status: 'open' | 'closed' | 'archived' }>(
       `SELECT i.status AS investigation_status, draft.id, draft.version, draft.content_hash
        FROM saved_views draft JOIN investigations i ON i.id = draft.investigation_id AND i.owner_id = draft.created_by
        WHERE i.id = $1 AND i.owner_id = $2 AND i.deleted_at IS NULL AND draft.kind = 'draft'
-       FOR UPDATE OF i, draft`,
+       FOR UPDATE OF draft`,
       [restore.investigationId, restore.ownerId],
     );
     const [held] = draft.rows;
-    const view = await client.query<RestoredFrom>(`SELECT id, content_hash, created_at FROM saved_views WHERE id = $1 AND investigation_id = $2 AND kind = 'named'`, [restore.viewId, restore.investigationId]);
+    const view = await client.query<RestoredFrom>(`SELECT id, content_hash, created_at FROM saved_views WHERE id = $1 AND investigation_id = $2 AND kind = 'named' AND deleted_at IS NULL FOR UPDATE`, [restore.viewId, restore.investigationId]);
     const [from] = view.rows;
     if (held === undefined || from === undefined) {
       await client.query('ROLLBACK');
@@ -319,7 +349,7 @@ export async function restoreNamedView(pool: pg.Pool, restore: ViewRestore): Pro
     const written = await client.query<{ version: number; layout: unknown; query_context: unknown; notes: string | null }>(
       `UPDATE saved_views AS draft SET layout = v.layout, query_context = v.query_context, notes = v.notes, ai_notes = v.ai_notes, mapping_hash = v.mapping_hash, node_count = v.node_count, edge_count = v.edge_count,
          counts_policy_version = v.counts_policy_version, content_hash = v.content_hash, based_on_view_id = v.id, version = draft.version + 1, updated_at = now()
-       FROM saved_views v WHERE draft.id = $1 AND v.id = $2
+       FROM saved_views v WHERE draft.id = $1 AND v.id = $2 AND v.deleted_at IS NULL
        RETURNING draft.version, draft.layout, draft.query_context, draft.notes`,
       [held.id, from.id],
     );
@@ -328,6 +358,67 @@ export async function restoreNamedView(pool: pg.Pool, restore: ViewRestore): Pro
     if (held.content_hash !== from.content_hash) await client.query(`UPDATE investigations SET last_edited_at = now() WHERE id = $1`, [restore.investigationId]);
     await client.query('COMMIT');
     return { outcome: 'restored', savedAt: from.created_at.toISOString(), draft: { version: draftNow.version, layout: draftNow.layout, queryContext: draftNow.query_context, notes: draftNow.notes, basedOnViewId: from.id } };
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function deleteNamedView(pool: pg.Pool, deletion: ViewDelete): Promise<ViewDeleteResult> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await lockLiveInvestigation(client, deletion.investigationId, deletion.ownerId);
+    const found = await client.query<{ investigation_status: 'open' | 'closed' | 'archived'; version: number; content_hash: string; based_on_view_id: string | null }>(
+      `SELECT i.status AS investigation_status, draft.version, draft.content_hash, draft.based_on_view_id
+       FROM saved_views draft JOIN investigations i ON i.id = draft.investigation_id AND i.owner_id = draft.created_by
+       WHERE i.id = $1 AND i.owner_id = $2 AND i.deleted_at IS NULL AND draft.kind = 'draft'
+       FOR UPDATE OF draft`,
+      [deletion.investigationId, deletion.ownerId],
+    );
+    const [draft] = found.rows;
+    const view = await client.query<{ version: number }>(
+      `SELECT version FROM saved_views WHERE id = $1 AND investigation_id = $2 AND kind = 'named' AND deleted_at IS NULL FOR UPDATE`,
+      [deletion.viewId, deletion.investigationId],
+    );
+    const [held] = view.rows;
+    if (draft === undefined || held === undefined) {
+      await client.query('ROLLBACK');
+      return { outcome: 'not-found' };
+    }
+    const readOnly = readOnlyStatusOf(draft.investigation_status);
+    if (readOnly !== undefined) {
+      await client.query('ROLLBACK');
+      return { outcome: 'read-only', status: readOnly };
+    }
+    if (held.version !== deletion.expectedVersion) {
+      await client.query('ROLLBACK');
+      return { outcome: 'conflict' };
+    }
+    const deleted = await client.query<{ version: number; deleted_at: Date }>(
+      `UPDATE saved_views SET deleted_at = now(), deleted_by = $2, deletion_note = $3, version = version + 1, updated_at = now() WHERE id = $1 RETURNING version, deleted_at`,
+      [deletion.viewId, deletion.ownerId, deletion.note],
+    );
+    const counted = await client.query<{ total: number; saved_at: Date | null; based_on: string | null }>(
+      `SELECT count(*)::int AS total, (SELECT named.id FROM saved_views named WHERE named.id = $2 AND named.kind = 'named' AND named.deleted_at IS NULL) AS based_on, (SELECT named.created_at FROM saved_views named WHERE named.id = $2 AND named.kind = 'named' AND named.deleted_at IS NULL AND named.content_hash = $3) AS saved_at
+       FROM saved_views WHERE investigation_id = $1 AND kind = 'named' AND deleted_at IS NULL`,
+      [deletion.investigationId, draft.based_on_view_id, draft.content_hash],
+    );
+    await client.query('COMMIT');
+    const [changed] = deleted.rows;
+    const [after] = counted.rows;
+    if (changed === undefined || after === undefined) throw new Error('the deleted view was not returned');
+    return {
+      outcome: 'deleted',
+      id: deletion.viewId,
+      version: changed.version,
+      deletedAt: changed.deleted_at.toISOString(),
+      draft: { version: draft.version, basedOnViewId: after.based_on },
+      save: after.saved_at === null ? { state: 'unsaved', savedAt: null } : { state: 'saved', savedAt: after.saved_at.toISOString() },
+      count: after.total,
+    };
   } catch (error) {
     await client.query('ROLLBACK').catch(() => undefined);
     throw error;

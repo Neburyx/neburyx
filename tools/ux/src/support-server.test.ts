@@ -100,6 +100,47 @@ describe('the investigations the support server holds', () => {
   const open = (base: string, body: unknown) => fetch(`${base}/v1/investigations`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
   const request = (extra: Record<string, unknown> = {}) => ({ sourceId: 'demo', entity: { sourceId: 'demo', entityType: 'thing', stableId: 'T-1' }, ...extra });
 
+  it('deletes an investigation with its version, keeps it out of every ordinary route and list, lists it as deleted with its dates, and restores it as it was', async () => {
+    const base = await startWithTypes();
+    const opened = openInvestigationResponseSchema.parse(await (await open(base, request())).json());
+    const id = opened.investigation.id;
+    const remove = (version: string | undefined) => fetch(`${base}/v1/investigations/${id}`, { method: 'DELETE', ...(version === undefined ? {} : { headers: { 'if-match': version } }) });
+    expect((await remove(undefined)).status).toBe(400);
+    expect((await remove('"7"')).status).toBe(409);
+    const deleted = await remove('"1"');
+    expect(deleted.status).toBe(200);
+    expect(await deleted.json()).toMatchObject({ id, version: 2 });
+    expect((await fetch(`${base}/v1/investigations/${id}`)).status).toBe(404);
+    expect((await remove('"2"')).status).toBe(404);
+    expect(investigationListResponseSchema.parse(await (await fetch(`${base}/v1/investigations`)).json()).items).toEqual([]);
+    const gone = investigationListResponseSchema.parse(await (await fetch(`${base}/v1/investigations?deleted=true`)).json());
+    expect(gone.items.map((item) => item.id)).toEqual([id]);
+    expect(gone.items[0]).toMatchObject({ deletedAt: expect.any(String), purgeAfter: expect.any(String) });
+    expect((await fetch(`${base}/v1/investigations?deleted=true&status=open`)).status).toBe(400);
+    const restore = (version: number) => fetch(`${base}/v1/investigations/${id}/restore`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ expectedVersion: version }) });
+    expect((await restore(1)).status).toBe(409);
+    expect((await restore(2)).status).toBe(200);
+    expect((await fetch(`${base}/v1/investigations/${id}`)).status).toBe(200);
+    expect((await restore(3)).status).toBe(404);
+  });
+
+  it('deletes a named view with its note, leaves it out of the lists, and refuses a second delete', async () => {
+    const base = await startWithTypes();
+    const opened = openInvestigationResponseSchema.parse(await (await open(base, request())).json());
+    const id = opened.investigation.id;
+    const saved = await fetch(`${base}/v1/investigations/${id}/views`, { method: 'POST', headers: { 'content-type': 'application/json', 'if-match': `"${opened.draft.version}"` }, body: JSON.stringify({ name: 'First look', notes: null }) });
+    expect(saved.status).toBe(201);
+    const view = (await saved.json()) as { view: { id: string } };
+    const remove = (version: number, body: unknown = {}) => fetch(`${base}/v1/investigations/${id}/views/${view.view.id}/delete`, { method: 'POST', headers: { 'content-type': 'application/json', 'if-match': `"${version}"` }, body: JSON.stringify(body) });
+    expect((await remove(5)).status).toBe(409);
+    const done = await remove(1, { note: 'a duplicate' });
+    expect(done.status).toBe(200);
+    expect(await done.json()).toMatchObject({ id: view.view.id, version: 2, count: { value: 0 }, save: { state: 'unsaved' }, draft: { basedOnViewId: null } });
+    expect(await (await fetch(`${base}/v1/investigations/${id}/views`)).json()).toMatchObject({ items: [], count: { value: 0 } });
+    expect(await (await fetch(`${base}/v1/views`)).json()).toMatchObject({ items: [], count: { value: 0 } });
+    expect((await remove(2)).status).toBe(404);
+  });
+
   it('forgets every investigation opened when a spec asks, and lists none afterwards', async () => {
     const base = await startWithTypes();
     await open(base, request());
@@ -113,7 +154,7 @@ describe('the investigations the support server holds', () => {
     vi.useFakeTimers({ toFake: ['Date'], now: Date.parse('2026-11-05T12:00:00.000Z') });
     const base = await startWithTypes();
     const list = async (query = '') => investigationListResponseSchema.parse(await (await fetch(`${base}/v1/investigations${query}`)).json());
-    expect(await list()).toEqual({ items: [], nextCursor: null, matching: { value: 0, quality: 'exact', scope: 'investigations-matching' }, counts: { investigations: { value: 0, quality: 'exact', scope: 'investigations' }, sources: { value: 0, quality: 'exact', scope: 'investigation-sources' }, savedViews: { count: { value: 0, quality: 'exact', scope: 'named-views' }, lastEditedAt: null } } });
+    expect(await list()).toEqual({ retention: { deletedInvestigationsDays: 30 }, items: [], nextCursor: null, matching: { value: 0, quality: 'exact', scope: 'investigations-matching' }, counts: { investigations: { value: 0, quality: 'exact', scope: 'investigations' }, sources: { value: 0, quality: 'exact', scope: 'investigation-sources' }, savedViews: { count: { value: 0, quality: 'exact', scope: 'named-views' }, lastEditedAt: null } } });
     for (const id of ['T-1', 'T-2', 'T-3', 'T-4', 'T-5', 'T-6']) {
       vi.advanceTimersByTime(1000);
       await open(base, request({ entity: { sourceId: 'demo', entityType: 'thing', stableId: id } }));

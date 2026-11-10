@@ -136,6 +136,14 @@ export interface SourceModel {
   readonly configHash: string;
 }
 
+/** How many days deleted investigations and exports are kept. */
+export interface RetentionModel {
+  readonly deletedInvestigationsDays: number;
+  readonly exportsDays: number;
+}
+
 export interface MappingModel {
   readonly sources: readonly SourceModel[];
+  /** Absent only in a model that was not loaded from a file; read it with `retentionOf`. */
+  readonly retention?: RetentionModel;
 }

@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { ApiClient } from '../api/client.js';
 import { renderApp } from '../test-utils.js';
+import { investigationOfRow } from '../investigations/test-data.js';
 import { pagedClient, rowsOf } from './page-fixtures.js';
 
 beforeAll(() => configure({ reactStrictMode: true }));
@@ -14,13 +15,13 @@ const menuButton = (title: string): HTMLElement => screen.getByRole('button', { 
 const itemsOf = (): string[] => screen.getAllByRole('menuitem').map((item) => item.querySelector('.menu-label')?.textContent ?? '');
 
 describe('the row menu', () => {
-  it('offers Open, Rename, Close and Archive for an open investigation, and never Delete', async () => {
+  it('offers Open, Rename, Close, Archive and Delete for an open investigation', async () => {
     const { client } = pagedClient(rowsOf(2));
     renderApp('/investigations', client);
     const user = userEvent.setup();
     await screen.findByRole('link', { name: 'Case 1' });
     await user.click(menuButton('Case 1'));
-    expect(itemsOf()).toEqual(['Open', 'Rename', 'Close', 'Archive']);
+    expect(itemsOf()).toEqual(['Open', 'Rename', 'Close', 'Archive', 'Delete']);
   });
 
   it('offers Reopen and Archive for a closed one, and Reopen for an archived one, with Rename disabled and saying why', async () => {
@@ -29,7 +30,7 @@ describe('the row menu', () => {
     const user = userEvent.setup();
     await screen.findByRole('link', { name: 'Case 1' });
     await user.click(menuButton('Case 1'));
-    expect(itemsOf()).toEqual(['Open', 'Rename', 'Reopen', 'Archive']);
+    expect(itemsOf()).toEqual(['Open', 'Rename', 'Reopen', 'Archive', 'Delete']);
     const rename = screen.getByRole('menuitem', { name: /Rename/ });
     expect(rename.getAttribute('aria-disabled')).toBe('true');
     expect(rename.textContent).toContain('Reopen to rename.');
@@ -37,7 +38,7 @@ describe('the row menu', () => {
     await user.selectOptions(screen.getByRole('combobox', { name: 'Status' }), 'archived');
     await screen.findByRole('link', { name: 'Case 2' });
     await user.click(menuButton('Case 2'));
-    expect(itemsOf()).toEqual(['Open', 'Rename', 'Reopen']);
+    expect(itemsOf()).toEqual(['Open', 'Rename', 'Reopen', 'Delete']);
   });
 
   it('closes an investigation with its version, takes the row out of the Open list, says so and moves the focus to the next row', async () => {
@@ -72,7 +73,7 @@ describe('the row menu', () => {
     const parts = pagedClient(rowsOf(2));
     const [first] = rowsOf(1);
     if (first === undefined) throw new Error('no row');
-    const { sourceAlias: _alias, save: _save, nodeCount: _nodes, edgeCount: _edges, ...investigation } = first;
+    const investigation = investigationOfRow(first);
     const client: ApiClient = { ...parts.client, renameInvestigation: async (id, title, version) => ({ ok: true, value: { investigation: { ...investigation, id, title, version: version + 1 } } }) };
     renderApp('/investigations', client);
     const user = userEvent.setup();
@@ -180,5 +181,97 @@ describe('the row menu', () => {
     await user.keyboard('{Enter}');
     await user.keyboard('{Enter}');
     await waitFor(() => expect(view.router.state.location.pathname).toBe('/explore/0192f000-0000-7000-8000-000000000001'));
+  });
+});
+
+describe('Delete in the row menu', () => {
+  const choose = async (user: ReturnType<typeof userEvent.setup>, title: string): Promise<void> => {
+    await user.click(menuButton(title));
+    await user.click(screen.getByRole('menuitem', { name: 'Delete' }));
+  };
+  const confirm = (user: ReturnType<typeof userEvent.setup>) => user.click(within(screen.getByRole('dialog', { name: 'Delete this investigation?' })).getByRole('button', { name: 'Delete investigation' }));
+
+  it('opens the same confirm, and Escape or Cancel call nothing and return the focus to the row\'s menu', async () => {
+    const { client, recorded } = pagedClient(rowsOf(3));
+    renderApp('/investigations', client);
+    const user = userEvent.setup();
+    await screen.findByRole('link', { name: 'Case 1' });
+    await choose(user, 'Case 2');
+    const dialog = screen.getByRole('dialog', { name: 'Delete this investigation?' });
+    expect(document.activeElement).toBe(within(dialog).getByRole('button', { name: 'Cancel' }));
+    await user.keyboard('{Escape}');
+    expect(document.activeElement).toBe(menuButton('Case 2'));
+    await choose(user, 'Case 2');
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }));
+    expect(recorded.deletes).toEqual([]);
+    expect(bodyRows()).toHaveLength(3);
+  });
+
+  it('removes the row, takes the Investigations count down by one, moves the focus to the next row, and says until when it can be restored', async () => {
+    const { client, recorded } = pagedClient(rowsOf(3));
+    renderApp('/investigations', client);
+    const user = userEvent.setup();
+    await screen.findByRole('link', { name: 'Case 1' });
+    expect(screen.getByRole('tab', { name: 'Investigations (3)' })).toBeTruthy();
+    await choose(user, 'Case 2');
+    await confirm(user);
+    await waitFor(() => expect(bodyRows()).toHaveLength(2));
+    expect(recorded.deletes).toEqual([{ id: expect.any(String), version: 1 }]);
+    expect(screen.getByRole('tab', { name: 'Investigations (2)' })).toBeTruthy();
+    expect(status()).toBe('Investigation deleted. Restorable until 10 Dec 2026 10:00 UTC.');
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('link', { name: 'Case 3' })));
+    expect(screen.queryByRole('link', { name: 'Case 2' })).toBeNull();
+  });
+
+  it('moves the focus to the previous row when the last row was deleted, and to the caption when none is left', async () => {
+    const { client } = pagedClient(rowsOf(2));
+    renderApp('/investigations', client);
+    const user = userEvent.setup();
+    await screen.findByRole('link', { name: 'Case 1' });
+    await choose(user, 'Case 2');
+    await confirm(user);
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('link', { name: 'Case 1' })));
+    await choose(user, 'Case 1');
+    await confirm(user);
+    await waitFor(() => expect(screen.getByText('No investigations yet.', { exact: false })).toBeTruthy());
+  });
+
+  it.each([
+    ['a version that changed elsewhere', { code: 'CONFLICT' as const, message: 'This item was changed elsewhere. Reload to continue.', retryable: false, traceId: 't' }],
+    ['an internal error', { code: 'INTERNAL_ERROR' as const, message: 'Something went wrong.', retryable: true, traceId: 't' }],
+  ])('keeps the dialog and the row after %s, with the server\'s message', async (_name, failure) => {
+    const { client } = pagedClient(rowsOf(2), [], { deleteInvestigation: async () => ({ ok: false, failure }) });
+    renderApp('/investigations', client);
+    const user = userEvent.setup();
+    await screen.findByRole('link', { name: 'Case 1' });
+    await choose(user, 'Case 1');
+    await confirm(user);
+    const dialog = await screen.findByRole('dialog', { name: 'Delete this investigation?' });
+    expect(within(dialog).getByRole('alert').textContent).toContain(failure.message);
+    expect(bodyRows()).toHaveLength(2);
+  });
+
+  it('reads the list again at once after a conflict, and keeps the dialog with its message', async () => {
+    const { client, recorded } = pagedClient(rowsOf(2), [], { deleteInvestigation: async () => ({ ok: false, failure: { code: 'CONFLICT', message: 'This item was changed elsewhere. Reload to continue.', retryable: false, traceId: 't' } }) });
+    renderApp('/investigations', client);
+    const user = userEvent.setup();
+    await screen.findByRole('link', { name: 'Case 1' });
+    await choose(user, 'Case 1');
+    const before = recorded.pages.length;
+    await confirm(user);
+    await waitFor(() => expect(recorded.pages.length).toBeGreaterThan(before));
+    expect(within(await screen.findByRole('dialog')).getByRole('alert').textContent).toContain('changed elsewhere');
+  });
+
+  it('removes the row and reads the list again when the investigation is gone', async () => {
+    const { client, recorded } = pagedClient(rowsOf(2), [], { deleteInvestigation: async () => ({ ok: false, failure: { code: 'NOT_FOUND', message: 'Not found.', retryable: false, traceId: 't' } }) });
+    renderApp('/investigations', client);
+    const user = userEvent.setup();
+    await screen.findByRole('link', { name: 'Case 1' });
+    const before = recorded.pages.length;
+    await choose(user, 'Case 1');
+    await confirm(user);
+    await waitFor(() => expect(recorded.pages.length).toBeGreaterThan(before));
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 });

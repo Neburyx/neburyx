@@ -40,7 +40,7 @@ export function useRowLabels(client: ApiClient, items: readonly InvestigationLis
       bySource.set(item.sourceId, [...(bySource.get(item.sourceId) ?? []), item]);
     }
     for (const [sourceId, rows] of bySource) {
-      const entities = rows.flatMap((item) => (item.startingEntity === null ? [] : [{ sourceId, entityType: item.startingEntity.entityType, stableId: item.startingEntity.stableId }]));
+      const entities = rows.flatMap((item) => (item.startingEntity === null || item.startingEntity.stableId === undefined ? [] : [{ sourceId, entityType: item.startingEntity.entityType, stableId: item.startingEntity.stableId }]));
       void client.readRefs({ sourceId, mask: true, entities, edges: [], aggregates: [], derived: [] }, abort.current.signal).then((result) => {
         if (abort.current.signal.aborted) return;
         if (current.current !== listKey) {

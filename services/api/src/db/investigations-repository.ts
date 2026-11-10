@@ -1,6 +1,7 @@
 import { layoutDocumentSchema, queryContextDocumentSchema, type InvestigationSave, type LayoutDocument, type QueryContextDocument } from '@neburyx/contracts';
 import type pg from 'pg';
 import { readOnlyStatusOf, type ReadOnlyStatus } from '../investigations/read-only.js';
+import { lockLiveInvestigation } from './locks.js';
 import { planStatusChange, type StatusChangePlan } from '../investigations/status-change.js';
 
 export interface InvestigationRow {
@@ -90,6 +91,26 @@ export type TitleChangeResult = { readonly outcome: 'renamed' | 'unchanged'; rea
 
 export type StatusChangeResult = { readonly outcome: 'changed' | 'unchanged'; readonly row: InvestigationRow } | { readonly outcome: 'conflict' } | { readonly outcome: 'not-allowed' } | { readonly outcome: 'not-found' };
 
+export interface DeleteChange extends InvestigationChange {
+  readonly retentionDays: number;
+  /** Runs inside the transaction before it commits, with the row as deleted; a throw rolls the delete back. */
+  readonly beforeCommit: (row: InvestigationRow) => Promise<void>;
+}
+
+export interface RestoreChange extends InvestigationChange {
+  readonly beforeCommit: (row: InvestigationRow) => Promise<void>;
+}
+
+/** `deletedAt` and `purgeAfter` are the database's times of the delete and of the last moment it can be restored. */
+export type DeleteResult = { readonly outcome: 'deleted'; readonly row: InvestigationRow; readonly deletedAt: string; readonly purgeAfter: string } | { readonly outcome: 'conflict' } | { readonly outcome: 'not-found' };
+
+export type RestoreResult = { readonly outcome: 'restored'; readonly row: InvestigationRow } | { readonly outcome: 'conflict' } | { readonly outcome: 'not-found' };
+
+export interface PurgedInvestigation {
+  readonly id: string;
+  readonly sourceId: string;
+}
+
 export interface ReusableQuery {
   readonly ownerId: string;
   readonly sourceId: string;
@@ -112,6 +133,8 @@ export interface StoredInvestigation {
 }
 
 export interface ListedInvestigation extends InvestigationRow {
+  readonly deletedAt?: string;
+  readonly purgeAfter?: string;
   readonly sourceAlias: string;
   readonly save: InvestigationSave;
   readonly nodeCount: number;
@@ -126,6 +149,18 @@ export interface ListPosition {
   readonly editedKey: string;
   readonly id: string;
 }
+
+/** Where a page of the deleted list starts: after the row deleted at `editedKey` (microsecond text) with this `id`. */
+export interface DeletedListQuery {
+  readonly ownerId: string;
+  readonly sourceIds: readonly string[];
+  readonly sourceId: string | undefined;
+  readonly text: string | undefined;
+  readonly limit: number;
+  readonly after: ListPosition | undefined;
+}
+
+export type DeletedMatchQuery = Omit<DeletedListQuery, 'limit' | 'after'>;
 
 export interface ListFilters {
   readonly status: 'open' | 'closed' | 'archived';
@@ -165,6 +200,9 @@ export interface LibraryReader {
   countMatching(query: MatchQuery): Promise<number>;
   countInvestigations(query: CountQuery): Promise<InvestigationCounts>;
   countNamedViews(query: CountQuery): Promise<NamedViewCounts>;
+  listDeletedInvestigationSourceIds(ownerId: string): Promise<string[]>;
+  listDeletedInvestigations(query: DeletedListQuery): Promise<ListedInvestigation[]>;
+  countDeletedMatching(query: DeletedMatchQuery): Promise<number>;
 }
 
 export interface InvestigationStore {
@@ -178,6 +216,12 @@ export interface InvestigationStore {
   renameInvestigation(change: TitleChange): Promise<TitleChangeResult>;
   /** Moves the investigation to another status in one transaction under a lock on the investigation; a request for its current status writes nothing, and a stale `expectedVersion` is a conflict. `last_edited_at` does not move. */
   changeInvestigationStatus(change: StatusChange): Promise<StatusChangeResult>;
+  /** Marks the investigation deleted in one statement, guarded by its live row and `expectedVersion`, whatever its status; the draft, the views and `last_edited_at` are not touched. A stale version is a conflict; an investigation that is not the owner's, unknown or already deleted is not found. */
+  deleteInvestigation(change: DeleteChange): Promise<DeleteResult>;
+  /** Clears the deletion in one statement, guarded by the row being deleted, not yet past `purge_after` by the database's clock, and `expectedVersion`; the purge's own predicate is the opposite, so one of the two takes the row. */
+  restoreInvestigation(change: RestoreChange): Promise<RestoreResult>;
+  /** Deletes the investigations whose purge date has passed, each in a transaction of its own that locks the row first (rows another transaction holds are left for the next run), with the views and the draft following by cascade. `beforeDelete` runs inside that transaction, so a throw keeps the investigation and stops the run. Answers how many were deleted. */
+  purgeExpiredInvestigations(beforeDelete: (purged: PurgedInvestigation) => Promise<void>): Promise<number>;
   /** Runs the reads of one list call at one snapshot; what they return is not changed by an investigation another call creates meanwhile. */
   readLibrary<T>(read: (reader: LibraryReader) => Promise<T>): Promise<T>;
 }
@@ -300,7 +344,7 @@ export async function readInvestigation(db: pg.Pool, id: string, ownerId: string
   const result = await db.query<StoredRecord>(
     `SELECT ${QUALIFIED_COLUMNS}, v.id AS draft_id, v.version AS draft_version, v.layout, v.query_context, v.notes, v.mapping_hash, named.id AS based_on_view_id, CASE WHEN named.content_hash = v.content_hash THEN named.created_at END AS saved_at
      FROM investigations i JOIN saved_views v ON v.investigation_id = i.id AND v.kind = 'draft' AND v.created_by = i.owner_id
-     LEFT JOIN saved_views named ON named.id = v.based_on_view_id AND named.kind = 'named'
+     LEFT JOIN saved_views named ON named.id = v.based_on_view_id AND named.kind = 'named' AND named.deleted_at IS NULL
      WHERE i.id = $1 AND i.owner_id = $2 AND i.deleted_at IS NULL`,
     [id, ownerId],
   );
@@ -323,7 +367,7 @@ interface DraftRecord {
 const DRAFT_STATE = `SELECT i.status AS investigation_status, draft.id, draft.version, draft.content_hash, draft.notes, draft.ai_notes, draft.mapping_hash, CASE WHEN named.content_hash = draft.content_hash THEN named.created_at END AS saved_at
      FROM saved_views draft
      JOIN investigations i ON i.id = draft.investigation_id AND i.owner_id = draft.created_by
-     LEFT JOIN saved_views named ON named.id = draft.based_on_view_id AND named.kind = 'named'
+     LEFT JOIN saved_views named ON named.id = draft.based_on_view_id AND named.kind = 'named' AND named.deleted_at IS NULL
      WHERE i.id = $1 AND i.owner_id = $2 AND i.deleted_at IS NULL AND draft.kind = 'draft'`;
 
 const saveOf = (savedAt: Date | null): InvestigationSave => (savedAt === null ? { state: 'unsaved', savedAt: null } : { state: 'saved', savedAt: savedAt.toISOString() });
@@ -334,7 +378,8 @@ export async function saveDraft(pool: pg.Pool, write: DraftWrite): Promise<Draft
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const found = await client.query<DraftRecord>(`${DRAFT_STATE} FOR UPDATE OF i, draft`, [write.investigationId, write.ownerId]);
+    await lockLiveInvestigation(client, write.investigationId, write.ownerId);
+    const found = await client.query<DraftRecord>(`${DRAFT_STATE} FOR UPDATE OF draft`, [write.investigationId, write.ownerId]);
     const [held] = found.rows;
     if (held === undefined) {
       await client.query('ROLLBACK');
@@ -442,6 +487,44 @@ export async function changeInvestigationStatus(pool: pg.Pool, change: StatusCha
   });
 }
 
+export async function deleteInvestigation(pool: pg.Pool, change: DeleteChange): Promise<DeleteResult> {
+  return inTransaction(pool, async (client) => {
+    const updated = await client.query<InvestigationRecord & { deleted_at: Date; purge_after: Date }>(
+      `UPDATE investigations SET deleted_at = now(), purge_after = now() + make_interval(days => $4), deleted_by = $2, version = version + 1
+       WHERE id = $1 AND owner_id = $2 AND deleted_at IS NULL AND version = $3
+       RETURNING ${COLUMNS}, deleted_at, purge_after`,
+      [change.investigationId, change.ownerId, change.expectedVersion, change.retentionDays],
+    );
+    const [record] = updated.rows;
+    if (record === undefined) {
+      const live = await client.query(`SELECT 1 FROM investigations WHERE id = $1 AND owner_id = $2 AND deleted_at IS NULL`, [change.investigationId, change.ownerId]);
+      return live.rowCount === 0 ? { outcome: 'not-found' } : { outcome: 'conflict' };
+    }
+    const row = rowOf(record);
+    await change.beforeCommit(row);
+    return { outcome: 'deleted', row, deletedAt: record.deleted_at.toISOString(), purgeAfter: record.purge_after.toISOString() };
+  });
+}
+
+export async function restoreInvestigation(pool: pg.Pool, change: RestoreChange): Promise<RestoreResult> {
+  return inTransaction(pool, async (client) => {
+    const updated = await client.query<InvestigationRecord>(
+      `UPDATE investigations SET deleted_at = NULL, purge_after = NULL, deleted_by = NULL, version = version + 1
+       WHERE id = $1 AND owner_id = $2 AND deleted_at IS NOT NULL AND purge_after > now() AND version = $3
+       RETURNING ${COLUMNS}`,
+      [change.investigationId, change.ownerId, change.expectedVersion],
+    );
+    const [record] = updated.rows;
+    if (record === undefined) {
+      const restorable = await client.query(`SELECT 1 FROM investigations WHERE id = $1 AND owner_id = $2 AND deleted_at IS NOT NULL AND purge_after > now()`, [change.investigationId, change.ownerId]);
+      return restorable.rowCount === 0 ? { outcome: 'not-found' } : { outcome: 'conflict' };
+    }
+    const row = rowOf(record);
+    await change.beforeCommit(row);
+    return { outcome: 'restored', row };
+  });
+}
+
 interface ListedRecord extends InvestigationRecord {
   readonly source_alias: string;
   readonly last_edited_key: string;
@@ -478,7 +561,7 @@ export async function listInvestigations(db: pg.Pool | pg.PoolClient, query: Lis
      FROM investigations i
      JOIN sources s ON s.id = i.source_id
      LEFT JOIN saved_views draft ON draft.investigation_id = i.id AND draft.kind = 'draft' AND draft.created_by = i.owner_id
-     LEFT JOIN saved_views named ON named.id = draft.based_on_view_id AND named.kind = 'named'
+     LEFT JOIN saved_views named ON named.id = draft.based_on_view_id AND named.kind = 'named' AND named.deleted_at IS NULL
      WHERE ${FILTER_WHERE}
        AND ($6::text IS NULL OR (i.last_edited_at, i.id) < ($6::timestamptz, $7::uuid))
      ORDER BY i.last_edited_at DESC, i.id DESC
@@ -518,12 +601,84 @@ export async function countNamedViews(db: pg.Pool | pg.PoolClient, query: CountQ
     `SELECT count(*)::int AS views, max(v.updated_at) AS last_edited_at
      FROM saved_views v
      JOIN investigations i ON i.id = v.investigation_id
-     WHERE v.kind = 'named' AND i.owner_id = $1 AND i.source_id = ANY($2::text[]) AND i.deleted_at IS NULL`,
+     WHERE v.kind = 'named' AND v.deleted_at IS NULL AND i.owner_id = $1 AND i.source_id = ANY($2::text[]) AND i.deleted_at IS NULL`,
     [query.ownerId, [...query.sourceIds]],
   );
   const [row] = result.rows;
   if (row === undefined) throw new Error('the named view counts were not returned');
   return { views: row.views, lastEditedAt: row.last_edited_at === null ? null : row.last_edited_at.toISOString() };
+}
+
+export async function listDeletedInvestigationSourceIds(db: pg.Pool | pg.PoolClient, ownerId: string): Promise<string[]> {
+  const result = await db.query<{ source_id: string }>(`SELECT DISTINCT source_id FROM investigations WHERE owner_id = $1 AND deleted_at IS NOT NULL AND purge_after > now()`, [ownerId]);
+  return result.rows.map((record) => record.source_id);
+}
+
+const DELETED_KEY = `to_char(i.deleted_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
+
+const DELETED_WHERE = `i.owner_id = $1 AND i.source_id = ANY($2::text[]) AND i.deleted_at IS NOT NULL AND i.purge_after > now()
+     AND ($3::text IS NULL OR i.source_id = $3)
+     AND ($4::text IS NULL OR i.title ILIKE $4 OR i.case_ref ILIKE $4)`;
+
+const deletedParameters = (query: DeletedMatchQuery) => [query.ownerId, [...query.sourceIds], query.sourceId ?? null, containsPattern(query.text)];
+
+export async function listDeletedInvestigations(db: pg.Pool | pg.PoolClient, query: DeletedListQuery): Promise<ListedInvestigation[]> {
+  const after = query.after;
+  const result = await db.query<ListedRecord & { deleted_at: Date; purge_after: Date }>(
+    `SELECT ${QUALIFIED_COLUMNS}, i.deleted_at, i.purge_after, s.alias AS source_alias, ${DELETED_KEY} AS last_edited_key,
+            CASE WHEN named.content_hash = draft.content_hash AND named.deleted_at IS NULL THEN named.created_at END AS saved_at
+     FROM investigations i
+     JOIN sources s ON s.id = i.source_id
+     LEFT JOIN saved_views draft ON draft.investigation_id = i.id AND draft.kind = 'draft' AND draft.created_by = i.owner_id
+     LEFT JOIN saved_views named ON named.id = draft.based_on_view_id AND named.kind = 'named' AND named.deleted_at IS NULL
+     WHERE ${DELETED_WHERE}
+       AND ($5::text IS NULL OR (i.deleted_at, i.id) < ($5::timestamptz, $6::uuid))
+     ORDER BY i.deleted_at DESC, i.id DESC
+     LIMIT $7`,
+    [...deletedParameters(query), after?.editedKey ?? null, after?.id ?? null, query.limit],
+  );
+  return result.rows.map((record) => ({
+    ...rowOf(record),
+    deletedAt: record.deleted_at.toISOString(),
+    purgeAfter: record.purge_after.toISOString(),
+    sourceAlias: record.source_alias,
+    save: record.saved_at === null ? { state: 'unsaved', savedAt: null } : { state: 'saved', savedAt: record.saved_at.toISOString() },
+    nodeCount: 0,
+    edgeCount: 0,
+    countsPolicyVersion: '',
+    lastEditedKey: record.last_edited_key,
+  }));
+}
+
+export async function countDeletedMatching(db: pg.Pool | pg.PoolClient, query: DeletedMatchQuery): Promise<number> {
+  const result = await db.query<{ total: number }>(`SELECT count(*)::int AS total FROM investigations i WHERE ${DELETED_WHERE}`, deletedParameters(query));
+  return result.rows[0]?.total ?? 0;
+}
+
+const PURGE_PASS_SIZE = 100;
+
+async function purgeOne(pool: pg.Pool, beforeDelete: (purged: PurgedInvestigation) => Promise<void>): Promise<boolean> {
+  return inTransaction(pool, async (client) => {
+    const found = await client.query<{ id: string; source_id: string }>(
+      `SELECT id, source_id FROM investigations WHERE deleted_at IS NOT NULL AND purge_after <= now() ORDER BY purge_after, id LIMIT 1 FOR UPDATE SKIP LOCKED`,
+    );
+    const [held] = found.rows;
+    if (held === undefined) return false;
+    await beforeDelete({ id: held.id, sourceId: held.source_id });
+    await client.query(`DELETE FROM investigations WHERE id = $1 AND deleted_at IS NOT NULL AND purge_after <= now()`, [held.id]);
+    return true;
+  });
+}
+
+export async function purgeExpiredInvestigations(pool: pg.Pool, beforeDelete: (purged: PurgedInvestigation) => Promise<void>): Promise<number> {
+  let purged = 0;
+  for (;;) {
+    for (let inPass = 0; inPass < PURGE_PASS_SIZE; inPass += 1) {
+      if (!(await purgeOne(pool, beforeDelete))) return purged;
+      purged += 1;
+    }
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  }
 }
 
 export async function readLibrary<T>(pool: pg.Pool, read: (reader: LibraryReader) => Promise<T>): Promise<T> {
@@ -537,6 +692,9 @@ export async function readLibrary<T>(pool: pg.Pool, read: (reader: LibraryReader
       countMatching: (query) => countMatching(client, query),
       countInvestigations: (query) => countInvestigations(client, query),
       countNamedViews: (query) => countNamedViews(client, query),
+      listDeletedInvestigationSourceIds: (ownerId) => listDeletedInvestigationSourceIds(client, ownerId),
+      listDeletedInvestigations: (query) => listDeletedInvestigations(client, query),
+      countDeletedMatching: (query) => countDeletedMatching(client, query),
     });
     await client.query('COMMIT');
     return answer;

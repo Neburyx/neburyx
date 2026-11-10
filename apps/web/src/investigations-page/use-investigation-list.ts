@@ -4,6 +4,8 @@ import type { ApiClient, ApiFailure, InvestigationPageQuery } from '../api/clien
 
 export interface ListFilters {
   readonly status: 'open' | 'closed' | 'archived';
+  /** The deleted investigations that can still be restored, of any status. */
+  readonly deleted?: boolean;
   readonly sourceId: string | undefined;
   readonly text: string | undefined;
 }
@@ -15,6 +17,8 @@ export interface ListState {
   /** The library's named views, as the first page said; the tab of the saved views shows it. */
   readonly savedViews: number | undefined;
   readonly nextCursor: string | null;
+  /** How many days a deleted investigation stays restorable, as the server's last answer said. */
+  readonly retentionDays: number | undefined;
   /** The first page of the filters is being read. */
   readonly loading: boolean;
   readonly loadingMore: boolean;
@@ -29,7 +33,7 @@ export interface ListState {
 
 type Action =
   | { readonly type: 'first-started' }
-  | { readonly type: 'first-answered'; readonly items: readonly InvestigationListItem[]; readonly matching: number; readonly savedViews: number; readonly nextCursor: string | null }
+  | { readonly type: 'first-answered'; readonly items: readonly InvestigationListItem[]; readonly matching: number; readonly savedViews: number; readonly nextCursor: string | null; readonly retentionDays: number }
   | { readonly type: 'more-started' }
   | { readonly type: 'more-answered'; readonly items: readonly InvestigationListItem[]; readonly matching: number; readonly nextCursor: string | null }
   | { readonly type: 'failed'; readonly where: 'first' | 'more'; readonly failure: ApiFailure }
@@ -40,14 +44,14 @@ type Action =
 /** `focusId` when the row that took the focus was the last one: the caption of the table does. */
 export const NO_ROW_LEFT = '';
 
-export const INITIAL: ListState = { items: undefined, matching: undefined, savedViews: undefined, nextCursor: null, loading: true, loadingMore: false, failure: undefined, focusId: undefined, note: undefined, refocusFirst: false };
+export const INITIAL: ListState = { items: undefined, matching: undefined, savedViews: undefined, nextCursor: null, retentionDays: undefined, loading: true, loadingMore: false, failure: undefined, focusId: undefined, note: undefined, refocusFirst: false };
 
 export function reduceList(state: ListState, action: Action): ListState {
   switch (action.type) {
     case 'first-started':
       return { ...state, loading: true, loadingMore: false, failure: undefined, note: state.refocusFirst ? state.note : undefined };
     case 'first-answered':
-      return { items: action.items, matching: action.matching, savedViews: action.savedViews, nextCursor: action.nextCursor, loading: false, loadingMore: false, failure: undefined, focusId: state.refocusFirst ? action.items[0]?.id : undefined, note: state.refocusFirst ? state.note : undefined, refocusFirst: false };
+      return { items: action.items, matching: action.matching, savedViews: action.savedViews, nextCursor: action.nextCursor, retentionDays: action.retentionDays, loading: false, loadingMore: false, failure: undefined, focusId: state.refocusFirst ? action.items[0]?.id : undefined, note: state.refocusFirst ? state.note : undefined, refocusFirst: false };
     case 'more-started':
       return { ...state, loadingMore: true, failure: undefined };
     case 'more-answered':
@@ -72,7 +76,7 @@ export function reduceList(state: ListState, action: Action): ListState {
   }
 }
 
-export const querySoFar = (filters: ListFilters): InvestigationPageQuery => ({ status: filters.status, ...(filters.sourceId === undefined ? {} : { sourceId: filters.sourceId }), ...(filters.text === undefined ? {} : { text: filters.text }) });
+export const querySoFar = (filters: ListFilters): InvestigationPageQuery => ({ ...(filters.deleted === true ? { deleted: true } : { status: filters.status }), ...(filters.sourceId === undefined ? {} : { sourceId: filters.sourceId }), ...(filters.text === undefined ? {} : { text: filters.text }) });
 
 export interface InvestigationList {
   readonly state: ListState;
@@ -91,7 +95,7 @@ export function useInvestigationList(client: ApiClient, filters: ListFilters): I
   const moreInFlight = useRef(false);
   const latest = useRef(state);
   latest.current = state;
-  const { status, sourceId, text } = filters;
+  const { status, sourceId, text, deleted } = filters;
 
   const loadFirst = useCallback(() => {
     generation.current += 1;
@@ -101,12 +105,12 @@ export function useInvestigationList(client: ApiClient, filters: ListFilters): I
     const abort = new AbortController();
     controller.current = abort;
     dispatch({ type: 'first-started' });
-    void client.listInvestigationPage(querySoFar({ status, sourceId, text }), abort.signal).then((result) => {
+    void client.listInvestigationPage(querySoFar({ status, sourceId, text, deleted }), abort.signal).then((result) => {
       if (generation.current !== mine) return;
-      if (result.ok) dispatch({ type: 'first-answered', items: result.value.items, matching: result.value.matching.value, savedViews: result.value.counts.savedViews.count.value, nextCursor: result.value.nextCursor });
+      if (result.ok) dispatch({ type: 'first-answered', items: result.value.items, matching: result.value.matching.value, savedViews: result.value.counts.savedViews.count.value, nextCursor: result.value.nextCursor, retentionDays: result.value.retention.deletedInvestigationsDays });
       else dispatch({ type: 'failed', where: 'first', failure: result.failure });
     });
-  }, [client, status, sourceId, text]);
+  }, [client, status, sourceId, text, deleted]);
 
   useEffect(() => {
     loadFirst();
@@ -127,14 +131,14 @@ export function useInvestigationList(client: ApiClient, filters: ListFilters): I
     const mine = generation.current;
     const cursor = held.nextCursor;
     dispatch({ type: 'more-started' });
-    void client.listInvestigationPage({ ...querySoFar({ status, sourceId, text }), cursor }, controller.current?.signal).then((result) => {
+    void client.listInvestigationPage({ ...querySoFar({ status, sourceId, text, deleted }), cursor }, controller.current?.signal).then((result) => {
       if (generation.current !== mine) return;
       moreInFlight.current = false;
       if (result.ok) dispatch({ type: 'more-answered', items: result.value.items, matching: result.value.matching.value, nextCursor: result.value.nextCursor });
       else if (result.failure.code === 'CURSOR_INVALIDATED') loadFirst();
       else dispatch({ type: 'failed', where: 'more', failure: result.failure });
     });
-  }, [client, status, sourceId, text, loadFirst]);
+  }, [client, status, sourceId, text, deleted, loadFirst]);
 
   return {
     state,

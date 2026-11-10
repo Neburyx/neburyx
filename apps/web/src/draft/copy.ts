@@ -11,3 +11,4 @@ export const DRAFT_CONFLICT_BANNER_ID = 'draft-conflict';
 export const LEAVE_GUARD_LABEL = 'Changes not saved';
 export const LEAVE_GUARD_TEXT = 'The changes to this investigation could not be saved. Leaving now loses them.';
 export const LEAVE_ANYWAY = 'Leave anyway';
+export const INVESTIGATION_DELETED_NOT_SAVED = 'This investigation was deleted. Changes are not saved.';

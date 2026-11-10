@@ -33,7 +33,7 @@ export const MORE_FAILED = "Couldn't load more views. Try again.";
 export const VIEWS_LOADING = 'Loading views…';
 export const VIEWS_FAILED = "Couldn't load the views.";
 export const RETRY = 'Retry';
-export const READ_ONLY_VIEWS = 'Reopen to restore or rename views.';
+export const READ_ONLY_VIEWS = 'Reopen to restore, rename or delete views.';
 export const RESTORE_FOOTNOTE = 'Restoring copies a view into your draft. Only you see your draft.';
 export const draftAutosaved = (time: string): string => `Your draft autosaved at ${time} UTC. Named views never change.`;
 export const savedBy = (name: string, when: string): string => `Saved by ${name} · ${when} UTC`;
@@ -48,3 +48,13 @@ export const RESTORE_FAILED = "Couldn't restore the view. Your draft is unchange
 export const RESTORE_READ_FAILED = 'The view was restored to your draft, but its graph could not be read. Try again, or reload to continue with the restored draft.';
 export const TRY_AGAIN = 'Try again';
 export const RESTORING = 'Restoring…';
+
+export const VIEW_DELETE = 'Delete';
+export const DELETE_VIEW = 'Delete view';
+export const DELETING_VIEW = 'Deleting…';
+export const DELETE_VIEW_TEXT = "The view is deleted and can't be restored. Your draft is not changed.";
+export const VIEW_DELETED = 'View deleted.';
+export const VIEW_ALREADY_DELETED = 'This view was already deleted. The list is updated.';
+export const deleteViewTitle = (name: string): string => `Delete “${name}”?`;
+export const deleteViewFromTitle = (name: string, investigation: string): string => `Delete “${name}” from “${investigation}”?`;
+export const deleteLabel = (name: string): string => `Delete ${name}`;

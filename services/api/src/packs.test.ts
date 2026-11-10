@@ -83,7 +83,7 @@ function fileOfText(text: string): string {
 async function startFile(path: string, store = memoryStoreWith({})) {
   const errors: string[] = [];
   const openStore = vi.fn(() => store);
-  const io: StartIo = { stderr: { write: (text) => errors.push(text) }, logger: pino({ level: 'silent' }), defaultWebRoot: webRoot, openStore, portOverride: 0 };
+  const io: StartIo = { stderr: { write: (text) => errors.push(text) }, logger: pino({ level: 'silent' }), defaultWebRoot: webRoot, openStore, tasks: [], portOverride: 0 };
   const result = await start({ ...ENV, NEBURYX_CONFIG: path }, io);
   if (result.exitCode === 0) running.push(result.app);
   return { result, message: errors.join(''), openStore };

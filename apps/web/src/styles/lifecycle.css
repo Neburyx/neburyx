@@ -81,3 +81,29 @@
   justify-content: flex-end;
   gap: var(--space-8);
 }
+
+.investigation-menu-panel .menu-row-danger .menu-label {
+  color: var(--color-danger);
+}
+
+button.primary.confirm-danger:not(:disabled) {
+  border-color: var(--color-danger);
+  background: var(--color-danger);
+  color: var(--color-surface);
+}
+
+.confirm-dialog p {
+  margin: 0;
+}
+
+.confirm-dialog textarea {
+  min-height: calc(var(--button-height) * 2);
+  padding: var(--space-8) var(--space-12);
+  border: var(--border-width) solid var(--color-control-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--font-size-small);
+  resize: vertical;
+}

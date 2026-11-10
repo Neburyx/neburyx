@@ -55,10 +55,40 @@ function io(overrides: Partial<StartIo> = {}): { readonly io: StartIo; readonly 
       logger: pino({ level: 'silent' }),
       defaultWebRoot: webRoot,
       openStore: memoryAppStore,
+      tasks: [],
       ...overrides,
     },
   };
 }
+
+describe('the maintenance tasks at start', () => {
+  const runnerSeen = () => {
+    const seen: { tasks: readonly { name: string; schedule?: string }[] }[] = [];
+    const startJobRunner: NonNullable<StartIo['startJobRunner']> = (_url, tasks) => {
+      seen.push({ tasks: tasks.map((task) => ({ name: task.name, ...(task.schedule === undefined ? {} : { schedule: task.schedule }) })) });
+      return Promise.resolve(undefined);
+    };
+    return { seen, startJobRunner };
+  };
+
+  it('hands the runner the purge with its daily schedule when no task list is injected', async () => {
+    const { seen, startJobRunner } = runnerSeen();
+    const run = io({ startJobRunner });
+    delete (run.io as { tasks?: unknown }).tasks;
+    const result = await start(DATABASE_ENV, run.io);
+    expect(result.exitCode).toBe(0);
+    expect(seen).toEqual([{ tasks: [{ name: 'purge-deleted-investigations', schedule: '17 3 * * *' }] }]);
+    if ('app' in result) await result.app.close();
+  });
+
+  it('hands the runner an injected list as it is, and builds no shipped task', async () => {
+    const { seen, startJobRunner } = runnerSeen();
+    const run = io({ startJobRunner, tasks: [{ name: 'mine', run: () => Promise.resolve() }] });
+    const result = await start(DATABASE_ENV, run.io);
+    expect(seen).toEqual([{ tasks: [{ name: 'mine' }] }]);
+    if ('app' in result) await result.app.close();
+  });
+});
 
 describe('start-up failures from the task list', () => {
   const noop = (): Promise<void> => Promise.resolve();

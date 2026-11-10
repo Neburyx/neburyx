@@ -27,7 +27,8 @@ import { PING_INTERVAL_MS, startPingSchedule, type PingSchedule } from './source
 import { createStartupChecker, startupProblem, type StartupResult } from './source-test/startup.js';
 import { createSourceTester } from './source-test/tester.js';
 import { startJobRunner, type JobRunner } from './jobs/runner.js';
-import { registeredTasks, TaskConfigError, validateTasks, type Task } from './jobs/tasks.js';
+import { maintenanceTasks } from './jobs/maintenance.js';
+import { TaskConfigError, validateTasks, type Task } from './jobs/tasks.js';
 
 const SHIPPED_MIGRATIONS = fileURLToPath(new URL('../migrations', import.meta.url));
 
@@ -42,6 +43,8 @@ export interface StartIo {
   readonly openStore?: (url: string, onConnectionError: () => void, migrationsDirectory: string) => AppStore;
   readonly migrationsDirectory?: string;
   readonly tasks?: readonly Task[];
+  /** Starts the job runner; the shipped one unless a test says otherwise. */
+  readonly startJobRunner?: typeof startJobRunner;
   readonly fileExists?: (path: string) => boolean;
 }
 
@@ -104,9 +107,8 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
     }
   }
 
-  const tasks = io.tasks ?? registeredTasks;
   try {
-    validateTasks(tasks);
+    if (io.tasks !== undefined) validateTasks(io.tasks);
   } catch (error) {
     if (!(error instanceof TaskConfigError)) throw error;
     io.stderr.write(`${error.message}\n`);
@@ -148,7 +150,9 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
     seedFromStartup(reachability, results);
     const problem = (io.startupProblem ?? startupProblem)(results);
     if (problem !== undefined) throw new StartupStop(problem);
-    jobs = await startJobRunner(
+    const tasks = io.tasks ?? maintenanceTasks({ store: openedStore, audit: seams.audit, logger: io.logger });
+    validateTasks(tasks);
+    jobs = await (io.startJobRunner ?? startJobRunner)(
       config.databaseUrl,
       tasks,
       io.logger,

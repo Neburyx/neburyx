@@ -30,7 +30,7 @@ function Entity({ item, profile, labels }: { readonly item: InvestigationListIte
   );
 }
 
-export interface InvestigationsTableProps extends Pick<RowMenuProps, 'onChanged' | 'onLeft' | 'onNotice' | 'client' | 'statusFilter'> {
+export interface InvestigationsTableProps extends Pick<RowMenuProps, 'onChanged' | 'onLeft' | 'onNotice' | 'client' | 'statusFilter' | 'onDeleted' | 'onGone' | 'onStale'> {
   readonly items: readonly InvestigationListItem[];
   readonly profiles: ReadonlyMap<string, SourceProfile>;
   readonly labels: Labels;

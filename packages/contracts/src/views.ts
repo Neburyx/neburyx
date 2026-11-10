@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { INVESTIGATION_STATUSES, codePoints, draftSchema, holdsNoNulOrLoneSurrogate, investigationTitleSchema, notesSchema } from './investigations.js';
+import { INVESTIGATION_STATUSES, codePoints, draftSchema, holdsNoNulOrLoneSurrogate, investigationSaveSchema, investigationTitleSchema, notesSchema } from './investigations.js';
 
 /** The longest name of a named view, in characters (the database checks the same limit). */
 export const MAX_VIEW_NAME_LENGTH = 120;
@@ -83,6 +83,22 @@ export const ownedViewListResponseSchema = z.strictObject({
 export type OwnedView = z.infer<typeof ownedViewSchema>;
 export type OwnedViewListResponse = z.infer<typeof ownedViewListResponseSchema>;
 export type RenameViewRequest = z.infer<typeof renameViewRequestSchema>;
+
+/** `POST /v1/investigations/{id}/views/{viewId}/delete`; the view's `version` goes in `If-Match`. The note says why and is kept with the deleted view; it is optional, and an empty one is stored as none. */
+export const deleteViewRequestSchema = z.strictObject({ note: notesSchema.optional() });
+
+/** The investigation's views after the delete: the draft (its `basedOnViewId` is null when the view it was based on is deleted, which this delete may have just done), the save state and the exact number of views that are left. */
+export const deleteViewResponseSchema = z.strictObject({
+  id: z.uuid(),
+  version: versionSchema,
+  deletedAt: z.iso.datetime(),
+  draft: z.strictObject({ version: versionSchema, basedOnViewId: z.uuid().nullable() }),
+  save: investigationSaveSchema,
+  count: z.strictObject({ value: z.number().int().nonnegative(), quality: z.literal('exact'), scope: z.literal('named-views') }),
+});
+
+export type DeleteViewRequest = z.infer<typeof deleteViewRequestSchema>;
+export type DeleteViewResponse = z.infer<typeof deleteViewResponseSchema>;
 
 /** `POST /v1/investigations/{id}/views/{viewId}/restore`: the draft as it is now, which holds what the view held, and that it equals the view. */
 export const restoreViewResponseSchema = z.strictObject({

@@ -13,6 +13,7 @@ const fail = (failure: ApiFailure): ApiResult<DraftWriteResponse> => ({ ok: fals
 const SERVER_DOWN = fail({ code: 'INTERNAL_ERROR', message: 'x', retryable: true, traceId: 't' });
 const CONFLICT = fail({ code: 'CONFLICTED_VIEW_VERSION', message: 'x', retryable: false, traceId: 't' });
 const REFUSED = fail({ code: 'INVALID_REQUEST', message: 'x', retryable: false, traceId: 't' });
+const GONE = fail({ code: 'NOT_FOUND', message: 'x', retryable: false, traceId: 't' });
 
 interface Write {
   readonly version: number;
@@ -632,3 +633,32 @@ describe('settling the draft before another investigation is opened', () => {
     expect(second.leaving.getState()).toBe(false);
   });
 });
+
+describe('an investigation that was deleted in another tab', () => {
+  it('says so, stops retrying, sends nothing more however the canvas changes, and does not hold the person back from leaving', async () => {
+    const { writes, move, sync } = rig(() => GONE);
+    move(1);
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
+    expect(writes).toHaveLength(1);
+    expect(sync.status.getState()).toEqual({ kind: 'deleted' });
+    await vi.advanceTimersByTimeAsync(RETRY_STEADY_MS * 3);
+    expect(writes).toHaveLength(1);
+    move(2);
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS * 2);
+    expect(writes).toHaveLength(1);
+    expect(await sync.settle()).toBe(true);
+  });
+});
+
+describe('discarding the draft of a deleted investigation', () => {
+  it('drops the changes that wait and sends nothing, neither on the timer nor as the investigation is left', async () => {
+    const { writes, move, sync, state } = rig();
+    move(1);
+    sync.discard(ID);
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS * 3);
+    state.forget(ID);
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
+    expect(writes).toHaveLength(0);
+  });
+});
+

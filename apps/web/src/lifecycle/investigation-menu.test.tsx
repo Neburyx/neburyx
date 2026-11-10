@@ -7,17 +7,18 @@ const button = () => screen.getByRole('button', { name: 'Investigation menu' });
 const items = () => within(screen.getByRole('menu')).getAllByRole('menuitem').map((item) => item.textContent);
 
 describe('the investigation menu', () => {
-  it('lists Rename, Close and Archive of an open investigation, and no Delete', async () => {
+  it('lists Rename, Close, Archive and a separate red Delete of an open investigation', async () => {
     renderLifecycle(shownState('open'));
     await userEvent.setup().click(button());
-    expect(items()).toEqual(['Rename', 'Close', 'Archive']);
-    expect(screen.queryByRole('menuitem', { name: /delete/i })).toBeNull();
+    expect(items()).toEqual(['Rename', 'Close', 'Archive', 'Delete']);
+    expect(screen.getByRole('menuitem', { name: 'Delete' }).className).toContain('menu-row-danger');
+    expect(screen.getByRole('menu').querySelector('[role="separator"]')).not.toBeNull();
   });
 
   it('lists Reopen, Archive and a disabled Rename described as "Reopen to rename." for a closed one', async () => {
     renderLifecycle(shownState('closed'));
     await userEvent.setup().click(button());
-    expect(items()).toEqual(['RenameReopen to rename.', 'Reopen', 'Archive']);
+    expect(items()).toEqual(['RenameReopen to rename.', 'Reopen', 'Archive', 'Delete']);
     const rename = screen.getByRole('menuitem', { name: /Rename/ });
     expect(rename.getAttribute('aria-disabled')).toBe('true');
     expect(rename.getAttribute('aria-describedby')).not.toBeNull();
@@ -27,7 +28,7 @@ describe('the investigation menu', () => {
   it('lists Reopen and a disabled Rename for an archived one', async () => {
     renderLifecycle(shownState('archived'));
     await userEvent.setup().click(button());
-    expect(items()).toEqual(['RenameReopen to rename.', 'Reopen']);
+    expect(items()).toEqual(['RenameReopen to rename.', 'Reopen', 'Delete']);
   });
 
   it('does not open the rename dialog from a disabled Rename', async () => {
@@ -72,7 +73,7 @@ describe('the investigation menu', () => {
     expect(state.investigation.getState().record).toMatchObject({ status: 'open', readOnly: false, version: 5 });
     expect(screen.queryByRole('region', { name: 'Request status' })).toBeNull();
     await user.click(button());
-    expect(items()).toEqual(['Rename', 'Close', 'Archive']);
+    expect(items()).toEqual(['Rename', 'Close', 'Archive', 'Delete']);
     await user.click(screen.getByRole('menuitem', { name: 'Close' }));
     await flush();
     expect(changeInvestigationStatus.mock.calls.map((call) => [call[1]])).toEqual([['closed'], ['open'], ['closed']]);
@@ -183,7 +184,11 @@ describe('the investigation menu with the keyboard', () => {
     await user.keyboard('{ArrowDown}');
     expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: 'Close' }));
     await user.keyboard('{ArrowDown}{ArrowDown}');
+    expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: 'Delete' }));
+    await user.keyboard('{ArrowDown}');
     expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: 'Rename' }));
+    await user.keyboard('{ArrowUp}');
+    expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: 'Delete' }));
     await user.keyboard('{ArrowUp}');
     expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: 'Archive' }));
     await user.keyboard('{ArrowUp}{Enter}');

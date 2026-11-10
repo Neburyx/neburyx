@@ -22,6 +22,9 @@ export type ViewListState =
 
 export type RenameOutcome = 'renamed' | 'failed' | 'conflict' | 'unknown';
 
+/** What a delete of a view came to: the view is gone from the list, or the list was read again because it was changed or deleted elsewhere. */
+export type RemoveOutcome = { readonly kind: 'deleted' } | { readonly kind: 'changed-elsewhere' } | { readonly kind: 'gone' } | { readonly kind: 'failed'; readonly failure: ApiFailure } | { readonly kind: 'unknown' };
+
 export interface ViewList {
   readonly state: ReadableStore<ViewListState>;
   /** Reads the first page of the investigation shown, again from the start; a read that is still going is dropped. */
@@ -30,6 +33,8 @@ export interface ViewList {
   more(): Promise<void>;
   /** Changes a view's name. A name that was taken elsewhere is `conflict`, and the list is read again. */
   rename(viewId: string, name: string): Promise<RenameOutcome>;
+  /** Deletes a view with a note. The list and the save state of the investigation shown take the server's answer. */
+  remove(viewId: string, note: string | null): Promise<RemoveOutcome>;
   /** Forgets what was read, as when another investigation takes the place of the one shown. */
   reset(): void;
 }
@@ -101,11 +106,38 @@ export function createViewList(client: ApiClient, shown: ClientState): ViewList 
     return 'renamed';
   }
 
+  async function remove(viewId: string, note: string | null): Promise<RemoveOutcome> {
+    const id = investigationId();
+    const current = store.getState();
+    const item = current.kind === 'ready' ? current.items.find((candidate) => candidate.id === viewId) : undefined;
+    if (id === null || id !== readOf || current.kind !== 'ready' || item === undefined) return { kind: 'unknown' };
+    const result = await client.deleteView(id, viewId, item.version, note);
+    if (!result.ok) {
+      if (result.failure.code === 'CONFLICTED_VIEW_VERSION') {
+        await load();
+        return { kind: 'changed-elsewhere' };
+      }
+      if (result.failure.code === 'NOT_FOUND') {
+        await load();
+        return { kind: 'gone' };
+      }
+      noteReadOnlyRefusal(shown, result.failure);
+      return { kind: 'failed', failure: result.failure };
+    }
+    const { save, count, draft } = result.value;
+    const now = store.getState();
+    if (now.kind === 'ready' && id === readOf) store.setState({ ...now, items: now.items.filter((candidate) => candidate.id !== viewId), count: count.value, draft: { ...now.draft, basedOnViewId: draft.basedOnViewId } });
+    const held = shown.investigation.getState();
+    if (held.id === id && held.record !== null) shown.describeInvestigation({ ...held.record, save: save.state === 'saved' ? { kind: 'saved', at: save.savedAt } : { kind: 'unsaved' } });
+    return { kind: 'deleted' };
+  }
+
   return {
     state: readable(store),
     load,
     more,
     rename,
+    remove,
     reset() {
       read += 1;
       readOf = null;

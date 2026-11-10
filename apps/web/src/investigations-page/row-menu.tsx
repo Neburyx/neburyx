@@ -7,7 +7,10 @@ import { isReadOnlyStatus, type InvestigationStatus } from '../state/investigati
 import { EXPLORE_PATH } from '../shell/navigation.js';
 import { ActionMenu, type ActionMenuItem } from '../lifecycle/action-menu.js';
 import { lifecycleActionsOf } from '../lifecycle/menu-items.js';
+import { DeleteInvestigationDialog } from '../lifecycle/delete-dialog.js';
+import { investigationDeleted } from '../lifecycle/copy.js';
 import { RenameDialogView } from '../lifecycle/rename-dialog.js';
+import { utcDateTime } from '../views/format.js';
 import { messageOf } from '../lifecycle/status-flow.js';
 import { OPEN, ROW_MENU_BUTTON, ROW_MENU_LABEL, rowLeft } from './copy.js';
 
@@ -21,23 +24,31 @@ export interface RowMenuProps {
   readonly onChanged: (item: InvestigationListItem) => void;
   readonly onLeft: (item: InvestigationListItem, note: string) => void;
   readonly onNotice: (failure: ApiFailure | undefined) => void;
+  /** The investigation was deleted from this row: it leaves the list, and the note says until when it can be restored. */
+  readonly onDeleted: (item: InvestigationListItem, note: string) => void;
+  /** The investigation is not there to delete (deleted or purged elsewhere): it leaves the list. */
+  readonly onGone: (item: InvestigationListItem) => void;
+  /** The list may be out of date (the row changed elsewhere): read it again. */
+  readonly onStale: () => void;
 }
 
-/** The "···" menu of one row: Open, then what the investigation's status allows (Rename, Close, Reopen, Archive); a change shows on the row from the server's answer. */
-export function RowMenu({ item, client, statusFilter, onChanged, onLeft, onNotice }: RowMenuProps) {
+/** The "···" menu of one row: Open, then what the investigation's status allows (Rename, Close, Reopen, Archive), and Delete; a change shows on the row from the server's answer. */
+export function RowMenu({ item, client, statusFilter, onChanged, onLeft, onNotice, onDeleted, onGone, onStale }: RowMenuProps) {
   const navigate = useNavigate();
   const workspace = useClientStateWhenProvided();
   const [busy, setBusy] = useState(false);
   const [renaming, setRenaming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const button = useRef<HTMLButtonElement>(null);
   const busyNow = useRef(false);
 
   // focus returns once the dialog is gone: while it is open the page behind it is inert and cannot take focus
-  const wasRenaming = useRef(false);
+  const dialogOpen = renaming || deleting;
+  const wasOpen = useRef(false);
   useEffect(() => {
-    if (wasRenaming.current && !renaming) button.current?.focus();
-    wasRenaming.current = renaming;
-  }, [renaming]);
+    if (wasOpen.current && !dialogOpen && button.current?.isConnected === true) button.current.focus();
+    wasOpen.current = dialogOpen;
+  }, [dialogOpen]);
 
   const keepWorkspaceRecord = (title: string, status: InvestigationStatus, version: number): void => {
     const held = workspace?.investigation.getState();
@@ -84,6 +95,11 @@ export function RowMenu({ item, client, statusFilter, onChanged, onLeft, onNotic
           setRenaming(true);
           return;
         }
+        if (action.id === 'delete') {
+          close(false);
+          setDeleting(true);
+          return;
+        }
         close(true);
         void move(TARGET_OF[action.id]);
       },
@@ -104,6 +120,20 @@ export function RowMenu({ item, client, statusFilter, onChanged, onLeft, onNotic
           refresh={refresh}
           onReadOnlyRefusal={() => void refresh()}
           onClose={() => setRenaming(false)}
+        />
+      ) : null}
+      {deleting ? (
+        <DeleteInvestigationDialog
+          target={{ id: item.id, version: item.version }}
+          send={(target) => client.deleteInvestigation(target.id, target.version)}
+          onDeleted={(answer) => onDeleted(item, investigationDeleted(utcDateTime(answer.purgeAfter)))}
+          onGone={() => onGone(item)}
+          onConflict={onStale}
+          refresh={() => {
+            onStale();
+            return Promise.resolve(true);
+          }}
+          onClose={() => setDeleting(false)}
         />
       ) : null}
     </>

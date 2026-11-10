@@ -2,7 +2,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { extname, join, normalize, sep } from 'node:path';
-import { DEFAULT_INVESTIGATION_LIST_LIMIT, DEFAULT_VIEW_PAGE, MAX_INVESTIGATION_LIST_LIMIT, MAX_VIEW_PAGE, viewListQuerySchema, parseEdgeRefSegment, renameRequestSchema, renameViewRequestSchema, saveViewRequestSchema, statusChangeRequestSchema, investigationListCountsSchema, nodeSchema, investigationListQuerySchema, type Investigation, type LastTest, openInvestigationRequestSchema, SEARCH_GROUP_CAP, searchMoreRequestSchema, searchMoreResultSchema, searchRequestSchema, searchResultSchema, type SourceSummary, sourceSummaryFieldsSchema, sourceSummarySchema, type SourceTestReport, type EdgeReadRef, valueOfPathSegment } from '@neburyx/contracts';
+import { deleteViewRequestSchema, restoreInvestigationRequestSchema, DEFAULT_INVESTIGATION_LIST_LIMIT, DEFAULT_VIEW_PAGE, MAX_INVESTIGATION_LIST_LIMIT, MAX_VIEW_PAGE, viewListQuerySchema, parseEdgeRefSegment, renameRequestSchema, renameViewRequestSchema, saveViewRequestSchema, statusChangeRequestSchema, investigationListCountsSchema, nodeSchema, investigationListQuerySchema, type Investigation, type LastTest, openInvestigationRequestSchema, SEARCH_GROUP_CAP, searchMoreRequestSchema, searchMoreResultSchema, searchRequestSchema, searchResultSchema, type SourceSummary, sourceSummaryFieldsSchema, sourceSummarySchema, type SourceTestReport, type EdgeReadRef, valueOfPathSegment } from '@neburyx/contracts';
 
 interface SupportProfile {
   readonly sourceId: string;
@@ -189,6 +189,8 @@ function readOnlyRefusal(status: 'closed' | 'archived'): unknown {
   return { error: { code: 'CONFLICT', message: 'This investigation is closed or archived. Reopen it to make changes.', retryable: false, traceId: 'tr-support', details: { reason: 'investigation-read-only', status } } };
 }
 
+const RETENTION_DAYS = 30;
+
 const INVALID = { error: { code: 'INVALID_REQUEST', message: 'The request is not valid.', retryable: false, traceId: 'tr-support' } };
 
 /** A named view the stand-in holds: what the list shows, and the draft it was saved from. */
@@ -200,6 +202,9 @@ interface StoredView {
   version: number;
   readonly layout: unknown;
   readonly queryContext: unknown;
+  /** Set when the view was deleted: it is left out of every read and cannot be restored. */
+  deletedNote?: string | null;
+  deleted?: boolean;
 }
 
 const viewShown = (view: StoredView): unknown => ({ id: view.id, name: view.name, notes: view.notes, savedBy: { name: 'Support analyst' }, createdAt: view.createdAt, version: view.version });
@@ -221,6 +226,8 @@ interface StoredInvestigation {
   readonly entityType: string;
   readonly stableId: string;
   readonly createdAt: string;
+  /** Set when the investigation was deleted: it is reachable by restore only until `purgeAfter`. */
+  deleted?: { readonly at: string; readonly purgeAfter: string };
 }
 
 function node(sourceId: string, entityType: string, stableId: string): unknown {
@@ -258,7 +265,7 @@ function shown(stored: StoredInvestigation, isNew = false): Investigation {
 
 /** Saved when the draft names a view and still holds what that view holds. */
 function saveOf(stored: StoredInvestigation): { state: 'saved'; savedAt: string } | { state: 'unsaved'; savedAt: null } {
-  const view = stored.views.find((entry) => entry.id === stored.basedOnViewId);
+  const view = stored.views.find((entry) => entry.id === stored.basedOnViewId && entry.deleted !== true);
   const draft = draftOf(stored) as { layout: unknown; queryContext: unknown };
   const same = view !== undefined && JSON.stringify([view.layout, view.queryContext, view.notes]) === JSON.stringify([draft.layout, draft.queryContext, stored.draftNotes]);
   return same ? { state: 'saved', savedAt: view.createdAt } : { state: 'unsaved', savedAt: null };
@@ -284,6 +291,12 @@ function countsOf(stored: StoredInvestigation): { nodeCount: number; edgeCount: 
 /** The synthetic stand-in for the entity and investigation endpoints: it holds the investigations opened since it started, and an entity named `missing` does not exist. */
 function createInvestigations(options: SupportServerOptions) {
   const held = new Map<string, StoredInvestigation>();
+  /** The investigation as the routes that are not restore see it: a deleted one is not there. */
+  const live = (id: string): StoredInvestigation | undefined => {
+    const stored = held.get(id);
+    return stored?.deleted === undefined ? stored : undefined;
+  };
+  const liveViews = (stored: StoredInvestigation): StoredView[] => stored.views.filter((view) => view.deleted !== true);
   let namedViews: { readonly count: number; readonly lastEditedAt: string | null } = { count: 0, lastEditedAt: null };
   const typesOf = new Map(profilesOf(options).map((profile) => [profile.sourceId, new Set((profile.entityTypes ?? []).map((entry) => entry.type))]));
   const refused = new Set(options.refusedSources ?? []);
@@ -295,13 +308,13 @@ function createInvestigations(options: SupportServerOptions) {
       json(response, 200, node(sourceId, entityType, stableId));
     },
     read(id: string, response: ServerResponse): void {
-      const stored = held.get(id);
+      const stored = live(id);
       if (stored === undefined) return json(response, 404, NOT_FOUND);
       json(response, 200, { investigation: shown(stored), draft: draftOf(stored), save: saveOf(stored) });
     },
     /** Replaces the draft when the version in If-Match is the draft's, as the API does; an unmapped entity type or a missing field is refused. */
     saveDraft(id: string, ifMatch: string | undefined, body: unknown, response: ServerResponse): void {
-      const stored = held.get(id);
+      const stored = live(id);
       if (stored === undefined) return json(response, 404, NOT_FOUND);
       const given = typeof body === 'object' && body !== null && !Array.isArray(body) ? Object.fromEntries(Object.entries(body)) : undefined;
       const notes = given?.['notes'];
@@ -319,7 +332,7 @@ function createInvestigations(options: SupportServerOptions) {
     },
     /** Saves the draft as a named view, as the API does: the draft's version in If-Match, a closed investigation refused. */
     saveView(id: string, ifMatch: string | undefined, body: unknown, response: ServerResponse): void {
-      const stored = held.get(id);
+      const stored = live(id);
       if (stored === undefined) return json(response, 404, NOT_FOUND);
       const parsed = saveViewRequestSchema.safeParse(body);
       if (!parsed.success || ifMatch === undefined || !/^"[1-9][0-9]*"$/.test(ifMatch)) return json(response, 400, INVALID);
@@ -341,13 +354,13 @@ function createInvestigations(options: SupportServerOptions) {
       json(response, 201, { view: viewShown(view), draft: { version: stored.draftVersion, notes, basedOnViewId: view.id }, save: saveOf(stored), ...(title === undefined ? {} : { investigation: { title: stored.title, version: stored.version } }) });
     },
     listViews(id: string, response: ServerResponse): void {
-      const stored = held.get(id);
+      const stored = live(id);
       if (stored === undefined) return json(response, 404, NOT_FOUND);
-      json(response, 200, { items: [...stored.views].reverse().map(viewShown), nextCursor: null, count: { value: stored.views.length, quality: 'exact', scope: 'named-views' }, draft: { basedOnViewId: stored.basedOnViewId, updatedAt: stored.lastEditedAt } });
+      json(response, 200, { items: [...liveViews(stored)].reverse().map(viewShown), nextCursor: null, count: { value: liveViews(stored).length, quality: 'exact', scope: 'named-views' }, draft: { basedOnViewId: stored.basedOnViewId, updatedAt: stored.lastEditedAt } });
     },
     renameView(id: string, viewId: string, ifMatch: string | undefined, body: unknown, response: ServerResponse): void {
-      const stored = held.get(id);
-      const view = stored?.views.find((entry) => entry.id === viewId);
+      const stored = live(id);
+      const view = stored === undefined ? undefined : liveViews(stored).find((entry) => entry.id === viewId);
       if (stored === undefined || view === undefined) return json(response, 404, NOT_FOUND);
       const parsed = renameViewRequestSchema.safeParse(body);
       if (!parsed.success || ifMatch === undefined || !/^"[1-9][0-9]*"$/.test(ifMatch)) return json(response, 400, INVALID);
@@ -358,8 +371,8 @@ function createInvestigations(options: SupportServerOptions) {
       json(response, 200, viewShown(view), { etag: `"${view.version}"` });
     },
     restoreView(id: string, viewId: string, ifMatch: string | undefined, response: ServerResponse): void {
-      const stored = held.get(id);
-      const view = stored?.views.find((entry) => entry.id === viewId);
+      const stored = live(id);
+      const view = stored === undefined ? undefined : liveViews(stored).find((entry) => entry.id === viewId);
       if (stored === undefined || view === undefined) return json(response, 404, NOT_FOUND);
       if (ifMatch === undefined || !/^"[1-9][0-9]*"$/.test(ifMatch)) return json(response, 400, INVALID);
       if (stored.status !== 'open') return json(response, 409, readOnlyRefusal(stored.status));
@@ -372,9 +385,46 @@ function createInvestigations(options: SupportServerOptions) {
       stored.lastEditedAt = new Date().toISOString();
       json(response, 200, { draft: draftOf(stored), save: saveOf(stored) });
     },
+    /** Deletes the investigation whatever its status, restorable for the retention days; the version in If-Match guards it. */
+    deleteInvestigation(id: string, ifMatch: string | undefined, response: ServerResponse): void {
+      const stored = live(id);
+      if (stored === undefined) return json(response, 404, NOT_FOUND);
+      if (ifMatch === undefined || !/^"[1-9][0-9]*"$/.test(ifMatch)) return json(response, 400, INVALID);
+      if (Number(ifMatch.slice(1, -1)) !== stored.version) return json(response, 409, PLAIN_CONFLICT);
+      const at = new Date();
+      stored.deleted = { at: at.toISOString(), purgeAfter: new Date(at.getTime() + RETENTION_DAYS * 86_400_000).toISOString() };
+      stored.version += 1;
+      json(response, 200, { id: stored.id, version: stored.version, deletedAt: stored.deleted.at, purgeAfter: stored.deleted.purgeAfter }, { etag: `"${stored.version}"` });
+    },
+    /** Restores a deleted investigation that has not reached its purge date, as it was. */
+    restoreInvestigation(id: string, body: unknown, response: ServerResponse): void {
+      const stored = held.get(id);
+      const parsed = restoreInvestigationRequestSchema.safeParse(body);
+      if (!parsed.success) return json(response, 400, INVALID);
+      if (stored?.deleted === undefined || stored.deleted.purgeAfter <= new Date().toISOString()) return json(response, 404, NOT_FOUND);
+      if (parsed.data.expectedVersion !== stored.version) return json(response, 409, PLAIN_CONFLICT);
+      stored.deleted = undefined;
+      stored.version += 1;
+      json(response, 200, { investigation: shown(stored), draft: draftOf(stored), save: saveOf(stored) }, { etag: `"${stored.version}"` });
+    },
+    /** Deletes a named view with its note: the view is left out of every read and cannot be restored. */
+    deleteView(id: string, viewId: string, ifMatch: string | undefined, body: unknown, response: ServerResponse): void {
+      const stored = live(id);
+      const view = stored === undefined ? undefined : liveViews(stored).find((entry) => entry.id === viewId);
+      if (stored === undefined || view === undefined) return json(response, 404, NOT_FOUND);
+      const parsed = deleteViewRequestSchema.safeParse(body ?? {});
+      if (!parsed.success || ifMatch === undefined || !/^"[1-9][0-9]*"$/.test(ifMatch)) return json(response, 400, INVALID);
+      if (stored.status !== 'open') return json(response, 409, readOnlyRefusal(stored.status));
+      if (Number(ifMatch.slice(1, -1)) !== view.version) return json(response, 409, { error: { code: 'CONFLICTED_VIEW_VERSION', message: 'This view was changed elsewhere. Reload to continue.', retryable: false, traceId: 'support' } });
+      view.deleted = true;
+      view.deletedNote = parsed.data.note === undefined || parsed.data.note === '' ? null : parsed.data.note;
+      view.version += 1;
+      const basedOn = liveViews(stored).find((entry) => entry.id === stored.basedOnViewId);
+      json(response, 200, { id: view.id, version: view.version, deletedAt: new Date().toISOString(), draft: { version: stored.draftVersion, basedOnViewId: basedOn?.id ?? null }, save: saveOf(stored), count: { value: liveViews(stored).length, quality: 'exact', scope: 'named-views' } }, { etag: `"${view.version}"` });
+    },
     /** Closes, archives or reopens, with the transitions of the API; a request for the status it has changes nothing. */
     changeStatus(id: string, body: unknown, response: ServerResponse): void {
-      const stored = held.get(id);
+      const stored = live(id);
       if (stored === undefined) return json(response, 404, NOT_FOUND);
       const parsed = statusChangeRequestSchema.safeParse(body);
       if (!parsed.success) return json(response, 400, INVALID);
@@ -388,7 +438,7 @@ function createInvestigations(options: SupportServerOptions) {
       answer();
     },
     rename(id: string, body: unknown, response: ServerResponse): void {
-      const stored = held.get(id);
+      const stored = live(id);
       if (stored === undefined) return json(response, 404, NOT_FOUND);
       const parsed = renameRequestSchema.safeParse(body);
       if (!parsed.success) return json(response, 400, INVALID);
@@ -445,12 +495,15 @@ function createInvestigations(options: SupportServerOptions) {
       const limit = query.data.limit ?? DEFAULT_INVESTIGATION_LIST_LIMIT;
       if (limit < 1) return json(response, 400, INVALID);
       if (limit > MAX_INVESTIGATION_LIST_LIMIT) return json(response, 422, { error: { code: 'QUERY_BUDGET_EXCEEDED', details: { maxPage: MAX_INVESTIGATION_LIST_LIMIT } } });
+      const deleted = query.data.deleted === 'true';
+      if (deleted && query.data.status !== undefined) return json(response, 400, INVALID);
       const status = query.data.status ?? 'open';
       const fragment = query.data.q?.toLowerCase();
-      const library = [...held.values()].filter((stored) => readable(stored.sourceId) && stored.status === 'open');
-      const filterKey = JSON.stringify([status, query.data.source ?? null, fragment ?? null]);
+      const library = [...held.values()].filter((stored) => readable(stored.sourceId) && stored.status === 'open' && stored.deleted === undefined);
+      const filterKey = JSON.stringify([deleted ? 'deleted' : status, query.data.source ?? null, fragment ?? null]);
+      const now = new Date().toISOString();
       const matching = [...held.values()]
-        .filter((stored) => readable(stored.sourceId) && stored.status === status && (query.data.source === undefined || stored.sourceId === query.data.source) && (fragment === undefined || stored.title.toLowerCase().includes(fragment) || (stored.caseRef?.toLowerCase().includes(fragment) ?? false)))
+        .filter((stored) => readable(stored.sourceId) && (deleted ? stored.deleted !== undefined && stored.deleted.purgeAfter > now : stored.deleted === undefined && stored.status === status) && (query.data.source === undefined || stored.sourceId === query.data.source) && (fragment === undefined || stored.title.toLowerCase().includes(fragment) || (stored.caseRef?.toLowerCase().includes(fragment) ?? false)))
         .sort((left, right) => (left.createdAt === right.createdAt ? (left.id < right.id ? 1 : -1) : left.createdAt < right.createdAt ? 1 : -1));
       let start = 0;
       if (query.data.cursor !== undefined) {
@@ -460,13 +513,14 @@ function createInvestigations(options: SupportServerOptions) {
       }
       const end = start + limit;
       json(response, 200, {
-        items: matching.slice(start, end).map((stored) => ({ ...shown(stored), sourceAlias: stored.sourceId, save: saveOf(stored), ...countsOf(stored) })),
+        retention: { deletedInvestigationsDays: RETENTION_DAYS },
+        items: matching.slice(start, end).map((stored) => ({ ...shown(stored), sourceAlias: stored.sourceId, save: saveOf(stored), ...countsOf(stored), ...(stored.deleted === undefined ? {} : { deletedAt: stored.deleted.at, purgeAfter: stored.deleted.purgeAfter }) })),
         nextCursor: end < matching.length ? Buffer.from(`${filterKey}|${end}`).toString('base64url') : null,
         matching: { value: matching.length, quality: 'exact', scope: 'investigations-matching' },
         counts: {
           investigations: { value: library.length, quality: 'exact', scope: 'investigations' },
           sources: { value: new Set(library.map((stored) => stored.sourceId)).size, quality: 'exact', scope: 'investigation-sources' },
-          savedViews: { count: { value: Math.max(namedViews.count, [...held.values()].filter((stored) => readable(stored.sourceId)).reduce((total, stored) => total + stored.views.length, 0)), quality: 'exact', scope: 'named-views' }, lastEditedAt: namedViews.lastEditedAt },
+          savedViews: { count: { value: Math.max(namedViews.count, [...held.values()].filter((stored) => readable(stored.sourceId)).reduce((total, stored) => total + (stored.deleted === undefined ? liveViews(stored).length : 0), 0)), quality: 'exact', scope: 'named-views' }, lastEditedAt: namedViews.lastEditedAt },
         },
       });
     },
@@ -479,8 +533,8 @@ function createInvestigations(options: SupportServerOptions) {
       if (limit < 1) return json(response, 400, INVALID);
       if (limit > MAX_VIEW_PAGE) return json(response, 422, { error: { code: 'QUERY_BUDGET_EXCEEDED', details: { maxPage: MAX_VIEW_PAGE } } });
       const all = [...held.values()]
-        .filter((stored) => readable(stored.sourceId))
-        .flatMap((stored) => stored.views.map((view) => ({ stored, view })))
+        .filter((stored) => readable(stored.sourceId) && stored.deleted === undefined)
+        .flatMap((stored) => liveViews(stored).map((view) => ({ stored, view })))
         .sort((left, right) => (left.view.createdAt === right.view.createdAt ? (left.view.id < right.view.id ? 1 : -1) : left.view.createdAt < right.view.createdAt ? 1 : -1));
       let start = 0;
       if (query.data.cursor !== undefined) {
@@ -798,18 +852,23 @@ export function createSupportServer(options: SupportServerOptions): Server {
       const lifecycle = /^\/v1\/investigations\/([^/]+)\/status$/.exec(path);
       if (request.method === 'POST' && lifecycle?.[1] !== undefined) return investigations.changeStatus(decodeURIComponent(lifecycle[1]), await bodyOf(request), response);
       const renaming = /^\/v1\/investigations\/([^/]+)$/.exec(path);
+      if (request.method === 'DELETE' && renaming?.[1] !== undefined) return investigations.deleteInvestigation(decodeURIComponent(renaming[1]), request.headers['if-match'], response);
+      const restoringInvestigation = /^\/v1\/investigations\/([^/]+)\/restore$/.exec(path);
+      if (request.method === 'POST' && restoringInvestigation?.[1] !== undefined) return investigations.restoreInvestigation(decodeURIComponent(restoringInvestigation[1]), await bodyOf(request), response);
       if (request.method === 'PUT' && renaming?.[1] !== undefined) return investigations.rename(decodeURIComponent(renaming[1]), await bodyOf(request), response);
       if (request.method === 'POST' && path === '/__support/set-status') return investigations.setStatus(await bodyOf(request), response);
       const saving = /^\/v1\/investigations\/([^/]+)\/draft$/.exec(path);
       if (request.method === 'PUT' && saving?.[1] !== undefined) return investigations.saveDraft(decodeURIComponent(saving[1]), request.headers['if-match'], await bodyOf(request), response);
-      const viewing = /^\/v1\/investigations\/([^/]+)\/views(?:\/([^/]+)(\/restore)?)?$/.exec(path);
+      const viewing = /^\/v1\/investigations\/([^/]+)\/views(?:\/([^/]+)(\/restore|\/delete)?)?$/.exec(path);
       if (viewing?.[1] !== undefined) {
-        const [, investigationId, viewId, restoring] = viewing;
+        const [, investigationId, viewId, action] = viewing;
+        const restoring = action === '/restore' ? action : undefined;
         const id = decodeURIComponent(investigationId ?? '');
         if (request.method === 'POST' && viewId === undefined) return investigations.saveView(id, request.headers['if-match'], await bodyOf(request), response);
         if (request.method === 'GET' && viewId === undefined) return investigations.listViews(id, response);
         if (request.method === 'PUT' && viewId !== undefined && restoring === undefined) return investigations.renameView(id, decodeURIComponent(viewId), request.headers['if-match'], await bodyOf(request), response);
         if (request.method === 'POST' && viewId !== undefined && restoring !== undefined) return investigations.restoreView(id, decodeURIComponent(viewId), request.headers['if-match'], response);
+        if (request.method === 'POST' && viewId !== undefined && action === '/delete') return investigations.deleteView(id, decodeURIComponent(viewId), request.headers['if-match'], await bodyOf(request), response);
       }
       if (request.method === 'POST' && path === '/v1/search/entities') return search.run(await bodyOf(request), response);
       if (request.method === 'POST' && path === '/v1/search/entities/more') return search.more(await bodyOf(request), response);

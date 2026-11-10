@@ -23,7 +23,7 @@ function run(): { readonly io: StartIo; readonly errors: string[]; readonly open
   return {
     errors,
     openStore,
-    io: { stderr: { write: (text) => errors.push(text) }, logger: pino({ level: 'silent' }), defaultWebRoot: webRoot, openStore, portOverride: 0 },
+    io: { stderr: { write: (text) => errors.push(text) }, logger: pino({ level: 'silent' }), defaultWebRoot: webRoot, openStore, tasks: [], portOverride: 0 },
   };
 }
 
@@ -42,6 +42,13 @@ async function refused(text: string): Promise<{ readonly message: string; readon
 }
 
 describe('start-up with a mapping file', () => {
+  it('refuses a retention value out of range, naming the key, and does not open the store', async () => {
+    const outcome = await refused(`${fileOf(baseSource())}retention:\n  deleted_investigations_days: 0\n`);
+    expect(outcome.exitCode).toBe(1);
+    expect(outcome.message).toContain('retention.deleted_investigations_days');
+    expect(outcome.openStore).not.toHaveBeenCalled();
+  });
+
   it('starts as before when NEBURYX_CONFIG is not set', async () => {
     const attempt = run();
     const result = await start({ ...DATABASE_ENV }, attempt.io);

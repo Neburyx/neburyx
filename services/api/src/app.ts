@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import type { Socket } from 'node:net';
 import fastifyStatic from '@fastify/static';
-import { type ErrorCode, MAX_DRAFT_DOCUMENT_BYTES, readRefsRequestSchema, readRefsResponseSchema, draftWriteRequestSchema, draftWriteResponseSchema, renameRequestSchema, renameResponseSchema, statusChangeRequestSchema, statusChangeResponseSchema, derivedNeighborsRequestSchema, derivedNeighborsResponseSchema, coverageRequestSchema, coverageResponseSchema, degreePreviewRequestSchema, edgeDetailSchema, edgePathSchema, entityLookupRequestSchema, degreePreviewSchema, entityPathSchema, entityQuerySchema, expandRequestSchema, expandResponseSchema, healthResponseSchema, investigationListQuerySchema, investigationListResponseSchema, investigationResponseSchema, meResponseSchema, nodeSchema, parseEdgeRefSegment, parseSourceLinkSegment, sourceLinkPathSchema, sourceLinkQuerySchema, openInvestigationRequestSchema, openInvestigationResponseSchema, readyResponseSchema, searchMoreRequestSchema, searchMoreResultSchema, searchRequestSchema, searchResultSchema, sourceProfileSchema, sourceTestReportSchema, sourcesResponseSchema, renameViewRequestSchema, restoreViewResponseSchema, saveViewRequestSchema, saveViewResponseSchema, viewListQuerySchema, viewListResponseSchema, ownedViewListResponseSchema, namedViewSchema } from '@neburyx/contracts';
+import { type ErrorCode, deleteInvestigationResponseSchema, deleteViewRequestSchema, deleteViewResponseSchema, restoreInvestigationRequestSchema, MAX_DRAFT_DOCUMENT_BYTES, readRefsRequestSchema, readRefsResponseSchema, draftWriteRequestSchema, draftWriteResponseSchema, renameRequestSchema, renameResponseSchema, statusChangeRequestSchema, statusChangeResponseSchema, derivedNeighborsRequestSchema, derivedNeighborsResponseSchema, coverageRequestSchema, coverageResponseSchema, degreePreviewRequestSchema, edgeDetailSchema, edgePathSchema, entityLookupRequestSchema, degreePreviewSchema, entityPathSchema, entityQuerySchema, expandRequestSchema, expandResponseSchema, healthResponseSchema, investigationListQuerySchema, investigationListResponseSchema, investigationResponseSchema, meResponseSchema, nodeSchema, parseEdgeRefSegment, parseSourceLinkSegment, sourceLinkPathSchema, sourceLinkQuerySchema, openInvestigationRequestSchema, openInvestigationResponseSchema, readyResponseSchema, searchMoreRequestSchema, searchMoreResultSchema, searchRequestSchema, searchResultSchema, sourceProfileSchema, sourceTestReportSchema, sourcesResponseSchema, renameViewRequestSchema, restoreViewResponseSchema, saveViewRequestSchema, saveViewResponseSchema, viewListQuerySchema, viewListResponseSchema, ownedViewListResponseSchema, namedViewSchema } from '@neburyx/contracts';
 import { z } from 'zod';
 import Fastify, {
   type FastifyBaseLogger,
@@ -491,8 +491,8 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       const query = investigationListQuerySchema.safeParse(request.query);
       if (!query.success) throw new AppError('INVALID_REQUEST');
       const identity = await options.store.current();
-      const { limit, cursor, status, source, q } = query.data;
-      const answer = await investigations.list({ principal: identity.principal, limit, cursor, status, sourceId: source, text: q });
+      const { limit, cursor, status, deleted, source, q } = query.data;
+      const answer = await investigations.list({ principal: identity.principal, limit, cursor, status, deleted: deleted === 'true', sourceId: source, text: q });
       return investigationListResponseSchema.parse(answer);
     });
 
@@ -522,6 +522,24 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       const identity = await options.store.current();
       const answer = await investigations.changeStatus({ traceId: request.id, id: params.data.id, principal: identity.principal, expectedVersion: body.data.expectedVersion, status: body.data.status });
       return reply.header('etag', `"${answer.investigation.version}"`).send(statusChangeResponseSchema.parse(answer));
+    });
+
+    app.delete('/v1/investigations/:id', { config: { permission: 'principal' } }, async (request, reply) => {
+      const params = profileParamsSchema.safeParse(request.params);
+      const expected = ifMatchSchema.safeParse(request.headers['if-match']);
+      if (!noQuerySchema.safeParse(request.query).success || !params.success || !expected.success || (request.body !== undefined && request.body !== null)) throw new AppError('INVALID_REQUEST');
+      const identity = await options.store.current();
+      const answer = await investigations.delete({ traceId: request.id, id: params.data.id, principal: identity.principal, expectedVersion: expected.data });
+      return reply.header('etag', `"${answer.version}"`).send(deleteInvestigationResponseSchema.parse(answer));
+    });
+
+    app.post('/v1/investigations/:id/restore', { config: { permission: 'principal' } }, async (request, reply) => {
+      const params = profileParamsSchema.safeParse(request.params);
+      const body = restoreInvestigationRequestSchema.safeParse(request.body);
+      if (!noQuerySchema.safeParse(request.query).success || !params.success || !body.success) throw new AppError('INVALID_REQUEST');
+      const identity = await options.store.current();
+      const answer = await investigations.restore({ traceId: request.id, id: params.data.id, principal: identity.principal, expectedVersion: body.data.expectedVersion });
+      return reply.header('etag', `"${answer.investigation.version}"`).send(investigationResponseSchema.parse(answer));
     });
 
     const views = createViewService({ store: options.store, references: storedReferences, mapping, cursors: listCursors });
@@ -562,6 +580,16 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       const identity = await options.store.current();
       const answer = await views.rename({ id: params.data.id, viewId: params.data.viewId, principal: identity.principal, expectedVersion: expected.data, name: body.data.name });
       return reply.header('etag', `"${answer.version}"`).send(namedViewSchema.parse(answer));
+    });
+
+    app.post('/v1/investigations/:id/views/:viewId/delete', { config: { permission: 'principal' } }, async (request, reply) => {
+      const params = viewParamsSchema.safeParse(request.params);
+      const body = deleteViewRequestSchema.safeParse(request.body ?? {});
+      const expected = ifMatchSchema.safeParse(request.headers['if-match']);
+      if (!noQuerySchema.safeParse(request.query).success || !params.success || !body.success || !expected.success) throw new AppError('INVALID_REQUEST');
+      const identity = await options.store.current();
+      const answer = await views.delete({ id: params.data.id, viewId: params.data.viewId, principal: identity.principal, expectedVersion: expected.data, note: body.data.note ?? null });
+      return reply.header('etag', `"${answer.version}"`).send(deleteViewResponseSchema.parse(answer));
     });
 
     app.post('/v1/investigations/:id/views/:viewId/restore', { config: { permission: 'principal' } }, async (request, reply) => {

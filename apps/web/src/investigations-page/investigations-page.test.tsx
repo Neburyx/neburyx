@@ -259,7 +259,7 @@ describe('the Investigations page: the filters', () => {
     expect(within(screen.getByRole('combobox', { name: 'Status' })).getAllByRole('option').map((option) => option.textContent)).toEqual(['Open', 'Closed', 'Archived']);
     expect(within(screen.getByRole('combobox', { name: 'Source' })).getAllByRole('option').map((option) => option.textContent)).toEqual(['All sources', 'Source source-a', 'Source source-b']);
     expect(screen.getByLabelText('Title or referral')).toBeTruthy();
-    expect(screen.getByText('Archived investigations are hidden.')).toBeTruthy();
+    expect(screen.getByText('Archived investigations are hidden. Deleted ones stay restorable for 30 days.')).toBeTruthy();
   });
 
   it('finds a case reference fragment, drops the cursor, follows the exact count and keeps the filters in the address', async () => {
@@ -316,7 +316,7 @@ describe('the Investigations page: the filters', () => {
     await screen.findByRole('link', { name: 'Case 3' });
     await user.selectOptions(screen.getByRole('combobox', { name: 'Status' }), 'closed');
     await waitFor(() => expect(bodyRows()).toHaveLength(2));
-    expect(screen.queryByText('Archived investigations are hidden.')).toBeNull();
+    expect(screen.queryByText(/Archived investigations are hidden/)).toBeNull();
     await user.selectOptions(screen.getByRole('combobox', { name: 'Status' }), 'open');
     await waitFor(() => expect(bodyRows()).toHaveLength(4));
     await user.selectOptions(screen.getByRole('combobox', { name: 'Source' }), 'source-a');

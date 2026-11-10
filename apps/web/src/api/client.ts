@@ -5,6 +5,8 @@ import {
   readRefsResponseSchema,
   renameResponseSchema,
   statusChangeResponseSchema,
+  deleteInvestigationResponseSchema,
+  deleteViewResponseSchema,
   saveViewResponseSchema,
   namedViewSchema,
   viewListResponseSchema,
@@ -37,6 +39,8 @@ import {
   type ReadRefsRequest,
   type RenameResponse,
   type StatusChangeResponse,
+  type DeleteInvestigationResponse,
+  type DeleteViewResponse,
   type SaveViewRequest,
   type SaveViewResponse,
   type NamedView,
@@ -73,7 +77,7 @@ import { sourcesOfEdge } from '../state/keys.js';
 
 export interface FetchInit {
   readonly signal?: AbortSignal;
-  readonly method?: 'POST' | 'PUT';
+  readonly method?: 'POST' | 'PUT' | 'DELETE';
   readonly headers?: Readonly<Record<string, string>>;
   readonly body?: string;
   /** Lets the request finish after the page is left; the browser caps the body of such a request. */
@@ -94,6 +98,8 @@ export type ApiResult<T> = { readonly ok: true; readonly value: T } | { readonly
 
 export interface InvestigationPageQuery {
   readonly status?: Investigation['status'];
+  /** The caller's deleted investigations that can still be restored; no `status` goes with it. */
+  readonly deleted?: boolean;
   readonly sourceId?: string;
   readonly text?: string;
   readonly cursor?: string;
@@ -120,6 +126,12 @@ export interface ApiClient {
   changeInvestigationStatus(id: string, status: Investigation['status'], expectedVersion: number, signal?: AbortSignal): Promise<ApiResult<StatusChangeResponse>>;
   /** Stores a new title for the caller's investigation when `expectedVersion` is its version; the answer names the investigation asked for. */
   renameInvestigation(id: string, title: string, expectedVersion: number, signal?: AbortSignal): Promise<ApiResult<RenameResponse>>;
+  /** Deletes the caller's investigation when `version` is its version; the answer names the investigation asked for and the date until which it can be restored. */
+  deleteInvestigation(id: string, version: number, signal?: AbortSignal): Promise<ApiResult<DeleteInvestigationResponse>>;
+  /** Restores a deleted investigation of the caller when `expectedVersion` is its version, and answers it as `getInvestigation` does. */
+  restoreInvestigation(id: string, expectedVersion: number, signal?: AbortSignal): Promise<ApiResult<InvestigationResponse>>;
+  /** Deletes a named view when `version` is the view's version, with a note that is kept with it; a stale version is refused as `CONFLICTED_VIEW_VERSION`. The view cannot be restored. */
+  deleteView(id: string, viewId: string, version: number, note: string | null, signal?: AbortSignal): Promise<ApiResult<DeleteViewResponse>>;
   /** Saves the caller's draft as a named view when `draftVersion` is the draft's version; a stale one is refused as `CONFLICTED_VIEW_VERSION`, and a title read at another version of the investigation as `CONFLICT`. */
   saveView(id: string, draftVersion: number, view: SaveViewRequest, signal?: AbortSignal): Promise<ApiResult<SaveViewResponse>>;
   /** One page of the investigation's named views, newest first, from the first page or from a cursor; `count` is the exact number of all of them. */
@@ -187,7 +199,7 @@ interface RequestExtras {
   readonly keepalive?: boolean;
 }
 
-async function request<T>(fetcher: Fetcher, path: string, schema: z.ZodType<T>, signal: AbortSignal | undefined, method?: 'POST' | 'PUT', body?: unknown, extras: RequestExtras = {}): Promise<ApiResult<T>> {
+async function request<T>(fetcher: Fetcher, path: string, schema: z.ZodType<T>, signal: AbortSignal | undefined, method?: 'POST' | 'PUT' | 'DELETE', body?: unknown, extras: RequestExtras = {}): Promise<ApiResult<T>> {
   if (wasAborted(signal)) return failed('ABORTED');
   let text: string;
   let response: Response;
@@ -291,6 +303,7 @@ export function createApiClient(fetcher: Fetcher = (input, init) => fetch(input,
         ['limit', query.limit === undefined ? undefined : String(query.limit)],
         ['cursor', query.cursor],
         ['status', query.status],
+        ['deleted', query.deleted === true ? 'true' : undefined],
         ['source', query.sourceId],
         ['q', query.text],
       ].flatMap(([name, value]) => (value === undefined ? [] : [`${name}=${encodeURIComponent(value)}`]));
@@ -312,6 +325,18 @@ export function createApiClient(fetcher: Fetcher = (input, init) => fetch(input,
     renameInvestigation: async (id, title, expectedVersion, signal) => {
       const result = await request(fetcher, `/v1/investigations/${encodeURIComponent(id)}`, renameResponseSchema, signal, 'PUT', { title, expectedVersion });
       return result.ok && result.value.investigation.id !== id ? failed('SCHEMA_MISMATCH') : result;
+    },
+    deleteInvestigation: async (id, version, signal) => {
+      const result = await request(fetcher, `/v1/investigations/${encodeURIComponent(id)}`, deleteInvestigationResponseSchema, signal, 'DELETE', undefined, { headers: { 'if-match': `"${version}"` } });
+      return result.ok && (result.value.id !== id || result.value.version !== version + 1) ? failed('SCHEMA_MISMATCH') : result;
+    },
+    restoreInvestigation: async (id, expectedVersion, signal) => {
+      const result = await request(fetcher, `/v1/investigations/${encodeURIComponent(id)}/restore`, investigationResponseSchema, signal, 'POST', { expectedVersion });
+      return result.ok && (result.value.investigation.id !== id || result.value.investigation.version !== expectedVersion + 1) ? failed('SCHEMA_MISMATCH') : result;
+    },
+    deleteView: async (id, viewId, version, note, signal) => {
+      const result = await request(fetcher, `/v1/investigations/${encodeURIComponent(id)}/views/${encodeURIComponent(viewId)}/delete`, deleteViewResponseSchema, signal, 'POST', note === null ? {} : { note }, { headers: { 'if-match': `"${version}"` } });
+      return result.ok && (result.value.id !== viewId || result.value.version !== version + 1) ? failed('SCHEMA_MISMATCH') : result;
     },
     saveView: async (id, draftVersion, view, signal) => {
       const result = await request(fetcher, `/v1/investigations/${encodeURIComponent(id)}/views`, saveViewResponseSchema, signal, 'POST', view, { headers: { 'if-match': `"${draftVersion}"` } });

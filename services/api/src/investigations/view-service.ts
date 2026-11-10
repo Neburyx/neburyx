@@ -1,4 +1,4 @@
-import { DEFAULT_VIEW_PAGE, MAX_VIEW_PAGE, layoutDocumentSchema, queryContextDocumentSchema, type RestoreViewResponse, type NamedView, type SaveViewRequest, type SaveViewResponse, type ViewListResponse } from '@neburyx/contracts';
+import { DEFAULT_VIEW_PAGE, MAX_VIEW_PAGE, layoutDocumentSchema, queryContextDocumentSchema, type RestoreViewResponse, type NamedView, type SaveViewRequest, type SaveViewResponse, type ViewListResponse, type DeleteViewResponse } from '@neburyx/contracts';
 import { z } from 'zod';
 import type { InvestigationStore } from '../db/investigations-repository.js';
 import type { CursorBinding, CursorCodec } from '../gate/cursor/codec.js';
@@ -28,6 +28,8 @@ export interface ViewService {
   restore(call: { readonly id: string; readonly viewId: string; readonly principal: Principal; readonly expectedDraftVersion: number }): Promise<RestoreViewResponse>;
   /** Changes the name of a named view when `expectedVersion` is its version; `CONFLICTED_VIEW_VERSION` when it is not. */
   rename(call: { readonly id: string; readonly viewId: string; readonly principal: Principal; readonly expectedVersion: number; readonly name: string }): Promise<NamedView>;
+  /** Deletes a named view when `expectedVersion` is its version, keeping the note with it. A closed or archived investigation is refused before the version is checked; `CONFLICTED_VIEW_VERSION` when it is stale; `NOT_FOUND` for a view that is not the caller's, unknown or already deleted. The draft is not changed. */
+  delete(call: { readonly id: string; readonly viewId: string; readonly principal: Principal; readonly expectedVersion: number; readonly note: string | null }): Promise<DeleteViewResponse>;
 }
 
 export interface ViewServiceDeps {
@@ -93,6 +95,14 @@ export function createViewService(deps: ViewServiceDeps): ViewService {
       if (result.outcome === 'read-only') throw readOnlyRefusal(result.status);
       if (result.outcome === 'conflict') throw new AppError('CONFLICTED_VIEW_VERSION');
       return result.view;
+    },
+    async delete({ id, viewId, principal, expectedVersion, note }) {
+      if (!UUID.test(id) || !UUID.test(viewId)) throw new AppError('NOT_FOUND');
+      const result = await deps.store.deleteNamedView({ investigationId: id, viewId, ownerId: principal.id, expectedVersion, note: note === null || note === '' ? null : note });
+      if (result.outcome === 'not-found') throw new AppError('NOT_FOUND');
+      if (result.outcome === 'read-only') throw readOnlyRefusal(result.status);
+      if (result.outcome === 'conflict') throw new AppError('CONFLICTED_VIEW_VERSION');
+      return { id: result.id, version: result.version, deletedAt: result.deletedAt, draft: result.draft, save: result.save, count: { value: result.count, quality: 'exact', scope: 'named-views' } };
     },
     async restore({ id, viewId, principal, expectedDraftVersion }) {
       if (!UUID.test(id) || !UUID.test(viewId)) throw new AppError('NOT_FOUND');

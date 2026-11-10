@@ -564,6 +564,20 @@
             }
           },
           {
+            "name": "deleted",
+            "in": "query",
+            "required": false,
+            "description": "true lists the caller's deleted investigations of any status that can still be restored (the status parameter is then refused), newest deletion first, each with deletedAt and purgeAfter; false or left out lists the others",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ],
+              "default": "false"
+            }
+          },
+          {
             "name": "source",
             "in": "query",
             "required": false,
@@ -942,6 +956,91 @@
             }
           }
         }
+      },
+      "delete": {
+        "operationId": "deleteInvestigation",
+        "summary": "Delete an investigation of the caller, restorable until its purge date",
+        "description": "Writes Postgres only; no source is read. If-Match carries the investigation's version as a quoted whole number. The investigation leaves every ordinary list and every route except restore and the deleted list: deleted_at is the database time, purge_after is that time plus the configured number of days (retention.deleted_investigations_days, 30 by default) and the version goes up by one. The status, the draft, the named views and the last-edited time are not touched. It works whatever the status. An investigation that is already deleted, another user's or unknown is NOT_FOUND.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "description": "The investigation's version as a quoted whole number",
+            "schema": {
+              "type": "string",
+              "pattern": "^\"[1-9][0-9]{0,9}\"$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "When it was deleted and the last moment it can be restored",
+            "headers": {
+              "ETag": {
+                "description": "The investigation's new version as a strong tag",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteInvestigationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "If-Match is missing or is not a quoted whole number of 1 or more, or a body or a query parameter was sent",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such investigation of this caller that is not already deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "CONFLICT: the version sent is stale",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The investigation could not be deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/investigations/{id}/status": {
@@ -1020,6 +1119,93 @@
           },
           "500": {
             "description": "The status could not be written",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/investigations/{id}/restore": {
+      "post": {
+        "operationId": "restoreInvestigation",
+        "summary": "Restore a deleted investigation of the caller",
+        "description": "Writes Postgres only; no source is read. The body is { expectedVersion } with the investigation's version. In one statement deleted_at, purge_after and deleted_by are cleared and the version goes up by one; the status, the last-edited time, the draft and the named views are not touched. A view deleted before the investigation was deleted stays deleted. At or after purge_after the investigation can no longer be restored, whether or not the purge task has run, and the answer is NOT_FOUND, as it is for an investigation that is not deleted.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RestoreInvestigationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The investigation as GET /v1/investigations/{id} answers it",
+            "headers": {
+              "ETag": {
+                "description": "The investigation's new version as a strong tag",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvestigationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "expectedVersion is missing or not valid, or a field is not known",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such deleted investigation of this caller that can still be restored",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "CONFLICT: expectedVersion is stale",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The investigation could not be restored",
             "content": {
               "application/json": {
                 "schema": {
@@ -1588,6 +1774,111 @@
           },
           "500": {
             "description": "The view could not be restored",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/investigations/{id}/views/{viewId}/delete": {
+      "post": {
+        "operationId": "deleteView",
+        "summary": "Delete a named view, with an optional note",
+        "description": "Writes Postgres only; no source is read. The view is not removed: deleted_at, deleted_by and the optional note are set and the version goes up by one, and from then on every read leaves it out (it is not listed or counted, and rename and restore into the draft answer NOT_FOUND). It cannot be restored, and it is removed for good only with its investigation's purge. The note is stored and never returned or logged. The draft is not changed: if it was based on this view it now reads unsaved. This is a POST and not a DELETE because it carries a body. If-Match carries the view's version as a quoted whole number.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "viewId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "description": "The view's version as a quoted whole number",
+            "schema": {
+              "type": "string",
+              "pattern": "^\"[1-9][0-9]{0,9}\"$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteViewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The deleted view, the draft, the save state and the number of views left",
+            "headers": {
+              "ETag": {
+                "description": "The view's new version as a strong tag",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteViewResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "If-Match is missing or not a quoted whole number, or the note is more than 10,000 characters, holds a NUL or an unpaired surrogate, or the body holds another field",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such view of an investigation of this caller, or the view is already deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "CONFLICTED_VIEW_VERSION: the view changed since the version sent; CONFLICT: the investigation is closed or archived (details.reason investigation-read-only)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The view could not be deleted",
             "content": {
               "application/json": {
                 "schema": {
@@ -8709,31 +9000,6 @@
                     "archived"
                   ]
                 },
-                "startingEntity": {
-                  "anyOf": [
-                    {
-                      "type": "object",
-                      "properties": {
-                        "entityType": {
-                          "type": "string",
-                          "minLength": 1
-                        },
-                        "stableId": {
-                          "type": "string",
-                          "minLength": 1
-                        }
-                      },
-                      "required": [
-                        "entityType",
-                        "stableId"
-                      ],
-                      "additionalProperties": false
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                },
                 "sourceState": {
                   "type": "string",
                   "enum": [
@@ -8756,6 +9022,30 @@
                   "type": "integer",
                   "minimum": 1,
                   "maximum": 9007199254740991
+                },
+                "startingEntity": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "entityType": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "stableId": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "entityType"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 },
                 "sourceAlias": {
                   "type": "string",
@@ -8824,6 +9114,16 @@
                       "type": "null"
                     }
                   ]
+                },
+                "deletedAt": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                },
+                "purgeAfter": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                 }
               },
               "required": [
@@ -8832,11 +9132,11 @@
                 "title",
                 "caseRef",
                 "status",
-                "startingEntity",
                 "sourceState",
                 "createdAt",
                 "lastEditedAt",
                 "version",
+                "startingEntity",
                 "sourceAlias",
                 "save",
                 "nodeCount",
@@ -8979,13 +9279,28 @@
               "scope"
             ],
             "additionalProperties": false
+          },
+          "retention": {
+            "type": "object",
+            "properties": {
+              "deletedInvestigationsDays": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "deletedInvestigationsDays"
+            ],
+            "additionalProperties": false
           }
         },
         "required": [
           "items",
           "nextCursor",
           "counts",
-          "matching"
+          "matching",
+          "retention"
         ],
         "additionalProperties": false
       },
@@ -16911,6 +17226,189 @@
         "required": [
           "items",
           "nextCursor"
+        ],
+        "additionalProperties": false
+      },
+      "DeleteInvestigationResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "deletedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "purgeAfter": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": [
+          "id",
+          "version",
+          "deletedAt",
+          "purgeAfter"
+        ],
+        "additionalProperties": false
+      },
+      "DeleteViewRequest": {
+        "type": "object",
+        "properties": {
+          "note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 10000
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeleteViewResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "deletedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "draft": {
+            "type": "object",
+            "properties": {
+              "version": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "basedOnViewId": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "version",
+              "basedOnViewId"
+            ],
+            "additionalProperties": false
+          },
+          "save": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "state": {
+                    "type": "string",
+                    "const": "saved"
+                  },
+                  "savedAt": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                  }
+                },
+                "required": [
+                  "state",
+                  "savedAt"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "state": {
+                    "type": "string",
+                    "const": "unsaved"
+                  },
+                  "savedAt": {
+                    "type": "null"
+                  }
+                },
+                "required": [
+                  "state",
+                  "savedAt"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "count": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "quality": {
+                "type": "string",
+                "const": "exact"
+              },
+              "scope": {
+                "type": "string",
+                "const": "named-views"
+              }
+            },
+            "required": [
+              "value",
+              "quality",
+              "scope"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "id",
+          "version",
+          "deletedAt",
+          "draft",
+          "save",
+          "count"
+        ],
+        "additionalProperties": false
+      },
+      "RestoreInvestigationRequest": {
+        "type": "object",
+        "properties": {
+          "expectedVersion": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "expectedVersion"
         ],
         "additionalProperties": false
       },

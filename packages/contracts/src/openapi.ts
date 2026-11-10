@@ -3,8 +3,8 @@ import { errorResponseSchema } from './error-response.js';
 import { healthResponseSchema } from './health.js';
 import { nodeSchema } from './graph.js';
 import { MAX_READ_REFS, readRefsRequestSchema, readRefsResponseSchema } from './read-refs.js';
-import { DEFAULT_INVESTIGATION_LIST_LIMIT, INVESTIGATION_STATUSES, MAX_LIST_TEXT_LENGTH, MIN_LIST_TEXT_LENGTH, draftWriteRequestSchema, draftWriteResponseSchema, MAX_DRAFT_DOCUMENT_BYTES, INVESTIGATION_LIST_SORTS, investigationListResponseSchema, investigationResponseSchema, MAX_INVESTIGATION_LIST_LIMIT, MAX_TITLE_LENGTH, openInvestigationRequestSchema, openInvestigationResponseSchema, renameRequestSchema, renameResponseSchema, statusChangeRequestSchema, statusChangeResponseSchema } from './investigations.js';
-import { MAX_VIEW_PAGE, namedViewSchema, ownedViewListResponseSchema, renameViewRequestSchema, restoreViewResponseSchema, saveViewRequestSchema, saveViewResponseSchema, viewListResponseSchema } from './views.js';
+import { deleteInvestigationResponseSchema, restoreInvestigationRequestSchema, DEFAULT_INVESTIGATION_LIST_LIMIT, INVESTIGATION_STATUSES, MAX_LIST_TEXT_LENGTH, MIN_LIST_TEXT_LENGTH, draftWriteRequestSchema, draftWriteResponseSchema, MAX_DRAFT_DOCUMENT_BYTES, INVESTIGATION_LIST_SORTS, investigationListResponseSchema, investigationResponseSchema, MAX_INVESTIGATION_LIST_LIMIT, MAX_TITLE_LENGTH, openInvestigationRequestSchema, openInvestigationResponseSchema, renameRequestSchema, renameResponseSchema, statusChangeRequestSchema, statusChangeResponseSchema } from './investigations.js';
+import { deleteViewRequestSchema, deleteViewResponseSchema, MAX_VIEW_PAGE, namedViewSchema, ownedViewListResponseSchema, renameViewRequestSchema, restoreViewResponseSchema, saveViewRequestSchema, saveViewResponseSchema, viewListResponseSchema } from './views.js';
 import { meResponseSchema } from './me.js';
 import { readyResponseSchema } from './ready.js';
 import { sourceProfileSchema } from './profile.js';
@@ -25,7 +25,7 @@ export interface OpenApiDocument {
   readonly openapi: string;
   readonly info: { readonly title: string; readonly version: string };
   readonly paths: Readonly<Record<string, unknown>>;
-  readonly components: { readonly schemas: { readonly CoverageRequest: Record<string, unknown>; readonly CoverageResponse: Record<string, unknown>; readonly DegreePreview: Record<string, unknown>; readonly DegreePreviewRequest: Record<string, unknown>; readonly DerivedNeighborsRequest: Record<string, unknown>; readonly DerivedNeighborsResponse: Record<string, unknown>; readonly DraftWriteRequest: Record<string, unknown>; readonly DraftWriteResponse: Record<string, unknown>; readonly EdgeDetail: Record<string, unknown>; readonly EntityLookupRequest: Record<string, unknown>; readonly ErrorResponse: Record<string, unknown>; readonly ExpandRequest: Record<string, unknown>; readonly ExpandResponse: Record<string, unknown>; readonly GraphNode: Record<string, unknown>; readonly HealthResponse: Record<string, unknown>; readonly InvestigationListResponse: Record<string, unknown>; readonly InvestigationResponse: Record<string, unknown>; readonly MeResponse: Record<string, unknown>; readonly NamedView: Record<string, unknown>; readonly OpenInvestigationRequest: Record<string, unknown>; readonly OpenInvestigationResponse: Record<string, unknown>; readonly ReadRefsRequest: Record<string, unknown>; readonly ReadRefsResponse: Record<string, unknown>; readonly ReadyResponse: Record<string, unknown>; readonly RenameRequest: Record<string, unknown>; readonly RenameResponse: Record<string, unknown>; readonly RenameViewRequest: Record<string, unknown>; readonly RestoreViewResponse: Record<string, unknown>; readonly SaveViewRequest: Record<string, unknown>; readonly SaveViewResponse: Record<string, unknown>; readonly SearchMoreRequest: Record<string, unknown>; readonly SearchMoreResult: Record<string, unknown>; readonly SearchRequest: Record<string, unknown>; readonly SearchResult: Record<string, unknown>; readonly SourceProfile: Record<string, unknown>; readonly SourceTestReport: Record<string, unknown>; readonly SourcesResponse: Record<string, unknown>; readonly StatusChangeRequest: Record<string, unknown>; readonly StatusChangeResponse: Record<string, unknown>; readonly ViewListResponse: Record<string, unknown>; readonly OwnedViewListResponse: Record<string, unknown>; } };
+  readonly components: { readonly schemas: { readonly CoverageRequest: Record<string, unknown>; readonly CoverageResponse: Record<string, unknown>; readonly DegreePreview: Record<string, unknown>; readonly DegreePreviewRequest: Record<string, unknown>; readonly DerivedNeighborsRequest: Record<string, unknown>; readonly DerivedNeighborsResponse: Record<string, unknown>; readonly DraftWriteRequest: Record<string, unknown>; readonly DraftWriteResponse: Record<string, unknown>; readonly EdgeDetail: Record<string, unknown>; readonly EntityLookupRequest: Record<string, unknown>; readonly ErrorResponse: Record<string, unknown>; readonly ExpandRequest: Record<string, unknown>; readonly ExpandResponse: Record<string, unknown>; readonly GraphNode: Record<string, unknown>; readonly HealthResponse: Record<string, unknown>; readonly InvestigationListResponse: Record<string, unknown>; readonly InvestigationResponse: Record<string, unknown>; readonly MeResponse: Record<string, unknown>; readonly NamedView: Record<string, unknown>; readonly OpenInvestigationRequest: Record<string, unknown>; readonly OpenInvestigationResponse: Record<string, unknown>; readonly ReadRefsRequest: Record<string, unknown>; readonly ReadRefsResponse: Record<string, unknown>; readonly ReadyResponse: Record<string, unknown>; readonly RenameRequest: Record<string, unknown>; readonly RenameResponse: Record<string, unknown>; readonly RenameViewRequest: Record<string, unknown>; readonly RestoreViewResponse: Record<string, unknown>; readonly SaveViewRequest: Record<string, unknown>; readonly SaveViewResponse: Record<string, unknown>; readonly SearchMoreRequest: Record<string, unknown>; readonly SearchMoreResult: Record<string, unknown>; readonly SearchRequest: Record<string, unknown>; readonly SearchResult: Record<string, unknown>; readonly SourceProfile: Record<string, unknown>; readonly SourceTestReport: Record<string, unknown>; readonly SourcesResponse: Record<string, unknown>; readonly DeleteInvestigationResponse: Record<string, unknown>; readonly DeleteViewRequest: Record<string, unknown>; readonly DeleteViewResponse: Record<string, unknown>; readonly RestoreInvestigationRequest: Record<string, unknown>; readonly StatusChangeRequest: Record<string, unknown>; readonly StatusChangeResponse: Record<string, unknown>; readonly ViewListResponse: Record<string, unknown>; readonly OwnedViewListResponse: Record<string, unknown>; } };
 }
 
 const RETRY_AFTER_HEADER = { 'Retry-After': { description: 'Whole seconds to wait', schema: { type: 'integer', minimum: 1 } } };
@@ -195,6 +195,7 @@ export function buildOpenApiDocument(
             { name: 'limit', in: 'query', required: false, description: 'A whole number; 25 when left out', schema: { type: 'integer', minimum: 1, maximum: MAX_INVESTIGATION_LIST_LIMIT, default: DEFAULT_INVESTIGATION_LIST_LIMIT } },
             { name: 'cursor', in: 'query', required: false, description: 'The nextCursor of the previous page, unchanged', schema: { type: 'string', minLength: 1, maxLength: 2048 } },
             { name: 'status', in: 'query', required: false, description: 'open when left out', schema: { type: 'string', enum: [...INVESTIGATION_STATUSES], default: 'open' } },
+            { name: 'deleted', in: 'query', required: false, description: 'true lists the caller\'s deleted investigations of any status that can still be restored (the status parameter is then refused), newest deletion first, each with deletedAt and purgeAfter; false or left out lists the others', schema: { type: 'string', enum: ['true', 'false'], default: 'false' } },
             { name: 'source', in: 'query', required: false, description: 'A source id', schema: { type: 'string', minLength: 1 } },
             { name: 'q', in: 'query', required: false, description: 'A fragment of the title or of the case reference', schema: { type: 'string', minLength: MIN_LIST_TEXT_LENGTH, maxLength: MAX_LIST_TEXT_LENGTH } },
             { name: 'sort', in: 'query', required: false, description: 'lastEdited, the only order', schema: { type: 'string', enum: [...INVESTIGATION_LIST_SORTS] } },
@@ -254,6 +255,23 @@ export function buildOpenApiDocument(
             '500': { description: 'The title could not be written', content: jsonBody('ErrorResponse') },
           },
         },
+        delete: {
+          operationId: 'deleteInvestigation',
+          summary: 'Delete an investigation of the caller, restorable until its purge date',
+          description:
+            "Writes Postgres only; no source is read. If-Match carries the investigation's version as a quoted whole number. The investigation leaves every ordinary list and every route except restore and the deleted list: deleted_at is the database time, purge_after is that time plus the configured number of days (retention.deleted_investigations_days, 30 by default) and the version goes up by one. The status, the draft, the named views and the last-edited time are not touched. It works whatever the status. An investigation that is already deleted, another user's or unknown is NOT_FOUND.",
+          parameters: [
+            { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+            { name: 'If-Match', in: 'header', required: true, description: "The investigation's version as a quoted whole number", schema: { type: 'string', pattern: '^\"[1-9][0-9]{0,9}\"$' } },
+          ],
+          responses: {
+            '200': { description: 'When it was deleted and the last moment it can be restored', headers: { ETag: { description: "The investigation's new version as a strong tag", schema: { type: 'string' } } }, content: jsonBody('DeleteInvestigationResponse') },
+            '400': { description: 'If-Match is missing or is not a quoted whole number of 1 or more, or a body or a query parameter was sent', content: jsonBody('ErrorResponse') },
+            '404': { description: 'No such investigation of this caller that is not already deleted', content: jsonBody('ErrorResponse') },
+            '409': { description: 'CONFLICT: the version sent is stale', content: jsonBody('ErrorResponse') },
+            '500': { description: 'The investigation could not be deleted', content: jsonBody('ErrorResponse') },
+          },
+        },
       },
       '/v1/investigations/{id}/status': {
         post: {
@@ -269,6 +287,23 @@ export function buildOpenApiDocument(
             '404': { description: 'No such investigation of this caller', content: jsonBody('ErrorResponse') },
             '409': { description: 'CONFLICT with details.reason status-change-not-allowed, or CONFLICT without a reason when expectedVersion is stale', content: jsonBody('ErrorResponse') },
             '500': { description: 'The status could not be written', content: jsonBody('ErrorResponse') },
+          },
+        },
+      },
+      '/v1/investigations/{id}/restore': {
+        post: {
+          operationId: 'restoreInvestigation',
+          summary: 'Restore a deleted investigation of the caller',
+          description:
+            'Writes Postgres only; no source is read. The body is { expectedVersion } with the investigation\'s version. In one statement deleted_at, purge_after and deleted_by are cleared and the version goes up by one; the status, the last-edited time, the draft and the named views are not touched. A view deleted before the investigation was deleted stays deleted. At or after purge_after the investigation can no longer be restored, whether or not the purge task has run, and the answer is NOT_FOUND, as it is for an investigation that is not deleted.',
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+          requestBody: { required: true, content: jsonBody('RestoreInvestigationRequest') },
+          responses: {
+            '200': { description: 'The investigation as GET /v1/investigations/{id} answers it', headers: { ETag: { description: "The investigation's new version as a strong tag", schema: { type: 'string' } } }, content: jsonBody('InvestigationResponse') },
+            '400': { description: 'expectedVersion is missing or not valid, or a field is not known', content: jsonBody('ErrorResponse') },
+            '404': { description: 'No such deleted investigation of this caller that can still be restored', content: jsonBody('ErrorResponse') },
+            '409': { description: 'CONFLICT: expectedVersion is stale', content: jsonBody('ErrorResponse') },
+            '500': { description: 'The investigation could not be restored', content: jsonBody('ErrorResponse') },
           },
         },
       },
@@ -384,6 +419,27 @@ export function buildOpenApiDocument(
             '404': { description: 'No such view of an investigation of this caller', content: jsonBody('ErrorResponse') },
             '409': { description: 'CONFLICTED_VIEW_VERSION: the draft changed since the version sent; CONFLICT: the investigation\'s source is no longer the one it was opened on, or it is closed or archived (details.reason investigation-read-only)', content: jsonBody('ErrorResponse') },
             '500': { description: 'The view could not be restored', content: jsonBody('ErrorResponse') },
+          },
+        },
+      },
+      '/v1/investigations/{id}/views/{viewId}/delete': {
+        post: {
+          operationId: 'deleteView',
+          summary: 'Delete a named view, with an optional note',
+          description:
+            "Writes Postgres only; no source is read. The view is not removed: deleted_at, deleted_by and the optional note are set and the version goes up by one, and from then on every read leaves it out (it is not listed or counted, and rename and restore into the draft answer NOT_FOUND). It cannot be restored, and it is removed for good only with its investigation's purge. The note is stored and never returned or logged. The draft is not changed: if it was based on this view it now reads unsaved. This is a POST and not a DELETE because it carries a body. If-Match carries the view's version as a quoted whole number.",
+          parameters: [
+            { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+            { name: 'viewId', in: 'path', required: true, schema: { type: 'string' } },
+            { name: 'If-Match', in: 'header', required: true, description: "The view's version as a quoted whole number", schema: { type: 'string', pattern: '^\"[1-9][0-9]{0,9}\"$' } },
+          ],
+          requestBody: { required: false, content: jsonBody('DeleteViewRequest') },
+          responses: {
+            '200': { description: 'The deleted view, the draft, the save state and the number of views left', headers: { ETag: { description: "The view's new version as a strong tag", schema: { type: 'string' } } }, content: jsonBody('DeleteViewResponse') },
+            '400': { description: 'If-Match is missing or not a quoted whole number, or the note is more than 10,000 characters, holds a NUL or an unpaired surrogate, or the body holds another field', content: jsonBody('ErrorResponse') },
+            '404': { description: 'No such view of an investigation of this caller, or the view is already deleted', content: jsonBody('ErrorResponse') },
+            '409': { description: 'CONFLICTED_VIEW_VERSION: the view changed since the version sent; CONFLICT: the investigation is closed or archived (details.reason investigation-read-only)', content: jsonBody('ErrorResponse') },
+            '500': { description: 'The view could not be deleted', content: jsonBody('ErrorResponse') },
           },
         },
       },
@@ -577,7 +633,7 @@ export function buildOpenApiDocument(
       },
     },
     components: {
-      schemas: { CoverageRequest: schemaJson(coverageRequest), CoverageResponse: schemaJson(coverageResponse), DegreePreview: schemaJson(degreePreview), DegreePreviewRequest: schemaJson(degreePreviewRequest), DerivedNeighborsRequest: schemaJson(derivedNeighborsRequest), DerivedNeighborsResponse: schemaJson(derivedNeighborsResponse), DraftWriteRequest: schemaJson(draftWriteRequestSchema), DraftWriteResponse: schemaJson(draftWriteResponseSchema), EdgeDetail: schemaJson(edgeDetail), EntityLookupRequest: schemaJson(entityLookupRequest), ErrorResponse: schemaJson(errorResponse), ExpandRequest: schemaJson(expandRequest), ExpandResponse: schemaJson(expandResponse), GraphNode: schemaJson(graphNode), HealthResponse: schemaJson(healthResponse), InvestigationListResponse: schemaJson(investigationList), InvestigationResponse: schemaJson(investigationResponse), MeResponse: schemaJson(meResponse), NamedView: schemaJson(namedViewSchema), OpenInvestigationRequest: schemaJson(openInvestigationRequest), OpenInvestigationResponse: schemaJson(openInvestigationResponse), ReadRefsRequest: schemaJson(readRefsRequestSchema), ReadRefsResponse: schemaJson(readRefsResponseSchema), ReadyResponse: schemaJson(readyResponse), RenameRequest: schemaJson(renameRequestSchema), RenameResponse: schemaJson(renameResponseSchema), RenameViewRequest: schemaJson(renameViewRequestSchema), RestoreViewResponse: schemaJson(restoreViewResponseSchema), SaveViewRequest: schemaJson(saveViewRequestSchema), SaveViewResponse: schemaJson(saveViewResponseSchema), SearchMoreRequest: schemaJson(searchMoreRequest), SearchMoreResult: schemaJson(searchMoreResult), SearchRequest: schemaJson(searchRequest), SearchResult: schemaJson(searchResult), SourceProfile: schemaJson(sourceProfile), SourceTestReport: schemaJson(sourceTestReport), SourcesResponse: schemaJson(sourcesResponse), StatusChangeRequest: schemaJson(statusChangeRequestSchema), StatusChangeResponse: schemaJson(statusChangeResponseSchema), OwnedViewListResponse: schemaJson(ownedViewListResponseSchema), ViewListResponse: schemaJson(viewListResponseSchema) },
+      schemas: { CoverageRequest: schemaJson(coverageRequest), CoverageResponse: schemaJson(coverageResponse), DegreePreview: schemaJson(degreePreview), DegreePreviewRequest: schemaJson(degreePreviewRequest), DerivedNeighborsRequest: schemaJson(derivedNeighborsRequest), DerivedNeighborsResponse: schemaJson(derivedNeighborsResponse), DraftWriteRequest: schemaJson(draftWriteRequestSchema), DraftWriteResponse: schemaJson(draftWriteResponseSchema), EdgeDetail: schemaJson(edgeDetail), EntityLookupRequest: schemaJson(entityLookupRequest), ErrorResponse: schemaJson(errorResponse), ExpandRequest: schemaJson(expandRequest), ExpandResponse: schemaJson(expandResponse), GraphNode: schemaJson(graphNode), HealthResponse: schemaJson(healthResponse), InvestigationListResponse: schemaJson(investigationList), InvestigationResponse: schemaJson(investigationResponse), MeResponse: schemaJson(meResponse), NamedView: schemaJson(namedViewSchema), OpenInvestigationRequest: schemaJson(openInvestigationRequest), OpenInvestigationResponse: schemaJson(openInvestigationResponse), ReadRefsRequest: schemaJson(readRefsRequestSchema), ReadRefsResponse: schemaJson(readRefsResponseSchema), ReadyResponse: schemaJson(readyResponse), RenameRequest: schemaJson(renameRequestSchema), RenameResponse: schemaJson(renameResponseSchema), RenameViewRequest: schemaJson(renameViewRequestSchema), RestoreViewResponse: schemaJson(restoreViewResponseSchema), SaveViewRequest: schemaJson(saveViewRequestSchema), SaveViewResponse: schemaJson(saveViewResponseSchema), SearchMoreRequest: schemaJson(searchMoreRequest), SearchMoreResult: schemaJson(searchMoreResult), SearchRequest: schemaJson(searchRequest), SearchResult: schemaJson(searchResult), SourceProfile: schemaJson(sourceProfile), SourceTestReport: schemaJson(sourceTestReport), SourcesResponse: schemaJson(sourcesResponse), DeleteInvestigationResponse: schemaJson(deleteInvestigationResponseSchema), DeleteViewRequest: schemaJson(deleteViewRequestSchema), DeleteViewResponse: schemaJson(deleteViewResponseSchema), RestoreInvestigationRequest: schemaJson(restoreInvestigationRequestSchema), StatusChangeRequest: schemaJson(statusChangeRequestSchema), StatusChangeResponse: schemaJson(statusChangeResponseSchema), OwnedViewListResponse: schemaJson(ownedViewListResponseSchema), ViewListResponse: schemaJson(viewListResponseSchema) },
     },
   };
 }

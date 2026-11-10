@@ -4,7 +4,7 @@ import { useClientState } from '../state/context.js';
 import { draftSyncOf } from './draft-sync.js';
 import { useBanner } from '../banner/banner-context.js';
 import { useStoreSelector } from '../state/store.js';
-import { CHANGES_NOT_BEING_SAVED, CHANGES_NOT_SAVED, CHANGES_STILL_NOT_SAVED, CONFLICT_CHIP, CONFLICT_HEADLINE, CONFLICT_TEXT, DRAFT_CONFLICT_BANNER_ID, LEAVE_ANYWAY, LEAVE_GUARD_LABEL, LEAVE_GUARD_TEXT, RELOAD, SAVE_AGAIN } from './copy.js';
+import { INVESTIGATION_DELETED_NOT_SAVED, CHANGES_NOT_BEING_SAVED, CHANGES_NOT_SAVED, CHANGES_STILL_NOT_SAVED, CONFLICT_CHIP, CONFLICT_HEADLINE, CONFLICT_TEXT, DRAFT_CONFLICT_BANNER_ID, LEAVE_ANYWAY, LEAVE_GUARD_LABEL, LEAVE_GUARD_TEXT, RELOAD, SAVE_AGAIN } from './copy.js';
 import type { DraftStatus, DraftSync } from './draft-sync.js';
 
 function textOf(status: DraftStatus): string {
@@ -13,6 +13,8 @@ function textOf(status: DraftStatus): string {
       return status.stalled ? CHANGES_STILL_NOT_SAVED : CHANGES_NOT_SAVED;
     case 'rejected':
       return CHANGES_NOT_BEING_SAVED;
+    case 'deleted':
+      return INVESTIGATION_DELETED_NOT_SAVED;
     case 'conflict':
     case 'idle':
       return '';
@@ -33,6 +35,7 @@ export function DraftAnnouncer({ sync }: { readonly sync: DraftSync }) {
 export function DraftStatusLine({ sync }: { readonly sync: DraftSync }) {
   const status = useStoreSelector(sync.status, (current) => current);
   if (status.kind === 'idle' || status.kind === 'conflict') return null;
+  if (status.kind === 'deleted') return <p className="draft-status">{textOf(status)}</p>;
   return (
     <p className="draft-status">
       {textOf(status)}

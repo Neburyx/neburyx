@@ -1,10 +1,12 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
+import { Fragment, useEffect, useId, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
 
 export interface ActionMenuItem {
   readonly id: string;
   readonly label: string;
   readonly description?: string;
   readonly disabled: boolean;
+  /** Red, and set apart from the items before it. */
+  readonly tone?: 'danger';
   /** Runs when the item is chosen; `close` shuts the menu, with or without giving the focus back to its button. */
   readonly run: (close: (restoreFocus: boolean) => void) => void;
 }
@@ -68,11 +70,12 @@ export function ActionMenu({ buttonRef, buttonLabel, menuLabel, items, align = '
       {open ? (
         <div ref={panel} id={menuId} className={`menu-panel investigation-menu-panel${align === 'end' ? ' investigation-menu-panel-end' : ''}`} role="menu" aria-label={menuLabel} onKeyDown={onKeyDown}>
           {items.map((item) => (
+            <Fragment key={item.id}>
+            {item.tone === 'danger' ? <div role="separator" className="menu-separator" /> : null}
             <button
-              key={item.id}
               type="button"
               role="menuitem"
-              className={item.disabled ? 'menu-row menu-row-disabled' : 'menu-row'}
+              className={`menu-row${item.disabled ? ' menu-row-disabled' : ''}${item.tone === 'danger' ? ' menu-row-danger' : ''}`}
               aria-disabled={item.disabled ? true : undefined}
               aria-describedby={item.description === undefined ? undefined : descriptionId}
               onClick={() => {
@@ -86,6 +89,7 @@ export function ActionMenu({ buttonRef, buttonLabel, menuLabel, items, align = '
                 </span>
               )}
             </button>
+            </Fragment>
           ))}
         </div>
       ) : null}

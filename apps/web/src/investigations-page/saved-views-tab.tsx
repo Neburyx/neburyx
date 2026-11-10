@@ -1,31 +1,54 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
+import type { OwnedView } from '@neburyx/contracts';
+import { DeleteViewDialog } from '../views/delete-view-dialog.js';
+import type { RemoveOutcome } from '../views/view-list.js';
+import { VIEW_ALREADY_DELETED, VIEW_DELETED, RENAME_CONFLICT, deleteViewFromTitle } from '../views/copy.js';
 import { useNavigate } from 'react-router';
 import { useApiClient } from '../api/client-context.js';
 import { canRetry, FailureNotice } from '../failure-notice.js';
 import { EXPLORE_PATH } from '../shell/navigation.js';
 import { utcDateTime } from '../views/format.js';
-import { COLUMN_SOURCE, COULD_NOT_READ_VIEWS, LOADING, LOADING_MORE, MORE_FAILED, NO_VIEWS, SAVED_VIEWS_LABEL, SHOW_MORE, TRY_AGAIN, VIEWS_FOOTNOTE, VIEW_INVESTIGATION, VIEW_NAME, VIEW_SAVED_AT, VIEW_SAVED_BY, openView, showing } from './copy.js';
+import { VIEW_DELETE_ACTION, deleteViewLabel, viewsReadOnlyReason, COLUMN_SOURCE, COULD_NOT_READ_VIEWS, LOADING, LOADING_MORE, MORE_FAILED, NO_VIEWS, SAVED_VIEWS_LABEL, SHOW_MORE, TRY_AGAIN, VIEWS_FOOTNOTE, VIEW_INVESTIGATION, VIEW_NAME, VIEW_SAVED_AT, VIEW_SAVED_BY, openView, showing } from './copy.js';
 import { intentOf } from './restore-intent.js';
-import { useOwnedViews } from './use-owned-views.js';
+import { NO_VIEW_LEFT, useOwnedViews } from './use-owned-views.js';
 
 /** The named views of all the caller's investigations, newest first, each with an Open that leads to the investigation and asks before the view replaces the draft. */
-export function SavedViewsTab() {
+export function SavedViewsTab({ onViewDeleted }: { /** A view was deleted from this tab: the count in the tab's name goes down by one. */ readonly onViewDeleted?: (() => void) | undefined } = {}) {
   const client = useApiClient();
   const navigate = useNavigate();
-  const { state, showMore, retry, focusTaken } = useOwnedViews(client);
+  const { state, showMore, retry, focusTaken, removeRow, setNote } = useOwnedViews(client);
   const table = useRef<HTMLTableElement>(null);
+  const caption = useRef<HTMLTableCaptionElement>(null);
+  const [deleting, setDeleting] = useState<OwnedView | undefined>(undefined);
+  const reasonId = useId();
+  const deleteButton = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     if (state.focusId === undefined) return;
-    table.current?.querySelector<HTMLElement>(`button[data-view-open="${CSS.escape(state.focusId)}"]`)?.focus();
+    if (state.focusId === NO_VIEW_LEFT) caption.current?.focus();
+    else table.current?.querySelector<HTMLElement>(`button[data-view-open="${CSS.escape(state.focusId)}"]`)?.focus();
     focusTaken();
   }, [state.focusId, focusTaken]);
+
+  const remove = async (view: OwnedView, note: string | null): Promise<RemoveOutcome> => {
+    const result = await client.deleteView(view.investigation.id, view.id, view.version, note);
+    if (result.ok) return { kind: 'deleted' };
+    if (result.failure.code === 'CONFLICTED_VIEW_VERSION') {
+      retry();
+      return { kind: 'changed-elsewhere' };
+    }
+    if (result.failure.code === 'NOT_FOUND') {
+      retry();
+      return { kind: 'gone' };
+    }
+    return { kind: 'failed', failure: result.failure };
+  };
 
   const items = state.items;
   return (
     <div className="investigations-views">
       <p role="status" className="investigations-status">
-        {items === undefined ? (state.failure === undefined ? LOADING : '') : items.length === 0 ? '' : state.count === undefined ? '' : showing(items.length, state.count)}
+        {state.note ?? (items === undefined ? (state.failure === undefined ? LOADING : '') : items.length === 0 ? '' : state.count === undefined ? '' : showing(items.length, state.count))}
       </p>
       {state.failure === undefined ? null : (
         <div className="investigations-failure">
@@ -44,7 +67,9 @@ export function SavedViewsTab() {
         <>
           <div className="investigations-table-wrap">
             <table ref={table} className="investigations-table" aria-busy={state.loading ? true : undefined}>
-              <caption className="visually-hidden">{SAVED_VIEWS_LABEL}</caption>
+              <caption ref={caption} tabIndex={-1} className="visually-hidden">
+                {SAVED_VIEWS_LABEL}
+              </caption>
               <colgroup>
                 <col className="investigations-view-col-name" />
                 <col className="investigations-view-col-investigation" />
@@ -79,6 +104,24 @@ export function SavedViewsTab() {
                       <button type="button" className="secondary" data-view-open={view.id} aria-label={openView(view.name, view.investigation.title)} onClick={() => void navigate(`${EXPLORE_PATH}/${view.investigation.id}`, { state: intentOf(view) })}>
                         Open
                       </button>
+                      <button
+                        type="button"
+                        className="secondary"
+                        aria-label={deleteViewLabel(view.name, view.investigation.title)}
+                        aria-describedby={view.investigation.status === 'open' ? undefined : `${reasonId}-${view.id}`}
+                        disabled={view.investigation.status !== 'open'}
+                        onClick={(event) => {
+                          deleteButton.current = event.currentTarget;
+                          setDeleting(view);
+                        }}
+                      >
+                        {VIEW_DELETE_ACTION}
+                      </button>
+                      {view.investigation.status === 'open' ? null : (
+                        <span id={`${reasonId}-${view.id}`} className="visually-hidden">
+                          {viewsReadOnlyReason(view.investigation.status)}
+                        </span>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -93,6 +136,23 @@ export function SavedViewsTab() {
         </>
       )}
       <p className="investigations-footnote">{VIEWS_FOOTNOTE}</p>
+      {deleting === undefined ? null : (
+        <DeleteViewDialog
+          title={deleteViewFromTitle(deleting.name, deleting.investigation.title)}
+          send={(note) => remove(deleting, note)}
+          onDeleted={() => {
+            removeRow(deleting.id, VIEW_DELETED);
+            onViewDeleted?.();
+          }}
+          onChangedElsewhere={() => setNote(RENAME_CONFLICT)}
+          onGone={() => setNote(VIEW_ALREADY_DELETED)}
+          onClose={() => {
+            setDeleting(undefined);
+            const button = deleteButton.current;
+            if (button?.isConnected === true) button.focus();
+          }}
+        />
+      )}
     </div>
   );
 }

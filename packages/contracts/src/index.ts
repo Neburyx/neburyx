@@ -66,8 +66,11 @@ export {
   draftSchema,
   draftWriteRequestSchema,
   draftWriteResponseSchema,
+  deleteInvestigationResponseSchema,
   droppedFilterSchema,
   edgeEntrySchema,
+  restoreInvestigationRequestSchema,
+  retentionShownSchema,
   investigationListItemSchema,
   investigationListQuerySchema,
   investigationListCountsSchema,
@@ -91,9 +94,9 @@ export {
   startingEntitySchema,
   unmappedItemsSchema,
 } from './investigations.js';
-export type { DraftWriteRequest, DraftWriteResponse, Investigation, InvestigationListCounts, InvestigationListItem, InvestigationListResponse, InvestigationResponse, InvestigationSave, InvestigationSourceState, LayoutDocument, OpenInvestigationRequest, ReferenceOpenRequest, ValueOpenRequest, OpenInvestigationResponse, DroppedFilter, DroppedFilterReason, MappingChange, UnmappedItems, QueryContextDocument, RenameRequest, RenameResponse, StatusChangeRequest, StatusChangeResponse, OpenDraft } from './investigations.js';
-export { ownedViewListResponseSchema, ownedViewSchema, DEFAULT_VIEW_PAGE, MAX_VIEW_NAME_LENGTH, MAX_VIEW_PAGE, namedViewSchema, renameViewRequestSchema, restoreViewResponseSchema, saveViewRequestSchema, saveViewResponseSchema, viewAuthorSchema, viewListQuerySchema, viewListResponseSchema, viewNameSchema } from './views.js';
-export type { OwnedView, OwnedViewListResponse, NamedView, RenameViewRequest, RestoreViewResponse, SaveViewRequest, SaveViewResponse, ViewListResponse } from './views.js';
+export type { DeleteInvestigationResponse, RestoreInvestigationRequest, DraftWriteRequest, DraftWriteResponse, Investigation, InvestigationListCounts, InvestigationListItem, InvestigationListResponse, InvestigationResponse, InvestigationSave, InvestigationSourceState, LayoutDocument, OpenInvestigationRequest, ReferenceOpenRequest, ValueOpenRequest, OpenInvestigationResponse, DroppedFilter, DroppedFilterReason, MappingChange, UnmappedItems, QueryContextDocument, RenameRequest, RenameResponse, StatusChangeRequest, StatusChangeResponse, OpenDraft } from './investigations.js';
+export { deleteViewRequestSchema, deleteViewResponseSchema, ownedViewListResponseSchema, ownedViewSchema, DEFAULT_VIEW_PAGE, MAX_VIEW_NAME_LENGTH, MAX_VIEW_PAGE, namedViewSchema, renameViewRequestSchema, restoreViewResponseSchema, saveViewRequestSchema, saveViewResponseSchema, viewAuthorSchema, viewListQuerySchema, viewListResponseSchema, viewNameSchema } from './views.js';
+export type { DeleteViewRequest, DeleteViewResponse, OwnedView, OwnedViewListResponse, NamedView, RenameViewRequest, RestoreViewResponse, SaveViewRequest, SaveViewResponse, ViewListResponse } from './views.js';
 export {
   FACET_SCOPES,
   MAX_SEARCH_TEXT_LENGTH,
