@@ -9,7 +9,7 @@ import { useClientState, useSessionMask } from '../state/context.js';
 import { WorkspaceShell } from '../workspace/workspace-shell.js';
 import { AttemptedSource } from './attempted-source.js';
 import { useStoreSelector } from '../state/store.js';
-import { BACK_TO_HOME, NOT_FOUND_TEXT, NOT_FOUND_TITLE, OPENING, openingOver, RESUMED, SOURCE_NOT_AVAILABLE_TEXT, SOURCE_NOT_AVAILABLE_TITLE, TRY_AGAIN } from './messages.js';
+import { BACK_TO_HOME, NOT_FOUND_TEXT, NOT_FOUND_TITLE, OPENING, openingOver, RESUMED, TRY_AGAIN } from './messages.js';
 import { EXPLORE_PATH } from '../shell/navigation.js';
 import { openById } from './open-flow.js';
 import { SOME_ITEMS_UNAVAILABLE } from '../draft/copy.js';
@@ -26,7 +26,6 @@ type Status =
   | { readonly kind: 'loading' }
   | { readonly kind: 'ready'; readonly someMissing?: true }
   | { readonly kind: 'not-found'; readonly sourceId?: string }
-  | { readonly kind: 'source-unavailable'; readonly sourceId: string }
   | { readonly kind: 'failed'; readonly failure: ApiFailure; readonly sourceId?: string };
 
 function Message({ title, text, source, attempted }: { readonly title: string; readonly text: string; readonly source: string | null; readonly attempted?: string | undefined }) {
@@ -88,7 +87,6 @@ export function ExploreInvestigation({ client }: { readonly client: ApiClient })
         return;
       }
       if (outcome.kind === 'shown') setStatus(outcome.someMissing === true ? { kind: 'ready', someMissing: true } : { kind: 'ready' });
-      else if (outcome.kind === 'source-unavailable') setStatus({ kind: 'source-unavailable', sourceId: outcome.investigation.sourceId });
       else {
         const tried = outcome.sourceId === undefined ? {} : { sourceId: outcome.sourceId };
         setStatus(outcome.failure.code === 'NOT_FOUND' ? { kind: 'not-found', ...tried } : { kind: 'failed', failure: outcome.failure, ...tried });
@@ -98,7 +96,6 @@ export function ExploreInvestigation({ client }: { readonly client: ApiClient })
   }, [client, state, sync, navigate, investigationId, principalId, mask, attempt]);
 
   if (status.kind === 'not-found') return <Message title={NOT_FOUND_TITLE} text={NOT_FOUND_TEXT} source={null} attempted={status.sourceId} />;
-  if (status.kind === 'source-unavailable') return <Message title={SOURCE_NOT_AVAILABLE_TITLE} text={SOURCE_NOT_AVAILABLE_TEXT} source={status.sourceId} />;
   const failure = status.kind === 'failed' ? status.failure : status.kind === 'loading' ? principalFailure : undefined;
   const retry = (): void => {
     if (principalId === undefined) shell.reload();

@@ -1,4 +1,5 @@
-import { useEffect, useState, type RefObject } from 'react';
+import { useEffect, useMemo, useState, type RefObject } from 'react';
+import { withoutReadsWhileSourceChanged } from '../api/changed-source-guard.js';
 import { useApiClient } from '../api/client-context.js';
 import type { ApiClient } from '../api/client.js';
 import { leaveFocus } from '../canvas/focus-commands.js';
@@ -90,7 +91,9 @@ function TypeaheadBox({ client, sourceId, mask, box }: { readonly client: ApiCli
 /** The content is keyed by the context epoch, so a change of investigation, source or mask drops what was typed and aborts what was started. */
 export function AddFromSourceTab({ epoch, box, id, labelledBy, hidden }: TabProps) {
   const state = useClientState();
-  const client = useApiClient();
+  const open = useApiClient();
+  // the box searches the source, which is not read while it is re-pointed or removed
+  const client = useMemo(() => withoutReadsWhileSourceChanged(open, state), [open, state]);
   const mask = useSessionMask();
   const sourceId = useStoreSelector(state.investigation, (investigation) => investigation.sourceId);
   return (

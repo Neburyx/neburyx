@@ -6,7 +6,7 @@ import type { GraphNode } from '@neburyx/contracts';
 import { draftSyncOf } from '../draft/draft-sync.js';
 import { createClientState } from '../state/client-state.js';
 import { renderApp } from '../test-utils.js';
-import { BACK_TO_HOME, NOT_FOUND_TITLE, SOURCE_NOT_AVAILABLE_TITLE, TRY_AGAIN } from './messages.js';
+import { BACK_TO_HOME, NOT_FOUND_TITLE, TRY_AGAIN } from './messages.js';
 import { INVESTIGATION_A, INVESTIGATION_B, investigationOf, knowing, nodeOf } from './test-data.js';
 
 const INVESTIGATION_C = '0192f000-0000-7000-8000-0000000000c1';
@@ -117,7 +117,7 @@ describe('an investigation that is being opened while another is on screen', () 
     await screen.findByRole('heading', { name: 'kind-a C-1', level: 1 });
   });
 
-  it('is replaced by the page for an investigation that is not found, or whose source is not available as it was, with nothing marked as loading', async () => {
+  it('is replaced by the page for an investigation that is not found, or by the saved layout of one whose source is not available as it was, with nothing marked as loading', async () => {
     const gone = { ...B, investigation: { ...B.investigation, sourceState: 'removed' as const } };
     const { view } = await onFirst([A, gone]);
     await go(view, '/explore/0192f000-0000-7000-8000-0000000000ee');
@@ -126,7 +126,8 @@ describe('an investigation that is being opened while another is on screen', () 
     expect(busy()).not.toBe('true');
     expect(screen.getByRole('link', { name: BACK_TO_HOME })).toBeTruthy();
     await go(view, `/explore/${INVESTIGATION_B}`);
-    await screen.findByRole('heading', { name: SOURCE_NOT_AVAILABLE_TITLE, level: 1 });
+    await screen.findByRole('heading', { name: 'kind-a C-1', level: 1 });
+    await screen.findByText('The source this investigation used is no longer configured.');
     expect(strip()).toBeNull();
     expect(busy()).not.toBe('true');
   });

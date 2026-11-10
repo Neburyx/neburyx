@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseCommand, parseTestSourceArgs, TEST_SOURCE_USAGE, USAGE } from './commands.js';
+import { parseCommand, parseRebindArgs, parseTestSourceArgs, SOURCE_REBIND_USAGE, TEST_SOURCE_USAGE, USAGE } from './commands.js';
 
 describe('parseCommand', () => {
   it.each([
@@ -8,6 +8,7 @@ describe('parseCommand', () => {
     [['migrate'], 'migrate'],
     [['migrate', 'extra'], 'migrate'],
     [['test-source', '--name', 'alpha'], 'test-source'],
+    [['source', 'rebind', 'alpha'], 'source'],
   ] as const)('reads %j as %s', (args, expected) => {
     expect(parseCommand(args)).toBe(expected);
   });
@@ -17,7 +18,8 @@ describe('parseCommand', () => {
   });
 
   it('prints the usage line the image documents', () => {
-    expect(USAGE).toBe('usage: neburyx api | migrate | test-source --name <source> [--write-probe]\n');
+    expect(USAGE).toBe('usage: neburyx api | migrate | test-source --name <source> [--write-probe] | source rebind <source> [--confirm <source>]\n');
+    expect(SOURCE_REBIND_USAGE).toBe('usage: neburyx source rebind <source> [--confirm <source>]\n');
     expect(TEST_SOURCE_USAGE).toBe('usage: neburyx test-source --name <source> [--write-probe]\n');
   });
 });
@@ -53,5 +55,17 @@ describe('parseTestSourceArgs', () => {
     [['--other', 'alpha']],
   ])('refuses %j', (args) => {
     expect(parseTestSourceArgs(args)).toBeUndefined();
+  });
+});
+
+describe('parseRebindArgs', () => {
+  it('reads the source ID, with the confirmation before or after it', () => {
+    expect(parseRebindArgs(['rebind', 'alpha'])).toEqual({ id: 'alpha' });
+    expect(parseRebindArgs(['rebind', 'alpha', '--confirm', 'alpha'])).toEqual({ id: 'alpha', confirm: 'alpha' });
+    expect(parseRebindArgs(['rebind', '--confirm', 'beta', 'alpha'])).toEqual({ id: 'alpha', confirm: 'beta' });
+  });
+
+  it.each([[[]], [['rebind']], [['rebind', '']], [['rebind', '--confirm']], [['rebind', 'alpha', '--confirm']], [['rebind', 'alpha', '--confirm', '--x']], [['rebind', 'alpha', 'beta']], [['rebind', 'alpha', '--confirm', 'a', 'b']], [['migrate', 'alpha']], [['rebind', '--force', 'alpha']]])('refuses %j', (args) => {
+    expect(parseRebindArgs(args)).toBeUndefined();
   });
 });

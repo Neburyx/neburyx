@@ -1,7 +1,7 @@
 import type { ApiClient, ApiFailure } from '../api/client.js';
 import type { BannerController } from '../banner/banner-controller.js';
 import type { ClientState } from '../state/client-state.js';
-import { isReadOnlyStatus, type InvestigationStatus } from '../state/investigation-state.js';
+import { isReadOnlyStatus, readOnlyOf, type InvestigationStatus } from '../state/investigation-state.js';
 import { createStore, readable, type ReadableStore } from '../state/store.js';
 import { FAILURE_BANNER_ID, FAILURE_CHIP, FAILURE_TEXT, UNKNOWN_OUTCOME_TEXT, NETWORK_FAILURE, RELOAD, SCHEMA_FAILURE } from './copy.js';
 import { draftSyncOf } from '../draft/draft-sync.js';
@@ -86,7 +86,7 @@ export async function changeStatus(deps: LifecycleDeps, status: InvestigationSta
     const held = deps.state.investigation.getState();
     if (held.id === id && held.record !== null) {
       const { investigation } = result.value;
-      deps.state.describeInvestigation({ ...held.record, title: investigation.title, status: investigation.status, readOnly: isReadOnlyStatus(investigation.status), version: investigation.version });
+      deps.state.describeInvestigation({ ...held.record, title: investigation.title, status: investigation.status, readOnly: readOnlyOf(investigation.status, investigation.sourceState), sourceState: investigation.sourceState, version: investigation.version });
     }
     return 'changed';
   } finally {

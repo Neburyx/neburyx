@@ -7,7 +7,7 @@ import { EXPLORE_PATH } from '../shell/navigation.js';
 import { useClientState, useSessionMask } from '../state/context.js';
 import { characters, deepLinkPath, readDeepLink, SOURCE_ID } from './deep-link.js';
 import { openEntity } from './open-flow.js';
-import { PROMPT_GIVE_ENTITY_TYPE, PROMPT_GIVE_SOURCE, PROMPT_GIVE_STABLE_ID, PROMPT_LABELS, PROMPT_MASKED_VALUE, PROMPT_NOT_A_LINK, PROMPT_NOT_FOUND, PROMPT_NOT_OF_THIS_APP, PROMPT_SOURCE_UNAVAILABLE, PROMPT_OPEN, PROMPT_SOURCE_SHAPE, promptTooLong } from './messages.js';
+import { PROMPT_GIVE_ENTITY_TYPE, PROMPT_GIVE_SOURCE, PROMPT_GIVE_STABLE_ID, PROMPT_LABELS, PROMPT_MASKED_VALUE, PROMPT_NOT_A_LINK, PROMPT_NOT_FOUND, PROMPT_NOT_OF_THIS_APP, PROMPT_OPEN, PROMPT_SOURCE_SHAPE, promptTooLong } from './messages.js';
 
 interface Parts {
   readonly sourceId: string;
@@ -80,7 +80,6 @@ export function OpenDeepLinkPrompt() {
       if (controller.signal.aborted) return;
       if (answer.kind === 'held') return;
       if (answer.kind === 'shown') navigate(`${EXPLORE_PATH}/${answer.id}`, { state: { resumed: answer.created === false } });
-      else if (answer.kind === 'source-unavailable') setPartsProblem(PROMPT_SOURCE_UNAVAILABLE);
       else if (answer.failure.code === 'INVALID_REQUEST' && mask) setPartsProblem(PROMPT_MASKED_VALUE);
       else if (answer.failure.code === 'NOT_FOUND') setPartsProblem(PROMPT_NOT_FOUND);
       else setPartsProblem(`The entity could not be opened (${answer.failure.code}).`);

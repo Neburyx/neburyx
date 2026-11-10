@@ -1,5 +1,5 @@
 import type { GraphNode, IconKey, SourceProfile } from '@neburyx/contracts';
-import { isUnmappedNode, NO_LONGER_MAPPED, UNMAPPED_TITLE } from '../draft/unmapped.js';
+import { isNotReadNode, isUnmappedNode, NO_LONGER_MAPPED, SAVED_LAYOUT_NOT_READ, UNMAPPED_TITLE } from '../draft/unmapped.js';
 
 export interface EntityLook {
   readonly iconKey: IconKey;
@@ -17,6 +17,7 @@ function stateOf(node: GraphNode, stateProperty: string | null): string | undefi
 
 /** Line 1 is the title; line 2 is the type's display name and, when the entity has one, its state. A type the profile does not list shows the generic icon and the raw type name. */
 export function entityLook(node: GraphNode, profile: SourceProfile | undefined): EntityLook {
+  if (isNotReadNode(node)) return { iconKey: 'generic', line1: profile?.entityTypes.find((entry) => entry.type === node.ref.entityType)?.displayName ?? UNMAPPED_TITLE, line2: SAVED_LAYOUT_NOT_READ };
   if (isUnmappedNode(node)) return { iconKey: 'generic', line1: UNMAPPED_TITLE, line2: NO_LONGER_MAPPED };
   const type = profile?.entityTypes.find((entry) => entry.type === node.ref.entityType);
   const typeName = type?.displayName ?? node.ref.entityType;

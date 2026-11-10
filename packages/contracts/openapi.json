@@ -936,7 +936,7 @@
             }
           },
           "409": {
-            "description": "CONFLICT with details.reason investigation-read-only and details.status (closed or archived), or CONFLICT without a reason when expectedVersion is stale",
+            "description": "CONFLICT with details.reason investigation-read-only and details.status (closed or archived), or details.reason source-changed with details.sourceState (repointed or removed), or CONFLICT without a reason when expectedVersion is stale",
             "content": {
               "application/json": {
                 "schema": {
@@ -1108,7 +1108,7 @@
             }
           },
           "409": {
-            "description": "CONFLICT with details.reason status-change-not-allowed, or CONFLICT without a reason when expectedVersion is stale",
+            "description": "CONFLICT with details.reason status-change-not-allowed, or details.reason source-changed with details.sourceState (repointed or removed), or CONFLICT without a reason when expectedVersion is stale",
             "content": {
               "application/json": {
                 "schema": {
@@ -1292,7 +1292,7 @@
             }
           },
           "409": {
-            "description": "CONFLICTED_VIEW_VERSION: the draft changed since the version sent; CONFLICT: the investigation's source is not available as it was, or with details.reason investigation-read-only and details.status (closed or archived) when the investigation is closed or archived (checked before the version)",
+            "description": "CONFLICTED_VIEW_VERSION: the draft changed since the version sent; CONFLICT: with details.reason investigation-read-only and details.status (closed or archived) when the investigation is closed or archived, or details.reason source-changed with details.sourceState (repointed or removed) when its source is re-pointed or no longer configured (checked after the closed or archived refusal and before the version)",
             "content": {
               "application/json": {
                 "schema": {
@@ -1563,7 +1563,7 @@
             }
           },
           "409": {
-            "description": "CONFLICTED_VIEW_VERSION: the draft changed since the version sent; CONFLICT: the investigation changed since expectedInvestigationVersion, its source is no longer the one it was opened on, or it is closed or archived (details.reason investigation-read-only)",
+            "description": "CONFLICTED_VIEW_VERSION: the draft changed since the version sent; CONFLICT: the investigation changed since expectedInvestigationVersion, or it is closed or archived (details.reason investigation-read-only), or its source is re-pointed or no longer configured (details.reason source-changed, details.sourceState)",
             "content": {
               "application/json": {
                 "schema": {
@@ -1668,7 +1668,7 @@
             }
           },
           "409": {
-            "description": "CONFLICTED_VIEW_VERSION: the view changed since the version sent; CONFLICT: the investigation is closed or archived (details.reason investigation-read-only)",
+            "description": "CONFLICTED_VIEW_VERSION: the view changed since the version sent; CONFLICT: the investigation is closed or archived (details.reason investigation-read-only), or its source is re-pointed or no longer configured (details.reason source-changed, details.sourceState)",
             "content": {
               "application/json": {
                 "schema": {
@@ -1763,7 +1763,7 @@
             }
           },
           "409": {
-            "description": "CONFLICTED_VIEW_VERSION: the draft changed since the version sent; CONFLICT: the investigation's source is no longer the one it was opened on, or it is closed or archived (details.reason investigation-read-only)",
+            "description": "CONFLICTED_VIEW_VERSION: the draft changed since the version sent; CONFLICT: the investigation is closed or archived (details.reason investigation-read-only), or its source is re-pointed or no longer configured (details.reason source-changed, details.sourceState)",
             "content": {
               "application/json": {
                 "schema": {
@@ -1868,7 +1868,7 @@
             }
           },
           "409": {
-            "description": "CONFLICTED_VIEW_VERSION: the view changed since the version sent; CONFLICT: the investigation is closed or archived (details.reason investigation-read-only)",
+            "description": "CONFLICTED_VIEW_VERSION: the view changed since the version sent; CONFLICT: the investigation is closed or archived (details.reason investigation-read-only), or its source is re-pointed or no longer configured (details.reason source-changed, details.sourceState)",
             "content": {
               "application/json": {
                 "schema": {
@@ -7163,6 +7163,56 @@
                     "required": [
                       "reason",
                       "status"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "code",
+                  "message",
+                  "retryable",
+                  "traceId",
+                  "details"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "const": "CONFLICT"
+                  },
+                  "message": {
+                    "type": "string",
+                    "const": "This source now points to a different database or is no longer configured. This investigation is read-only."
+                  },
+                  "retryable": {
+                    "type": "boolean",
+                    "const": false
+                  },
+                  "traceId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "details": {
+                    "type": "object",
+                    "properties": {
+                      "reason": {
+                        "type": "string",
+                        "const": "source-changed"
+                      },
+                      "sourceState": {
+                        "type": "string",
+                        "enum": [
+                          "repointed",
+                          "removed"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "reason",
+                      "sourceState"
                     ],
                     "additionalProperties": false
                   }

@@ -10,6 +10,16 @@ export const ARCHIVED_HEADLINE = 'This investigation is archived and read-only.'
 export const ARCHIVED_TEXT = 'Archived investigations are hidden from the list by default.';
 export const REOPEN = 'Reopen';
 
+export const SOURCE_CHANGED_PILL = 'Read-only';
+export const REPOINTED_CHIP = 'Source re-pointed';
+export const REPOINTED_HEADLINE = 'This source now points to a different database.';
+export const REPOINTED_TEXT = 'An operator must confirm the rebind. This investigation is read-only and runs no source reads.';
+export const REMOVED_CHIP = 'Source removed';
+export const REMOVED_HEADLINE = 'The source this investigation used is no longer configured.';
+export const REMOVED_TEXT = 'You can still see the saved layout. No source reads run.';
+export const REMOVED_DELETE_SENTENCE = 'You can delete the investigation.';
+export const RENAME_DISABLED_SOURCE = 'Not available while the source has changed.';
+
 export const STANDING_BANNER_ID = 'investigation-read-only';
 export const FAILURE_BANNER_ID = 'investigation-lifecycle-failure';
 export const FAILURE_CHIP = 'Not changed';

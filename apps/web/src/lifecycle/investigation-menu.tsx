@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router';
 import type { ApiClient } from '../api/client.js';
 import { useBanner } from '../banner/banner-context.js';
 import { useClientState } from '../state/context.js';
-import type { InvestigationStatus } from '../state/investigation-state.js';
+import { isSourceChanged, type InvestigationStatus } from '../state/investigation-state.js';
 import { useStoreSelector } from '../state/store.js';
 import { draftSyncOf } from '../draft/draft-sync.js';
 import { utcDateTime } from '../views/format.js';
@@ -23,6 +23,7 @@ export function InvestigationMenu({ client }: { readonly client: ApiClient }) {
   const state = useClientState();
   const banner = useBanner();
   const status = useStoreSelector(state.investigation, (held) => held.record?.status);
+  const sourceChanged = useStoreSelector(state.investigation, (held) => isSourceChanged(held.record?.sourceState));
   const busy = useStoreSelector(statusChangeBusy(state), (value) => value);
   const [renaming, setRenaming] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -37,7 +38,7 @@ export function InvestigationMenu({ client }: { readonly client: ApiClient }) {
   }, [dialogOpen]);
 
   if (status === undefined) return null;
-  const items: readonly ActionMenuItem[] = lifecycleActionsOf(status, busy).map((action) => ({
+  const items: readonly ActionMenuItem[] = lifecycleActionsOf(status, busy, sourceChanged).map((action) => ({
     ...action,
     run: (close) => {
       if (action.id === 'rename') {
@@ -65,7 +66,7 @@ export function InvestigationMenu({ client }: { readonly client: ApiClient }) {
 }
 
 /** The delete of the investigation on screen. A write of the draft that is going on is awaited and the changes not yet sent are dropped, since the investigation is going away; a failed write does not stop the delete. After it the page is the Investigations page, with the date until which the investigation can be restored. */
-function WorkspaceDeleteDialog({ client, onClose }: { readonly client: ApiClient; readonly onClose: () => void }) {
+export function WorkspaceDeleteDialog({ client, onClose }: { readonly client: ApiClient; readonly onClose: () => void }) {
   const state = useClientState();
   const navigate = useNavigate();
   const record = useStoreSelector(state.investigation, (held) => held.record);

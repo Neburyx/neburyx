@@ -364,6 +364,14 @@
   background: var(--color-tool-icon);
 }
 
+.tool-button:disabled {
+  cursor: default;
+}
+
+.tool-button:disabled .icon {
+  background: var(--color-text-muted);
+}
+
 .tool-button[data-active='true'] {
   background: var(--color-accent-surface);
 }

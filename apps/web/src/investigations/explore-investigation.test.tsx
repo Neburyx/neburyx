@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { createClientState } from '../state/client-state.js';
 import { me, renderApp, stubFactory } from '../test-utils.js';
 import { INVESTIGATION_A, INVESTIGATION_B, investigationOf, knowing, nodeOf, readOf } from './test-data.js';
-import { BACK_TO_HOME, NOT_FOUND_TITLE, OPENING, SOURCE_NOT_AVAILABLE_TITLE, TRY_AGAIN } from './messages.js';
+import { BACK_TO_HOME, NOT_FOUND_TITLE, OPENING, TRY_AGAIN } from './messages.js';
 
 const A = { investigation: investigationOf(INVESTIGATION_A, 'source-a', 'kind-a', 'A-1', { caseRef: 'CASE-1' }), node: nodeOf('source-a', 'kind-a', 'A-1') };
 const B = { investigation: investigationOf(INVESTIGATION_B, 'source-b', 'kind-a', 'C-1'), node: nodeOf('source-b', 'kind-a', 'C-1') };
@@ -88,24 +88,22 @@ describe('/explore/{id}', () => {
     expect(state.investigation.getState().id).toBeNull();
   });
 
-  it.each(['removed', 'repointed'] as const)('shows that the source is not available as it was, reads no entity and loads nothing, when it is %s', async (sourceState) => {
+  it.each([['removed', 'The source this investigation used is no longer configured.'], ['repointed', 'This source now points to a different database.']] as const)('shows the saved layout read-only with the banner and reads no entity, when the source is %s', async (sourceState, headline) => {
     const { client, calls } = knowing([{ ...A, investigation: { ...A.investigation, sourceState } }]);
     const state = createClientState();
     renderApp(`/explore/${INVESTIGATION_A}`, client, state);
-    expect(await screen.findByRole('heading', { name: SOURCE_NOT_AVAILABLE_TITLE, level: 1 })).toBeTruthy();
-    expect(screen.getByText('Its source is no longer configured, or it now points at another database. Nothing is read from it.')).toBeTruthy();
-    expect(screen.getByRole('link', { name: BACK_TO_HOME })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'kind-a A-1', level: 1 })).toBeTruthy();
+    expect(screen.getByText(headline)).toBeTruthy();
+    expect(screen.getAllByRole('status').some((element) => element.textContent === 'Read-only')).toBe(true);
     expect(calls.getEntity).toEqual([]);
-    expect(state.investigation.getState().id).toBeNull();
+    expect(state.investigation.getState()).toMatchObject({ id: INVESTIGATION_A, record: { readOnly: true, sourceState } });
   });
 
-  it('names the investigation’s own stored source under the heading of the source-not-available page, and never the source the shell has in view, with no Synthetic data badge', async () => {
+  it('names the investigation’s own stored source in the banner of a removed source, and never the source the shell has in view', async () => {
     const gone = { investigation: investigationOf(INVESTIGATION_A, 'gone-source', 'kind-a', 'A-1', { sourceState: 'removed' }), node: nodeOf('gone-source', 'kind-a', 'A-1') };
     const { client } = knowing([gone]);
     renderApp(`/explore/${INVESTIGATION_A}`, client, createClientState());
-    await screen.findByRole('heading', { name: SOURCE_NOT_AVAILABLE_TITLE, level: 1 });
-    const line = document.querySelector('.page-heading .source-note');
-    expect(line?.textContent).toBe('gone-source');
+    await screen.findByText('The source this investigation used is no longer configured.');
     expect(screen.queryByText('Synthetic data')).toBeNull();
   });
 

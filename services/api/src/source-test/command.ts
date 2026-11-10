@@ -3,7 +3,7 @@ import type { SourceTestReport } from '@neburyx/contracts';
 import { createAppStore, type AppStore } from '../app-store.js';
 import { TEST_SOURCE_USAGE, parseTestSourceArgs } from '../commands.js';
 import { ConfigError, parseCommandConfig } from '../config.js';
-import { errorCode, isConnectionError } from '../database-errors.js';
+import { databaseMessage } from '../database-errors.js';
 import { AppError } from '../errors.js';
 import { createSourceGate, type SourceGate, type SourceGateOptions } from '../gate/source-gate.js';
 import type { Clock, GateLogger } from '../gate/types.js';
@@ -39,11 +39,6 @@ class CommandFailure extends Error {}
 
 const IDENTITY_MESSAGE = 'the local identity is missing; start the API once so that it creates it\n';
 
-function databaseMessage(error: unknown): string | undefined {
-  if (isConnectionError(error)) return 'the database could not be reached\n';
-  if (errorCode(error) === '42P01' || errorCode(error) === '42703') return 'the database schema is behind this version; run neburyx migrate\n';
-  return undefined;
-}
 
 function describeFailure(error: unknown): string {
   if (error instanceof CommandFailure) return error.message;

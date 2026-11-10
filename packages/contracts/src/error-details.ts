@@ -14,7 +14,7 @@ export const ERROR_DETAIL_KEYS: Readonly<Record<ErrorCode, readonly DetailKey[]>
   PARTIAL_RESULT: ['retained', 'requested'],
   EVIDENCE_NOT_AVAILABLE: [],
   CONFLICTED_VIEW_VERSION: [],
-  CONFLICT: ['reason', 'status'],
+  CONFLICT: ['reason', 'status', 'sourceState'],
   EXPORT_FAILED: [],
   ASK_UNSUPPORTED: [],
   ASK_PLAN_INVALID: [],
@@ -45,6 +45,7 @@ export function allowedDetails(code: ErrorCode, details: unknown): ErrorDetails 
   }
   if (typeof allowed['reason'] === 'string' && !REASONS_OF_CODE[code]?.includes(allowed['reason'])) delete allowed['reason'];
   if (code === 'CONFLICT' && allowed['reason'] !== 'investigation-read-only') delete allowed['status'];
+  if (code === 'CONFLICT' && allowed['reason'] !== 'source-changed') delete allowed['sourceState'];
   if (Object.keys(allowed).length === 0) return undefined;
   const parsed = errorDetailsSchema.safeParse(allowed);
   return parsed.success ? parsed.data : undefined;

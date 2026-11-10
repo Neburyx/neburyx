@@ -1,7 +1,7 @@
 import type { SourceProfile } from '@neburyx/contracts';
 import { edgeKey, elementKey } from '../state/keys.js';
 import { partitionEdges, type LoadedGraph } from '../state/loaded-graph.js';
-import { isUnmappedEdge, isUnmappedNode, NO_LONGER_MAPPED, UNMAPPED_TITLE } from '../draft/unmapped.js';
+import { isNotReadEdge, isNotReadNode, isUnmappedEdge, isUnmappedNode, NO_LONGER_MAPPED, SAVED_LAYOUT_NOT_READ, UNMAPPED_TITLE } from '../draft/unmapped.js';
 import { relationshipParts } from './relationship-look.js';
 
 /** The elements the walk visits: the drawn entities in their loaded order, then the drawn relationships in theirs, then the aggregate nodes in the order the scene gives them. */
@@ -24,12 +24,14 @@ export function describeWalked(graph: LoadedGraph, profile: SourceProfile | unde
   const titles = new Map(graph.nodes.map((node) => [elementKey(node.ref), node.display.title]));
   const node = graph.nodes.find((candidate) => elementKey(candidate.ref) === key);
   if (node !== undefined) {
+    if (isNotReadNode(node)) return [`${profile?.entityTypes.find((entry) => entry.type === node.ref.entityType)?.displayName ?? UNMAPPED_TITLE}, ${SAVED_LAYOUT_NOT_READ}`, ...(pins.has(key) ? ['pinned'] : [])].join(', ');
     if (isUnmappedNode(node)) return [`${UNMAPPED_TITLE}, ${NO_LONGER_MAPPED.toLowerCase()}`, ...(pins.has(key) ? ['pinned'] : [])].join(', ');
     const typeName = profile?.entityTypes.find((entry) => entry.type === node.ref.entityType)?.displayName ?? node.ref.entityType;
     return [node.display.title, typeName, ...(pins.has(key) ? ['pinned'] : [])].join(', ');
   }
   const edge = graph.edges.find((candidate) => edgeKey(candidate.ref) === key);
   if (edge === undefined) return undefined;
+  if (isNotReadEdge(edge)) return `${SAVED_LAYOUT_NOT_READ}, from ${titles.get(elementKey(edge.from)) ?? ''} to ${titles.get(elementKey(edge.to)) ?? ''}`;
   if (isUnmappedEdge(edge)) return `${NO_LONGER_MAPPED}, from ${titles.get(elementKey(edge.from)) ?? ''} to ${titles.get(elementKey(edge.to)) ?? ''}`;
   const { type, count, origin } = relationshipParts(edge);
   const label = [type, count, origin].filter((part) => part !== undefined).join(' · ');

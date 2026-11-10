@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router';
 import type { InvestigationListItem } from '@neburyx/contracts';
 import type { ApiClient, ApiFailure } from '../api/client.js';
 import { useClientStateWhenProvided } from '../state/context.js';
-import { isReadOnlyStatus, type InvestigationStatus } from '../state/investigation-state.js';
+import { isSourceChanged, readOnlyOf, type InvestigationStatus } from '../state/investigation-state.js';
 import { EXPLORE_PATH } from '../shell/navigation.js';
 import { ActionMenu, type ActionMenuItem } from '../lifecycle/action-menu.js';
 import { lifecycleActionsOf } from '../lifecycle/menu-items.js';
@@ -52,7 +52,7 @@ export function RowMenu({ item, client, statusFilter, onChanged, onLeft, onNotic
 
   const keepWorkspaceRecord = (title: string, status: InvestigationStatus, version: number): void => {
     const held = workspace?.investigation.getState();
-    if (workspace !== undefined && held?.id === item.id && held.record !== null) workspace.describeInvestigation({ ...held.record, title, status, readOnly: isReadOnlyStatus(status), version });
+    if (workspace !== undefined && held?.id === item.id && held.record !== null) workspace.describeInvestigation({ ...held.record, title, status, readOnly: readOnlyOf(status, held.record.sourceState), version });
   };
 
   const refresh = async (): Promise<boolean> => {
@@ -87,7 +87,7 @@ export function RowMenu({ item, client, statusFilter, onChanged, onLeft, onNotic
 
   const items: readonly ActionMenuItem[] = [
     { id: 'open', label: OPEN, disabled: false, run: (close) => (close(false), void navigate(`${EXPLORE_PATH}/${item.id}`)) },
-    ...lifecycleActionsOf(item.status, busy).map((action) => ({
+    ...lifecycleActionsOf(item.status, busy, isSourceChanged(item.sourceState)).map((action) => ({
       ...action,
       run: (close: (restoreFocus: boolean) => void) => {
         if (action.id === 'rename') {
@@ -112,7 +112,7 @@ export function RowMenu({ item, client, statusFilter, onChanged, onLeft, onNotic
       {renaming ? (
         <RenameDialogView
           client={client}
-          target={{ id: item.id, title: item.title, version: item.version, readOnly: isReadOnlyStatus(item.status) }}
+          target={{ id: item.id, title: item.title, version: item.version, readOnly: readOnlyOf(item.status, item.sourceState) }}
           onRenamed={({ title, version }) => {
             keepWorkspaceRecord(title, item.status, version);
             onChanged({ ...item, title, version });

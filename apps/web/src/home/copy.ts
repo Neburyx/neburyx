@@ -15,7 +15,6 @@ export const MORE_THAN_SHOWN = `Showing the ${RECENT_LIMIT} most recent.`;
 export const CASE_REFERENCE_LABEL = 'Case reference';
 export const LAST_EDITED = 'Last edited';
 export const UNSAVED = 'Unsaved';
-export const SOURCE_NO_LONGER_AVAILABLE = 'Source no longer available as it was';
 export const savedBadge = (clock: string): string => `Saved · ${clock} UTC`;
 export const sourceStateNote = (state: string, reason: string | null): string => `${state === 'unknown' ? 'Source state unknown' : `Source ${state}`}${reason === null ? '' : ` · ${reason}`}`;
 

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useClientState } from '../state/context.js';
+import { isSourceChanged } from '../state/investigation-state.js';
 import { useStoreSelector } from '../state/store.js';
 import { FlyoutBoundary } from './flyout-boundary.js';
 import { EXPLORE_TOOL_ID, useTools } from './tool-registry.js';
@@ -7,6 +8,8 @@ import { EXPLORE_TOOL_ID, useTools } from './tool-registry.js';
 export function ToolStrip() {
   const state = useClientState();
   const tools = useTools();
+  // the tools read the source, and nothing is read while its source is re-pointed or removed: the strip is dimmed and none opens
+  const dimmed = useStoreSelector(state.investigation, (held) => isSourceChanged(held.record?.sourceState));
   const openTool = useStoreSelector(state.presentation.view, (current) => current.openTool);
   const activeActions = useStoreSelector(state.presentation.view, (current) =>
     tools.filter((tool) => tool.kind.type === 'action' && tool.kind.isActive?.(current) === true).map((tool) => tool.id).join('\n'),
@@ -14,7 +17,10 @@ export function ToolStrip() {
   const buttons = useRef(new Map<string, HTMLButtonElement>());
   const root = useRef<HTMLDivElement>(null);
   const open = tools.find((tool) => tool.id === openTool?.id && tool.registration === openTool.registration && tool.kind.type === 'flyout');
-  const flyoutOpen = open !== undefined;
+  const flyoutOpen = open !== undefined && !dimmed;
+  useEffect(() => {
+    if (dimmed && openTool !== undefined) state.presentation.setOpenTool(undefined);
+  }, [dimmed, openTool, state]);
   useEffect(() => {
     if (!flyoutOpen) return undefined;
     const closeOnOutsidePress = (event: PointerEvent): void => {
@@ -30,13 +36,14 @@ export function ToolStrip() {
   const active = open?.id ?? activeActionIds[0] ?? (tools.some((tool) => tool.id === EXPLORE_TOOL_ID) ? EXPLORE_TOOL_ID : undefined);
   const Flyout = open?.kind.type === 'flyout' ? open.kind.content : undefined;
   return (
-    <div className="tool-strip" ref={root}>
+    <div className="tool-strip" ref={root} data-dimmed={dimmed ? 'true' : undefined}>
       <div className="tool-strip-buttons" role="group" aria-label="Tools">
         {tools.map((tool) => (
           <button
             key={tool.id}
             type="button"
             className="tool-button"
+            disabled={dimmed}
             aria-label={tool.label}
             aria-haspopup={tool.kind.type === 'flyout' ? 'menu' : undefined}
             aria-expanded={tool.kind.type === 'flyout' ? tool.id === open?.id : undefined}
@@ -55,7 +62,7 @@ export function ToolStrip() {
           </button>
         ))}
       </div>
-      {open !== undefined && Flyout !== undefined ? (
+      {open !== undefined && Flyout !== undefined && !dimmed ? (
         <div
           className="tool-flyout-position"
           onKeyDown={(event) => {

@@ -23,6 +23,18 @@ async function openEntity(page: Page, source: string, stableId: string): Promise
   await expect(page).toHaveURL(/\/explore\/[0-9a-f-]{36}$/);
 }
 
+/** Opens an entity under a case reference the support server reads back as a changed source, and loads the page again so that it is read as it is now. */
+async function openChangedSource(page: Page, kind: 'repointed' | 'removed'): Promise<void> {
+  await page.goto('/dev/open-entity');
+  await page.getByRole('button', { name: 'banking-demo' }).click();
+  const form = page.getByRole('form', { name: 'Open an entity' });
+  await form.getByLabel('Stable ID').fill(`PS-${unique()}`);
+  await form.getByLabel('Case reference (optional)').fill(`${kind}-${unique()}`);
+  await form.getByRole('button', { name: 'Open' }).click();
+  await expect(page).toHaveURL(/\/explore\/[0-9a-f-]{36}$/);
+  await page.reload();
+}
+
 async function searchFor(page: Page, text: string): Promise<void> {
   await page.goto('/');
   await page.getByRole('searchbox', { name: 'Search text' }).fill(text);
@@ -318,6 +330,14 @@ export const REACH: Readonly<Record<string, (page: Page) => Promise<void>>> = {
     await page.getByRole('button', { name: 'Investigation menu' }).click();
     await page.getByRole('menuitem', { name: 'Close' }).click();
     await expect(page.getByRole('button', { name: 'Reopen' })).toBeVisible();
+  },
+  'Explore with a re-pointed source': async (page) => {
+    await openChangedSource(page, 'repointed');
+    await expect(page.getByRole('region', { name: 'Request status' })).toContainText('This source now points to a different database.');
+  },
+  'Explore with a removed source': async (page) => {
+    await openChangedSource(page, 'removed');
+    await expect(page.getByRole('button', { name: 'Delete', exact: true })).toBeVisible();
   },
   'Explore without an investigation': async (page) => {
     await page.goto('/explore');

@@ -46,14 +46,19 @@ describe('opening an investigation by its identifier', () => {
     expect(state.visibleGraph().nodes).toEqual([]);
   });
 
-  it.each(['removed', 'repointed'] as const)('reads no entity and shows nothing when the source is %s', async (sourceState) => {
+  it.each(['removed', 'repointed'] as const)('reads no entity and shows the saved layout as placeholders, read-only, when the source is %s', async (sourceState) => {
     const { client, calls } = knowing([{ ...A, investigation: { ...A.investigation, sourceState } }]);
     const state = createClientState();
     const outcome = await openById(client, state, INVESTIGATION_A, CONTEXT);
-    expect(outcome).toMatchObject({ kind: 'source-unavailable' });
-    expect(calls.getEntity).toEqual([]);
-    expect(state.investigation.getState().id).toBeNull();
+    expect(outcome).toEqual({ kind: 'shown', id: INVESTIGATION_A, activation: 'fresh' });
+    expect(calls).toEqual({ getInvestigation: [INVESTIGATION_A], getEntity: [], openInvestigation: [], listInvestigations: [] });
+    expect(state.investigation.getState()).toMatchObject({ id: INVESTIGATION_A, record: { status: 'open', readOnly: true, sourceState } });
+    const [placeholder] = state.loadedGraph().nodes;
+    expect(state.loadedGraph().nodes).toHaveLength(1);
+    expect(placeholder).toMatchObject({ display: { title: 'Unmapped item' }, qualityFlags: ['no-longer-mapped', 'saved-layout-not-read'] });
+    expect(JSON.stringify(placeholder?.display)).not.toContain('A-1');
   });
+
 
   it('answers NOT_FOUND for an investigation the API does not know, and changes nothing that is on screen', async () => {
     const { client } = knowing([A]);
@@ -113,11 +118,12 @@ describe('opening an entity', () => {
     expect(await openEntity(client, createClientState(), request, CONTEXT)).toMatchObject({ kind: 'shown', created: false });
   });
 
-  it('shows nothing when the investigation that was resumed has a source that is not as it was', async () => {
-    const { client } = knowing([A], { openInvestigation: async () => ({ ok: true, value: openedOf({ ...A.investigation, sourceState: 'repointed' }, undefined, false) }) });
+  it('shows the saved layout, read-only and without a read, when the investigation that was resumed has a source that is not as it was', async () => {
+    const { client, calls } = knowing([{ ...A, investigation: { ...A.investigation, sourceState: 'repointed' } }], { openInvestigation: async () => ({ ok: true, value: openedOf({ ...A.investigation, sourceState: 'repointed' }, undefined, false) }) });
     const state = createClientState();
-    expect(await openEntity(client, state, request, CONTEXT)).toMatchObject({ kind: 'source-unavailable' });
-    expect(state.investigation.getState().id).toBeNull();
+    expect(await openEntity(client, state, request, CONTEXT)).toMatchObject({ kind: 'shown', id: INVESTIGATION_A, created: false });
+    expect(calls.getEntity).toEqual([]);
+    expect(state.investigation.getState().record).toMatchObject({ readOnly: true, sourceState: 'repointed' });
   });
 
   it('gives the failure of the API and changes nothing', async () => {

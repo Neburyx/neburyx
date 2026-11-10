@@ -173,14 +173,15 @@ describe('the open-entity page', () => {
     expect(await screen.findByText('An existing investigation for this case reference was opened.')).toBeTruthy();
   });
 
-  it('says that the source is not available as it was when the investigation that was resumed has a source that changed', async () => {
-    const { client } = knowing([A], { openInvestigation: async () => ({ ok: true, value: openedOf({ ...A.investigation, sourceState: 'repointed' }, undefined, false) }) });
+  it('shows the saved layout, read-only, when the investigation that was resumed has a source that changed', async () => {
+    const changed = { ...A, investigation: { ...A.investigation, sourceState: 'repointed' as const } };
+    const { client } = knowing([changed], { openInvestigation: async () => ({ ok: true, value: openedOf(changed.investigation, undefined, false) }) });
     renderApp('/dev/open-entity', client);
     const user = userEvent.setup();
     await chooseSource(user);
     await user.type(screen.getByLabelText('Stable ID'), 'A-1');
     await user.click(screen.getByRole('button', { name: 'Open' }));
-    expect((await screen.findByRole('alert')).textContent).toContain('Nothing is read from it.');
+    expect(await screen.findByText('This source now points to a different database.')).toBeTruthy();
   });
 
   it('opens with Enter from the stable ID field, and reaches every control in reading order with the keyboard', async () => {

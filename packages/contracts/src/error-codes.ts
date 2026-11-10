@@ -40,12 +40,15 @@ export const SOURCE_UNAVAILABLE_REASONS = ['unreachable', 'authentication', 'ref
 export type SourceUnavailableReason = (typeof SOURCE_UNAVAILABLE_REASONS)[number];
 
 /** Why an update was refused with `CONFLICT`; a `CONFLICT` with no reason means the item was changed elsewhere. */
-export const CONFLICT_REASONS = ['status-change-not-allowed', 'investigation-read-only'] as const;
+export const CONFLICT_REASONS = ['status-change-not-allowed', 'investigation-read-only', 'source-changed'] as const;
 
 export type ConflictReason = (typeof CONFLICT_REASONS)[number];
 
 /** The status a read-only refusal names. */
 export const READ_ONLY_STATUSES = ['closed', 'archived'] as const;
+
+/** What a source-changed refusal names: the source now points at another database, or is no longer configured. */
+export const SOURCE_CHANGED_STATES = ['repointed', 'removed'] as const;
 
 export const errorDetailsSchema = z.strictObject({
   retained: retainedSchema.optional(),
@@ -55,6 +58,7 @@ export const errorDetailsSchema = z.strictObject({
   timeoutMs: z.number().int().positive().optional(),
   reason: z.enum([...SOURCE_UNAVAILABLE_REASONS, ...CONFLICT_REASONS]).optional(),
   status: z.enum(READ_ONLY_STATUSES).optional(),
+  sourceState: z.enum(SOURCE_CHANGED_STATES).optional(),
 });
 
 export type ErrorDetails = z.infer<typeof errorDetailsSchema>;

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { placeholderEdge, placeholderNode } from '../draft/unmapped.js';
+import { notReadEdge, notReadNode, placeholderEdge, placeholderNode } from '../draft/unmapped.js';
+import { testProfile } from '../dev/test-profile.js';
 import { coverageEntitiesOf } from '../workspace/coverage-input.js';
 import { idsOfSelection } from '../workspace/copy-ids.js';
 import { menuHeader } from '../workspace/menu-header.js';
@@ -43,5 +44,40 @@ describe('copying the IDs of placeholders', () => {
     const all = { nodes: [gone], edges: [stored, edge], entities: count, relationships: count };
     const selection = new Set([elementKey(gone.ref), edgeKey(stored.ref), edgeKey(edge.ref)]);
     expect(idsOfSelection(all, selection)).toEqual({ ids: [], withoutId: 3 });
+  });
+});
+
+describe('saved items of an investigation whose source changed', () => {
+  const saved = notReadNode('source-a', { t: 'kind-a', id: 'SECRET-ID' });
+  const unlisted = notReadNode('source-a', { t: 'gone', id: 'SECRET-ID' });
+  const savedEdge = notReadEdge('source-a', { t: 'REL', from: { t: 'kind-a', id: 'SECRET-ID' }, to: { t: 'kind-a', id: 'OTHER' }, id: 'E-9' });
+  const profile = testProfile('source-a');
+  const typeName = profile.entityTypes.find((entry) => entry.type === 'kind-a')?.displayName ?? '';
+  const saveGraph = { nodes: [saved, unlisted], edges: [savedEdge], entities: count, relationships: count };
+
+  it('say "Saved layout · not read" under the type name the profile gives, or under "Unmapped item" for a type it does not hold', () => {
+    expect(entityLook(saved, profile)).toEqual({ iconKey: 'generic', line1: typeName, line2: 'Saved layout · not read' });
+    expect(entityLook(unlisted, profile)).toEqual({ iconKey: 'generic', line1: 'Unmapped item', line2: 'Saved layout · not read' });
+    expect(entityLook(saved, undefined).line1).toBe('Unmapped item');
+  });
+
+  it('draw their relationships as plain lines with no label', () => {
+    expect(relationshipLook(savedEdge)).toMatchObject({ label: '', aggregate: false });
+  });
+
+  it('are announced with the same words, and said to be pinned when they are, never with a stored ID', () => {
+    const key = elementKey(saved.ref);
+    expect(describeWalked(saveGraph, profile, new Set(), key)).toBe(`${typeName}, Saved layout · not read`);
+    expect(describeWalked(saveGraph, profile, new Set([key]), key)).toBe(`${typeName}, Saved layout · not read, pinned`);
+    expect(describeWalked(saveGraph, profile, new Set(), edgeKey(savedEdge.ref))).toContain('Saved layout · not read, from');
+    for (const text of [describeWalked(saveGraph, profile, new Set(), key), describeWalked(saveGraph, profile, new Set(), edgeKey(savedEdge.ref))]) expect(text).not.toContain('SECRET-ID');
+  });
+
+  it('show no stored ID in the menu header and are left out of the coverage a read asks for', () => {
+    const node = menuHeader({ kind: 'node', key: elementKey(saved.ref) } as never, saveGraph, profile);
+    const line = menuHeader({ kind: 'relationship', key: edgeKey(savedEdge.ref) } as never, saveGraph, profile);
+    expect(node).toEqual({ title: typeName, detail: 'Saved layout · not read' });
+    expect(JSON.stringify([node, line])).not.toContain('SECRET-ID');
+    expect(coverageEntitiesOf(saveGraph)).toEqual([]);
   });
 });

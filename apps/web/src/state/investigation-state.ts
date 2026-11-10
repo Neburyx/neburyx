@@ -1,4 +1,4 @@
-import type { EdgeRef, ElementRef, Investigation } from '@neburyx/contracts';
+import type { EdgeRef, ElementRef, Investigation, InvestigationSourceState } from '@neburyx/contracts';
 import { z } from 'zod';
 import { StateError } from './errors.js';
 import { sourcesOfEdgeRef, type QueryKey } from './keys.js';
@@ -18,9 +18,22 @@ export interface InvestigationRecord {
   /** The version the next status change or rename is guarded by. */
   readonly version: number;
   readonly save: SaveState;
+  /** Whether the source is as it was when the investigation was made; a record with none is read as available. A source that was re-pointed or removed makes the investigation read-only, and nothing is read from it. */
+  readonly sourceState?: InvestigationSourceState;
+  /** False when the person may not delete the investigation (it is not theirs); a record with none is read as allowed. */
+  readonly canDelete?: boolean;
 }
 
 export const isReadOnlyStatus = (status: InvestigationStatus): boolean => status !== 'open';
+
+/** True for a source that was re-pointed at another database or is no longer configured. */
+export const isSourceChanged = (sourceState: InvestigationSourceState | undefined): boolean => sourceState !== undefined && sourceState !== 'available';
+
+/** What makes an investigation refuse changes: it is closed or archived, or its source changed. */
+export const readOnlyOf = (status: InvestigationStatus, sourceState?: InvestigationSourceState): boolean => isReadOnlyStatus(status) || isSourceChanged(sourceState);
+
+/** Whether an export of the investigation is dimmed: an export reads the source, so a changed source blocks it, while a closed or archived investigation still exports. */
+export const exportBlockedOf = (record: Pick<InvestigationRecord, 'sourceState'> | null): boolean => record !== null && isSourceChanged(record.sourceState);
 
 export interface InvestigationState {
   /** The investigation the server knows, when this state holds one; the development fixture has none. */

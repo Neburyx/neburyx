@@ -11,6 +11,7 @@ import { referenceKeyOf } from './db/reference-key-repository.js';
 import type { SourceHashes } from './source-state/decide.js';
 import { applyPingState, hasActiveSource, latestChecksFor, latestQualifyingChecks, markSourceUnchecked, recordSourceCheck, type CheckedSource, type PingStateChange, type QualifyingCheck, type SourceCheck } from './db/source-checks-repository.js';
 import { listSourceRows, syncSources, type SourceRow } from './db/sources-repository.js';
+import { rebindSource, type RebindOutcome } from './db/source-rebind-repository.js';
 import type { SourceModel } from './mapping/model.js';
 import { toStartError } from './identity/errors.js';
 import type { Identity } from './identity/identity.js';
@@ -26,6 +27,8 @@ export interface AppStore extends InvestigationStore, ViewStore, OwnedViewStore 
   latestQualifyingChecks(sources: readonly CheckedSource[], since: string, onUnreadable?: (sourceId: string, checkedAt: string) => void): Promise<QualifyingCheck[]>;
   latestChecksFor(sources: readonly CheckedSource[], onUnreadable?: (sourceId: string, checkedAt: string) => void): Promise<QualifyingCheck[]>;
   applyPingState(change: PingStateChange): Promise<boolean>;
+  /** Confirms a source that was re-pointed on purpose: its investigations take the identity hash it has now (`neburyx source rebind`). */
+  rebindSource(sourceId: string, identityHash: string): Promise<RebindOutcome>;
   readiness(): Promise<ReadyChecks>;
   /** The deployment's reference key, made by the first copy that asks and the same for every copy. */
   referenceKey(): Promise<Buffer>;
@@ -71,6 +74,7 @@ export function createAppStore(url: string, onConnectionError: () => void, optio
     latestChecksFor: (sources, onUnreadable) => latestChecksFor(pool, sources, onUnreadable),
     referenceKey: () => referenceKeyOf(pool),
     applyPingState: (change) => applyPingState(pool, change),
+    rebindSource: (sourceId, identityHash) => rebindSource(pool, sourceId, identityHash),
     createInvestigation: (input) => createInvestigation(pool, input),
     findReusableInvestigation: (query) => findReusableInvestigation(pool, query),
     readInvestigation: (id, ownerId) => readInvestigation(pool, id, ownerId),

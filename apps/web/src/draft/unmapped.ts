@@ -7,7 +7,13 @@ export const UNMAPPED_FLAG = 'no-longer-mapped';
 export const UNMAPPED_TITLE = 'Unmapped item';
 export const NO_LONGER_MAPPED = 'No longer mapped';
 
+/** Marks a saved item of an investigation whose source was re-pointed or removed: drawn from the saved layout, never read. It also carries the unmapped flag, so every guard that keeps a placeholder from being read applies to it. */
+export const NOT_READ_FLAG = 'saved-layout-not-read';
+export const SAVED_LAYOUT_NOT_READ = 'Saved layout · not read';
+
 export const isUnmappedNode = (node: Pick<GraphNode, 'qualityFlags'>): boolean => node.qualityFlags.includes(UNMAPPED_FLAG);
+export const isNotReadNode = (node: Pick<GraphNode, 'qualityFlags'>): boolean => node.qualityFlags.includes(NOT_READ_FLAG);
+export const isNotReadEdge = (edge: Pick<GraphEdge, 'qualityFlags'>): boolean => edge.qualityFlags.includes(NOT_READ_FLAG);
 export const isUnmappedEdge = (edge: Pick<GraphEdge, 'qualityFlags'>): boolean => edge.qualityFlags.includes(UNMAPPED_FLAG);
 
 const nodeIdentity = (type: string, id: string): string => `${type}\u0000${id}`;
@@ -40,4 +46,15 @@ export function placeholderEdge(sourceId: string, entry: StoredEdge): GraphEdge 
   if (entry.id !== undefined) return { ...base, ref: { sourceId, type: entry.t, from: entry.from.t, to: entry.to.t, stableId: entry.id } };
   if (entry.ruleId !== undefined) return { ...base, ref: { sourceId, derived: { ruleId: entry.ruleId, from, to } } };
   return { ...base, ref: { sourceId, aggregate: { type: entry.t, from, to } }, memberCount: { quality: 'unknown', scope: UNMAPPED_FLAG } };
+}
+
+/** A saved item of an investigation whose source changed: a placeholder that is not read, at the place the layout holds. */
+export function notReadNode(sourceId: string, entry: { readonly t: string; readonly id: string }): GraphNode {
+  const node = placeholderNode(sourceId, entry);
+  return { ...node, qualityFlags: [UNMAPPED_FLAG, NOT_READ_FLAG] };
+}
+
+export function notReadEdge(sourceId: string, entry: StoredEdge): GraphEdge {
+  const edge = placeholderEdge(sourceId, entry);
+  return { ...edge, qualityFlags: [UNMAPPED_FLAG, NOT_READ_FLAG] };
 }

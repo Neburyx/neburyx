@@ -6,7 +6,7 @@ import { openEntity } from '../investigations/open-flow.js';
 import { EXPLORE_PATH } from '../shell/navigation.js';
 import { useClientState, useSessionMask } from '../state/context.js';
 
-export type OpenRefusal = { readonly kind: 'failure'; readonly failure: ApiFailure } | { readonly kind: 'source-unavailable' };
+export type OpenRefusal = { readonly kind: 'failure'; readonly failure: ApiFailure };
 
 export interface OpenResult {
   readonly open: (node: GraphNode) => void;
@@ -42,7 +42,7 @@ export function useOpenResult(client: ApiClient, principalId: string): OpenResul
           if (controller.signal.aborted) return;
           if (outcome.kind === 'held') return;
           if (outcome.kind === 'shown') navigate(`${EXPLORE_PATH}/${outcome.id}`, { state: { resumed: outcome.created === false } });
-          else setRefusal(outcome.kind === 'failed' ? { kind: 'failure', failure: outcome.failure } : { kind: 'source-unavailable' });
+          else setRefusal({ kind: 'failure', failure: outcome.failure });
         })
         .finally(() => {
           if (attempt.current !== controller) return;

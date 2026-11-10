@@ -35,6 +35,8 @@
     { "name": "Explore with the Search panel's Add tab failed", "route": "explore/:investigationId" },
     { "name": "Explore with its read failed", "route": "explore/:investigationId" },
     { "name": "Explore with the investigation menu open", "route": "explore/:investigationId" },
+    { "name": "Explore with a re-pointed source", "route": "explore/:investigationId" },
+    { "name": "Explore with a removed source", "route": "explore/:investigationId" },
     { "name": "Explore with the rename dialog open", "route": "explore/:investigationId" },
     { "name": "Explore with the delete dialog open", "route": "explore/:investigationId" },
     { "name": "Explore with the delete view dialog open", "route": "explore/:investigationId" },

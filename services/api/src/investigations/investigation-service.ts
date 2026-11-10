@@ -13,7 +13,7 @@ import type { AuditSink, Principal } from '../seams/seams.js';
 import type { SourceAccess } from './source-access.js';
 import { droppedFiltersOf, unmappedItemsOf, withoutDropped } from './mapping-change.js';
 import type { StoredReferences } from './stored-references.js';
-import { readOnlyRefusal, readOnlyStatusOf } from './read-only.js';
+import { readOnlyRefusal, readOnlyStatusOf, sourceChangedError, sourceChangedRefusal } from './read-only.js';
 import { auditActionOf } from './status-change.js';
 import { retentionOf } from '../mapping/retention.js';
 import { COMMUNITY_POLICY_VERSION, contentHashOf, defaultTitle, initialDraftDocuments } from './draft.js';
@@ -291,7 +291,9 @@ export function createInvestigationService(deps: InvestigationServiceDeps): Inve
       if (readOnly !== undefined) throw readOnlyRefusal(readOnly);
       const { sourceId } = stored.investigation;
       const source = deps.mapping.sources.find((candidate) => candidate.id === sourceId);
-      if (source === undefined || sourceStateOf(deps.mapping, stored.investigation) !== 'available') throw new AppError('CONFLICT');
+      if (source === undefined) throw sourceChangedError('removed');
+      const state = sourceStateOf(deps.mapping, stored.investigation);
+      if (state !== 'available') throw sourceChangedError(state);
       const documents = { layout: deps.references.storedLayout(sourceId, draft.layout), queryContext: deps.references.storedQueryContext(sourceId, draft.queryContext) };
       if ([documents.layout, documents.queryContext].some((document) => Buffer.byteLength(JSON.stringify(document)) > MAX_DRAFT_DOCUMENT_BYTES)) throw new AppError('INVALID_REQUEST');
       const result = await deps.store.saveDraft({
@@ -312,6 +314,12 @@ export function createInvestigationService(deps: InvestigationServiceDeps): Inve
     },
     async rename({ id, principal, expectedVersion, title }) {
       if (!UUID.test(id)) throw new AppError('NOT_FOUND');
+      const stored = await deps.store.readInvestigation(id, principal.id);
+      if (stored === undefined) throw new AppError('NOT_FOUND');
+      const frozen = readOnlyStatusOf(stored.investigation.status);
+      if (frozen !== undefined) throw readOnlyRefusal(frozen);
+      const changed = sourceChangedRefusal(sourceStateOf(deps.mapping, stored.investigation));
+      if (changed !== undefined) throw changed;
       const result = await deps.store.renameInvestigation({ investigationId: id, ownerId: principal.id, expectedVersion, title });
       if (result.outcome === 'not-found') throw new AppError('NOT_FOUND');
       if (result.outcome === 'read-only') throw readOnlyRefusal(result.status);

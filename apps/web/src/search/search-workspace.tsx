@@ -4,7 +4,6 @@ import { MAX_SEARCH_TEXT_LENGTH, MIN_SEARCH_TEXT_LENGTH, type SourceProfile, typ
 import type { ApiClient, ApiResult } from '../api/client.js';
 import { useRequest } from '../api/use-request.js';
 import { canRetry, FailureNotice } from '../failure-notice.js';
-import { SOURCE_NOT_AVAILABLE_TEXT } from '../investigations/messages.js';
 import { SearchEvidenceHost } from '../evidence/search-host.js';
 import { PageHeading } from '../shell/page-heading.js';
 import { useSessionMask } from '../state/context.js';
@@ -110,7 +109,7 @@ export function SearchWorkspace({ client, source, sources, principalId, text }: 
       {notice === undefined ? null : <p role="status">{notice}</p>}
       {refusal === undefined ? null : (
         <div role="group" aria-label="Opening failed">
-          {refusal.kind === 'failure' ? <FailureNotice failure={refusal.failure} /> : <p>{SOURCE_NOT_AVAILABLE_TEXT}</p>}
+          <FailureNotice failure={refusal.failure} />
         </div>
       )}
       {profileData === undefined ? (

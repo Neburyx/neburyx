@@ -63,7 +63,7 @@ export function errorResponse(code: ErrorCode, traceId: string, details?: unknow
     const wait = reason === 'repeated-timeouts' ? allowed?.retryAfterMs : undefined;
     return { error: { code, ...SOURCE_UNAVAILABLE_ENTRIES[reason], traceId, details: { reason, ...(wait === undefined ? {} : { retryAfterMs: wait }) } } };
   }
-  if (code === 'CONFLICT' && (allowed?.reason === 'status-change-not-allowed' || allowed?.reason === 'investigation-read-only')) {
+  if (code === 'CONFLICT' && (allowed?.reason === 'status-change-not-allowed' || allowed?.reason === 'investigation-read-only' || allowed?.reason === 'source-changed')) {
     return { error: { code, ...CONFLICT_ENTRIES[allowed.reason], traceId, details: allowed } };
   }
   const { message, retryable } = ERROR_TABLE[code];

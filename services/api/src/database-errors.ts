@@ -17,3 +17,10 @@ export function isConnectionError(error: unknown): boolean {
   if (code === undefined) return error instanceof Error && CONNECTION_ERROR_MESSAGES.has(error.message);
   return CONNECTION_ERROR_CODES.has(code) || ['08', '28', '57'].some((prefix) => code.startsWith(prefix)) || code === '3D000';
 }
+
+/** What a command says of a failure of the application database that it can name: the database could not be reached, or its schema is behind this version. `undefined` for any other failure. */
+export function databaseMessage(error: unknown): string | undefined {
+  if (isConnectionError(error)) return 'the database could not be reached\n';
+  if (errorCode(error) === '42P01' || errorCode(error) === '42703') return 'the database schema is behind this version; run neburyx migrate\n';
+  return undefined;
+}

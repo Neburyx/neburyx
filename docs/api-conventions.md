@@ -119,13 +119,14 @@ A read that needs several indexes that are not online names the least recoverabl
 
 ## A refused update
 
-`CONFLICT` (409) without a reason means the item was changed elsewhere. With `details.reason` it says why the update was refused; `message` is the reason's sentence and `retryable` is `false` for each. `details.status` is sent only with `investigation-read-only`.
+`CONFLICT` (409) without a reason means the item was changed elsewhere. With `details.reason` it says why the update was refused; `message` is the reason's sentence and `retryable` is `false` for each. `details.status` is sent only with `investigation-read-only`, and `details.sourceState` only with `source-changed`.
 
 | `details.reason` | `details.status` | `message` | `retryable` |
 |---|---|---|---|
 | none | none | This item was changed elsewhere. Reload to continue. | `false` |
 | `status-change-not-allowed` | none | An archived investigation must be reopened before it can be closed. | `false` |
 | `investigation-read-only` | `closed` or `archived` | This investigation is closed or archived. Reopen it to make changes. | `false` |
+| `source-changed` | `details.sourceState`: `repointed` or `removed` | This source now points to a different database or is no longer configured. This investigation is read-only. | `false` |
 
 A reason of `SOURCE_UNAVAILABLE` is not valid on `CONFLICT`, and a reason of `CONFLICT` is not valid on `SOURCE_UNAVAILABLE`.
 
@@ -184,7 +185,7 @@ Every edit of a resource that has a `version` is guarded, so a stale edit never 
   body. A mismatch is `CONFLICT` (409). `PUT /v1/investigations/{id}` takes `{title, expectedVersion}` and
   `POST /v1/investigations/{id}/status` takes `{status, expectedVersion}`; each raises the investigation's `version` by one, answers its new
   `ETag` and leaves `last_edited_at`. A request for the status the investigation already has answers 200 with the same version and writes nothing, whatever `expectedVersion` it carries (a second tab's retry helps); a rename to the title it already has needs the current `expectedVersion`, and a stale one is `CONFLICT`. A closed or archived investigation refuses a draft write, a rename, a view save, a view rename and a view restore (listing the views still works) with `CONFLICT` and the reason
-  `investigation-read-only` (see *A refused update*); that check comes after the owner's investigation is found and before the version guard.
+  `investigation-read-only` (see *A refused update*); that check comes after the owner's investigation is found and before the version guard. An investigation whose source now points at another database or is no longer configured refuses the same writes with `source-changed` (`details.sourceState` `repointed` or `removed`), checked after the closed or archived one and before the version guard; opening, a status change and a delete still work, and nothing is read from the source.
 - A delete has no body (the one deletion that carries a note is a `POST`, see *Deleted views* above), so its guard is always `If-Match`, whatever the resource; a mismatch answers the resource's own code.
   Deleting or restoring a resource that has a version is a modification and is guarded.
 - A missing guard on a guarded call is `INVALID_REQUEST`.

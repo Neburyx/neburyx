@@ -87,17 +87,4 @@ test.describe('opening an entity from the development page', () => {
     await expect(page.locator('.notice-strip')).toHaveCount(0);
   });
 
-  test('names the investigation’s own source, not the shell’s, on the page for a source that is not available as it was', async ({ page }) => {
-    await page.goto('/dev/open-entity');
-    await page.getByRole('button', { name: 'banking-demo' }).click();
-    const form = page.getByRole('form', { name: 'Open an entity' });
-    await form.getByLabel('Stable ID').fill('AC-3');
-    await form.getByLabel('Case reference (optional)').fill(`repointed-${Date.now()}`);
-    await form.getByRole('button', { name: 'Open' }).click();
-    await expect(page).toHaveURL(/\/explore\//);
-    await page.goto(page.url());
-    await expect(page.getByRole('heading', { level: 1 })).toHaveText('This investigation’s source is not available as it was');
-    await expect(page.getByText('Nothing is read from it.')).toBeVisible();
-    await expect(page.locator('.page-heading .source-note')).toHaveText('banking-demo');
-  });
 });

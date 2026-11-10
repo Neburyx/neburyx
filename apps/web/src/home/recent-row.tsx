@@ -2,11 +2,12 @@ import { Link } from 'react-router';
 import type { InvestigationListItem, SourceProfile, SourceSummary } from '@neburyx/contracts';
 import { legendGlyph } from '../workspace/legend-panel.js';
 import { EXPLORE_PATH } from '../shell/navigation.js';
-import { CASE_REFERENCE_LABEL, LAST_EDITED, savedBadge, SOURCE_NO_LONGER_AVAILABLE, sourceStateNote, UNSAVED } from './copy.js';
+import { REMOVED_CHIP, REPOINTED_CHIP } from '../lifecycle/copy.js';
+import { CASE_REFERENCE_LABEL, LAST_EDITED, savedBadge, sourceStateNote, UNSAVED } from './copy.js';
 import { relativeTime, utcClock, utcMoment } from './relative-time.js';
 
 function sourceNote(item: InvestigationListItem, source: SourceSummary | undefined): string | undefined {
-  if (item.sourceState !== 'available') return SOURCE_NO_LONGER_AVAILABLE;
+  if (item.sourceState !== 'available') return undefined;
   if (source === undefined || source.state === 'connected') return undefined;
   return sourceStateNote(source.state, source.stateReason);
 }
@@ -31,6 +32,7 @@ export function RecentRow({ item, now, source, profile }: { readonly item: Inves
       <div className="recent-main">
         <Link to={`${EXPLORE_PATH}/${item.id}`}>{item.title}</Link>
         <span className="badge">{item.save.state === 'saved' ? savedBadge(utcClock(item.save.savedAt)) : UNSAVED}</span>
+        {item.sourceState === 'available' ? null : <span className="badge">{item.sourceState === 'repointed' ? REPOINTED_CHIP : REMOVED_CHIP}</span>}
       </div>
       <Entity item={item} profile={profile} />
       {item.caseRef === null ? null : (

@@ -28,6 +28,9 @@ export interface MemoryAppStoreOptions {
   readonly failStatusChange?: boolean;
   readonly failList?: boolean;
   readonly failCounts?: boolean;
+  /** The identity hash each source row holds, by source ID; a source with no entry holds whatever hash is asked about. */
+  readonly storedIdentityHashes?: Readonly<Record<string, string>>;
+  readonly failRebind?: boolean;
 }
 
 export interface MemoryNamedView {
@@ -125,6 +128,20 @@ export function memoryStoreWith(options: MemoryAppStoreOptions): MemoryAppStore 
           return found === undefined ? [] : [{ sourceId: source.id, checkedAt: found.report.checkedAt, report: found.report }];
         }),
       ),
+    rebindSource: (sourceId, identityHash) => {
+      if (options.failRebind === true) return Promise.reject(new Error('the investigations could not be written'));
+      if ((options.inactiveSources ?? []).includes(sourceId) || !rows.some((row) => row.id === sourceId)) return Promise.resolve({ outcome: 'unknown-source' });
+      if ((options.storedIdentityHashes?.[sourceId] ?? identityHash) !== identityHash) return Promise.resolve({ outcome: 'not-synced' });
+      if (!checks.some((check) => check.report.sourceId === sourceId && check.identityHash === identityHash && check.report.server !== null)) return Promise.resolve({ outcome: 'not-tested' });
+      let count = 0;
+      for (const [index, row] of investigations.entries()) {
+        if (row.sourceId === sourceId && row.sourceIdentityHash !== identityHash) {
+          investigations[index] = { ...row, sourceIdentityHash: identityHash };
+          count += 1;
+        }
+      }
+      return Promise.resolve({ outcome: 'rebound', count });
+    },
     markSourceUnchecked: (sourceId, reason, source) => {
       // the rule of the Postgres store: only when no check of any copy qualifies
       if (decideSourceState(storedChecksOf(sourceId), source).decidedBy === null) {

@@ -146,7 +146,7 @@ describe('an open into another source that does not end in a shown investigation
     expect(sourceText()).toContain('Source source-a');
   });
 
-  it('keeps naming the first source, and the first investigation, for a not-found page and for a source that is not available as it was', async () => {
+  it('keeps naming the first source, and the first investigation, for a not-found page, and names the source of a saved layout whose source is not available as it was', async () => {
     const gone = { ...B, investigation: { ...B.investigation, sourceState: 'repointed' as const } };
     const known = knowing([A, gone]);
     const view = renderApp(`/explore/${INVESTIGATION_A}`, known.client, createClientState());
@@ -155,8 +155,8 @@ describe('an open into another source that does not end in a shown investigation
     await screen.findByRole('heading', { name: 'Investigation not found', level: 1 });
     expect(sourceText()).toContain('Source source-a');
     await go(view, `/explore/${INVESTIGATION_B}`);
-    await screen.findByRole('heading', { level: 1, name: /not available as it was/ });
-    expect(sourceText()).toContain('Source source-a');
+    await screen.findByRole('heading', { level: 1, name: 'kind-a C-1' });
+    await screen.findByText('This source now points to a different database.');
     await go(view, `/explore/${INVESTIGATION_A}`);
     expect(await screen.findByRole('heading', { name: 'kind-a A-1', level: 1 })).toBeTruthy();
   });

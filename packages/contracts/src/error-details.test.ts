@@ -42,6 +42,9 @@ describe('allowedDetails', () => {
     expect(allowedDetails('CONFLICT', { reason: 'status-change-not-allowed' })).toEqual({ reason: 'status-change-not-allowed' });
     expect(allowedDetails('CONFLICT', { reason: 'status-change-not-allowed', status: 'closed' })).toEqual({ reason: 'status-change-not-allowed' });
     expect(allowedDetails('CONFLICT', { status: 'closed' })).toBeUndefined();
+    expect(allowedDetails('CONFLICT', { reason: 'source-changed', sourceState: 'removed', status: 'closed' })).toEqual({ reason: 'source-changed', sourceState: 'removed' });
+    expect(allowedDetails('CONFLICT', { reason: 'investigation-read-only', status: 'closed', sourceState: 'removed' })).toEqual({ reason: 'investigation-read-only', status: 'closed' });
+    expect(allowedDetails('SOURCE_UNAVAILABLE', { reason: 'source-changed' })).toBeUndefined();
     expect(allowedDetails('CONFLICT', { reason: 'investigation-read-only', status: 'open' })).toEqual({ reason: 'investigation-read-only' });
   });
 

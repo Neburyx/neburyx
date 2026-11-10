@@ -130,4 +130,17 @@ describe('the profile store', () => {
     expect(request.phase === 'ready' && request.data.sourceId).toBe('a');
     expect(request.phase === 'ready' && request.failure).toEqual({ code: 'SCHEMA_MISMATCH' });
   });
+
+  it('asks for no profile of a source that was removed, and shows no failure for it, while a re-pointed one is read as usual', async () => {
+    const { client, asked } = controlled();
+    const state = createClientState();
+    const store = createProfileStore(client, state.investigation);
+    store.subscribe(() => undefined);
+    const record = (sourceState: 'removed' | 'repointed') => ({ title: 'T', caseRef: null, status: 'open' as const, readOnly: true, version: 1, save: { kind: 'unsaved' as const }, sourceState });
+    state.show({ id: 'i-1', sourceId: 'gone', record: record('removed'), resultKeys: [], nodeRefs: [], edgeRefs: [] }, []);
+    expect(asked).toHaveLength(0);
+    expect(store.getState().request).toMatchObject({ phase: 'idle' });
+    state.show({ id: 'i-2', sourceId: 'moved', record: record('repointed'), resultKeys: [], nodeRefs: [], edgeRefs: [] }, []);
+    expect(asked.map((ask) => ask.sourceId)).toEqual(['moved']);
+  });
 });

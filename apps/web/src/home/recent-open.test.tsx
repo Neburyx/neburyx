@@ -75,12 +75,12 @@ describe('a row that cannot be opened', () => {
     await returnsHome(view);
   });
 
-  it('shows the page for a source that is not available as it was, and Back returns to Home with its rows', async () => {
+  it('shows the saved layout of a source that is not available as it was, and Back returns to Home with its rows', async () => {
     const gone = { ...A, investigation: { ...A.investigation, sourceState: 'removed' as const } };
     const parts = knowing([gone, B]);
     const view = renderApp('/', parts.client);
     await openRow('kind-a A-1');
-    expect(await screen.findByRole('heading', { level: 1, name: /not available as it was/ })).toBeTruthy();
+    expect(await screen.findByText('The source this investigation used is no longer configured.')).toBeTruthy();
     await returnsHome(view);
   });
 

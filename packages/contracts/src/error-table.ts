@@ -23,6 +23,7 @@ export const SOURCE_UNAVAILABLE_ENTRIES: Readonly<Record<SourceUnavailableReason
 export const CONFLICT_ENTRIES: Readonly<Record<ConflictReason, Omit<ErrorEntry, 'status'>>> = {
   'status-change-not-allowed': { message: 'An archived investigation must be reopened before it can be closed.', retryable: false },
   'investigation-read-only': { message: 'This investigation is closed or archived. Reopen it to make changes.', retryable: false },
+  'source-changed': { message: 'This source now points to a different database or is no longer configured. This investigation is read-only.', retryable: false },
 };
 
 export const ERROR_TABLE: Readonly<Record<ErrorCode, ErrorEntry>> = {

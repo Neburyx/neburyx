@@ -3,12 +3,15 @@ import { useClientState } from '../state/context.js';
 import type { InvestigationState } from '../state/investigation-state.js';
 import { useStoreSelector } from '../state/store.js';
 import { saveStateText } from './save-state-text.js';
-import { ARCHIVED_PILL, CHANGES_NOT_SAVED_SUFFIX, CLOSED_PILL } from '../lifecycle/copy.js';
+import { ARCHIVED_PILL, CHANGES_NOT_SAVED_SUFFIX, CLOSED_PILL, SOURCE_CHANGED_PILL } from '../lifecycle/copy.js';
+import { isSourceChanged } from '../state/investigation-state.js';
 import { unsavedChangesOf } from '../draft/draft-sync.js';
 import { Slot } from './slots.js';
 
 function pillTextOf(record: NonNullable<InvestigationState['record']>, unsavedChanges: boolean): string {
   if (!record.readOnly) return saveStateText(record.save);
+  // a changed source is the cause an operator must act on, so its pill is the one shown; nothing is saved, so there are no unsaved changes to name
+  if (isSourceChanged(record.sourceState)) return SOURCE_CHANGED_PILL;
   return `${record.status === 'archived' ? ARCHIVED_PILL : CLOSED_PILL}${unsavedChanges ? CHANGES_NOT_SAVED_SUFFIX : ''}`;
 }
 

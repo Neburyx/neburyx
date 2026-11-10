@@ -247,6 +247,22 @@ const DUPLICATE_ID_PREFIX = 'dup-';
 /** An investigation opened with a case reference that starts with this is new when it is opened, and once it exists reads back, and is resumed, as one whose source now points at another database. */
 const REPOINTED_CASE_REF = 'repointed';
 const isRepointed = (caseRef: string | null): boolean => caseRef?.startsWith(REPOINTED_CASE_REF) === true;
+/** The same for a source that is no longer configured. */
+const REMOVED_CASE_REF = 'removed';
+const isRemoved = (caseRef: string | null): boolean => caseRef?.startsWith(REMOVED_CASE_REF) === true;
+
+function sourceStateOf(stored: StoredInvestigation, isNew: boolean): Investigation['sourceState'] {
+  if (isNew) return 'available';
+  return isRepointed(stored.caseRef) ? 'repointed' : isRemoved(stored.caseRef) ? 'removed' : 'available';
+}
+
+/** What a write to an investigation is refused with: closed or archived first, then a source that changed. */
+function writeRefusal(stored: StoredInvestigation): unknown {
+  if (stored.status !== 'open') return readOnlyRefusal(stored.status);
+  const sourceState = sourceStateOf(stored, false);
+  if (sourceState === 'available') return undefined;
+  return { error: { code: 'CONFLICT', message: 'This source now points to a different database or is no longer configured. This investigation is read-only.', retryable: false, traceId: 'tr-support', details: { reason: 'source-changed', sourceState } } };
+}
 
 function shown(stored: StoredInvestigation, isNew = false): Investigation {
   return {
@@ -256,7 +272,7 @@ function shown(stored: StoredInvestigation, isNew = false): Investigation {
     caseRef: stored.caseRef,
     status: stored.status,
     startingEntity: { entityType: stored.entityType, stableId: stored.stableId },
-    sourceState: !isNew && isRepointed(stored.caseRef) ? 'repointed' : 'available',
+    sourceState: sourceStateOf(stored, isNew),
     createdAt: stored.createdAt,
     lastEditedAt: stored.lastEditedAt,
     version: stored.version,
@@ -318,7 +334,10 @@ function createInvestigations(options: SupportServerOptions) {
       if (stored === undefined) return json(response, 404, NOT_FOUND);
       const given = typeof body === 'object' && body !== null && !Array.isArray(body) ? Object.fromEntries(Object.entries(body)) : undefined;
       const notes = given?.['notes'];
-      if (stored.status !== 'open') return json(response, 409, readOnlyRefusal(stored.status));
+      {
+        const refusal = writeRefusal(stored);
+        if (refusal !== undefined) return json(response, 409, refusal);
+      }
       if (given === undefined || given['layout'] === undefined || given['queryContext'] === undefined || (notes !== null && typeof notes !== 'string') || ifMatch === undefined || !/^"[1-9][0-9]*"$/.test(ifMatch)) return json(response, 400, INVALID);
       if (Number(ifMatch.slice(1, -1)) !== stored.draftVersion) return json(response, 409, { error: { code: 'CONFLICTED_VIEW_VERSION', message: 'This view was changed elsewhere. Reload to continue.', retryable: false, traceId: 'tr-support' } });
       const same = JSON.stringify([stored.draftLayout, stored.draftQueryContext, stored.draftNotes]) === JSON.stringify([given['layout'], given['queryContext'], notes]);
@@ -336,7 +355,10 @@ function createInvestigations(options: SupportServerOptions) {
       if (stored === undefined) return json(response, 404, NOT_FOUND);
       const parsed = saveViewRequestSchema.safeParse(body);
       if (!parsed.success || ifMatch === undefined || !/^"[1-9][0-9]*"$/.test(ifMatch)) return json(response, 400, INVALID);
-      if (stored.status !== 'open') return json(response, 409, readOnlyRefusal(stored.status));
+      {
+        const refusal = writeRefusal(stored);
+        if (refusal !== undefined) return json(response, 409, refusal);
+      }
       if (Number(ifMatch.slice(1, -1)) !== stored.draftVersion) return json(response, 409, { error: { code: 'CONFLICTED_VIEW_VERSION', message: 'This view was changed elsewhere. Reload to continue.', retryable: false, traceId: 'tr-support' } });
       const { name, notes, title, expectedInvestigationVersion } = parsed.data;
       if (title !== undefined && expectedInvestigationVersion !== stored.version) return json(response, 409, PLAIN_CONFLICT);
@@ -364,7 +386,10 @@ function createInvestigations(options: SupportServerOptions) {
       if (stored === undefined || view === undefined) return json(response, 404, NOT_FOUND);
       const parsed = renameViewRequestSchema.safeParse(body);
       if (!parsed.success || ifMatch === undefined || !/^"[1-9][0-9]*"$/.test(ifMatch)) return json(response, 400, INVALID);
-      if (stored.status !== 'open') return json(response, 409, readOnlyRefusal(stored.status));
+      {
+        const refusal = writeRefusal(stored);
+        if (refusal !== undefined) return json(response, 409, refusal);
+      }
       if (Number(ifMatch.slice(1, -1)) !== view.version) return json(response, 409, { error: { code: 'CONFLICTED_VIEW_VERSION', message: 'This view was changed elsewhere. Reload to continue.', retryable: false, traceId: 'tr-support' } });
       view.name = parsed.data.name;
       view.version += 1;
@@ -375,7 +400,10 @@ function createInvestigations(options: SupportServerOptions) {
       const view = stored === undefined ? undefined : liveViews(stored).find((entry) => entry.id === viewId);
       if (stored === undefined || view === undefined) return json(response, 404, NOT_FOUND);
       if (ifMatch === undefined || !/^"[1-9][0-9]*"$/.test(ifMatch)) return json(response, 400, INVALID);
-      if (stored.status !== 'open') return json(response, 409, readOnlyRefusal(stored.status));
+      {
+        const refusal = writeRefusal(stored);
+        if (refusal !== undefined) return json(response, 409, refusal);
+      }
       if (Number(ifMatch.slice(1, -1)) !== stored.draftVersion) return json(response, 409, { error: { code: 'CONFLICTED_VIEW_VERSION', message: 'This view was changed elsewhere. Reload to continue.', retryable: false, traceId: 'tr-support' } });
       stored.draftLayout = view.layout;
       stored.draftQueryContext = view.queryContext;
@@ -414,7 +442,10 @@ function createInvestigations(options: SupportServerOptions) {
       if (stored === undefined || view === undefined) return json(response, 404, NOT_FOUND);
       const parsed = deleteViewRequestSchema.safeParse(body ?? {});
       if (!parsed.success || ifMatch === undefined || !/^"[1-9][0-9]*"$/.test(ifMatch)) return json(response, 400, INVALID);
-      if (stored.status !== 'open') return json(response, 409, readOnlyRefusal(stored.status));
+      {
+        const refusal = writeRefusal(stored);
+        if (refusal !== undefined) return json(response, 409, refusal);
+      }
       if (Number(ifMatch.slice(1, -1)) !== view.version) return json(response, 409, { error: { code: 'CONFLICTED_VIEW_VERSION', message: 'This view was changed elsewhere. Reload to continue.', retryable: false, traceId: 'support' } });
       view.deleted = true;
       view.deletedNote = parsed.data.note === undefined || parsed.data.note === '' ? null : parsed.data.note;
@@ -442,7 +473,10 @@ function createInvestigations(options: SupportServerOptions) {
       if (stored === undefined) return json(response, 404, NOT_FOUND);
       const parsed = renameRequestSchema.safeParse(body);
       if (!parsed.success) return json(response, 400, INVALID);
-      if (stored.status !== 'open') return json(response, 409, readOnlyRefusal(stored.status));
+      {
+        const refusal = writeRefusal(stored);
+        if (refusal !== undefined) return json(response, 409, refusal);
+      }
       if (parsed.data.expectedVersion !== stored.version) return json(response, 409, PLAIN_CONFLICT);
       if (parsed.data.title !== stored.title) {
         stored.title = parsed.data.title;

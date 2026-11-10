@@ -9,7 +9,7 @@ import { useClientState, useSessionMask } from '../state/context.js';
 import { EXPLORE_PATH } from '../shell/navigation.js';
 import { AttemptedSource } from './attempted-source.js';
 import { deepLinkPath, readDeepLink } from './deep-link.js';
-import { BACK_TO_HOME, LINK_FAILED_TITLE, LINK_MALFORMED_TEXT, LINK_MALFORMED_TITLE, LINK_NOT_FOUND_TEXT, LINK_NOT_FOUND_TITLE, LINK_UNKNOWN_TYPE_TITLE, linkUnknownTypeText, OPENING_LINK, OPENING_LINK_TEXT, OPENING_LINK_TITLE, SOURCE_NOT_AVAILABLE_TEXT, SOURCE_NOT_AVAILABLE_TITLE, TRY_AGAIN } from './messages.js';
+import { BACK_TO_HOME, LINK_FAILED_TITLE, LINK_MALFORMED_TEXT, LINK_MALFORMED_TITLE, LINK_NOT_FOUND_TEXT, LINK_NOT_FOUND_TITLE, LINK_UNKNOWN_TYPE_TITLE, linkUnknownTypeText, OPENING_LINK, OPENING_LINK_TEXT, OPENING_LINK_TITLE, TRY_AGAIN } from './messages.js';
 import { openEntity, type OpenEntityOutcome } from './open-flow.js';
 
 interface Flight {
@@ -22,7 +22,6 @@ type Status =
   | { readonly kind: 'opening' }
   | { readonly kind: 'not-found' }
   | { readonly kind: 'unknown-type'; readonly sourceId: string }
-  | { readonly kind: 'source-unavailable'; readonly sourceId: string }
   | { readonly kind: 'failed'; readonly failure: ApiFailure; readonly sourceId?: string };
 
 const OPENING: Status = { kind: 'opening' };
@@ -77,7 +76,6 @@ export function DeepLinkPage({ client }: { readonly client: ApiClient }) {
       if (!current || controller.signal.aborted) return;
       if (answer.kind === 'held') return void navigate(state.investigation.getState().id === null ? '/' : `${EXPLORE_PATH}/${state.investigation.getState().id}`, { replace: true });
       if (answer.kind === 'shown') navigate(`${EXPLORE_PATH}/${answer.id}`, { replace: true, state: { resumed: answer.created === false } });
-      else if (answer.kind === 'source-unavailable') setStatus({ kind: 'source-unavailable', sourceId: answer.investigation.sourceId });
       else if (answer.failure.code === 'NOT_FOUND') setStatus({ kind: 'not-found' });
       else if (answer.failure.code === 'INVALID_REQUEST') setStatus({ kind: 'unknown-type', sourceId: link.sourceId });
       else setStatus({ kind: 'failed', failure: answer.failure, ...(answer.sourceId === undefined ? {} : { sourceId: answer.sourceId }) });
@@ -100,7 +98,6 @@ export function DeepLinkPage({ client }: { readonly client: ApiClient }) {
   if (!read.ok) return <Message title={LINK_MALFORMED_TITLE} text={LINK_MALFORMED_TEXT} source={null} />;
   if (status.kind === 'not-found') return <Message title={LINK_NOT_FOUND_TITLE} text={LINK_NOT_FOUND_TEXT} source={null} />;
   if (status.kind === 'unknown-type') return <UnknownType sourceId={status.sourceId} />;
-  if (status.kind === 'source-unavailable') return <Message title={SOURCE_NOT_AVAILABLE_TITLE} text={SOURCE_NOT_AVAILABLE_TEXT} source={status.sourceId} />;
   const failure = status.kind === 'failed' ? status.failure : principalFailure;
   return (
     <section>

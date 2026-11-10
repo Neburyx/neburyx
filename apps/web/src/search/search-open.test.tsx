@@ -118,7 +118,7 @@ describe('opening a result in the graph', () => {
     await waitFor(() => expect(button.getAttribute('aria-disabled')).toBe('false'));
   });
 
-  it('shows the notice, keeps the results and lets the control work again when the open fails, and when the source is not available as it was', async () => {
+  it('shows the notice, keeps the results and lets the control work again when the open fails', async () => {
     let answer: ApiResult<OpenInvestigationResponse> = { ok: false, failure: { code: 'NETWORK_UNAVAILABLE' } };
     const seen: OpenInvestigationRequest[] = [];
     const { client } = rig([demoAccount]);
@@ -129,10 +129,9 @@ describe('opening a result in the graph', () => {
     const notice = await screen.findByRole('group', { name: 'Opening failed' });
     expect(within(notice).getByRole('alert').textContent).toContain('NETWORK_UNAVAILABLE');
     expect(screen.getByText('Title AC-1')).toBeDefined();
-    answer = { ok: true, value: { investigation: { ...investigationOf(INVESTIGATION_A, 'demo', TYPE, 'AC-1'), sourceState: 'removed' }, created: false, draft: { version: 1, notes: null, basedOnViewId: null } } };
+    answer = { ok: false, failure: { code: 'NETWORK_UNAVAILABLE' } };
     await user.click(openButton());
-    await waitFor(() => expect(within(screen.getByRole('group', { name: 'Opening failed' })).queryByRole('alert')).toBeNull());
-    expect(screen.getByText(/no longer configured/)).toBeDefined();
+    await waitFor(() => expect(within(screen.getByRole('group', { name: 'Opening failed' })).getByRole('alert').textContent).toContain('NETWORK_UNAVAILABLE'));
     expect(screen.getByText('Title AC-1')).toBeDefined();
     expect(seen).toHaveLength(2);
     expect(view.router.state.location.pathname).toBe('/search');

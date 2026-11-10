@@ -5,7 +5,7 @@ import type { ApiFailure } from '../api/client.js';
 import { createClientState } from '../state/client-state.js';
 import { renderApp, source } from '../test-utils.js';
 import { deepLinkPath } from './deep-link.js';
-import { BACK_TO_HOME, LINK_MALFORMED_TITLE, LINK_NOT_FOUND_TEXT, LINK_NOT_FOUND_TITLE, LINK_UNKNOWN_TYPE_TITLE, SOURCE_NOT_AVAILABLE_TITLE, TRY_AGAIN } from './messages.js';
+import { BACK_TO_HOME, LINK_MALFORMED_TITLE, LINK_NOT_FOUND_TEXT, LINK_NOT_FOUND_TITLE, LINK_UNKNOWN_TYPE_TITLE, TRY_AGAIN } from './messages.js';
 import { INVESTIGATION_A, INVESTIGATION_B, investigationOf, knowing, nodeOf, openedOf } from './test-data.js';
 
 const A = { investigation: investigationOf(INVESTIGATION_A, 'source-a', 'kind-a', 'A-1', { caseRef: 'CASE-1' }), node: nodeOf('source-a', 'kind-a', 'A-1') };
@@ -61,12 +61,12 @@ describe('a link to an entity type the readable source does not name', () => {
 });
 
 describe('a link whose case reference reuses an investigation of a source that now points elsewhere', () => {
-  it('shows the page of an unavailable source with the investigation’s own source ID in the heading, and reads nothing', async () => {
-    const { client, calls } = knowing([A], { openInvestigation: async () => ({ ok: true, value: openedOf({ ...A.investigation, sourceState: 'repointed' }, undefined, false) }) });
+  it('shows the saved layout of that investigation, read-only with the banner, and reads nothing', async () => {
+    const changed = { ...A, investigation: { ...A.investigation, sourceState: 'repointed' as const } };
+    const { client, calls } = knowing([changed], { openInvestigation: async () => ({ ok: true, value: openedOf(changed.investigation, undefined, false) }) });
     renderApp(link('source-a', 'A-1'), client);
-    await screen.findByRole('heading', { name: SOURCE_NOT_AVAILABLE_TITLE, level: 1 });
-    expect(headingNote()).toBe('source-a');
-    expect(screen.queryByText('Synthetic data')).toBeNull();
+    await screen.findByText('This source now points to a different database.');
+    expect(screen.getByRole('heading', { name: 'kind-a A-1', level: 1 })).toBeTruthy();
     expect(calls.getEntity).toEqual([]);
   });
 });

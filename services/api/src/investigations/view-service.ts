@@ -9,7 +9,7 @@ import type { Principal } from '../seams/seams.js';
 import type { MappingModel } from '../mapping/model.js';
 import { COMMUNITY_POLICY_VERSION, contentHashOf } from './draft.js';
 import { sourceStateOf } from './investigation-service.js';
-import { readOnlyRefusal, readOnlyStatusOf } from './read-only.js';
+import { readOnlyRefusal, readOnlyStatusOf, sourceChangedRefusal } from './read-only.js';
 import type { StoredReferences } from './stored-references.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -42,6 +42,16 @@ export interface ViewServiceDeps {
 export function createViewService(deps: ViewServiceDeps): ViewService {
   const bindingOf = (investigationId: string, principal: Principal): CursorBinding => ({ source: null, principal: principal.id, policyVersion: COMMUNITY_POLICY_VERSION, filterHash: investigationId, sort: LIST_SORT, target: LIST_TARGET, targetVersion: '1' });
 
+  /** The owner's investigation, or the refusal a write gets: not found, then closed or archived, then a changed source, all before a version guard. */
+  async function requireWritable(id: string, principal: Principal): Promise<void> {
+    const stored = await deps.store.readInvestigation(id, principal.id);
+    if (stored === undefined) throw new AppError('NOT_FOUND');
+    const readOnly = readOnlyStatusOf(stored.investigation.status);
+    if (readOnly !== undefined) throw readOnlyRefusal(readOnly);
+    const changed = sourceChangedRefusal(sourceStateOf(deps.mapping, stored.investigation));
+    if (changed !== undefined) throw changed;
+  }
+
   return {
     async save({ id, principal, expectedDraftVersion, request }) {
       if (!UUID.test(id)) throw new AppError('NOT_FOUND');
@@ -49,7 +59,8 @@ export function createViewService(deps: ViewServiceDeps): ViewService {
       if (stored === undefined) throw new AppError('NOT_FOUND');
       const readOnly = readOnlyStatusOf(stored.investigation.status);
       if (readOnly !== undefined) throw readOnlyRefusal(readOnly);
-      if (sourceStateOf(deps.mapping, stored.investigation) !== 'available') throw new AppError('CONFLICT');
+      const changed = sourceChangedRefusal(sourceStateOf(deps.mapping, stored.investigation));
+      if (changed !== undefined) throw changed;
       const result = await deps.store.saveNamedView({
         investigationId: id,
         ownerId: principal.id,
@@ -90,6 +101,7 @@ export function createViewService(deps: ViewServiceDeps): ViewService {
     },
     async rename({ id, viewId, principal, expectedVersion, name }) {
       if (!UUID.test(id) || !UUID.test(viewId)) throw new AppError('NOT_FOUND');
+      await requireWritable(id, principal);
       const result = await deps.store.renameNamedView({ investigationId: id, viewId, ownerId: principal.id, expectedVersion, name });
       if (result.outcome === 'not-found') throw new AppError('NOT_FOUND');
       if (result.outcome === 'read-only') throw readOnlyRefusal(result.status);
@@ -98,6 +110,7 @@ export function createViewService(deps: ViewServiceDeps): ViewService {
     },
     async delete({ id, viewId, principal, expectedVersion, note }) {
       if (!UUID.test(id) || !UUID.test(viewId)) throw new AppError('NOT_FOUND');
+      await requireWritable(id, principal);
       const result = await deps.store.deleteNamedView({ investigationId: id, viewId, ownerId: principal.id, expectedVersion, note: note === null || note === '' ? null : note });
       if (result.outcome === 'not-found') throw new AppError('NOT_FOUND');
       if (result.outcome === 'read-only') throw readOnlyRefusal(result.status);
@@ -110,7 +123,8 @@ export function createViewService(deps: ViewServiceDeps): ViewService {
       if (stored === undefined) throw new AppError('NOT_FOUND');
       const readOnly = readOnlyStatusOf(stored.investigation.status);
       if (readOnly !== undefined) throw readOnlyRefusal(readOnly);
-      if (sourceStateOf(deps.mapping, stored.investigation) !== 'available') throw new AppError('CONFLICT');
+      const changed = sourceChangedRefusal(sourceStateOf(deps.mapping, stored.investigation));
+      if (changed !== undefined) throw changed;
       const result = await deps.store.restoreNamedView({ investigationId: id, viewId, ownerId: principal.id, expectedDraftVersion });
       if (result.outcome === 'not-found') throw new AppError('NOT_FOUND');
       if (result.outcome === 'read-only') throw readOnlyRefusal(result.status);

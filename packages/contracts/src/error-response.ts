@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { CONFLICT_REASONS, ERROR_CODES, errorDetailsSchema, partialDetailsSchema, READ_ONLY_STATUSES, SOURCE_UNAVAILABLE_REASONS, type ErrorCode } from './error-codes.js';
+import { CONFLICT_REASONS, ERROR_CODES, errorDetailsSchema, partialDetailsSchema, READ_ONLY_STATUSES, SOURCE_CHANGED_STATES, SOURCE_UNAVAILABLE_REASONS, type ErrorCode } from './error-codes.js';
 import { ERROR_DETAIL_KEYS } from './error-details.js';
 import { CONFLICT_ENTRIES, ERROR_TABLE, SOURCE_UNAVAILABLE_ENTRIES } from './error-table.js';
 
@@ -30,14 +30,14 @@ const unavailableVariants = SOURCE_UNAVAILABLE_REASONS.map((reason) =>
   }),
 );
 
-/** A refused update says why: the reason in its details, with that reason's sentence; only a read-only refusal names the status. */
+/** A refused update says why: the reason in its details, with that reason's sentence; only a read-only refusal names the status, and only a source-changed refusal names the source state. */
 const conflictVariants = CONFLICT_REASONS.map((reason) =>
   z.strictObject({
     code: z.literal('CONFLICT'),
     message: z.literal(CONFLICT_ENTRIES[reason].message),
     retryable: z.literal(CONFLICT_ENTRIES[reason].retryable),
     traceId: z.string().min(1),
-    details: z.strictObject({ reason: z.literal(reason), ...(reason === 'investigation-read-only' ? { status: z.enum(READ_ONLY_STATUSES) } : {}) }),
+    details: z.strictObject({ reason: z.literal(reason), ...(reason === 'investigation-read-only' ? { status: z.enum(READ_ONLY_STATUSES) } : {}), ...(reason === 'source-changed' ? { sourceState: z.enum(SOURCE_CHANGED_STATES) } : {}) }),
   }),
 );
 

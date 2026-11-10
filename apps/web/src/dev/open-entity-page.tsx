@@ -5,14 +5,13 @@ import type { ApiClient, ApiFailure } from '../api/client.js';
 import { FailureNotice } from '../failure-notice.js';
 import { openEntity } from '../investigations/open-flow.js';
 import { AttemptedSource } from '../investigations/attempted-source.js';
-import { SOURCE_NOT_AVAILABLE_TEXT } from '../investigations/messages.js';
 import { EXPLORE_PATH } from '../shell/navigation.js';
 import { PageHeading } from '../shell/page-heading.js';
 import { answeredData, useShellData } from '../shell/shell-data.js';
 import { useClientState, useSessionMask } from '../state/context.js';
 import { SourcesPanel } from './sources-panel.js';
 
-type Refusal = { readonly kind: 'failure'; readonly failure: ApiFailure } | { readonly kind: 'source-unavailable' };
+type Refusal = { readonly kind: 'failure'; readonly failure: ApiFailure };
 
 function OpenEntityForm({ client, profile }: { readonly client: ApiClient; readonly profile: SourceProfile }) {
   const state = useClientState();
@@ -48,8 +47,9 @@ function OpenEntityForm({ client, profile }: { readonly client: ApiClient; reado
     void openEntity(client, state, request, { principalId, mask }, controller.signal)
       .then((outcome) => {
         if (controller.signal.aborted) return;
+        if (outcome.kind === 'held') return;
         if (outcome.kind === 'shown') navigate(`${EXPLORE_PATH}/${outcome.id}`, { state: { resumed: outcome.created === false } });
-        else setRefusal(outcome.kind === 'failed' ? { kind: 'failure', failure: outcome.failure } : { kind: 'source-unavailable' });
+        else setRefusal({ kind: 'failure', failure: outcome.failure });
       })
       .finally(() => {
         inFlight.current = false;
@@ -82,7 +82,7 @@ function OpenEntityForm({ client, profile }: { readonly client: ApiClient; reado
       </button>
       {refusal === undefined ? null : (
         <div role="group" aria-label="Opening failed" tabIndex={-1} ref={message}>
-          {refusal.kind === 'failure' ? <FailureNotice failure={refusal.failure} /> : <p role="alert">{SOURCE_NOT_AVAILABLE_TEXT}</p>}
+          <FailureNotice failure={refusal.failure} />
           <AttemptedSource sourceId={profile.sourceId} />
         </div>
       )}

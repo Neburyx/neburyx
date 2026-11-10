@@ -5,12 +5,14 @@ import { legendGlyph } from '../workspace/legend-panel.js';
 import { EXPLORE_PATH } from '../shell/navigation.js';
 import { CASE_REFERENCE_LABEL } from '../home/copy.js';
 import { utcDateTime } from '../views/format.js';
+import { REMOVED_CHIP, REPOINTED_CHIP } from '../lifecycle/copy.js';
 import { COLUMN_ACTIONS, COLUMN_COUNTS, COLUMN_COUNTS_LOADED, COLUMN_EDITED, COLUMN_ENTITY, COLUMN_SOURCE, COLUMN_TITLE, COUNTS_NOT_AVAILABLE, TABLE_CAPTION } from './copy.js';
 import { labelOf, type Labels } from './use-row-labels.js';
 import { NO_ROW_LEFT } from './use-investigation-list.js';
 import { RowMenu, type RowMenuProps } from './row-menu.js';
 
 const STATUS_CHIPS = { closed: 'Closed', archived: 'Archived' } as const;
+const SOURCE_CHIPS = { repointed: REPOINTED_CHIP, removed: REMOVED_CHIP } as const;
 
 function Entity({ item, profile, labels }: { readonly item: InvestigationListItem; readonly profile: SourceProfile | undefined; readonly labels: Labels }) {
   const start = item.startingEntity;
@@ -91,6 +93,7 @@ export function InvestigationsTable({ items, profiles, labels, busy, focusId, on
                       {item.title}
                     </Link>
                     {item.status === 'open' ? null : <span className="badge">{STATUS_CHIPS[item.status]}</span>}
+                    {item.sourceState === 'available' ? null : <span className="badge">{SOURCE_CHIPS[item.sourceState]}</span>}
                   </div>
                   {item.caseRef === null ? null : (
                     <div className="investigations-case">

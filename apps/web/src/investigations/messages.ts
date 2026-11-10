@@ -3,8 +3,6 @@ export const openingOver = (previousTitle: string): string => `${OPENING} The gr
 export const RESUMED = 'An existing investigation for this case reference was opened.';
 export const NOT_FOUND_TITLE = 'Investigation not found';
 export const NOT_FOUND_TEXT = 'There is no investigation at this link among yours.';
-export const SOURCE_NOT_AVAILABLE_TITLE = 'This investigation’s source is not available as it was';
-export const SOURCE_NOT_AVAILABLE_TEXT = 'Its source is no longer configured, or it now points at another database. Nothing is read from it.';
 export const BACK_TO_HOME = 'Back to Home';
 export const TRY_AGAIN = 'Try again';
 export const couldNotOpenIn = (sourceName: string): string => `Could not open in ${sourceName}.`;
@@ -26,7 +24,6 @@ export const PROMPT_GIVE_ENTITY_TYPE = 'Give the entity type.';
 export const PROMPT_GIVE_STABLE_ID = 'Give the stable ID.';
 export const LINK_CANNOT_CARRY_ID = 'This ID cannot be put in a link. Open it from the graph, or by its ID.';
 export const PROMPT_MASKED_VALUE = 'Masking is on. A personal-data ID can be opened by its value only when masking is off; turn masking off, or open it from the graph.';
-export const PROMPT_SOURCE_UNAVAILABLE = 'That source is not available right now.';
 export const PROMPT_NOT_FOUND = 'That entity is not in the source.';
 export const PROMPT_SOURCE_SHAPE = 'The source ID starts with a letter or a digit and has only letters, digits, dots, dashes and underscores.';
 export const promptTooLong = (what: string, limit: number): string => `The ${what} is longer than ${limit} characters.`;

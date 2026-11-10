@@ -160,7 +160,7 @@ describe('a command the image does not have', () => {
   it('exits 2 and prints the usage line', async () => {
     const result = await docker(['run', '--rm', TAG, 'bogus']);
     expect(result.code).toBe(2);
-    expect(result.stderr).toBe('usage: neburyx api | migrate | test-source --name <source> [--write-probe]\n');
+    expect(result.stderr).toBe('usage: neburyx api | migrate | test-source --name <source> [--write-probe] | source rebind <source> [--confirm <source>]\n');
   });
 });
 

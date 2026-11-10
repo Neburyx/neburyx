@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { useClientState } from '../state/context.js';
+import { isSourceChanged } from '../state/investigation-state.js';
 import { KeyBindingError, useKeyBindingRegistry } from '../workspace/key-binding-registry.js';
 import { useWorkspacePresence } from '../workspace/workspace-presence.js';
 
@@ -33,7 +34,8 @@ export function SearchShortcut() {
 
   useEffect(() => {
     const open = (): void => {
-      if (presence?.shown.getState() === true) return state.presentation.requestSearch();
+      // nothing is read from a source that changed, so the panel that searches it stays shut
+      if (presence?.shown.getState() === true) return isSourceChanged(state.investigation.getState().record?.sourceState) ? undefined : state.presentation.requestSearch();
       const current = here.current;
       if (current.pathname === SEARCH_PATH) navigate({ pathname: SEARCH_PATH, search: current.search }, { replace: true, state: { ...(typeof current.state === 'object' && current.state !== null ? current.state : {}), ...FOCUS_SEARCH } });
       else navigate(SEARCH_PATH, { state: FOCUS_SEARCH });

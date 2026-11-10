@@ -31,7 +31,9 @@ export function createProfileStore(client: ApiClient, investigation: ReadableSto
   let following: Following | undefined;
 
   const follow = (): void => {
-    const sourceId = investigation.getState().sourceId;
+    const held = investigation.getState();
+    // a source that is no longer configured has no profile to read: asking would only show a failure on a page that needs none
+    const sourceId = held.record?.sourceState === 'removed' ? null : held.sourceId;
     if ((following?.sourceId ?? null) === sourceId) return;
     following?.unsubscribe();
     following?.request.cancel();

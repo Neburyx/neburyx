@@ -116,11 +116,12 @@ describe('a Recent row: the note and an unavailable source', () => {
   });
 
   it.each([
-    ['removed', 'Source no longer available as it was'],
-    ['repointed', 'Source no longer available as it was'],
-  ] as const)('says so on a row whose source is %s, and the row stays a link', async (sourceState, text) => {
+    ['removed', 'Source removed'],
+    ['repointed', 'Source re-pointed'],
+  ] as const)('shows a pill on a row whose source is %s, with no source note, and the row stays a link', async (sourceState, text) => {
     await shown([listItemOf({ ...base, sourceState })]);
-    expect(row().querySelector('.recent-note')?.textContent).toBe(text);
+    expect([...row().querySelectorAll('.badge')].map((badge) => badge.textContent)).toContain(text);
+    expect(row().querySelector('.recent-note')).toBeNull();
     expect(row().querySelector('a')?.getAttribute('href')).toBe(`/explore/${INVESTIGATION_A}`);
   });
 

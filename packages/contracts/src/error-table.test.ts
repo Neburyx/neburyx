@@ -46,6 +46,7 @@ describe('ERROR_TABLE', () => {
 
   it('gives each reason of CONFLICT its own fixed message and a retryable flag of false', () => {
     expect(CONFLICT_ENTRIES['status-change-not-allowed']).toEqual({ message: 'An archived investigation must be reopened before it can be closed.', retryable: false });
+    expect(CONFLICT_ENTRIES['source-changed']).toEqual({ message: 'This source now points to a different database or is no longer configured. This investigation is read-only.', retryable: false });
     expect(CONFLICT_ENTRIES['investigation-read-only']).toEqual({ message: 'This investigation is closed or archived. Reopen it to make changes.', retryable: false });
     for (const reason of CONFLICT_REASONS) expect(CONFLICT_ENTRIES[reason].message).not.toMatch(/MATCH|RETURN|WHERE|[A-Z]{2,}-\d+/);
   });

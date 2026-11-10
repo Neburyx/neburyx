@@ -2,7 +2,7 @@ import type { GraphEdge, GraphNode, Investigation, InvestigationResponse, QueryC
 import type { ApiClient, ApiFailure } from '../api/client.js';
 import type { ClientState, Activation } from '../state/client-state.js';
 import { StateError } from '../state/errors.js';
-import { isReadOnlyStatus } from '../state/investigation-state.js';
+import { readOnlyOf } from '../state/investigation-state.js';
 import type { SaveState } from '../state/investigation-state.js';
 import { DEFAULT_FILTER_HASH, DEFAULT_POLICY_VERSION, type QueryKey } from '../state/keys.js';
 import { LAYOUTS } from '../state/layout-choice.js';
@@ -10,12 +10,11 @@ import { elementKey } from '../state/keys.js';
 import { draftSyncOf } from '../draft/draft-sync.js';
 import type { KeptItems } from '../draft/draft-document.js';
 import { isOpeningDraft, readDraftItems } from '../draft/restore.js';
-import { isUnmappedStart } from '../draft/unmapped.js';
+import { isUnmappedStart, notReadEdge, notReadNode } from '../draft/unmapped.js';
 import { mappingNoticesOf } from '../draft/mapping-notice.js';
 
 export type OpenOutcome =
   | { readonly kind: 'shown'; readonly id: string; readonly activation: Activation; readonly someMissing?: true }
-  | { readonly kind: 'source-unavailable'; readonly investigation: Investigation }
   /** The investigation shown has changes that could not be saved and the person did not go on without them (or the open was cancelled meanwhile): nothing was opened. */
   | { readonly kind: 'held' }
   | { readonly kind: 'failed'; readonly failure: ApiFailure; readonly sourceId?: string };
@@ -38,7 +37,7 @@ function show(state: ClientState, investigation: Investigation, items: { readonl
   const key = openedKey(investigation.sourceId, context.principalId, investigation.id, context.mask);
   try {
     const activation = state.show(
-      { id: investigation.id, sourceId: investigation.sourceId, record: { title: investigation.title, caseRef: investigation.caseRef, status: investigation.status, readOnly: isReadOnlyStatus(investigation.status), version: investigation.version, save }, resultKeys: [key], nodeRefs: items.nodes.map((node) => node.ref), edgeRefs: items.edges.map((edge) => edge.ref) },
+      { id: investigation.id, sourceId: investigation.sourceId, record: { title: investigation.title, caseRef: investigation.caseRef, status: investigation.status, readOnly: readOnlyOf(investigation.status, investigation.sourceState), sourceState: investigation.sourceState, version: investigation.version, save }, resultKeys: [key], nodeRefs: items.nodes.map((node) => node.ref), edgeRefs: items.edges.map((edge) => edge.ref) },
       [{ key, result: { sourceId: investigation.sourceId, nodes: [...items.nodes], edges: [...items.edges] } }],
     );
     return { kind: 'shown', id: investigation.id, activation };
@@ -80,6 +79,23 @@ function adoptDraft(state: ClientState, sync: ReturnType<typeof draftSyncOf>, re
   sync.adopt(investigation.id, { version: draft.version, basedOnViewId: draft.basedOnViewId, ...held, writable: true, ...(rehash ? { rehash: true } : {}) });
 }
 
+const nodeEntryIdentity = (entry: { readonly t: string; readonly id: string }): string => nodeIdentity(entry.t, entry.id);
+
+/**
+ * Shows the saved layout of an investigation whose source was re-pointed or removed: every item the draft holds is a placeholder at its saved place, pin and hidden flag, and nothing is read from the source and nothing is adopted for writing,
+ * so no autosave runs. The stored IDs are not shown (the placeholder never carries a title taken from them).
+ */
+function openSavedLayout(state: ClientState, read: InvestigationResponse, save: SaveState, context: OpenContext, signal: AbortSignal | undefined): OpenOutcome {
+  const { investigation, draft } = read;
+  const entries = new Map<string, { readonly t: string; readonly id: string }>();
+  for (const entry of [...draft.layout.nodes, ...draft.queryContext.loaded.nodes]) entries.set(nodeEntryIdentity(entry), { t: entry.t, id: entry.id });
+  const nodes = [...entries.values()].map((entry) => notReadNode(investigation.sourceId, entry));
+  const edges = draft.queryContext.loaded.edges.map((edge) => notReadEdge(investigation.sourceId, edge));
+  const shown = show(state, investigation, { nodes, edges }, context, signal, save);
+  if (shown.kind === 'shown' && shown.activation === 'fresh') applyPresentation(state, draft, nodes);
+  return shown;
+}
+
 /** Opens an investigation by its ID: shows what the session holds without a read, else reads the investigation and, when its source is as it was, the items of its draft: its first entity when the draft is no more than that, otherwise every item the draft names, in bounded calls. */
 export async function openById(client: ApiClient, state: ClientState, id: string, context: OpenContext, signal?: AbortSignal): Promise<OpenOutcome> {
   if (state.investigation.getState().id !== id && !(await draftSyncOf(state, client).settle(signal))) return { kind: 'held' };
@@ -89,7 +105,7 @@ export async function openById(client: ApiClient, state: ClientState, id: string
   if (!read.ok) return { kind: 'failed', failure: read.failure };
   const { investigation, draft, unmapped } = read.value;
   const save: SaveState = read.value.save.state === 'saved' ? { kind: 'saved', at: read.value.save.savedAt } : { kind: 'unsaved' };
-  if (investigation.sourceState !== 'available') return { kind: 'source-unavailable', investigation };
+  if (investigation.sourceState !== 'available') return openSavedLayout(state, read.value, save, context, signal);
   const start = investigation.startingEntity;
   if (start === null) return mismatchIn(investigation.sourceId);
   const sync = draftSyncOf(state, client);
@@ -124,7 +140,8 @@ export async function openEntity(client: ApiClient, state: ClientState, request:
   const body = answer.value;
   if (body.investigation.sourceId !== request.sourceId) return mismatchIn(request.sourceId);
   if ('entity' in body && body.entity.ref.sourceId !== body.investigation.sourceId) return mismatchIn(request.sourceId);
-  if (body.investigation.sourceState !== 'available' || !('entity' in body)) return { kind: 'source-unavailable', investigation: body.investigation };
+  // an investigation whose source changed is shown from its saved layout, as when it is opened by its ID
+  if (!('entity' in body)) return { ...(await openById(client, state, body.investigation.id, context, signal)), created: false };
   // an investigation that was resumed has a draft of its own, which is restored whole; one that was just made holds its first entity only
   if (!body.created) return { ...(await openById(client, state, body.investigation.id, context, signal)), created: false };
   const shown = show(state, body.investigation, { nodes: [body.entity], edges: [] }, context, signal);
@@ -152,7 +169,7 @@ export async function replaceWithRead(client: ApiClient, state: ClientState, ans
   const key = openedKey(sourceId, principalId, id, mask);
   const save: SaveState = answer.save.state === 'saved' ? { kind: 'saved', at: answer.save.savedAt } : { kind: 'unsaved' };
   try {
-    state.replace({ id, sourceId, record: { ...record, title: answer.investigation.title, status: answer.investigation.status, readOnly: isReadOnlyStatus(answer.investigation.status), version: answer.investigation.version, save }, resultKeys: [key], nodeRefs: nodes.map((node) => node.ref), edgeRefs: edges.map((edge) => edge.ref) }, [{ key, result: { sourceId, nodes: [...nodes], edges: [...edges] } }]);
+    state.replace({ id, sourceId, record: { ...record, title: answer.investigation.title, status: answer.investigation.status, readOnly: readOnlyOf(answer.investigation.status, answer.investigation.sourceState), sourceState: answer.investigation.sourceState, version: answer.investigation.version, save }, resultKeys: [key], nodeRefs: nodes.map((node) => node.ref), edgeRefs: edges.map((edge) => edge.ref) }, [{ key, result: { sourceId, nodes: [...nodes], edges: [...edges] } }]);
   } catch (error) {
     if (error instanceof StateError) return { kind: 'failed', failure: { code: 'SCHEMA_MISMATCH' } };
     throw error;

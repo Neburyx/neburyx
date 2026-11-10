@@ -12,6 +12,7 @@ Public technical documentation. Pre-release placeholder: the technical architect
 - [filtered-expansion.md](filtered-expansion.md): filtering and ranking an expansion by the properties a mapping declares, the operators, the count, what masking does and what it costs.
 - [fuzz-suite.md](fuzz-suite.md): the input fuzz suite, what it proves about statement text and refusals, a recorded run and how to replay a failure.
 - [circuit-breaker.md](circuit-breaker.md): the rule that stops a source being asked when its reads keep timing out, how it recovers, what a person sees and the three settings.
+- [source-rebind.md](source-rebind.md): what a person sees when a source name is pointed at another database or removed, and how an operator confirms the change with `neburyx source rebind`.
 - [source-state.md](source-state.md): which stored check decides the state a source shows when several API copies run, and what stays different between copies.
 - [concurrency.md](concurrency.md): the read-slot, request-rate and breaker limits with their numbers, and what the concurrency suite proves about them.
 - [layouts.md](layouts.md): the layouts, the Physics switch, how a pinned entity is treated, the limits of live physics and what was measured.

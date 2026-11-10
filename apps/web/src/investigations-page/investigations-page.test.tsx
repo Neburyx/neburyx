@@ -191,6 +191,25 @@ describe('the Investigations page: the starting-entity labels', () => {
     await waitFor(() => expect(recorded.readRefs.reduce((sum, call) => sum + call.refs, 0)).toBe(28));
   });
 
+  it('shows the pill "Source re-pointed" or "Source removed" next to the title of a row whose source changed, in the accessible name of its row, and no pill for the others', async () => {
+    const rows = rowsOf(4, (index) => (index === 0 ? { sourceState: 'removed' as const } : index === 1 ? { sourceState: 'repointed' as const } : {}));
+    const { client, recorded } = pagedClient(rows);
+    await openPage(client);
+    await screen.findByRole('link', { name: 'Case 1' });
+    const pillsOf = (row: HTMLElement | undefined): (string | null)[] => [...(row?.querySelectorAll('.badge') ?? [])].map((badge) => badge.textContent);
+    expect(pillsOf(bodyRows()[0])).toEqual(['Source removed']);
+    expect(pillsOf(bodyRows()[1])).toEqual(['Source re-pointed']);
+    expect(pillsOf(bodyRows()[2])).toEqual([]);
+    expect(screen.getByRole('row', { name: /Case 1.*Source removed/ })).toBeTruthy();
+    expect(screen.getByRole('row', { name: /Case 2.*Source re-pointed/ })).toBeTruthy();
+    await waitFor(() => expect(recorded.readRefs.length).toBeGreaterThan(0));
+    expect(recorded.readRefs.reduce((sum, call) => sum + call.refs, 0)).toBe(2);
+    expect(screen.getByRole('link', { name: 'Case 1' }).getAttribute('href')).toMatch(/^\/explore\//);
+    expect(within(bodyRows()[0] as HTMLElement).getByRole('link', { name: 'Case 1' })).toBeTruthy();
+    expect(screen.getAllByText('Source removed')).toHaveLength(1);
+    expect(screen.queryByText('Source no longer available as it was')).toBeNull();
+  });
+
   it('drops a label answer that comes after the filters changed and asks again when the row is shown again', async () => {
     const parts = pagedClient(rowsOf(2));
     const releases: (() => void)[] = [];

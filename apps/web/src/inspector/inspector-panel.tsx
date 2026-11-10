@@ -3,8 +3,8 @@ import { useProfileWhenProvided } from '../canvas/profile-context.js';
 import { elementKey, nodeRefOfKey } from '../state/keys.js';
 import { useClientState, useLoadedGraph, useSessionMask, useVisibleGraph } from '../state/context.js';
 import { useStoreSelector } from '../state/store.js';
-import { isUnmappedNode, NO_LONGER_MAPPED, UNMAPPED_TITLE } from '../draft/unmapped.js';
-import { CLOSE_INSPECTOR, INSPECTOR_TITLE, UNMAPPED_INSPECTOR_TEXT } from './copy.js';
+import { isNotReadNode, isUnmappedNode, NO_LONGER_MAPPED, SAVED_LAYOUT_NOT_READ, UNMAPPED_TITLE } from '../draft/unmapped.js';
+import { CLOSE_INSPECTOR, INSPECTOR_TITLE, NOT_READ_INSPECTOR_TEXT, UNMAPPED_INSPECTOR_TEXT } from './copy.js';
 import { InspectorHeader } from './inspector-header.js';
 import { inspectedKey } from './inspected.js';
 import { InspectorContext, type Inspector } from './inspector.js';
@@ -29,6 +29,7 @@ function InspectorPanel({ inspector }: { readonly inspector: Inspector }) {
   const ref = key === undefined ? undefined : nodeRefOfKey(key);
   const node = key === undefined ? undefined : loaded.nodes.find((candidate) => elementKey(candidate.ref) === key);
   const unmapped = node !== undefined && isUnmappedNode(node);
+  const notRead = node !== undefined && isNotReadNode(node);
   const read = useEntityRead(unmapped ? undefined : ref, mask);
   const tab = tabs.find((candidate) => candidate.id === chosen) ?? tabs[0];
   if (key === undefined || ref === undefined || node === undefined) return null;
@@ -60,8 +61,8 @@ function InspectorPanel({ inspector }: { readonly inspector: Inspector }) {
         <header className="inspector-header">
           <div className="inspector-heading">
             <div className="inspector-titles">
-              <p className="inspector-caption">{NO_LONGER_MAPPED}</p>
-              <h2 className="inspector-title">{UNMAPPED_TITLE}</h2>
+              <p className="inspector-caption">{notRead ? SAVED_LAYOUT_NOT_READ : NO_LONGER_MAPPED}</p>
+              <h2 className="inspector-title">{notRead ? (profile?.entityTypes.find((entry) => entry.type === node.ref.entityType)?.displayName ?? UNMAPPED_TITLE) : UNMAPPED_TITLE}</h2>
             </div>
             <button type="button" className="legend-close" aria-label={CLOSE_INSPECTOR} onClick={close}>
               <span className="icon icon-clear" aria-hidden="true" />
@@ -69,7 +70,7 @@ function InspectorPanel({ inspector }: { readonly inspector: Inspector }) {
           </div>
         </header>
         <div className="inspector-body">
-          <p>{UNMAPPED_INSPECTOR_TEXT}</p>
+          <p>{notRead ? NOT_READ_INSPECTOR_TEXT : UNMAPPED_INSPECTOR_TEXT}</p>
         </div>
       </div>
     );
