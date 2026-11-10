@@ -1119,6 +1119,15 @@
   background: none;
 }
 
+/* the hint of an unavailable row says why it is, so only the label is dimmed */
+.layout-list .menu-row-disabled {
+  opacity: 1;
+}
+
+.layout-list .menu-row-disabled .menu-label {
+  opacity: var(--opacity-disabled);
+}
+
 .layout-list {
   display: flex;
   flex-direction: column;

@@ -132,8 +132,17 @@ describe('the shared control styles', () => {
       ['link-style on the page', 'color-accent', 'color-surface'],
       ['link-style on a muted fill', 'color-accent', 'color-surface-muted'],
       ['link-style, disabled', 'color-text-muted', 'color-surface'],
+      ['a flyout hint, on the page', 'color-flyout-hint', 'color-surface'],
+      ['a flyout hint, on a muted fill', 'color-flyout-hint', 'color-surface-muted'],
+      ['a flyout hint, on a chosen or hovered menu row', 'color-flyout-hint', 'color-row-chosen'],
     ];
     for (const [label, foreground, background] of pairs) expect(contrast(at(foreground), at(background)), label).toBeGreaterThanOrEqual(MIN_TEXT_CONTRAST);
+  });
+
+  it('keep the hint that tells why a layout row is unavailable at full strength, and dim only the label of that row', () => {
+    const workspace = sheet('workspace.css');
+    expect(workspace).toMatch(/\.layout-list \.menu-row-disabled \{[^}]*opacity: 1;/s);
+    expect(workspace).toMatch(/\.layout-list \.menu-row-disabled \.menu-label \{[^}]*opacity: var\(--opacity-disabled\);/s);
   });
 
   it('keep the muted text of the graph scope lines at 4.5 to 1 on their backdrop, the surface at 85 % over black, the darkest thing that can lie behind it', () => {
