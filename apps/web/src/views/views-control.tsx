@@ -1,5 +1,5 @@
 import type { NamedView } from '@neburyx/contracts';
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import { useApiClient } from '../api/client-context.js';
 import { useClientState } from '../state/context.js';
 import { useStoreSelector } from '../state/store.js';
@@ -7,6 +7,16 @@ import { VIEWS_CONTROL } from './copy.js';
 import { RestoreConfirm } from './restore-confirm.js';
 import { viewListOf } from './view-list.js';
 import { ViewsPanel } from './views-panel.js';
+
+/** The space kept between the banner above the canvas and the panel, in pixels. */
+const BANNER_GAP_PX = 8;
+
+/** Where the panel starts when a banner is showing: below it, so the banner's own actions stay in reach. */
+function clearanceBelowBanner(): number | undefined {
+  const bottoms = [...document.querySelectorAll<HTMLElement>('.banner-region')].filter((region) => (region.textContent ?? '').trim() !== '').map((region) => region.getBoundingClientRect().bottom);
+  const lowest = Math.max(0, ...bottoms);
+  return lowest > 0 ? Math.ceil(lowest) + BANNER_GAP_PX : undefined;
+}
 
 const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
@@ -18,6 +28,7 @@ export function ViewsControl() {
   const shown = useStoreSelector(state.investigation, (current) => current.record !== null);
   const readOnly = useStoreSelector(state.investigation, (current) => current.record?.readOnly === true);
   const [open, setOpen] = useState(false);
+  const [top, setTop] = useState<number | undefined>(undefined);
   const [restoring, setRestoring] = useState<NamedView | undefined>(undefined);
   const button = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLDivElement>(null);
@@ -35,6 +46,10 @@ export function ViewsControl() {
     document.addEventListener('pointerdown', onPress);
     return () => document.removeEventListener('pointerdown', onPress);
   }, [open, list]);
+
+  useLayoutEffect(() => {
+    if (open) setTop(clearanceBelowBanner());
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -64,7 +79,7 @@ export function ViewsControl() {
         <span aria-hidden="true"> ▾</span>
       </button>
       {open ? (
-        <div className="views-panel" role="dialog" aria-labelledby={titleId} tabIndex={-1} ref={panel} onKeyDown={onKeyDown}>
+        <div className="views-panel" role="dialog" aria-labelledby={titleId} tabIndex={-1} ref={panel} style={top === undefined ? undefined : ({ top } satisfies CSSProperties)} onKeyDown={onKeyDown}>
           <ViewsPanel list={list} titleId={titleId} onRestore={setRestoring} readOnly={readOnly} />
         </div>
       ) : null}

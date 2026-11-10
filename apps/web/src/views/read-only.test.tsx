@@ -129,3 +129,25 @@ describe('a refusal because the investigation was closed in another tab', () => 
     expect(createClientState().investigation.getState().record).toBeNull();
   });
 });
+
+describe('the Views panel and the banner above the canvas', () => {
+  it('starts below the banner when one is showing, so the banner actions stay in reach, and at its usual place when none is', async () => {
+    const user = userEvent.setup();
+    shown(true);
+    const region = document.createElement('div');
+    region.className = 'banner-region';
+    region.textContent = 'This investigation is closed and read-only.';
+    region.getBoundingClientRect = () => ({ bottom: 96, top: 56, left: 0, right: 100, width: 100, height: 40, x: 0, y: 56, toJSON: () => ({}) });
+    document.body.append(region);
+    try {
+      await user.click(await screen.findByRole('button', { name: /^Views/ }));
+      expect((await screen.findByRole('dialog', { name: /^Views/ })).style.top).toBe('104px');
+      await user.keyboard('{Escape}');
+      region.textContent = '';
+      await user.click(screen.getByRole('button', { name: /^Views/ }));
+      expect(screen.getByRole('dialog', { name: /^Views/ }).style.top).toBe('');
+    } finally {
+      region.remove();
+    }
+  });
+});
