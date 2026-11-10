@@ -1,11 +1,12 @@
 import type { GraphNode, SourceProfile } from '@neburyx/contracts';
+import { isUnmappedEdge, isUnmappedNode } from '../draft/unmapped.js';
 import { edgeKey, elementKey } from '../state/keys.js';
 import type { LoadedGraph } from '../state/loaded-graph.js';
 
 export interface CopiedIds {
   /** The stable ID of each selected item whose reference holds one, in selection order. */
   readonly ids: readonly string[];
-  /** How many selected items have none: a relationship whose reference is an aggregate or a derived one. */
+  /** How many selected items have none: an aggregate or derived relationship, or an item the mapping no longer covers. */
   readonly withoutId: number;
 }
 
@@ -23,8 +24,8 @@ export function copiedIdOf(node: GraphNode, profile: SourceProfile | undefined, 
 
 export function idsOfSelection(graph: LoadedGraph, selection: ReadonlySet<string>, profile?: SourceProfile, mask = false): CopiedIds {
   const known = new Map<string, string | undefined>();
-  for (const node of graph.nodes) known.set(elementKey(node.ref), copiedIdOf(node, profile, mask));
-  for (const edge of graph.edges) known.set(edgeKey(edge.ref), 'stableId' in edge.ref ? edge.ref.stableId : undefined);
+  for (const node of graph.nodes) known.set(elementKey(node.ref), isUnmappedNode(node) ? undefined : copiedIdOf(node, profile, mask));
+  for (const edge of graph.edges) known.set(edgeKey(edge.ref), 'stableId' in edge.ref && !isUnmappedEdge(edge) ? edge.ref.stableId : undefined);
   const ids: string[] = [];
   let withoutId = 0;
   for (const key of selection) {

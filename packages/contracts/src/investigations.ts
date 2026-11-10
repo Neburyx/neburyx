@@ -161,7 +161,19 @@ export const statusChangeRequestSchema = z.strictObject({ status: z.enum(INVESTI
 /** The investigation after a status change, with when it was closed and archived (`null` while it is not). */
 export const statusChangeResponseSchema = z.strictObject({ investigation: investigationSchema.extend({ closedAt: z.iso.datetime().nullable(), archivedAt: z.iso.datetime().nullable() }) });
 
-export const investigationResponseSchema = z.strictObject({ investigation: investigationSchema, draft: draftSchema });
+/** Why a saved filter is no longer kept after the mapping changed. A filter has exactly one reason, the first that holds in this order. */
+export const DROPPED_FILTER_REASONS = ['type-removed', 'property-removed', 'now-personal', 'not-filterable'] as const;
+
+/** `entityType` and `relType` name a type filter, `property` the key of a property filter. The name is as it was saved, since the mapping that gave it a display name may be gone. */
+export const droppedFilterSchema = z.strictObject({ kind: z.enum(['entityType', 'relType', 'property']), name: text, reason: z.enum(DROPPED_FILTER_REASONS) });
+
+/** The items of a draft that the current mapping does not cover: nodes whose entity type is not mapped, and relationships whose type, derived rule or end type is not. They stay in the draft. */
+export const unmappedItemsSchema = z.strictObject({ nodes: z.array(refEntry), edges: z.array(edgeEntrySchema) });
+
+export const mappingChangeSchema = z.strictObject({ droppedFilters: z.array(droppedFilterSchema) });
+
+/** `unmapped` is present whenever the source is as it was; `mappingChange` only when the mapping changed since the draft was written. */
+export const investigationResponseSchema = z.strictObject({ investigation: investigationSchema, draft: draftSchema, unmapped: unmappedItemsSchema.optional(), mappingChange: mappingChangeSchema.optional() });
 
 export type Investigation = z.infer<typeof investigationSchema>;
 export type OpenInvestigationRequest = z.infer<typeof openInvestigationRequestSchema>;
@@ -177,6 +189,10 @@ export type RenameResponse = z.infer<typeof renameResponseSchema>;
 export type StatusChangeRequest = z.infer<typeof statusChangeRequestSchema>;
 export type StatusChangeResponse = z.infer<typeof statusChangeResponseSchema>;
 export type InvestigationResponse = z.infer<typeof investigationResponseSchema>;
+export type DroppedFilter = z.infer<typeof droppedFilterSchema>;
+export type DroppedFilterReason = (typeof DROPPED_FILTER_REASONS)[number];
+export type UnmappedItems = z.infer<typeof unmappedItemsSchema>;
+export type MappingChange = z.infer<typeof mappingChangeSchema>;
 export type InvestigationListItem = z.infer<typeof investigationListItemSchema>;
 export type InvestigationListResponse = z.infer<typeof investigationListResponseSchema>;
 export type InvestigationListCounts = z.infer<typeof investigationListCountsSchema>;

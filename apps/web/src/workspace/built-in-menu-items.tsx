@@ -3,11 +3,14 @@ import { pinTargetsOf, togglePin, willUnpin } from '../canvas/pin-commands.js';
 import { drawnEntityKeys, hideEntities, hideTargetsOf, showHiddenAndFocusCanvas } from '../canvas/hide-commands.js';
 import { runSelectionCommand } from '../canvas/selection-commands.js';
 import { LayoutList } from './layout-list.js';
-import { nodeRefOfKey } from '../state/keys.js';
+import { isUnmappedNode } from '../draft/unmapped.js';
+import { elementKey, nodeRefOfKey } from '../state/keys.js';
 import { COLLAPSE, EXPAND_BY_NEIGHBOR_TYPE, EXPAND_BY_TYPE } from './expand-copy.js';
 import { ExpandByTypeSubmenu } from './expand-by-type-submenu.js';
 import { offersEntityLink, openSourceLink, entityLinkHref, OPEN_SOURCE_RECORD } from './source-link.js';
 import { MENU_GROUP, MENU_ORDER, type MenuContext, type MenuRegistry, type SubmenuProps } from './menu-registry.js';
+
+const isPlaceholder = (context: MenuContext): boolean => context.key !== undefined && context.state.loadedGraph().nodes.some((node) => isUnmappedNode(node) && elementKey(node.ref) === context.key);
 
 const canLayOut = (context: MenuContext): boolean => context.canvas !== undefined && context.state.visibleGraph().nodes.length > 0;
 
@@ -30,7 +33,7 @@ export function registerBuiltInMenuItems(registry: MenuRegistry): () => void {
       group: MENU_GROUP.node.expand,
       order: MENU_ORDER.node.expandNeighbors,
       binding: 'expand',
-      state: (context) => (context.expansion === undefined ? 'disabled' : 'enabled'),
+      state: (context) => (context.expansion === undefined || isPlaceholder(context) ? 'disabled' : 'enabled'),
       run: (context) => {
         if (context.key !== undefined) context.expansion?.expandNode(context.key);
       },
@@ -41,6 +44,7 @@ export function registerBuiltInMenuItems(registry: MenuRegistry): () => void {
       icon: <span className="icon icon-expand" aria-hidden="true" />,
       group: MENU_GROUP.node.expand,
       order: MENU_ORDER.node.expandByNeighborType,
+      state: (context) => (isPlaceholder(context) ? 'disabled' : 'enabled'),
       submenu: ExpandByTypeSubmenu,
     }),
     registry.register('node', {
@@ -49,7 +53,7 @@ export function registerBuiltInMenuItems(registry: MenuRegistry): () => void {
       icon: <span className="icon icon-expand" aria-hidden="true" />,
       group: MENU_GROUP.node.expand,
       order: MENU_ORDER.node.expandByType,
-      state: (context) => (context.key !== undefined && nodeRefOfKey(context.key) !== undefined ? 'enabled' : 'disabled'),
+      state: (context) => (context.key !== undefined && nodeRefOfKey(context.key) !== undefined && !isPlaceholder(context) ? 'enabled' : 'disabled'),
       run: (context) => {
         if (context.key !== undefined) context.state.presentation.setSupernodePanel({ key: context.key });
       },

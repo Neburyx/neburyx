@@ -14,6 +14,7 @@ import { EXPLORE_PATH } from '../shell/navigation.js';
 import { openById } from './open-flow.js';
 import { SOME_ITEMS_UNAVAILABLE } from '../draft/copy.js';
 import { DraftAnnouncer, DraftConflictBanner, DraftStatusLine } from '../draft/draft-status.js';
+import { MappingChangeBanner } from '../draft/mapping-banner.js';
 import { draftSyncOf } from '../draft/draft-sync.js';
 import { ReadOnlyBannerSync } from '../lifecycle/read-only-banner.js';
 
@@ -120,6 +121,7 @@ export function ExploreInvestigation({ client }: { readonly client: ApiClient })
     <DraftAnnouncer sync={sync} />
     <DraftConflictBanner sync={sync} />
     <ReadOnlyBannerSync client={client} />
+    <MappingChangeBanner />
     </>
   );
 }

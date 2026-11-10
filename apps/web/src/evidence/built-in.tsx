@@ -5,6 +5,7 @@ import { edgeKey } from '../state/keys.js';
 import { partitionEdges } from '../state/loaded-graph.js';
 import { MENU_GROUP, MENU_ORDER, type MenuContext, type MenuRegistry } from '../workspace/menu-registry.js';
 import type { PanelRegistry } from '../workspace/panel-registry.js';
+import { isUnmappedEdge } from '../draft/unmapped.js';
 import { OPEN_SOURCE_RECORD, offersRecordLink, openSourceLink, recordLinkHref } from '../workspace/source-link.js';
 import { VIEW_SUPPORTING_RECORDS, WHY_HERE } from './copy.js';
 import { bindEvidencePanel } from './evidence-binder.js';
@@ -61,7 +62,7 @@ function registerMenuItems(menus: MenuRegistry, evidence: Evidence): () => void 
 
 /** The relationship evidence of a workspace: the kinds for stored, derived and aggregate relationships, the docked panel, the two menu items and the inspector's Evidence tab. The function returned takes all of it away. */
 export function bindBuiltInEvidence(state: ClientState, panels: PanelRegistry, inspector: Inspector, menus: MenuRegistry): { readonly evidence: Evidence; readonly unbind: () => void } {
-  const evidence = createEvidence();
+  const evidence = createEvidence((ref) => !state.loadedGraph().edges.some((edge) => isUnmappedEdge(edge) && edgeKey(edge.ref) === edgeKey(ref)));
   const removals = [
     evidence.kinds.register(storedEvidenceKind),
     evidence.kinds.register(derivedEvidenceKind),

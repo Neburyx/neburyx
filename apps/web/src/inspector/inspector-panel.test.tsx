@@ -162,3 +162,19 @@ describe('the inspector panel', () => {
     vi.clearAllMocks();
   });
 });
+
+describe('the inspector panel for an item the mapping no longer covers', () => {
+  it('says it is no longer mapped, reads nothing, and shows no stored ID', () => {
+    const placeholder = { ...entity('GONE-ID'), display: { title: 'Unmapped item', type: 'type-a' }, qualityFlags: ['no-longer-mapped'], properties: [] };
+    const rig = inspectorRig({ nodes: [placeholder] });
+    select(rig.state, 'GONE-ID');
+    const panel = inInspector();
+    expect(panel.getByRole('heading', { name: 'Unmapped item' })).toBeTruthy();
+    expect(panel.getByText('No longer mapped')).toBeTruthy();
+    expect(panel.getByText(/The mapping no longer covers this item/)).toBeTruthy();
+    expect(panel.queryByText('GONE-ID')).toBeNull();
+    expect(panel.queryByRole('tab')).toBeNull();
+    expect(rig.entityReads).toHaveLength(0);
+    expect(panel.getByRole('button', { name: 'Close inspector' })).toBeTruthy();
+  });
+});

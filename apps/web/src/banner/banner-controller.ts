@@ -52,7 +52,7 @@ export interface BannerController {
   /** Clears the banner only when it is the one with this ID, so a request that ends cannot clear a later request's banner. */
   dismiss(id: string): void;
   clear(): void;
-  /** Sets the banner of a state that lasts as long as it holds, such as a closed investigation: it is shown whenever no request banner is, and comes back when one is dismissed or cleared. `undefined` takes it away. */
+  /** Sets the banner of a state that lasts as long as it holds, such as a closed investigation: it is shown whenever no request banner is, and comes back when one is dismissed or cleared. `undefined` takes it away. A standing state with `onDismiss` can be dismissed by the person: it is then taken away for good and `onDismiss` runs. */
   setStanding(state: BannerState | undefined): void;
   /** Makes a feature's banner state known for an error code; a code that already has one is refused. Returns the function that takes it out again. */
   registerCause(code: ErrorCode, describe: BannerDescriber): () => void;
@@ -80,6 +80,11 @@ export function createBannerController(): BannerController {
     },
     dismiss(id) {
       if (store.getState().banner?.id !== id) return;
+      if (standing?.id === id && standing.onDismiss !== undefined) {
+        const gone = standing;
+        standing = undefined;
+        gone.onDismiss?.();
+      }
       store.setState(restingView());
     },
     clear() {

@@ -253,6 +253,33 @@ describe('reading an investigation against Postgres', () => {
     await app.close();
   });
 
+  it('lists the items the mapping no longer covers and names the dropped filters, with no error and no source read', async () => {
+    const { database, app, post, executor } = await running();
+    const opened = openInvestigationResponseSchema.parse((await post(body())).json());
+    const documents = initialDraftDocuments({ entityType: 'widget', stableId: 'W-1' });
+    const filters = { entityTypes: ['widget', 'removed-type'], relTypes: [], time: null, properties: [{ key: 'removedProperty', op: 'eq', values: ['x'] }] };
+    const put = await app.inject({
+      method: 'PUT',
+      url: `/v1/investigations/${opened.investigation.id}/draft`,
+      headers: { 'if-match': '"1"' },
+      payload: { notes: null, layout: { ...documents.layout, nodes: [...documents.layout.nodes, { t: 'removed-type', id: 'X', pinned: false, hidden: false, groupId: null }] }, queryContext: { ...documents.queryContext, loaded: { ...documents.queryContext.loaded, nodes: [...documents.queryContext.loaded.nodes, { t: 'removed-type', id: 'X' }] }, filters } },
+    });
+    expect(put.statusCode).toBe(200);
+    await rows(database.ownerUrl, `UPDATE saved_views SET mapping_hash = 'the-mapping-that-was'`);
+    const calls = executor.calls.length;
+    const read = await app.inject({ method: 'GET', url: `/v1/investigations/${opened.investigation.id}` });
+    expect(read.statusCode).toBe(200);
+    const answer = investigationResponseSchema.parse(read.json());
+    expect(answer.unmapped).toEqual({ nodes: [{ t: 'removed-type', id: 'X' }], edges: [] });
+    expect(answer.mappingChange?.droppedFilters).toEqual([
+      { kind: 'entityType', name: 'removed-type', reason: 'type-removed' },
+      { kind: 'property', name: 'removedProperty', reason: 'property-removed' },
+    ]);
+    expect(answer.draft.queryContext.filters).toEqual({ entityTypes: ['widget'], relTypes: [], time: null, properties: [] });
+    expect(executor.calls.length).toBe(calls);
+    await app.close();
+  });
+
   it('reports a source that is no longer configured as removed and one that points elsewhere as repointed, and reads no source', async () => {
     const parts = await running();
     const created = openInvestigationResponseSchema.parse((await parts.post(body())).json());
@@ -321,6 +348,30 @@ describe('saving the draft against Postgres', () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ version: 1 });
     expect(JSON.stringify(await rows(database.ownerUrl, 'SELECT i.last_edited_at, v.updated_at, v.version FROM investigations i JOIN saved_views v ON v.investigation_id = i.id'))).toBe(before);
+    await app.close();
+  });
+
+  it('stores the draft under the current mapping when the content is the one stored: the version and updated_at move, last_edited_at does not', async () => {
+    const { database, app, put, answer } = await opened();
+    await rows(database.ownerUrl, `UPDATE saved_views SET mapping_hash = 'the-mapping-that-was'`);
+    const [before] = await rows(database.ownerUrl, 'SELECT i.last_edited_at, v.updated_at FROM investigations i JOIN saved_views v ON v.investigation_id = i.id');
+    const response = await put({ ...initialDraftDocuments({ entityType: 'widget', stableId: 'W-1' }), notes: null });
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['etag']).toBe('"2"');
+    const [after] = await rows(database.ownerUrl, 'SELECT i.last_edited_at, v.updated_at, v.version, v.mapping_hash FROM investigations i JOIN saved_views v ON v.investigation_id = i.id');
+    expect(after).toMatchObject({ version: 2, mapping_hash: demo.configHash });
+    expect((after?.['last_edited_at'] as Date).getTime()).toBe((before?.['last_edited_at'] as Date).getTime());
+    expect((after?.['updated_at'] as Date).getTime()).toBeGreaterThan((before?.['updated_at'] as Date).getTime());
+    const read = investigationResponseSchema.parse((await app.inject({ method: 'GET', url: `/v1/investigations/${answer.investigation.id}` })).json());
+    expect(read.mappingChange).toBeUndefined();
+    await app.close();
+  });
+
+  it('refuses a stale version and leaves the stored mapping hash as it was', async () => {
+    const { database, app, put } = await opened();
+    await rows(database.ownerUrl, `UPDATE saved_views SET mapping_hash = 'the-mapping-that-was'`);
+    expect((await put({ ...initialDraftDocuments({ entityType: 'widget', stableId: 'W-1' }), notes: null }, 9)).statusCode).toBe(409);
+    expect(await rows(database.ownerUrl, 'SELECT mapping_hash FROM saved_views')).toEqual([{ mapping_hash: 'the-mapping-that-was' }]);
     await app.close();
   });
 

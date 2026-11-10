@@ -50,6 +50,7 @@ export { canCarryInPath, MAX_REFERENCE_TEXT_CHARACTERS, MAX_REFERENCE_VALUE_CHAR
 export type { EntityPath } from './entities.js';
 export {
   DEFAULT_INVESTIGATION_LIST_LIMIT,
+  DROPPED_FILTER_REASONS,
   INVESTIGATION_LIST_SORTS,
   INVESTIGATION_SOURCE_STATES,
   INVESTIGATION_STATUSES,
@@ -62,6 +63,7 @@ export {
   draftSchema,
   draftWriteRequestSchema,
   draftWriteResponseSchema,
+  droppedFilterSchema,
   edgeEntrySchema,
   investigationListItemSchema,
   investigationListQuerySchema,
@@ -77,14 +79,16 @@ export {
   statusChangeRequestSchema,
   statusChangeResponseSchema,
   layoutDocumentSchema,
+  mappingChangeSchema,
   openInvestigationRequestSchema,
   referenceOpenRequestSchema,
   valueOpenRequestSchema,
   openInvestigationResponseSchema,
   queryContextDocumentSchema,
   startingEntitySchema,
+  unmappedItemsSchema,
 } from './investigations.js';
-export type { DraftWriteRequest, DraftWriteResponse, Investigation, InvestigationListCounts, InvestigationListItem, InvestigationListResponse, InvestigationResponse, InvestigationSave, InvestigationSourceState, LayoutDocument, OpenInvestigationRequest, ReferenceOpenRequest, ValueOpenRequest, OpenInvestigationResponse, QueryContextDocument, RenameRequest, RenameResponse, StatusChangeRequest, StatusChangeResponse } from './investigations.js';
+export type { DraftWriteRequest, DraftWriteResponse, Investigation, InvestigationListCounts, InvestigationListItem, InvestigationListResponse, InvestigationResponse, InvestigationSave, InvestigationSourceState, LayoutDocument, OpenInvestigationRequest, ReferenceOpenRequest, ValueOpenRequest, OpenInvestigationResponse, DroppedFilter, DroppedFilterReason, MappingChange, UnmappedItems, QueryContextDocument, RenameRequest, RenameResponse, StatusChangeRequest, StatusChangeResponse } from './investigations.js';
 export {
   FACET_SCOPES,
   MAX_SEARCH_TEXT_LENGTH,

@@ -26,6 +26,7 @@ export interface DraftRow {
   readonly layout: unknown;
   readonly queryContext: unknown;
   readonly notes: string | null;
+  readonly mappingHash: string;
 }
 
 export interface NewDraft {
@@ -265,18 +266,19 @@ interface StoredRecord extends InvestigationRecord {
   readonly layout: unknown;
   readonly query_context: unknown;
   readonly notes: string | null;
+  readonly mapping_hash: string;
 }
 
 export async function readInvestigation(db: pg.Pool, id: string, ownerId: string): Promise<StoredInvestigation | undefined> {
   const result = await db.query<StoredRecord>(
-    `SELECT ${QUALIFIED_COLUMNS}, v.id AS draft_id, v.version AS draft_version, v.layout, v.query_context, v.notes
+    `SELECT ${QUALIFIED_COLUMNS}, v.id AS draft_id, v.version AS draft_version, v.layout, v.query_context, v.notes, v.mapping_hash
      FROM investigations i JOIN saved_views v ON v.investigation_id = i.id AND v.kind = 'draft' AND v.created_by = i.owner_id
      WHERE i.id = $1 AND i.owner_id = $2 AND i.deleted_at IS NULL`,
     [id, ownerId],
   );
   const [record] = result.rows;
   if (record === undefined) return undefined;
-  return { investigation: rowOf(record), draft: { id: record.draft_id, version: record.draft_version, layout: record.layout, queryContext: record.query_context, notes: record.notes } };
+  return { investigation: rowOf(record), draft: { id: record.draft_id, version: record.draft_version, layout: record.layout, queryContext: record.query_context, notes: record.notes, mappingHash: record.mapping_hash } };
 }
 
 interface DraftRecord {
@@ -285,11 +287,12 @@ interface DraftRecord {
   readonly content_hash: string;
   readonly notes: string | null;
   readonly ai_notes: unknown;
+  readonly mapping_hash: string;
   readonly saved_at: Date | null;
   readonly investigation_status: InvestigationRow['status'];
 }
 
-const DRAFT_STATE = `SELECT i.status AS investigation_status, draft.id, draft.version, draft.content_hash, draft.notes, draft.ai_notes, CASE WHEN named.content_hash = draft.content_hash THEN named.created_at END AS saved_at
+const DRAFT_STATE = `SELECT i.status AS investigation_status, draft.id, draft.version, draft.content_hash, draft.notes, draft.ai_notes, draft.mapping_hash, CASE WHEN named.content_hash = draft.content_hash THEN named.created_at END AS saved_at
      FROM saved_views draft
      JOIN investigations i ON i.id = draft.investigation_id AND i.owner_id = draft.created_by
      LEFT JOIN saved_views named ON named.id = draft.based_on_view_id AND named.kind = 'named'
@@ -320,8 +323,17 @@ export async function saveDraft(pool: pg.Pool, write: DraftWrite): Promise<Draft
     }
     const contentHash = write.contentHashOf({ aiNotes: held.ai_notes });
     if (contentHash === held.content_hash) {
+      if (held.mapping_hash === write.mappingHash) {
+        await client.query('COMMIT');
+        return { outcome: 'unchanged', version: held.version, save: saveOf(held.saved_at) };
+      }
+      // the content is the same but was written under another mapping: only the hash moves, and the investigation's last edit does not
+      await client.query(`UPDATE saved_views SET mapping_hash = $2, version = version + 1, updated_at = now() WHERE id = $1`, [held.id, write.mappingHash]);
+      const rehashed = await client.query<DraftRecord>(DRAFT_STATE, [write.investigationId, write.ownerId]);
       await client.query('COMMIT');
-      return { outcome: 'unchanged', version: held.version, save: saveOf(held.saved_at) };
+      const [current] = rehashed.rows;
+      if (current === undefined) throw new Error('the draft was not returned after its write');
+      return { outcome: 'saved', version: current.version, save: saveOf(current.saved_at) };
     }
     await client.query(
       `UPDATE saved_views SET layout = $2, query_context = $3, notes = $8, mapping_hash = $4, content_hash = $5, node_count = $6, edge_count = $7, version = version + 1, updated_at = now() WHERE id = $1`,

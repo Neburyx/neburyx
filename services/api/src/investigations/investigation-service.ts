@@ -1,4 +1,4 @@
-import { DEFAULT_INVESTIGATION_LIST_LIMIT, MAX_DRAFT_DOCUMENT_BYTES, investigationResponseSchema, layoutDocumentSchema, MAX_TITLE_LENGTH, queryContextDocumentSchema, type GraphNode, type Investigation, type InvestigationListResponse, type DraftWriteRequest, type DraftWriteResponse, type InvestigationResponse, type InvestigationSourceState, type ReferenceOpenRequest, type OpenInvestigationResponse, type RenameResponse, type StatusChangeResponse, type Investigation as InvestigationShown } from '@neburyx/contracts';
+import { DEFAULT_INVESTIGATION_LIST_LIMIT, MAX_DRAFT_DOCUMENT_BYTES, investigationResponseSchema, layoutDocumentSchema, MAX_TITLE_LENGTH, queryContextDocumentSchema, type GraphNode, type Investigation, type InvestigationListResponse, type DraftWriteRequest, type DraftWriteResponse, type InvestigationResponse, type InvestigationSourceState, type MappingChange, type ReferenceOpenRequest, type OpenInvestigationResponse, type RenameResponse, type StatusChangeResponse, type Investigation as InvestigationShown } from '@neburyx/contracts';
 import { AppError } from '../errors.js';
 import type { InvestigationRow, InvestigationStore, ListedInvestigation } from '../db/investigations-repository.js';
 import type { EntityReader } from '../entities/entity-reader.js';
@@ -8,6 +8,7 @@ import { isStorableText, storableOf } from '../reference/well-formed.js';
 import { identityHashOf } from '../registry/identity-hash.js';
 import type { AuditSink, Principal } from '../seams/seams.js';
 import type { SourceAccess } from './source-access.js';
+import { droppedFiltersOf, unmappedItemsOf, withoutDropped } from './mapping-change.js';
 import type { StoredReferences } from './stored-references.js';
 import { readOnlyRefusal, readOnlyStatusOf } from './read-only.js';
 import { auditActionOf } from './status-change.js';
@@ -238,9 +239,26 @@ export function createInvestigationService(deps: InvestigationServiceDeps): Inve
       const stored = await deps.store.readInvestigation(id, principal.id);
       if (stored === undefined) throw new AppError('NOT_FOUND');
       const sourceId = stored.investigation.sourceId;
-      const layout = deps.references.layout(sourceId, layoutDocumentSchema.parse(stored.draft.layout));
-      const queryContext = deps.references.queryContext(sourceId, queryContextDocumentSchema.parse(stored.draft.queryContext));
-      return investigationResponseSchema.parse({ investigation: shown(deps.mapping, deps.references, stored.investigation), draft: { version: stored.draft.version, layout, queryContext, notes: stored.draft.notes } });
+      const investigation = shown(deps.mapping, deps.references, stored.investigation);
+      const storedLayout = layoutDocumentSchema.parse(stored.draft.layout);
+      const storedContext = queryContextDocumentSchema.parse(stored.draft.queryContext);
+      const layout = deps.references.layout(sourceId, storedLayout);
+      let queryContext = deps.references.queryContext(sourceId, storedContext);
+      const source = investigation.sourceState === 'available' ? deps.mapping.sources.find((candidate) => candidate.id === sourceId) : undefined;
+      // the check compares the mapping only: nothing is read from the source, and a source that was removed or re-pointed is not judged here
+      const unmapped = source === undefined ? undefined : unmappedItemsOf(source, layout, queryContext);
+      let mappingChange: MappingChange | undefined;
+      if (source !== undefined && stored.draft.mappingHash !== source.configHash) {
+        const droppedFilters = droppedFiltersOf(source, storedContext.filters);
+        queryContext = withoutDropped(queryContext, droppedFilters);
+        mappingChange = { droppedFilters };
+      }
+      return investigationResponseSchema.parse({
+        investigation,
+        draft: { version: stored.draft.version, layout, queryContext, notes: stored.draft.notes },
+        ...(unmapped === undefined ? {} : { unmapped }),
+        ...(mappingChange === undefined ? {} : { mappingChange }),
+      });
     },
   };
 }

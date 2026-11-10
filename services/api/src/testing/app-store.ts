@@ -131,7 +131,7 @@ export function memoryStoreWith(options: MemoryAppStoreOptions): MemoryAppStore 
       const now = new Date(Date.UTC(2026, 10, 5, 12, 0, investigations.length)).toISOString();
       const row: InvestigationRow = { id: input.id, sourceId: input.sourceId, sourceIdentityHash: input.sourceIdentityHash, ownerId: input.ownerId, title: input.title, caseRef: input.caseRef, startingEntityType: input.startingEntityType, startingStableId: input.startingStableId, status: 'open', createdAt: now, lastEditedAt: now, closedAt: null, archivedAt: null, version: 1 };
       investigations.push(row);
-      drafts.push({ id: draft.id, version: 1, layout: draft.layout, queryContext: draft.queryContext, notes: null, investigationId: input.id, contentHash: draft.contentHash });
+      drafts.push({ id: draft.id, version: 1, layout: draft.layout, queryContext: draft.queryContext, notes: null, mappingHash: draft.mappingHash, investigationId: input.id, contentHash: draft.contentHash });
       return Promise.resolve({ row, created: true });
     },
     findReusableInvestigation: (query) => Promise.resolve(reusableOf(investigations, query)),
@@ -148,8 +148,12 @@ export function memoryStoreWith(options: MemoryAppStoreOptions): MemoryAppStore 
       if (readOnly !== undefined) return Promise.resolve({ outcome: 'read-only', status: readOnly });
       if (draft.version !== write.expectedVersion) return Promise.resolve({ outcome: 'conflict' });
       const contentHash = write.contentHashOf({ aiNotes: null });
-      if (contentHash === draft.contentHash) return Promise.resolve({ outcome: 'unchanged', version: draft.version, save: { state: 'unsaved', savedAt: null } });
-      const saved = { ...draft, version: draft.version + 1, layout: write.layout, queryContext: write.queryContext, notes: write.notes, contentHash };
+      if (contentHash === draft.contentHash && draft.mappingHash === write.mappingHash) return Promise.resolve({ outcome: 'unchanged', version: draft.version, save: { state: 'unsaved', savedAt: null } });
+      if (contentHash === draft.contentHash) {
+        drafts[drafts.indexOf(draft)] = { ...draft, version: draft.version + 1, mappingHash: write.mappingHash };
+        return Promise.resolve({ outcome: 'saved', version: draft.version + 1, save: { state: 'unsaved', savedAt: null } });
+      }
+      const saved = { ...draft, version: draft.version + 1, layout: write.layout, queryContext: write.queryContext, notes: write.notes, mappingHash: write.mappingHash, contentHash };
       drafts[drafts.indexOf(draft)] = saved;
       investigations[investigations.indexOf(investigation)] = { ...investigation, lastEditedAt: new Date(Date.parse(investigation.lastEditedAt) + 1000).toISOString() };
       return Promise.resolve({ outcome: 'saved', version: saved.version, save: { state: 'unsaved', savedAt: null } });

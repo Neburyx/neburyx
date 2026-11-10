@@ -32,6 +32,8 @@ export interface DraftSession {
   readonly filters?: QueryContextDocument['filters'];
   /** False until the draft was restored in full or in part: a write before then would replace it with what was not read. */
   readonly writable: boolean;
+  /** The draft was written under another mapping: one write follows `releaseRehash`, even if nothing changed. */
+  readonly rehash?: boolean;
 }
 
 interface Session {
@@ -41,6 +43,7 @@ interface Session {
   writable: boolean;
   conflicted: boolean;
   pendingFilters: QueryContextDocument['filters'] | undefined;
+  rehashHeld: boolean;
   /** The document last stored or read, as text. */
   lastJson: string | undefined;
 }
@@ -76,6 +79,8 @@ export interface DraftSync {
   adopt(investigationId: string, session: DraftSession): void;
   /** Writes at once what is waiting. */
   flush(): void;
+  /** Sends the write that stores the draft of this investigation under the current mapping, which `adopt` held back with `rehash`. */
+  releaseRehash(investigationId: string): void;
   /** Tries again at once, when the writes were refused or are being retried. */
   retry(): void;
   /** True while the person is held at a page they were about to leave, because their changes could not be saved. */
@@ -410,13 +415,21 @@ export function createDraftSync(options: DraftSyncOptions): DraftSync {
   return {
     status: readable(status),
     adopt(investigationId, session) {
-      const adopted: Session = { version: session.version, notes: session.notes, kept: session.kept ?? NOTHING_KEPT, writable: session.writable, conflicted: false, pendingFilters: session.filters, lastJson: undefined };
+      const adopted: Session = { version: session.version, notes: session.notes, kept: session.kept ?? NOTHING_KEPT, writable: session.writable, conflicted: false, pendingFilters: session.filters, rehashHeld: session.rehash === true, lastJson: undefined };
       sessions.set(investigationId, adopted);
       if (state.investigation.getState().id === investigationId && adopted.writable) {
         applyFilters(adopted);
         adopted.lastJson = JSON.stringify(documentOf(adopted));
       }
       refreshUnsaved();
+    },
+    releaseRehash(investigationId) {
+      const held = sessions.get(investigationId);
+      if (held === undefined || !held.rehashHeld) return;
+      held.rehashHeld = false;
+      if (state.investigation.getState().id !== investigationId || !held.writable || held.conflicted) return;
+      held.lastJson = undefined;
+      schedule(0);
     },
     flush,
     leaving: readable(leaving),

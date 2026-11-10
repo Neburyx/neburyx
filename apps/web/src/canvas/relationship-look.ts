@@ -1,4 +1,5 @@
 import type { Count, GraphEdge } from '@neburyx/contracts';
+import { isUnmappedEdge, NO_LONGER_MAPPED } from '../draft/unmapped.js';
 import { degreeCountText } from '../workspace/degree-text.js';
 
 export type Origin = GraphEdge['semantics'];
@@ -56,6 +57,7 @@ const isNeedlessCount = (edge: GraphEdge): boolean => edge.memberCount?.quality 
 
 /** The line style follows the origin and the width follows whether it stands for more than one relationship; the label is the type, then the count of an aggregate (not an exact 1), then the origin when it is not stored. Every relationship carries one: the canvas draws it on hover, when an end is selected and at or above the zoom where captions are read, and below that zoom keeps only an aggregate's count. */
 export function relationshipLook(edge: GraphEdge, touchesSelection = false): RelationshipLook {
+  if (isUnmappedEdge(edge)) return { aggregate: false, origin: 'unknown', label: NO_LONGER_MAPPED, ...(touchesSelection ? { touched: true as const } : {}) };
   const aggregate = 'aggregate' in edge.ref;
   const { type, count, origin } = relationshipParts(edge);
   const full = [type, count, origin].filter((part) => part !== undefined).join(' · ');

@@ -59,7 +59,7 @@ const asOther = (store: MemoryAppStore): MemoryAppStore => ({ ...store, current:
 
 const draftFor = (investigationId: string, id: string) => {
   const documents = initialDraftDocuments({ entityType: 'widget', stableId: 'W-1' });
-  return { id, version: 1, notes: null, investigationId, layout: documents.layout, queryContext: documents.queryContext };
+  return { id, version: 1, notes: null, investigationId, layout: documents.layout, queryContext: documents.queryContext, mappingHash: demo.configHash };
 };
 
 const post = (app: Awaited<ReturnType<typeof started>>['app'], payload: object) => app.inject({ method: 'POST', url: '/v1/investigations', payload });
@@ -223,7 +223,7 @@ describe('GET /v1/investigations/{id}', () => {
     store.investigations.push(row({ id: '0192f000-0000-7000-8000-0000000000d1', sourceId: 'gone' }), row({ id: '0192f000-0000-7000-8000-0000000000d2', sourceIdentityHash: 'other-database' }));
     const initial = initialDraftDocuments({ entityType: 'widget', stableId: 'W-1' });
     for (const [id, investigationId] of [['0192f000-0000-7000-8000-0000000000e1', '0192f000-0000-7000-8000-0000000000d1'], ['0192f000-0000-7000-8000-0000000000e2', '0192f000-0000-7000-8000-0000000000d2']] as const) {
-      store.drafts.push({ id, version: 1, notes: null, investigationId, layout: initial.layout, queryContext: initial.queryContext });
+      store.drafts.push({ id, version: 1, notes: null, investigationId, layout: initial.layout, queryContext: initial.queryContext, mappingHash: demo.configHash });
     }
     const { app, executor } = await started(entityRows(WIDGET), store);
     const removed = investigationResponseSchema.parse((await app.inject({ method: 'GET', url: '/v1/investigations/0192f000-0000-7000-8000-0000000000d1' })).json());

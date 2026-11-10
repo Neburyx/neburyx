@@ -8966,6 +8966,143 @@
               "notes"
             ],
             "additionalProperties": false
+          },
+          "unmapped": {
+            "type": "object",
+            "properties": {
+              "nodes": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "t": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "id": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "t",
+                    "id"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "edges": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "t": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "from": {
+                      "type": "object",
+                      "properties": {
+                        "t": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "id": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "t",
+                        "id"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "to": {
+                      "type": "object",
+                      "properties": {
+                        "t": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "id": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "t",
+                        "id"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "id": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "ruleId": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "t",
+                    "from",
+                    "to"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "nodes",
+              "edges"
+            ],
+            "additionalProperties": false
+          },
+          "mappingChange": {
+            "type": "object",
+            "properties": {
+              "droppedFilters": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "entityType",
+                        "relType",
+                        "property"
+                      ]
+                    },
+                    "name": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "reason": {
+                      "type": "string",
+                      "enum": [
+                        "type-removed",
+                        "property-removed",
+                        "now-personal",
+                        "not-filterable"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "name",
+                    "reason"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "droppedFilters"
+            ],
+            "additionalProperties": false
           }
         },
         "required": [

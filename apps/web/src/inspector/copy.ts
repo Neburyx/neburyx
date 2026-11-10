@@ -1,6 +1,7 @@
 export const INSPECTOR_TITLE = 'Inspector';
 export const CLOSE_INSPECTOR = 'Close inspector';
 export const MORE_ACTIONS = 'More actions';
+export const UNMAPPED_INSPECTOR_TEXT = 'The mapping no longer covers this item, so it is not read from the source. It stays in this investigation and shows again if the mapping covers it.';
 export const READING_DETAILS = 'Reading details…';
 export const DETAILS_NOT_READ = 'Some details could not be read.';
 export const UNAVAILABLE = 'unavailable';

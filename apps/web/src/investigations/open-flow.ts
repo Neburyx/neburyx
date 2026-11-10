@@ -1,4 +1,4 @@
-import type { GraphEdge, GraphNode, Investigation, InvestigationResponse, ReferenceOpenRequest, ValueOpenRequest } from '@neburyx/contracts';
+import type { GraphEdge, GraphNode, Investigation, InvestigationResponse, QueryContextDocument, ReferenceOpenRequest, ValueOpenRequest } from '@neburyx/contracts';
 import type { ApiClient, ApiFailure } from '../api/client.js';
 import type { ClientState } from '../state/client-state.js';
 import { StateError } from '../state/errors.js';
@@ -8,7 +8,10 @@ import type { Activation } from '../state/client-state.js';
 import { LAYOUTS } from '../state/layout-choice.js';
 import { elementKey } from '../state/keys.js';
 import { draftSyncOf } from '../draft/draft-sync.js';
+import type { KeptItems } from '../draft/draft-document.js';
 import { isOpeningDraft, readDraftItems } from '../draft/restore.js';
+import { isUnmappedStart } from '../draft/unmapped.js';
+import { mappingNoticesOf } from '../draft/mapping-notice.js';
 
 export type OpenOutcome =
   | { readonly kind: 'shown'; readonly id: string; readonly activation: Activation; readonly someMissing?: true }
@@ -68,6 +71,15 @@ function applyPresentation(state: ClientState, draft: InvestigationResponse['dra
   if (draft.layout.viewport !== undefined) state.presentation.setViewport(draft.layout.viewport);
 }
 
+/** The write that stores the draft under the current mapping waits until the banner has been shown, and is not made for an investigation that cannot be changed. */
+function adoptDraft(state: ClientState, sync: ReturnType<typeof draftSyncOf>, read: InvestigationResponse, held: { readonly notes: string | null; readonly kept?: KeptItems; readonly filters?: QueryContextDocument['filters'] }): void {
+  const { investigation, draft, unmapped, mappingChange } = read;
+  const canChange = investigation.status === 'open';
+  const rehash = mappingChange !== undefined && canChange;
+  mappingNoticesOf(state).set(mappingChange === undefined ? undefined : { investigationId: investigation.id, droppedFilters: mappingChange.droppedFilters, hasUnmapped: (unmapped?.nodes.length ?? 0) + (unmapped?.edges.length ?? 0) > 0, canChange, ...(rehash ? { onShown: () => sync.releaseRehash(investigation.id) } : {}) });
+  sync.adopt(investigation.id, { version: draft.version, ...held, writable: true, ...(rehash ? { rehash: true } : {}) });
+}
+
 /** Opens an investigation by its ID: shows what the session holds without a read, else reads the investigation and, when its source is as it was, the items of its draft: its first entity when the draft is no more than that, otherwise every item the draft names, in bounded calls. */
 export async function openById(client: ApiClient, state: ClientState, id: string, context: OpenContext, signal?: AbortSignal): Promise<OpenOutcome> {
   if (state.investigation.getState().id !== id && !(await draftSyncOf(state, client).settle(signal))) return { kind: 'held' };
@@ -75,26 +87,26 @@ export async function openById(client: ApiClient, state: ClientState, id: string
   if (held !== undefined) return { kind: 'shown', id, activation: held };
   const read = await client.getInvestigation(id, signal);
   if (!read.ok) return { kind: 'failed', failure: read.failure };
-  const { investigation, draft } = read.value;
+  const { investigation, draft, unmapped } = read.value;
   if (investigation.sourceState !== 'available') return { kind: 'source-unavailable', investigation };
   const start = investigation.startingEntity;
   if (start === null) return mismatchIn(investigation.sourceId);
   const sync = draftSyncOf(state, client);
-  if (isOpeningDraft(draft, start)) {
+  if (isOpeningDraft(draft, start) && !isUnmappedStart(unmapped, start)) {
     const entity = await client.getEntity({ sourceId: investigation.sourceId, entityType: start.entityType, stableId: start.stableId }, { mask: context.mask }, signal);
     if (!entity.ok) return failedIn(investigation.sourceId, entity.failure);
     if (entity.value.ref.sourceId !== investigation.sourceId) return mismatchIn(investigation.sourceId);
     const shown = show(state, investigation, { nodes: [entity.value], edges: [] }, context, signal);
-    if (shown.kind === 'shown') sync.adopt(id, { version: draft.version, notes: draft.notes, writable: true });
+    if (shown.kind === 'shown') adoptDraft(state, sync, read.value, { notes: draft.notes });
     return shown;
   }
-  const restore = await readDraftItems(client, investigation.sourceId, context.mask, draft, signal);
+  const restore = await readDraftItems(client, investigation.sourceId, context.mask, draft, unmapped, signal);
   if (!restore.ok) return failedIn(investigation.sourceId, restore.failure);
   const { nodes, edges, kept, someMissing } = restore.restored;
   const shown = show(state, investigation, { nodes, edges }, context, signal);
   if (shown.kind !== 'shown') return shown;
   if (shown.activation === 'fresh') applyPresentation(state, draft, nodes);
-  sync.adopt(id, { version: draft.version, notes: draft.notes, kept, filters: draft.queryContext.filters, writable: true });
+  adoptDraft(state, sync, read.value, { notes: draft.notes, kept, filters: draft.queryContext.filters });
   return someMissing ? { ...shown, someMissing: true } : shown;
 }
 

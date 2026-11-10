@@ -1,7 +1,8 @@
-import { MAX_READ_REFS, type EdgeRef, type ElementRef, type GraphEdge, type GraphNode, type InvestigationResponse } from '@neburyx/contracts';
+import { MAX_READ_REFS, type EdgeRef, type ElementRef, type GraphEdge, type GraphNode, type InvestigationResponse, type UnmappedItems } from '@neburyx/contracts';
 import type { ApiClient, ApiFailure } from '../api/client.js';
 import { DEFAULT_LAYOUT } from '../state/layout-choice.js';
 import { keptFrom, refsOf, type KeptItems } from './draft-document.js';
+import { placeholderEdge, placeholderNode, withoutUnmapped } from './unmapped.js';
 
 export interface RestoredItems {
   readonly nodes: readonly GraphNode[];
@@ -43,10 +44,11 @@ export function isOpeningDraft(draft: InvestigationResponse['draft'], start: { r
 
 /**
  * Reads again the items a draft names, in calls of at most the number of references one call takes; the first failure ends the restore, and nothing it read is shown. The entities are asked for
- * first and the relationships after, each kind a chunk at a time.
+ * first and the relationships after, each kind a chunk at a time. What the mapping no longer covers is not asked of the source: it comes back as placeholders that stay in the draft.
  */
-export async function readDraftItems(client: ApiClient, sourceId: string, mask: boolean, draft: InvestigationResponse['draft'], signal?: AbortSignal): Promise<RestoreOutcome> {
-  const asked = refsOf(sourceId, draft.queryContext);
+export async function readDraftItems(client: ApiClient, sourceId: string, mask: boolean, draft: InvestigationResponse['draft'], unmapped?: UnmappedItems, signal?: AbortSignal): Promise<RestoreOutcome> {
+  const wanted = withoutUnmapped(draft.queryContext, unmapped);
+  const asked = refsOf(sourceId, wanted);
   const nodes: GraphNode[] = [];
   const edges: GraphEdge[] = [];
   const missingEntities: ElementRef[] = [];
@@ -65,6 +67,8 @@ export async function readDraftItems(client: ApiClient, sourceId: string, mask: 
     missingEntities.push(...result.value.missing.entities);
     missingEdges.push(...result.value.missing.edges);
   }
-  const kept = keptFrom(sourceId, draft.layout, draft.queryContext, { entities: missingEntities, edges: missingEdges });
+  const kept = keptFrom(sourceId, draft.layout, wanted, { entities: missingEntities, edges: missingEdges });
+  nodes.push(...(unmapped?.nodes ?? []).map((entry) => placeholderNode(sourceId, entry)));
+  edges.push(...(unmapped?.edges ?? []).map((entry) => placeholderEdge(sourceId, entry)));
   return { ok: true, restored: { nodes, edges, kept, someMissing: missingEntities.length + missingEdges.length > 0 } };
 }

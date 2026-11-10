@@ -21,16 +21,20 @@ export function ReadOnlyBannerSync({ client }: { readonly client: ApiClient }) {
   const status = useStoreSelector(state.investigation, (held) => held.record?.status);
   const busy = useStoreSelector(statusChangeBusy(state), (value) => value);
   const previous = useRef<typeof status>(undefined);
+  // whether this component holds the standing slot, so that an open investigation does not clear a banner another feature put there
+  const holds = useRef(false);
   useEffect(() => {
     if (status === undefined || status === 'open') {
-      banner.setStanding(undefined);
+      if (holds.current) banner.setStanding(undefined);
+      holds.current = false;
       return;
     }
     const reopen = [{ id: 'reopen', label: REOPEN, disabled: busy, primary: true, run: () => void changeStatus({ client, state, banner }, 'open') }];
     const changed = previous.current !== undefined && previous.current !== status;
     previous.current = status;
+    holds.current = true;
     banner.setStanding({ ...standingBannerOf(status, reopen), ...(changed ? { announce: true } : {}) });
   }, [banner, client, state, status, busy]);
-  useEffect(() => () => banner.setStanding(undefined), [banner]);
+  useEffect(() => () => { if (holds.current) banner.setStanding(undefined); }, [banner]);
   return null;
 }

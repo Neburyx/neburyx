@@ -25,13 +25,13 @@ function focusCanvas(): void {
   document.querySelector<HTMLElement>('.graph-canvas')?.focus({ preventScroll: true });
 }
 
-export function createEvidence(): Evidence {
+export function createEvidence(covered: (ref: EdgeRef) => boolean = () => true): Evidence {
   const kinds = createEvidenceKindRegistry();
   const target = createStore<EdgeRef | undefined>(undefined);
   const choices = createStore(0);
   let opener: HTMLElement | null = null;
   const listeners = new Set<() => void>();
-  const offers = (ref: EdgeRef): boolean => kindOf(kinds.view.getState(), ref) !== undefined;
+  const offers = (ref: EdgeRef): boolean => covered(ref) && kindOf(kinds.view.getState(), ref) !== undefined;
   return {
     kinds,
     target: readable(target),

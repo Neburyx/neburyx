@@ -17,6 +17,7 @@ import { TestRunsProvider } from './sources/test-runs-context.js';
 import { answeredData, createShellData, ShellDataProvider } from './shell/shell-data.js';
 import { createCoverageStore } from './api/coverage-store.js';
 import { createDerivedStore } from './api/derived-store.js';
+import { withoutUnmappedReads } from './api/unmapped-guard.js';
 import { createPreviewStore } from './api/preview-store.js';
 import { CoverageProvider } from './workspace/coverage-context.js';
 import { createEdgeReadStore, dropReadsOnNewEpoch, EdgeReadProvider } from './evidence/edge-read.js';
@@ -115,13 +116,14 @@ export function appRoutes(client: ApiClient, state: ClientState, banner?: Banner
           titleOf: (ref) => state.loadedGraph().nodes.find((node) => node.ref.sourceId === ref.sourceId && node.ref.entityType === ref.entityType && node.ref.stableId === ref.stableId)?.display.title,
           timeoutOf: (sourceId) => sourceItems().find((source) => source.id === sourceId)?.timeoutMs,
         });
-  const previews = createPreviewStore(client, person, report, tracker);
-  const derived = createDerivedStore(client, state, person, () => state.investigation.getState().id ?? '');
-  const entityReads = createEntityReadStore(client, person, () => state.investigation.getState().id ?? '');
-  const edgeReads = createEdgeReadStore(client, person, () => state.investigation.getState().id ?? '');
+  const reads = withoutUnmappedReads(client, state);
+  const previews = createPreviewStore(reads, person, report, tracker);
+  const derived = createDerivedStore(reads, state, person, () => state.investigation.getState().id ?? '');
+  const entityReads = createEntityReadStore(reads, person, () => state.investigation.getState().id ?? '');
+  const edgeReads = createEdgeReadStore(reads, person, () => state.investigation.getState().id ?? '');
   dropReadsOnNewEpoch(state, edgeReads);
   const coverage = createCoverageStore(client, person, report);
-  const expansions = createExpandStore(client, state, person, report, banner === undefined ? undefined : createHeavyGuard(previews, banner, state), tracker);
+  const expansions = createExpandStore(reads, state, person, report, banner === undefined ? undefined : createHeavyGuard(previews, banner, state), tracker);
   const recent = createRecentInvestigations(client);
   const presence = createWorkspacePresence();
   return [

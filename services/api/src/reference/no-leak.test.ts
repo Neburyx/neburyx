@@ -221,7 +221,7 @@ describe('every artifact of the flows is scanned, and each scan can fail', () =>
     expect(stored).toBeUndefined();
     store.investigations.push({ id: '0192f000-0000-7000-8000-0000000000e1', sourceId: 'demo', sourceIdentityHash: identityHashOf(source), ownerId: LOCAL_IDENTITY.principal.id, title: `Handle ${VALUE}`, caseRef: null, startingEntityType: 'phone', startingStableId: VALUE, status: 'open', createdAt: '2026-11-05T10:00:00.000Z', lastEditedAt: '2026-11-05T10:00:00.000Z', closedAt: null, archivedAt: null, version: 1 });
     const initial = initialDraftDocuments({ entityType: 'phone', stableId: VALUE });
-    store.drafts.push({ id: '0192f000-0000-7000-8000-0000000000e2', version: 1, notes: null, investigationId: '0192f000-0000-7000-8000-0000000000e1', layout: initial.layout, queryContext: initial.queryContext });
+    store.drafts.push({ id: '0192f000-0000-7000-8000-0000000000e2', version: 1, notes: null, investigationId: '0192f000-0000-7000-8000-0000000000e1', layout: initial.layout, queryContext: initial.queryContext, mappingHash: source.configHash });
     for (const response of [await send('GET', '/v1/investigations'), await send('GET', '/v1/investigations/0192f000-0000-7000-8000-0000000000e1')]) {
       expect(response.statusCode).toBe(200);
       expect(leaksIn(response.body)).toEqual([]);

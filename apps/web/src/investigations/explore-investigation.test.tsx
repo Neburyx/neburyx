@@ -41,6 +41,31 @@ describe('/explore/{id}', () => {
     expect(screen.getByText('3 shown · more not yet retrieved')).toBeTruthy();
   });
 
+  it('shows placeholders and the mapping-changed banner for an item the mapping no longer covers, with no error and no read for it', async () => {
+    const draft = readOf(A.investigation).draft;
+    const ids = [['kind-a', 'A-1'], ['gone', 'X']] as const;
+    const restored = {
+      ...draft,
+      layout: { ...draft.layout, nodes: ids.map(([t, id]) => ({ t, id, pinned: false, hidden: false, groupId: null })) },
+      queryContext: { ...draft.queryContext, loaded: { nodes: ids.map(([t, id]) => ({ t, id })), edges: [] } },
+    };
+    const asked: string[] = [];
+    const { client } = knowing([A], {
+      getInvestigation: async () => ({ ok: true, value: { investigation: A.investigation, draft: restored, unmapped: { nodes: [{ t: 'gone', id: 'X' }], edges: [] }, mappingChange: { droppedFilters: [{ kind: 'property', name: 'ghost', reason: 'property-removed' }] } } }),
+      readRefs: async (request) => {
+        asked.push(...request.entities.map((ref) => ref.entityType));
+        return { ok: true, value: { nodes: request.entities.map((ref) => nodeOf(ref.sourceId, ref.entityType, ref.stableId)), edges: [], missing: { entities: [], edges: [] } } };
+      },
+    });
+    renderApp(`/explore/${INVESTIGATION_A}`, client, createClientState());
+    expect(await screen.findByText('The mapping changed since this view was saved.')).toBeTruthy();
+    expect(screen.getAllByText(/Dropped filters: ghost \(property removed\)\./).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Items that are no longer mapped show as/).length).toBeGreaterThan(0);
+    expect(screen.getByText('2 entities · 0 relationships · loaded · exact')).toBeTruthy();
+    expect(asked).toEqual(['kind-a']);
+    expect(screen.queryByText('Some items are no longer available.')).toBeNull();
+  });
+
   it('reads nothing when the investigation was opened from an entity in this session', async () => {
     const { client, calls } = knowing([A]);
     const state = createClientState();

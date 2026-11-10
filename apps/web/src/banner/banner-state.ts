@@ -23,6 +23,8 @@ export interface BannerState {
   readonly dismissible?: boolean;
   /** Moves the focus to the banner when it first appears, for a state the person must act on before they go on. */
   readonly moveFocus?: boolean;
+  /** Runs when the person dismisses the banner with its Dismiss button. */
+  readonly onDismiss?: () => void;
   /** Announces an update of the banner already on screen; a new banner is always announced. */
   readonly announce?: boolean;
 }

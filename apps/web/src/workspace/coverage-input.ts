@@ -1,4 +1,5 @@
 import type { CoverageEntity, GraphEdge } from '@neburyx/contracts';
+import { isUnmappedEdge, isUnmappedNode } from '../draft/unmapped.js';
 import { elementKey } from '../state/keys.js';
 import type { LoadedGraph } from '../state/loaded-graph.js';
 
@@ -29,6 +30,7 @@ function loadedBy(edge: GraphEdge): Loaded | undefined {
 export function coverageEntitiesOf(graph: LoadedGraph): readonly CoverageEntity[] {
   const loaded = new Map<string, Loaded>();
   for (const edge of graph.edges) {
+    if (isUnmappedEdge(edge)) continue;
     const put = loadedBy(edge);
     if (put === undefined) continue;
     for (const end of [edge.from, edge.to]) {
@@ -37,7 +39,7 @@ export function coverageEntitiesOf(graph: LoadedGraph): readonly CoverageEntity[
       loaded.set(key, { relationships: (held?.relationships ?? 0) + put.relationships, quality: weakest(held?.quality ?? 'exact', put.quality) });
     }
   }
-  return graph.nodes.map((node) => {
+  return graph.nodes.filter((node) => !isUnmappedNode(node)).map((node) => {
     const held = loaded.get(elementKey(node.ref));
     return { ref: node.ref, loadedRelationships: held?.relationships ?? 0, loadedQuality: held?.quality ?? 'exact' };
   });
