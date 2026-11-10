@@ -205,6 +205,16 @@ test.describe('the Investigations page', () => {
     expect(seen.filter((path) => path.startsWith('/v1/'))).toEqual([]);
   });
 
+  test('opened straight on the Evidence packs tab, loads the counts and the source line like any other tab', async ({ page }) => {
+    await seed(page, 5, 2);
+    await page.goto('/investigations?tab=evidence');
+    await expect(page.getByText('Evidence packs are an Enterprise capability. They are not available in this edition.')).toBeVisible();
+    await expect(page.getByRole('tab', { name: 'Investigations (5)' })).toBeVisible();
+    await expect(page.getByRole('tab', { name: 'Saved views (2)' })).toBeVisible();
+    await expect(page.getByText(/banking-demo · read-only/).first()).toBeVisible();
+    await expect(page.getByText('Loading', { exact: false })).toHaveCount(0);
+  });
+
   test('shows a failed read with a retry and keeps the rows it has', async ({ page }) => {
     await seed(page, 60, 0);
     await page.goto('/investigations');
