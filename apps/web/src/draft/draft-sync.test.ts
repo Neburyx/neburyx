@@ -57,6 +57,53 @@ function rig(answers: (call: number) => ApiResult<DraftWriteResponse> = (call) =
 beforeEach(() => vi.useFakeTimers({ now: Date.parse('2026-11-10T10:00:00.000Z') }));
 afterEach(() => vi.useRealTimers());
 
+describe('the first viewport of a draft that held none', () => {
+  it('is the drawing\'s own: it is not written, and nothing waits to be written for it', async () => {
+    const { writes, state, sync } = rig();
+    state.presentation.setViewport({ zoom: 1, x: 612, y: 318 });
+    expect(sync.needsSettle()).toBe(false);
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS * 2);
+    expect(writes).toHaveLength(0);
+  });
+
+  it('is the same when the viewport comes before the draft is adopted', async () => {
+    const { writes, state, sync } = rig(undefined, false);
+    state.presentation.setViewport({ zoom: 1, x: 612, y: 318 });
+    sync.adopt(ID, { version: 1, notes: null, basedOnViewId: null, writable: true });
+    expect(sync.needsSettle()).toBe(false);
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS * 2);
+    expect(writes).toHaveLength(0);
+  });
+
+  it('is written with the next change, and a later move of the viewport is written alone', async () => {
+    const { writes, state, move } = rig();
+    state.presentation.setViewport({ zoom: 1, x: 612, y: 318 });
+    move(4);
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
+    expect(writes).toHaveLength(1);
+    expect(writes[0]?.body.layout.viewport).toEqual({ zoom: 1, x: 612, y: 318 });
+    state.presentation.setViewport({ zoom: 2, x: 600, y: 300 });
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
+    expect(writes).toHaveLength(2);
+    expect(writes[1]?.body.layout.viewport).toEqual({ zoom: 2, x: 600, y: 300 });
+  });
+
+  it('does not hide a move of the viewport made after the draft was adopted with one, nor a change that comes first', async () => {
+    const stored = rig(undefined, false);
+    stored.state.presentation.setViewport({ zoom: 1, x: 10, y: 10 });
+    stored.sync.adopt(ID, { version: 1, notes: null, basedOnViewId: null, writable: true });
+    stored.state.presentation.setViewport({ zoom: 3, x: 0, y: 0 });
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
+    expect(stored.writes).toHaveLength(1);
+    const moved = rig();
+    moved.move(5);
+    moved.state.presentation.setViewport({ zoom: 1, x: 612, y: 318 });
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
+    expect(moved.writes).toHaveLength(1);
+    expect(moved.writes[0]?.body.layout.viewport).toEqual({ zoom: 1, x: 612, y: 318 });
+  });
+});
+
 describe('autosave', () => {
   it('writes once, with the current version, when the delay has passed without another change, and a burst of changes is one write', async () => {
     const { writes, move } = rig();

@@ -50,6 +50,8 @@ interface Session {
   carriedTypes: { readonly entityTypes: readonly string[]; readonly relTypes: readonly string[] } | undefined;
   /** The type filters as applied from the stored draft; `listed` stays true only while the person has not changed that kind. */
   applied: { readonly entityTypes: { listed: boolean; readonly off: string }; readonly relTypes: { listed: boolean; readonly off: string } } | undefined;
+  /** The draft held no viewport when it was adopted, so the first one the drawing makes is the drawing's own and not a change of the person's. */
+  awaitingFit: boolean;
   /** The document last stored or read, as text. */
   lastJson: string | undefined;
 }
@@ -380,6 +382,24 @@ export function createDraftSync(options: DraftSyncOptions): DraftSync {
     refreshUnsaved();
   }
 
+  /** The text of a draft without its viewport. */
+  const withoutViewport = (json: string): string => {
+    const parsed = JSON.parse(json) as { layout?: { viewport?: unknown } };
+    if (parsed.layout !== undefined) delete parsed.layout.viewport;
+    return JSON.stringify(parsed);
+  };
+
+  /** Moves what the draft is compared with to the first viewport the drawing made of an opened draft that held none, as long as nothing else differs, so that opening is not a change to write: whether the fit comes before or after the draft is adopted. */
+  function absorbFit(session: Session, body: DraftWriteRequest, next: string): void {
+    const stored = session.lastJson;
+    if (stored === undefined || withoutViewport(next) !== withoutViewport(stored)) {
+      session.awaitingFit = false;
+      return;
+    }
+    session.lastJson = next;
+    if (body.layout.viewport !== undefined) session.awaitingFit = false;
+  }
+
   function handleChange(): void {
     const currentId = state.investigation.getState().id;
     if (watched !== undefined && watched.id !== currentId) {
@@ -396,6 +416,7 @@ export function createDraftSync(options: DraftSyncOptions): DraftSync {
     applyFilters(shown.session);
     const body = documentOf(shown.session);
     const next = JSON.stringify(body);
+    if (shown.session.awaitingFit) absorbFit(shown.session, body, next);
     watched = { id: shown.id, session: shown.session, body, json: next };
     if (next === shown.session.lastJson) {
       if (!retrying && !writing) cancel();
@@ -536,11 +557,13 @@ export function createDraftSync(options: DraftSyncOptions): DraftSync {
       return session === undefined ? undefined : { version: session.version, notes: session.notes, basedOnViewId: session.basedOnViewId };
     },
     adopt(investigationId, session) {
-      const adopted: Session = { version: session.version, notes: session.notes, basedOnViewId: session.basedOnViewId, kept: session.kept ?? NOTHING_KEPT, writable: session.writable, conflicted: false, pendingFilters: session.filters, rehashHeld: session.rehash === true, carriedTypes: undefined, applied: undefined, lastJson: undefined };
+      const adopted: Session = { version: session.version, notes: session.notes, basedOnViewId: session.basedOnViewId, kept: session.kept ?? NOTHING_KEPT, writable: session.writable, conflicted: false, pendingFilters: session.filters, rehashHeld: session.rehash === true, carriedTypes: undefined, applied: undefined, awaitingFit: false, lastJson: undefined };
       sessions.set(investigationId, adopted);
       if (state.investigation.getState().id === investigationId && adopted.writable) {
         applyFilters(adopted);
-        adopted.lastJson = JSON.stringify(documentOf(adopted));
+        const document = documentOf(adopted);
+        adopted.lastJson = JSON.stringify(document);
+        adopted.awaitingFit = document.layout.viewport === undefined;
       }
       refreshUnsaved();
     },
