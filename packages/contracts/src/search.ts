@@ -67,7 +67,7 @@ const nextCursorSchema = z.string().min(1);
 const droppedCount = z.number().int().nonnegative();
 
 /** The rows the normalize stage left out, by reason. */
-export const droppedSchema = z.strictObject({ 'not-mapped': droppedCount, 'ambiguous-type': droppedCount, 'no-stable-id': droppedCount, 'end-not-shown': droppedCount.optional(), 'end-missing': droppedCount.optional(), 'no-mapping-row': droppedCount.optional(), 'not-visible': droppedCount.optional() });
+export const droppedSchema = z.strictObject({ 'not-mapped': droppedCount, 'ambiguous-type': droppedCount, 'no-stable-id': droppedCount, 'end-not-shown': droppedCount.optional(), 'end-missing': droppedCount.optional(), 'no-mapping-row': droppedCount.optional() });
 
 /**
  * A property of an entity type that is not searched, with why; the type's other properties are searched. `typeSearched` is false when none of the type's properties is searched, so the type itself is
@@ -195,13 +195,13 @@ export const storedEvidenceHitSchema = z.strictObject({
 });
 
 /**
- * One relationship of an aggregate that carries the searched record ID. Its element ID is shown as text only: it is never a reference, and nothing is opened or copied by it, because it can name
- * another relationship once this one is deleted.
+ * One relationship of an aggregate that carries the searched record ID: the evidence records it holds and, when the mapping names one, when it was observed. It has no ID of its own: the element ID
+ * of the source's database never leaves the server (a member is told apart by its place among the members, and a page continues from a position the signed cursor holds).
  */
-export const aggregateMemberSchema = z.strictObject({ elementId: z.string().min(1), records: evidenceRecordsSchema, observedAt: z.string().min(1).optional() });
+export const aggregateMemberSchema = z.strictObject({ records: evidenceRecordsSchema, observedAt: z.string().min(1).optional() });
 
 /**
- * The relationships of a type with no `stable_id` between two entities that carry the searched record ID: the aggregate (the type and both ends), its members on this page in element ID order,
+ * The relationships of a type with no `stable_id` between two entities that carry the searched record ID: the aggregate (the type and both ends), its members on this page,
  * and their number, a lower bound when more may be on another page.
  */
 export const aggregateEvidenceHitSchema = z
@@ -212,7 +212,6 @@ export const aggregateEvidenceHitSchema = z
     rules: z.array(evidenceRuleSchema),
   })
   .superRefine((hit, context) => {
-    if (new Set(hit.members.map((member) => member.elementId)).size !== hit.members.length) context.addIssue({ code: 'custom', message: 'a member is listed once', path: ['members'] });
     if ((hit.memberCount.quality !== 'exact' && hit.memberCount.quality !== 'lowerBound') || hit.memberCount.value !== hit.members.length) {
       context.addIssue({ code: 'custom', message: 'the member count is the members listed, exact or a lower bound', path: ['memberCount'] });
     }

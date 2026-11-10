@@ -146,8 +146,8 @@ describe('the search result', () => {
       ],
     };
 
-    const member = (elementId: string) => ({ elementId, records: [{ sourceRecordId: 'REC-1' }] });
-    const aggregateHit = { aggregate: { type: 'MADE_FROM', from: node.ref, to: node.ref }, members: [member('5:r:1'), { ...member('5:r:2'), observedAt: '2026-01-02T03:04:05Z' }], memberCount: { value: 2, quality: 'exact' as const, scope: 'members' }, rules: [] };
+    const member = (record = 'REC-1') => ({ records: [{ sourceRecordId: record }] });
+    const aggregateHit = { aggregate: { type: 'MADE_FROM', from: node.ref, to: node.ref }, members: [member('REC-1'), { ...member('REC-2'), observedAt: '2026-01-02T03:04:05Z' }], memberCount: { value: 2, quality: 'exact' as const, scope: 'members' }, rules: [] };
 
     it('accepts an aggregate hit with its members, as exact or a lower bound', () => {
       expect(searchResultSchema.safeParse({ ...result, evidence: { ...evidence, hits: [hit, aggregateHit], count: { value: 3, quality: 'exact', scope: 'search:evidence' } } }).success).toBe(true);
@@ -157,7 +157,7 @@ describe('the search result', () => {
     it('accepts a record that cannot be read, named by its property, in a stored hit and in a member', () => {
       const unreadable = { property: 'docId', unreadable: true };
       expect(searchResultSchema.safeParse({ ...result, evidence: { ...evidence, hits: [{ ...hit, records: [unreadable] }] } }).success).toBe(true);
-      expect(searchResultSchema.safeParse({ ...result, evidence: { ...evidence, hits: [{ ...aggregateHit, members: [{ elementId: '5:r:1', records: [{ sourceRecordId: 'REC-1' }, unreadable] }], memberCount: { value: 1, quality: 'exact', scope: 'members' } }] } }).success).toBe(true);
+      expect(searchResultSchema.safeParse({ ...result, evidence: { ...evidence, hits: [{ ...aggregateHit, members: [{ records: [{ sourceRecordId: 'REC-1' }, unreadable] }], memberCount: { value: 1, quality: 'exact', scope: 'members' } }] } }).success).toBe(true);
     });
 
     it('counts a stored hit as one relationship and an aggregate as its members', () => {
@@ -170,14 +170,13 @@ describe('the search result', () => {
       ['a record marked unreadable that also holds a value', { ...hit, records: [{ property: 'docId', unreadable: true, sourceRecordId: 'REC-1' }] }],
       ['a record marked readable', { ...hit, records: [{ property: 'docId', unreadable: false }] }],
       ['an aggregate with no member', { ...aggregateHit, members: [], memberCount: { value: 0, quality: 'exact', scope: 'members' } }],
-      ['a member twice', { ...aggregateHit, members: [member('5:r:1'), member('5:r:1')] }],
       ['a member count that is not the members listed', { ...aggregateHit, memberCount: { value: 3, quality: 'exact', scope: 'members' } }],
       ['an estimated member count', { ...aggregateHit, memberCount: { value: 2, quality: 'estimated', scope: 'members' } }],
       ['an unknown member count', { ...aggregateHit, memberCount: { quality: 'unknown', scope: 'members' } }],
-      ['a member with no record', { ...aggregateHit, members: [{ elementId: '5:r:1', records: [] }, member('5:r:2')] }],
-      ['a member with an empty element ID', { ...aggregateHit, members: [member(''), member('5:r:2')] }],
-      ['a member with a reference', { ...aggregateHit, members: [{ ...member('5:r:1'), ref: node.ref }, member('5:r:2')] }],
-      ['a member with a stable ID', { ...aggregateHit, members: [{ ...member('5:r:1'), stableId: 'L-1' }, member('5:r:2')] }],
+      ['a member with no record', { ...aggregateHit, members: [{ records: [] }, member('REC-2')] }],
+      ['a member with an element ID', { ...aggregateHit, members: [{ ...member(), elementId: '5:r:1' }, member('REC-2')] }],
+      ['a member with a reference', { ...aggregateHit, members: [{ ...member(), ref: node.ref }, member('REC-2')] }],
+      ['a member with a stable ID', { ...aggregateHit, members: [{ ...member(), stableId: 'L-1' }, member('REC-2')] }],
       ['an aggregate with a stored reference', { ...aggregateHit, supports: hit.supports }],
       ['an aggregate with no member count', { aggregate: aggregateHit.aggregate, members: aggregateHit.members, rules: [] }],
       ['an aggregate whose end has no stable ID', { ...aggregateHit, aggregate: { type: 'MADE_FROM', from: { sourceId: 'demo', entityType: 'widget' }, to: node.ref } }],

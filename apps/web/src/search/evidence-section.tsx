@@ -43,12 +43,13 @@ function StoredRow({ hit, profile, viewEvidence, focus }: { readonly hit: Stored
   );
 }
 
-/** A member is text only: no button, no link and no ID to copy, because its element ID is not a reference. */
-function MemberRow({ member, focus }: { readonly member: AggregateMember; readonly focus: boolean }) {
+/** A member is text only: no button, no link and no ID, because it has none. It is told by its records and its time, or by its place among the members read when it has neither. */
+function MemberRow({ member, position, total, focus }: { readonly member: AggregateMember; readonly position: number; readonly total: number | undefined; readonly focus: boolean }) {
   const item = useFocusOnMount<HTMLLIElement>(focus);
+  const parts = [...(member.records.length === 0 ? [] : [evidenceRecordsText(member.records)]), ...(member.observedAt === undefined ? [] : [observedText(member.observedAt)])];
   return (
     <li ref={item} className="search-member" {...(focus ? { tabIndex: -1 } : {})}>
-      {[memberText(member.elementId), evidenceRecordsText(member.records), ...(member.observedAt === undefined ? [] : [observedText(member.observedAt)])].join(' · ')}
+      {(parts.length === 0 ? [memberText(position, total)] : parts).join(' · ')}
     </li>
   );
 }
@@ -68,7 +69,7 @@ function AggregateRow({ hit, profile, focus, focusMember }: { readonly hit: Aggr
         <span className="search-hit-context">{AGGREGATE_NOTE}</span>
         <ul className="search-members">
           {hit.members.map((member, index) => (
-            <MemberRow key={member.elementId} member={member} focus={index === focusMember} />
+            <MemberRow key={index} member={member} position={index + 1} total={hit.memberCount.quality === 'exact' ? hit.members.length : undefined} focus={index === focusMember} />
           ))}
         </ul>
       </div>
@@ -91,7 +92,7 @@ export interface EvidenceRow {
 
 /**
  * The rows of the evidence hits of every page read: a stored hit once, and the hits of one aggregate (the same type and ends) on several pages as one row with their members in the order read,
- * each once. A merged aggregate counts the members held, exact when the group has no next page (every page from the first was read) and a lower bound while it has one. The hit at `focusAt` is
+ * in the order read. A merged aggregate counts the members held, exact when the group has no next page (every page from the first was read) and a lower bound while it has one. The hit at `focusAt` is
  * the first of the last page added: its row takes the focus, or, when it joined an earlier row, its first member does.
  */
 export function evidenceRowsOf(hits: readonly EvidenceHit[], hasMore: boolean, focusAt: number | undefined): EvidenceRow[] {
@@ -107,10 +108,9 @@ export function evidenceRowsOf(hits: readonly EvidenceHit[], hasMore: boolean, f
       return;
     }
     if (!('members' in known.hit) || !('members' in hit)) return;
-    const held = new Set(known.hit.members.map((member) => member.elementId));
-    const added = hit.members.filter((member) => !held.has(member.elementId));
-    if (index === focusAt && added.length > 0) known.focusMember = known.hit.members.length;
-    known.hit = { ...known.hit, members: [...known.hit.members, ...added] };
+    // a page continues from the position its cursor holds, so its members are the ones not yet read: they are added as they come
+    if (index === focusAt && hit.members.length > 0) known.focusMember = known.hit.members.length;
+    known.hit = { ...known.hit, members: [...known.hit.members, ...hit.members] };
   });
   return rows.map((row) => {
     if (!('members' in row.hit)) return row;

@@ -1,9 +1,11 @@
 import { rmSync } from 'node:fs';
 import { expect } from 'vitest';
 import { Agent, request as httpRequest } from 'node:http';
-import { buildApp } from '../../../services/api/src/app.js';
+import { buildApp, registeredRoutesOf } from '../../../services/api/src/app.js';
 import type { ExecuteCall, ExecuteOutcome } from '../../../services/api/src/gate/executor.js';
 import { edgeRefSegmentOf, sourceLinkSegmentOf } from '@neburyx/contracts';
+import { DERIVED_EDGE_SUPPORT_ID } from '../../../services/api/src/gate/templates/derived-edge-support.js';
+import { DERIVED_RULE_RUN_ID } from '../../../services/api/src/gate/templates/derived-rule-run.js';
 import { EDGE_LOAD_ID } from '../../../services/api/src/gate/templates/edge-load.js';
 import { ENTITY_LOAD_ID } from '../../../services/api/src/gate/templates/entity-load.js';
 import type { Gate } from '../../../services/api/src/gate/types.js';
@@ -25,6 +27,11 @@ import { testSourceGate } from '../../../services/api/src/testing/source-gate.js
 import { makeWebRoot } from '../../../services/api/src/testing/web-root.js';
 
 export const SOURCE = 'demo';
+/** A rule over the two entity types: two node_a entities are related when they link to the same node_b. */
+const DERIVED_RULE = { id: 'shared-b', from: 'node_a', to: 'node_a', via: ['LINKS', 'node_b', 'LINKS'], rule_version: 1 };
+const derivedEdgePathOf = (sourceId: string): string =>
+  `/v1/edges/${edgeRefSegmentOf({ sourceId, derived: { ruleId: 'shared-b', from: { sourceId, entityType: 'node_a', stableId: 'H-1' }, to: { sourceId, entityType: 'node_a', stableId: 'H-2' } } })}`;
+const DERIVED_NEIGHBORS_PATH = '/v1/graph/derived-neighbors';
 const edgePathOf = (sourceId: string): string => `/v1/edges/${edgeRefSegmentOf({ sourceId, type: 'LINKS', from: 'node_a', to: 'node_b', stableId: 'L-1' })}`;
 export const OTHER_SOURCE = 'other';
 const LINKED_ENTITIES = [
@@ -64,6 +71,8 @@ export interface Rig {
   readonly held: HeldRead[];
   readonly data: { started: number; inFlight: number; peak: number };
   startedAt(sourceId: string): number;
+  /** The routes the API registered, as `METHOD pattern`. */
+  readonly routes: readonly string[];
   http(sourceId?: string, route?: Route): Promise<HttpAnswer>;
   asPerson(person: Principal, sourceId?: string, signal?: AbortSignal): Promise<unknown>;
   get(path: string): Promise<number>;
@@ -87,11 +96,19 @@ export const personNumber = (n: number): Principal => ({ ...LOCAL_PRINCIPAL, id:
 
 const NODE = plainNode(['NodeA'], { id: 'H-1' });
 const NODE_B = plainNode(['NodeB'], { key: 'K-1' }, '4:fixture:2');
+const NODE_2 = plainNode(['NodeA'], { id: 'H-2' }, '4:fixture:3');
+/** The chain the rule finds: H-1 and H-2 both link to K-1. */
+const CHAIN_ROWS: ExecuteOutcome = {
+  status: 'rows',
+  rows: [{ p: { $type: 'path', start: NODE, segments: [{ relationship: plainRelationship('LINKS', NODE, NODE_B, { relId: 'L-1' }, '4:fixture:r1'), end: NODE_B }, { relationship: plainRelationship('LINKS', NODE_2, NODE_B, { relId: 'L-2' }, '4:fixture:r2'), end: NODE_2 }] } }],
+};
 const EDGE_ROWS: ExecuteOutcome = { status: 'rows', rows: [{ r: plainRelationship('LINKS', NODE, NODE_B, { relId: 'L-1' }), a: NODE, b: NODE_B }] };
 export const EDGE_PATH = `/v1/edges/${edgeRefSegmentOf({ sourceId: SOURCE, type: 'LINKS', from: 'node_a', to: 'node_b', stableId: 'L-1' })}`;
 
+const READS = [ENTITY_LOAD_ID, EDGE_LOAD_ID, DERIVED_EDGE_SUPPORT_ID, DERIVED_RULE_RUN_ID];
+
 /** Which read route `http` calls: the entity read, the stored edge read, or the source link of the entity. */
-export type Route = 'entity' | 'edge' | 'link';
+export type Route = 'entity' | 'edge' | 'link' | 'derived-edge' | 'derived-neighbors';
 
 /** Fake timers: set at a time of the shared clock, fired in order of time and then of setting. */
 function timers(clock: { now: number }) {
@@ -118,7 +135,7 @@ export const flush = async (turns = 20): Promise<void> => {
  */
 export async function startRig(options: RigOptions = {}): Promise<Rig> {
   const mapping = parseMapping(
-    fileOf(baseSource({ id: SOURCE, entities: LINKED_ENTITIES, relationships: [{ type: 'LINKS', from: 'node_a', to: 'node_b', stable_id: 'relId' }], ...(options.budgets === undefined ? {} : { budgets: options.budgets }) }), baseSource({ id: OTHER_SOURCE, entities: LINKED_ENTITIES, relationships: [{ type: 'LINKS', from: 'node_a', to: 'node_b', stable_id: 'relId' }], ...(options.otherBudgets === undefined ? {} : { budgets: options.otherBudgets }) })),
+    fileOf(baseSource({ id: SOURCE, entities: LINKED_ENTITIES, relationships: [{ type: 'LINKS', from: 'node_a', to: 'node_b', stable_id: 'relId' }], derived: [DERIVED_RULE], ...(options.budgets === undefined ? {} : { budgets: options.budgets }) }), baseSource({ id: OTHER_SOURCE, entities: LINKED_ENTITIES, relationships: [{ type: 'LINKS', from: 'node_a', to: 'node_b', stable_id: 'relId' }], derived: [DERIVED_RULE], ...(options.otherBudgets === undefined ? {} : { budgets: options.otherBudgets }) })),
     'neburyx.yaml',
   );
   const clock = { now: START };
@@ -141,12 +158,12 @@ export async function startRig(options: RigOptions = {}): Promise<Rig> {
     return source;
   };
   const respond = (call: ExecuteCall): Promise<ExecuteOutcome> => {
-    if (call.templateId !== ENTITY_LOAD_ID && call.templateId !== EDGE_LOAD_ID) return Promise.resolve({ status: 'rows', rows: [] });
+    if (!READS.includes(call.templateId)) return Promise.resolve({ status: 'rows', rows: [] });
     data.started += 1;
     data.inFlight += 1;
     data.peak = Math.max(data.peak, data.inFlight);
     startedBySource.set(call.sourceId, (startedBySource.get(call.sourceId) ?? 0) + 1);
-    const answered = call.templateId === EDGE_LOAD_ID ? EDGE_ROWS : entityRows(NODE);
+    const answered = call.templateId === EDGE_LOAD_ID ? EDGE_ROWS : call.templateId === DERIVED_EDGE_SUPPORT_ID || call.templateId === DERIVED_RULE_RUN_ID ? CHAIN_ROWS : entityRows(NODE);
     const done = (outcome: ExecuteOutcome): ExecuteOutcome => (data.inFlight -= 1, outcome);
     if (rig.mode === 'answer') return Promise.resolve(done(answered));
     if (rig.mode === 'timeout') return Promise.resolve(done({ status: 'timeout' }));
@@ -187,9 +204,13 @@ export async function startRig(options: RigOptions = {}): Promise<Rig> {
     data,
     roles,
     startedAt: (sourceId) => startedBySource.get(sourceId) ?? 0,
+    routes: registeredRoutesOf(app).filter((each) => each.method !== 'HEAD').map((each) => `${each.method} ${each.url}`),
     http: (sourceId = SOURCE, route = 'entity') =>
       new Promise<HttpAnswer>((resolve, reject) => {
-        const call = httpRequest(`${base}${route === 'edge' ? edgePathOf(sourceId) : route === 'link' ? linkPathOf(sourceId) : `/v1/entities/${sourceId}/node_a/H-1`}`, { agent: sockets }, (response) => {
+        const path =
+          route === 'edge' ? edgePathOf(sourceId) : route === 'link' ? linkPathOf(sourceId) : route === 'derived-edge' ? derivedEdgePathOf(sourceId) : route === 'derived-neighbors' ? DERIVED_NEIGHBORS_PATH : `/v1/entities/${sourceId}/node_a/H-1`;
+        const body = route === 'derived-neighbors' ? JSON.stringify({ sourceId, ref: { entityType: 'node_a', stableId: 'H-1' } }) : undefined;
+        const call = httpRequest(`${base}${path}`, { agent: sockets, method: body === undefined ? 'GET' : 'POST', ...(body === undefined ? {} : { headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(body) } }) }, (response) => {
           const chunks: Buffer[] = [];
           response.on('data', (chunk: Buffer) => chunks.push(chunk));
           response.on('end', () => {
@@ -198,7 +219,7 @@ export async function startRig(options: RigOptions = {}): Promise<Rig> {
           });
         });
         call.on('error', reject);
-        call.end();
+        call.end(body);
       }),
     get: (path) =>
       new Promise<number>((resolve, reject) => {

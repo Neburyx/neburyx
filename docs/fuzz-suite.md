@@ -16,6 +16,8 @@ Files are in `services/api/src/fuzz/`, with the rig in `services/api/src/testing
 
 A test feeds the check a statement built from text and shows it fails.
 
+**Every route is in the set.** (`POST /v1/investigations`, which reads the entity once through the gate when it opens one, is built into the set; no hostile request to it is part of the recorded run below.) `fuzz/completeness.test.ts` compares the routes the closed set was built from (the builder records each route it requests) with the routes the API registers under `/v1`, less a named list with a reason for each: the routes that read no source, and the source test, which runs the tester and not a gate template. A route the builder does not request fails the test, so removing a route from the set, or adding a source-reading route and leaving it out, cannot pass unseen. Negative tests feed the check a set with one route missing. The cancellation route list (`graph/cancel-routes.test.ts`) and the concurrency suite's (`tools/concurrency-suite/src/routes.test.ts`) are compared with the registered routes the same way.
+
 **The matched properties.** The exact group of a search answer and of a next page names the `search` properties that held the typed text (`exactMatches` and `matches`). `fuzz/routes.test.ts` sends hostile texts, masked and not, and checks that every name is a `search` property of the mapping; the answer adds no statement, so the closed set is the one above.
 
 **The refusals.** Each of these is a property over generated input, with the codes the API returns:

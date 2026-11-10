@@ -132,7 +132,7 @@ describe('POST /v1/graph/derived-neighbors', () => {
     await app.close();
   });
 
-  it('neither counts nor returns a derived edge whose end the person cannot see, nor its other end, middle entity or supporting edges, and names it only in the not-visible warning', async () => {
+  it('neither counts nor returns a derived edge whose end the person cannot see, nor its other end, middle entity or supporting edges, and says nothing of it: no warning, no count of what was left out', async () => {
     const { app } = await started({ rows: [chain('A-1', 'O-1', 'D-1'), chain('A-1', 'O-2', 'D-2')], hideStableId: 'O-1' });
     const response = await post(app, anAccount);
     expect(response.statusCode, response.body).toBe(200);
@@ -142,7 +142,7 @@ describe('POST /v1/graph/derived-neighbors', () => {
     expect(result?.nodes.map((node) => node.ref.stableId).sort()).toEqual(['A-1', 'D-2', 'O-2']);
     expect(result?.edges).toHaveLength(3);
     expect(response.body).not.toMatch(/O-1|D-1/);
-    expect(result?.warnings).toEqual(['1 derived edge was left out because their ends or supports are not shown.']);
+    expect(result?.warnings, 'nothing says that a derived relationship was left out').toEqual([]);
     await app.close();
   });
 

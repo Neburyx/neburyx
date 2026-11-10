@@ -175,12 +175,12 @@ describe('the rows of a rule run', () => {
 });
 
 describe('the redact stage over a rule run', () => {
-  it('drops a derived edge whose end the person cannot see, counts it as not visible and says so in the warnings, and keeps the others', async () => {
+  it('drops a derived edge whose end the person cannot see, says nothing about it (no count, no warning), and keeps the others', async () => {
     const { read } = rig(() => ({ status: 'rows', rows: [chain('A-1', 'O-1', 'D-1'), chain('A-1', 'O-2', 'D-2')] }), mappingWith(), hidingRedact('O-1', redactItems));
     const [item] = (await read(params)).items;
     const edges = (item?.['edges'] ?? []) as GraphEdge[];
     expect(derivedOf(edges).map((edge) => edge.to.stableId)).toEqual(['O-2']);
-    expect((item?.['dropped'] as Record<string, number>)['not-visible']).toBe(1);
-    expect(item?.['warnings']).toContain('1 derived edge was left out because their ends or supports are not shown.');
+    expect(item?.['dropped']).not.toHaveProperty('not-visible');
+    expect((item?.['warnings'] as string[]).join(' ')).not.toMatch(/left out|not shown/);
   });
 });

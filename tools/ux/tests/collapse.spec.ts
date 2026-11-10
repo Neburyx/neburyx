@@ -87,6 +87,8 @@ test.describe('collapse', () => {
       description: await canvasOf(page).evaluate((element) => document.getElementById(element.getAttribute('aria-describedby') ?? '')?.textContent ?? '').then((text) => text.replace(/; \d+ selected/, '')),
       rows: await panel.locator('.supernode-card-type').allTextContents(),
     });
+    // the snapshot is taken once the node is touched and its aggregate nodes are drawn (the panel touches it in an effect after it opens): taken earlier, it would lack them, and the collapse, which keeps the node touched, would show them
+    await expect.poll(async () => (await captions()).description).toContain('aggregate nodes for relationships not loaded');
     const before = await captions();
     const placesBefore = await positions(page);
 

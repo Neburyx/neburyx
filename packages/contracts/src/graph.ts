@@ -79,8 +79,8 @@ export const edgeSchema = z
     validTo: text.optional(),
     qualityFlags: z.array(z.string()),
   })
-  .refine((edge) => (edge.semantics === 'derived') === (edge.derivation !== undefined), { message: 'a derived edge has a derivation and no other edge has one', path: ['derivation'] })
-  .refine((edge) => 'aggregate' in edge.ref === (edge.memberCount !== undefined), { message: 'an aggregate edge has a member count and no other edge has one', path: ['memberCount'] });
+  .refine((edge) => (edge.semantics === 'derived') === (edge.derivation !== undefined), { message: 'a derived relationship has a derivation and no other relationship has one', path: ['derivation'] })
+  .refine((edge) => 'aggregate' in edge.ref === (edge.memberCount !== undefined), { message: 'an aggregate relationship has a member count and no other relationship has one', path: ['memberCount'] });
 
 export type EdgeRef = z.infer<typeof edgeRefSchema>;
 export type StoredEdgeRef = z.infer<typeof storedEdgeRefSchema>;

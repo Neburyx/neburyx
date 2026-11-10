@@ -89,9 +89,10 @@ evidence group.
 - **Derived neighbors.** `POST /v1/graph/derived-neighbors` runs each derived rule of the mapping whose `from` type is the entity's type (one bounded read for each rule, through the gate, under one read slot): the other ends the rule finds, at most 25 (`DERIVED_NEIGHBOR_CAP`; a source that lowered `max_page` lowers it to that, and a larger `max_page` does not raise it), each with the first chain of nodes and relationships that supports it. The count of a rule is `exact` when the read found no other end beyond the cap and a `lowerBound` of the ends that remained when it did; a derived edge whose end or supporting edge is not shown is neither counted nor returned, and a count that stopped at the cap is never `exact` after one was dropped. When the read stops at the cap, the ends it returns are those the source finds first (the statement has no order, which would read every candidate). A relationship type with no `stable_id` supports as an aggregate edge whose member count is a `lowerBound`. The rule comes from the mapping, never from the request. When no rule finds anything, one entity read through the gate follows, with its own audit event, to tell an exact zero for an entity that exists from a node that is not there.
 - **Evidence on relationships with no `stable_id`** is searched like any other. A hit is the aggregate `{ aggregate: { type,
   from, to }, members, memberCount, rules }`: the relationship type and both ends, its members on this page, each
-  `{ elementId, records, observedAt? }`, and `memberCount`, a `lowerBound` while another page may hold more. A member's element
-  ID is text only: nothing opens, copies or links by it, because it can name another relationship once that one is deleted.
-  The web adds the members of the next page to the same aggregate.
+  `{ records, observedAt? }`, and `memberCount`, a `lowerBound` while another page may hold more. A member has no ID: the
+  element ID of the source database never leaves the server (it can name another relationship once that one is deleted), and the
+  next page continues from a position that only the signed cursor holds. The web adds the members of the next page to the same
+  aggregate and tells a member by its records and time, or "Member n" (with "of m" only when the member count is exact) when it has neither.
 - **Evidence values that cannot be read** (neither text nor a number) are kept as `{ property, unreadable: true }`, so the list
   and the count agree; the web says "Value cannot be shown" with the property name.
 

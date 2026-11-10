@@ -56,8 +56,8 @@ describe('evidence on a relationship row with no stable ID', () => {
       {
         aggregate: AGGREGATE,
         members: [
-          { elementId: '5:n:001', records: [{ sourceRecordId: TEXT }, { sourceRecordId: 'DOC-7' }], observedAt: '2026-03-01T10:00:00Z' },
-          { elementId: '5:n:002', records: [{ sourceRecordId: TEXT }] },
+          { records: [{ sourceRecordId: TEXT }, { sourceRecordId: 'DOC-7' }], observedAt: '2026-03-01T10:00:00Z' },
+          { records: [{ sourceRecordId: TEXT }] },
         ],
         memberCount: { value: 2, quality: 'exact', scope: 'members' },
         rules: [],
@@ -90,25 +90,27 @@ describe('evidence on a relationship row with no stable ID', () => {
   });
 
   it('gives the next members of the same aggregate on the next page, none twice, with a lower-bound member count, and the group count is the members of both pages', async () => {
-    const { app } = await started(Array.from({ length: 30 }, (_, index) => seen(index + 1)));
+    const minute = (index: number): string => `2026-03-01T10:${String(index).padStart(2, '0')}:00Z`;
+    const { app } = await started(Array.from({ length: 30 }, (_, index) => seen(index + 1, { seenAt: minute(index + 1) })));
     const answer = await answerOf(app);
     const page = await moreOf(app, answer.evidence.nextCursor ?? '');
     if (page.group !== 'evidence') throw new Error('not an evidence page');
     const [first] = aggregateHits(answer.evidence.hits);
     const [next] = aggregateHits(page.hits);
     expect(next?.aggregate).toEqual(first?.aggregate);
-    expect(next?.members.map((member) => member.elementId)).toEqual(Array.from({ length: 5 }, (_, index) => `5:n:${String(index + 26).padStart(3, '0')}`));
+    expect(next?.members.map((member) => member.observedAt)).toEqual(Array.from({ length: 5 }, (_, index) => minute(index + 26)));
+    expect(first?.members.map((member) => member.observedAt)).toEqual(Array.from({ length: 25 }, (_, index) => minute(index + 1)));
     expect(next?.memberCount).toEqual({ value: 5, quality: 'lowerBound', scope: 'members' });
     expect(page.count).toEqual({ value: 30, quality: 'exact', scope: 'search:evidence' });
     expect(page.nextCursor).toBeUndefined();
     await app.close();
   });
 
-  it('gives a member no reference, no stable ID and no cursor: only its element ID, as text, its records and its time', async () => {
+  it('gives a member no reference, no stable ID and no cursor: only its records and its time, and no ID', async () => {
     const { app } = await started([seen(1, { seenAt: '2026-03-01T10:00:00Z' })]);
     const answer = await answerOf(app);
     const [hit] = aggregateHits(answer.evidence.hits);
-    for (const member of hit?.members ?? []) expect(Object.keys(member).sort()).toEqual(['elementId', 'observedAt', 'records']);
+    for (const member of hit?.members ?? []) expect(Object.keys(member).sort()).toEqual(['observedAt', 'records']);
     expect(hit !== undefined && 'supports' in hit).toBe(false);
     await app.close();
   });
@@ -141,7 +143,7 @@ describe('evidence that cannot be read', () => {
       ['L-1', [{ sourceRecordId: TEXT }]],
       ['L-2', [{ property: 'recordId', unreadable: true }]],
     ]);
-    expect(aggregateHits(answer.evidence.hits)[0]?.members).toEqual([{ elementId: '5:n:001', records: [{ property: 'recordId', unreadable: true }] }]);
+    expect(aggregateHits(answer.evidence.hits)[0]?.members).toEqual([{ records: [{ property: 'recordId', unreadable: true }] }]);
     expect(answer.evidence.count).toEqual({ value: 3, quality: 'exact', scope: 'search:evidence' });
     expect(relationshipsOf(answer.evidence.hits)).toBe(3);
     await app.close();

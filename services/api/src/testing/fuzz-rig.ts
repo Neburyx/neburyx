@@ -108,7 +108,7 @@ const phoneRow = (index: number) => {
 };
 
 /** What the source answers: the search model for the search templates, one full page of neighbors for an expansion, one widget for a load, nothing for the rest. */
-function respond(call: ExecuteCall): Promise<ExecuteOutcome> {
+export function respond(call: ExecuteCall): Promise<ExecuteOutcome> {
   if (call.templateId.startsWith('entity-search') || call.templateId === 'search-facets' || call.templateId === 'relationship-evidence' || call.templateId === 'entity-related') return searchModel(call);
   if (call.templateId === 'entity-load') return Promise.resolve({ status: 'rows', rows: call.cypher.includes('`Widget`') ? [{ n: widget, id: 'W-1' }] : call.cypher.includes('`Handle`') ? [{ n: plainNode(['Handle'], { phoneNumber: call.parameters['stableId'] }, 'e-phone-x'), id: 'p' }] : [] });
   if (call.templateId === 'derived-edge-support') return Promise.resolve({ status: 'rows', rows: Array.from({ length: Math.min(call.rowLimit, 3) }, (_, index) => supportRow(index)) });

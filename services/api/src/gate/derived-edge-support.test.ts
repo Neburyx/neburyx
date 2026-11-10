@@ -177,21 +177,21 @@ describe('the redact stage over the supports', () => {
   it('drops the derived edge when an end is hidden', async () => {
     const { edges, dropped } = await edgesOf('A-2');
     expect(derivedOf(edges)).toHaveLength(0);
-    expect(dropped['not-visible']).toBe(1);
+    expect(dropped).not.toHaveProperty('not-visible');
   });
 
   it('drops the derived edge when the middle entity of any one chain is hidden, though its support edges are shown', async () => {
     const { edges, dropped, warnings } = await edgesOf('D-2');
     expect(derivedOf(edges)).toHaveLength(0);
-    expect(dropped['not-visible']).toBe(1);
-    expect(warnings).toContain('1 derived edge was left out because their ends or supports are not shown.');
+    expect(dropped).not.toHaveProperty('not-visible');
+    expect(warnings.join(' ')).not.toMatch(/left out|not shown/);
   });
 
   it('drops the derived edge when a supporting edge is hidden and both its ends are shown', async () => {
     const { read } = rig(() => ({ status: 'rows', rows }), mappingWith(), hidingEdgeRedact('A-2-D-2', redactItems));
     const [item] = (await read(params)).items;
     expect(derivedOf((item?.['edges'] ?? []) as GraphEdge[])).toHaveLength(0);
-    expect((item?.['dropped'] as Record<string, number>)['not-visible']).toBe(1);
+    expect(item?.['dropped']).not.toHaveProperty('not-visible');
   });
 
   it('does not check a chain past the limit, because it is not read: the read is trimmed to the limit before it is normalized', async () => {

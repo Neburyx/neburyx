@@ -71,7 +71,7 @@ export function evidenceHitsOf(source: SourceModel, evidence: readonly Relations
     }
     const { aggregate } = relationship.of;
     const key = JSON.stringify([aggregate.type, endKey(aggregate.from), endKey(aggregate.to)]);
-    const member: AggregateMember = { elementId: relationship.elementId, records: [...relationship.records], ...(relationship.observedAt === undefined ? {} : { observedAt: relationship.observedAt }) };
+    const member: AggregateMember = { records: [...relationship.records], ...(relationship.observedAt === undefined ? {} : { observedAt: relationship.observedAt }) };
     const known = aggregates.get(key);
     if (known === undefined) aggregates.set(key, { rank: rankOf(aggregate.type, aggregate.from.entityType, aggregate.to.entityType), order: key, aggregate, members: [member] });
     else known.members.push(member);

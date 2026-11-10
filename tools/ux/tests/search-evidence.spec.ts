@@ -70,7 +70,7 @@ test.describe('evidence records', () => {
     await expect(aggregate).toContainText('SEEN_WITH');
     await expect(aggregate).toContainText('≥ 25 relationships · lower bound');
     await expect(aggregate.locator('.search-member')).toHaveCount(25);
-    await expect(aggregate.locator('.search-member').first()).toHaveText('Element ID 5:agg-30:01 · 1 record: REC-agg-30');
+    await expect(aggregate.locator('.search-member').first()).toHaveText('1 record: REC-agg-30 · observed 2026-03-01T10:01:00Z');
     await expect(aggregate.getByRole('button')).toHaveCount(0);
     const more = page.getByRole('button', { name: 'Show more: Evidence records' });
     await more.focus();
@@ -79,7 +79,7 @@ test.describe('evidence records', () => {
     await expect(aggregate).toHaveCount(1);
     await expect(aggregate.locator('.search-member')).toHaveCount(30);
     await expect(aggregate).toContainText('30 relationships');
-    await expect(page.locator(':focus')).toHaveText('Element ID 5:agg-30:26 · 1 record: REC-agg-30');
+    await expect(page.locator(':focus')).toHaveText('1 record: REC-agg-30 · observed 2026-03-01T10:26:00Z');
   });
 
   test('keeps a supporting relationship whose evidence value cannot be shown, and says so with the property name', async ({ page }) => {

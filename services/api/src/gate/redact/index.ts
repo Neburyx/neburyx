@@ -4,7 +4,6 @@ import type { EntityNormalizer } from '../normalize/model.js';
 import { PLACEHOLDER, placeholderText } from '../normalize/node.js';
 import type { GateContext, Item } from '../types.js';
 import { canonicalJson } from '../cursor/binding.js';
-import { withNotVisible } from '../normalize/drops.js';
 import { FULL_MASK, maskValue } from './mask.js';
 
 export { FULL_MASK, maskValue } from './mask.js';
@@ -81,10 +80,9 @@ function withoutHiddenDerived(result: Normalized): Normalized {
   const edges = result.edges.filter(
     (edge) => edge.semantics !== 'derived' || (shownNodes.has(keyOf(edge.from)) && shownNodes.has(keyOf(edge.to)) && (edge.derivation?.supportingEdgeRefs ?? []).every(supportShown)),
   );
-  const hidden = result.edges.length - edges.length;
-  if (hidden === 0) return result;
-  const dropped = { ...result.dropped, 'not-visible': (result.dropped['not-visible'] ?? 0) + hidden };
-  return { ...result, edges, dropped, warnings: withNotVisible(result.warnings, dropped['not-visible'] ?? 0) };
+  // dropped without a word: no count, no warning and no other hint that a derived relationship was hidden. What hides one is that an end, a middle entity or a supporting relationship is not in the result, and
+  // a policy that hides an element (a later edition's) is one cause of that; the person is told nothing a hidden element would reveal. A later edition may record the number in the audit event, never in the answer.
+  return edges.length === result.edges.length ? result : { ...result, edges };
 }
 
 /** Redacts a normalized result: the derived-edge rule always, and the masking when the request asks. */

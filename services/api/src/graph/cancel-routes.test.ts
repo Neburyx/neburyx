@@ -1,8 +1,8 @@
 import { rmSync } from 'node:fs';
 import { request as httpRequest } from 'node:http';
-import { sourceLinkSegmentOf } from '@neburyx/contracts';
+import { edgeRefSegmentOf, sourceLinkSegmentOf } from '@neburyx/contracts';
 import { afterAll, describe, expect, it } from 'vitest';
-import { buildApp } from '../app.js';
+import { buildApp, registeredRoutesOf } from '../app.js';
 import type { ExecuteCall, ExecuteOutcome } from '../gate/executor.js';
 import { createLogger } from '../logger.js';
 import { parseMapping } from '../mapping/load.js';
@@ -29,7 +29,7 @@ const mapping = parseMapping(
         { type: 'hub', label: 'Hub', stable_id: 'hubId', search: ['hubId'], link: 'https://records.example.test/{hubId}' },
         { type: 'leaf', label: 'Leaf', stable_id: 'leafId' },
       ],
-      relationships: [{ type: 'LINKED', from: 'hub', to: 'leaf', stable_id: 'relId' }],
+      relationships: [{ type: 'LINKED', from: 'hub', to: 'leaf', stable_id: 'relId', evidence: ['recordId'], evidence_link: 'https://records.example.test/r/{recordId}' }],
       derived: [{ id: 'shared-leaf', from: 'hub', to: 'hub', via: ['LINKED', 'leaf', 'LINKED'], rule_version: 1 }],
     }),
   ),
@@ -37,15 +37,22 @@ const mapping = parseMapping(
 );
 
 const ref = { entityType: 'hub', stableId: 'H-1' };
-const ROUTES: readonly { readonly name: string; readonly method: 'GET' | 'POST'; readonly path: string; readonly body?: unknown }[] = [
-  { name: 'entity load', method: 'GET', path: '/v1/entities/demo/hub/H-1' },
-  { name: 'entity lookup', method: 'POST', path: '/v1/entities/lookup', body: { sourceId: 'demo', ref } },
-  { name: 'search', method: 'POST', path: '/v1/search/entities', body: { sourceId: 'demo', text: 'abc' } },
-  { name: 'degree preview', method: 'POST', path: '/v1/graph/preview-expansion', body: { sourceId: 'demo', ref } },
-  { name: 'derived neighbors', method: 'POST', path: '/v1/graph/derived-neighbors', body: { sourceId: 'demo', ref } },
-  { name: 'expand', method: 'POST', path: '/v1/graph/expand', body: { sourceId: 'demo', ref, neighborTypes: ['leaf'] } },
-  { name: 'source link', method: 'GET', path: `/v1/source-links/${sourceLinkSegmentOf({ form: 'entity', ref: { sourceId: 'demo', ...ref } })}` },
-  { name: 'open investigation', method: 'POST', path: '/v1/investigations', body: { sourceId: 'demo', entity: { sourceId: 'demo', ...ref } } },
+const STORED = { sourceId: 'demo', type: 'LINKED', from: 'hub', to: 'leaf', stableId: 'L-1' };
+const DERIVED = { sourceId: 'demo', derived: { ruleId: 'shared-leaf', from: { sourceId: 'demo', ...ref }, to: { sourceId: 'demo', entityType: 'hub', stableId: 'H-2' } } };
+
+/** `route` is the registered route a case sends to; the list below is compared with the routes that read the source. */
+const ROUTES: readonly { readonly name: string; readonly route: string; readonly method: 'GET' | 'POST'; readonly path: string; readonly body?: unknown }[] = [
+  { name: 'entity load', route: 'GET /v1/entities/:sourceId/:entityType/:stableId', method: 'GET', path: '/v1/entities/demo/hub/H-1' },
+  { name: 'entity lookup', route: 'POST /v1/entities/lookup', method: 'POST', path: '/v1/entities/lookup', body: { sourceId: 'demo', ref } },
+  { name: 'search', route: 'POST /v1/search/entities', method: 'POST', path: '/v1/search/entities', body: { sourceId: 'demo', text: 'abc' } },
+  { name: 'degree preview', route: 'POST /v1/graph/preview-expansion', method: 'POST', path: '/v1/graph/preview-expansion', body: { sourceId: 'demo', ref } },
+  { name: 'derived neighbors', route: 'POST /v1/graph/derived-neighbors', method: 'POST', path: '/v1/graph/derived-neighbors', body: { sourceId: 'demo', ref } },
+  { name: 'expand', route: 'POST /v1/graph/expand', method: 'POST', path: '/v1/graph/expand', body: { sourceId: 'demo', ref, neighborTypes: ['leaf'] } },
+  { name: 'source link', route: 'GET /v1/source-links/:ref', method: 'GET', path: `/v1/source-links/${sourceLinkSegmentOf({ form: 'entity', ref: { sourceId: 'demo', ...ref } })}` },
+  { name: 'stored relationship evidence', route: 'GET /v1/edges/:ref', method: 'GET', path: `/v1/edges/${edgeRefSegmentOf(STORED)}` },
+  { name: 'derived relationship evidence', route: 'GET /v1/edges/:ref', method: 'GET', path: `/v1/edges/${edgeRefSegmentOf(DERIVED)}` },
+  { name: 'source link of a record', route: 'GET /v1/source-links/:ref', method: 'GET', path: `/v1/source-links/${sourceLinkSegmentOf({ form: 'stored', ref: STORED })}?record=R-1` },
+  { name: 'open investigation', route: 'POST /v1/investigations', method: 'POST', path: '/v1/investigations', body: { sourceId: 'demo', entity: { sourceId: 'demo', ...ref } } },
 ];
 
 /** Every data read waits until its call's signal aborts, as the adapter ends a cancelled read; the schema read answers at once. */
@@ -122,6 +129,35 @@ describe('a request that reads the source, when the client closes the connection
     const readsAtCancel = executor.calls.length;
     await new Promise((resolve) => setTimeout(resolve, 30));
     expect(executor.calls).toHaveLength(readsAtCancel);
+    await app.close();
+  });
+});
+
+/** Routes that read the source and are cancelled in a case of their own above (search more), and routes that read no source, each with its reason. */
+const OTHER_CASES: Readonly<Record<string, string>> = {
+  'POST /v1/search/entities/more': 'its own case, which first needs a cursor',
+  'GET /v1/me': 'reads no source',
+  'GET /v1/sources': 'reads no source',
+  'GET /v1/sources/:id/profile': 'reads no source',
+  'POST /v1/sources/:id/test': 'the tester is called with no signal (below)',
+  'POST /v1/graph/coverage': 'reads no source (below)',
+  'GET /v1/investigations': 'reads no source',
+  'GET /v1/investigations/:id': 'reads no source',
+};
+
+/** The routes under /v1 that neither a case of ROUTES nor the list above names. */
+export const uncancelledRoutes = (registered: readonly { readonly method: string; readonly url: string }[], cases: readonly string[]): string[] =>
+  registered.filter((route) => route.method !== 'HEAD' && route.url.startsWith('/v1')).map((route) => `${route.method} ${route.url}`).filter((key) => !cases.includes(key) && !(key in OTHER_CASES));
+
+describe('every route that reads the source has a cancellation case', () => {
+  it('names each registered route in the cases or in the list of routes with a reason, so a new route cannot be left out', async () => {
+    const { app } = await listening();
+    const registered = registeredRoutesOf(app);
+    const cases = ROUTES.map((route) => route.route);
+    expect(uncancelledRoutes(registered, cases)).toEqual([]);
+    expect(uncancelledRoutes(registered, cases.filter((key) => key !== 'GET /v1/edges/:ref'))).toEqual(['GET /v1/edges/:ref']);
+    expect(uncancelledRoutes([...registered, { method: 'GET', url: '/v1/new-read/:id' }], cases)).toEqual(['GET /v1/new-read/:id']);
+    for (const key of Object.keys(OTHER_CASES)) expect(registered.map((route) => `${route.method} ${route.url}`), key).toContain(key);
     await app.close();
   });
 });

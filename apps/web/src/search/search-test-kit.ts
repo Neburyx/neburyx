@@ -54,13 +54,13 @@ export function evidenceHit(stableId: string, overrides: { readonly type?: strin
   };
 }
 
-/** An aggregate hit of the relationship type `SEEN_WITH` between two entities of `TYPE`, with members of the given element IDs (each carrying one record) or as given. */
+/** An aggregate hit of the relationship type `SEEN_WITH` between two entities of `TYPE`, with members each carrying the given record ID, or as given. */
 export function aggregateHit(
   members: readonly (string | AggregateMember)[],
   overrides: { readonly from?: string; readonly to?: string; readonly quality?: 'exact' | 'lowerBound'; readonly sourceId?: string } = {},
 ): AggregateEvidenceHit {
   const sourceId = overrides.sourceId ?? 'demo';
-  const listed = members.map((member) => (typeof member === 'string' ? { elementId: member, records: [{ sourceRecordId: 'REC-1' }] } : member));
+  const listed = members.map((member) => (typeof member === 'string' ? { records: [{ sourceRecordId: member }] } : member));
   return {
     aggregate: { type: 'SEEN_WITH', from: { sourceId, entityType: TYPE, stableId: overrides.from ?? 'W-1' }, to: { sourceId, entityType: TYPE, stableId: overrides.to ?? 'W-2' } },
     members: listed,

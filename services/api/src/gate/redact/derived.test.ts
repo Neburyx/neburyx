@@ -12,6 +12,13 @@ const REQUEST = 'the-request';
 /** The same derived edge under another source, so that it is a second one. */
 const anotherSource = (edge: GraphEdge): GraphEdge => ('derived' in edge.ref ? { ...edge, ref: { sourceId: 'another', derived: edge.ref.derived } } : edge);
 
+/** A dropped derived relationship leaves no trace for the person: the same warnings and the same drop counts as before, and no new key. */
+function expectNoHint(result: Normalized, before: Normalized): void {
+  expect(result.warnings).toEqual(before.warnings);
+  expect(result.dropped).toEqual(before.dropped);
+  expect(JSON.stringify(result.warnings)).not.toMatch(/left out|not shown|not-visible|hidden|[A-Z]{2}-\d|ZZ-/);
+}
+
 describe.each(PACKS)('the derived edge of the %s pack\'s captured supports', (pack) => {
   const source = packSource(pack);
   const model = normalizeModelOf(source);
@@ -31,7 +38,6 @@ describe.each(PACKS)('the derived edge of the %s pack\'s captured supports', (pa
   it.each([[true], [false]])('is kept, with the flag %s, when both ends and every support are in the result', (mask) => {
     const result = run(whole, mask);
     expect(result.edges).toEqual(whole.edges);
-    expect(result.dropped['not-visible']).toBeUndefined();
     expect(result.warnings).toEqual(whole.warnings);
   });
 
@@ -41,8 +47,7 @@ describe.each(PACKS)('the derived edge of the %s pack\'s captured supports', (pa
     expect(result.edges.some((edge) => edge.semantics === 'derived')).toBe(false);
     expect(result.edges).toEqual(withoutSupport.edges.filter((edge) => edge.semantics !== 'derived'));
     expect(result.nodes.length).toBe(whole.nodes.length);
-    expect(result.dropped['not-visible']).toBe(1);
-    expect(result.warnings).toContain('1 derived edge was left out because their ends or supports are not shown.');
+    expectNoHint(result, whole);
   });
 
   it.each([[true], [false]])('is dropped, with the flag %s, when an end is not a node of the result', (mask) => {
@@ -50,22 +55,20 @@ describe.each(PACKS)('the derived edge of the %s pack\'s captured supports', (pa
     const withoutEnd = { ...whole, nodes: whole.nodes.filter((node) => JSON.stringify(node.ref) !== JSON.stringify(derived?.from)) };
     const result = run(withoutEnd, mask);
     expect(result.edges.some((edge) => edge.semantics === 'derived')).toBe(false);
-    expect(result.dropped['not-visible']).toBe(1);
+    expectNoHint(result, whole);
   });
 
   it('never drops a stored or an aggregate edge by this rule, even with no node in the result', () => {
     const result = run({ ...supports, nodes: [] }, true);
     expect(result.edges).toEqual(supports.edges);
-    expect(result.dropped['not-visible']).toBeUndefined();
   });
 
-  it('counts several dropped derived edges and says so in the plural, with no ID, label or value', () => {
+  it('drops several derived edges as it drops one: with no count, no warning and no other hint', () => {
     const derived = whole.edges.filter((edge) => edge.semantics === 'derived');
     const twice = { ...whole, edges: [...whole.edges.filter((edge) => edge !== first), ...derived.map(anotherSource)] };
     const result = run(twice, false);
-    expect(result.dropped['not-visible']).toBe(2);
-    expect(result.warnings.at(-1)).toBe('2 derived edges were left out because their ends or supports are not shown.');
-    expect(JSON.stringify(result.warnings)).not.toMatch(/[A-Z]{2}-\d|ZZ-/);
+    expect(result.edges.some((edge) => edge.semantics === 'derived')).toBe(false);
+    expectNoHint(result, twice);
   });
 });
 
@@ -90,7 +93,6 @@ describe('the derived-edge rule on references written in another order', () => {
     const shuffled = { ...whole, edges: whole.edges.map((edge) => (edge.semantics === 'derived' ? { ...edge, from: reordered(edge.from), to: reordered(edge.to), derivation: reordered(edge.derivation) } : edge)) };
     const result = redactResult(shuffled, redactContext(model, false));
     expect(result.edges.filter((edge) => edge.semantics === 'derived')).toHaveLength(1);
-    expect(result.dropped['not-visible']).toBeUndefined();
   });
 
   it('keeps the derived edge when the nodes and the supports are written in another field order', () => {
@@ -111,20 +113,20 @@ describe('the warnings when a derived edge is dropped', () => {
   const whole = withDerivedEdges(context, supports, [{ ruleId: rule?.id ?? '', from: first.from, to: second.from, supports: supports.edges.map((edge) => edge.ref) }]);
   const broken: Normalized = { ...whole, edges: whole.edges.filter((edge) => edge !== first), warnings: ['a warning of the template'] };
 
-  it('keeps the warnings the result already had and adds the sentence about the edge', () => {
+  it('keeps the warnings the result already had and adds none about the relationship it dropped', () => {
     const result = redactResult(broken, redactContext(model, false));
-    expect(result.warnings).toEqual(['a warning of the template', '1 derived edge was left out because their ends or supports are not shown.']);
+    expect(result.warnings).toEqual(['a warning of the template']);
   });
 
-  it('says nothing more when it is run again on its own result, and keeps one sentence for the total', () => {
+  it('says nothing more when it is run again on its own result', () => {
     const once = redactResult(broken, redactContext(model, false));
     const twice = redactResult(once, redactContext(model, false));
     expect(twice).toEqual(once);
     const extra = { ...once, edges: [...once.edges, ...whole.edges.filter((edge) => edge.semantics === 'derived').map((edge) => ({ ...edge, ref: { ...edge.ref, sourceId: 'another' } }))] };
     const thrice = redactResult(extra, redactContext(model, false));
-    expect(thrice.dropped['not-visible']).toBe(2);
-    expect(thrice.warnings.filter((warning) => warning.includes('derived'))).toEqual(['2 derived edges were left out because their ends or supports are not shown.']);
+    expect(thrice.edges.filter((edge) => edge.semantics === 'derived')).toHaveLength(0);
     expect(thrice.warnings).toContain('a warning of the template');
+    expect(thrice.warnings.filter((warning) => /derived|left out|not shown/.test(warning))).toEqual([]);
   });
 });
 

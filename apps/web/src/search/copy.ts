@@ -51,14 +51,15 @@ export const NO_EVIDENCE_PROPERTIES = 'No relationship of this source is configu
 export const UNREADABLE_VALUE = 'Value cannot be shown';
 export const evidenceRecordText = (record: EvidenceRecord): string => ('unreadable' in record ? `${record.property}: ${UNREADABLE_VALUE}` : record.sourceRecordId);
 export const evidenceRecordsText = (records: readonly EvidenceRecord[]): string => `${records.length} ${records.length === 1 ? 'record' : 'records'}: ${records.map(evidenceRecordText).join(', ')}`;
-/** What an aggregate's members are: relationships with no stable ID, each listed by its element ID, which is never a reference. */
-export const AGGREGATE_NOTE = 'No stable ID: each relationship is listed by its element ID and cannot be opened or copied as an ID';
+/** What an aggregate's members are: relationships with no stable ID, each told by its records and its time, and never by an ID. */
+export const AGGREGATE_NOTE = 'No stable ID: each relationship is listed by its records and time, and cannot be opened or copied as an ID';
 export const membersText = (count: Count): string | undefined => {
   if (count.value === undefined) return undefined;
   if (count.quality === 'exact') return `${count.value} ${count.value === 1 ? 'relationship' : 'relationships'}`;
   return count.quality === 'lowerBound' ? `≥ ${count.value} relationships · lower bound` : undefined;
 };
-export const memberText = (elementId: string): string => `Element ID ${elementId}`;
+/** What a member is called when it holds neither a record nor a time to tell it by: its place among the members read, with their number only when that number is exact (a lower bound is not a total). */
+export const memberText = (position: number, total: number | undefined): string => (total === undefined ? `Member ${position}` : `Member ${position} of ${total}`);
 export const observedText = (observedAt: string): string => `observed ${observedAt}`;
 export const evidenceRuleText = (ruleId: string, ruleVersion: number): string => `Rule ${ruleId} v${ruleVersion} uses this relationship type`;
 export const EXACT_MASKED = 'Exact matches cannot be searched while personal data is masked. Turn masking off to search personal data.';

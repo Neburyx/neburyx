@@ -141,8 +141,6 @@ function droppedOf(results: readonly Normalized[]): Dropped {
       const count = result.dropped[reason] ?? 0;
       if (count > 0 || total[reason] !== undefined) total[reason] = (total[reason] ?? 0) + count;
     }
-    const hidden = result.dropped['not-visible'];
-    if (hidden !== undefined) total['not-visible'] = (total['not-visible'] ?? 0) + hidden;
   }
   return total;
 }

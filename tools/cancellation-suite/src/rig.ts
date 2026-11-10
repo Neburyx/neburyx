@@ -81,6 +81,10 @@ export const rowFor = (neighborType: string, n = 1): Record<string, unknown> => 
 /** The stored edge of the hub to its first leaf, as an edge read of `EDGE_REF` finds it. */
 const leafNode = plainNode(['Leaf'], { leafId: 'L-0' }, 'e-leaf-0');
 const EDGE_ROW = { r: plainRelationship('LINKED', hubNode, leafNode, { relId: 'r-edge' }, 'rel-edge'), a: hubNode, b: leafNode };
+const hubTwoNode = plainNode(['Hub'], { hubId: 'H-2' }, 'e-hub-2');
+/** The chain a read of the supports of `DERIVED_EDGE_REF` finds: both hubs link to the first leaf. */
+const SUPPORT_ROW = { p: { $type: 'path', start: hubNode, segments: [{ relationship: plainRelationship('LINKED', hubNode, leafNode, { relId: 'r-s1' }, 'rel-s1'), end: leafNode }, { relationship: plainRelationship('LINKED', hubTwoNode, leafNode, { relId: 'r-s2' }, 'rel-s2'), end: hubTwoNode }] } };
+export const DERIVED_EDGE_REF = { sourceId: SOURCE, derived: { ruleId: RULE, from: ref(SOURCE, 'hub', 'H-1'), to: ref(SOURCE, 'hub', 'H-2') } } as const;
 export const EDGE_REF = { sourceId: SOURCE, type: 'LINKED', from: 'hub', to: 'leaf', stableId: 'r-edge' } as const;
 
 /** What the scripted source does with the next expansion read: wait for the test, then answer. */
@@ -105,7 +109,7 @@ function scriptedSource(mapping: ReturnType<typeof mappingWith>) {
     const neighborType = String(call.parameters['neighborType']);
     return new Promise<ExecuteOutcome>((resolve) => {
       const degrees = Object.fromEntries(Array.from({ length: DEGREE_COLUMNS }, (_, index) => [`c${index}`, 1]));
-      const rows = (count: number): readonly Record<string, unknown>[] => (call.templateId === EXPAND_NEIGHBORS_ID ? Array.from({ length: count }, (_, index) => rowFor(neighborType, index + 1)) : call.templateId.startsWith('degree-preview') ? [degrees] : call.templateId === 'edge-load' ? [EDGE_ROW] : []);
+      const rows = (count: number): readonly Record<string, unknown>[] => (call.templateId === EXPAND_NEIGHBORS_ID ? Array.from({ length: count }, (_, index) => rowFor(neighborType, index + 1)) : call.templateId.startsWith('degree-preview') ? [degrees] : call.templateId === 'edge-load' ? [EDGE_ROW] : call.templateId === 'derived-edge-support' ? [SUPPORT_ROW] : []);
       const read: Read = { call, neighborType, answerRows: (count = 1) => resolve({ status: 'rows', rows: rows(count) }), fail: resolve };
       call.signal?.addEventListener('abort', () => resolve({ status: 'cancelled' }), { once: true });
       if (draining) return read.answerRows();

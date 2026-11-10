@@ -6,6 +6,8 @@ import { restoreOnInterrupt } from './interrupt.ts';
 import { checkBrokenBinding, type TestRun } from './mutation.ts';
 
 const PACKAGE = fileURLToPath(new URL('..', import.meta.url));
+/** A Playwright configuration other than the package's (for example one on other ports, while another run holds the usual ones). */
+const CONFIG = process.env['NEBURYX_UX_CONFIG'];
 const ROOT = fileURLToPath(new URL('../../..', import.meta.url));
 const WEB = (path: string): string => fileURLToPath(new URL(`../../../apps/web/src/${path}`, import.meta.url));
 
@@ -53,6 +55,16 @@ const MUTATIONS: readonly Mutation[] = [
     what: 'with a 25 ms stall at every pan and zoom, held to the runner threshold',
     test: { file: 'tests/benchmark.spec.ts', title: 'holds the threshold', project: 'benchmark', env: { NEBURYX_UX_PROFILE: 'runner' }, extraArgs: ['--no-deps'] },
     assertion: /toEqual\(expected\)/,
+  },
+  {
+    // the source record IDs of a stored relationship's evidence left out of the panel: the scripted case that reads what the panel shows has to notice
+    name: 'evidence',
+    source: WEB('evidence/stored-evidence.tsx'),
+    binding: ': evidenceRecordText(record)}',
+    broken: ": ''}",
+    what: 'with the source records of a relationship left out of the evidence panel',
+    test: { file: 'tests/trust-a-relationship.spec.ts', title: 'evidence-panel: Each kind of relationship', project: 'laptop-1440', env: {}, extraArgs: [] },
+    assertion: /toContain\(expected\)|toMatch\(expected\)/,
   },
   {
     // the shared look of selectors and text fields taken out of the built CSS: the source selector and the search box fall back to the browser's look
@@ -113,7 +125,7 @@ export function readRun(stdout: string, code: number | null, signal: NodeJS.Sign
 
 async function runTest(mutation: Mutation): Promise<TestRun> {
   const { file, title, project, env, extraArgs } = mutation.test;
-  const { stdout, stderr, code, signal } = await runTracked('pnpm', ['exec', 'playwright', 'test', file, '-g', title, `--project=${project}`, ...extraArgs, '--reporter=json'], PACKAGE, env);
+  const { stdout, stderr, code, signal } = await runTracked('pnpm', ['exec', 'playwright', 'test', ...(CONFIG === undefined ? [] : ['-c', CONFIG]), file, '-g', title, `--project=${project}`, ...extraArgs, '--reporter=json'], PACKAGE, env);
   const run = readRun(stdout, code, signal);
   return run.errors.length > 0 && stderr.trim() !== '' ? { ...run, errors: [...run.errors, `its error output ended: ${stderr.trim().slice(-300)}`] } : run;
 }

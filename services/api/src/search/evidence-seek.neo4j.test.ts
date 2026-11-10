@@ -207,16 +207,17 @@ describe(`evidence on a relationship row with no stable ID, on ${NEO4J_SERIES}`,
     expect(first?.aggregate).toEqual({ type: 'BULK', from: { sourceId: 'graph', entityType: 'item', stableId: 'I-1' }, to: { sourceId: 'graph', entityType: 'thing', stableId: 'T-1' } });
     expect(first?.members).toHaveLength(25);
     expect(first?.memberCount).toEqual({ value: 25, quality: 'lowerBound', scope: 'members' });
-    expect(first?.members.every((member) => member.records.length === 1 && member.observedAt !== undefined && Object.keys(member).sort().join() === 'elementId,observedAt,records')).toBe(true);
+    expect(first?.members.every((member) => member.records.length === 1 && member.observedAt !== undefined && Object.keys(member).sort().join() === 'observedAt,records')).toBe(true);
     expect(answer.evidence.count).toEqual({ value: 25, quality: 'lowerBound', scope: 'search:evidence' });
     const page = await more('bulk-text', answer.evidence.nextCursor ?? '');
     if (page.group !== 'evidence') throw new Error('not an evidence page');
     const [next] = aggregateHits(page.hits);
     expect(next?.aggregate).toEqual(first?.aggregate);
     expect(next?.members).toHaveLength(BULK_MATCHES - 25);
-    const ids = [...(first?.members ?? []), ...(next?.members ?? [])].map((member) => member.elementId);
-    expect(new Set(ids).size).toBe(BULK_MATCHES);
-    expect([...ids].sort()).toEqual(ids);
+    // a member has no ID: the thirty are told apart by their times (one minute apart), and each is on one page only, in the order the cursor keeps
+    const times = [...(first?.members ?? []), ...(next?.members ?? [])].map((member) => member.observedAt);
+    expect(new Set(times).size).toBe(BULK_MATCHES);
+    expect([...times].sort()).toEqual(times);
     expect(page.nextCursor).toBeUndefined();
   });
 

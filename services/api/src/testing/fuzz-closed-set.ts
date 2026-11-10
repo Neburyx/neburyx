@@ -1,4 +1,5 @@
 import { edgeRefSegmentOf, sourceLinkSegmentOf } from '@neburyx/contracts';
+import { registeredRoutesOf } from '../app.js';
 import { FUZZ_SOURCE, FUZZ_TEXT, allowedNames, type FuzzRig } from './fuzz-rig.js';
 
 /** The names a statement quotes in backticks. */
@@ -34,17 +35,38 @@ export function tokensOf(value: unknown): { readonly entityType: string; readonl
  */
 export async function closedSetOf(rig: FuzzRig): Promise<ReadonlySet<string>> {
   const set = await buildClosedSet(rig);
+  routesOfClosedSet.set(set.statements, set.routes);
   const leaks = leaksOf(set.statements, set.values);
   if (leaks.length > 0) throw new Error(`the closed set holds request text: ${leaks.join('; ')}`);
   benignValuesOf.set(set.statements, set.values);
   return set.statements;
 }
 
+/** The routes (`METHOD /v1/pattern`) each closed set was built from: a route that is not here has no statement in the set, and a request to it in the fuzz would fail as "not in the closed set" only if it read the source. */
+export const routesOfClosedSet = new WeakMap<ReadonlySet<string>, ReadonlySet<string>>();
+
+/** The registered route (`METHOD pattern`) a request URL goes to. */
+export function routeKeyOf(rig: FuzzRig, method: 'GET' | 'POST', url: string): string {
+  const path = url.split('?')[0] ?? url;
+  const match = registeredRoutesOf(rig.app).find((route) => route.method === method && new RegExp(`^${route.url.replace(/:[A-Za-z]+/g, '[^/]+')}$`).test(path));
+  if (match === undefined) throw new Error(`no registered route for ${method} ${path}`);
+  return `${method} ${match.url}`;
+}
+
 /** The benign values each closed set was built from, for a test that checks the set for them. */
 export const benignValuesOf = new WeakMap<ReadonlySet<string>, readonly string[]>();
 
-async function buildClosedSet(rig: FuzzRig): Promise<{ readonly statements: Set<string>; readonly values: string[] }> {
-  const { post, app, executor } = rig;
+async function buildClosedSet(rig: FuzzRig): Promise<{ readonly statements: Set<string>; readonly values: string[]; readonly routes: ReadonlySet<string> }> {
+  const { app, executor } = rig;
+  const routes = new Set<string>();
+  const post = (url: string, payload: unknown) => {
+    routes.add(routeKeyOf(rig, 'POST', url));
+    return rig.post(url, payload);
+  };
+  const get = (url: string) => {
+    routes.add(routeKeyOf(rig, 'GET', url));
+    return app.inject({ method: 'GET', url });
+  };
   const statements = new Set<string>();
   const keep = (): void => {
     for (const call of executor.calls) statements.add(call.cypher);
@@ -100,26 +122,28 @@ async function buildClosedSet(rig: FuzzRig): Promise<{ readonly statements: Set<
     keep();
     await post('/v1/entities/lookup', { sourceId: FUZZ_SOURCE, value: { entityType, value: stableId } });
     keep();
-    await app.inject({ method: 'GET', url: `/v1/entities/${FUZZ_SOURCE}/${entityType}/${stableId}` });
+    await get(`/v1/entities/${FUZZ_SOURCE}/${entityType}/${stableId}` );
     keep();
   }
+  await post('/v1/investigations', { sourceId: FUZZ_SOURCE, entity: { sourceId: FUZZ_SOURCE, entityType: 'widget', stableId: 'W-1' } });
+  keep();
   for (const mask of [undefined, 'true', 'false']) {
-    await app.inject({ method: 'GET', url: `/v1/edges/${edgeRefSegmentOf({ sourceId: FUZZ_SOURCE, type: 'MADE_FROM', from: 'widget', to: 'gadget', stableId: 'L-1' })}${mask === undefined ? '' : `?mask=${mask}`}` });
+    await get(`/v1/edges/${edgeRefSegmentOf({ sourceId: FUZZ_SOURCE, type: 'MADE_FROM', from: 'widget', to: 'gadget', stableId: 'L-1' })}${mask === undefined ? '' : `?mask=${mask}`}` );
     keep();
   }
   for (const mask of [undefined, 'true', 'false']) {
     const ref = { sourceId: FUZZ_SOURCE, derived: { ruleId: 'shared-gadget', from: { sourceId: FUZZ_SOURCE, entityType: 'widget', stableId: 'W-1' }, to: { sourceId: FUZZ_SOURCE, entityType: 'widget', stableId: 'W-2' } } };
-    await app.inject({ method: 'GET', url: `/v1/edges/${edgeRefSegmentOf(ref)}${mask === undefined ? '' : `?mask=${mask}`}` });
+    await get(`/v1/edges/${edgeRefSegmentOf(ref)}${mask === undefined ? '' : `?mask=${mask}`}` );
     keep();
   }
-  await app.inject({ method: 'GET', url: `/v1/source-links/${sourceLinkSegmentOf({ form: 'entity', ref: { sourceId: FUZZ_SOURCE, entityType: 'widget', stableId: 'W-1' } })}` });
+  await get(`/v1/source-links/${sourceLinkSegmentOf({ form: 'entity', ref: { sourceId: FUZZ_SOURCE, entityType: 'widget', stableId: 'W-1' } })}` );
   keep();
-  await app.inject({ method: 'GET', url: `/v1/source-links/${sourceLinkSegmentOf({ form: 'stored', ref: { sourceId: FUZZ_SOURCE, type: 'MADE_FROM', from: 'widget', to: 'gadget', stableId: 'L-1' } })}?record=R-1` });
+  await get(`/v1/source-links/${sourceLinkSegmentOf({ form: 'stored', ref: { sourceId: FUZZ_SOURCE, type: 'MADE_FROM', from: 'widget', to: 'gadget', stableId: 'L-1' } })}?record=R-1` );
   keep();
   for (const token of keys.filter((entry) => entry.entityType === 'phone').slice(0, 1)) {
     for (const mask of [undefined, 'true']) {
       const ref = { sourceId: FUZZ_SOURCE, aggregate: { type: 'USES', from: { sourceId: FUZZ_SOURCE, entityType: 'widget', stableId: 'W-1' }, to: { sourceId: FUZZ_SOURCE, ...token } } };
-      await app.inject({ method: 'GET', url: `/v1/edges/${edgeRefSegmentOf(ref)}${mask === undefined ? '' : `?mask=${mask}`}` });
+      await get(`/v1/edges/${edgeRefSegmentOf(ref)}${mask === undefined ? '' : `?mask=${mask}`}`);
       keep();
     }
   }
@@ -146,7 +170,7 @@ async function buildClosedSet(rig: FuzzRig): Promise<{ readonly statements: Set<
       keep();
     }
   }
-  return { statements, values: ['W-1', 'GD-0', 'L-1', FUZZ_TEXT, 'ne', '+1-212-555-01', ...cursors, ...expandCursors.map((entry) => entry.cursor), ...keys.map((entry) => entry.stableId)] };
+  return { statements, routes, values: ['W-1', 'GD-0', 'L-1', FUZZ_TEXT, 'ne', '+1-212-555-01', ...cursors, ...expandCursors.map((entry) => entry.cursor), ...keys.map((entry) => entry.stableId)] };
 }
 
 const escaped = (value: string): string => value.replace(/[.*+?^${}()|[\]\\-]/g, '\\$&');

@@ -330,7 +330,7 @@ const NO_RELATED = { hits: [], count: { value: 0, quality: 'exact', scope: 'sear
 function aggregateOf(sourceId: string, text: string, from: number, to: number, more: boolean): unknown {
   return {
     aggregate: { type: 'SEEN_WITH', from: { sourceId, entityType: SEARCH_TYPE, stableId: `${text}-a` }, to: { sourceId, entityType: SEARCH_TYPE, stableId: `${text}-b` } },
-    members: Array.from({ length: to - from }, (_, index) => ({ elementId: `5:${text}:${String(from + index + 1).padStart(2, '0')}`, records: [{ sourceRecordId: `REC-${text}` }] })),
+    members: Array.from({ length: to - from }, (_, index) => ({ records: [{ sourceRecordId: `REC-${text}` }], observedAt: `2026-03-01T10:${String(from + index + 1).padStart(2, '0')}:00Z` })),
     memberCount: { value: to - from, quality: more || from > 0 ? 'lowerBound' : 'exact', scope: 'members' },
     rules: [],
   };

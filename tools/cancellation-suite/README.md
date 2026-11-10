@@ -11,4 +11,6 @@ Each case runs the real API (the gate, the read slots, an app store) on a loopba
 
 The forced slow read swaps a slow statement into the adapter's call; the session, the transaction timeout and the connection are the adapter's. It is not the statement of the expansion.
 
+The reads of the evidence of a relationship are cases too: `edge.test.ts` for a stored one and `derived-edge.test.ts` for a rule-derived one (the answer, a cancel, a timeout and an unreachable source, each leaving the client as it was). `services/api/src/graph/cancel-routes.test.ts` lists every route that reads the source, the evidence reads and the record link among them, and fails for a registered route it does not name.
+
 Synthetic data only. Nothing here prints an address or a login.

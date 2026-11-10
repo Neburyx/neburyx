@@ -116,7 +116,7 @@ describe('buildOpenApiDocument', () => {
                     required: ['aggregate', 'members', 'memberCount', 'rules'],
                     properties: {
                       aggregate: { additionalProperties: false, required: ['type', 'from', 'to'] },
-                      members: { type: 'array', minItems: 1, items: { additionalProperties: false, required: ['elementId', 'records'], properties: { elementId: { type: 'string' }, records: { type: 'array', items: record } } } },
+                      members: { type: 'array', minItems: 1, items: { additionalProperties: false, required: ['records'], properties: { records: { type: 'array', items: record } } } },
                       rules: { type: 'array' },
                     },
                   },

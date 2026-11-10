@@ -92,7 +92,7 @@ test.describe('the relationship evidence panel', () => {
     await rightClickBetween(page, 'holder', 'cas');
     await choose(page, /Why is this relationship here/);
     await expect(panel(page).getByText('Evidence not available')).toBeVisible();
-    await expect(panel(page).getByText('For legacy edges without retained source records.')).toBeVisible();
+    await expect(panel(page).getByText('For legacy relationships without retained source records.')).toBeVisible();
     await expect(panel(page).getByRole('alert')).toHaveCount(0);
     await panel(page).getByRole('tab', { name: 'Properties' }).click();
     await expect(panel(page).getByText('21 Oct 2026, 08:15:00 UTC')).toBeVisible();
