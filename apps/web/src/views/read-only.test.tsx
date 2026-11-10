@@ -138,13 +138,14 @@ describe('the Views panel and the banner above the canvas', () => {
     const region = document.createElement('div');
     region.className = 'banner-region';
     region.textContent = 'This investigation is closed and read-only.';
-    region.getBoundingClientRect = () => ({ bottom: 96, top: 56, left: 0, right: 100, width: 100, height: 40, x: 0, y: 56, toJSON: () => ({}) });
+    let drawn = true;
+    region.getBoundingClientRect = () => ({ bottom: drawn ? 96 : 56, top: 56, left: 0, right: 100, width: 100, height: drawn ? 40 : 0, x: 0, y: 56, toJSON: () => ({}) });
     document.body.append(region);
     try {
       await user.click(await screen.findByRole('button', { name: /^Views/ }));
       expect((await screen.findByRole('dialog', { name: /^Views/ })).style.getPropertyValue('--views-panel-top')).toBe('104px');
       await user.keyboard('{Escape}');
-      region.textContent = '';
+      drawn = false;
       await user.click(screen.getByRole('button', { name: /^Views/ }));
       expect(screen.getByRole('dialog', { name: /^Views/ }).style.getPropertyValue('--views-panel-top')).toBe('');
     } finally {
@@ -175,7 +176,9 @@ describe('the Views panel and the banner above the canvas', () => {
     shown(true);
     const region = document.createElement('div');
     region.className = 'banner-region';
-    region.getBoundingClientRect = () => ({ bottom: 96, top: 56, left: 0, right: 100, width: 100, height: 40, x: 0, y: 56, toJSON: () => ({}) });
+    region.textContent = 'Announced earlier, nothing drawn.';
+    let drawn = false;
+    region.getBoundingClientRect = () => ({ bottom: drawn ? 96 : 56, top: 56, left: 0, right: 100, width: 100, height: drawn ? 40 : 0, x: 0, y: 56, toJSON: () => ({}) });
     document.body.append(region);
     try {
       await user.click(await screen.findByRole('button', { name: /^Views/ }));
@@ -183,7 +186,7 @@ describe('the Views panel and the banner above the canvas', () => {
       expect(dialog.style.getPropertyValue('--views-panel-top')).toBe('');
       const watcher = watchers.at(-1);
       expect(watcher?.watched).toContain(region);
-      region.textContent = 'This investigation is closed and read-only.';
+      drawn = true;
       act(() => watcher?.callback());
       expect(dialog.style.getPropertyValue('--views-panel-top')).toBe('104px');
       await user.keyboard('{Escape}');

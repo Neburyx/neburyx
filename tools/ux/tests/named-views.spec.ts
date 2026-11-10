@@ -23,11 +23,12 @@ async function boxOf(target: Locator): Promise<{ x: number; y: number; width: nu
   return box;
 }
 
-async function saveAs(page: Page, name: string): Promise<void> {
+async function saveAs(page: Page, name: string, note = ''): Promise<void> {
   await saveButton(page).focus();
   await page.keyboard.press('Enter');
   await saveDialog(page).getByLabel('Name').fill(name);
-  await page.keyboard.press('Enter');
+  if (note !== '') await saveDialog(page).getByLabel('Note (optional)').fill(note);
+  await saveDialog(page).getByRole('button', { name: 'Save investigation' }).click();
   await expect(saveDialog(page)).toHaveCount(0);
 }
 
@@ -81,8 +82,8 @@ test.describe('saving, listing, restoring and renaming named views', () => {
   });
 
   test('restores a view: the dialog keeps the focus inside, Cancel changes nothing, and confirming replaces the draft and the pill', async ({ page }) => {
-    await openInvestigation(page);
-    await saveAs(page, 'First look');
+    const id = await openInvestigation(page);
+    await saveAs(page, 'First look', 'alpha');
     await viewsButton(page).click();
     await panel(page).getByRole('button', { name: 'Restore First look into draft' }).click();
     const confirm = page.getByRole('dialog', { name: 'Replace your draft?' });
@@ -96,7 +97,9 @@ test.describe('saving, listing, restoring and renaming named views', () => {
     await confirm.getByRole('button', { name: 'Cancel' }).click();
     await expect(confirm).toHaveCount(0);
     await expect(header(page).getByText(/^Saved \d\d:\d\d UTC$/)).toBeVisible();
-    await saveAs(page, 'Second look');
+    await saveAs(page, 'Second look', 'beta');
+    const read = async () => (await (await page.request.get(`/v1/investigations/${id}`)).json()) as { draft: { notes: string | null; basedOnViewId: string | null }; save: { state: string; savedAt: string | null } };
+    expect((await read()).draft.notes).toBe('beta');
     await viewsButton(page).click();
     await expect(panel(page)).toContainText('Second look');
     await panel(page).getByRole('button', { name: 'Restore First look into draft' }).click();
@@ -104,6 +107,11 @@ test.describe('saving, listing, restoring and renaming named views', () => {
     await expect(page.getByRole('dialog', { name: 'Replace your draft?' })).toHaveCount(0);
     await expect(header(page).getByText(/^Saved \d\d:\d\d UTC$/)).toBeVisible();
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Second look');
+    const restored = await read();
+    expect(restored.draft.notes).toBe('alpha');
+    expect(restored.save.state).toBe('saved');
+    const listed = (await (await page.request.get(`/v1/investigations/${id}/views`)).json()) as { items: { id: string; name: string }[] };
+    expect(listed.items.find((view) => view.name === 'First look')?.id).toBe(restored.draft.basedOnViewId);
   });
 
   test('renames a view in place: Enter saves and Escape cancels', async ({ page }) => {
@@ -171,7 +179,7 @@ test.describe('saving, listing, restoring and renaming named views', () => {
     expect(covered).toBe(false);
   });
 
-  test('keeps the other header controls at one height', async ({ page }) => {
+  test('keeps Save and Views at 32 px', async ({ page }) => {
     await openInvestigation(page);
     const heights = await Promise.all([saveButton(page), viewsButton(page)].map(async (control) => (await control.boundingBox())?.height ?? 0));
     expect(heights.every((height) => height === 32)).toBe(true);

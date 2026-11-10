@@ -12,9 +12,9 @@ import { ViewsPanel } from './views-panel.js';
 /** The space kept between the banner above the canvas and the panel, in pixels. */
 const BANNER_GAP_PX = 8;
 
-/** Where the panel starts when a banner is showing: below it, so the banner's own actions stay in reach. */
+/** Where the panel starts when a banner is showing: below it, so the banner's own actions stay in reach. A region counts by the box it draws, since its hidden announcement text can stay after a banner goes. */
 function clearanceBelowBanner(): number | undefined {
-  const bottoms = [...document.querySelectorAll<HTMLElement>(`.${BANNER_REGION_CLASS}`)].filter((region) => (region.textContent ?? '').trim() !== '').map((region) => region.getBoundingClientRect().bottom);
+  const bottoms = [...document.querySelectorAll<HTMLElement>(`.${BANNER_REGION_CLASS}`)].map((region) => region.getBoundingClientRect()).filter((box) => box.height > 0).map((box) => box.bottom);
   const lowest = Math.max(0, ...bottoms);
   return lowest > 0 ? Math.ceil(lowest) + BANNER_GAP_PX : undefined;
 }

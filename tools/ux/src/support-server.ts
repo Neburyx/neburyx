@@ -347,10 +347,8 @@ function createInvestigations(options: SupportServerOptions) {
       if (!parsed.success || ifMatch === undefined || !/^"[1-9][0-9]*"$/.test(ifMatch)) return json(response, 400, INVALID);
       if (stored.status !== 'open') return json(response, 409, readOnlyRefusal(stored.status));
       if (Number(ifMatch.slice(1, -1)) !== view.version) return json(response, 409, { error: { code: 'CONFLICTED_VIEW_VERSION', message: 'This view was changed elsewhere. Reload to continue.', retryable: false, traceId: 'tr-support' } });
-      if (parsed.data.name !== view.name) {
-        view.name = parsed.data.name;
-        view.version += 1;
-      }
+      view.name = parsed.data.name;
+      view.version += 1;
       json(response, 200, viewShown(view), { etag: `"${view.version}"` });
     },
     restoreView(id: string, viewId: string, ifMatch: string | undefined, response: ServerResponse): void {
