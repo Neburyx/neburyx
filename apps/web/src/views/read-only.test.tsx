@@ -2,7 +2,8 @@ import { cleanup, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { act } from 'react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ApiClient, ApiResult } from '../api/client.js';
 import { createClientState } from '../state/client-state.js';
 import { clientWith, me, renderApp, source } from '../test-utils.js';
@@ -148,6 +149,48 @@ describe('the Views panel and the banner above the canvas', () => {
       expect(screen.getByRole('dialog', { name: /^Views/ }).style.getPropertyValue('--views-panel-top')).toBe('');
     } finally {
       region.remove();
+    }
+  });
+
+  it('moves below a banner that appears while it is open, and stops watching when it closes', async () => {
+    const watchers: { callback: () => void; watched: Element[]; disconnected: boolean }[] = [];
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        readonly watcher: (typeof watchers)[number];
+        constructor(callback: () => void) {
+          this.watcher = { callback, watched: [], disconnected: false };
+          watchers.push(this.watcher);
+        }
+        observe(target: Element): void {
+          this.watcher.watched.push(target);
+        }
+        disconnect(): void {
+          this.watcher.disconnected = true;
+        }
+        unobserve(): void {}
+      },
+    );
+    const user = userEvent.setup();
+    shown(true);
+    const region = document.createElement('div');
+    region.className = 'banner-region';
+    region.getBoundingClientRect = () => ({ bottom: 96, top: 56, left: 0, right: 100, width: 100, height: 40, x: 0, y: 56, toJSON: () => ({}) });
+    document.body.append(region);
+    try {
+      await user.click(await screen.findByRole('button', { name: /^Views/ }));
+      const dialog = await screen.findByRole('dialog', { name: /^Views/ });
+      expect(dialog.style.getPropertyValue('--views-panel-top')).toBe('');
+      const watcher = watchers.at(-1);
+      expect(watcher?.watched).toContain(region);
+      region.textContent = 'This investigation is closed and read-only.';
+      act(() => watcher?.callback());
+      expect(dialog.style.getPropertyValue('--views-panel-top')).toBe('104px');
+      await user.keyboard('{Escape}');
+      expect(watcher?.disconnected).toBe(true);
+    } finally {
+      region.remove();
+      vi.unstubAllGlobals();
     }
   });
 });

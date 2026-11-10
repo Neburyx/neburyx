@@ -2,7 +2,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { extname, join, normalize, sep } from 'node:path';
-import { DEFAULT_INVESTIGATION_LIST_LIMIT, parseEdgeRefSegment, renameRequestSchema, statusChangeRequestSchema, investigationListCountsSchema, nodeSchema, investigationListQuerySchema, type Investigation, type LastTest, openInvestigationRequestSchema, SEARCH_GROUP_CAP, searchMoreRequestSchema, searchMoreResultSchema, searchRequestSchema, searchResultSchema, type SourceSummary, sourceSummaryFieldsSchema, sourceSummarySchema, type SourceTestReport, type EdgeReadRef, valueOfPathSegment } from '@neburyx/contracts';
+import { DEFAULT_INVESTIGATION_LIST_LIMIT, parseEdgeRefSegment, renameRequestSchema, renameViewRequestSchema, saveViewRequestSchema, statusChangeRequestSchema, investigationListCountsSchema, nodeSchema, investigationListQuerySchema, type Investigation, type LastTest, openInvestigationRequestSchema, SEARCH_GROUP_CAP, searchMoreRequestSchema, searchMoreResultSchema, searchRequestSchema, searchResultSchema, type SourceSummary, sourceSummaryFieldsSchema, sourceSummarySchema, type SourceTestReport, type EdgeReadRef, valueOfPathSegment } from '@neburyx/contracts';
 
 interface SupportProfile {
   readonly sourceId: string;
@@ -191,6 +191,19 @@ function readOnlyRefusal(status: 'closed' | 'archived'): unknown {
 
 const INVALID = { error: { code: 'INVALID_REQUEST', message: 'The request is not valid.', retryable: false, traceId: 'tr-support' } };
 
+/** A named view the stand-in holds: what the list shows, and the draft it was saved from. */
+interface StoredView {
+  readonly id: string;
+  name: string;
+  readonly notes: string | null;
+  readonly createdAt: string;
+  version: number;
+  readonly layout: unknown;
+  readonly queryContext: unknown;
+}
+
+const viewShown = (view: StoredView): unknown => ({ id: view.id, name: view.name, notes: view.notes, savedBy: { name: 'Support analyst' }, createdAt: view.createdAt, version: view.version });
+
 interface StoredInvestigation {
   title: string;
   status: Investigation['status'];
@@ -199,6 +212,8 @@ interface StoredInvestigation {
   draftLayout?: unknown;
   draftQueryContext?: unknown;
   draftNotes: string | null;
+  basedOnViewId: string | null;
+  views: StoredView[];
   lastEditedAt: string;
   readonly id: string;
   readonly sourceId: string;
@@ -241,12 +256,20 @@ function shown(stored: StoredInvestigation, isNew = false): Investigation {
   };
 }
 
+/** Saved when the draft names a view and still holds what that view holds. */
+function saveOf(stored: StoredInvestigation): { state: 'saved'; savedAt: string } | { state: 'unsaved'; savedAt: null } {
+  const view = stored.views.find((entry) => entry.id === stored.basedOnViewId);
+  const draft = draftOf(stored) as { layout: unknown; queryContext: unknown };
+  const same = view !== undefined && JSON.stringify([view.layout, view.queryContext, view.notes]) === JSON.stringify([draft.layout, draft.queryContext, stored.draftNotes]);
+  return same ? { state: 'saved', savedAt: view.createdAt } : { state: 'unsaved', savedAt: null };
+}
+
 function draftOf(stored: StoredInvestigation): unknown {
-  if (stored.draftLayout !== undefined && stored.draftQueryContext !== undefined) return { version: stored.draftVersion, layout: stored.draftLayout, queryContext: stored.draftQueryContext, notes: stored.draftNotes, basedOnViewId: null };
+  if (stored.draftLayout !== undefined && stored.draftQueryContext !== undefined) return { version: stored.draftVersion, layout: stored.draftLayout, queryContext: stored.draftQueryContext, notes: stored.draftNotes, basedOnViewId: stored.basedOnViewId };
   return {
     version: stored.draftVersion,
     notes: stored.draftNotes,
-    basedOnViewId: null,
+    basedOnViewId: stored.basedOnViewId,
     layout: { schemaVersion: 1, layout: 'force', nodes: [{ t: stored.entityType, id: stored.stableId, pinned: false, hidden: false, groupId: null }], edges: [], groups: [] },
     queryContext: { schemaVersion: 1, loaded: { nodes: [{ t: stored.entityType, id: stored.stableId }], edges: [] }, expansions: [], filters: { entityTypes: [], relTypes: [], time: null, properties: [] } },
   };
@@ -268,7 +291,7 @@ function createInvestigations(options: SupportServerOptions) {
     read(id: string, response: ServerResponse): void {
       const stored = held.get(id);
       if (stored === undefined) return json(response, 404, NOT_FOUND);
-      json(response, 200, { investigation: shown(stored), draft: draftOf(stored), save: { state: 'unsaved', savedAt: null } });
+      json(response, 200, { investigation: shown(stored), draft: draftOf(stored), save: saveOf(stored) });
     },
     /** Replaces the draft when the version in If-Match is the draft's, as the API does; an unmapped entity type or a missing field is refused. */
     saveDraft(id: string, ifMatch: string | undefined, body: unknown, response: ServerResponse): void {
@@ -280,13 +303,70 @@ function createInvestigations(options: SupportServerOptions) {
       if (given === undefined || given['layout'] === undefined || given['queryContext'] === undefined || (notes !== null && typeof notes !== 'string') || ifMatch === undefined || !/^"[1-9][0-9]*"$/.test(ifMatch)) return json(response, 400, INVALID);
       if (Number(ifMatch.slice(1, -1)) !== stored.draftVersion) return json(response, 409, { error: { code: 'CONFLICTED_VIEW_VERSION', message: 'This view was changed elsewhere. Reload to continue.', retryable: false, traceId: 'tr-support' } });
       const same = JSON.stringify([stored.draftLayout, stored.draftQueryContext, stored.draftNotes]) === JSON.stringify([given['layout'], given['queryContext'], notes]);
-      if (same) return json(response, 200, { version: stored.draftVersion, save: { state: 'unsaved', savedAt: null }, notes });
+      if (same) return json(response, 200, { version: stored.draftVersion, save: saveOf(stored), notes });
       stored.draftVersion += 1;
       stored.draftLayout = given['layout'];
       stored.draftQueryContext = given['queryContext'];
       stored.draftNotes = notes;
       stored.lastEditedAt = new Date().toISOString();
-      json(response, 200, { version: stored.draftVersion, save: { state: 'unsaved', savedAt: null }, notes });
+      json(response, 200, { version: stored.draftVersion, save: saveOf(stored), notes });
+    },
+    /** Saves the draft as a named view, as the API does: the draft's version in If-Match, a closed investigation refused. */
+    saveView(id: string, ifMatch: string | undefined, body: unknown, response: ServerResponse): void {
+      const stored = held.get(id);
+      if (stored === undefined) return json(response, 404, NOT_FOUND);
+      const parsed = saveViewRequestSchema.safeParse(body);
+      if (!parsed.success || ifMatch === undefined || !/^"[1-9][0-9]*"$/.test(ifMatch)) return json(response, 400, INVALID);
+      if (stored.status !== 'open') return json(response, 409, readOnlyRefusal(stored.status));
+      if (Number(ifMatch.slice(1, -1)) !== stored.draftVersion) return json(response, 409, { error: { code: 'CONFLICTED_VIEW_VERSION', message: 'This view was changed elsewhere. Reload to continue.', retryable: false, traceId: 'tr-support' } });
+      const { name, notes, title, expectedInvestigationVersion } = parsed.data;
+      if (title !== undefined && expectedInvestigationVersion !== stored.version) return json(response, 409, PLAIN_CONFLICT);
+      if (title !== undefined && title !== stored.title) {
+        stored.title = title;
+        stored.version += 1;
+      }
+      const draft = draftOf(stored) as { layout: unknown; queryContext: unknown };
+      stored.draftNotes = notes;
+      const view: StoredView = { id: randomUUID(), name, notes, createdAt: new Date().toISOString(), version: 1, layout: draft.layout, queryContext: draft.queryContext };
+      stored.views.push(view);
+      stored.basedOnViewId = view.id;
+      stored.draftVersion += 1;
+      stored.lastEditedAt = view.createdAt;
+      json(response, 201, { view: viewShown(view), draft: { version: stored.draftVersion, notes, basedOnViewId: view.id }, save: saveOf(stored), ...(title === undefined ? {} : { investigation: { title: stored.title, version: stored.version } }) });
+    },
+    listViews(id: string, response: ServerResponse): void {
+      const stored = held.get(id);
+      if (stored === undefined) return json(response, 404, NOT_FOUND);
+      json(response, 200, { items: [...stored.views].reverse().map(viewShown), nextCursor: null, count: { value: stored.views.length, quality: 'exact', scope: 'named-views' }, draft: { basedOnViewId: stored.basedOnViewId, updatedAt: stored.lastEditedAt } });
+    },
+    renameView(id: string, viewId: string, ifMatch: string | undefined, body: unknown, response: ServerResponse): void {
+      const stored = held.get(id);
+      const view = stored?.views.find((entry) => entry.id === viewId);
+      if (stored === undefined || view === undefined) return json(response, 404, NOT_FOUND);
+      const parsed = renameViewRequestSchema.safeParse(body);
+      if (!parsed.success || ifMatch === undefined || !/^"[1-9][0-9]*"$/.test(ifMatch)) return json(response, 400, INVALID);
+      if (stored.status !== 'open') return json(response, 409, readOnlyRefusal(stored.status));
+      if (Number(ifMatch.slice(1, -1)) !== view.version) return json(response, 409, { error: { code: 'CONFLICTED_VIEW_VERSION', message: 'This view was changed elsewhere. Reload to continue.', retryable: false, traceId: 'tr-support' } });
+      if (parsed.data.name !== view.name) {
+        view.name = parsed.data.name;
+        view.version += 1;
+      }
+      json(response, 200, viewShown(view), { etag: `"${view.version}"` });
+    },
+    restoreView(id: string, viewId: string, ifMatch: string | undefined, response: ServerResponse): void {
+      const stored = held.get(id);
+      const view = stored?.views.find((entry) => entry.id === viewId);
+      if (stored === undefined || view === undefined) return json(response, 404, NOT_FOUND);
+      if (ifMatch === undefined || !/^"[1-9][0-9]*"$/.test(ifMatch)) return json(response, 400, INVALID);
+      if (stored.status !== 'open') return json(response, 409, readOnlyRefusal(stored.status));
+      if (Number(ifMatch.slice(1, -1)) !== stored.draftVersion) return json(response, 409, { error: { code: 'CONFLICTED_VIEW_VERSION', message: 'This view was changed elsewhere. Reload to continue.', retryable: false, traceId: 'tr-support' } });
+      stored.draftLayout = view.layout;
+      stored.draftQueryContext = view.queryContext;
+      stored.draftNotes = view.notes;
+      stored.basedOnViewId = view.id;
+      stored.draftVersion += 1;
+      stored.lastEditedAt = new Date().toISOString();
+      json(response, 200, { draft: draftOf(stored), save: saveOf(stored) });
     },
     /** Closes, archives or reopens, with the transitions of the API; a request for the status it has changes nothing. */
     changeStatus(id: string, body: unknown, response: ServerResponse): void {
@@ -363,7 +443,7 @@ function createInvestigations(options: SupportServerOptions) {
         .filter((stored) => readable(stored.sourceId))
         .sort((left, right) => (left.createdAt === right.createdAt ? (left.id < right.id ? 1 : -1) : left.createdAt < right.createdAt ? 1 : -1));
       json(response, 200, {
-        items: eligible.slice(0, limit).map((stored) => ({ ...shown(stored), sourceAlias: stored.sourceId, save: { state: 'unsaved', savedAt: null } })),
+        items: eligible.slice(0, limit).map((stored) => ({ ...shown(stored), sourceAlias: stored.sourceId, save: saveOf(stored) })),
         hasMore: eligible.length > limit,
         counts: {
           investigations: { value: eligible.length, quality: 'exact', scope: 'investigations' },
@@ -385,9 +465,9 @@ function createInvestigations(options: SupportServerOptions) {
       if (typesOf.get(sourceId)?.has(entityType) !== true) return json(response, 400, INVALID);
       if (!exists(sourceId, entityType, stableId)) return json(response, 404, NOT_FOUND);
       const existing = caseRef === null ? undefined : [...held.values()].find((stored) => stored.sourceId === sourceId && stored.caseRef === caseRef && stored.entityType === entityType && stored.stableId === stableId);
-      if (existing !== undefined) return json(response, 200, { investigation: shown(existing), created: false, draft: { version: existing.draftVersion, notes: existing.draftNotes, basedOnViewId: null }, ...(isRepointed(existing.caseRef) ? {} : { entity: node(sourceId, entityType, stableId) }) });
+      if (existing !== undefined) return json(response, 200, { investigation: shown(existing), created: false, draft: { version: existing.draftVersion, notes: existing.draftNotes, basedOnViewId: existing.basedOnViewId }, ...(isRepointed(existing.caseRef) ? {} : { entity: node(sourceId, entityType, stableId) }) });
       const createdAt = new Date().toISOString();
-      const stored: StoredInvestigation = { id: randomUUID(), sourceId, title: `${entityType} ${stableId}`, status: 'open', version: 1, caseRef, entityType, stableId, createdAt, lastEditedAt: createdAt, draftVersion: 1, draftNotes: null };
+      const stored: StoredInvestigation = { id: randomUUID(), sourceId, title: `${entityType} ${stableId}`, status: 'open', version: 1, caseRef, entityType, stableId, createdAt, lastEditedAt: createdAt, draftVersion: 1, draftNotes: null, basedOnViewId: null, views: [] };
       held.set(stored.id, stored);
       json(response, 201, { investigation: shown(stored, true), created: true, draft: { version: 1, notes: null, basedOnViewId: null }, entity: node(sourceId, entityType, stableId) });
     },
@@ -655,6 +735,15 @@ export function createSupportServer(options: SupportServerOptions): Server {
       if (request.method === 'POST' && path === '/__support/set-status') return investigations.setStatus(await bodyOf(request), response);
       const saving = /^\/v1\/investigations\/([^/]+)\/draft$/.exec(path);
       if (request.method === 'PUT' && saving?.[1] !== undefined) return investigations.saveDraft(decodeURIComponent(saving[1]), request.headers['if-match'], await bodyOf(request), response);
+      const viewing = /^\/v1\/investigations\/([^/]+)\/views(?:\/([^/]+)(\/restore)?)?$/.exec(path);
+      if (viewing?.[1] !== undefined) {
+        const [, investigationId, viewId, restoring] = viewing;
+        const id = decodeURIComponent(investigationId ?? '');
+        if (request.method === 'POST' && viewId === undefined) return investigations.saveView(id, request.headers['if-match'], await bodyOf(request), response);
+        if (request.method === 'GET' && viewId === undefined) return investigations.listViews(id, response);
+        if (request.method === 'PUT' && viewId !== undefined && restoring === undefined) return investigations.renameView(id, decodeURIComponent(viewId), request.headers['if-match'], await bodyOf(request), response);
+        if (request.method === 'POST' && viewId !== undefined && restoring !== undefined) return investigations.restoreView(id, decodeURIComponent(viewId), request.headers['if-match'], response);
+      }
       if (request.method === 'POST' && path === '/v1/search/entities') return search.run(await bodyOf(request), response);
       if (request.method === 'POST' && path === '/v1/search/entities/more') return search.more(await bodyOf(request), response);
       if (request.method === 'POST' && path === '/__support/named-views') return investigations.holdNamedViews(await bodyOf(request), response);

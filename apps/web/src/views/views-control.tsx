@@ -49,7 +49,12 @@ export function ViewsControl() {
   }, [open, list]);
 
   useLayoutEffect(() => {
-    if (open) setTop(clearanceBelowBanner());
+    if (!open) return undefined;
+    setTop(clearanceBelowBanner());
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const observer = new ResizeObserver(() => setTop(clearanceBelowBanner()));
+    for (const region of document.querySelectorAll(`.${BANNER_REGION_CLASS}`)) observer.observe(region);
+    return () => observer.disconnect();
   }, [open]);
 
   useEffect(() => {
