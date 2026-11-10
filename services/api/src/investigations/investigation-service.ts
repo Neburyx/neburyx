@@ -213,23 +213,24 @@ export function createInvestigationService(deps: InvestigationServiceDeps): Inve
     },
     async changeStatus({ traceId, id, principal, expectedVersion, status }) {
       if (!UUID.test(id)) throw new AppError('NOT_FOUND');
-      const result = await deps.store.changeInvestigationStatus({
-        investigationId: id,
-        ownerId: principal.id,
-        expectedVersion,
-        status,
-        beforeCommit: async ({ from, to, row }) => {
-          try {
-            await deps.audit.record({ actorId: principal.id, actorRole: principal.role, action: auditActionOf(from, to), result: 'success', sourceId: row.sourceId, traceId });
-          } catch {
-            // the change is not committed without its audit event, and the sink's error is not shown
-            throw new AppError('INTERNAL_ERROR');
-          }
-        },
-      });
+      const event = { actorId: principal.id, actorRole: principal.role, action: auditActionOf(status), traceId };
+      let result;
+      try {
+        result = await deps.store.changeInvestigationStatus({ investigationId: id, ownerId: principal.id, expectedVersion, status });
+      } catch (error) {
+        // the write failed, so the event says so; a sink that cannot take it must not hide the failure of the write
+        await deps.audit.record({ ...event, result: 'failed' }).catch(() => undefined);
+        throw error;
+      }
       if (result.outcome === 'not-found') throw new AppError('NOT_FOUND');
       if (result.outcome === 'conflict') throw new AppError('CONFLICT');
       if (result.outcome === 'not-allowed') throw new AppError('CONFLICT', { reason: 'status-change-not-allowed' });
+      if (result.outcome === 'changed') {
+        // recorded after the commit, so it never says success for a change that was not made
+        await deps.audit.record({ ...event, result: 'success', sourceId: result.row.sourceId }).catch(() => {
+          throw new AppError('INTERNAL_ERROR');
+        });
+      }
       return { investigation: { ...shown(deps.mapping, deps.references, result.row), closedAt: result.row.closedAt, archivedAt: result.row.archivedAt } };
     },
     async read({ id, principal }) {

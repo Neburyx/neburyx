@@ -19,7 +19,7 @@ export function planStatusChange(from: Status, to: Status): StatusChangePlan | '
   return { closedAt: 'keep', archivedAt: 'now' };
 }
 
-export function auditActionOf(from: Status, to: Status): 'investigation.close' | 'investigation.archive' | 'investigation.reopen' {
+export function auditActionOf(to: Status): 'investigation.close' | 'investigation.archive' | 'investigation.reopen' {
   if (to === 'open') return 'investigation.reopen';
   return to === 'closed' ? 'investigation.close' : 'investigation.archive';
 }

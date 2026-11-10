@@ -9,7 +9,7 @@ import { makeToken } from '../reference/token.js';
 import { identityHashOf } from '../registry/identity-hash.js';
 import type { AuditEvent, AuditSink } from '../seams/seams.js';
 import { communitySeams } from '../seams/community-seams.js';
-import { LOCAL_IDENTITY, memoryAppStore, type MemoryAppStore } from '../testing/app-store.js';
+import { LOCAL_IDENTITY, memoryAppStore, memoryStoreWith, type MemoryAppStore } from '../testing/app-store.js';
 import { TEST_REFERENCE_KEYS } from '../testing/gate.js';
 import { baseSource, fileOf } from '../testing/mapping.js';
 import { testSourceGate } from '../testing/source-gate.js';
@@ -172,14 +172,33 @@ describe('POST /v1/investigations/{id}/status', () => {
     await rig.app.close();
   });
 
-  it('answers INTERNAL_ERROR and writes nothing when the audit sink rejects', async () => {
+  it('answers INTERNAL_ERROR without the sink\'s words when the sink rejects the event of a change that was committed', async () => {
     const rig = await started(seeded(), { record: () => Promise.reject(new Error('sink down')) });
-    const before = JSON.stringify(rig.store.investigations);
     const response = await changeStatus(rig, { status: 'closed', expectedVersion: 3 });
     expect(response.statusCode).toBe(500);
     expect(response.json()).toMatchObject({ error: { code: 'INTERNAL_ERROR' } });
     expect(JSON.stringify(response.json())).not.toContain('sink down');
-    expect(JSON.stringify(rig.store.investigations)).toBe(before);
+    expect(stored(rig.store)?.status).toBe('closed');
+    await rig.app.close();
+  });
+
+  it('records a failed event, not a success, when the write fails, and stores nothing', async () => {
+    const store = memoryStoreWith({ failStatusChange: true });
+    const documents = initialDraftDocuments({ entityType: 'widget', stableId: 'W-1' });
+    store.investigations.push(row());
+    store.drafts.push({ id: '0192f000-0000-7000-8000-0000000000d1', version: 1, notes: null, layout: documents.layout, queryContext: documents.queryContext, investigationId: ID, contentHash: contentHashOf(documents) });
+    const rig = await started(store);
+    const response = await changeStatus(rig, { status: 'closed', expectedVersion: 3 });
+    expect(response.statusCode).toBe(500);
+    expect(rig.audited).toMatchObject([{ action: 'investigation.close', result: 'failed' }]);
+    expect(stored(rig.store)?.status).toBe('open');
+    await rig.app.close();
+  });
+
+  it('records the success event only once the change is made', async () => {
+    const rig = await started(seeded());
+    await changeStatus(rig, { status: 'closed', expectedVersion: 3 });
+    expect(rig.audited.map((event) => event.result)).toEqual(['success']);
     await rig.app.close();
   });
 });

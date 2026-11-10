@@ -4,6 +4,7 @@ import type { ClientState } from '../state/client-state.js';
 import { isReadOnlyStatus, type InvestigationStatus } from '../state/investigation-state.js';
 import { createStore, readable, type ReadableStore } from '../state/store.js';
 import { FAILURE_BANNER_ID, FAILURE_CHIP, FAILURE_TEXT, UNKNOWN_OUTCOME_TEXT, NETWORK_FAILURE, RELOAD, SCHEMA_FAILURE } from './copy.js';
+import { draftSyncOf } from '../draft/draft-sync.js';
 import { refreshRecord } from './refresh-record.js';
 
 export interface LifecycleDeps {
@@ -40,13 +41,15 @@ export function isReadOnlyRefusal(failure: ApiFailure): boolean {
 
 /** Shows a failed call as a request banner; a `CONFLICT` offers Reload, which reads the investigation again. */
 export function showFailure(deps: LifecycleDeps, failure: ApiFailure, investigationId: string): void {
-  const reload = failure.code === 'CONFLICT' || !('traceId' in failure);
+  // after a commit the server may still fail (its audit event is refused), so an internal error says no more than a lost answer does
+  const outcomeKnown = 'traceId' in failure && failure.code !== 'INTERNAL_ERROR';
+  const reload = failure.code === 'CONFLICT' || !outcomeKnown;
   deps.banner.show({
     id: FAILURE_BANNER_ID,
     tone: 'danger',
     chip: FAILURE_CHIP,
     headline: messageOf(failure),
-    text: 'traceId' in failure ? FAILURE_TEXT : UNKNOWN_OUTCOME_TEXT,
+    text: outcomeKnown ? FAILURE_TEXT : UNKNOWN_OUTCOME_TEXT,
     actions: reload
       ? [
           {
@@ -73,7 +76,9 @@ export async function changeStatus(deps: LifecycleDeps, status: InvestigationSta
   busy.setState(true);
   deps.banner.dismiss(FAILURE_BANNER_ID);
   try {
-    const result = await deps.client.changeInvestigationStatus(id, status, record.version);
+    // closing must not strand the edits still waiting for their write: they are saved first, or the person chooses to leave them
+    if (isReadOnlyStatus(status) && !(await draftSyncOf(deps.state, deps.client).settle())) return 'skipped';
+    const result = await deps.client.changeInvestigationStatus(id, status, deps.state.investigation.getState().record?.version ?? record.version);
     if (!result.ok) {
       if (deps.state.investigation.getState().id === id) showFailure(deps, result.failure, id);
       return 'failed';

@@ -93,7 +93,7 @@ describe('the investigation menu', () => {
     expect(screen.queryByRole('menu')).toBeNull();
     expect(screen.getByText('message' in refused ? refused.message : '')).toBeTruthy();
     expect(state.investigation.getState().record).toMatchObject({ status: 'open', version: 3 });
-    expect(screen.queryByRole('button', { name: 'Reload' }) !== null).toBe(code === 'CONFLICT');
+    expect(screen.queryByRole('button', { name: 'Reload' }) !== null).toBe(code !== 'NOT_FOUND');
   });
 
   it('reads the investigation again on Reload after a CONFLICT and takes its status', async () => {
@@ -108,6 +108,20 @@ describe('the investigation menu', () => {
     await flush();
     expect(getInvestigation).toHaveBeenCalledWith(ID);
     expect(state.investigation.getState().record).toMatchObject({ status: 'closed', readOnly: true, version: 9 });
+  });
+
+  it('treats an internal error as an unknown outcome: Reload takes the stored status', async () => {
+    const getInvestigation = vi.fn(async () => ({ ok: true as const, value: { investigation: investigationOf('closed', 4), draft: { version: 1, layout: { schemaVersion: 1 as const, layout: 'force', nodes: [], edges: [], groups: [] }, queryContext: { schemaVersion: 1 as const, loaded: { nodes: [], edges: [] }, expansions: [], filters: { entityTypes: [], relTypes: [], time: null, properties: [] } }, notes: null } } }));
+    const state = shownState('open', 3);
+    renderLifecycle(state, { getInvestigation, changeInvestigationStatus: async () => ({ ok: false, failure: failure('INTERNAL_ERROR', 'Something went wrong. Quote the trace ID if you contact support.') }) });
+    const user = userEvent.setup();
+    await user.click(button());
+    await user.click(screen.getByRole('menuitem', { name: 'Close' }));
+    await flush();
+    expect(screen.getByText('The change may not have been made. Reload to see.')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Reload' }));
+    await flush();
+    expect(state.investigation.getState().record).toMatchObject({ status: 'closed', version: 4 });
   });
 
   it('says the change may not have been made when the answer was lost, and offers Reload', async () => {

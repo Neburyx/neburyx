@@ -81,8 +81,6 @@ export interface TitleChange extends InvestigationChange {
 
 export interface StatusChange extends InvestigationChange {
   readonly status: InvestigationRow['status'];
-  /** Runs after the change is written and before it is committed; if it throws, nothing is committed. */
-  readonly beforeCommit: (change: { readonly from: InvestigationRow['status']; readonly to: InvestigationRow['status']; readonly row: InvestigationRow }) => Promise<void>;
 }
 
 /** `unchanged` is a change to what the investigation already has: nothing was written and `row` is as stored. */
@@ -400,9 +398,7 @@ export async function changeInvestigationStatus(pool: pg.Pool, change: StatusCha
     );
     const [record] = updated.rows;
     if (record === undefined) throw new Error('the investigation was not returned after its status change');
-    const row = rowOf(record);
-    await change.beforeCommit({ from: held.status, to: change.status, row });
-    return { outcome: 'changed', row };
+    return { outcome: 'changed', row: rowOf(record) };
   });
 }
 

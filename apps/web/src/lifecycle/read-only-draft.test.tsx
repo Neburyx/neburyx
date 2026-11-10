@@ -157,3 +157,71 @@ describe('an investigation closed in another tab', () => {
     expect(writes).toHaveLength(1);
   });
 });
+
+describe('closing an investigation with edits still waiting for their write', () => {
+  async function closing(answers: Parameters<typeof rig>[1]) {
+    const parts = rig('open', answers);
+    const { changeStatus } = await import('./status-flow.js');
+    const { createBannerController } = await import('../banner/banner-controller.js');
+    const calls: string[] = [];
+    const client = fakeClient({
+      saveDraft: async (_id, version, body) => {
+        parts.writes.push({ version, body });
+        calls.push('saveDraft');
+        return answers === undefined ? { ok: true, value: { version: version + 1, save: { state: 'unsaved', savedAt: null }, notes: null } } : answers(parts.writes.length);
+      },
+      changeInvestigationStatus: async (_id, status, version) => {
+        calls.push(`status ${status} ${version}`);
+        return { ok: true, value: { investigation: { ...investigationOf(status, version + 1), closedAt: '2026-11-10T10:00:00.000Z', archivedAt: null } } };
+      },
+    });
+    const { draftSyncOf } = await import('../draft/draft-sync.js');
+    draftSyncOf(parts.state, client).adopt(ID, { version: 1, notes: null, writable: true });
+    return { ...parts, calls, run: (status: 'closed' | 'archived') => changeStatus({ client, state: parts.state, banner: createBannerController() }, status) };
+  }
+
+  it('writes the edits inside the autosave delay first, then closes', async () => {
+    const { move, calls, run, state } = await closing(undefined);
+    move(5);
+    const done = run('closed');
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(done).resolves.toBe('changed');
+    expect(calls).toEqual(['saveDraft', 'status closed 3']);
+    expect(state.investigation.getState().record?.status).toBe('closed');
+  });
+
+  it('closes at once when nothing is waiting', async () => {
+    const { calls, run } = await closing(undefined);
+    await run('archived');
+    expect(calls).toEqual(['status archived 3']);
+  });
+
+  it('holds when the write fails, and closes only when the person chooses to leave anyway', async () => {
+    const { move, calls, run, state } = await closing(() => ({ ok: false, failure: failure('INTERNAL_ERROR', 'down') }));
+    const { draftSyncOf } = await import('../draft/draft-sync.js');
+    move(5);
+    const done = run('closed');
+    await vi.advanceTimersByTimeAsync(1);
+    expect(calls).toEqual(['saveDraft']);
+    expect(state.investigation.getState().record?.status).toBe('open');
+    draftSyncOf(state, fakeClient()).leaveAnyway();
+    await expect(done).resolves.toBe('changed');
+    expect(calls).toEqual(['saveDraft', 'status closed 3']);
+  });
+});
+
+describe('a draft that was failing when the investigation became read-only', () => {
+  it('stops retrying and drops the failing state', async () => {
+    const { writes, move, state, sync } = rig('open', () => ({ ok: false, failure: failure('INTERNAL_ERROR', 'down') }));
+    move(1);
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
+    expect(sync.status.getState().kind).toBe('failing');
+    act(() => {
+      const held = state.investigation.getState().record;
+      if (held !== null) state.describeInvestigation({ ...held, status: 'closed', readOnly: true });
+    });
+    expect(sync.status.getState().kind).toBe('idle');
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(writes).toHaveLength(1);
+  });
+});

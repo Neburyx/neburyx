@@ -24,6 +24,7 @@ export interface MemoryAppStoreOptions {
   readonly failPingState?: boolean;
   readonly failChecks?: boolean;
   readonly failInvestigations?: boolean;
+  readonly failStatusChange?: boolean;
   readonly failList?: boolean;
   readonly failCounts?: boolean;
 }
@@ -173,8 +174,8 @@ export function memoryStoreWith(options: MemoryAppStoreOptions): MemoryAppStore 
       if (plan === 'not-allowed') return { outcome: 'not-allowed' };
       const now = new Date(Date.UTC(2026, 10, 6, 12, 0, statusChanges++)).toISOString();
       const timeOf = (rule: 'keep' | 'now' | 'clear', kept: string | null) => (rule === 'keep' ? kept : rule === 'now' ? now : null);
+      if (options.failStatusChange === true) throw new Error('the status could not be written');
       const row: InvestigationRow = { ...held, status: change.status, closedAt: timeOf(plan.closedAt, held.closedAt), archivedAt: timeOf(plan.archivedAt, held.archivedAt), version: held.version + 1 };
-      await change.beforeCommit({ from: held.status, to: change.status, row });
       investigations[investigations.indexOf(held)] = row;
       return { outcome: 'changed', row };
     },

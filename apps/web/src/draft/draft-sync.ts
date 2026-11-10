@@ -357,7 +357,10 @@ export function createDraftSync(options: DraftSyncOptions): DraftSync {
     }
     if (status.getState().kind === 'rejected') setStatus(IDLE);
     if (readOnlyNow()) {
+      // nothing is written for it any more, so no retry or failure is left to tell
       cancel();
+      endFailing();
+      setStatus(IDLE);
       return;
     }
     if (writing || retrying) return;
