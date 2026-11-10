@@ -89,3 +89,9 @@ export async function grantQueue(client: pg.PoolClient, role: string): Promise<v
     await client.query(`GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA ${QUEUE_SCHEMA} TO ${app}`);
   });
 }
+
+/** The names the history table holds, read under the run's lock. The history tables must exist. */
+export async function appliedNames(client: pg.PoolClient): Promise<readonly string[]> {
+  const result = await client.query<{ name: string }>('SELECT name FROM kysely_migration');
+  return result.rows.map((row) => row.name);
+}

@@ -3,7 +3,7 @@ import { Kysely, PostgresDialect } from 'kysely';
 import { Migrator, NO_MIGRATIONS } from 'kysely/migration';
 import pg from 'pg';
 import { isConnectionError } from '../database-errors.js';
-import { grantDefaultsOnce, grantMigrationNames, grantQueue, historyTablesExist, protectHistory, roleExists } from './grants.js';
+import { appliedNames, grantDefaultsOnce, grantMigrationNames, grantQueue, historyTablesExist, protectHistory, roleExists } from './grants.js';
 import { sqlFileProvider } from './provider.js';
 
 export interface MigrateOptions {
@@ -71,19 +71,22 @@ async function runPhases(
   options: MigrateOptions,
   stillConnected: () => void,
 ): Promise<MigrateOutcome> {
-  const migrator = new Migrator({ db, provider: sqlFileProvider(options.directory) });
+  const setupMigrator = new Migrator({ db, provider: sqlFileProvider(options.directory) });
 
+  let alreadyApplied: readonly string[] = [];
   const setup = await pool.connect();
   try {
     if (!(await roleExists(setup, options.appRole))) return { status: 'unknown-role' };
-    if (!(await historyTablesExist(setup))) await migrator.migrateTo(NO_MIGRATIONS);
+    if (!(await historyTablesExist(setup))) await setupMigrator.migrateTo(NO_MIGRATIONS);
     await protectHistory(setup, options.appRole);
     await grantDefaultsOnce(setup, options.appRole);
+    alreadyApplied = await appliedNames(setup);
   } finally {
     setup.release();
   }
   stillConnected();
 
+  const migrator = new Migrator({ db, provider: sqlFileProvider(options.directory, alreadyApplied) });
   const known = await migrator.getMigrations();
   const lastApplied = known.findLastIndex((migration) => migration.executedAt !== undefined);
   const stray = known.find((migration, index) => migration.executedAt === undefined && index < lastApplied);

@@ -1,8 +1,8 @@
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { runCli } from '../testing/cli.js';
-import { attempt, fixtureFolder, removeFixtureFolders, rows, runInProcess, waiters } from '../testing/database.js';
-import { startPostgres, type TestDatabase, type TestPostgres } from '../testing/postgres.js';
+import { attempt, fixtureFolder, removeFixtureFolders, rows, runInProcess, snapshot, waiters } from '../testing/database.js';
+import { startPostgres, type TestPostgres } from '../testing/postgres.js';
 
 const KYSELY_MIGRATION_LOCK_ID = '3853314791062309107';
 
@@ -16,27 +16,6 @@ afterAll(async () => {
   await postgres.stop();
   removeFixtureFolders();
 });
-
-async function snapshot(database: TestDatabase): Promise<string> {
-  const tables = await rows(
-    database.ownerUrl,
-    `SELECT table_schema, table_name FROM information_schema.tables WHERE table_schema IN ('public', 'graphile_worker') ORDER BY 1, 2`,
-  );
-  const history = await rows(database.ownerUrl, 'SELECT name FROM kysely_migration ORDER BY name');
-  const queue = await rows(database.ownerUrl, 'SELECT id FROM graphile_worker.migrations ORDER BY id');
-  const privileges = await rows(
-    database.ownerUrl,
-    `SELECT n.nspname, c.relname, c.relkind, c.relacl::text AS acl FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-     WHERE n.nspname IN ('public', 'graphile_worker') AND c.relkind IN ('r', 'S', 'v') ORDER BY 1, 2`,
-  );
-  const schemas = await rows(database.ownerUrl, `SELECT nspname, nspacl::text AS acl FROM pg_namespace WHERE nspname IN ('public', 'graphile_worker') ORDER BY 1`);
-  const policies = await rows(
-    database.ownerUrl,
-    `SELECT schemaname, tablename, policyname, roles::text AS roles, cmd, qual, with_check FROM pg_policies ORDER BY 1, 2, 3`,
-  );
-  const defaults = await rows(database.ownerUrl, `SELECT defaclobjtype, defaclacl::text AS acl FROM pg_default_acl ORDER BY 1`);
-  return JSON.stringify({ tables, history, queue, privileges, schemas, policies, defaults });
-}
 
 describe('a database that cannot be reached', () => {
   it('exits 1 with a message that says so and prints no connection details', async () => {

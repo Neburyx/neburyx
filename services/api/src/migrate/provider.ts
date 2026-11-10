@@ -7,7 +7,12 @@ export async function migrationFileNames(directory: string): Promise<readonly st
   return (await readdir(directory)).filter((file) => file.endsWith('.sql')).sort().map((file) => basename(file, '.sql'));
 }
 
-export function sqlFileProvider(directory: string): MigrationProvider {
+/**
+ * The files of the image, plus a stand-in that does nothing for each name the database has applied and the
+ * image does not ship (the state after rolling the image back). Kysely refuses a history it cannot find
+ * every name of; the stand-ins give it a complete list, and they never run because their names are applied.
+ */
+export function sqlFileProvider(directory: string, appliedElsewhere: readonly string[] = []): MigrationProvider {
   return {
     async getMigrations(): Promise<Record<string, Migration>> {
       const files = (await readdir(directory)).filter((file) => file.endsWith('.sql')).sort();
@@ -19,6 +24,9 @@ export function sqlFileProvider(directory: string): MigrationProvider {
             await sql.raw(text).execute(db);
           },
         };
+      }
+      for (const name of appliedElsewhere) {
+        migrations[name] ??= { async up() {} };
       }
       return migrations;
     },

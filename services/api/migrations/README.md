@@ -29,6 +29,26 @@ rolling back the image still works against the new schema. In practice:
 
 Never rename or drop something in the same release that stops using it.
 
+## Running an older image against a newer database
+
+After a rollback the database has applied migrations that the older image does not ship. `neburyx migrate`
+accepts that: it treats the unshipped names as applied, applies only the shipped files that are still
+pending, and prints `nothing to apply` when there are none. It never undoes a migration.
+
+What it refuses, and why:
+
+- **A shipped file that is not applied but sorts before an applied name** (shipped or not). It would run
+  after migrations that, on every other database, run after it, so the schema could differ from a fresh
+  install's. The run stops, names the file and applies nothing. Give the file a later name.
+
+What it does not check:
+
+- **How far back the image is.** The command cannot tell, so it accepts any number of unshipped names.
+  Compatibility is promised only for the previous tag (see above); running an older image is unsupported
+  even though the command does not refuse it.
+- **Changed contents of an applied file.** The history stores only the name and the time, so an edited
+  file is not detected. Never edit a released migration.
+
 ## When a run stops half-way
 
 `neburyx migrate` applies your SQL files first, in one transaction, and then installs or upgrades the
