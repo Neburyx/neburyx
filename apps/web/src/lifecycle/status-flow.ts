@@ -39,7 +39,7 @@ export function isReadOnlyRefusal(failure: ApiFailure): boolean {
   return failure.code === 'CONFLICT' && 'details' in failure && failure.details?.reason === 'investigation-read-only';
 }
 
-/** Shows a failed call as a request banner; a `CONFLICT` offers Reload, which reads the investigation again. */
+/** Shows a failed call as a request banner; a `CONFLICT` or an outcome that is not known (a lost answer, an internal error) offers Reload, which reads the investigation again. */
 export function showFailure(deps: LifecycleDeps, failure: ApiFailure, investigationId: string): void {
   // after a commit the server may still fail (its audit event is refused), so an internal error says no more than a lost answer does
   const outcomeKnown = 'traceId' in failure && failure.code !== 'INTERNAL_ERROR';
