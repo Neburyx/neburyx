@@ -282,7 +282,7 @@ test.describe('Home: the library cards in a browser', () => {
     await expect(cardOf(page, 'Patterns')).toContainText('Built-in patterns are not available yet.');
     await expect(cardOf(page, 'Patterns').locator('.library-figure')).toHaveCount(0);
     expect(await noHorizontalScroll(page)).toBe(true);
-    await expect(library(page).getByRole('link')).toHaveCount(0);
+    await expect(library(page).getByRole('link')).toHaveText(['Investigations', 'Saved views']);
     await expect(library(page).getByRole('button')).toHaveCount(0);
     await openByLink(page, 'banking-demo', `LC-${id}`);
     await page.goto('/');
