@@ -103,7 +103,7 @@ function degreeLines(degrees: SourceTestReport['degreeChecks']): string[] {
   ];
 }
 
-function lines(report: SourceTestReport): string {
+export function reportLines(report: SourceTestReport): string {
   const server = report.server === null ? 'not reached' : `${report.server.product} ${report.server.version} (${report.server.edition})`;
   const supported = report.versionSupported === null ? 'unknown' : report.versionSupported ? 'yes' : 'no';
   const operations = report.operations.map((operation) => `${operation.name} (${operation.status})`).join(', ');
@@ -186,7 +186,7 @@ export async function runTestSourceCommand(args: readonly string[], env: Readonl
     };
     const tester = createSourceTester({ gate: sourceGate.gate, mapping, store, ...(io.clock === undefined ? {} : { clock: io.clock }), ...(parsed.writeProbe ? { probe } : {}), logger });
     const report = await tester.run({ traceId: `tr-cli-${Date.now()}`, principal: identity.principal, sourceId: name });
-    io.stdout.write(lines(report) + (parsed.writeProbe ? `${probeLine(report, probed.answer)}\n` : ''));
+    io.stdout.write(reportLines(report) + (parsed.writeProbe ? `${probeLine(report, probed.answer)}\n` : ''));
     return report.outcome === 'fail' ? FAILURE : 0;
   } catch (error) {
     io.stderr.write(describeFailure(error));

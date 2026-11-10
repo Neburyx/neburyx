@@ -1,6 +1,6 @@
 # Domain packs
 
-A domain pack is a directory of plain YAML and Markdown that describes one kind of graph to Neburyx. It holds no code: the same image serves every pack, and adding a pack changes nothing in `services/api`, `apps/web` or `packages/contracts`.
+A domain pack is a directory of plain YAML and Markdown that describes one kind of graph to Neburyx. It holds no code: the same image serves every pack, and adding a pack changes nothing in `services/api`, `apps/web` or `packages/contracts`. To write a mapping step by step, start with the [mapping guide](../docs/mapping-guide.md).
 
 | Pack | Domain |
 |---|---|
@@ -43,7 +43,7 @@ sources:
 3. Change the entity types, relationship types and property names to match your graph. Only `type`, `label` and `stable_id` are required for an entity type; everything else has a default. `label` is the label the nodes carry in your graph and is what the product reads with. To show an entity type under another name, give it a display name: `display: { name: IP address }`. The display name is what the canvas, the legend and the menus show; without one the label is shown, exactly as written.
 4. Point `NEBURYX_CONFIG` at the file and start the server. A mistake is reported with its place in the file and never repeats an address, a credential or a link.
 
-A command that checks a mapping against a running graph (`neburyx test-source`) is planned; this page will describe it when it exists.
+To check a mapping against a running graph, run `neburyx test-source`; see [Checking a mapping](../docs/mapping-guide.md#checking-a-mapping).
 
 ## An entity type whose identifier is personal data
 

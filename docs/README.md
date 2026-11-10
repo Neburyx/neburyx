@@ -3,6 +3,7 @@
 Public technical documentation. Pre-release placeholder: the technical architecture will be published here once it has been reviewed for publication.
 
 - [run-locally.md](run-locally.md): run the whole app on your machine with one command, against your own Neo4j and Postgres.
+- [mapping-guide.md](mapping-guide.md): write a mapping for your own Neo4j: every key, how to check it with `test-source`, what each check means, a worked example on the demo graph and what happens to saved investigations when a mapping changes.
 - [coding-guidelines.md](coding-guidelines.md): how code is written here (TypeScript rules, comments, tests, API and web client).
 - [architecture-checks.md](architecture-checks.md): the checks that fail the build (nothing outside the gate reaches the adapter; no domain words in code) and what they cannot see.
 - [configuration.md](configuration.md): the deployment settings of the mapping file: how long deleted investigations and exports are kept, their ranges and what a refused value says.
