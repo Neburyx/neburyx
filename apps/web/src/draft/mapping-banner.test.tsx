@@ -55,6 +55,14 @@ describe('the mapping-changed banner', () => {
     expect(text()).not.toContain('Nothing in this view had to change.');
   });
 
+  it('does not say that the filters hide types when the types that are off have nothing loaded', () => {
+    const { state } = started(notice([]));
+    act(() => state.presentation.setMappedTypes({ entityTypes: ['type-a', 'type-b'], relationshipTypes: [] }));
+    act(() => state.setEntityTypeOff('type-b', true));
+    expect(text()).toContain('Nothing in this view had to change.');
+    expect(text()).not.toContain('The filters saved with this view still hide some types.');
+  });
+
   it('says that fields are newly sensitive only for a now-personal filter and a masked session', () => {
     const personal = notice([{ name: 'phone', reason: 'now-personal' }]);
     started(personal, true);

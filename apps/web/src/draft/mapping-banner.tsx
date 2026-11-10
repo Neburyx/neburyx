@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useBanner } from '../banner/banner-context.js';
-import { useClientState, useSessionMask } from '../state/context.js';
+import { useClientState, useLoadedGraph, useSessionMask } from '../state/context.js';
+import { filteredKeys } from '../state/loaded-graph.js';
 import { useStoreSelector } from '../state/store.js';
 import { droppedFilterText, FILTERS_STILL_HIDE, joined, MAPPING_CHANGED_BANNER_ID, MAPPING_CHANGED_CHIP, MAPPING_CHANGED_HEADLINE, NEWLY_SENSITIVE, NOTHING_HAD_TO_CHANGE, UNMAPPED_ITEMS_SENTENCE } from './mapping-notice-copy.js';
 import { mappingNoticesOf } from './mapping-notice.js';
@@ -13,7 +14,10 @@ export function MappingChangeBanner() {
   const shownId = useStoreSelector(state.investigation, (current) => current.id);
   const status = useStoreSelector(state.investigation, (current) => current.record?.status);
   const active = notice !== undefined && notice.investigationId === shownId && notice.canChange && status === 'open' ? notice : undefined;
-  const typesHidden = useStoreSelector(state.presentation.view, (view) => view.typeFilter.offEntityTypes.size + view.typeFilter.offRelationshipTypes.size > 0);
+  const graph = useLoadedGraph();
+  const typeFilter = useStoreSelector(state.presentation.view, (view) => view.typeFilter);
+  // the sentence is true of what the person sees only when a loaded entity or relationship is held back by a type that is off
+  const typesHidden = filteredKeys(graph, typeFilter).size > 0 || graph.edges.some((edge) => typeFilter.offRelationshipTypes.has(edge.type));
   const onScreen = useStoreSelector(banner.view, (current) => current.banner?.id === MAPPING_CHANGED_BANNER_ID);
   useEffect(() => {
     if (active === undefined) return undefined;
