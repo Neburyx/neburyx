@@ -44,6 +44,7 @@ interface Session {
   conflicted: boolean;
   pendingFilters: QueryContextDocument['filters'] | undefined;
   rehashHeld: boolean;
+  carriedTypes: { readonly entityTypes: readonly string[]; readonly relTypes: readonly string[] } | undefined;
   /** The document last stored or read, as text. */
   lastJson: string | undefined;
 }
@@ -170,7 +171,7 @@ export function createDraftSync(options: DraftSyncOptions): DraftSync {
 
   const documentOf = (session: Session): DraftWriteRequest => {
     const held = state.investigation.getState();
-    return draftOf({ nodeRefs: held.nodeRefs, graph: state.loadedGraph(), presentation: state.presentation.view.getState(), notes: session.notes, kept: session.kept, storedFilters: session.pendingFilters });
+    return draftOf({ nodeRefs: held.nodeRefs, graph: state.loadedGraph(), presentation: state.presentation.view.getState(), notes: session.notes, kept: session.kept, storedFilters: session.pendingFilters, carriedTypes: session.carriedTypes });
   };
 
   const readOnlyNow = (): boolean => state.investigation.getState().record?.readOnly === true;
@@ -377,6 +378,7 @@ export function createDraftSync(options: DraftSyncOptions): DraftSync {
     const mapped = state.presentation.view.getState().mappedTypes;
     if (filters === undefined || mapped === undefined) return;
     session.pendingFilters = undefined;
+    session.carriedTypes = { entityTypes: filters.entityTypes.filter((type) => !mapped.entityTypes.includes(type)), relTypes: filters.relTypes.filter((type) => !mapped.relationshipTypes.includes(type)) };
     if (filters.entityTypes.length > 0) for (const type of mapped.entityTypes) if (!filters.entityTypes.includes(type)) state.setEntityTypeOff(type, true);
     if (filters.relTypes.length > 0) for (const type of mapped.relationshipTypes) if (!filters.relTypes.includes(type)) state.setRelationshipTypeOff(type, true);
     const shown = shownSession();
@@ -415,7 +417,7 @@ export function createDraftSync(options: DraftSyncOptions): DraftSync {
   return {
     status: readable(status),
     adopt(investigationId, session) {
-      const adopted: Session = { version: session.version, notes: session.notes, kept: session.kept ?? NOTHING_KEPT, writable: session.writable, conflicted: false, pendingFilters: session.filters, rehashHeld: session.rehash === true, lastJson: undefined };
+      const adopted: Session = { version: session.version, notes: session.notes, kept: session.kept ?? NOTHING_KEPT, writable: session.writable, conflicted: false, pendingFilters: session.filters, rehashHeld: session.rehash === true, carriedTypes: undefined, lastJson: undefined };
       sessions.set(investigationId, adopted);
       if (state.investigation.getState().id === investigationId && adopted.writable) {
         applyFilters(adopted);

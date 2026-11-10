@@ -33,6 +33,8 @@ function typesLeftOn(known: readonly string[] | undefined, off: ReadonlySet<stri
   return known === undefined || off.size === 0 ? [] : known.filter((type) => !off.has(type));
 }
 
+const withCarried = (left: string[], carried: readonly string[] = []): string[] => (left.length === 0 ? left : [...left, ...carried.filter((type) => !left.includes(type))]);
+
 export interface DraftInputs {
   readonly nodeRefs: readonly ElementRef[];
   readonly graph: LoadedGraph;
@@ -41,6 +43,8 @@ export interface DraftInputs {
   readonly kept: KeptItems;
   /** The filters of the stored draft, written unchanged until the mapping of the source is known and they can be put back on the view. */
   readonly storedFilters?: QueryContextDocument['filters'] | undefined;
+  /** Types the stored filters name that the mapping does not have now: written back with the types left on, so that a type that is mapped again has the state it was saved with. */
+  readonly carriedTypes?: { readonly entityTypes: readonly string[]; readonly relTypes: readonly string[] } | undefined;
 }
 
 /** The draft as it is written: references only, never a property value. The layout direction, physics, selection and panels are not part of it. */
@@ -72,7 +76,7 @@ export function draftOf(inputs: DraftInputs): DraftWriteRequest {
     schemaVersion: SCHEMA_VERSION,
     loaded: { nodes: allNodes.map(({ t, id }) => ({ t, id })), edges: allEdges },
     expansions: [],
-    filters: inputs.storedFilters ?? { entityTypes: typesLeftOn(mapped.entityTypes, presentation.typeFilter.offEntityTypes), relTypes: typesLeftOn(mapped.relationshipTypes, presentation.typeFilter.offRelationshipTypes), time: null, properties: [] },
+    filters: inputs.storedFilters ?? { entityTypes: withCarried(typesLeftOn(mapped.entityTypes, presentation.typeFilter.offEntityTypes), inputs.carriedTypes?.entityTypes), relTypes: withCarried(typesLeftOn(mapped.relationshipTypes, presentation.typeFilter.offRelationshipTypes), inputs.carriedTypes?.relTypes), time: null, properties: [] },
   };
   return { layout, queryContext, notes: inputs.notes };
 }

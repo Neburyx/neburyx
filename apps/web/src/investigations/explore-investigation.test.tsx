@@ -51,7 +51,7 @@ describe('/explore/{id}', () => {
     };
     const asked: string[] = [];
     const { client } = knowing([A], {
-      getInvestigation: async () => ({ ok: true, value: { investigation: A.investigation, draft: restored, unmapped: { nodes: [{ t: 'gone', id: 'X' }], edges: [] }, mappingChange: { droppedFilters: [{ kind: 'property', name: 'ghost', reason: 'property-removed' }] } } }),
+      getInvestigation: async () => ({ ok: true, value: { investigation: A.investigation, draft: restored, unmapped: { nodes: [{ t: 'gone', id: 'X' }], edges: [] }, mappingChange: { droppedFilters: [{ name: 'ghost', reason: 'property-removed' }] } } }),
       readRefs: async (request) => {
         asked.push(...request.entities.map((ref) => ref.entityType));
         return { ok: true, value: { nodes: request.entities.map((ref) => nodeOf(ref.sourceId, ref.entityType, ref.stableId)), edges: [], missing: { entities: [], edges: [] } } };

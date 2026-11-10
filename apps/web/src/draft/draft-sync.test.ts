@@ -258,6 +258,28 @@ describe('the filters of a stored draft', () => {
   });
 });
 
+describe('the type filters of a stored draft that name a type the mapping no longer has', () => {
+  it('are written back with the types left on, so the type has its saved state when the mapping has it again', async () => {
+    const { writes, move, sync, state } = rig(undefined, false);
+    sync.adopt(ID, { version: 1, notes: null, filters: { entityTypes: ['type-a', 'type-gone'], relTypes: ['rel-gone'], time: null, properties: [] }, writable: true });
+    state.presentation.setMappedTypes({ entityTypes: ['type-a', 'type-b'], relationshipTypes: ['rel-a'] });
+    expect(state.presentation.view.getState().typeFilter.offEntityTypes.has('type-b')).toBe(true);
+    move(2);
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
+    expect(writes.at(-1)?.body.queryContext.filters.entityTypes).toEqual(['type-a', 'type-gone']);
+    expect(writes.at(-1)?.body.queryContext.filters.relTypes).toEqual([]);
+  });
+
+  it('write nothing extra when no type is switched off', async () => {
+    const { writes, move, sync, state } = rig(undefined, false);
+    sync.adopt(ID, { version: 1, notes: null, filters: { entityTypes: ['type-a', 'type-gone'], relTypes: [], time: null, properties: [] }, writable: true });
+    state.presentation.setMappedTypes({ entityTypes: ['type-a', 'type-gone'], relationshipTypes: [] });
+    move(2);
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
+    expect(writes.at(-1)?.body.queryContext.filters.entityTypes).toEqual([]);
+  });
+});
+
 describe('a draft too large to send as the page is left', () => {
   it('is measured in bytes, so text of two-byte characters is not taken for half its size', async () => {
     const wide = rig();

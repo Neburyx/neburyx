@@ -9068,14 +9068,6 @@
                 "items": {
                   "type": "object",
                   "properties": {
-                    "kind": {
-                      "type": "string",
-                      "enum": [
-                        "entityType",
-                        "relType",
-                        "property"
-                      ]
-                    },
                     "name": {
                       "type": "string",
                       "minLength": 1
@@ -9083,7 +9075,6 @@
                     "reason": {
                       "type": "string",
                       "enum": [
-                        "type-removed",
                         "property-removed",
                         "now-personal",
                         "not-filterable"
@@ -9091,7 +9082,6 @@
                     }
                   },
                   "required": [
-                    "kind",
                     "name",
                     "reason"
                   ],

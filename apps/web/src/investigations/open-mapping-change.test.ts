@@ -107,13 +107,13 @@ describe('opening a draft that holds items the mapping no longer covers', () => 
 });
 
 describe('opening a draft written under another mapping', () => {
-  const changed = (extra: Partial<InvestigationResponse> = {}, status: 'open' | 'closed' = 'open') => answer([{ t: 'kind-a', id: 'A-1' }], [], { mappingChange: { droppedFilters: [{ kind: 'property', name: 'ghost', reason: 'property-removed' }] }, ...extra }, status);
+  const changed = (extra: Partial<InvestigationResponse> = {}, status: 'open' | 'closed' = 'open') => answer([{ t: 'kind-a', id: 'A-1' }], [], { mappingChange: { droppedFilters: [{ name: 'ghost', reason: 'property-removed' }] }, ...extra }, status);
 
   it('records what was dropped for the banner and sends one write once the banner has been shown, stored under the current mapping', async () => {
     const { client, writes } = rig(changed());
     const state = createClientState();
     await openById(client, state, INVESTIGATION_A, CONTEXT);
-    expect(mappingNoticesOf(state).notice.getState()).toMatchObject({ investigationId: INVESTIGATION_A, droppedFilters: [{ kind: 'property', name: 'ghost', reason: 'property-removed' }], hasUnmapped: false, canChange: true });
+    expect(mappingNoticesOf(state).notice.getState()).toMatchObject({ investigationId: INVESTIGATION_A, droppedFilters: [{ name: 'ghost', reason: 'property-removed' }], hasUnmapped: false, canChange: true });
     await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS * 3);
     expect(writes).toHaveLength(0);
     mappingNoticesOf(state).notice.getState()?.onShown?.();

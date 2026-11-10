@@ -11,10 +11,10 @@ const REASONS: Readonly<Record<DroppedFilterReason, string>> = {
   'property-removed': 'property removed',
   'not-filterable': 'no longer a filterable property',
   'now-personal': 'now a sensitive field',
-  'type-removed': 'type removed',
 };
 
 export const droppedFilterText = (name: string, reason: DroppedFilterReason): string => `${name} (${REASONS[reason]})`;
+export const FILTERS_STILL_HIDE = 'The filters saved with this view still hide some types.';
 
 export function joined(parts: readonly string[]): string {
   if (parts.length <= 1) return parts.join('');

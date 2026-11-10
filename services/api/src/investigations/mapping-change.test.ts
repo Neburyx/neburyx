@@ -92,18 +92,20 @@ describe('the unmapped items of a draft', () => {
 describe('the filters a mapping change drops', () => {
   const filters = (properties: string[], entityTypes: string[] = [], relTypes: string[] = []): QueryContextDocument['filters'] => ({ entityTypes, relTypes, time: null, properties: properties.map((key) => ({ key, op: 'eq', values: ['x'] })) });
 
-  it('gives each filter one reason: type removed, property removed, now personal, or not filterable', () => {
-    expect(droppedFiltersOf(demo, filters(['color', 'ghost', 'secret', 'partId'], ['widget', 'gone'], ['LINKS', 'GONE-LINK']))).toEqual([
-      { kind: 'entityType', name: 'gone', reason: 'type-removed' },
-      { kind: 'relType', name: 'GONE-LINK', reason: 'type-removed' },
-      { kind: 'property', name: 'ghost', reason: 'property-removed' },
-      { kind: 'property', name: 'secret', reason: 'now-personal' },
-      { kind: 'property', name: 'partId', reason: 'not-filterable' },
+  it('gives each property filter one reason: property removed, now personal, or not filterable', () => {
+    expect(droppedFiltersOf(demo, filters(['color', 'ghost', 'secret', 'partId']))).toEqual([
+      { name: 'ghost', reason: 'property-removed' },
+      { name: 'secret', reason: 'now-personal' },
+      { name: 'partId', reason: 'not-filterable' },
     ]);
   });
 
   it('gives a key that is personal and listed as filterable in no type only the first reason in the order', () => {
-    expect(droppedFiltersOf(demo, filters(['hush']))).toEqual([{ kind: 'property', name: 'hush', reason: 'now-personal' }]);
+    expect(droppedFiltersOf(demo, filters(['hush']))).toEqual([{ name: 'hush', reason: 'now-personal' }]);
+  });
+
+  it('never drops a type filter, so a type that is mapped again has the state it was saved with', () => {
+    expect(droppedFiltersOf(demo, filters([], ['widget', 'gone'], ['LINKS', 'GONE-LINK']))).toEqual([]);
   });
 });
 
@@ -116,17 +118,16 @@ describe('GET /v1/investigations/{id} after the mapping changed', () => {
     expect(body.unmapped?.nodes).toEqual([{ t: 'gone', id: 'GONE-1' }]);
   });
 
-  it('answers 200 with the dropped filters named and removed from the returned draft when the hashes differ', async () => {
+  it('answers 200 with the dropped property filters named and removed from the returned draft, and the type filters kept as saved, when the hashes differ', async () => {
     const filters: QueryContextDocument['filters'] = { entityTypes: ['widget', 'gone'], relTypes: [], time: null, properties: [{ key: 'color', op: 'eq', values: ['red'] }, { key: 'ghost', op: 'eq', values: ['x'] }, { key: 'secret', op: 'eq', values: ['x'] }] };
     const { response } = await read(seeded(documents([node('widget', 'W-1')], [], filters), OLD_HASH));
     expect(response.statusCode).toBe(200);
     const body = investigationResponseSchema.parse(response.json());
     expect(body.mappingChange?.droppedFilters).toEqual([
-      { kind: 'entityType', name: 'gone', reason: 'type-removed' },
-      { kind: 'property', name: 'ghost', reason: 'property-removed' },
-      { kind: 'property', name: 'secret', reason: 'now-personal' },
+      { name: 'ghost', reason: 'property-removed' },
+      { name: 'secret', reason: 'now-personal' },
     ]);
-    expect(body.draft.queryContext.filters).toEqual({ entityTypes: ['widget'], relTypes: [], time: null, properties: [{ key: 'color', op: 'eq', values: ['red'] }] });
+    expect(body.draft.queryContext.filters).toEqual({ entityTypes: ['widget', 'gone'], relTypes: [], time: null, properties: [{ key: 'color', op: 'eq', values: ['red'] }] });
   });
 
   it('answers an empty list of dropped filters when everything is still supported', async () => {

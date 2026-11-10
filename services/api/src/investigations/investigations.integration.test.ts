@@ -271,11 +271,8 @@ describe('reading an investigation against Postgres', () => {
     expect(read.statusCode).toBe(200);
     const answer = investigationResponseSchema.parse(read.json());
     expect(answer.unmapped).toEqual({ nodes: [{ t: 'removed-type', id: 'X' }], edges: [] });
-    expect(answer.mappingChange?.droppedFilters).toEqual([
-      { kind: 'entityType', name: 'removed-type', reason: 'type-removed' },
-      { kind: 'property', name: 'removedProperty', reason: 'property-removed' },
-    ]);
-    expect(answer.draft.queryContext.filters).toEqual({ entityTypes: ['widget'], relTypes: [], time: null, properties: [] });
+    expect(answer.mappingChange?.droppedFilters).toEqual([{ name: 'removedProperty', reason: 'property-removed' }]);
+    expect(answer.draft.queryContext.filters).toEqual({ entityTypes: ['widget', 'removed-type'], relTypes: [], time: null, properties: [] });
     expect(executor.calls.length).toBe(calls);
     await app.close();
   });
