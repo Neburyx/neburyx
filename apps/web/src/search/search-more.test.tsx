@@ -49,20 +49,22 @@ function moreKit(first: () => Promise<ApiResult<SearchResult>>, more: (request: 
 const showMore = (name = 'Show more: Exact matches') => within(main()).getByRole('button', { name });
 
 describe('Show more under a group that has more matches', () => {
+  // user-event reads the whole page on every Tab, so the page holds 3 hits and the walk runs from its top without delay:
+  // about 115 ms alone and 220 ms in the full suite; the 15 s limit leaves room for a heavily loaded runner.
   it('is under a group with a cursor only, and a keyboard user reaches it with Tab and runs it with Enter', async () => {
     const kit = moreKit(
-      async () => ok(firstPage({ related: relatedOf([hit('demo', 'REF-1')]) })),
-      async () => ok(exactPage(25, 25, 'cursor-2')),
+      async () => ok(answerOf('demo', hits(0, 3), { counts: { exact: lowerBound(3) }, exactNextCursor: 'cursor-1', related: relatedOf([hit('demo', 'REF-1')]) })),
+      async () => ok(exactPage(3, 25, 'cursor-2')),
     );
     renderApp(searchAt('demo', 'needle'), kit.client);
-    await screen.findByRole('heading', { level: 2, name: 'Exact ID match (≥ 25 · lower bound)' });
+    await screen.findByRole('heading', { level: 2, name: 'Exact ID match (≥ 3 · lower bound)' });
     expect(within(main()).queryByRole('button', { name: 'Show more: Related records' })).toBeNull();
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     for (let presses = 0; presses < 80 && document.activeElement !== showMore(); presses += 1) await user.tab();
     expect(document.activeElement).toBe(showMore());
     await user.keyboard('{Enter}');
     await waitFor(() => expect(kit.pages).toEqual([{ sourceId: 'demo', text: 'needle', group: 'exact', cursor: 'cursor-1' }]));
-  });
+  }, 15_000);
 
   it('runs with Space too', async () => {
     const kit = moreKit(async () => ok(firstPage()), async () => ok(exactPage(25, 25, 'cursor-2')));
