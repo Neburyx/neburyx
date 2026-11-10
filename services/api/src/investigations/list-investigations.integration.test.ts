@@ -43,12 +43,17 @@ afterAll(async () => {
   rmSync(webRoot, { recursive: true, force: true });
 });
 
-async function running(refused: readonly string[] = ['secret'], hooks: { afterDiscovery?: () => Promise<unknown> } = {}) {
+async function running(refused: readonly string[] = ['secret'], hooks: { afterDiscovery?: () => Promise<unknown>; betweenReads?: () => Promise<unknown>; connectionTimeoutMs?: number } = {}) {
   const database: TestDatabase = await postgres.newDatabase();
   expect((await runCli(['migrate'], { DATABASE_MIGRATION_URL: database.ownerUrl, DATABASE_APP_ROLE: database.appRole }).done).code).toBe(0);
-  const opened = createAppStore(database.appUrl, () => undefined, { migrationsDirectory: SHIPPED });
+  const opened = createAppStore(database.appUrl, () => undefined, { migrationsDirectory: SHIPPED, ...(hooks.connectionTimeoutMs === undefined ? {} : { connectionTimeoutMs: hooks.connectionTimeoutMs }) });
   let closing: Promise<void> | undefined;
-  const store: AppStore = { ...opened, close: () => (closing ??= opened.close()) };
+  // the hook runs after the rows are read and before the counts, inside the snapshot of the list
+  const store: AppStore = {
+    ...opened,
+    readLibrary: (read) => opened.readLibrary((reader) => read({ ...reader, listInvestigations: async (query) => { const listed = await reader.listInvestigations(query); await hooks.betweenReads?.(); return listed; } })),
+    close: () => (closing ??= opened.close()),
+  };
   stores.push(store);
   await store.initialize();
   await store.syncSources(withRetired.sources);
@@ -178,6 +183,20 @@ describe('the list of investigations against Postgres', () => {
   });
 });
 
+describe('the list of investigations under more concurrent calls than the pool has connections', () => {
+  it('answers every call when the policy reads the store, none holding a connection while it waits for another', async () => {
+    let held: AppStore | undefined;
+    const { app, store, add } = await running(['secret'], { connectionTimeoutMs: 2_000, afterDiscovery: () => (held ?? (() => { throw new Error('the store is not set'); })()).hasActiveSource('demo') });
+    held = store;
+    await add('demo', at(1));
+    await add('other', at(2));
+    const answers = await Promise.all(Array.from({ length: 12 }, () => app.inject({ method: 'GET', url: '/v1/investigations' })));
+    expect(answers.map((answer) => answer.statusCode)).toEqual(Array.from({ length: 12 }, () => 200));
+    for (const answer of answers) expect(investigationListResponseSchema.parse(answer.json()).items).toHaveLength(2);
+    await app.close();
+  });
+});
+
 describe('the counts of the list against Postgres', () => {
   const counts = (investigations: number, sources: number) => ({ investigations: { value: investigations, quality: 'exact', scope: 'investigations' }, sources: { value: sources, quality: 'exact', scope: 'investigation-sources' }, savedViews: { count: { value: 0, quality: 'exact', scope: 'named-views' }, lastEditedAt: null } });
 
@@ -231,12 +250,12 @@ describe('the counts of the list against Postgres', () => {
   });
 
   it('answers wholly as of the first read when an investigation is created between two of the reads, with the rows, the counts and the next cursor agreeing, and counts it at the next call', async () => {
-    const hooks: { afterDiscovery?: () => Promise<unknown> } = {};
+    const hooks: { betweenReads?: () => Promise<unknown> } = {};
     const { app, add, list } = await running(['secret'], hooks);
     await add('demo', at(1));
     await add('demo', at(2));
     let created = false;
-    hooks.afterDiscovery = async () => {
+    hooks.betweenReads = async () => {
       if (created) return;
       created = true;
       await add('demo', at(9));
@@ -314,11 +333,11 @@ describe('the named view counts of the list against Postgres', () => {
   });
 
   it('answers wholly before or wholly after a named view that is saved between two of the reads, with the row\'s saved state and the count agreeing', async () => {
-    const hooks: { afterDiscovery?: () => Promise<unknown> } = {};
+    const hooks: { betweenReads?: () => Promise<unknown> } = {};
     const { database, app, add, list } = await running(['secret'], hooks);
     const target = await add('demo', at(1));
     let saved = false;
-    hooks.afterDiscovery = async () => {
+    hooks.betweenReads = async () => {
       if (saved) return;
       saved = true;
       await rows(

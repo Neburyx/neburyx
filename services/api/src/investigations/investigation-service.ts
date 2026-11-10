@@ -184,8 +184,9 @@ export function createInvestigationService(deps: InvestigationServiceDeps): Inve
       const binding: CursorBinding = { source: null, principal: principal.id, policyVersion: COMMUNITY_POLICY_VERSION, filterHash: createHash('sha256').update(JSON.stringify([status, sourceId ?? null, text ?? null])).digest('hex'), sort: LIST_SORT, target: LIST_TARGET, targetVersion: '1' };
       const position = cursor === undefined ? undefined : listPositionSchema.safeParse(deps.cursors.verify(cursor, binding));
       if (position !== undefined && !position.success) throw new AppError('CURSOR_INVALIDATED');
+      // the policy may read the store, so no connection is held while it answers: the sources are read and decided first, and the snapshot then reads the rows, `matching` and the counts of those sources together
+      const sourceIds = await deps.access.readable({ principal, sourceIds: await deps.store.readLibrary((reader) => reader.listInvestigationSourceIds(principal.id)) });
       return deps.store.readLibrary(async (reader) => {
-        const sourceIds = await deps.access.readable({ principal, sourceIds: await reader.listInvestigationSourceIds(principal.id) });
         const filters = { ownerId: principal.id, sourceIds, status, sourceId, text };
         const found = await reader.listInvestigations({ ...filters, limit: limit + 1, after: position?.data });
         const matching = await reader.countMatching(filters);
