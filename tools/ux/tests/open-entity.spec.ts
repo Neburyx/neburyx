@@ -27,8 +27,10 @@ test.describe('opening an entity from the development page', () => {
   for (const id of ['.', '..']) {
     test(`opens an entity whose stable ID is "${id}" and draws it again from the address after a reload`, async ({ page }) => {
       const requested: string[] = [];
+      const referenced: string[] = [];
       page.on('request', (request) => {
         if (request.url().includes('/v1/entities/')) requested.push(new URL(request.url()).pathname);
+        if (request.url().includes('/v1/graph/read-refs')) referenced.push(request.postData() ?? '');
       });
       await page.goto('/dev/open-entity');
       await page.getByRole('button', { name: 'banking-demo' }).click();
@@ -40,7 +42,9 @@ test.describe('opening an entity from the development page', () => {
       await page.reload();
       await expect(page.getByRole('heading', { level: 1 })).toHaveText(`account ${id}`);
       await expect(canvasOf(page)).toHaveAttribute('data-drawn-entities', '1');
-      expect(requested, 'the reload read the entity by a path no URL parser shortens').toContain(`/v1/entities/banking-demo/account/~${id}`);
+      const byPath = requested.includes(`/v1/entities/banking-demo/account/~${id}`);
+      const byBody = referenced.some((body) => JSON.parse(body).entities.some((entity: { stableId: string }) => entity.stableId === id));
+      expect(byPath || byBody, 'the reload read the entity by a path no URL parser shortens, or by a reference in a body').toBe(true);
     });
   }
 

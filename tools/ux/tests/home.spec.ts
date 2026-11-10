@@ -44,7 +44,8 @@ test.describe('Home: the Recent list in a browser', () => {
     await expect(page.getByText('Showing the 5 most recent.')).toBeVisible();
     await expect(rows(page).first()).toContainText(`account HF-${id}`);
     expect(await noHorizontalScroll(page)).toBe(true);
-    await expect(page.getByText('An investigation opens with its starting entity.')).toBeVisible();
+    await expect(page.getByText('An investigation opens with its starting entity.')).toHaveCount(0);
+    await expect(rows(page).first().locator('.recent-time')).toContainText('Last edited');
     await expect(rows(page).first().locator('.badge')).toHaveText('Unsaved');
     await expect(rows(page).first().locator('time')).toHaveAttribute('dateTime', /^20\d\d-/);
   });

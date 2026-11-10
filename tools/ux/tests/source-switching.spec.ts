@@ -19,7 +19,7 @@ function recording(page: Page): { readonly seen: string[]; readonly metadata: st
   const metadata: string[] = [];
   page.on('request', (request) => {
     const { pathname } = new URL(request.url());
-    if (pathname === '/v1/graph/coverage') return;
+    if (pathname === '/v1/graph/coverage' || request.method() === 'PUT') return;
     const line = `${request.method()} ${pathname.replace(/[0-9a-f-]{36}/, ':id')}`;
     if (pathname.startsWith('/v1/investigations') || pathname.startsWith('/v1/entities')) seen.push(line);
     else if (pathname.startsWith('/v1/')) metadata.push(line);
@@ -116,16 +116,19 @@ test.describe('opening an entity of a second source while an investigation of th
     await openIn(page, 'claims-demo', 'CL-4');
     await expect(heading(page)).toHaveText('account CL-4');
     requests.seen.length = 0;
+    requests.metadata.length = 0;
     await page.reload();
     await expect(heading(page)).toHaveText('account CL-4');
     await expect(sourceLine(page)).toContainText('claims-demo');
-    expect(requests.seen).toEqual(['GET /v1/investigations/:id', 'GET /v1/entities/claims-demo/account/CL-4']);
+    const byReference = requests.metadata.filter((line) => line === 'POST /v1/graph/read-refs');
+    expect(requests.seen.filter((line) => !line.startsWith('GET /v1/entities/')), 'the investigation is read once').toEqual(['GET /v1/investigations/:id']);
+    expect(requests.seen.filter((line) => line.startsWith('GET /v1/entities/')).length + byReference.length, 'and its first entity once, by a path or, when the page left a draft, by a reference').toBe(1);
     requests.seen.length = 0;
     await page.goto('/dev/open-entity');
     await openIn(page, 'banking-demo', 'AC-4', reference);
     await expect(heading(page)).toHaveText('account AC-4');
     await expect(sourceLine(page)).toContainText('banking-demo');
     await expect(canvasOf(page)).toHaveAttribute('data-drawn-entities', '1');
-    expect(requests.seen).toEqual(['POST /v1/investigations']);
+    expect(requests.seen, 'a resumed investigation is read for its draft after the open').toEqual(['POST /v1/investigations', 'GET /v1/investigations/:id']);
   });
 });
