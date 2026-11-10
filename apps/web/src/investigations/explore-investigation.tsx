@@ -120,6 +120,7 @@ export function ExploreInvestigation({ client }: { readonly client: ApiClient })
     />
     <DraftAnnouncer sync={sync} />
     <DraftConflictBanner sync={sync} />
+    {/* the order matters: both use the one standing-banner slot, and the read-only sync clears it before the mapping banner sets it again on a reopen */}
     <ReadOnlyBannerSync client={client} />
     <MappingChangeBanner />
     </>

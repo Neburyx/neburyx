@@ -3,9 +3,11 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { BannerProvider } from '../banner/banner-context.js';
 import { createBuiltInBannerController } from '../banner/built-in-causes.js';
 import { StatusBanner } from '../banner/status-banner.js';
+import type { ApiClient } from '../api/client.js';
 import { ClientStateProvider } from '../state/context.js';
 import { createClientState, type ClientState } from '../state/client-state.js';
 import { key, ref, result } from '../state/test-data.js';
+import { ReadOnlyBannerSync } from '../lifecycle/read-only-banner.js';
 import { MappingChangeBanner } from './mapping-banner.js';
 import { mappingNoticesOf, type MappingNotice } from './mapping-notice.js';
 
@@ -120,5 +122,32 @@ describe('the mapping-changed banner', () => {
     expect(calls).toEqual([]);
     act(() => banner.dismiss('request'));
     expect(calls).toEqual([1]);
+  });
+
+  it('gives way to the banner of a closed investigation and shows again when it is reopened, next to the read-only sync as the page mounts them', () => {
+    const state: ClientState = createClientState();
+    state.bindSource('demo');
+    const read = result('demo', ['A']);
+    state.show({ id: ID, sourceId: 'demo', record: { title: 'T', caseRef: null, status: 'open', readOnly: false, version: 1, save: { kind: 'unsaved' } }, resultKeys: [key('demo')], nodeRefs: read.nodes.map((node) => node.ref), edgeRefs: [] }, [{ key: key('demo'), result: read }]);
+    mappingNoticesOf(state).set(notice([]));
+    const banner = createBuiltInBannerController();
+    const client = {} as ApiClient;
+    render(
+      <ClientStateProvider state={state}>
+        <BannerProvider controller={banner}>
+          <StatusBanner />
+          <ReadOnlyBannerSync client={client} />
+          <MappingChangeBanner />
+        </BannerProvider>
+      </ClientStateProvider>,
+    );
+    expect(text()).toContain('The mapping changed since this view was saved.');
+    const record = state.investigation.getState().record as NonNullable<ReturnType<typeof state.investigation.getState>['record']>;
+    act(() => state.describeInvestigation({ ...record, status: 'closed', readOnly: true }));
+    expect(text()).not.toContain('The mapping changed since this view was saved.');
+    expect(text()).toContain('This investigation is closed and read-only.');
+    act(() => state.describeInvestigation({ ...record, status: 'open', readOnly: false }));
+    expect(text()).toContain('The mapping changed since this view was saved.');
+    expect(text()).not.toContain('This investigation is closed and read-only.');
   });
 });
