@@ -156,17 +156,19 @@ test.describe('the Investigations page', () => {
     await expect(rows(page)).toHaveCount(3);
     const viewMeasured = await page.evaluate(() => {
       const table = document.querySelector<HTMLElement>('.investigations-table');
-      const cells = [...document.querySelectorAll<HTMLElement>('.investigations-table tbody tr:first-child td')];
+      const row = [...document.querySelectorAll<HTMLElement>('.investigations-table tbody tr')].find((candidate) => candidate.querySelector('td')?.textContent?.includes('with a very long name'));
+      const cells = [...(row?.querySelectorAll<HTMLElement>('td') ?? [])];
       const open = cells.at(-1)?.querySelector('button')?.getBoundingClientRect();
       const last = cells.at(-1)?.getBoundingClientRect();
       return {
+        measuredLongRow: (cells[0]?.textContent?.length ?? 0) > 60 && (cells[1]?.textContent?.length ?? 0) > 100,
         cellsInside: cells.every((cell) => cell.scrollWidth <= cell.clientWidth + 1),
         openInside: open !== undefined && last !== undefined && open.left >= last.left - 1 && open.right <= last.right + 1,
         wide: (table?.getBoundingClientRect().width ?? 0) > 0,
         noPageScroll: document.documentElement.scrollWidth <= document.documentElement.clientWidth,
       };
     });
-    expect(viewMeasured).toEqual({ cellsInside: true, openInside: true, wide: true, noPageScroll: true });
+    expect(viewMeasured).toEqual({ measuredLongRow: true, cellsInside: true, openInside: true, wide: true, noPageScroll: true });
   });
 
   test('shows the Saved views tab from the keyboard and opens a view with the confirm', async ({ page }) => {
