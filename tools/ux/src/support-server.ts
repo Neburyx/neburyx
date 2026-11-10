@@ -501,17 +501,19 @@ function createInvestigations(options: SupportServerOptions) {
       const count = given?.['count'];
       const sourceId = given?.['sourceId'];
       const viewEvery = typeof given?.['viewEvery'] === 'number' ? given['viewEvery'] : 0;
+      const longRow = given?.['longRow'] === true;
       if (typeof count !== 'number' || !Number.isInteger(count) || count < 1 || count > 500 || typeof sourceId !== 'string' || !readable(sourceId)) return json(response, 400, INVALID);
       const [entityType] = [...(typesOf.get(sourceId) ?? [])];
       if (entityType === undefined) return json(response, 400, INVALID);
       const base = Date.UTC(2026, 10, 5, 12);
       for (let index = 1; index <= count; index += 1) {
         const at = new Date(base - index * 60_000).toISOString();
-        const stableId = `${index}`.padStart(4, '0');
-        const stored: StoredInvestigation = { id: randomUUID(), sourceId, title: `Case ${index}`, status: 'open', version: 1, caseRef: `REF-2026-${stableId}`, entityType, stableId, createdAt: at, lastEditedAt: at, draftVersion: 1, draftNotes: null, basedOnViewId: null, views: [] };
+        const long = longRow && index === 1;
+        const stableId = long ? `LONG-${'0123456789'.repeat(8)}` : `${index}`.padStart(4, '0');
+        const stored: StoredInvestigation = { id: randomUUID(), sourceId, title: long ? `Long case ${'title words '.repeat(16)}`.slice(0, 200) : `Case ${index}`, status: 'open', version: 1, caseRef: long ? `REF-LONG-${'9876543210'.repeat(9)}` : `REF-2026-${stableId}`, entityType, stableId, createdAt: at, lastEditedAt: at, draftVersion: 1, draftNotes: null, basedOnViewId: null, views: [] };
         if (viewEvery > 0 && index % viewEvery === 0) {
           const { layout, queryContext } = draftOf(stored) as { layout: unknown; queryContext: unknown };
-          stored.views.push({ id: randomUUID(), name: `Saved state ${index}`, notes: null, layout, queryContext, createdAt: at, version: 1 });
+          stored.views.push({ id: randomUUID(), name: long ? `Saved state ${'with a very long name '.repeat(5)}`.slice(0, 120) : `Saved state ${index}`, notes: null, layout, queryContext, createdAt: at, version: 1 });
         }
         held.set(stored.id, stored);
       }

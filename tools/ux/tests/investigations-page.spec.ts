@@ -115,6 +115,60 @@ test.describe('the Investigations page', () => {
     await expect(rows(page).first().locator('.investigations-entity-label')).not.toHaveText('');
   });
 
+  test('keeps every column in place with a long title, label, referral and view name, and every control inside its cell', async ({ page }) => {
+    await page.request.post('/__support/forget-investigations');
+    await page.request.post('/__support/seed-investigations', { data: { count: 3, sourceId: 'banking-demo', viewEvery: 1, longRow: true } });
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    await page.route((url) => url.pathname === '/v1/graph/read-refs', async (route) => {
+      await gate;
+      await route.continue();
+    });
+    await page.goto('/investigations');
+    await expect(rows(page)).toHaveCount(3);
+    const headers = () => page.locator('.investigations-table thead th').evaluateAll((all) => all.map((cell) => Math.round(cell.getBoundingClientRect().left)));
+    const before = await headers();
+    release();
+    const label = page.locator('.investigations-entity-label').last();
+    await expect(label).not.toHaveText('');
+    expect(await headers()).toEqual(before);
+    const measured = await page.evaluate(() => {
+      const cells = [...document.querySelectorAll<HTMLElement>('.investigations-table tbody tr')].map((row) => [...row.querySelectorAll<HTMLElement>('td')]);
+      const long = cells.find((row) => row[0]?.textContent?.includes('Long case'));
+      if (long === undefined) return undefined;
+      const [titleCell, entityCell, , , countsCell, actionsCell] = long;
+      const box = (element: Element | null | undefined) => element?.getBoundingClientRect();
+      const labelElement = entityCell?.querySelector<HTMLElement>('.investigations-entity-label');
+      const button = actionsCell?.querySelector('button');
+      return {
+        labelTruncated: (labelElement?.scrollWidth ?? 0) > (labelElement?.clientWidth ?? 0),
+        labelFull: labelElement?.textContent === labelElement?.getAttribute('title') && (labelElement?.textContent?.length ?? 0) > 20,
+        titleInside: (box(titleCell?.querySelector('a'))?.right ?? 0) <= (box(titleCell)?.right ?? 0) + 1,
+        titleBeforeEntity: (box(titleCell)?.right ?? 0) <= (box(entityCell)?.left ?? 0) + 1,
+        countsInside: (box(countsCell?.firstElementChild)?.right ?? 0) <= (box(countsCell)?.right ?? 0) + 1,
+        buttonInside: (box(button)?.left ?? 0) >= (box(actionsCell)?.left ?? 0) - 1 && (box(button)?.right ?? 0) <= (box(actionsCell)?.right ?? 0) + 1,
+        headerInside: [...document.querySelectorAll<HTMLElement>('.investigations-table thead th')].every((cell) => cell.scrollWidth <= cell.clientWidth + 1),
+        noPageScroll: document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+      };
+    });
+    expect(measured).toEqual({ labelTruncated: true, labelFull: true, titleInside: true, titleBeforeEntity: true, countsInside: true, buttonInside: true, headerInside: true, noPageScroll: true });
+    await page.goto('/investigations?tab=views');
+    await expect(rows(page)).toHaveCount(3);
+    const viewMeasured = await page.evaluate(() => {
+      const table = document.querySelector<HTMLElement>('.investigations-table');
+      const cells = [...document.querySelectorAll<HTMLElement>('.investigations-table tbody tr:first-child td')];
+      const open = cells.at(-1)?.querySelector('button')?.getBoundingClientRect();
+      const last = cells.at(-1)?.getBoundingClientRect();
+      return {
+        cellsInside: cells.every((cell) => cell.scrollWidth <= cell.clientWidth + 1),
+        openInside: open !== undefined && last !== undefined && open.left >= last.left - 1 && open.right <= last.right + 1,
+        wide: (table?.getBoundingClientRect().width ?? 0) > 0,
+        noPageScroll: document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+      };
+    });
+    expect(viewMeasured).toEqual({ cellsInside: true, openInside: true, wide: true, noPageScroll: true });
+  });
+
   test('shows the Saved views tab from the keyboard and opens a view with the confirm', async ({ page }) => {
     await seed(page, 30, 10);
     await page.goto('/investigations');

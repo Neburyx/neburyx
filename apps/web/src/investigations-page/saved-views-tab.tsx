@@ -45,6 +45,14 @@ export function SavedViewsTab() {
           <div className="investigations-table-wrap">
             <table ref={table} className="investigations-table" aria-busy={state.loading ? true : undefined}>
               <caption className="visually-hidden">{SAVED_VIEWS_LABEL}</caption>
+              <colgroup>
+                <col className="investigations-view-col-name" />
+                <col className="investigations-view-col-investigation" />
+                <col className="investigations-view-col-source" />
+                <col className="investigations-view-col-saved-by" />
+                <col className="investigations-view-col-saved-at" />
+                <col className="investigations-view-col-open" />
+              </colgroup>
               <thead>
                 <tr>
                   <th scope="col">{VIEW_NAME}</th>

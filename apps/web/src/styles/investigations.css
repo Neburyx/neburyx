@@ -98,7 +98,7 @@
 }
 
 .investigations-col-title {
-  width: 28%;
+  width: 26%;
 }
 
 .investigations-col-entity {
@@ -118,7 +118,31 @@
 }
 
 .investigations-col-actions {
-  width: 6%;
+  width: 8%;
+}
+
+.investigations-view-col-name {
+  width: 22%;
+}
+
+.investigations-view-col-investigation {
+  width: 28%;
+}
+
+.investigations-view-col-source {
+  width: 12%;
+}
+
+.investigations-view-col-saved-by {
+  width: 14%;
+}
+
+.investigations-view-col-saved-at {
+  width: 16%;
+}
+
+.investigations-view-col-open {
+  width: 8%;
 }
 
 .investigations-table caption:focus-visible {
@@ -189,7 +213,12 @@
 }
 
 .investigations-actions {
+  padding-inline: var(--space-4);
   text-align: right;
+}
+
+.investigations-table td {
+  overflow-wrap: anywhere;
 }
 
 .investigations-actions .investigation-menu {
