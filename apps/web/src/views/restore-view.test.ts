@@ -1,4 +1,5 @@
 import type { InvestigationResponse, ReadRefsRequest, RestoreViewResponse } from '@neburyx/contracts';
+import { mappingNoticesOf } from '../draft/mapping-notice.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ApiClient, ApiResult } from '../api/client.js';
 import { AUTOSAVE_DELAY_MS, draftSyncOf } from '../draft/draft-sync.js';
@@ -37,15 +38,18 @@ interface Options {
   readonly readFails?: () => boolean;
   readonly saveDraft?: ApiClient['saveDraft'];
   readonly beforeRead?: () => Promise<void>;
+  readonly mapping?: Partial<Pick<InvestigationResponse, 'unmapped' | 'mappingChange'>>;
 }
 
 function rig(options: Options = {}) {
   const writes: { version: number; notes: string | null }[] = [];
   const restores: number[] = [];
   const asked: ReadRefsRequest[] = [];
+  let served: Pick<InvestigationResponse, 'draft' | 'save'> & Partial<Pick<InvestigationResponse, 'unmapped' | 'mappingChange'>>;
   const opening = { version: 3, notes: 'old note', basedOnViewId: null, layout: { schemaVersion: 1 as const, layout: 'force', nodes: [entry('A-1')], edges: [], groups: [] }, queryContext: { schemaVersion: 1 as const, loaded: { nodes: [{ t: 'kind-a', id: 'A-1' }], edges: [] }, expansions: [], filters: NO_FILTERS } } satisfies InvestigationResponse['draft'];
+  served = { draft: opening, save: { state: 'unsaved', savedAt: null } };
   const { client } = knowing([], {
-    getInvestigation: async () => ({ ok: true, value: { investigation, draft: opening, save: { state: 'unsaved', savedAt: null } } }),
+    getInvestigation: async () => ({ ok: true, value: { investigation, ...served } }),
     getEntity: async (ref) => ({ ok: true, value: nodeOf(ref.sourceId, ref.entityType, ref.stableId) }),
     readRefs: async (request, signal) => {
       asked.push(request);
@@ -64,7 +68,9 @@ function rig(options: Options = {}) {
       }),
     restoreView: async (_id, _viewId, version) => {
       restores.push(version);
-      return (options.restore ?? ((current) => ({ ok: true, value: { draft: restoredDraft(current + 1), save: { state: 'saved', savedAt: SAVED_AT } } })))(version);
+      const result = (options.restore ?? ((current) => ({ ok: true, value: { draft: restoredDraft(current + 1), save: { state: 'saved', savedAt: SAVED_AT } } })))(version);
+      if (result.ok) served = { draft: result.value.draft, save: result.value.save, ...(options.mapping ?? {}) };
+      return result;
     },
   });
   return { client, writes, restores, asked };
@@ -130,6 +136,28 @@ describe('restoring a view into the draft', () => {
     const bare = await opened({ restore: (version) => ({ ok: true, value: { draft: { ...restoredDraft(version + 1), layout: { ...restoredDraft(version + 1).layout, viewport: undefined } }, save: { state: 'saved', savedAt: SAVED_AT } } }) });
     await restoreNamedView(bare.client, bare.state, VIEW);
     expect(bare.state.presentation.view.getState().viewChange).toEqual({ show: 'fit' });
+  });
+
+  it('shows no mapping banner for a view under the current mapping, and reads "Saved" with the view time', async () => {
+    const { client, state } = await opened();
+    await restoreNamedView(client, state, VIEW);
+    expect(mappingNoticesOf(state).notice.getState()).toBeUndefined();
+    expect(state.investigation.getState().record?.save).toEqual({ kind: 'saved', at: SAVED_AT });
+  });
+
+  it('shows the mapping banner with the dropped filters, and writes nothing until it has been shown, when the view was saved under an older mapping', async () => {
+    const { client, state, writes } = await opened({ mapping: { mappingChange: { droppedFilters: [{ name: 'ghost', reason: 'property-removed' }] }, unmapped: { nodes: [], edges: [] } } });
+    await restoreNamedView(client, state, VIEW);
+    expect(mappingNoticesOf(state).notice.getState()).toMatchObject({ investigationId: INVESTIGATION_A, droppedFilters: [{ name: 'ghost', reason: 'property-removed' }], canChange: true });
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS * 2);
+    expect(writes).toEqual([]);
+  });
+
+  it('draws the items of an unmapped type as placeholders, reading nothing for them, when the view names them', async () => {
+    const unmapped = { nodes: [{ t: 'gone', id: 'X' }], edges: [] };
+    const { client, state, asked } = await opened({ mapping: { unmapped } });
+    await restoreNamedView(client, state, VIEW);
+    expect(asked.at(-1)?.entities.some((ref) => ref.entityType === 'gone')).toBe(false);
   });
 
   it('drops a pending autosave that was not sent, and sends the restore with the draft version the server holds', async () => {
@@ -226,7 +254,7 @@ describe('restoring a view into the draft', () => {
     expect(state.holds(INVESTIGATION_A, false)).toBe(false);
     expect(await openById(client, state, INVESTIGATION_A, CONTEXT)).toMatchObject({ kind: 'shown', activation: 'fresh' });
     expect(asked.length).toBeGreaterThan(0);
-    expect(draftSyncOf(state, client).stateOf(INVESTIGATION_A)?.version).toBe(3);
+    expect(draftSyncOf(state, client).stateOf(INVESTIGATION_A)?.version).toBe(4);
   });
 
   it('sends the restore even when the read is ended, and then forgets the investigation so that it is read anew when it is opened again and autosave goes on', async () => {

@@ -1,7 +1,6 @@
-import type { RestoreViewResponse } from '@neburyx/contracts';
 import type { ApiClient, ApiFailure } from '../api/client.js';
 import { draftSyncOf } from '../draft/draft-sync.js';
-import { replaceWithDraft } from '../investigations/open-flow.js';
+import { replaceWithRead } from '../investigations/open-flow.js';
 import type { ClientState } from '../state/client-state.js';
 import { noteReadOnlyRefusal } from './read-only.js';
 import { restoreNoticeOf } from './restore-notice.js';
@@ -18,14 +17,16 @@ export type RestoreOutcome =
   | { readonly kind: 'changed-elsewhere' }
   | { readonly kind: 'read-failed'; readonly failure: ApiFailure; readonly retry: () => Promise<RestoreOutcome> };
 
-async function showRestored(client: ApiClient, state: ClientState, id: string, restored: RestoreViewResponse, signal: AbortSignal | undefined): Promise<RestoreOutcome> {
-  const shown = await replaceWithDraft(client, state, restored.draft, { kind: 'saved', at: restored.save.savedAt }, signal);
-  // the read was ended or another investigation is shown: the restored draft is on the server, so what is held of it is dropped and the next open reads it
+async function showRestored(client: ApiClient, state: ClientState, id: string, signal: AbortSignal | undefined): Promise<RestoreOutcome> {
+  // what a reopen would show: the draft as the server holds it now, with the mapping change it may call for
+  const answer = await client.getInvestigation(id, signal);
+  const shown = answer.ok ? await replaceWithRead(client, state, answer.value, signal) : answer;
   if (signal?.aborted === true || state.investigation.getState().id !== id) {
+    // the read was ended or another investigation is shown: the restored draft is on the server, so what is held of it is dropped and the next open reads it
     state.forget(id);
     return { kind: 'left' };
   }
-  if (shown.kind === 'failed') return { kind: 'read-failed', failure: shown.failure, retry: () => showRestored(client, state, id, restored, signal) };
+  if ('failure' in shown) return { kind: 'read-failed', failure: shown.failure, retry: () => showRestored(client, state, id, signal) };
   restoreNoticeOf(state).set(shown.someMissing);
   return { kind: 'restored', someMissing: shown.someMissing };
 }
@@ -56,5 +57,5 @@ export async function restoreNamedView(client: ApiClient, state: ClientState, vi
   hold.release();
   // the draft is held at the version the server answered, and autosave stays off until the graph it names has been read
   sync.adopt(id, { version: draft.version, notes: draft.notes, basedOnViewId: draft.basedOnViewId, writable: false });
-  return showRestored(client, state, id, result.value, signal);
+  return showRestored(client, state, id, signal);
 }

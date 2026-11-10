@@ -27,6 +27,14 @@ const drafted = (version: number): RestoreViewResponse['draft'] => ({
   queryContext: { schemaVersion: 1, loaded: { nodes: [{ t: 'type-a', id: 'A' }, { t: 'type-a', id: 'B' }], edges: [] }, expansions: [], filters: NO_FILTERS },
 });
 
+
+const SERVED_INVESTIGATION = { id: INVESTIGATION_ID, sourceId: 'demo', title: 'Suspicious linked accounts', caseRef: null, status: 'open' as const, startingEntity: { entityType: 'type-a', stableId: 'A' }, sourceState: 'available' as const, createdAt: '2026-11-05T10:00:00.000Z', lastEditedAt: '2026-11-05T10:00:00.000Z', version: 3 };
+
+/** The answer of the investigation read once the view is restored: the draft the server holds now, equal to the view. */
+function restoredRead(version: number): ReturnType<NonNullable<ApiClient['getInvestigation']>> {
+  return Promise.resolve({ ok: true as const, value: { investigation: SERVED_INVESTIGATION, draft: drafted(version), save: { state: 'saved' as const, savedAt: SAVED_AT } } });
+}
+
 function shown(overrides: Partial<ApiClient> = {}) {
   const server = viewsServer([namedView(3, { name: 'Shared device ring' }), namedView(2), namedView(1)]);
   const restored: number[] = [];
@@ -38,6 +46,7 @@ function shown(overrides: Partial<ApiClient> = {}) {
     renameView: server.renameView,
     overrides: {
       restoreView: async (_id, _viewId, version) => (restored.push(version), { ok: true, value: { draft: drafted(version + 1), save: { state: 'saved', savedAt: SAVED_AT } } }),
+      getInvestigation: async () => restoredRead(restored.length > 0 ? 2 : 1),
       readRefs: async (request) => ({ ok: true, value: { nodes: known.nodes.filter((node) => request.entities.some((entity) => entity.stableId === node.ref.stableId)), edges: [], missing: { entities: [], edges: [] } } }),
       ...overrides,
     },
@@ -194,6 +203,7 @@ describe('the confirm of a restore', () => {
     const restored: number[] = [];
     const parts = rig({
       overrides: {
+        getInvestigation: async () => restoredRead(2),
         restoreView: async (_id, _viewId, version) => (restored.push(version), { ok: true, value: { draft: drafted(version + 1), save: { state: 'saved', savedAt: SAVED_AT } } }),
         readRefs: async (request) => ({ ok: true, value: { nodes: known.nodes.filter((node) => request.entities.some((entity) => entity.stableId === node.ref.stableId)), edges: [], missing: { entities: [], edges: [] } } }),
       },

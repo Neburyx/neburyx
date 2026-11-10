@@ -135,20 +135,22 @@ export async function openEntity(client: ApiClient, state: ClientState, request:
 export type ReplaceOutcome = { readonly kind: 'shown'; readonly someMissing: boolean } | { readonly kind: 'failed'; readonly failure: ApiFailure };
 
 /**
- * Replaces the graph of the investigation shown with the items its draft names, read again through the gate, as opening the investigation would show them, and gives the draft sync the draft as it is, so that autosave goes on from its version.
+ * Replaces the graph of the investigation shown with the items of the draft an open answer carries, read again through the gate, and adopts the draft as an open does, with the mapping banner and the rehash it may call for, so that autosave goes on from its version.
  * Nothing changes when a read fails.
  */
-export async function replaceWithDraft(client: ApiClient, state: ClientState, draft: InvestigationResponse['draft'], save: SaveState, signal?: AbortSignal): Promise<ReplaceOutcome> {
+export async function replaceWithRead(client: ApiClient, state: ClientState, answer: InvestigationResponse, signal?: AbortSignal): Promise<ReplaceOutcome> {
   const { id, sourceId, record, resultKeys } = state.investigation.getState();
+  const { draft, unmapped } = answer;
   const principalId = resultKeys[0]?.principalId;
-  if (id === null || sourceId === null || record === null || principalId === undefined) return { kind: 'failed', failure: { code: 'SCHEMA_MISMATCH' } };
+  if (id === null || sourceId === null || record === null || principalId === undefined || answer.investigation.id !== id) return { kind: 'failed', failure: { code: 'SCHEMA_MISMATCH' } };
   const mask = state.mask.getState();
-  const read = await readDraftItems(client, sourceId, mask, draft, undefined, signal);
+  const read = await readDraftItems(client, sourceId, mask, draft, unmapped, signal);
   if (!read.ok) return { kind: 'failed', failure: read.failure };
   // another investigation may have taken the place of this one while it was read
   if (state.investigation.getState().id !== id) return { kind: 'failed', failure: { code: 'ABORTED' } };
   const { nodes, edges, kept, someMissing } = read.restored;
   const key = openedKey(sourceId, principalId, id, mask);
+  const save: SaveState = answer.save.state === 'saved' ? { kind: 'saved', at: answer.save.savedAt } : { kind: 'unsaved' };
   try {
     state.replace({ id, sourceId, record: { ...record, save }, resultKeys: [key], nodeRefs: nodes.map((node) => node.ref), edgeRefs: edges.map((edge) => edge.ref) }, [{ key, result: { sourceId, nodes: [...nodes], edges: [...edges] } }]);
   } catch (error) {
@@ -158,6 +160,6 @@ export async function replaceWithDraft(client: ApiClient, state: ClientState, dr
   applyPresentation(state, draft, nodes);
   // the drawing that stays mounted has no new graph to fit itself to, so a draft that holds no viewport asks for the view to be fitted
   if (draft.layout.viewport === undefined) state.presentation.applyLayout(new Map());
-  draftSyncOf(state, client).adopt(id, { version: draft.version, notes: draft.notes, basedOnViewId: draft.basedOnViewId, kept, filters: draft.queryContext.filters, writable: true });
+  adoptDraft(state, draftSyncOf(state, client), answer, { notes: draft.notes, kept, filters: draft.queryContext.filters });
   return { kind: 'shown', someMissing };
 }
