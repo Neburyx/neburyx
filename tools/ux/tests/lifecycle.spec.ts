@@ -102,4 +102,16 @@ test.describe('closing, archiving, reopening and renaming an investigation', () 
     await page.reload();
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Mule ring');
   });
+
+  test('returns the focus to the menu button when the rename dialog is cancelled or closed with the cross', async ({ page }) => {
+    await openInvestigation(page);
+    const dialog = page.getByRole('dialog', { name: 'Rename investigation' });
+    for (const name of ['Cancel', 'Close']) {
+      await menuButton(page).click();
+      await page.getByRole('menuitem', { name: 'Rename' }).click();
+      await dialog.getByRole('button', { name, exact: true }).click();
+      await expect(dialog).toHaveCount(0);
+      await expect(menuButton(page)).toBeFocused();
+    }
+  });
 });
