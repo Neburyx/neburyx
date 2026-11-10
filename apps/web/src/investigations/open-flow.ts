@@ -152,7 +152,7 @@ export async function replaceWithRead(client: ApiClient, state: ClientState, ans
   const key = openedKey(sourceId, principalId, id, mask);
   const save: SaveState = answer.save.state === 'saved' ? { kind: 'saved', at: answer.save.savedAt } : { kind: 'unsaved' };
   try {
-    state.replace({ id, sourceId, record: { ...record, save }, resultKeys: [key], nodeRefs: nodes.map((node) => node.ref), edgeRefs: edges.map((edge) => edge.ref) }, [{ key, result: { sourceId, nodes: [...nodes], edges: [...edges] } }]);
+    state.replace({ id, sourceId, record: { ...record, title: answer.investigation.title, status: answer.investigation.status, readOnly: isReadOnlyStatus(answer.investigation.status), version: answer.investigation.version, save }, resultKeys: [key], nodeRefs: nodes.map((node) => node.ref), edgeRefs: edges.map((edge) => edge.ref) }, [{ key, result: { sourceId, nodes: [...nodes], edges: [...edges] } }]);
   } catch (error) {
     if (error instanceof StateError) return { kind: 'failed', failure: { code: 'SCHEMA_MISMATCH' } };
     throw error;

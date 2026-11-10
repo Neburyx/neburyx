@@ -138,6 +138,14 @@ describe('restoring a view into the draft', () => {
     expect(bare.state.presentation.view.getState().viewChange).toEqual({ show: 'fit' });
   });
 
+  it('takes the title, status and version of the investigation from the read that shows the restored draft', async () => {
+    const { client, state } = await opened();
+    const before = state.investigation.getState().record;
+    expect(before).toMatchObject({ status: 'open', readOnly: false });
+    await restoreNamedView(client, state, VIEW);
+    expect(state.investigation.getState().record).toMatchObject({ title: investigation.title, status: investigation.status, version: investigation.version });
+  });
+
   it('shows no mapping banner for a view under the current mapping, and reads "Saved" with the view time', async () => {
     const { client, state } = await opened();
     await restoreNamedView(client, state, VIEW);
