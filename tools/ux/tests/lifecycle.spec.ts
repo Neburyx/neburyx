@@ -54,7 +54,7 @@ test.describe('closing, archiving, reopening and renaming an investigation', () 
     await menuButton(page).click();
     await expect(page.getByRole('menuitem', { name: /Rename/ })).toHaveAttribute('aria-disabled', 'true');
     await expect(page.getByRole('menu')).toContainText('Reopen to rename.');
-    await expect(page.getByRole('menuitem', { name: 'Reopen' })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: 'Reopen', exact: true })).toBeVisible();
   });
 
   test('shows a closed investigation as closed again after a reload', async ({ page }) => {

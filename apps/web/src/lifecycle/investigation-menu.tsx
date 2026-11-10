@@ -29,6 +29,13 @@ export function InvestigationMenu({ client }: { readonly client: ApiClient }) {
   const menuId = useId();
   const descriptionId = useId();
 
+  // focus goes back once the dialog is gone: while it is open the workspace behind it is inert and cannot take focus
+  const wasRenaming = useRef(false);
+  useEffect(() => {
+    if (wasRenaming.current && !renaming) button.current?.focus();
+    wasRenaming.current = renaming;
+  }, [renaming]);
+
   const closeMenu = (restoreFocus: boolean): void => {
     setOpen(false);
     if (restoreFocus) button.current?.focus();
@@ -106,7 +113,7 @@ export function InvestigationMenu({ client }: { readonly client: ApiClient }) {
           ))}
         </div>
       ) : null}
-      {renaming ? <RenameDialog client={client} onClose={() => { setRenaming(false); button.current?.focus(); }} /> : null}
+      {renaming ? <RenameDialog client={client} onClose={() => setRenaming(false)} /> : null}
     </div>
   );
 }
