@@ -122,19 +122,19 @@
 }
 
 .investigations-view-col-name {
-  width: 22%;
+  width: 20%;
 }
 
 .investigations-view-col-investigation {
-  width: 28%;
+  width: 24%;
 }
 
 .investigations-view-col-source {
-  width: 12%;
+  width: 11%;
 }
 
 .investigations-view-col-saved-by {
-  width: 14%;
+  width: 13%;
 }
 
 .investigations-view-col-saved-at {
@@ -142,7 +142,7 @@
 }
 
 .investigations-view-col-open {
-  width: 8%;
+  width: 16%;
 }
 
 .investigations-table caption:focus-visible {
@@ -284,4 +284,18 @@
   border-color: var(--color-accent);
   background: var(--color-accent-surface);
   color: var(--color-text-strong);
+}
+
+.investigations-view-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  gap: var(--space-8);
+}
+
+.investigations-reason {
+  display: block;
+  margin-top: var(--space-4);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-small);
 }

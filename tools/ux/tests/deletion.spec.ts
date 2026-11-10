@@ -109,4 +109,43 @@ test.describe('deleting a named view', () => {
     await expect(page.getByRole('tab', { name: 'Saved views (2)' })).toBeVisible();
     await expect(page.getByRole('status').filter({ hasText: 'View deleted.' })).toBeVisible();
   });
+  test('shows why Delete is off on a closed investigation, with the actions side by side at 1280 and 1440', async ({ page }) => {
+    await page.request.post('/__support/seed-investigations', { data: { count: 2, sourceId: 'banking-demo', viewEvery: 1 } });
+    const listed = (await (await page.request.get('/v1/investigations')).json()) as { items: { id: string }[] };
+    const closedId = listed.items[0]?.id ?? '';
+    expect((await page.request.post('/__support/set-status', { data: { id: closedId, status: 'closed' } })).status()).toBe(200);
+    for (const width of [1280, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto('/investigations?tab=views');
+      const rows = page.getByRole('row').filter({ has: page.getByRole('button', { name: /^Delete “/ }) });
+      await expect(rows).toHaveCount(2);
+      const reason = page.getByText('This investigation is closed. Reopen it to delete its views.');
+      await expect(reason).toBeVisible();
+      await expect(reason).toHaveCount(1);
+      const disabled = page.locator('button:disabled', { hasText: 'Delete' });
+      await expect(disabled).toHaveCount(1);
+      await expect(disabled).toHaveAttribute('aria-describedby', (await reason.getAttribute('id')) ?? '');
+      for (let index = 0; index < 2; index += 1) {
+        const row = rows.nth(index);
+        const open = await row.getByRole('button', { name: /^Open/ }).boundingBox();
+        const remove = await row.getByRole('button', { name: /^Delete “/ }).boundingBox();
+        if (open === null || remove === null) throw new Error('a button has no box');
+        expect(Math.abs(open.y - remove.y)).toBeLessThan(2);
+        expect(remove.x).toBeGreaterThan(open.x + open.width);
+      }
+      const contrast = await reason.evaluate((element) => {
+        const channels = (value: string): number[] => (value.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number);
+        const luminance = ([r, g, b]: number[]): number => {
+          const lin = (c: number): number => { const v = c / 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+          return 0.2126 * lin(r ?? 0) + 0.7152 * lin(g ?? 0) + 0.0722 * lin(b ?? 0);
+        };
+        const fore = luminance(channels(getComputedStyle(element).color));
+        let surface: Element | null = element;
+        while (surface !== null && /rgba\(.*, 0\)$|transparent/.test(getComputedStyle(surface).backgroundColor)) surface = surface.parentElement;
+        const back = luminance(channels(getComputedStyle(surface ?? document.body).backgroundColor));
+        return (Math.max(fore, back) + 0.05) / (Math.min(fore, back) + 0.05);
+      });
+      expect(contrast).toBeGreaterThanOrEqual(4.5);
+    }
+  });
 });

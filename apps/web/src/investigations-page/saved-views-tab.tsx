@@ -93,7 +93,14 @@ export function SavedViewsTab({ onViewDeleted }: { /** A view was deleted from t
               <tbody>
                 {items.map((view) => (
                   <tr key={view.id}>
-                    <td>{view.name}</td>
+                    <td>
+                      {view.name}
+                      {view.investigation.status === 'open' ? null : (
+                        <span id={`${reasonId}-${view.id}`} className="investigations-reason">
+                          {viewsReadOnlyReason(view.investigation.status)}
+                        </span>
+                      )}
+                    </td>
                     <td>{view.investigation.title}</td>
                     <td>{view.investigation.sourceAlias}</td>
                     <td>{view.savedBy.name}</td>
@@ -101,6 +108,7 @@ export function SavedViewsTab({ onViewDeleted }: { /** A view was deleted from t
                       <time dateTime={view.createdAt}>{utcDateTime(view.createdAt)}</time>
                     </td>
                     <td className="investigations-actions">
+                      <div className="investigations-view-actions">
                       <button type="button" className="secondary" data-view-open={view.id} aria-label={openView(view.name, view.investigation.title)} onClick={() => void navigate(`${EXPLORE_PATH}/${view.investigation.id}`, { state: intentOf(view) })}>
                         Open
                       </button>
@@ -117,11 +125,7 @@ export function SavedViewsTab({ onViewDeleted }: { /** A view was deleted from t
                       >
                         {VIEW_DELETE_ACTION}
                       </button>
-                      {view.investigation.status === 'open' ? null : (
-                        <span id={`${reasonId}-${view.id}`} className="visually-hidden">
-                          {viewsReadOnlyReason(view.investigation.status)}
-                        </span>
-                      )}
+                      </div>
                     </td>
                   </tr>
                 ))}

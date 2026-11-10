@@ -64,7 +64,7 @@ export const EVIDENCE_PANEL = 'Evidence packs are an Enterprise capability. They
 
 export const DELETED_CHIP = 'Deleted';
 export const retentionLine = (days: number): string => `Deleted ones stay restorable for ${days} days.`;
-export const DELETED_FOOTNOTE = 'Restoring puts an investigation back as it was. Its named views, notes and shares return with it.';
+export const DELETED_FOOTNOTE = 'Restoring puts an investigation back as it was, with its named views and notes. Views deleted earlier stay deleted.';
 export const DELETED_TABLE_CAPTION = 'Your deleted investigations, most recently deleted first';
 export const COLUMN_DELETED = 'Deleted (UTC)';
 export const COLUMN_PURGES = 'Purges on (UTC)';

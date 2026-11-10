@@ -102,6 +102,7 @@ describe('Delete in the Saved views tab', () => {
     expect([closed.disabled, archived.disabled]).toEqual([true, true]);
     expect(document.getElementById(closed.getAttribute('aria-describedby') ?? '')?.textContent).toBe('This investigation is closed. Reopen it to delete its views.');
     expect(document.getElementById(archived.getAttribute('aria-describedby') ?? '')?.textContent).toBe('This investigation is archived. Reopen it to delete its views.');
+    expect(document.getElementById(closed.getAttribute('aria-describedby') ?? '')?.className).toBe('investigations-reason');
     await user.click(closed);
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(deleted).toEqual([]);

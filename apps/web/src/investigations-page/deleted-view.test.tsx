@@ -27,7 +27,7 @@ describe('the Deleted view of the Investigations page', () => {
     await screen.findByText('Gone 1');
     expect(chip().getAttribute('aria-pressed')).toBe('true');
     expect(screen.queryByRole('combobox', { name: 'Status' })).toBeNull();
-    expect(screen.getByText('Restoring puts an investigation back as it was. Its named views, notes and shares return with it.')).toBeTruthy();
+    expect(screen.getByText('Restoring puts an investigation back as it was, with its named views and notes. Views deleted earlier stay deleted.')).toBeTruthy();
     expect(screen.getAllByRole('columnheader').map((header) => header.textContent)).toEqual(['Title and referral', 'Starting entity', 'Source', 'Deleted (UTC)', 'Purges on (UTC)', 'Actions']);
     expect(bodyRows()).toHaveLength(2);
     expect(bodyRows()[0]?.textContent).toContain('1 Nov 2026 10:00');
