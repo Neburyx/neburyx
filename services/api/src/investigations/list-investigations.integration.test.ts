@@ -197,6 +197,22 @@ describe('the list of investigations under more concurrent calls than the pool h
   });
 });
 
+describe('the deleted list under more concurrent calls than the pool has connections', () => {
+  it('answers every call when the policy reads the store, none holding a connection while it waits for another', async () => {
+    let held: AppStore | undefined;
+    const { app, store, add, database } = await running(['secret'], { connectionTimeoutMs: 2_000, afterDiscovery: () => (held ?? (() => { throw new Error('the store is not set'); })()).hasActiveSource('demo') });
+    held = store;
+    for (const [source, minute] of [['demo', 1], ['other', 2]] as const) {
+      const id = await add(source, at(minute), { deleted: true });
+      await rows(database.ownerUrl, `UPDATE investigations SET purge_after = now() + interval '30 days', deleted_by = owner_id WHERE id = $1`, [id]);
+    }
+    const answers = await Promise.all(Array.from({ length: 12 }, () => app.inject({ method: 'GET', url: '/v1/investigations?deleted=true' })));
+    expect(answers.map((answer) => answer.statusCode)).toEqual(Array.from({ length: 12 }, () => 200));
+    for (const answer of answers) expect(investigationListResponseSchema.parse(answer.json()).items).toHaveLength(2);
+    await app.close();
+  });
+});
+
 describe('the counts of the list against Postgres', () => {
   const counts = (investigations: number, sources: number) => ({ investigations: { value: investigations, quality: 'exact', scope: 'investigations' }, sources: { value: sources, quality: 'exact', scope: 'investigation-sources' }, savedViews: { count: { value: 0, quality: 'exact', scope: 'named-views' }, lastEditedAt: null } });
 
