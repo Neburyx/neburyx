@@ -10,12 +10,12 @@ import { INVESTIGATION_A, investigationOf, knowing, nodeOf } from '../investigat
 import { createSlotRegistry, Slot, SlotsProvider } from '../workspace/slots.js';
 
 const CONTEXT = { principalId: 'principal-1', mask: false };
-const draft: InvestigationResponse['draft'] = { version: 1, notes: null, layout: { schemaVersion: 1, layout: 'force', nodes: [{ t: 'kind-a', id: 'A-1', pinned: false, hidden: false, groupId: null }], edges: [], groups: [] }, queryContext: { schemaVersion: 1, loaded: { nodes: [{ t: 'kind-a', id: 'A-1' }], edges: [] }, expansions: [], filters: { entityTypes: [], relTypes: [], time: null, properties: [] } } };
+const draft: InvestigationResponse['draft'] = { version: 1, notes: null, basedOnViewId: null, layout: { schemaVersion: 1, layout: 'force', nodes: [{ t: 'kind-a', id: 'A-1', pinned: false, hidden: false, groupId: null }], edges: [], groups: [] }, queryContext: { schemaVersion: 1, loaded: { nodes: [{ t: 'kind-a', id: 'A-1' }], edges: [] }, expansions: [], filters: { entityTypes: [], relTypes: [], time: null, properties: [] } } };
 
 async function opened(status: 'open' | 'closed' | 'archived', version: number) {
   const base = investigationOf(INVESTIGATION_A, 'source-a', 'kind-a', 'A-1');
   const { client } = knowing([], {
-    getInvestigation: async () => ({ ok: true, value: { investigation: { ...base, status, version }, draft } }),
+    getInvestigation: async () => ({ ok: true, value: { investigation: { ...base, status, version }, draft , save: { state: 'unsaved' as const, savedAt: null } } }),
     getEntity: async (ref) => ({ ok: true, value: nodeOf(ref.sourceId, ref.entityType, ref.stableId) }),
   });
   const state = createClientState();

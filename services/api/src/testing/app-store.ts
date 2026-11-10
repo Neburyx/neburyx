@@ -1,12 +1,13 @@
 import { randomBytes } from 'node:crypto';
 import type { AppStore } from '../app-store.js';
-import { sourceTestReportSchema } from '@neburyx/contracts';
+import { layoutDocumentSchema, queryContextDocumentSchema, sourceTestReportSchema, type LayoutDocument, type QueryContextDocument } from '@neburyx/contracts';
 import type { PingStateChange, SourceCheck } from '../db/source-checks-repository.js';
 import type { SourceRow } from '../db/sources-repository.js';
 import type { Identity } from '../identity/identity.js';
 import { readOnlyStatusOf } from '../investigations/read-only.js';
 import { planStatusChange } from '../investigations/status-change.js';
 import { validatedDraft, type CreatedInvestigation, type DraftRow, type DraftWriteResult, type StatusChangeResult, type TitleChangeResult, type InvestigationRow, type ListedInvestigation, type NewDraft, type NewInvestigation, type ReusableQuery, type StoredInvestigation } from '../db/investigations-repository.js';
+import type { ViewListResult, ViewRenameResult, ViewRestoreResult, ViewSaveResult } from '../db/views-repository.js';
 import type { SourceModel } from '../mapping/model.js';
 import { decideSourceState, type StoredCheck } from '../source-state/decide.js';
 
@@ -29,7 +30,20 @@ export interface MemoryAppStoreOptions {
   readonly failCounts?: boolean;
 }
 
+export interface MemoryNamedView {
+  readonly id: string;
+  readonly investigationId: string;
+  readonly name: string;
+  readonly notes: string | null;
+  readonly layout: LayoutDocument;
+  readonly queryContext: QueryContextDocument;
+  readonly contentHash: string;
+  readonly createdAt: string;
+  readonly version: number;
+}
+
 export interface MemoryAppStore extends AppStore {
+  readonly namedViews: MemoryNamedView[];
   readonly checks: SourceCheck[];
   readonly investigations: InvestigationRow[];
   readonly drafts: (DraftRow & { readonly investigationId: string; contentHash?: string })[];
@@ -64,8 +78,10 @@ export function memoryStoreWith(options: MemoryAppStoreOptions): MemoryAppStore 
   let statusChanges = 0;
   const investigations: InvestigationRow[] = [];
   const drafts: (DraftRow & { readonly investigationId: string; contentHash?: string })[] = [];
+  const namedViews: MemoryNamedView[] = [];
   return {
     checks,
+    namedViews,
     investigations,
     drafts,
     initialize: () => Promise.resolve(),
@@ -131,14 +147,16 @@ export function memoryStoreWith(options: MemoryAppStoreOptions): MemoryAppStore 
       const now = new Date(Date.UTC(2026, 10, 5, 12, 0, investigations.length)).toISOString();
       const row: InvestigationRow = { id: input.id, sourceId: input.sourceId, sourceIdentityHash: input.sourceIdentityHash, ownerId: input.ownerId, title: input.title, caseRef: input.caseRef, startingEntityType: input.startingEntityType, startingStableId: input.startingStableId, status: 'open', createdAt: now, lastEditedAt: now, closedAt: null, archivedAt: null, version: 1 };
       investigations.push(row);
-      drafts.push({ id: draft.id, version: 1, layout: draft.layout, queryContext: draft.queryContext, notes: null, mappingHash: draft.mappingHash, investigationId: input.id, contentHash: draft.contentHash });
+      drafts.push({ id: draft.id, version: 1, layout: draft.layout, queryContext: draft.queryContext, notes: null, mappingHash: draft.mappingHash, basedOnViewId: null, investigationId: input.id, contentHash: draft.contentHash });
       return Promise.resolve({ row, created: true });
     },
     findReusableInvestigation: (query) => Promise.resolve(reusableOf(investigations, query)),
     readInvestigation: (id, ownerId): Promise<StoredInvestigation | undefined> => {
       const investigation = investigations.find((row) => row.id === id && row.ownerId === ownerId);
       const draft = drafts.find((candidate) => candidate.investigationId === id);
-      return Promise.resolve(investigation === undefined || draft === undefined ? undefined : { investigation, draft });
+      const based = draft === undefined ? undefined : namedViews.find((view) => view.id === draft.basedOnViewId && view.investigationId === id);
+      const savedAt = based !== undefined && draft?.contentHash === based.contentHash ? based.createdAt : null;
+      return Promise.resolve(investigation === undefined || draft === undefined ? undefined : { investigation, draft, savedAt });
     },
     saveDraft: (write): Promise<DraftWriteResult> => {
       const investigation = investigations.find((row) => row.id === write.investigationId && row.ownerId === write.ownerId);
@@ -182,6 +200,71 @@ export function memoryStoreWith(options: MemoryAppStoreOptions): MemoryAppStore 
       const row: InvestigationRow = { ...held, status: change.status, closedAt: timeOf(plan.closedAt, held.closedAt), archivedAt: timeOf(plan.archivedAt, held.archivedAt), version: held.version + 1 };
       investigations[investigations.indexOf(held)] = row;
       return { outcome: 'changed', row };
+    },
+    saveNamedView: (save): Promise<ViewSaveResult> => {
+      const investigation = investigations.find((row) => row.id === save.investigationId && row.ownerId === save.ownerId);
+      const draft = drafts.find((candidate) => candidate.investigationId === save.investigationId);
+      if (investigation === undefined || draft === undefined) return Promise.resolve({ outcome: 'not-found' });
+      const frozen = readOnlyStatusOf(investigation.status);
+      if (frozen !== undefined) return Promise.resolve({ outcome: 'read-only', status: frozen });
+      if (draft.version !== save.expectedDraftVersion) return Promise.resolve({ outcome: 'draft-conflict' });
+      if (save.title !== undefined && investigation.version !== save.title.expectedInvestigationVersion) return Promise.resolve({ outcome: 'investigation-conflict' });
+      const layout = layoutDocumentSchema.parse(draft.layout);
+      const queryContext = queryContextDocumentSchema.parse(draft.queryContext);
+      const contentHash = save.contentHashOf({ layout, queryContext, aiNotes: null });
+      const createdAt = new Date(Date.UTC(2026, 10, 5, 13, 0, namedViews.length)).toISOString();
+      namedViews.push({ id: save.viewId, investigationId: save.investigationId, name: save.name, notes: save.notes, layout, queryContext, contentHash, createdAt, version: 1 });
+      drafts[drafts.indexOf(draft)] = { ...draft, version: draft.version + 1, notes: save.notes, basedOnViewId: save.viewId, contentHash };
+      const changed = { ...investigation, lastEditedAt: new Date(Date.parse(investigation.lastEditedAt) + 1000).toISOString(), ...(save.title === undefined ? {} : { title: save.title.value, version: investigation.version + 1 }) };
+      investigations[investigations.indexOf(investigation)] = changed;
+      return Promise.resolve({
+        outcome: 'saved',
+        view: { id: save.viewId, name: save.name, notes: save.notes, savedBy: { name: LOCAL_IDENTITY.principal.displayName }, createdAt, version: 1 },
+        draft: { version: draft.version + 1, notes: save.notes, basedOnViewId: save.viewId },
+        save: { state: 'saved', savedAt: createdAt },
+        investigation: save.title === undefined ? undefined : { title: changed.title, version: changed.version },
+      });
+    },
+    listNamedViews: (query): Promise<ViewListResult> => {
+      const investigation = investigations.find((row) => row.id === query.investigationId && row.ownerId === query.ownerId);
+      const draft = drafts.find((candidate) => candidate.investigationId === query.investigationId);
+      if (investigation === undefined || draft === undefined) return Promise.resolve({ outcome: 'not-found' });
+      const keyOf = (view: MemoryNamedView): string => `${view.createdAt.slice(0, -1)}000Z`;
+      const all = namedViews.filter((view) => view.investigationId === query.investigationId).sort((left, right) => (keyOf(left) === keyOf(right) ? (left.id < right.id ? 1 : -1) : keyOf(left) < keyOf(right) ? 1 : -1));
+      const after = query.after;
+      const rest = after === undefined ? all : all.filter((view) => keyOf(view) < after.createdKey || (keyOf(view) === after.createdKey && view.id < after.id));
+      const page = rest.slice(0, query.limit);
+      const last = page.at(-1);
+      return Promise.resolve({
+        outcome: 'listed',
+        items: page.map((view) => ({ id: view.id, name: view.name, notes: view.notes, savedBy: { name: LOCAL_IDENTITY.principal.displayName }, createdAt: view.createdAt, version: view.version })),
+        next: rest.length > query.limit && last !== undefined ? { createdKey: keyOf(last), id: last.id } : undefined,
+        count: all.length,
+        draft: { basedOnViewId: all.some((view) => view.id === draft.basedOnViewId) ? draft.basedOnViewId : null, updatedAt: investigation.lastEditedAt },
+      });
+    },
+    renameNamedView: (rename): Promise<ViewRenameResult> => {
+      const investigation = investigations.find((row) => row.id === rename.investigationId && row.ownerId === rename.ownerId);
+      const view = namedViews.find((candidate) => candidate.id === rename.viewId && candidate.investigationId === rename.investigationId);
+      if (investigation === undefined || view === undefined) return Promise.resolve({ outcome: 'not-found' });
+      const frozen = readOnlyStatusOf(investigation.status);
+      if (frozen !== undefined) return Promise.resolve({ outcome: 'read-only', status: frozen });
+      if (view.version !== rename.expectedVersion) return Promise.resolve({ outcome: 'conflict' });
+      const renamed = { ...view, name: rename.name, version: view.version + 1 };
+      namedViews[namedViews.indexOf(view)] = renamed;
+      return Promise.resolve({ outcome: 'renamed', view: { id: renamed.id, name: renamed.name, notes: renamed.notes, savedBy: { name: LOCAL_IDENTITY.principal.displayName }, createdAt: renamed.createdAt, version: renamed.version } });
+    },
+    restoreNamedView: (restore): Promise<ViewRestoreResult> => {
+      const investigation = investigations.find((row) => row.id === restore.investigationId && row.ownerId === restore.ownerId);
+      const draft = drafts.find((candidate) => candidate.investigationId === restore.investigationId);
+      const view = namedViews.find((candidate) => candidate.id === restore.viewId && candidate.investigationId === restore.investigationId);
+      if (investigation === undefined || draft === undefined || view === undefined) return Promise.resolve({ outcome: 'not-found' });
+      const frozen = readOnlyStatusOf(investigation.status);
+      if (frozen !== undefined) return Promise.resolve({ outcome: 'read-only', status: frozen });
+      if (draft.version !== restore.expectedDraftVersion) return Promise.resolve({ outcome: 'draft-conflict' });
+      drafts[drafts.indexOf(draft)] = { ...draft, version: draft.version + 1, layout: view.layout, queryContext: view.queryContext, notes: view.notes, basedOnViewId: view.id, contentHash: view.contentHash };
+      if (draft.contentHash !== view.contentHash) investigations[investigations.indexOf(investigation)] = { ...investigation, lastEditedAt: new Date(Date.parse(investigation.lastEditedAt) + 1000).toISOString() };
+      return Promise.resolve({ outcome: 'restored', savedAt: view.createdAt, draft: { version: draft.version + 1, layout: view.layout, queryContext: view.queryContext, notes: view.notes, basedOnViewId: view.id } });
     },
     // The double has no named views: every draft is unsaved. The Postgres suite proves the saved rule.
     readLibrary: (read) => {

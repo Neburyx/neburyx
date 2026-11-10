@@ -8,12 +8,11 @@ import { encodeStored } from '../reference/stored-text.js';
 import { makeToken } from '../reference/token.js';
 import { identityHashOf } from '../registry/identity-hash.js';
 import { LOCAL_IDENTITY, memoryAppStore } from '../testing/app-store.js';
-import { TEST_REFERENCE_KEYS } from '../testing/gate.js';
+import { TEST_REFERENCE_KEYS, TestExecutor } from '../testing/gate.js';
 import { baseSource, fileOf } from '../testing/mapping.js';
 import { testSourceGate } from '../testing/source-gate.js';
 import { makeWebRoot } from '../testing/web-root.js';
 import { entityRows, plainNode } from '../testing/entity-fixtures.js';
-import { TestExecutor } from '../testing/gate.js';
 import { withOnlineIndexes } from '../testing/search-fixtures.js';
 import { initialDraftDocuments } from './draft.js';
 import { createStoredReferences } from './stored-references.js';
@@ -100,7 +99,7 @@ describe('listing and reading an investigation stored before its type was keyed'
     const store = memoryAppStore();
     store.investigations.push(row);
     const initial = initialDraftDocuments({ entityType: 'phone', stableId: VALUE });
-    store.drafts.push({ id: '0192f000-0000-7000-8000-0000000000d1', version: 1, notes: null, investigationId: id, layout: initial.layout, queryContext: initial.queryContext, mappingHash: demo.configHash });
+    store.drafts.push({ id: '0192f000-0000-7000-8000-0000000000d1', version: 1, notes: null, basedOnViewId: null, investigationId: id, layout: initial.layout, queryContext: initial.queryContext, mappingHash: demo.configHash });
     const before = JSON.stringify([store.investigations, store.drafts]);
     const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store, mapping: keyedMapping, gate: testSourceGate(keyedMapping).gate, referenceKeys: TEST_REFERENCE_KEYS });
     const list = await app.inject({ method: 'GET', url: '/v1/investigations' });
@@ -122,7 +121,7 @@ describe('listing and reading an investigation stored before its type was keyed'
     const store = memoryAppStore();
     store.investigations.push({ ...row, sourceIdentityHash: identityHashOf(source ?? demo) });
     const initial = initialDraftDocuments({ entityType: 'phone', stableId: VALUE });
-    store.drafts.push({ id: '0192f000-0000-7000-8000-0000000000d1', version: 1, notes: null, investigationId: id, layout: initial.layout, queryContext: initial.queryContext, mappingHash: (source ?? demo).configHash });
+    store.drafts.push({ id: '0192f000-0000-7000-8000-0000000000d1', version: 1, notes: null, basedOnViewId: null, investigationId: id, layout: initial.layout, queryContext: initial.queryContext, mappingHash: (source ?? demo).configHash });
     const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store, mapping: plain, gate: testSourceGate(plain).gate, referenceKeys: TEST_REFERENCE_KEYS });
     const read = await app.inject({ method: 'GET', url: `/v1/investigations/${id}` });
     expect(read.json()).toMatchObject({ investigation: { title: `Handle ${VALUE}`, startingEntity: { stableId: VALUE } } });
@@ -132,7 +131,7 @@ describe('listing and reading an investigation stored before its type was keyed'
   it('opens the stored investigation again by its case reference, with the masked display title, and creates nothing', async () => {
     const store = memoryAppStore();
     store.investigations.push({ ...row, caseRef: 'CASE-1' });
-    store.drafts.push({ id: '0192f000-0000-7000-8000-0000000000d1', version: 1, notes: null, investigationId: id, layout: initialDraftDocuments({ entityType: 'phone', stableId: VALUE }).layout, queryContext: initialDraftDocuments({ entityType: 'phone', stableId: VALUE }).queryContext , mappingHash: demo.configHash });
+    store.drafts.push({ id: '0192f000-0000-7000-8000-0000000000d1', version: 1, notes: null, basedOnViewId: null, investigationId: id, layout: initialDraftDocuments({ entityType: 'phone', stableId: VALUE }).layout, queryContext: initialDraftDocuments({ entityType: 'phone', stableId: VALUE }).queryContext , mappingHash: demo.configHash });
     const executor = new TestExecutor(withOnlineIndexes(demo, () => Promise.resolve(entityRows(plainNode(['Handle'], { phoneNumber: VALUE })))));
     const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store, mapping: keyedMapping, gate: testSourceGate(keyedMapping, { executor, referenceKeys: TEST_REFERENCE_KEYS }).gate, referenceKeys: TEST_REFERENCE_KEYS });
     const response = await app.inject({ method: 'POST', url: '/v1/investigations', payload: { sourceId: 'demo', caseRef: 'CASE-1', entity: { sourceId: 'demo', entityType: 'phone', value: VALUE } } });
@@ -291,7 +290,7 @@ describe('a type that is no longer keyed', () => {
     const store = memoryAppStore();
     store.investigations.push({ id: '0192f000-0000-7000-8000-0000000000f1', sourceId: 'demo', sourceIdentityHash: identityHashOf(source), ownerId: LOCAL_IDENTITY.principal.id, title: 'Handle', caseRef: 'CASE-K', startingEntityType: 'phone', startingStableId: token, status: 'open', createdAt: '2026-11-05T10:00:00.000Z', lastEditedAt: '2026-11-05T10:00:00.000Z', closedAt: null, archivedAt: null, version: 1 });
     const initial = initialDraftDocuments({ entityType: 'phone', stableId: token });
-    store.drafts.push({ id: '0192f000-0000-7000-8000-0000000000f2', version: 1, notes: null, investigationId: '0192f000-0000-7000-8000-0000000000f1', layout: initial.layout, queryContext: initial.queryContext, mappingHash: source.configHash });
+    store.drafts.push({ id: '0192f000-0000-7000-8000-0000000000f2', version: 1, notes: null, basedOnViewId: null, investigationId: '0192f000-0000-7000-8000-0000000000f1', layout: initial.layout, queryContext: initial.queryContext, mappingHash: source.configHash });
     const executor = new TestExecutor(withOnlineIndexes(source, (call) => Promise.resolve(entityRows(plainNode(['Handle'], { phoneNumber: call.parameters['stableId'] })))));
     const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store, mapping: unkeyed, gate: testSourceGate(unkeyed, { executor, referenceKeys: TEST_REFERENCE_KEYS }).gate, referenceKeys: TEST_REFERENCE_KEYS });
     const read = await app.inject({ method: 'GET', url: '/v1/investigations/0192f000-0000-7000-8000-0000000000f1' });

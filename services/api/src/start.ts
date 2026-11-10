@@ -165,6 +165,7 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
       gate: gate.gate,
       seams,
       referenceKeys,
+      cursors,
       degreeVerdicts: usability,
       indexes: gate.indexes,
       reachability,

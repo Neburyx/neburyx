@@ -1,5 +1,4 @@
-import type { GraphNode, Investigation, InvestigationListItem, InvestigationListResponse, InvestigationResponse, OpenInvestigationResponse } from '@neburyx/contracts';
-import type { OpenInvestigationRequest } from '@neburyx/contracts';
+import type { GraphNode, Investigation, InvestigationListItem, InvestigationListResponse, InvestigationResponse, OpenInvestigationResponse, OpenInvestigationRequest } from '@neburyx/contracts';
 import type { ApiClient } from '../api/client.js';
 import { fakeClient } from '../api/fake-client.js';
 import { me, source } from '../test-utils.js';
@@ -53,14 +52,14 @@ export function readOf(investigation: Investigation): InvestigationResponse {
     layout: { schemaVersion: 1 as const, layout: 'force', nodes: nodes.map((node) => ({ ...node, pinned: false, hidden: false, groupId: null })), edges: [], groups: [] },
     queryContext: { schemaVersion: 1 as const, loaded: { nodes, edges: [] }, expansions: [], filters: { entityTypes: [], relTypes: [], time: null, properties: [] } },
   };
-  return { investigation, draft: { version: 1, ...documents, notes: null } };
+  return { investigation, draft: { version: 1, ...documents, notes: null, basedOnViewId: null }, save: { state: 'unsaved', savedAt: null } };
 }
 
 export function openedOf(investigation: Investigation, entity: GraphNode | undefined, created = true): OpenInvestigationResponse {
   const { sourceState } = investigation;
-  if (sourceState !== 'available') return { investigation: { ...investigation, sourceState }, created: false, draft: { version: 1 } };
+  if (sourceState !== 'available') return { investigation: { ...investigation, sourceState }, created: false, draft: { version: 1, notes: null, basedOnViewId: null } };
   if (entity === undefined) throw new Error('an available investigation is answered with its entity');
-  return { investigation: { ...investigation, sourceState }, created, entity, draft: { version: 1 } };
+  return { investigation: { ...investigation, sourceState }, created, entity, draft: { version: 1, notes: null, basedOnViewId: null } };
 }
 
 export interface Calls {

@@ -36,7 +36,7 @@ function seeded(overrides: Partial<InvestigationRow> = {}): MemoryAppStore {
   const store = memoryAppStore();
   const documents = initialDraftDocuments({ entityType: 'widget', stableId: 'W-1' });
   store.investigations.push(row(overrides));
-  store.drafts.push({ id: '0192f000-0000-7000-8000-0000000000d1', version: 1, notes: null, layout: documents.layout, queryContext: documents.queryContext, mappingHash: 'the-mapping-that-was', investigationId: ID, contentHash: contentHashOf(documents) });
+  store.drafts.push({ id: '0192f000-0000-7000-8000-0000000000d1', version: 1, notes: null, basedOnViewId: null, layout: documents.layout, queryContext: documents.queryContext, mappingHash: 'the-mapping-that-was', investigationId: ID, contentHash: contentHashOf(documents) });
   return store;
 }
 
@@ -186,7 +186,7 @@ describe('POST /v1/investigations/{id}/status', () => {
     const store = memoryStoreWith({ failStatusChange: true });
     const documents = initialDraftDocuments({ entityType: 'widget', stableId: 'W-1' });
     store.investigations.push(row());
-    store.drafts.push({ id: '0192f000-0000-7000-8000-0000000000d1', version: 1, notes: null, layout: documents.layout, queryContext: documents.queryContext, mappingHash: 'the-mapping-that-was', investigationId: ID, contentHash: contentHashOf(documents) });
+    store.drafts.push({ id: '0192f000-0000-7000-8000-0000000000d1', version: 1, notes: null, basedOnViewId: null, layout: documents.layout, queryContext: documents.queryContext, mappingHash: 'the-mapping-that-was', investigationId: ID, contentHash: contentHashOf(documents) });
     const rig = await started(store);
     const response = await changeStatus(rig, { status: 'closed', expectedVersion: 3 });
     expect(response.statusCode).toBe(500);
@@ -340,7 +340,7 @@ describe('a title typed in the form of a generated title', () => {
     const token = makeToken(TEST_REFERENCE_KEYS, { sourceId: 'demo', entityType: 'phone' }, VALUE);
     store.investigations.push(row({ sourceIdentityHash: identityHashOf(source), startingEntityType: 'phone', startingStableId: token, title: 'Handle' }));
     const initial = initialDraftDocuments({ entityType: 'phone', stableId: token });
-    store.drafts.push({ id: '0192f000-0000-7000-8000-0000000000d1', version: 1, notes: null, layout: initial.layout, queryContext: initial.queryContext, mappingHash: 'the-mapping-that-was', investigationId: ID, contentHash: contentHashOf(initial) });
+    store.drafts.push({ id: '0192f000-0000-7000-8000-0000000000d1', version: 1, notes: null, basedOnViewId: null, layout: initial.layout, queryContext: initial.queryContext, mappingHash: 'the-mapping-that-was', investigationId: ID, contentHash: contentHashOf(initial) });
     const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store, mapping: keyed, gate: testSourceGate(keyed, { referenceKeys: TEST_REFERENCE_KEYS }).gate, referenceKeys: TEST_REFERENCE_KEYS });
     const generated = await app.inject({ method: 'PUT', url: `/v1/investigations/${ID}`, payload: { title: `Handle ${VALUE}`, expectedVersion: 3 } });
     expect(generated.statusCode).toBe(200);

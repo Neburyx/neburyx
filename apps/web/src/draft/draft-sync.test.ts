@@ -49,7 +49,7 @@ function rig(answers: (call: number) => ApiResult<DraftWriteResponse> = (call) =
     },
   });
   const sync: DraftSync = createDraftSync({ client, state, page, document: page });
-  if (opened) sync.adopt(ID, { version: 1, notes: null, writable: true });
+  if (opened) sync.adopt(ID, { version: 1, notes: null, basedOnViewId: null, writable: true });
   const move = (x = 1): void => state.presentation.setPosition(elementKey(ref('demo', 'type-a', 'A')), { x, y: 0 });
   return { writes, page, state, sync, move };
 }
@@ -94,7 +94,7 @@ describe('autosave', () => {
     before.move();
     await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS * 2);
     expect(before.writes).toHaveLength(0);
-    before.sync.adopt(ID, { version: 1, notes: null, writable: false });
+    before.sync.adopt(ID, { version: 1, notes: null, basedOnViewId: null, writable: false });
     before.move(9);
     await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS * 2);
     expect(before.writes).toHaveLength(0);
@@ -109,7 +109,7 @@ describe('autosave', () => {
 
   it('writes back the note it last received', async () => {
     const { writes, move, sync } = rig();
-    sync.adopt(ID, { version: 1, notes: 'seen before', writable: true });
+    sync.adopt(ID, { version: 1, notes: 'seen before', basedOnViewId: null, writable: true });
     move();
     await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
     expect(writes[0]?.body.notes).toBe('seen before');
@@ -222,7 +222,7 @@ describe('leaving the page', () => {
     expect(small.writes).toHaveLength(1);
     expect(small.writes[0]?.keepalive).toBe(true);
     const large = rig();
-    large.sync.adopt(ID, { version: 1, notes: 'n'.repeat(KEEPALIVE_LIMIT_BYTES + 1), writable: true });
+    large.sync.adopt(ID, { version: 1, notes: 'n'.repeat(KEEPALIVE_LIMIT_BYTES + 1), basedOnViewId: null, writable: true });
     large.move();
     large.page.fire('pagehide');
     await vi.advanceTimersByTimeAsync(0);
@@ -249,7 +249,7 @@ describe('the filters of a stored draft', () => {
   it('are written as they were while the mapping of the source is not known, and put on the view once it is', async () => {
     const { writes, move, sync, state } = rig(undefined, false);
     const filters = { entityTypes: ['type-a'], relTypes: [], time: null, properties: [] };
-    sync.adopt(ID, { version: 1, notes: null, filters, writable: true });
+    sync.adopt(ID, { version: 1, notes: null, basedOnViewId: null, filters, writable: true });
     move(2);
     await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
     expect(writes[0]?.body.queryContext.filters).toEqual(filters);
@@ -261,7 +261,7 @@ describe('the filters of a stored draft', () => {
 describe('the type filters of a stored draft that name a type the mapping no longer has', () => {
   it('are written back with the types left on, so the type has its saved state when the mapping has it again', async () => {
     const { writes, move, sync, state } = rig(undefined, false);
-    sync.adopt(ID, { version: 1, notes: null, filters: { entityTypes: ['type-a', 'type-gone'], relTypes: ['rel-gone'], time: null, properties: [] }, writable: true });
+    sync.adopt(ID, { version: 1, notes: null, basedOnViewId: null, filters: { entityTypes: ['type-a', 'type-gone'], relTypes: ['rel-gone'], time: null, properties: [] }, writable: true });
     state.presentation.setMappedTypes({ entityTypes: ['type-a', 'type-b'], relationshipTypes: ['rel-a'] });
     expect(state.presentation.view.getState().typeFilter.offEntityTypes.has('type-b')).toBe(true);
     move(2);
@@ -272,7 +272,7 @@ describe('the type filters of a stored draft that name a type the mapping no lon
 
   it('keep the saved list as a list when the type that was off is the one the mapping dropped, and stop keeping it once the person changes a type filter', async () => {
     const { writes, move, sync, state } = rig(undefined, false);
-    sync.adopt(ID, { version: 1, notes: null, filters: { entityTypes: ['type-a', 'type-b'], relTypes: ['rel-a'], time: null, properties: [] }, writable: true });
+    sync.adopt(ID, { version: 1, notes: null, basedOnViewId: null, filters: { entityTypes: ['type-a', 'type-b'], relTypes: ['rel-a'], time: null, properties: [] }, writable: true });
     state.presentation.setMappedTypes({ entityTypes: ['type-a', 'type-b'], relationshipTypes: ['rel-a'] });
     expect(state.presentation.view.getState().typeFilter.offEntityTypes.size).toBe(0);
     move(2);
@@ -290,33 +290,33 @@ describe('the type filters of a stored draft that name a type the mapping no lon
 
   it('bring an entity type that was off back off when the mapping has it again', async () => {
     const { writes, move, sync, state } = rig(undefined, false);
-    sync.adopt(ID, { version: 1, notes: null, filters: { entityTypes: ['type-a', 'type-b'], relTypes: [], time: null, properties: [] }, writable: true });
+    sync.adopt(ID, { version: 1, notes: null, basedOnViewId: null, filters: { entityTypes: ['type-a', 'type-b'], relTypes: [], time: null, properties: [] }, writable: true });
     state.presentation.setMappedTypes({ entityTypes: ['type-a', 'type-b'], relationshipTypes: [] });
     move(2);
     await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
     const written = writes.at(-1)?.body.queryContext.filters;
     const again = rig(undefined, false);
-    again.sync.adopt(ID, { version: 1, notes: null, filters: written, writable: true });
+    again.sync.adopt(ID, { version: 1, notes: null, basedOnViewId: null, filters: written, writable: true });
     again.state.presentation.setMappedTypes({ entityTypes: ['type-a', 'type-b', 'type-gone'], relationshipTypes: [] });
     expect(again.state.presentation.view.getState().typeFilter.offEntityTypes.has('type-gone')).toBe(true);
   });
 
   it('bring a relationship type that was off back off when the mapping has it again', async () => {
     const { writes, move, sync, state } = rig(undefined, false);
-    sync.adopt(ID, { version: 1, notes: null, filters: { entityTypes: [], relTypes: ['rel-a'], time: null, properties: [] }, writable: true });
+    sync.adopt(ID, { version: 1, notes: null, basedOnViewId: null, filters: { entityTypes: [], relTypes: ['rel-a'], time: null, properties: [] }, writable: true });
     state.presentation.setMappedTypes({ entityTypes: ['type-a'], relationshipTypes: ['rel-a'] });
     move(2);
     await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
     expect(writes.at(-1)?.body.queryContext.filters.relTypes).toEqual(['rel-a']);
     const again = rig(undefined, false);
-    again.sync.adopt(ID, { version: 1, notes: null, filters: writes.at(-1)?.body.queryContext.filters, writable: true });
+    again.sync.adopt(ID, { version: 1, notes: null, basedOnViewId: null, filters: writes.at(-1)?.body.queryContext.filters, writable: true });
     again.state.presentation.setMappedTypes({ entityTypes: ['type-a'], relationshipTypes: ['rel-a', 'rel-gone'] });
     expect(again.state.presentation.view.getState().typeFilter.offRelationshipTypes.has('rel-gone')).toBe(true);
   });
 
   it('write a stored list as it was when every type in it is mapped', async () => {
     const { writes, move, sync, state } = rig(undefined, false);
-    sync.adopt(ID, { version: 1, notes: null, filters: { entityTypes: ['type-a', 'type-gone'], relTypes: [], time: null, properties: [] }, writable: true });
+    sync.adopt(ID, { version: 1, notes: null, basedOnViewId: null, filters: { entityTypes: ['type-a', 'type-gone'], relTypes: [], time: null, properties: [] }, writable: true });
     state.presentation.setMappedTypes({ entityTypes: ['type-a', 'type-gone'], relationshipTypes: [] });
     move(2);
     await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
@@ -327,7 +327,7 @@ describe('the type filters of a stored draft that name a type the mapping no lon
 describe('a draft too large to send as the page is left', () => {
   it('is measured in bytes, so text of two-byte characters is not taken for half its size', async () => {
     const wide = rig();
-    wide.sync.adopt(ID, { version: 1, notes: 'é'.repeat(KEEPALIVE_LIMIT_BYTES / 2), writable: true });
+    wide.sync.adopt(ID, { version: 1, notes: 'é'.repeat(KEEPALIVE_LIMIT_BYTES / 2), basedOnViewId: null, writable: true });
     wide.move();
     wide.page.fire('pagehide');
     await vi.advanceTimersByTimeAsync(0);
@@ -349,7 +349,7 @@ describe('two tabs of one person', () => {
       const read = result('demo', ['A']);
       state.show({ id: ID, sourceId: 'demo', record: { title: 'T', caseRef: null, status: 'open' as const, readOnly: false, version: 1, save: { kind: 'unsaved' } }, resultKeys: [key('demo')], nodeRefs: read.nodes.map((n) => n.ref), edgeRefs: [] }, [{ key: key('demo'), result: read }]);
       const sync = createDraftSync({ client: fakeClient({ saveDraft: async (id, version) => answer(id, version) }), state, page: new FakePage(), document: new FakePage() });
-      sync.adopt(ID, { version: 1, notes: null, writable: true });
+      sync.adopt(ID, { version: 1, notes: null, basedOnViewId: null, writable: true });
       return { state, sync };
     };
     const first = make();
@@ -377,7 +377,7 @@ describe('another investigation taking the place of one whose writes were failin
     await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
     expect(sync.status.getState().kind).toBe('failing');
     showOther(state);
-    sync.adopt(other, { version: 1, notes: null, writable: true });
+    sync.adopt(other, { version: 1, notes: null, basedOnViewId: null, writable: true });
     expect(sync.status.getState()).toEqual({ kind: 'idle' });
     state.presentation.setPosition(elementKey(ref('demo', 'type-a', 'B')), { x: 4, y: 4 });
     const before = writes.length;
@@ -417,7 +417,7 @@ describe('another investigation taking the place of one whose writes were failin
     });
     const page = new FakePage();
     const sync = createDraftSync({ client, state, page, document: page });
-    sync.adopt(ID, { version: 1, notes: null, writable: true });
+    sync.adopt(ID, { version: 1, notes: null, basedOnViewId: null, writable: true });
     state.presentation.setPosition(elementKey(ref('demo', 'type-a', 'A')), { x: 1, y: 0 });
     await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
     expect(writes).toHaveLength(1);
@@ -466,7 +466,7 @@ describe('settling the draft before another investigation is opened', () => {
     });
     sync.dispose();
     const second = createDraftSync({ client: slow, state, page: new FakePage(), document: new FakePage() });
-    second.adopt(ID, { version: 1, notes: null, writable: true });
+    second.adopt(ID, { version: 1, notes: null, basedOnViewId: null, writable: true });
     move(1);
     await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
     expect(writes).toHaveLength(1);
@@ -579,7 +579,7 @@ describe('settling the draft before another investigation is opened', () => {
     });
     sync.dispose();
     const second = createDraftSync({ client: busy, state, page: new FakePage(), document: new FakePage() });
-    second.adopt(ID, { version: 1, notes: null, writable: true });
+    second.adopt(ID, { version: 1, notes: null, basedOnViewId: null, writable: true });
     move(1);
     await expect(second.settle()).resolves.toBe(true);
     expect(second.leaving.getState()).toBe(false);

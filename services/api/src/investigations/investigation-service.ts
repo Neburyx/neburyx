@@ -1,4 +1,4 @@
-import { DEFAULT_INVESTIGATION_LIST_LIMIT, MAX_DRAFT_DOCUMENT_BYTES, investigationResponseSchema, layoutDocumentSchema, MAX_TITLE_LENGTH, queryContextDocumentSchema, type GraphNode, type Investigation, type InvestigationListResponse, type DraftWriteRequest, type DraftWriteResponse, type InvestigationResponse, type InvestigationSourceState, type MappingChange, type ReferenceOpenRequest, type OpenInvestigationResponse, type RenameResponse, type StatusChangeResponse, type Investigation as InvestigationShown } from '@neburyx/contracts';
+import { DEFAULT_INVESTIGATION_LIST_LIMIT, MAX_DRAFT_DOCUMENT_BYTES, investigationResponseSchema, layoutDocumentSchema, MAX_TITLE_LENGTH, queryContextDocumentSchema, type GraphNode, type Investigation, type InvestigationListResponse, type DraftWriteRequest, type DraftWriteResponse, type InvestigationResponse, type InvestigationSourceState, type MappingChange, type ReferenceOpenRequest, type OpenDraft, type OpenInvestigationResponse, type RenameResponse, type StatusChangeResponse, type Investigation as InvestigationShown } from '@neburyx/contracts';
 import { AppError } from '../errors.js';
 import type { InvestigationRow, InvestigationStore, ListedInvestigation } from '../db/investigations-repository.js';
 import type { EntityReader } from '../entities/entity-reader.js';
@@ -52,7 +52,7 @@ export interface InvestigationServiceDeps {
   readonly audit: AuditSink;
 }
 
-function sourceStateOf(mapping: MappingModel, row: InvestigationRow): InvestigationSourceState {
+export function sourceStateOf(mapping: MappingModel, row: InvestigationRow): InvestigationSourceState {
   const source = mapping.sources.find((candidate) => candidate.id === row.sourceId);
   if (source === undefined) return 'removed';
   return identityHashOf(source) === row.sourceIdentityHash ? 'available' : 'repointed';
@@ -88,13 +88,13 @@ function entityTypeOf(source: SourceModel, request: ReferenceOpenRequest): Entit
 }
 
 /** What the answer says of an investigation: with the entity that was read when its source is as it was, and without one when it is not, since nothing is read from a source that changed. */
-function answerOf(investigation: Investigation, created: boolean, entity: GraphNode | undefined, draftVersion: number): OpenInvestigationResponse {
+function answerOf(investigation: Investigation, created: boolean, entity: GraphNode | undefined, draft: OpenDraft): OpenInvestigationResponse {
   const { sourceState } = investigation;
   if (sourceState === 'available') {
     if (entity === undefined) throw new Error('an available investigation is answered with its entity');
-    return { investigation: { ...investigation, sourceState }, created, entity, draft: { version: draftVersion } };
+    return { investigation: { ...investigation, sourceState }, created, entity, draft };
   }
-  return { investigation: { ...investigation, sourceState }, created: false, draft: { version: draftVersion } };
+  return { investigation: { ...investigation, sourceState }, created: false, draft };
 }
 
 export function createInvestigationService(deps: InvestigationServiceDeps): InvestigationService {
@@ -106,10 +106,11 @@ export function createInvestigationService(deps: InvestigationServiceDeps): Inve
     return call.request.mask === true ? entity.display.title : (await deps.entities.read({ traceId: call.traceId, principal: call.principal, sourceId: call.request.sourceId, entityType: call.request.entity.entityType, stableId: call.request.entity.stableId, mask: true, ...(call.signal === undefined ? {} : { signal: call.signal }) })).display.title;
   }
 
-  async function draftVersionOf(row: InvestigationRow, ownerId: string): Promise<number> {
+  async function draftOf(row: InvestigationRow, ownerId: string): Promise<OpenDraft> {
     const stored = await deps.store.readInvestigation(row.id, ownerId);
     if (stored === undefined) throw new Error('an investigation just written has no draft');
-    return stored.draft.version;
+    const { version, notes, basedOnViewId } = stored.draft;
+    return { version, notes, basedOnViewId };
   }
 
   async function create(call: OpenCall, source: SourceModel, type: EntityModel): Promise<OpenAnswer> {
@@ -128,7 +129,7 @@ export function createInvestigationService(deps: InvestigationServiceDeps): Inve
       startingStableId: stored,
       draft: { id: uuidv7(), layout: documents.layout, queryContext: documents.queryContext, mappingHash: source.configHash, contentHash: contentHashOf(documents), nodeCount: 1, edgeCount: 0, countsPolicyVersion: COMMUNITY_POLICY_VERSION },
     });
-    return { created, body: answerOf(shown(deps.mapping, deps.references, row), created, entity, await draftVersionOf(row, call.principal.id)) };
+    return { created, body: answerOf(shown(deps.mapping, deps.references, row), created, entity, await draftOf(row, call.principal.id)) };
   }
 
   return {
@@ -151,13 +152,13 @@ export function createInvestigationService(deps: InvestigationServiceDeps): Inve
       if (existing === undefined) return create(call, source, entityTypeOf(source, request));
       const investigation = shown(deps.mapping, deps.references, existing);
       // an investigation whose source now points at another database is returned as it is: nothing is read from the new database under the old investigation, and the mapping that replaced the old one need not hold the type
-      if (investigation.sourceState !== 'available') return { created: false, body: answerOf(investigation, false, undefined, await draftVersionOf(existing, call.principal.id)) };
+      if (investigation.sourceState !== 'available') return { created: false, body: answerOf(investigation, false, undefined, await draftOf(existing, call.principal.id)) };
       entityTypeOf(source, request);
       const entity = await readEntity(call);
       const type = entityTypeOf(source, request);
       // a generated title that held the value is shown as the masked display title once the node is loaded
       const title = isKeyed(type) && investigation.title === (type.display.name ?? type.label) ? defaultTitle(type.display.name ?? type.label, await titleSubjectOf(call, type, entity), MAX_TITLE_LENGTH) : investigation.title;
-      return { created: false, body: answerOf({ ...investigation, title }, false, entity, await draftVersionOf(existing, call.principal.id)) };
+      return { created: false, body: answerOf({ ...investigation, title }, false, entity, await draftOf(existing, call.principal.id)) };
     },
     async list({ principal, limit = DEFAULT_INVESTIGATION_LIST_LIMIT }) {
       return deps.store.readLibrary(async (reader) => {
@@ -255,7 +256,8 @@ export function createInvestigationService(deps: InvestigationServiceDeps): Inve
       }
       return investigationResponseSchema.parse({
         investigation,
-        draft: { version: stored.draft.version, layout, queryContext, notes: stored.draft.notes },
+        draft: { version: stored.draft.version, layout, queryContext, notes: stored.draft.notes, basedOnViewId: stored.draft.basedOnViewId },
+        save: stored.savedAt === null ? { state: 'unsaved', savedAt: null } : { state: 'saved', savedAt: stored.savedAt },
         ...(unmapped === undefined ? {} : { unmapped }),
         ...(mappingChange === undefined ? {} : { mappingChange }),
       });

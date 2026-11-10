@@ -27,6 +27,8 @@ const IDLE: DraftStatus = { kind: 'idle' };
 export interface DraftSession {
   readonly version: number;
   readonly notes: string | null;
+  /** The named view the draft was last saved as or restored from. */
+  readonly basedOnViewId: string | null;
   readonly kept?: KeptItems;
   /** The filters of the stored draft, applied once the mapping of the source is known. */
   readonly filters?: QueryContextDocument['filters'];
@@ -39,6 +41,7 @@ export interface DraftSession {
 interface Session {
   version: number;
   notes: string | null;
+  basedOnViewId: string | null;
   kept: KeptItems;
   writable: boolean;
   conflicted: boolean;
@@ -76,8 +79,32 @@ export interface DraftSyncOptions {
   readonly document?: DocumentEvents;
 }
 
+/** What a write of the draft other than autosave leaves it at, when the server took it. */
+export interface DraftAccepted {
+  readonly version: number;
+  readonly notes: string | null;
+  readonly basedOnViewId: string | null;
+}
+
+/** The draft of the investigation shown, held for one write of its own: autosave waits until `release` or `conflict`, and the write goes out with `version`. */
+export interface DraftHold {
+  readonly id: string;
+  readonly version: number;
+  /** The write is over: the draft takes what the server answered, when it took the write, and autosave goes on from there. */
+  release(accepted?: DraftAccepted): void;
+  /** The server refused `version`: the draft changed elsewhere, as when an autosave is refused. */
+  conflict(): void;
+}
+
+/** `failed`: the changes waiting could not be written, so nothing was held. `conflict`: the draft already changed elsewhere. `none`: no draft of the investigation shown can be written. */
+export type HoldOutcome = { readonly kind: 'held'; readonly hold: DraftHold } | { readonly kind: 'failed' } | { readonly kind: 'conflict' } | { readonly kind: 'none' };
+
 export interface DraftSync {
   readonly status: ReadableStore<DraftStatus>;
+  /** Holds the draft for a write of its own. The changes that wait are written first, so the write is of the draft as it is; with `discardPending` they are dropped instead, and only a write already going on is awaited, for a write that replaces the draft whole. */
+  hold(options?: { readonly discardPending?: boolean }): Promise<HoldOutcome>;
+  /** What the sync holds of the draft of an investigation: its version, notes and the view it is based on. */
+  stateOf(investigationId: string): DraftAccepted | undefined;
   /** Starts writing the draft of an investigation that is shown: from now on its changes are saved. */
   adopt(investigationId: string, session: DraftSession): void;
   /** Writes at once what is waiting. */
@@ -424,6 +451,72 @@ export function createDraftSync(options: DraftSyncOptions): DraftSync {
     if (new TextEncoder().encode(json).byteLength <= KEEPALIVE_LIMIT_BYTES) void write(true);
   };
 
+  const notesOf = (json: string, notes: string | null): string => {
+    const parsed: unknown = JSON.parse(json);
+    return JSON.stringify(typeof parsed === 'object' && parsed !== null ? { ...parsed, notes } : parsed);
+  };
+
+  async function hold(options: { readonly discardPending?: boolean } = {}): Promise<HoldOutcome> {
+    const discard = options.discardPending === true;
+    for (let round = 0; round < 3; round += 1) {
+      if (writing && inFlight !== undefined) await inFlight;
+      if (discard || !isDirty()) break;
+      cancel();
+      const last = await write();
+      if (last === 'conflict') return { kind: 'conflict' };
+      if (last !== 'saved') return { kind: 'failed' };
+    }
+    const shown = shownSession();
+    if (shown === undefined) return { kind: status.getState().kind === 'conflict' ? 'conflict' : 'none' };
+    if (writing || (!discard && isDirty())) return { kind: 'failed' };
+    cancel();
+    writing = true;
+    // a `settle` that comes while the hold is kept waits for it, as it waits for a write
+    let finish: () => void = () => undefined;
+    inFlight = new Promise<WriteResult>((resolve) => {
+      finish = () => resolve('saved');
+    });
+    const { id, session } = shown;
+    const resume = (): void => {
+      writing = false;
+      finish();
+      if (again || isDirty()) {
+        again = false;
+        schedule(AUTOSAVE_DELAY_MS);
+      }
+    };
+    return {
+      kind: 'held',
+      hold: {
+        id,
+        version: session.version,
+        release(accepted) {
+          if (accepted !== undefined) {
+            session.version = accepted.version;
+            session.notes = accepted.notes;
+            session.basedOnViewId = accepted.basedOnViewId;
+            if (session.lastJson !== undefined) session.lastJson = notesOf(session.lastJson, accepted.notes);
+          }
+          resume();
+        },
+        conflict() {
+          session.conflicted = true;
+          if (state.investigation.getState().id === id) {
+            cancel();
+            endFailing();
+            setStatus({ kind: 'conflict' });
+            // the conflict has its own state, so it does not hold the person back from the page they asked for
+            releaseGate(true);
+          }
+          writing = false;
+          again = false;
+          finish();
+          sendDeferred();
+        },
+      },
+    };
+  }
+
   const unsubscribes = [state.investigation.subscribe(onChange), state.presentation.view.subscribe(onChange), state.server.subscribe(onChange)];
   doc?.addEventListener('visibilitychange', onHidden);
   page?.addEventListener('beforeunload', onBeforeUnload);
@@ -431,8 +524,13 @@ export function createDraftSync(options: DraftSyncOptions): DraftSync {
 
   return {
     status: readable(status),
+    hold,
+    stateOf(investigationId) {
+      const session = sessions.get(investigationId);
+      return session === undefined ? undefined : { version: session.version, notes: session.notes, basedOnViewId: session.basedOnViewId };
+    },
     adopt(investigationId, session) {
-      const adopted: Session = { version: session.version, notes: session.notes, kept: session.kept ?? NOTHING_KEPT, writable: session.writable, conflicted: false, pendingFilters: session.filters, rehashHeld: session.rehash === true, carriedTypes: undefined, applied: undefined, lastJson: undefined };
+      const adopted: Session = { version: session.version, notes: session.notes, basedOnViewId: session.basedOnViewId, kept: session.kept ?? NOTHING_KEPT, writable: session.writable, conflicted: false, pendingFilters: session.filters, rehashHeld: session.rehash === true, carriedTypes: undefined, applied: undefined, lastJson: undefined };
       sessions.set(investigationId, adopted);
       if (state.investigation.getState().id === investigationId && adopted.writable) {
         applyFilters(adopted);

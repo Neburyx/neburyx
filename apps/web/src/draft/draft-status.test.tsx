@@ -12,8 +12,7 @@ import { CHANGES_NOT_BEING_SAVED, CHANGES_NOT_SAVED, CHANGES_STILL_NOT_SAVED, CO
 import { ApiClientProvider } from '../api/client-context.js';
 import { ClientStateProvider } from '../state/context.js';
 import { DraftAnnouncer, DraftConflictBanner, DraftStatusLine, LeaveGuard } from './draft-status.js';
-import { draftSyncOf } from './draft-sync.js';
-import { AUTOSAVE_DELAY_MS, createDraftSync, RETRY_STEADY_MS, STALLED_AFTER_MS } from './draft-sync.js';
+import { draftSyncOf, AUTOSAVE_DELAY_MS, createDraftSync, RETRY_STEADY_MS, STALLED_AFTER_MS } from './draft-sync.js';
 
 const ID = '0192f000-0000-7000-8000-0000000000a1';
 const failure = (code: 'INTERNAL_ERROR' | 'CONFLICTED_VIEW_VERSION' | 'INVALID_REQUEST') => ({ ok: false as const, failure: { code, message: 'x', retryable: false, traceId: 't' } });
@@ -31,7 +30,7 @@ function started(answer: () => ReturnType<typeof failure> | { ok: true; value: {
   state.show({ id: ID, sourceId: 'demo', record: { title: 'T', caseRef: null, status: 'open' as const, readOnly: false, version: 1, save: { kind: 'unsaved' } }, resultKeys: [key('demo')], nodeRefs: read.nodes.map((n) => n.ref), edgeRefs: [] }, [{ key: key('demo'), result: read }]);
   const client = fakeClient({ saveDraft: async () => answer() });
   const sync = createDraftSync({ client, state });
-  sync.adopt(ID, { version: 1, notes: null, writable: true });
+  sync.adopt(ID, { version: 1, notes: null, basedOnViewId: null, writable: true });
   const banner = createBuiltInBannerController();
   const reload = vi.fn();
   const view = render(
@@ -135,7 +134,7 @@ describe('the guard that holds the person at a page they were about to leave', (
     state.show({ id: ID, sourceId: 'demo', record: { title: 'T', caseRef: null, status: 'open' as const, readOnly: false, version: 1, save: { kind: 'unsaved' } }, resultKeys: [key('demo')], nodeRefs: read.nodes.map((n) => n.ref), edgeRefs: [] }, [{ key: key('demo'), result: read }]);
     const client = fakeClient({ saveDraft: async () => answer() });
     const sync = draftSyncOf(state, client);
-    sync.adopt(ID, { version: 1, notes: null, writable: true });
+    sync.adopt(ID, { version: 1, notes: null, basedOnViewId: null, writable: true });
     render(
       <ClientStateProvider state={state}>
         <ApiClientProvider client={client}>

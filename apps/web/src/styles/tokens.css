@@ -179,4 +179,11 @@
   --badge-height: 22px;
 
   --focus-outline: var(--focus-width) solid var(--color-focus);
+  --color-view-scrim: rgba(38, 41, 51, 0.4);
+  --view-dialog-top: 115px;
+  --view-dialog-width: 520px;
+  --view-input-height: 36px;
+  --view-note-height: 72px;
+  --views-panel-width: 390px;
+  --views-panel-top: 56px;
 }

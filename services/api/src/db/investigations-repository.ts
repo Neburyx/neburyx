@@ -27,6 +27,7 @@ export interface DraftRow {
   readonly queryContext: unknown;
   readonly notes: string | null;
   readonly mappingHash: string;
+  readonly basedOnViewId: string | null;
 }
 
 export interface NewDraft {
@@ -106,6 +107,8 @@ export interface CreatedInvestigation {
 export interface StoredInvestigation {
   readonly investigation: InvestigationRow;
   readonly draft: DraftRow;
+  /** When the named view the draft equals was made, or null when the draft equals none. */
+  readonly savedAt: string | null;
 }
 
 export interface ListedInvestigation extends InvestigationRow {
@@ -267,18 +270,21 @@ interface StoredRecord extends InvestigationRecord {
   readonly query_context: unknown;
   readonly notes: string | null;
   readonly mapping_hash: string;
+  readonly based_on_view_id: string | null;
+  readonly saved_at: Date | null;
 }
 
 export async function readInvestigation(db: pg.Pool, id: string, ownerId: string): Promise<StoredInvestigation | undefined> {
   const result = await db.query<StoredRecord>(
-    `SELECT ${QUALIFIED_COLUMNS}, v.id AS draft_id, v.version AS draft_version, v.layout, v.query_context, v.notes, v.mapping_hash
+    `SELECT ${QUALIFIED_COLUMNS}, v.id AS draft_id, v.version AS draft_version, v.layout, v.query_context, v.notes, v.mapping_hash, named.id AS based_on_view_id, CASE WHEN named.content_hash = v.content_hash THEN named.created_at END AS saved_at
      FROM investigations i JOIN saved_views v ON v.investigation_id = i.id AND v.kind = 'draft' AND v.created_by = i.owner_id
+     LEFT JOIN saved_views named ON named.id = v.based_on_view_id AND named.kind = 'named'
      WHERE i.id = $1 AND i.owner_id = $2 AND i.deleted_at IS NULL`,
     [id, ownerId],
   );
   const [record] = result.rows;
   if (record === undefined) return undefined;
-  return { investigation: rowOf(record), draft: { id: record.draft_id, version: record.draft_version, layout: record.layout, queryContext: record.query_context, notes: record.notes, mappingHash: record.mapping_hash } };
+  return { investigation: rowOf(record), draft: { id: record.draft_id, version: record.draft_version, layout: record.layout, queryContext: record.query_context, notes: record.notes, basedOnViewId: record.based_on_view_id, mappingHash: record.mapping_hash }, savedAt: record.saved_at === null ? null : record.saved_at.toISOString() };
 }
 
 interface DraftRecord {

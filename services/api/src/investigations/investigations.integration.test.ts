@@ -1,6 +1,6 @@
 import { rmSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { investigationResponseSchema, layoutDocumentSchema, openInvestigationResponseSchema, queryContextDocumentSchema } from '@neburyx/contracts';
+import { investigationResponseSchema, layoutDocumentSchema, openInvestigationResponseSchema, queryContextDocumentSchema, saveViewResponseSchema, investigationListResponseSchema, viewListResponseSchema, namedViewSchema, restoreViewResponseSchema } from '@neburyx/contracts';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../app.js';
 import { createAppStore, type AppStore } from '../app-store.js';
@@ -10,6 +10,7 @@ import { parseMapping } from '../mapping/load.js';
 import { identityHashOf } from '../registry/identity-hash.js';
 import { runCli } from '../testing/cli.js';
 import { attempt, rows } from '../testing/database.js';
+import pg from 'pg';
 import { entityRows, plainNode } from '../testing/entity-fixtures.js';
 import type { ExecuteOutcome } from '../gate/executor.js';
 import { TestExecutor } from '../testing/gate.js';
@@ -312,12 +313,12 @@ describe('saving the draft against Postgres', () => {
   it('hands the first write the version of the draft it made, and the version of the draft it found when an investigation is reused', async () => {
     const { database, app, post } = await running();
     const first = openInvestigationResponseSchema.parse((await post(body({ caseRef: 'CASE-1' }))).json());
-    expect(first.draft).toEqual({ version: 1 });
+    expect(first.draft).toEqual({ version: 1, notes: null, basedOnViewId: null });
     const put = await app.inject({ method: 'PUT', url: `/v1/investigations/${first.investigation.id}/draft`, headers: { 'if-match': '"1"' }, payload: changed() });
     expect(put.statusCode).toBe(200);
     const again = openInvestigationResponseSchema.parse((await post(body({ caseRef: 'CASE-1' }))).json());
     expect(again.created).toBe(false);
-    expect(again.draft).toEqual({ version: 2 });
+    expect(again.draft).toEqual({ version: 2, notes: null, basedOnViewId: null });
     expect(await count(database, 'saved_views')).toBe(1);
     await app.close();
   });
@@ -383,6 +384,40 @@ describe('saving the draft against Postgres', () => {
     await app.close();
   });
 
+  it('round-trips a note of 10,000 multi-byte characters exactly, and gives it back when an investigation is opened again', async () => {
+    const { database, app, post } = await running();
+    const first = openInvestigationResponseSchema.parse((await post(body({ caseRef: 'CASE-1' }))).json());
+    const note = '\u00e9\u4e2d\u{1f642}'.repeat(3333) + '\u00e9';
+    expect(Array.from(note)).toHaveLength(10_000);
+    const written = await app.inject({ method: 'PUT', url: `/v1/investigations/${first.investigation.id}/draft`, headers: { 'if-match': '"1"' }, payload: changed('GZ-1', note) });
+    expect(written.statusCode).toBe(200);
+    const [stored] = await rows(database.ownerUrl, 'SELECT notes FROM saved_views');
+    expect(stored?.['notes']).toBe(note);
+    const read = await app.inject({ method: 'GET', url: `/v1/investigations/${first.investigation.id}` });
+    expect(investigationResponseSchema.parse(read.json()).draft.notes).toBe(note);
+    const reopened = openInvestigationResponseSchema.parse((await post(body({ caseRef: 'CASE-1' }))).json());
+    expect(reopened.draft).toEqual({ version: 2, notes: note, basedOnViewId: null });
+    await app.close();
+  });
+
+  it('names the saved view a draft is based on, and says nothing of one that no longer exists', async () => {
+    const { database, app, answer } = await opened();
+    const [draft] = await rows(database.ownerUrl, 'SELECT * FROM saved_views');
+    const viewId = '0192f000-0000-7000-8000-0000000000a1';
+    await rows(
+      database.ownerUrl,
+      `INSERT INTO saved_views (id, investigation_id, kind, name, layout, query_context, mapping_hash, content_hash, counts_policy_version, created_by)
+       VALUES ($1, $2, 'named', 'A view', $3, $4, $5, $6, $7, $8)`,
+      [viewId, answer.investigation.id, JSON.stringify(draft?.['layout']), JSON.stringify(draft?.['query_context']), draft?.['mapping_hash'], draft?.['content_hash'], draft?.['counts_policy_version'], draft?.['created_by']],
+    );
+    await rows(database.ownerUrl, `UPDATE saved_views SET based_on_view_id = $1 WHERE kind = 'draft'`, [viewId]);
+    const read = () => app.inject({ method: 'GET', url: `/v1/investigations/${answer.investigation.id}` });
+    expect(investigationResponseSchema.parse((await read()).json()).draft.basedOnViewId).toBe(viewId);
+    await rows(database.ownerUrl, `DELETE FROM saved_views WHERE kind = 'named'`);
+    expect(investigationResponseSchema.parse((await read()).json()).draft.basedOnViewId).toBeNull();
+    await app.close();
+  });
+
   it('stores an ID PostgreSQL cannot hold in its encoded form and answers it back as it was sent', async () => {
     const { database, app, put, answer } = await opened();
     expect((await put(changed('GZ\u0000-1'))).statusCode).toBe(200);
@@ -405,3 +440,403 @@ describe('saving the draft against Postgres', () => {
     await app.close();
   });
 });
+
+describe('saving a named view against Postgres', () => {
+  async function opened() {
+    const run = await running();
+    const answer = openInvestigationResponseSchema.parse((await run.post(body())).json());
+    const path = `/v1/investigations/${answer.investigation.id}`;
+    const saveView = (payload: unknown, version: number | string = answer.draft.version) => run.app.inject({ method: 'POST', url: `${path}/views`, headers: { 'if-match': `"${version}"` }, payload: payload as object });
+    const putDraft = (payload: unknown, version: number | string) => run.app.inject({ method: 'PUT', url: `${path}/draft`, headers: { 'if-match': `"${version}"` }, payload: payload as object });
+    return { ...run, answer, path, saveView, putDraft };
+  }
+  const views = (database: TestDatabase) => rows(database.ownerUrl, `SELECT * FROM saved_views WHERE kind = 'named'`);
+  const draftRow = async (database: TestDatabase) => (await rows(database.ownerUrl, `SELECT * FROM saved_views WHERE kind = 'draft'`))[0];
+
+  it('copies the stored draft into one named view, points the draft at it and moves last_edited_at, in one write', async () => {
+    const { database, app, saveView } = await opened();
+    const [before] = await rows(database.ownerUrl, 'SELECT last_edited_at FROM investigations');
+    const draftBefore = await draftRow(database);
+    const response = await saveView({ name: 'First look', notes: 'a note' });
+    expect(response.statusCode).toBe(201);
+    expect(response.headers['etag']).toBe('"2"');
+    const answer = saveViewResponseSchema.parse(response.json());
+    const [view] = await views(database);
+    expect(view).toMatchObject({ id: answer.view.id, name: 'First look', notes: 'a note', kind: 'named', based_on_view_id: null, node_count: 1, edge_count: 0, mapping_hash: demo.configHash, counts_policy_version: draftBefore?.['counts_policy_version'], created_by: draftBefore?.['created_by'] });
+    expect(view?.['layout']).toEqual(draftBefore?.['layout']);
+    expect(view?.['query_context']).toEqual(draftBefore?.['query_context']);
+    const draft = await draftRow(database);
+    expect(draft).toMatchObject({ version: 2, notes: 'a note', based_on_view_id: answer.view.id, content_hash: view?.['content_hash'] });
+    expect(answer.save.savedAt).toBe((view?.['created_at'] as Date).toISOString());
+    const [after] = await rows(database.ownerUrl, 'SELECT last_edited_at FROM investigations');
+    expect((after?.['last_edited_at'] as Date).getTime()).toBeGreaterThan((before?.['last_edited_at'] as Date).getTime());
+    await app.close();
+  });
+
+  it('changes the title with the save, and a stale version of the investigation stores no view, no note, no title and no draft change', async () => {
+    const { database, app, saveView, answer } = await opened();
+    const stale = await saveView({ name: 'First look', notes: 'a note', title: 'Ring of five', expectedInvestigationVersion: answer.investigation.version + 1 });
+    expect(stale.statusCode).toBe(409);
+    expect(stale.json().error.code).toBe('CONFLICT');
+    expect(await views(database)).toHaveLength(0);
+    expect(await draftRow(database)).toMatchObject({ version: 1, notes: null, based_on_view_id: null });
+    expect((await rows(database.ownerUrl, 'SELECT title, version FROM investigations'))[0]).toMatchObject({ title: answer.investigation.title, version: answer.investigation.version });
+    const matching = await saveView({ name: 'First look', notes: 'a note', title: 'Ring of five', expectedInvestigationVersion: answer.investigation.version });
+    expect(matching.statusCode).toBe(201);
+    expect(saveViewResponseSchema.parse(matching.json()).investigation).toEqual({ title: 'Ring of five', version: answer.investigation.version + 1 });
+    expect((await rows(database.ownerUrl, 'SELECT title, version FROM investigations'))[0]).toMatchObject({ title: 'Ring of five', version: answer.investigation.version + 1 });
+    await app.close();
+  });
+
+  it('lets one of two saves with the same If-Match win, and makes one view', async () => {
+    const { database, app, saveView } = await opened();
+    const [first, second] = await Promise.all([saveView({ name: 'One', notes: null }), saveView({ name: 'Two', notes: null })]);
+    expect([first.statusCode, second.statusCode].sort()).toEqual([201, 409]);
+    expect([first, second].find((response) => response.statusCode === 409)?.json().error.code).toBe('CONFLICTED_VIEW_VERSION');
+    expect(await views(database)).toHaveLength(1);
+    expect(await draftRow(database)).toMatchObject({ version: 2 });
+    await app.close();
+  });
+
+  it('makes a second view when nothing changed since the first, and leaves the first untouched', async () => {
+    const { database, app, saveView } = await opened();
+    expect((await saveView({ name: 'One', notes: null })).statusCode).toBe(201);
+    const [first] = await views(database);
+    expect((await saveView({ name: 'Two', notes: null }, 2)).statusCode).toBe(201);
+    const stored = await views(database);
+    expect(stored).toHaveLength(2);
+    expect(stored.find((view) => view['id'] === first?.['id'])).toEqual(first);
+    await app.close();
+  });
+
+  it('reads the draft as saved with the view time while its content equals the view, and as unsaved after the next content change', async () => {
+    const { database, app, saveView, putDraft, path } = await opened();
+    const saved = saveViewResponseSchema.parse((await saveView({ name: 'First look', notes: 'a note' })).json());
+    const listed = async () => investigationListResponseSchema.parse((await app.inject({ method: 'GET', url: '/v1/investigations' })).json()).items[0]?.save;
+    expect(await listed()).toEqual({ state: 'saved', savedAt: saved.save.savedAt });
+    const draft = investigationResponseSchema.parse((await app.inject({ method: 'GET', url: path })).json()).draft;
+    expect(draft).toMatchObject({ version: 2, notes: 'a note', basedOnViewId: saved.view.id });
+    const unchanged = await putDraft({ layout: draft.layout, queryContext: draft.queryContext, notes: 'a note' }, 2);
+    expect(unchanged.json().save).toEqual({ state: 'saved', savedAt: saved.save.savedAt });
+    const changed = await putDraft({ layout: draft.layout, queryContext: draft.queryContext, notes: 'another note' }, 2);
+    expect(changed.json().save).toEqual({ state: 'unsaved', savedAt: null });
+    expect(await listed()).toEqual({ state: 'unsaved', savedAt: null });
+    expect(await views(database)).toHaveLength(1);
+    await app.close();
+  });
+
+  it('answers the investigation read as saved with the view time, as the list does, and as unsaved after a change or when the view is gone', async () => {
+    const { database, app, saveView, putDraft, path } = await opened();
+    const read = async () => investigationResponseSchema.parse((await app.inject({ method: 'GET', url: path })).json());
+    const listed = async () => investigationListResponseSchema.parse((await app.inject({ method: 'GET', url: '/v1/investigations' })).json()).items[0]?.save;
+    expect((await read()).save).toEqual({ state: 'unsaved', savedAt: null });
+    const saved = saveViewResponseSchema.parse((await saveView({ name: 'First look', notes: null })).json());
+    expect((await read()).save).toEqual({ state: 'saved', savedAt: saved.save.savedAt });
+    expect(await listed()).toEqual((await read()).save);
+    const draft = (await read()).draft;
+    await putDraft({ layout: draft.layout, queryContext: draft.queryContext, notes: 'edited' }, saved.draft.version);
+    expect((await read()).save).toEqual({ state: 'unsaved', savedAt: null });
+    expect(await listed()).toEqual({ state: 'unsaved', savedAt: null });
+    await rows(database.ownerUrl, `DELETE FROM saved_views WHERE kind = 'named'`);
+    expect((await read()).save).toEqual({ state: 'unsaved', savedAt: null });
+    await app.close();
+  });
+
+  it('names the user who saved the view by the name the workspace shows', async () => {
+    const { database, app, saveView } = await opened();
+    const answer = saveViewResponseSchema.parse((await saveView({ name: 'First look', notes: null })).json());
+    const [user] = await rows(database.ownerUrl, `SELECT u.display_name FROM users u JOIN saved_views v ON v.created_by = u.id WHERE v.id = $1`, [answer.view.id]);
+    expect(answer.view.savedBy).toEqual({ name: user?.['display_name'] });
+    await app.close();
+  });
+});
+
+describe('listing and renaming named views against Postgres', () => {
+  async function opened() {
+    const run = await running();
+    const answer = openInvestigationResponseSchema.parse((await run.post(body())).json());
+    const path = `/v1/investigations/${answer.investigation.id}`;
+    let draftVersion = answer.draft.version;
+    const saveView = async (name: string) => {
+      const response = await run.app.inject({ method: 'POST', url: `${path}/views`, headers: { 'if-match': `"${draftVersion}"` }, payload: { name, notes: null } });
+      expect(response.statusCode).toBe(201);
+      draftVersion += 1;
+      return saveViewResponseSchema.parse(response.json()).view;
+    };
+    const listPage = async (query: string) => viewListResponseSchema.parse((await run.app.inject({ method: 'GET', url: `${path}/views${query}` })).json());
+    return { ...run, answer, path, saveView, listPage };
+  }
+
+  it('pages by cursor over views made in the same instant, once each, also when a view is added between the calls, and keeps the count exact', async () => {
+    const { database, app, saveView, listPage } = await opened();
+    for (const name of ['One', 'Two', 'Three', 'Four', 'Five']) await saveView(name);
+    await rows(database.ownerUrl, `UPDATE saved_views SET created_at = '2026-11-10T09:00:00.123456Z' WHERE kind = 'named' AND name IN ('Two', 'Three', 'Four')`);
+    const first = await listPage('?limit=2');
+    expect(first.count).toEqual({ value: 5, quality: 'exact', scope: 'named-views' });
+    expect(first.nextCursor).not.toBeNull();
+    await saveView('Six');
+    const names = first.items.map((item) => item.name);
+    let cursor = first.nextCursor;
+    while (cursor !== null) {
+      const page = await listPage(`?limit=2&cursor=${cursor}`);
+      names.push(...page.items.map((item) => item.name));
+      cursor = page.nextCursor;
+    }
+    expect(names).toHaveLength(5);
+    expect(new Set(names).size).toBe(5);
+    expect(names.slice(0, 1)).toEqual(['Five']);
+    expect([...names].sort()).toEqual(['Five', 'Four', 'One', 'Three', 'Two']);
+    expect((await listPage('')).count.value).toBe(6);
+    await app.close();
+  });
+
+  it('lists summaries with who saved them, and a draft based on the newest view', async () => {
+    const { database, app, saveView, listPage } = await opened();
+    const view = await saveView('First look');
+    const page = await listPage('');
+    expect(page.items).toEqual([view]);
+    expect(page.draft.basedOnViewId).toBe(view.id);
+    const [user] = await rows(database.ownerUrl, 'SELECT display_name FROM users');
+    expect(page.items[0]?.savedBy).toEqual({ name: user?.['display_name'] });
+    await app.close();
+  });
+
+  it('renames only the name: the version and updated_at move, no other column of the view and not last_edited_at', async () => {
+    const { database, app, saveView, path } = await opened();
+    const view = await saveView('First look');
+    const read = async () => (await rows(database.ownerUrl, `SELECT * FROM saved_views WHERE id = $1`, [view.id]))[0];
+    const before = await read();
+    const [investigationBefore] = await rows(database.ownerUrl, 'SELECT last_edited_at FROM investigations');
+    const response = await app.inject({ method: 'PUT', url: `${path}/views/${view.id}`, headers: { 'if-match': '"1"' }, payload: { name: 'Renamed' } });
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['etag']).toBe('"2"');
+    expect(namedViewSchema.parse(response.json())).toMatchObject({ id: view.id, name: 'Renamed', version: 2, createdAt: view.createdAt });
+    const after = await read();
+    const { name: _n, version: _v, updated_at: _u, ...otherBefore } = before ?? {};
+    const { name: _n2, version: _v2, updated_at: _u2, ...otherAfter } = after ?? {};
+    expect(otherAfter).toEqual(otherBefore);
+    expect(after).toMatchObject({ name: 'Renamed', version: 2 });
+    expect((after?.['updated_at'] as Date).getTime()).toBeGreaterThan((before?.['updated_at'] as Date).getTime());
+    const [investigationAfter] = await rows(database.ownerUrl, 'SELECT last_edited_at FROM investigations');
+    expect(investigationAfter).toEqual(investigationBefore);
+    const stale = await app.inject({ method: 'PUT', url: `${path}/views/${view.id}`, headers: { 'if-match': '"1"' }, payload: { name: 'Again' } });
+    expect(stale.statusCode).toBe(409);
+    expect(stale.json().error.code).toBe('CONFLICTED_VIEW_VERSION');
+    expect((await read())?.['name']).toBe('Renamed');
+    await app.close();
+  });
+
+  it('lets one of two renames with the same version win', async () => {
+    const { app, saveView, path } = await opened();
+    const view = await saveView('First look');
+    const rename = (name: string) => app.inject({ method: 'PUT', url: `${path}/views/${view.id}`, headers: { 'if-match': '"1"' }, payload: { name } });
+    const answers = await Promise.all([rename('A'), rename('B')]);
+    expect(answers.map((answer) => answer.statusCode).sort()).toEqual([200, 409]);
+    await app.close();
+  });
+
+  it('reads the draft as unsaved, answers the list and fails nothing when the view the draft was based on is removed', async () => {
+    const { database, app, saveView, listPage } = await opened();
+    await saveView('First look');
+    await rows(database.ownerUrl, `DELETE FROM saved_views WHERE kind = 'named'`);
+    const page = await listPage('');
+    expect(page).toMatchObject({ items: [], count: { value: 0 }, draft: { basedOnViewId: null } });
+    const saves = investigationListResponseSchema.parse((await app.inject({ method: 'GET', url: '/v1/investigations' })).json()).items[0]?.save;
+    expect(saves).toEqual({ state: 'unsaved', savedAt: null });
+    await app.close();
+  });
+
+  it('does not show a view of another user’s investigation', async () => {
+    const { database, app, saveView, answer } = await opened();
+    const view = await saveView('First look');
+    await rows(database.ownerUrl, `UPDATE investigations SET deleted_at = now() WHERE id = $1`, [answer.investigation.id]);
+    const list = await app.inject({ method: 'GET', url: `/v1/investigations/${answer.investigation.id}/views` });
+    const rename = await app.inject({ method: 'PUT', url: `/v1/investigations/${answer.investigation.id}/views/${view.id}`, headers: { 'if-match': '"1"' }, payload: { name: 'X' } });
+    expect([list.statusCode, rename.statusCode]).toEqual([404, 404]);
+    await app.close();
+  });
+});
+
+describe('restoring a named view against Postgres', () => {
+  const node = (t: string, id: string) => ({ t, id, pinned: false, hidden: false, groupId: null });
+  const larger = (note: string | null) => ({
+    notes: note,
+    layout: { schemaVersion: 1, layout: 'force', nodes: [node('widget', 'W-1'), node('gizmo', 'GZ-1')], edges: [], groups: [] },
+    queryContext: { schemaVersion: 1, loaded: { nodes: [{ t: 'widget', id: 'W-1' }, { t: 'gizmo', id: 'GZ-1' }], edges: [] }, expansions: [], filters: { entityTypes: [], relTypes: [], time: null, properties: [] } },
+  });
+
+  async function opened() {
+    const run = await running();
+    const answer = openInvestigationResponseSchema.parse((await run.post(body())).json());
+    const path = `/v1/investigations/${answer.investigation.id}`;
+    const put = (payload: unknown, version: number) => run.app.inject({ method: 'PUT', url: `${path}/draft`, headers: { 'if-match': `"${version}"` }, payload: payload as object });
+    const saveView = (name: string, version: number, notes: string | null = null) => run.app.inject({ method: 'POST', url: `${path}/views`, headers: { 'if-match': `"${version}"` }, payload: { name, notes } });
+    const restore = (viewId: string, version: number) => run.app.inject({ method: 'POST', url: `${path}/views/${viewId}/restore`, headers: { 'if-match': `"${version}"` } });
+    const draftRow = async () => (await rows(run.database.ownerUrl, `SELECT * FROM saved_views WHERE kind = 'draft'`))[0];
+    const viewRow = async (id: string) => (await rows(run.database.ownerUrl, `SELECT * FROM saved_views WHERE id = $1`, [id]))[0];
+    const lastEdited = async () => ((await rows(run.database.ownerUrl, 'SELECT last_edited_at FROM investigations'))[0]?.['last_edited_at'] as Date).getTime();
+    return { ...run, answer, path, put, saveView, restore, draftRow, viewRow, lastEdited };
+  }
+
+  /** A view of the larger draft, saved with a note, and the draft written back to the starting state. */
+  async function withViewAndMovedDraft(parts: Awaited<ReturnType<typeof opened>>) {
+    expect((await parts.put(larger('first note'), 1)).statusCode).toBe(200);
+    const saved = saveViewResponseSchema.parse((await parts.saveView('Larger', 2, 'first note')).json());
+    await rows(parts.database.ownerUrl, `UPDATE saved_views SET mapping_hash = 'older-mapping', counts_policy_version = 'policy-7' WHERE id = $1`, [saved.view.id]);
+    const moved = await parts.put({ ...initialDraftDocuments({ entityType: 'widget', stableId: 'W-1' }), notes: null }, saved.draft.version);
+    expect(moved.statusCode).toBe(200);
+    return { saved, draftVersion: moved.json().version as number };
+  }
+
+  it('copies every column of the view over the draft, bases the draft on it and answers the draft saved with the view time, leaving the view as it was', async () => {
+    const parts = await opened();
+    const { saved, draftVersion } = await withViewAndMovedDraft(parts);
+    const viewBefore = await parts.viewRow(saved.view.id);
+    const response = await parts.restore(saved.view.id, draftVersion);
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['etag']).toBe(`"${draftVersion + 1}"`);
+    const answer = restoreViewResponseSchema.parse(response.json());
+    expect(answer.draft).toMatchObject({ version: draftVersion + 1, notes: 'first note', basedOnViewId: saved.view.id });
+    expect(answer.save.savedAt).toBe(saved.save.savedAt);
+    const draft = await parts.draftRow();
+    for (const column of ['layout', 'query_context', 'notes', 'ai_notes', 'mapping_hash', 'node_count', 'edge_count', 'counts_policy_version', 'content_hash']) expect(draft?.[column]).toEqual(viewBefore?.[column]);
+    expect(draft).toMatchObject({ mapping_hash: 'older-mapping', counts_policy_version: 'policy-7', based_on_view_id: saved.view.id, version: draftVersion + 1, node_count: 2 });
+    expect(await parts.viewRow(saved.view.id)).toEqual(viewBefore);
+    await parts.app.close();
+  });
+
+  it('builds the answer from the draft the restore wrote, in the same transaction', async () => {
+    const parts = await opened();
+    const { saved, draftVersion } = await withViewAndMovedDraft(parts);
+    const result = await parts.store.restoreNamedView({ investigationId: parts.answer.investigation.id, viewId: saved.view.id, ownerId: (await parts.draftRow())?.['created_by'] as string, expectedDraftVersion: draftVersion });
+    if (result.outcome !== 'restored') throw new Error(`expected restored, got ${result.outcome}`);
+    const row = await parts.draftRow();
+    expect(result.draft).toMatchObject({ version: row?.['version'], notes: 'first note', basedOnViewId: saved.view.id });
+    expect(result.draft.layout).toEqual(row?.['layout']);
+    await parts.app.close();
+  });
+
+  it('moves last_edited_at only when the draft’s content changed', async () => {
+    const parts = await opened();
+    const { saved, draftVersion } = await withViewAndMovedDraft(parts);
+    const before = await parts.lastEdited();
+    const first = await parts.restore(saved.view.id, draftVersion);
+    expect(first.statusCode).toBe(200);
+    const afterChange = await parts.lastEdited();
+    expect(afterChange).toBeGreaterThan(before);
+    const again = await parts.restore(saved.view.id, draftVersion + 1);
+    expect(again.statusCode).toBe(200);
+    expect(await parts.lastEdited()).toBe(afterChange);
+    await parts.app.close();
+  });
+
+  it('lets one of two restores with the same If-Match win', async () => {
+    const parts = await opened();
+    const { saved, draftVersion } = await withViewAndMovedDraft(parts);
+    const answers = await Promise.all([parts.restore(saved.view.id, draftVersion), parts.restore(saved.view.id, draftVersion)]);
+    expect(answers.map((answer) => answer.statusCode).sort()).toEqual([200, 409]);
+    expect(answers.find((answer) => answer.statusCode === 409)?.json().error.code).toBe('CONFLICTED_VIEW_VERSION');
+    expect((await parts.draftRow())?.['version']).toBe(draftVersion + 1);
+    await parts.app.close();
+  });
+
+  it('changes nothing for a stale version, a view of another investigation or an unknown view', async () => {
+    const parts = await opened();
+    const { saved, draftVersion } = await withViewAndMovedDraft(parts);
+    const before = await parts.draftRow();
+    const stale = await parts.restore(saved.view.id, draftVersion - 1);
+    const unknown = await parts.restore('0192f000-0000-7000-8000-0000000000ee', draftVersion);
+    expect([stale.statusCode, unknown.statusCode]).toEqual([409, 404]);
+    expect(await parts.draftRow()).toEqual(before);
+    await parts.app.close();
+  });
+
+  it('leaves the draft, its version and last_edited_at as they were when a restore is refused for a missing If-Match, a body, or a stale version', async () => {
+    const parts = await opened();
+    const { saved, draftVersion } = await withViewAndMovedDraft(parts);
+    const before = await parts.draftRow();
+    const editedBefore = await parts.lastEdited();
+    const url = `${parts.path}/views/${saved.view.id}/restore`;
+    const noIfMatch = await parts.app.inject({ method: 'POST', url });
+    const withBody = await parts.app.inject({ method: 'POST', url, headers: { 'if-match': `"${draftVersion}"`, 'content-type': 'application/json' }, payload: { a: 1 } });
+    const stale = await parts.restore(saved.view.id, draftVersion + 1);
+    expect([noIfMatch.statusCode, withBody.statusCode, stale.statusCode]).toEqual([400, 400, 409]);
+    expect(await parts.draftRow()).toEqual(before);
+    expect(await parts.lastEdited()).toBe(editedBefore);
+    await parts.app.close();
+  });
+
+  it('accepts the next draft write with the new version, and reads the draft as unsaved after a content change', async () => {
+    const parts = await opened();
+    const { saved, draftVersion } = await withViewAndMovedDraft(parts);
+    const restored = restoreViewResponseSchema.parse((await parts.restore(saved.view.id, draftVersion)).json());
+    const unchanged = await parts.put({ layout: restored.draft.layout, queryContext: restored.draft.queryContext, notes: 'first note' }, restored.draft.version);
+    expect(unchanged.json().save).toEqual({ state: 'saved', savedAt: saved.save.savedAt });
+    const changed = await parts.put({ layout: restored.draft.layout, queryContext: restored.draft.queryContext, notes: 'edited' }, restored.draft.version);
+    expect(changed.statusCode).toBe(200);
+    expect(changed.json().save).toEqual({ state: 'unsaved', savedAt: null });
+    await parts.app.close();
+  });
+});
+
+describe('a closed or archived investigation and its named views against Postgres', () => {
+  async function opened() {
+    const run = await running();
+    const answer = openInvestigationResponseSchema.parse((await run.post(body())).json());
+    const path = `/v1/investigations/${answer.investigation.id}`;
+    const saved = saveViewResponseSchema.parse((await run.app.inject({ method: 'POST', url: `${path}/views`, headers: { 'if-match': `"${answer.draft.version}"` }, payload: { name: 'First look', notes: 'a note' } })).json());
+    return { ...run, answer, path, saved };
+  }
+  const snapshot = (database: TestDatabase) => rows(database.ownerUrl, `SELECT id, kind, name, notes, version, content_hash, based_on_view_id, updated_at FROM saved_views ORDER BY id`);
+
+  it.each(['closed', 'archived'] as const)('refuses a view save, a rename and a restore when the investigation is %s, stores nothing, and lists the views', async (status) => {
+    const { database, app, path, saved } = await opened();
+    await rows(database.ownerUrl, `UPDATE investigations SET status = $1`, [status]);
+    const before = JSON.stringify(await snapshot(database));
+    const [edited] = await rows(database.ownerUrl, 'SELECT last_edited_at, version FROM investigations');
+    const calls = [
+      app.inject({ method: 'POST', url: `${path}/views`, headers: { 'if-match': `"${saved.draft.version}"` }, payload: { name: 'Another', notes: null, title: 'New title', expectedInvestigationVersion: 1 } }),
+      app.inject({ method: 'PUT', url: `${path}/views/${saved.view.id}`, headers: { 'if-match': '"1"' }, payload: { name: 'Renamed' } }),
+      app.inject({ method: 'POST', url: `${path}/views/${saved.view.id}/restore`, headers: { 'if-match': `"${saved.draft.version}"` } }),
+    ];
+    for (const response of await Promise.all(calls)) {
+      expect(response.statusCode).toBe(409);
+      expect(response.json()).toMatchObject({ error: { code: 'CONFLICT', details: { reason: 'investigation-read-only', status } } });
+    }
+    expect(JSON.stringify(await snapshot(database))).toBe(before);
+    expect((await rows(database.ownerUrl, 'SELECT last_edited_at, version FROM investigations'))[0]).toEqual(edited);
+    const listed = await app.inject({ method: 'GET', url: `${path}/views` });
+    expect(viewListResponseSchema.parse(listed.json()).items).toHaveLength(1);
+    await rows(database.ownerUrl, `UPDATE investigations SET status = 'open'`);
+    const renamed = await app.inject({ method: 'PUT', url: `${path}/views/${saved.view.id}`, headers: { 'if-match': '"1"' }, payload: { name: 'Renamed' } });
+    expect(renamed.statusCode).toBe(200);
+    await app.close();
+  });
+
+  it('answers the read-only refusal, and stores nothing, for writes that start while a close is in flight and finish after it commits', async () => {
+    const { database, app, path, saved } = await opened();
+    const closer = new pg.Client({ connectionString: database.ownerUrl });
+    await closer.connect();
+    try {
+      await closer.query('BEGIN');
+      await closer.query(`UPDATE investigations SET status = 'closed', closed_at = now()`);
+      const before = JSON.stringify(await snapshot(database));
+      const calls = [
+        app.inject({ method: 'POST', url: `${path}/views`, headers: { 'if-match': `"${saved.draft.version}"` }, payload: { name: 'Another', notes: null } }),
+        app.inject({ method: 'PUT', url: `${path}/views/${saved.view.id}`, headers: { 'if-match': '"1"' }, payload: { name: 'Renamed' } }),
+        app.inject({ method: 'POST', url: `${path}/views/${saved.view.id}/restore`, headers: { 'if-match': `"${saved.draft.version}"` } }),
+      ];
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      await closer.query('COMMIT');
+      for (const response of await Promise.all(calls)) {
+        expect(response.statusCode).toBe(409);
+        expect(response.json()).toMatchObject({ error: { code: 'CONFLICT', details: { reason: 'investigation-read-only', status: 'closed' } } });
+      }
+      expect(JSON.stringify(await snapshot(database))).toBe(before);
+    } finally {
+      await closer.end();
+    }
+    await app.close();
+  });
+});
+

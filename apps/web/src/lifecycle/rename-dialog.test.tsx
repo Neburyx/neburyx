@@ -90,7 +90,7 @@ describe('the rename dialog', () => {
   });
 
   it('keeps the dialog open with the plain conflict message and Reload, which reads the investigation again', async () => {
-    const getInvestigation = vi.fn(async () => ({ ok: true as const, value: { investigation: investigationOf('open', 9, 'Renamed elsewhere'), draft: { version: 1, layout: { schemaVersion: 1 as const, layout: 'force', nodes: [], edges: [], groups: [] }, queryContext: { schemaVersion: 1 as const, loaded: { nodes: [], edges: [] }, expansions: [], filters: { entityTypes: [], relTypes: [], time: null, properties: [] } }, notes: null } } }));
+    const getInvestigation = vi.fn(async () => ({ ok: true as const, value: { investigation: investigationOf('open', 9, 'Renamed elsewhere'), draft: { version: 1, layout: { schemaVersion: 1 as const, layout: 'force', nodes: [], edges: [], groups: [] }, queryContext: { schemaVersion: 1 as const, loaded: { nodes: [], edges: [] }, expansions: [], filters: { entityTypes: [], relTypes: [], time: null, properties: [] } }, notes: null, basedOnViewId: null }, save: { state: 'unsaved' as const, savedAt: null } } }));
     const { state, user } = await opened({ getInvestigation, renameInvestigation: async () => ({ ok: false, failure: failure('CONFLICT', 'This item was changed elsewhere. Reload to continue.') }) });
     await user.type(within(dialog()).getByRole('textbox', { name: 'Name' }), '!');
     await user.click(within(dialog()).getByRole('button', { name: 'Rename' }));
@@ -105,7 +105,7 @@ describe('the rename dialog', () => {
   });
 
   it('says "Reopen to rename." and reads the investigation again when it was closed meanwhile', async () => {
-    const getInvestigation = vi.fn(async () => ({ ok: true as const, value: { investigation: investigationOf('closed', 4), draft: { version: 1, layout: { schemaVersion: 1 as const, layout: 'force', nodes: [], edges: [], groups: [] }, queryContext: { schemaVersion: 1 as const, loaded: { nodes: [], edges: [] }, expansions: [], filters: { entityTypes: [], relTypes: [], time: null, properties: [] } }, notes: null } } }));
+    const getInvestigation = vi.fn(async () => ({ ok: true as const, value: { investigation: investigationOf('closed', 4), draft: { version: 1, layout: { schemaVersion: 1 as const, layout: 'force', nodes: [], edges: [], groups: [] }, queryContext: { schemaVersion: 1 as const, loaded: { nodes: [], edges: [] }, expansions: [], filters: { entityTypes: [], relTypes: [], time: null, properties: [] } }, notes: null, basedOnViewId: null }, save: { state: 'unsaved' as const, savedAt: null } } }));
     const { state, user } = await opened({ getInvestigation, renameInvestigation: async () => ({ ok: false, failure: failure('CONFLICT', 'This investigation is closed or archived. Reopen it to make changes.', { reason: 'investigation-read-only', status: 'closed' }) }) });
     await user.type(within(dialog()).getByRole('textbox', { name: 'Name' }), '!');
     await user.click(within(dialog()).getByRole('button', { name: 'Rename' }));

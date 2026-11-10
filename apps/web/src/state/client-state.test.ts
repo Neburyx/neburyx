@@ -1,9 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { partitionEdges } from './loaded-graph.js';
 import { createClientState } from './client-state.js';
-import { elementKey } from './keys.js';
+import { elementKey, edgeKey } from './keys.js';
 import { edge, edgeRef, key, node, ref, result } from './test-data.js';
-import { edgeKey } from './keys.js';
 
 function loaded() {
   const state = createClientState();

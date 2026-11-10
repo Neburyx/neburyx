@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { edgeEntrySchema, investigationListQuerySchema, investigationListResponseSchema, openInvestigationRequestSchema, openInvestigationResponseSchema, renameRequestSchema, statusChangeRequestSchema, statusChangeResponseSchema } from './investigations.js';
+import { investigationResponseSchema, edgeEntrySchema, investigationListQuerySchema, investigationListResponseSchema, openInvestigationRequestSchema, openInvestigationResponseSchema, renameRequestSchema, statusChangeRequestSchema, statusChangeResponseSchema } from './investigations.js';
 
 const investigation = {
   id: '0192f000-0000-7000-8000-0000000000a1',
@@ -17,22 +17,27 @@ const entity = { ref: { sourceId: 'demo', entityType: 'widget', stableId: 'W-1' 
 
 describe('the answer to opening an investigation', () => {
   it.each([
-    ['an available source with its entity, new', { investigation, created: true, entity, draft: { version: 1 } }],
-    ['an available source with its entity, resumed', { investigation, created: false, entity, draft: { version: 2 } }],
-    ['a repointed source, resumed, with no entity', { investigation: { ...investigation, sourceState: 'repointed' }, created: false, draft: { version: 1 } }],
-    ['a removed source, resumed, with no entity', { investigation: { ...investigation, sourceState: 'removed' }, created: false, draft: { version: 1 } }],
+    ['an available source with its entity, new', { investigation, created: true, entity, draft: { version: 1, notes: null, basedOnViewId: null } }],
+    ['an available source with its entity, resumed', { investigation, created: false, entity, draft: { version: 2, notes: null, basedOnViewId: null } }],
+    ['an available source, resumed with a note and the view it is based on', { investigation, created: false, entity, draft: { version: 3, notes: 'a note', basedOnViewId: '0192f000-0000-7000-8000-0000000000a1' } }],
+    ['a repointed source, resumed, with no entity', { investigation: { ...investigation, sourceState: 'repointed' }, created: false, draft: { version: 1, notes: null, basedOnViewId: null } }],
+    ['a removed source, resumed, with no entity', { investigation: { ...investigation, sourceState: 'removed' }, created: false, draft: { version: 1, notes: null, basedOnViewId: null } }],
   ])('accepts %s', (_name, answer) => {
     expect(openInvestigationResponseSchema.safeParse(answer).success).toBe(true);
   });
 
   it.each([
-    ['an available source without its entity', { investigation, created: true, draft: { version: 1 } }],
+    ['an available source without its entity', { investigation, created: true, draft: { version: 1, notes: null, basedOnViewId: null } }],
     ['an answer without the version of the draft', { investigation, created: true, entity }],
+    ['a draft without its notes', { investigation, created: true, entity, draft: { version: 1, basedOnViewId: null } }],
+    ['a draft without the view it is based on', { investigation, created: true, entity, draft: { version: 1, notes: null } }],
+    ['a draft based on something that is not a view ID', { investigation, created: true, entity, draft: { version: 1, notes: null, basedOnViewId: 'not-an-id' } }],
+    ['a note of 10,001 characters', { investigation, created: true, entity, draft: { version: 1, notes: 'n'.repeat(10_001), basedOnViewId: null } }],
     ['a draft version of zero', { investigation, created: true, entity, draft: { version: 0 } }],
-    ['a repointed source with an entity', { investigation: { ...investigation, sourceState: 'repointed' }, created: false, entity, draft: { version: 1 } }],
-    ['a repointed source reported as new', { investigation: { ...investigation, sourceState: 'repointed' }, created: true, draft: { version: 1 } }],
-    ['a removed source with an entity', { investigation: { ...investigation, sourceState: 'removed' }, created: false, entity, draft: { version: 1 } }],
-    ['a state that does not exist', { investigation: { ...investigation, sourceState: 'gone' }, created: false, draft: { version: 1 } }],
+    ['a repointed source with an entity', { investigation: { ...investigation, sourceState: 'repointed' }, created: false, entity, draft: { version: 1, notes: null, basedOnViewId: null } }],
+    ['a repointed source reported as new', { investigation: { ...investigation, sourceState: 'repointed' }, created: true, draft: { version: 1, notes: null, basedOnViewId: null } }],
+    ['a removed source with an entity', { investigation: { ...investigation, sourceState: 'removed' }, created: false, entity, draft: { version: 1, notes: null, basedOnViewId: null } }],
+    ['a state that does not exist', { investigation: { ...investigation, sourceState: 'gone' }, created: false, draft: { version: 1, notes: null, basedOnViewId: null } }],
   ])('refuses %s', (_name, answer) => {
     expect(openInvestigationResponseSchema.safeParse(answer).success).toBe(false);
   });
@@ -173,6 +178,26 @@ describe('the answer to a status change', () => {
   it('carries closedAt and archivedAt, each a time or null', () => {
     expect(statusChangeResponseSchema.safeParse({ investigation: { ...investigation, closedAt: '2026-11-06T12:00:00.000Z', archivedAt: null } }).success).toBe(true);
     expect(statusChangeResponseSchema.safeParse({ investigation }).success).toBe(false);
-    expect(statusChangeResponseSchema.safeParse({ investigation: { ...investigation, closedAt: 'yesterday', archivedAt: null } }).success).toBe(false);
+    expect(statusChangeResponseSchema.safeParse({ investigation: { ...investigation, closedAt: 'yesterday', archivedAt: null } }).success).toBe(false);  });
+});
+
+describe('the answer to reading an investigation', () => {
+  const layout = { schemaVersion: 1, layout: 'force', nodes: [], edges: [], groups: [] };
+  const queryContext = { schemaVersion: 1, loaded: { nodes: [], edges: [] }, expansions: [], filters: { entityTypes: [], relTypes: [], time: null, properties: [] } };
+  const draft = { version: 2, layout, queryContext, notes: null, basedOnViewId: null };
+
+  it.each([
+    ['unsaved', { state: 'unsaved', savedAt: null }],
+    ['saved with the time of the view', { state: 'saved', savedAt: '2026-11-08T09:30:00.000Z' }],
+  ])('accepts a draft that is %s', (_name, save) => {
+    expect(investigationResponseSchema.safeParse({ investigation, draft, save }).success).toBe(true);
+  });
+
+  it.each([
+    ['no save', { investigation, draft }],
+    ['a saved state without its time', { investigation, draft, save: { state: 'saved', savedAt: null } }],
+    ['an unsaved state with a time', { investigation, draft, save: { state: 'unsaved', savedAt: '2026-11-08T09:30:00.000Z' } }],
+  ])('refuses %s', (_name, body) => {
+    expect(investigationResponseSchema.safeParse(body).success).toBe(false);
   });
 });

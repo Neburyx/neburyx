@@ -147,6 +147,10 @@ const OTHER_CASES: Readonly<Record<string, string>> = {
   'PUT /v1/investigations/:id/draft': 'reads no source',
   'PUT /v1/investigations/:id': 'reads no source',
   'POST /v1/investigations/:id/status': 'reads no source',
+  'POST /v1/investigations/:id/views': 'reads no source',
+  'POST /v1/investigations/:id/views/:viewId/restore': 'reads no source',
+  'GET /v1/investigations/:id/views': 'reads no source',
+  'PUT /v1/investigations/:id/views/:viewId': 'reads no source',
 };
 
 /** The routes under /v1 that neither a case of ROUTES nor the list above names. */

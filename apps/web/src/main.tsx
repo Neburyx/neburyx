@@ -50,6 +50,7 @@ import './styles/filters.css';
 import './styles/first-run.css';
 import './styles/home.css';
 import './styles/lifecycle.css';
+import './styles/views.css';
 
 const root = document.getElementById('root');
 if (root === null) throw new Error('the page has no #root element');

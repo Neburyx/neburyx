@@ -6,10 +6,10 @@ import { elementRefSchema, nodeSchema } from './graph.js';
 export const MAX_CASE_REF_LENGTH = 100;
 export const MAX_TITLE_LENGTH = 200;
 
-const codePoints = (text: string): number => Array.from(text).length;
+export const codePoints = (text: string): number => Array.from(text).length;
 const text = z.string().min(1);
 
-const holdsNoNulOrLoneSurrogate = (value: string): boolean => !value.includes('\u0000') && !/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/.test(value);
+export const holdsNoNulOrLoneSurrogate = (value: string): boolean => !value.includes('\u0000') && !/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/.test(value);
 
 /** The longest note of a draft or a named view, in characters (the database checks the same limit). */
 export const MAX_NOTES_LENGTH = 10_000;
@@ -88,16 +88,19 @@ export const valueOpenRequestSchema = z.strictObject({ ...openRequestBase, entit
 
 export const openInvestigationRequestSchema = z.union([referenceOpenRequestSchema, valueOpenRequestSchema]);
 
-/** The version of the caller's draft, which the first write sends in `If-Match`. */
-const draftVersionSchema = z.strictObject({ version: z.number().int().min(1) });
+/** The named view a draft was last saved as or restored from; `null` when it never was, or when that view is gone. */
+export const basedOnViewIdSchema = z.uuid().nullable();
+
+/** The caller's draft as an open answers it: the version the first write sends in `If-Match`, and the two fields a view save or restore changes. */
+const openDraftSchema = z.strictObject({ version: z.number().int().min(1), notes: notesSchema, basedOnViewId: basedOnViewIdSchema });
 
 const availableInvestigationSchema = investigationSchema.extend({ sourceState: z.literal('available') });
 const unavailableInvestigationSchema = investigationSchema.extend({ sourceState: z.enum(INVESTIGATION_SOURCE_STATES).exclude(['available']) });
 
 /** An investigation whose source is as it was comes with the entity that was read. One whose source is not (removed or pointing at another database) was resumed, and nothing was read from the source, so there is no entity. */
 export const openInvestigationResponseSchema = z.union([
-  z.strictObject({ investigation: availableInvestigationSchema, created: z.boolean(), entity: nodeSchema, draft: draftVersionSchema }),
-  z.strictObject({ investigation: unavailableInvestigationSchema, created: z.literal(false), draft: draftVersionSchema }),
+  z.strictObject({ investigation: availableInvestigationSchema, created: z.boolean(), entity: nodeSchema, draft: openDraftSchema }),
+  z.strictObject({ investigation: unavailableInvestigationSchema, created: z.literal(false), draft: openDraftSchema }),
 ]);
 
 const refEntry = z.strictObject({ t: text, id: text });
@@ -130,7 +133,7 @@ export const queryContextDocumentSchema = z.strictObject({
   }),
 });
 
-export const draftSchema = z.strictObject({ version: z.number().int().min(1), layout: layoutDocumentSchema, queryContext: queryContextDocumentSchema, notes: notesSchema });
+export const draftSchema = z.strictObject({ version: z.number().int().min(1), layout: layoutDocumentSchema, queryContext: queryContextDocumentSchema, notes: notesSchema, basedOnViewId: basedOnViewIdSchema });
 
 /** The most a stored document may hold, in bytes of its JSON text (data-model §5.2: 1 MB per document). */
 export const MAX_DRAFT_DOCUMENT_BYTES = 1_048_576;
@@ -172,13 +175,14 @@ export const unmappedItemsSchema = z.strictObject({ nodes: z.array(refEntry), ed
 
 export const mappingChangeSchema = z.strictObject({ droppedFilters: z.array(droppedFilterSchema) });
 
-/** `unmapped` is present whenever the source is as it was; `mappingChange` only when the mapping changed since the draft was written. */
-export const investigationResponseSchema = z.strictObject({ investigation: investigationSchema, draft: draftSchema, unmapped: unmappedItemsSchema.optional(), mappingChange: mappingChangeSchema.optional() });
+/** `unmapped` is present whenever the source is as it was; `mappingChange` only when the mapping changed since the draft was written; `save` is whether the draft equals a named view, with the time of that view. */
+export const investigationResponseSchema = z.strictObject({ investigation: investigationSchema, draft: draftSchema, save: investigationSaveSchema, unmapped: unmappedItemsSchema.optional(), mappingChange: mappingChangeSchema.optional() });
 
 export type Investigation = z.infer<typeof investigationSchema>;
 export type OpenInvestigationRequest = z.infer<typeof openInvestigationRequestSchema>;
 export type ReferenceOpenRequest = z.infer<typeof referenceOpenRequestSchema>;
 export type ValueOpenRequest = z.infer<typeof valueOpenRequestSchema>;
+export type OpenDraft = z.infer<typeof openDraftSchema>;
 export type OpenInvestigationResponse = z.infer<typeof openInvestigationResponseSchema>;
 export type LayoutDocument = z.infer<typeof layoutDocumentSchema>;
 export type QueryContextDocument = z.infer<typeof queryContextDocumentSchema>;

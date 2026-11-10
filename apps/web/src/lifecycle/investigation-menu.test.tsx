@@ -97,7 +97,7 @@ describe('the investigation menu', () => {
   });
 
   it('reads the investigation again on Reload after a CONFLICT and takes its status', async () => {
-    const getInvestigation = vi.fn(async () => ({ ok: true as const, value: { investigation: investigationOf('closed', 9), draft: { version: 1, layout: { schemaVersion: 1 as const, layout: 'force', nodes: [], edges: [], groups: [] }, queryContext: { schemaVersion: 1 as const, loaded: { nodes: [], edges: [] }, expansions: [], filters: { entityTypes: [], relTypes: [], time: null, properties: [] } }, notes: null } } }));
+    const getInvestigation = vi.fn(async () => ({ ok: true as const, value: { investigation: investigationOf('closed', 9), draft: { version: 1, layout: { schemaVersion: 1 as const, layout: 'force', nodes: [], edges: [], groups: [] }, queryContext: { schemaVersion: 1 as const, loaded: { nodes: [], edges: [] }, expansions: [], filters: { entityTypes: [], relTypes: [], time: null, properties: [] } }, notes: null, basedOnViewId: null }, save: { state: 'unsaved' as const, savedAt: null } } }));
     const state = shownState('open', 3);
     renderLifecycle(state, { getInvestigation, changeInvestigationStatus: async () => ({ ok: false, failure: failure('CONFLICT', 'This item was changed elsewhere. Reload to continue.') }) });
     const user = userEvent.setup();
@@ -111,7 +111,7 @@ describe('the investigation menu', () => {
   });
 
   it('treats an internal error as an unknown outcome: Reload takes the stored status', async () => {
-    const getInvestigation = vi.fn(async () => ({ ok: true as const, value: { investigation: investigationOf('closed', 4), draft: { version: 1, layout: { schemaVersion: 1 as const, layout: 'force', nodes: [], edges: [], groups: [] }, queryContext: { schemaVersion: 1 as const, loaded: { nodes: [], edges: [] }, expansions: [], filters: { entityTypes: [], relTypes: [], time: null, properties: [] } }, notes: null } } }));
+    const getInvestigation = vi.fn(async () => ({ ok: true as const, value: { investigation: investigationOf('closed', 4), draft: { version: 1, layout: { schemaVersion: 1 as const, layout: 'force', nodes: [], edges: [], groups: [] }, queryContext: { schemaVersion: 1 as const, loaded: { nodes: [], edges: [] }, expansions: [], filters: { entityTypes: [], relTypes: [], time: null, properties: [] } }, notes: null, basedOnViewId: null }, save: { state: 'unsaved' as const, savedAt: null } } }));
     const state = shownState('open', 3);
     renderLifecycle(state, { getInvestigation, changeInvestigationStatus: async () => ({ ok: false, failure: failure('INTERNAL_ERROR', 'Something went wrong. Quote the trace ID if you contact support.') }) });
     const user = userEvent.setup();

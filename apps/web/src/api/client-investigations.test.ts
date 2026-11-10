@@ -206,3 +206,66 @@ describe('readRefs', () => {
     expect(await createApiClient(fetcher).readRefs(request)).toEqual({ ok: false, failure: { code: 'SCHEMA_MISMATCH' } });
   });
 });
+
+describe('the named views', () => {
+  const VIEW_ID = '0192f000-0000-7000-8000-0000000000b1';
+  const view = { id: VIEW_ID, name: 'First look', notes: null, savedBy: { name: 'Local workspace' }, createdAt: '2026-11-10T09:42:00.000Z', version: 1 };
+  const draft = readOf(investigationOf(INVESTIGATION_A, 'source-a', 'kind-a', 'A-1')).draft;
+
+  it('posts a view save with the draft version in If-Match and the body as JSON, and parses the answer', async () => {
+    const answer = { view, draft: { version: 3, notes: null, basedOnViewId: VIEW_ID }, save: { state: 'saved', savedAt: view.createdAt } };
+    const { fetcher, asked } = answering(answer, 201);
+    const result = await createApiClient(fetcher).saveView(INVESTIGATION_A, 2, { name: 'First look', notes: null });
+    expect(result).toEqual({ ok: true, value: answer });
+    expect(asked[0]?.path).toBe(`/v1/investigations/${INVESTIGATION_A}/views`);
+    expect(asked[0]?.init).toMatchObject({ method: 'POST', headers: { 'content-type': 'application/json', 'if-match': '"2"' } });
+    expect(JSON.parse(asked[0]?.init?.body ?? '{}')).toEqual({ name: 'First look', notes: null });
+  });
+
+  it.each([
+    ['a name that is not the one sent', { view: { ...view, name: 'Other' }, draft: { version: 3, notes: null, basedOnViewId: VIEW_ID }, save: { state: 'saved', savedAt: view.createdAt } }],
+    ['a draft that is not one version on', { view, draft: { version: 9, notes: null, basedOnViewId: VIEW_ID }, save: { state: 'saved', savedAt: view.createdAt } }],
+    ['a title that was not asked for', { view, draft: { version: 3, notes: null, basedOnViewId: VIEW_ID }, save: { state: 'saved', savedAt: view.createdAt }, investigation: { title: 'T', version: 2 } }],
+  ])('refuses an answer to a view save with %s', async (_name, answer) => {
+    const { fetcher } = answering(answer, 201);
+    expect(await createApiClient(fetcher).saveView(INVESTIGATION_A, 2, { name: 'First look', notes: null })).toEqual({ ok: false, failure: { code: 'SCHEMA_MISMATCH' } });
+  });
+
+  it('gives the server failure of a view save as it is', async () => {
+    const conflict = answering({ error: { code: 'CONFLICTED_VIEW_VERSION', message: 'This view was changed elsewhere. Reload to continue.', retryable: false, traceId: 'tr' } }, 409);
+    expect(await createApiClient(conflict.fetcher).saveView(INVESTIGATION_A, 2, { name: 'First look', notes: null })).toMatchObject({ ok: false, failure: { code: 'CONFLICTED_VIEW_VERSION' } });
+  });
+
+  it('asks for a page of views with the limit and the cursor in the query, encoded', async () => {
+    const answer = { items: [view], nextCursor: null, count: { value: 1, quality: 'exact', scope: 'named-views' }, draft: { basedOnViewId: null, updatedAt: view.createdAt } };
+    const { fetcher, asked } = answering(answer);
+    await createApiClient(fetcher).listViews(INVESTIGATION_A, {});
+    await createApiClient(fetcher).listViews(INVESTIGATION_A, { limit: 10, cursor: 'v1.a/b.c' });
+    expect(asked.map((call) => call.path)).toEqual([`/v1/investigations/${INVESTIGATION_A}/views`, `/v1/investigations/${INVESTIGATION_A}/views?limit=10&cursor=v1.a%2Fb.c`]);
+  });
+
+  it('puts a rename with the view version in If-Match, and refuses an answer for another view, name or version', async () => {
+    const renamed = { ...view, name: 'Renamed', version: 2 };
+    const ok = answering(renamed);
+    expect(await createApiClient(ok.fetcher).renameView(INVESTIGATION_A, VIEW_ID, 1, 'Renamed')).toEqual({ ok: true, value: renamed });
+    expect(ok.asked[0]?.path).toBe(`/v1/investigations/${INVESTIGATION_A}/views/${VIEW_ID}`);
+    expect(ok.asked[0]?.init).toMatchObject({ method: 'PUT', headers: { 'content-type': 'application/json', 'if-match': '"1"' } });
+    expect(JSON.parse(ok.asked[0]?.init?.body ?? '{}')).toEqual({ name: 'Renamed' });
+    for (const wrong of [{ ...renamed, id: '0192f000-0000-7000-8000-0000000000b2' }, { ...renamed, name: 'Other' }, { ...renamed, version: 5 }]) {
+      expect(await createApiClient(answering(wrong).fetcher).renameView(INVESTIGATION_A, VIEW_ID, 1, 'Renamed')).toEqual({ ok: false, failure: { code: 'SCHEMA_MISMATCH' } });
+    }
+  });
+
+  it('posts a restore with the draft version in If-Match and no body, and refuses an answer that is not based on the view or one version on', async () => {
+    const answer = { draft: { ...draft, version: 4, basedOnViewId: VIEW_ID }, save: { state: 'saved', savedAt: view.createdAt } };
+    const ok = answering(answer);
+    expect(await createApiClient(ok.fetcher).restoreView(INVESTIGATION_A, VIEW_ID, 3)).toEqual({ ok: true, value: answer });
+    expect(ok.asked[0]?.path).toBe(`/v1/investigations/${INVESTIGATION_A}/views/${VIEW_ID}/restore`);
+    expect(ok.asked[0]?.init).toMatchObject({ method: 'POST', headers: { 'if-match': '"3"' } });
+    expect(ok.asked[0]?.init?.body).toBeUndefined();
+    const other = { ...answer, draft: { ...answer.draft, basedOnViewId: '0192f000-0000-7000-8000-0000000000b2' } };
+    expect(await createApiClient(answering(other).fetcher).restoreView(INVESTIGATION_A, VIEW_ID, 3)).toEqual({ ok: false, failure: { code: 'SCHEMA_MISMATCH' } });
+    const stale = { ...answer, draft: { ...answer.draft, version: 9 } };
+    expect(await createApiClient(answering(stale).fetcher).restoreView(INVESTIGATION_A, VIEW_ID, 3)).toEqual({ ok: false, failure: { code: 'SCHEMA_MISMATCH' } });
+  });
+});

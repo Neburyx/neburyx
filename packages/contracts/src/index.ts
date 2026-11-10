@@ -47,7 +47,7 @@ export type { EntityLinkRef, SourceLinkRef } from './source-link.js';
 export { COUNT_QUALITIES, DATA_CLASSES, aggregateSchema, countSchema, edgeRefSchema, edgeSchema, elementRefSchema, nodeSchema, propertySchema, storedEdgeRefSchema } from './graph.js';
 export type { Count, DataClass, EdgeRef, ElementRef, GraphEdge, GraphNode, GraphProperty, StoredEdgeRef } from './graph.js';
 export { canCarryInPath, MAX_REFERENCE_TEXT_CHARACTERS, MAX_REFERENCE_VALUE_CHARACTERS, MAX_PATH_REFERENCE_LENGTH, MAX_STABLE_ID_LENGTH, entityLookupRequestSchema, entityPathSchema, referenceTextSchema, referenceValueSchema, entityQuerySchema, pathSegmentOf, stableIdSchema, valueOfPathSegment } from './entities.js';
-export type { EntityPath } from './entities.js';
+export type { EntityPath, EntityLookupRequest } from './entities.js';
 export {
   DEFAULT_INVESTIGATION_LIST_LIMIT,
   DROPPED_FILTER_REASONS,
@@ -88,7 +88,9 @@ export {
   startingEntitySchema,
   unmappedItemsSchema,
 } from './investigations.js';
-export type { DraftWriteRequest, DraftWriteResponse, Investigation, InvestigationListCounts, InvestigationListItem, InvestigationListResponse, InvestigationResponse, InvestigationSave, InvestigationSourceState, LayoutDocument, OpenInvestigationRequest, ReferenceOpenRequest, ValueOpenRequest, OpenInvestigationResponse, DroppedFilter, DroppedFilterReason, MappingChange, UnmappedItems, QueryContextDocument, RenameRequest, RenameResponse, StatusChangeRequest, StatusChangeResponse } from './investigations.js';
+export type { DraftWriteRequest, DraftWriteResponse, Investigation, InvestigationListCounts, InvestigationListItem, InvestigationListResponse, InvestigationResponse, InvestigationSave, InvestigationSourceState, LayoutDocument, OpenInvestigationRequest, ReferenceOpenRequest, ValueOpenRequest, OpenInvestigationResponse, DroppedFilter, DroppedFilterReason, MappingChange, UnmappedItems, QueryContextDocument, RenameRequest, RenameResponse, StatusChangeRequest, StatusChangeResponse, OpenDraft } from './investigations.js';
+export { DEFAULT_VIEW_PAGE, MAX_VIEW_NAME_LENGTH, MAX_VIEW_PAGE, namedViewSchema, renameViewRequestSchema, restoreViewResponseSchema, saveViewRequestSchema, saveViewResponseSchema, viewAuthorSchema, viewListQuerySchema, viewListResponseSchema, viewNameSchema } from './views.js';
+export type { NamedView, RenameViewRequest, RestoreViewResponse, SaveViewRequest, SaveViewResponse, ViewListResponse } from './views.js';
 export {
   FACET_SCOPES,
   MAX_SEARCH_TEXT_LENGTH,
@@ -135,7 +137,6 @@ export { COVERAGE_MAX_ENTITIES, COVERAGE_SCOPE, LOADED_QUALITIES, combineCoverag
 export type { CoverageEntity, CoverageRequest, CoverageResponse } from './coverage.js';
 export { EXPAND_DIRECTIONS, EXPAND_SORTS, FILTER_KINDS, MAX_FILTERS, MAX_FILTER_VALUES, expandFilterSchema, expandPageSchema, expandRankSchema, expandRequestSchema, expandResponseSchema, filterShapeProblem, filterValueSchema } from './expand.js';
 export type { ExpandFilter, ExpandPage, ExpandRank, ExpandRequest, ExpandResponse, FilterKind, FilterValue } from './expand.js';
-export type { EntityLookupRequest } from './entities.js';
 export type { DegreeByType, DegreePreview, DegreePreviewRequest, DegreeWarning } from './degree-preview.js';
 export type { AggregateEvidenceHit, AggregateMember, DisabledRelationship, DisabledType, EvidenceGroup, ExactMatch, EvidenceHit, EvidenceRecord, Facets, GroupFailure, RelatedGroup, RelatedHit, RelationshipContext, SearchFailureGroup, SearchFilters, SearchGroup, SearchMatchMode, SearchMoreRequest, SearchMoreResult, SearchPagedGroup, SearchRequest, SearchResult, StartsWithGroup, StoredEvidenceHit, UnreferencedHit } from './search.js';
 export { MAX_READ_REFS, readRefsRequestSchema, readRefsResponseSchema } from './read-refs.js';

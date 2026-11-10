@@ -1,10 +1,10 @@
 import type { GraphEdge, GraphNode, Investigation, InvestigationResponse, QueryContextDocument, ReferenceOpenRequest, ValueOpenRequest } from '@neburyx/contracts';
 import type { ApiClient, ApiFailure } from '../api/client.js';
-import type { ClientState } from '../state/client-state.js';
+import type { ClientState, Activation } from '../state/client-state.js';
 import { StateError } from '../state/errors.js';
 import { isReadOnlyStatus } from '../state/investigation-state.js';
+import type { SaveState } from '../state/investigation-state.js';
 import { DEFAULT_FILTER_HASH, DEFAULT_POLICY_VERSION, type QueryKey } from '../state/keys.js';
-import type { Activation } from '../state/client-state.js';
 import { LAYOUTS } from '../state/layout-choice.js';
 import { elementKey } from '../state/keys.js';
 import { draftSyncOf } from '../draft/draft-sync.js';
@@ -33,12 +33,12 @@ export function openedKey(sourceId: string, principalId: string, investigationId
 }
 
 /** Shows an investigation whose items are read: nothing is applied when the page was left meanwhile, and the source, the investigation and the graph change together. */
-function show(state: ClientState, investigation: Investigation, items: { readonly nodes: readonly GraphNode[]; readonly edges: readonly GraphEdge[] }, context: OpenContext, signal: AbortSignal | undefined): OpenOutcome {
+function show(state: ClientState, investigation: Investigation, items: { readonly nodes: readonly GraphNode[]; readonly edges: readonly GraphEdge[] }, context: OpenContext, signal: AbortSignal | undefined, save: SaveState = { kind: 'unsaved' }): OpenOutcome {
   if (signal?.aborted === true) return { kind: 'failed', failure: { code: 'ABORTED' } };
   const key = openedKey(investigation.sourceId, context.principalId, investigation.id, context.mask);
   try {
     const activation = state.show(
-      { id: investigation.id, sourceId: investigation.sourceId, record: { title: investigation.title, caseRef: investigation.caseRef, status: investigation.status, readOnly: isReadOnlyStatus(investigation.status), version: investigation.version, save: { kind: 'unsaved' } }, resultKeys: [key], nodeRefs: items.nodes.map((node) => node.ref), edgeRefs: items.edges.map((edge) => edge.ref) },
+      { id: investigation.id, sourceId: investigation.sourceId, record: { title: investigation.title, caseRef: investigation.caseRef, status: investigation.status, readOnly: isReadOnlyStatus(investigation.status), version: investigation.version, save }, resultKeys: [key], nodeRefs: items.nodes.map((node) => node.ref), edgeRefs: items.edges.map((edge) => edge.ref) },
       [{ key, result: { sourceId: investigation.sourceId, nodes: [...items.nodes], edges: [...items.edges] } }],
     );
     return { kind: 'shown', id: investigation.id, activation };
@@ -77,7 +77,7 @@ function adoptDraft(state: ClientState, sync: ReturnType<typeof draftSyncOf>, re
   const canChange = investigation.status === 'open';
   const rehash = mappingChange !== undefined && canChange;
   mappingNoticesOf(state).set(mappingChange === undefined ? undefined : { investigationId: investigation.id, droppedFilters: mappingChange.droppedFilters, hasUnmapped: (unmapped?.nodes.length ?? 0) + (unmapped?.edges.length ?? 0) > 0, canChange, ...(rehash ? { onShown: () => sync.releaseRehash(investigation.id) } : {}) });
-  sync.adopt(investigation.id, { version: draft.version, ...held, writable: true, ...(rehash ? { rehash: true } : {}) });
+  sync.adopt(investigation.id, { version: draft.version, basedOnViewId: draft.basedOnViewId, ...held, writable: true, ...(rehash ? { rehash: true } : {}) });
 }
 
 /** Opens an investigation by its ID: shows what the session holds without a read, else reads the investigation and, when its source is as it was, the items of its draft: its first entity when the draft is no more than that, otherwise every item the draft names, in bounded calls. */
@@ -88,6 +88,7 @@ export async function openById(client: ApiClient, state: ClientState, id: string
   const read = await client.getInvestigation(id, signal);
   if (!read.ok) return { kind: 'failed', failure: read.failure };
   const { investigation, draft, unmapped } = read.value;
+  const save: SaveState = read.value.save.state === 'saved' ? { kind: 'saved', at: read.value.save.savedAt } : { kind: 'unsaved' };
   if (investigation.sourceState !== 'available') return { kind: 'source-unavailable', investigation };
   const start = investigation.startingEntity;
   if (start === null) return mismatchIn(investigation.sourceId);
@@ -96,14 +97,14 @@ export async function openById(client: ApiClient, state: ClientState, id: string
     const entity = await client.getEntity({ sourceId: investigation.sourceId, entityType: start.entityType, stableId: start.stableId }, { mask: context.mask }, signal);
     if (!entity.ok) return failedIn(investigation.sourceId, entity.failure);
     if (entity.value.ref.sourceId !== investigation.sourceId) return mismatchIn(investigation.sourceId);
-    const shown = show(state, investigation, { nodes: [entity.value], edges: [] }, context, signal);
+    const shown = show(state, investigation, { nodes: [entity.value], edges: [] }, context, signal, save);
     if (shown.kind === 'shown') adoptDraft(state, sync, read.value, { notes: draft.notes });
     return shown;
   }
   const restore = await readDraftItems(client, investigation.sourceId, context.mask, draft, unmapped, signal);
   if (!restore.ok) return failedIn(investigation.sourceId, restore.failure);
   const { nodes, edges, kept, someMissing } = restore.restored;
-  const shown = show(state, investigation, { nodes, edges }, context, signal);
+  const shown = show(state, investigation, { nodes, edges }, context, signal, save);
   if (shown.kind !== 'shown') return shown;
   if (shown.activation === 'fresh') applyPresentation(state, draft, nodes);
   adoptDraft(state, sync, read.value, { notes: draft.notes, kept, filters: draft.queryContext.filters });
@@ -127,6 +128,36 @@ export async function openEntity(client: ApiClient, state: ClientState, request:
   // an investigation that was resumed has a draft of its own, which is restored whole; one that was just made holds its first entity only
   if (!body.created) return { ...(await openById(client, state, body.investigation.id, context, signal)), created: false };
   const shown = show(state, body.investigation, { nodes: [body.entity], edges: [] }, context, signal);
-  if (shown.kind === 'shown') draftSyncOf(state, client).adopt(body.investigation.id, { version: body.draft.version, notes: null, writable: true });
+  if (shown.kind === 'shown') draftSyncOf(state, client).adopt(body.investigation.id, { version: body.draft.version, notes: body.draft.notes, basedOnViewId: body.draft.basedOnViewId, writable: true });
   return { ...shown, created: true };
+}
+
+export type ReplaceOutcome = { readonly kind: 'shown'; readonly someMissing: boolean } | { readonly kind: 'failed'; readonly failure: ApiFailure };
+
+/**
+ * Replaces the graph of the investigation shown with the items its draft names, read again through the gate, as opening the investigation would show them, and gives the draft sync the draft as it is, so that autosave goes on from its version.
+ * Nothing changes when a read fails.
+ */
+export async function replaceWithDraft(client: ApiClient, state: ClientState, draft: InvestigationResponse['draft'], save: SaveState, signal?: AbortSignal): Promise<ReplaceOutcome> {
+  const { id, sourceId, record, resultKeys } = state.investigation.getState();
+  const principalId = resultKeys[0]?.principalId;
+  if (id === null || sourceId === null || record === null || principalId === undefined) return { kind: 'failed', failure: { code: 'SCHEMA_MISMATCH' } };
+  const mask = state.mask.getState();
+  const read = await readDraftItems(client, sourceId, mask, draft, undefined, signal);
+  if (!read.ok) return { kind: 'failed', failure: read.failure };
+  // another investigation may have taken the place of this one while it was read
+  if (state.investigation.getState().id !== id) return { kind: 'failed', failure: { code: 'ABORTED' } };
+  const { nodes, edges, kept, someMissing } = read.restored;
+  const key = openedKey(sourceId, principalId, id, mask);
+  try {
+    state.replace({ id, sourceId, record: { ...record, save }, resultKeys: [key], nodeRefs: nodes.map((node) => node.ref), edgeRefs: edges.map((edge) => edge.ref) }, [{ key, result: { sourceId, nodes: [...nodes], edges: [...edges] } }]);
+  } catch (error) {
+    if (error instanceof StateError) return { kind: 'failed', failure: { code: 'SCHEMA_MISMATCH' } };
+    throw error;
+  }
+  applyPresentation(state, draft, nodes);
+  // the drawing that stays mounted has no new graph to fit itself to, so a draft that holds no viewport asks for the view to be fitted
+  if (draft.layout.viewport === undefined) state.presentation.applyLayout(new Map());
+  draftSyncOf(state, client).adopt(id, { version: draft.version, notes: draft.notes, basedOnViewId: draft.basedOnViewId, kept, filters: draft.queryContext.filters, writable: true });
+  return { kind: 'shown', someMissing };
 }

@@ -59,7 +59,7 @@ const asOther = (store: MemoryAppStore): MemoryAppStore => ({ ...store, current:
 
 const draftFor = (investigationId: string, id: string) => {
   const documents = initialDraftDocuments({ entityType: 'widget', stableId: 'W-1' });
-  return { id, version: 1, notes: null, investigationId, layout: documents.layout, queryContext: documents.queryContext, mappingHash: demo.configHash };
+  return { id, version: 1, notes: null, basedOnViewId: null, investigationId, layout: documents.layout, queryContext: documents.queryContext, mappingHash: demo.configHash };
 };
 
 const post = (app: Awaited<ReturnType<typeof started>>['app'], payload: object) => app.inject({ method: 'POST', url: '/v1/investigations', payload });
@@ -96,6 +96,19 @@ describe('POST /v1/investigations with a case reference', () => {
     expect(response.statusCode).toBe(201);
     expect(store.investigations).toHaveLength(2);
     expect(store.investigations[1]).toMatchObject({ caseRef: 'CASE-1', ownerId: ME });
+    await app.close();
+  });
+
+  it('answers a new investigation with no note and no view, and a resumed one with the note and the view its draft holds', async () => {
+    const { app, store } = await started();
+    const first = openInvestigationResponseSchema.parse((await post(app, body())).json());
+    expect(first.draft).toEqual({ version: 1, notes: null, basedOnViewId: null });
+    const [stored] = store.drafts;
+    if (stored === undefined) throw new Error('the investigation has a draft');
+    const VIEW = '0192f000-0000-7000-8000-0000000000a1';
+    store.drafts[0] = { ...stored, notes: 'a note', basedOnViewId: VIEW };
+    const resumed = openInvestigationResponseSchema.parse((await post(app, body())).json());
+    expect(resumed.draft).toEqual({ version: 1, notes: 'a note', basedOnViewId: VIEW });
     await app.close();
   });
 
@@ -189,6 +202,37 @@ describe('GET /v1/investigations/{id}', () => {
     await app.close();
   });
 
+  it('answers the draft as unsaved for a new investigation, and as saved with the view time while the draft equals the view it is based on', async () => {
+    const { app, id, store } = await opened();
+    const read = async () => investigationResponseSchema.parse((await app.inject({ method: 'GET', url: `/v1/investigations/${id}` })).json()).save;
+    expect(await read()).toEqual({ state: 'unsaved', savedAt: null });
+    const [stored] = store.drafts;
+    if (stored === undefined) throw new Error('the investigation has a draft');
+    const VIEW = '0192f000-0000-7000-8000-0000000000a1';
+    store.namedViews.push({ id: VIEW, investigationId: id, name: 'A view', notes: null, layout: initialDraftDocuments({ entityType: 'widget', stableId: 'W-1' }).layout, queryContext: initialDraftDocuments({ entityType: 'widget', stableId: 'W-1' }).queryContext, contentHash: 'same', createdAt: '2026-11-08T09:30:00.000Z', version: 1 });
+    store.drafts[0] = { ...stored, basedOnViewId: VIEW, contentHash: 'same' };
+    expect(await read()).toEqual({ state: 'saved', savedAt: '2026-11-08T09:30:00.000Z' });
+    store.drafts[0] = { ...stored, basedOnViewId: VIEW, contentHash: 'changed' };
+    expect(await read()).toEqual({ state: 'unsaved', savedAt: null });
+    store.namedViews.length = 0;
+    store.drafts[0] = { ...stored, basedOnViewId: VIEW, contentHash: 'same' };
+    expect(await read()).toEqual({ state: 'unsaved', savedAt: null });
+    await app.close();
+  });
+
+  it('answers the note and the view the draft is based on, null for a new investigation', async () => {
+    const { app, id, store } = await opened();
+    const fresh = investigationResponseSchema.parse((await app.inject({ method: 'GET', url: `/v1/investigations/${id}` })).json());
+    expect(fresh.draft).toMatchObject({ notes: null, basedOnViewId: null });
+    const VIEW = '0192f000-0000-7000-8000-0000000000a1';
+    const [stored] = store.drafts;
+    if (stored === undefined) throw new Error('the investigation has a draft');
+    store.drafts[0] = { ...stored, notes: 'a note', basedOnViewId: VIEW };
+    const held = investigationResponseSchema.parse((await app.inject({ method: 'GET', url: `/v1/investigations/${id}` })).json());
+    expect(held.draft).toMatchObject({ notes: 'a note', basedOnViewId: VIEW });
+    await app.close();
+  });
+
   it.each([
     ['an identifier that does not exist', '0192f000-0000-7000-8000-0000000000ee'],
     ['an identifier that is not a UUID', 'not-a-uuid'],
@@ -223,7 +267,7 @@ describe('GET /v1/investigations/{id}', () => {
     store.investigations.push(row({ id: '0192f000-0000-7000-8000-0000000000d1', sourceId: 'gone' }), row({ id: '0192f000-0000-7000-8000-0000000000d2', sourceIdentityHash: 'other-database' }));
     const initial = initialDraftDocuments({ entityType: 'widget', stableId: 'W-1' });
     for (const [id, investigationId] of [['0192f000-0000-7000-8000-0000000000e1', '0192f000-0000-7000-8000-0000000000d1'], ['0192f000-0000-7000-8000-0000000000e2', '0192f000-0000-7000-8000-0000000000d2']] as const) {
-      store.drafts.push({ id, version: 1, notes: null, investigationId, layout: initial.layout, queryContext: initial.queryContext, mappingHash: demo.configHash });
+      store.drafts.push({ id, version: 1, notes: null, basedOnViewId: null, investigationId, layout: initial.layout, queryContext: initial.queryContext, mappingHash: demo.configHash });
     }
     const { app, executor } = await started(entityRows(WIDGET), store);
     const removed = investigationResponseSchema.parse((await app.inject({ method: 'GET', url: '/v1/investigations/0192f000-0000-7000-8000-0000000000d1' })).json());

@@ -13,6 +13,7 @@ import { BACK_TO_HOME, NOT_FOUND_TEXT, NOT_FOUND_TITLE, OPENING, openingOver, RE
 import { EXPLORE_PATH } from '../shell/navigation.js';
 import { openById } from './open-flow.js';
 import { SOME_ITEMS_UNAVAILABLE } from '../draft/copy.js';
+import { restoreNoticeOf } from '../views/restore-notice.js';
 import { DraftAnnouncer, DraftConflictBanner, DraftStatusLine } from '../draft/draft-status.js';
 import { MappingChangeBanner } from '../draft/mapping-banner.js';
 import { draftSyncOf } from '../draft/draft-sync.js';
@@ -58,6 +59,7 @@ export function ExploreInvestigation({ client }: { readonly client: ApiClient })
   const onScreen = useStoreSelector(state.investigation, (held) => held);
   const sync = draftSyncOf(state, client);
   const draftKind = useStoreSelector(sync.status, (current) => current.kind);
+  const restoredMissing = useStoreSelector(restoreNoticeOf(state).missing, (missing) => missing);
   const previousTitle = onScreen.id !== null && onScreen.id !== investigationId ? (onScreen.record?.title ?? null) : null;
 
   // A layout effect, so that a new address never paints the previous investigation before this page has marked it as loading.
@@ -97,7 +99,7 @@ export function ExploreInvestigation({ client }: { readonly client: ApiClient })
     if (principalId === undefined) shell.reload();
     setAttempt((count) => count + 1);
   };
-  const statusLine = status.kind === 'loading' && failure === undefined ? <p role="status">{previousTitle === null ? OPENING : openingOver(previousTitle)}</p> : status.kind === 'ready' && resumed ? <p role="status">{RESUMED}</p> : status.kind === 'ready' && status.someMissing === true ? <p role="status">{SOME_ITEMS_UNAVAILABLE}</p> : undefined;
+  const statusLine = status.kind === 'loading' && failure === undefined ? <p role="status">{previousTitle === null ? OPENING : openingOver(previousTitle)}</p> : status.kind === 'ready' && resumed ? <p role="status">{RESUMED}</p> : status.kind === 'ready' && (status.someMissing === true || restoredMissing) ? <p role="status">{SOME_ITEMS_UNAVAILABLE}</p> : undefined;
   const visible = draftKind === 'idle' || draftKind === 'conflict' ? statusLine : <>{statusLine}<DraftStatusLine sync={sync} /></>;
   return (
     <>

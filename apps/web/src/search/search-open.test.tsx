@@ -129,7 +129,7 @@ describe('opening a result in the graph', () => {
     const notice = await screen.findByRole('group', { name: 'Opening failed' });
     expect(within(notice).getByRole('alert').textContent).toContain('NETWORK_UNAVAILABLE');
     expect(screen.getByText('Title AC-1')).toBeDefined();
-    answer = { ok: true, value: { investigation: { ...investigationOf(INVESTIGATION_A, 'demo', TYPE, 'AC-1'), sourceState: 'removed' }, created: false, draft: { version: 1 } } };
+    answer = { ok: true, value: { investigation: { ...investigationOf(INVESTIGATION_A, 'demo', TYPE, 'AC-1'), sourceState: 'removed' }, created: false, draft: { version: 1, notes: null, basedOnViewId: null } } };
     await user.click(openButton());
     await waitFor(() => expect(within(screen.getByRole('group', { name: 'Opening failed' })).queryByRole('alert')).toBeNull());
     expect(screen.getByText(/no longer configured/)).toBeDefined();

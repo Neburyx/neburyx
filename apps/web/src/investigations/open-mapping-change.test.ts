@@ -22,9 +22,11 @@ function answer(nodes: { t: string; id: string; extra?: Record<string, unknown> 
     draft: {
       version: 4,
       notes: null,
+      basedOnViewId: null,
       layout: { schemaVersion: 1, layout: 'force', nodes: nodes.map((node) => ({ t: node.t, id: node.id, pinned: false, hidden: false, groupId: null, ...node.extra })), edges: edges.map((edge) => ({ ...edge, hidden: false })), groups: [] },
       queryContext: { schemaVersion: 1, loaded: { nodes: nodes.map(({ t, id }) => ({ t, id })), edges }, expansions: [], filters: NO_FILTERS },
     },
+    save: { state: 'unsaved', savedAt: null },
     ...extra,
   };
 }

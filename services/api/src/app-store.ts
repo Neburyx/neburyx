@@ -5,6 +5,7 @@ import { migrationFileNames } from './migrate/provider.js';
 import { PROBE_STEP_MS, READINESS_LIMIT_MS, runReadiness } from './health/readiness.js';
 import { readIdentity, seedFirstStart } from './db/identity-repository.js';
 import { changeInvestigationStatus, createInvestigation, findReusableInvestigation, readInvestigation, readLibrary, renameInvestigation, saveDraft, type InvestigationStore } from './db/investigations-repository.js';
+import { listNamedViews, renameNamedView, restoreNamedView, saveNamedView, type ViewStore } from './db/views-repository.js';
 import { referenceKeyOf } from './db/reference-key-repository.js';
 import type { SourceHashes } from './source-state/decide.js';
 import { applyPingState, hasActiveSource, latestChecksFor, latestQualifyingChecks, markSourceUnchecked, recordSourceCheck, type CheckedSource, type PingStateChange, type QualifyingCheck, type SourceCheck } from './db/source-checks-repository.js';
@@ -13,7 +14,7 @@ import type { SourceModel } from './mapping/model.js';
 import { toStartError } from './identity/errors.js';
 import type { Identity } from './identity/identity.js';
 
-export interface AppStore extends InvestigationStore {
+export interface AppStore extends InvestigationStore, ViewStore {
   initialize(): Promise<void>;
   current(): Promise<Identity>;
   syncSources(sources: readonly SourceModel[]): Promise<readonly string[]>;
@@ -75,6 +76,10 @@ export function createAppStore(url: string, onConnectionError: () => void, optio
     saveDraft: (write) => saveDraft(pool, write),
     renameInvestigation: (change) => renameInvestigation(pool, change),
     changeInvestigationStatus: (change) => changeInvestigationStatus(pool, change),
+    saveNamedView: (save) => saveNamedView(pool, save),
+    listNamedViews: (query) => listNamedViews(pool, query),
+    renameNamedView: (rename) => renameNamedView(pool, rename),
+    restoreNamedView: (restore) => restoreNamedView(pool, restore),
     readLibrary: (read) => readLibrary(pool, read),
     readiness: () => runReadiness({ ping: () => pingDatabase(probes), migrations: shippedMigrations }, READINESS_LIMIT_MS),
     async close(): Promise<void> {

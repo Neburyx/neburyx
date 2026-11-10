@@ -3,8 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { createClientState, type ClientState } from './client-state.js';
 import { edgeKey, elementKey } from './keys.js';
 import { excludedKeys, filteredKeys, visibleGraph } from './loaded-graph.js';
-import { NO_TYPE_FILTER } from './presentation-state.js';
-import { createPresentationStore } from './presentation-state.js';
+import { NO_TYPE_FILTER, createPresentationStore } from './presentation-state.js';
 import { edge, key, node, ref } from './test-data.js';
 
 const typed = (id: string, entityType: string): GraphNode => ({ ...node('a', id), ref: ref('a', entityType, id), display: { title: id, type: entityType } });

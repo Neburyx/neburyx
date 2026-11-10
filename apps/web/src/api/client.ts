@@ -5,6 +5,10 @@ import {
   readRefsResponseSchema,
   renameResponseSchema,
   statusChangeResponseSchema,
+  saveViewResponseSchema,
+  namedViewSchema,
+  viewListResponseSchema,
+  restoreViewResponseSchema,
   degreePreviewSchema,
   edgeDetailSchema,
   edgeRefSegmentOf,
@@ -32,6 +36,11 @@ import {
   type ReadRefsRequest,
   type RenameResponse,
   type StatusChangeResponse,
+  type SaveViewRequest,
+  type SaveViewResponse,
+  type NamedView,
+  type ViewListResponse,
+  type RestoreViewResponse,
   type ReadRefsResponse,
   type EdgeDetail,
   type EntityLookupRequest,
@@ -101,6 +110,14 @@ export interface ApiClient {
   changeInvestigationStatus(id: string, status: Investigation['status'], expectedVersion: number, signal?: AbortSignal): Promise<ApiResult<StatusChangeResponse>>;
   /** Stores a new title for the caller's investigation when `expectedVersion` is its version; the answer names the investigation asked for. */
   renameInvestigation(id: string, title: string, expectedVersion: number, signal?: AbortSignal): Promise<ApiResult<RenameResponse>>;
+  /** Saves the caller's draft as a named view when `draftVersion` is the draft's version; a stale one is refused as `CONFLICTED_VIEW_VERSION`, and a title read at another version of the investigation as `CONFLICT`. */
+  saveView(id: string, draftVersion: number, view: SaveViewRequest, signal?: AbortSignal): Promise<ApiResult<SaveViewResponse>>;
+  /** One page of the investigation's named views, newest first, from the first page or from a cursor; `count` is the exact number of all of them. */
+  listViews(id: string, page: { readonly cursor?: string; readonly limit?: number }, signal?: AbortSignal): Promise<ApiResult<ViewListResponse>>;
+  /** Changes the name of a named view when `version` is the view's version; a stale one is refused as `CONFLICTED_VIEW_VERSION`. */
+  renameView(id: string, viewId: string, version: number, name: string, signal?: AbortSignal): Promise<ApiResult<NamedView>>;
+  /** Copies a named view over the caller's draft when `draftVersion` is the draft's version; a stale one is refused as `CONFLICTED_VIEW_VERSION`. The answer is the draft as it is now. */
+  restoreView(id: string, viewId: string, draftVersion: number, signal?: AbortSignal): Promise<ApiResult<RestoreViewResponse>>;
   /** Reads again the items a stored draft names, by reference; the answer names the source asked for and holds nothing of another, or it is refused. */
   readRefs(request: ReadRefsRequest, signal?: AbortSignal): Promise<ApiResult<ReadRefsResponse>>;
   /** The caller's most recently edited open investigations, across every source they may read; Postgres only. */
@@ -161,7 +178,7 @@ async function request<T>(fetcher: Fetcher, path: string, schema: z.ZodType<T>, 
   let text: string;
   let response: Response;
   try {
-    response = await fetcher(path, signal === undefined && method === undefined ? undefined : { ...(signal === undefined ? {} : { signal }), ...(method === undefined ? {} : { method }), ...(extras.keepalive === true ? { keepalive: true } : {}), ...(body === undefined ? {} : { headers: { 'content-type': 'application/json', ...extras.headers }, body: JSON.stringify(body) }) });
+    response = await fetcher(path, signal === undefined && method === undefined ? undefined : { ...(signal === undefined ? {} : { signal }), ...(method === undefined ? {} : { method }), ...(extras.keepalive === true ? { keepalive: true } : {}), ...(body === undefined ? (extras.headers === undefined ? {} : { headers: extras.headers }) : { headers: { 'content-type': 'application/json', ...extras.headers }, body: JSON.stringify(body) }) });
     text = await response.text();
   } catch {
     return failed(wasAborted(signal) ? 'ABORTED' : 'NETWORK_UNAVAILABLE');
@@ -267,6 +284,26 @@ export function createApiClient(fetcher: Fetcher = (input, init) => fetch(input,
     renameInvestigation: async (id, title, expectedVersion, signal) => {
       const result = await request(fetcher, `/v1/investigations/${encodeURIComponent(id)}`, renameResponseSchema, signal, 'PUT', { title, expectedVersion });
       return result.ok && result.value.investigation.id !== id ? failed('SCHEMA_MISMATCH') : result;
+    },
+    saveView: async (id, draftVersion, view, signal) => {
+      const result = await request(fetcher, `/v1/investigations/${encodeURIComponent(id)}/views`, saveViewResponseSchema, signal, 'POST', view, { headers: { 'if-match': `"${draftVersion}"` } });
+      if (!result.ok) return result;
+      const { value } = result;
+      const echoed = value.view.name === view.name && value.view.notes === view.notes && value.draft.notes === view.notes && value.draft.version === draftVersion + 1;
+      const retitled = view.title === undefined ? value.investigation === undefined : value.investigation?.title === view.title && value.investigation.version === (view.expectedInvestigationVersion ?? 0) + 1;
+      return echoed && retitled ? result : failed('SCHEMA_MISMATCH');
+    },
+    listViews: async (id, page, signal) => {
+      const query = [...(page.limit === undefined ? [] : [`limit=${page.limit}`]), ...(page.cursor === undefined ? [] : [`cursor=${encodeURIComponent(page.cursor)}`])].join('&');
+      return request(fetcher, `/v1/investigations/${encodeURIComponent(id)}/views${query === '' ? '' : `?${query}`}`, viewListResponseSchema, signal);
+    },
+    renameView: async (id, viewId, version, name, signal) => {
+      const result = await request(fetcher, `/v1/investigations/${encodeURIComponent(id)}/views/${encodeURIComponent(viewId)}`, namedViewSchema, signal, 'PUT', { name }, { headers: { 'if-match': `"${version}"` } });
+      return result.ok && (result.value.id !== viewId || result.value.name !== name || result.value.version !== version + 1) ? failed('SCHEMA_MISMATCH') : result;
+    },
+    restoreView: async (id, viewId, draftVersion, signal) => {
+      const result = await request(fetcher, `/v1/investigations/${encodeURIComponent(id)}/views/${encodeURIComponent(viewId)}/restore`, restoreViewResponseSchema, signal, 'POST', undefined, { headers: { 'if-match': `"${draftVersion}"` } });
+      return result.ok && (result.value.draft.basedOnViewId !== viewId || result.value.draft.version !== draftVersion + 1) ? failed('SCHEMA_MISMATCH') : result;
     },
     readRefs: async (refs, signal) => {
       const result = await request(fetcher, '/v1/graph/read-refs', readRefsResponseSchema, signal, 'POST', refs);

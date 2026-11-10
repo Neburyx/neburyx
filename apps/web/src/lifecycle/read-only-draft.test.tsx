@@ -39,7 +39,7 @@ function rig(status: 'open' | 'closed' | 'archived', answer: (call: number) => A
   const state: ClientState = shownState(status);
   const writes: Write[] = [];
   const page = new FakePage();
-  const reads = vi.fn(async () => ({ ok: true as const, value: { investigation: investigationOf('closed', 8), draft: { version: 1, layout: { schemaVersion: 1 as const, layout: 'force', nodes: [], edges: [], groups: [] }, queryContext: { schemaVersion: 1 as const, loaded: { nodes: [], edges: [] }, expansions: [], filters: { entityTypes: [], relTypes: [], time: null, properties: [] } }, notes: null } } }));
+  const reads = vi.fn(async () => ({ ok: true as const, value: { investigation: investigationOf('closed', 8), draft: { version: 1, layout: { schemaVersion: 1 as const, layout: 'force', nodes: [], edges: [], groups: [] }, queryContext: { schemaVersion: 1 as const, loaded: { nodes: [], edges: [] }, expansions: [], filters: { entityTypes: [], relTypes: [], time: null, properties: [] } }, notes: null, basedOnViewId: null }, save: { state: 'unsaved' as const, savedAt: null } } }));
   const client = fakeClient({
     saveDraft: async (_id, version, body) => {
       writes.push({ version, body });
@@ -48,7 +48,7 @@ function rig(status: 'open' | 'closed' | 'archived', answer: (call: number) => A
     getInvestigation: reads,
   });
   const sync: DraftSync = createDraftSync({ client, state, page, document: page });
-  sync.adopt(ID, { version: 1, notes: null, writable: true });
+  sync.adopt(ID, { version: 1, notes: null, basedOnViewId: null, writable: true });
   render(
     <MemoryRouter>
       <ClientStateProvider state={state}>
@@ -176,7 +176,7 @@ describe('closing an investigation with edits still waiting for their write', ()
       },
     });
     const { draftSyncOf } = await import('../draft/draft-sync.js');
-    draftSyncOf(parts.state, client).adopt(ID, { version: 1, notes: null, writable: true });
+    draftSyncOf(parts.state, client).adopt(ID, { version: 1, notes: null, basedOnViewId: null, writable: true });
     return { ...parts, calls, run: (status: 'closed' | 'archived') => changeStatus({ client, state: parts.state, banner: createBannerController() }, status) };
   }
 

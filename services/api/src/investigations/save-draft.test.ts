@@ -48,7 +48,7 @@ function seeded(overrides: Partial<InvestigationRow> = {}): MemoryAppStore {
   const store = memoryAppStore();
   const documents = initialDraftDocuments({ entityType: 'widget', stableId: 'W-1' });
   store.investigations.push(row(overrides));
-  store.drafts.push({ id: '0192f000-0000-7000-8000-0000000000d1', version: 1, notes: null, layout: documents.layout, queryContext: documents.queryContext, mappingHash: demo.configHash, investigationId: ID, contentHash: contentHashOf(documents) });
+  store.drafts.push({ id: '0192f000-0000-7000-8000-0000000000d1', version: 1, notes: null, basedOnViewId: null, layout: documents.layout, queryContext: documents.queryContext, mappingHash: demo.configHash, investigationId: ID, contentHash: contentHashOf(documents) });
   return store;
 }
 

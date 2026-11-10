@@ -1,10 +1,9 @@
 import { MAX_READ_REFS, type InvestigationResponse, type ReadRefsRequest } from '@neburyx/contracts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ApiResult } from '../api/client.js';
-import { AUTOSAVE_DELAY_MS } from '../draft/draft-sync.js';
+import { AUTOSAVE_DELAY_MS, draftSyncOf } from '../draft/draft-sync.js';
 import { createClientState } from '../state/client-state.js';
 import { elementKey } from '../state/keys.js';
-import { draftSyncOf } from '../draft/draft-sync.js';
 import { openById, openEntity } from './open-flow.js';
 import { INVESTIGATION_A, INVESTIGATION_B, investigationOf, knowing, nodeOf, openedOf } from './test-data.js';
 
@@ -17,6 +16,7 @@ function draftOf(ids: readonly string[], layoutExtra: Record<string, unknown> = 
   return {
     version: 4,
     notes: 'a note',
+    basedOnViewId: null,
     layout: { schemaVersion: 1, layout: 'force', nodes: ids.map((id) => entry(id, nodeExtras[id])), edges: edges.map((edge) => ({ ...edge, hidden: false })), groups: [], ...layoutExtra },
     queryContext: { schemaVersion: 1, loaded: { nodes: ids.map((id) => ({ t: 'kind-a', id })), edges: [...edges] }, expansions: [], filters: NO_FILTERS },
   };
@@ -32,7 +32,7 @@ function rig(draft: InvestigationResponse['draft'], gone: readonly string[] = []
   const asked: ReadRefsRequest[] = [];
   const writes: Rig['writes'] = [];
   const { client } = knowing([], {
-    getInvestigation: async () => ({ ok: true, value: { investigation, draft } }),
+    getInvestigation: async () => ({ ok: true, value: { investigation, draft, save: { state: 'unsaved', savedAt: null } } }),
     readRefs: async (request): Promise<ApiResult<{ nodes: ReturnType<typeof nodeOf>[]; edges: never[]; missing: { entities: never[]; edges: never[] } }>> => {
       asked.push(request);
       onOpen?.();
@@ -132,7 +132,7 @@ describe('opening an investigation whose draft holds more than its first entity'
 
   it('writes with the version of the draft a new investigation was made with', async () => {
     const { client, writes } = rig(draftOf(['A-1']));
-    const created = { ...client, openInvestigation: async () => ({ ok: true as const, value: { ...openedOf(investigation, nodeOf('source-a', 'kind-a', 'A-1'), true), draft: { version: 1 } } }) };
+    const created = { ...client, openInvestigation: async () => ({ ok: true as const, value: { ...openedOf(investigation, nodeOf('source-a', 'kind-a', 'A-1'), true), draft: { version: 1, notes: null, basedOnViewId: null } } }) };
     const state = createClientState();
     await openEntity(created, state, { sourceId: 'source-a', entity: { sourceId: 'source-a', entityType: 'kind-a', stableId: 'A-1' } }, CONTEXT);
     state.presentation.setPosition(elementKey({ sourceId: 'source-a', entityType: 'kind-a', stableId: 'A-1' }), { x: 9, y: 9 });
@@ -216,5 +216,29 @@ describe('opening another investigation while the changes of the one shown canno
     draftSyncOf(state, client).leaveAnyway();
     await vi.advanceTimersByTimeAsync(0);
     expect(outcome).toMatchObject({ kind: 'shown', id: INVESTIGATION_B });
+  });
+});
+
+describe('the saved state of an investigation that is opened', () => {
+  const opening = draftOf(['A-1']);
+
+  async function openedWith(save: InvestigationResponse['save']) {
+    const { client } = knowing([], {
+      getInvestigation: async () => ({ ok: true, value: { investigation, draft: opening, save } }),
+      getEntity: async (ref) => ({ ok: true, value: nodeOf(ref.sourceId, ref.entityType, ref.stableId) }),
+    });
+    const state = createClientState();
+    expect((await openById(client, state, INVESTIGATION_A, CONTEXT)).kind).toBe('shown');
+    return state;
+  }
+
+  it('shows the time of the view the draft equals when the server says it is saved', async () => {
+    const state = await openedWith({ state: 'saved', savedAt: '2026-11-08T09:30:00.000Z' });
+    expect(state.investigation.getState().record?.save).toEqual({ kind: 'saved', at: '2026-11-08T09:30:00.000Z' });
+  });
+
+  it('shows Unsaved when the server says the draft equals no view, as when the view it was based on is gone', async () => {
+    const state = await openedWith({ state: 'unsaved', savedAt: null });
+    expect(state.investigation.getState().record?.save).toEqual({ kind: 'unsaved' });
   });
 });

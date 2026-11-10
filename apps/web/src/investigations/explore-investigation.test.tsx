@@ -33,7 +33,7 @@ describe('/explore/{id}', () => {
       queryContext: { ...draft.queryContext, loaded: { nodes: ids.map((id) => ({ t: 'kind-a', id })), edges: [] } },
     };
     const { client } = knowing([A], {
-      getInvestigation: async () => ({ ok: true, value: { investigation: A.investigation, draft: restored } }),
+      getInvestigation: async () => ({ ok: true, value: { investigation: A.investigation, draft: restored, save: { state: 'unsaved', savedAt: null } } }),
       readRefs: async (request) => ({ ok: true, value: { nodes: request.entities.map((ref) => nodeOf(ref.sourceId, ref.entityType, ref.stableId)), edges: [], missing: { entities: [], edges: [] } } }),
     });
     renderApp(`/explore/${INVESTIGATION_A}`, client, createClientState());
@@ -51,7 +51,7 @@ describe('/explore/{id}', () => {
     };
     const asked: string[] = [];
     const { client } = knowing([A], {
-      getInvestigation: async () => ({ ok: true, value: { investigation: A.investigation, draft: restored, unmapped: { nodes: [{ t: 'gone', id: 'X' }], edges: [] }, mappingChange: { droppedFilters: [{ name: 'ghost', reason: 'property-removed' }] } } }),
+      getInvestigation: async () => ({ ok: true, value: { investigation: A.investigation, draft: restored, unmapped: { nodes: [{ t: 'gone', id: 'X' }], edges: [] }, mappingChange: { droppedFilters: [{ name: 'ghost', reason: 'property-removed' }] } , save: { state: 'unsaved' as const, savedAt: null } } }),
       readRefs: async (request) => {
         asked.push(...request.entities.map((ref) => ref.entityType));
         return { ok: true, value: { nodes: request.entities.map((ref) => nodeOf(ref.sourceId, ref.entityType, ref.stableId)), edges: [], missing: { entities: [], edges: [] } } };

@@ -30,7 +30,7 @@ async function reopened() {
   const store = memoryAppStore();
   const documents = initialDraftDocuments({ entityType: 'widget', stableId: 'W-1' });
   store.investigations.push({ id: ID, sourceId: 'demo', sourceIdentityHash: identityHashOf(demo), ownerId: LOCAL_IDENTITY.principal.id, title: 'Widget W-1', caseRef: null, startingEntityType: 'widget', startingStableId: 'W-1', status: 'open', closedAt: null, archivedAt: null, createdAt: '2026-11-05T10:00:00.000Z', lastEditedAt: '2026-11-05T10:00:00.000Z', version: 1 });
-  store.drafts.push({ id: '0192f000-0000-7000-8000-0000000000d1', version: 1, notes: null, ...documents, mappingHash: 'the-mapping-that-was', investigationId: ID, contentHash: contentHashOf(documents) });
+  store.drafts.push({ id: '0192f000-0000-7000-8000-0000000000d1', version: 1, notes: null, basedOnViewId: null, ...documents, mappingHash: 'the-mapping-that-was', investigationId: ID, contentHash: contentHashOf(documents) });
   const executor = new TestExecutor(withSchema(() => schemaAnswer(onlineIndexesOf(demo)), (call) => Promise.resolve(call.templateId === 'entity-load' ? { status: 'rows' as const, rows: [{ n: plainNode(['Widget'], { widgetId: 'W-1', ownerName: NAME }, '4:s:W-1') }] } : { status: 'rows' as const, rows: [] })));
   const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store, mapping, gate: testSourceGate(mapping, { executor, referenceKeys: TEST_REFERENCE_KEYS }).gate, referenceKeys: TEST_REFERENCE_KEYS });
   return app;

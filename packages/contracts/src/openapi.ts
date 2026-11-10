@@ -4,6 +4,7 @@ import { healthResponseSchema } from './health.js';
 import { nodeSchema } from './graph.js';
 import { MAX_READ_REFS, readRefsRequestSchema, readRefsResponseSchema } from './read-refs.js';
 import { DEFAULT_INVESTIGATION_LIST_LIMIT, draftWriteRequestSchema, draftWriteResponseSchema, MAX_DRAFT_DOCUMENT_BYTES, INVESTIGATION_LIST_SORTS, investigationListResponseSchema, investigationResponseSchema, MAX_INVESTIGATION_LIST_LIMIT, MAX_TITLE_LENGTH, openInvestigationRequestSchema, openInvestigationResponseSchema, renameRequestSchema, renameResponseSchema, statusChangeRequestSchema, statusChangeResponseSchema } from './investigations.js';
+import { MAX_VIEW_PAGE, namedViewSchema, renameViewRequestSchema, restoreViewResponseSchema, saveViewRequestSchema, saveViewResponseSchema, viewListResponseSchema } from './views.js';
 import { meResponseSchema } from './me.js';
 import { readyResponseSchema } from './ready.js';
 import { sourceProfileSchema } from './profile.js';
@@ -24,7 +25,7 @@ export interface OpenApiDocument {
   readonly openapi: string;
   readonly info: { readonly title: string; readonly version: string };
   readonly paths: Readonly<Record<string, unknown>>;
-  readonly components: { readonly schemas: { readonly CoverageRequest: Record<string, unknown>; readonly CoverageResponse: Record<string, unknown>; readonly DegreePreview: Record<string, unknown>; readonly DegreePreviewRequest: Record<string, unknown>; readonly DerivedNeighborsRequest: Record<string, unknown>; readonly DerivedNeighborsResponse: Record<string, unknown>; readonly DraftWriteRequest: Record<string, unknown>; readonly ReadRefsRequest: Record<string, unknown>; readonly ReadRefsResponse: Record<string, unknown>; readonly DraftWriteResponse: Record<string, unknown>; readonly EdgeDetail: Record<string, unknown>; readonly EntityLookupRequest: Record<string, unknown>; readonly ErrorResponse: Record<string, unknown>; readonly ExpandRequest: Record<string, unknown>; readonly ExpandResponse: Record<string, unknown>; readonly GraphNode: Record<string, unknown>; readonly HealthResponse: Record<string, unknown>; readonly InvestigationListResponse: Record<string, unknown>; readonly InvestigationResponse: Record<string, unknown>; readonly MeResponse: Record<string, unknown>; readonly OpenInvestigationRequest: Record<string, unknown>; readonly OpenInvestigationResponse: Record<string, unknown>; readonly ReadyResponse: Record<string, unknown>; readonly RenameRequest: Record<string, unknown>; readonly RenameResponse: Record<string, unknown>; readonly SearchMoreRequest: Record<string, unknown>; readonly SearchMoreResult: Record<string, unknown>; readonly SearchRequest: Record<string, unknown>; readonly SearchResult: Record<string, unknown>; readonly SourceProfile: Record<string, unknown>; readonly SourceTestReport: Record<string, unknown>; readonly SourcesResponse: Record<string, unknown>; readonly StatusChangeRequest: Record<string, unknown>; readonly StatusChangeResponse: Record<string, unknown> } };
+  readonly components: { readonly schemas: { readonly CoverageRequest: Record<string, unknown>; readonly CoverageResponse: Record<string, unknown>; readonly DegreePreview: Record<string, unknown>; readonly DegreePreviewRequest: Record<string, unknown>; readonly DerivedNeighborsRequest: Record<string, unknown>; readonly DerivedNeighborsResponse: Record<string, unknown>; readonly DraftWriteRequest: Record<string, unknown>; readonly DraftWriteResponse: Record<string, unknown>; readonly EdgeDetail: Record<string, unknown>; readonly EntityLookupRequest: Record<string, unknown>; readonly ErrorResponse: Record<string, unknown>; readonly ExpandRequest: Record<string, unknown>; readonly ExpandResponse: Record<string, unknown>; readonly GraphNode: Record<string, unknown>; readonly HealthResponse: Record<string, unknown>; readonly InvestigationListResponse: Record<string, unknown>; readonly InvestigationResponse: Record<string, unknown>; readonly MeResponse: Record<string, unknown>; readonly NamedView: Record<string, unknown>; readonly OpenInvestigationRequest: Record<string, unknown>; readonly OpenInvestigationResponse: Record<string, unknown>; readonly ReadRefsRequest: Record<string, unknown>; readonly ReadRefsResponse: Record<string, unknown>; readonly ReadyResponse: Record<string, unknown>; readonly RenameRequest: Record<string, unknown>; readonly RenameResponse: Record<string, unknown>; readonly RenameViewRequest: Record<string, unknown>; readonly RestoreViewResponse: Record<string, unknown>; readonly SaveViewRequest: Record<string, unknown>; readonly SaveViewResponse: Record<string, unknown>; readonly SearchMoreRequest: Record<string, unknown>; readonly SearchMoreResult: Record<string, unknown>; readonly SearchRequest: Record<string, unknown>; readonly SearchResult: Record<string, unknown>; readonly SourceProfile: Record<string, unknown>; readonly SourceTestReport: Record<string, unknown>; readonly SourcesResponse: Record<string, unknown>; readonly StatusChangeRequest: Record<string, unknown>; readonly StatusChangeResponse: Record<string, unknown>; readonly ViewListResponse: Record<string, unknown>; } };
 }
 
 const RETRY_AFTER_HEADER = { 'Retry-After': { description: 'Whole seconds to wait', schema: { type: 'integer', minimum: 1 } } };
@@ -284,6 +285,84 @@ export function buildOpenApiDocument(
           },
         },
       },
+      '/v1/investigations/{id}/views': {
+        get: {
+          operationId: 'listViews',
+          summary: 'The named views of an investigation of the caller, newest first',
+          description: `Reads Postgres only; no source is read. Summaries only: the layout and query context of a view are not returned. Paged by keyset on the time the view was made and its id, 25 rows by default and at most ${MAX_VIEW_PAGE}; a limit above that is QUERY_BUDGET_EXCEEDED with details.maxPage, a limit below 1 is INVALID_REQUEST, and a cursor that is altered, expired or was made for another user, investigation or route is CURSOR_INVALIDATED. count is the exact number of named views and is the same on every page. draft names the view the draft is based on (null when none, or when that view is gone).`,
+          parameters: [
+            { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+            { name: 'limit', in: 'query', required: false, schema: { type: 'integer', minimum: 1, maximum: MAX_VIEW_PAGE } },
+            { name: 'cursor', in: 'query', required: false, schema: { type: 'string' } },
+          ],
+          responses: {
+            '200': { description: 'A page of named views', content: jsonBody('ViewListResponse') },
+            '400': { description: 'A limit that is not a whole number of at least 1, or an unknown query parameter', content: jsonBody('ErrorResponse') },
+            '404': { description: 'No such investigation of this caller', content: jsonBody('ErrorResponse') },
+            '409': { description: 'CURSOR_INVALIDATED: start the list again', content: jsonBody('ErrorResponse') },
+            '422': { description: 'QUERY_BUDGET_EXCEEDED: the limit is above the maximum page', content: jsonBody('ErrorResponse') },
+            '500': { description: 'The views could not be read', content: jsonBody('ErrorResponse') },
+          },
+        },
+        post: {
+          operationId: 'saveView',
+          summary: 'Save the caller\'s draft of an investigation as a named view',
+          description:
+            'Writes Postgres only; no source is read. In one transaction it copies the draft (layout, query context, AI notes, mapping hash, counts) into a new named view with the name and the note given, sets the draft\'s note to that note, points the draft at the view, raises the draft\'s version by one and moves the investigation\'s last-edited time. If-Match carries the draft\'s version as a quoted whole number; another version is refused with CONFLICTED_VIEW_VERSION and nothing is stored. title and expectedInvestigationVersion come together: when the version matches the investigation\'s, the title changes in the same transaction, and when it does not, CONFLICT is answered and nothing is stored. Saving again with nothing changed creates another view. The answer is saved, with the time of the view.',
+          parameters: [
+            { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+            { name: 'If-Match', in: 'header', required: true, description: 'The draft\'s version as a quoted whole number', schema: { type: 'string', pattern: '^"[1-9][0-9]{0,9}"$' } },
+          ],
+          requestBody: { required: true, content: jsonBody('SaveViewRequest') },
+          responses: {
+            '201': { description: 'The view was saved', headers: { ETag: { description: "The draft's new version as a strong tag", schema: { type: 'string' } } }, content: jsonBody('SaveViewResponse') },
+            '400': { description: 'If-Match is missing or not a quoted whole number, or the body is not a view save: a name or title of the wrong length, a note over the limit, text with a NUL or an unpaired surrogate, only one of title and expectedInvestigationVersion, or an unknown field', content: jsonBody('ErrorResponse') },
+            '404': { description: 'No such investigation of this caller', content: jsonBody('ErrorResponse') },
+            '409': { description: 'CONFLICTED_VIEW_VERSION: the draft changed since the version sent; CONFLICT: the investigation changed since expectedInvestigationVersion, its source is no longer the one it was opened on, or it is closed or archived (details.reason investigation-read-only)', content: jsonBody('ErrorResponse') },
+            '500': { description: 'The view could not be saved', content: jsonBody('ErrorResponse') },
+          },
+        },
+      },
+      '/v1/investigations/{id}/views/{viewId}': {
+        put: {
+          operationId: 'renameView',
+          summary: 'Rename a named view',
+          description: "Writes Postgres only. Only the name changes: the view's documents, note and time stay, and so does the investigation's last-edited time. If-Match carries the view's version as a quoted whole number; another version is refused with CONFLICTED_VIEW_VERSION and changes nothing.",
+          parameters: [
+            { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+            { name: 'viewId', in: 'path', required: true, schema: { type: 'string' } },
+            { name: 'If-Match', in: 'header', required: true, description: "The view's version as a quoted whole number", schema: { type: 'string', pattern: '^\"[1-9][0-9]{0,9}\"$' } },
+          ],
+          requestBody: { required: true, content: jsonBody('RenameViewRequest') },
+          responses: {
+            '200': { description: 'The view, renamed', headers: { ETag: { description: "The view's new version as a strong tag", schema: { type: 'string' } } }, content: jsonBody('NamedView') },
+            '400': { description: 'If-Match is missing or not a quoted whole number, or the name is not 1 to 120 characters without a NUL or an unpaired surrogate, or the body holds another field', content: jsonBody('ErrorResponse') },
+            '404': { description: 'No such view of an investigation of this caller', content: jsonBody('ErrorResponse') },
+            '409': { description: 'CONFLICTED_VIEW_VERSION: the view changed since the version sent; CONFLICT: the investigation is closed or archived (details.reason investigation-read-only)', content: jsonBody('ErrorResponse') },
+            '500': { description: 'The view could not be renamed', content: jsonBody('ErrorResponse') },
+          },
+        },
+      },
+      '/v1/investigations/{id}/views/{viewId}/restore': {
+        post: {
+          operationId: 'restoreView',
+          summary: 'Copy a named view over the caller\'s draft',
+          description:
+            "Writes Postgres only; no source is read. In one transaction the view's documents, note, AI notes, mapping hash and counts replace the draft's, the draft is based on the view, and its version goes up by one; the draft then equals the view, so the answer's save is saved, with the view's time. The view itself is not changed. The investigation's last-edited time moves only when the draft's content changed. If-Match carries the draft's version as a quoted whole number; another version is refused with CONFLICTED_VIEW_VERSION and changes nothing. The body is empty.",
+          parameters: [
+            { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+            { name: 'viewId', in: 'path', required: true, schema: { type: 'string' } },
+            { name: 'If-Match', in: 'header', required: true, description: "The draft's version as a quoted whole number", schema: { type: 'string', pattern: '^\"[1-9][0-9]{0,9}\"$' } },
+          ],
+          responses: {
+            '200': { description: 'The draft as it is now', headers: { ETag: { description: "The draft's new version as a strong tag", schema: { type: 'string' } } }, content: jsonBody('RestoreViewResponse') },
+            '400': { description: 'If-Match is missing or not a quoted whole number, or a body was sent', content: jsonBody('ErrorResponse') },
+            '404': { description: 'No such view of an investigation of this caller', content: jsonBody('ErrorResponse') },
+            '409': { description: 'CONFLICTED_VIEW_VERSION: the draft changed since the version sent; CONFLICT: the investigation\'s source is no longer the one it was opened on, or it is closed or archived (details.reason investigation-read-only)', content: jsonBody('ErrorResponse') },
+            '500': { description: 'The view could not be restored', content: jsonBody('ErrorResponse') },
+          },
+        },
+      },
       '/v1/edges/{ref}': {
         get: {
           operationId: 'getEdge',
@@ -474,7 +553,7 @@ export function buildOpenApiDocument(
       },
     },
     components: {
-      schemas: { CoverageRequest: schemaJson(coverageRequest), CoverageResponse: schemaJson(coverageResponse), DegreePreview: schemaJson(degreePreview), DegreePreviewRequest: schemaJson(degreePreviewRequest), DerivedNeighborsRequest: schemaJson(derivedNeighborsRequest), DerivedNeighborsResponse: schemaJson(derivedNeighborsResponse), DraftWriteRequest: schemaJson(draftWriteRequestSchema), DraftWriteResponse: schemaJson(draftWriteResponseSchema), EdgeDetail: schemaJson(edgeDetail), EntityLookupRequest: schemaJson(entityLookupRequest), ErrorResponse: schemaJson(errorResponse), ExpandRequest: schemaJson(expandRequest), ExpandResponse: schemaJson(expandResponse), GraphNode: schemaJson(graphNode), HealthResponse: schemaJson(healthResponse), InvestigationListResponse: schemaJson(investigationList), InvestigationResponse: schemaJson(investigationResponse), MeResponse: schemaJson(meResponse), OpenInvestigationRequest: schemaJson(openInvestigationRequest), OpenInvestigationResponse: schemaJson(openInvestigationResponse), ReadRefsRequest: schemaJson(readRefsRequestSchema), ReadRefsResponse: schemaJson(readRefsResponseSchema), ReadyResponse: schemaJson(readyResponse), RenameRequest: schemaJson(renameRequestSchema), RenameResponse: schemaJson(renameResponseSchema), SearchMoreRequest: schemaJson(searchMoreRequest), SearchMoreResult: schemaJson(searchMoreResult), SearchRequest: schemaJson(searchRequest), SearchResult: schemaJson(searchResult), SourceProfile: schemaJson(sourceProfile), SourceTestReport: schemaJson(sourceTestReport), SourcesResponse: schemaJson(sourcesResponse), StatusChangeRequest: schemaJson(statusChangeRequestSchema), StatusChangeResponse: schemaJson(statusChangeResponseSchema) },
+      schemas: { CoverageRequest: schemaJson(coverageRequest), CoverageResponse: schemaJson(coverageResponse), DegreePreview: schemaJson(degreePreview), DegreePreviewRequest: schemaJson(degreePreviewRequest), DerivedNeighborsRequest: schemaJson(derivedNeighborsRequest), DerivedNeighborsResponse: schemaJson(derivedNeighborsResponse), DraftWriteRequest: schemaJson(draftWriteRequestSchema), DraftWriteResponse: schemaJson(draftWriteResponseSchema), EdgeDetail: schemaJson(edgeDetail), EntityLookupRequest: schemaJson(entityLookupRequest), ErrorResponse: schemaJson(errorResponse), ExpandRequest: schemaJson(expandRequest), ExpandResponse: schemaJson(expandResponse), GraphNode: schemaJson(graphNode), HealthResponse: schemaJson(healthResponse), InvestigationListResponse: schemaJson(investigationList), InvestigationResponse: schemaJson(investigationResponse), MeResponse: schemaJson(meResponse), NamedView: schemaJson(namedViewSchema), OpenInvestigationRequest: schemaJson(openInvestigationRequest), OpenInvestigationResponse: schemaJson(openInvestigationResponse), ReadRefsRequest: schemaJson(readRefsRequestSchema), ReadRefsResponse: schemaJson(readRefsResponseSchema), ReadyResponse: schemaJson(readyResponse), RenameRequest: schemaJson(renameRequestSchema), RenameResponse: schemaJson(renameResponseSchema), RenameViewRequest: schemaJson(renameViewRequestSchema), RestoreViewResponse: schemaJson(restoreViewResponseSchema), SaveViewRequest: schemaJson(saveViewRequestSchema), SaveViewResponse: schemaJson(saveViewResponseSchema), SearchMoreRequest: schemaJson(searchMoreRequest), SearchMoreResult: schemaJson(searchMoreResult), SearchRequest: schemaJson(searchRequest), SearchResult: schemaJson(searchResult), SourceProfile: schemaJson(sourceProfile), SourceTestReport: schemaJson(sourceTestReport), SourcesResponse: schemaJson(sourcesResponse), StatusChangeRequest: schemaJson(statusChangeRequestSchema), StatusChangeResponse: schemaJson(statusChangeResponseSchema), ViewListResponse: schemaJson(viewListResponseSchema) },
     },
   };
 }

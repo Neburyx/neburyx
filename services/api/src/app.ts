@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import type { Socket } from 'node:net';
 import fastifyStatic from '@fastify/static';
-import { type ErrorCode, MAX_DRAFT_DOCUMENT_BYTES, readRefsRequestSchema, readRefsResponseSchema, draftWriteRequestSchema, draftWriteResponseSchema, renameRequestSchema, renameResponseSchema, statusChangeRequestSchema, statusChangeResponseSchema, derivedNeighborsRequestSchema, derivedNeighborsResponseSchema, coverageRequestSchema, coverageResponseSchema, degreePreviewRequestSchema, edgeDetailSchema, edgePathSchema, entityLookupRequestSchema, degreePreviewSchema, entityPathSchema, entityQuerySchema, expandRequestSchema, expandResponseSchema, healthResponseSchema, investigationListQuerySchema, investigationListResponseSchema, investigationResponseSchema, meResponseSchema, nodeSchema, parseEdgeRefSegment, parseSourceLinkSegment, sourceLinkPathSchema, sourceLinkQuerySchema, openInvestigationRequestSchema, openInvestigationResponseSchema, readyResponseSchema, searchMoreRequestSchema, searchMoreResultSchema, searchRequestSchema, searchResultSchema, sourceProfileSchema, sourceTestReportSchema, sourcesResponseSchema } from '@neburyx/contracts';
+import { type ErrorCode, MAX_DRAFT_DOCUMENT_BYTES, readRefsRequestSchema, readRefsResponseSchema, draftWriteRequestSchema, draftWriteResponseSchema, renameRequestSchema, renameResponseSchema, statusChangeRequestSchema, statusChangeResponseSchema, derivedNeighborsRequestSchema, derivedNeighborsResponseSchema, coverageRequestSchema, coverageResponseSchema, degreePreviewRequestSchema, edgeDetailSchema, edgePathSchema, entityLookupRequestSchema, degreePreviewSchema, entityPathSchema, entityQuerySchema, expandRequestSchema, expandResponseSchema, healthResponseSchema, investigationListQuerySchema, investigationListResponseSchema, investigationResponseSchema, meResponseSchema, nodeSchema, parseEdgeRefSegment, parseSourceLinkSegment, sourceLinkPathSchema, sourceLinkQuerySchema, openInvestigationRequestSchema, openInvestigationResponseSchema, readyResponseSchema, searchMoreRequestSchema, searchMoreResultSchema, searchRequestSchema, searchResultSchema, sourceProfileSchema, sourceTestReportSchema, sourcesResponseSchema, renameViewRequestSchema, restoreViewResponseSchema, saveViewRequestSchema, saveViewResponseSchema, viewListQuerySchema, viewListResponseSchema, namedViewSchema } from '@neburyx/contracts';
 import { z } from 'zod';
 import Fastify, {
   type FastifyBaseLogger,
@@ -28,6 +28,8 @@ import { asksForJsonOnly, REFUSAL_PAGE_CSP, refusalPage } from './source-links/r
 import { createSourceLinkService } from './source-links/source-link-service.js';
 import { createSearchService } from './search/search-service.js';
 import { createInvestigationService } from './investigations/investigation-service.js';
+import { createCursorCodec, type CursorCodec } from './gate/cursor/codec.js';
+import { createViewService } from './investigations/view-service.js';
 import { createStoredReferences } from './investigations/stored-references.js';
 import { createSourceAccess } from './investigations/source-access.js';
 import { createRequestLimiter, type RequestLimiter } from './rate/request-limiter.js';
@@ -57,6 +59,8 @@ export interface AppOptions {
   readonly indexes?: IndexReader | undefined;
   /** The keys of the reference tokens of keyed entity types; the source summary carries a demo case's keyed starting entity as a token. */
   readonly referenceKeys?: ReferenceKeys | undefined;
+  /** Signs and checks the cursors of the lists of the application database; absent, a key made for this copy alone. */
+  readonly cursors?: CursorCodec | undefined;
   /** What the checks showed about how the source answers a count of neighbors; absent, every degree preview is bounded. */
   readonly degreeVerdicts?: DegreeVerdicts | undefined;
   /** Overrides the lifetime and size of the degree preview cache, which is only kept when the verdicts are given. */
@@ -468,7 +472,8 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       return expandResponseSchema.parse(answer);
     });
 
-    const investigations = createInvestigationService({ store: options.store, entities, mapping, access, references: createStoredReferences(mapping, referenceKeys), audit: auditSink });
+    const storedReferences = createStoredReferences(mapping, referenceKeys);
+    const investigations = createInvestigationService({ store: options.store, entities, mapping, access, references: storedReferences, audit: auditSink });
     app.post('/v1/investigations', { config: { permission: 'principal' } }, async (request, reply) => {
       const body = openInvestigationRequestSchema.safeParse(request.body);
       if (!noQuerySchema.safeParse(request.query).success || !body.success) throw new AppError('INVALID_REQUEST');
@@ -514,6 +519,46 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       const identity = await options.store.current();
       const answer = await investigations.changeStatus({ traceId: request.id, id: params.data.id, principal: identity.principal, expectedVersion: body.data.expectedVersion, status: body.data.status });
       return reply.header('etag', `"${answer.investigation.version}"`).send(statusChangeResponseSchema.parse(answer));
+    });
+
+    const views = createViewService({ store: options.store, references: storedReferences, mapping, cursors: options.cursors ?? createCursorCodec({ key: randomBytes(32), clock: Date.now }) });
+    app.post('/v1/investigations/:id/views', { config: { permission: 'principal' } }, async (request, reply) => {
+      const params = profileParamsSchema.safeParse(request.params);
+      const body = saveViewRequestSchema.safeParse(request.body);
+      const expected = ifMatchSchema.safeParse(request.headers['if-match']);
+      if (!noQuerySchema.safeParse(request.query).success || !params.success || !body.success || !expected.success) throw new AppError('INVALID_REQUEST');
+      const identity = await options.store.current();
+      const answer = await views.save({ id: params.data.id, principal: identity.principal, expectedDraftVersion: expected.data, request: body.data });
+      return reply.code(201).header('etag', `"${answer.draft.version}"`).send(saveViewResponseSchema.parse(answer));
+    });
+
+    app.get('/v1/investigations/:id/views', { exposeHeadRoute: false, config: { permission: 'principal' } }, async (request) => {
+      const params = profileParamsSchema.safeParse(request.params);
+      const query = viewListQuerySchema.safeParse(request.query);
+      if (!params.success || !query.success) throw new AppError('INVALID_REQUEST');
+      const identity = await options.store.current();
+      const answer = await views.list({ id: params.data.id, principal: identity.principal, limit: query.data.limit, cursor: query.data.cursor });
+      return viewListResponseSchema.parse(answer);
+    });
+
+    const viewParamsSchema = z.strictObject({ id: z.string(), viewId: z.string() });
+    app.put('/v1/investigations/:id/views/:viewId', { config: { permission: 'principal' } }, async (request, reply) => {
+      const params = viewParamsSchema.safeParse(request.params);
+      const body = renameViewRequestSchema.safeParse(request.body);
+      const expected = ifMatchSchema.safeParse(request.headers['if-match']);
+      if (!noQuerySchema.safeParse(request.query).success || !params.success || !body.success || !expected.success) throw new AppError('INVALID_REQUEST');
+      const identity = await options.store.current();
+      const answer = await views.rename({ id: params.data.id, viewId: params.data.viewId, principal: identity.principal, expectedVersion: expected.data, name: body.data.name });
+      return reply.header('etag', `"${answer.version}"`).send(namedViewSchema.parse(answer));
+    });
+
+    app.post('/v1/investigations/:id/views/:viewId/restore', { config: { permission: 'principal' } }, async (request, reply) => {
+      const params = viewParamsSchema.safeParse(request.params);
+      const expected = ifMatchSchema.safeParse(request.headers['if-match']);
+      if (!noQuerySchema.safeParse(request.query).success || !params.success || !expected.success || (request.body !== undefined && request.body !== null)) throw new AppError('INVALID_REQUEST');
+      const identity = await options.store.current();
+      const answer = await views.restore({ id: params.data.id, viewId: params.data.viewId, principal: identity.principal, expectedDraftVersion: expected.data });
+      return reply.header('etag', `"${answer.draft.version}"`).send(restoreViewResponseSchema.parse(answer));
     });
 
     app.get('/v1/investigations/:id', { exposeHeadRoute: false, config: { permission: 'principal' } }, async (request, reply) => {

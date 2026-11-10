@@ -27,6 +27,10 @@ export interface ClientState {
   resume(id: string, mask: boolean): Exclude<Activation, 'fresh'> | undefined;
   /** Shows an investigation that is already read, all at once: the one shown is set aside, the result is stored under its key, and the investigation, its source and its graph change together. An investigation the session holds that was read for the same mask is shown as it was left and `loaded` is ignored; one read for the other mask is replaced. */
   show(loaded: LoadedInvestigation, results: readonly { readonly key: QueryKey; readonly result: GraphResult }[]): Activation;
+  /** Replaces the graph and the presentation of the investigation shown with an investigation of the same ID that is already read, all at once: nothing of the old graph or of its positions, pins, hidden items and filters is kept. Refused when anything named belongs to another source. */
+  replace(loaded: LoadedInvestigation, results: readonly { readonly key: QueryKey; readonly result: GraphResult }[]): void;
+  /** Drops an investigation the session holds, the one shown as well, so that opening it again reads it anew; when it is the one shown, nothing is shown afterwards. */
+  forget(id: string): void;
   /** Sets what the header shows of the investigation, or clears it; refused while no source is bound. */
   describeInvestigation(record: InvestigationRecord | null): void;
   putResult(key: QueryKey, result: GraphResult): void;
@@ -137,6 +141,26 @@ export function createClientState(): ClientState {
       investigation.load(loaded);
       presentation.reset();
       return 'fresh';
+    },
+    replace(loaded, results) {
+      if (investigation.view.getState().id !== loaded.id) throw new StateError('SOURCE_MISMATCH');
+      for (const { key, result } of results) {
+        if (key.sourceId !== loaded.sourceId || result.sourceId !== loaded.sourceId) throw new StateError('SOURCE_MISMATCH');
+      }
+      // checks the sources named by the investigation before anything is stored
+      createInvestigationStore().load(loaded);
+      for (const { key, result } of results) server.put(key, result);
+      investigation.load(loaded);
+      presentation.reset();
+    },
+    forget(id) {
+      const shown = investigation.view.getState();
+      if (shown.id !== id) {
+        setAside.delete(id);
+        return;
+      }
+      investigation.restore({ id: null, sourceId: shown.sourceId, record: null, resultKeys: [], nodeRefs: [], edgeRefs: [] });
+      presentation.reset();
     },
     describeInvestigation: (record) => investigation.describe(record),
     putResult(key, result) {

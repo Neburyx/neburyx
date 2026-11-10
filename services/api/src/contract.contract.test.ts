@@ -442,6 +442,8 @@ describe('the running API against the committed openapi.json', () => {
     { method: 'PUT', url: '/v1/investigations/0192f000-0000-7000-8000-000000000001', payload: '{}', headers: { 'content-type': 'application/json' } },
     { method: 'POST', url: '/v1/investigations/not-a-uuid/status', payload: JSON.stringify({ status: 'closed', expectedVersion: 1 }), headers: { 'content-type': 'application/json' } },
     { method: 'POST', url: '/v1/investigations/0192f000-0000-7000-8000-000000000001/status', payload: '{}', headers: { 'content-type': 'application/json' } },
+    { method: 'POST', url: '/v1/investigations/not-a-uuid/views', payload: '{}', headers: { 'content-type': 'application/json' } },
+    { method: 'POST', url: '/v1/investigations/0192f000-0000-7000-8000-000000000001/views', payload: '{}', headers: { 'content-type': 'application/json', 'if-match': '"1"' } },
     { method: 'GET', url: '/v1/investigations/0192f000-0000-7000-8000-000000000001?x=1' },
     { method: 'GET', url: '/v1/sources/nope/profile' },
     { method: 'GET', url: '/v1/sources/%ZZ/profile' },
