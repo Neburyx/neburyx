@@ -51,7 +51,7 @@ function documents(nodes: LayoutDocument['nodes'], edges: ReturnType<typeof link
 
 function seeded(docs: ReturnType<typeof documents>, mappingHash: string, overrides: Partial<InvestigationRow> = {}): MemoryAppStore {
   const store = memoryAppStore();
-  store.investigations.push({ id: ID, sourceId: 'demo', sourceIdentityHash: identityHashOf(demo), ownerId: ME, title: 'Widget W-1', caseRef: null, startingEntityType: 'widget', startingStableId: 'W-1', status: 'open', createdAt: '2026-11-05T10:00:00.000Z', lastEditedAt: '2026-11-05T10:00:00.000Z', version: 3, ...overrides });
+  store.investigations.push({ id: ID, sourceId: 'demo', sourceIdentityHash: identityHashOf(demo), ownerId: ME, title: 'Widget W-1', caseRef: null, startingEntityType: 'widget', startingStableId: 'W-1', status: 'open', closedAt: null, archivedAt: null, createdAt: '2026-11-05T10:00:00.000Z', lastEditedAt: '2026-11-05T10:00:00.000Z', version: 3, ...overrides });
   store.drafts.push({ id: '0192f000-0000-7000-8000-0000000000d1', version: 1, notes: null, ...docs, mappingHash, investigationId: ID, contentHash: contentHashOf(docs) });
   return store;
 }

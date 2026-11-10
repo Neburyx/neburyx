@@ -18,7 +18,7 @@ function started(notice: MappingNotice | undefined, mask = false) {
   state.bindSource('demo');
   state.setMask(mask);
   const read = result('demo', ['A']);
-  state.show({ id: ID, sourceId: 'demo', record: { title: 'T', caseRef: null, save: { kind: 'unsaved' } }, resultKeys: [key('demo')], nodeRefs: read.nodes.map((node) => node.ref), edgeRefs: [] }, [{ key: key('demo'), result: read }]);
+  state.show({ id: ID, sourceId: 'demo', record: { title: 'T', caseRef: null, status: 'open', readOnly: false, version: 1, save: { kind: 'unsaved' } }, resultKeys: [key('demo')], nodeRefs: read.nodes.map((node) => node.ref), edgeRefs: [] }, [{ key: key('demo'), result: read }]);
   mappingNoticesOf(state).set(notice);
   const banner = createBuiltInBannerController();
   render(
@@ -105,7 +105,7 @@ describe('the mapping-changed banner', () => {
     const state: ClientState = createClientState();
     state.bindSource('demo');
     const read = result('demo', ['A']);
-    state.show({ id: ID, sourceId: 'demo', record: { title: 'T', caseRef: null, save: { kind: 'unsaved' } }, resultKeys: [key('demo')], nodeRefs: read.nodes.map((node) => node.ref), edgeRefs: [] }, [{ key: key('demo'), result: read }]);
+    state.show({ id: ID, sourceId: 'demo', record: { title: 'T', caseRef: null, status: 'open', readOnly: false, version: 1, save: { kind: 'unsaved' } }, resultKeys: [key('demo')], nodeRefs: read.nodes.map((node) => node.ref), edgeRefs: [] }, [{ key: key('demo'), result: read }]);
     const banner = createBuiltInBannerController();
     banner.show({ id: 'request', tone: 'warning', chip: 'Busy', headline: 'A request banner.', text: 'x', actions: [] });
     mappingNoticesOf(state).set(notified);

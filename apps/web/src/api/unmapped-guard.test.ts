@@ -10,7 +10,7 @@ function held() {
   state.bindSource('s');
   const gone = placeholderNode('s', { t: 'gone', id: 'X' });
   const edge = placeholderEdge('s', { t: 'REL', from: { t: 'gone', id: 'X' }, to: { t: 'mapped', id: 'M' }, id: 'r1' });
-  state.show({ id: 'i', sourceId: 's', record: { title: 'T', caseRef: null, save: { kind: 'unsaved' } }, resultKeys: [key('s')], nodeRefs: [gone.ref], edgeRefs: [edge.ref] }, [{ key: key('s'), result: { sourceId: 's', nodes: [gone], edges: [edge] } }]);
+  state.show({ id: 'i', sourceId: 's', record: { title: 'T', caseRef: null, status: 'open', readOnly: false, version: 1, save: { kind: 'unsaved' } }, resultKeys: [key('s')], nodeRefs: [gone.ref], edgeRefs: [edge.ref] }, [{ key: key('s'), result: { sourceId: 's', nodes: [gone], edges: [edge] } }]);
   const sent: string[] = [];
   const spy = (name: string) => async () => {
     sent.push(name);
