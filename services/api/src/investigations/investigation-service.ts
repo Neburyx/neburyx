@@ -38,7 +38,7 @@ export interface InvestigationService {
   saveDraft(call: { readonly id: string; readonly principal: Principal; readonly expectedVersion: number; readonly draft: DraftWriteRequest }): Promise<DraftWriteResponse>;
   /** Stores the title as typed when `expectedVersion` is the investigation's version; a closed or archived investigation is refused first. */
   rename(call: { readonly id: string; readonly principal: Principal; readonly expectedVersion: number; readonly title: string }): Promise<RenameResponse>;
-  /** Closes, archives or reopens the investigation, with one audit event; if the event cannot be recorded nothing changes. */
+  /** Closes, archives or reopens the investigation, with one audit event, recorded after the commit; if the event cannot be recorded the change is kept and the call answers `INTERNAL_ERROR`. */
   changeStatus(call: { readonly traceId: string; readonly id: string; readonly principal: Principal; readonly expectedVersion: number; readonly status: InvestigationShown['status'] }): Promise<StatusChangeResponse>;
 }
 
