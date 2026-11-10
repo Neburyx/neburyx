@@ -63,6 +63,39 @@ describe('the mapping-changed banner', () => {
     expect(text()).not.toContain('The filters saved with this view still hide some types.');
   });
 
+  describe('with a relationship loaded', () => {
+    function withRelationship() {
+      const state: ClientState = createClientState();
+      state.bindSource('demo');
+      const read = result('demo', ['A', 'B'], [['e1', 'A', 'B']]);
+      state.show({ id: ID, sourceId: 'demo', record: { title: 'T', caseRef: null, status: 'open', readOnly: false, version: 1, save: { kind: 'unsaved' } }, resultKeys: [key('demo')], nodeRefs: read.nodes.map((node) => node.ref), edgeRefs: read.edges.map((edge) => edge.ref) }, [{ key: key('demo'), result: read }]);
+      mappingNoticesOf(state).set(notice([]));
+      render(
+        <ClientStateProvider state={state}>
+          <BannerProvider controller={createBuiltInBannerController()}>
+            <StatusBanner />
+            <MappingChangeBanner />
+          </BannerProvider>
+        </ClientStateProvider>,
+      );
+      act(() => state.presentation.setMappedTypes({ entityTypes: ['type-a'], relationshipTypes: ['rel-a', 'rel-b'] }));
+      return state;
+    }
+
+    it('says that the filters hide types when a loaded relationship has a type that is off', () => {
+      const state = withRelationship();
+      act(() => state.setRelationshipTypeOff('rel-a', true));
+      expect(text()).toContain('The filters saved with this view still hide some types.');
+    });
+
+    it('does not say it when the relationship type that is off has nothing loaded', () => {
+      const state = withRelationship();
+      act(() => state.setRelationshipTypeOff('rel-b', true));
+      expect(text()).toContain('Nothing in this view had to change.');
+      expect(text()).not.toContain('The filters saved with this view still hide some types.');
+    });
+  });
+
   it('says that fields are newly sensitive only for a now-personal filter and a masked session', () => {
     const personal = notice([{ name: 'phone', reason: 'now-personal' }]);
     started(personal, true);
