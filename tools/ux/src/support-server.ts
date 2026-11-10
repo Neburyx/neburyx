@@ -451,7 +451,7 @@ function createInvestigations(options: SupportServerOptions) {
       const filterKey = JSON.stringify([status, query.data.source ?? null, fragment ?? null]);
       const matching = [...held.values()]
         .filter((stored) => readable(stored.sourceId) && stored.status === status && (query.data.source === undefined || stored.sourceId === query.data.source) && (fragment === undefined || stored.title.toLowerCase().includes(fragment) || (stored.caseRef?.toLowerCase().includes(fragment) ?? false)))
-        .sort((left, right) => (left.lastEditedAt === right.lastEditedAt ? (left.id < right.id ? 1 : -1) : left.lastEditedAt < right.lastEditedAt ? 1 : -1));
+        .sort((left, right) => (left.createdAt === right.createdAt ? (left.id < right.id ? 1 : -1) : left.createdAt < right.createdAt ? 1 : -1));
       let start = 0;
       if (query.data.cursor !== undefined) {
         const [key, offset] = Buffer.from(query.data.cursor, 'base64url').toString('utf8').split('|');

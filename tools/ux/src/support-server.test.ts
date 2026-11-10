@@ -109,7 +109,7 @@ describe('the investigations the support server holds', () => {
     expect(await count()).toBe(0);
   });
 
-  it('lists the investigations opened, the most recently edited first, 25 unless asked, with the cursor of the next page, and refuses a query that is not the contract\'s', async () => {
+  it('lists the investigations opened, the most recently created first, 25 unless asked, with the cursor of the next page, and refuses a query that is not the contract\'s', async () => {
     vi.useFakeTimers({ toFake: ['Date'], now: Date.parse('2026-11-05T12:00:00.000Z') });
     const base = await startWithTypes();
     const list = async (query = '') => investigationListResponseSchema.parse(await (await fetch(`${base}/v1/investigations${query}`)).json());
