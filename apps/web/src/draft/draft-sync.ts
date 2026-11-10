@@ -45,6 +45,8 @@ interface Session {
   pendingFilters: QueryContextDocument['filters'] | undefined;
   rehashHeld: boolean;
   carriedTypes: { readonly entityTypes: readonly string[]; readonly relTypes: readonly string[] } | undefined;
+  /** The type filters as applied from the stored draft; `listed` stays true only while the person has not changed that kind. */
+  applied: { readonly entityTypes: { listed: boolean; readonly off: string }; readonly relTypes: { listed: boolean; readonly off: string } } | undefined;
   /** The document last stored or read, as text. */
   lastJson: string | undefined;
 }
@@ -169,9 +171,20 @@ export function createDraftSync(options: DraftSyncOptions): DraftSync {
     return id !== null && session !== undefined && session.writable && !session.conflicted ? { id, session } : undefined;
   };
 
+  const offKey = (off: ReadonlySet<string>): string => JSON.stringify([...off].sort());
+
+  const keepListsOf = (session: Session) => {
+    const { applied } = session;
+    if (applied === undefined) return undefined;
+    const filter = state.presentation.view.getState().typeFilter;
+    if (applied.entityTypes.off !== offKey(filter.offEntityTypes)) applied.entityTypes.listed = false;
+    if (applied.relTypes.off !== offKey(filter.offRelationshipTypes)) applied.relTypes.listed = false;
+    return { entityTypes: applied.entityTypes.listed, relTypes: applied.relTypes.listed };
+  };
+
   const documentOf = (session: Session): DraftWriteRequest => {
     const held = state.investigation.getState();
-    return draftOf({ nodeRefs: held.nodeRefs, graph: state.loadedGraph(), presentation: state.presentation.view.getState(), notes: session.notes, kept: session.kept, storedFilters: session.pendingFilters, carriedTypes: session.carriedTypes });
+    return draftOf({ nodeRefs: held.nodeRefs, graph: state.loadedGraph(), presentation: state.presentation.view.getState(), notes: session.notes, kept: session.kept, storedFilters: session.pendingFilters, carriedTypes: session.carriedTypes, keepLists: keepListsOf(session) });
   };
 
   const readOnlyNow = (): boolean => state.investigation.getState().record?.readOnly === true;
@@ -381,6 +394,8 @@ export function createDraftSync(options: DraftSyncOptions): DraftSync {
     session.carriedTypes = { entityTypes: filters.entityTypes.filter((type) => !mapped.entityTypes.includes(type)), relTypes: filters.relTypes.filter((type) => !mapped.relationshipTypes.includes(type)) };
     if (filters.entityTypes.length > 0) for (const type of mapped.entityTypes) if (!filters.entityTypes.includes(type)) state.setEntityTypeOff(type, true);
     if (filters.relTypes.length > 0) for (const type of mapped.relationshipTypes) if (!filters.relTypes.includes(type)) state.setRelationshipTypeOff(type, true);
+    const filter = state.presentation.view.getState().typeFilter;
+    session.applied = { entityTypes: { listed: filters.entityTypes.length > 0, off: offKey(filter.offEntityTypes) }, relTypes: { listed: filters.relTypes.length > 0, off: offKey(filter.offRelationshipTypes) } };
     const shown = shownSession();
     if (shown !== undefined && shown.session.lastJson !== undefined) shown.session.lastJson = JSON.stringify(documentOf(shown.session));
   }
@@ -417,7 +432,7 @@ export function createDraftSync(options: DraftSyncOptions): DraftSync {
   return {
     status: readable(status),
     adopt(investigationId, session) {
-      const adopted: Session = { version: session.version, notes: session.notes, kept: session.kept ?? NOTHING_KEPT, writable: session.writable, conflicted: false, pendingFilters: session.filters, rehashHeld: session.rehash === true, carriedTypes: undefined, lastJson: undefined };
+      const adopted: Session = { version: session.version, notes: session.notes, kept: session.kept ?? NOTHING_KEPT, writable: session.writable, conflicted: false, pendingFilters: session.filters, rehashHeld: session.rehash === true, carriedTypes: undefined, applied: undefined, lastJson: undefined };
       sessions.set(investigationId, adopted);
       if (state.investigation.getState().id === investigationId && adopted.writable) {
         applyFilters(adopted);

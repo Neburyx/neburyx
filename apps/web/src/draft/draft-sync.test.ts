@@ -267,16 +267,60 @@ describe('the type filters of a stored draft that name a type the mapping no lon
     move(2);
     await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
     expect(writes.at(-1)?.body.queryContext.filters.entityTypes).toEqual(['type-a', 'type-gone']);
-    expect(writes.at(-1)?.body.queryContext.filters.relTypes).toEqual([]);
+    expect(writes.at(-1)?.body.queryContext.filters.relTypes).toEqual(['rel-gone']);
   });
 
-  it('write nothing extra when no type is switched off', async () => {
+  it('keep the saved list as a list when the type that was off is the one the mapping dropped, and stop keeping it once the person changes a type filter', async () => {
+    const { writes, move, sync, state } = rig(undefined, false);
+    sync.adopt(ID, { version: 1, notes: null, filters: { entityTypes: ['type-a', 'type-b'], relTypes: ['rel-a'], time: null, properties: [] }, writable: true });
+    state.presentation.setMappedTypes({ entityTypes: ['type-a', 'type-b'], relationshipTypes: ['rel-a'] });
+    expect(state.presentation.view.getState().typeFilter.offEntityTypes.size).toBe(0);
+    move(2);
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
+    expect(writes.at(-1)?.body.queryContext.filters).toMatchObject({ entityTypes: ['type-a', 'type-b'], relTypes: ['rel-a'] });
+    state.setEntityTypeOff('type-b', true);
+    move(4);
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
+    expect(writes.at(-1)?.body.queryContext.filters.entityTypes).toEqual(['type-a']);
+    state.setEntityTypeOff('type-b', false);
+    move(5);
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
+    expect(writes.at(-1)?.body.queryContext.filters.entityTypes).toEqual([]);
+  });
+
+  it('bring an entity type that was off back off when the mapping has it again', async () => {
+    const { writes, move, sync, state } = rig(undefined, false);
+    sync.adopt(ID, { version: 1, notes: null, filters: { entityTypes: ['type-a', 'type-b'], relTypes: [], time: null, properties: [] }, writable: true });
+    state.presentation.setMappedTypes({ entityTypes: ['type-a', 'type-b'], relationshipTypes: [] });
+    move(2);
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
+    const written = writes.at(-1)?.body.queryContext.filters;
+    const again = rig(undefined, false);
+    again.sync.adopt(ID, { version: 1, notes: null, filters: written, writable: true });
+    again.state.presentation.setMappedTypes({ entityTypes: ['type-a', 'type-b', 'type-gone'], relationshipTypes: [] });
+    expect(again.state.presentation.view.getState().typeFilter.offEntityTypes.has('type-gone')).toBe(true);
+  });
+
+  it('bring a relationship type that was off back off when the mapping has it again', async () => {
+    const { writes, move, sync, state } = rig(undefined, false);
+    sync.adopt(ID, { version: 1, notes: null, filters: { entityTypes: [], relTypes: ['rel-a'], time: null, properties: [] }, writable: true });
+    state.presentation.setMappedTypes({ entityTypes: ['type-a'], relationshipTypes: ['rel-a'] });
+    move(2);
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
+    expect(writes.at(-1)?.body.queryContext.filters.relTypes).toEqual(['rel-a']);
+    const again = rig(undefined, false);
+    again.sync.adopt(ID, { version: 1, notes: null, filters: writes.at(-1)?.body.queryContext.filters, writable: true });
+    again.state.presentation.setMappedTypes({ entityTypes: ['type-a'], relationshipTypes: ['rel-a', 'rel-gone'] });
+    expect(again.state.presentation.view.getState().typeFilter.offRelationshipTypes.has('rel-gone')).toBe(true);
+  });
+
+  it('write a stored list as it was when every type in it is mapped', async () => {
     const { writes, move, sync, state } = rig(undefined, false);
     sync.adopt(ID, { version: 1, notes: null, filters: { entityTypes: ['type-a', 'type-gone'], relTypes: [], time: null, properties: [] }, writable: true });
     state.presentation.setMappedTypes({ entityTypes: ['type-a', 'type-gone'], relationshipTypes: [] });
     move(2);
     await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
-    expect(writes.at(-1)?.body.queryContext.filters.entityTypes).toEqual([]);
+    expect(writes.at(-1)?.body.queryContext.filters.entityTypes).toEqual(['type-a', 'type-gone']);
   });
 });
 

@@ -29,11 +29,11 @@ function storedEdgeOf(edge: GraphEdge): StoredEdge {
 }
 
 /** The types of a kind that are left switched on when at least one is switched off; none when no type is off or the mapping is not known. */
-function typesLeftOn(known: readonly string[] | undefined, off: ReadonlySet<string>): string[] {
-  return known === undefined || off.size === 0 ? [] : known.filter((type) => !off.has(type));
+function typesLeftOn(known: readonly string[] | undefined, off: ReadonlySet<string>, keepList = false): string[] {
+  return known === undefined || (off.size === 0 && !keepList) ? [] : known.filter((type) => !off.has(type));
 }
 
-const withCarried = (left: string[], carried: readonly string[] = []): string[] => (left.length === 0 ? left : [...left, ...carried.filter((type) => !left.includes(type))]);
+const withCarried = (left: string[], carried: readonly string[] = [], keepList = false): string[] => (left.length === 0 && !keepList ? left : [...left, ...carried.filter((type) => !left.includes(type))]);
 
 export interface DraftInputs {
   readonly nodeRefs: readonly ElementRef[];
@@ -45,6 +45,8 @@ export interface DraftInputs {
   readonly storedFilters?: QueryContextDocument['filters'] | undefined;
   /** Types the stored filters name that the mapping does not have now: written back with the types left on, so that a type that is mapped again has the state it was saved with. */
   readonly carriedTypes?: { readonly entityTypes: readonly string[]; readonly relTypes: readonly string[] } | undefined;
+  /** The stored list of a kind was not empty, so some type was off when it was saved, and the person has not changed that kind since: the list is written as a list even when no mapped type is off now, since a type the mapping dropped may have been the one that was off. */
+  readonly keepLists?: { readonly entityTypes: boolean; readonly relTypes: boolean } | undefined;
 }
 
 /** The draft as it is written: references only, never a property value. The layout direction, physics, selection and panels are not part of it. */
@@ -76,7 +78,7 @@ export function draftOf(inputs: DraftInputs): DraftWriteRequest {
     schemaVersion: SCHEMA_VERSION,
     loaded: { nodes: allNodes.map(({ t, id }) => ({ t, id })), edges: allEdges },
     expansions: [],
-    filters: inputs.storedFilters ?? { entityTypes: withCarried(typesLeftOn(mapped.entityTypes, presentation.typeFilter.offEntityTypes), inputs.carriedTypes?.entityTypes), relTypes: withCarried(typesLeftOn(mapped.relationshipTypes, presentation.typeFilter.offRelationshipTypes), inputs.carriedTypes?.relTypes), time: null, properties: [] },
+    filters: inputs.storedFilters ?? { entityTypes: withCarried(typesLeftOn(mapped.entityTypes, presentation.typeFilter.offEntityTypes, inputs.keepLists?.entityTypes), inputs.carriedTypes?.entityTypes, inputs.keepLists?.entityTypes), relTypes: withCarried(typesLeftOn(mapped.relationshipTypes, presentation.typeFilter.offRelationshipTypes, inputs.keepLists?.relTypes), inputs.carriedTypes?.relTypes, inputs.keepLists?.relTypes), time: null, properties: [] },
   };
   return { layout, queryContext, notes: inputs.notes };
 }
