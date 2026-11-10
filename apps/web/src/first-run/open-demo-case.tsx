@@ -38,6 +38,7 @@ export function OpenDemoCase({ entry, label, offered, className }: { readonly en
     const request = { sourceId: entry.sourceId, entity: { sourceId: entry.sourceId, entityType: entry.entityType, stableId: entry.stableId }, caseRef: entry.caseRef };
     void openEntity(client, state, request, { principalId, mask }, controller.signal).then((answer) => {
       if (controller.signal.aborted) return;
+      if (answer.kind === 'held') return;
       if (answer.kind === 'shown') navigate(`${EXPLORE_PATH}/${answer.id}`, { state: { resumed: answer.created === false } });
       else setProblem(LINK_CANNOT_CARRY_ID);
     });

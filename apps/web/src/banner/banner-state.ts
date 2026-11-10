@@ -1,10 +1,13 @@
-export type BannerTone = 'neutral' | 'warning' | 'danger';
+/** `caution` is the amber of a state that holds the person's own unsaved work; `warning` keeps the look every other banner has. */
+export type BannerTone = 'neutral' | 'warning' | 'caution' | 'danger';
 
 export interface BannerAction {
   readonly id: string;
   readonly label: string;
   readonly run: () => void;
   readonly disabled?: boolean;
+  /** Draws the button as the primary action of the banner. */
+  readonly primary?: boolean;
 }
 
 export interface BannerState {

@@ -103,6 +103,7 @@ export function knowing(known: readonly KnownInvestigation[], overrides: Partial
       const found = known.find((entry) => entry.node.ref.sourceId === request.entity.sourceId && entry.node.ref.entityType === request.entity.entityType && entry.node.ref.stableId === entityIdOf(request.entity));
       return found === undefined ? { ok: false, failure: { code: 'NOT_FOUND', message: 'Not found.', retryable: false, traceId: 'tr-3' } } : { ok: true, value: openedOf(found.investigation, request.mask === true && found.masked !== undefined ? found.masked : found.node) };
     },
+    saveDraft: async (_id, version, body) => ({ ok: true, value: { version, save: { state: 'unsaved', savedAt: null }, notes: body.notes } }),
     ...overrides,
   });
   return { client, calls };

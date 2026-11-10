@@ -26,6 +26,7 @@ import { PreviewProvider } from './workspace/preview-context.js';
 import { ExpandProvider } from './workspace/expand-context.js';
 import { createHeavyGuard } from './api/heavy-guard.js';
 import { createExpandStore } from './api/expand-store.js';
+import { LeaveGuard } from './draft/draft-status.js';
 import type { ClientState } from './state/client-state.js';
 import type { BannerController } from './banner/banner-controller.js';
 import { bannerReporter } from './banner/banner-reporter.js';
@@ -140,6 +141,7 @@ export function appRoutes(client: ApiClient, state: ClientState, banner?: Banner
                 <TestRunsProvider runs={testRuns}>
                   <ExcerptsProvider excerpts={excerpts}>
                     <SearchShortcut />
+                    <LeaveGuard />
                     <RecentProvider recent={recent}>
                       <Outlet />
                     </RecentProvider>

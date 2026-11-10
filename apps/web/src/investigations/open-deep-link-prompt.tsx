@@ -78,6 +78,7 @@ export function OpenDeepLinkPrompt() {
     attempt.current = controller;
     void openEntity(client, state, request, { principalId, mask }, controller.signal).then((answer) => {
       if (controller.signal.aborted) return;
+      if (answer.kind === 'held') return;
       if (answer.kind === 'shown') navigate(`${EXPLORE_PATH}/${answer.id}`, { state: { resumed: answer.created === false } });
       else if (answer.kind === 'source-unavailable') setPartsProblem(PROMPT_SOURCE_UNAVAILABLE);
       else if (answer.failure.code === 'INVALID_REQUEST' && mask) setPartsProblem(PROMPT_MASKED_VALUE);

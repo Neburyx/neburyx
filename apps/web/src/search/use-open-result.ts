@@ -40,6 +40,7 @@ export function useOpenResult(client: ApiClient, principalId: string): OpenResul
       void openEntity(client, state, request, { principalId, mask }, controller.signal)
         .then((outcome) => {
           if (controller.signal.aborted) return;
+          if (outcome.kind === 'held') return;
           if (outcome.kind === 'shown') navigate(`${EXPLORE_PATH}/${outcome.id}`, { state: { resumed: outcome.created === false } });
           else setRefusal(outcome.kind === 'failed' ? { kind: 'failure', failure: outcome.failure } : { kind: 'source-unavailable' });
         })

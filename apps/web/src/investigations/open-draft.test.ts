@@ -4,8 +4,9 @@ import type { ApiResult } from '../api/client.js';
 import { AUTOSAVE_DELAY_MS } from '../draft/draft-sync.js';
 import { createClientState } from '../state/client-state.js';
 import { elementKey } from '../state/keys.js';
+import { draftSyncOf } from '../draft/draft-sync.js';
 import { openById, openEntity } from './open-flow.js';
-import { INVESTIGATION_A, investigationOf, knowing, nodeOf, openedOf } from './test-data.js';
+import { INVESTIGATION_A, INVESTIGATION_B, investigationOf, knowing, nodeOf, openedOf } from './test-data.js';
 
 const CONTEXT = { principalId: 'principal-1', mask: false };
 const investigation = investigationOf(INVESTIGATION_A, 'source-a', 'kind-a', 'A-1');
@@ -148,5 +149,72 @@ describe('opening an investigation whose draft holds more than its first entity'
     state.presentation.setPosition(elementKey({ sourceId: 'source-a', entityType: 'kind-a', stableId: 'A-1' }), { x: 1, y: 1 });
     await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
     expect(writes[0]?.body.layout.layout).toBe('grid');
+  });
+});
+
+describe('opening another investigation while the changes of the one shown cannot be written', () => {
+  const other = investigationOf(INVESTIGATION_B, 'source-a', 'kind-a', 'BZ-1');
+  const A_REF = { sourceId: 'source-a', entityType: 'kind-a', stableId: 'A-1' };
+
+  async function shownWithUnsavedChanges(saves: () => ApiResult<{ version: number; save: { state: 'unsaved'; savedAt: null }; notes: null }>) {
+    const { client } = knowing([{ investigation, node: nodeOf('source-a', 'kind-a', 'A-1') }, { investigation: other, node: nodeOf('source-a', 'kind-a', 'BZ-1') }], { saveDraft: async () => saves() });
+    const state = createClientState();
+    await openEntity(client, state, { sourceId: 'source-a', entity: A_REF }, CONTEXT);
+    state.presentation.setPosition(elementKey(A_REF), { x: 4, y: 4 });
+    return { client, state };
+  }
+
+  it('writes the draft first, and opens the other once it is saved', async () => {
+    let saved = 0;
+    const { client, state } = await shownWithUnsavedChanges(() => ({ ok: true, value: { version: ++saved + 1, save: { state: 'unsaved', savedAt: null }, notes: null } }));
+    const outcome = await openById(client, state, INVESTIGATION_B, CONTEXT);
+    expect(outcome).toMatchObject({ kind: 'shown', id: INVESTIGATION_B });
+    expect(saved).toBe(1);
+  });
+
+  it('keeps the person where they are until they save again or leave anyway, and opens nothing before', async () => {
+    let up = false;
+    const { client, state } = await shownWithUnsavedChanges(() => (up ? { ok: true, value: { version: 2, save: { state: 'unsaved', savedAt: null }, notes: null } } : { ok: false, failure: { code: 'INTERNAL_ERROR', message: 'x', retryable: true, traceId: 't' } }));
+    let outcome: Awaited<ReturnType<typeof openById>> | undefined;
+    void openById(client, state, INVESTIGATION_B, CONTEXT).then((done) => (outcome = done));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(outcome).toBeUndefined();
+    expect(state.investigation.getState().id).toBe(INVESTIGATION_A);
+    expect(draftSyncOf(state, client).leaving.getState()).toBe(true);
+    up = true;
+    draftSyncOf(state, client).retry();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(outcome).toMatchObject({ kind: 'shown', id: INVESTIGATION_B });
+  });
+
+  it('opens the other when the person leaves anyway, and nothing when the open is cancelled', async () => {
+    const down = (): ApiResult<{ version: number; save: { state: 'unsaved'; savedAt: null }; notes: null }> => ({ ok: false, failure: { code: 'INTERNAL_ERROR', message: 'x', retryable: true, traceId: 't' } });
+    const left = await shownWithUnsavedChanges(down);
+    let outcome: Awaited<ReturnType<typeof openById>> | undefined;
+    void openById(left.client, left.state, INVESTIGATION_B, CONTEXT).then((done) => (outcome = done));
+    await vi.advanceTimersByTimeAsync(0);
+    draftSyncOf(left.state, left.client).leaveAnyway();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(outcome).toMatchObject({ kind: 'shown', id: INVESTIGATION_B });
+
+    const stayed = await shownWithUnsavedChanges(down);
+    const controller = new AbortController();
+    const cancelled = openById(stayed.client, stayed.state, INVESTIGATION_B, CONTEXT, controller.signal);
+    await vi.advanceTimersByTimeAsync(0);
+    controller.abort();
+    expect(await cancelled).toEqual({ kind: 'held' });
+    expect(stayed.state.investigation.getState().id).toBe(INVESTIGATION_A);
+  });
+
+  it('does the same before an entity is opened', async () => {
+    const down = (): ApiResult<{ version: number; save: { state: 'unsaved'; savedAt: null }; notes: null }> => ({ ok: false, failure: { code: 'INTERNAL_ERROR', message: 'x', retryable: true, traceId: 't' } });
+    const { client, state } = await shownWithUnsavedChanges(down);
+    let outcome: Awaited<ReturnType<typeof openEntity>> | undefined;
+    void openEntity(client, state, { sourceId: 'source-a', entity: { sourceId: 'source-a', entityType: 'kind-a', stableId: 'BZ-1' } }, CONTEXT).then((done) => (outcome = done));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(outcome).toBeUndefined();
+    draftSyncOf(state, client).leaveAnyway();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(outcome).toMatchObject({ kind: 'shown', id: INVESTIGATION_B });
   });
 });

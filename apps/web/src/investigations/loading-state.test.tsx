@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { ApiResult } from '../api/client.js';
 import type { GraphNode } from '@neburyx/contracts';
+import { draftSyncOf } from '../draft/draft-sync.js';
 import { createClientState } from '../state/client-state.js';
 import { renderApp } from '../test-utils.js';
 import { BACK_TO_HOME, NOT_FOUND_TITLE, SOURCE_NOT_AVAILABLE_TITLE, TRY_AGAIN } from './messages.js';
@@ -42,6 +43,8 @@ async function onFirst(known = [A, B, C], overrides = {}) {
   const state = createClientState();
   const view = renderApp(`/explore/${INVESTIGATION_A}`, parts.client, state);
   await screen.findByRole('heading', { name: 'kind-a A-1', level: 1 });
+  // what the canvas changed of the draft is written before the next investigation is opened, as the page does; these tests are of what follows
+  await act(async () => void (await draftSyncOf(state, parts.client).settle()));
   return { ...parts, state, view };
 }
 
@@ -187,9 +190,10 @@ describe('an investigation that is being opened while another is on screen', () 
   });
 
   it('shows an investigation the session holds at once, with no marking and no read', async () => {
-    const { view, calls } = await onFirst();
+    const { view, calls, state, client } = await onFirst();
     await go(view, `/explore/${INVESTIGATION_B}`);
     await screen.findByRole('heading', { name: 'kind-a C-1', level: 1 });
+    await act(async () => void (await draftSyncOf(state, client).settle()));
     const reads = JSON.stringify(calls);
     const watched: (string | null)[] = [];
     const observer = new MutationObserver(() => watched.push(strip()));
@@ -202,3 +206,22 @@ describe('an investigation that is being opened while another is on screen', () 
     expect(JSON.stringify(calls)).toBe(reads);
   });
 });
+
+describe('an open that was given up while the changes of the investigation on screen could not be saved', () => {
+  it('goes back to the investigation on screen, with nothing marked as loading', async () => {
+    const down = { saveDraft: async (): Promise<ApiResult<never>> => ({ ok: false, failure: { code: 'INTERNAL_ERROR', message: 'x', retryable: true, traceId: 't' } }) };
+    const parts = knowing([A, B, C], down);
+    const state = createClientState();
+    const view = renderApp(`/explore/${INVESTIGATION_A}`, parts.client, state);
+    await screen.findByRole('heading', { name: 'kind-a A-1', level: 1 });
+    await go(view, `/explore/${INVESTIGATION_B}`);
+    expect(draftSyncOf(state, parts.client).leaving.getState()).toBe(true);
+    expect(busy()).toBe('true');
+    // another open takes the place of this one
+    await act(async () => void draftSyncOf(state, parts.client).settle());
+    expect(view.router.state.location.pathname).toBe(`/explore/${INVESTIGATION_A}`);
+    expect(busy()).not.toBe('true');
+    expect(title()).toBe('kind-a A-1');
+  });
+});
+

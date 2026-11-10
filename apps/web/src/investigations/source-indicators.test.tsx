@@ -1,6 +1,7 @@
 import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
+import { draftSyncOf } from '../draft/draft-sync.js';
 import { createClientState } from '../state/client-state.js';
 import { renderApp, source } from '../test-utils.js';
 import { INVESTIGATION_A, INVESTIGATION_B, investigationOf, knowing, nodeOf } from './test-data.js';
@@ -104,7 +105,8 @@ describe('the source of an investigation that is opened from another source', ()
 
 describe('an open into another source that does not end in a shown investigation', () => {
   it('keeps naming the first source, names the second in the failure when the investigation was read and its entity was not, and leaves the first as it was', async () => {
-    const { view, state } = await onFirst({ getEntity: async (ref: { stableId: string }) => (ref.stableId === 'A-1' ? { ok: true, value: A.node } : { ok: false, failure: { code: 'NETWORK_UNAVAILABLE' } }) });
+    const { view, state, client } = await onFirst({ getEntity: async (ref: { stableId: string }) => (ref.stableId === 'A-1' ? { ok: true, value: A.node } : { ok: false, failure: { code: 'NETWORK_UNAVAILABLE' } }) });
+    await act(async () => void (await draftSyncOf(state, client).settle()));
     const shown = state.investigation.getState();
     await go(view, `/explore/${INVESTIGATION_B}`);
     const notice = await screen.findByRole('group', { name: 'Opening failed' });

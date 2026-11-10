@@ -49,7 +49,7 @@ function BannerBody() {
       {banner.sideLabel === undefined ? null : <span className="status-banner-side">{banner.sideLabel}</span>}
       <div className="status-banner-actions">
         {banner.actions.map((action) => (
-          <button key={action.id} type="button" className="secondary" disabled={action.disabled} onClick={action.run}>
+          <button key={action.id} type="button" className={action.primary === true ? 'primary' : 'secondary'} disabled={action.disabled} onClick={action.run}>
             {action.label}
           </button>
         ))}

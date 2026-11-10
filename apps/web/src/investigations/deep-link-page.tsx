@@ -75,6 +75,7 @@ export function DeepLinkPage({ client }: { readonly client: ApiClient }) {
     setStatus(OPENING);
     void outcome.then((answer) => {
       if (!current || controller.signal.aborted) return;
+      if (answer.kind === 'held') return void navigate(state.investigation.getState().id === null ? '/' : `${EXPLORE_PATH}/${state.investigation.getState().id}`, { replace: true });
       if (answer.kind === 'shown') navigate(`${EXPLORE_PATH}/${answer.id}`, { replace: true, state: { resumed: answer.created === false } });
       else if (answer.kind === 'source-unavailable') setStatus({ kind: 'source-unavailable', sourceId: answer.investigation.sourceId });
       else if (answer.failure.code === 'NOT_FOUND') setStatus({ kind: 'not-found' });

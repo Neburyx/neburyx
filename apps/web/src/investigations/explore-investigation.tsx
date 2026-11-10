@@ -1,5 +1,5 @@
 import { useLayoutEffect, useState } from 'react';
-import { Link, useLocation, useParams } from 'react-router';
+import { Link, useLocation, useNavigate, useParams } from 'react-router';
 import type { ApiClient, ApiFailure } from '../api/client.js';
 import { canRetry, FailureNotice } from '../failure-notice.js';
 import { PageFrame } from '../shell/page-shell.js';
@@ -10,6 +10,7 @@ import { WorkspaceShell } from '../workspace/workspace-shell.js';
 import { AttemptedSource } from './attempted-source.js';
 import { useStoreSelector } from '../state/store.js';
 import { BACK_TO_HOME, NOT_FOUND_TEXT, NOT_FOUND_TITLE, OPENING, openingOver, RESUMED, SOURCE_NOT_AVAILABLE_TEXT, SOURCE_NOT_AVAILABLE_TITLE, TRY_AGAIN } from './messages.js';
+import { EXPLORE_PATH } from '../shell/navigation.js';
 import { openById } from './open-flow.js';
 import { SOME_ITEMS_UNAVAILABLE } from '../draft/copy.js';
 import { DraftAnnouncer, DraftConflictBanner, DraftStatusLine } from '../draft/draft-status.js';
@@ -48,6 +49,7 @@ export function ExploreInvestigation({ client }: { readonly client: ApiClient })
   const shell = useShellData();
   const principalId = answeredData(shell.me)?.principal.id;
   const principalFailure = principalId === undefined ? retainedFailure(shell.me) : undefined;
+  const navigate = useNavigate();
   const resumed = arrivedByResuming(useLocation().state);
   const [attempt, setAttempt] = useState(0);
   const [status, setStatus] = useState<Status>(() => (investigationId !== undefined && state.holds(investigationId, mask) ? { kind: 'ready' } : { kind: 'loading' }));
@@ -59,7 +61,9 @@ export function ExploreInvestigation({ client }: { readonly client: ApiClient })
   // A layout effect, so that a new address never paints the previous investigation before this page has marked it as loading.
   useLayoutEffect(() => {
     if (investigationId === undefined || principalId === undefined) return undefined;
-    if (state.resume(investigationId, mask) !== undefined) {
+    // another investigation that is held is shown at once, unless the one on screen has changes to write first: the open then settles them
+    const mustSettle = state.investigation.getState().id !== investigationId && sync.needsSettle();
+    if (!mustSettle && state.resume(investigationId, mask) !== undefined) {
       setStatus({ kind: 'ready' });
       return undefined;
     }
@@ -67,6 +71,13 @@ export function ExploreInvestigation({ client }: { readonly client: ApiClient })
     setStatus({ kind: 'loading' });
     void openById(client, state, investigationId, { principalId, mask }, controller.signal).then((outcome) => {
       if (controller.signal.aborted) return;
+      if (outcome.kind === 'held') {
+        // the open was given up (another took its place): the address goes back to the investigation that stayed on screen, which is no longer being left
+        const shownId = state.investigation.getState().id;
+        setStatus({ kind: 'ready' });
+        navigate(shownId === null ? '/' : `${EXPLORE_PATH}/${shownId}`, { replace: true });
+        return;
+      }
       if (outcome.kind === 'shown') setStatus(outcome.someMissing === true ? { kind: 'ready', someMissing: true } : { kind: 'ready' });
       else if (outcome.kind === 'source-unavailable') setStatus({ kind: 'source-unavailable', sourceId: outcome.investigation.sourceId });
       else {
@@ -75,7 +86,7 @@ export function ExploreInvestigation({ client }: { readonly client: ApiClient })
       }
     });
     return () => controller.abort();
-  }, [client, state, investigationId, principalId, mask, attempt]);
+  }, [client, state, sync, navigate, investigationId, principalId, mask, attempt]);
 
   if (status.kind === 'not-found') return <Message title={NOT_FOUND_TITLE} text={NOT_FOUND_TEXT} source={null} attempted={status.sourceId} />;
   if (status.kind === 'source-unavailable') return <Message title={SOURCE_NOT_AVAILABLE_TITLE} text={SOURCE_NOT_AVAILABLE_TEXT} source={status.sourceId} />;

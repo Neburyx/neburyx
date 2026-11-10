@@ -1,6 +1,7 @@
 import { act, configure, screen, waitFor } from '@testing-library/react';
 import type { OpenInvestigationRequest } from '@neburyx/contracts';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { draftSyncOf } from '../draft/draft-sync.js';
 import { createClientState } from '../state/client-state.js';
 import { renderApp } from '../test-utils.js';
 import { deepLinkPath } from './deep-link.js';
@@ -92,6 +93,7 @@ describe('following a link', () => {
     const state = createClientState();
     const view = renderApp(link('source-a', 'kind-a', 'A-1', 'CASE-1'), client, state);
     await screen.findByRole('heading', { name: 'kind-a A-1', level: 1 });
+    await act(async () => void (await draftSyncOf(state, client).settle()));
     const first = state.investigation.getState();
     await act(async () => view.router.navigate(link('source-b', 'kind-a', 'C-1')));
     expect(screen.getByRole('status').textContent).toBe(OPENING_LINK);

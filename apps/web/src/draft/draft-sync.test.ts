@@ -367,3 +367,155 @@ describe('another investigation taking the place of one whose writes were failin
   });
 });
 
+
+describe('settling the draft before another investigation is opened', () => {
+  it('answers at once, writing nothing, when nothing is waiting', async () => {
+    const { writes, sync } = rig();
+    expect(sync.needsSettle()).toBe(false);
+    await expect(sync.settle()).resolves.toBe(true);
+    expect(writes).toHaveLength(0);
+    expect(sync.leaving.getState()).toBe(false);
+  });
+
+  it('writes what is waiting without the delay, and answers when it is saved', async () => {
+    const { writes, sync, move } = rig();
+    move(5);
+    expect(sync.needsSettle()).toBe(true);
+    await expect(sync.settle()).resolves.toBe(true);
+    expect(writes).toHaveLength(1);
+    expect(writes[0]?.body.layout.nodes[0]).toMatchObject({ x: 5 });
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS * 2);
+    expect(writes, 'the waiting timer was cancelled, nothing is written twice').toHaveLength(1);
+  });
+
+  it('waits for a write that is already going on, then writes what changed meanwhile', async () => {
+    let release: (() => void) | undefined;
+    const { writes, sync, move, state } = rig();
+    const slow = fakeClient({
+      saveDraft: async (_id, version, body) => {
+        writes.push({ version, body, keepalive: undefined });
+        if (writes.length === 1) await new Promise<void>((resolve) => (release = resolve));
+        return OK(writes.length + 1);
+      },
+    });
+    sync.dispose();
+    const second = createDraftSync({ client: slow, state, page: new FakePage(), document: new FakePage() });
+    second.adopt(ID, { version: 1, notes: null, writable: true });
+    move(1);
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
+    expect(writes).toHaveLength(1);
+    move(2);
+    const settled = second.settle();
+    release?.();
+    await expect(settled).resolves.toBe(true);
+    expect(writes.map((write) => write.body.layout.nodes[0]?.x)).toEqual([1, 2]);
+  });
+
+  it('holds the person when the write fails, and goes on once a retry of theirs saves it', async () => {
+    let up = false;
+    const { writes, sync, move } = rig(() => (up ? OK(2) : SERVER_DOWN));
+    move();
+    let answer: boolean | undefined;
+    void sync.settle().then((leave) => (answer = leave));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(answer, 'held').toBeUndefined();
+    expect(sync.leaving.getState()).toBe(true);
+    expect(sync.status.getState()).toEqual({ kind: 'failing', stalled: false });
+    up = true;
+    sync.retry();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(answer).toBe(true);
+    expect(sync.leaving.getState()).toBe(false);
+    expect(writes.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('holds the person when the server refuses the write, since that is lost work too', async () => {
+    const { sync, move } = rig(() => REFUSED);
+    move();
+    let answer: boolean | undefined;
+    void sync.settle().then((leave) => (answer = leave));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(answer).toBeUndefined();
+    expect(sync.leaving.getState()).toBe(true);
+    expect(sync.status.getState().kind).toBe('rejected');
+  });
+
+  it('goes on when the person chooses to leave, and the changes of the investigation left are tried once more where it is shown no more', async () => {
+    const { sync, move } = rig(() => SERVER_DOWN);
+    move();
+    let answer: boolean | undefined;
+    void sync.settle().then((leave) => (answer = leave));
+    await vi.advanceTimersByTimeAsync(0);
+    sync.leaveAnyway();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(answer).toBe(true);
+    expect(sync.leaving.getState()).toBe(false);
+  });
+
+  it('does not hold the person for a conflict: that has its own state, and the changes cannot be saved', async () => {
+    const { sync, move } = rig(() => CONFLICT);
+    move();
+    await expect(sync.settle()).resolves.toBe(true);
+    expect(sync.status.getState()).toEqual({ kind: 'conflict' });
+    expect(sync.leaving.getState()).toBe(false);
+  });
+
+  it('lets go when the open is cancelled while it waits', async () => {
+    const { sync, move } = rig(() => SERVER_DOWN);
+    move();
+    const controller = new AbortController();
+    const settled = sync.settle(controller.signal);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(sync.leaving.getState()).toBe(true);
+    controller.abort();
+    await expect(settled).resolves.toBe(false);
+    expect(sync.leaving.getState()).toBe(false);
+  });
+
+  it('answers false at once for an open that was cancelled before it asked, and a second open takes the place of the first', async () => {
+    const { sync, move } = rig(() => SERVER_DOWN);
+    move();
+    const cancelled = new AbortController();
+    cancelled.abort();
+    await expect(sync.settle(cancelled.signal)).resolves.toBe(false);
+    expect(sync.leaving.getState()).toBe(false);
+    const first = sync.settle();
+    await vi.advanceTimersByTimeAsync(0);
+    const second = sync.settle();
+    await expect(first).resolves.toBe(false);
+    sync.leaveAnyway();
+    await expect(second).resolves.toBe(true);
+  });
+
+  it('lets the person go on when a conflict is found while they are held', async () => {
+    let call = 0;
+    const { sync, move } = rig(() => (++call === 1 ? SERVER_DOWN : CONFLICT));
+    move();
+    let answer: boolean | undefined;
+    void sync.settle().then((leave) => (answer = leave));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(sync.leaving.getState()).toBe(true);
+    sync.retry();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(answer).toBe(true);
+    expect(sync.leaving.getState()).toBe(false);
+    expect(sync.status.getState()).toEqual({ kind: 'conflict' });
+  });
+
+  it('does not hold the person when the writes succeed but more changes keep coming', async () => {
+    const { sync, move, state } = rig();
+    let x = 10;
+    const busy = fakeClient({
+      saveDraft: async () => {
+        move(x++);
+        return OK(x);
+      },
+    });
+    sync.dispose();
+    const second = createDraftSync({ client: busy, state, page: new FakePage(), document: new FakePage() });
+    second.adopt(ID, { version: 1, notes: null, writable: true });
+    move(1);
+    await expect(second.settle()).resolves.toBe(true);
+    expect(second.leaving.getState()).toBe(false);
+  });
+});

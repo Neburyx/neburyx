@@ -1,6 +1,7 @@
 import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { draftSyncOf } from '../draft/draft-sync.js';
 import { createClientState, type ClientState } from '../state/client-state.js';
 import { elementKey } from '../state/keys.js';
 import { testProfile } from '../dev/test-profile.js';
@@ -139,7 +140,8 @@ describe('returning to the first investigation after another source was opened',
   });
 
   it('leaves the first investigation on screen and held as it was when the second cannot be opened', async () => {
-    const { view, state } = await leftWithWork({ getInvestigation: async (id: string) => (id === INVESTIGATION_B ? { ok: false as const, failure: { code: 'NETWORK_UNAVAILABLE' as const } } : knowing([A]).client.getInvestigation(id)) });
+    const { view, state, client } = await leftWithWork({ getInvestigation: async (id: string) => (id === INVESTIGATION_B ? { ok: false as const, failure: { code: 'NETWORK_UNAVAILABLE' as const } } : knowing([A]).client.getInvestigation(id)) });
+    await act(async () => void (await draftSyncOf(state, client).settle()));
     const shown = state.investigation.getState();
     await act(async () => view.router.navigate(`/explore/${INVESTIGATION_B}`));
     expect(await screen.findByRole('group', { name: 'Opening failed' })).toBeTruthy();

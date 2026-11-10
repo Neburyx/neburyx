@@ -77,10 +77,20 @@ export interface DraftSync {
   flush(): void;
   /** Tries again at once, when the writes were refused or are being retried. */
   retry(): void;
+  /** True while the person is held at a page they were about to leave, because their changes could not be saved. */
+  readonly leaving: ReadableStore<boolean>;
+  /** Whether something is waiting to be written or is being written, so that leaving the investigation shown needs `settle` first. */
+  needsSettle(): boolean;
+  /** Writes what is waiting before another investigation takes the place of the one shown: true when the person may go on, false when the open was cancelled. When the write fails for a reason other than a conflict it waits, with `leaving` set, until the changes are saved or `leaveAnyway` is called. */
+  settle(signal?: AbortSignal): Promise<boolean>;
+  /** The person chose to go on without saving: the `settle` that waits answers true. */
+  leaveAnyway(): void;
   dispose(): void;
 }
 
 const realTimers: Timers = { setTimeout: (run, ms) => setTimeout(run, ms), clearTimeout: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>), now: () => Date.now() };
+
+type WriteResult = 'saved' | 'conflict' | 'failed' | 'skipped';
 
 type Verdict = 'conflict' | 'retry' | 'rejected';
 
@@ -110,6 +120,17 @@ export function createDraftSync(options: DraftSyncOptions): DraftSync {
   let retrying = false;
   let stalled = false;
   let stallTimer: unknown;
+  let inFlight: Promise<WriteResult> | undefined;
+  let gate: ((leave: boolean) => void) | undefined;
+  const leaving = createStore<boolean>(false);
+
+  const releaseGate = (leave: boolean): void => {
+    const open = gate;
+    gate = undefined;
+    if (open === undefined) return;
+    leaving.setState(false);
+    open(leave);
+  };
 
   const setStatus = (next: DraftStatus): void => {
     const current = status.getState();
@@ -157,16 +178,22 @@ export function createDraftSync(options: DraftSyncOptions): DraftSync {
 
   const retryDelay = (failure: ApiFailure): number => Math.max(RETRY_DELAYS_MS[failureCount - 1] ?? RETRY_STEADY_MS, retryAfterOf(failure));
 
-  async function write(keepalive = false): Promise<void> {
+  function write(keepalive = false): Promise<WriteResult> {
     if (writing) {
       again = true;
-      return;
+      return Promise.resolve('skipped');
     }
+    const run = attempt(keepalive);
+    inFlight = run;
+    return run;
+  }
+
+  async function attempt(keepalive: boolean): Promise<WriteResult> {
     const shown = shownSession();
-    if (shown === undefined) return;
+    if (shown === undefined) return 'skipped';
     const body = documentOf(shown.session);
     const json = JSON.stringify(body);
-    if (json === shown.session.lastJson) return;
+    if (json === shown.session.lastJson) return 'skipped';
     writing = true;
     const { id, session } = shown;
     const result = await client.saveDraft(id, session.version, body, keepalive ? { keepalive: true } : undefined);
@@ -184,13 +211,15 @@ export function createDraftSync(options: DraftSyncOptions): DraftSync {
           const save = result.value.save.state === 'saved' ? ({ kind: 'saved', at: result.value.save.savedAt } as const) : ({ kind: 'unsaved' } as const);
           state.describeInvestigation({ ...record, save });
         }
-        if (again || isDirty()) {
+        if (gate !== undefined && !isDirty()) releaseGate(true);
+        else if (gate !== undefined) void write();
+        else if (again || isDirty()) {
           again = false;
           schedule(AUTOSAVE_DELAY_MS);
         }
       }
       sendDeferred();
-      return;
+      return 'saved';
     }
     again = false;
     const verdict = verdictOf(result.failure);
@@ -200,19 +229,21 @@ export function createDraftSync(options: DraftSyncOptions): DraftSync {
         cancel();
         endFailing();
         setStatus({ kind: 'conflict' });
+        // the conflict has its own state, so it does not hold the person back from the page they asked for
+        releaseGate(true);
       }
       sendDeferred();
-      return;
+      return 'conflict';
     }
     if (!stillShown) {
       sendDeferred();
-      return;
+      return 'failed';
     }
     if (verdict === 'rejected') {
       cancel();
       endFailing();
       setStatus({ kind: 'rejected' });
-      return;
+      return 'failed';
     }
     if (!retrying) {
       retrying = true;
@@ -226,6 +257,7 @@ export function createDraftSync(options: DraftSyncOptions): DraftSync {
     failureCount += 1;
     setStatus({ kind: 'failing', stalled });
     schedule(retryDelay(result.failure));
+    return 'failed';
   }
 
   /** The draft of the investigation that was shown, sent once when another takes its place, since the timer and the page events look at the one shown. A write of the shown one that is still going on is waited for first. A failure leaves it unsaved, and it is written when that investigation is shown again and changes; a conflict is remembered for when it is. */
@@ -331,9 +363,40 @@ export function createDraftSync(options: DraftSyncOptions): DraftSync {
       }
     },
     flush,
+    leaving: readable(leaving),
+    needsSettle: () => writing || isDirty(),
+    async settle(signal) {
+      let last: WriteResult = 'saved';
+      for (let round = 0; round < 3; round += 1) {
+        if (writing && inFlight !== undefined) await inFlight;
+        if (!isDirty()) return true;
+        cancel();
+        last = await write();
+        // a conflict is already the state of that investigation, the banner says so and it is remembered; the changes cannot be saved, so they do not hold the person back
+        if (last === 'conflict') return true;
+        if (last !== 'saved') break;
+      }
+      // changes that kept coming while the writes succeeded are not a failure: the one that is left is sent as the investigation is left
+      if (last === 'saved' || !isDirty()) return true;
+      releaseGate(false);
+      if (signal?.aborted === true) return false;
+      return new Promise<boolean>((resolve) => {
+        const onAbort = (): void => releaseGate(false);
+        gate = (leave) => {
+          signal?.removeEventListener('abort', onAbort);
+          resolve(leave);
+        };
+        signal?.addEventListener('abort', onAbort, { once: true });
+        leaving.setState(true);
+      });
+    },
+    leaveAnyway: () => releaseGate(true),
     retry() {
       const { kind } = status.getState();
-      if (kind !== 'rejected' && kind !== 'failing') return;
+      if (kind !== 'rejected' && kind !== 'failing') {
+        if (gate !== undefined) flush();
+        return;
+      }
       if (kind === 'rejected') {
         setStatus(IDLE);
         endFailing();
@@ -341,6 +404,7 @@ export function createDraftSync(options: DraftSyncOptions): DraftSync {
       flush();
     },
     dispose() {
+      releaseGate(false);
       cancel();
       endFailing();
       for (const stop of unsubscribes) stop();

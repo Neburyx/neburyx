@@ -12,6 +12,8 @@ import { isOpeningDraft, readDraftItems } from '../draft/restore.js';
 export type OpenOutcome =
   | { readonly kind: 'shown'; readonly id: string; readonly activation: Activation; readonly someMissing?: true }
   | { readonly kind: 'source-unavailable'; readonly investigation: Investigation }
+  /** The investigation shown has changes that could not be saved and the person did not go on without them (or the open was cancelled meanwhile): nothing was opened. */
+  | { readonly kind: 'held' }
   | { readonly kind: 'failed'; readonly failure: ApiFailure; readonly sourceId?: string };
 
 export interface OpenContext {
@@ -67,6 +69,7 @@ function applyPresentation(state: ClientState, draft: InvestigationResponse['dra
 
 /** Opens an investigation by its ID: shows what the session holds without a read, else reads the investigation and, when its source is as it was, the items of its draft: its first entity when the draft is no more than that, otherwise every item the draft names, in bounded calls. */
 export async function openById(client: ApiClient, state: ClientState, id: string, context: OpenContext, signal?: AbortSignal): Promise<OpenOutcome> {
+  if (state.investigation.getState().id !== id && !(await draftSyncOf(state, client).settle(signal))) return { kind: 'held' };
   const held = state.resume(id, context.mask);
   if (held !== undefined) return { kind: 'shown', id, activation: held };
   const read = await client.getInvestigation(id, signal);
@@ -101,6 +104,7 @@ export type OpenEntityOutcome = OpenOutcome & { readonly created?: boolean };
 
 /** Opens an entity as an investigation: the entity the answer carries is shown, so the page that follows reads nothing. */
 export async function openEntity(client: ApiClient, state: ClientState, request: OpenEntityRequest, context: OpenContext, signal?: AbortSignal): Promise<OpenEntityOutcome> {
+  if (!(await draftSyncOf(state, client).settle(signal))) return { kind: 'held' };
   const answer = await client.openInvestigation({ ...request, mask: context.mask }, signal);
   if (!answer.ok) return failedIn(request.sourceId, answer.failure);
   const body = answer.value;

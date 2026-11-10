@@ -8,3 +8,6 @@ export const CONFLICT_HEADLINE = 'This investigation changed in another tab.';
 export const CONFLICT_TEXT = 'Changes made in this tab are not saved. Reload to continue with the latest version.';
 export const RELOAD = 'Reload';
 export const DRAFT_CONFLICT_BANNER_ID = 'draft-conflict';
+export const LEAVE_GUARD_LABEL = 'Changes not saved';
+export const LEAVE_GUARD_TEXT = 'The changes to this investigation could not be saved. Leaving now loses them.';
+export const LEAVE_ANYWAY = 'Leave anyway';
