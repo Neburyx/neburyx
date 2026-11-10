@@ -98,13 +98,21 @@ test.describe('the Investigations page', () => {
     await expect(rows(page)).toHaveCount(5);
     const link = page.getByRole('link', { name: 'Case 2', exact: true });
     await link.focus();
+    const columns = () => page.locator('.investigations-table thead th').evaluateAll((all) => all.map((cell) => Math.round(cell.getBoundingClientRect().left)));
     const before = await rows(page).evaluateAll((all) => all.map((row) => row.getBoundingClientRect().height));
+    const columnsBefore = await columns();
+    expect(await rows(page).first().locator('.investigations-entity-label').textContent()).toBe('');
     release();
     await expect(rows(page).first()).toContainText(/account/i);
     await expect(rows(page).first().locator('.investigations-entity-label')).not.toHaveText('');
     const after = await rows(page).evaluateAll((all) => all.map((row) => row.getBoundingClientRect().height));
     expect(after).toEqual(before);
+    expect(await columns()).toEqual(columnsBefore);
     await expect(link).toBeFocused();
+    await rows(page).nth(1).getByRole('button', { name: /^Actions for/ }).click();
+    await page.keyboard.press('Escape');
+    expect(await columns()).toEqual(columnsBefore);
+    await expect(rows(page).first().locator('.investigations-entity-label')).not.toHaveText('');
   });
 
   test('shows the Saved views tab from the keyboard and opens a view with the confirm', async ({ page }) => {

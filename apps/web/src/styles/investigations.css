@@ -93,7 +93,32 @@
 .investigations-table {
   width: 100%;
   border-collapse: collapse;
+  table-layout: fixed;
   text-align: left;
+}
+
+.investigations-col-title {
+  width: 28%;
+}
+
+.investigations-col-entity {
+  width: 24%;
+}
+
+.investigations-col-source {
+  width: 12%;
+}
+
+.investigations-col-edited {
+  width: 16%;
+}
+
+.investigations-col-counts {
+  width: 14%;
+}
+
+.investigations-col-actions {
+  width: 6%;
 }
 
 .investigations-table caption:focus-visible {
@@ -111,7 +136,11 @@
   color: var(--color-text-muted);
   font-size: var(--font-size-small);
   font-weight: 500;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+}
+
+.investigations-title a {
+  overflow-wrap: anywhere;
 }
 
 .investigations-title {
@@ -128,6 +157,7 @@
 }
 
 .investigations-entity {
+  min-width: 0;
   display: flex;
   align-items: flex-start;
   gap: var(--space-6);
@@ -148,7 +178,9 @@
 
 .investigations-entity-label {
   min-height: 1lh;
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .investigations-entity-type {

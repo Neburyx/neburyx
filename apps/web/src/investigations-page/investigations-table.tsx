@@ -21,7 +21,9 @@ function Entity({ item, profile, labels }: { readonly item: InvestigationListIte
     <div className="investigations-entity">
       <img src={legendGlyph(type?.icon ?? 'generic')} alt="" className="investigations-glyph" />
       <span className="investigations-entity-text">
-        <span className="investigations-entity-label">{label ?? ''}</span>
+        <span className="investigations-entity-label" title={label}>
+          {label ?? ''}
+        </span>
         <span className="investigations-entity-type">{type?.displayName ?? start.entityType}</span>
       </span>
     </div>
@@ -55,6 +57,14 @@ export function InvestigationsTable({ items, profiles, labels, busy, focusId, on
         <caption ref={caption} tabIndex={-1} className="visually-hidden">
           {TABLE_CAPTION}
         </caption>
+        <colgroup>
+          <col className="investigations-col-title" />
+          <col className="investigations-col-entity" />
+          <col className="investigations-col-source" />
+          <col className="investigations-col-edited" />
+          <col className="investigations-col-counts" />
+          <col className="investigations-col-actions" />
+        </colgroup>
         <thead>
           <tr>
             <th scope="col">{COLUMN_TITLE}</th>
