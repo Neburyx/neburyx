@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { investigationListQuerySchema, investigationListResponseSchema, openInvestigationRequestSchema, openInvestigationResponseSchema } from './investigations.js';
+import { edgeEntrySchema, investigationListQuerySchema, investigationListResponseSchema, openInvestigationRequestSchema, openInvestigationResponseSchema } from './investigations.js';
 
 const investigation = {
   id: '0192f000-0000-7000-8000-0000000000a1',
@@ -17,20 +17,22 @@ const entity = { ref: { sourceId: 'demo', entityType: 'widget', stableId: 'W-1' 
 
 describe('the answer to opening an investigation', () => {
   it.each([
-    ['an available source with its entity, new', { investigation, created: true, entity }],
-    ['an available source with its entity, resumed', { investigation, created: false, entity }],
-    ['a repointed source, resumed, with no entity', { investigation: { ...investigation, sourceState: 'repointed' }, created: false }],
-    ['a removed source, resumed, with no entity', { investigation: { ...investigation, sourceState: 'removed' }, created: false }],
+    ['an available source with its entity, new', { investigation, created: true, entity, draft: { version: 1 } }],
+    ['an available source with its entity, resumed', { investigation, created: false, entity, draft: { version: 2 } }],
+    ['a repointed source, resumed, with no entity', { investigation: { ...investigation, sourceState: 'repointed' }, created: false, draft: { version: 1 } }],
+    ['a removed source, resumed, with no entity', { investigation: { ...investigation, sourceState: 'removed' }, created: false, draft: { version: 1 } }],
   ])('accepts %s', (_name, answer) => {
     expect(openInvestigationResponseSchema.safeParse(answer).success).toBe(true);
   });
 
   it.each([
-    ['an available source without its entity', { investigation, created: true }],
-    ['a repointed source with an entity', { investigation: { ...investigation, sourceState: 'repointed' }, created: false, entity }],
-    ['a repointed source reported as new', { investigation: { ...investigation, sourceState: 'repointed' }, created: true }],
-    ['a removed source with an entity', { investigation: { ...investigation, sourceState: 'removed' }, created: false, entity }],
-    ['a state that does not exist', { investigation: { ...investigation, sourceState: 'gone' }, created: false }],
+    ['an available source without its entity', { investigation, created: true, draft: { version: 1 } }],
+    ['an answer without the version of the draft', { investigation, created: true, entity }],
+    ['a draft version of zero', { investigation, created: true, entity, draft: { version: 0 } }],
+    ['a repointed source with an entity', { investigation: { ...investigation, sourceState: 'repointed' }, created: false, entity, draft: { version: 1 } }],
+    ['a repointed source reported as new', { investigation: { ...investigation, sourceState: 'repointed' }, created: true, draft: { version: 1 } }],
+    ['a removed source with an entity', { investigation: { ...investigation, sourceState: 'removed' }, created: false, entity, draft: { version: 1 } }],
+    ['a state that does not exist', { investigation: { ...investigation, sourceState: 'gone' }, created: false, draft: { version: 1 } }],
   ])('refuses %s', (_name, answer) => {
     expect(openInvestigationResponseSchema.safeParse(answer).success).toBe(false);
   });
@@ -106,5 +108,23 @@ describe('the query of the list of investigations', () => {
 
   it.each([[{ limit: '0' }], [{ limit: '26' }], [{ limit: '1.5' }], [{ limit: 'x' }], [{ limit: '' }], [{ limit: '-1' }], [{ sort: 'name' }], [{ sort: '' }], [{ other: '1' }], [{ limit: ['5', '6'] }]])('refuses %j', (query) => {
     expect(investigationListQuerySchema.safeParse(query).success).toBe(false);
+  });
+});
+
+describe('an edge of a stored document', () => {
+  const ends = { t: 'LINKS', from: { t: 'widget', id: 'W-1' }, to: { t: 'gizmo', id: 'W-1' } };
+
+  it.each([[ends], [{ ...ends, id: 'REL-1' }], [{ ...ends, ruleId: 'shared-gizmo' }]])('accepts %j', (edge) => {
+    expect(edgeEntrySchema.safeParse(edge).success).toBe(true);
+  });
+
+  it.each([
+    ['an end with no type', { ...ends, to: { id: 'W-1' } }],
+    ['an end that is only an ID', { ...ends, from: 'W-1' }],
+    ['both an id and a rule', { ...ends, id: 'REL-1', ruleId: 'shared-gizmo' }],
+    ['an unknown field', { ...ends, extra: 1 }],
+    ['an empty type', { ...ends, from: { t: '', id: 'W-1' } }],
+  ])('refuses %s', (_name, edge) => {
+    expect(edgeEntrySchema.safeParse(edge).success).toBe(false);
   });
 });

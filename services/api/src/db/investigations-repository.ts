@@ -21,6 +21,7 @@ export interface DraftRow {
   readonly version: number;
   readonly layout: unknown;
   readonly queryContext: unknown;
+  readonly notes: string | null;
 }
 
 export interface NewDraft {
@@ -45,6 +46,23 @@ export interface NewInvestigation {
   readonly startingStableId: string;
   readonly draft: NewDraft;
 }
+
+/** What a draft write replaces. `contentHashOf` is given the `ai_notes` the draft holds, which a write leaves as they are, and returns the hash of everything the Save dialog would snapshot. */
+export interface DraftWrite {
+  readonly investigationId: string;
+  readonly ownerId: string;
+  readonly expectedVersion: number;
+  readonly layout: LayoutDocument;
+  readonly queryContext: QueryContextDocument;
+  readonly notes: string | null;
+  readonly mappingHash: string;
+  readonly nodeCount: number;
+  readonly edgeCount: number;
+  readonly contentHashOf: (held: { readonly aiNotes: unknown }) => string;
+}
+
+/** `unchanged` is a write whose content equals the stored one: nothing was written and `version` is the one that was sent. */
+export type DraftWriteResult = { readonly outcome: 'saved' | 'unchanged'; readonly version: number; readonly save: InvestigationSave } | { readonly outcome: 'conflict' } | { readonly outcome: 'not-found' };
 
 export interface ReusableQuery {
   readonly ownerId: string;
@@ -104,6 +122,8 @@ export interface InvestigationStore {
   createInvestigation(input: NewInvestigation): Promise<CreatedInvestigation>;
   findReusableInvestigation(query: ReusableQuery): Promise<InvestigationRow | undefined>;
   readInvestigation(id: string, ownerId: string): Promise<StoredInvestigation | undefined>;
+  /** Replaces the owner's draft when `expectedVersion` is its version, in one transaction under a lock on the draft row, so two writes with one version make one winner. `last_edited_at` of the investigation moves only when the content changed. */
+  saveDraft(write: DraftWrite): Promise<DraftWriteResult>;
   /** Runs the reads of one list call at one snapshot; what they return is not changed by an investigation another call creates meanwhile. */
   readLibrary<T>(read: (reader: LibraryReader) => Promise<T>): Promise<T>;
 }
@@ -212,18 +232,75 @@ interface StoredRecord extends InvestigationRecord {
   readonly draft_version: number;
   readonly layout: unknown;
   readonly query_context: unknown;
+  readonly notes: string | null;
 }
 
 export async function readInvestigation(db: pg.Pool, id: string, ownerId: string): Promise<StoredInvestigation | undefined> {
   const result = await db.query<StoredRecord>(
-    `SELECT ${QUALIFIED_COLUMNS}, v.id AS draft_id, v.version AS draft_version, v.layout, v.query_context
+    `SELECT ${QUALIFIED_COLUMNS}, v.id AS draft_id, v.version AS draft_version, v.layout, v.query_context, v.notes
      FROM investigations i JOIN saved_views v ON v.investigation_id = i.id AND v.kind = 'draft' AND v.created_by = i.owner_id
      WHERE i.id = $1 AND i.owner_id = $2 AND i.deleted_at IS NULL`,
     [id, ownerId],
   );
   const [record] = result.rows;
   if (record === undefined) return undefined;
-  return { investigation: rowOf(record), draft: { id: record.draft_id, version: record.draft_version, layout: record.layout, queryContext: record.query_context } };
+  return { investigation: rowOf(record), draft: { id: record.draft_id, version: record.draft_version, layout: record.layout, queryContext: record.query_context, notes: record.notes } };
+}
+
+interface DraftRecord {
+  readonly id: string;
+  readonly version: number;
+  readonly content_hash: string;
+  readonly notes: string | null;
+  readonly ai_notes: unknown;
+  readonly saved_at: Date | null;
+}
+
+const DRAFT_STATE = `SELECT draft.id, draft.version, draft.content_hash, draft.notes, draft.ai_notes, CASE WHEN named.content_hash = draft.content_hash THEN named.created_at END AS saved_at
+     FROM saved_views draft
+     JOIN investigations i ON i.id = draft.investigation_id AND i.owner_id = draft.created_by
+     LEFT JOIN saved_views named ON named.id = draft.based_on_view_id AND named.kind = 'named'
+     WHERE i.id = $1 AND i.owner_id = $2 AND i.deleted_at IS NULL AND draft.kind = 'draft'`;
+
+const saveOf = (savedAt: Date | null): InvestigationSave => (savedAt === null ? { state: 'unsaved', savedAt: null } : { state: 'saved', savedAt: savedAt.toISOString() });
+
+export async function saveDraft(pool: pg.Pool, write: DraftWrite): Promise<DraftWriteResult> {
+  const layout = layoutDocumentSchema.parse(write.layout);
+  const queryContext = queryContextDocumentSchema.parse(write.queryContext);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const found = await client.query<DraftRecord>(`${DRAFT_STATE} FOR UPDATE OF draft`, [write.investigationId, write.ownerId]);
+    const [held] = found.rows;
+    if (held === undefined) {
+      await client.query('ROLLBACK');
+      return { outcome: 'not-found' };
+    }
+    if (held.version !== write.expectedVersion) {
+      await client.query('ROLLBACK');
+      return { outcome: 'conflict' };
+    }
+    const contentHash = write.contentHashOf({ aiNotes: held.ai_notes });
+    if (contentHash === held.content_hash) {
+      await client.query('COMMIT');
+      return { outcome: 'unchanged', version: held.version, save: saveOf(held.saved_at) };
+    }
+    await client.query(
+      `UPDATE saved_views SET layout = $2, query_context = $3, notes = $8, mapping_hash = $4, content_hash = $5, node_count = $6, edge_count = $7, version = version + 1, updated_at = now() WHERE id = $1`,
+      [held.id, JSON.stringify(layout), JSON.stringify(queryContext), write.mappingHash, contentHash, write.nodeCount, write.edgeCount, write.notes],
+    );
+    await client.query(`UPDATE investigations SET last_edited_at = now() WHERE id = $1`, [write.investigationId]);
+    const after = await client.query<DraftRecord>(DRAFT_STATE, [write.investigationId, write.ownerId]);
+    await client.query('COMMIT');
+    const [now] = after.rows;
+    if (now === undefined) throw new Error('the draft was not returned after its write');
+    return { outcome: 'saved', version: now.version, save: saveOf(now.saved_at) };
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 interface ListedRecord extends InvestigationRecord {

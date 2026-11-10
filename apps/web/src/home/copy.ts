@@ -11,9 +11,8 @@ export const RECENT_LIMIT = 5;
 
 export const MORE_THAN_SHOWN = `Showing the ${RECENT_LIMIT} most recent.`;
 
-export const RECENT_NOTE = 'An investigation opens with its starting entity. Entities added later are kept until the page is reloaded.';
 export const CASE_REFERENCE_LABEL = 'Case reference';
-export const CREATED = 'Created';
+export const LAST_EDITED = 'Last edited';
 export const UNSAVED = 'Unsaved';
 export const SOURCE_NO_LONGER_AVAILABLE = 'Source no longer available as it was';
 export const savedBadge = (clock: string): string => `Saved · ${clock} UTC`;

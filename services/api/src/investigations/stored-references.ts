@@ -6,7 +6,7 @@ import { decodeStored, encodeStored } from '../reference/stored-text.js';
 import { isStorableText } from '../reference/well-formed.js';
 
 type Ref = { readonly t: string; readonly id: string };
-type EdgeEnds = { readonly t: string; readonly from: string; readonly to: string };
+type EdgeEnds = { readonly t: string; readonly from: Ref; readonly to: Ref };
 
 export interface StoredReferences {
   /** The reference a stored entity ID is shown as: the ID as it was sent, decoded from its stored form; a token when the type is keyed now; and the value of a token that a type no longer keyed was stored under. */
@@ -22,6 +22,10 @@ export interface StoredReferences {
   rawValue(sourceId: string, entityType: string, stableId: string): string | undefined;
   /** Refuses a reference of a keyed type that is not exactly a token this deployment made for this source and type; any other type is accepted as it is. */
   authenticate(sourceId: string, entityType: string, stableId: string): void;
+  /** The layout as it is stored: every ID in the form `toStored` gives, a reference of a keyed type refused unless it is a token of this deployment (`INVALID_REQUEST`). */
+  storedLayout(sourceId: string, document: LayoutDocument): LayoutDocument;
+  /** The query context as it is stored, as `storedLayout`, and without a filter on a personal-data property. */
+  storedQueryContext(sourceId: string, document: QueryContextDocument): QueryContextDocument;
   layout(sourceId: string, document: LayoutDocument): LayoutDocument;
   queryContext(sourceId: string, document: QueryContextDocument): QueryContextDocument;
   /** The title of a stored investigation as it may be shown: a generated title that holds a keyed value becomes the entity type's display name; a title the person wrote is theirs and stays. */
@@ -63,38 +67,16 @@ export function createStoredReferences(mapping: MappingModel, keys: ReferenceKey
     return valueOfToken(sourceId, entityType, decoded) ?? decoded;
   };
 
-  /** The entity types an end of a relationship type can have, from the mapping rows of that type. */
-  const endTypes = (source: SourceModel, relationshipType: string, end: 'from' | 'to'): string[] => [...new Set(source.relationships.filter((row) => row.type === relationshipType).map((row) => row[end]))];
-
-  /** An end of a stored edge holds an ID and no type. When the mapping allows one type it is that type; when it allows several, the nodes the document holds under that ID say which; when they do not say, and a keyed type is among the possibilities, the end is not known and is undefined. */
-  function edgeEnd(sourceId: string, source: SourceModel, edge: EdgeEnds, end: 'from' | 'to', nodes: readonly Ref[]): string | undefined {
-    const value = edge[end];
-    const all = endTypes(source, edge.t, end);
-    // the relationship type is no longer mapped, so the end cannot be told: it is left out, never returned as it was stored
-    if (all.length === 0) return nodes.some((node) => keyedType(sourceId, node.t) !== undefined && entityId(sourceId, node.t, node.id) === entityId(sourceId, node.t, value)) ? undefined : decodeStored(value);
-    const plain = (types: readonly string[]): boolean => types.every((type) => keyedType(sourceId, type) === undefined);
-    if (plain(all)) return plainEnd(sourceId, all, value);
-    if (all.length === 1) return entityId(sourceId, all[0] as string, value);
-    const named = [...new Set(nodes.filter((node) => all.includes(node.t) && entityId(sourceId, node.t, node.id) === entityId(sourceId, node.t, value)).map((node) => node.t))];
-    const possible = named.length > 0 ? named : all;
-    if (plain(possible)) return plainEnd(sourceId, possible, value);
-    return possible.length === 1 ? entityId(sourceId, possible[0] as string, value) : undefined;
-  }
-
-  /** The ID an edge end stands for when the types it can have are known: through the node conversion, so an end and the node it points at agree. */
-  const plainEnd = (sourceId: string, types: readonly string[], value: string): string => (types.length === 1 ? entityId(sourceId, types[0] as string, value) : decodeStored(value));
+  const storedId = (sourceId: string, entityType: string, reference: string): string => {
+    if (keyedType(sourceId, entityType) === undefined) return encodeStored(reference);
+    readToken(keys, { sourceId, entityType }, reference);
+    return reference;
+  };
+  const storedRefs = (sourceId: string, list: readonly Ref[]): Ref[] => list.map((ref) => ({ ...ref, id: storedId(sourceId, ref.t, ref.id) }));
+  const storedEdges = <E extends EdgeEnds>(sourceId: string, list: readonly E[]): E[] => list.map((edge) => ({ ...edge, from: { ...edge.from, id: storedId(sourceId, edge.from.t, edge.from.id) }, to: { ...edge.to, id: storedId(sourceId, edge.to.t, edge.to.id) } }));
 
   const refs = (sourceId: string, list: readonly Ref[]): Ref[] => list.map((ref) => ({ ...ref, id: entityId(sourceId, ref.t, ref.id) }));
-  /** An edge whose ends cannot be told is left out of the answer, and a possibly raw value is never returned; the stored document is not changed, since nothing here writes it. Documents that hold edges are written by a later feature with typed ends, so only a document stored before then can be ambiguous. */
-  const edges = <E extends EdgeEnds>(sourceId: string, list: readonly E[], nodes: readonly Ref[]): E[] => {
-    const source = sourceOf(sourceId);
-    if (source === undefined) return [...list];
-    return list.flatMap((edge) => {
-      const from = edgeEnd(sourceId, source, edge, 'from', nodes);
-      const to = edgeEnd(sourceId, source, edge, 'to', nodes);
-      return from === undefined || to === undefined ? [] : [{ ...edge, from, to }];
-    });
-  };
+  const edges = <E extends EdgeEnds>(sourceId: string, list: readonly E[]): E[] => list.map((edge) => ({ ...edge, from: { ...edge.from, id: entityId(sourceId, edge.from.t, edge.from.id) }, to: { ...edge.to, id: entityId(sourceId, edge.to.t, edge.to.id) } }));
 
   /** The keys of every personal-data property of the source: a stored property filter on one is not returned, since its values are personal data and the type it belongs to is not stored. */
   const personalKeys = (sourceId: string): ReadonlySet<string> => new Set(sourceOf(sourceId)?.entities.flatMap((entity) => entity.pii) ?? []);
@@ -132,18 +114,34 @@ export function createStoredReferences(mapping: MappingModel, keys: ReferenceKey
     authenticate(sourceId, entityType, stableId) {
       if (keyedType(sourceId, entityType) !== undefined) readToken(keys, { sourceId, entityType }, stableId);
     },
+    storedLayout(sourceId, document) {
+      return {
+        ...document,
+        nodes: document.nodes.map((node) => ({ ...node, id: storedId(sourceId, node.t, node.id) })),
+        edges: storedEdges(sourceId, document.edges),
+        groups: document.groups.map((group) => ({ ...group, members: storedRefs(sourceId, group.members) })),
+      };
+    },
+    storedQueryContext(sourceId, document) {
+      return {
+        ...document,
+        loaded: { nodes: storedRefs(sourceId, document.loaded.nodes), edges: storedEdges(sourceId, document.loaded.edges) },
+        expansions: document.expansions.map((expansion) => ({ ...expansion, from: { ...expansion.from, id: storedId(sourceId, expansion.from.t, expansion.from.id) } })),
+        filters: { ...document.filters, properties: document.filters.properties.filter((filter) => !personalKeys(sourceId).has(filter.key)) },
+      };
+    },
     layout(sourceId, document) {
       return {
         ...document,
         nodes: document.nodes.map((node) => ({ ...node, id: entityId(sourceId, node.t, node.id) })),
-        edges: edges(sourceId, document.edges, document.nodes),
+        edges: edges(sourceId, document.edges),
         groups: document.groups.map((group) => ({ ...group, members: refs(sourceId, group.members) })),
       };
     },
     queryContext(sourceId, document) {
       return {
         ...document,
-        loaded: { nodes: refs(sourceId, document.loaded.nodes), edges: edges(sourceId, document.loaded.edges, document.loaded.nodes) },
+        loaded: { nodes: refs(sourceId, document.loaded.nodes), edges: edges(sourceId, document.loaded.edges) },
         expansions: document.expansions.map((expansion) => ({ ...expansion, from: { ...expansion.from, id: entityId(sourceId, expansion.from.t, expansion.from.id) } })),
         filters: { ...document.filters, properties: document.filters.properties.filter((filter) => !personalKeys(sourceId).has(filter.key)) },
       };

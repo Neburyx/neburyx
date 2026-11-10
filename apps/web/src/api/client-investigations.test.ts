@@ -160,3 +160,49 @@ describe('openInvestigation by a value', () => {
     expect(await createApiClient(answering(different).fetcher).openInvestigation(reference)).toEqual({ ok: false, failure: { code: 'SCHEMA_MISMATCH' } });
   });
 });
+
+describe('saveDraft', () => {
+  const draft = readOf(investigationOf(INVESTIGATION_A, 'source-a', 'kind-a', 'A-1')).draft;
+  const body = { layout: draft.layout, queryContext: draft.queryContext, notes: null };
+
+  it('puts the draft with the version in If-Match, as JSON, and parses the answer', async () => {
+    const { fetcher, asked } = answering({ version: 3, save: { state: 'unsaved', savedAt: null }, notes: null });
+    const result = await createApiClient(fetcher).saveDraft(INVESTIGATION_A, 2, body);
+    expect(result).toEqual({ ok: true, value: { version: 3, save: { state: 'unsaved', savedAt: null }, notes: null } });
+    expect(asked[0]?.path).toBe(`/v1/investigations/${INVESTIGATION_A}/draft`);
+    expect(asked[0]?.init).toMatchObject({ method: 'PUT', headers: { 'content-type': 'application/json', 'if-match': '"2"' } });
+    expect(JSON.parse(asked[0]?.init?.body ?? '{}')).toEqual(body);
+    expect(asked[0]?.init?.keepalive).toBeUndefined();
+  });
+
+  it('asks for keepalive when it is told to', async () => {
+    const { fetcher, asked } = answering({ version: 3, save: { state: 'unsaved', savedAt: null }, notes: null });
+    await createApiClient(fetcher).saveDraft(INVESTIGATION_A, 2, body, { keepalive: true });
+    expect(asked[0]?.init?.keepalive).toBe(true);
+  });
+
+  it('refuses an answer whose note is not the one sent, and gives the server failure as it is', async () => {
+    const other = answering({ version: 3, save: { state: 'unsaved', savedAt: null }, notes: 'another' });
+    expect(await createApiClient(other.fetcher).saveDraft(INVESTIGATION_A, 2, body)).toEqual({ ok: false, failure: { code: 'SCHEMA_MISMATCH' } });
+    const conflict = answering({ error: { code: 'CONFLICTED_VIEW_VERSION', message: 'This view was changed elsewhere. Reload to continue.', retryable: false, traceId: 'tr' } }, 409);
+    expect(await createApiClient(conflict.fetcher).saveDraft(INVESTIGATION_A, 2, body)).toMatchObject({ ok: false, failure: { code: 'CONFLICTED_VIEW_VERSION' } });
+  });
+});
+
+describe('readRefs', () => {
+  const request = { sourceId: 'source-a', entities: [REF], edges: [], aggregates: [], derived: [] };
+
+  it('posts the references and parses the nodes and what is missing', async () => {
+    const { fetcher, asked } = answering({ nodes: [nodeOf('source-a', 'kind-a', 'A-1')], edges: [], missing: { entities: [{ ...REF, stableId: 'A-2' }], edges: [] } });
+    const result = await createApiClient(fetcher).readRefs(request);
+    expect(result.ok && result.value.nodes).toHaveLength(1);
+    expect(asked[0]?.path).toBe('/v1/graph/read-refs');
+    expect(asked[0]?.init).toMatchObject({ method: 'POST' });
+    expect(JSON.parse(asked[0]?.init?.body ?? '{}')).toEqual(request);
+  });
+
+  it('refuses an answer that holds an item of another source', async () => {
+    const { fetcher } = answering({ nodes: [nodeOf('source-b', 'kind-a', 'A-1')], edges: [], missing: { entities: [], edges: [] } });
+    expect(await createApiClient(fetcher).readRefs(request)).toEqual({ ok: false, failure: { code: 'SCHEMA_MISMATCH' } });
+  });
+});

@@ -11,10 +11,13 @@ import { AttemptedSource } from './attempted-source.js';
 import { useStoreSelector } from '../state/store.js';
 import { BACK_TO_HOME, NOT_FOUND_TEXT, NOT_FOUND_TITLE, OPENING, openingOver, RESUMED, SOURCE_NOT_AVAILABLE_TEXT, SOURCE_NOT_AVAILABLE_TITLE, TRY_AGAIN } from './messages.js';
 import { openById } from './open-flow.js';
+import { SOME_ITEMS_UNAVAILABLE } from '../draft/copy.js';
+import { DraftAnnouncer, DraftConflictBanner, DraftStatusLine } from '../draft/draft-status.js';
+import { draftSyncOf } from '../draft/draft-sync.js';
 
 type Status =
   | { readonly kind: 'loading' }
-  | { readonly kind: 'ready' }
+  | { readonly kind: 'ready'; readonly someMissing?: true }
   | { readonly kind: 'not-found'; readonly sourceId?: string }
   | { readonly kind: 'source-unavailable'; readonly sourceId: string }
   | { readonly kind: 'failed'; readonly failure: ApiFailure; readonly sourceId?: string };
@@ -49,6 +52,8 @@ export function ExploreInvestigation({ client }: { readonly client: ApiClient })
   const [attempt, setAttempt] = useState(0);
   const [status, setStatus] = useState<Status>(() => (investigationId !== undefined && state.holds(investigationId, mask) ? { kind: 'ready' } : { kind: 'loading' }));
   const onScreen = useStoreSelector(state.investigation, (held) => held);
+  const sync = draftSyncOf(state, client);
+  const draftKind = useStoreSelector(sync.status, (current) => current.kind);
   const previousTitle = onScreen.id !== null && onScreen.id !== investigationId ? (onScreen.record?.title ?? null) : null;
 
   // A layout effect, so that a new address never paints the previous investigation before this page has marked it as loading.
@@ -62,7 +67,7 @@ export function ExploreInvestigation({ client }: { readonly client: ApiClient })
     setStatus({ kind: 'loading' });
     void openById(client, state, investigationId, { principalId, mask }, controller.signal).then((outcome) => {
       if (controller.signal.aborted) return;
-      if (outcome.kind === 'shown') setStatus({ kind: 'ready' });
+      if (outcome.kind === 'shown') setStatus(outcome.someMissing === true ? { kind: 'ready', someMissing: true } : { kind: 'ready' });
       else if (outcome.kind === 'source-unavailable') setStatus({ kind: 'source-unavailable', sourceId: outcome.investigation.sourceId });
       else {
         const tried = outcome.sourceId === undefined ? {} : { sourceId: outcome.sourceId };
@@ -79,7 +84,10 @@ export function ExploreInvestigation({ client }: { readonly client: ApiClient })
     if (principalId === undefined) shell.reload();
     setAttempt((count) => count + 1);
   };
+  const statusLine = status.kind === 'loading' && failure === undefined ? <p role="status">{previousTitle === null ? OPENING : openingOver(previousTitle)}</p> : status.kind === 'ready' && resumed ? <p role="status">{RESUMED}</p> : status.kind === 'ready' && status.someMissing === true ? <p role="status">{SOME_ITEMS_UNAVAILABLE}</p> : undefined;
+  const visible = draftKind === 'idle' || draftKind === 'conflict' ? statusLine : <>{statusLine}<DraftStatusLine sync={sync} /></>;
   return (
+    <>
     <WorkspaceShell
       notice={
         failure !== undefined ? (
@@ -95,7 +103,10 @@ export function ExploreInvestigation({ client }: { readonly client: ApiClient })
         ) : undefined
       }
       busy={status.kind === 'loading' && failure === undefined}
-      status={status.kind === 'loading' && failure === undefined ? <p role="status">{previousTitle === null ? OPENING : openingOver(previousTitle)}</p> : status.kind === 'ready' && resumed ? <p role="status">{RESUMED}</p> : undefined}
+      status={visible}
     />
+    <DraftAnnouncer sync={sync} />
+    <DraftConflictBanner sync={sync} />
+    </>
   );
 }

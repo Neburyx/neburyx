@@ -1,5 +1,6 @@
 import {
   coverageResponseSchema,
+  readRefsResponseSchema,
   degreePreviewSchema,
   derivedNeighborsResponseSchema,
   edgeDetailSchema,
@@ -71,6 +72,7 @@ const SCENARIOS: readonly Scenario[] = [
   { name: 'derived relationship', route: 'GET /v1/edges/:ref', method: 'GET', url: `/v1/edges/${edgeRefSegmentOf(derived)}`, schema: edgeDetailSchema },
   { name: 'source link of an entity', route: 'GET /v1/source-links/:ref', method: 'GET', url: `/v1/source-links/${sourceLinkSegmentOf({ form: 'entity', ref: entity })}` },
   { name: 'source link of a record', route: 'GET /v1/source-links/:ref', method: 'GET', url: `/v1/source-links/${sourceLinkSegmentOf({ form: 'stored', ref: stored })}?record=R-1` },
+  { name: 'read by references', route: 'POST /v1/graph/read-refs', method: 'POST', url: '/v1/graph/read-refs', payload: { sourceId: FUZZ_SOURCE, entities: [{ sourceId: FUZZ_SOURCE, entityType: 'widget', stableId: 'W-1' }] }, schema: readRefsResponseSchema },
   { name: 'derived neighbors', route: 'POST /v1/graph/derived-neighbors', method: 'POST', url: '/v1/graph/derived-neighbors', payload: { sourceId: FUZZ_SOURCE, ref: { entityType: 'widget', stableId: 'W-1' } }, schema: derivedNeighborsResponseSchema },
   { name: 'degree preview', route: 'POST /v1/graph/preview-expansion', method: 'POST', url: '/v1/graph/preview-expansion', payload: { sourceId: FUZZ_SOURCE, ref: { entityType: 'widget', stableId: 'W-1' } }, schema: degreePreviewSchema },
   { name: 'expand', route: 'POST /v1/graph/expand', method: 'POST', url: '/v1/graph/expand', payload: { sourceId: FUZZ_SOURCE, ref: { entityType: 'widget', stableId: 'W-1' }, neighborTypes: ['gadget'], direction: 'out' }, schema: expandResponseSchema },
@@ -88,6 +90,7 @@ const NOT_SWEPT_HERE: Readonly<Record<string, string>> = {
   'POST /v1/sources/:id/test': 'answers the report of the source test, not an element',
   'GET /v1/investigations': 'answers the person\'s saved investigations (references, never element IDs of the source)',
   'GET /v1/investigations/:id': 'answers a saved investigation (references, never element IDs of the source)',
+  'PUT /v1/investigations/:id/draft': 'answers the new version of a draft and whether it equals a named view, no element ID',
 };
 
 /** The registered routes under /v1 that neither a scenario nor the list above names. */

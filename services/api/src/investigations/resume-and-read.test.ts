@@ -57,6 +57,11 @@ async function started(answer: ExecuteOutcome = entityRows(WIDGET), store: Memor
 
 const asOther = (store: MemoryAppStore): MemoryAppStore => ({ ...store, current: () => Promise.resolve({ ...LOCAL_IDENTITY, principal: { ...LOCAL_IDENTITY.principal, id: OTHER } }) });
 
+const draftFor = (investigationId: string, id: string) => {
+  const documents = initialDraftDocuments({ entityType: 'widget', stableId: 'W-1' });
+  return { id, version: 1, notes: null, investigationId, layout: documents.layout, queryContext: documents.queryContext };
+};
+
 const post = (app: Awaited<ReturnType<typeof started>>['app'], payload: object) => app.inject({ method: 'POST', url: '/v1/investigations', payload });
 
 describe('POST /v1/investigations with a case reference', () => {
@@ -99,13 +104,14 @@ describe('POST /v1/investigations with a case reference', () => {
     const theirs = row({ id: '0192f000-0000-7000-8000-0000000000c2', ownerId: OTHER });
     const store = memoryAppStore();
     store.investigations.push(mine, theirs);
+    store.drafts.push(draftFor(mine.id, '0192f000-0000-7000-8000-0000000000d1'), draftFor(theirs.id, '0192f000-0000-7000-8000-0000000000d2'));
     const me = await started(entityRows(WIDGET), store);
     const other = await started(entityRows(WIDGET), asOther(store));
     const first = openInvestigationResponseSchema.parse((await post(me.app, body())).json());
     const second = openInvestigationResponseSchema.parse((await post(other.app, body())).json());
     expect([first.investigation.id, second.investigation.id]).toEqual([mine.id, theirs.id]);
     expect(store.investigations).toHaveLength(2);
-    expect(store.drafts).toHaveLength(0);
+    expect(store.drafts).toHaveLength(2);
     const third = await post(other.app, body({ caseRef: 'CASE-3' }));
     expect(third.statusCode).toBe(201);
     expect(store.investigations.map((investigation) => investigation.ownerId)).toEqual([ME, OTHER, OTHER]);
@@ -117,6 +123,7 @@ describe('POST /v1/investigations with a case reference', () => {
   it('makes no source read, creates nothing and answers with the investigation as it is when its source now points elsewhere', async () => {
     const store = memoryAppStore();
     store.investigations.push(row({ sourceIdentityHash: 'a-hash-of-another-database' }));
+    store.drafts.push(draftFor(row().id, '0192f000-0000-7000-8000-0000000000d1'));
     const { app, executor } = await started(entityRows(WIDGET), store);
     const response = await post(app, body());
     expect(response.statusCode).toBe(200);
@@ -132,6 +139,7 @@ describe('POST /v1/investigations with a case reference', () => {
     const replaced = parseMapping(fileOf(baseSource({ id: 'demo', entities: [{ type: 'gadget', label: 'Gadget', stable_id: 'gadgetId' }, { type: 'gizmo', label: 'Gizmo', stable_id: 'gizmoId' }], relationships: [{ type: 'LINKS', from: 'gadget', to: 'gizmo' }] })), 'neburyx.yaml');
     const store = memoryAppStore();
     store.investigations.push(row({ sourceIdentityHash: 'a-hash-of-another-database' }));
+    store.drafts.push(draftFor(row().id, '0192f000-0000-7000-8000-0000000000d1'));
     const { app, executor } = await started(entityRows(WIDGET), store, replaced);
     const response = await post(app, body());
     expect(response.statusCode).toBe(200);
@@ -215,7 +223,7 @@ describe('GET /v1/investigations/{id}', () => {
     store.investigations.push(row({ id: '0192f000-0000-7000-8000-0000000000d1', sourceId: 'gone' }), row({ id: '0192f000-0000-7000-8000-0000000000d2', sourceIdentityHash: 'other-database' }));
     const initial = initialDraftDocuments({ entityType: 'widget', stableId: 'W-1' });
     for (const [id, investigationId] of [['0192f000-0000-7000-8000-0000000000e1', '0192f000-0000-7000-8000-0000000000d1'], ['0192f000-0000-7000-8000-0000000000e2', '0192f000-0000-7000-8000-0000000000d2']] as const) {
-      store.drafts.push({ id, version: 1, investigationId, layout: initial.layout, queryContext: initial.queryContext });
+      store.drafts.push({ id, version: 1, notes: null, investigationId, layout: initial.layout, queryContext: initial.queryContext });
     }
     const { app, executor } = await started(entityRows(WIDGET), store);
     const removed = investigationResponseSchema.parse((await app.inject({ method: 'GET', url: '/v1/investigations/0192f000-0000-7000-8000-0000000000d1' })).json());

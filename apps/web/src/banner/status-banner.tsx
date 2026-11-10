@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import { useBanner, useBannerView, useClearBannerOnLeave } from './banner-context.js';
 import { BANNER_LABEL, DISMISS } from './copy.js';
 
@@ -12,6 +12,10 @@ export function StatusBanner() {
     const lost = activatedInside.current && (document.activeElement === null || document.activeElement === document.body);
     if (lost) region.current?.focus();
   });
+  const focusedFor = banner?.moveFocus === true ? banner.id : undefined;
+  useEffect(() => {
+    if (focusedFor !== undefined) region.current?.focus();
+  }, [focusedFor]);
   const markActivation = (): void => {
     activatedInside.current = true;
     setTimeout(() => {

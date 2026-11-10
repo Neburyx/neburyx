@@ -23,7 +23,9 @@ export interface AuditEvent {
   readonly sourceId?: string;
   readonly traceId: string;
   /** Per-action fields of the event; the Community sink keeps none. */
-  readonly detail?: { readonly reason: 'cancelled' | 'timeout'; readonly target?: never; readonly type?: never } | { readonly target: 'entity' | 'evidence'; readonly type: string; readonly reason?: never };
+  readonly detail?: { readonly reason: 'cancelled' | 'timeout'; readonly target?: never; readonly type?: never } | { readonly target: 'entity' | 'evidence'; readonly type: string; readonly reason?: never }
+    /** How many items a read by references returned and could not find: counts only, never a value or an ID. */
+    | { readonly counts: Readonly<Record<'nodes' | 'edges' | 'missing', number>>; readonly reason?: never; readonly target?: never; readonly type?: never };
 }
 
 export interface AuditSink {

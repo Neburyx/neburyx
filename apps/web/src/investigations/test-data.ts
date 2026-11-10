@@ -47,18 +47,20 @@ export function listItemOf(investigation: Investigation, overrides: Partial<Inve
 }
 
 export function readOf(investigation: Investigation): InvestigationResponse {
+  const start = investigation.startingEntity;
+  const nodes = start === null ? [] : [{ t: start.entityType, id: start.stableId }];
   const documents = {
-    layout: { schemaVersion: 1 as const, layout: 'force', nodes: [], edges: [], groups: [] },
-    queryContext: { schemaVersion: 1 as const, loaded: { nodes: [], edges: [] }, expansions: [], filters: { entityTypes: [], relTypes: [], time: null, properties: [] } },
+    layout: { schemaVersion: 1 as const, layout: 'force', nodes: nodes.map((node) => ({ ...node, pinned: false, hidden: false, groupId: null })), edges: [], groups: [] },
+    queryContext: { schemaVersion: 1 as const, loaded: { nodes, edges: [] }, expansions: [], filters: { entityTypes: [], relTypes: [], time: null, properties: [] } },
   };
-  return { investigation, draft: { version: 1, ...documents } };
+  return { investigation, draft: { version: 1, ...documents, notes: null } };
 }
 
 export function openedOf(investigation: Investigation, entity: GraphNode | undefined, created = true): OpenInvestigationResponse {
   const { sourceState } = investigation;
-  if (sourceState !== 'available') return { investigation: { ...investigation, sourceState }, created: false };
+  if (sourceState !== 'available') return { investigation: { ...investigation, sourceState }, created: false, draft: { version: 1 } };
   if (entity === undefined) throw new Error('an available investigation is answered with its entity');
-  return { investigation: { ...investigation, sourceState }, created, entity };
+  return { investigation: { ...investigation, sourceState }, created, entity, draft: { version: 1 } };
 }
 
 export interface Calls {

@@ -28,6 +28,8 @@ function recording(client: ApiClient) {
     openInvestigation: (request, signal) => (calls.push('openInvestigation'), client.openInvestigation(request, signal)),
     getInvestigation: (id, signal) => (calls.push('getInvestigation'), client.getInvestigation(id, signal)),
     listInvestigations: (limit, signal) => (calls.push('listInvestigations'), client.listInvestigations(limit, signal)),
+    saveDraft: (id, version, draft, options) => (calls.push('saveDraft'), client.saveDraft(id, version, draft, options)),
+    readRefs: (request, signal) => (calls.push('readRefs'), client.readRefs(request, signal)),
     searchEntities: (request, signal) => (calls.push('searchEntities'), client.searchEntities(request, signal)),
     searchMore: (request, signal) => (calls.push('searchMore'), client.searchMore(request, signal)),
     lookupEntity: (request, signal) => (calls.push('lookupEntity'), client.lookupEntity(request, signal)),
@@ -58,7 +60,7 @@ describe('going Back and Forward between investigations opened from Recent', () 
     await openRow('kind-a C-1');
     await screen.findByRole('heading', { name: 'kind-a C-1', level: 1 });
     await screen.findByText('1 entity · 0 relationships · loaded · exact');
-    const since = (): string[] => watched.calls.splice(0);
+    const since = (): string[] => watched.calls.splice(0).filter((call) => call !== 'saveDraft');
     since();
     const arrivalAtHome = ['getProfile source-a', 'getProfile source-b', 'listInvestigations'];
     for (let round = 0; round < 3; round += 1) {

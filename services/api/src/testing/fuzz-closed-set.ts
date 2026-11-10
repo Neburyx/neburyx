@@ -117,6 +117,8 @@ async function buildClosedSet(rig: FuzzRig): Promise<{ readonly statements: Set<
     for (const mask of [undefined, true, false]) {
       await post('/v1/graph/derived-neighbors', { sourceId: FUZZ_SOURCE, ref: { entityType, stableId }, ...(mask === undefined ? {} : { mask }) });
       keep();
+      await post('/v1/graph/read-refs', { sourceId: FUZZ_SOURCE, entities: [{ sourceId: FUZZ_SOURCE, entityType, stableId }], ...(mask === undefined ? {} : { mask }) });
+      keep();
     }
     await post('/v1/entities/lookup', { sourceId: FUZZ_SOURCE, ref: { entityType, stableId } });
     keep();

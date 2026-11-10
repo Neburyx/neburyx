@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import type { Socket } from 'node:net';
 import fastifyStatic from '@fastify/static';
-import { type ErrorCode, derivedNeighborsRequestSchema, derivedNeighborsResponseSchema, coverageRequestSchema, coverageResponseSchema, degreePreviewRequestSchema, edgeDetailSchema, edgePathSchema, entityLookupRequestSchema, degreePreviewSchema, entityPathSchema, entityQuerySchema, expandRequestSchema, expandResponseSchema, healthResponseSchema, investigationListQuerySchema, investigationListResponseSchema, investigationResponseSchema, meResponseSchema, nodeSchema, parseEdgeRefSegment, parseSourceLinkSegment, sourceLinkPathSchema, sourceLinkQuerySchema, openInvestigationRequestSchema, openInvestigationResponseSchema, readyResponseSchema, searchMoreRequestSchema, searchMoreResultSchema, searchRequestSchema, searchResultSchema, sourceProfileSchema, sourceTestReportSchema, sourcesResponseSchema } from '@neburyx/contracts';
+import { type ErrorCode, MAX_DRAFT_DOCUMENT_BYTES, readRefsRequestSchema, readRefsResponseSchema, draftWriteRequestSchema, draftWriteResponseSchema, derivedNeighborsRequestSchema, derivedNeighborsResponseSchema, coverageRequestSchema, coverageResponseSchema, degreePreviewRequestSchema, edgeDetailSchema, edgePathSchema, entityLookupRequestSchema, degreePreviewSchema, entityPathSchema, entityQuerySchema, expandRequestSchema, expandResponseSchema, healthResponseSchema, investigationListQuerySchema, investigationListResponseSchema, investigationResponseSchema, meResponseSchema, nodeSchema, parseEdgeRefSegment, parseSourceLinkSegment, sourceLinkPathSchema, sourceLinkQuerySchema, openInvestigationRequestSchema, openInvestigationResponseSchema, readyResponseSchema, searchMoreRequestSchema, searchMoreResultSchema, searchRequestSchema, searchResultSchema, sourceProfileSchema, sourceTestReportSchema, sourcesResponseSchema } from '@neburyx/contracts';
 import { z } from 'zod';
 import Fastify, {
   type FastifyBaseLogger,
@@ -16,6 +16,7 @@ import type { AppStore } from './app-store.js';
 import { deriveReferenceKeys, type ReferenceKeys } from './reference/keys.js';
 import { canonicalLookup, canonicalOpen } from './reference/resolve.js';
 import { createCoverageService } from './graph/coverage-service.js';
+import { createReadRefsService } from './graph/read-refs-service.js';
 import { createDegreePreviewService } from './graph/degree-preview-service.js';
 import { createDerivedNeighborsService } from './graph/derived-neighbors-service.js';
 import { createExpandService } from './graph/expand-service.js';
@@ -75,6 +76,12 @@ const SOURCE_TEST_AUDIT_ACTION = 'source.test';
 const NO_PATH_PARAMETER_LIMIT = Number.MAX_SAFE_INTEGER;
 const noQuerySchema = z.strictObject({});
 const profileParamsSchema = z.strictObject({ id: z.string() });
+
+/** A version in `If-Match` is the quoted integer the `ETag` of the same resource carried. */
+const ifMatchSchema = z.string().regex(/^"[1-9][0-9]{0,9}"$/).transform((tag) => Number(tag.slice(1, -1)));
+
+/** The draft is two documents of at most `MAX_DRAFT_DOCUMENT_BYTES` each, so a body may hold twice that and its envelope. */
+const DRAFT_BODY_LIMIT = 2 * MAX_DRAFT_DOCUMENT_BYTES + 4096;
 const PROBE_PATHS: ReadonlySet<string> = new Set(['/healthz', '/readyz']);
 const TRACE_HEADER = 'x-trace-id';
 const UNMATCHED_ROUTE = 'unmatched';
@@ -433,6 +440,15 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       return derivedNeighborsResponseSchema.parse(answer);
     });
 
+    const readRefs = createReadRefsService({ gate: options.gate, mapping, access, audit: auditSink, logger: options.logger });
+    app.post('/v1/graph/read-refs', { config: { permission: 'principal' } }, async (request) => {
+      const body = readRefsRequestSchema.safeParse(request.body);
+      if (!noQuerySchema.safeParse(request.query).success || !body.success) throw new AppError('INVALID_REQUEST');
+      const identity = await options.store.current();
+      const answer = await readRefs.read({ traceId: request.id, principal: identity.principal, request: body.data, signal: signalOf(request) });
+      return readRefsResponseSchema.parse(answer);
+    });
+
     const coverage = createCoverageService({ mapping, access, verdicts: options.degreeVerdicts ?? NO_DEGREE_VERDICTS, audit: auditSink, logger: options.logger, ...(degreeCache === undefined ? {} : { cache: degreeCache }) });
     app.post('/v1/graph/coverage', { config: { permission: 'principal' } }, async (request) => {
       const body = coverageRequestSchema.safeParse(request.body);
@@ -470,6 +486,16 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       const identity = await options.store.current();
       const answer = await investigations.list({ principal: identity.principal, ...(query.data.limit === undefined ? {} : { limit: query.data.limit }) });
       return investigationListResponseSchema.parse(answer);
+    });
+
+    app.put('/v1/investigations/:id/draft', { bodyLimit: DRAFT_BODY_LIMIT, config: { permission: 'principal' } }, async (request, reply) => {
+      const params = profileParamsSchema.safeParse(request.params);
+      const body = draftWriteRequestSchema.safeParse(request.body);
+      const expected = ifMatchSchema.safeParse(request.headers['if-match']);
+      if (!noQuerySchema.safeParse(request.query).success || !params.success || !body.success || !expected.success) throw new AppError('INVALID_REQUEST');
+      const identity = await options.store.current();
+      const answer = await investigations.saveDraft({ id: params.data.id, principal: identity.principal, expectedVersion: expected.data, draft: body.data });
+      return reply.header('etag', `"${answer.version}"`).send(draftWriteResponseSchema.parse(answer));
     });
 
     app.get('/v1/investigations/:id', { exposeHeadRoute: false, config: { permission: 'principal' } }, async (request, reply) => {

@@ -1,6 +1,8 @@
 import {
   canCarryInPath,
   coverageResponseSchema,
+  draftWriteResponseSchema,
+  readRefsResponseSchema,
   degreePreviewSchema,
   edgeDetailSchema,
   edgeRefSegmentOf,
@@ -23,6 +25,10 @@ import {
   type CoverageResponse,
   type DegreePreview,
   type DegreePreviewRequest,
+  type DraftWriteRequest,
+  type DraftWriteResponse,
+  type ReadRefsRequest,
+  type ReadRefsResponse,
   type EdgeDetail,
   type EntityLookupRequest,
   type ElementRef,
@@ -51,9 +57,11 @@ import { sourcesOfEdge } from '../state/keys.js';
 
 export interface FetchInit {
   readonly signal?: AbortSignal;
-  readonly method?: 'POST';
+  readonly method?: 'POST' | 'PUT';
   readonly headers?: Readonly<Record<string, string>>;
   readonly body?: string;
+  /** Lets the request finish after the page is left; the browser caps the body of such a request. */
+  readonly keepalive?: boolean;
 }
 
 export type Fetcher = (input: string, init?: FetchInit) => Promise<Response>;
@@ -82,6 +90,10 @@ export interface ApiClient {
   /** Opens an entity as an investigation: creates one, or resumes the caller's own for the same case reference. */
   openInvestigation(request: OpenInvestigationRequest, signal?: AbortSignal): Promise<ApiResult<OpenInvestigationResponse>>;
   getInvestigation(id: string, signal?: AbortSignal): Promise<ApiResult<InvestigationResponse>>;
+  /** Replaces the caller's draft of an investigation when `version` is the draft's version; a stale one is refused as `CONFLICTED_VIEW_VERSION`. */
+  saveDraft(id: string, version: number, draft: DraftWriteRequest, options?: { readonly signal?: AbortSignal; readonly keepalive?: boolean }): Promise<ApiResult<DraftWriteResponse>>;
+  /** Reads again the items a stored draft names, by reference; the answer names the source asked for and holds nothing of another, or it is refused. */
+  readRefs(request: ReadRefsRequest, signal?: AbortSignal): Promise<ApiResult<ReadRefsResponse>>;
   /** The caller's most recently edited open investigations, across every source they may read; Postgres only. */
   listInvestigations(limit: number, signal?: AbortSignal): Promise<ApiResult<InvestigationListResponse>>;
   /** The exact matches of a text in one source, and with `typeahead` the entities that start with it; every hit and the answer name the source that was asked, or the answer is refused. */
@@ -130,12 +142,17 @@ function isEnvelope(value: unknown): boolean {
   return typeof value === 'object' && value !== null && !Array.isArray(value) && 'error' in value;
 }
 
-async function request<T>(fetcher: Fetcher, path: string, schema: z.ZodType<T>, signal: AbortSignal | undefined, method?: 'POST', body?: unknown): Promise<ApiResult<T>> {
+interface RequestExtras {
+  readonly headers?: Readonly<Record<string, string>>;
+  readonly keepalive?: boolean;
+}
+
+async function request<T>(fetcher: Fetcher, path: string, schema: z.ZodType<T>, signal: AbortSignal | undefined, method?: 'POST' | 'PUT', body?: unknown, extras: RequestExtras = {}): Promise<ApiResult<T>> {
   if (wasAborted(signal)) return failed('ABORTED');
   let text: string;
   let response: Response;
   try {
-    response = await fetcher(path, signal === undefined && method === undefined ? undefined : { ...(signal === undefined ? {} : { signal }), ...(method === undefined ? {} : { method }), ...(body === undefined ? {} : { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }) });
+    response = await fetcher(path, signal === undefined && method === undefined ? undefined : { ...(signal === undefined ? {} : { signal }), ...(method === undefined ? {} : { method }), ...(extras.keepalive === true ? { keepalive: true } : {}), ...(body === undefined ? {} : { headers: { 'content-type': 'application/json', ...extras.headers }, body: JSON.stringify(body) }) });
     text = await response.text();
   } catch {
     return failed(wasAborted(signal) ? 'ABORTED' : 'NETWORK_UNAVAILABLE');
@@ -230,6 +247,16 @@ export function createApiClient(fetcher: Fetcher = (input, init) => fetch(input,
       return !sameRef(answer.ref, { sourceId: derived.sourceId, ...derived.ref }) || named.some((sourceId) => sourceId !== derived.sourceId) ? failed('SCHEMA_MISMATCH') : result;
     },
     listInvestigations: (limit, signal) => request(fetcher, `/v1/investigations?limit=${limit}&sort=lastEdited`, investigationListResponseSchema, signal),
+    saveDraft: async (id, version, draft, options) => {
+      const result = await request(fetcher, `/v1/investigations/${encodeURIComponent(id)}/draft`, draftWriteResponseSchema, options?.signal, 'PUT', draft, { headers: { 'if-match': `"${version}"` }, ...(options?.keepalive === true ? { keepalive: true } : {}) });
+      return result.ok && result.value.notes !== draft.notes ? failed('SCHEMA_MISMATCH') : result;
+    },
+    readRefs: async (refs, signal) => {
+      const result = await request(fetcher, '/v1/graph/read-refs', readRefsResponseSchema, signal, 'POST', refs);
+      if (!result.ok) return result;
+      const named = [...result.value.nodes.map((node) => node.ref.sourceId), ...result.value.edges.flatMap((edge) => sourcesOfEdge(edge)), ...result.value.missing.entities.map((ref) => ref.sourceId)];
+      return named.some((sourceId) => sourceId !== refs.sourceId) ? failed('SCHEMA_MISMATCH') : result;
+    },
     getInvestigation: async (id, signal) => {
       const result = await request(fetcher, `/v1/investigations/${encodeURIComponent(id)}`, investigationResponseSchema, signal);
       return result.ok && result.value.investigation.id !== id ? failed('SCHEMA_MISMATCH') : result;

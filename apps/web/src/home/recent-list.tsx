@@ -2,7 +2,7 @@ import type { SourceProfile } from '@neburyx/contracts';
 import type { RequestState } from '../api/use-request.js';
 import { canRetry, FailureNotice } from '../failure-notice.js';
 import { answeredData, useShellData } from '../shell/shell-data.js';
-import { HOME_COPY, MORE_THAN_SHOWN, RECENT_NOTE } from './copy.js';
+import { HOME_COPY, MORE_THAN_SHOWN } from './copy.js';
 import { useRecent, useRecentState } from './recent-context.js';
 import { HomeEmptyState } from './home-empty-state.js';
 import { RecentRow } from './recent-row.js';
@@ -57,7 +57,6 @@ export function RecentList() {
             <HomeEmptyState />
           ) : (
             <>
-              <p className="recent-note-line">{RECENT_NOTE}</p>
               <ul className="recent-rows">
                 {data.items.map((item) => (
                   <RecentRow key={item.id} item={item} now={now} source={sources?.find((candidate) => candidate.id === item.sourceId)} profile={usableProfile(profiles.get(item.sourceId))} />

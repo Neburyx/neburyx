@@ -1,0 +1,10 @@
+export const CHANGES_NOT_SAVED = 'Changes not saved. Trying again.';
+export const CHANGES_STILL_NOT_SAVED = 'Changes are still not saved. Still trying.';
+export const CHANGES_NOT_BEING_SAVED = 'Changes are not being saved. The server did not accept them.';
+export const SAVE_AGAIN = 'Save again';
+export const SOME_ITEMS_UNAVAILABLE = 'Some items are no longer available.';
+export const CONFLICT_CHIP = 'Changed elsewhere';
+export const CONFLICT_HEADLINE = 'This investigation changed in another tab.';
+export const CONFLICT_TEXT = 'Changes made in this tab are not saved. Reload to continue with the latest version.';
+export const RELOAD = 'Reload';
+export const DRAFT_CONFLICT_BANNER_ID = 'draft-conflict';

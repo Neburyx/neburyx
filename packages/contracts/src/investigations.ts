@@ -9,12 +9,25 @@ export const MAX_TITLE_LENGTH = 200;
 const codePoints = (text: string): number => Array.from(text).length;
 const text = z.string().min(1);
 
+const holdsNoNulOrLoneSurrogate = (value: string): boolean => !value.includes('\u0000') && !/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/.test(value);
+
+/** The longest note of a draft or a named view, in characters (the database checks the same limit). */
+export const MAX_NOTES_LENGTH = 10_000;
+
+/** The note of the Save dialog that a draft carries; `null` when there is none. */
+export const notesSchema = z
+  .string()
+  .refine(holdsNoNulOrLoneSurrogate, { message: 'a note has no NUL and no unpaired surrogate' })
+  .refine((value) => codePoints(value) <= MAX_NOTES_LENGTH, { message: 'a note is at most 10,000 characters' })
+  .meta({ maxLength: MAX_NOTES_LENGTH })
+  .nullable();
+
 export const INVESTIGATION_STATUSES = ['open', 'closed', 'archived'] as const;
 
 /** Whether the source of an investigation can be read as it was: it can, it is no longer in the configuration, or it now points at another database. Decided without reading the source. */
 export const INVESTIGATION_SOURCE_STATES = ['available', 'removed', 'repointed'] as const;
 
-export const caseRefSchema = text.refine((value) => !value.includes('\u0000') && !/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/.test(value), { message: 'a case reference has no NUL and no unpaired surrogate' }).refine((value) => codePoints(value) <= MAX_CASE_REF_LENGTH, { message: 'a case reference is at most 100 characters' }).meta({ maxLength: MAX_CASE_REF_LENGTH });
+export const caseRefSchema = text.refine(holdsNoNulOrLoneSurrogate, { message: 'a case reference has no NUL and no unpaired surrogate' }).refine((value) => codePoints(value) <= MAX_CASE_REF_LENGTH, { message: 'a case reference is at most 100 characters' }).meta({ maxLength: MAX_CASE_REF_LENGTH });
 
 export const startingEntitySchema = z.strictObject({ entityType: text, stableId: text });
 
@@ -75,30 +88,39 @@ export const valueOpenRequestSchema = z.strictObject({ ...openRequestBase, entit
 
 export const openInvestigationRequestSchema = z.union([referenceOpenRequestSchema, valueOpenRequestSchema]);
 
+/** The version of the caller's draft, which the first write sends in `If-Match`. */
+const draftVersionSchema = z.strictObject({ version: z.number().int().min(1) });
+
 const availableInvestigationSchema = investigationSchema.extend({ sourceState: z.literal('available') });
 const unavailableInvestigationSchema = investigationSchema.extend({ sourceState: z.enum(INVESTIGATION_SOURCE_STATES).exclude(['available']) });
 
 /** An investigation whose source is as it was comes with the entity that was read. One whose source is not (removed or pointing at another database) was resumed, and nothing was read from the source, so there is no entity. */
 export const openInvestigationResponseSchema = z.union([
-  z.strictObject({ investigation: availableInvestigationSchema, created: z.boolean(), entity: nodeSchema }),
-  z.strictObject({ investigation: unavailableInvestigationSchema, created: z.literal(false) }),
+  z.strictObject({ investigation: availableInvestigationSchema, created: z.boolean(), entity: nodeSchema, draft: draftVersionSchema }),
+  z.strictObject({ investigation: unavailableInvestigationSchema, created: z.literal(false), draft: draftVersionSchema }),
 ]);
 
 const refEntry = z.strictObject({ t: text, id: text });
-const edgeEntry = z.strictObject({ t: text, from: text, to: text, id: text.optional() });
+const edgeFields = { t: text, from: refEntry, to: refEntry, id: text.optional(), ruleId: text.optional() };
+const hasOneForm = (edge: { readonly id?: string | undefined; readonly ruleId?: string | undefined }): boolean => edge.id === undefined || edge.ruleId === undefined;
+const oneForm = { message: 'a stored relationship has an id, a derived one a rule, an aggregate one neither, and none has both', path: ['ruleId'] };
+
+/** An edge of a stored document: its type and both ends with the entity type of each, because a stable ID is unique per entity type and not across types. An `id` makes it a stored relationship, a `ruleId` a derived one, and neither an aggregate. */
+export const edgeEntrySchema = z.strictObject(edgeFields).refine(hasOneForm, oneForm);
+const layoutEdgeSchema = z.strictObject({ ...edgeFields, hidden: z.boolean() }).refine(hasOneForm, oneForm);
 
 export const layoutDocumentSchema = z.strictObject({
   schemaVersion: z.literal(1),
   viewport: z.strictObject({ zoom: z.number(), x: z.number(), y: z.number() }).optional(),
   layout: text,
   nodes: z.array(refEntry.extend({ x: z.number().optional(), y: z.number().optional(), pinned: z.boolean(), hidden: z.boolean(), groupId: text.nullable() })),
-  edges: z.array(edgeEntry.extend({ hidden: z.boolean() })),
+  edges: z.array(layoutEdgeSchema),
   groups: z.array(z.strictObject({ id: text, label: text, by: text, members: z.array(refEntry) })),
 });
 
 export const queryContextDocumentSchema = z.strictObject({
   schemaVersion: z.literal(1),
-  loaded: z.strictObject({ nodes: z.array(refEntry), edges: z.array(edgeEntry) }),
+  loaded: z.strictObject({ nodes: z.array(refEntry), edges: z.array(edgeEntrySchema) }),
   expansions: z.array(z.strictObject({ from: refEntry, relTypes: z.array(text), neighborTypes: z.array(text), window: z.unknown().nullable(), sort: text, pages: z.number().int().min(1) })),
   filters: z.strictObject({
     entityTypes: z.array(text),
@@ -108,7 +130,17 @@ export const queryContextDocumentSchema = z.strictObject({
   }),
 });
 
-export const draftSchema = z.strictObject({ version: z.number().int().min(1), layout: layoutDocumentSchema, queryContext: queryContextDocumentSchema });
+export const draftSchema = z.strictObject({ version: z.number().int().min(1), layout: layoutDocumentSchema, queryContext: queryContextDocumentSchema, notes: notesSchema });
+
+/** The most a stored document may hold, in bytes of its JSON text (data-model §5.2: 1 MB per document). */
+export const MAX_DRAFT_DOCUMENT_BYTES = 1_048_576;
+
+/** `PUT /v1/investigations/{id}/draft`; the draft's `version` goes in `If-Match`. */
+/** `notes` is required: a client writes back the note it last received, and nothing in a write leaves it out. */
+export const draftWriteRequestSchema = z.strictObject({ layout: layoutDocumentSchema, queryContext: queryContextDocumentSchema, notes: notesSchema });
+
+/** The new version of the draft, and whether it now equals a named view. */
+export const draftWriteResponseSchema = z.strictObject({ version: z.number().int().min(1), save: investigationSaveSchema, notes: notesSchema });
 
 export const investigationResponseSchema = z.strictObject({ investigation: investigationSchema, draft: draftSchema });
 
@@ -119,6 +151,8 @@ export type ValueOpenRequest = z.infer<typeof valueOpenRequestSchema>;
 export type OpenInvestigationResponse = z.infer<typeof openInvestigationResponseSchema>;
 export type LayoutDocument = z.infer<typeof layoutDocumentSchema>;
 export type QueryContextDocument = z.infer<typeof queryContextDocumentSchema>;
+export type DraftWriteRequest = z.infer<typeof draftWriteRequestSchema>;
+export type DraftWriteResponse = z.infer<typeof draftWriteResponseSchema>;
 export type InvestigationResponse = z.infer<typeof investigationResponseSchema>;
 export type InvestigationListItem = z.infer<typeof investigationListItemSchema>;
 export type InvestigationListResponse = z.infer<typeof investigationListResponseSchema>;

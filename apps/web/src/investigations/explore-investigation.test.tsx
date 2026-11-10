@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import { createClientState } from '../state/client-state.js';
 import { me, renderApp, stubFactory } from '../test-utils.js';
-import { INVESTIGATION_A, INVESTIGATION_B, investigationOf, knowing, nodeOf } from './test-data.js';
+import { INVESTIGATION_A, INVESTIGATION_B, investigationOf, knowing, nodeOf, readOf } from './test-data.js';
 import { BACK_TO_HOME, NOT_FOUND_TITLE, OPENING, SOURCE_NOT_AVAILABLE_TITLE, TRY_AGAIN } from './messages.js';
 
 const A = { investigation: investigationOf(INVESTIGATION_A, 'source-a', 'kind-a', 'A-1', { caseRef: 'CASE-1' }), node: nodeOf('source-a', 'kind-a', 'A-1') };
@@ -22,6 +22,23 @@ describe('/explore/{id}', () => {
     await waitFor(() => expect(renderer.made[0]?.scenes.at(-1)?.entities.map((entity) => entity.id)).toHaveLength(1));
     expect(calls.getInvestigation).toEqual([INVESTIGATION_A]);
     expect(calls.getEntity).toHaveLength(1);
+  });
+
+  it('shows a restored draft with three entities loaded and says more is not yet retrieved, with no number', async () => {
+    const draft = readOf(A.investigation).draft;
+    const ids = ['A-1', 'A-2', 'A-3'];
+    const restored = {
+      ...draft,
+      layout: { ...draft.layout, nodes: ids.map((id) => ({ t: 'kind-a', id, pinned: false, hidden: false, groupId: null })) },
+      queryContext: { ...draft.queryContext, loaded: { nodes: ids.map((id) => ({ t: 'kind-a', id })), edges: [] } },
+    };
+    const { client } = knowing([A], {
+      getInvestigation: async () => ({ ok: true, value: { investigation: A.investigation, draft: restored } }),
+      readRefs: async (request) => ({ ok: true, value: { nodes: request.entities.map((ref) => nodeOf(ref.sourceId, ref.entityType, ref.stableId)), edges: [], missing: { entities: [], edges: [] } } }),
+    });
+    renderApp(`/explore/${INVESTIGATION_A}`, client, createClientState());
+    expect(await screen.findByText('3 entities · 0 relationships · loaded · exact')).toBeTruthy();
+    expect(screen.getByText('3 shown · more not yet retrieved')).toBeTruthy();
   });
 
   it('reads nothing when the investigation was opened from an entity in this session', async () => {

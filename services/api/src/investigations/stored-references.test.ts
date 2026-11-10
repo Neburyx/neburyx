@@ -54,17 +54,17 @@ describe('stored references of a type that is keyed now', () => {
         { t: 'phone', id: VALUE, pinned: false, hidden: false, groupId: null },
         { t: 'person', id: 'P-1', pinned: false, hidden: false, groupId: null },
       ],
-      edges: [{ t: 'HAS_PHONE', from: 'P-1', to: VALUE, hidden: false }],
+      edges: [{ t: 'HAS_PHONE', from: { t: 'person', id: 'P-1' }, to: { t: 'phone', id: VALUE }, hidden: false }],
       groups: [{ id: 'g', label: 'g', by: 'x', members: [{ t: 'phone', id: VALUE }] }],
     });
     const context = refs.queryContext('demo', {
       schemaVersion: 1,
-      loaded: { nodes: [{ t: 'phone', id: VALUE }], edges: [{ t: 'HAS_PHONE', from: 'P-1', to: VALUE }] },
+      loaded: { nodes: [{ t: 'phone', id: VALUE }], edges: [{ t: 'HAS_PHONE', from: { t: 'person', id: 'P-1' }, to: { t: 'phone', id: VALUE } }] },
       expansions: [{ from: { t: 'phone', id: VALUE }, relTypes: [], neighborTypes: [], window: null, sort: 'a', pages: 1 }],
       filters: { entityTypes: [], relTypes: [], time: null, properties: [] },
     });
     expect(JSON.stringify([layout, context])).not.toContain(VALUE);
-    expect(layout.edges[0]).toMatchObject({ from: 'P-1', to: token });
+    expect(layout.edges[0]).toMatchObject({ from: { t: 'person', id: 'P-1' }, to: { t: 'phone', id: token } });
     expect(layout.nodes[1]?.id).toBe('P-1');
   });
 
@@ -100,7 +100,7 @@ describe('listing and reading an investigation stored before its type was keyed'
     const store = memoryAppStore();
     store.investigations.push(row);
     const initial = initialDraftDocuments({ entityType: 'phone', stableId: VALUE });
-    store.drafts.push({ id: '0192f000-0000-7000-8000-0000000000d1', version: 1, investigationId: id, layout: initial.layout, queryContext: initial.queryContext });
+    store.drafts.push({ id: '0192f000-0000-7000-8000-0000000000d1', version: 1, notes: null, investigationId: id, layout: initial.layout, queryContext: initial.queryContext });
     const before = JSON.stringify([store.investigations, store.drafts]);
     const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store, mapping: keyedMapping, gate: testSourceGate(keyedMapping).gate, referenceKeys: TEST_REFERENCE_KEYS });
     const list = await app.inject({ method: 'GET', url: '/v1/investigations' });
@@ -122,7 +122,7 @@ describe('listing and reading an investigation stored before its type was keyed'
     const store = memoryAppStore();
     store.investigations.push({ ...row, sourceIdentityHash: identityHashOf(source ?? demo) });
     const initial = initialDraftDocuments({ entityType: 'phone', stableId: VALUE });
-    store.drafts.push({ id: '0192f000-0000-7000-8000-0000000000d1', version: 1, investigationId: id, layout: initial.layout, queryContext: initial.queryContext });
+    store.drafts.push({ id: '0192f000-0000-7000-8000-0000000000d1', version: 1, notes: null, investigationId: id, layout: initial.layout, queryContext: initial.queryContext });
     const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store, mapping: plain, gate: testSourceGate(plain).gate, referenceKeys: TEST_REFERENCE_KEYS });
     const read = await app.inject({ method: 'GET', url: `/v1/investigations/${id}` });
     expect(read.json()).toMatchObject({ investigation: { title: `Handle ${VALUE}`, startingEntity: { stableId: VALUE } } });
@@ -132,6 +132,7 @@ describe('listing and reading an investigation stored before its type was keyed'
   it('opens the stored investigation again by its case reference, with the masked display title, and creates nothing', async () => {
     const store = memoryAppStore();
     store.investigations.push({ ...row, caseRef: 'CASE-1' });
+    store.drafts.push({ id: '0192f000-0000-7000-8000-0000000000d1', version: 1, notes: null, investigationId: id, layout: initialDraftDocuments({ entityType: 'phone', stableId: VALUE }).layout, queryContext: initialDraftDocuments({ entityType: 'phone', stableId: VALUE }).queryContext });
     const executor = new TestExecutor(withOnlineIndexes(demo, () => Promise.resolve(entityRows(plainNode(['Handle'], { phoneNumber: VALUE })))));
     const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store, mapping: keyedMapping, gate: testSourceGate(keyedMapping, { executor, referenceKeys: TEST_REFERENCE_KEYS }).gate, referenceKeys: TEST_REFERENCE_KEYS });
     const response = await app.inject({ method: 'POST', url: '/v1/investigations', payload: { sourceId: 'demo', caseRef: 'CASE-1', entity: { sourceId: 'demo', entityType: 'phone', value: VALUE } } });
@@ -145,7 +146,7 @@ describe('listing and reading an investigation stored before its type was keyed'
   });
 });
 
-describe('stored documents whose types cannot be told', () => {
+describe('stored documents with typed edge ends', () => {
   const twoKeyed = parseMapping(
     fileOf(
       baseSource({
@@ -166,33 +167,48 @@ describe('stored documents whose types cannot be told', () => {
   const both = createStoredReferences(twoKeyed, TEST_REFERENCE_KEYS);
   const tokenOf = (type: string, value: string) => makeToken(TEST_REFERENCE_KEYS, { sourceId: 'demo', entityType: type }, value);
   const node = (t: string, id: string) => ({ t, id, pinned: false, hidden: false, groupId: null });
-  const layoutOf = (nodes: ReturnType<typeof node>[]) => ({ schemaVersion: 1 as const, layout: 'force', nodes, edges: [{ t: 'HAS', from: 'P-1', to: 'X', hidden: false }], groups: [] });
+  const end = (t: string, id: string) => ({ t, id });
 
-  it.each([
-    ['the first type first', ['handle_a', 'handle_b'], 'handle_a'],
-    ['the second type first', ['handle_b', 'handle_a'], 'handle_b'],
-  ])('gives an edge end the type of the only node that holds its ID (%s)', (_name, order, held) => {
-    const nodes = [node('person', 'P-1'), ...order.slice(0, 1).map((type) => node(type, type === held ? 'X' : 'Y'))];
-    const layout = both.layout('demo', layoutOf(nodes));
-    expect(layout.edges[0]?.to).toBe(tokenOf(held, 'X'));
+  it('gives each end of an edge the type it was stored with, so two keyed types that share an ID stay apart', () => {
+    const layout = both.layout('demo', {
+      schemaVersion: 1,
+      layout: 'force',
+      nodes: [node('person', 'P-1'), node('handle_a', 'X'), node('handle_b', 'X')],
+      edges: [
+        { t: 'HAS', from: end('person', 'P-1'), to: end('handle_a', 'X'), hidden: false },
+        { t: 'HAS', from: end('person', 'P-1'), to: end('handle_b', 'X'), hidden: false },
+      ],
+      groups: [],
+    });
+    expect(layout.edges.map((edge) => edge.to)).toEqual([end('handle_a', tokenOf('handle_a', 'X')), end('handle_b', tokenOf('handle_b', 'X'))]);
     expect(JSON.stringify(layout)).not.toContain('"X"');
   });
 
-  it('leaves out an edge whose end is the ID of two keyed types and is not told apart, and returns no raw value', () => {
-    const layout = both.layout('demo', layoutOf([node('person', 'P-1'), node('handle_a', 'X'), node('handle_b', 'X')]));
-    expect(layout.edges).toEqual([]);
-    expect(JSON.stringify(layout)).not.toContain('"X"');
-    const bare = both.layout('demo', layoutOf([node('person', 'P-1')]));
-    expect(bare.edges).toEqual([]);
+  it('keeps the edge of a relationship type that is no longer mapped, with its ends as stored', () => {
+    const layout = both.layout('demo', { schemaVersion: 1, layout: 'force', nodes: [node('person', 'P-1')], edges: [{ t: 'GONE', from: end('person', 'P-1'), to: end('handle_a', 'X'), hidden: false }], groups: [] });
+    expect(layout.edges).toEqual([{ t: 'GONE', from: end('person', 'P-1'), to: end('handle_a', tokenOf('handle_a', 'X')), hidden: false }]);
   });
 
-  it('leaves out an edge of a relationship type that is no longer mapped when one of its ends is the ID of a keyed node, and keeps it otherwise', () => {
-    const edge = { t: 'GONE', from: 'P-1', to: 'X', hidden: false };
-    const dropped = both.layout('demo', { schemaVersion: 1, layout: 'force', nodes: [node('person', 'P-1'), node('handle_a', 'X')], edges: [edge], groups: [] });
-    expect(dropped.edges).toEqual([]);
-    expect(JSON.stringify(dropped)).not.toContain('"X"');
-    const kept = both.layout('demo', { schemaVersion: 1, layout: 'force', nodes: [node('person', 'P-1')], edges: [edge], groups: [] });
-    expect(kept.edges).toHaveLength(1);
+  it.each([['a NUL', 'A\u0000B'], ['an unpaired surrogate', 'A\ud800B'], ['text that starts with the marker', '~e1:AAA']])('returns the ID of an edge end with %s as it was sent', (_name, id) => {
+    const stored = both.toStored('demo', 'person', id);
+    const layout = both.layout('demo', { schemaVersion: 1, layout: 'force', nodes: [], edges: [{ t: 'HAS', from: end('person', stored), to: end('person', 'P-2'), hidden: false }], groups: [] });
+    expect(layout.edges[0]?.from).toEqual(end('person', id));
+  });
+
+  it('returns the token of a keyed end whose stable ID is a name', () => {
+    const layout = both.layout('demo', { schemaVersion: 1, layout: 'force', nodes: [], edges: [{ t: 'HAS', from: end('person', 'P-1'), to: end('handle_a', 'Jordan Lee'), hidden: false }], groups: [] });
+    expect(layout.edges[0]?.to).toEqual(end('handle_a', tokenOf('handle_a', 'Jordan Lee')));
+  });
+
+  it('keeps the rule of a derived edge and the ID of a stored one', () => {
+    const context = both.queryContext('demo', {
+      schemaVersion: 1,
+      loaded: { nodes: [], edges: [{ t: 'HAS', from: end('person', 'P-1'), to: end('handle_a', 'X'), id: 'REL-1' }, { t: 'SHARES', from: end('person', 'P-1'), to: end('person', 'P-2'), ruleId: 'shared-handle' }] },
+      expansions: [],
+      filters: { entityTypes: [], relTypes: [], time: null, properties: [] },
+    });
+    expect(context.loaded.edges[0]).toMatchObject({ id: 'REL-1' });
+    expect(context.loaded.edges[1]).toMatchObject({ ruleId: 'shared-handle', to: end('person', 'P-2') });
   });
 
   it('drops a stored property filter that names a personal-data property, and keeps the others', () => {
@@ -275,7 +291,7 @@ describe('a type that is no longer keyed', () => {
     const store = memoryAppStore();
     store.investigations.push({ id: '0192f000-0000-7000-8000-0000000000f1', sourceId: 'demo', sourceIdentityHash: identityHashOf(source), ownerId: LOCAL_IDENTITY.principal.id, title: 'Handle', caseRef: 'CASE-K', startingEntityType: 'phone', startingStableId: token, status: 'open', createdAt: '2026-11-05T10:00:00.000Z', lastEditedAt: '2026-11-05T10:00:00.000Z', version: 1 });
     const initial = initialDraftDocuments({ entityType: 'phone', stableId: token });
-    store.drafts.push({ id: '0192f000-0000-7000-8000-0000000000f2', version: 1, investigationId: '0192f000-0000-7000-8000-0000000000f1', layout: initial.layout, queryContext: initial.queryContext });
+    store.drafts.push({ id: '0192f000-0000-7000-8000-0000000000f2', version: 1, notes: null, investigationId: '0192f000-0000-7000-8000-0000000000f1', layout: initial.layout, queryContext: initial.queryContext });
     const executor = new TestExecutor(withOnlineIndexes(source, (call) => Promise.resolve(entityRows(plainNode(['Handle'], { phoneNumber: call.parameters['stableId'] })))));
     const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store, mapping: unkeyed, gate: testSourceGate(unkeyed, { executor, referenceKeys: TEST_REFERENCE_KEYS }).gate, referenceKeys: TEST_REFERENCE_KEYS });
     const read = await app.inject({ method: 'GET', url: '/v1/investigations/0192f000-0000-7000-8000-0000000000f1' });
@@ -296,9 +312,9 @@ describe('an edge end of a type that is no longer keyed', () => {
     const plainRefs = createStoredReferences(mappingOf(false), TEST_REFERENCE_KEYS);
     const tokenOfX = makeToken(TEST_REFERENCE_KEYS, { sourceId: 'demo', entityType: 'phone' }, VALUE);
     const node = (id: string) => ({ t: 'phone', id, pinned: false, hidden: false, groupId: null });
-    const layout = plainRefs.layout('demo', { schemaVersion: 1, layout: 'force', nodes: [node(tokenOfX)], edges: [{ t: 'HAS_PHONE', from: 'P-1', to: tokenOfX, hidden: false }], groups: [] });
+    const layout = plainRefs.layout('demo', { schemaVersion: 1, layout: 'force', nodes: [node(tokenOfX)], edges: [{ t: 'HAS_PHONE', from: { t: 'person', id: 'P-1' }, to: { t: 'phone', id: tokenOfX }, hidden: false }], groups: [] });
     expect(layout.nodes[0]?.id).toBe(VALUE);
-    expect(layout.edges[0]?.to).toBe(VALUE);
+    expect(layout.edges[0]?.to).toEqual({ t: 'phone', id: VALUE });
   });
 });
 

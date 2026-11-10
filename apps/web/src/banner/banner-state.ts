@@ -18,6 +18,8 @@ export interface BannerState {
   readonly actions: readonly BannerAction[];
   /** Whether the banner has a Dismiss button; a state of a request still in flight sets it to false. */
   readonly dismissible?: boolean;
+  /** Moves the focus to the banner when it first appears, for a state the person must act on before they go on. */
+  readonly moveFocus?: boolean;
   /** Announces an update of the banner already on screen; a new banner is always announced. */
   readonly announce?: boolean;
 }

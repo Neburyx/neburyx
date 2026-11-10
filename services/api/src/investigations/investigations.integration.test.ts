@@ -18,7 +18,7 @@ import { baseSource, fileOf } from '../testing/mapping.js';
 import { startPostgres, type TestDatabase, type TestPostgres } from '../testing/postgres.js';
 import { testSourceGate } from '../testing/source-gate.js';
 import { webRoot } from '../testing/start-api.js';
-import { initialDraftDocuments } from './draft.js';
+import { contentHashOf, initialDraftDocuments } from './draft.js';
 
 const SHIPPED = fileURLToPath(new URL('../../migrations', import.meta.url));
 const mapping = parseMapping(fileOf(baseSource({ id: 'demo', entities: [{ type: 'widget', label: 'Widget', stable_id: 'widgetId' }, { type: 'gizmo', label: 'Gizmo', stable_id: 'gizmoId' }], relationships: [{ type: 'LINKS', from: 'widget', to: 'gizmo' }] })), 'neburyx.yaml');
@@ -266,5 +266,94 @@ describe('reading an investigation against Postgres', () => {
     const repointed = investigationResponseSchema.parse((await pointedElsewhere.app.inject({ method: 'GET', url: `/v1/investigations/${created.investigation.id}` })).json());
     expect(repointed.investigation.sourceState).toBe('repointed');
     expect(pointedElsewhere.executor.calls).toEqual([]);
+  });
+});
+
+describe('saving the draft against Postgres', () => {
+  const node = (t: string, id: string) => ({ t, id, pinned: false, hidden: false, groupId: null });
+  const edge = { t: 'LINKS', from: { t: 'widget', id: 'W-1' }, to: { t: 'gizmo', id: 'GZ-1' }, id: 'LK-1' };
+  const changed = (extraId = 'GZ-1', notes: string | null = null) => ({
+    notes,
+    layout: { schemaVersion: 1, layout: 'force', nodes: [node('widget', 'W-1'), node('gizmo', extraId)], edges: [{ ...edge, hidden: false }], groups: [] },
+    queryContext: { schemaVersion: 1, loaded: { nodes: [{ t: 'widget', id: 'W-1' }, { t: 'gizmo', id: extraId }], edges: [edge] }, expansions: [], filters: { entityTypes: [], relTypes: [], time: null, properties: [] } },
+  });
+
+  async function opened() {
+    const run = await running();
+    const answer = openInvestigationResponseSchema.parse((await run.post(body())).json());
+    const put = (payload: unknown, version: number | string = answer.draft.version) => run.app.inject({ method: 'PUT', url: `/v1/investigations/${answer.investigation.id}/draft`, headers: { 'if-match': `"${version}"` }, payload: payload as object });
+    return { ...run, answer, put };
+  }
+
+  it('hands the first write the version of the draft it made, and the version of the draft it found when an investigation is reused', async () => {
+    const { database, app, post } = await running();
+    const first = openInvestigationResponseSchema.parse((await post(body({ caseRef: 'CASE-1' }))).json());
+    expect(first.draft).toEqual({ version: 1 });
+    const put = await app.inject({ method: 'PUT', url: `/v1/investigations/${first.investigation.id}/draft`, headers: { 'if-match': '"1"' }, payload: changed() });
+    expect(put.statusCode).toBe(200);
+    const again = openInvestigationResponseSchema.parse((await post(body({ caseRef: 'CASE-1' }))).json());
+    expect(again.created).toBe(false);
+    expect(again.draft).toEqual({ version: 2 });
+    expect(await count(database, 'saved_views')).toBe(1);
+    await app.close();
+  });
+
+  it('replaces the documents, raises the version, moves last_edited_at, and updates the counts, the mapping hash and the content hash', async () => {
+    const { database, app, put } = await opened();
+    const [before] = await rows(database.ownerUrl, 'SELECT i.last_edited_at, v.updated_at FROM investigations i JOIN saved_views v ON v.investigation_id = i.id');
+    const response = await put(changed());
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ version: 2, save: { state: 'unsaved', savedAt: null }, notes: null });
+    const [draft] = await rows(database.ownerUrl, 'SELECT * FROM saved_views');
+    const documents = { layout: layoutDocumentSchema.parse(draft?.['layout']), queryContext: queryContextDocumentSchema.parse(draft?.['query_context']) };
+    expect(draft).toMatchObject({ version: 2, node_count: 2, edge_count: 1, mapping_hash: demo.configHash, content_hash: contentHashOf(documents) });
+    expect(documents.layout.edges[0]).toMatchObject({ from: { t: 'widget', id: 'W-1' }, to: { t: 'gizmo', id: 'GZ-1' }, id: 'LK-1' });
+    const [after] = await rows(database.ownerUrl, 'SELECT i.last_edited_at, v.updated_at FROM investigations i JOIN saved_views v ON v.investigation_id = i.id');
+    expect((after?.['last_edited_at'] as Date).getTime()).toBeGreaterThan((before?.['last_edited_at'] as Date).getTime());
+    expect((after?.['updated_at'] as Date).getTime()).toBeGreaterThan((before?.['updated_at'] as Date).getTime());
+    await app.close();
+  });
+
+  it('writes nothing when the content is the one stored: version, updated_at and last_edited_at stay', async () => {
+    const { database, app, put } = await opened();
+    const before = JSON.stringify(await rows(database.ownerUrl, 'SELECT i.last_edited_at, v.updated_at, v.version FROM investigations i JOIN saved_views v ON v.investigation_id = i.id'));
+    const response = await put({ ...initialDraftDocuments({ entityType: 'widget', stableId: 'W-1' }), notes: null });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ version: 1 });
+    expect(JSON.stringify(await rows(database.ownerUrl, 'SELECT i.last_edited_at, v.updated_at, v.version FROM investigations i JOIN saved_views v ON v.investigation_id = i.id'))).toBe(before);
+    await app.close();
+  });
+
+  it('stores the note with the documents, hashes it with them, and reads it back on the draft', async () => {
+    const { database, app, put, answer } = await opened();
+    expect((await put(changed('GZ-1', 'a note'))).statusCode).toBe(200);
+    const [draft] = await rows(database.ownerUrl, 'SELECT * FROM saved_views');
+    const documents = { layout: layoutDocumentSchema.parse(draft?.['layout']), queryContext: queryContextDocumentSchema.parse(draft?.['query_context']) };
+    expect(draft).toMatchObject({ notes: 'a note', content_hash: contentHashOf(documents, 'a note', null) });
+    const read = await app.inject({ method: 'GET', url: `/v1/investigations/${answer.investigation.id}` });
+    expect(investigationResponseSchema.parse(read.json()).draft.notes).toBe('a note');
+    await app.close();
+  });
+
+  it('stores an ID PostgreSQL cannot hold in its encoded form and answers it back as it was sent', async () => {
+    const { database, app, put, answer } = await opened();
+    expect((await put(changed('GZ\u0000-1'))).statusCode).toBe(200);
+    const [draft] = await rows(database.ownerUrl, 'SELECT layout FROM saved_views');
+    expect(JSON.stringify(draft?.['layout'])).toContain('~e1:');
+    const read = await app.inject({ method: 'GET', url: `/v1/investigations/${answer.investigation.id}` });
+    expect(investigationResponseSchema.parse(read.json()).draft.layout.nodes[1]?.id).toBe('GZ\u0000-1');
+    await app.close();
+  });
+
+  it('lets one of two writes with the same version win and refuses the other with CONFLICTED_VIEW_VERSION, leaving the winner stored', async () => {
+    const { database, app, put } = await opened();
+    const [first, second] = await Promise.all([put(changed('GZ-1')), put(changed('GZ-2'))]);
+    expect([first.statusCode, second.statusCode].sort()).toEqual([200, 409]);
+    const loser = first.statusCode === 409 ? first : second;
+    expect(loser.json()).toMatchObject({ error: { code: 'CONFLICTED_VIEW_VERSION' } });
+    const [draft] = await rows(database.ownerUrl, 'SELECT version, layout FROM saved_views');
+    expect(draft?.['version']).toBe(2);
+    expect(JSON.stringify(draft?.['layout'])).toContain(first.statusCode === 200 ? 'GZ-1' : 'GZ-2');
+    await app.close();
   });
 });

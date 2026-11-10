@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import type { GraphNode, OpenInvestigationRequest, OpenInvestigationResponse } from '@neburyx/contracts';
 import { createApiClient, type ApiClient, type ApiResult, type Fetcher } from '../api/client.js';
-import { INVESTIGATION_A, INVESTIGATION_B, investigationOf, knowing, openedOf } from '../investigations/test-data.js';
+import { INVESTIGATION_A, INVESTIGATION_B, investigationOf, knowing, openedOf, readOf } from '../investigations/test-data.js';
 import { createClientState } from '../state/client-state.js';
 import { me, renderApp, source } from '../test-utils.js';
 import { answerOf, deferred, hit, profiled, TYPE, searchAt } from './search-test-kit.js';
@@ -86,7 +86,7 @@ describe('opening a result in the graph', () => {
       if (input === '/v1/sources/demo/profile') return new Response(JSON.stringify(profiled('demo')));
       if (input === '/v1/search/entities') return new Response(JSON.stringify(answerOf('demo', [node])));
       if (input === '/v1/investigations') return new Response(JSON.stringify(openedOf(investigation, node)), { status: 201 });
-      if (input === `/v1/investigations/${INVESTIGATION_A}`) return new Response(JSON.stringify({ investigation, draft: { version: 1, layout: { schemaVersion: 1, layout: 'force', nodes: [], edges: [], groups: [] }, queryContext: { schemaVersion: 1, loaded: { nodes: [], edges: [] }, expansions: [], filters: { entityTypes: [], relTypes: [], time: null, properties: [] } } } }));
+      if (input === `/v1/investigations/${INVESTIGATION_A}`) return new Response(JSON.stringify(readOf(investigation)));
       if (input.startsWith('/v1/entities/')) return new Response(JSON.stringify(node));
       return new Response('{}', { status: 404 });
     };
@@ -129,7 +129,7 @@ describe('opening a result in the graph', () => {
     const notice = await screen.findByRole('group', { name: 'Opening failed' });
     expect(within(notice).getByRole('alert').textContent).toContain('NETWORK_UNAVAILABLE');
     expect(screen.getByText('Title AC-1')).toBeDefined();
-    answer = { ok: true, value: { investigation: { ...investigationOf(INVESTIGATION_A, 'demo', TYPE, 'AC-1'), sourceState: 'removed' }, created: false } };
+    answer = { ok: true, value: { investigation: { ...investigationOf(INVESTIGATION_A, 'demo', TYPE, 'AC-1'), sourceState: 'removed' }, created: false, draft: { version: 1 } } };
     await user.click(openButton());
     await waitFor(() => expect(within(screen.getByRole('group', { name: 'Opening failed' })).queryByRole('alert')).toBeNull());
     expect(screen.getByText(/no longer configured/)).toBeDefined();

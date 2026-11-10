@@ -53,6 +53,7 @@ const COUNTED: Readonly<Record<string, Call>> = {
   'derived neighbors': { method: 'POST', url: () => '/v1/graph/derived-neighbors', payload: (s) => ({ sourceId: s, ref }) },
   coverage: { method: 'POST', url: () => '/v1/graph/coverage', payload: (s) => ({ sourceId: s, entities: [{ ref: element(s), loadedRelationships: 0, loadedQuality: 'exact' }] }) },
   expand: { method: 'POST', url: () => '/v1/graph/expand', payload: (s) => ({ sourceId: s, ref, neighborTypes: ['node_b'] }) },
+  'read by references': { method: 'POST', url: () => '/v1/graph/read-refs', payload: (s) => ({ sourceId: s, entities: [element(s)] }) },
   'open investigation': { method: 'POST', url: () => '/v1/investigations', payload: (s) => ({ sourceId: s, entity: element(s) }) },
   'source test': { method: 'POST', url: (s) => `/v1/sources/${s}/test` },
 };
@@ -239,11 +240,12 @@ const COUNTED_ROUTES = [
   'POST /v1/graph/preview-expansion',
   'POST /v1/graph/derived-neighbors',
   'POST /v1/graph/coverage',
+  'POST /v1/graph/read-refs',
   'POST /v1/graph/expand',
   'POST /v1/investigations',
   'POST /v1/sources/:id/test',
 ];
-const UNCOUNTED_ROUTES = ['GET /v1/me', 'GET /v1/sources', 'GET /v1/sources/:id/profile', 'GET /v1/investigations', 'GET /v1/investigations/:id', 'GET /healthz', 'GET /readyz'];
+const UNCOUNTED_ROUTES = ['GET /v1/me', 'GET /v1/sources', 'GET /v1/sources/:id/profile', 'GET /v1/investigations', 'GET /v1/investigations/:id', 'PUT /v1/investigations/:id/draft', 'GET /healthz', 'GET /readyz'];
 
 describe('every route has a decision', () => {
   it('is either counted or on the list of routes that read no source, so a new route cannot be left out', async () => {

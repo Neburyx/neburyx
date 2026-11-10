@@ -2,7 +2,8 @@ import { z } from 'zod';
 import { errorResponseSchema } from './error-response.js';
 import { healthResponseSchema } from './health.js';
 import { nodeSchema } from './graph.js';
-import { DEFAULT_INVESTIGATION_LIST_LIMIT, INVESTIGATION_LIST_SORTS, investigationListResponseSchema, investigationResponseSchema, MAX_INVESTIGATION_LIST_LIMIT, openInvestigationRequestSchema, openInvestigationResponseSchema } from './investigations.js';
+import { MAX_READ_REFS, readRefsRequestSchema, readRefsResponseSchema } from './read-refs.js';
+import { DEFAULT_INVESTIGATION_LIST_LIMIT, draftWriteRequestSchema, draftWriteResponseSchema, MAX_DRAFT_DOCUMENT_BYTES, INVESTIGATION_LIST_SORTS, investigationListResponseSchema, investigationResponseSchema, MAX_INVESTIGATION_LIST_LIMIT, openInvestigationRequestSchema, openInvestigationResponseSchema } from './investigations.js';
 import { meResponseSchema } from './me.js';
 import { readyResponseSchema } from './ready.js';
 import { sourceProfileSchema } from './profile.js';
@@ -23,7 +24,7 @@ export interface OpenApiDocument {
   readonly openapi: string;
   readonly info: { readonly title: string; readonly version: string };
   readonly paths: Readonly<Record<string, unknown>>;
-  readonly components: { readonly schemas: { readonly CoverageRequest: Record<string, unknown>; readonly CoverageResponse: Record<string, unknown>; readonly DegreePreview: Record<string, unknown>; readonly DegreePreviewRequest: Record<string, unknown>; readonly DerivedNeighborsRequest: Record<string, unknown>; readonly DerivedNeighborsResponse: Record<string, unknown>; readonly EdgeDetail: Record<string, unknown>; readonly EntityLookupRequest: Record<string, unknown>; readonly ErrorResponse: Record<string, unknown>; readonly ExpandRequest: Record<string, unknown>; readonly ExpandResponse: Record<string, unknown>; readonly GraphNode: Record<string, unknown>; readonly HealthResponse: Record<string, unknown>; readonly InvestigationListResponse: Record<string, unknown>; readonly InvestigationResponse: Record<string, unknown>; readonly MeResponse: Record<string, unknown>; readonly OpenInvestigationRequest: Record<string, unknown>; readonly OpenInvestigationResponse: Record<string, unknown>; readonly ReadyResponse: Record<string, unknown>; readonly SearchMoreRequest: Record<string, unknown>; readonly SearchMoreResult: Record<string, unknown>; readonly SearchRequest: Record<string, unknown>; readonly SearchResult: Record<string, unknown>; readonly SourceProfile: Record<string, unknown>; readonly SourceTestReport: Record<string, unknown>; readonly SourcesResponse: Record<string, unknown> } };
+  readonly components: { readonly schemas: { readonly CoverageRequest: Record<string, unknown>; readonly CoverageResponse: Record<string, unknown>; readonly DegreePreview: Record<string, unknown>; readonly DegreePreviewRequest: Record<string, unknown>; readonly DerivedNeighborsRequest: Record<string, unknown>; readonly DerivedNeighborsResponse: Record<string, unknown>; readonly DraftWriteRequest: Record<string, unknown>; readonly ReadRefsRequest: Record<string, unknown>; readonly ReadRefsResponse: Record<string, unknown>; readonly DraftWriteResponse: Record<string, unknown>; readonly EdgeDetail: Record<string, unknown>; readonly EntityLookupRequest: Record<string, unknown>; readonly ErrorResponse: Record<string, unknown>; readonly ExpandRequest: Record<string, unknown>; readonly ExpandResponse: Record<string, unknown>; readonly GraphNode: Record<string, unknown>; readonly HealthResponse: Record<string, unknown>; readonly InvestigationListResponse: Record<string, unknown>; readonly InvestigationResponse: Record<string, unknown>; readonly MeResponse: Record<string, unknown>; readonly OpenInvestigationRequest: Record<string, unknown>; readonly OpenInvestigationResponse: Record<string, unknown>; readonly ReadyResponse: Record<string, unknown>; readonly SearchMoreRequest: Record<string, unknown>; readonly SearchMoreResult: Record<string, unknown>; readonly SearchRequest: Record<string, unknown>; readonly SearchResult: Record<string, unknown>; readonly SourceProfile: Record<string, unknown>; readonly SourceTestReport: Record<string, unknown>; readonly SourcesResponse: Record<string, unknown> } };
 }
 
 const RETRY_AFTER_HEADER = { 'Retry-After': { description: 'Whole seconds to wait', schema: { type: 'integer', minimum: 1 } } };
@@ -233,6 +234,25 @@ export function buildOpenApiDocument(
           },
         },
       },
+      '/v1/investigations/{id}/draft': {
+        put: {
+          operationId: 'saveDraft',
+          summary: 'Replace the caller\'s draft of an investigation',
+          description: `Writes Postgres only; no source is read. If-Match carries the draft's version as a quoted whole number (the version of the draft, which is not the ETag of the investigation); a write with another version is refused with CONFLICTED_VIEW_VERSION and changes nothing. Each document is at most ${MAX_DRAFT_DOCUMENT_BYTES} bytes of JSON. A reference of a keyed entity type must be a token of this deployment for this source and type. Filters on personal-data properties are not stored. notes is required (a string of at most 10,000 characters with no NUL and no unpaired surrogate, or null): a client writes back the note it last received. The note is part of the content, and every draft answer carries it. A write whose content equals the stored draft changes nothing and answers the same version. The investigation's last_edited_at moves only when the content changed. An identifier that does not exist, is not a UUID, belongs to another user or is deleted gives the same 404; an investigation whose source is not available as it was gives CONFLICT.`,
+          parameters: [
+            { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+            { name: 'If-Match', in: 'header', required: true, description: 'The draft\'s version as a quoted whole number', schema: { type: 'string', pattern: '^"[1-9][0-9]{0,9}"$' } },
+          ],
+          requestBody: { required: true, content: jsonBody('DraftWriteRequest') },
+          responses: {
+            '200': { description: 'The draft was written, or the content was the one stored', headers: { ETag: { description: "The draft's version as a strong tag", schema: { type: 'string' } } }, content: jsonBody('DraftWriteResponse') },
+            '400': { description: 'If-Match is missing or not a quoted whole number, the body is not a draft, a document is over the limit, or a reference of a keyed type is not a token', content: jsonBody('ErrorResponse') },
+            '404': { description: 'No such investigation of this caller', content: jsonBody('ErrorResponse') },
+            '409': { description: 'CONFLICTED_VIEW_VERSION: the draft changed since the version sent; CONFLICT: the investigation\'s source is not available as it was', content: jsonBody('ErrorResponse') },
+            '500': { description: 'The draft could not be written', content: jsonBody('ErrorResponse') },
+          },
+        },
+      },
       '/v1/edges/{ref}': {
         get: {
           operationId: 'getEdge',
@@ -369,6 +389,24 @@ export function buildOpenApiDocument(
           },
         },
       },
+      '/v1/graph/read-refs': {
+        post: {
+          operationId: 'readRefs',
+          summary: 'Read again the entities and relationships a stored draft names, by reference',
+          requestBody: { required: true, content: jsonBody('ReadRefsRequest') },
+          description: `Reads through the gate, as the calling principal, the items of one source that a stored draft names: entities, stored relationships, aggregate relationships and derived relationships, each list at most ${MAX_READ_REFS} references. A draft holds references and never property values, so a reopened investigation gets its items back here. The call counts as one request; every item is read by the template the matching single read uses, so the masking, the count labels and the limits are those of the single reads. An item that no longer resolves is listed under missing, once, whatever the cause (gone from the source, a type or rule no longer mapped, or not readable by the person); nothing says which. The relationships come without their ends: the entities are asked for in the same or an earlier call. A derived relationship is returned only when its rule still finds it and every one of its ends and supports is readable. A reference of another source is SOURCE_MISMATCH; a reference of a keyed entity type that is not a token of this deployment for this source and type is INVALID_REQUEST. If a read fails, nothing is returned.`,
+          responses: {
+            '200': { description: 'The items that resolved, and the references that did not', content: jsonBody('ReadRefsResponse') },
+            '400': { description: 'The body is not valid, a list is over the limit, a reference of a keyed type is not a token (INVALID_REQUEST), or a reference names another source (SOURCE_MISMATCH)', content: jsonBody('ErrorResponse') },
+            '404': { description: 'The source is not configured or the person may not read it (one answer for both)', content: jsonBody('ErrorResponse') },
+            '415': { description: 'The body is not JSON', content: jsonBody('ErrorResponse') },
+            '429': { description: 'Too many requests from this person to this source in the last minute: nothing was read; details.retryAfterMs and the Retry-After header (whole seconds) say how long to wait', headers: RETRY_AFTER_HEADER, content: jsonBody('ErrorResponse') },
+            '500': { description: 'The read could not be completed', content: jsonBody('ErrorResponse') },
+            '503': { description: 'The source is not available, or is busy; after repeated timeouts details.retryAfterMs and the Retry-After header (whole seconds) say how long to wait', content: jsonBody('ErrorResponse'), headers: RETRY_AFTER_HEADER },
+            '504': { description: 'The source did not answer in time', content: jsonBody('ErrorResponse') },
+          },
+        },
+      },
       '/v1/graph/expand': {
         post: {
           operationId: 'expandNeighbors',
@@ -405,7 +443,7 @@ export function buildOpenApiDocument(
       },
     },
     components: {
-      schemas: { CoverageRequest: schemaJson(coverageRequest), CoverageResponse: schemaJson(coverageResponse), DegreePreview: schemaJson(degreePreview), DegreePreviewRequest: schemaJson(degreePreviewRequest), DerivedNeighborsRequest: schemaJson(derivedNeighborsRequest), DerivedNeighborsResponse: schemaJson(derivedNeighborsResponse), EdgeDetail: schemaJson(edgeDetail), EntityLookupRequest: schemaJson(entityLookupRequest), ErrorResponse: schemaJson(errorResponse), ExpandRequest: schemaJson(expandRequest), ExpandResponse: schemaJson(expandResponse), GraphNode: schemaJson(graphNode), HealthResponse: schemaJson(healthResponse), InvestigationListResponse: schemaJson(investigationList), InvestigationResponse: schemaJson(investigationResponse), MeResponse: schemaJson(meResponse), OpenInvestigationRequest: schemaJson(openInvestigationRequest), OpenInvestigationResponse: schemaJson(openInvestigationResponse), ReadyResponse: schemaJson(readyResponse), SearchMoreRequest: schemaJson(searchMoreRequest), SearchMoreResult: schemaJson(searchMoreResult), SearchRequest: schemaJson(searchRequest), SearchResult: schemaJson(searchResult), SourceProfile: schemaJson(sourceProfile), SourceTestReport: schemaJson(sourceTestReport), SourcesResponse: schemaJson(sourcesResponse) },
+      schemas: { CoverageRequest: schemaJson(coverageRequest), CoverageResponse: schemaJson(coverageResponse), DegreePreview: schemaJson(degreePreview), DegreePreviewRequest: schemaJson(degreePreviewRequest), DerivedNeighborsRequest: schemaJson(derivedNeighborsRequest), DerivedNeighborsResponse: schemaJson(derivedNeighborsResponse), DraftWriteRequest: schemaJson(draftWriteRequestSchema), DraftWriteResponse: schemaJson(draftWriteResponseSchema), EdgeDetail: schemaJson(edgeDetail), EntityLookupRequest: schemaJson(entityLookupRequest), ErrorResponse: schemaJson(errorResponse), ExpandRequest: schemaJson(expandRequest), ExpandResponse: schemaJson(expandResponse), GraphNode: schemaJson(graphNode), HealthResponse: schemaJson(healthResponse), InvestigationListResponse: schemaJson(investigationList), InvestigationResponse: schemaJson(investigationResponse), MeResponse: schemaJson(meResponse), OpenInvestigationRequest: schemaJson(openInvestigationRequest), OpenInvestigationResponse: schemaJson(openInvestigationResponse), ReadRefsRequest: schemaJson(readRefsRequestSchema), ReadRefsResponse: schemaJson(readRefsResponseSchema), ReadyResponse: schemaJson(readyResponse), SearchMoreRequest: schemaJson(searchMoreRequest), SearchMoreResult: schemaJson(searchMoreResult), SearchRequest: schemaJson(searchRequest), SearchResult: schemaJson(searchResult), SourceProfile: schemaJson(sourceProfile), SourceTestReport: schemaJson(sourceTestReport), SourcesResponse: schemaJson(sourcesResponse) },
     },
   };
 }

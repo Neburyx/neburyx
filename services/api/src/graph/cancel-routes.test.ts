@@ -47,6 +47,7 @@ const ROUTES: readonly { readonly name: string; readonly route: string; readonly
   { name: 'search', route: 'POST /v1/search/entities', method: 'POST', path: '/v1/search/entities', body: { sourceId: 'demo', text: 'abc' } },
   { name: 'degree preview', route: 'POST /v1/graph/preview-expansion', method: 'POST', path: '/v1/graph/preview-expansion', body: { sourceId: 'demo', ref } },
   { name: 'derived neighbors', route: 'POST /v1/graph/derived-neighbors', method: 'POST', path: '/v1/graph/derived-neighbors', body: { sourceId: 'demo', ref } },
+  { name: 'read by references', route: 'POST /v1/graph/read-refs', method: 'POST', path: '/v1/graph/read-refs', body: { sourceId: 'demo', entities: [{ sourceId: 'demo', ...ref }], edges: [STORED], derived: [DERIVED] } },
   { name: 'expand', route: 'POST /v1/graph/expand', method: 'POST', path: '/v1/graph/expand', body: { sourceId: 'demo', ref, neighborTypes: ['leaf'] } },
   { name: 'source link', route: 'GET /v1/source-links/:ref', method: 'GET', path: `/v1/source-links/${sourceLinkSegmentOf({ form: 'entity', ref: { sourceId: 'demo', ...ref } })}` },
   { name: 'stored relationship evidence', route: 'GET /v1/edges/:ref', method: 'GET', path: `/v1/edges/${edgeRefSegmentOf(STORED)}` },
@@ -143,6 +144,7 @@ const OTHER_CASES: Readonly<Record<string, string>> = {
   'POST /v1/graph/coverage': 'reads no source (below)',
   'GET /v1/investigations': 'reads no source',
   'GET /v1/investigations/:id': 'reads no source',
+  'PUT /v1/investigations/:id/draft': 'reads no source',
 };
 
 /** The routes under /v1 that neither a case of ROUTES nor the list above names. */

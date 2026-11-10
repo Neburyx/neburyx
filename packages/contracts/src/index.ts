@@ -54,10 +54,15 @@ export {
   INVESTIGATION_SOURCE_STATES,
   INVESTIGATION_STATUSES,
   MAX_CASE_REF_LENGTH,
+  MAX_DRAFT_DOCUMENT_BYTES,
   MAX_INVESTIGATION_LIST_LIMIT,
+  MAX_NOTES_LENGTH,
   MAX_TITLE_LENGTH,
   caseRefSchema,
   draftSchema,
+  draftWriteRequestSchema,
+  draftWriteResponseSchema,
+  edgeEntrySchema,
   investigationListItemSchema,
   investigationListQuerySchema,
   investigationListCountsSchema,
@@ -65,6 +70,7 @@ export {
   investigationResponseSchema,
   investigationSaveSchema,
   investigationSchema,
+  notesSchema,
   layoutDocumentSchema,
   openInvestigationRequestSchema,
   referenceOpenRequestSchema,
@@ -73,7 +79,7 @@ export {
   queryContextDocumentSchema,
   startingEntitySchema,
 } from './investigations.js';
-export type { Investigation, InvestigationListCounts, InvestigationListItem, InvestigationListResponse, InvestigationResponse, InvestigationSave, InvestigationSourceState, LayoutDocument, OpenInvestigationRequest, ReferenceOpenRequest, ValueOpenRequest, OpenInvestigationResponse, QueryContextDocument } from './investigations.js';
+export type { DraftWriteRequest, DraftWriteResponse, Investigation, InvestigationListCounts, InvestigationListItem, InvestigationListResponse, InvestigationResponse, InvestigationSave, InvestigationSourceState, LayoutDocument, OpenInvestigationRequest, ReferenceOpenRequest, ValueOpenRequest, OpenInvestigationResponse, QueryContextDocument } from './investigations.js';
 export {
   FACET_SCOPES,
   MAX_SEARCH_TEXT_LENGTH,
@@ -123,3 +129,5 @@ export type { ExpandFilter, ExpandPage, ExpandRank, ExpandRequest, ExpandRespons
 export type { EntityLookupRequest } from './entities.js';
 export type { DegreeByType, DegreePreview, DegreePreviewRequest, DegreeWarning } from './degree-preview.js';
 export type { AggregateEvidenceHit, AggregateMember, DisabledRelationship, DisabledType, EvidenceGroup, ExactMatch, EvidenceHit, EvidenceRecord, Facets, GroupFailure, RelatedGroup, RelatedHit, RelationshipContext, SearchFailureGroup, SearchFilters, SearchGroup, SearchMatchMode, SearchMoreRequest, SearchMoreResult, SearchPagedGroup, SearchRequest, SearchResult, StartsWithGroup, StoredEvidenceHit, UnreferencedHit } from './search.js';
+export { MAX_READ_REFS, readRefsRequestSchema, readRefsResponseSchema } from './read-refs.js';
+export type { ReadRefsRequest, ReadRefsResponse } from './read-refs.js';

@@ -88,14 +88,14 @@ describe('a Recent row: the case reference', () => {
 });
 
 describe('a Recent row: the time and the state', () => {
-  it('says "Created" with the time since the investigation was created, never since its last edit, and keeps the order the list gave', async () => {
+  it('says "Last edited" with the time since the investigation was last edited, never since it was created, and keeps the order the list gave', async () => {
     vi.useFakeTimers({ toFake: ['Date'], now: Date.parse('2026-11-05T12:12:00.000Z') });
     const newerEdit = { ...base, title: 'Edited later', id: INVESTIGATION_B, createdAt: '2026-11-05T09:00:00.000Z', lastEditedAt: '2026-11-05T11:59:00.000Z' };
     await shown([listItemOf(newerEdit), listItemOf(base)]);
-    expect(row(0).querySelector('.recent-time')?.textContent).toBe('Created 3 h ago');
-    expect(row(1).querySelector('.recent-time')?.textContent).toBe('Created 2 h ago');
-    expect(row(0).querySelector('time')?.getAttribute('dateTime')).toBe('2026-11-05T09:00:00.000Z');
-    expect(row(1).querySelector('time')?.getAttribute('title')).toBe('2026-11-05 10:00 UTC');
+    expect(row(0).querySelector('.recent-time')?.textContent).toBe('Last edited 13 min ago');
+    expect(row(1).querySelector('.recent-time')?.textContent).toBe('Last edited 17 min ago');
+    expect(row(0).querySelector('time')?.getAttribute('dateTime')).toBe('2026-11-05T11:59:00.000Z');
+    expect(row(1).querySelector('time')?.getAttribute('title')).toBe('2026-11-05 11:55 UTC');
     expect(row(0).textContent).toContain('Edited later');
   });
 
@@ -108,9 +108,10 @@ describe('a Recent row: the time and the state', () => {
 });
 
 describe('a Recent row: the note and an unavailable source', () => {
-  it('shows the line about what a row restores under the Recent heading when there are rows, and not when there are none', async () => {
+  it('shows no line about what a row restores, since the whole draft is kept', async () => {
     await shown([listItemOf(base)]);
-    expect(screen.getByText('An investigation opens with its starting entity. Entities added later are kept until the page is reloaded.')).toBeTruthy();
+    expect(screen.queryByText(/Entities added later/)).toBeNull();
+    expect(document.querySelector('.recent-note-line')).toBeNull();
   });
 
   it.each([

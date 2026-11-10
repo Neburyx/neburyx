@@ -436,6 +436,8 @@ describe('the running API against the committed openapi.json', () => {
     { method: 'POST', url: '/v1/investigations', payload: JSON.stringify({ sourceId: 'demo', entity: { sourceId: 'other', entityType: 'node_a', stableId: 'A-1' } }), headers: { 'content-type': 'application/json' } },
     { method: 'POST', url: '/v1/investigations', payload: 'x', headers: { 'content-type': 'application/x-unsupported' } },
     { method: 'GET', url: '/v1/investigations/not-a-uuid' },
+    { method: 'PUT', url: '/v1/investigations/not-a-uuid/draft', payload: '{}', headers: { 'content-type': 'application/json' } },
+    { method: 'PUT', url: '/v1/investigations/0192f000-0000-7000-8000-000000000001/draft', payload: '{}', headers: { 'content-type': 'application/json', 'if-match': '"1"' } },
     { method: 'GET', url: '/v1/investigations/0192f000-0000-7000-8000-000000000001?x=1' },
     { method: 'GET', url: '/v1/sources/nope/profile' },
     { method: 'GET', url: '/v1/sources/%ZZ/profile' },

@@ -2,7 +2,7 @@ import { Link } from 'react-router';
 import type { InvestigationListItem, SourceProfile, SourceSummary } from '@neburyx/contracts';
 import { legendGlyph } from '../workspace/legend-panel.js';
 import { EXPLORE_PATH } from '../shell/navigation.js';
-import { CASE_REFERENCE_LABEL, CREATED, savedBadge, SOURCE_NO_LONGER_AVAILABLE, sourceStateNote, UNSAVED } from './copy.js';
+import { CASE_REFERENCE_LABEL, LAST_EDITED, savedBadge, SOURCE_NO_LONGER_AVAILABLE, sourceStateNote, UNSAVED } from './copy.js';
 import { relativeTime, utcClock, utcMoment } from './relative-time.js';
 
 function sourceNote(item: InvestigationListItem, source: SourceSummary | undefined): string | undefined {
@@ -40,9 +40,9 @@ export function RecentRow({ item, now, source, profile }: { readonly item: Inves
       )}
       <span className="recent-source">{item.sourceAlias}</span>
       <span className="recent-time">
-        {CREATED}{' '}
-        <time dateTime={item.createdAt} title={utcMoment(item.createdAt)}>
-          {relativeTime(item.createdAt, now)}
+        {LAST_EDITED}{' '}
+        <time dateTime={item.lastEditedAt} title={utcMoment(item.lastEditedAt)}>
+          {relativeTime(item.lastEditedAt, now)}
         </time>
       </span>
       {note === undefined ? null : (
