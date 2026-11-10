@@ -68,6 +68,8 @@ export function ViewsControl() {
     setRestoring(undefined);
     button.current?.focus();
   };
+  // React's CSSProperties type has no custom properties, so the cast
+  const panelStyle = top === undefined ? undefined : ({ '--views-panel-top': `${top}px` } as CSSProperties);
   const onKeyDown = (event: KeyboardEvent): void => {
     if (event.key !== 'Escape') return;
     event.preventDefault();
@@ -80,7 +82,7 @@ export function ViewsControl() {
         <span aria-hidden="true"> ▾</span>
       </button>
       {open ? (
-        <div className="views-panel" role="dialog" aria-labelledby={titleId} tabIndex={-1} ref={panel} style={top === undefined ? undefined : ({ '--views-panel-top': `${top}px` } as CSSProperties)} onKeyDown={onKeyDown}>
+        <div className="views-panel" role="dialog" aria-labelledby={titleId} tabIndex={-1} ref={panel} style={panelStyle} onKeyDown={onKeyDown}>
           <ViewsPanel list={list} titleId={titleId} onRestore={setRestoring} readOnly={readOnly} />
         </div>
       ) : null}
