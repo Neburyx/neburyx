@@ -196,7 +196,7 @@ describe('the demo stack', () => {
     const model = composeModel.parse(JSON.parse((await stack.compose(['config', '--format', 'json'])).stdout));
     const sources = model.services['db']?.volumes?.map((volume) => volume.source) ?? [];
     expect(sources.some((source) => source?.endsWith('/deploy/compose/initdb'))).toBe(true);
-    expect(Object.keys(model.volumes).sort()).toEqual(['demo-config', 'neburyx-db']);
+    expect(Object.keys(model.volumes).sort()).toEqual(['demo-config', 'neburyx-db', 'neburyx-exports']);
     for (const [name, service] of Object.entries(model.services)) {
       const published = (service.ports ?? []).map((port) => port.host_ip);
       expect(published, name).toEqual(name === 'api' ? ['127.0.0.1'] : []);

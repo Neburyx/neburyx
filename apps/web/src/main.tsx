@@ -14,6 +14,7 @@ import { registerSearchTool } from './search/search-tool.js';
 import { createCytoscapeRenderer } from './canvas/cytoscape-renderer.js';
 import { registerBuiltInMenuItems } from './workspace/built-in-menu-items.js';
 import { registerBuiltInSlots } from './workspace/built-in-slots.js';
+import { registerExport } from './exports/register-export.js';
 import { registerInvestigationMenu } from './lifecycle/register-menu.js';
 import { registerBuiltInTools } from './workspace/built-in-tools.js';
 import { registerBuiltInKeyBindings } from './workspace/built-in-key-bindings.js';
@@ -50,6 +51,7 @@ import './styles/filters.css';
 import './styles/first-run.css';
 import './styles/home.css';
 import './styles/lifecycle.css';
+import './styles/exports.css';
 import './styles/views.css';
 import './styles/investigations.css';
 
@@ -79,6 +81,7 @@ const keyBindings = createKeyBindingRegistry();
 registerBuiltInKeyBindings(keyBindings);
 const client = createApiClient();
 registerInvestigationMenu(slots, client);
+registerExport(slots, client);
 const router = createBrowserRouter(appRoutes(client, state, banner));
 createRoot(root).render(
   <StrictMode>

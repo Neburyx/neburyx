@@ -1,8 +1,8 @@
-export { CONFLICT_REASONS, ERROR_CODES, errorBodySchema, errorCodeSchema, errorDetailsSchema, partialDetailsSchema, SOURCE_UNAVAILABLE_REASONS } from './error-codes.js';
+export { ACCESS_DENIED_REASONS, CONFLICT_REASONS, ERROR_CODES, INVALID_REQUEST_REASONS, errorBodySchema, errorCodeSchema, errorDetailsSchema, partialDetailsSchema, SOURCE_UNAVAILABLE_REASONS } from './error-codes.js';
 export { errorResponseSchema } from './error-response.js';
-export type { ConflictReason, ErrorCode, ErrorDetails, ErrorResponse, SourceUnavailableReason } from './error-codes.js';
+export type { AccessDeniedReason, ConflictReason, InvalidRequestReason, ErrorCode, ErrorDetails, ErrorResponse, SourceUnavailableReason } from './error-codes.js';
 export { ERROR_DETAIL_KEYS, allowedDetails } from './error-details.js';
-export { CONFLICT_ENTRIES, ERROR_TABLE, findMissingCodes, SOURCE_UNAVAILABLE_ENTRIES } from './error-table.js';
+export { ACCESS_DENIED_ENTRIES, CONFLICT_ENTRIES, ERROR_TABLE, INVALID_REQUEST_ENTRIES, findMissingCodes, SOURCE_UNAVAILABLE_ENTRIES } from './error-table.js';
 export type { ErrorEntry } from './error-table.js';
 export { buildOpenApiDocument } from './openapi.js';
 export type { OpenApiDocument } from './openapi.js';
@@ -145,5 +145,7 @@ export { EXPAND_DIRECTIONS, EXPAND_SORTS, FILTER_KINDS, MAX_FILTERS, MAX_FILTER_
 export type { ExpandFilter, ExpandPage, ExpandRank, ExpandRequest, ExpandResponse, FilterKind, FilterValue } from './expand.js';
 export type { DegreeByType, DegreePreview, DegreePreviewRequest, DegreeWarning } from './degree-preview.js';
 export type { AggregateEvidenceHit, AggregateMember, DisabledRelationship, DisabledType, EvidenceGroup, ExactMatch, EvidenceHit, EvidenceRecord, Facets, GroupFailure, RelatedGroup, RelatedHit, RelationshipContext, SearchFailureGroup, SearchFilters, SearchGroup, SearchMatchMode, SearchMoreRequest, SearchMoreResult, SearchPagedGroup, SearchRequest, SearchResult, StartsWithGroup, StoredEvidenceHit, UnreferencedHit } from './search.js';
+export { EXPORT_FORMATS, EXPORT_HIDDEN_NOTE, EXPORT_SCOPE, EXPORT_STATUSES, IDEMPOTENCY_KEY_PATTERN, exportFileSchema, exportHeaderSchema, exportMaskingSchema, exportRequestSchema, exportSchema } from './exports.js';
+export type { ExportFile, ExportFormat, ExportHeader, ExportRecord, ExportRequest } from './exports.js';
 export { MAX_READ_REFS, readRefsRequestSchema, readRefsResponseSchema } from './read-refs.js';
 export type { ReadRefsRequest, ReadRefsResponse } from './read-refs.js';

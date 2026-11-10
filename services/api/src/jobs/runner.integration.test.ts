@@ -7,7 +7,8 @@ import { serve, type ShutdownTimes, type Signals } from '../serve.js';
 import { runCli } from '../testing/cli.js';
 import { rows } from '../testing/database.js';
 import { startPostgres, type TestDatabase, type TestPostgres } from '../testing/postgres.js';
-import { startApi, stopApi, webRoot } from '../testing/start-api.js';
+import { idleExportDeps } from '../testing/export-deps.js';
+import { exportDirectory, startApi, stopApi, webRoot } from '../testing/start-api.js';
 import { maintenanceTasks } from './maintenance.js';
 import type { Task } from './tasks.js';
 
@@ -107,6 +108,7 @@ describe('the job runner of the API', () => {
     let purged = 0;
     const logger = createLogger({ write: (chunk: string) => lines.push(chunk) });
     const tasks = maintenanceTasks({
+      ...idleExportDeps(),
       store: { purgeExpiredInvestigations: async (beforeDelete) => (await beforeDelete({ id: 'x', sourceId: 'demo' }), ++purged) },
       audit: { record: () => (++sinkCalls === 1 ? Promise.reject(new Error('the sink is down')) : Promise.resolve()) },
       logger,
@@ -281,7 +283,7 @@ function optionsWith(tasks: readonly Task[]): Parameters<typeof serve>[1] {
   return {
     stderr: { write: () => true },
     logger: createLogger({ write: () => undefined }),
-    defaultWebRoot: webRoot,
+    defaultWebRoot: webRoot, defaultExportDirectory: exportDirectory,
     portOverride: 0,
     tasks,
   };

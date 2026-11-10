@@ -1,6 +1,6 @@
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { ConfigError, DEFAULT_HOST, DEFAULT_PORT, parseConfig } from './config.js';
+import { ConfigError, DEFAULT_EXPORT_DIRECTORY, DEFAULT_HOST, DEFAULT_PORT, parseConfig } from './config.js';
 
 const defaults = { webRoot: '/default/web' };
 const DATABASE_URL = 'postgres://app_user:app-secret@db.example.test:5432/neburyx';
@@ -46,7 +46,7 @@ describe('parseConfig', () => {
   });
 
   it('defaults to the loopback address and port 8080', () => {
-    expect(parseConfig({ ...database }, defaults)).toEqual({ host: '127.0.0.1', port: 8080, webRoot: '/default/web', databaseUrl: DATABASE_URL });
+    expect(parseConfig({ ...database }, defaults)).toMatchObject({ host: '127.0.0.1', port: 8080, webRoot: '/default/web', databaseUrl: DATABASE_URL });
     expect(DEFAULT_HOST).toBe('127.0.0.1');
     expect(DEFAULT_PORT).toBe(8080);
   });
@@ -57,6 +57,7 @@ describe('parseConfig', () => {
       port: 9000,
       webRoot: '/srv/web',
       databaseUrl: DATABASE_URL,
+      exportDirectory: DEFAULT_EXPORT_DIRECTORY,
     });
   });
 
@@ -122,5 +123,16 @@ describe('the cursor key', () => {
       if (value.length > 0) expect(JSON.stringify([error, String(error)])).not.toContain(value);
     }
   });
-});
 
+  it('keeps export files in /data/exports unless told otherwise', () => {
+    expect(parseConfig({ ...database }, defaults).exportDirectory).toBe(DEFAULT_EXPORT_DIRECTORY);
+    expect(parseConfig({ ...database, NEBURYX_EXPORT_DIR: '/srv/exports' }, defaults).exportDirectory).toBe('/srv/exports');
+  });
+
+  it.each(['', 'exports', './exports', '../exports'])('rejects the export directory %j, naming only the key', (directory) => {
+    const failure = (): unknown => parseConfig({ ...database, NEBURYX_EXPORT_DIR: directory }, defaults);
+    expect(failure).toThrow(ConfigError);
+    expect(failure).toThrow('NEBURYX_EXPORT_DIR');
+    if (directory.length > 0) expect(failure).not.toThrow(directory);
+  });
+});

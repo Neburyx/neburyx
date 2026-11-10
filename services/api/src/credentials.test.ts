@@ -5,8 +5,10 @@ import { createLogger } from './logger.js';
 import { start } from './start.js';
 import { memoryAppStore } from './testing/app-store.js';
 import { makeWebRoot } from './testing/web-root.js';
+import { makeExportDirectory } from './testing/export-directory.js';
 
 const webRoot = makeWebRoot();
+const exportDirectory = makeExportDirectory();
 afterAll(() => rmSync(webRoot, { recursive: true, force: true }));
 
 const APP_URL = 'postgres://app_user:app-secret@db.example.test:5432/neburyx';
@@ -19,7 +21,7 @@ async function serve(env: Readonly<Record<string, string>>): Promise<{ readonly 
     {
       stderr: { write: (text) => lines.push(text) },
       logger: createLogger({ write: (chunk: string) => lines.push(chunk) }),
-      defaultWebRoot: webRoot,
+      defaultWebRoot: webRoot, defaultExportDirectory: exportDirectory,
       portOverride: 0,
       openStore: memoryAppStore,
       tasks: [],

@@ -22,6 +22,8 @@ export interface ReadRefsCall {
   readonly request: ReadRefsRequest;
   /** Aborted when the client gives up the request. */
   readonly signal?: AbortSignal;
+  /** False when the caller has already counted the request it is part of, as an export does for the many calls it makes. */
+  readonly countRate?: boolean;
 }
 
 export interface ReadRefsService {
@@ -180,7 +182,7 @@ export function createReadRefsService(deps: ReadRefsDeps): ReadRefsService {
         ...request.derived.flatMap((ref) => [ref.sourceId, ref.derived.from.sourceId, ref.derived.to.sourceId]),
       ];
       if (named.some((sourceId) => sourceId !== request.sourceId)) throw new AppError('SOURCE_MISMATCH');
-      await deps.access.require({ traceId: call.traceId, principal: call.principal, sourceId: request.sourceId, auditAction: READ_REFS_AUDIT_ACTION, rate: 'count' });
+      await deps.access.require({ traceId: call.traceId, principal: call.principal, sourceId: request.sourceId, auditAction: READ_REFS_AUDIT_ACTION, ...(call.countRate === false ? {} : { rate: 'count' as const }) });
       const source = deps.mapping.sources.find((candidate) => candidate.id === request.sourceId);
       if (source === undefined) throw new AppError('NOT_FOUND');
       const found = await entities(call, source, distinct(request.entities));

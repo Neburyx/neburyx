@@ -1,3 +1,4 @@
+import { idleExportDeps } from '../testing/export-deps.js';
 import { describe, expect, it } from 'vitest';
 import { createLogger } from '../logger.js';
 import type { AuditEvent } from '../seams/seams.js';
@@ -6,6 +7,7 @@ import { validateTasks } from './tasks.js';
 
 function depsWith(purge: MaintenanceDeps['store']['purgeExpiredInvestigations'], audited: AuditEvent[] = [], lines: string[] = []): MaintenanceDeps {
   return {
+    ...idleExportDeps(),
     store: { purgeExpiredInvestigations: purge },
     audit: { record: (event) => { audited.push(event); return Promise.resolve(); } },
     logger: createLogger({ write: (line: string) => void lines.push(line) }),
@@ -13,9 +15,9 @@ function depsWith(purge: MaintenanceDeps['store']['purgeExpiredInvestigations'],
 }
 
 describe('the shipped maintenance tasks', () => {
-  it('hold the purge, once, with a daily schedule that is a valid cron expression', () => {
+  it('hold the purge and the export expiry, once each, with a daily schedule that is a valid cron expression', () => {
     const tasks = maintenanceTasks(depsWith(() => Promise.resolve(0)));
-    expect(tasks.map((task) => [task.name, task.schedule])).toEqual([['purge-deleted-investigations', '17 3 * * *']]);
+    expect(tasks.map((task) => [task.name, task.schedule])).toEqual([['purge-deleted-investigations', '17 3 * * *'], ['expire-exports', '41 3 * * *']]);
     expect(() => validateTasks(tasks)).not.toThrow();
   });
 
@@ -44,7 +46,7 @@ describe('purgeDeletedInvestigations', () => {
   });
 
   it('raises when the audit sink rejects an event, so the runner retries the task', async () => {
-    const deps: MaintenanceDeps = { store: { purgeExpiredInvestigations: async (beforeDelete) => { await beforeDelete({ id: 'x', sourceId: 'demo' }); return 1; } }, audit: { record: () => Promise.reject(new Error('the sink is down')) }, logger: createLogger({ write: () => undefined }) };
+    const deps: MaintenanceDeps = { ...idleExportDeps(), store: { purgeExpiredInvestigations: async (beforeDelete) => { await beforeDelete({ id: 'x', sourceId: 'demo' }); return 1; } }, audit: { record: () => Promise.reject(new Error('the sink is down')) }, logger: createLogger({ write: () => undefined }) };
     await expect(purgeDeletedInvestigations(deps)).rejects.toThrow('the sink is down');
   });
 });

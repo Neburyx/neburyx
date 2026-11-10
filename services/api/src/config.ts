@@ -1,5 +1,5 @@
 import { isIP } from 'node:net';
-import { resolve } from 'node:path';
+import { isAbsolute, resolve } from 'node:path';
 import { z } from 'zod';
 
 export const DEFAULT_HOST = '127.0.0.1';
@@ -22,6 +22,7 @@ const keys = {
   databaseUrl: 'DATABASE_URL',
   mappingPath: 'NEBURYX_CONFIG',
   cursorKey: 'NEBURYX_CURSOR_KEY',
+  exportDirectory: 'NEBURYX_EXPORT_DIR',
 } as const;
 
 function isPostgresUrl(value: string): boolean {
@@ -47,6 +48,9 @@ function decodeCursorKey(value: string): Buffer | undefined {
   return bytes.length >= MIN_CURSOR_KEY_BYTES ? bytes : undefined;
 }
 
+/** Where export files are kept when the setting is absent; the image creates it. */
+export const DEFAULT_EXPORT_DIRECTORY = '/data/exports';
+
 const configSchema = z.object({
   host: z.string().min(1).refine(isValidHost),
   port: z
@@ -57,6 +61,7 @@ const configSchema = z.object({
   webRoot: z.string().min(1).transform((path) => resolve(path)),
   databaseUrl: z.string().refine(isPostgresUrl),
   mappingPath: z.string().min(1).transform((path) => resolve(path)).optional(),
+  exportDirectory: z.string().refine((path) => isAbsolute(path)),
   /** The key that signs page cursors; absent, the API makes one of its own for the process. */
   cursorKey: z
     .string()
@@ -81,7 +86,7 @@ export class ConfigError extends Error {
 
 export function parseConfig(
   env: Readonly<Record<string, string | undefined>>,
-  defaults: { readonly webRoot: string },
+  defaults: { readonly webRoot: string; readonly exportDirectory?: string },
 ): Config {
   const result = configSchema.safeParse({
     host: env[keys.host] ?? DEFAULT_HOST,
@@ -90,12 +95,13 @@ export function parseConfig(
     databaseUrl: env[keys.databaseUrl],
     mappingPath: env[keys.mappingPath],
     cursorKey: env[keys.cursorKey],
+    exportDirectory: env[keys.exportDirectory] ?? defaults.exportDirectory ?? DEFAULT_EXPORT_DIRECTORY,
   });
   if (result.success) return result.data;
 
   const failed = result.error.issues.flatMap((issue) => {
     const field = issue.path[0];
-    return field === 'host' || field === 'port' || field === 'webRoot' || field === 'databaseUrl' || field === 'mappingPath' || field === 'cursorKey' ? [keys[field]] : [];
+    return field === 'host' || field === 'port' || field === 'webRoot' || field === 'databaseUrl' || field === 'mappingPath' || field === 'cursorKey' || field === 'exportDirectory' ? [keys[field]] : [];
   });
   throw new ConfigError([...new Set(failed)]);
 }

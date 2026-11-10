@@ -1,0 +1,79 @@
+.export-scrim {
+  pointer-events: auto;
+  background: var(--color-scrim);
+}
+
+.export-dialog {
+  top: var(--sheet-top);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+}
+
+.export-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.export-formats {
+  display: flex;
+  gap: var(--space-16);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.export-formats legend {
+  padding: 0;
+  margin-bottom: var(--space-4);
+  font-size: var(--font-size-small);
+  color: var(--color-text-muted);
+}
+
+.export-format {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.export-preview {
+  padding: var(--space-8) var(--space-12);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-small);
+  background: var(--color-surface-muted);
+}
+
+.export-preview-heading {
+  margin: 0 0 var(--space-4);
+  font-size: var(--font-size-small);
+  color: var(--color-text-muted);
+}
+
+.export-preview-lines {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-small);
+}
+
+.export-footnote,
+.export-problem {
+  margin: 0;
+  font-size: var(--font-size-small);
+}
+
+.export-footnote {
+  color: var(--color-text-muted);
+}
+
+.export-problem {
+  color: var(--color-danger);
+}
+
+.export-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-8);
+}

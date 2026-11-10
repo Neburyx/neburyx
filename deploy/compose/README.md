@@ -13,6 +13,7 @@ docker compose up --wait
 - `migrate` runs `neburyx migrate` with the migration role and exits. `api` starts only after it has
   finished successfully, and connects with the app role. The `api` service never sees the migration
   password.
+- Export files are kept in the `neburyx-exports` volume, mounted at `/data/exports` (the image creates it for the `node` user with mode 0700). Set `NEBURYX_EXPORT_DIR` to keep them elsewhere. `docker compose down -v` removes them with the database.
 - The API is published on `127.0.0.1` only (port 8080, or `NEBURYX_PORT`); Postgres is not published. The
   app has no sign-in yet, so do not change the published address.
 - To upgrade, set `NEBURYX_TAG` to the new tag and run `docker compose up --wait` again. Migrations run

@@ -1,4 +1,4 @@
-import type { ConflictReason, ErrorCode, SourceUnavailableReason } from './error-codes.js';
+import type { AccessDeniedReason, ConflictReason, ErrorCode, InvalidRequestReason, SourceUnavailableReason } from './error-codes.js';
 import { ERROR_CODES } from './error-codes.js';
 
 export interface ErrorEntry {
@@ -24,6 +24,16 @@ export const CONFLICT_ENTRIES: Readonly<Record<ConflictReason, Omit<ErrorEntry, 
   'status-change-not-allowed': { message: 'An archived investigation must be reopened before it can be closed.', retryable: false },
   'investigation-read-only': { message: 'This investigation is closed or archived. Reopen it to make changes.', retryable: false },
   'source-changed': { message: 'This source now points to a different database or is no longer configured. This investigation is read-only.', retryable: false },
+};
+
+/** The sentence of each reason of `ACCESS_DENIED`; it never says what changed. */
+export const ACCESS_DENIED_ENTRIES: Readonly<Record<AccessDeniedReason, Omit<ErrorEntry, 'status'>>> = {
+  'access-changed': { message: 'Your access changed since this export was made. Export again to get a file that matches your current access.', retryable: false },
+};
+
+/** The sentence of each reason of `INVALID_REQUEST`; the limit itself is in the details. */
+export const INVALID_REQUEST_ENTRIES: Readonly<Record<InvalidRequestReason, Omit<ErrorEntry, 'status'>>> = {
+  'export-too-large': { message: 'This view holds more than one export can. Hide some items, then export again.', retryable: false },
 };
 
 export const ERROR_TABLE: Readonly<Record<ErrorCode, ErrorEntry>> = {

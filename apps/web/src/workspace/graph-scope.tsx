@@ -15,7 +15,8 @@ import { filteredOnlyCount, hiddenByFiltersLine, hiddenFromViewLine, outsideFocu
 
 const NOTHING_ASKED: ReadableStore<RequestState<Count>> = readable(createStore<RequestState<Count>>({ phase: 'idle' }));
 
-function useNotRetrieved(): Count {
+/** What is not yet retrieved of the loaded graph, as the graph scope lines show it. */
+export function useNotRetrieved(): Count {
   const graph = useLoadedGraph();
   const mask = useSessionMask();
   const coverage = useCoverageStoreWhenProvided();

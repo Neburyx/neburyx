@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { purgeDeletedInvestigations } from '../jobs/maintenance.js';
 import { createLogger } from '../logger.js';
 import { parseMapping } from '../mapping/load.js';
+import { idleExportDeps } from '../testing/export-deps.js';
 import { holdRow } from '../testing/barrier.js';
 import { rows } from '../testing/database.js';
 import { rigStores, startRig } from '../testing/investigation-rig.js';
@@ -27,7 +28,8 @@ afterAll(async () => {
 type Rig = Awaited<ReturnType<typeof startRig>>;
 const running = () => startRig(postgres, mapping);
 const silent = createLogger({ write: () => undefined });
-const purgeWith = (rig: Rig, audited: string[] = []) => purgeDeletedInvestigations({ store: rig.store, audit: { record: (event) => { audited.push(event.action); return Promise.resolve(); } }, logger: silent });
+const exportFiles = idleExportDeps().files;
+const purgeWith = (rig: Rig, audited: string[] = []) => purgeDeletedInvestigations({ store: rig.store, exports: rig.store, files: exportFiles, audit: { record: (event) => { audited.push(event.action); return Promise.resolve(); } }, logger: silent });
 
 /** An investigation with a view, deleted, with its purge date `purgeAfter` (an interval from the database's now). */
 async function deleted(rig: Rig, caseRef: string, purgeAfter: string | null): Promise<string> {
@@ -113,7 +115,7 @@ describe('purging expired investigations against Postgres', () => {
     const rig = await running();
     for (const caseRef of ['A', 'B', 'C']) await deleted(rig, caseRef, '-1 second');
     let seen = 0;
-    const failing = purgeDeletedInvestigations({ store: rig.store, audit: { record: () => (++seen === 2 ? Promise.reject(new Error('the sink is down')) : Promise.resolve()) }, logger: silent });
+    const failing = purgeDeletedInvestigations({ store: rig.store, exports: rig.store, files: exportFiles, audit: { record: () => (++seen === 2 ? Promise.reject(new Error('the sink is down')) : Promise.resolve()) }, logger: silent });
     await expect(failing).rejects.toThrow('the sink is down');
     expect((await rows(rig.database.ownerUrl, `SELECT id FROM investigations`)).length).toBe(2);
     expect(await purgeWith(rig)).toBe(2);

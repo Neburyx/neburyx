@@ -427,7 +427,7 @@ export async function saveDraft(pool: pg.Pool, write: DraftWrite): Promise<Draft
 }
 
 /** Runs `work` in a transaction on one connection; a throw rolls back, and the error that caused it is the one reported. */
-async function inTransaction<T>(pool: pg.Pool, work: (client: pg.PoolClient) => Promise<T>): Promise<T> {
+export async function inTransaction<T>(pool: pg.Pool, work: (client: pg.PoolClient) => Promise<T>): Promise<T> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');

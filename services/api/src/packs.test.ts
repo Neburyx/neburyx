@@ -14,6 +14,7 @@ import { start, type StartIo } from './start.js';
 import { memoryStoreWith } from './testing/app-store.js';
 import { issuesOf } from './testing/mapping.js';
 import { makeWebRoot } from './testing/web-root.js';
+import { makeExportDirectory } from './testing/export-directory.js';
 
 const PACKS_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'domain-packs');
 const MAPPING_FILE = 'neburyx.yaml';
@@ -59,6 +60,7 @@ function markPii(entity: object, property: string): void {
 const sourceOf = (file: RawMappingFile): RawSource => onlySource(file.sources);
 
 const webRoot = makeWebRoot();
+const exportDirectory = makeExportDirectory();
 const folder = mkdtempSync(join(tmpdir(), 'packs-'));
 const running: { close: () => Promise<unknown> }[] = [];
 
@@ -83,7 +85,7 @@ function fileOfText(text: string): string {
 async function startFile(path: string, store = memoryStoreWith({})) {
   const errors: string[] = [];
   const openStore = vi.fn(() => store);
-  const io: StartIo = { stderr: { write: (text) => errors.push(text) }, logger: pino({ level: 'silent' }), defaultWebRoot: webRoot, openStore, tasks: [], portOverride: 0 };
+  const io: StartIo = { stderr: { write: (text) => errors.push(text) }, logger: pino({ level: 'silent' }), defaultWebRoot: webRoot, defaultExportDirectory: exportDirectory, openStore, tasks: [], portOverride: 0 };
   const result = await start({ ...ENV, NEBURYX_CONFIG: path }, io);
   if (result.exitCode === 0) running.push(result.app);
   return { result, message: errors.join(''), openStore };

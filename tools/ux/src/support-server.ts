@@ -2,7 +2,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { extname, join, normalize, sep } from 'node:path';
-import { deleteViewRequestSchema, restoreInvestigationRequestSchema, DEFAULT_INVESTIGATION_LIST_LIMIT, DEFAULT_VIEW_PAGE, MAX_INVESTIGATION_LIST_LIMIT, MAX_VIEW_PAGE, viewListQuerySchema, parseEdgeRefSegment, renameRequestSchema, renameViewRequestSchema, saveViewRequestSchema, statusChangeRequestSchema, investigationListCountsSchema, nodeSchema, investigationListQuerySchema, type Investigation, type LastTest, openInvestigationRequestSchema, SEARCH_GROUP_CAP, searchMoreRequestSchema, searchMoreResultSchema, searchRequestSchema, searchResultSchema, type SourceSummary, sourceSummaryFieldsSchema, sourceSummarySchema, type SourceTestReport, type EdgeReadRef, valueOfPathSegment } from '@neburyx/contracts';
+import { exportRequestSchema, IDEMPOTENCY_KEY_PATTERN, deleteViewRequestSchema, restoreInvestigationRequestSchema, DEFAULT_INVESTIGATION_LIST_LIMIT, DEFAULT_VIEW_PAGE, MAX_INVESTIGATION_LIST_LIMIT, MAX_VIEW_PAGE, viewListQuerySchema, parseEdgeRefSegment, renameRequestSchema, renameViewRequestSchema, saveViewRequestSchema, statusChangeRequestSchema, investigationListCountsSchema, nodeSchema, investigationListQuerySchema, type Investigation, type LastTest, openInvestigationRequestSchema, SEARCH_GROUP_CAP, searchMoreRequestSchema, searchMoreResultSchema, searchRequestSchema, searchResultSchema, type SourceSummary, sourceSummaryFieldsSchema, sourceSummarySchema, type SourceTestReport, type EdgeReadRef, valueOfPathSegment } from '@neburyx/contracts';
 
 interface SupportProfile {
   readonly sourceId: string;
@@ -307,6 +307,8 @@ function countsOf(stored: StoredInvestigation): { nodeCount: number; edgeCount: 
 /** The synthetic stand-in for the entity and investigation endpoints: it holds the investigations opened since it started, and an entity named `missing` does not exist. */
 function createInvestigations(options: SupportServerOptions) {
   const held = new Map<string, StoredInvestigation>();
+  const exports = new Map<string, { readonly format: 'json' | 'csv'; readonly filename: string }>();
+  let exportMode: 'ok' | 'refused' | 'failed' | 'large' = 'ok';
   /** The investigation as the routes that are not restore see it: a deleted one is not there. */
   const live = (id: string): StoredInvestigation | undefined => {
     const stored = held.get(id);
@@ -483,6 +485,32 @@ function createInvestigations(options: SupportServerOptions) {
         stored.version += 1;
       }
       json(response, 200, { investigation: shown(stored) }, { etag: `"${stored.version}"` });
+    },
+    /** How the stand-in answers an export: normally, refused as if access changed, failed, or as if the view were too large. */
+    setExportMode(body: unknown, response: ServerResponse): void {
+      const given = typeof body === 'object' && body !== null && !Array.isArray(body) ? Object.fromEntries(Object.entries(body)) : {};
+      const mode = given['mode'];
+      if (mode !== 'ok' && mode !== 'refused' && mode !== 'failed' && mode !== 'large') return json(response, 400, INVALID);
+      exportMode = mode;
+      json(response, 200, {});
+    },
+    createExport(id: string, key: string | undefined, body: unknown, response: ServerResponse): void {
+      const parsed = exportRequestSchema.safeParse(body);
+      if (!parsed.success || key === undefined || !IDEMPOTENCY_KEY_PATTERN.test(key)) return json(response, 400, INVALID);
+      if (live(id) === undefined) return json(response, 404, NOT_FOUND);
+      if (exportMode === 'large') return json(response, 400, { error: { code: 'INVALID_REQUEST', message: 'This view holds more than one export can. Hide some items, then export again.', retryable: false, traceId: 'support', details: { reason: 'export-too-large', maxElements: 300 } } });
+      if (exportMode === 'failed') return json(response, 500, { error: { code: 'EXPORT_FAILED', message: 'The export could not be created.', retryable: true, traceId: 'support' } });
+      const exportId = randomUUID();
+      const filename = parsed.data.format === 'json' ? 'neburyx-export-20261110T101500Z.json' : 'neburyx-export-20261110T101500Z.zip';
+      exports.set(exportId, { format: parsed.data.format, filename });
+      json(response, 201, { id: exportId, status: 'ready', format: parsed.data.format, filename, sizeBytes: 2, createdAt: '2026-11-10T10:15:00.000Z', expiresAt: '2026-11-17T10:15:00.000Z' });
+    },
+    downloadExport(id: string, response: ServerResponse): void {
+      const stored = exports.get(id);
+      if (stored === undefined) return json(response, 404, NOT_FOUND);
+      if (exportMode === 'refused') return json(response, 403, { error: { code: 'ACCESS_DENIED', message: 'Your access changed since this export was made. Export again to get a file that matches your current access.', retryable: false, traceId: 'support', details: { reason: 'access-changed' } } });
+      response.writeHead(200, { 'content-type': stored.format === 'json' ? 'application/json' : 'application/zip', 'content-disposition': `attachment; filename="${stored.filename}"`, 'cache-control': 'no-store' });
+      response.end('{}');
     },
     /** Changes the status behind the page's back, as another tab would. */
     setStatus(body: unknown, response: ServerResponse): void {
@@ -883,6 +911,11 @@ export function createSupportServer(options: SupportServerOptions): Server {
       const isApi = path === API_PREFIX || path.startsWith(`${API_PREFIX}/`) || PROBE_PATHS.has(path);
       if (request.method === 'POST' && path === '/v1/investigations') return investigations.open(await bodyOf(request), response);
       if (request.method === 'POST' && path === '/v1/graph/read-refs') return investigations.readRefs(await bodyOf(request), response);
+      const exporting = /^\/v1\/investigations\/([^/]+)\/exports$/.exec(path);
+      if (request.method === 'POST' && exporting?.[1] !== undefined) return investigations.createExport(decodeURIComponent(exporting[1]), typeof request.headers['idempotency-key'] === 'string' ? request.headers['idempotency-key'] : undefined, await bodyOf(request), response);
+      const downloading = /^\/v1\/exports\/([^/]+)\/download$/.exec(path);
+      if (request.method === 'GET' && downloading?.[1] !== undefined) return investigations.downloadExport(decodeURIComponent(downloading[1]), response);
+      if (request.method === 'POST' && path === '/__support/export-mode') return investigations.setExportMode(await bodyOf(request), response);
       const lifecycle = /^\/v1\/investigations\/([^/]+)\/status$/.exec(path);
       if (request.method === 'POST' && lifecycle?.[1] !== undefined) return investigations.changeStatus(decodeURIComponent(lifecycle[1]), await bodyOf(request), response);
       const renaming = /^\/v1\/investigations\/([^/]+)$/.exec(path);

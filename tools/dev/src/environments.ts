@@ -27,6 +27,8 @@ export interface ApiSettings {
   readonly webRoot: string;
   /** Base64 of 32 random bytes, made once per run so cursors survive the API's restarts. */
   readonly cursorKey: string;
+  /** A directory of the developer's own for export files, so a run never needs the image's `/data/exports`. */
+  readonly exportDirectory: string;
   /** The logins the mapping's sources name: the values of the developer's own env file. */
   readonly sourceLogins: Environment;
 }
@@ -42,6 +44,7 @@ export function apiEnvironment(base: Environment, api: ApiSettings): Environment
     NEBURYX_PORT: String(api.port),
     NEBURYX_WEB_ROOT: api.webRoot,
     NEBURYX_CURSOR_KEY: api.cursorKey,
+    NEBURYX_EXPORT_DIR: api.exportDirectory,
   };
 }
 

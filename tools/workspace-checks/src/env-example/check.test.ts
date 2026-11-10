@@ -11,10 +11,10 @@ function root(example: string, files: Record<string, string>): string {
 }
 
 describe('the API variables against .env.example in this repository', () => {
-  it('agree, and are the nine the API reads', () => {
+  it('agree, and are the ten the API reads', () => {
     expect(checkEnvExample(repoRoot)).toEqual([]);
     const names = [...new Set(readsOf(repoRoot).flatMap((entry) => (entry.name === undefined ? [] : [entry.name])))].sort();
-    expect(names).toEqual(['DATABASE_APP_ROLE', 'DATABASE_MIGRATION_URL', 'DATABASE_URL', 'NEBURYX_CONFIG', 'NEBURYX_CONTAINER', 'NEBURYX_CURSOR_KEY', 'NEBURYX_HOST', 'NEBURYX_PORT', 'NEBURYX_WEB_ROOT']);
+    expect(names).toEqual(['DATABASE_APP_ROLE', 'DATABASE_MIGRATION_URL', 'DATABASE_URL', 'NEBURYX_CONFIG', 'NEBURYX_CONTAINER', 'NEBURYX_CURSOR_KEY', 'NEBURYX_EXPORT_DIR', 'NEBURYX_HOST', 'NEBURYX_PORT', 'NEBURYX_WEB_ROOT']);
   });
 
   it('keep the secrets without a value', () => {

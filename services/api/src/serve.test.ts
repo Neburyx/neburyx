@@ -16,8 +16,10 @@ import { sourceWith } from './testing/gate-fixtures.js';
 import { fileOf } from './testing/mapping.js';
 import { SERVER_ROW } from './testing/source-tester.js';
 import { makeWebRoot } from './testing/web-root.js';
+import { makeExportDirectory } from './testing/export-directory.js';
 
 const webRoot = makeWebRoot();
+const exportDirectory = makeExportDirectory();
 afterAll(() => rmSync(webRoot, { recursive: true, force: true }));
 
 const ENV = { DATABASE_URL: 'postgres://app@db.example.test/neburyx', NEBURYX_WEB_ROOT: webRoot };
@@ -42,7 +44,7 @@ const QUICK: ShutdownTimes = { graceMs: 100, deadlineMs: 2000 };
 const io = (stderr: string[] = []): Parameters<typeof serve>[1] => ({
   stderr: { write: (text) => stderr.push(text) },
   logger: pino({ level: 'silent' }),
-  defaultWebRoot: webRoot,
+  defaultWebRoot: webRoot, defaultExportDirectory: exportDirectory,
   openStore: memoryAppStore,
   tasks: [],
   portOverride: 0,

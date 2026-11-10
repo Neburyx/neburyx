@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import type { Socket } from 'node:net';
 import fastifyStatic from '@fastify/static';
-import { type ErrorCode, deleteInvestigationResponseSchema, deleteViewRequestSchema, deleteViewResponseSchema, restoreInvestigationRequestSchema, MAX_DRAFT_DOCUMENT_BYTES, readRefsRequestSchema, readRefsResponseSchema, draftWriteRequestSchema, draftWriteResponseSchema, renameRequestSchema, renameResponseSchema, statusChangeRequestSchema, statusChangeResponseSchema, derivedNeighborsRequestSchema, derivedNeighborsResponseSchema, coverageRequestSchema, coverageResponseSchema, degreePreviewRequestSchema, edgeDetailSchema, edgePathSchema, entityLookupRequestSchema, degreePreviewSchema, entityPathSchema, entityQuerySchema, expandRequestSchema, expandResponseSchema, healthResponseSchema, investigationListQuerySchema, investigationListResponseSchema, investigationResponseSchema, meResponseSchema, nodeSchema, parseEdgeRefSegment, parseSourceLinkSegment, sourceLinkPathSchema, sourceLinkQuerySchema, openInvestigationRequestSchema, openInvestigationResponseSchema, readyResponseSchema, searchMoreRequestSchema, searchMoreResultSchema, searchRequestSchema, searchResultSchema, sourceProfileSchema, sourceTestReportSchema, sourcesResponseSchema, renameViewRequestSchema, restoreViewResponseSchema, saveViewRequestSchema, saveViewResponseSchema, viewListQuerySchema, viewListResponseSchema, ownedViewListResponseSchema, namedViewSchema } from '@neburyx/contracts';
+import { type ErrorCode, deleteInvestigationResponseSchema, deleteViewRequestSchema, deleteViewResponseSchema, restoreInvestigationRequestSchema, MAX_DRAFT_DOCUMENT_BYTES, readRefsRequestSchema, readRefsResponseSchema, exportRequestSchema, exportSchema, draftWriteRequestSchema, draftWriteResponseSchema, renameRequestSchema, renameResponseSchema, statusChangeRequestSchema, statusChangeResponseSchema, derivedNeighborsRequestSchema, derivedNeighborsResponseSchema, coverageRequestSchema, coverageResponseSchema, degreePreviewRequestSchema, edgeDetailSchema, edgePathSchema, entityLookupRequestSchema, degreePreviewSchema, entityPathSchema, entityQuerySchema, expandRequestSchema, expandResponseSchema, healthResponseSchema, investigationListQuerySchema, investigationListResponseSchema, investigationResponseSchema, meResponseSchema, nodeSchema, parseEdgeRefSegment, parseSourceLinkSegment, sourceLinkPathSchema, sourceLinkQuerySchema, openInvestigationRequestSchema, openInvestigationResponseSchema, readyResponseSchema, searchMoreRequestSchema, searchMoreResultSchema, searchRequestSchema, searchResultSchema, sourceProfileSchema, sourceTestReportSchema, sourcesResponseSchema, renameViewRequestSchema, restoreViewResponseSchema, saveViewRequestSchema, saveViewResponseSchema, viewListQuerySchema, viewListResponseSchema, ownedViewListResponseSchema, namedViewSchema } from '@neburyx/contracts';
 import { z } from 'zod';
 import Fastify, {
   type FastifyBaseLogger,
@@ -17,6 +17,10 @@ import { deriveReferenceKeys, type ReferenceKeys } from './reference/keys.js';
 import { canonicalLookup, canonicalOpen } from './reference/resolve.js';
 import { createCoverageService } from './graph/coverage-service.js';
 import { createReadRefsService } from './graph/read-refs-service.js';
+import { createExportService } from './exports/export-service.js';
+import { fingerprintOf, IDEMPOTENT_REPLAY_HEADER, idempotencyKeyOf, runOnce } from './exports/idempotency.js';
+import { createShownReader } from './exports/shown-reader.js';
+import type { ExportFileStore } from './exports/store.js';
 import { createDegreePreviewService } from './graph/degree-preview-service.js';
 import { createDerivedNeighborsService } from './graph/derived-neighbors-service.js';
 import { createExpandService } from './graph/expand-service.js';
@@ -72,6 +76,10 @@ export interface AppOptions {
   readonly closeSources?: (() => Promise<void>) | undefined;
   /** The request rate of this copy; a test passes one with its own clock. */
   readonly limiter?: RequestLimiter;
+  /** Where export files are kept; without it the export routes are not registered. */
+  readonly exportFiles?: ExportFileStore | undefined;
+  /** The version of the policy a person's access is under, for an export to be made under and a download to be checked against; Community has none. */
+  readonly policyVersion?: ((sourceId: string) => string) | undefined;
 }
 
 const API_PREFIX = '/v1';
@@ -87,6 +95,8 @@ const ifMatchSchema = z.string().regex(/^"[1-9][0-9]{0,9}"$/).transform((tag) =>
 
 /** The draft is two documents of at most `MAX_DRAFT_DOCUMENT_BYTES` each, so a body may hold twice that and its envelope. */
 const DRAFT_BODY_LIMIT = 2 * MAX_DRAFT_DOCUMENT_BYTES + 4096;
+/** An export names the items it holds by reference, in a body of at most one megabyte. */
+const EXPORT_BODY_LIMIT = 1_048_576;
 const PROBE_PATHS: ReadonlySet<string> = new Set(['/healthz', '/readyz']);
 const TRACE_HEADER = 'x-trace-id';
 const UNMATCHED_ROUTE = 'unmatched';
@@ -462,6 +472,64 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       const answer = await coverage.coverage({ traceId: request.id, principal: identity.principal, sourceId: body.data.sourceId, mask: body.data.mask === true, entities: body.data.entities });
       return coverageResponseSchema.parse(answer);
     });
+
+    const exportFiles = options.exportFiles;
+    if (exportFiles !== undefined) {
+      const policyVersion = options.policyVersion ?? (() => 'none');
+      const seams = options.seams ?? communitySeams();
+      const exportService = createExportService({
+        store: options.store,
+        files: exportFiles,
+        reader: createShownReader({ readRefs, coverage }),
+        mapping,
+        access,
+        policy: seams.policy,
+        policyVersion,
+        audit: auditSink,
+        logger: options.logger,
+      });
+      app.post('/v1/investigations/:id/exports', { bodyLimit: EXPORT_BODY_LIMIT, config: { permission: 'principal' } }, async (request, reply) => {
+        const params = profileParamsSchema.safeParse(request.params);
+        const body = exportRequestSchema.safeParse(request.body);
+        const key = idempotencyKeyOf(request.headers['idempotency-key']);
+        if (!noQuerySchema.safeParse(request.query).success || !params.success || !body.success || key === undefined) throw new AppError('INVALID_REQUEST');
+        const identity = await options.store.current();
+        const principal = identity.principal;
+        const stored = await options.store.readInvestigation(params.data.id, principal.id);
+        if (stored === undefined) throw new AppError('NOT_FOUND');
+        const answer = await runOnce(
+          { store: options.store, policy: seams.policy, policyVersion },
+          { principal, sourceId: stored.investigation.sourceId, key, fingerprint: fingerprintOf({ method: 'POST', path: request.url.split('?')[0] ?? '', query: '', body: request.body }), stillReadable: async () => (await options.store.readInvestigation(params.data.id, principal.id)) !== undefined },
+          async () => {
+            const made = await exportService.create({ traceId: request.id, principal, investigationId: params.data.id, request: body.data, signal: signalOf(request) });
+            return { statusCode: 201, body: exportSchema.parse(made), replayed: false };
+          },
+          (error) => (error instanceof AppError ? { statusCode: errorStatus(error.code), body: errorResponse(error.code, request.id, error.details) } : undefined),
+        );
+        if (answer.replayed) reply.header(IDEMPOTENT_REPLAY_HEADER, 'true');
+        return reply.code(answer.statusCode).send(answer.body);
+      });
+
+      app.get('/v1/exports/:id', { exposeHeadRoute: false, config: { permission: 'principal' } }, async (request) => {
+        const params = profileParamsSchema.safeParse(request.params);
+        if (!noQuerySchema.safeParse(request.query).success || !params.success) throw new AppError('INVALID_REQUEST');
+        const identity = await options.store.current();
+        return exportSchema.parse(await exportService.get({ principal: identity.principal, id: params.data.id }));
+      });
+
+      app.get('/v1/exports/:id/download', { exposeHeadRoute: false, config: { permission: 'principal' } }, async (request, reply) => {
+        const params = profileParamsSchema.safeParse(request.params);
+        if (!noQuerySchema.safeParse(request.query).success || !params.success) throw new AppError('INVALID_REQUEST');
+        const identity = await options.store.current();
+        const file = await exportService.download({ traceId: request.id, principal: identity.principal, id: params.data.id });
+        return reply
+          .header('content-type', file.contentType)
+          .header('content-disposition', `attachment; filename="${file.filename}"`)
+          .header('cache-control', 'no-store')
+          .header('x-content-type-options', 'nosniff')
+          .send(file.bytes);
+      });
+    }
 
     const expansions = createExpandService({ gate: options.gate, mapping, access, entities });
     app.post('/v1/graph/expand', { config: { permission: 'principal' } }, async (request) => {

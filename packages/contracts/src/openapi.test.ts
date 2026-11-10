@@ -8,8 +8,8 @@ describe('buildOpenApiDocument', () => {
     const document = buildOpenApiDocument();
     expect(document.openapi).toBe('3.1.0');
     expect(document.info.title).toBe('Neburyx API');
-    expect(Object.keys(document.paths)).toEqual(['/healthz', '/readyz', '/v1/me', '/v1/sources/{id}/profile', '/v1/sources/{id}/test', '/v1/entities/{sourceId}/{entityType}/{stableId}', '/v1/entities/lookup', '/v1/investigations', '/v1/investigations/{id}', '/v1/investigations/{id}/status', '/v1/investigations/{id}/restore', '/v1/investigations/{id}/draft', '/v1/views', '/v1/investigations/{id}/views', '/v1/investigations/{id}/views/{viewId}', '/v1/investigations/{id}/views/{viewId}/restore', '/v1/investigations/{id}/views/{viewId}/delete', '/v1/edges/{ref}', '/v1/source-links/{ref}', '/v1/search/entities', '/v1/search/entities/more', '/v1/graph/preview-expansion', '/v1/graph/derived-neighbors', '/v1/graph/coverage', '/v1/graph/read-refs', '/v1/graph/expand', '/v1/sources']);
-    expect(Object.keys(document.components.schemas)).toEqual(['CoverageRequest', 'CoverageResponse', 'DegreePreview', 'DegreePreviewRequest', 'DerivedNeighborsRequest', 'DerivedNeighborsResponse', 'DraftWriteRequest', 'DraftWriteResponse', 'EdgeDetail', 'EntityLookupRequest', 'ErrorResponse', 'ExpandRequest', 'ExpandResponse', 'GraphNode', 'HealthResponse', 'InvestigationListResponse', 'InvestigationResponse', 'MeResponse', 'NamedView', 'OpenInvestigationRequest', 'OpenInvestigationResponse', 'ReadRefsRequest', 'ReadRefsResponse', 'ReadyResponse', 'RenameRequest', 'RenameResponse', 'RenameViewRequest', 'RestoreViewResponse', 'SaveViewRequest', 'SaveViewResponse', 'SearchMoreRequest', 'SearchMoreResult', 'SearchRequest', 'SearchResult', 'SourceProfile', 'SourceTestReport', 'SourcesResponse', 'DeleteInvestigationResponse', 'DeleteViewRequest', 'DeleteViewResponse', 'RestoreInvestigationRequest', 'StatusChangeRequest', 'StatusChangeResponse', 'OwnedViewListResponse', 'ViewListResponse']);
+    expect(Object.keys(document.paths)).toEqual(['/healthz', '/readyz', '/v1/me', '/v1/sources/{id}/profile', '/v1/sources/{id}/test', '/v1/entities/{sourceId}/{entityType}/{stableId}', '/v1/entities/lookup', '/v1/investigations', '/v1/investigations/{id}', '/v1/investigations/{id}/status', '/v1/investigations/{id}/exports', '/v1/exports/{id}', '/v1/exports/{id}/download', '/v1/investigations/{id}/restore', '/v1/investigations/{id}/draft', '/v1/views', '/v1/investigations/{id}/views', '/v1/investigations/{id}/views/{viewId}', '/v1/investigations/{id}/views/{viewId}/restore', '/v1/investigations/{id}/views/{viewId}/delete', '/v1/edges/{ref}', '/v1/source-links/{ref}', '/v1/search/entities', '/v1/search/entities/more', '/v1/graph/preview-expansion', '/v1/graph/derived-neighbors', '/v1/graph/coverage', '/v1/graph/read-refs', '/v1/graph/expand', '/v1/sources']);
+    expect(Object.keys(document.components.schemas)).toEqual(['CoverageRequest', 'CoverageResponse', 'DegreePreview', 'DegreePreviewRequest', 'DerivedNeighborsRequest', 'DerivedNeighborsResponse', 'DraftWriteRequest', 'DraftWriteResponse', 'EdgeDetail', 'EntityLookupRequest', 'ErrorResponse', 'Export', 'ExportFile', 'ExportRequest', 'ExpandRequest', 'ExpandResponse', 'GraphNode', 'HealthResponse', 'InvestigationListResponse', 'InvestigationResponse', 'MeResponse', 'NamedView', 'OpenInvestigationRequest', 'OpenInvestigationResponse', 'ReadRefsRequest', 'ReadRefsResponse', 'ReadyResponse', 'RenameRequest', 'RenameResponse', 'RenameViewRequest', 'RestoreViewResponse', 'SaveViewRequest', 'SaveViewResponse', 'SearchMoreRequest', 'SearchMoreResult', 'SearchRequest', 'SearchResult', 'SourceProfile', 'SourceTestReport', 'SourcesResponse', 'DeleteInvestigationResponse', 'DeleteViewRequest', 'DeleteViewResponse', 'RestoreInvestigationRequest', 'StatusChangeRequest', 'StatusChangeResponse', 'OwnedViewListResponse', 'ViewListResponse']);
     expect(document.components.schemas.ErrorResponse).not.toHaveProperty('$schema');
     expect(document.components.schemas.MeResponse).not.toHaveProperty('$schema');
   });
@@ -20,6 +20,20 @@ describe('buildOpenApiDocument', () => {
     expect(text).toContain('"investigation-read-only"');
     expect(text).toContain('This investigation is closed or archived. Reopen it to make changes.');
     expect(text).toMatch(/"status":\{[^}]*"closed"[^}]*"archived"/);
+  });
+
+  it('lists the reasons of ACCESS_DENIED and INVALID_REQUEST, and the limit an export names', () => {
+    const text = JSON.stringify(buildOpenApiDocument().components.schemas.ErrorResponse);
+    expect(text).toContain('"access-changed"');
+    expect(text).toContain('"export-too-large"');
+    expect(text).toContain('"maxElements"');
+    expect(text).toContain('Export again to get a file that matches your current access.');
+  });
+
+  it('describes the export routes, with the idempotency key required on creation', () => {
+    const { paths } = buildOpenApiDocument();
+    expect(paths['/v1/investigations/{id}/exports']).toMatchObject({ post: { parameters: expect.arrayContaining([expect.objectContaining({ name: 'Idempotency-Key', in: 'header', required: true })]) } });
+    expect(paths['/v1/exports/{id}/download']).toMatchObject({ get: { responses: { '403': expect.anything(), '404': expect.anything() } } });
   });
 
   it('describes the body of the open request from its schema, with the limits it enforces', () => {

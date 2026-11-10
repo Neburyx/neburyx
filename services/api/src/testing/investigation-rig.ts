@@ -20,7 +20,7 @@ const json = { 'content-type': 'application/json' };
 /** The stores a rig opened, for the file to close when it is done. */
 export const rigStores: AppStore[] = [];
 
-export async function startRig(postgres: TestPostgres, appMapping: MappingModel) {
+export async function startRig(postgres: TestPostgres, appMapping: MappingModel, extra: Partial<Parameters<typeof buildApp>[0]> = {}) {
   const database = await postgres.newDatabase();
   expect((await runCli(['migrate'], { DATABASE_MIGRATION_URL: database.ownerUrl, DATABASE_APP_ROLE: database.appRole }).done).code).toBe(0);
   const opened = createAppStore(database.appUrl, () => undefined, { migrationsDirectory: SHIPPED });
@@ -32,7 +32,7 @@ export async function startRig(postgres: TestPostgres, appMapping: MappingModel)
   const source = appMapping.sources[0];
   if (source === undefined) throw new Error('the mapping has a source');
   const executor = new TestExecutor(withOnlineIndexes(source, () => Promise.resolve(entityRows(WIDGET))));
-  const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store, mapping: appMapping, gate: testSourceGate(appMapping, { executor }).gate });
+  const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store, mapping: appMapping, gate: testSourceGate(appMapping, { executor }).gate, ...extra });
   const get = (url: string) => app.inject({ method: 'GET', url });
   const open = async (caseRef?: string) => {
     const response = await app.inject({ method: 'POST', url: '/v1/investigations', payload: { sourceId: 'demo', entity: { sourceId: 'demo', entityType: 'widget', stableId: 'W-1' }, ...(caseRef === undefined ? {} : { caseRef }) } });

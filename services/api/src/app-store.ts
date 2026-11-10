@@ -4,6 +4,7 @@ import { checkMigrations, pingDatabase } from './db/readiness-repository.js';
 import { migrationFileNames } from './migrate/provider.js';
 import { PROBE_STEP_MS, READINESS_LIMIT_MS, runReadiness } from './health/readiness.js';
 import { readIdentity, seedFirstStart } from './db/identity-repository.js';
+import { createExportStore, type ExportStore } from './db/exports-repository.js';
 import { changeInvestigationStatus, createInvestigation, deleteInvestigation, purgeExpiredInvestigations, restoreInvestigation, findReusableInvestigation, readInvestigation, readLibrary, renameInvestigation, saveDraft, type InvestigationStore } from './db/investigations-repository.js';
 import { listOwnedViews, type OwnedViewStore } from './db/views-list-repository.js';
 import { deleteNamedView, listNamedViews, renameNamedView, restoreNamedView, saveNamedView, type ViewStore } from './db/views-repository.js';
@@ -16,7 +17,7 @@ import type { SourceModel } from './mapping/model.js';
 import { toStartError } from './identity/errors.js';
 import type { Identity } from './identity/identity.js';
 
-export interface AppStore extends InvestigationStore, ViewStore, OwnedViewStore {
+export interface AppStore extends InvestigationStore, ViewStore, OwnedViewStore, ExportStore {
   initialize(): Promise<void>;
   current(): Promise<Identity>;
   syncSources(sources: readonly SourceModel[]): Promise<readonly string[]>;
@@ -77,6 +78,7 @@ export function createAppStore(url: string, onConnectionError: () => void, optio
     rebindSource: (sourceId, identityHash) => rebindSource(pool, sourceId, identityHash),
     createInvestigation: (input) => createInvestigation(pool, input),
     findReusableInvestigation: (query) => findReusableInvestigation(pool, query),
+    ...createExportStore(pool),
     readInvestigation: (id, ownerId) => readInvestigation(pool, id, ownerId),
     saveDraft: (write) => saveDraft(pool, write),
     renameInvestigation: (change) => renameInvestigation(pool, change),

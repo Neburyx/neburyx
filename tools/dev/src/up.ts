@@ -1,3 +1,4 @@
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadDevConfig } from './config.js';
 import { apiEnvironment, baseEnvironment, migrationEnvironment, webEnvironment } from './environments.js';
@@ -72,7 +73,7 @@ export async function up(deps: Dependencies): Promise<number> {
         command: deps.nodePath,
         args: [join(deps.root, 'services/api/dist/main.js')],
         cwd: deps.root,
-        env: apiEnvironment(base, { databaseUrl: database.appUrl, mappingPath: own.mappingPath, port: apiPort, webRoot: join(deps.root, 'apps/web/dist'), cursorKey: deps.random(CURSOR_KEY_BYTES).toString('base64'), sourceLogins: own.logins }),
+        env: apiEnvironment(base, { databaseUrl: database.appUrl, mappingPath: own.mappingPath, port: apiPort, webRoot: join(deps.root, 'apps/web/dist'), cursorKey: deps.random(CURSOR_KEY_BYTES).toString('base64'), exportDirectory: join(tmpdir(), `neburyx-dev-exports-${apiPort}`), sourceLogins: own.logins }),
         healthUrl: `${apiUrl}/healthz`,
         watch: [join(deps.root, 'services/api/dist'), join(deps.root, 'packages/contracts/dist')],
       },

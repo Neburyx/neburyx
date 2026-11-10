@@ -1,11 +1,11 @@
 import { z } from 'zod';
-import { CONFLICT_REASONS, ERROR_CODES, errorDetailsSchema, partialDetailsSchema, READ_ONLY_STATUSES, SOURCE_CHANGED_STATES, SOURCE_UNAVAILABLE_REASONS, type ErrorCode } from './error-codes.js';
+import { ACCESS_DENIED_REASONS, CONFLICT_REASONS, ERROR_CODES, INVALID_REQUEST_REASONS, errorDetailsSchema, partialDetailsSchema, READ_ONLY_STATUSES, SOURCE_CHANGED_STATES, SOURCE_UNAVAILABLE_REASONS, type ErrorCode } from './error-codes.js';
 import { ERROR_DETAIL_KEYS } from './error-details.js';
-import { CONFLICT_ENTRIES, ERROR_TABLE, SOURCE_UNAVAILABLE_ENTRIES } from './error-table.js';
+import { ACCESS_DENIED_ENTRIES, CONFLICT_ENTRIES, ERROR_TABLE, INVALID_REQUEST_ENTRIES, SOURCE_UNAVAILABLE_ENTRIES } from './error-table.js';
 
 function variantFor(code: ErrorCode): z.ZodObject {
   const { message, retryable } = ERROR_TABLE[code];
-  const keys = code === 'CONFLICT' ? [] : ERROR_DETAIL_KEYS[code];
+  const keys = code === 'CONFLICT' || code === 'ACCESS_DENIED' || code === 'INVALID_REQUEST' ? [] : ERROR_DETAIL_KEYS[code];
   const fields = Object.fromEntries(keys.map((key) => [key, errorDetailsSchema.shape[key]]));
   const shape = {
     code: z.literal(code),
@@ -41,6 +41,28 @@ const conflictVariants = CONFLICT_REASONS.map((reason) =>
   }),
 );
 
+/** A refusal because access changed says so in its details, with its own sentence, which never says what changed. */
+const accessDeniedVariants = ACCESS_DENIED_REASONS.map((reason) =>
+  z.strictObject({
+    code: z.literal('ACCESS_DENIED'),
+    message: z.literal(ACCESS_DENIED_ENTRIES[reason].message),
+    retryable: z.literal(ACCESS_DENIED_ENTRIES[reason].retryable),
+    traceId: z.string().min(1),
+    details: z.strictObject({ reason: z.literal(reason) }),
+  }),
+);
+
+/** A request refused for its size names the limit in its details. */
+const invalidRequestVariants = INVALID_REQUEST_REASONS.map((reason) =>
+  z.strictObject({
+    code: z.literal('INVALID_REQUEST'),
+    message: z.literal(INVALID_REQUEST_ENTRIES[reason].message),
+    retryable: z.literal(INVALID_REQUEST_ENTRIES[reason].retryable),
+    traceId: z.string().min(1),
+    details: z.strictObject({ reason: z.literal(reason), maxElements: errorDetailsSchema.shape.maxElements.unwrap() }),
+  }),
+);
+
 export const errorResponseSchema = z.object({
-  error: z.union([...ERROR_CODES.filter((code) => code !== 'SOURCE_UNAVAILABLE').map(variantFor), ...unavailableVariants, ...conflictVariants]),
+  error: z.union([...ERROR_CODES.filter((code) => code !== 'SOURCE_UNAVAILABLE').map(variantFor), ...unavailableVariants, ...conflictVariants, ...accessDeniedVariants, ...invalidRequestVariants]),
 });

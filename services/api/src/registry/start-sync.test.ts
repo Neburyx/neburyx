@@ -8,8 +8,10 @@ import { start, type StartIo } from '../start.js';
 import { memoryStoreWith } from '../testing/app-store.js';
 import { baseSource, fileOf } from '../testing/mapping.js';
 import { makeWebRoot } from '../testing/web-root.js';
+import { makeExportDirectory } from '../testing/export-directory.js';
 
 const webRoot = makeWebRoot();
+const exportDirectory = makeExportDirectory();
 const folder = mkdtempSync(join(tmpdir(), 'start-sync-'));
 afterAll(() => {
   rmSync(webRoot, { recursive: true, force: true });
@@ -22,7 +24,7 @@ function io(store: AppStore): { readonly io: StartIo; readonly errors: string[];
   const errors: string[] = [];
   const logs: Record<string, unknown>[] = [];
   const logger = pino({ level: 'info' }, { write: (line: string) => logs.push(JSON.parse(line)) });
-  return { errors, logs, io: { stderr: { write: (text) => errors.push(text) }, logger, defaultWebRoot: webRoot, openStore: () => store, tasks: [], portOverride: 0 } };
+  return { errors, logs, io: { stderr: { write: (text) => errors.push(text) }, logger, defaultWebRoot: webRoot, defaultExportDirectory: exportDirectory, openStore: () => store, tasks: [], portOverride: 0 } };
 }
 
 function mappingFile(...ids: string[]): string {

@@ -7,8 +7,10 @@ import { start, type StartIo } from '../start.js';
 import { memoryAppStore } from '../testing/app-store.js';
 import { baseSource, fileOf, REFUSED_MARKER, REFUSED_YAML, type Json } from '../testing/mapping.js';
 import { makeWebRoot } from '../testing/web-root.js';
+import { makeExportDirectory } from '../testing/export-directory.js';
 
 const webRoot = makeWebRoot();
+const exportDirectory = makeExportDirectory();
 const folder = mkdtempSync(join(tmpdir(), 'start-mapping-'));
 afterAll(() => {
   rmSync(webRoot, { recursive: true, force: true });
@@ -23,7 +25,7 @@ function run(): { readonly io: StartIo; readonly errors: string[]; readonly open
   return {
     errors,
     openStore,
-    io: { stderr: { write: (text) => errors.push(text) }, logger: pino({ level: 'silent' }), defaultWebRoot: webRoot, openStore, tasks: [], portOverride: 0 },
+    io: { stderr: { write: (text) => errors.push(text) }, logger: pino({ level: 'silent' }), defaultWebRoot: webRoot, defaultExportDirectory: exportDirectory, openStore, tasks: [], portOverride: 0 },
   };
 }
 

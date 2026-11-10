@@ -18,20 +18,20 @@ describe('the environments of the children', () => {
   });
 
   it('give the API the app URL, the loopback address, the cursor key and the logins, and neither the administrator nor the migration password', () => {
-    const env = apiEnvironment(baseEnvironment(developer), { databaseUrl: 'postgres://app', mappingPath: '/m.yaml', port: 4100, webRoot: '/web', cursorKey, sourceLogins: logins });
-    expect(env).toMatchObject({ DATABASE_URL: 'postgres://app', NEBURYX_CONFIG: '/m.yaml', NEBURYX_HOST: '127.0.0.1', NEBURYX_PORT: '4100', NEBURYX_WEB_ROOT: '/web', NEBURYX_CURSOR_KEY: cursorKey, ...logins });
+    const env = apiEnvironment(baseEnvironment(developer), { databaseUrl: 'postgres://app', mappingPath: '/m.yaml', port: 4100, webRoot: '/web', cursorKey, exportDirectory: '/tmp/exports', sourceLogins: logins });
+    expect(env).toMatchObject({ DATABASE_URL: 'postgres://app', NEBURYX_CONFIG: '/m.yaml', NEBURYX_HOST: '127.0.0.1', NEBURYX_PORT: '4100', NEBURYX_WEB_ROOT: '/web', NEBURYX_CURSOR_KEY: cursorKey, NEBURYX_EXPORT_DIR: '/tmp/exports', ...logins });
     const text = JSON.stringify(env);
     for (const forbidden of ['DATABASE_MIGRATION_URL', 'DATABASE_APP_ROLE', 'inherited', 'a developer secret', 'elsewhere']) expect(text, forbidden).not.toContain(forbidden);
   });
 
   it('keep the loopback binding even when the developer sets another host', () => {
-    const env = apiEnvironment(baseEnvironment({ ...developer, NEBURYX_HOST: '0.0.0.0' }), { databaseUrl: 'postgres://app', mappingPath: '/m.yaml', port: 4100, webRoot: '/web', cursorKey, sourceLogins: logins });
+    const env = apiEnvironment(baseEnvironment({ ...developer, NEBURYX_HOST: '0.0.0.0' }), { databaseUrl: 'postgres://app', mappingPath: '/m.yaml', port: 4100, webRoot: '/web', cursorKey, exportDirectory: '/tmp/exports', sourceLogins: logins });
     expect(env['NEBURYX_HOST']).toBe('127.0.0.1');
   });
 
   it('let none of the logins replace a fixed value', () => {
     const hostile = { OWN_USER: 'reader', DATABASE_URL: 'postgres://other', NEBURYX_CONFIG: '/other.yaml', NEBURYX_HOST: '0.0.0.0' };
-    const env = apiEnvironment(baseEnvironment(developer), { databaseUrl: 'postgres://app', mappingPath: '/m.yaml', port: 4100, webRoot: '/web', cursorKey, sourceLogins: hostile });
+    const env = apiEnvironment(baseEnvironment(developer), { databaseUrl: 'postgres://app', mappingPath: '/m.yaml', port: 4100, webRoot: '/web', cursorKey, exportDirectory: '/tmp/exports', sourceLogins: hostile });
     expect(env).toMatchObject({ OWN_USER: 'reader', DATABASE_URL: 'postgres://app', NEBURYX_CONFIG: '/m.yaml', NEBURYX_HOST: '127.0.0.1' });
   });
 

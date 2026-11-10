@@ -36,6 +36,9 @@ import {
   type DegreePreviewRequest,
   type DraftWriteRequest,
   type DraftWriteResponse,
+  exportSchema,
+  type ExportRecord,
+  type ExportRequest,
   type ReadRefsRequest,
   type RenameResponse,
   type StatusChangeResponse,
@@ -94,6 +97,11 @@ export interface ClientFailure {
 
 export type ApiFailure = ClientFailure | ServerFailure;
 
+export interface DownloadedFile {
+  readonly blob: Blob;
+  readonly filename: string;
+}
+
 export type ApiResult<T> = { readonly ok: true; readonly value: T } | { readonly ok: false; readonly failure: ApiFailure };
 
 export interface InvestigationPageQuery {
@@ -126,6 +134,10 @@ export interface ApiClient {
   changeInvestigationStatus(id: string, status: Investigation['status'], expectedVersion: number, signal?: AbortSignal): Promise<ApiResult<StatusChangeResponse>>;
   /** Stores a new title for the caller's investigation when `expectedVersion` is its version; the answer names the investigation asked for. */
   renameInvestigation(id: string, title: string, expectedVersion: number, signal?: AbortSignal): Promise<ApiResult<RenameResponse>>;
+  /** Asks the server to build an export of the references given; `key` is the idempotency key, the same text for a retry of the same attempt. */
+  createExport(investigationId: string, request: ExportRequest, key: string, signal?: AbortSignal): Promise<ApiResult<ExportRecord>>;
+  /** The file of an export, with the name the server gave it. A refusal is the server's own failure. */
+  downloadExport(id: string, signal?: AbortSignal): Promise<ApiResult<DownloadedFile>>;
   /** Deletes the caller's investigation when `version` is its version; the answer names the investigation asked for and the date until which it can be restored. */
   deleteInvestigation(id: string, version: number, signal?: AbortSignal): Promise<ApiResult<DeleteInvestigationResponse>>;
   /** Restores a deleted investigation of the caller when `expectedVersion` is its version, and answers it as `getInvestigation` does. */
@@ -223,6 +235,35 @@ async function request<T>(fetcher: Fetcher, path: string, schema: z.ZodType<T>, 
   if (!parsedBody.parsed) return failed('UNREADABLE_RESPONSE');
   const parsed = schema.safeParse(parsedBody.value);
   return parsed.success ? { ok: true, value: parsed.data } : failed('SCHEMA_MISMATCH');
+}
+
+const FILENAME = /filename="([^"\\]+)"/;
+
+/** A download is bytes, not JSON, so a refusal is read from the envelope the server sent and a success is the file itself. */
+async function download(fetcher: Fetcher, path: string, signal: AbortSignal | undefined): Promise<ApiResult<DownloadedFile>> {
+  if (wasAborted(signal)) return failed('ABORTED');
+  let response: Response;
+  let bytes: ArrayBuffer;
+  try {
+    response = await fetcher(path, signal === undefined ? undefined : { signal });
+    bytes = await response.arrayBuffer();
+  } catch {
+    return failed(wasAborted(signal) ? 'ABORTED' : 'NETWORK_UNAVAILABLE');
+  }
+  if (wasAborted(signal)) return failed('ABORTED');
+  if (!response.ok) {
+    const text = new TextDecoder().decode(bytes);
+    const parsedBody = parseJson(text);
+    if (parsedBody.parsed && isEnvelope(parsedBody.value)) {
+      const strict = errorResponseSchema.safeParse(parsedBody.value);
+      const typed = errorBodySchema.safeParse(parsedBody.value);
+      return strict.success && typed.success ? { ok: false, failure: typed.data.error } : failed('SCHEMA_MISMATCH');
+    }
+    return GATEWAY_STATUSES.has(response.status) || text === '' ? failed('NETWORK_UNAVAILABLE') : failed('UNREADABLE_RESPONSE');
+  }
+  const filename = FILENAME.exec(response.headers.get('content-disposition') ?? '')?.[1];
+  if (filename === undefined) return failed('UNREADABLE_RESPONSE');
+  return { ok: true, value: { blob: new Blob([bytes], { type: response.headers.get('content-type') ?? 'application/octet-stream' }), filename } };
 }
 
 export function createApiClient(fetcher: Fetcher = (input, init) => fetch(input, init)): ApiClient {
@@ -326,6 +367,11 @@ export function createApiClient(fetcher: Fetcher = (input, init) => fetch(input,
       const result = await request(fetcher, `/v1/investigations/${encodeURIComponent(id)}`, renameResponseSchema, signal, 'PUT', { title, expectedVersion });
       return result.ok && result.value.investigation.id !== id ? failed('SCHEMA_MISMATCH') : result;
     },
+    createExport: async (investigationId, body, key, signal) => {
+      const result = await request(fetcher, `/v1/investigations/${encodeURIComponent(investigationId)}/exports`, exportSchema, signal, 'POST', body, { headers: { 'idempotency-key': key } });
+      return result.ok && result.value.status !== 'ready' ? failed('SCHEMA_MISMATCH') : result;
+    },
+    downloadExport: (id, signal) => download(fetcher, `/v1/exports/${encodeURIComponent(id)}/download`, signal),
     deleteInvestigation: async (id, version, signal) => {
       const result = await request(fetcher, `/v1/investigations/${encodeURIComponent(id)}`, deleteInvestigationResponseSchema, signal, 'DELETE', undefined, { headers: { 'if-match': `"${version}"` } });
       return result.ok && (result.value.id !== id || result.value.version !== version + 1) ? failed('SCHEMA_MISMATCH') : result;

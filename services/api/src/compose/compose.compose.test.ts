@@ -176,6 +176,13 @@ describe('the credentials of each service', () => {
     }
   });
 
+  it('keeps export files in a volume at /data/exports, owned by the node user with mode 0700, and the api can write there', async () => {
+    const mount = (await stack.compose(['exec', '-T', 'api', 'sh', '-c', 'stat -c "%a %U" /data/exports && touch /data/exports/.probe && rm /data/exports/.probe && echo writable'])).stdout.trim().split('\n');
+    expect(mount).toEqual(['700 node', 'writable']);
+    const id = await stack.containerId('api');
+    expect(await dockerOk(['inspect', '--format', '{{range .Mounts}}{{.Destination}} {{.Type}}\n{{end}}', id])).toContain('/data/exports volume');
+  });
+
   it('shows in the connection log that migrate used the migration role and api the app role', async () => {
     const log = (await stack.compose(['logs', '--no-log-prefix', 'db'])).stdout;
     const users = new Set([...log.matchAll(/connection authorized: user=(\S+)/g)].map((match) => match[1]));

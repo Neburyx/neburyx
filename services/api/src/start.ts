@@ -27,6 +27,8 @@ import { PING_INTERVAL_MS, startPingSchedule, type PingSchedule } from './source
 import { createStartupChecker, startupProblem, type StartupResult } from './source-test/startup.js';
 import { createSourceTester } from './source-test/tester.js';
 import { startJobRunner, type JobRunner } from './jobs/runner.js';
+import { exportDirectoryProblem } from './exports/directory.js';
+import { createExportFileStore } from './exports/store.js';
 import { maintenanceTasks } from './jobs/maintenance.js';
 import { TaskConfigError, validateTasks, type Task } from './jobs/tasks.js';
 
@@ -36,6 +38,8 @@ export interface StartIo {
   readonly stderr: { write(text: string): unknown };
   readonly logger: FastifyBaseLogger;
   readonly defaultWebRoot: string;
+  /** Where export files go when `NEBURYX_EXPORT_DIR` is not set; the shipped default unless a test names its own. */
+  readonly defaultExportDirectory?: string;
   readonly portOverride?: number;
   readonly pingIntervalMs?: number;
   readonly startupProblem?: (results: readonly StartupResult[]) => string | undefined;
@@ -84,7 +88,7 @@ function describeStartFailure(error: unknown): string {
 export async function start(env: Readonly<Record<string, string | undefined>>, io: StartIo): Promise<StartResult> {
   let config;
   try {
-    config = parseConfig(env, { webRoot: io.defaultWebRoot });
+    config = parseConfig(env, { webRoot: io.defaultWebRoot, ...(io.defaultExportDirectory === undefined ? {} : { exportDirectory: io.defaultExportDirectory }) });
   } catch (error) {
     if (!(error instanceof ConfigError)) throw error;
     io.stderr.write(`${error.message}\n`);
@@ -93,6 +97,12 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
 
   if (!hasReadableIndex(config.webRoot)) {
     io.stderr.write('invalid configuration: NEBURYX_WEB_ROOT has no readable index.html\n');
+    return { exitCode: 1 };
+  }
+
+  const exportProblem = exportDirectoryProblem(config.exportDirectory);
+  if (exportProblem !== undefined) {
+    io.stderr.write(`invalid configuration: NEBURYX_EXPORT_DIR ${exportProblem}\n`);
     return { exitCode: 1 };
   }
 
@@ -132,6 +142,7 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
     const startedAt = new Date().toISOString();
     await store.initialize();
     const openedStore = store;
+    const exportFiles = createExportFileStore(config.exportDirectory);
     const usability = createUsabilityRecord();
     const observingStore = observingStoreOf(openedStore, usability);
     for (const sourceId of await store.syncSources(mapping.sources)) {
@@ -150,7 +161,7 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
     seedFromStartup(reachability, results);
     const problem = (io.startupProblem ?? startupProblem)(results);
     if (problem !== undefined) throw new StartupStop(problem);
-    const tasks = io.tasks ?? maintenanceTasks({ store: openedStore, audit: seams.audit, logger: io.logger });
+    const tasks = io.tasks ?? maintenanceTasks({ store: openedStore, exports: openedStore, files: exportFiles, audit: seams.audit, logger: io.logger });
     validateTasks(tasks);
     jobs = await (io.startJobRunner ?? startJobRunner)(
       config.databaseUrl,
@@ -170,6 +181,7 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
       seams,
       referenceKeys,
       cursors,
+      exportFiles,
       degreeVerdicts: usability,
       indexes: gate.indexes,
       reachability,

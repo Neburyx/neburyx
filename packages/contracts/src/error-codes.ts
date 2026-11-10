@@ -44,11 +44,24 @@ export const CONFLICT_REASONS = ['status-change-not-allowed', 'investigation-rea
 
 export type ConflictReason = (typeof CONFLICT_REASONS)[number];
 
+/** Why an `ACCESS_DENIED` was given, when the person's access changed since something was made for them. */
+export const ACCESS_DENIED_REASONS = ['access-changed'] as const;
+
+export type AccessDeniedReason = (typeof ACCESS_DENIED_REASONS)[number];
+
+/** Why an `INVALID_REQUEST` is more than a malformed body: an export names more elements than one export holds. */
+export const INVALID_REQUEST_REASONS = ['export-too-large'] as const;
+
+export type InvalidRequestReason = (typeof INVALID_REQUEST_REASONS)[number];
+
 /** The status a read-only refusal names. */
 export const READ_ONLY_STATUSES = ['closed', 'archived'] as const;
 
 /** What a source-changed refusal names: the source now points at another database, or is no longer configured. */
 export const SOURCE_CHANGED_STATES = ['repointed', 'removed'] as const;
+
+const reasonsOf = (code: ErrorCode): readonly string[] =>
+  code === 'CONFLICT' ? CONFLICT_REASONS : code === 'SOURCE_UNAVAILABLE' ? SOURCE_UNAVAILABLE_REASONS : code === 'ACCESS_DENIED' ? ACCESS_DENIED_REASONS : code === 'INVALID_REQUEST' ? INVALID_REQUEST_REASONS : [];
 
 export const errorDetailsSchema = z.strictObject({
   retained: retainedSchema.optional(),
@@ -56,9 +69,11 @@ export const errorDetailsSchema = z.strictObject({
   maxPage: z.number().int().positive().optional(),
   retryAfterMs: z.number().int().nonnegative().optional(),
   timeoutMs: z.number().int().positive().optional(),
-  reason: z.enum([...SOURCE_UNAVAILABLE_REASONS, ...CONFLICT_REASONS]).optional(),
+  reason: z.enum([...SOURCE_UNAVAILABLE_REASONS, ...CONFLICT_REASONS, ...ACCESS_DENIED_REASONS, ...INVALID_REQUEST_REASONS]).optional(),
   status: z.enum(READ_ONLY_STATUSES).optional(),
   sourceState: z.enum(SOURCE_CHANGED_STATES).optional(),
+  /** The most entities, and the most relationships, one export holds. */
+  maxElements: z.number().int().positive().optional(),
 });
 
 export type ErrorDetails = z.infer<typeof errorDetailsSchema>;
@@ -72,7 +87,8 @@ export const errorBodySchema = z.object({
     details: errorDetailsSchema.optional(),
   })
     .refine(({ code, details }) => code !== 'PARTIAL_RESULT' || partialDetailsSchema.safeParse(details).success, { message: 'PARTIAL_RESULT carries retained and requested counts' })
-    .refine(({ code, details }) => details?.reason === undefined || (code === 'CONFLICT' ? CONFLICT_REASONS : code === 'SOURCE_UNAVAILABLE' ? SOURCE_UNAVAILABLE_REASONS : []).some((reason) => reason === details.reason), { message: 'the reason belongs to the code' })
+    .refine(({ code, details }) => details?.reason === undefined || reasonsOf(code).some((reason) => reason === details.reason), { message: 'the reason belongs to the code' })
+    .refine(({ code, details }) => details?.maxElements === undefined || (code === 'INVALID_REQUEST' && details.reason === 'export-too-large'), { message: 'only an export that is too large names its limit' })
     .refine(({ code, details }) => details?.status === undefined || (code === 'CONFLICT' && details.reason === 'investigation-read-only'), { message: 'only a read-only refusal names the status' }),
 });
 

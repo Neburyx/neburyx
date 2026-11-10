@@ -9,6 +9,7 @@ import { planStatusChange } from '../investigations/status-change.js';
 import { validatedDraft, type DeleteResult, type RestoreResult, type CreatedInvestigation, type DraftRow, type DraftWriteResult, type StatusChangeResult, type TitleChangeResult, type InvestigationRow, type ListedInvestigation, type MatchQuery, type NewDraft, type NewInvestigation, type ReusableQuery, type StoredInvestigation } from '../db/investigations-repository.js';
 import type { ViewDeleteResult, ViewListResult, ViewRenameResult, ViewRestoreResult, ViewSaveResult } from '../db/views-repository.js';
 import type { SourceModel } from '../mapping/model.js';
+import { memoryExports, type MemoryExports } from './memory-exports.js';
 import { decideSourceState, type StoredCheck } from '../source-state/decide.js';
 
 export const LOCAL_IDENTITY: Identity = {
@@ -48,6 +49,7 @@ export interface MemoryNamedView {
 }
 
 export interface MemoryAppStore extends AppStore {
+  readonly exports: MemoryExports;
   readonly namedViews: MemoryNamedView[];
   readonly checks: SourceCheck[];
   readonly investigations: InvestigationRow[];
@@ -88,7 +90,11 @@ export function memoryStoreWith(options: MemoryAppStoreOptions): MemoryAppStore 
   const liveOf = (id: string, ownerId: string): InvestigationRow | undefined => (deletedAt.has(id) ? undefined : investigations.find((row) => row.id === id && row.ownerId === ownerId));
   const isDeletedView = (view: MemoryNamedView): boolean => view.deletedAt !== undefined;
   let deletions = 0;
+  const exports = memoryExports({ investigations, isDeleted: (id) => deletedAt.has(id) });
+  const { rows: _rows, keys: _keys, clock: _clock, ...exportStore } = exports;
   return {
+    ...exportStore,
+    exports,
     checks,
     namedViews,
     investigations,
