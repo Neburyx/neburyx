@@ -1,0 +1,71 @@
+.investigation-menu {
+  position: relative;
+  flex: none;
+}
+
+.investigation-menu-panel {
+  position: absolute;
+  top: calc(100% + var(--space-4));
+  left: 0;
+  z-index: var(--layer-menu);
+  min-width: var(--menu-width-investigation);
+}
+
+.investigation-menu-button {
+  padding: var(--space-4) var(--space-8);
+  border: none;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--color-text-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.investigation-menu-button:hover {
+  background: var(--color-surface-muted);
+}
+
+.rename-scrim {
+  pointer-events: auto;
+  background: var(--color-scrim);
+}
+
+.rename-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.investigation-menu-panel .menu-row {
+  gap: var(--space-12);
+}
+
+.rename-dialog {
+  top: var(--sheet-top);
+}
+
+.rename-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.rename-hint,
+.rename-problem {
+  margin: 0;
+  font-size: var(--font-size-small);
+}
+
+.rename-hint {
+  color: var(--color-flyout-hint);
+}
+
+.rename-problem {
+  color: var(--color-danger);
+}
+
+.rename-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-8);
+}

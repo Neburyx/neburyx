@@ -2,6 +2,7 @@ import type { GraphEdge, GraphNode, Investigation, InvestigationResponse, Refere
 import type { ApiClient, ApiFailure } from '../api/client.js';
 import type { ClientState } from '../state/client-state.js';
 import { StateError } from '../state/errors.js';
+import { isReadOnlyStatus } from '../state/investigation-state.js';
 import { DEFAULT_FILTER_HASH, DEFAULT_POLICY_VERSION, type QueryKey } from '../state/keys.js';
 import type { Activation } from '../state/client-state.js';
 import { LAYOUTS } from '../state/layout-choice.js';
@@ -34,7 +35,7 @@ function show(state: ClientState, investigation: Investigation, items: { readonl
   const key = openedKey(investigation.sourceId, context.principalId, investigation.id, context.mask);
   try {
     const activation = state.show(
-      { id: investigation.id, sourceId: investigation.sourceId, record: { title: investigation.title, caseRef: investigation.caseRef, save: { kind: 'unsaved' } }, resultKeys: [key], nodeRefs: items.nodes.map((node) => node.ref), edgeRefs: items.edges.map((edge) => edge.ref) },
+      { id: investigation.id, sourceId: investigation.sourceId, record: { title: investigation.title, caseRef: investigation.caseRef, status: investigation.status, readOnly: isReadOnlyStatus(investigation.status), version: investigation.version, save: { kind: 'unsaved' } }, resultKeys: [key], nodeRefs: items.nodes.map((node) => node.ref), edgeRefs: items.edges.map((edge) => edge.ref) },
       [{ key, result: { sourceId: investigation.sourceId, nodes: [...items.nodes], edges: [...items.edges] } }],
     );
     return { kind: 'shown', id: investigation.id, activation };

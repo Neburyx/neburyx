@@ -3,6 +3,8 @@ import {
   coverageResponseSchema,
   draftWriteResponseSchema,
   readRefsResponseSchema,
+  renameResponseSchema,
+  statusChangeResponseSchema,
   degreePreviewSchema,
   edgeDetailSchema,
   edgeRefSegmentOf,
@@ -28,6 +30,8 @@ import {
   type DraftWriteRequest,
   type DraftWriteResponse,
   type ReadRefsRequest,
+  type RenameResponse,
+  type StatusChangeResponse,
   type ReadRefsResponse,
   type EdgeDetail,
   type EntityLookupRequest,
@@ -38,6 +42,7 @@ import {
   type DerivedNeighborsResponse,
   type ExpandResponse,
   type GraphNode,
+  type Investigation,
   type InvestigationListResponse,
   type InvestigationResponse,
   type MeResponse,
@@ -92,6 +97,10 @@ export interface ApiClient {
   getInvestigation(id: string, signal?: AbortSignal): Promise<ApiResult<InvestigationResponse>>;
   /** Replaces the caller's draft of an investigation when `version` is the draft's version; a stale one is refused as `CONFLICTED_VIEW_VERSION`. */
   saveDraft(id: string, version: number, draft: DraftWriteRequest, options?: { readonly signal?: AbortSignal; readonly keepalive?: boolean }): Promise<ApiResult<DraftWriteResponse>>;
+  /** Closes, archives or reopens the caller's investigation when `expectedVersion` is its version; the answer names the investigation asked for. */
+  changeInvestigationStatus(id: string, status: Investigation['status'], expectedVersion: number, signal?: AbortSignal): Promise<ApiResult<StatusChangeResponse>>;
+  /** Stores a new title for the caller's investigation when `expectedVersion` is its version; the answer names the investigation asked for. */
+  renameInvestigation(id: string, title: string, expectedVersion: number, signal?: AbortSignal): Promise<ApiResult<RenameResponse>>;
   /** Reads again the items a stored draft names, by reference; the answer names the source asked for and holds nothing of another, or it is refused. */
   readRefs(request: ReadRefsRequest, signal?: AbortSignal): Promise<ApiResult<ReadRefsResponse>>;
   /** The caller's most recently edited open investigations, across every source they may read; Postgres only. */
@@ -250,6 +259,14 @@ export function createApiClient(fetcher: Fetcher = (input, init) => fetch(input,
     saveDraft: async (id, version, draft, options) => {
       const result = await request(fetcher, `/v1/investigations/${encodeURIComponent(id)}/draft`, draftWriteResponseSchema, options?.signal, 'PUT', draft, { headers: { 'if-match': `"${version}"` }, ...(options?.keepalive === true ? { keepalive: true } : {}) });
       return result.ok && result.value.notes !== draft.notes ? failed('SCHEMA_MISMATCH') : result;
+    },
+    changeInvestigationStatus: async (id, status, expectedVersion, signal) => {
+      const result = await request(fetcher, `/v1/investigations/${encodeURIComponent(id)}/status`, statusChangeResponseSchema, signal, 'POST', { status, expectedVersion });
+      return result.ok && (result.value.investigation.id !== id || result.value.investigation.status !== status) ? failed('SCHEMA_MISMATCH') : result;
+    },
+    renameInvestigation: async (id, title, expectedVersion, signal) => {
+      const result = await request(fetcher, `/v1/investigations/${encodeURIComponent(id)}`, renameResponseSchema, signal, 'PUT', { title, expectedVersion });
+      return result.ok && result.value.investigation.id !== id ? failed('SCHEMA_MISMATCH') : result;
     },
     readRefs: async (refs, signal) => {
       const result = await request(fetcher, '/v1/graph/read-refs', readRefsResponseSchema, signal, 'POST', refs);

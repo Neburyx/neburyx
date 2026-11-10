@@ -117,6 +117,18 @@ A read that needs several indexes that are not online names the least recoverabl
 `index-unavailable`, then `index-building`. An index list that cannot be read whole refuses the read
 (`index-list-unreadable`) rather than run it without the check.
 
+## A refused update
+
+`CONFLICT` (409) without a reason means the item was changed elsewhere. With `details.reason` it says why the update was refused; `message` is the reason's sentence and `retryable` is `false` for each. `details.status` is sent only with `investigation-read-only`.
+
+| `details.reason` | `details.status` | `message` | `retryable` |
+|---|---|---|---|
+| none | none | This item was changed elsewhere. Reload to continue. | `false` |
+| `status-change-not-allowed` | none | An archived investigation must be reopened before it can be closed. | `false` |
+| `investigation-read-only` | `closed` or `archived` | This investigation is closed or archived. Reopen it to make changes. | `false` |
+
+A reason of `SOURCE_UNAVAILABLE` is not valid on `CONFLICT`, and a reason of `CONFLICT` is not valid on `SOURCE_UNAVAILABLE`.
+
 ## Field limits
 
 Every request is checked against a strict schema: unknown fields are rejected, and a violation is `INVALID_REQUEST`.
@@ -162,7 +174,10 @@ Every edit of a resource that has a `version` is guarded, so a stale edit never 
   `version` in its body. A successful write returns the new version.
 - Drafts and views: send `If-Match: "<version>"`. A mismatch is `CONFLICTED_VIEW_VERSION` (409). `PUT /v1/investigations/{id}/draft` takes `{layout, queryContext, notes}` (all required; `notes` may be `null`), at most 1 MiB for each document; the version in `If-Match` is the draft's, which `POST` and `GET` of an investigation carry in `draft.version`, not the `ETag` of the investigation. A write whose content equals the stored draft answers 200 with the same version and changes nothing. A draft of an investigation whose source is no longer the one it was opened on (removed from the configuration, or pointing at another database) is not written: the answer is `CONFLICT`.
 - Investigations, grants, settings, limits and saved patterns: send `expectedVersion` (an integer of 1 or more) in the JSON
-  body. A mismatch is `CONFLICT` (409).
+  body. A mismatch is `CONFLICT` (409). `PUT /v1/investigations/{id}` takes `{title, expectedVersion}` and
+  `POST /v1/investigations/{id}/status` takes `{status, expectedVersion}`; each raises the investigation's `version` by one, answers its new
+  `ETag` and leaves `last_edited_at`. A request for the status the investigation already has answers 200 with the same version and writes nothing, whatever `expectedVersion` it carries (a second tab's retry helps); a rename to the title it already has needs the current `expectedVersion`, and a stale one is `CONFLICT`. A closed or archived investigation refuses a draft write and a rename with `CONFLICT` and the reason
+  `investigation-read-only` (see *A refused update*); that check comes after the owner's investigation is found and before the version guard.
 - A delete has no body, so its guard is always `If-Match`, whatever the resource; a mismatch answers the resource's own code.
   Deleting or restoring a resource that has a version is a modification and is guarded.
 - A missing guard on a guarded call is `INVALID_REQUEST`.

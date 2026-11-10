@@ -16,6 +16,8 @@ export const NOT_IN_THE_CLOSED_SET: Readonly<Record<string, string>> = {
   'GET /v1/investigations': 'reads no source: the application database',
   'GET /v1/investigations/:id': 'reads no source: the application database',
   'PUT /v1/investigations/:id/draft': 'reads no source: the application database',
+  'PUT /v1/investigations/:id': 'reads no source: the application database',
+  'POST /v1/investigations/:id/status': 'reads no source: the application database',
 };
 
 /** The routes under /v1 that read the source and are not on the list above. */

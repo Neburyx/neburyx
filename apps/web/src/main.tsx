@@ -14,6 +14,7 @@ import { registerSearchTool } from './search/search-tool.js';
 import { createCytoscapeRenderer } from './canvas/cytoscape-renderer.js';
 import { registerBuiltInMenuItems } from './workspace/built-in-menu-items.js';
 import { registerBuiltInSlots } from './workspace/built-in-slots.js';
+import { registerInvestigationMenu } from './lifecycle/register-menu.js';
 import { registerBuiltInTools } from './workspace/built-in-tools.js';
 import { registerBuiltInKeyBindings } from './workspace/built-in-key-bindings.js';
 import { createKeyBindingRegistry } from './workspace/key-binding-registry.js';
@@ -48,6 +49,7 @@ import './styles/search.css';
 import './styles/filters.css';
 import './styles/first-run.css';
 import './styles/home.css';
+import './styles/lifecycle.css';
 
 const root = document.getElementById('root');
 if (root === null) throw new Error('the page has no #root element');
@@ -73,7 +75,9 @@ const { evidence } = bindBuiltInEvidence(state, panels, inspector, menus);
 bindBuiltInCompare(state, panels, menus, selectionActions, evidence);
 const keyBindings = createKeyBindingRegistry();
 registerBuiltInKeyBindings(keyBindings);
-const router = createBrowserRouter(appRoutes(createApiClient(), state, banner));
+const client = createApiClient();
+registerInvestigationMenu(slots, client);
+const router = createBrowserRouter(appRoutes(client, state, banner));
 createRoot(root).render(
   <StrictMode>
     <App router={router} state={state} banner={banner} slots={slots} selectionActions={selectionActions} tools={tools} menus={menus} panels={panels} keyBindings={keyBindings} createRenderer={createCytoscapeRenderer} />

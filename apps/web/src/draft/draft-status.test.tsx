@@ -28,7 +28,7 @@ function started(answer: () => ReturnType<typeof failure> | { ok: true; value: {
   const state = createClientState();
   state.bindSource('demo');
   const read = result('demo', ['A']);
-  state.show({ id: ID, sourceId: 'demo', record: { title: 'T', caseRef: null, save: { kind: 'unsaved' } }, resultKeys: [key('demo')], nodeRefs: read.nodes.map((n) => n.ref), edgeRefs: [] }, [{ key: key('demo'), result: read }]);
+  state.show({ id: ID, sourceId: 'demo', record: { title: 'T', caseRef: null, status: 'open' as const, readOnly: false, version: 1, save: { kind: 'unsaved' } }, resultKeys: [key('demo')], nodeRefs: read.nodes.map((n) => n.ref), edgeRefs: [] }, [{ key: key('demo'), result: read }]);
   const client = fakeClient({ saveDraft: async () => answer() });
   const sync = createDraftSync({ client, state });
   sync.adopt(ID, { version: 1, notes: null, writable: true });
@@ -132,7 +132,7 @@ describe('the guard that holds the person at a page they were about to leave', (
     const state = createClientState();
     state.bindSource('demo');
     const read = result('demo', ['A']);
-    state.show({ id: ID, sourceId: 'demo', record: { title: 'T', caseRef: null, save: { kind: 'unsaved' } }, resultKeys: [key('demo')], nodeRefs: read.nodes.map((n) => n.ref), edgeRefs: [] }, [{ key: key('demo'), result: read }]);
+    state.show({ id: ID, sourceId: 'demo', record: { title: 'T', caseRef: null, status: 'open' as const, readOnly: false, version: 1, save: { kind: 'unsaved' } }, resultKeys: [key('demo')], nodeRefs: read.nodes.map((n) => n.ref), edgeRefs: [] }, [{ key: key('demo'), result: read }]);
     const client = fakeClient({ saveDraft: async () => answer() });
     const sync = draftSyncOf(state, client);
     sync.adopt(ID, { version: 1, notes: null, writable: true });

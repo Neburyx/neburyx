@@ -30,6 +30,21 @@ describe('allowedDetails', () => {
     expect(allowedDetails('QUERY_TIMEOUT', { reason: 'unreachable' })).toBeUndefined();
   });
 
+  it('keeps a reason of a refused update only for CONFLICT, and a reason of an unavailable source only for that code', () => {
+    expect(allowedDetails('SOURCE_UNAVAILABLE', { reason: 'investigation-read-only' })).toBeUndefined();
+    expect(allowedDetails('CONFLICT', { reason: 'unreachable' })).toBeUndefined();
+    expect(allowedDetails('CONFLICT', { reason: 'repeated-timeouts', status: 'closed' })).toBeUndefined();
+    expect(allowedDetails('CONFLICTED_VIEW_VERSION', { reason: 'investigation-read-only', status: 'closed' })).toBeUndefined();
+  });
+
+  it('keeps the reasons of CONFLICT and names the status only for a read-only refusal', () => {
+    expect(allowedDetails('CONFLICT', { reason: 'investigation-read-only', status: 'archived', query: 'MATCH (n)' })).toEqual({ reason: 'investigation-read-only', status: 'archived' });
+    expect(allowedDetails('CONFLICT', { reason: 'status-change-not-allowed' })).toEqual({ reason: 'status-change-not-allowed' });
+    expect(allowedDetails('CONFLICT', { reason: 'status-change-not-allowed', status: 'closed' })).toEqual({ reason: 'status-change-not-allowed' });
+    expect(allowedDetails('CONFLICT', { status: 'closed' })).toBeUndefined();
+    expect(allowedDetails('CONFLICT', { reason: 'investigation-read-only', status: 'open' })).toEqual({ reason: 'investigation-read-only' });
+  });
+
   it('allows no field for a code that names none', () => {
     expect(allowedDetails('ACCESS_DENIED', { maxPage: 50 })).toBeUndefined();
   });

@@ -52,6 +52,8 @@ export interface BannerController {
   /** Clears the banner only when it is the one with this ID, so a request that ends cannot clear a later request's banner. */
   dismiss(id: string): void;
   clear(): void;
+  /** Sets the banner of a state that lasts as long as it holds, such as a closed investigation: it is shown whenever no request banner is, and comes back when one is dismissed or cleared. `undefined` takes it away. */
+  setStanding(state: BannerState | undefined): void;
   /** Makes a feature's banner state known for an error code; a code that already has one is refused. Returns the function that takes it out again. */
   registerCause(code: ErrorCode, describe: BannerDescriber): () => void;
   /** Shows the state its describer builds for the failure. False when the code has no describer or the describer builds nothing; the caller then keeps its own presentation. */
@@ -64,6 +66,9 @@ const announcementOf = (state: BannerState): Announcement => ({ tone: state.tone
 
 export function createBannerController(): BannerController {
   const store = createStore<BannerView>(EMPTY);
+  let standing: BannerState | undefined;
+  // the view when no request banner is on screen: the standing banner, announced again when it comes back
+  const restingView = (): BannerView => (standing === undefined ? EMPTY : { banner: standing, announcement: announcementOf(standing) });
   const describers = new Map<ErrorCode, BannerDescriber>();
   const controller: BannerController = {
     view: readable(store),
@@ -75,10 +80,20 @@ export function createBannerController(): BannerController {
     },
     dismiss(id) {
       if (store.getState().banner?.id !== id) return;
-      store.setState(EMPTY);
+      store.setState(restingView());
     },
     clear() {
-      store.setState(EMPTY);
+      store.setState(restingView());
+    },
+    setStanding(state) {
+      const current = store.getState();
+      const showing = standing !== undefined && current.banner?.id === standing.id;
+      standing = state;
+      if (state === undefined) {
+        if (showing) store.setState(EMPTY);
+        return;
+      }
+      if (current.banner === undefined || showing) controller.show(state);
     },
     registerCause(code, describe) {
       if (describers.has(code)) throw new BannerCauseError(code);

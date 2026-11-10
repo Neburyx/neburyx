@@ -78,7 +78,7 @@ describe('following a link', () => {
     const state = createClientState();
     const key = { sourceId: 'source-a', principalId: '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d', policyVersion: 'community', filterHash: 'none', params: `open:${INVESTIGATION_A}`, mask: false };
     const added = nodeOf('source-a', 'kind-a', 'A-2');
-    state.show({ id: INVESTIGATION_A, sourceId: 'source-a', record: { title: 'kind-a A-1', caseRef: 'CASE-1', save: { kind: 'unsaved' } }, resultKeys: [key], nodeRefs: [A.node.ref, added.ref], edgeRefs: [] }, [{ key, result: { sourceId: 'source-a', nodes: [A.node, added], edges: [] } }]);
+    state.show({ id: INVESTIGATION_A, sourceId: 'source-a', record: { title: 'kind-a A-1', caseRef: 'CASE-1', status: 'open' as const, readOnly: false, version: 1, save: { kind: 'unsaved' } }, resultKeys: [key], nodeRefs: [A.node.ref, added.ref], edgeRefs: [] }, [{ key, result: { sourceId: 'source-a', nodes: [A.node, added], edges: [] } }]);
     renderApp(link('source-a', 'kind-a', 'A-1', 'CASE-1'), parts.client, state);
     expect(await screen.findByText(RESUMED)).toBeTruthy();
     expect(screen.getByText('2 entities · 0 relationships · loaded · exact')).toBeTruthy();

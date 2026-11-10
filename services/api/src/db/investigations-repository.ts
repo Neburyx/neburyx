@@ -1,5 +1,7 @@
 import { layoutDocumentSchema, queryContextDocumentSchema, type InvestigationSave, type LayoutDocument, type QueryContextDocument } from '@neburyx/contracts';
 import type pg from 'pg';
+import { readOnlyStatusOf, type ReadOnlyStatus } from '../investigations/read-only.js';
+import { planStatusChange, type StatusChangePlan } from '../investigations/status-change.js';
 
 export interface InvestigationRow {
   readonly id: string;
@@ -13,6 +15,8 @@ export interface InvestigationRow {
   readonly status: 'open' | 'closed' | 'archived';
   readonly createdAt: string;
   readonly lastEditedAt: string;
+  readonly closedAt: string | null;
+  readonly archivedAt: string | null;
   readonly version: number;
 }
 
@@ -62,7 +66,29 @@ export interface DraftWrite {
 }
 
 /** `unchanged` is a write whose content equals the stored one: nothing was written and `version` is the one that was sent. */
-export type DraftWriteResult = { readonly outcome: 'saved' | 'unchanged'; readonly version: number; readonly save: InvestigationSave } | { readonly outcome: 'conflict' } | { readonly outcome: 'not-found' };
+export type DraftWriteResult = { readonly outcome: 'saved' | 'unchanged'; readonly version: number; readonly save: InvestigationSave } | { readonly outcome: 'conflict' } | { readonly outcome: 'not-found' } | { readonly outcome: 'read-only'; readonly status: ReadOnlyStatus };
+
+/** What a title change or a status change asks of the investigation of `investigationId`. */
+export interface InvestigationChange {
+  readonly investigationId: string;
+  readonly ownerId: string;
+  readonly expectedVersion: number;
+}
+
+export interface TitleChange extends InvestigationChange {
+  readonly title: string;
+}
+
+export interface StatusChange extends InvestigationChange {
+  readonly status: InvestigationRow['status'];
+  /** Runs after the change is written and before it is committed; if it throws, nothing is committed. */
+  readonly beforeCommit: (change: { readonly from: InvestigationRow['status']; readonly to: InvestigationRow['status']; readonly row: InvestigationRow }) => Promise<void>;
+}
+
+/** `unchanged` is a change to what the investigation already has: nothing was written and `row` is as stored. */
+export type TitleChangeResult = { readonly outcome: 'renamed' | 'unchanged'; readonly row: InvestigationRow } | { readonly outcome: 'conflict' } | { readonly outcome: 'not-found' } | { readonly outcome: 'read-only'; readonly status: ReadOnlyStatus };
+
+export type StatusChangeResult = { readonly outcome: 'changed' | 'unchanged'; readonly row: InvestigationRow } | { readonly outcome: 'conflict' } | { readonly outcome: 'not-allowed' } | { readonly outcome: 'not-found' };
 
 export interface ReusableQuery {
   readonly ownerId: string;
@@ -124,6 +150,10 @@ export interface InvestigationStore {
   readInvestigation(id: string, ownerId: string): Promise<StoredInvestigation | undefined>;
   /** Replaces the owner's draft when `expectedVersion` is its version, in one transaction under a lock on the draft row, so two writes with one version make one winner. `last_edited_at` of the investigation moves only when the content changed. */
   saveDraft(write: DraftWrite): Promise<DraftWriteResult>;
+  /** Changes the title in one transaction under a lock on the investigation: the order of checks is the owner's investigation, then read-only, then the version. `last_edited_at` does not move. */
+  renameInvestigation(change: TitleChange): Promise<TitleChangeResult>;
+  /** Moves the investigation to another status in one transaction under a lock on the investigation; a request for its current status writes nothing, and a stale `expectedVersion` is a conflict. `last_edited_at` does not move. */
+  changeInvestigationStatus(change: StatusChange): Promise<StatusChangeResult>;
   /** Runs the reads of one list call at one snapshot; what they return is not changed by an investigation another call creates meanwhile. */
   readLibrary<T>(read: (reader: LibraryReader) => Promise<T>): Promise<T>;
 }
@@ -140,10 +170,12 @@ interface InvestigationRecord {
   readonly status: InvestigationRow['status'];
   readonly created_at: Date;
   readonly last_edited_at: Date;
+  readonly closed_at: Date | null;
+  readonly archived_at: Date | null;
   readonly version: number;
 }
 
-const COLUMNS = `id, source_id, source_identity_hash, owner_id, title, case_ref, starting_entity_type, starting_stable_id, status, created_at, last_edited_at, version`;
+const COLUMNS = `id, source_id, source_identity_hash, owner_id, title, case_ref, starting_entity_type, starting_stable_id, status, created_at, last_edited_at, closed_at, archived_at, version`;
 const QUALIFIED_COLUMNS = COLUMNS.split(', ').map((column) => `i.${column}`).join(', ');
 
 function rowOf(record: InvestigationRecord): InvestigationRow {
@@ -159,6 +191,8 @@ function rowOf(record: InvestigationRecord): InvestigationRow {
     status: record.status,
     createdAt: record.created_at.toISOString(),
     lastEditedAt: record.last_edited_at.toISOString(),
+    closedAt: record.closed_at === null ? null : record.closed_at.toISOString(),
+    archivedAt: record.archived_at === null ? null : record.archived_at.toISOString(),
     version: record.version,
   };
 }
@@ -254,9 +288,10 @@ interface DraftRecord {
   readonly notes: string | null;
   readonly ai_notes: unknown;
   readonly saved_at: Date | null;
+  readonly investigation_status: InvestigationRow['status'];
 }
 
-const DRAFT_STATE = `SELECT draft.id, draft.version, draft.content_hash, draft.notes, draft.ai_notes, CASE WHEN named.content_hash = draft.content_hash THEN named.created_at END AS saved_at
+const DRAFT_STATE = `SELECT i.status AS investigation_status, draft.id, draft.version, draft.content_hash, draft.notes, draft.ai_notes, CASE WHEN named.content_hash = draft.content_hash THEN named.created_at END AS saved_at
      FROM saved_views draft
      JOIN investigations i ON i.id = draft.investigation_id AND i.owner_id = draft.created_by
      LEFT JOIN saved_views named ON named.id = draft.based_on_view_id AND named.kind = 'named'
@@ -270,11 +305,16 @@ export async function saveDraft(pool: pg.Pool, write: DraftWrite): Promise<Draft
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const found = await client.query<DraftRecord>(`${DRAFT_STATE} FOR UPDATE OF draft`, [write.investigationId, write.ownerId]);
+    const found = await client.query<DraftRecord>(`${DRAFT_STATE} FOR UPDATE OF i, draft`, [write.investigationId, write.ownerId]);
     const [held] = found.rows;
     if (held === undefined) {
       await client.query('ROLLBACK');
       return { outcome: 'not-found' };
+    }
+    const readOnly = readOnlyStatusOf(held.investigation_status);
+    if (readOnly !== undefined) {
+      await client.query('ROLLBACK');
+      return { outcome: 'read-only', status: readOnly };
     }
     if (held.version !== write.expectedVersion) {
       await client.query('ROLLBACK');
@@ -301,6 +341,69 @@ export async function saveDraft(pool: pg.Pool, write: DraftWrite): Promise<Draft
   } finally {
     client.release();
   }
+}
+
+/** Runs `work` in a transaction on one connection; a throw rolls back, and the error that caused it is the one reported. */
+async function inTransaction<T>(pool: pg.Pool, work: (client: pg.PoolClient) => Promise<T>): Promise<T> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const answer = await work(client);
+    await client.query('COMMIT');
+    return answer;
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function lockInvestigation(client: pg.PoolClient, change: InvestigationChange): Promise<InvestigationRow | undefined> {
+  const found = await client.query<InvestigationRecord>(`SELECT ${COLUMNS} FROM investigations WHERE id = $1 AND owner_id = $2 AND deleted_at IS NULL FOR UPDATE`, [change.investigationId, change.ownerId]);
+  const [record] = found.rows;
+  return record === undefined ? undefined : rowOf(record);
+}
+
+export async function renameInvestigation(pool: pg.Pool, change: TitleChange): Promise<TitleChangeResult> {
+  return inTransaction(pool, async (client) => {
+    const held = await lockInvestigation(client, change);
+    if (held === undefined) return { outcome: 'not-found' };
+    const readOnly = readOnlyStatusOf(held.status);
+    if (readOnly !== undefined) return { outcome: 'read-only', status: readOnly };
+    if (held.version !== change.expectedVersion) return { outcome: 'conflict' };
+    if (held.title === change.title) return { outcome: 'unchanged', row: held };
+    const updated = await client.query<InvestigationRecord>(`UPDATE investigations SET title = $2, version = version + 1 WHERE id = $1 RETURNING ${COLUMNS}`, [change.investigationId, change.title]);
+    const [record] = updated.rows;
+    if (record === undefined) throw new Error('the investigation was not returned after its rename');
+    return { outcome: 'renamed', row: rowOf(record) };
+  });
+}
+
+const TIME_COLUMN_SQL: Readonly<Record<StatusChangePlan['closedAt'], (column: string) => string>> = {
+  keep: (column) => column,
+  now: () => 'now()',
+  clear: () => 'NULL',
+};
+
+export async function changeInvestigationStatus(pool: pg.Pool, change: StatusChange): Promise<StatusChangeResult> {
+  return inTransaction(pool, async (client) => {
+    const held = await lockInvestigation(client, change);
+    if (held === undefined) return { outcome: 'not-found' };
+    const plan = planStatusChange(held.status, change.status);
+    if (plan === 'unchanged') return { outcome: 'unchanged', row: held };
+    if (held.version !== change.expectedVersion) return { outcome: 'conflict' };
+    if (plan === 'not-allowed') return { outcome: 'not-allowed' };
+    const updated = await client.query<InvestigationRecord>(
+      `UPDATE investigations SET status = $2, closed_at = ${TIME_COLUMN_SQL[plan.closedAt]('closed_at')}, archived_at = ${TIME_COLUMN_SQL[plan.archivedAt]('archived_at')}, version = version + 1 WHERE id = $1 RETURNING ${COLUMNS}`,
+      [change.investigationId, change.status],
+    );
+    const [record] = updated.rows;
+    if (record === undefined) throw new Error('the investigation was not returned after its status change');
+    const row = rowOf(record);
+    await change.beforeCommit({ from: held.status, to: change.status, row });
+    return { outcome: 'changed', row };
+  });
 }
 
 interface ListedRecord extends InvestigationRecord {

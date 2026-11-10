@@ -2,6 +2,7 @@ import { ERROR_TABLE, type DraftWriteRequest, type ErrorCode, type QueryContextD
 import type { ApiClient, ApiFailure } from '../api/client.js';
 import type { ClientState } from '../state/client-state.js';
 import { createStore, readable, type ReadableStore } from '../state/store.js';
+import { refreshRecord } from '../lifecycle/refresh-record.js';
 import { draftOf, NOTHING_KEPT, type KeptItems } from './draft-document.js';
 
 /** How long the draft waits after the last change before it is written. */
@@ -88,14 +89,31 @@ export interface DraftSync {
   dispose(): void;
 }
 
+const unsavedStores = new WeakMap<ClientState, ReturnType<typeof createStore<boolean>>>();
+
+function unsavedChangesStoreOf(state: ClientState): ReturnType<typeof createStore<boolean>> {
+  let store = unsavedStores.get(state);
+  if (store === undefined) {
+    store = createStore<boolean>(false);
+    unsavedStores.set(state, store);
+  }
+  return store;
+}
+
+/** True while the canvas differs from the draft last read or written, whether or not the investigation can be written; the header says so for a closed or archived investigation. It needs no API client. */
+export function unsavedChangesOf(state: ClientState): ReadableStore<boolean> {
+  return readable(unsavedChangesStoreOf(state));
+}
+
 const realTimers: Timers = { setTimeout: (run, ms) => setTimeout(run, ms), clearTimeout: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>), now: () => Date.now() };
 
 type WriteResult = 'saved' | 'conflict' | 'failed' | 'skipped';
 
-type Verdict = 'conflict' | 'retry' | 'rejected';
+type Verdict = 'conflict' | 'read-only' | 'retry' | 'rejected';
 
 function verdictOf(failure: ApiFailure): Verdict {
   if (failure.code === 'CONFLICTED_VIEW_VERSION') return 'conflict';
+  if (failure.code === 'CONFLICT' && 'details' in failure && failure.details?.reason === 'investigation-read-only') return 'read-only';
   if (failure.code === 'SCHEMA_MISMATCH') return 'rejected';
   if (!(failure.code in ERROR_TABLE)) return 'retry';
   const status = ERROR_TABLE[failure.code as ErrorCode].status;
@@ -123,6 +141,7 @@ export function createDraftSync(options: DraftSyncOptions): DraftSync {
   let inFlight: Promise<WriteResult> | undefined;
   let gate: ((leave: boolean) => void) | undefined;
   const leaving = createStore<boolean>(false);
+  const unsavedChanges = unsavedChangesStoreOf(state);
 
   const releaseGate = (leave: boolean): void => {
     const open = gate;
@@ -149,10 +168,20 @@ export function createDraftSync(options: DraftSyncOptions): DraftSync {
     return draftOf({ nodeRefs: held.nodeRefs, graph: state.loadedGraph(), presentation: state.presentation.view.getState(), notes: session.notes, kept: session.kept, storedFilters: session.pendingFilters });
   };
 
-  const isDirty = (): boolean => {
+  const readOnlyNow = (): boolean => state.investigation.getState().record?.readOnly === true;
+
+  const differs = (): boolean => {
     const shown = shownSession();
     if (shown === undefined) return false;
     return JSON.stringify(documentOf(shown.session)) !== shown.session.lastJson;
+  };
+
+  /** What there is to write: a closed or archived investigation refuses its draft, so nothing is waiting for it. */
+  const isDirty = (): boolean => !readOnlyNow() && differs();
+
+  const refreshUnsaved = (): void => {
+    const next = differs();
+    if (unsavedChanges.getState() !== next) unsavedChanges.setState(next);
   };
 
   const endFailing = (): void => {
@@ -190,7 +219,7 @@ export function createDraftSync(options: DraftSyncOptions): DraftSync {
 
   async function attempt(keepalive: boolean): Promise<WriteResult> {
     const shown = shownSession();
-    if (shown === undefined) return 'skipped';
+    if (shown === undefined || readOnlyNow()) return 'skipped';
     const body = documentOf(shown.session);
     const json = JSON.stringify(body);
     if (json === shown.session.lastJson) return 'skipped';
@@ -223,6 +252,20 @@ export function createDraftSync(options: DraftSyncOptions): DraftSync {
     }
     again = false;
     const verdict = verdictOf(result.failure);
+    if (verdict === 'read-only') {
+      if (stillShown) {
+        cancel();
+        endFailing();
+        setStatus(IDLE);
+        // closed in another tab: the refusal names the status, so writes stop at once, even if the record cannot be read again for its title and version
+        const held = state.investigation.getState().record;
+        const refused = 'details' in result.failure ? result.failure.details?.status : undefined;
+        if (held !== null && refused !== undefined) state.describeInvestigation({ ...held, status: refused, readOnly: true });
+        void refreshRecord(client, state, id).then(() => releaseGate(true));
+      }
+      sendDeferred();
+      return 'failed';
+    }
     if (verdict === 'conflict') {
       session.conflicted = true;
       if (stillShown) {
@@ -287,6 +330,11 @@ export function createDraftSync(options: DraftSyncOptions): DraftSync {
   }
 
   function onChange(): void {
+    handleChange();
+    refreshUnsaved();
+  }
+
+  function handleChange(): void {
     const currentId = state.investigation.getState().id;
     if (watched !== undefined && watched.id !== currentId) {
       const previous = watched;
@@ -308,6 +356,10 @@ export function createDraftSync(options: DraftSyncOptions): DraftSync {
       return;
     }
     if (status.getState().kind === 'rejected') setStatus(IDLE);
+    if (readOnlyNow()) {
+      cancel();
+      return;
+    }
     if (writing || retrying) return;
     schedule(AUTOSAVE_DELAY_MS);
   }
@@ -333,14 +385,14 @@ export function createDraftSync(options: DraftSyncOptions): DraftSync {
   };
 
   const onBeforeUnload = (event: Event): void => {
-    if (!isDirty() && !writing) return;
+    if (!differs() && !writing) return;
     event.preventDefault();
     Object.assign(event, { returnValue: '' });
   };
 
   const onPageHide = (): void => {
     const shown = shownSession();
-    if (shown === undefined) return;
+    if (shown === undefined || readOnlyNow()) return;
     const json = JSON.stringify(documentOf(shown.session));
     if (json === shown.session.lastJson) return;
     cancel();
@@ -361,6 +413,7 @@ export function createDraftSync(options: DraftSyncOptions): DraftSync {
         applyFilters(adopted);
         adopted.lastJson = JSON.stringify(documentOf(adopted));
       }
+      refreshUnsaved();
     },
     flush,
     leaving: readable(leaving),

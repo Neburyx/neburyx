@@ -1,4 +1,4 @@
-import { allowedDetails, ERROR_TABLE, SOURCE_UNAVAILABLE_ENTRIES, type ErrorCode, type ErrorResponse, type SourceUnavailableReason } from '@neburyx/contracts';
+import { allowedDetails, CONFLICT_ENTRIES, ERROR_TABLE, SOURCE_UNAVAILABLE_ENTRIES, SOURCE_UNAVAILABLE_REASONS, type ErrorCode, type ErrorResponse, type SourceUnavailableReason } from '@neburyx/contracts';
 
 /** Why a read could not reach a source, as the adapter tells it; a fixed tag, sent in a response only as the public reason it maps to (`unavailableReasonOf`). */
 export const UNAVAILABLE_REASONS = ['unreachable', 'authentication', 'credentials', 'database', 'refused', 'pool-full', 'closed'] as const;
@@ -58,10 +58,13 @@ export class RequestCancelled extends Error {
 export function errorResponse(code: ErrorCode, traceId: string, details?: unknown): ErrorResponse {
   const allowed = allowedDetails(code, details);
   if (code === 'SOURCE_UNAVAILABLE') {
-    const reason = allowed?.reason ?? 'unreachable';
+    const reason = SOURCE_UNAVAILABLE_REASONS.find((candidate) => candidate === allowed?.reason) ?? 'unreachable';
     // only the breaker's reason has a wait to give
     const wait = reason === 'repeated-timeouts' ? allowed?.retryAfterMs : undefined;
     return { error: { code, ...SOURCE_UNAVAILABLE_ENTRIES[reason], traceId, details: { reason, ...(wait === undefined ? {} : { retryAfterMs: wait }) } } };
+  }
+  if (code === 'CONFLICT' && (allowed?.reason === 'status-change-not-allowed' || allowed?.reason === 'investigation-read-only')) {
+    return { error: { code, ...CONFLICT_ENTRIES[allowed.reason], traceId, details: allowed } };
   }
   const { message, retryable } = ERROR_TABLE[code];
   return { error: { code, message, retryable, traceId, ...(allowed ? { details: allowed } : {}) } };

@@ -4,7 +4,9 @@ import { sourceTestReportSchema } from '@neburyx/contracts';
 import type { PingStateChange, SourceCheck } from '../db/source-checks-repository.js';
 import type { SourceRow } from '../db/sources-repository.js';
 import type { Identity } from '../identity/identity.js';
-import { validatedDraft, type CreatedInvestigation, type DraftRow, type DraftWriteResult, type InvestigationRow, type ListedInvestigation, type NewDraft, type NewInvestigation, type ReusableQuery, type StoredInvestigation } from '../db/investigations-repository.js';
+import { readOnlyStatusOf } from '../investigations/read-only.js';
+import { planStatusChange } from '../investigations/status-change.js';
+import { validatedDraft, type CreatedInvestigation, type DraftRow, type DraftWriteResult, type StatusChangeResult, type TitleChangeResult, type InvestigationRow, type ListedInvestigation, type NewDraft, type NewInvestigation, type ReusableQuery, type StoredInvestigation } from '../db/investigations-repository.js';
 import type { SourceModel } from '../mapping/model.js';
 import { decideSourceState, type StoredCheck } from '../source-state/decide.js';
 
@@ -58,6 +60,7 @@ export function memoryStoreWith(options: MemoryAppStoreOptions): MemoryAppStore 
     checks
       .filter((check) => check.report.sourceId === sourceId)
       .map((check) => ({ id: check.id, checkedAt: check.report.checkedAt, identityHash: check.identityHash, configHash: check.configHash, reachedSource: check.report.server !== null, state: check.report.state, stateReason: check.report.stateReason }));
+  let statusChanges = 0;
   const investigations: InvestigationRow[] = [];
   const drafts: (DraftRow & { readonly investigationId: string; contentHash?: string })[] = [];
   return {
@@ -125,7 +128,7 @@ export function memoryStoreWith(options: MemoryAppStoreOptions): MemoryAppStore 
       const reusable = input.caseRef === null ? undefined : reusableOf(investigations, { ownerId: input.ownerId, sourceId: input.sourceId, caseRef: input.caseRef, entityType: input.startingEntityType, stableId: input.startingStableId });
       if (reusable !== undefined) return Promise.resolve({ row: reusable, created: false });
       const now = new Date(Date.UTC(2026, 10, 5, 12, 0, investigations.length)).toISOString();
-      const row: InvestigationRow = { id: input.id, sourceId: input.sourceId, sourceIdentityHash: input.sourceIdentityHash, ownerId: input.ownerId, title: input.title, caseRef: input.caseRef, startingEntityType: input.startingEntityType, startingStableId: input.startingStableId, status: 'open', createdAt: now, lastEditedAt: now, version: 1 };
+      const row: InvestigationRow = { id: input.id, sourceId: input.sourceId, sourceIdentityHash: input.sourceIdentityHash, ownerId: input.ownerId, title: input.title, caseRef: input.caseRef, startingEntityType: input.startingEntityType, startingStableId: input.startingStableId, status: 'open', createdAt: now, lastEditedAt: now, closedAt: null, archivedAt: null, version: 1 };
       investigations.push(row);
       drafts.push({ id: draft.id, version: 1, layout: draft.layout, queryContext: draft.queryContext, notes: null, investigationId: input.id, contentHash: draft.contentHash });
       return Promise.resolve({ row, created: true });
@@ -140,6 +143,8 @@ export function memoryStoreWith(options: MemoryAppStoreOptions): MemoryAppStore 
       const investigation = investigations.find((row) => row.id === write.investigationId && row.ownerId === write.ownerId);
       const draft = drafts.find((candidate) => candidate.investigationId === write.investigationId);
       if (investigation === undefined || draft === undefined) return Promise.resolve({ outcome: 'not-found' });
+      const readOnly = readOnlyStatusOf(investigation.status);
+      if (readOnly !== undefined) return Promise.resolve({ outcome: 'read-only', status: readOnly });
       if (draft.version !== write.expectedVersion) return Promise.resolve({ outcome: 'conflict' });
       const contentHash = write.contentHashOf({ aiNotes: null });
       if (contentHash === draft.contentHash) return Promise.resolve({ outcome: 'unchanged', version: draft.version, save: { state: 'unsaved', savedAt: null } });
@@ -147,6 +152,31 @@ export function memoryStoreWith(options: MemoryAppStoreOptions): MemoryAppStore 
       drafts[drafts.indexOf(draft)] = saved;
       investigations[investigations.indexOf(investigation)] = { ...investigation, lastEditedAt: new Date(Date.parse(investigation.lastEditedAt) + 1000).toISOString() };
       return Promise.resolve({ outcome: 'saved', version: saved.version, save: { state: 'unsaved', savedAt: null } });
+    },
+    renameInvestigation: (change): Promise<TitleChangeResult> => {
+      const held = investigations.find((row) => row.id === change.investigationId && row.ownerId === change.ownerId);
+      if (held === undefined) return Promise.resolve({ outcome: 'not-found' });
+      const readOnly = readOnlyStatusOf(held.status);
+      if (readOnly !== undefined) return Promise.resolve({ outcome: 'read-only', status: readOnly });
+      if (held.version !== change.expectedVersion) return Promise.resolve({ outcome: 'conflict' });
+      if (held.title === change.title) return Promise.resolve({ outcome: 'unchanged', row: held });
+      const row = { ...held, title: change.title, version: held.version + 1 };
+      investigations[investigations.indexOf(held)] = row;
+      return Promise.resolve({ outcome: 'renamed', row });
+    },
+    changeInvestigationStatus: async (change): Promise<StatusChangeResult> => {
+      const held = investigations.find((row) => row.id === change.investigationId && row.ownerId === change.ownerId);
+      if (held === undefined) return { outcome: 'not-found' };
+      const plan = planStatusChange(held.status, change.status);
+      if (plan === 'unchanged') return { outcome: 'unchanged', row: held };
+      if (held.version !== change.expectedVersion) return { outcome: 'conflict' };
+      if (plan === 'not-allowed') return { outcome: 'not-allowed' };
+      const now = new Date(Date.UTC(2026, 10, 6, 12, 0, statusChanges++)).toISOString();
+      const timeOf = (rule: 'keep' | 'now' | 'clear', kept: string | null) => (rule === 'keep' ? kept : rule === 'now' ? now : null);
+      const row: InvestigationRow = { ...held, status: change.status, closedAt: timeOf(plan.closedAt, held.closedAt), archivedAt: timeOf(plan.archivedAt, held.archivedAt), version: held.version + 1 };
+      await change.beforeCommit({ from: held.status, to: change.status, row });
+      investigations[investigations.indexOf(held)] = row;
+      return { outcome: 'changed', row };
     },
     // The double has no named views: every draft is unsaved. The Postgres suite proves the saved rule.
     readLibrary: (read) => {

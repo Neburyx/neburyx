@@ -4,7 +4,7 @@ import { checkMigrations, pingDatabase } from './db/readiness-repository.js';
 import { migrationFileNames } from './migrate/provider.js';
 import { PROBE_STEP_MS, READINESS_LIMIT_MS, runReadiness } from './health/readiness.js';
 import { readIdentity, seedFirstStart } from './db/identity-repository.js';
-import { createInvestigation, findReusableInvestigation, readInvestigation, readLibrary, saveDraft, type InvestigationStore } from './db/investigations-repository.js';
+import { changeInvestigationStatus, createInvestigation, findReusableInvestigation, readInvestigation, readLibrary, renameInvestigation, saveDraft, type InvestigationStore } from './db/investigations-repository.js';
 import { referenceKeyOf } from './db/reference-key-repository.js';
 import type { SourceHashes } from './source-state/decide.js';
 import { applyPingState, hasActiveSource, latestChecksFor, latestQualifyingChecks, markSourceUnchecked, recordSourceCheck, type CheckedSource, type PingStateChange, type QualifyingCheck, type SourceCheck } from './db/source-checks-repository.js';
@@ -73,6 +73,8 @@ export function createAppStore(url: string, onConnectionError: () => void, optio
     findReusableInvestigation: (query) => findReusableInvestigation(pool, query),
     readInvestigation: (id, ownerId) => readInvestigation(pool, id, ownerId),
     saveDraft: (write) => saveDraft(pool, write),
+    renameInvestigation: (change) => renameInvestigation(pool, change),
+    changeInvestigationStatus: (change) => changeInvestigationStatus(pool, change),
     readLibrary: (read) => readLibrary(pool, read),
     readiness: () => runReadiness({ ping: () => pingDatabase(probes), migrations: shippedMigrations }, READINESS_LIMIT_MS),
     async close(): Promise<void> {

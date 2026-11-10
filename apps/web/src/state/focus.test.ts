@@ -143,7 +143,7 @@ describe('the neighborhood focus', () => {
 
   it('is kept when another investigation is shown and this one is resumed, with the viewport held, and is gone when another source is bound', () => {
     const state = createClientState();
-    const record = { title: 't', caseRef: null, save: { kind: 'unsaved' } } as const;
+    const record = { title: 't', caseRef: null, status: 'open' as const, readOnly: false, version: 1, save: { kind: 'unsaved' } } as const;
     const first = { id: 'i1', sourceId: 'a', record, resultKeys: [key('a')], nodeRefs: IDS.map((id) => ref('a', 'type-a', id)), edgeRefs: LINKS.map(([id]) => edgeRef('a', id)) };
     const second = { id: 'i2', sourceId: 'a', record, resultKeys: [key('a', 'seed-2')], nodeRefs: [ref('a', 'type-a', 'n0')], edgeRefs: [] };
     state.bindSource('a');

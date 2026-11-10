@@ -245,7 +245,7 @@ const COUNTED_ROUTES = [
   'POST /v1/investigations',
   'POST /v1/sources/:id/test',
 ];
-const UNCOUNTED_ROUTES = ['GET /v1/me', 'GET /v1/sources', 'GET /v1/sources/:id/profile', 'GET /v1/investigations', 'GET /v1/investigations/:id', 'PUT /v1/investigations/:id/draft', 'GET /healthz', 'GET /readyz'];
+const UNCOUNTED_ROUTES = ['GET /v1/me', 'GET /v1/sources', 'GET /v1/sources/:id/profile', 'GET /v1/investigations', 'GET /v1/investigations/:id', 'PUT /v1/investigations/:id/draft', 'PUT /v1/investigations/:id', 'POST /v1/investigations/:id/status', 'GET /healthz', 'GET /readyz'];
 
 describe('every route has a decision', () => {
   it('is either counted or on the list of routes that read no source, so a new route cannot be left out', async () => {

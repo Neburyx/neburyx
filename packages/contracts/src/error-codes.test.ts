@@ -43,6 +43,30 @@ describe('ErrorResponse', () => {
     expect(errorResponseSchema.safeParse(body).success).toBe(false);
   });
 
+  const conflict = { code: 'CONFLICT', retryable: false, traceId: 'tr-1' };
+  const readOnlyMessage = 'This investigation is closed or archived. Reopen it to make changes.';
+  const notAllowedMessage = 'An archived investigation must be reopened before it can be closed.';
+  const unavailable = { code: 'SOURCE_UNAVAILABLE', message: 'The source did not answer. Try again shortly.', retryable: true, traceId: 'tr-1' };
+
+  it.each([
+    ['a source-unavailable reason on CONFLICT', { error: { ...conflict, message: 'This item was changed elsewhere. Reload to continue.', details: { reason: 'unreachable' } } }],
+    ['a conflict reason on SOURCE_UNAVAILABLE', { error: { ...unavailable, details: { reason: 'investigation-read-only' } } }],
+    ['a read-only reason with the plain message', { error: { ...conflict, message: 'This item was changed elsewhere. Reload to continue.', details: { reason: 'investigation-read-only', status: 'closed' } } }],
+    ['a read-only reason with no status', { error: { ...conflict, message: readOnlyMessage, details: { reason: 'investigation-read-only' } } }],
+    ['a status on a not-allowed reason', { error: { ...conflict, message: notAllowedMessage, details: { reason: 'status-change-not-allowed', status: 'closed' } } }],
+    ['a status of open', { error: { ...conflict, message: readOnlyMessage, details: { reason: 'investigation-read-only', status: 'open' } } }],
+    ['a status with no reason', { error: { ...conflict, message: 'This item was changed elsewhere. Reload to continue.', details: { status: 'closed' } } }],
+    ['a retryable read-only refusal', { error: { ...conflict, retryable: true, message: readOnlyMessage, details: { reason: 'investigation-read-only', status: 'closed' } } }],
+  ])('rejects %s', (_name, body) => {
+    expect(errorResponseSchema.safeParse(body).success).toBe(false);
+  });
+
+  it('accepts a CONFLICT with no reason and each reason with its own message', () => {
+    expect(errorResponseSchema.safeParse({ error: { ...conflict, message: 'This item was changed elsewhere. Reload to continue.' } }).success).toBe(true);
+    expect(errorResponseSchema.safeParse({ error: { ...conflict, message: notAllowedMessage, details: { reason: 'status-change-not-allowed' } } }).success).toBe(true);
+    expect(errorResponseSchema.safeParse({ error: { ...conflict, message: readOnlyMessage, details: { reason: 'investigation-read-only', status: 'archived' } } }).success).toBe(true);
+  });
+
   it('accepts a full body, with and without details', () => {
     expect(errorResponseSchema.safeParse(validBody).success).toBe(true);
     const budget = { code: 'QUERY_BUDGET_EXCEEDED', message: 'Refine your filters to continue.', retryable: true, traceId: 'tr-1' };

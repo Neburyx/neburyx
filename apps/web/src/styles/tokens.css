@@ -71,6 +71,8 @@
   --menu-max-width: calc(100vw - 16px);
   --menu-max-height: calc(100vh - 16px);
   --menu-width-canvas: 260px;
+  --menu-width-investigation: 184px;
+  --color-scrim: rgba(38, 49, 73, 0.35);
   --menu-width-submenu: 280px;
   --menu-width-node: 304px;
   --menu-width-relationship: 300px;

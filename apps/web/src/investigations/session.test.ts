@@ -10,7 +10,7 @@ const PRINCIPAL = 'principal-1';
 function showing(state: ReturnType<typeof createClientState>, id: string, sourceId: string, stableId: string, mask = false) {
   const node = nodeOf(sourceId, 'kind-a', stableId);
   const key = openedKey(sourceId, PRINCIPAL, id, mask);
-  return state.show({ id, sourceId, record: { title: stableId, caseRef: null, save: { kind: 'unsaved' } }, resultKeys: [key], nodeRefs: [node.ref], edgeRefs: [] }, [{ key, result: { sourceId, nodes: [node], edges: [] } }]);
+  return state.show({ id, sourceId, record: { title: stableId, caseRef: null, status: 'open' as const, readOnly: false, version: 1, save: { kind: 'unsaved' } }, resultKeys: [key], nodeRefs: [node.ref], edgeRefs: [] }, [{ key, result: { sourceId, nodes: [node], edges: [] } }]);
 }
 
 describe('showing an investigation', () => {
@@ -91,7 +91,7 @@ describe('showing an investigation', () => {
     const foreign = nodeOf('source-b', 'kind-a', 'X-1');
     const key = openedKey('source-a', PRINCIPAL, INVESTIGATION_B, false);
     const attempt = (nodeRefs: readonly (typeof foreign.ref)[], result: { sourceId: string }) =>
-      state.show({ id: INVESTIGATION_B, sourceId: 'source-a', record: { title: 'x', caseRef: null, save: { kind: 'unsaved' } }, resultKeys: [key], nodeRefs, edgeRefs: [] }, [{ key, result: { sourceId: result.sourceId, nodes: [], edges: [] } }]);
+      state.show({ id: INVESTIGATION_B, sourceId: 'source-a', record: { title: 'x', caseRef: null, status: 'open' as const, readOnly: false, version: 1, save: { kind: 'unsaved' } }, resultKeys: [key], nodeRefs, edgeRefs: [] }, [{ key, result: { sourceId: result.sourceId, nodes: [], edges: [] } }]);
     expect(() => attempt([foreign.ref], { sourceId: 'source-a' })).toThrow(StateError);
     expect(() => attempt([], { sourceId: 'source-b' })).toThrow(StateError);
     expect(state.investigation.getState()).toBe(before);

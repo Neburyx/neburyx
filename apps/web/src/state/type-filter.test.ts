@@ -118,7 +118,7 @@ describe('the entity type filter', () => {
     const state = createClientState();
     const opened = (id: string, params: string) => {
       const nodes = [typed(`${id}-0`, 'kind-a'), typed(`${id}-1`, 'kind-b')];
-      return { loaded: { id, sourceId: 'a', record: { title: id, caseRef: null, save: { kind: 'unsaved' as const } }, resultKeys: [key('a', params)], nodeRefs: nodes.map((entry) => entry.ref), edgeRefs: [] }, results: [{ key: key('a', params), result: { sourceId: 'a', nodes, edges: [] } }] };
+      return { loaded: { id, sourceId: 'a', record: { title: id, caseRef: null, status: 'open' as const, readOnly: false, version: 1, save: { kind: 'unsaved' as const } }, resultKeys: [key('a', params)], nodeRefs: nodes.map((entry) => entry.ref), edgeRefs: [] }, results: [{ key: key('a', params), result: { sourceId: 'a', nodes, edges: [] } }] };
     };
     const first = opened('inv-1', 'p1');
     const second = opened('inv-2', 'p2');

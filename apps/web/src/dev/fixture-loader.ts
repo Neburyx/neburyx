@@ -7,7 +7,7 @@ import { generateAddition, generateFixtureGraph } from './fixture-graph.js';
 export const LOADER_MARKER = 'neburyx-dev-fixture-loader';
 
 /** Synthetic: made-up investigation details so the header has something to show before any real investigation exists. */
-export const FIXTURE_RECORD: InvestigationRecord = { title: 'Suspicious linked accounts', caseRef: 'REF-2026-1048', save: { kind: 'saved', at: '2026-10-28T09:42:00Z' } };
+export const FIXTURE_RECORD: InvestigationRecord = { title: 'Suspicious linked accounts', caseRef: 'REF-2026-1048', status: 'open', readOnly: false, version: 1, save: { kind: 'saved', at: '2026-10-28T09:42:00Z' } };
 
 export interface LoaderOptions {
   /** How many connected entities are left out of the loaded refs, so the relationships that join them are loaded but cannot be drawn. */

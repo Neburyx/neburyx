@@ -3,7 +3,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from './app.js';
 import { loadCommittedDocument, validatorFor } from './testing/document.js';
 import { createLogger } from './logger.js';
-import { SOURCE_UNAVAILABLE_ENTRIES } from '@neburyx/contracts';
+import { CONFLICT_ENTRIES, ERROR_TABLE, SOURCE_UNAVAILABLE_ENTRIES } from '@neburyx/contracts';
 import { AppError, detailsOf, errorResponse, unavailableReasonOf } from './errors.js';
 import { CYPHER, IDENTIFIER, registerErrorRoutes } from './testing/error-routes.js';
 import { makeWebRoot } from './testing/web-root.js';
@@ -234,5 +234,22 @@ describe('the reason of an unavailable source', () => {
     // no other reason carries a wait, whatever the details say
     expect(errorResponse('SOURCE_UNAVAILABLE', 'tr-4', detailsOf(new AppError('SOURCE_UNAVAILABLE', { retryAfterMs: 12_000 }, 'database'))).error.details).toEqual({ reason: 'unreachable' });
     expect(errorResponse('SOURCE_UNAVAILABLE', 'tr-2')).toEqual({ error: { code: 'SOURCE_UNAVAILABLE', ...SOURCE_UNAVAILABLE_ENTRIES.unreachable, traceId: 'tr-2', details: { reason: 'unreachable' } } });
+  });
+
+  it('answers a CONFLICT with its reason, its sentence and, for a read-only refusal, the status, valid in the committed document', () => {
+    const readOnly = errorResponse('CONFLICT', 'tr-5', detailsOf(new AppError('CONFLICT', { reason: 'investigation-read-only', status: 'closed' })));
+    expect(readOnly).toEqual({ error: { code: 'CONFLICT', ...CONFLICT_ENTRIES['investigation-read-only'], traceId: 'tr-5', details: { reason: 'investigation-read-only', status: 'closed' } } });
+    expect(validateErrorResponse(readOnly)).toBe(true);
+    const notAllowed = errorResponse('CONFLICT', 'tr-6', { reason: 'status-change-not-allowed', status: 'closed' });
+    expect(notAllowed).toEqual({ error: { code: 'CONFLICT', ...CONFLICT_ENTRIES['status-change-not-allowed'], traceId: 'tr-6', details: { reason: 'status-change-not-allowed' } } });
+    expect(validateErrorResponse(notAllowed)).toBe(true);
+  });
+
+  it('answers a CONFLICT with no reason, or one that is not its own, with the plain message and no details', () => {
+    for (const details of [undefined, {}, { reason: 'unreachable' }]) {
+      const body = errorResponse('CONFLICT', 'tr-7', details);
+      expect(body).toEqual({ error: { code: 'CONFLICT', message: ERROR_TABLE.CONFLICT.message, retryable: false, traceId: 'tr-7' } });
+      expect(validateErrorResponse(body)).toBe(true);
+    }
   });
 });

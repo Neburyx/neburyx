@@ -41,7 +41,7 @@ const VALUE = '+1-212-555-0100';
 const phoneToken = makeToken(TEST_REFERENCE_KEYS, { sourceId: 'demo', entityType: 'phone' }, VALUE);
 
 function row(overrides: Partial<InvestigationRow> = {}): InvestigationRow {
-  return { id: ID, sourceId: 'demo', sourceIdentityHash: identityHashOf(demo), ownerId: ME, title: 'Widget W-1', caseRef: null, startingEntityType: 'widget', startingStableId: 'W-1', status: 'open', createdAt: '2026-11-05T10:00:00.000Z', lastEditedAt: '2026-11-05T10:00:00.000Z', version: 3, ...overrides };
+  return { id: ID, sourceId: 'demo', sourceIdentityHash: identityHashOf(demo), ownerId: ME, title: 'Widget W-1', caseRef: null, startingEntityType: 'widget', startingStableId: 'W-1', status: 'open', createdAt: '2026-11-05T10:00:00.000Z', lastEditedAt: '2026-11-05T10:00:00.000Z', closedAt: null, archivedAt: null, version: 3, ...overrides };
 }
 
 function seeded(overrides: Partial<InvestigationRow> = {}): MemoryAppStore {

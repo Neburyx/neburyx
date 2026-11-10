@@ -1,8 +1,8 @@
-export { ERROR_CODES, errorBodySchema, errorCodeSchema, errorDetailsSchema, partialDetailsSchema, SOURCE_UNAVAILABLE_REASONS } from './error-codes.js';
+export { CONFLICT_REASONS, ERROR_CODES, errorBodySchema, errorCodeSchema, errorDetailsSchema, partialDetailsSchema, SOURCE_UNAVAILABLE_REASONS } from './error-codes.js';
 export { errorResponseSchema } from './error-response.js';
-export type { ErrorCode, ErrorDetails, ErrorResponse, SourceUnavailableReason } from './error-codes.js';
+export type { ConflictReason, ErrorCode, ErrorDetails, ErrorResponse, SourceUnavailableReason } from './error-codes.js';
 export { ERROR_DETAIL_KEYS, allowedDetails } from './error-details.js';
-export { ERROR_TABLE, findMissingCodes, SOURCE_UNAVAILABLE_ENTRIES } from './error-table.js';
+export { CONFLICT_ENTRIES, ERROR_TABLE, findMissingCodes, SOURCE_UNAVAILABLE_ENTRIES } from './error-table.js';
 export type { ErrorEntry } from './error-table.js';
 export { buildOpenApiDocument } from './openapi.js';
 export type { OpenApiDocument } from './openapi.js';
@@ -70,7 +70,12 @@ export {
   investigationResponseSchema,
   investigationSaveSchema,
   investigationSchema,
+  investigationTitleSchema,
   notesSchema,
+  renameRequestSchema,
+  renameResponseSchema,
+  statusChangeRequestSchema,
+  statusChangeResponseSchema,
   layoutDocumentSchema,
   openInvestigationRequestSchema,
   referenceOpenRequestSchema,
@@ -79,7 +84,7 @@ export {
   queryContextDocumentSchema,
   startingEntitySchema,
 } from './investigations.js';
-export type { DraftWriteRequest, DraftWriteResponse, Investigation, InvestigationListCounts, InvestigationListItem, InvestigationListResponse, InvestigationResponse, InvestigationSave, InvestigationSourceState, LayoutDocument, OpenInvestigationRequest, ReferenceOpenRequest, ValueOpenRequest, OpenInvestigationResponse, QueryContextDocument } from './investigations.js';
+export type { DraftWriteRequest, DraftWriteResponse, Investigation, InvestigationListCounts, InvestigationListItem, InvestigationListResponse, InvestigationResponse, InvestigationSave, InvestigationSourceState, LayoutDocument, OpenInvestigationRequest, ReferenceOpenRequest, ValueOpenRequest, OpenInvestigationResponse, QueryContextDocument, RenameRequest, RenameResponse, StatusChangeRequest, StatusChangeResponse } from './investigations.js';
 export {
   FACET_SCOPES,
   MAX_SEARCH_TEXT_LENGTH,

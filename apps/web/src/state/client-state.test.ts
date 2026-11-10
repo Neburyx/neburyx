@@ -536,7 +536,7 @@ describe('selection and positions', () => {
 });
 
 describe('the investigation record', () => {
-  const record = { title: 'Suspicious linked accounts', caseRef: null, save: { kind: 'unsaved' } } as const;
+  const record = { title: 'Suspicious linked accounts', caseRef: null, status: 'open' as const, readOnly: false, version: 1, save: { kind: 'unsaved' } } as const;
 
   it('is refused while no source is bound, and nothing is stored', () => {
     const state = createClientState();
@@ -547,7 +547,7 @@ describe('the investigation record', () => {
   it('is refused for a save time that is not a time, and the earlier record stays', () => {
     const state = loaded();
     state.describeInvestigation(record);
-    expect(() => state.describeInvestigation({ title: 'x', caseRef: null, save: { kind: 'saved', at: 'yesterday' } })).toThrow('INVALID_TIME');
+    expect(() => state.describeInvestigation({ title: 'x', caseRef: null, status: 'open' as const, readOnly: false, version: 1, save: { kind: 'saved', at: 'yesterday' } })).toThrow('INVALID_TIME');
     expect(state.investigation.getState().record).toBe(record);
   });
 
@@ -566,13 +566,13 @@ describe('the investigation record', () => {
   it.each(['2026-10-28T09:42:00', '2026-10-28 09:42:00Z', '2026-10-28', 'yesterday', '', '2026-02-30T09:42:00Z', '2026-02-29T09:42:00Z', '2026-13-01T09:42:00Z', '2026-10-28T24:00:00Z'])('is refused for a save time without a zone or not a time: %j, and the earlier record stays', (at) => {
     const state = loaded();
     state.describeInvestigation(record);
-    expect(() => state.describeInvestigation({ title: 'x', caseRef: null, save: { kind: 'saved', at } })).toThrow('INVALID_TIME');
+    expect(() => state.describeInvestigation({ title: 'x', caseRef: null, status: 'open' as const, readOnly: false, version: 1, save: { kind: 'saved', at } })).toThrow('INVALID_TIME');
     expect(state.investigation.getState().record).toBe(record);
   });
 
   it('keeps a saved time as the same instant in UTC, whatever zone it was written in', () => {
     const state = loaded();
-    state.describeInvestigation({ title: 'x', caseRef: null, save: { kind: 'saved', at: '2026-10-29T01:30:00+02:00' } });
+    state.describeInvestigation({ title: 'x', caseRef: null, status: 'open' as const, readOnly: false, version: 1, save: { kind: 'saved', at: '2026-10-29T01:30:00+02:00' } });
     expect(state.investigation.getState().record?.save).toEqual({ kind: 'saved', at: '2026-10-28T23:30:00.000Z' });
   });
 });

@@ -790,6 +790,178 @@
             }
           }
         }
+      },
+      "put": {
+        "operationId": "renameInvestigation",
+        "summary": "Change the title of an investigation of the caller",
+        "description": "Writes Postgres only; no source is read. The body is { title, expectedVersion }: the title is stored as typed (not empty or only whitespace, at most 200 code points, no NUL and no unpaired surrogate) and expectedVersion is the investigation's version, which the answer's ETag carries. The version goes up by one and last_edited_at does not change; the title the investigation already has changes nothing and answers the same version. A closed or archived investigation is refused with CONFLICT and details.reason investigation-read-only (this check comes before the version check); a stale expectedVersion is CONFLICT without a reason. An identifier that does not exist, is not a UUID, belongs to another user or is deleted gives the same 404.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenameRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The investigation with its new title",
+            "headers": {
+              "ETag": {
+                "description": "The investigation's version as a strong tag",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RenameResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The title or expectedVersion is not valid, or a field is not known",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such investigation of this caller",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "CONFLICT with details.reason investigation-read-only and details.status (closed or archived), or CONFLICT without a reason when expectedVersion is stale",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The title could not be written",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/investigations/{id}/status": {
+      "post": {
+        "operationId": "changeInvestigationStatus",
+        "summary": "Close, archive or reopen an investigation of the caller",
+        "description": "Writes Postgres only; no source is read. The body is { status, expectedVersion } with status open, closed or archived. Allowed changes: open to closed, open to archived, closed to open, closed to archived and archived to open; archived to closed is CONFLICT with details.reason status-change-not-allowed. Closing sets closedAt; archiving sets archivedAt and keeps an earlier closedAt; reopening clears both. The version goes up by one and last_edited_at does not change. A request for the status the investigation already has answers 200 with the same version and writes nothing, whatever expectedVersion it carries. A stale expectedVersion is CONFLICT without a reason. Closing, archiving and reopening are audited as investigation.close, investigation.archive and investigation.reopen; if the audit sink rejects, nothing is written and the answer is INTERNAL_ERROR. An identifier that does not exist, is not a UUID, belongs to another user or is deleted gives the same 404.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StatusChangeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The investigation with its status, closedAt and archivedAt",
+            "headers": {
+              "ETag": {
+                "description": "The investigation's version as a strong tag",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusChangeResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The status or expectedVersion is not valid, or a field is not known",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such investigation of this caller",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "CONFLICT with details.reason status-change-not-allowed, or CONFLICT without a reason when expectedVersion is stale",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The status could not be written",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/investigations/{id}/draft": {
@@ -867,7 +1039,7 @@
             }
           },
           "409": {
-            "description": "CONFLICTED_VIEW_VERSION: the draft changed since the version sent; CONFLICT: the investigation's source is not available as it was",
+            "description": "CONFLICTED_VIEW_VERSION: the draft changed since the version sent; CONFLICT: the investigation's source is not available as it was, or with details.reason investigation-read-only and details.status (closed or archived) when the investigation is closed or archived (checked before the version)",
             "content": {
               "application/json": {
                 "schema": {
@@ -6082,6 +6254,98 @@
                   "details"
                 ],
                 "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "const": "CONFLICT"
+                  },
+                  "message": {
+                    "type": "string",
+                    "const": "An archived investigation must be reopened before it can be closed."
+                  },
+                  "retryable": {
+                    "type": "boolean",
+                    "const": false
+                  },
+                  "traceId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "details": {
+                    "type": "object",
+                    "properties": {
+                      "reason": {
+                        "type": "string",
+                        "const": "status-change-not-allowed"
+                      }
+                    },
+                    "required": [
+                      "reason"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "code",
+                  "message",
+                  "retryable",
+                  "traceId",
+                  "details"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "const": "CONFLICT"
+                  },
+                  "message": {
+                    "type": "string",
+                    "const": "This investigation is closed or archived. Reopen it to make changes."
+                  },
+                  "retryable": {
+                    "type": "boolean",
+                    "const": false
+                  },
+                  "traceId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "details": {
+                    "type": "object",
+                    "properties": {
+                      "reason": {
+                        "type": "string",
+                        "const": "investigation-read-only"
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": [
+                          "closed",
+                          "archived"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "reason",
+                      "status"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "code",
+                  "message",
+                  "retryable",
+                  "traceId",
+                  "details"
+                ],
+                "additionalProperties": false
               }
             ]
           }
@@ -10571,6 +10835,133 @@
         ],
         "additionalProperties": false
       },
+      "RenameRequest": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "expectedVersion": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "title",
+          "expectedVersion"
+        ],
+        "additionalProperties": false
+      },
+      "RenameResponse": {
+        "type": "object",
+        "properties": {
+          "investigation": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "sourceId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1
+              },
+              "caseRef": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "open",
+                  "closed",
+                  "archived"
+                ]
+              },
+              "startingEntity": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "entityType": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "stableId": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "entityType",
+                      "stableId"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "sourceState": {
+                "type": "string",
+                "enum": [
+                  "available",
+                  "removed",
+                  "repointed"
+                ]
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              "lastEditedAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              "version": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "id",
+              "sourceId",
+              "title",
+              "caseRef",
+              "status",
+              "startingEntity",
+              "sourceState",
+              "createdAt",
+              "lastEditedAt",
+              "version"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "investigation"
+        ],
+        "additionalProperties": false
+      },
       "SearchMoreRequest": {
         "type": "object",
         "properties": {
@@ -14948,6 +15339,163 @@
         "required": [
           "items",
           "nextCursor"
+        ],
+        "additionalProperties": false
+      },
+      "StatusChangeRequest": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "open",
+              "closed",
+              "archived"
+            ]
+          },
+          "expectedVersion": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "status",
+          "expectedVersion"
+        ],
+        "additionalProperties": false
+      },
+      "StatusChangeResponse": {
+        "type": "object",
+        "properties": {
+          "investigation": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "sourceId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1
+              },
+              "caseRef": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "open",
+                  "closed",
+                  "archived"
+                ]
+              },
+              "startingEntity": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "entityType": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "stableId": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "entityType",
+                      "stableId"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "sourceState": {
+                "type": "string",
+                "enum": [
+                  "available",
+                  "removed",
+                  "repointed"
+                ]
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              "lastEditedAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              "version": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "closedAt": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "archivedAt": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "sourceId",
+              "title",
+              "caseRef",
+              "status",
+              "startingEntity",
+              "sourceState",
+              "createdAt",
+              "lastEditedAt",
+              "version",
+              "closedAt",
+              "archivedAt"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "investigation"
         ],
         "additionalProperties": false
       }

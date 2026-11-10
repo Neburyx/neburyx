@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { edgeEntrySchema, investigationListQuerySchema, investigationListResponseSchema, openInvestigationRequestSchema, openInvestigationResponseSchema } from './investigations.js';
+import { edgeEntrySchema, investigationListQuerySchema, investigationListResponseSchema, openInvestigationRequestSchema, openInvestigationResponseSchema, renameRequestSchema, statusChangeRequestSchema, statusChangeResponseSchema } from './investigations.js';
 
 const investigation = {
   id: '0192f000-0000-7000-8000-0000000000a1',
@@ -126,5 +126,53 @@ describe('an edge of a stored document', () => {
     ['an empty type', { ...ends, from: { t: '', id: 'W-1' } }],
   ])('refuses %s', (_name, edge) => {
     expect(edgeEntrySchema.safeParse(edge).success).toBe(false);
+  });
+});
+
+describe('the request to rename an investigation', () => {
+  it.each([
+    ['an empty title', { title: '', expectedVersion: 1 }],
+    ['a title of only whitespace', { title: ' \t\n ', expectedVersion: 1 }],
+    ['a title of 201 code points', { title: 'a'.repeat(201), expectedVersion: 1 }],
+    ['a title of 101 emoji and one more', { title: '\u{1F600}'.repeat(201), expectedVersion: 1 }],
+    ['a title with a NUL', { title: 'a\u0000b', expectedVersion: 1 }],
+    ['a title with an unpaired high surrogate', { title: 'a\ud800b', expectedVersion: 1 }],
+    ['a title with an unpaired low surrogate', { title: 'a\udc00b', expectedVersion: 1 }],
+    ['no expectedVersion', { title: 'Mule ring' }],
+    ['an expectedVersion of 0', { title: 'Mule ring', expectedVersion: 0 }],
+    ['an expectedVersion that is text', { title: 'Mule ring', expectedVersion: '1' }],
+    ['another field', { title: 'Mule ring', expectedVersion: 1, status: 'closed' }],
+  ])('rejects %s', (_name, body) => {
+    expect(renameRequestSchema.safeParse(body).success).toBe(false);
+  });
+
+  it('accepts a title as typed, with accents and emoji, up to 200 code points', () => {
+    expect(renameRequestSchema.safeParse({ title: '  Café \u{1F600} ring  ', expectedVersion: 3 }).success).toBe(true);
+    expect(renameRequestSchema.safeParse({ title: '\u{1F600}'.repeat(200), expectedVersion: 1 }).success).toBe(true);
+  });
+});
+
+describe('the request to change the status of an investigation', () => {
+  it.each([
+    ['a status that is not known', { status: 'deleted', expectedVersion: 1 }],
+    ['no status', { expectedVersion: 1 }],
+    ['no expectedVersion', { status: 'closed' }],
+    ['another field', { status: 'closed', expectedVersion: 1, title: 'x' }],
+  ])('rejects %s', (_name, body) => {
+    expect(statusChangeRequestSchema.safeParse(body).success).toBe(false);
+  });
+
+  it.each(['open', 'closed', 'archived'])('accepts %s', (status) => {
+    expect(statusChangeRequestSchema.safeParse({ status, expectedVersion: 2 }).success).toBe(true);
+  });
+});
+
+describe('the answer to a status change', () => {
+  const investigation = { id: '0194f1d0-0000-7000-8000-000000000001', sourceId: 'src', title: 'T', caseRef: null, status: 'closed', startingEntity: null, sourceState: 'available', createdAt: '2026-11-05T12:00:00.000Z', lastEditedAt: '2026-11-05T12:00:00.000Z', version: 2 };
+
+  it('carries closedAt and archivedAt, each a time or null', () => {
+    expect(statusChangeResponseSchema.safeParse({ investigation: { ...investigation, closedAt: '2026-11-06T12:00:00.000Z', archivedAt: null } }).success).toBe(true);
+    expect(statusChangeResponseSchema.safeParse({ investigation }).success).toBe(false);
+    expect(statusChangeResponseSchema.safeParse({ investigation: { ...investigation, closedAt: 'yesterday', archivedAt: null } }).success).toBe(false);
   });
 });

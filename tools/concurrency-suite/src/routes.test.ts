@@ -29,6 +29,8 @@ const ELSEWHERE: Readonly<Record<string, string>> = {
   'GET /v1/investigations': 'reads no source',
   'GET /v1/investigations/:id': 'reads no source',
   'PUT /v1/investigations/:id/draft': 'reads no source',
+  'PUT /v1/investigations/:id': 'reads no source',
+  'POST /v1/investigations/:id/status': 'reads no source',
 };
 
 /** The routes under /v1 that neither the rig nor the list above names. */

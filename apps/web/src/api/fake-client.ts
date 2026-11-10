@@ -7,5 +7,5 @@ const NOT_RETRIEVED_UNKNOWN = async () => ({ ok: true, value: { notRetrieved: { 
 
 /** A client whose reads fail as unreachable unless a test supplies them. */
 export function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
-  return { getMe: UNREACHABLE, getSources: UNREACHABLE, getProfile: UNREACHABLE, testSource: UNREACHABLE, getEntity: UNREACHABLE, getEdge: UNREACHABLE, lookupEntity: UNREACHABLE, openInvestigation: UNREACHABLE, getInvestigation: UNREACHABLE, saveDraft: UNREACHABLE, readRefs: UNREACHABLE, listInvestigations: UNREACHABLE, searchEntities: UNREACHABLE, searchMore: UNREACHABLE, previewExpansion: UNREACHABLE, graphCoverage: NOT_RETRIEVED_UNKNOWN, derivedNeighbors: UNREACHABLE, expandNeighbors: UNREACHABLE, ...overrides };
+  return { getMe: UNREACHABLE, getSources: UNREACHABLE, getProfile: UNREACHABLE, testSource: UNREACHABLE, getEntity: UNREACHABLE, getEdge: UNREACHABLE, lookupEntity: UNREACHABLE, openInvestigation: UNREACHABLE, getInvestigation: UNREACHABLE, saveDraft: UNREACHABLE, changeInvestigationStatus: UNREACHABLE, renameInvestigation: UNREACHABLE, readRefs: UNREACHABLE, listInvestigations: UNREACHABLE, searchEntities: UNREACHABLE, searchMore: UNREACHABLE, previewExpansion: UNREACHABLE, graphCoverage: NOT_RETRIEVED_UNKNOWN, derivedNeighbors: UNREACHABLE, expandNeighbors: UNREACHABLE, ...overrides };
 }

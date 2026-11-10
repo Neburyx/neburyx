@@ -2,7 +2,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { extname, join, normalize, sep } from 'node:path';
-import { DEFAULT_INVESTIGATION_LIST_LIMIT, parseEdgeRefSegment, investigationListCountsSchema, nodeSchema, investigationListQuerySchema, type Investigation, type LastTest, openInvestigationRequestSchema, SEARCH_GROUP_CAP, searchMoreRequestSchema, searchMoreResultSchema, searchRequestSchema, searchResultSchema, type SourceSummary, sourceSummaryFieldsSchema, sourceSummarySchema, type SourceTestReport, type EdgeReadRef, valueOfPathSegment } from '@neburyx/contracts';
+import { DEFAULT_INVESTIGATION_LIST_LIMIT, parseEdgeRefSegment, renameRequestSchema, statusChangeRequestSchema, investigationListCountsSchema, nodeSchema, investigationListQuerySchema, type Investigation, type LastTest, openInvestigationRequestSchema, SEARCH_GROUP_CAP, searchMoreRequestSchema, searchMoreResultSchema, searchRequestSchema, searchResultSchema, type SourceSummary, sourceSummaryFieldsSchema, sourceSummarySchema, type SourceTestReport, type EdgeReadRef, valueOfPathSegment } from '@neburyx/contracts';
 
 interface SupportProfile {
   readonly sourceId: string;
@@ -34,8 +34,8 @@ const TYPES: Readonly<Record<string, string>> = {
 const API_PREFIX = '/v1';
 const PROBE_PATHS: ReadonlySet<string> = new Set(['/healthz', '/readyz']);
 
-function json(response: ServerResponse, status: number, body: unknown): void {
-  response.writeHead(status, { 'content-type': 'application/json' });
+function json(response: ServerResponse, status: number, body: unknown, headers: Readonly<Record<string, string>> = {}): void {
+  response.writeHead(status, { 'content-type': 'application/json', ...headers });
   response.end(JSON.stringify(body));
 }
 
@@ -183,9 +183,18 @@ function aggregateEdge(ref: Extract<EdgeReadRef, { aggregate: unknown }>, respon
   });
 }
 
+const PLAIN_CONFLICT = { error: { code: 'CONFLICT', message: 'This item was changed elsewhere. Reload to continue.', retryable: false, traceId: 'tr-support' } };
+
+function readOnlyRefusal(status: 'closed' | 'archived'): unknown {
+  return { error: { code: 'CONFLICT', message: 'This investigation is closed or archived. Reopen it to make changes.', retryable: false, traceId: 'tr-support', details: { reason: 'investigation-read-only', status } } };
+}
+
 const INVALID = { error: { code: 'INVALID_REQUEST', message: 'The request is not valid.', retryable: false, traceId: 'tr-support' } };
 
 interface StoredInvestigation {
+  title: string;
+  status: Investigation['status'];
+  version: number;
   draftVersion: number;
   draftLayout?: unknown;
   draftQueryContext?: unknown;
@@ -193,7 +202,6 @@ interface StoredInvestigation {
   lastEditedAt: string;
   readonly id: string;
   readonly sourceId: string;
-  readonly title: string;
   readonly caseRef: string | null;
   readonly entityType: string;
   readonly stableId: string;
@@ -224,12 +232,12 @@ function shown(stored: StoredInvestigation, isNew = false): Investigation {
     sourceId: stored.sourceId,
     title: stored.title,
     caseRef: stored.caseRef,
-    status: 'open',
+    status: stored.status,
     startingEntity: { entityType: stored.entityType, stableId: stored.stableId },
     sourceState: !isNew && isRepointed(stored.caseRef) ? 'repointed' : 'available',
     createdAt: stored.createdAt,
     lastEditedAt: stored.lastEditedAt,
-    version: 1,
+    version: stored.version,
   };
 }
 
@@ -267,6 +275,7 @@ function createInvestigations(options: SupportServerOptions) {
       if (stored === undefined) return json(response, 404, NOT_FOUND);
       const given = typeof body === 'object' && body !== null && !Array.isArray(body) ? Object.fromEntries(Object.entries(body)) : undefined;
       const notes = given?.['notes'];
+      if (stored.status !== 'open') return json(response, 409, readOnlyRefusal(stored.status));
       if (given === undefined || given['layout'] === undefined || given['queryContext'] === undefined || (notes !== null && typeof notes !== 'string') || ifMatch === undefined || !/^"[1-9][0-9]*"$/.test(ifMatch)) return json(response, 400, INVALID);
       if (Number(ifMatch.slice(1, -1)) !== stored.draftVersion) return json(response, 409, { error: { code: 'CONFLICTED_VIEW_VERSION', message: 'This view was changed elsewhere. Reload to continue.', retryable: false, traceId: 'tr-support' } });
       const same = JSON.stringify([stored.draftLayout, stored.draftQueryContext, stored.draftNotes]) === JSON.stringify([given['layout'], given['queryContext'], notes]);
@@ -277,6 +286,44 @@ function createInvestigations(options: SupportServerOptions) {
       stored.draftNotes = notes;
       stored.lastEditedAt = new Date().toISOString();
       json(response, 200, { version: stored.draftVersion, save: { state: 'unsaved', savedAt: null }, notes });
+    },
+    /** Closes, archives or reopens, with the transitions of the API; a request for the status it has changes nothing. */
+    changeStatus(id: string, body: unknown, response: ServerResponse): void {
+      const stored = held.get(id);
+      if (stored === undefined) return json(response, 404, NOT_FOUND);
+      const parsed = statusChangeRequestSchema.safeParse(body);
+      if (!parsed.success) return json(response, 400, INVALID);
+      const { status, expectedVersion } = parsed.data;
+      const answer = (): void => json(response, 200, { investigation: { ...shown(stored), closedAt: stored.status === 'closed' ? stored.lastEditedAt : null, archivedAt: stored.status === 'archived' ? stored.lastEditedAt : null } }, { etag: `"${stored.version}"` });
+      if (status === stored.status) return answer();
+      if (expectedVersion !== stored.version) return json(response, 409, PLAIN_CONFLICT);
+      if (status === 'closed' && stored.status === 'archived') return json(response, 409, { error: { code: 'CONFLICT', message: 'An archived investigation must be reopened before it can be closed.', retryable: false, traceId: 'tr-support', details: { reason: 'status-change-not-allowed' } } });
+      stored.status = status;
+      stored.version += 1;
+      answer();
+    },
+    rename(id: string, body: unknown, response: ServerResponse): void {
+      const stored = held.get(id);
+      if (stored === undefined) return json(response, 404, NOT_FOUND);
+      const parsed = renameRequestSchema.safeParse(body);
+      if (!parsed.success) return json(response, 400, INVALID);
+      if (stored.status !== 'open') return json(response, 409, readOnlyRefusal(stored.status));
+      if (parsed.data.expectedVersion !== stored.version) return json(response, 409, PLAIN_CONFLICT);
+      if (parsed.data.title !== stored.title) {
+        stored.title = parsed.data.title;
+        stored.version += 1;
+      }
+      json(response, 200, { investigation: shown(stored) }, { etag: `"${stored.version}"` });
+    },
+    /** Changes the status behind the page's back, as another tab would. */
+    setStatus(body: unknown, response: ServerResponse): void {
+      const given = typeof body === 'object' && body !== null && !Array.isArray(body) ? Object.fromEntries(Object.entries(body)) : {};
+      const stored = typeof given['id'] === 'string' ? held.get(given['id']) : undefined;
+      const status = given['status'];
+      if (stored === undefined || (status !== 'open' && status !== 'closed' && status !== 'archived')) return json(response, 400, INVALID);
+      stored.status = status;
+      stored.version += 1;
+      json(response, 200, {});
     },
     /** Reads again the entities a draft names: the ones the stand-in holds, and the rest as missing. */
     readRefs(body: unknown, response: ServerResponse): void {
@@ -339,7 +386,7 @@ function createInvestigations(options: SupportServerOptions) {
       const existing = caseRef === null ? undefined : [...held.values()].find((stored) => stored.sourceId === sourceId && stored.caseRef === caseRef && stored.entityType === entityType && stored.stableId === stableId);
       if (existing !== undefined) return json(response, 200, { investigation: shown(existing), created: false, draft: { version: existing.draftVersion }, ...(isRepointed(existing.caseRef) ? {} : { entity: node(sourceId, entityType, stableId) }) });
       const createdAt = new Date().toISOString();
-      const stored: StoredInvestigation = { id: randomUUID(), sourceId, title: `${entityType} ${stableId}`, caseRef, entityType, stableId, createdAt, lastEditedAt: createdAt, draftVersion: 1, draftNotes: null };
+      const stored: StoredInvestigation = { id: randomUUID(), sourceId, title: `${entityType} ${stableId}`, status: 'open', version: 1, caseRef, entityType, stableId, createdAt, lastEditedAt: createdAt, draftVersion: 1, draftNotes: null };
       held.set(stored.id, stored);
       json(response, 201, { investigation: shown(stored, true), created: true, draft: { version: 1 }, entity: node(sourceId, entityType, stableId) });
     },
@@ -600,6 +647,11 @@ export function createSupportServer(options: SupportServerOptions): Server {
       const isApi = path === API_PREFIX || path.startsWith(`${API_PREFIX}/`) || PROBE_PATHS.has(path);
       if (request.method === 'POST' && path === '/v1/investigations') return investigations.open(await bodyOf(request), response);
       if (request.method === 'POST' && path === '/v1/graph/read-refs') return investigations.readRefs(await bodyOf(request), response);
+      const lifecycle = /^\/v1\/investigations\/([^/]+)\/status$/.exec(path);
+      if (request.method === 'POST' && lifecycle?.[1] !== undefined) return investigations.changeStatus(decodeURIComponent(lifecycle[1]), await bodyOf(request), response);
+      const renaming = /^\/v1\/investigations\/([^/]+)$/.exec(path);
+      if (request.method === 'PUT' && renaming?.[1] !== undefined) return investigations.rename(decodeURIComponent(renaming[1]), await bodyOf(request), response);
+      if (request.method === 'POST' && path === '/__support/set-status') return investigations.setStatus(await bodyOf(request), response);
       const saving = /^\/v1\/investigations\/([^/]+)\/draft$/.exec(path);
       if (request.method === 'PUT' && saving?.[1] !== undefined) return investigations.saveDraft(decodeURIComponent(saving[1]), request.headers['if-match'], await bodyOf(request), response);
       if (request.method === 'POST' && path === '/v1/search/entities') return search.run(await bodyOf(request), response);

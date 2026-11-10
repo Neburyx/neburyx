@@ -1,4 +1,4 @@
-import { DEFAULT_INVESTIGATION_LIST_LIMIT, MAX_DRAFT_DOCUMENT_BYTES, investigationResponseSchema, layoutDocumentSchema, MAX_TITLE_LENGTH, queryContextDocumentSchema, type GraphNode, type Investigation, type InvestigationListResponse, type DraftWriteRequest, type DraftWriteResponse, type InvestigationResponse, type InvestigationSourceState, type ReferenceOpenRequest, type OpenInvestigationResponse } from '@neburyx/contracts';
+import { DEFAULT_INVESTIGATION_LIST_LIMIT, MAX_DRAFT_DOCUMENT_BYTES, investigationResponseSchema, layoutDocumentSchema, MAX_TITLE_LENGTH, queryContextDocumentSchema, type GraphNode, type Investigation, type InvestigationListResponse, type DraftWriteRequest, type DraftWriteResponse, type InvestigationResponse, type InvestigationSourceState, type ReferenceOpenRequest, type OpenInvestigationResponse, type RenameResponse, type StatusChangeResponse, type Investigation as InvestigationShown } from '@neburyx/contracts';
 import { AppError } from '../errors.js';
 import type { InvestigationRow, InvestigationStore, ListedInvestigation } from '../db/investigations-repository.js';
 import type { EntityReader } from '../entities/entity-reader.js';
@@ -6,9 +6,11 @@ import { uuidv7 } from '../identity/uuid.js';
 import { isKeyed, type EntityModel, type MappingModel, type SourceModel } from '../mapping/model.js';
 import { isStorableText, storableOf } from '../reference/well-formed.js';
 import { identityHashOf } from '../registry/identity-hash.js';
-import type { Principal } from '../seams/seams.js';
+import type { AuditSink, Principal } from '../seams/seams.js';
 import type { SourceAccess } from './source-access.js';
 import type { StoredReferences } from './stored-references.js';
+import { readOnlyRefusal, readOnlyStatusOf } from './read-only.js';
+import { auditActionOf } from './status-change.js';
 import { COMMUNITY_POLICY_VERSION, contentHashOf, defaultTitle, initialDraftDocuments } from './draft.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -33,6 +35,10 @@ export interface InvestigationService {
   list(call: { readonly principal: Principal; readonly limit?: number }): Promise<InvestigationListResponse>;
   /** Replaces the caller's draft when `expectedVersion` is the draft's version; `CONFLICTED_VIEW_VERSION` when it is not. */
   saveDraft(call: { readonly id: string; readonly principal: Principal; readonly expectedVersion: number; readonly draft: DraftWriteRequest }): Promise<DraftWriteResponse>;
+  /** Stores the title as typed when `expectedVersion` is the investigation's version; a closed or archived investigation is refused first. */
+  rename(call: { readonly id: string; readonly principal: Principal; readonly expectedVersion: number; readonly title: string }): Promise<RenameResponse>;
+  /** Closes, archives or reopens the investigation, with one audit event; if the event cannot be recorded nothing changes. */
+  changeStatus(call: { readonly traceId: string; readonly id: string; readonly principal: Principal; readonly expectedVersion: number; readonly status: InvestigationShown['status'] }): Promise<StatusChangeResponse>;
 }
 
 export interface InvestigationServiceDeps {
@@ -42,6 +48,7 @@ export interface InvestigationServiceDeps {
   readonly access: SourceAccess;
   /** Converts the IDs a stored investigation holds to the references the API returns now. */
   readonly references: StoredReferences;
+  readonly audit: AuditSink;
 }
 
 function sourceStateOf(mapping: MappingModel, row: InvestigationRow): InvestigationSourceState {
@@ -173,6 +180,8 @@ export function createInvestigationService(deps: InvestigationServiceDeps): Inve
       if (!UUID.test(id)) throw new AppError('NOT_FOUND');
       const stored = await deps.store.readInvestigation(id, principal.id);
       if (stored === undefined) throw new AppError('NOT_FOUND');
+      const readOnly = readOnlyStatusOf(stored.investigation.status);
+      if (readOnly !== undefined) throw readOnlyRefusal(readOnly);
       const { sourceId } = stored.investigation;
       const source = deps.mapping.sources.find((candidate) => candidate.id === sourceId);
       if (source === undefined || sourceStateOf(deps.mapping, stored.investigation) !== 'available') throw new AppError('CONFLICT');
@@ -190,8 +199,38 @@ export function createInvestigationService(deps: InvestigationServiceDeps): Inve
         contentHashOf: ({ aiNotes }) => contentHashOf(documents, draft.notes, aiNotes),
       });
       if (result.outcome === 'not-found') throw new AppError('NOT_FOUND');
+      if (result.outcome === 'read-only') throw readOnlyRefusal(result.status);
       if (result.outcome === 'conflict') throw new AppError('CONFLICTED_VIEW_VERSION');
       return { version: result.version, save: result.save, notes: draft.notes };
+    },
+    async rename({ id, principal, expectedVersion, title }) {
+      if (!UUID.test(id)) throw new AppError('NOT_FOUND');
+      const result = await deps.store.renameInvestigation({ investigationId: id, ownerId: principal.id, expectedVersion, title });
+      if (result.outcome === 'not-found') throw new AppError('NOT_FOUND');
+      if (result.outcome === 'read-only') throw readOnlyRefusal(result.status);
+      if (result.outcome === 'conflict') throw new AppError('CONFLICT');
+      return { investigation: shown(deps.mapping, deps.references, result.row) };
+    },
+    async changeStatus({ traceId, id, principal, expectedVersion, status }) {
+      if (!UUID.test(id)) throw new AppError('NOT_FOUND');
+      const result = await deps.store.changeInvestigationStatus({
+        investigationId: id,
+        ownerId: principal.id,
+        expectedVersion,
+        status,
+        beforeCommit: async ({ from, to, row }) => {
+          try {
+            await deps.audit.record({ actorId: principal.id, actorRole: principal.role, action: auditActionOf(from, to), result: 'success', sourceId: row.sourceId, traceId });
+          } catch {
+            // the change is not committed without its audit event, and the sink's error is not shown
+            throw new AppError('INTERNAL_ERROR');
+          }
+        },
+      });
+      if (result.outcome === 'not-found') throw new AppError('NOT_FOUND');
+      if (result.outcome === 'conflict') throw new AppError('CONFLICT');
+      if (result.outcome === 'not-allowed') throw new AppError('CONFLICT', { reason: 'status-change-not-allowed' });
+      return { investigation: { ...shown(deps.mapping, deps.references, result.row), closedAt: result.row.closedAt, archivedAt: result.row.archivedAt } };
     },
     async read({ id, principal }) {
       if (!UUID.test(id)) throw new AppError('NOT_FOUND');

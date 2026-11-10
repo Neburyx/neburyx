@@ -41,7 +41,7 @@ function rig(answers: (call: number) => ApiResult<DraftWriteResponse> = (call) =
   const state: ClientState = createClientState();
   state.bindSource('demo');
   const read = result('demo', ['A']);
-  state.show({ id: ID, sourceId: 'demo', record: { title: 'T', caseRef: null, save: { kind: 'unsaved' } }, resultKeys: [key('demo')], nodeRefs: read.nodes.map((n) => n.ref), edgeRefs: [] }, [{ key: key('demo'), result: read }]);
+  state.show({ id: ID, sourceId: 'demo', record: { title: 'T', caseRef: null, status: 'open' as const, readOnly: false, version: 1, save: { kind: 'unsaved' } }, resultKeys: [key('demo')], nodeRefs: read.nodes.map((n) => n.ref), edgeRefs: [] }, [{ key: key('demo'), result: read }]);
   const client = fakeClient({
     saveDraft: async (_id, version, body, options) => {
       writes.push({ version, body, keepalive: options?.keepalive });
@@ -236,7 +236,7 @@ describe('another investigation taking the place of the one shown', () => {
     move(5);
     const other = '0192f000-0000-7000-8000-0000000000b1';
     const read = result('demo', ['B']);
-    state.show({ id: other, sourceId: 'demo', record: { title: 'U', caseRef: null, save: { kind: 'unsaved' } }, resultKeys: [key('demo', 'other')], nodeRefs: read.nodes.map((n) => n.ref), edgeRefs: [] }, [{ key: key('demo', 'other'), result: read }]);
+    state.show({ id: other, sourceId: 'demo', record: { title: 'U', caseRef: null, status: 'open' as const, readOnly: false, version: 1, save: { kind: 'unsaved' } }, resultKeys: [key('demo', 'other')], nodeRefs: read.nodes.map((n) => n.ref), edgeRefs: [] }, [{ key: key('demo', 'other'), result: read }]);
     await vi.advanceTimersByTimeAsync(0);
     expect(writes).toHaveLength(1);
     expect(writes[0]?.body.layout.nodes[0]).toMatchObject({ id: 'A', x: 5 });
@@ -281,7 +281,7 @@ describe('two tabs of one person', () => {
       const state: ClientState = createClientState();
       state.bindSource('demo');
       const read = result('demo', ['A']);
-      state.show({ id: ID, sourceId: 'demo', record: { title: 'T', caseRef: null, save: { kind: 'unsaved' } }, resultKeys: [key('demo')], nodeRefs: read.nodes.map((n) => n.ref), edgeRefs: [] }, [{ key: key('demo'), result: read }]);
+      state.show({ id: ID, sourceId: 'demo', record: { title: 'T', caseRef: null, status: 'open' as const, readOnly: false, version: 1, save: { kind: 'unsaved' } }, resultKeys: [key('demo')], nodeRefs: read.nodes.map((n) => n.ref), edgeRefs: [] }, [{ key: key('demo'), result: read }]);
       const sync = createDraftSync({ client: fakeClient({ saveDraft: async (id, version) => answer(id, version) }), state, page: new FakePage(), document: new FakePage() });
       sync.adopt(ID, { version: 1, notes: null, writable: true });
       return { state, sync };
@@ -302,7 +302,7 @@ describe('another investigation taking the place of one whose writes were failin
   const other = '0192f000-0000-7000-8000-0000000000b1';
   const showOther = (state: ClientState): void => {
     const read = result('demo', ['B']);
-    state.show({ id: other, sourceId: 'demo', record: { title: 'U', caseRef: null, save: { kind: 'unsaved' } }, resultKeys: [key('demo', 'other')], nodeRefs: read.nodes.map((n) => n.ref), edgeRefs: [] }, [{ key: key('demo', 'other'), result: read }]);
+    state.show({ id: other, sourceId: 'demo', record: { title: 'U', caseRef: null, status: 'open' as const, readOnly: false, version: 1, save: { kind: 'unsaved' } }, resultKeys: [key('demo', 'other')], nodeRefs: read.nodes.map((n) => n.ref), edgeRefs: [] }, [{ key: key('demo', 'other'), result: read }]);
   };
 
   it('writes the new investigation after its delay, though the old one was failing, and clears the status', async () => {
@@ -326,7 +326,7 @@ describe('another investigation taking the place of one whose writes were failin
     showOther(state);
     await vi.advanceTimersByTimeAsync(0);
     expect(writes).toHaveLength(1);
-    state.show({ id: ID, sourceId: 'demo', record: { title: 'T', caseRef: null, save: { kind: 'unsaved' } }, resultKeys: [key('demo')], nodeRefs: [ref('demo', 'type-a', 'A')], edgeRefs: [] }, []);
+    state.show({ id: ID, sourceId: 'demo', record: { title: 'T', caseRef: null, status: 'open' as const, readOnly: false, version: 1, save: { kind: 'unsaved' } }, resultKeys: [key('demo')], nodeRefs: [ref('demo', 'type-a', 'A')], edgeRefs: [] }, []);
     move(3);
     await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS * 2);
     expect(writes).toHaveLength(1);
@@ -341,7 +341,7 @@ describe('another investigation taking the place of one whose writes were failin
     const state: ClientState = createClientState();
     state.bindSource('demo');
     const read = result('demo', ['A']);
-    state.show({ id: ID, sourceId: 'demo', record: { title: 'T', caseRef: null, save: { kind: 'unsaved' } }, resultKeys: [key('demo')], nodeRefs: read.nodes.map((n) => n.ref), edgeRefs: [] }, [{ key: key('demo'), result: read }]);
+    state.show({ id: ID, sourceId: 'demo', record: { title: 'T', caseRef: null, status: 'open' as const, readOnly: false, version: 1, save: { kind: 'unsaved' } }, resultKeys: [key('demo')], nodeRefs: read.nodes.map((n) => n.ref), edgeRefs: [] }, [{ key: key('demo'), result: read }]);
     const client = fakeClient({
       saveDraft: async (_id, version, body) => {
         writes.push({ version, body, keepalive: undefined });

@@ -17,7 +17,7 @@ describe('opening an investigation by its identifier', () => {
     const state = createClientState();
     expect(await openById(client, state, INVESTIGATION_A, CONTEXT)).toEqual({ kind: 'shown', id: INVESTIGATION_A, activation: 'fresh' });
     expect(calls).toEqual({ getInvestigation: [INVESTIGATION_A], getEntity: [1], openInvestigation: [], listInvestigations: [] });
-    expect(state.investigation.getState()).toMatchObject({ id: INVESTIGATION_A, sourceId: 'source-a', record: { title: 'kind-a A-1', caseRef: 'CASE-1', save: { kind: 'unsaved' } } });
+    expect(state.investigation.getState()).toMatchObject({ id: INVESTIGATION_A, sourceId: 'source-a', record: { title: 'kind-a A-1', caseRef: 'CASE-1', status: 'open' as const, readOnly: false, version: 1, save: { kind: 'unsaved' } } });
     expect(state.loadedGraph().nodes.map((node) => node.ref.stableId)).toEqual(['A-1']);
   });
 

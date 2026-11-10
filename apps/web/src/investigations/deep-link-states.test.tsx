@@ -84,7 +84,7 @@ describe('a failure that can be tried again', () => {
     const state = createClientState();
     const key = { sourceId: 'source-b', principalId: '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d', policyVersion: 'community', filterHash: 'none', params: 'open:held', mask: false };
     const held = nodeOf('source-b', 'kind-a', 'C-1');
-    state.show({ id: INVESTIGATION_B, sourceId: 'source-b', record: { title: 'kind-a C-1', caseRef: null, save: { kind: 'unsaved' } }, resultKeys: [key], nodeRefs: [held.ref], edgeRefs: [] }, [{ key, result: { sourceId: 'source-b', nodes: [held], edges: [] } }]);
+    state.show({ id: INVESTIGATION_B, sourceId: 'source-b', record: { title: 'kind-a C-1', caseRef: null, status: 'open' as const, readOnly: false, version: 1, save: { kind: 'unsaved' } }, resultKeys: [key], nodeRefs: [held.ref], edgeRefs: [] }, [{ key, result: { sourceId: 'source-b', nodes: [held], edges: [] } }]);
     const shown = state.investigation.getState();
     const view = renderApp('/sources', client, state);
     await screen.findByRole('heading', { name: 'Sources', level: 1 });
@@ -145,7 +145,7 @@ describe('the status line on these pages', () => {
     const on = knowing([A], { openInvestigation: async () => failure('NOT_FOUND') });
     const view = renderApp(link('source-a', 'A-1'), on.client, state);
     await screen.findByRole('heading', { name: LINK_NOT_FOUND_TITLE, level: 1 });
-    state.show({ id: INVESTIGATION_A, sourceId: 'source-a', record: { title: 'kind-a A-1', caseRef: null, save: { kind: 'unsaved' } }, resultKeys: [], nodeRefs: [], edgeRefs: [] }, []);
+    state.show({ id: INVESTIGATION_A, sourceId: 'source-a', record: { title: 'kind-a A-1', caseRef: null, status: 'open' as const, readOnly: false, version: 1, save: { kind: 'unsaved' } }, resultKeys: [], nodeRefs: [], edgeRefs: [] }, []);
     await act(async () => view.router.navigate(link('source-b', 'Y')));
     await screen.findByRole('heading', { name: LINK_NOT_FOUND_TITLE, level: 1 });
     expect(sourceLine()).toContain('Source source-a');

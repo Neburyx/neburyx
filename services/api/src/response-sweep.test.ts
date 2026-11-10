@@ -90,6 +90,8 @@ const NOT_SWEPT_HERE: Readonly<Record<string, string>> = {
   'POST /v1/sources/:id/test': 'answers the report of the source test, not an element',
   'GET /v1/investigations': 'answers the person\'s saved investigations (references, never element IDs of the source)',
   'GET /v1/investigations/:id': 'answers a saved investigation (references, never element IDs of the source)',
+  'PUT /v1/investigations/:id': 'answers the investigation with its new title, no element ID',
+  'POST /v1/investigations/:id/status': 'answers the investigation with its status and the times it was closed and archived, no element ID',
   'PUT /v1/investigations/:id/draft': 'answers the new version of a draft and whether it equals a named view, no element ID',
 };
 

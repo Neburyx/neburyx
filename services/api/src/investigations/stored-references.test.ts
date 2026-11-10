@@ -92,7 +92,7 @@ describe('listing and reading an investigation stored before its type was keyed'
     startingStableId: VALUE,
     status: 'open',
     createdAt: '2026-11-05T10:00:00.000Z',
-    lastEditedAt: '2026-11-05T10:00:00.000Z',
+    lastEditedAt: '2026-11-05T10:00:00.000Z', closedAt: null, archivedAt: null,
     version: 1,
   };
 
@@ -246,7 +246,7 @@ describe('opening with a reference the person supplied', () => {
   it('refuses a raw value in reference form for a keyed type even when the investigation found is one whose source points elsewhere', async () => {
     const [source] = keyedMapping.sources;
     const store = memoryAppStore();
-    store.investigations.push({ id: '0192f000-0000-7000-8000-0000000000c9', sourceId: 'demo', sourceIdentityHash: 'another-database', ownerId: LOCAL_IDENTITY.principal.id, title: 'Handle', caseRef: 'CASE-9', startingEntityType: 'phone', startingStableId: VALUE, status: 'open', createdAt: '2026-11-05T10:00:00.000Z', lastEditedAt: '2026-11-05T10:00:00.000Z', version: 1 });
+    store.investigations.push({ id: '0192f000-0000-7000-8000-0000000000c9', sourceId: 'demo', sourceIdentityHash: 'another-database', ownerId: LOCAL_IDENTITY.principal.id, title: 'Handle', caseRef: 'CASE-9', startingEntityType: 'phone', startingStableId: VALUE, status: 'open', createdAt: '2026-11-05T10:00:00.000Z', lastEditedAt: '2026-11-05T10:00:00.000Z', closedAt: null, archivedAt: null, version: 1 });
     const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store, mapping: keyedMapping, gate: testSourceGate(keyedMapping, { referenceKeys: TEST_REFERENCE_KEYS }).gate, referenceKeys: TEST_REFERENCE_KEYS });
     const send = (stableId: string) => app.inject({ method: 'POST', url: '/v1/investigations', payload: { sourceId: 'demo', caseRef: 'CASE-9', mask: true, entity: { sourceId: 'demo', entityType: 'phone', stableId } } });
     expect((await send(VALUE)).statusCode).toBe(400);
@@ -289,7 +289,7 @@ describe('a type that is no longer keyed', () => {
     const [source] = unkeyed.sources;
     if (source === undefined) throw new Error('no source');
     const store = memoryAppStore();
-    store.investigations.push({ id: '0192f000-0000-7000-8000-0000000000f1', sourceId: 'demo', sourceIdentityHash: identityHashOf(source), ownerId: LOCAL_IDENTITY.principal.id, title: 'Handle', caseRef: 'CASE-K', startingEntityType: 'phone', startingStableId: token, status: 'open', createdAt: '2026-11-05T10:00:00.000Z', lastEditedAt: '2026-11-05T10:00:00.000Z', version: 1 });
+    store.investigations.push({ id: '0192f000-0000-7000-8000-0000000000f1', sourceId: 'demo', sourceIdentityHash: identityHashOf(source), ownerId: LOCAL_IDENTITY.principal.id, title: 'Handle', caseRef: 'CASE-K', startingEntityType: 'phone', startingStableId: token, status: 'open', createdAt: '2026-11-05T10:00:00.000Z', lastEditedAt: '2026-11-05T10:00:00.000Z', closedAt: null, archivedAt: null, version: 1 });
     const initial = initialDraftDocuments({ entityType: 'phone', stableId: token });
     store.drafts.push({ id: '0192f000-0000-7000-8000-0000000000f2', version: 1, notes: null, investigationId: '0192f000-0000-7000-8000-0000000000f1', layout: initial.layout, queryContext: initial.queryContext });
     const executor = new TestExecutor(withOnlineIndexes(source, (call) => Promise.resolve(entityRows(plainNode(['Handle'], { phoneNumber: call.parameters['stableId'] })))));

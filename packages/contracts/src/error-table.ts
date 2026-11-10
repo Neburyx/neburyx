@@ -1,4 +1,4 @@
-import type { ErrorCode, SourceUnavailableReason } from './error-codes.js';
+import type { ConflictReason, ErrorCode, SourceUnavailableReason } from './error-codes.js';
 import { ERROR_CODES } from './error-codes.js';
 
 export interface ErrorEntry {
@@ -17,6 +17,12 @@ export const SOURCE_UNAVAILABLE_ENTRIES: Readonly<Record<SourceUnavailableReason
   'index-failed': { message: 'A needed index failed, so the read was not run.', retryable: false },
   'index-list-unreadable': { message: "The source's indexes could not be listed, so the read was not run.", retryable: false },
   'repeated-timeouts': { message: 'The source has timed out repeatedly and is being left to recover. Try again shortly.', retryable: true },
+};
+
+/** The sentence of each reason of `CONFLICT`; a `CONFLICT` with no reason keeps the entry of `ERROR_TABLE`. */
+export const CONFLICT_ENTRIES: Readonly<Record<ConflictReason, Omit<ErrorEntry, 'status'>>> = {
+  'status-change-not-allowed': { message: 'An archived investigation must be reopened before it can be closed.', retryable: false },
+  'investigation-read-only': { message: 'This investigation is closed or archived. Reopen it to make changes.', retryable: false },
 };
 
 export const ERROR_TABLE: Readonly<Record<ErrorCode, ErrorEntry>> = {

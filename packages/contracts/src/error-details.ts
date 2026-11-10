@@ -1,5 +1,5 @@
 import type { ErrorCode } from './error-codes.js';
-import { errorDetailsSchema, partialDetailsSchema, type ErrorDetails } from './error-codes.js';
+import { CONFLICT_REASONS, errorDetailsSchema, partialDetailsSchema, SOURCE_UNAVAILABLE_REASONS, type ErrorDetails } from './error-codes.js';
 
 type DetailKey = keyof typeof errorDetailsSchema.shape;
 
@@ -14,7 +14,7 @@ export const ERROR_DETAIL_KEYS: Readonly<Record<ErrorCode, readonly DetailKey[]>
   PARTIAL_RESULT: ['retained', 'requested'],
   EVIDENCE_NOT_AVAILABLE: [],
   CONFLICTED_VIEW_VERSION: [],
-  CONFLICT: [],
+  CONFLICT: ['reason', 'status'],
   EXPORT_FAILED: [],
   ASK_UNSUPPORTED: [],
   ASK_PLAN_INVALID: [],
@@ -23,6 +23,11 @@ export const ERROR_DETAIL_KEYS: Readonly<Record<ErrorCode, readonly DetailKey[]>
   NOT_FOUND: [],
   INTERNAL_ERROR: [],
   SOURCE_MISMATCH: [],
+};
+
+const REASONS_OF_CODE: Partial<Record<ErrorCode, readonly string[]>> = {
+  SOURCE_UNAVAILABLE: SOURCE_UNAVAILABLE_REASONS,
+  CONFLICT: CONFLICT_REASONS,
 };
 
 export function allowedDetails(code: ErrorCode, details: unknown): ErrorDetails | undefined {
@@ -38,6 +43,8 @@ export function allowedDetails(code: ErrorCode, details: unknown): ErrorDetails 
   } catch {
     return undefined;
   }
+  if (typeof allowed['reason'] === 'string' && !REASONS_OF_CODE[code]?.includes(allowed['reason'])) delete allowed['reason'];
+  if (code === 'CONFLICT' && allowed['reason'] !== 'investigation-read-only') delete allowed['status'];
   if (Object.keys(allowed).length === 0) return undefined;
   const parsed = errorDetailsSchema.safeParse(allowed);
   return parsed.success ? parsed.data : undefined;

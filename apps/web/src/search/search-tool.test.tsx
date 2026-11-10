@@ -203,7 +203,7 @@ describe('the Search tool and its panel', () => {
     await user.type(box(), 'acc');
     expect(inputOf(box()).value).toBe('acc');
     act(() => {
-      state.show({ id: 'inv-2', sourceId: 'a', record: { title: 'Another', caseRef: null, save: { kind: 'unsaved' } }, resultKeys: [], nodeRefs: [], edgeRefs: [] }, []);
+      state.show({ id: 'inv-2', sourceId: 'a', record: { title: 'Another', caseRef: null, status: 'open' as const, readOnly: false, version: 1, save: { kind: 'unsaved' } }, resultKeys: [], nodeRefs: [], edgeRefs: [] }, []);
     });
     expect(inputOf(box()).value).toBe('');
     expect(screen.getByRole('tablist', { name: 'Search' })).toBeDefined();
@@ -225,7 +225,7 @@ describe('the Search tool and its panel', () => {
     await user.click(searchTool());
     await user.type(box(), 'acc');
     act(() => {
-      state.show({ id: 'inv-b', sourceId: 'b', record: { title: 'Another', caseRef: null, save: { kind: 'unsaved' } }, resultKeys: [], nodeRefs: [], edgeRefs: [] }, []);
+      state.show({ id: 'inv-b', sourceId: 'b', record: { title: 'Another', caseRef: null, status: 'open' as const, readOnly: false, version: 1, save: { kind: 'unsaved' } }, resultKeys: [], nodeRefs: [], edgeRefs: [] }, []);
     });
     expect(inputOf(box()).value).toBe('');
   });

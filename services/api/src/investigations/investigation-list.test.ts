@@ -45,7 +45,7 @@ function row(sourceId: string, minutes: number, overrides: Partial<Investigation
     startingStableId: `W-${counter}`,
     status: 'open',
     createdAt: at,
-    lastEditedAt: at,
+    lastEditedAt: at, closedAt: null, archivedAt: null,
     version: 1,
     ...overrides,
   };

@@ -45,7 +45,7 @@ describe('/explore/{id}', () => {
     const { client, calls } = knowing([A]);
     const state = createClientState();
     state.show(
-      { id: INVESTIGATION_A, sourceId: 'source-a', record: { title: 'kind-a A-1', caseRef: null, save: { kind: 'unsaved' } }, resultKeys: [], nodeRefs: [], edgeRefs: [] },
+      { id: INVESTIGATION_A, sourceId: 'source-a', record: { title: 'kind-a A-1', caseRef: null, status: 'open' as const, readOnly: false, version: 1, save: { kind: 'unsaved' } }, resultKeys: [], nodeRefs: [], edgeRefs: [] },
       [],
     );
     renderApp(`/explore/${INVESTIGATION_A}`, client, state);
@@ -117,7 +117,7 @@ describe('/explore/{id}', () => {
     let up = false;
     const { client, calls } = knowing([A, B], { getMe: async () => (up ? { ok: true, value: me() } : { ok: false, failure: { code: 'NETWORK_UNAVAILABLE' } }) });
     const state = createClientState();
-    state.show({ id: INVESTIGATION_B, sourceId: 'source-b', record: { title: 'kind-a C-1', caseRef: null, save: { kind: 'unsaved' } }, resultKeys: [], nodeRefs: [], edgeRefs: [] }, []);
+    state.show({ id: INVESTIGATION_B, sourceId: 'source-b', record: { title: 'kind-a C-1', caseRef: null, status: 'open' as const, readOnly: false, version: 1, save: { kind: 'unsaved' } }, resultKeys: [], nodeRefs: [], edgeRefs: [] }, []);
     renderApp(`/explore/${INVESTIGATION_A}`, client, state);
     expect((await screen.findByRole('group', { name: 'Opening failed' })).textContent).toContain('NETWORK_UNAVAILABLE');
     expect(screen.queryByText(OPENING)).toBeNull();

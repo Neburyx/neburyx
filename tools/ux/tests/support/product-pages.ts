@@ -238,6 +238,23 @@ export const REACH: Readonly<Record<string, (page: Page) => Promise<void>>> = {
     await page.reload();
     await expect(page.getByRole('button', { name: 'Try again' })).toBeVisible();
   },
+  'Explore with the investigation menu open': async (page) => {
+    await openEntity(page, 'banking-demo', `PM-${unique()}`);
+    await page.getByRole('button', { name: 'Investigation menu' }).click();
+    await expect(page.getByRole('menuitem', { name: 'Close' })).toBeVisible();
+  },
+  'Explore with the rename dialog open': async (page) => {
+    await openEntity(page, 'banking-demo', `PR-${unique()}`);
+    await page.getByRole('button', { name: 'Investigation menu' }).click();
+    await page.getByRole('menuitem', { name: 'Rename' }).click();
+    await expect(page.getByRole('dialog', { name: 'Rename investigation' })).toBeVisible();
+  },
+  'Explore with a closed investigation': async (page) => {
+    await openEntity(page, 'banking-demo', `PC-${unique()}`);
+    await page.getByRole('button', { name: 'Investigation menu' }).click();
+    await page.getByRole('menuitem', { name: 'Close' }).click();
+    await expect(page.getByRole('button', { name: 'Reopen' })).toBeVisible();
+  },
   'Explore without an investigation': async (page) => {
     await page.goto('/explore');
     await expect(page.locator('main, [role="application"]').first()).toBeVisible();

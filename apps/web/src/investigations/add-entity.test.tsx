@@ -16,7 +16,7 @@ function openedWithOneEntity() {
   const state = createClientState();
   const key = openedKey('source-a', 'principal-1', INVESTIGATION_A, false);
   state.show(
-    { id: INVESTIGATION_A, sourceId: 'source-a', record: { title: 'kind-a A-1', caseRef: null, save: { kind: 'unsaved' } }, resultKeys: [key], nodeRefs: [first.ref], edgeRefs: [] },
+    { id: INVESTIGATION_A, sourceId: 'source-a', record: { title: 'kind-a A-1', caseRef: null, status: 'open' as const, readOnly: false, version: 1, save: { kind: 'unsaved' } }, resultKeys: [key], nodeRefs: [first.ref], edgeRefs: [] },
     [{ key, result: { sourceId: 'source-a', nodes: [first], edges: [] } }],
   );
   return state;

@@ -3,7 +3,7 @@ import { errorResponseSchema } from './error-response.js';
 import { healthResponseSchema } from './health.js';
 import { nodeSchema } from './graph.js';
 import { MAX_READ_REFS, readRefsRequestSchema, readRefsResponseSchema } from './read-refs.js';
-import { DEFAULT_INVESTIGATION_LIST_LIMIT, draftWriteRequestSchema, draftWriteResponseSchema, MAX_DRAFT_DOCUMENT_BYTES, INVESTIGATION_LIST_SORTS, investigationListResponseSchema, investigationResponseSchema, MAX_INVESTIGATION_LIST_LIMIT, openInvestigationRequestSchema, openInvestigationResponseSchema } from './investigations.js';
+import { DEFAULT_INVESTIGATION_LIST_LIMIT, draftWriteRequestSchema, draftWriteResponseSchema, MAX_DRAFT_DOCUMENT_BYTES, INVESTIGATION_LIST_SORTS, investigationListResponseSchema, investigationResponseSchema, MAX_INVESTIGATION_LIST_LIMIT, MAX_TITLE_LENGTH, openInvestigationRequestSchema, openInvestigationResponseSchema, renameRequestSchema, renameResponseSchema, statusChangeRequestSchema, statusChangeResponseSchema } from './investigations.js';
 import { meResponseSchema } from './me.js';
 import { readyResponseSchema } from './ready.js';
 import { sourceProfileSchema } from './profile.js';
@@ -24,7 +24,7 @@ export interface OpenApiDocument {
   readonly openapi: string;
   readonly info: { readonly title: string; readonly version: string };
   readonly paths: Readonly<Record<string, unknown>>;
-  readonly components: { readonly schemas: { readonly CoverageRequest: Record<string, unknown>; readonly CoverageResponse: Record<string, unknown>; readonly DegreePreview: Record<string, unknown>; readonly DegreePreviewRequest: Record<string, unknown>; readonly DerivedNeighborsRequest: Record<string, unknown>; readonly DerivedNeighborsResponse: Record<string, unknown>; readonly DraftWriteRequest: Record<string, unknown>; readonly ReadRefsRequest: Record<string, unknown>; readonly ReadRefsResponse: Record<string, unknown>; readonly DraftWriteResponse: Record<string, unknown>; readonly EdgeDetail: Record<string, unknown>; readonly EntityLookupRequest: Record<string, unknown>; readonly ErrorResponse: Record<string, unknown>; readonly ExpandRequest: Record<string, unknown>; readonly ExpandResponse: Record<string, unknown>; readonly GraphNode: Record<string, unknown>; readonly HealthResponse: Record<string, unknown>; readonly InvestigationListResponse: Record<string, unknown>; readonly InvestigationResponse: Record<string, unknown>; readonly MeResponse: Record<string, unknown>; readonly OpenInvestigationRequest: Record<string, unknown>; readonly OpenInvestigationResponse: Record<string, unknown>; readonly ReadyResponse: Record<string, unknown>; readonly SearchMoreRequest: Record<string, unknown>; readonly SearchMoreResult: Record<string, unknown>; readonly SearchRequest: Record<string, unknown>; readonly SearchResult: Record<string, unknown>; readonly SourceProfile: Record<string, unknown>; readonly SourceTestReport: Record<string, unknown>; readonly SourcesResponse: Record<string, unknown> } };
+  readonly components: { readonly schemas: { readonly CoverageRequest: Record<string, unknown>; readonly CoverageResponse: Record<string, unknown>; readonly DegreePreview: Record<string, unknown>; readonly DegreePreviewRequest: Record<string, unknown>; readonly DerivedNeighborsRequest: Record<string, unknown>; readonly DerivedNeighborsResponse: Record<string, unknown>; readonly DraftWriteRequest: Record<string, unknown>; readonly ReadRefsRequest: Record<string, unknown>; readonly ReadRefsResponse: Record<string, unknown>; readonly DraftWriteResponse: Record<string, unknown>; readonly EdgeDetail: Record<string, unknown>; readonly EntityLookupRequest: Record<string, unknown>; readonly ErrorResponse: Record<string, unknown>; readonly ExpandRequest: Record<string, unknown>; readonly ExpandResponse: Record<string, unknown>; readonly GraphNode: Record<string, unknown>; readonly HealthResponse: Record<string, unknown>; readonly InvestigationListResponse: Record<string, unknown>; readonly InvestigationResponse: Record<string, unknown>; readonly MeResponse: Record<string, unknown>; readonly OpenInvestigationRequest: Record<string, unknown>; readonly OpenInvestigationResponse: Record<string, unknown>; readonly ReadyResponse: Record<string, unknown>; readonly RenameRequest: Record<string, unknown>; readonly RenameResponse: Record<string, unknown>; readonly SearchMoreRequest: Record<string, unknown>; readonly SearchMoreResult: Record<string, unknown>; readonly SearchRequest: Record<string, unknown>; readonly SearchResult: Record<string, unknown>; readonly SourceProfile: Record<string, unknown>; readonly SourceTestReport: Record<string, unknown>; readonly SourcesResponse: Record<string, unknown>; readonly StatusChangeRequest: Record<string, unknown>; readonly StatusChangeResponse: Record<string, unknown> } };
 }
 
 const RETRY_AFTER_HEADER = { 'Retry-After': { description: 'Whole seconds to wait', schema: { type: 'integer', minimum: 1 } } };
@@ -233,6 +233,37 @@ export function buildOpenApiDocument(
             '500': { description: 'The investigation could not be read', content: jsonBody('ErrorResponse') },
           },
         },
+        put: {
+          operationId: 'renameInvestigation',
+          summary: 'Change the title of an investigation of the caller',
+          description: `Writes Postgres only; no source is read. The body is { title, expectedVersion }: the title is stored as typed (not empty or only whitespace, at most ${MAX_TITLE_LENGTH} code points, no NUL and no unpaired surrogate) and expectedVersion is the investigation's version, which the answer's ETag carries. The version goes up by one and last_edited_at does not change; the title the investigation already has changes nothing and answers the same version. A closed or archived investigation is refused with CONFLICT and details.reason investigation-read-only (this check comes before the version check); a stale expectedVersion is CONFLICT without a reason. An identifier that does not exist, is not a UUID, belongs to another user or is deleted gives the same 404.`,
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+          requestBody: { required: true, content: jsonBody('RenameRequest') },
+          responses: {
+            '200': { description: 'The investigation with its new title', headers: { ETag: { description: "The investigation's version as a strong tag", schema: { type: 'string' } } }, content: jsonBody('RenameResponse') },
+            '400': { description: 'The title or expectedVersion is not valid, or a field is not known', content: jsonBody('ErrorResponse') },
+            '404': { description: 'No such investigation of this caller', content: jsonBody('ErrorResponse') },
+            '409': { description: 'CONFLICT with details.reason investigation-read-only and details.status (closed or archived), or CONFLICT without a reason when expectedVersion is stale', content: jsonBody('ErrorResponse') },
+            '500': { description: 'The title could not be written', content: jsonBody('ErrorResponse') },
+          },
+        },
+      },
+      '/v1/investigations/{id}/status': {
+        post: {
+          operationId: 'changeInvestigationStatus',
+          summary: 'Close, archive or reopen an investigation of the caller',
+          description:
+            'Writes Postgres only; no source is read. The body is { status, expectedVersion } with status open, closed or archived. Allowed changes: open to closed, open to archived, closed to open, closed to archived and archived to open; archived to closed is CONFLICT with details.reason status-change-not-allowed. Closing sets closedAt; archiving sets archivedAt and keeps an earlier closedAt; reopening clears both. The version goes up by one and last_edited_at does not change. A request for the status the investigation already has answers 200 with the same version and writes nothing, whatever expectedVersion it carries. A stale expectedVersion is CONFLICT without a reason. Closing, archiving and reopening are audited as investigation.close, investigation.archive and investigation.reopen; if the audit sink rejects, nothing is written and the answer is INTERNAL_ERROR. An identifier that does not exist, is not a UUID, belongs to another user or is deleted gives the same 404.',
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+          requestBody: { required: true, content: jsonBody('StatusChangeRequest') },
+          responses: {
+            '200': { description: 'The investigation with its status, closedAt and archivedAt', headers: { ETag: { description: "The investigation's version as a strong tag", schema: { type: 'string' } } }, content: jsonBody('StatusChangeResponse') },
+            '400': { description: 'The status or expectedVersion is not valid, or a field is not known', content: jsonBody('ErrorResponse') },
+            '404': { description: 'No such investigation of this caller', content: jsonBody('ErrorResponse') },
+            '409': { description: 'CONFLICT with details.reason status-change-not-allowed, or CONFLICT without a reason when expectedVersion is stale', content: jsonBody('ErrorResponse') },
+            '500': { description: 'The status could not be written', content: jsonBody('ErrorResponse') },
+          },
+        },
       },
       '/v1/investigations/{id}/draft': {
         put: {
@@ -248,7 +279,7 @@ export function buildOpenApiDocument(
             '200': { description: 'The draft was written, or the content was the one stored', headers: { ETag: { description: "The draft's version as a strong tag", schema: { type: 'string' } } }, content: jsonBody('DraftWriteResponse') },
             '400': { description: 'If-Match is missing or not a quoted whole number, the body is not a draft, a document is over the limit, or a reference of a keyed type is not a token', content: jsonBody('ErrorResponse') },
             '404': { description: 'No such investigation of this caller', content: jsonBody('ErrorResponse') },
-            '409': { description: 'CONFLICTED_VIEW_VERSION: the draft changed since the version sent; CONFLICT: the investigation\'s source is not available as it was', content: jsonBody('ErrorResponse') },
+            '409': { description: 'CONFLICTED_VIEW_VERSION: the draft changed since the version sent; CONFLICT: the investigation\'s source is not available as it was, or with details.reason investigation-read-only and details.status (closed or archived) when the investigation is closed or archived (checked before the version)', content: jsonBody('ErrorResponse') },
             '500': { description: 'The draft could not be written', content: jsonBody('ErrorResponse') },
           },
         },
@@ -443,7 +474,7 @@ export function buildOpenApiDocument(
       },
     },
     components: {
-      schemas: { CoverageRequest: schemaJson(coverageRequest), CoverageResponse: schemaJson(coverageResponse), DegreePreview: schemaJson(degreePreview), DegreePreviewRequest: schemaJson(degreePreviewRequest), DerivedNeighborsRequest: schemaJson(derivedNeighborsRequest), DerivedNeighborsResponse: schemaJson(derivedNeighborsResponse), DraftWriteRequest: schemaJson(draftWriteRequestSchema), DraftWriteResponse: schemaJson(draftWriteResponseSchema), EdgeDetail: schemaJson(edgeDetail), EntityLookupRequest: schemaJson(entityLookupRequest), ErrorResponse: schemaJson(errorResponse), ExpandRequest: schemaJson(expandRequest), ExpandResponse: schemaJson(expandResponse), GraphNode: schemaJson(graphNode), HealthResponse: schemaJson(healthResponse), InvestigationListResponse: schemaJson(investigationList), InvestigationResponse: schemaJson(investigationResponse), MeResponse: schemaJson(meResponse), OpenInvestigationRequest: schemaJson(openInvestigationRequest), OpenInvestigationResponse: schemaJson(openInvestigationResponse), ReadRefsRequest: schemaJson(readRefsRequestSchema), ReadRefsResponse: schemaJson(readRefsResponseSchema), ReadyResponse: schemaJson(readyResponse), SearchMoreRequest: schemaJson(searchMoreRequest), SearchMoreResult: schemaJson(searchMoreResult), SearchRequest: schemaJson(searchRequest), SearchResult: schemaJson(searchResult), SourceProfile: schemaJson(sourceProfile), SourceTestReport: schemaJson(sourceTestReport), SourcesResponse: schemaJson(sourcesResponse) },
+      schemas: { CoverageRequest: schemaJson(coverageRequest), CoverageResponse: schemaJson(coverageResponse), DegreePreview: schemaJson(degreePreview), DegreePreviewRequest: schemaJson(degreePreviewRequest), DerivedNeighborsRequest: schemaJson(derivedNeighborsRequest), DerivedNeighborsResponse: schemaJson(derivedNeighborsResponse), DraftWriteRequest: schemaJson(draftWriteRequestSchema), DraftWriteResponse: schemaJson(draftWriteResponseSchema), EdgeDetail: schemaJson(edgeDetail), EntityLookupRequest: schemaJson(entityLookupRequest), ErrorResponse: schemaJson(errorResponse), ExpandRequest: schemaJson(expandRequest), ExpandResponse: schemaJson(expandResponse), GraphNode: schemaJson(graphNode), HealthResponse: schemaJson(healthResponse), InvestigationListResponse: schemaJson(investigationList), InvestigationResponse: schemaJson(investigationResponse), MeResponse: schemaJson(meResponse), OpenInvestigationRequest: schemaJson(openInvestigationRequest), OpenInvestigationResponse: schemaJson(openInvestigationResponse), ReadRefsRequest: schemaJson(readRefsRequestSchema), ReadRefsResponse: schemaJson(readRefsResponseSchema), ReadyResponse: schemaJson(readyResponse), RenameRequest: schemaJson(renameRequestSchema), RenameResponse: schemaJson(renameResponseSchema), SearchMoreRequest: schemaJson(searchMoreRequest), SearchMoreResult: schemaJson(searchMoreResult), SearchRequest: schemaJson(searchRequest), SearchResult: schemaJson(searchResult), SourceProfile: schemaJson(sourceProfile), SourceTestReport: schemaJson(sourceTestReport), SourcesResponse: schemaJson(sourcesResponse), StatusChangeRequest: schemaJson(statusChangeRequestSchema), StatusChangeResponse: schemaJson(statusChangeResponseSchema) },
     },
   };
 }

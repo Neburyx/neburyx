@@ -13,7 +13,7 @@ function stateWith(record: InvestigationRecord | null) {
   return state;
 }
 
-const saved: InvestigationRecord = { title: 'Suspicious linked accounts', caseRef: 'REF-2026-1048', save: { kind: 'saved', at: '2026-10-28T09:42:00Z' } };
+const saved: InvestigationRecord = { title: 'Suspicious linked accounts', caseRef: 'REF-2026-1048', status: 'open' as const, readOnly: false, version: 1, save: { kind: 'saved', at: '2026-10-28T09:42:00Z' } };
 const header = () => screen.getByRole('banner', { name: 'Investigation' });
 
 describe('the investigation identity in the header', () => {

@@ -39,13 +39,22 @@ export const SOURCE_UNAVAILABLE_REASONS = ['unreachable', 'authentication', 'ref
 
 export type SourceUnavailableReason = (typeof SOURCE_UNAVAILABLE_REASONS)[number];
 
+/** Why an update was refused with `CONFLICT`; a `CONFLICT` with no reason means the item was changed elsewhere. */
+export const CONFLICT_REASONS = ['status-change-not-allowed', 'investigation-read-only'] as const;
+
+export type ConflictReason = (typeof CONFLICT_REASONS)[number];
+
+/** The status a read-only refusal names. */
+export const READ_ONLY_STATUSES = ['closed', 'archived'] as const;
+
 export const errorDetailsSchema = z.strictObject({
   retained: retainedSchema.optional(),
   requested: requestedSchema.optional(),
   maxPage: z.number().int().positive().optional(),
   retryAfterMs: z.number().int().nonnegative().optional(),
   timeoutMs: z.number().int().positive().optional(),
-  reason: z.enum(SOURCE_UNAVAILABLE_REASONS).optional(),
+  reason: z.enum([...SOURCE_UNAVAILABLE_REASONS, ...CONFLICT_REASONS]).optional(),
+  status: z.enum(READ_ONLY_STATUSES).optional(),
 });
 
 export type ErrorDetails = z.infer<typeof errorDetailsSchema>;
@@ -57,7 +66,10 @@ export const errorBodySchema = z.object({
     retryable: z.boolean(),
     traceId: z.string().min(1),
     details: errorDetailsSchema.optional(),
-  }).refine(({ code, details }) => code !== 'PARTIAL_RESULT' || partialDetailsSchema.safeParse(details).success, { message: 'PARTIAL_RESULT carries retained and requested counts' }),
+  })
+    .refine(({ code, details }) => code !== 'PARTIAL_RESULT' || partialDetailsSchema.safeParse(details).success, { message: 'PARTIAL_RESULT carries retained and requested counts' })
+    .refine(({ code, details }) => details?.reason === undefined || (code === 'CONFLICT' ? CONFLICT_REASONS : code === 'SOURCE_UNAVAILABLE' ? SOURCE_UNAVAILABLE_REASONS : []).some((reason) => reason === details.reason), { message: 'the reason belongs to the code' })
+    .refine(({ code, details }) => details?.status === undefined || (code === 'CONFLICT' && details.reason === 'investigation-read-only'), { message: 'only a read-only refusal names the status' }),
 });
 
 export type ErrorResponse = z.infer<typeof errorBodySchema>;

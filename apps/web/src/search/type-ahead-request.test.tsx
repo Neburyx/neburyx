@@ -127,7 +127,7 @@ describe('the type-ahead request of the Add from source tab', () => {
     await typeText('AC');
     await wait(TYPEAHEAD_DEBOUNCE_MS);
     act(() => {
-      state.show({ id: 'inv-2', sourceId: 'a', record: { title: 'Another', caseRef: null, save: { kind: 'unsaved' } }, resultKeys: [], nodeRefs: [], edgeRefs: [] }, []);
+      state.show({ id: 'inv-2', sourceId: 'a', record: { title: 'Another', caseRef: null, status: 'open' as const, readOnly: false, version: 1, save: { kind: 'unsaved' } }, resultKeys: [], nodeRefs: [], edgeRefs: [] }, []);
     });
     expect(searches[0]?.signal?.aborted).toBe(true);
     expect(inputOf(sourceBox()).value).toBe('');
@@ -135,7 +135,7 @@ describe('the type-ahead request of the Add from source tab', () => {
     await wait(TYPEAHEAD_DEBOUNCE_MS);
     expect(searches).toHaveLength(2);
     act(() => {
-      state.show({ id: 'inv-3', sourceId: 'a', record: { title: 'Third', caseRef: null, save: { kind: 'unsaved' } }, resultKeys: [], nodeRefs: [], edgeRefs: [] }, []);
+      state.show({ id: 'inv-3', sourceId: 'a', record: { title: 'Third', caseRef: null, status: 'open' as const, readOnly: false, version: 1, save: { kind: 'unsaved' } }, resultKeys: [], nodeRefs: [], edgeRefs: [] }, []);
     });
     expect(searches[1]?.signal?.aborted).toBe(true);
     act(() => void state.resume('inv-2', false));
@@ -148,7 +148,7 @@ describe('the type-ahead request of the Add from source tab', () => {
   it('drops the text and aborts the request when the investigation changes away and back inside one batch of updates', async () => {
     const { searches, state } = await panelWorkspace({ bound: false });
     const opened = { ...testKey('a'), params: 'open:inv-a' };
-    const inv = (id: string) => ({ id, sourceId: 'a', record: { title: id, caseRef: null, save: { kind: 'unsaved' as const } }, resultKeys: [opened], nodeRefs: [node('a', 'ACC-1').ref], edgeRefs: [] });
+    const inv = (id: string) => ({ id, sourceId: 'a', record: { title: id, caseRef: null, status: 'open' as const, readOnly: false, version: 1, save: { kind: 'unsaved' as const } }, resultKeys: [opened], nodeRefs: [node('a', 'ACC-1').ref], edgeRefs: [] });
     const results = [{ key: opened, result: { sourceId: 'a', nodes: [node('a', 'ACC-1')], edges: [] } }];
     act(() => void state.show(inv('inv-a'), results));
     await typeText('AC');

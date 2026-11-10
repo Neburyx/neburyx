@@ -142,6 +142,25 @@ export const draftWriteRequestSchema = z.strictObject({ layout: layoutDocumentSc
 /** The new version of the draft, and whether it now equals a named view. */
 export const draftWriteResponseSchema = z.strictObject({ version: z.number().int().min(1), save: investigationSaveSchema, notes: notesSchema });
 
+/** A title as typed: at least one character that is not whitespace, at most `MAX_TITLE_LENGTH` code points, no NUL and no unpaired surrogate. */
+export const investigationTitleSchema = z
+  .string()
+  .refine((value) => value.trim().length > 0, { message: 'a title is not empty or only whitespace' })
+  .refine(holdsNoNulOrLoneSurrogate, { message: 'a title has no NUL and no unpaired surrogate' })
+  .refine((value) => codePoints(value) <= MAX_TITLE_LENGTH, { message: 'a title is at most 200 characters' })
+  .meta({ maxLength: MAX_TITLE_LENGTH });
+
+/** `PUT /v1/investigations/{id}`: the investigation's own version goes in the body as `expectedVersion`. */
+export const renameRequestSchema = z.strictObject({ title: investigationTitleSchema, expectedVersion: z.number().int().min(1) });
+
+export const renameResponseSchema = z.strictObject({ investigation: investigationSchema });
+
+/** `POST /v1/investigations/{id}/status`: the status to move to. */
+export const statusChangeRequestSchema = z.strictObject({ status: z.enum(INVESTIGATION_STATUSES), expectedVersion: z.number().int().min(1) });
+
+/** The investigation after a status change, with when it was closed and archived (`null` while it is not). */
+export const statusChangeResponseSchema = z.strictObject({ investigation: investigationSchema.extend({ closedAt: z.iso.datetime().nullable(), archivedAt: z.iso.datetime().nullable() }) });
+
 export const investigationResponseSchema = z.strictObject({ investigation: investigationSchema, draft: draftSchema });
 
 export type Investigation = z.infer<typeof investigationSchema>;
@@ -153,6 +172,10 @@ export type LayoutDocument = z.infer<typeof layoutDocumentSchema>;
 export type QueryContextDocument = z.infer<typeof queryContextDocumentSchema>;
 export type DraftWriteRequest = z.infer<typeof draftWriteRequestSchema>;
 export type DraftWriteResponse = z.infer<typeof draftWriteResponseSchema>;
+export type RenameRequest = z.infer<typeof renameRequestSchema>;
+export type RenameResponse = z.infer<typeof renameResponseSchema>;
+export type StatusChangeRequest = z.infer<typeof statusChangeRequestSchema>;
+export type StatusChangeResponse = z.infer<typeof statusChangeResponseSchema>;
 export type InvestigationResponse = z.infer<typeof investigationResponseSchema>;
 export type InvestigationListItem = z.infer<typeof investigationListItemSchema>;
 export type InvestigationListResponse = z.infer<typeof investigationListResponseSchema>;

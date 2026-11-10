@@ -1,4 +1,4 @@
-import type { EdgeRef, ElementRef } from '@neburyx/contracts';
+import type { EdgeRef, ElementRef, Investigation } from '@neburyx/contracts';
 import { z } from 'zod';
 import { StateError } from './errors.js';
 import { sourcesOfEdgeRef, type QueryKey } from './keys.js';
@@ -7,11 +7,20 @@ import { createStore, readable, type ReadableStore } from './store.js';
 /** Where the investigation stands on saving; `at` is the time of the last save, an ISO-8601 UTC string. */
 export type SaveState = { readonly kind: 'saved'; readonly at: string } | { readonly kind: 'unsaved' };
 
+export type InvestigationStatus = Investigation['status'];
+
 export interface InvestigationRecord {
   readonly title: string;
   readonly caseRef: string | null;
+  readonly status: InvestigationStatus;
+  /** True for a closed or archived investigation: its draft is not written and its Save is dimmed. */
+  readonly readOnly: boolean;
+  /** The version the next status change or rename is guarded by. */
+  readonly version: number;
   readonly save: SaveState;
 }
+
+export const isReadOnlyStatus = (status: InvestigationStatus): boolean => status !== 'open';
 
 export interface InvestigationState {
   /** The investigation the server knows, when this state holds one; the development fixture has none. */

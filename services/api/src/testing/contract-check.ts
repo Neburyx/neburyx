@@ -45,6 +45,8 @@ const PRODUCT_EXAMPLES: Readonly<Record<string, OperationExample>> = {
   'GET /v1/source-links/{ref}': { url: `/v1/source-links/${Buffer.from(JSON.stringify({ sourceId: 'demo', entityType: 'node_a', stableId: 'A-1' })).toString('base64url')}`, headers: { accept: 'application/json' } },
   'POST /v1/investigations': { url: '/v1/investigations', payload: JSON.stringify({ sourceId: 'demo', entity: { sourceId: 'demo', entityType: 'node_a', stableId: 'A-1' } }) },
   'GET /v1/investigations/{id}': { url: '/v1/investigations/0192f000-0000-7000-8000-000000000001' },
+  'PUT /v1/investigations/{id}': { url: '/v1/investigations/0192f000-0000-7000-8000-000000000001', payload: '{}', headers: { 'content-type': 'application/json' } },
+  'POST /v1/investigations/{id}/status': { url: '/v1/investigations/0192f000-0000-7000-8000-000000000001/status', payload: '{}', headers: { 'content-type': 'application/json' } },
   'PUT /v1/investigations/{id}/draft': { url: '/v1/investigations/0192f000-0000-7000-8000-000000000001/draft', payload: '{}', headers: { 'content-type': 'application/json', 'if-match': '"1"' } },
 };
 

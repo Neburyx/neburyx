@@ -299,7 +299,7 @@ describe('collapsing a node', () => {
     const state = createClientState();
     const showing = (id: string) => {
       const key = { sourceId: 'a', principalId: 'p', policyVersion: 'community', filterHash: 'none', params: `open-${id}`, mask: false };
-      return state.show({ id, sourceId: 'a', record: { title: id, caseRef: null, save: { kind: 'unsaved' } }, resultKeys: [key], nodeRefs: [A], edgeRefs: [] }, [{ key, result: { sourceId: 'a', nodes: [nodeOf('type-a', 'A')], edges: [] } }]);
+      return state.show({ id, sourceId: 'a', record: { title: id, caseRef: null, status: 'open' as const, readOnly: false, version: 1, save: { kind: 'unsaved' } }, resultKeys: [key], nodeRefs: [A], edgeRefs: [] }, [{ key, result: { sourceId: 'a', nodes: [nodeOf('type-a', 'A')], edges: [] } }]);
     };
     const client = fakeClient({ expandNeighbors: () => Promise.resolve<ApiResult<ExpandResponse>>({ ok: true, value: answerOf(A, { neighbors: [B] }) }) });
     showing('inv-1');

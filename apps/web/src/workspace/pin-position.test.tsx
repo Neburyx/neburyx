@@ -149,7 +149,7 @@ describe('the command', () => {
 
   it('keeps pins when the investigation is set aside and resumed', () => {
     const state = createClientState();
-    const record = { title: 't', caseRef: null, save: { kind: 'unsaved' } } as const;
+    const record = { title: 't', caseRef: null, status: 'open' as const, readOnly: false, version: 1, save: { kind: 'unsaved' } } as const;
     const refs = ['n1', 'n2'].map((id) => ref('a', 'type-a', id));
     const first = { id: 'i1', sourceId: 'a', record, resultKeys: [key('a')], nodeRefs: refs, edgeRefs: [] };
     const second = { id: 'i2', sourceId: 'a', record, resultKeys: [key('a', 'seed-2')], nodeRefs: [refs[0] as (typeof refs)[number]], edgeRefs: [] };

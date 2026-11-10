@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { ERROR_CODES, SOURCE_UNAVAILABLE_REASONS } from './error-codes.js';
-import { ERROR_TABLE, findMissingCodes, SOURCE_UNAVAILABLE_ENTRIES } from './error-table.js';
+import { CONFLICT_REASONS, ERROR_CODES, SOURCE_UNAVAILABLE_REASONS } from './error-codes.js';
+import { CONFLICT_ENTRIES, ERROR_TABLE, findMissingCodes, SOURCE_UNAVAILABLE_ENTRIES } from './error-table.js';
 
 describe('findMissingCodes', () => {
   it('reports a code that a fixture table leaves out', () => {
@@ -38,6 +38,16 @@ describe('ERROR_TABLE', () => {
 
   it('gives each reason of an unavailable source a sentence free of query syntax and identifiers', () => {
     for (const reason of SOURCE_UNAVAILABLE_REASONS) expect(SOURCE_UNAVAILABLE_ENTRIES[reason].message).not.toMatch(/MATCH|RETURN|WHERE|[A-Z]{2,}-\d+/);
+  });
+
+  it('keeps the plain message of a CONFLICT with no reason', () => {
+    expect(ERROR_TABLE.CONFLICT).toEqual({ message: 'This item was changed elsewhere. Reload to continue.', status: 409, retryable: false });
+  });
+
+  it('gives each reason of CONFLICT its own fixed message and a retryable flag of false', () => {
+    expect(CONFLICT_ENTRIES['status-change-not-allowed']).toEqual({ message: 'An archived investigation must be reopened before it can be closed.', retryable: false });
+    expect(CONFLICT_ENTRIES['investigation-read-only']).toEqual({ message: 'This investigation is closed or archived. Reopen it to make changes.', retryable: false });
+    for (const reason of CONFLICT_REASONS) expect(CONFLICT_ENTRIES[reason].message).not.toMatch(/MATCH|RETURN|WHERE|[A-Z]{2,}-\d+/);
   });
 
   it('keeps every message free of query syntax and identifiers', () => {

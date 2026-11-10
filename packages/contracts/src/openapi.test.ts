@@ -8,10 +8,18 @@ describe('buildOpenApiDocument', () => {
     const document = buildOpenApiDocument();
     expect(document.openapi).toBe('3.1.0');
     expect(document.info.title).toBe('Neburyx API');
-    expect(Object.keys(document.paths)).toEqual(['/healthz', '/readyz', '/v1/me', '/v1/sources/{id}/profile', '/v1/sources/{id}/test', '/v1/entities/{sourceId}/{entityType}/{stableId}', '/v1/entities/lookup', '/v1/investigations', '/v1/investigations/{id}', '/v1/investigations/{id}/draft', '/v1/edges/{ref}', '/v1/source-links/{ref}', '/v1/search/entities', '/v1/search/entities/more', '/v1/graph/preview-expansion', '/v1/graph/derived-neighbors', '/v1/graph/coverage', '/v1/graph/read-refs', '/v1/graph/expand', '/v1/sources']);
-    expect(Object.keys(document.components.schemas)).toEqual(['CoverageRequest', 'CoverageResponse', 'DegreePreview', 'DegreePreviewRequest', 'DerivedNeighborsRequest', 'DerivedNeighborsResponse', 'DraftWriteRequest', 'DraftWriteResponse', 'EdgeDetail', 'EntityLookupRequest', 'ErrorResponse', 'ExpandRequest', 'ExpandResponse', 'GraphNode', 'HealthResponse', 'InvestigationListResponse', 'InvestigationResponse', 'MeResponse', 'OpenInvestigationRequest', 'OpenInvestigationResponse', 'ReadRefsRequest', 'ReadRefsResponse', 'ReadyResponse', 'SearchMoreRequest', 'SearchMoreResult', 'SearchRequest', 'SearchResult', 'SourceProfile', 'SourceTestReport', 'SourcesResponse']);
+    expect(Object.keys(document.paths)).toEqual(['/healthz', '/readyz', '/v1/me', '/v1/sources/{id}/profile', '/v1/sources/{id}/test', '/v1/entities/{sourceId}/{entityType}/{stableId}', '/v1/entities/lookup', '/v1/investigations', '/v1/investigations/{id}', '/v1/investigations/{id}/status', '/v1/investigations/{id}/draft', '/v1/edges/{ref}', '/v1/source-links/{ref}', '/v1/search/entities', '/v1/search/entities/more', '/v1/graph/preview-expansion', '/v1/graph/derived-neighbors', '/v1/graph/coverage', '/v1/graph/read-refs', '/v1/graph/expand', '/v1/sources']);
+    expect(Object.keys(document.components.schemas)).toEqual(['CoverageRequest', 'CoverageResponse', 'DegreePreview', 'DegreePreviewRequest', 'DerivedNeighborsRequest', 'DerivedNeighborsResponse', 'DraftWriteRequest', 'DraftWriteResponse', 'EdgeDetail', 'EntityLookupRequest', 'ErrorResponse', 'ExpandRequest', 'ExpandResponse', 'GraphNode', 'HealthResponse', 'InvestigationListResponse', 'InvestigationResponse', 'MeResponse', 'OpenInvestigationRequest', 'OpenInvestigationResponse', 'ReadRefsRequest', 'ReadRefsResponse', 'ReadyResponse', 'RenameRequest', 'RenameResponse', 'SearchMoreRequest', 'SearchMoreResult', 'SearchRequest', 'SearchResult', 'SourceProfile', 'SourceTestReport', 'SourcesResponse', 'StatusChangeRequest', 'StatusChangeResponse']);
     expect(document.components.schemas.ErrorResponse).not.toHaveProperty('$schema');
     expect(document.components.schemas.MeResponse).not.toHaveProperty('$schema');
+  });
+
+  it('lists the reasons of CONFLICT with their detail keys in the error response', () => {
+    const text = JSON.stringify(buildOpenApiDocument().components.schemas.ErrorResponse);
+    expect(text).toContain('"status-change-not-allowed"');
+    expect(text).toContain('"investigation-read-only"');
+    expect(text).toContain('This investigation is closed or archived. Reopen it to make changes.');
+    expect(text).toMatch(/"status":\{[^}]*"closed"[^}]*"archived"/);
   });
 
   it('describes the body of the open request from its schema, with the limits it enforces', () => {

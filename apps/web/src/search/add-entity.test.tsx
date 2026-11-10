@@ -212,7 +212,7 @@ describe('adding one entity from the Add from source tab', () => {
     const changed = await withRows();
     fireEvent.click(addButton('Title ACC-100'));
     act(() => {
-      changed.state.show({ id: 'inv-2', sourceId: 'a', record: { title: 'Another', caseRef: null, save: { kind: 'unsaved' } }, resultKeys: [], nodeRefs: [], edgeRefs: [] }, []);
+      changed.state.show({ id: 'inv-2', sourceId: 'a', record: { title: 'Another', caseRef: null, status: 'open' as const, readOnly: false, version: 1, save: { kind: 'unsaved' } }, resultKeys: [], nodeRefs: [], edgeRefs: [] }, []);
     });
     expect(changed.loads[0]?.signal?.aborted).toBe(true);
     act(() => changed.loads[0]?.answer({ ok: true, value: first }));
@@ -280,7 +280,7 @@ describe('adding one entity from the Add from source tab', () => {
     const show = (id: string) => {
       const opened = { ...testKey('a'), params: `open:${id}` };
       act(() => {
-        parts.state.show({ id, sourceId: 'a', record: { title: id, caseRef: null, save: { kind: 'unsaved' } }, resultKeys: [opened], nodeRefs: [node('a', 'ACC-1').ref], edgeRefs: [] }, [{ key: opened, result: { sourceId: 'a', nodes: [node('a', 'ACC-1')], edges: [] } }]);
+        parts.state.show({ id, sourceId: 'a', record: { title: id, caseRef: null, status: 'open' as const, readOnly: false, version: 1, save: { kind: 'unsaved' } }, resultKeys: [opened], nodeRefs: [node('a', 'ACC-1').ref], edgeRefs: [] }, [{ key: opened, result: { sourceId: 'a', nodes: [node('a', 'ACC-1')], edges: [] } }]);
       });
     };
     const addFirst = async (round: number) => {
@@ -306,7 +306,7 @@ describe('adding one entity from the Add from source tab', () => {
   it('ignores the late answer when the investigation changed away and back inside one batch of updates', async () => {
     const parts = await panelWorkspace({ bound: false });
     const opened = { ...testKey('a'), params: 'open:inv-a' };
-    const sameInvestigation = () => ({ id: 'inv-a', sourceId: 'a', record: { title: 'inv-a', caseRef: null, save: { kind: 'unsaved' as const } }, resultKeys: [opened], nodeRefs: [node('a', 'ACC-1').ref], edgeRefs: [] });
+    const sameInvestigation = () => ({ id: 'inv-a', sourceId: 'a', record: { title: 'inv-a', caseRef: null, status: 'open' as const, readOnly: false, version: 1, save: { kind: 'unsaved' as const } }, resultKeys: [opened], nodeRefs: [node('a', 'ACC-1').ref], edgeRefs: [] });
     const results = [{ key: opened, result: { sourceId: 'a', nodes: [node('a', 'ACC-1')], edges: [] } }];
     act(() => void parts.state.show(sameInvestigation(), results));
     await searchFor('ACC');
@@ -314,7 +314,7 @@ describe('adding one entity from the Add from source tab', () => {
     await settle();
     fireEvent.click(addButton('Title ACC-100'));
     act(() => {
-      parts.state.show({ id: 'inv-b', sourceId: 'a', record: { title: 'inv-b', caseRef: null, save: { kind: 'unsaved' } }, resultKeys: [], nodeRefs: [], edgeRefs: [] }, []);
+      parts.state.show({ id: 'inv-b', sourceId: 'a', record: { title: 'inv-b', caseRef: null, status: 'open' as const, readOnly: false, version: 1, save: { kind: 'unsaved' } }, resultKeys: [], nodeRefs: [], edgeRefs: [] }, []);
       parts.state.show(sameInvestigation(), results);
     });
     expect(parts.loads[0]?.signal?.aborted).toBe(true);
