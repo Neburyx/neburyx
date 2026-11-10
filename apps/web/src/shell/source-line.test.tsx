@@ -59,7 +59,7 @@ describe('the source status line', () => {
   it('shows an explicit Unavailable state with the code when the API cannot be reached, and the sidebar and the navigation stay', async () => {
     renderApp('/', clientWith({ me: me() }));
     expect((await within(line()).findByRole('alert')).textContent).toBe('Unavailable · NETWORK_UNAVAILABLE');
-    expect(screen.getAllByRole('link')).toHaveLength(3);
+    expect(screen.getAllByRole('link').map((link) => link.textContent)).toEqual(['Home', 'Investigations', 'Sources', 'Investigations', 'Saved views']);
     expect(screen.getByText('Local workspace')).toBeTruthy();
   });
 

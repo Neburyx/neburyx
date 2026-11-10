@@ -114,13 +114,34 @@ export interface StoredInvestigation {
 export interface ListedInvestigation extends InvestigationRow {
   readonly sourceAlias: string;
   readonly save: InvestigationSave;
+  readonly nodeCount: number;
+  readonly edgeCount: number;
+  readonly countsPolicyVersion: string;
+  /** `lastEditedAt` as the database holds it, in microseconds, so the next page starts after exactly this row. */
+  readonly lastEditedKey: string;
 }
 
-export interface ListQuery {
+/** Where a page of the list starts: after the row last edited at `editedKey` (microsecond text) with this `id`. */
+export interface ListPosition {
+  readonly editedKey: string;
+  readonly id: string;
+}
+
+export interface ListFilters {
+  readonly status: 'open' | 'closed' | 'archived';
+  readonly sourceId: string | undefined;
+  /** A fragment of the title or the case reference. */
+  readonly text: string | undefined;
+}
+
+export interface ListQuery extends ListFilters {
   readonly ownerId: string;
   readonly sourceIds: readonly string[];
   readonly limit: number;
+  readonly after: ListPosition | undefined;
 }
+
+export type MatchQuery = Omit<ListQuery, 'limit' | 'after'>;
 
 export interface CountQuery {
   readonly ownerId: string;
@@ -141,6 +162,7 @@ export interface NamedViewCounts {
 export interface LibraryReader {
   listInvestigationSourceIds(ownerId: string): Promise<string[]>;
   listInvestigations(query: ListQuery): Promise<ListedInvestigation[]>;
+  countMatching(query: MatchQuery): Promise<number>;
   countInvestigations(query: CountQuery): Promise<InvestigationCounts>;
   countNamedViews(query: CountQuery): Promise<NamedViewCounts>;
 }
@@ -422,27 +444,61 @@ export async function changeInvestigationStatus(pool: pg.Pool, change: StatusCha
 
 interface ListedRecord extends InvestigationRecord {
   readonly source_alias: string;
+  readonly last_edited_key: string;
+  readonly node_count: number | null;
+  readonly edge_count: number | null;
+  readonly counts_policy_version: string | null;
   readonly saved_at: Date | null;
 }
 
 export async function listInvestigationSourceIds(db: pg.Pool | pg.PoolClient, ownerId: string): Promise<string[]> {
-  const result = await db.query<{ source_id: string }>(`SELECT DISTINCT source_id FROM investigations WHERE owner_id = $1 AND status = 'open' AND deleted_at IS NULL`, [ownerId]);
+  const result = await db.query<{ source_id: string }>(`SELECT DISTINCT source_id FROM investigations WHERE owner_id = $1 AND deleted_at IS NULL`, [ownerId]);
   return result.rows.map((record) => record.source_id);
 }
 
+const EDITED_KEY = `to_char(i.last_edited_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
+
+const FILTER_WHERE = `i.owner_id = $1 AND i.source_id = ANY($2::text[]) AND i.status = $3 AND i.deleted_at IS NULL
+     AND ($4::text IS NULL OR i.source_id = $4)
+     AND ($5::text IS NULL OR i.title ILIKE $5 OR i.case_ref ILIKE $5)`;
+
+/** The text becomes an ILIKE pattern that matches it as a fragment, with `\`, `%` and `_` standing for themselves. */
+export function containsPattern(text: string | undefined): string | null {
+  return text === undefined ? null : `%${text.replace(/[\\%_]/g, '\\$&')}%`;
+}
+
+const filterParameters = (query: MatchQuery) => [query.ownerId, [...query.sourceIds], query.status, query.sourceId ?? null, containsPattern(query.text)];
+
 export async function listInvestigations(db: pg.Pool | pg.PoolClient, query: ListQuery): Promise<ListedInvestigation[]> {
+  const after = query.after;
   const result = await db.query<ListedRecord>(
-    `SELECT ${QUALIFIED_COLUMNS}, s.alias AS source_alias, CASE WHEN named.content_hash = draft.content_hash THEN named.created_at END AS saved_at
+    `SELECT ${QUALIFIED_COLUMNS}, s.alias AS source_alias, ${EDITED_KEY} AS last_edited_key,
+            draft.node_count, draft.edge_count, draft.counts_policy_version,
+            CASE WHEN named.content_hash = draft.content_hash THEN named.created_at END AS saved_at
      FROM investigations i
      JOIN sources s ON s.id = i.source_id
      LEFT JOIN saved_views draft ON draft.investigation_id = i.id AND draft.kind = 'draft' AND draft.created_by = i.owner_id
      LEFT JOIN saved_views named ON named.id = draft.based_on_view_id AND named.kind = 'named'
-     WHERE i.owner_id = $1 AND i.source_id = ANY($2::text[]) AND i.status = 'open' AND i.deleted_at IS NULL
+     WHERE ${FILTER_WHERE}
+       AND ($6::text IS NULL OR (i.last_edited_at, i.id) < ($6::timestamptz, $7::uuid))
      ORDER BY i.last_edited_at DESC, i.id DESC
-     LIMIT $3`,
-    [query.ownerId, [...query.sourceIds], query.limit],
+     LIMIT $8`,
+    [...filterParameters(query), after?.editedKey ?? null, after?.id ?? null, query.limit],
   );
-  return result.rows.map((record) => ({ ...rowOf(record), sourceAlias: record.source_alias, save: record.saved_at === null ? { state: 'unsaved', savedAt: null } : { state: 'saved', savedAt: record.saved_at.toISOString() } }));
+  return result.rows.map((record) => ({
+    ...rowOf(record),
+    sourceAlias: record.source_alias,
+    save: record.saved_at === null ? { state: 'unsaved', savedAt: null } : { state: 'saved', savedAt: record.saved_at.toISOString() },
+    nodeCount: record.node_count ?? 0,
+    edgeCount: record.edge_count ?? 0,
+    countsPolicyVersion: record.counts_policy_version ?? '',
+    lastEditedKey: record.last_edited_key,
+  }));
+}
+
+export async function countMatching(db: pg.Pool | pg.PoolClient, query: MatchQuery): Promise<number> {
+  const result = await db.query<{ total: number }>(`SELECT count(*)::int AS total FROM investigations i WHERE ${FILTER_WHERE}`, filterParameters(query));
+  return result.rows[0]?.total ?? 0;
 }
 
 export async function countInvestigations(db: pg.Pool | pg.PoolClient, query: CountQuery): Promise<InvestigationCounts> {
@@ -462,7 +518,7 @@ export async function countNamedViews(db: pg.Pool | pg.PoolClient, query: CountQ
     `SELECT count(*)::int AS views, max(v.updated_at) AS last_edited_at
      FROM saved_views v
      JOIN investigations i ON i.id = v.investigation_id
-     WHERE v.kind = 'named' AND i.owner_id = $1 AND i.source_id = ANY($2::text[]) AND i.status = 'open' AND i.deleted_at IS NULL`,
+     WHERE v.kind = 'named' AND i.owner_id = $1 AND i.source_id = ANY($2::text[]) AND i.deleted_at IS NULL`,
     [query.ownerId, [...query.sourceIds]],
   );
   const [row] = result.rows;
@@ -478,6 +534,7 @@ export async function readLibrary<T>(pool: pg.Pool, read: (reader: LibraryReader
     const answer = await read({
       listInvestigationSourceIds: (ownerId) => listInvestigationSourceIds(client, ownerId),
       listInvestigations: (query) => listInvestigations(client, query),
+      countMatching: (query) => countMatching(client, query),
       countInvestigations: (query) => countInvestigations(client, query),
       countNamedViews: (query) => countNamedViews(client, query),
     });

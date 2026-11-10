@@ -31,7 +31,8 @@ export function investigationOf(id: string, sourceId: string, entityType: string
 export function listOf(items: readonly InvestigationListItem[], hasMore = false, all: readonly InvestigationListItem[] = items, savedViews: { readonly count: number; readonly lastEditedAt: string | null } = { count: 0, lastEditedAt: null }): InvestigationListResponse {
   return {
     items: [...items],
-    hasMore,
+    nextCursor: hasMore ? 'next-page' : null,
+    matching: { value: all.length, quality: 'exact', scope: 'investigations-matching' },
     counts: {
       investigations: { value: all.length, quality: 'exact', scope: 'investigations' },
       sources: { value: new Set(all.map((item) => item.sourceId)).size, quality: 'exact', scope: 'investigation-sources' },
@@ -42,7 +43,7 @@ export function listOf(items: readonly InvestigationListItem[], hasMore = false,
 
 /** The row of the list for an investigation, as the API answers it: the alias is the one the test sources have. */
 export function listItemOf(investigation: Investigation, overrides: Partial<InvestigationListItem> = {}): InvestigationListItem {
-  return { ...investigation, sourceAlias: `Source ${investigation.sourceId}`, save: { state: 'unsaved', savedAt: null }, ...overrides };
+  return { ...investigation, sourceAlias: `Source ${investigation.sourceId}`, save: { state: 'unsaved', savedAt: null }, nodeCount: 1, edgeCount: 0, ...overrides };
 }
 
 export function readOf(investigation: Investigation): InvestigationResponse {

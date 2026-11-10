@@ -11,7 +11,7 @@ type Phase = { readonly kind: 'asking' } | { readonly kind: 'busy' } | { readonl
 const reloadPage = (): void => window.location.reload();
 
 export interface RestoreConfirmProps {
-  readonly view: NamedView;
+  readonly view: Pick<NamedView, 'id' | 'name'>;
   /** Called when the dialog is done: cancelled, restored, or the draft was found changed elsewhere. */
   readonly onClose: () => void;
   readonly reload?: () => void;

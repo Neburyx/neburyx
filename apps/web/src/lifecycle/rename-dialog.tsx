@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom';
 import type { ApiClient, ApiFailure } from '../api/client.js';
 import { KEY_SCOPE_ATTRIBUTE } from '../workspace/key-binding-handler.js';
 import { useClientState } from '../state/context.js';
+import { DIALOG_BEHIND_ATTRIBUTE } from './dialog-behind.js';
 import { useStoreSelector } from '../state/store.js';
 import { CANCEL, NAME_HINT, NAME_LABEL, RELOAD, RENAME, RENAME_DISABLED, RENAME_TITLE, RENAMING, TITLE_EMPTY, TITLE_INVALID, TITLE_TOO_LONG } from './copy.js';
 import { refreshRecord } from './refresh-record.js';
@@ -20,12 +21,51 @@ export function titleProblemOf(title: string): string | undefined {
 
 type Outcome = { readonly kind: 'none' } | { readonly kind: 'failed'; readonly failure: ApiFailure };
 
-/** The "Rename investigation" dialog: one name, validated as the server does, with the server's own message when the change is refused. */
+export interface RenameTarget {
+  readonly id: string;
+  readonly title: string;
+  readonly version: number;
+  readonly readOnly: boolean;
+}
+
+export interface RenameDialogViewProps {
+  readonly client: ApiClient;
+  /** The investigation as the caller holds it now: a change of its title or version while the dialog is open (a reload) is taken from here. */
+  readonly target: RenameTarget;
+  readonly onRenamed: (renamed: { readonly title: string; readonly version: number }) => void;
+  /** Reads the investigation again and tells the caller what it holds; false when that could not be done. */
+  readonly refresh: () => Promise<boolean>;
+  /** Called when a rename is refused because the investigation is closed or archived, after the caller's copy was refreshed. */
+  readonly onReadOnlyRefusal: () => void;
+  readonly onClose: () => void;
+}
+
+/** The "Rename investigation" dialog of the investigation on screen. */
 export function RenameDialog({ client, onClose }: { readonly client: ApiClient; readonly onClose: () => void }) {
   const state = useClientState();
   const record = useStoreSelector(state.investigation, (held) => held.record);
   const investigationId = useStoreSelector(state.investigation, (held) => held.id);
-  const [title, setTitle] = useState(record?.title ?? '');
+  if (record === null || investigationId === null) return null;
+  return (
+    <RenameDialogView
+      client={client}
+      target={{ id: investigationId, title: record.title, version: record.version, readOnly: record.readOnly }}
+      onRenamed={({ title, version }) => {
+        const held = state.investigation.getState();
+        if (held.id === investigationId && held.record !== null) state.describeInvestigation({ ...held.record, title, version });
+      }}
+      refresh={() => refreshRecord(client, state, investigationId)}
+      onReadOnlyRefusal={() => void refreshRecord(client, state, investigationId)}
+      onClose={onClose}
+    />
+  );
+}
+
+/** One name, validated as the server does, with the server's own message when the change is refused. */
+export function RenameDialogView({ client, target, onRenamed, refresh, onReadOnlyRefusal, onClose }: RenameDialogViewProps) {
+  const record = target;
+  const investigationId = target.id;
+  const [title, setTitle] = useState(record.title);
   const [sending, setSending] = useState(false);
   const [outcome, setOutcome] = useState<Outcome>({ kind: 'none' });
   const dialog = useRef<HTMLDivElement>(null);
@@ -34,30 +74,31 @@ export function RenameDialog({ client, onClose }: { readonly client: ApiClient; 
   const hintId = useId();
   const problemId = useId();
   const problem = titleProblemOf(title);
-  const changed = record !== null && title !== record.title;
-  const canSend = problem === undefined && changed && !sending && record !== null && !record.readOnly;
+  const changed = title !== record.title;
+  const canSend = problem === undefined && changed && !sending && !record.readOnly;
 
   useEffect(() => {
-    const behind = document.querySelector(`[${KEY_SCOPE_ATTRIBUTE}="workspace"]`);
-    behind?.setAttribute('inert', '');
+    const behind = document.querySelectorAll(`[${KEY_SCOPE_ATTRIBUTE}="workspace"], [${DIALOG_BEHIND_ATTRIBUTE}]`);
+    for (const element of behind) element.setAttribute('inert', '');
     input.current?.focus();
     input.current?.select();
-    return () => behind?.removeAttribute('inert');
+    return () => {
+      for (const element of behind) element.removeAttribute('inert');
+    };
   }, []);
 
   const send = async (): Promise<void> => {
-    if (!canSend || investigationId === null || record === null) return;
+    if (!canSend) return;
     setSending(true);
     setOutcome({ kind: 'none' });
     const result = await client.renameInvestigation(investigationId, title, record.version);
     setSending(false);
     if (result.ok) {
-      const held = state.investigation.getState();
-      if (held.id === investigationId && held.record !== null) state.describeInvestigation({ ...held.record, title: result.value.investigation.title, version: result.value.investigation.version });
+      onRenamed({ title: result.value.investigation.title, version: result.value.investigation.version });
       onClose();
       return;
     }
-    if (isReadOnlyRefusal(result.failure)) void refreshRecord(client, state, investigationId);
+    if (isReadOnlyRefusal(result.failure)) onReadOnlyRefusal();
     setOutcome({ kind: 'failed', failure: result.failure });
   };
 
@@ -136,7 +177,7 @@ export function RenameDialog({ client, onClose }: { readonly client: ApiClient; 
                     type="button"
                     className="secondary"
                     onClick={() => {
-                      if (investigationId !== null) void refreshRecord(client, state, investigationId).then((refreshed) => setOutcome(refreshed ? { kind: 'none' } : { kind: 'failed', failure: { code: 'NETWORK_UNAVAILABLE' } }));
+                      void refresh().then((refreshed) => setOutcome(refreshed ? { kind: 'none' } : { kind: 'failed', failure: { code: 'NETWORK_UNAVAILABLE' } }));
                     }}
                   >
                     {RELOAD}

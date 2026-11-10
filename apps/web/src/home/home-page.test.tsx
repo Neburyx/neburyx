@@ -28,6 +28,12 @@ describe('Home: the Recent list', () => {
     expect(asked).toEqual([5]);
   });
 
+  it('links the Recent list to the Investigations page with View all', async () => {
+    renderApp('/', knowing([A, B]).client);
+    await screen.findByRole('link', { name: 'kind-a A-1' });
+    expect(screen.getByRole('link', { name: 'View all' }).getAttribute('href')).toBe('/investigations');
+  });
+
   it('sends the list, the sources and the identity and nothing else when Home is opened', async () => {
     const parts = knowing([A, B]);
     renderApp('/', parts.client);

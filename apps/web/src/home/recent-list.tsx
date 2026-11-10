@@ -1,3 +1,4 @@
+import { Link } from 'react-router';
 import type { SourceProfile } from '@neburyx/contracts';
 import type { RequestState } from '../api/use-request.js';
 import { canRetry, FailureNotice } from '../failure-notice.js';
@@ -64,7 +65,10 @@ export function RecentList() {
               </ul>
             </>
           )}
-          {data.hasMore ? <p className="recent-more">{MORE_THAN_SHOWN}</p> : null}
+          {data.nextCursor !== null ? <p className="recent-more">{MORE_THAN_SHOWN}</p> : null}
+          <p className="recent-all">
+            <Link to="/investigations">{HOME_COPY.viewAll}</Link>
+          </p>
         </>
       )}
     </section>

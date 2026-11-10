@@ -93,6 +93,7 @@ const NOT_SWEPT_HERE: Readonly<Record<string, string>> = {
   'PUT /v1/investigations/:id': 'answers the investigation with its new title, no element ID',
   'POST /v1/investigations/:id/status': 'answers the investigation with its status and the times it was closed and archived, no element ID',
   'PUT /v1/investigations/:id/draft': 'answers the new version of a draft and whether it equals a named view, no element ID',
+  'GET /v1/views': 'answers summaries of named views across investigations (ID, name, who saved it, time) with the investigation ID, title, source and status, no element ID',
   'GET /v1/investigations/:id/views': 'answers summaries of named views (ID, name, note, who saved it, time) and the ID of the view the draft is based on, no element ID',
   'PUT /v1/investigations/:id/views/:viewId': 'answers the renamed view as a summary, no element ID',
   'POST /v1/investigations/:id/views/:viewId/restore': 'answers the draft as restored (version, documents, note, view ID), no property value',

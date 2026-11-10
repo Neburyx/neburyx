@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import type { Socket } from 'node:net';
 import fastifyStatic from '@fastify/static';
-import { type ErrorCode, MAX_DRAFT_DOCUMENT_BYTES, readRefsRequestSchema, readRefsResponseSchema, draftWriteRequestSchema, draftWriteResponseSchema, renameRequestSchema, renameResponseSchema, statusChangeRequestSchema, statusChangeResponseSchema, derivedNeighborsRequestSchema, derivedNeighborsResponseSchema, coverageRequestSchema, coverageResponseSchema, degreePreviewRequestSchema, edgeDetailSchema, edgePathSchema, entityLookupRequestSchema, degreePreviewSchema, entityPathSchema, entityQuerySchema, expandRequestSchema, expandResponseSchema, healthResponseSchema, investigationListQuerySchema, investigationListResponseSchema, investigationResponseSchema, meResponseSchema, nodeSchema, parseEdgeRefSegment, parseSourceLinkSegment, sourceLinkPathSchema, sourceLinkQuerySchema, openInvestigationRequestSchema, openInvestigationResponseSchema, readyResponseSchema, searchMoreRequestSchema, searchMoreResultSchema, searchRequestSchema, searchResultSchema, sourceProfileSchema, sourceTestReportSchema, sourcesResponseSchema, renameViewRequestSchema, restoreViewResponseSchema, saveViewRequestSchema, saveViewResponseSchema, viewListQuerySchema, viewListResponseSchema, namedViewSchema } from '@neburyx/contracts';
+import { type ErrorCode, MAX_DRAFT_DOCUMENT_BYTES, readRefsRequestSchema, readRefsResponseSchema, draftWriteRequestSchema, draftWriteResponseSchema, renameRequestSchema, renameResponseSchema, statusChangeRequestSchema, statusChangeResponseSchema, derivedNeighborsRequestSchema, derivedNeighborsResponseSchema, coverageRequestSchema, coverageResponseSchema, degreePreviewRequestSchema, edgeDetailSchema, edgePathSchema, entityLookupRequestSchema, degreePreviewSchema, entityPathSchema, entityQuerySchema, expandRequestSchema, expandResponseSchema, healthResponseSchema, investigationListQuerySchema, investigationListResponseSchema, investigationResponseSchema, meResponseSchema, nodeSchema, parseEdgeRefSegment, parseSourceLinkSegment, sourceLinkPathSchema, sourceLinkQuerySchema, openInvestigationRequestSchema, openInvestigationResponseSchema, readyResponseSchema, searchMoreRequestSchema, searchMoreResultSchema, searchRequestSchema, searchResultSchema, sourceProfileSchema, sourceTestReportSchema, sourcesResponseSchema, renameViewRequestSchema, restoreViewResponseSchema, saveViewRequestSchema, saveViewResponseSchema, viewListQuerySchema, viewListResponseSchema, ownedViewListResponseSchema, namedViewSchema } from '@neburyx/contracts';
 import { z } from 'zod';
 import Fastify, {
   type FastifyBaseLogger,
@@ -30,6 +30,7 @@ import { createSearchService } from './search/search-service.js';
 import { createInvestigationService } from './investigations/investigation-service.js';
 import { createCursorCodec, type CursorCodec } from './gate/cursor/codec.js';
 import { createViewService } from './investigations/view-service.js';
+import { createOwnedViewService } from './investigations/owned-view-service.js';
 import { createStoredReferences } from './investigations/stored-references.js';
 import { createSourceAccess } from './investigations/source-access.js';
 import { createRequestLimiter, type RequestLimiter } from './rate/request-limiter.js';
@@ -473,7 +474,8 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
     });
 
     const storedReferences = createStoredReferences(mapping, referenceKeys);
-    const investigations = createInvestigationService({ store: options.store, entities, mapping, access, references: storedReferences, audit: auditSink });
+    const listCursors = options.cursors ?? createCursorCodec({ key: randomBytes(32), clock: Date.now });
+    const investigations = createInvestigationService({ cursors: listCursors, store: options.store, entities, mapping, access, references: storedReferences, audit: auditSink });
     app.post('/v1/investigations', { config: { permission: 'principal' } }, async (request, reply) => {
       const body = openInvestigationRequestSchema.safeParse(request.body);
       if (!noQuerySchema.safeParse(request.query).success || !body.success) throw new AppError('INVALID_REQUEST');
@@ -489,7 +491,8 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       const query = investigationListQuerySchema.safeParse(request.query);
       if (!query.success) throw new AppError('INVALID_REQUEST');
       const identity = await options.store.current();
-      const answer = await investigations.list({ principal: identity.principal, ...(query.data.limit === undefined ? {} : { limit: query.data.limit }) });
+      const { limit, cursor, status, source, q } = query.data;
+      const answer = await investigations.list({ principal: identity.principal, limit, cursor, status, sourceId: source, text: q });
       return investigationListResponseSchema.parse(answer);
     });
 
@@ -521,7 +524,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       return reply.header('etag', `"${answer.investigation.version}"`).send(statusChangeResponseSchema.parse(answer));
     });
 
-    const views = createViewService({ store: options.store, references: storedReferences, mapping, cursors: options.cursors ?? createCursorCodec({ key: randomBytes(32), clock: Date.now }) });
+    const views = createViewService({ store: options.store, references: storedReferences, mapping, cursors: listCursors });
     app.post('/v1/investigations/:id/views', { config: { permission: 'principal' } }, async (request, reply) => {
       const params = profileParamsSchema.safeParse(request.params);
       const body = saveViewRequestSchema.safeParse(request.body);
@@ -530,6 +533,15 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       const identity = await options.store.current();
       const answer = await views.save({ id: params.data.id, principal: identity.principal, expectedDraftVersion: expected.data, request: body.data });
       return reply.code(201).header('etag', `"${answer.draft.version}"`).send(saveViewResponseSchema.parse(answer));
+    });
+
+    const ownedViews = createOwnedViewService({ store: options.store, access, references: storedReferences, cursors: listCursors });
+    app.get('/v1/views', { exposeHeadRoute: false, config: { permission: 'principal' } }, async (request) => {
+      const query = viewListQuerySchema.safeParse(request.query);
+      if (!query.success) throw new AppError('INVALID_REQUEST');
+      const identity = await options.store.current();
+      const answer = await ownedViews.list({ principal: identity.principal, limit: query.data.limit, cursor: query.data.cursor });
+      return ownedViewListResponseSchema.parse(answer);
     });
 
     app.get('/v1/investigations/:id/views', { exposeHeadRoute: false, config: { permission: 'principal' } }, async (request) => {

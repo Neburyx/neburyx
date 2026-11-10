@@ -51,6 +51,7 @@ import './styles/first-run.css';
 import './styles/home.css';
 import './styles/lifecycle.css';
 import './styles/views.css';
+import './styles/investigations.css';
 
 const root = document.getElementById('root');
 if (root === null) throw new Error('the page has no #root element');

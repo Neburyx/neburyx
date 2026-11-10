@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { codePoints, draftSchema, holdsNoNulOrLoneSurrogate, investigationTitleSchema, notesSchema } from './investigations.js';
+import { INVESTIGATION_STATUSES, codePoints, draftSchema, holdsNoNulOrLoneSurrogate, investigationTitleSchema, notesSchema } from './investigations.js';
 
 /** The longest name of a named view, in characters (the database checks the same limit). */
 export const MAX_VIEW_NAME_LENGTH = 120;
@@ -63,6 +63,25 @@ export const viewListResponseSchema = z.strictObject({
 export const renameViewRequestSchema = z.strictObject({ name: viewNameSchema });
 
 export type ViewListResponse = z.infer<typeof viewListResponseSchema>;
+
+/** A named view of one of the caller's investigations, with the investigation it belongs to: what the Saved views tab lists. */
+export const ownedViewSchema = z.strictObject({
+  id: z.uuid(),
+  name: viewNameSchema,
+  investigation: z.strictObject({ id: z.uuid(), title: investigationTitleSchema, sourceId: z.string().min(1), sourceAlias: z.string().min(1), status: z.enum(INVESTIGATION_STATUSES) }),
+  savedBy: viewAuthorSchema,
+  createdAt: z.iso.datetime(),
+  version: versionSchema,
+});
+
+export const ownedViewListResponseSchema = z.strictObject({
+  items: z.array(ownedViewSchema),
+  nextCursor: z.string().nullable(),
+  count: z.strictObject({ value: z.number().int().nonnegative(), quality: z.literal('exact'), scope: z.literal('named-views') }),
+});
+
+export type OwnedView = z.infer<typeof ownedViewSchema>;
+export type OwnedViewListResponse = z.infer<typeof ownedViewListResponseSchema>;
 export type RenameViewRequest = z.infer<typeof renameViewRequestSchema>;
 
 /** `POST /v1/investigations/{id}/views/{viewId}/restore`: the draft as it is now, which holds what the view held, and that it equals the view. */

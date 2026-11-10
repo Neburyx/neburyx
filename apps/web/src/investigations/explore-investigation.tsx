@@ -18,6 +18,9 @@ import { DraftAnnouncer, DraftConflictBanner, DraftStatusLine } from '../draft/d
 import { MappingChangeBanner } from '../draft/mapping-banner.js';
 import { draftSyncOf } from '../draft/draft-sync.js';
 import { ReadOnlyBannerSync } from '../lifecycle/read-only-banner.js';
+import { restoreIntentOf } from '../investigations-page/restore-intent.js';
+import { viewNotLoaded } from '../investigations-page/copy.js';
+import { RestoreConfirm } from '../views/restore-confirm.js';
 
 type Status =
   | { readonly kind: 'loading' }
@@ -53,7 +56,9 @@ export function ExploreInvestigation({ client }: { readonly client: ApiClient })
   const principalId = answeredData(shell.me)?.principal.id;
   const principalFailure = principalId === undefined ? retainedFailure(shell.me) : undefined;
   const navigate = useNavigate();
-  const resumed = arrivedByResuming(useLocation().state);
+  const location = useLocation();
+  const resumed = arrivedByResuming(location.state);
+  const restoreAsked = restoreIntentOf(location.state);
   const [attempt, setAttempt] = useState(0);
   const [status, setStatus] = useState<Status>(() => (investigationId !== undefined && state.holds(investigationId, mask) ? { kind: 'ready' } : { kind: 'loading' }));
   const onScreen = useStoreSelector(state.investigation, (held) => held);
@@ -100,6 +105,10 @@ export function ExploreInvestigation({ client }: { readonly client: ApiClient })
     setAttempt((count) => count + 1);
   };
   const statusLine = status.kind === 'loading' && failure === undefined ? <p role="status">{previousTitle === null ? OPENING : openingOver(previousTitle)}</p> : status.kind === 'ready' && resumed ? <p role="status">{RESUMED}</p> : status.kind === 'ready' && (status.someMissing === true || restoredMissing) ? <p role="status">{SOME_ITEMS_UNAVAILABLE}</p> : undefined;
+  const record = onScreen.id === investigationId ? onScreen.record : null;
+  const restoreReady = status.kind === 'ready' && restoreAsked !== undefined && record !== null;
+  const notLoaded = restoreReady && record.readOnly && record.status !== 'open' ? viewNotLoaded(record.status) : undefined;
+  const asking = restoreReady && !record.readOnly ? restoreAsked : undefined;
   const visible = draftKind === 'idle' || draftKind === 'conflict' ? statusLine : <>{statusLine}<DraftStatusLine sync={sync} /></>;
   return (
     <>
@@ -118,8 +127,9 @@ export function ExploreInvestigation({ client }: { readonly client: ApiClient })
         ) : undefined
       }
       busy={status.kind === 'loading' && failure === undefined}
-      status={visible}
+      status={notLoaded === undefined ? visible : <>{visible}<p role="status">{notLoaded}</p></>}
     />
+    {asking === undefined ? null : <RestoreConfirm view={asking} onClose={() => void navigate(location.pathname, { replace: true, state: undefined })} />}
     <DraftAnnouncer sync={sync} />
     <DraftConflictBanner sync={sync} />
     {/* the order matters: both use the one standing-banner slot, and the read-only sync clears it before the mapping banner sets it again on a reopen */}

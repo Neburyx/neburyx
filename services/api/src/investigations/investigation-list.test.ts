@@ -56,7 +56,7 @@ interface Started {
   readonly asks: string[];
   readonly events: AuditEvent[];
   readonly executor: TestExecutor;
-  readonly list: (query?: string) => Promise<{ readonly status: number; readonly body: { items: { id: string; sourceId: string; sourceState: string; sourceAlias: string }[]; hasMore: boolean; counts?: unknown; error?: { code: string } } }>;
+  readonly list: (query?: string) => Promise<{ readonly status: number; readonly body: { items: { id: string; sourceId: string; sourceState: string; sourceAlias: string }[]; nextCursor: string | null; counts?: unknown; error?: { code: string } } }>;
 }
 
 async function started(refused: readonly string[] = ['secret'], options: { readonly store?: MemoryAppStore; readonly failPolicy?: boolean } = {}): Promise<Started> {
@@ -109,18 +109,18 @@ describe('the list of the caller\'s investigations', () => {
   it('cuts the list at the limit and says there is more only when there is', async () => {
     const { store, list } = await started();
     store.investigations.push(...[1, 2, 3, 4, 5].map((minutes) => row('open', minutes)));
-    expect((await list('?limit=5')).body).toMatchObject({ hasMore: false });
+    expect((await list('?limit=5')).body).toMatchObject({ nextCursor: null });
     expect((await list('?limit=5')).body.items).toHaveLength(5);
     store.investigations.push(row('open', 6));
     const answer = await list('?limit=5');
     expect(answer.body.items).toHaveLength(5);
-    expect(answer.body.hasMore).toBe(true);
-    expect((await list()).body.items).toHaveLength(5);
+    expect(answer.body.nextCursor).not.toBeNull();
+    expect((await list()).body.items).toHaveLength(6);
     expect((await list('?limit=2')).body.items).toHaveLength(2);
     expect((await list('?limit=25')).body.items).toHaveLength(6);
   });
 
-  it.each([['limit=0'], ['limit=26'], ['limit=1.5'], ['limit=x'], ['limit='], ['limit=-1'], ['sort=name'], ['sort='], ['other=1'], ['limit=5&limit=6'], ['limit=5&other=1']])('refuses the query %s with INVALID_REQUEST', async (query) => {
+  it.each([['limit=0'], ['limit=1.5'], ['limit=x'], ['limit='], ['limit=-1'], ['sort=name'], ['sort='], ['other=1'], ['limit=5&limit=6'], ['limit=5&other=1']])('refuses the query %s with INVALID_REQUEST', async (query) => {
     const { list, asks } = await started();
     const answer = await list(`?${query}`);
     expect(answer.status).toBe(400);
@@ -141,7 +141,7 @@ describe('the list of the caller\'s investigations', () => {
 
   it('answers an empty list with no rows and no more', async () => {
     const { list } = await started();
-    expect((await list()).body).toEqual({ items: [], hasMore: false, counts: counts(0, 0) });
+    expect((await list()).body).toEqual({ items: [], nextCursor: null, matching: { value: 0, quality: 'exact', scope: 'investigations-matching' }, counts: counts(0, 0) });
   });
 
   it('answers 500 INTERNAL_ERROR when the investigations cannot be read', async () => {
@@ -216,17 +216,17 @@ describe('the sources a person may read in the list', () => {
     store.investigations.push(...readable, row('secret', 20), row('secret', 21), row('secret', 22));
     const answer = await list('?limit=3');
     expect(idsOf(answer)).toEqual(readable.map((entry) => entry.id).reverse());
-    expect(answer.body.hasMore).toBe(false);
+    expect(answer.body.nextCursor).toBeNull();
   });
 
   it('says there is more only for readable rows beyond the limit, never for refused ones', async () => {
     const { store, list } = await started();
     store.investigations.push(...[1, 2].map((minutes) => row('open', minutes)), row('secret', 0), row('secret', 30));
-    expect((await list('?limit=2')).body.hasMore).toBe(false);
+    expect((await list('?limit=2')).body.nextCursor).toBeNull();
     store.investigations.push(row('open', 3));
     const answer = await list('?limit=2');
     expect(answer.body.items).toHaveLength(2);
-    expect(answer.body.hasMore).toBe(true);
+    expect(answer.body.nextCursor).not.toBeNull();
   });
 
   it('asks the policy once for each configured source among the rows', async () => {

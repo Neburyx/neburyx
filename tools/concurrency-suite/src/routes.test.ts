@@ -33,6 +33,7 @@ const ELSEWHERE: Readonly<Record<string, string>> = {
   'POST /v1/investigations/:id/status': 'reads no source',
   'POST /v1/investigations/:id/views': 'reads no source',
   'POST /v1/investigations/:id/views/:viewId/restore': 'reads no source',
+  'GET /v1/views': 'reads no source',
   'GET /v1/investigations/:id/views': 'reads no source',
   'PUT /v1/investigations/:id/views/:viewId': 'reads no source',
 };

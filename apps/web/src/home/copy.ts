@@ -1,6 +1,7 @@
 export const HOME_COPY = {
   title: 'Investigations',
   description: 'Resume recent work, or start from a search.',
+  viewAll: 'View all',
   recentTitle: 'Recent',
   loading: 'Loading recent investigations…',
   tryAgain: 'Try again',

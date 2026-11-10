@@ -105,11 +105,11 @@ describe('Home: the Investigations card', () => {
     expect(within(cardOf('Investigations')).getByText('Across 4 sources')).toBeTruthy();
   });
 
-  it('is neither a link nor a control, and Home sends no request for it beyond the list', async () => {
+  it('links to the Investigations page and is no control, and Home sends no request for it beyond the list', async () => {
     const parts = knowing([A, B]);
     renderApp('/', parts.client);
     await screen.findByRole('link', { name: 'kind-a A-1' });
-    expect(within(cardOf('Investigations')).queryByRole('link')).toBeNull();
+    expect(within(cardOf('Investigations')).getByRole('link', { name: 'Investigations' }).getAttribute('href')).toBe('/investigations');
     expect(within(cardOf('Investigations')).queryByRole('button')).toBeNull();
     expect(parts.calls).toEqual({ getEntity: [], getInvestigation: [], openInvestigation: [], listInvestigations: [5] });
   });
@@ -171,10 +171,10 @@ describe('Home: the Saved views card', () => {
     expect(within(cardOf('Saved views')).getByText('Last edited 09:42 UTC')).toBeTruthy();
   });
 
-  it('is neither a link nor a control', async () => {
+  it('links to the Saved views tab of the Investigations page and is no control', async () => {
     renderApp('/', knowing([A]).client);
     await screen.findByRole('link', { name: 'kind-a A-1' });
-    expect(within(cardOf('Saved views')).queryByRole('link')).toBeNull();
+    expect(within(cardOf('Saved views')).getByRole('link', { name: 'Saved views' }).getAttribute('href')).toBe('/investigations?tab=views');
     expect(within(cardOf('Saved views')).queryByRole('button')).toBeNull();
   });
 });

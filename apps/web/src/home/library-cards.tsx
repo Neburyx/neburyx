@@ -1,3 +1,4 @@
+import { Link } from 'react-router';
 import { useRecentState } from './recent-context.js';
 import { LIBRARY_COPY } from './copy.js';
 import { utcClock } from './relative-time.js';
@@ -9,7 +10,9 @@ export function LibraryCards() {
   return (
     <div role="group" aria-label={LIBRARY_COPY.label} className="library-cards">
       <div className="library-card">
-        <h3>{LIBRARY_COPY.investigations}</h3>
+        <h3>
+          <Link to="/investigations">{LIBRARY_COPY.investigations}</Link>
+        </h3>
         {counts === undefined ? (
           unanswered
         ) : (
@@ -20,7 +23,9 @@ export function LibraryCards() {
         )}
       </div>
       <div className="library-card">
-        <h3>{LIBRARY_COPY.savedViews}</h3>
+        <h3>
+          <Link to="/investigations?tab=views">{LIBRARY_COPY.savedViews}</Link>
+        </h3>
         {counts === undefined ? (
           unanswered
         ) : (

@@ -109,23 +109,26 @@ describe('the investigations the support server holds', () => {
     expect(await count()).toBe(0);
   });
 
-  it('lists the investigations opened, the most recently created first, five unless asked, with whether more exist, and refuses a query that is not the contract\'s', async () => {
+  it('lists the investigations opened, the most recently edited first, 25 unless asked, with the cursor of the next page, and refuses a query that is not the contract\'s', async () => {
     vi.useFakeTimers({ toFake: ['Date'], now: Date.parse('2026-11-05T12:00:00.000Z') });
     const base = await startWithTypes();
     const list = async (query = '') => investigationListResponseSchema.parse(await (await fetch(`${base}/v1/investigations${query}`)).json());
-    expect(await list()).toEqual({ items: [], hasMore: false, counts: { investigations: { value: 0, quality: 'exact', scope: 'investigations' }, sources: { value: 0, quality: 'exact', scope: 'investigation-sources' }, savedViews: { count: { value: 0, quality: 'exact', scope: 'named-views' }, lastEditedAt: null } } });
+    expect(await list()).toEqual({ items: [], nextCursor: null, matching: { value: 0, quality: 'exact', scope: 'investigations-matching' }, counts: { investigations: { value: 0, quality: 'exact', scope: 'investigations' }, sources: { value: 0, quality: 'exact', scope: 'investigation-sources' }, savedViews: { count: { value: 0, quality: 'exact', scope: 'named-views' }, lastEditedAt: null } } });
     for (const id of ['T-1', 'T-2', 'T-3', 'T-4', 'T-5', 'T-6']) {
       vi.advanceTimersByTime(1000);
       await open(base, request({ entity: { sourceId: 'demo', entityType: 'thing', stableId: id } }));
     }
     const first = await list('?limit=5&sort=lastEdited');
     expect(first.items.map((item) => item.startingEntity?.stableId)).toEqual(['T-6', 'T-5', 'T-4', 'T-3', 'T-2']);
-    expect(first).toMatchObject({ hasMore: true, counts: { investigations: { value: 6 }, sources: { value: 1 } } });
+    expect(first).toMatchObject({ matching: { value: 6 }, counts: { investigations: { value: 6 }, sources: { value: 1 } } });
     expect(first.items[0]).toMatchObject({ sourceAlias: 'demo', save: { state: 'unsaved', savedAt: null }, sourceState: 'available' });
-    expect(await list()).toEqual(first);
-    expect((await list('?limit=25')).hasMore).toBe(false);
+    expect(first.nextCursor).not.toBeNull();
+    expect((await list()).items).toHaveLength(6);
+    expect((await list('?limit=25')).nextCursor).toBeNull();
+    expect((await list(`?limit=5&cursor=${encodeURIComponent(first.nextCursor ?? '')}`)).items.map((item) => item.startingEntity?.stableId)).toEqual(['T-1']);
     expect((await list('?limit=1')).counts.investigations.value).toBe(6);
-    for (const query of ['?limit=0', '?limit=26', '?sort=name', '?other=1', '?limit=5&limit=6']) expect((await fetch(`${base}/v1/investigations${query}`)).status).toBe(400);
+    expect((await fetch(`${base}/v1/investigations?limit=101`)).status).toBe(422);
+    for (const query of ['?limit=0', '?sort=name', '?other=1', '?limit=5&limit=6']) expect((await fetch(`${base}/v1/investigations${query}`)).status).toBe(400);
   });
 
   it('puts the larger id first between investigations created at the same time', async () => {

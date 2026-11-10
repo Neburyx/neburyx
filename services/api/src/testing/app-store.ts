@@ -6,7 +6,7 @@ import type { SourceRow } from '../db/sources-repository.js';
 import type { Identity } from '../identity/identity.js';
 import { readOnlyStatusOf } from '../investigations/read-only.js';
 import { planStatusChange } from '../investigations/status-change.js';
-import { validatedDraft, type CreatedInvestigation, type DraftRow, type DraftWriteResult, type StatusChangeResult, type TitleChangeResult, type InvestigationRow, type ListedInvestigation, type NewDraft, type NewInvestigation, type ReusableQuery, type StoredInvestigation } from '../db/investigations-repository.js';
+import { validatedDraft, type CreatedInvestigation, type DraftRow, type DraftWriteResult, type StatusChangeResult, type TitleChangeResult, type InvestigationRow, type ListedInvestigation, type MatchQuery, type NewDraft, type NewInvestigation, type ReusableQuery, type StoredInvestigation } from '../db/investigations-repository.js';
 import type { ViewListResult, ViewRenameResult, ViewRestoreResult, ViewSaveResult } from '../db/views-repository.js';
 import type { SourceModel } from '../mapping/model.js';
 import { decideSourceState, type StoredCheck } from '../source-state/decide.js';
@@ -243,6 +243,32 @@ export function memoryStoreWith(options: MemoryAppStoreOptions): MemoryAppStore 
         draft: { basedOnViewId: all.some((view) => view.id === draft.basedOnViewId) ? draft.basedOnViewId : null, updatedAt: investigation.lastEditedAt },
       });
     },
+    listOwnedViews: (query) => {
+      const keyOf = (view: MemoryNamedView): string => `${view.createdAt.slice(0, -1)}000Z`;
+      const owned = namedViews
+        .flatMap((view) => {
+          const investigation = investigations.find((row) => row.id === view.investigationId && row.ownerId === query.ownerId && query.sourceIds.includes(row.sourceId));
+          return investigation === undefined ? [] : [{ view, investigation }];
+        })
+        .sort((left, right) => (keyOf(left.view) === keyOf(right.view) ? (left.view.id < right.view.id ? 1 : -1) : keyOf(left.view) < keyOf(right.view) ? 1 : -1));
+      const after = query.after;
+      const rest = after === undefined ? owned : owned.filter(({ view }) => keyOf(view) < after.createdKey || (keyOf(view) === after.createdKey && view.id < after.id));
+      const page = rest.slice(0, query.limit);
+      const last = page.at(-1);
+      return Promise.resolve({
+        items: page.map(({ view, investigation }) => ({
+          id: view.id,
+          name: view.name,
+          createdAt: view.createdAt,
+          createdKey: keyOf(view),
+          version: view.version,
+          savedByName: LOCAL_IDENTITY.principal.displayName,
+          investigation: { id: investigation.id, title: investigation.title, sourceId: investigation.sourceId, sourceAlias: rows.find((source) => source.id === investigation.sourceId)?.alias ?? investigation.sourceId, status: investigation.status, startingEntityType: investigation.startingEntityType, startingStableId: investigation.startingStableId },
+        })),
+        next: rest.length > query.limit && last !== undefined ? { createdKey: keyOf(last.view), id: last.view.id } : undefined,
+        count: owned.length,
+      });
+    },
     renameNamedView: (rename): Promise<ViewRenameResult> => {
       const investigation = investigations.find((row) => row.id === rename.investigationId && row.ownerId === rename.ownerId);
       const view = namedViews.find((candidate) => candidate.id === rename.viewId && candidate.investigationId === rename.investigationId);
@@ -269,19 +295,33 @@ export function memoryStoreWith(options: MemoryAppStoreOptions): MemoryAppStore 
     // The double has no named views: every draft is unsaved. The Postgres suite proves the saved rule.
     readLibrary: (read) => {
       const snapshot = [...investigations];
+      const matching = (query: MatchQuery): InvestigationRow[] => {
+        const fragment = query.text?.toLowerCase();
+        return snapshot.filter(
+          (row) =>
+            row.ownerId === query.ownerId &&
+            row.status === query.status &&
+            query.sourceIds.includes(row.sourceId) &&
+            (query.sourceId === undefined || row.sourceId === query.sourceId) &&
+            (fragment === undefined || row.title.toLowerCase().includes(fragment) || (row.caseRef?.toLowerCase().includes(fragment) ?? false)),
+        );
+      };
       return read({
         listInvestigationSourceIds: (ownerId) => {
           if (options.failList === true) return Promise.reject(new Error('the investigations could not be read'));
-          return Promise.resolve([...new Set(snapshot.filter((row) => row.ownerId === ownerId && row.status === 'open').map((row) => row.sourceId))]);
+          return Promise.resolve([...new Set(snapshot.filter((row) => row.ownerId === ownerId).map((row) => row.sourceId))]);
         },
         listInvestigations: (query) => {
           if (options.failList === true) return Promise.reject(new Error('the investigations could not be read'));
-          const listed: ListedInvestigation[] = snapshot
-            .filter((row) => row.ownerId === query.ownerId && row.status === 'open' && query.sourceIds.includes(row.sourceId))
-            .map((row) => ({ ...row, sourceAlias: rows.find((source) => source.id === row.sourceId)?.alias ?? row.sourceId, save: { state: 'unsaved' as const, savedAt: null } }))
-            .sort((left, right) => (left.lastEditedAt < right.lastEditedAt ? 1 : left.lastEditedAt > right.lastEditedAt ? -1 : left.id < right.id ? 1 : -1));
+          const keyOf = (row: InvestigationRow): string => `${row.lastEditedAt.slice(0, -1)}000Z`;
+          const after = query.after;
+          const listed: ListedInvestigation[] = matching(query)
+            .map((row) => ({ ...row, sourceAlias: rows.find((source) => source.id === row.sourceId)?.alias ?? row.sourceId, save: { state: 'unsaved' as const, savedAt: null }, nodeCount: 0, edgeCount: 0, countsPolicyVersion: 'none', lastEditedKey: keyOf(row) }))
+            .sort((left, right) => (left.lastEditedKey < right.lastEditedKey ? 1 : left.lastEditedKey > right.lastEditedKey ? -1 : left.id < right.id ? 1 : -1))
+            .filter((row) => after === undefined || row.lastEditedKey < after.editedKey || (row.lastEditedKey === after.editedKey && row.id < after.id));
           return Promise.resolve(listed.slice(0, query.limit));
         },
+        countMatching: (query) => Promise.resolve(matching(query).length),
         countInvestigations: (query) => {
           if (options.failCounts === true) return Promise.reject(new Error('the counts could not be read'));
           const counted = snapshot.filter((row) => row.ownerId === query.ownerId && row.status === 'open' && query.sourceIds.includes(row.sourceId));

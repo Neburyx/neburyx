@@ -35,20 +35,11 @@ import { createRequestTracker } from './banner/request-tracker.js';
 import { sourceNameOf } from './shell/current-source.js';
 import { StartPage } from './first-run/start-page.js';
 import { RecentProvider } from './home/recent-context.js';
+import { InvestigationsPage } from './investigations-page/investigations-page.js';
 import { createRecentInvestigations } from './home/recent-store.js';
 import { DeepLinkPage } from './investigations/deep-link-page.js';
 import { ExploreInvestigation } from './investigations/explore-investigation.js';
 import { WorkspaceShell } from './workspace/workspace-shell.js';
-
-const NOT_BUILT = 'This screen is not built yet.';
-
-function NotBuiltYet({ title }: { readonly title: string }) {
-  return (
-    <section>
-      <PageHeading title={title} description={NOT_BUILT} />
-    </section>
-  );
-}
 
 function NotFound() {
   return (
@@ -165,7 +156,7 @@ export function appRoutes(client: ApiClient, state: ClientState, banner?: Banner
           element: <PageShell />,
           children: [
             { index: true, element: <StartPage /> },
-            { path: 'investigations', element: <NotBuiltYet title="Investigations" /> },
+            { path: 'investigations', element: <InvestigationsPage /> },
             { path: 'search', element: <SearchPage client={client} /> },
             { path: 'sources', element: <SourcesPage /> },
             ...developmentRoutes(client),

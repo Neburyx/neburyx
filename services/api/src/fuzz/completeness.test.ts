@@ -20,6 +20,7 @@ export const NOT_IN_THE_CLOSED_SET: Readonly<Record<string, string>> = {
   'POST /v1/investigations/:id/status': 'reads no source: the application database',
   'POST /v1/investigations/:id/views': 'reads no source: the application database',
   'POST /v1/investigations/:id/views/:viewId/restore': 'reads no source: the application database',
+  'GET /v1/views': 'reads no source: the application database',
   'GET /v1/investigations/:id/views': 'reads no source: the application database',
   'PUT /v1/investigations/:id/views/:viewId': 'reads no source: the application database',
 };

@@ -45,26 +45,37 @@ export const investigationSchema = z.strictObject({
 });
 
 /** The most rows `GET /v1/investigations` returns, and how many it returns when `limit` is left out (a list policy of this product; no source sets it). */
-export const MAX_INVESTIGATION_LIST_LIMIT = 25;
-export const DEFAULT_INVESTIGATION_LIST_LIMIT = 5;
+export const MAX_INVESTIGATION_LIST_LIMIT = 100;
+export const DEFAULT_INVESTIGATION_LIST_LIMIT = 25;
+export const MIN_LIST_TEXT_LENGTH = 2;
+export const MAX_LIST_TEXT_LENGTH = 200;
 
 export const INVESTIGATION_LIST_SORTS = ['lastEdited'] as const;
 
+export const listFilterTextSchema = z
+  .string()
+  .refine(holdsNoNulOrLoneSurrogate, { message: 'filter text has no NUL and no unpaired surrogate' })
+  .refine((value) => codePoints(value) >= MIN_LIST_TEXT_LENGTH && codePoints(value) <= MAX_LIST_TEXT_LENGTH, { message: 'filter text is 2 to 200 characters' });
+
+/** `limit` is checked against its bounds by the service, since a limit above the maximum is a budget error and not a malformed request. */
 export const investigationListQuerySchema = z.strictObject({
   limit: z
     .string()
-    .regex(/^[0-9]+$/)
+    .regex(/^[0-9]{1,18}$/)
     .transform(Number)
-    .pipe(z.number().int().min(1).max(MAX_INVESTIGATION_LIST_LIMIT))
     .optional(),
+  cursor: z.string().min(1).max(2048).optional(),
   sort: z.enum(INVESTIGATION_LIST_SORTS).optional(),
+  status: z.enum(INVESTIGATION_STATUSES).optional(),
+  source: text.optional(),
+  q: listFilterTextSchema.optional(),
 });
 
 /** `savedAt` is when the named view the draft equals was made. */
 export const investigationSaveSchema = z.discriminatedUnion('state', [z.strictObject({ state: z.literal('saved'), savedAt: z.iso.datetime() }), z.strictObject({ state: z.literal('unsaved'), savedAt: z.null() })]);
 
 /** `sourceAlias` is kept for a source taken out of the configuration. */
-export const investigationListItemSchema = investigationSchema.extend({ sourceAlias: text, save: investigationSaveSchema });
+export const investigationListItemSchema = investigationSchema.extend({ sourceAlias: text, save: investigationSaveSchema, nodeCount: z.number().int().nonnegative().nullable(), edgeCount: z.number().int().nonnegative().nullable() });
 
 const exactCountOf = <S extends string>(scope: S) => z.strictObject({ value: z.number().int().nonnegative(), quality: z.literal('exact'), scope: z.literal(scope) });
 
@@ -75,7 +86,8 @@ export const investigationListCountsSchema = z.strictObject({
   savedViews: z.strictObject({ count: exactCountOf('named-views'), lastEditedAt: z.iso.datetime().nullable() }),
 });
 
-export const investigationListResponseSchema = z.strictObject({ items: z.array(investigationListItemSchema), hasMore: z.boolean(), counts: investigationListCountsSchema });
+/** `matching` is the exact number of investigations the filters select, taken with the page. */
+export const investigationListResponseSchema = z.strictObject({ items: z.array(investigationListItemSchema), nextCursor: z.string().nullable(), counts: investigationListCountsSchema, matching: exactCountOf('investigations-matching') });
 
 /** `POST /v1/investigations`: open an entity as an investigation. The entity names its own source so a reference to another source is refused, not read. */
 const openRequestBase = { sourceId: text, caseRef: caseRefSchema.optional(), mask: z.boolean().optional() };

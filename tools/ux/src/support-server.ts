@@ -2,7 +2,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { extname, join, normalize, sep } from 'node:path';
-import { DEFAULT_INVESTIGATION_LIST_LIMIT, parseEdgeRefSegment, renameRequestSchema, renameViewRequestSchema, saveViewRequestSchema, statusChangeRequestSchema, investigationListCountsSchema, nodeSchema, investigationListQuerySchema, type Investigation, type LastTest, openInvestigationRequestSchema, SEARCH_GROUP_CAP, searchMoreRequestSchema, searchMoreResultSchema, searchRequestSchema, searchResultSchema, type SourceSummary, sourceSummaryFieldsSchema, sourceSummarySchema, type SourceTestReport, type EdgeReadRef, valueOfPathSegment } from '@neburyx/contracts';
+import { DEFAULT_INVESTIGATION_LIST_LIMIT, DEFAULT_VIEW_PAGE, MAX_INVESTIGATION_LIST_LIMIT, MAX_VIEW_PAGE, viewListQuerySchema, parseEdgeRefSegment, renameRequestSchema, renameViewRequestSchema, saveViewRequestSchema, statusChangeRequestSchema, investigationListCountsSchema, nodeSchema, investigationListQuerySchema, type Investigation, type LastTest, openInvestigationRequestSchema, SEARCH_GROUP_CAP, searchMoreRequestSchema, searchMoreResultSchema, searchRequestSchema, searchResultSchema, type SourceSummary, sourceSummaryFieldsSchema, sourceSummarySchema, type SourceTestReport, type EdgeReadRef, valueOfPathSegment } from '@neburyx/contracts';
 
 interface SupportProfile {
   readonly sourceId: string;
@@ -275,6 +275,12 @@ function draftOf(stored: StoredInvestigation): unknown {
   };
 }
 
+/** What the list shows for the entities and relationships of an investigation: the loaded items of its draft. */
+function countsOf(stored: StoredInvestigation): { nodeCount: number; edgeCount: number } {
+  const layout = (draftOf(stored) as { layout?: { nodes?: unknown[]; edges?: unknown[] } }).layout;
+  return { nodeCount: layout?.nodes?.length ?? 0, edgeCount: layout?.edges?.length ?? 0 };
+}
+
 /** The synthetic stand-in for the entity and investigation endpoints: it holds the investigations opened since it started, and an entity named `missing` does not exist. */
 function createInvestigations(options: SupportServerOptions) {
   const held = new Map<string, StoredInvestigation>();
@@ -437,18 +443,79 @@ function createInvestigations(options: SupportServerOptions) {
       const query = investigationListQuerySchema.safeParse(Object.fromEntries(entries));
       if (!query.success || new Set(entries.map(([name]) => name)).size !== entries.length) return json(response, 400, INVALID);
       const limit = query.data.limit ?? DEFAULT_INVESTIGATION_LIST_LIMIT;
-      const eligible = [...held.values()]
-        .filter((stored) => readable(stored.sourceId))
-        .sort((left, right) => (left.createdAt === right.createdAt ? (left.id < right.id ? 1 : -1) : left.createdAt < right.createdAt ? 1 : -1));
+      if (limit < 1) return json(response, 400, INVALID);
+      if (limit > MAX_INVESTIGATION_LIST_LIMIT) return json(response, 422, { error: { code: 'QUERY_BUDGET_EXCEEDED', details: { maxPage: MAX_INVESTIGATION_LIST_LIMIT } } });
+      const status = query.data.status ?? 'open';
+      const fragment = query.data.q?.toLowerCase();
+      const library = [...held.values()].filter((stored) => readable(stored.sourceId) && stored.status === 'open');
+      const filterKey = JSON.stringify([status, query.data.source ?? null, fragment ?? null]);
+      const matching = [...held.values()]
+        .filter((stored) => readable(stored.sourceId) && stored.status === status && (query.data.source === undefined || stored.sourceId === query.data.source) && (fragment === undefined || stored.title.toLowerCase().includes(fragment) || (stored.caseRef?.toLowerCase().includes(fragment) ?? false)))
+        .sort((left, right) => (left.lastEditedAt === right.lastEditedAt ? (left.id < right.id ? 1 : -1) : left.lastEditedAt < right.lastEditedAt ? 1 : -1));
+      let start = 0;
+      if (query.data.cursor !== undefined) {
+        const [key, offset] = Buffer.from(query.data.cursor, 'base64url').toString('utf8').split('|');
+        if (key !== filterKey || !/^\d+$/.test(offset ?? '')) return json(response, 409, { error: { code: 'CURSOR_INVALIDATED' } });
+        start = Number(offset);
+      }
+      const end = start + limit;
       json(response, 200, {
-        items: eligible.slice(0, limit).map((stored) => ({ ...shown(stored), sourceAlias: stored.sourceId, save: saveOf(stored) })),
-        hasMore: eligible.length > limit,
+        items: matching.slice(start, end).map((stored) => ({ ...shown(stored), sourceAlias: stored.sourceId, save: saveOf(stored), ...countsOf(stored) })),
+        nextCursor: end < matching.length ? Buffer.from(`${filterKey}|${end}`).toString('base64url') : null,
+        matching: { value: matching.length, quality: 'exact', scope: 'investigations-matching' },
         counts: {
-          investigations: { value: eligible.length, quality: 'exact', scope: 'investigations' },
-          sources: { value: new Set(eligible.map((stored) => stored.sourceId)).size, quality: 'exact', scope: 'investigation-sources' },
-          savedViews: { count: { value: namedViews.count, quality: 'exact', scope: 'named-views' }, lastEditedAt: namedViews.lastEditedAt },
+          investigations: { value: library.length, quality: 'exact', scope: 'investigations' },
+          sources: { value: new Set(library.map((stored) => stored.sourceId)).size, quality: 'exact', scope: 'investigation-sources' },
+          savedViews: { count: { value: Math.max(namedViews.count, [...held.values()].filter((stored) => readable(stored.sourceId)).reduce((total, stored) => total + stored.views.length, 0)), quality: 'exact', scope: 'named-views' }, lastEditedAt: namedViews.lastEditedAt },
         },
       });
+    },
+    /** The named views of every investigation held, newest first, a page at a time. */
+    ownedViews(search: URLSearchParams, response: ServerResponse): void {
+      const entries = [...search.entries()];
+      const query = viewListQuerySchema.safeParse(Object.fromEntries(entries));
+      if (!query.success || new Set(entries.map(([name]) => name)).size !== entries.length) return json(response, 400, INVALID);
+      const limit = query.data.limit ?? DEFAULT_VIEW_PAGE;
+      if (limit < 1) return json(response, 400, INVALID);
+      if (limit > MAX_VIEW_PAGE) return json(response, 422, { error: { code: 'QUERY_BUDGET_EXCEEDED', details: { maxPage: MAX_VIEW_PAGE } } });
+      const all = [...held.values()]
+        .filter((stored) => readable(stored.sourceId))
+        .flatMap((stored) => stored.views.map((view) => ({ stored, view })))
+        .sort((left, right) => (left.view.createdAt === right.view.createdAt ? (left.view.id < right.view.id ? 1 : -1) : left.view.createdAt < right.view.createdAt ? 1 : -1));
+      let start = 0;
+      if (query.data.cursor !== undefined) {
+        const offset = Buffer.from(query.data.cursor, 'base64url').toString('utf8');
+        if (!/^\d+$/.test(offset)) return json(response, 409, { error: { code: 'CURSOR_INVALIDATED' } });
+        start = Number(offset);
+      }
+      const end = start + limit;
+      json(response, 200, {
+        items: all.slice(start, end).map(({ stored, view }) => ({ id: view.id, name: view.name, investigation: { id: stored.id, title: stored.title, sourceId: stored.sourceId, sourceAlias: stored.sourceId, status: stored.status }, savedBy: { name: 'Support analyst' }, createdAt: view.createdAt, version: view.version })),
+        nextCursor: end < all.length ? Buffer.from(String(end)).toString('base64url') : null,
+        count: { value: all.length, quality: 'exact', scope: 'named-views' },
+      });
+    },
+    /** Makes `count` open investigations of a source with titles "Case n" and case references "REF-2026-nnnn", edited a minute apart, and gives some of them a named view. */
+    seed(body: unknown, response: ServerResponse): void {
+      const given = typeof body === 'object' && body !== null && !Array.isArray(body) ? Object.fromEntries(Object.entries(body)) : undefined;
+      const count = given?.['count'];
+      const sourceId = given?.['sourceId'];
+      const viewEvery = typeof given?.['viewEvery'] === 'number' ? given['viewEvery'] : 0;
+      if (typeof count !== 'number' || !Number.isInteger(count) || count < 1 || count > 500 || typeof sourceId !== 'string' || !readable(sourceId)) return json(response, 400, INVALID);
+      const [entityType] = [...(typesOf.get(sourceId) ?? [])];
+      if (entityType === undefined) return json(response, 400, INVALID);
+      const base = Date.UTC(2026, 10, 5, 12);
+      for (let index = 1; index <= count; index += 1) {
+        const at = new Date(base - index * 60_000).toISOString();
+        const stableId = `${index}`.padStart(4, '0');
+        const stored: StoredInvestigation = { id: randomUUID(), sourceId, title: `Case ${index}`, status: 'open', version: 1, caseRef: `REF-2026-${stableId}`, entityType, stableId, createdAt: at, lastEditedAt: at, draftVersion: 1, draftNotes: null, basedOnViewId: null, views: [] };
+        if (viewEvery > 0 && index % viewEvery === 0) {
+          const { layout, queryContext } = draftOf(stored) as { layout: unknown; queryContext: unknown };
+          stored.views.push({ id: randomUUID(), name: `Saved state ${index}`, notes: null, layout, queryContext, createdAt: at, version: 1 });
+        }
+        held.set(stored.id, stored);
+      }
+      json(response, 200, {});
     },
     open(body: unknown, response: ServerResponse): void {
       const parsed = openInvestigationRequestSchema.safeParse(body);
@@ -744,6 +811,7 @@ export function createSupportServer(options: SupportServerOptions): Server {
       }
       if (request.method === 'POST' && path === '/v1/search/entities') return search.run(await bodyOf(request), response);
       if (request.method === 'POST' && path === '/v1/search/entities/more') return search.more(await bodyOf(request), response);
+      if (request.method === 'POST' && path === '/__support/seed-investigations') return investigations.seed(await bodyOf(request), response);
       if (request.method === 'POST' && path === '/__support/named-views') return investigations.holdNamedViews(await bodyOf(request), response);
       if (request.method === 'POST' && path === '/__support/forget-investigations') {
         investigations.forgetInvestigations();
@@ -765,6 +833,7 @@ export function createSupportServer(options: SupportServerOptions): Server {
           return entityType === undefined || stableId === undefined ? json(response, 400, INVALID) : investigations.entity(first, entityType, stableId, response);
         }
         if (kind === 'edges' && parts.length === 4 && first !== undefined) return edge(parseEdgeRefSegment(first), response);
+        if (kind === 'views' && parts.length === 3) return investigations.ownedViews(new URL(request.url ?? '/', 'http://localhost').searchParams, response);
         if (kind === 'investigations' && parts.length === 3) return investigations.list(new URL(request.url ?? '/', 'http://localhost').searchParams, response);
         if (kind === 'investigations' && parts.length === 4 && first !== undefined) return investigations.read(first, response);
         if (kind === 'sources' && parts.length === 3) return sources.list(response);

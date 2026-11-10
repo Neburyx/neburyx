@@ -17,6 +17,7 @@ import {
   derivedNeighborsResponseSchema,
   expandResponseSchema,
   investigationListResponseSchema,
+  ownedViewListResponseSchema,
   investigationResponseSchema,
   meResponseSchema,
   nodeSchema,
@@ -39,6 +40,7 @@ import {
   type SaveViewRequest,
   type SaveViewResponse,
   type NamedView,
+  type OwnedViewListResponse,
   type ViewListResponse,
   type RestoreViewResponse,
   type ReadRefsResponse,
@@ -90,6 +92,14 @@ export type ApiFailure = ClientFailure | ServerFailure;
 
 export type ApiResult<T> = { readonly ok: true; readonly value: T } | { readonly ok: false; readonly failure: ApiFailure };
 
+export interface InvestigationPageQuery {
+  readonly status?: Investigation['status'];
+  readonly sourceId?: string;
+  readonly text?: string;
+  readonly cursor?: string;
+  readonly limit?: number;
+}
+
 export interface ApiClient {
   getMe(signal?: AbortSignal): Promise<ApiResult<MeResponse>>;
   getSources(signal?: AbortSignal): Promise<ApiResult<SourcesResponse>>;
@@ -122,6 +132,10 @@ export interface ApiClient {
   readRefs(request: ReadRefsRequest, signal?: AbortSignal): Promise<ApiResult<ReadRefsResponse>>;
   /** The caller's most recently edited open investigations, across every source they may read; Postgres only. */
   listInvestigations(limit: number, signal?: AbortSignal): Promise<ApiResult<InvestigationListResponse>>;
+  /** One page of the caller's investigations of one status, from the first page or from a cursor; `matching` is the exact number the filters select. */
+  listInvestigationPage(query: InvestigationPageQuery, signal?: AbortSignal): Promise<ApiResult<InvestigationListResponse>>;
+  /** One page of the named views of all the caller's investigations, newest first; `count` is the exact number of all of them. */
+  listOwnedViews(page: { readonly cursor?: string; readonly limit?: number }, signal?: AbortSignal): Promise<ApiResult<OwnedViewListResponse>>;
   /** The exact matches of a text in one source, and with `typeahead` the entities that start with it; every hit and the answer name the source that was asked, or the answer is refused. */
   searchEntities(request: SearchRequest, signal?: AbortSignal): Promise<ApiResult<SearchResult>>;
   /** The next page of one group of a search, from that group's cursor; the page names the source and the group that were asked, or it is refused. */
@@ -271,6 +285,20 @@ export function createApiClient(fetcher: Fetcher = (input, init) => fetch(input,
       const answer = result.value;
       const named = answer.results.flatMap((entry) => [...entry.nodes.map((node) => node.ref.sourceId), ...entry.edges.flatMap((edge) => sourcesOfEdge(edge))]);
       return !sameRef(answer.ref, { sourceId: derived.sourceId, ...derived.ref }) || named.some((sourceId) => sourceId !== derived.sourceId) ? failed('SCHEMA_MISMATCH') : result;
+    },
+    listInvestigationPage: (query, signal) => {
+      const parts = [
+        ['limit', query.limit === undefined ? undefined : String(query.limit)],
+        ['cursor', query.cursor],
+        ['status', query.status],
+        ['source', query.sourceId],
+        ['q', query.text],
+      ].flatMap(([name, value]) => (value === undefined ? [] : [`${name}=${encodeURIComponent(value)}`]));
+      return request(fetcher, `/v1/investigations${parts.length === 0 ? '' : `?${parts.join('&')}`}`, investigationListResponseSchema, signal);
+    },
+    listOwnedViews: (page, signal) => {
+      const query = [...(page.limit === undefined ? [] : [`limit=${page.limit}`]), ...(page.cursor === undefined ? [] : [`cursor=${encodeURIComponent(page.cursor)}`])].join('&');
+      return request(fetcher, `/v1/views${query === '' ? '' : `?${query}`}`, ownedViewListResponseSchema, signal);
     },
     listInvestigations: (limit, signal) => request(fetcher, `/v1/investigations?limit=${limit}&sort=lastEdited`, investigationListResponseSchema, signal),
     saveDraft: async (id, version, draft, options) => {

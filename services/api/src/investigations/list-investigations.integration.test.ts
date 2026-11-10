@@ -1,6 +1,7 @@
 import { rmSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { investigationListResponseSchema } from '@neburyx/contracts';
+import pg from 'pg';
+import { investigationListResponseSchema, ownedViewListResponseSchema } from '@neburyx/contracts';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../app.js';
 import { createAppStore, type AppStore } from '../app-store.js';
@@ -100,7 +101,7 @@ describe('the list of investigations against Postgres', () => {
     expect(investigationListResponseSchema.safeParse(answer.body).success).toBe(true);
     expect(answer.body.items.map((item) => item.id)).toEqual([newest, tieHigh, tieLow, older]);
     expect(answer.body.items.map((item) => item.sourceId)).toEqual(['other', 'demo', 'other', 'demo']);
-    expect(answer.body.hasMore).toBe(false);
+    expect(answer.body.nextCursor).toBeNull();
     expect(await list()).toEqual(answer);
     await app.close();
   });
@@ -118,11 +119,11 @@ describe('the list of investigations against Postgres', () => {
   it('cuts the list at the limit and says there is more only when an eligible investigation lies beyond it', async () => {
     const { app, add, list } = await running();
     for (const minute of [1, 2, 3, 4, 5]) await add('demo', at(minute));
-    expect((await list('?limit=5')).body).toMatchObject({ hasMore: false });
+    expect((await list('?limit=5')).body).toMatchObject({ nextCursor: null });
     await add('demo', at(6));
     const answer = await list('?limit=5');
     expect(answer.body.items).toHaveLength(5);
-    expect(answer.body.hasMore).toBe(true);
+    expect(answer.body.nextCursor).not.toBeNull();
     expect((await list('?limit=25')).body.items).toHaveLength(6);
     await app.close();
   });
@@ -170,9 +171,9 @@ describe('the list of investigations against Postgres', () => {
     await add('secret', at(21));
     const answer = await list('?limit=3');
     expect(answer.body.items.map((item) => item.id)).toEqual([...readable].reverse());
-    expect(answer.body.hasMore).toBe(false);
+    expect(answer.body.nextCursor).toBeNull();
     await add('demo', at(4));
-    expect((await list('?limit=3')).body.hasMore).toBe(true);
+    expect((await list('?limit=3')).body.nextCursor).not.toBeNull();
     await app.close();
   });
 });
@@ -229,7 +230,7 @@ describe('the counts of the list against Postgres', () => {
     await app.close();
   });
 
-  it('answers wholly as of the first read when an investigation is created between two of the reads, with the rows, the counts and hasMore agreeing, and counts it at the next call', async () => {
+  it('answers wholly as of the first read when an investigation is created between two of the reads, with the rows, the counts and the next cursor agreeing, and counts it at the next call', async () => {
     const hooks: { afterDiscovery?: () => Promise<unknown> } = {};
     const { app, add, list } = await running(['secret'], hooks);
     await add('demo', at(1));
@@ -244,11 +245,11 @@ describe('the counts of the list against Postgres', () => {
     expect(created).toBe(true);
     expect(during.body.items).toHaveLength(2);
     expect(during.body.counts).toEqual(counts(2, 1));
-    expect(during.body.hasMore).toBe(false);
+    expect(during.body.nextCursor).toBeNull();
     const after = await list('?limit=2');
     expect(after.body.items).toHaveLength(2);
     expect(after.body.counts).toEqual(counts(3, 1));
-    expect(after.body.hasMore).toBe(true);
+    expect(after.body.nextCursor).not.toBeNull();
     await app.close();
   });
 });
@@ -298,15 +299,17 @@ describe('the named view counts of the list against Postgres', () => {
     await app.close();
   });
 
-  it('counts no draft, and no named view of a closed, archived, deleted, other person\'s or refused-source investigation, and lets none of them set the time', async () => {
+  it('counts the named views of closed and archived investigations too, and no draft and no view of a deleted, other person\'s or refused-source investigation, and lets none of those set the time', async () => {
     const { database, app, add, list } = await running(['secret']);
     const [other] = await rows(database.ownerUrl, `INSERT INTO users (id, issuer, subject, display_name) VALUES ($1, 'issuer', 'second', 'Second') RETURNING id`, [uuidv7()]);
     const counted = await add('demo', at(1));
     await nameView(database, counted, '2026-11-05T12:10:00Z');
-    for (const hidden of [await add('demo', at(2), { status: 'closed' }), await add('demo', at(3), { status: 'archived' }), await add('demo', at(4), { deleted: true }), await add('demo', at(5), { owner: String(other?.['id']) }), await add('secret', at(6))]) {
+    await nameView(database, await add('demo', at(2), { status: 'closed' }), '2026-11-05T12:20:00Z');
+    await nameView(database, await add('demo', at(3), { status: 'archived' }), '2026-11-05T12:30:00Z');
+    for (const hidden of [await add('demo', at(4), { deleted: true }), await add('demo', at(5), { owner: String(other?.['id']) }), await add('secret', at(6))]) {
       await nameView(database, hidden, '2026-11-05T13:00:00Z');
     }
-    expect((await list()).body.counts.savedViews).toEqual(views(1, '2026-11-05T12:10:00.000Z'));
+    expect((await list()).body.counts.savedViews).toEqual(views(3, '2026-11-05T12:30:00.000Z'));
     await app.close();
   });
 
@@ -336,6 +339,209 @@ describe('the named view counts of the list against Postgres', () => {
     const after = await list();
     expect(after.body.items[0]?.save.state).toBe('saved');
     expect(after.body.counts.savedViews.count.value).toBe(1);
+    await app.close();
+  });
+});
+
+describe('paging, filters and counts of the list against Postgres', () => {
+  type Running = Awaited<ReturnType<typeof running>>;
+  const rename = (database: Running['database'], id: string, title: string, caseRef: string | null) => rows(database.ownerUrl, `UPDATE investigations SET title = $2, case_ref = $3 WHERE id = $1`, [id, title, caseRef]);
+
+  it('pages 60 investigations 25 at a time and reaches each once, also when one is created or edited between two calls', async () => {
+    const { database, app, add, list } = await running();
+    const made: string[] = [];
+    for (let minute = 0; minute < 60; minute += 1) made.push(await add(minute % 2 === 0 ? 'demo' : 'other', new Date(Date.UTC(2026, 10, 5, 12, 0, minute)).toISOString()));
+    const first = await list();
+    expect(first.body.items).toHaveLength(25);
+    expect(first.body.matching.value).toBe(60);
+    await add('demo', new Date(Date.UTC(2026, 10, 5, 13)).toISOString());
+    await rows(database.ownerUrl, `UPDATE investigations SET last_edited_at = '2026-11-05T13:05:00Z' WHERE id = $1`, [made[3]]);
+    const seen = first.body.items.map((item) => item.id);
+    let cursor = first.body.nextCursor;
+    while (cursor !== null) {
+      const page = await list(`?cursor=${encodeURIComponent(cursor)}`);
+      seen.push(...page.body.items.map((item) => item.id));
+      cursor = page.body.nextCursor;
+    }
+    expect(new Set(seen).size).toBe(seen.length);
+    expect(seen.length).toBeGreaterThanOrEqual(58);
+    expect(seen.slice(0, 25)).toEqual(first.body.items.map((item) => item.id));
+    await app.close();
+  });
+
+  it('follows a page boundary through rows with equal edit times in id order', async () => {
+    const { app, add, list } = await running();
+    const ids: string[] = [];
+    for (let index = 0; index < 7; index += 1) ids.push(await add('demo', at(5), { id: `0192f000-0000-7000-8000-000000000b0${index}` }));
+    const seen: string[] = [];
+    let cursor: string | null = null;
+    do {
+      const page: Awaited<ReturnType<typeof list>> = await list(`?limit=3${cursor === null ? '' : `&cursor=${encodeURIComponent(cursor)}`}`);
+      seen.push(...page.body.items.map((item) => item.id));
+      cursor = page.body.nextCursor;
+    } while (cursor !== null);
+    expect(seen).toEqual([...ids].reverse());
+    await app.close();
+  });
+
+  it('lists closed and archived rows of every readable source, narrows to a source, and answers empty for an unknown or refused one', async () => {
+    const { app, add, list } = await running(['secret']);
+    const open = await add('demo', at(1));
+    const closed = await add('other', at(2), { status: 'closed' });
+    const archived = await add('retired', at(3), { status: 'archived', model: 'retired' });
+    await add('secret', at(4), { status: 'closed' });
+    const ids = async (query: string) => (await list(query)).body.items.map((item) => item.id);
+    expect(await ids('')).toEqual([open]);
+    expect(await ids('?status=closed')).toEqual([closed]);
+    expect(await ids('?status=archived')).toEqual([archived]);
+    expect(await ids('?status=closed&source=other')).toEqual([closed]);
+    expect(await ids('?status=closed&source=secret')).toEqual([]);
+    expect((await list('?source=nowhere')).body.matching.value).toBe(0);
+    await app.close();
+  });
+
+  it('finds a fragment of a title or a case reference whatever the case, and matches %, _ and a backslash as themselves', async () => {
+    const { database, app, add, list } = await running();
+    const percent = await add('demo', at(1));
+    const underscore = await add('demo', at(2));
+    const plain = await add('demo', at(3));
+    const slash = await add('demo', at(4));
+    const reference = await add('demo', at(5));
+    await rename(database, percent, 'Rate 5%x', null);
+    await rename(database, underscore, 'File a_b', null);
+    await rename(database, plain, 'File axb', null);
+    await rename(database, slash, 'Path c\\d', null);
+    await rename(database, reference, 'Other', 'REF-2026-0042');
+    const ids = async (query: string) => (await list(query)).body.items.map((item) => item.id);
+    expect(await ids('?q=5%25')).toEqual([percent]);
+    expect(await ids('?q=a_b')).toEqual([underscore]);
+    expect(await ids('?q=c%5Cd')).toEqual([slash]);
+    expect(await ids('?q=FILE')).toEqual([plain, underscore]);
+    expect(await ids('?q=26-00')).toEqual([reference]);
+    expect(await ids('?q=ref-2026')).toEqual([reference]);
+    expect((await list('?q=file')).body.matching.value).toBe(2);
+    await app.close();
+  });
+
+  it('can use the trigram indexes of the title and the case reference for a fragment of 3 or more characters over 5,000 rows, when the other indexes are not there to be chosen', async () => {
+    const { database, app, ownerId } = await running();
+    await rows(
+      database.ownerUrl,
+      `INSERT INTO investigations (id, source_id, source_identity_hash, owner_id, title, case_ref, status)
+       SELECT gen_random_uuid(), 'demo', 'h', $1, 'Title ' || n, 'REF-' || n, 'open' FROM generate_series(1, 5000) AS n`,
+      [ownerId],
+    );
+    await rows(database.ownerUrl, 'DROP INDEX investigations_owner_edited, investigations_source_edited, investigations_open_case_ref');
+    await rows(database.ownerUrl, 'ANALYZE investigations');
+    const client = new pg.Client({ connectionString: database.ownerUrl });
+    await client.connect();
+    try {
+      await client.query('SET enable_seqscan = off');
+      const plan = await client.query(`EXPLAIN SELECT i.id FROM investigations i WHERE i.owner_id = $1 AND i.status = 'open' AND i.deleted_at IS NULL AND (i.title ILIKE $2 OR i.case_ref ILIKE $2)`.replace('$1', `'${ownerId}'`).replace(/\$2/g, `'%REF-4242%'`));
+      const text = plan.rows.map((row) => String(row['QUERY PLAN'])).join('\n');
+      expect(text).toMatch(/investigations_title_trigram/);
+      expect(text).toMatch(/investigations_case_ref_trigram/);
+    } finally {
+      await client.end();
+    }
+    await app.close();
+  });
+
+  it('carries the counts of the caller\'s draft, and null when they were made under another policy version', async () => {
+    const { database, app, add, list } = await running();
+    const made = await add('demo', at(1));
+    expect((await list()).body.items[0]).toMatchObject({ nodeCount: 1, edgeCount: 0 });
+    await rows(database.ownerUrl, `UPDATE saved_views SET counts_policy_version = 'another' WHERE investigation_id = $1 AND kind = 'draft'`, [made]);
+    expect((await list()).body.items[0]).toMatchObject({ nodeCount: null, edgeCount: null });
+    await app.close();
+  });
+
+  it('counts the rows the filters select exactly, apart from the library counts', async () => {
+    const { database, app, add, list } = await running();
+    for (let minute = 0; minute < 6; minute += 1) {
+      const made = await add('demo', at(minute), minute === 5 ? { status: 'closed' } : {});
+      await rename(database, made, minute < 4 ? `Match ${minute}` : `Other ${minute}`, null);
+    }
+    const filtered = await list('?limit=2&q=match');
+    const plain = await list();
+    expect(filtered.body.matching).toEqual({ value: 4, quality: 'exact', scope: 'investigations-matching' });
+    expect(filtered.body.counts).toEqual(plain.body.counts);
+    expect(plain.body.counts.investigations.value).toBe(5);
+    await app.close();
+  });
+});
+
+describe('the named views across investigations against Postgres', () => {
+  type Running = Awaited<ReturnType<typeof running>>;
+
+  async function addView(database: Running['database'], investigationId: string, name: string, createdAt: string, id = uuidv7()): Promise<string> {
+    await rows(
+      database.ownerUrl,
+      `INSERT INTO saved_views (id, investigation_id, kind, name, layout, query_context, mapping_hash, content_hash, node_count, edge_count, counts_policy_version, created_by, created_at, updated_at)
+       SELECT $1, investigation_id, 'named', $3, layout, query_context, mapping_hash, content_hash, node_count, edge_count, counts_policy_version, created_by, $4, $4 FROM saved_views WHERE investigation_id = $2 AND kind = 'draft'`,
+      [id, investigationId, name, createdAt],
+    );
+    return id;
+  }
+
+  const views = async (app: Running['app'], query = '') => {
+    const response = await app.inject({ method: 'GET', url: `/v1/views${query}` });
+    return { status: response.statusCode, body: response.json() };
+  };
+
+  it('lists the views of every status newest first with their investigation, and the Home card counts the same views', async () => {
+    const { database, app, add, list } = await running(['secret']);
+    const [other] = await rows(database.ownerUrl, `INSERT INTO users (id, issuer, subject, display_name) VALUES ($1, 'issuer', 'second', 'Second') RETURNING id`, [uuidv7()]);
+    const open = await add('demo', at(1));
+    const closed = await add('other', at(2), { status: 'closed' });
+    const archived = await add('retired', at(3), { status: 'archived', model: 'retired' });
+    const oldest = await addView(database, open, 'Oldest', '2026-11-05T13:00:01Z');
+    const middle = await addView(database, closed, 'Middle', '2026-11-05T13:00:02Z');
+    const newest = await addView(database, archived, 'Newest', '2026-11-05T13:00:03Z');
+    await addView(database, await add('demo', at(4), { deleted: true }), 'Deleted', '2026-11-05T13:00:04Z');
+    await addView(database, await add('demo', at(5), { owner: String(other?.['id']) }), 'Not mine', '2026-11-05T13:00:05Z');
+    await addView(database, await add('secret', at(6)), 'Refused', '2026-11-05T13:00:06Z');
+    const answer = ownedViewListResponseSchema.parse((await views(app)).body);
+    expect(answer.items.map((item) => item.id)).toEqual([newest, middle, oldest]);
+    expect(answer.items.map((item) => item.investigation.status)).toEqual(['archived', 'closed', 'open']);
+    expect(answer.items[0]?.investigation).toMatchObject({ sourceId: 'retired', sourceAlias: 'retired' });
+    expect(answer.count).toEqual({ value: 3, quality: 'exact', scope: 'named-views' });
+    expect((await list()).body.counts.savedViews.count.value).toBe(answer.count.value);
+    await app.close();
+  });
+
+  it('pages 30 views 25 at a time and reaches each once, also when a view is added between two calls', async () => {
+    const { database, app, add } = await running();
+    const owner = await add('demo', at(1));
+    for (let second = 0; second < 30; second += 1) await addView(database, owner, `View ${second}`, new Date(Date.UTC(2026, 10, 5, 13, 0, second)).toISOString());
+    const first = ownedViewListResponseSchema.parse((await views(app)).body);
+    expect(first.items).toHaveLength(25);
+    await addView(database, owner, 'Late', '2026-11-05T14:00:00Z');
+    const second = ownedViewListResponseSchema.parse((await views(app, `?cursor=${encodeURIComponent(first.nextCursor ?? '')}`)).body);
+    const ids = [...first.items, ...second.items].map((item) => item.id);
+    expect(second.nextCursor).toBeNull();
+    expect(new Set(ids).size).toBe(30);
+    await app.close();
+  });
+
+  it('has the index of named views, uses it for the first page, and answers the same without it', async () => {
+    const { database, app, add } = await running();
+    const owner = await add('demo', at(1));
+    for (let second = 0; second < 40; second += 1) await addView(database, owner, `View ${second}`, new Date(Date.UTC(2026, 10, 5, 13, 0, second)).toISOString());
+    expect(await rows(database.ownerUrl, `SELECT indexname FROM pg_indexes WHERE indexname = 'saved_views_named_created'`)).toHaveLength(1);
+    const client = new pg.Client({ connectionString: database.ownerUrl });
+    await client.connect();
+    try {
+      await client.query('SET enable_seqscan = off');
+      const plan = await client.query(`EXPLAIN SELECT v.id FROM saved_views v WHERE v.kind = 'named' ORDER BY v.created_at DESC, v.id DESC LIMIT 26`);
+      expect(plan.rows.map((row) => String(row['QUERY PLAN'])).join('\n')).toMatch(/saved_views_named_created/);
+    } finally {
+      await client.end();
+    }
+    const before = ownedViewListResponseSchema.parse((await views(app)).body);
+    await rows(database.ownerUrl, 'DROP INDEX saved_views_named_created');
+    const without = ownedViewListResponseSchema.parse((await views(app)).body);
+    expect({ items: without.items, count: without.count }).toEqual({ items: before.items, count: before.count });
     await app.close();
   });
 });

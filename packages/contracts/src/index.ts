@@ -50,6 +50,9 @@ export { canCarryInPath, MAX_REFERENCE_TEXT_CHARACTERS, MAX_REFERENCE_VALUE_CHAR
 export type { EntityPath, EntityLookupRequest } from './entities.js';
 export {
   DEFAULT_INVESTIGATION_LIST_LIMIT,
+  MAX_LIST_TEXT_LENGTH,
+  MIN_LIST_TEXT_LENGTH,
+  listFilterTextSchema,
   DROPPED_FILTER_REASONS,
   INVESTIGATION_LIST_SORTS,
   INVESTIGATION_SOURCE_STATES,
@@ -89,8 +92,8 @@ export {
   unmappedItemsSchema,
 } from './investigations.js';
 export type { DraftWriteRequest, DraftWriteResponse, Investigation, InvestigationListCounts, InvestigationListItem, InvestigationListResponse, InvestigationResponse, InvestigationSave, InvestigationSourceState, LayoutDocument, OpenInvestigationRequest, ReferenceOpenRequest, ValueOpenRequest, OpenInvestigationResponse, DroppedFilter, DroppedFilterReason, MappingChange, UnmappedItems, QueryContextDocument, RenameRequest, RenameResponse, StatusChangeRequest, StatusChangeResponse, OpenDraft } from './investigations.js';
-export { DEFAULT_VIEW_PAGE, MAX_VIEW_NAME_LENGTH, MAX_VIEW_PAGE, namedViewSchema, renameViewRequestSchema, restoreViewResponseSchema, saveViewRequestSchema, saveViewResponseSchema, viewAuthorSchema, viewListQuerySchema, viewListResponseSchema, viewNameSchema } from './views.js';
-export type { NamedView, RenameViewRequest, RestoreViewResponse, SaveViewRequest, SaveViewResponse, ViewListResponse } from './views.js';
+export { ownedViewListResponseSchema, ownedViewSchema, DEFAULT_VIEW_PAGE, MAX_VIEW_NAME_LENGTH, MAX_VIEW_PAGE, namedViewSchema, renameViewRequestSchema, restoreViewResponseSchema, saveViewRequestSchema, saveViewResponseSchema, viewAuthorSchema, viewListQuerySchema, viewListResponseSchema, viewNameSchema } from './views.js';
+export type { OwnedView, OwnedViewListResponse, NamedView, RenameViewRequest, RestoreViewResponse, SaveViewRequest, SaveViewResponse, ViewListResponse } from './views.js';
 export {
   FACET_SCOPES,
   MAX_SEARCH_TEXT_LENGTH,

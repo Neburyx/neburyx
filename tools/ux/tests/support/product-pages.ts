@@ -79,6 +79,30 @@ export const REACH: Readonly<Record<string, (page: Page) => Promise<void>>> = {
     await page.goto('/');
     await expect(page.getByRole('button', { name: 'Try again' })).toBeVisible();
   },
+  'Investigations with rows': async (page) => {
+    await page.request.post('/__support/forget-investigations');
+    await page.request.post('/__support/seed-investigations', { data: { count: 30, sourceId: 'banking-demo', viewEvery: 10 } });
+    await page.goto('/investigations');
+    await expect(page.getByRole('button', { name: 'Show more' })).toBeVisible();
+  },
+  'Investigations with a row menu open': async (page) => {
+    await page.request.post('/__support/forget-investigations');
+    await page.request.post('/__support/seed-investigations', { data: { count: 3, sourceId: 'banking-demo', viewEvery: 0 } });
+    await page.goto('/investigations');
+    await page.getByRole('button', { name: 'Actions for Case 1', exact: true }).click();
+    await expect(page.getByRole('menu')).toBeVisible();
+  },
+  'Investigations with the Saved views tab': async (page) => {
+    await page.request.post('/__support/forget-investigations');
+    await page.request.post('/__support/seed-investigations', { data: { count: 30, sourceId: 'banking-demo', viewEvery: 10 } });
+    await page.goto('/investigations?tab=views');
+    await expect(page.getByRole('button', { name: /^Open “Saved state/ }).first()).toBeVisible();
+  },
+  'Investigations with the list read failed': async (page) => {
+    await abort(page, (url) => url.pathname === '/v1/investigations');
+    await page.goto('/investigations');
+    await expect(page.getByRole('button', { name: 'Try again' })).toBeVisible();
+  },
   'Home with the source read failed': async (page) => {
     await abort(page, isSources);
     await page.goto('/');

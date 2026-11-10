@@ -522,19 +522,66 @@
     "/v1/investigations": {
       "get": {
         "operationId": "listInvestigations",
-        "summary": "The caller's recent investigations, across every source the caller may read",
-        "description": "Reads Postgres only; no source is read. Lists the caller's own open, undeleted investigations, the most recently edited first and, between equal times, the larger id first. Investigations of a configured source the policy does not let the caller read are left out without a record, and the order, limit and hasMore are those of the investigations that remain; investigations of a source no longer in the configuration are listed with sourceState removed. limit is a whole number from 1 to 25 (5 when left out) and sort is lastEdited, the only order; any other query parameter is refused. sourceAlias is the alias the product stored for the source. save is saved, with the time of the named view, when the caller's draft equals the named view it was last saved as, and unsaved otherwise. hasMore is true when more investigations than limit could be listed. counts holds the number of investigations that could be listed, the number of sources they are on (a source no longer in the configuration included) and the number of named views they hold with the newest time any of them was updated (null when there is none), all exact, whatever the limit; the rows, hasMore and counts are read at one snapshot. There is no cursor and no filter.",
+        "summary": "The caller's investigations, a page at a time, across every source the caller may read",
+        "description": "Reads Postgres only; no source is read. Lists the caller's own undeleted investigations of one status (open when status is left out), the most recently edited first and, between equal times, the larger id first. Investigations of a configured source the policy does not let the caller read are left out without a record; investigations of a source no longer in the configuration are listed with sourceState removed. limit is a whole number from 1 to 100 (25 when left out); a larger one is QUERY_BUDGET_EXCEEDED with the maximum in details.maxPage, and 0 is INVALID_REQUEST. nextCursor is a signed, expiring string that is null on the last page; it is valid for the same caller, status, source and q, and anything else is CURSOR_INVALIDATED. A row edited or added between two calls is never repeated, and may be missing from the later pages. status, source (a source id) and q (2 to 200 characters, a fragment of the title or of the case reference, matched without regard to case) narrow the list; an unknown source or one the caller may not read gives an empty list. sort is lastEdited, the only order; any other query parameter is refused. sourceAlias is the alias the product stored for the source. save is saved, with the time of the named view, when the caller's draft equals the named view it was last saved as, and unsaved otherwise. nodeCount and edgeCount are the loaded-item counts of the caller's draft at its last save, null when they were made under another policy version. matching is the exact number of investigations the filters select. counts describes the library whatever the filters: the open investigations that could be listed, the sources they are on and the named views of the caller's investigations of any status with the newest time any of them was updated (null when there is none), all exact; the rows, matching and counts are read at one snapshot.",
         "parameters": [
           {
             "name": "limit",
             "in": "query",
             "required": false,
-            "description": "A whole number; 5 when left out",
+            "description": "A whole number; 25 when left out",
             "schema": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 25,
-              "default": 5
+              "maximum": 100,
+              "default": 25
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "The nextCursor of the previous page, unchanged",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "open when left out",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "open",
+                "closed",
+                "archived"
+              ],
+              "default": "open"
+            }
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "description": "A source id",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "description": "A fragment of the title or of the case reference",
+            "schema": {
+              "type": "string",
+              "minLength": 2,
+              "maxLength": 200
             }
           },
           {
@@ -562,7 +609,27 @@
             }
           },
           "400": {
-            "description": "A query parameter other than limit and sort was sent, limit is not a whole number from 1 to 25, or sort is not lastEdited",
+            "description": "A query parameter is not one of those above, a value is not valid, or limit is 0 (INVALID_REQUEST)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "CURSOR_INVALIDATED: start the list again",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "QUERY_BUDGET_EXCEEDED: the limit is above the maximum page",
             "content": {
               "application/json": {
                 "schema": {
@@ -1050,6 +1117,85 @@
           },
           "500": {
             "description": "The draft could not be written",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/views": {
+      "get": {
+        "operationId": "listOwnedViews",
+        "summary": "The named views of every investigation of the caller, newest first",
+        "description": "Reads Postgres only; no source is read. Lists the named views of the caller's undeleted investigations of any status, on every source the caller may read, each with the investigation it belongs to and without its layout, query context or notes. Paged by keyset on the time the view was made and its id, 25 rows by default and at most 100; a limit above that is QUERY_BUDGET_EXCEEDED with details.maxPage, a limit below 1 is INVALID_REQUEST, and a cursor that was not made for this caller is CURSOR_INVALIDATED. count is the exact number of views the list holds, read with the page.",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of named views",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnedViewListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A limit that is not a whole number of at least 1, or an unknown query parameter",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "CURSOR_INVALIDATED: start the list again",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "QUERY_BUDGET_EXCEEDED: the limit is above the maximum page",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The views could not be read",
             "content": {
               "application/json": {
                 "schema": {
@@ -8654,6 +8800,30 @@
                       "additionalProperties": false
                     }
                   ]
+                },
+                "nodeCount": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "edgeCount": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 }
               },
               "required": [
@@ -8668,13 +8838,18 @@
                 "lastEditedAt",
                 "version",
                 "sourceAlias",
-                "save"
+                "save",
+                "nodeCount",
+                "edgeCount"
               ],
               "additionalProperties": false
             }
           },
-          "hasMore": {
-            "type": "boolean"
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "counts": {
             "type": "object",
@@ -8780,12 +8955,37 @@
               "savedViews"
             ],
             "additionalProperties": false
+          },
+          "matching": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "quality": {
+                "type": "string",
+                "const": "exact"
+              },
+              "scope": {
+                "type": "string",
+                "const": "investigations-matching"
+              }
+            },
+            "required": [
+              "value",
+              "quality",
+              "scope"
+            ],
+            "additionalProperties": false
           }
         },
         "required": [
           "items",
-          "hasMore",
-          "counts"
+          "nextCursor",
+          "counts",
+          "matching"
         ],
         "additionalProperties": false
       },
@@ -16868,6 +17068,135 @@
         },
         "required": [
           "investigation"
+        ],
+        "additionalProperties": false
+      },
+      "OwnedViewListResponse": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 120
+                },
+                "investigation": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "title": {
+                      "type": "string",
+                      "maxLength": 200
+                    },
+                    "sourceId": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "sourceAlias": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "open",
+                        "closed",
+                        "archived"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "title",
+                    "sourceId",
+                    "sourceAlias",
+                    "status"
+                  ],
+                  "additionalProperties": false
+                },
+                "savedBy": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "name"
+                  ],
+                  "additionalProperties": false
+                },
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                },
+                "version": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "investigation",
+                "savedBy",
+                "createdAt",
+                "version"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "count": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "quality": {
+                "type": "string",
+                "const": "exact"
+              },
+              "scope": {
+                "type": "string",
+                "const": "named-views"
+              }
+            },
+            "required": [
+              "value",
+              "quality",
+              "scope"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor",
+          "count"
         ],
         "additionalProperties": false
       },

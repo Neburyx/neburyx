@@ -42,7 +42,7 @@ describe('the sidebar', () => {
     const server: ApiClient = fakeClient({ getMe: async () => ({ ok: false, failure: { code: 'SOURCE_UNAVAILABLE', message: 'The data source is not available. Try again shortly.', retryable: true, traceId: 'trace-9' } }) });
     const view = renderApp('/', server);
     expect((await within(identity()).findByRole('alert')).textContent).toBe('The source did not answer. Try again shortly. · trace trace-9');
-    expect(screen.getAllByRole('link')).toHaveLength(3);
+    expect(screen.getAllByRole('link').map((link) => link.textContent)).toEqual(['Home', 'Investigations', 'Sources', 'Investigations', 'Saved views']);
     view.unmount();
     renderApp('/', fakeClient());
     expect((await within(identity()).findByRole('alert')).textContent).toBe('NETWORK_UNAVAILABLE');

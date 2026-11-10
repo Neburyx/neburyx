@@ -22,10 +22,10 @@ describe('routes and navigation', () => {
     expect(screen.getByRole('link', { name: 'Home' }).getAttribute('aria-current')).toBeNull();
   });
 
-  it('shows its own page at /investigations, saying that it is not built yet', () => {
+  it('shows its own page at /investigations, with the Investigations, Saved views and Evidence packs tabs', () => {
     renderAt('/investigations');
     expect(screen.getByRole('heading', { name: 'Investigations', level: 1 })).toBeTruthy();
-    expect(screen.getByText('This screen is not built yet.')).toBeTruthy();
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Investigations', 'Saved views', 'Evidence packsEvidence packs, Enterprise only']);
   });
 
   it('shows Home at /, with its own heading and the Recent card', async () => {

@@ -28,6 +28,8 @@ function recording(client: ApiClient) {
     openInvestigation: (request, signal) => (calls.push('openInvestigation'), client.openInvestigation(request, signal)),
     getInvestigation: (id, signal) => (calls.push('getInvestigation'), client.getInvestigation(id, signal)),
     listInvestigations: (limit, signal) => (calls.push('listInvestigations'), client.listInvestigations(limit, signal)),
+    listInvestigationPage: (query, signal) => (calls.push('listInvestigationPage'), client.listInvestigationPage(query, signal)),
+    listOwnedViews: (page, signal) => (calls.push('listOwnedViews'), client.listOwnedViews(page, signal)),
     saveDraft: (id, version, draft, options) => (calls.push('saveDraft'), client.saveDraft(id, version, draft, options)),
     changeInvestigationStatus: (id, status, version, signal) => (calls.push('changeInvestigationStatus'), client.changeInvestigationStatus(id, status, version, signal)),
     renameInvestigation: (id, title, version, signal) => (calls.push('renameInvestigation'), client.renameInvestigation(id, title, version, signal)),

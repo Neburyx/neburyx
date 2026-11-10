@@ -1,5 +1,8 @@
-import { DEFAULT_INVESTIGATION_LIST_LIMIT, MAX_DRAFT_DOCUMENT_BYTES, investigationResponseSchema, layoutDocumentSchema, MAX_TITLE_LENGTH, queryContextDocumentSchema, type GraphNode, type Investigation, type InvestigationListResponse, type DraftWriteRequest, type DraftWriteResponse, type InvestigationResponse, type InvestigationSourceState, type MappingChange, type ReferenceOpenRequest, type OpenDraft, type OpenInvestigationResponse, type RenameResponse, type StatusChangeResponse, type Investigation as InvestigationShown } from '@neburyx/contracts';
+import { DEFAULT_INVESTIGATION_LIST_LIMIT, MAX_DRAFT_DOCUMENT_BYTES, MAX_INVESTIGATION_LIST_LIMIT, investigationResponseSchema, layoutDocumentSchema, MAX_TITLE_LENGTH, queryContextDocumentSchema, type GraphNode, type Investigation, type InvestigationListResponse, type DraftWriteRequest, type DraftWriteResponse, type InvestigationResponse, type InvestigationSourceState, type MappingChange, type ReferenceOpenRequest, type OpenDraft, type OpenInvestigationResponse, type RenameResponse, type StatusChangeResponse, type Investigation as InvestigationShown } from '@neburyx/contracts';
+import { createHash } from 'node:crypto';
+import { z } from 'zod';
 import { AppError } from '../errors.js';
+import type { CursorBinding, CursorCodec } from '../gate/cursor/codec.js';
 import type { InvestigationRow, InvestigationStore, ListedInvestigation } from '../db/investigations-repository.js';
 import type { EntityReader } from '../entities/entity-reader.js';
 import { uuidv7 } from '../identity/uuid.js';
@@ -33,7 +36,8 @@ export interface OpenAnswer {
 export interface InvestigationService {
   open(call: OpenCall): Promise<OpenAnswer>;
   read(call: { readonly id: string; readonly principal: Principal }): Promise<InvestigationResponse>;
-  list(call: { readonly principal: Principal; readonly limit?: number }): Promise<InvestigationListResponse>;
+  /** A page of the caller's investigations of one status, newest edit first. A `limit` of 0 is `INVALID_REQUEST`; above the maximum it is `QUERY_BUDGET_EXCEEDED`; a cursor that was not made for this caller and these filters is `CURSOR_INVALIDATED`. */
+  list(call: InvestigationListCall): Promise<InvestigationListResponse>;
   /** Replaces the caller's draft when `expectedVersion` is the draft's version; `CONFLICTED_VIEW_VERSION` when it is not. */
   saveDraft(call: { readonly id: string; readonly principal: Principal; readonly expectedVersion: number; readonly draft: DraftWriteRequest }): Promise<DraftWriteResponse>;
   /** Stores the title as typed when `expectedVersion` is the investigation's version; a closed or archived investigation is refused first. */
@@ -42,7 +46,21 @@ export interface InvestigationService {
   changeStatus(call: { readonly traceId: string; readonly id: string; readonly principal: Principal; readonly expectedVersion: number; readonly status: InvestigationShown['status'] }): Promise<StatusChangeResponse>;
 }
 
+export interface InvestigationListCall {
+  readonly principal: Principal;
+  readonly limit?: number | undefined;
+  readonly cursor?: string | undefined;
+  readonly status?: InvestigationShown['status'] | undefined;
+  readonly sourceId?: string | undefined;
+  readonly text?: string | undefined;
+}
+
+const LIST_TARGET = 'GET /v1/investigations';
+const LIST_SORT = 'last-edited-desc';
+const listPositionSchema = z.strictObject({ editedKey: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/), id: z.string().regex(UUID) });
+
 export interface InvestigationServiceDeps {
+  readonly cursors: CursorCodec;
   readonly store: InvestigationStore;
   readonly entities: EntityReader;
   readonly mapping: MappingModel;
@@ -160,16 +178,29 @@ export function createInvestigationService(deps: InvestigationServiceDeps): Inve
       const title = isKeyed(type) && investigation.title === (type.display.name ?? type.label) ? defaultTitle(type.display.name ?? type.label, await titleSubjectOf(call, type, entity), MAX_TITLE_LENGTH) : investigation.title;
       return { created: false, body: answerOf({ ...investigation, title }, false, entity, await draftOf(existing, call.principal.id)) };
     },
-    async list({ principal, limit = DEFAULT_INVESTIGATION_LIST_LIMIT }) {
+    async list({ principal, limit = DEFAULT_INVESTIGATION_LIST_LIMIT, cursor, status = 'open', sourceId, text }) {
+      if (limit < 1) throw new AppError('INVALID_REQUEST');
+      if (limit > MAX_INVESTIGATION_LIST_LIMIT) throw new AppError('QUERY_BUDGET_EXCEEDED', { maxPage: MAX_INVESTIGATION_LIST_LIMIT });
+      const binding: CursorBinding = { source: null, principal: principal.id, policyVersion: COMMUNITY_POLICY_VERSION, filterHash: createHash('sha256').update(JSON.stringify([status, sourceId ?? null, text ?? null])).digest('hex'), sort: LIST_SORT, target: LIST_TARGET, targetVersion: '1' };
+      const position = cursor === undefined ? undefined : listPositionSchema.safeParse(deps.cursors.verify(cursor, binding));
+      if (position !== undefined && !position.success) throw new AppError('CURSOR_INVALIDATED');
       return deps.store.readLibrary(async (reader) => {
         const sourceIds = await deps.access.readable({ principal, sourceIds: await reader.listInvestigationSourceIds(principal.id) });
-        const found = await reader.listInvestigations({ ownerId: principal.id, sourceIds, limit: limit + 1 });
+        const filters = { ownerId: principal.id, sourceIds, status, sourceId, text };
+        const found = await reader.listInvestigations({ ...filters, limit: limit + 1, after: position?.data });
+        const matching = await reader.countMatching(filters);
         const counts = await reader.countInvestigations({ ownerId: principal.id, sourceIds });
         const views = await reader.countNamedViews({ ownerId: principal.id, sourceIds });
-        const items = found.slice(0, limit).map((row: ListedInvestigation) => ({ ...shown(deps.mapping, deps.references, row), sourceAlias: row.sourceAlias, save: row.save }));
+        const page = found.slice(0, limit);
+        const last = page.at(-1);
+        const items = page.map((row: ListedInvestigation) => {
+          const countsShown = row.countsPolicyVersion === COMMUNITY_POLICY_VERSION;
+          return { ...shown(deps.mapping, deps.references, row), sourceAlias: row.sourceAlias, save: row.save, nodeCount: countsShown ? row.nodeCount : null, edgeCount: countsShown ? row.edgeCount : null };
+        });
         return {
           items,
-          hasMore: found.length > limit,
+          nextCursor: found.length > limit && last !== undefined ? deps.cursors.mint(binding, { editedKey: last.lastEditedKey, id: last.id }) : null,
+          matching: { value: matching, quality: 'exact' as const, scope: 'investigations-matching' as const },
           counts: {
             investigations: { value: counts.investigations, quality: 'exact' as const, scope: 'investigations' as const },
             sources: { value: counts.sources, quality: 'exact' as const, scope: 'investigation-sources' as const },

@@ -67,43 +67,48 @@ describe('the request to open an investigation', () => {
   });
 });
 
-const listed = { ...investigation, sourceAlias: 'Demo source', save: { state: 'unsaved', savedAt: null } };
+const listed = { ...investigation, sourceAlias: 'Demo source', save: { state: 'unsaved', savedAt: null }, nodeCount: 10, edgeCount: 13 };
+const matchingOf = (value: number) => ({ value, quality: 'exact', scope: 'investigations-matching' });
 const countsOf = (investigations: number, sources: number) => ({ investigations: { value: investigations, quality: 'exact', scope: 'investigations' }, sources: { value: sources, quality: 'exact', scope: 'investigation-sources' }, savedViews: { count: { value: 0, quality: 'exact', scope: 'named-views' }, lastEditedAt: null } });
 
 describe('the list of investigations', () => {
   it.each([
-    ['an unsaved row', { items: [listed], hasMore: false, counts: countsOf(1, 1) }],
-    ['a saved row with the time of its view', { items: [{ ...listed, save: { state: 'saved', savedAt: '2026-11-05T10:05:00.000Z' } }], hasMore: true, counts: countsOf(7, 3) }],
-    ['no rows', { items: [], hasMore: false, counts: countsOf(0, 0) }],
-    ['named views with the time of the newest', { items: [], hasMore: false, counts: { ...countsOf(0, 0), savedViews: { count: { value: 3, quality: 'exact', scope: 'named-views' }, lastEditedAt: '2026-11-05T12:30:00.000Z' } } }],
-    ['a row of a source taken out of the configuration', { items: [{ ...listed, sourceState: 'removed' }], hasMore: false, counts: countsOf(1, 1) }],
+    ['an unsaved row', { items: [listed], nextCursor: null, matching: matchingOf(1), counts: countsOf(1, 1) }],
+    ['a row whose counts were made under another policy version', { items: [{ ...listed, nodeCount: null, edgeCount: null }], nextCursor: null, matching: matchingOf(1), counts: countsOf(1, 1) }],
+    ['a saved row with the time of its view', { items: [{ ...listed, save: { state: 'saved', savedAt: '2026-11-05T10:05:00.000Z' } }], nextCursor: 'next', matching: matchingOf(8), counts: countsOf(7, 3) }],
+    ['no rows', { items: [], nextCursor: null, matching: matchingOf(0), counts: countsOf(0, 0) }],
+    ['named views with the time of the newest', { items: [], nextCursor: null, matching: matchingOf(0), counts: { ...countsOf(0, 0), savedViews: { count: { value: 3, quality: 'exact', scope: 'named-views' }, lastEditedAt: '2026-11-05T12:30:00.000Z' } } }],
+    ['a row of a source taken out of the configuration', { items: [{ ...listed, sourceState: 'removed' }], nextCursor: null, matching: matchingOf(0), counts: countsOf(1, 1) }],
   ])('accepts %s', (_name, answer) => {
     expect(investigationListResponseSchema.safeParse(answer).success).toBe(true);
   });
 
   it.each([
-    ['a row without its source alias', { items: [{ ...investigation, save: listed.save }], hasMore: false, counts: countsOf(1, 1) }],
-    ['a saved row with no time', { items: [{ ...listed, save: { state: 'saved', savedAt: null } }], hasMore: false, counts: countsOf(1, 1) }],
-    ['an unsaved row with a time', { items: [{ ...listed, save: { state: 'unsaved', savedAt: '2026-11-05T10:05:00.000Z' } }], hasMore: false, counts: countsOf(1, 1) }],
-    ['an answer without hasMore', { items: [], counts: countsOf(0, 0) }],
-    ['a cursor', { items: [], hasMore: false, counts: countsOf(0, 0), nextCursor: null }],
-    ['an answer without counts', { items: [], hasMore: false }],
-    ['counts without the sources', { items: [], hasMore: false, counts: { investigations: countsOf(0, 0).investigations, savedViews: countsOf(0, 0).savedViews } }],
-    ['counts without the saved views', { items: [], hasMore: false, counts: { investigations: countsOf(0, 0).investigations, sources: countsOf(0, 0).sources } }],
-    ['saved views with a time that is not a time', { items: [], hasMore: false, counts: { ...countsOf(0, 0), savedViews: { ...countsOf(0, 0).savedViews, lastEditedAt: 'yesterday' } } }],
-    ['saved views whose count is not exact', { items: [], hasMore: false, counts: { ...countsOf(0, 0), savedViews: { count: { value: 2, quality: 'estimated', scope: 'named-views' }, lastEditedAt: null } } }],
-    ['a count that is not exact', { items: [], hasMore: false, counts: { ...countsOf(0, 0), investigations: { value: 3, quality: 'lowerBound', scope: 'investigations' } } }],
-    ['a count with another scope', { items: [], hasMore: false, counts: { ...countsOf(0, 0), sources: { value: 0, quality: 'exact', scope: 'investigations' } } }],
-    ['a count with no value', { items: [], hasMore: false, counts: { ...countsOf(0, 0), sources: { quality: 'unknown', scope: 'investigation-sources' } } }],
-    ['a negative count', { items: [], hasMore: false, counts: { ...countsOf(0, 0), investigations: { value: -1, quality: 'exact', scope: 'investigations' } } }],
-    ['an extra count', { items: [], hasMore: false, counts: { ...countsOf(0, 0), patterns: { value: 0, quality: 'exact', scope: 'patterns' } } }],
+    ['a row without its source alias', { items: [{ ...investigation, save: listed.save }], nextCursor: null, matching: matchingOf(0), counts: countsOf(1, 1) }],
+    ['a saved row with no time', { items: [{ ...listed, save: { state: 'saved', savedAt: null } }], nextCursor: null, matching: matchingOf(0), counts: countsOf(1, 1) }],
+    ['an unsaved row with a time', { items: [{ ...listed, save: { state: 'unsaved', savedAt: '2026-11-05T10:05:00.000Z' } }], nextCursor: null, matching: matchingOf(0), counts: countsOf(1, 1) }],
+    ['an answer without nextCursor', { items: [], matching: matchingOf(0), counts: countsOf(0, 0) }],
+    ['an answer that still says hasMore', { items: [], hasMore: false, nextCursor: null, matching: matchingOf(0), counts: countsOf(0, 0) }],
+    ['an answer without the matching count', { items: [], nextCursor: null, counts: countsOf(0, 0) }],
+    ['a matching count that is not exact', { items: [], nextCursor: null, matching: { value: 1, quality: 'lowerBound', scope: 'investigations-matching' }, counts: countsOf(0, 0) }],
+    ['a row without its counts', { items: [{ investigation, sourceAlias: 'Demo source', save: listed.save }], nextCursor: null, matching: matchingOf(1), counts: countsOf(1, 1) }],
+    ['an answer without counts', { items: [], nextCursor: null, matching: matchingOf(0) }],
+    ['counts without the sources', { items: [], nextCursor: null, matching: matchingOf(0), counts: { investigations: countsOf(0, 0).investigations, savedViews: countsOf(0, 0).savedViews } }],
+    ['counts without the saved views', { items: [], nextCursor: null, matching: matchingOf(0), counts: { investigations: countsOf(0, 0).investigations, sources: countsOf(0, 0).sources } }],
+    ['saved views with a time that is not a time', { items: [], nextCursor: null, matching: matchingOf(0), counts: { ...countsOf(0, 0), savedViews: { ...countsOf(0, 0).savedViews, lastEditedAt: 'yesterday' } } }],
+    ['saved views whose count is not exact', { items: [], nextCursor: null, matching: matchingOf(0), counts: { ...countsOf(0, 0), savedViews: { count: { value: 2, quality: 'estimated', scope: 'named-views' }, lastEditedAt: null } } }],
+    ['a count that is not exact', { items: [], nextCursor: null, matching: matchingOf(0), counts: { ...countsOf(0, 0), investigations: { value: 3, quality: 'lowerBound', scope: 'investigations' } } }],
+    ['a count with another scope', { items: [], nextCursor: null, matching: matchingOf(0), counts: { ...countsOf(0, 0), sources: { value: 0, quality: 'exact', scope: 'investigations' } } }],
+    ['a count with no value', { items: [], nextCursor: null, matching: matchingOf(0), counts: { ...countsOf(0, 0), sources: { quality: 'unknown', scope: 'investigation-sources' } } }],
+    ['a negative count', { items: [], nextCursor: null, matching: matchingOf(0), counts: { ...countsOf(0, 0), investigations: { value: -1, quality: 'exact', scope: 'investigations' } } }],
+    ['an extra count', { items: [], nextCursor: null, matching: matchingOf(0), counts: { ...countsOf(0, 0), patterns: { value: 0, quality: 'exact', scope: 'patterns' } } }],
   ])('refuses %s', (_name, answer) => {
     expect(investigationListResponseSchema.safeParse(answer).success).toBe(false);
   });
 });
 
 describe('the query of the list of investigations', () => {
-  it.each([[{}], [{ limit: '5' }], [{ limit: '25', sort: 'lastEdited' }], [{ sort: 'lastEdited' }], [{ limit: '1' }]])('accepts %j', (query) => {
+  it.each([[{}], [{ limit: '5' }], [{ limit: '100', sort: 'lastEdited' }], [{ sort: 'lastEdited' }], [{ limit: '1' }], [{ limit: '0' }], [{ limit: '101' }], [{ cursor: 'abc' }], [{ status: 'closed', source: 'north', q: 'ab' }]])('accepts %j', (query) => {
     expect(investigationListQuerySchema.safeParse(query).success).toBe(true);
   });
 
@@ -111,8 +116,13 @@ describe('the query of the list of investigations', () => {
     expect(investigationListQuerySchema.parse({ limit: '7' })).toEqual({ limit: 7 });
   });
 
-  it.each([[{ limit: '0' }], [{ limit: '26' }], [{ limit: '1.5' }], [{ limit: 'x' }], [{ limit: '' }], [{ limit: '-1' }], [{ sort: 'name' }], [{ sort: '' }], [{ other: '1' }], [{ limit: ['5', '6'] }]])('refuses %j', (query) => {
+  it.each([[{ limit: '1.5' }], [{ limit: 'x' }], [{ limit: '' }], [{ limit: '-1' }], [{ sort: 'name' }], [{ sort: '' }], [{ other: '1' }], [{ limit: ['5', '6'] }], [{ cursor: '' }], [{ status: 'deleted' }], [{ status: '' }], [{ source: '' }], [{ q: 'a' }], [{ q: 'x'.repeat(201) }], [{ q: 'a\u0000b' }], [{ q: 'ab\ud800' }]])('refuses %j', (query) => {
     expect(investigationListQuerySchema.safeParse(query).success).toBe(false);
+  });
+
+  it('counts the length of the text in characters, not code units', () => {
+    expect(investigationListQuerySchema.safeParse({ q: '\u{1F600}' }).success).toBe(false);
+    expect(investigationListQuerySchema.safeParse({ q: '\u{1F600}\u{1F600}' }).success).toBe(true);
   });
 });
 
