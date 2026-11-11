@@ -10,7 +10,8 @@ import { useCoverageStoreWhenProvided } from './coverage-context.js';
 import { usePreviewAnswers } from './preview-context.js';
 import { showHiddenAndFocusCanvas } from '../canvas/hide-commands.js';
 import { leaveFocusAndFocusCanvas } from '../canvas/focus-commands.js';
-import { filteredOnlyCount, hiddenByFiltersLine, hiddenFromViewLine, outsideFocusLine, formatNumber, loadedLine, notDrawnLine, remainderLine, shownCount, UNKNOWN_REMAINDER } from './scope-text.js';
+import { isSourceChanged } from '../state/investigation-state.js';
+import { filteredOnlyCount, hiddenByFiltersLine, hiddenFromViewLine, outsideFocusLine, formatNumber, loadedLine, notDrawnLine, remainderLine, savedLayoutLine, savedLayoutShownLine, shownCount, UNKNOWN_REMAINDER } from './scope-text.js';
 
 const NOTHING_ASKED: ReadableStore<RequestState<Count>> = readable(createStore<RequestState<Count>>({ phase: 'idle' }));
 
@@ -28,7 +29,7 @@ function useNotRetrieved(): Count {
 
 const NO_KEYS: ReadonlySet<string> = new Set();
 
-export function GraphScopeLines({ graph, hidden, filtered, outside = NO_KEYS, onLeaveFocus, notRetrieved, onShowHidden }: { readonly graph: LoadedGraph; readonly hidden: ReadonlySet<string>; readonly filtered: ReadonlySet<string>; readonly outside?: ReadonlySet<string>; readonly onLeaveFocus?: () => void; readonly notRetrieved: Count; readonly onShowHidden?: () => void }) {
+export function GraphScopeLines({ graph, hidden, filtered, outside = NO_KEYS, onLeaveFocus, notRetrieved, onShowHidden, savedLayout = false }: { readonly savedLayout?: boolean; readonly graph: LoadedGraph; readonly hidden: ReadonlySet<string>; readonly filtered: ReadonlySet<string>; readonly outside?: ReadonlySet<string>; readonly onLeaveFocus?: () => void; readonly notRetrieved: Count; readonly onShowHidden?: () => void }) {
   const loaded = graph.nodes.map((node) => elementKey(node.ref));
   const hiddenCount = loaded.filter((key) => hidden.has(key)).length;
   const show =
@@ -38,7 +39,7 @@ export function GraphScopeLines({ graph, hidden, filtered, outside = NO_KEYS, on
       </button>
     );
   const parts: ReactNode[] = [
-    loadedLine(graph),
+    savedLayout ? savedLayoutLine(graph) : loadedLine(graph),
     hiddenFromViewLine(hiddenCount) === undefined ? undefined : (
       <Fragment key="hidden">
         {hiddenFromViewLine(hiddenCount)}
@@ -61,7 +62,7 @@ export function GraphScopeLines({ graph, hidden, filtered, outside = NO_KEYS, on
       <p>
         {parts.flatMap((part, at) => (at === 0 ? [part] : [' · ', part]))}
       </p>
-      <p>{remainderLine(shownCount(loaded, hidden, filtered, outside), notRetrieved)}</p>
+      <p>{savedLayout ? savedLayoutShownLine(shownCount(loaded, hidden, filtered, outside)) : remainderLine(shownCount(loaded, hidden, filtered, outside), notRetrieved)}</p>
     </div>
   );
 }
@@ -72,8 +73,9 @@ export function GraphScope() {
   const neighborhoodFocus = useStoreSelector(state.presentation.view, (current) => current.neighborhoodFocus);
   const typeFilter = useStoreSelector(state.presentation.view, (current) => current.typeFilter);
   const graph = useLoadedGraph();
+  const savedLayout = useStoreSelector(state.investigation, (held) => isSourceChanged(held.record?.sourceState));
   const focusing = neighborhoodFocus !== undefined && neighborhoodOf(graph, neighborhoodFocus).size > 0;
   const outside = useMemo(() => outsideFocusKeys(graph, neighborhoodFocus, hidden), [graph, neighborhoodFocus, hidden]);
   const filtered = useMemo(() => filteredKeys(graph, typeFilter), [graph, typeFilter]);
-  return <GraphScopeLines graph={graph} hidden={hidden} filtered={filtered} outside={outside} notRetrieved={useNotRetrieved()} onShowHidden={() => showHiddenAndFocusCanvas(state)} onLeaveFocus={focusing ? () => leaveFocusAndFocusCanvas(state) : undefined} />;
+  return <GraphScopeLines savedLayout={savedLayout} graph={graph} hidden={hidden} filtered={filtered} outside={outside} notRetrieved={useNotRetrieved()} onShowHidden={() => showHiddenAndFocusCanvas(state)} onLeaveFocus={focusing ? () => leaveFocusAndFocusCanvas(state) : undefined} />;
 }

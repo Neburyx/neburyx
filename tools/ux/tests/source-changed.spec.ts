@@ -34,6 +34,11 @@ test.describe('an investigation whose source was re-pointed', () => {
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('account AC-1');
     await expect(page.locator('[data-drawn-entities]')).toHaveAttribute('data-drawn-entities', '1');
     await expect(banner(page).getByRole('button')).toHaveCount(0);
+    await expect(page.getByRole('group', { name: 'Graph scope' })).toContainText('saved layout, not read');
+    await expect(page.getByRole('group', { name: 'Graph scope' })).not.toContainText('not yet retrieved');
+    const save = header(page).getByRole('button', { name: 'Save' });
+    await expect(save).toBeDisabled();
+    await expect(save).toHaveAttribute('title', 'Not available while the source has changed.');
     expect(reads).toEqual([]);
   });
 

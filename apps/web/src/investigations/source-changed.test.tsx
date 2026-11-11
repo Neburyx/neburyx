@@ -99,6 +99,30 @@ describe('a re-pointed source opens read-only on its saved layout', () => {
     expect(region.queryByRole('button')).toBeNull();
   });
 
+  it('says in the scope lines what is true: the saved layout was not read, and no remainder is named', async () => {
+    await opened('repointed');
+    const group = screen.getByRole('group', { name: 'Graph scope' });
+    expect(group.textContent).toContain('3 entities · 1 relationship · saved layout, not read');
+    expect(within(group).getByText('2 shown')).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/loaded · exact|not yet retrieved/);
+  });
+
+  it('disables Save and gives the reason, for a changed source first', async () => {
+    const { state } = await opened('repointed');
+    const save = screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+    expect(save.title).toBe('Not available while the source has changed.');
+    expect(save.getAttribute('aria-describedby')).not.toBeNull();
+    expect(document.getElementById(save.getAttribute('aria-describedby') ?? '')?.textContent).toBe('Not available while the source has changed.');
+    act(() => state.describeInvestigation({ title: 'T', caseRef: null, status: 'closed', readOnly: true, version: 2, save: { kind: 'unsaved' }, sourceState: 'available' }));
+    expect((screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).title).toBe('Reopen to save.');
+    act(() => state.describeInvestigation({ title: 'T', caseRef: null, status: 'open', readOnly: false, version: 3, save: { kind: 'unsaved' }, sourceState: 'available' }));
+    const open = screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement;
+    expect(open.disabled).toBe(false);
+    expect(open.title).toBe('');
+    expect(open.getAttribute('aria-describedby')).toBeNull();
+  });
+
   it('draws every saved item as a placeholder at its saved place, pin and hidden flag, and never shows a stored ID', async () => {
     const { state } = await opened('repointed');
     const nodes = state.loadedGraph().nodes;

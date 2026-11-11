@@ -1,7 +1,7 @@
 import type { Count } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
 import type { LoadedGraph } from '../state/loaded-graph.js';
-import { formatNumber, loadedLine, notDrawnLine, remainderLine, UNKNOWN_REMAINDER } from './scope-text.js';
+import { formatNumber, loadedLine, notDrawnLine, remainderLine, savedLayoutLine, savedLayoutShownLine, UNKNOWN_REMAINDER } from './scope-text.js';
 
 const exact = (value: number): Count => ({ value, quality: 'exact', scope: 'loaded in this view' });
 const graph = (entities: Count, relationships: Count): LoadedGraph => ({ nodes: [], edges: [], entities, relationships });
@@ -65,5 +65,14 @@ describe('the not drawn line', () => {
   it('uses the singular for one and the plural, with a thousands separator, for many', () => {
     expect(notDrawnLine(1)).toBe('1 relationship not drawn (entity not loaded)');
     expect(notDrawnLine(1200)).toBe('1,200 relationships not drawn (entity not loaded)');
+  });
+});
+
+describe('the scope lines of a saved layout whose source was not read', () => {
+  it('say "saved layout, not read" instead of "loaded", keep the count quality out of a claim about a read, and name no remainder', () => {
+    const graph = { nodes: [], edges: [], entities: { value: 19, quality: 'exact', scope: 'loaded in this view' }, relationships: { value: 1, quality: 'exact', scope: 'loaded in this view' } } as never;
+    expect(savedLayoutLine(graph)).toBe('19 entities · 1 relationship · saved layout, not read');
+    expect(savedLayoutShownLine(19)).toBe('19 shown');
+    expect(savedLayoutShownLine(1200)).toBe('1,200 shown');
   });
 });

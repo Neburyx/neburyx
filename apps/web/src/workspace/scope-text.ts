@@ -62,6 +62,16 @@ export function loadedLine(graph: LoadedGraph): string {
   return `${counted(graph.entities, 'entity', 'entities')} · ${counted(graph.relationships, 'relationship', 'relationships')} · loaded · ${quality}`;
 }
 
+/** The counts of an investigation drawn from its saved layout while its source cannot be read: the items are the saved ones and nothing was loaded from the source. */
+export function savedLayoutLine(graph: LoadedGraph): string {
+  return `${counted(graph.entities, 'entity', 'entities')} · ${counted(graph.relationships, 'relationship', 'relationships')} · saved layout, not read`;
+}
+
+/** What is left to show of the saved items; nothing more can be retrieved, so no remainder is named. */
+export function savedLayoutShownLine(shown: number): string {
+  return `${formatNumber(shown)} shown`;
+}
+
 export function remainderLine(shown: number, remainder: Count): string {
   const number = numberText(remainder);
   if (number === undefined) return `${formatNumber(shown)} shown · more not yet retrieved`;
