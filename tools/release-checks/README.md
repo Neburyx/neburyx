@@ -26,10 +26,9 @@ In this order, in every run:
 | `neutrality` | Four parts: `domains` (the no-domain-words check), `packs` (`services/api/src/packs.test.ts`), `demo-compose` (`demo.compose.test.ts`: one test body over every pack, on one image) and `saved-view` (a view saved under a mapping from which a type and a property were removed reopens with placeholders at the saved places, the dropped-filter notice and no error, in memory and on Postgres) | all four parts pass, each reports its tests, each required test is found once per pack (or once), and the record names the packs found in `domain-packs/` and the image the compose suite built for itself (which is not the image under test of `demo-install`) |
 | `supernode-suite` | `pnpm test:supernodes` with `NBX_SUPERNODE_RECORD` set to a file in the run's folder | it exits 0, reports tests and wrote the record file |
 | `fuzz-real-server` | `src/fuzz/real-server.neo4j.test.ts` on a Neo4j test database | it exits 0 and reports at least one passed test |
-| `supernode-benchmark` | `pnpm bench:supernode` with `NBX_BENCH_RECORD_DIR` set to a folder in the run's folder, so that the committed files in `docs/benchmarks/` are not touched (their hashes are compared before and after) | the worst p95 of any cell at 100,000 relationships is under 3,000 ms, no cell rests on failed calls (more than one in twenty samples), and no walk stopped early. The figures are recorded whether it passes or fails |
 | `demo-install` | `docker build` of the product image, then `docker compose up --wait` of `deploy/demo`, then `GET /readyz` and `GET /v1/sources` | the whole takes 900,000 ms (15 minutes) or less |
 
-The three Neo4j checks need the connection above and make their own `nbx-test-` databases on that server (see [packages/test-neo4j](../../packages/test-neo4j/README.md) and [docs/benchmarks](../../docs/benchmarks/README.md)); the benchmark takes hours. `neutrality` and `demo-install` need Docker.
+The two Neo4j checks need the connection above and make their own `nbx-test-` databases on that server (see [packages/test-neo4j](../../packages/test-neo4j/README.md)); the supernode suite takes about 12 minutes. `neutrality` and `demo-install` need Docker.
 
 ## How the install time is measured
 

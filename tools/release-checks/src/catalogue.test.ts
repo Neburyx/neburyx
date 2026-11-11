@@ -7,9 +7,9 @@ import { CHECK_IDS, releaseCatalogue } from './catalogue.js';
 const packageRoot = resolve(fileURLToPath(new URL('..', import.meta.url)));
 
 describe('releaseCatalogue', () => {
-  it('lists the six checks in the fixed order', () => {
+  it('lists the five checks in the fixed order', () => {
     expect(releaseCatalogue('/repo').map((check) => check.id)).toEqual([...CHECK_IDS]);
-    expect(CHECK_IDS).toEqual(['fuzz', 'neutrality', 'supernode-suite', 'fuzz-real-server', 'supernode-benchmark', 'demo-install']);
+    expect(CHECK_IDS).toEqual(['fuzz', 'neutrality', 'supernode-suite', 'fuzz-real-server', 'demo-install']);
   });
 
   it('names every check id in the tool guide', () => {

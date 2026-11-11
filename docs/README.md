@@ -19,4 +19,4 @@ Public technical documentation.
 - [source-state.md](source-state.md): which stored check decides the state a source shows when several API copies run, and what stays different between copies.
 - [concurrency.md](concurrency.md): the read-slot, request-rate and breaker limits with their numbers, and what the concurrency suite proves about them.
 - [layouts.md](layouts.md): the layouts, the Physics switch, how a pinned entity is treated, the limits of live physics and what was measured.
-- [benchmarks/](benchmarks/README.md): the supernode benchmark, what it measures, how to run it and the last record.
+- [benchmarks/](benchmarks/README.md): the supernode benchmark, an optional tool to run by hand (no release requires it): what it measures, how to run it and the last record.
