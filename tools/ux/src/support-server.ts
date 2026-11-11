@@ -497,7 +497,10 @@ function createInvestigations(options: SupportServerOptions) {
     createExport(id: string, key: string | undefined, body: unknown, response: ServerResponse): void {
       const parsed = exportRequestSchema.safeParse(body);
       if (!parsed.success || key === undefined || !IDEMPOTENCY_KEY_PATTERN.test(key)) return json(response, 400, INVALID);
-      if (live(id) === undefined) return json(response, 404, NOT_FOUND);
+      const found = live(id);
+      if (found === undefined) return json(response, 404, NOT_FOUND);
+      const changed = sourceStateOf(found, false);
+      if (changed !== 'available') return json(response, 409, { error: { code: 'CONFLICT', message: 'This source now points to a different database or is no longer configured. This investigation is read-only.', retryable: false, traceId: 'tr-support', details: { reason: 'source-changed', sourceState: changed } } });
       if (exportMode === 'large') return json(response, 400, { error: { code: 'INVALID_REQUEST', message: 'This view holds more than one export can. Hide some items, then export again.', retryable: false, traceId: 'support', details: { reason: 'export-too-large', maxElements: 300 } } });
       if (exportMode === 'failed') return json(response, 500, { error: { code: 'EXPORT_FAILED', message: 'The export could not be created.', retryable: true, traceId: 'support' } });
       const exportId = randomUUID();

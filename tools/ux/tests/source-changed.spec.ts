@@ -125,3 +125,23 @@ test.describe('an investigation whose source was removed', () => {
     await expect(page.getByRole('row', { name: /account AC-1/ }).first()).toContainText('Source removed');
   });
 });
+
+test.describe('Export of an investigation whose source changed', () => {
+  for (const kind of ['repointed', 'removed'] as const) {
+    test(`is dimmed with its reason, cannot be opened with the keyboard, and sends no export (${kind})`, async ({ page }) => {
+      const exportRequests: string[] = [];
+      page.on('request', (request) => {
+        if (request.method() === 'POST' && /\/exports$/.test(new URL(request.url()).pathname)) exportRequests.push(request.url());
+      });
+      await openChanged(page, kind);
+      const button = header(page).getByRole('button', { name: 'Export', exact: true });
+      await expect(button).toBeDisabled();
+      await expect(button).toHaveAttribute('title', 'Not available while the source has changed.');
+      await expect(button).toHaveAccessibleDescription('Not available while the source has changed.');
+      await button.focus({ timeout: 1000 }).catch(() => undefined);
+      await page.keyboard.press('Enter');
+      await expect(page.getByRole('dialog', { name: 'Export current view' })).toHaveCount(0);
+      expect(exportRequests).toEqual([]);
+    });
+  }
+});

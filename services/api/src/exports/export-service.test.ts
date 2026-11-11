@@ -50,3 +50,24 @@ describe('an export that the client abandons', () => {
     await rig.stop();
   });
 });
+
+describe('an export of an investigation whose source changed', () => {
+  it.each([
+    ['repointed', { sourceIdentityHash: 'another-database' }],
+    ['removed', { sourceId: 'gone' }],
+  ] as const)('is refused as source-changed (%s), reads nothing and keeps nothing', async (sourceState, change) => {
+    const rig = await startExportRig();
+    const opened = await rig.open();
+    const [row] = rig.store.investigations;
+    if (row === undefined) throw new Error('no investigation');
+    rig.store.investigations[0] = { ...row, ...change };
+    const readsBefore = rig.executor.calls.length;
+    const response = await rig.create(opened.id, request);
+    expect(response.statusCode).toBe(409);
+    expect(response.json().error).toMatchObject({ code: 'CONFLICT', details: { reason: 'source-changed', sourceState } });
+    expect(rig.store.exports.rows).toEqual([]);
+    expect(await rig.files.list()).toEqual([]);
+    expect(rig.executor.calls.length).toBe(readsBefore);
+    await rig.stop();
+  });
+});

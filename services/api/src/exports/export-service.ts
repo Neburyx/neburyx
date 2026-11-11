@@ -3,6 +3,8 @@ import { type ExportFormat, type ExportRecord, type ExportRequest, type GraphEdg
 import type { ExportRow, ExportStore } from '../db/exports-repository.js';
 import type { InvestigationStore } from '../db/investigations-repository.js';
 import { AppError } from '../errors.js';
+import { sourceStateOf } from '../investigations/investigation-service.js';
+import { sourceChangedRefusal } from '../investigations/read-only.js';
 import type { SourceAccess } from '../investigations/source-access.js';
 import type { MappingModel } from '../mapping/model.js';
 import { retentionOf } from '../mapping/retention.js';
@@ -89,6 +91,8 @@ export function createExportService(deps: Deps): ExportService {
     async create(call) {
       const stored = await deps.store.readInvestigation(call.investigationId, call.principal.id);
       if (stored === undefined) throw new AppError('NOT_FOUND');
+      const changed = sourceChangedRefusal(sourceStateOf(deps.mapping, stored.investigation));
+      if (changed !== undefined) throw changed;
       const sourceId = stored.investigation.sourceId;
       await deps.access.require({ traceId: call.traceId, principal: call.principal, sourceId, auditAction: EXPORT_CREATE_AUDIT_ACTION, rate: 'count' });
 

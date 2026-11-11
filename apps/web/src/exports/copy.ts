@@ -14,6 +14,7 @@ export const DONE_ANNOUNCEMENT = 'Export downloaded.';
 export const NETWORK_FAILURE = 'The export could not be made. Try again.';
 export const SCHEMA_FAILURE = 'The answer could not be read. Try again.';
 export const EXPORT_BUSY = 'This export is already being made. Try again in a moment.';
+export const EXPORT_DISABLED_SOURCE = 'Not available while the source has changed.';
 export const ACCESS_NOTE = 'Some items may be hidden by your access.';
 
 export const downloadLabel = (format: ExportFormat): string => `Download ${FORMAT_NAMES[format]}`;

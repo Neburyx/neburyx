@@ -193,6 +193,8 @@ const REFUSED_ROUTES: readonly (readonly [string, keyof typeof write])[] = [
   ['POST /v1/investigations/{id}/views/{viewId}/delete', 'deleteView'],
   ['POST /v1/investigations/{id}/views/{viewId}/restore', 'restore'],
 ];
+/** Refused too, but tested where the route's own rig is (an export reads the source, so a changed source blocks it). */
+const REFUSED_ELSEWHERE: readonly string[] = ['POST /v1/investigations/{id}/exports'];
 const ALLOWED_ROUTES: readonly string[] = [
   // opening reads nothing for a changed source (above), and these change the status or the deletion mark, which no source read or draft write is part of
   'POST /v1/investigations',
@@ -208,7 +210,7 @@ describe('every route that changes an investigation has a decision for a changed
     .flatMap(([path, operations]) => Object.keys(operations).filter((method) => method !== 'get' && method !== 'parameters').map((method) => `${method.toUpperCase()} ${path}`));
 
   it('lists each one as refused or allowed, and nothing in the lists is a route that is gone', () => {
-    const decided = [...REFUSED_ROUTES.map(([route]) => route), ...ALLOWED_ROUTES];
+    const decided = [...REFUSED_ROUTES.map(([route]) => route), ...REFUSED_ELSEWHERE, ...ALLOWED_ROUTES];
     expect(changing.filter((route) => !decided.includes(route))).toEqual([]);
     expect(decided.filter((route) => !changing.includes(route))).toEqual([]);
   });
