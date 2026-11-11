@@ -66,7 +66,7 @@ export function errorResponse(code: ErrorCode, traceId: string, details?: unknow
   if (code === 'CONFLICT' && (allowed?.reason === 'status-change-not-allowed' || allowed?.reason === 'investigation-read-only' || allowed?.reason === 'source-changed')) {
     return { error: { code, ...CONFLICT_ENTRIES[allowed.reason], traceId, details: allowed } };
   }
-  if (code === 'ACCESS_DENIED' && allowed?.reason === 'access-changed') {
+  if (code === 'ACCESS_DENIED' && (allowed?.reason === 'access-changed' || allowed?.reason === 'export-source-changed')) {
     return { error: { code, ...ACCESS_DENIED_ENTRIES[allowed.reason], traceId, details: allowed } };
   }
   if (code === 'INVALID_REQUEST' && allowed?.reason === 'export-too-large') {

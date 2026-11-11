@@ -56,6 +56,11 @@ describe('downloadExport', () => {
     expect(await createApiClient(fetcher).downloadExport('e')).toMatchObject({ ok: false, failure: { code: 'ACCESS_DENIED', details: { reason: 'access-changed' } } });
   });
 
+  it('answers a refusal because the source of the export changed as the server\'s failure, with its reason', async () => {
+    const { fetcher } = once(error('ACCESS_DENIED', 'The source of this export changed since it was made. The file is no longer available.', 403, { reason: 'export-source-changed' }));
+    expect(await createApiClient(fetcher).downloadExport('e')).toMatchObject({ ok: false, failure: { code: 'ACCESS_DENIED', details: { reason: 'export-source-changed' } } });
+  });
+
   it('answers NOT_FOUND, a lost answer and a download with no name', async () => {
     expect(await createApiClient(once(error('NOT_FOUND', 'Not found.', 404)).fetcher).downloadExport('e')).toMatchObject({ ok: false, failure: { code: 'NOT_FOUND' } });
     expect(await createApiClient(() => Promise.reject(new Error('offline'))).downloadExport('e')).toEqual({ ok: false, failure: { code: 'NETWORK_UNAVAILABLE' } });

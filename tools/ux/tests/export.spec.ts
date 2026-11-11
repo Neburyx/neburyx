@@ -12,7 +12,7 @@ async function openInvestigation(page: Page): Promise<void> {
 const exportButton = (page: Page) => page.getByRole('button', { name: 'Export', exact: true });
 const dialog = (page: Page) => page.getByRole('dialog', { name: 'Export current view' });
 const banner = (page: Page) => page.getByRole('region', { name: 'Request status' });
-const mode = (page: Page, value: 'ok' | 'refused' | 'failed' | 'large') => page.request.post('/__support/export-mode', { data: { mode: value } });
+const mode = (page: Page, value: 'ok' | 'refused' | 'source-changed' | 'failed' | 'large') => page.request.post('/__support/export-mode', { data: { mode: value } });
 
 test.afterEach(async ({ page }) => {
   await mode(page, 'ok');
@@ -97,6 +97,20 @@ test.describe('exporting the current view', () => {
     await expect(banner(page).getByText('Export', { exact: true })).toBeVisible();
     await banner(page).getByRole('button', { name: 'Export again' }).click();
     await expect(dialog(page)).toBeVisible();
+    await expect(banner(page)).toHaveCount(0);
+  });
+
+  test('shows the banner of a download refused because the source of the export changed, with no Export again', async ({ page }) => {
+    await openInvestigation(page);
+    await mode(page, 'source-changed');
+    await exportButton(page).click();
+    await dialog(page).getByRole('button', { name: 'Download JSON' }).click();
+    await expect(dialog(page)).toHaveCount(0);
+    await expect(banner(page)).toContainText('The source of this export changed since it was made.');
+    await expect(banner(page)).toContainText('The file is no longer available.');
+    await expect(banner(page).getByText('Export', { exact: true })).toBeVisible();
+    await expect(banner(page).getByRole('button', { name: 'Export again' })).toHaveCount(0);
+    await banner(page).getByRole('button', { name: 'Dismiss' }).click();
     await expect(banner(page)).toHaveCount(0);
   });
 

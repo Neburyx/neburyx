@@ -44,8 +44,8 @@ export const CONFLICT_REASONS = ['status-change-not-allowed', 'investigation-rea
 
 export type ConflictReason = (typeof CONFLICT_REASONS)[number];
 
-/** Why an `ACCESS_DENIED` was given, when the person's access changed since something was made for them. */
-export const ACCESS_DENIED_REASONS = ['access-changed'] as const;
+/** Why an `ACCESS_DENIED` was given: the person's access changed since an export was made for them, or the export's source did. */
+export const ACCESS_DENIED_REASONS = ['access-changed', 'export-source-changed'] as const;
 
 export type AccessDeniedReason = (typeof ACCESS_DENIED_REASONS)[number];
 

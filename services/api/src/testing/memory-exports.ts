@@ -19,14 +19,24 @@ interface KeyEntry {
 export interface MemoryExports extends ExportStore {
   readonly rows: ExportRow[];
   readonly keys: KeyEntry[];
-  /** The clock of the store, in milliseconds; a test moves it. */
-  clock: { now: number };
+  /** The clock of the store, in milliseconds: it moves with the clock the store was given, and a test moves it further by setting it. */
+  readonly clock: { now: number };
 }
 
 export function memoryExports(deps: { readonly investigations: readonly InvestigationRow[]; readonly isDeleted: (id: string) => boolean; readonly now?: () => number }): MemoryExports {
   const rows: ExportRow[] = [];
   const keys: KeyEntry[] = [];
-  const clock = { now: deps.now?.() ?? Date.now() };
+  const started = Date.now();
+  const base = (): number => deps.now?.() ?? started;
+  let moved = 0;
+  const clock = {
+    get now(): number {
+      return base() + moved;
+    },
+    set now(value: number) {
+      moved = value - base();
+    },
+  };
   const replace = (id: string, change: Partial<ExportRow>): void => {
     const index = rows.findIndex((row) => row.id === id);
     const held = rows[index];
@@ -43,6 +53,7 @@ export function memoryExports(deps: { readonly investigations: readonly Investig
         investigationId: input.investigationId,
         requestedBy: input.requestedBy,
         policyVersion: input.policyVersion,
+        sourceIdentityHash: input.sourceIdentityHash,
         kind: 'view',
         format: input.format,
         masked: false,

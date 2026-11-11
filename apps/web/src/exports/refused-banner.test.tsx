@@ -83,3 +83,54 @@ describe('the banner of a download refused because access changed', () => {
     expect(banner.view.getState().announcement?.text).toContain('Your access changed since this export was made.');
   });
 });
+
+const sourceDenied = (): ApiFailure => ({ code: 'ACCESS_DENIED', message: 'The source of this export changed since it was made. The file is no longer available.', retryable: false, traceId: 't', details: { reason: 'export-source-changed' } }) as ApiFailure;
+
+describe('the banner of a download refused because the source of the export changed', () => {
+  it('closes the dialog and shows the chip and the two lines, with no Export again and no more than the source changed', async () => {
+    await refused(sourceDenied());
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    const banner = within(region() as HTMLElement);
+    expect(banner.getByText('Export')).toBeTruthy();
+    expect(banner.getByText('The source of this export changed since it was made.')).toBeTruthy();
+    expect(banner.getByText('The file is no longer available.')).toBeTruthy();
+    expect(banner.queryByRole('button', { name: 'Export again' })).toBeNull();
+    expect(region()?.textContent ?? '').not.toMatch(/access|owner|policy|revoked|role/i);
+  });
+
+  it('announces the banner and moves focus to it', async () => {
+    const { banner } = await refused(sourceDenied());
+    await waitFor(() => expect(region()).not.toBeNull());
+    expect(banner.view.getState().banner).toMatchObject({ id: 'export-download-refused', moveFocus: true, tone: 'warning' });
+    expect(banner.view.getState().announcement?.text).toContain('The source of this export changed since it was made.');
+  });
+
+  it('can be dismissed, and leaves the loaded graph and the saved state as they were', async () => {
+    const state = shownState('open');
+    const graph = state.visibleGraph();
+    const record = state.investigation.getState().record;
+    renderExport(state, { createExport: () => ok(RECORD), downloadExport: () => fail(sourceDenied()) });
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Export' }));
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Download JSON' }));
+    expect(screen.getByText('The file is no longer available.')).toBeTruthy();
+    expect(state.visibleGraph()).toBe(graph);
+    expect(state.investigation.getState().record).toEqual(record);
+    await user.click(screen.getByRole('button', { name: 'Dismiss' }));
+    expect(region()).toBeNull();
+  });
+
+  it('replaces the banner of a refusal for changed access, never standing beside it', async () => {
+    const failures = [denied('access-changed'), sourceDenied()];
+    const state = shownState('open');
+    renderExport(state, { createExport: () => ok(RECORD), downloadExport: () => fail(failures.shift() ?? sourceDenied()) });
+    const user = userEvent.setup();
+    for (const _round of failures.slice()) {
+      await user.click(screen.getByRole('button', { name: 'Export' }));
+      await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Download JSON' }));
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    }
+    expect(screen.getByText('The file is no longer available.')).toBeTruthy();
+    expect(screen.queryByText('Your access changed since this export was made.')).toBeNull();
+  });
+});

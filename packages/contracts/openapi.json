@@ -1337,7 +1337,7 @@
       "get": {
         "operationId": "downloadExport",
         "summary": "The file of an export the caller requested",
-        "description": "Re-checks, at this moment, that the caller still owns the investigation, may still read its source and is under the policy version the file was made under. If any of that changed the answer is ACCESS_DENIED with details.reason access-changed, the file is deleted and the export is expired. An export at or after its expiry, or whose file is gone, is NOT_FOUND. The file is sent as an attachment with Cache-Control no-store.",
+        "description": "Re-checks, at this moment, that the caller still owns the investigation, may still read its source and is under the policy version the file was made under. If any of that changed the answer is ACCESS_DENIED with details.reason access-changed, the file is deleted and the export is expired. The same answer, with details.reason export-source-changed, is given when the source of the export is no longer configured or no longer has the identity it had when the export was made, and for every export made before the identity was recorded. An export at or after its expiry, or whose file is gone, is NOT_FOUND. The file is sent as an attachment with Cache-Control no-store.",
         "parameters": [
           {
             "name": "id",
@@ -1366,7 +1366,7 @@
             }
           },
           "403": {
-            "description": "ACCESS_DENIED with details.reason access-changed",
+            "description": "ACCESS_DENIED with details.reason access-changed or export-source-changed",
             "content": {
               "application/json": {
                 "schema": {
@@ -7519,6 +7519,48 @@
                       "reason": {
                         "type": "string",
                         "const": "access-changed"
+                      }
+                    },
+                    "required": [
+                      "reason"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "code",
+                  "message",
+                  "retryable",
+                  "traceId",
+                  "details"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "const": "ACCESS_DENIED"
+                  },
+                  "message": {
+                    "type": "string",
+                    "const": "The source of this export changed since it was made. The file is no longer available."
+                  },
+                  "retryable": {
+                    "type": "boolean",
+                    "const": false
+                  },
+                  "traceId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "details": {
+                    "type": "object",
+                    "properties": {
+                      "reason": {
+                        "type": "string",
+                        "const": "export-source-changed"
                       }
                     },
                     "required": [

@@ -52,3 +52,17 @@ describe('the in-memory store follows the shared source state rule', () => {
     expect(await stateOf(store)).toEqual([['unknown', NOT_CHECKED_SINCE_START]]);
   });
 });
+
+describe('the in-memory export clock', () => {
+  it('moves with the clock of the store, and a test can still move it further', async () => {
+    const store = await opened();
+    const owner = '0192f000-0000-7000-8000-0000000000aa';
+    const id = '0192f000-0000-7000-8000-0000000000c1';
+    store.investigations.push({ id, sourceId: 'alpha', sourceIdentityHash: identityHashOf(alpha), ownerId: owner, title: 't', caseRef: null, startingEntityType: null, startingStableId: null, status: 'open', closedAt: null, archivedAt: null, createdAt: at(0), lastEditedAt: at(0), version: 1 });
+    const start = store.exports.clock.now;
+    await store.deleteInvestigation({ investigationId: id, ownerId: owner, expectedVersion: 1, retentionDays: 30, beforeCommit: () => Promise.resolve() });
+    expect(store.exports.clock.now).toBe(start + 1000);
+    store.exports.clock.now += 86_400_000;
+    expect(store.exports.clock.now).toBe(start + 1000 + 86_400_000);
+  });
+});

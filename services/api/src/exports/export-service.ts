@@ -8,6 +8,7 @@ import { sourceChangedRefusal } from '../investigations/read-only.js';
 import type { SourceAccess } from '../investigations/source-access.js';
 import type { MappingModel } from '../mapping/model.js';
 import { retentionOf } from '../mapping/retention.js';
+import { identityHashOf } from '../registry/identity-hash.js';
 import type { AuditSink, PolicyProvider, Principal } from '../seams/seams.js';
 import { entitiesCsvOf, relationshipsCsvOf } from './csv.js';
 import { exportFilename, contentTypeOf } from './filename.js';
@@ -82,6 +83,16 @@ export function createExportService(deps: Deps): ExportService {
     }
   }
 
+  /** A refused download deletes the file, expires the export and is audited; the refusal stands whether or not the audit write succeeds, since nothing is handed out either way. */
+  async function refuseDownload(call: { readonly traceId: string; readonly principal: Principal }, row: ExportRow & { readonly storageKey: string; readonly format: 'json' | 'csv' }, sourceId: string, reason: 'access-changed' | 'export-source-changed'): Promise<never> {
+    await deps.files.remove(row.storageKey).catch(() => undefined);
+    await deps.store.expireExport(row.id);
+    await deps.audit
+      .record({ actorId: call.principal.id, actorRole: call.principal.role, action: EXPORT_DOWNLOAD_AUDIT_ACTION, result: 'refused', sourceId, traceId: call.traceId, detail: { export: { format: row.format, refusal: reason } } })
+      .catch(() => deps.logger.warn({ event: 'export.audit_failed', action: EXPORT_DOWNLOAD_AUDIT_ACTION }, 'export audit write failed'));
+    throw new AppError('ACCESS_DENIED', { reason });
+  }
+
   async function discard(id: string, storageKey: string | null, errorCode: string): Promise<void> {
     if (storageKey !== null) await deps.files.remove(storageKey).catch(() => undefined);
     await deps.store.failExport(id, errorCode).catch(() => undefined);
@@ -101,7 +112,7 @@ export function createExportService(deps: Deps): ExportService {
       const exportedAt = now();
       const bytes = exportBytesOf(call.request.format, sourceId, exportedAt, read);
       const id = randomUUID();
-      const row = await deps.store.insertExport({ id, investigationId: call.investigationId, requestedBy: call.principal.id, policyVersion: deps.policyVersion(sourceId), format: call.request.format, retentionDays: retentionOf(deps.mapping).exportsDays });
+      const row = await deps.store.insertExport({ id, investigationId: call.investigationId, requestedBy: call.principal.id, policyVersion: deps.policyVersion(sourceId), sourceIdentityHash: stored.investigation.sourceIdentityHash, format: call.request.format, retentionDays: retentionOf(deps.mapping).exportsDays });
 
       let storageKey: string | null = null;
       try {
@@ -136,11 +147,16 @@ export function createExportService(deps: Deps): ExportService {
         throw new AppError('NOT_FOUND');
       }
 
+      const refusable = { ...row, storageKey: row.storageKey, format: row.format };
+      const source = deps.mapping.sources.find((candidate) => candidate.id === investigation.sourceId);
+      // an export made before the identity was recorded cannot be shown to come from the source as it is, so it is refused
+      if (source === undefined || row.sourceIdentityHash === null || identityHashOf(source) !== row.sourceIdentityHash) {
+        return refuseDownload(call, refusable, investigation.sourceId, 'export-source-changed');
+      }
+
       const decision = await deps.policy.authorizeSource({ principal: call.principal, sourceId: investigation.sourceId });
       if (investigation.ownerId !== call.principal.id || !decision.allowed || deps.policyVersion(investigation.sourceId) !== row.policyVersion) {
-        await deps.files.remove(row.storageKey).catch(() => undefined);
-        await deps.store.expireExport(row.id);
-        throw new AppError('ACCESS_DENIED', { reason: 'access-changed' });
+        return refuseDownload(call, refusable, investigation.sourceId, 'access-changed');
       }
 
       const bytes = await deps.files.read(row.storageKey);

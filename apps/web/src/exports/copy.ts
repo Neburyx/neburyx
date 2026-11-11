@@ -35,4 +35,6 @@ export const REFUSED_BANNER_ID = 'export-download-refused';
 export const REFUSED_CHIP = 'Export';
 export const REFUSED_HEADLINE = 'Your access changed since this export was made.';
 export const REFUSED_TEXT = 'Export again to get a file that matches your current access.';
+export const SOURCE_REFUSED_HEADLINE = 'The source of this export changed since it was made.';
+export const SOURCE_REFUSED_TEXT = 'The file is no longer available.';
 export const EXPORT_AGAIN = 'Export again';

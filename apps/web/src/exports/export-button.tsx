@@ -6,7 +6,7 @@ import { useClientState } from '../state/context.js';
 import { useStoreSelector } from '../state/store.js';
 import { DONE_ANNOUNCEMENT, EXPORT_BUTTON, EXPORT_DISABLED_SOURCE } from './copy.js';
 import { ExportDialog } from './export-dialog.js';
-import { showDownloadRefused } from './refused-banner.js';
+import { showDownloadRefused, showDownloadSourceChanged } from './refused-banner.js';
 
 /** The Export button of the header: it stays available for a closed or an archived investigation, since an export changes nothing, and is dimmed with its reason when the source changed, since an export reads the source. */
 export function ExportButton({ client }: { readonly client: ApiClient }) {
@@ -47,7 +47,7 @@ export function ExportButton({ client }: { readonly client: ApiClient }) {
       <span role="status" className="visually-hidden">
         {done ? DONE_ANNOUNCEMENT : ''}
       </span>
-      {open && !blocked ? <ExportDialog client={client} onClose={close} onDone={() => setDone(true)} onAccessChanged={() => showDownloadRefused(banner, () => setOpen(true))} /> : null}
+      {open && !blocked ? <ExportDialog client={client} onClose={close} onDone={() => setDone(true)} onAccessChanged={() => showDownloadRefused(banner, () => setOpen(true))} onSourceChanged={() => showDownloadSourceChanged(banner)} /> : null}
     </>
   );
 }

@@ -60,6 +60,8 @@ The in-memory store's clock advances one second a delete, so no purge date is ev
 | The cap boundary is accepted, and reads the source | `src/export.test.ts` | and reads the source to do it |
 | A refusal needs a new key to retry | `src/export.test.ts` | keeps the refusal for its key, so the retry after it takes a new key |
 | An export of a re-pointed or removed source is refused with no read | `src/export.test.ts` | is refused when the source was |
+| An export made before a source change is refused on download, and stays refused after the real rebind command made the investigation available again, while a new export downloads | `src/pg-export.integration.test.ts` | even after the real rebind command |
+| An export with no recorded source identity is refused on download | `src/pg-export.integration.test.ts` | refuses an export that has no recorded identity |
 | Export is available on a closed and on an archived investigation | `src/export.test.ts` | is made and downloaded in a tab that shows the investigation |
 | An expired export loses its file and is answered as unknown | `src/export.test.ts` | is cleared by the expiry task, which removes its file and marks its row expired |
 | The same on real Postgres | `src/pg-export.integration.test.ts` | writes a row and a file for each export, and past its expiry the task removes the file |

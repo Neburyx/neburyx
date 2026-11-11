@@ -25,6 +25,10 @@ export function failureText(failure: ApiFailure): string {
   return failure.code === 'INVALID_REQUEST' && maxEntities !== undefined && maxRelationships !== undefined && maxAggregates !== undefined ? tooLargeText(failure.message, { maxEntities, maxRelationships, maxAggregates }) : failure.message;
 }
 
+export function isSourceChanged(failure: ApiFailure): boolean {
+  return failure.code === 'ACCESS_DENIED' && 'details' in failure && failure.details?.reason === 'export-source-changed';
+}
+
 /** Whether a failed download says the person's access changed since the export was made. */
 export function isAccessChanged(failure: ApiFailure): boolean {
   return failure.code === 'ACCESS_DENIED' && 'details' in failure && failure.details?.reason === 'access-changed';
@@ -35,6 +39,8 @@ export interface ExportDialogProps {
   readonly onClose: () => void;
   /** Called, after the dialog is closed, when the download is refused because access changed. */
   readonly onAccessChanged: () => void;
+  /** Called, after the dialog is closed, when the download is refused because the source of the export changed. */
+  readonly onSourceChanged: () => void;
   /** Called when the file was handed to the browser. */
   readonly onDone?: () => void;
   readonly save?: typeof saveFile;
@@ -42,7 +48,7 @@ export interface ExportDialogProps {
 }
 
 /** "Export current view": the format, the lines every export starts with, and the file. */
-export function ExportDialog({ client, onClose, onAccessChanged, onDone, save = saveFile, now = () => new Date() }: ExportDialogProps) {
+export function ExportDialog({ client, onClose, onAccessChanged, onSourceChanged, onDone, save = saveFile, now = () => new Date() }: ExportDialogProps) {
   const state = useClientState();
   const investigationId = useStoreSelector(state.investigation, (held) => held.id);
   const notRetrieved = useNotRetrieved();
@@ -92,6 +98,11 @@ export function ExportDialog({ client, onClose, onAccessChanged, onDone, save = 
     if (isAccessChanged(downloaded.failure)) {
       onClose();
       onAccessChanged();
+      return;
+    }
+    if (isSourceChanged(downloaded.failure)) {
+      onClose();
+      onSourceChanged();
       return;
     }
     key.current = newExportKey();

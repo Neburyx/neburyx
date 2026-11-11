@@ -10,6 +10,8 @@ export interface ExportRow {
   readonly investigationId: string | null;
   readonly requestedBy: string;
   readonly policyVersion: string;
+  /** The identity of the source when the export was made; `null` for an export made before it was recorded. */
+  readonly sourceIdentityHash: string | null;
   readonly kind: ExportKind;
   readonly format: ExportRowFormat;
   readonly masked: boolean;
@@ -29,6 +31,7 @@ export interface NewExport {
   readonly investigationId: string;
   readonly requestedBy: string;
   readonly policyVersion: string;
+  readonly sourceIdentityHash: string;
   readonly format: 'json' | 'csv';
   readonly retentionDays: number;
 }
@@ -96,6 +99,7 @@ interface ExportRecord {
   readonly investigation_id: string | null;
   readonly requested_by: string;
   readonly policy_version: string;
+  readonly source_identity_hash: string | null;
   readonly kind: ExportKind;
   readonly format: ExportRowFormat;
   readonly masked: boolean;
@@ -110,7 +114,7 @@ interface ExportRecord {
   readonly expires_at: Date;
 }
 
-const COLUMNS = `id, investigation_id, requested_by, policy_version, kind, format, masked, masked_field_count, status, filename, storage_key, size_bytes, sha256, error_code, created_at, expires_at`;
+const COLUMNS = `id, investigation_id, requested_by, policy_version, source_identity_hash, kind, format, masked, masked_field_count, status, filename, storage_key, size_bytes, sha256, error_code, created_at, expires_at`;
 
 function rowOf(record: ExportRecord): ExportRow {
   return {
@@ -118,6 +122,7 @@ function rowOf(record: ExportRecord): ExportRow {
     investigationId: record.investigation_id,
     requestedBy: record.requested_by,
     policyVersion: record.policy_version,
+    sourceIdentityHash: record.source_identity_hash,
     kind: record.kind,
     format: record.format,
     masked: record.masked,
@@ -141,10 +146,10 @@ export function createExportStore(pool: pg.Pool): ExportStore {
   return {
     async insertExport(input) {
       const result = await pool.query<ExportRecord>(
-        `INSERT INTO exports (id, investigation_id, requested_by, policy_version, kind, format, status, expires_at)
-         VALUES ($1, $2, $3, $4, 'view', $5, 'pending', now() + make_interval(days => $6))
+        `INSERT INTO exports (id, investigation_id, requested_by, policy_version, source_identity_hash, kind, format, status, expires_at)
+         VALUES ($1, $2, $3, $4, $7, 'view', $5, 'pending', now() + make_interval(days => $6))
          RETURNING ${COLUMNS}`,
-        [input.id, input.investigationId, input.requestedBy, input.policyVersion, input.format, input.retentionDays],
+        [input.id, input.investigationId, input.requestedBy, input.policyVersion, input.format, input.retentionDays, input.sourceIdentityHash],
       );
       const [record] = result.rows;
       if (record === undefined) throw new Error('the export row was not written');

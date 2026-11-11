@@ -208,7 +208,6 @@ describe('an export of an investigation whose source changed', () => {
     suite = await startSuite();
     const { tab, id } = await reopened(suite);
     const earlier = await made(tab, id, 'json', viewRequest(tab, 'json'));
-    const earlierBytes = await downloaded(tab, earlier.record.id);
     tab.dispose();
     await suite.restart(changed());
     const fresh = suite.tab();
@@ -221,8 +220,10 @@ describe('an export of an investigation whose source changed', () => {
     expect(suite.dataReads().length).toBe(reads);
     expect(exportRows(suite)).toHaveLength(rowsBefore);
     expect(files(suite)).toEqual(filesBefore);
-    // an export made before the change keeps downloading as it was: the file states its own source and time, and a download reads nothing
-    expect(await downloaded(fresh, earlier.record.id)).toEqual(earlierBytes);
+    // an export made before the change is refused, its file deleted and its row expired; a download reads nothing either way
+    expect(await fresh.client.downloadExport(earlier.record.id)).toMatchObject({ ok: false, failure: { code: 'ACCESS_DENIED', details: { reason: 'export-source-changed' } } });
+    expect(files(suite)).toEqual([]);
+    expect(await fresh.client.downloadExport(earlier.record.id)).toMatchObject({ ok: false, failure: { code: 'NOT_FOUND' } });
     expect(suite.dataReads().length).toBe(reads);
   });
 

@@ -50,6 +50,7 @@ describe('allowedDetails', () => {
 
   it('keeps the reason of ACCESS_DENIED and of INVALID_REQUEST, and the limit only for an export that is too large', () => {
     expect(allowedDetails('ACCESS_DENIED', { reason: 'access-changed', owner: 'x' })).toEqual({ reason: 'access-changed' });
+    expect(allowedDetails('ACCESS_DENIED', { reason: 'export-source-changed', owner: 'x' })).toEqual({ reason: 'export-source-changed' });
     expect(allowedDetails('ACCESS_DENIED', { reason: 'unreachable' })).toBeUndefined();
     expect(allowedDetails('INVALID_REQUEST', { reason: 'export-too-large', maxEntities: 300, maxRelationships: 300, maxAggregates: 100, exceeded: 'entities' })).toEqual({ reason: 'export-too-large', maxEntities: 300, maxRelationships: 300, maxAggregates: 100, exceeded: 'entities' });
     expect(allowedDetails('INVALID_REQUEST', { maxEntities: 300 })).toBeUndefined();

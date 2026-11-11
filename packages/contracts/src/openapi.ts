@@ -332,11 +332,11 @@ export function buildOpenApiDocument(
         get: {
           operationId: 'downloadExport',
           summary: 'The file of an export the caller requested',
-          description: 'Re-checks, at this moment, that the caller still owns the investigation, may still read its source and is under the policy version the file was made under. If any of that changed the answer is ACCESS_DENIED with details.reason access-changed, the file is deleted and the export is expired. An export at or after its expiry, or whose file is gone, is NOT_FOUND. The file is sent as an attachment with Cache-Control no-store.',
+          description: 'Re-checks, at this moment, that the caller still owns the investigation, may still read its source and is under the policy version the file was made under. If any of that changed the answer is ACCESS_DENIED with details.reason access-changed, the file is deleted and the export is expired. The same answer, with details.reason export-source-changed, is given when the source of the export is no longer configured or no longer has the identity it had when the export was made, and for every export made before the identity was recorded. An export at or after its expiry, or whose file is gone, is NOT_FOUND. The file is sent as an attachment with Cache-Control no-store.',
           parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
           responses: {
             '200': { description: 'The file: application/json or application/zip', content: { 'application/json': { schema: { $ref: '#/components/schemas/ExportFile' } }, 'application/zip': { schema: { type: 'string', description: 'The bytes of a zip holding entities.csv and relationships.csv' } } } },
-            '403': { description: 'ACCESS_DENIED with details.reason access-changed', content: jsonBody('ErrorResponse') },
+            '403': { description: 'ACCESS_DENIED with details.reason access-changed or export-source-changed', content: jsonBody('ErrorResponse') },
             '404': { description: 'No such export of this caller, or it has expired', content: jsonBody('ErrorResponse') },
             '500': { description: 'INTERNAL_ERROR: the stored file no longer matches its hash', content: jsonBody('ErrorResponse') },
           },

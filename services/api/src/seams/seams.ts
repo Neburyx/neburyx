@@ -27,8 +27,8 @@ export interface AuditEvent {
   readonly detail?: { readonly reason: 'cancelled' | 'timeout'; readonly target?: never; readonly type?: never } | { readonly target: 'entity' | 'evidence'; readonly type: string; readonly reason?: never }
     /** How many items a read by references returned and could not find: counts only, never a value or an ID. */
     | { readonly counts: Readonly<Record<'nodes' | 'edges' | 'missing', number>>; readonly reason?: never; readonly target?: never; readonly type?: never }
-    /** What an export or a download of one was: the format, and for an export how many items it holds and how many fields were masked; never a value, an ID or a file name. */
-    | { readonly export: { readonly format: 'json' | 'csv'; readonly entities?: number; readonly relationships?: number; readonly maskedFields?: number }; readonly counts?: never; readonly reason?: never; readonly target?: never; readonly type?: never };
+    /** What an export or a download of one was: the format, and for an export how many items it holds and how many fields were masked; never a value, an ID or a file name; a refused download adds which of the two refusals it was. */
+    | { readonly export: { readonly format: 'json' | 'csv'; readonly entities?: number; readonly relationships?: number; readonly maskedFields?: number; readonly refusal?: 'access-changed' | 'export-source-changed' }; readonly counts?: never; readonly reason?: never; readonly target?: never; readonly type?: never };
 }
 
 export interface AuditSink {

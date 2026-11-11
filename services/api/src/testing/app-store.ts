@@ -90,7 +90,7 @@ export function memoryStoreWith(options: MemoryAppStoreOptions): MemoryAppStore 
   const liveOf = (id: string, ownerId: string): InvestigationRow | undefined => (deletedAt.has(id) ? undefined : investigations.find((row) => row.id === id && row.ownerId === ownerId));
   const isDeletedView = (view: MemoryNamedView): boolean => view.deletedAt !== undefined;
   let deletions = 0;
-  const exports = memoryExports({ investigations, isDeleted: (id) => deletedAt.has(id) });
+  const exports = memoryExports({ investigations, isDeleted: (id) => deletedAt.has(id), now: () => Date.UTC(2026, 10, 7, 12, 0, deletions) });
   const { rows: _rows, keys: _keys, clock: _clock, ...exportStore } = exports;
   return {
     ...exportStore,

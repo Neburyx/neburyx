@@ -26,9 +26,10 @@ export const CONFLICT_ENTRIES: Readonly<Record<ConflictReason, Omit<ErrorEntry, 
   'source-changed': { message: 'This source now points to a different database or is no longer configured. This investigation is read-only.', retryable: false },
 };
 
-/** The sentence of each reason of `ACCESS_DENIED`; it never says what changed. */
+/** The sentence of each reason of `ACCESS_DENIED`; a changed access is never said in more than that. */
 export const ACCESS_DENIED_ENTRIES: Readonly<Record<AccessDeniedReason, Omit<ErrorEntry, 'status'>>> = {
   'access-changed': { message: 'Your access changed since this export was made. Export again to get a file that matches your current access.', retryable: false },
+  'export-source-changed': { message: 'The source of this export changed since it was made. The file is no longer available.', retryable: false },
 };
 
 /** The sentence of each reason of `INVALID_REQUEST`; the limit itself is in the details. */

@@ -4,6 +4,7 @@ import { exportSchema } from '@neburyx/contracts';
 import { afterAll, describe, expect, it } from 'vitest';
 import { expireExports, purgeDeletedInvestigations } from '../jobs/maintenance.js';
 import { createLogger } from '../logger.js';
+import { identityHashOf } from '../registry/identity-hash.js';
 import { el, exportWebRoot, idsOf, startExportRig, type ExportRig } from '../testing/export-rig.js';
 
 afterAll(() => rmSync(exportWebRoot, { recursive: true, force: true }));
@@ -102,6 +103,95 @@ describe('GET /v1/exports/{id}/download', () => {
     expect(rig.store.exports.rows[0]).toMatchObject({ status: 'expired', storageKey: null });
     denied = false;
     expect((await rig.download(record.id)).statusCode).toBe(404);
+    await rig.stop();
+  });
+
+  it('records the identity of the source on the row when the export is made', async () => {
+    const rig = await startExportRig();
+    const [source] = rig.mapping.sources;
+    if (source === undefined) throw new Error('the rig has a source');
+    await ready(rig);
+    expect(firstRow(rig).sourceIdentityHash).toBe(identityHashOf(source));
+    await rig.stop();
+  });
+
+  describe('when the source of the export changed', () => {
+    const refusedBody = { error: { code: 'ACCESS_DENIED', details: { reason: 'export-source-changed' }, message: 'The source of this export changed since it was made. The file is no longer available.' } };
+    const changes: readonly (readonly [string, (rig: ExportRig) => void])[] = [
+      ['was re-pointed', (rig) => rig.store.exports.rows.splice(0, 1, { ...firstRow(rig), sourceIdentityHash: 'another-database' })],
+      ['was removed from the configuration', (rig) => {
+        const held = rig.store.investigations[0];
+        if (held === undefined) throw new Error('the rig holds an investigation');
+        rig.store.investigations[0] = { ...held, sourceId: 'gone' };
+      }],
+      ['was made before the identity was recorded', (rig) => rig.store.exports.rows.splice(0, 1, { ...firstRow(rig), sourceIdentityHash: null })],
+    ];
+
+    it.each(changes)('refuses the download, sends no bytes and expires the export when it %s', async (_name, change) => {
+      const rig = await startExportRig();
+      const { record } = await ready(rig);
+      change(rig);
+      const refused = await rig.download(record.id);
+      expect(refused.statusCode).toBe(403);
+      expect(refused.json()).toMatchObject(refusedBody);
+      expect(refused.headers['content-disposition']).toBeUndefined();
+      expect(await rig.files.list()).toEqual([]);
+      expect(firstRow(rig)).toMatchObject({ status: 'expired', storageKey: null });
+      expect((await rig.download(record.id)).statusCode).toBe(404);
+      await rig.stop();
+    });
+
+    it('audits the refusal once, as refused, with the format and the reason only', async () => {
+      const rig = await startExportRig();
+      const { record } = await ready(rig);
+      rig.store.exports.rows.splice(0, 1, { ...firstRow(rig), sourceIdentityHash: 'another-database' });
+      await rig.download(record.id);
+      const downloads = rig.events.filter((event) => event.action === 'export.download');
+      expect(downloads).toEqual([expect.objectContaining({ result: 'refused', sourceId: 'demo', detail: { export: { format: 'json', refusal: 'export-source-changed' } } })]);
+      await rig.stop();
+    });
+
+    it('still refuses when the audit sink is down', async () => {
+      const rig = await startExportRig({ failAudit: (action) => action === 'export.download' });
+      const { record } = await ready(rig);
+      rig.store.exports.rows.splice(0, 1, { ...firstRow(rig), sourceIdentityHash: 'another-database' });
+      const refused = await rig.download(record.id);
+      expect(refused.statusCode).toBe(403);
+      expect(refused.json()).toMatchObject(refusedBody);
+      expect(await rig.files.list()).toEqual([]);
+      await rig.stop();
+    });
+
+    it('gives the same refusal to an export whose source changed and whose access changed too, the source first', async () => {
+      let denied = false;
+      const rig = await startExportRig({ deny: () => denied });
+      const { record } = await ready(rig);
+      denied = true;
+      rig.store.exports.rows.splice(0, 1, { ...firstRow(rig), sourceIdentityHash: 'another-database' });
+      expect((await rig.download(record.id)).json()).toMatchObject(refusedBody);
+      await rig.stop();
+    });
+  });
+
+  it('still refuses for changed access when the audit sink is down', async () => {
+    let denied = false;
+    const rig = await startExportRig({ deny: () => denied, failAudit: (action) => action === 'export.download' });
+    const { record } = await ready(rig);
+    denied = true;
+    const refused = await rig.download(record.id);
+    expect(refused.statusCode).toBe(403);
+    expect(refused.json()).toMatchObject({ error: { code: 'ACCESS_DENIED', details: { reason: 'access-changed' } } });
+    expect(await rig.files.list()).toEqual([]);
+    await rig.stop();
+  });
+
+  it('audits a refusal for changed access as refused, with the format and the reason only', async () => {
+    let denied = false;
+    const rig = await startExportRig({ deny: () => denied });
+    const { record } = await ready(rig);
+    denied = true;
+    await rig.download(record.id);
+    expect(rig.events.filter((event) => event.action === 'export.download')).toEqual([expect.objectContaining({ result: 'refused', detail: { export: { format: 'json', refusal: 'access-changed' } } })]);
     await rig.stop();
   });
 
@@ -302,7 +392,7 @@ describe('the expiry task', () => {
   it('fails a pending row older than fifteen minutes, removes old temporary files and idempotency keys, and counts a file no row names without deleting it', async () => {
     const rig = await startExportRig();
     const investigation = await rig.open();
-    await rig.store.insertExport({ id: '11111111-1111-4111-8111-111111111111', investigationId: investigation.id, requestedBy: (await rig.store.current()).principal.id, policyVersion: 'none', format: 'json', retentionDays: 7 });
+    await rig.store.insertExport({ id: '11111111-1111-4111-8111-111111111111', investigationId: investigation.id, requestedBy: (await rig.store.current()).principal.id, policyVersion: 'none', sourceIdentityHash: 'x', format: 'json', retentionDays: 7 });
     await rig.create(investigation.id, body());
     const unnamed = await rig.files.write('22222222-2222-4222-8222-222222222222', Buffer.from('x'));
     rig.store.exports.clock.now += 16 * 60_000;
@@ -405,13 +495,13 @@ describe('calls that were killed, and the codes a retry meets', () => {
     const investigation = await rig.open();
     const principal = (await rig.store.current()).principal.id;
     const id = '33333333-3333-4333-8333-333333333333';
-    await rig.store.insertExport({ id, investigationId: investigation.id, requestedBy: principal, policyVersion: 'none', format: 'json', retentionDays: 7 });
+    await rig.store.insertExport({ id, investigationId: investigation.id, requestedBy: principal, policyVersion: 'none', sourceIdentityHash: 'x', format: 'json', retentionDays: 7 });
     await rig.files.write(id, Buffer.from('x'));
     rig.store.exports.clock.now += 16 * 60_000;
     expect((await expireExports(maintenance(rig))).failed).toBe(1);
     expect(await rig.files.list()).toEqual([]);
     const second = '44444444-4444-4444-8444-444444444444';
-    await rig.store.insertExport({ id: second, investigationId: investigation.id, requestedBy: principal, policyVersion: 'none', format: 'json', retentionDays: 7 });
+    await rig.store.insertExport({ id: second, investigationId: investigation.id, requestedBy: principal, policyVersion: 'none', sourceIdentityHash: 'x', format: 'json', retentionDays: 7 });
     await rig.files.write(second, Buffer.from('x'));
     await purgeDeletedInvestigations({ ...maintenance(rig), store: { purgeExpiredInvestigations: async (beforeDelete) => { await beforeDelete({ id: investigation.id, sourceId: 'demo' }); return 1; } } });
     expect(await rig.files.list()).toEqual([]);

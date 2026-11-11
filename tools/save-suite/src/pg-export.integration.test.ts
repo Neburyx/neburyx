@@ -1,10 +1,18 @@
-import { readdirSync } from 'node:fs';
+import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { expireExports, purgeDeletedInvestigations } from '../../../services/api/src/jobs/maintenance.js';
 import { createLogger } from '../../../services/api/src/logger.js';
+import { identityHashOf } from '../../../services/api/src/registry/identity-hash.js';
+import { reportFromServer } from '../../../services/api/src/source-test/report.js';
+import { runCli } from '../../../services/api/src/testing/cli.js';
+import { baseSource, fileOf } from '../../../services/api/src/testing/mapping.js';
 import { startPostgres, type TestPostgres } from '../../../services/api/src/testing/postgres.js';
 import { downloaded, made, removeExportFolder, reopened, viewRequest } from './export-helpers.js';
-import { closePgStores, startPgSuite, type PgSuite } from './rig.js';
+import { closePgStores, ENTITY_TYPES, mappingOf, RELATIONSHIP_TYPES, SOURCE, startPgSuite, type PgSuite } from './rig.js';
+
+const configFolder = mkdtempSync(join(tmpdir(), 'save-suite-pg-export-'));
 
 let postgres: TestPostgres;
 let suite: PgSuite | undefined;
@@ -17,6 +25,7 @@ afterEach(async () => {
 });
 afterAll(async () => {
   removeExportFolder();
+  rmSync(configFolder, { recursive: true, force: true });
   await closePgStores();
   await postgres.stop();
 });
@@ -84,5 +93,48 @@ describe('exports on real Postgres', () => {
     expect(files(suite)).toEqual([]);
     expect(await exportRows(suite)).toEqual([]);
     expect(await tab.client.downloadExport(kept.record.id)).toMatchObject(NOT_FOUND);
+  });
+
+  it('records the identity of the source, and refuses the download of an export made before a source was re-pointed even after the real rebind command made the investigation available again', async () => {
+    suite = await startPgSuite(postgres);
+    const { tab, id } = await reopened(suite);
+    const before = await made(tab, id, 'json', viewRequest(tab, 'json'));
+    const [original] = mappingOf().sources;
+    if (original === undefined) throw new Error('the mapping has a source');
+    expect(await suite.sql(`SELECT source_identity_hash FROM exports`)).toEqual([{ source_identity_hash: identityHashOf(original) }]);
+    tab.dispose();
+
+    const next = mappingOf({ database: 'a-different-database' });
+    await suite.restart(next);
+    const [source] = next.sources;
+    if (source === undefined) throw new Error('the mapping has a source');
+    await suite.store.recordSourceCheck({ id: '0192f000-0000-7000-8000-0000000000a2', report: reportFromServer(source, { product: 'Neo4j Kernel', version: '5.26.32', edition: 'community', versionSupported: true, operations: [] }, false, '2026-11-10T10:00:00.000Z'), triggeredBy: null, identityHash: identityHashOf(source), configHash: source.configHash });
+    const file = join(configFolder, 'neburyx.yaml');
+    writeFileSync(file, fileOf(baseSource({ id: SOURCE, database: 'a-different-database', entities: ENTITY_TYPES, relationships: RELATIONSHIP_TYPES })));
+    const rebound = await runCli(['source', 'rebind', SOURCE, '--confirm', SOURCE], { DATABASE_URL: suite.database.appUrl, NEBURYX_CONFIG: file }).done;
+    expect({ code: rebound.code, stdout: rebound.stdout }).toEqual({ code: 0, stdout: 'Source: demo\nInvestigations rebound: 1\n' });
+
+    const again = suite.tab();
+    expect(await again.openById(id)).toMatchObject({ kind: 'shown', id });
+    expect(again.state.investigation.getState().record).toMatchObject({ readOnly: false, sourceState: 'available' });
+    const refused = await again.client.downloadExport(before.record.id);
+    expect(refused).toMatchObject({ ok: false, failure: { code: 'ACCESS_DENIED', details: { reason: 'export-source-changed' } } });
+    expect(files(suite)).toEqual([]);
+    expect(await exportRows(suite)).toEqual([expect.objectContaining({ status: 'expired', storage_key: null })]);
+    expect(await again.client.downloadExport(before.record.id)).toMatchObject(NOT_FOUND);
+
+    again.mapTypes(['hub', 'leaf', 'part'], ['LINKED', 'HAS']);
+    const fresh = await made(again, id, 'json', viewRequest(again, 'json'));
+    expect(fresh.record.id).not.toBe(before.record.id);
+    expect(await suite.sql(`SELECT source_identity_hash FROM exports WHERE id = $1`, [fresh.record.id])).toEqual([{ source_identity_hash: identityHashOf(source) }]);
+  });
+
+  it('refuses an export that has no recorded identity, as one made before the identity was recorded', async () => {
+    suite = await startPgSuite(postgres);
+    const { tab, id } = await reopened(suite);
+    const old = await made(tab, id, 'json', viewRequest(tab, 'json'));
+    await suite.sql(`UPDATE exports SET source_identity_hash = NULL`);
+    expect(await tab.client.downloadExport(old.record.id)).toMatchObject({ ok: false, failure: { code: 'ACCESS_DENIED', details: { reason: 'export-source-changed' } } });
+    expect(files(suite)).toEqual([]);
   });
 });

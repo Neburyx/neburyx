@@ -308,7 +308,7 @@ function countsOf(stored: StoredInvestigation): { nodeCount: number; edgeCount: 
 function createInvestigations(options: SupportServerOptions) {
   const held = new Map<string, StoredInvestigation>();
   const exports = new Map<string, { readonly format: 'json' | 'csv'; readonly filename: string }>();
-  let exportMode: 'ok' | 'refused' | 'failed' | 'large' = 'ok';
+  let exportMode: 'ok' | 'refused' | 'source-changed' | 'failed' | 'large' = 'ok';
   /** The investigation as the routes that are not restore see it: a deleted one is not there. */
   const live = (id: string): StoredInvestigation | undefined => {
     const stored = held.get(id);
@@ -486,11 +486,11 @@ function createInvestigations(options: SupportServerOptions) {
       }
       json(response, 200, { investigation: shown(stored) }, { etag: `"${stored.version}"` });
     },
-    /** How the stand-in answers an export: normally, refused as if access changed, failed, or as if the view were too large. */
+    /** How the stand-in answers an export: normally, refused as if access changed or as if the source of the export changed, failed, or as if the view were too large. */
     setExportMode(body: unknown, response: ServerResponse): void {
       const given = typeof body === 'object' && body !== null && !Array.isArray(body) ? Object.fromEntries(Object.entries(body)) : {};
       const mode = given['mode'];
-      if (mode !== 'ok' && mode !== 'refused' && mode !== 'failed' && mode !== 'large') return json(response, 400, INVALID);
+      if (mode !== 'ok' && mode !== 'refused' && mode !== 'source-changed' && mode !== 'failed' && mode !== 'large') return json(response, 400, INVALID);
       exportMode = mode;
       json(response, 200, {});
     },
@@ -512,6 +512,7 @@ function createInvestigations(options: SupportServerOptions) {
       const stored = exports.get(id);
       if (stored === undefined) return json(response, 404, NOT_FOUND);
       if (exportMode === 'refused') return json(response, 403, { error: { code: 'ACCESS_DENIED', message: 'Your access changed since this export was made. Export again to get a file that matches your current access.', retryable: false, traceId: 'support', details: { reason: 'access-changed' } } });
+      if (exportMode === 'source-changed') return json(response, 403, { error: { code: 'ACCESS_DENIED', message: 'The source of this export changed since it was made. The file is no longer available.', retryable: false, traceId: 'support', details: { reason: 'export-source-changed' } } });
       response.writeHead(200, { 'content-type': stored.format === 'json' ? 'application/json' : 'application/zip', 'content-disposition': `attachment; filename="${stored.filename}"`, 'cache-control': 'no-store' });
       response.end('{}');
     },
