@@ -31,7 +31,14 @@ export async function startRig(postgres: TestPostgres, appMapping: MappingModel,
   await store.syncSources(appMapping.sources);
   const source = appMapping.sources[0];
   if (source === undefined) throw new Error('the mapping has a source');
-  const executor = new TestExecutor(withOnlineIndexes(source, () => Promise.resolve(entityRows(WIDGET))));
+  const executor = new TestExecutor(withOnlineIndexes(source, (call) => {
+    // a batched read answers a row for each reference it holds, with the position of the reference in the list
+    if (call.templateId === 'entity-load-many') {
+      const refs = Array.isArray(call.parameters['refs']) ? call.parameters['refs'] : [];
+      return Promise.resolve({ status: 'rows', rows: refs.map((_ref, i) => ({ i, dup: false, n: WIDGET })) });
+    }
+    return Promise.resolve(entityRows(WIDGET));
+  }));
   const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store, mapping: appMapping, gate: testSourceGate(appMapping, { executor }).gate, ...extra });
   const get = (url: string) => app.inject({ method: 'GET', url });
   const open = async (caseRef?: string) => {
