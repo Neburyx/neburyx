@@ -86,6 +86,17 @@ export const REACH: Readonly<Record<string, (page: Page) => Promise<void>>> = {
     await page.getByRole('form', { name: 'Open by parts' }).getByRole('button', { name: 'Open' }).click();
     await expect(page.getByRole('alert')).toHaveCount(2);
   },
+  'Home with the Help menu open': async (page) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Help' }).click();
+    await expect(page.getByRole('menu', { name: 'Help' })).toBeVisible();
+  },
+  'Home with the shortcut sheet open': async (page) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Help' }).click();
+    await page.getByRole('menuitem', { name: /^Keyboard shortcuts/ }).click();
+    await expect(page.getByRole('dialog', { name: 'Keyboard shortcuts' })).toBeVisible();
+  },
   'Home with the list read failed': async (page) => {
     await abort(page, (url) => url.pathname === '/v1/investigations');
     await page.goto('/');

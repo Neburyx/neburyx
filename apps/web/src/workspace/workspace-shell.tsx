@@ -16,7 +16,6 @@ import { NavigationRail } from './navigation-rail.js';
 import { StatusBanner } from '../banner/status-banner.js';
 import { NoticeStrip } from './notice-strip.js';
 import { useWorkspaceMark } from './workspace-presence.js';
-import { ShortcutSheet } from './shortcut-sheet.js';
 import { SelectionBar } from './selection-bar.js';
 
 export function WorkspaceShell({ canvasView, notice, status, busy = false }: { readonly canvasView?: 'fit' | 'as-drawn'; readonly notice?: ReactNode; readonly status?: ReactNode; readonly busy?: boolean }) {
@@ -48,7 +47,6 @@ export function WorkspaceShell({ canvasView, notice, status, busy = false }: { r
           <DockColumn />
         </div>
       </div>
-      <ShortcutSheet />
     </div>
   );
 }

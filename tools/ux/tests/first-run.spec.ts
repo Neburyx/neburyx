@@ -104,7 +104,7 @@ test.describe('First run in a browser', () => {
     await expect(page).toHaveURL(first);
   });
 
-  test('shows the setup note and the three steps inside the viewport, moves focus to the note on Connect your Neo4j, and copies the command', async ({ page, context }) => {
+  test('shows the setup note and the three steps inside the viewport, links Connect your Neo4j to the install guide in a new tab, and copies the command', async ({ page, context }) => {
     await context.grantPermissions(['clipboard-read', 'clipboard-write']);
     await page.goto('/');
     await expect(page.getByText('No sign-in')).toBeVisible();
@@ -117,8 +117,10 @@ test.describe('First run in a browser', () => {
       expect(box?.x ?? -1).toBeGreaterThanOrEqual(0);
       expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(viewport?.width ?? 0);
     }
-    await page.getByRole('button', { name: 'Connect your Neo4j' }).click();
-    await expect(page.getByRole('region', { name: 'Source setup' })).toBeFocused();
+    const guide = page.getByRole('link', { name: 'Connect your Neo4j' });
+    await expect(guide).toHaveAttribute('target', '_blank');
+    await expect(guide).toHaveAttribute('rel', /noopener/);
+    await expect(guide).toHaveAttribute('href', /\/docs\/install\.md$/);
     await expect(page).toHaveURL(/\/$/);
     await page.getByRole('button', { name: 'Copy' }).click();
     await expect(page.getByText('Copied')).toBeVisible();
@@ -129,7 +131,7 @@ test.describe('First run in a browser', () => {
   test('draws the focus outline on Open demo case, Connect your Neo4j and Copy, in reading order', async ({ page }) => {
     await page.goto('/');
     const focus = await tokenColour(page, '--color-focus');
-    const order = [page.getByRole('button', { name: 'Open demo case' }), page.getByRole('button', { name: 'Connect your Neo4j' }), page.getByRole('button', { name: 'Copy' })];
+    const order = [page.getByRole('button', { name: 'Open demo case' }), page.getByRole('link', { name: 'Connect your Neo4j' }), page.getByRole('button', { name: 'Copy' })];
     await order[0]?.focus();
     for (const [index, control] of order.entries()) {
       if (index > 0) await page.keyboard.press('Tab');

@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { HELP_LINKS } from '../help/links.js';
 import { PageHeading } from '../shell/page-heading.js';
 import { answeredData, useShellData } from '../shell/shell-data.js';
 import { FIRST_RUN_COPY } from './copy.js';
@@ -12,8 +12,6 @@ export function FirstRunPage() {
   const sources = answeredData(useShellData().sources)?.items ?? [];
   const demoCases = demoCasesOf(sources);
   const subtitle = sources.some((source) => source.synthetic) ? FIRST_RUN_COPY.subtitleWithDemo : FIRST_RUN_COPY.subtitleNone;
-  const note = useRef<HTMLElement>(null);
-  const showNote = (): void => note.current?.focus();
   return (
     <section className="first-run">
       <PageHeading title={FIRST_RUN_COPY.title} description={subtitle} source={null} tag={FIRST_RUN_COPY.tag} />
@@ -21,11 +19,11 @@ export function FirstRunPage() {
         {demoCases.map((entry) => (
           <OpenDemoCase key={entry.sourceId} entry={entry} label={FIRST_RUN_COPY.openDemoCase} offered={demoCases.length} className="primary" />
         ))}
-        <button type="button" className="secondary" onClick={showNote}>
+        <a className="secondary" href={HELP_LINKS.installGuide} target="_blank" rel="noopener noreferrer">
           {FIRST_RUN_COPY.connect}
-        </button>
+        </a>
       </EmptyState>
-      <SetupNote noteRef={note} />
+      <SetupNote />
       <GettingStarted />
     </section>
   );

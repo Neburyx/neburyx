@@ -51,6 +51,7 @@ import './styles/filters.css';
 import './styles/first-run.css';
 import './styles/home.css';
 import './styles/lifecycle.css';
+import './styles/help.css';
 import './styles/exports.css';
 import './styles/views.css';
 import './styles/investigations.css';
