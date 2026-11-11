@@ -292,9 +292,12 @@ function checkEdgeLoad(definition: TemplateDefinition, shape: Shape): void {
     return;
   }
   if (used.length !== 1 || used[0]?.name !== spec.typeParam || definition.cypher !== `@edgeLoad(${spec.typeParam})`) throw new CatalogError(definition.id, 'declares an edge load and its Cypher is not exactly its one edge load marker');
-  if (![spec.typeParam, spec.fromParam, spec.toParam].every((name) => shape.properties.get(name) === 'string') || !shape.properties.has('stableId')) throw new CatalogError(definition.id, 'declares an edge load for parameters its schema does not have');
-  if (definition.searchBranches !== undefined || definition.facetProbes !== undefined || definition.degreeCounts !== undefined || definition.expandNeighbors !== undefined || definition.relatedContext !== undefined || definition.paged || definition.profile === true || definition.cutMeans !== 'duplicate') {
-    throw new CatalogError(definition.id, "declares an edge load and is also another kind of template, paged, profiled or not declared cutMeans: 'duplicate'");
+  const list = spec.listParam;
+  if (list !== undefined && !/^[A-Za-z_][A-Za-z0-9_]*$/.test(list)) throw new CatalogError(definition.id, 'declares an edge load for a list parameter that is not a plain name');
+  const hasIds = list === undefined ? shape.properties.has('stableId') : shape.properties.get(list) === 'array' && !shape.properties.has('stableId');
+  if (![spec.typeParam, spec.fromParam, spec.toParam].every((name) => shape.properties.get(name) === 'string') || !hasIds) throw new CatalogError(definition.id, 'declares an edge load for parameters its schema does not have');
+  if (definition.searchBranches !== undefined || definition.facetProbes !== undefined || definition.degreeCounts !== undefined || definition.expandNeighbors !== undefined || definition.relatedContext !== undefined || definition.paged || definition.profile === true || (list === undefined ? definition.cutMeans !== 'duplicate' || definition.boundedBy !== undefined : definition.rows !== 'bounded' || definition.cutMeans !== undefined || definition.boundedBy !== list)) {
+    throw new CatalogError(definition.id, "declares an edge load and is also another kind of template, paged, profiled or not declared cutMeans: 'duplicate' (a read of a list of IDs is declared rows: 'bounded' and bounded by that list instead)");
   }
   if (definition.indexNeeds === undefined || definition.usedProperties === undefined) throw new CatalogError(definition.id, 'declares an edge load and does not name its index and its properties');
 }
@@ -332,6 +335,12 @@ function checkRows(definition: TemplateDefinition): void {
   if (!definition.paged && declared !== 1) throw new CatalogError(definition.id, "is not paged and does not declare exactly one of rows: 'one', rows: 'bounded', cutMeans: 'duplicate' or cutMeans: 'lowerBound'");
 }
 
+/** A template that reads a list is bounded by it: it is declared rows 'bounded', and the list is a parameter its schema has as a list. */
+function checkBoundedBy(definition: TemplateDefinition, shape: Shape): void {
+  if (definition.boundedBy === undefined) return;
+  if (definition.rows !== 'bounded' || definition.paged || shape.properties.get(definition.boundedBy) !== 'array') throw new CatalogError(definition.id, "is bounded by a list its schema does not have as a list, or is not declared rows: 'bounded'");
+}
+
 function build(definition: TemplateDefinition): Template {
   const shape = shapeOf(definition);
   for (const name of RESERVED) if (shape.properties.has(name)) throw new CatalogError(definition.id, `declares the reserved parameter ${name}`);
@@ -351,6 +360,7 @@ function build(definition: TemplateDefinition): Template {
   checkDerivedSupport(definition, shape);
   checkEdgeLoad(definition, shape);
   checkAggregateRead(definition, shape);
+  checkBoundedBy(definition, shape);
   checkReferenceParams(definition, shape);
   checkGateParameters(definition, shape);
   const integerParameters = [...shape.properties].flatMap(([name, type]) => (type === 'integer' ? [name] : []));

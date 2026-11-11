@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { CatalogError, createTemplateCatalog, type TemplateDefinition } from './catalog.js';
 import { connectivityTemplate } from './templates/connectivity.js';
 import { edgeLoadTemplate } from './templates/edge-load.js';
+import { edgeLoadManyTemplate } from './templates/edge-load-many.js';
+import { entityLoadManyTemplate } from './templates/entity-load-many.js';
 import { defaultCatalogTemplates } from './assemble.js';
 import { integerTemplate, markerTemplate, nodesTemplate } from '../testing/gate-fixtures.js';
 
@@ -195,6 +197,8 @@ describe('the templates of the shipped catalog', () => {
       'degree-preview-cheap': 'cut means a duplicate',
       'entity-load': 'cut means a duplicate',
       'edge-load': 'cut means a duplicate',
+      'entity-load-many': 'bounded by its input',
+      'edge-load-many': 'bounded by its input',
       'expand-neighbors': 'paged',
       'expand-count': 'one row',
       'entity-search': 'paged',
@@ -248,5 +252,49 @@ describe('the edge load declaration', () => {
 
   it('is refused when its schema lacks a parameter it names', () => {
     expect(failure({ edgeLoad: { typeParam: 'type', fromParam: 'from', toParam: 'missing' } })).toBe('the template edge-load declares an edge load for parameters its schema does not have');
+  });
+});
+
+describe('the declarations of a read of a list', () => {
+  const problem = (definition: TemplateDefinition): string | undefined => {
+    try {
+      createTemplateCatalog({ templates: [definition] });
+      return undefined;
+    } catch (error) {
+      return error instanceof CatalogError ? error.message : 'not a CatalogError';
+    }
+  };
+
+  it('accepts the shipped reads of a list', () => {
+    expect(problem(edgeLoadManyTemplate)).toBeUndefined();
+    expect(problem(entityLoadManyTemplate)).toBeUndefined();
+  });
+
+  it('refuses a read bounded by a list that its schema does not have as a list', () => {
+    expect(problem({ ...entityLoadManyTemplate, boundedBy: 'entityType' })).toBe("the template entity-load-many is bounded by a list its schema does not have as a list, or is not declared rows: 'bounded'");
+    expect(problem({ ...entityLoadManyTemplate, boundedBy: 'missing' })).toContain('is bounded by a list');
+  });
+
+  it('refuses a read bounded by a list that is not declared as bounded rows, or that is paged', () => {
+    expect(problem({ ...entityLoadManyTemplate, rows: undefined, cutMeans: 'duplicate' })).toContain('is bounded by a list');
+    expect(problem({ ...entityLoadManyTemplate, rows: undefined, paged: true })).toBeDefined();
+  });
+
+  it('refuses an edge read of a list that is not bounded by that list, or that says a cut means a duplicate', () => {
+    expect(problem({ ...edgeLoadManyTemplate, boundedBy: undefined })).toContain('declares an edge load and is also another kind of template');
+    expect(problem({ ...edgeLoadManyTemplate, rows: undefined, cutMeans: 'duplicate' })).toContain('declares an edge load and is also another kind of template');
+  });
+
+  it('refuses an edge read of a list whose schema lacks the list, or still has the single stable ID', () => {
+    expect(problem({ ...edgeLoadManyTemplate, edgeLoad: { typeParam: 'type', fromParam: 'from', toParam: 'to', listParam: 'missing' } })).toBe('the template edge-load-many declares an edge load for parameters its schema does not have');
+    expect(problem({ ...edgeLoadTemplate, edgeLoad: { typeParam: 'type', fromParam: 'from', toParam: 'to', listParam: 'stableId' } })).toBe('the template edge-load declares an edge load for parameters its schema does not have');
+  });
+
+  it('refuses an edge read whose list parameter is not a plain name', () => {
+    expect(problem({ ...edgeLoadManyTemplate, edgeLoad: { typeParam: 'type', fromParam: 'from', toParam: 'to', listParam: 'refs) MATCH (x' } })).toBe('the template edge-load-many declares an edge load for a list parameter that is not a plain name');
+  });
+
+  it('refuses a single edge read that is bounded by a list', () => {
+    expect(problem({ ...edgeLoadTemplate, boundedBy: 'stableId' })).toBeDefined();
   });
 });

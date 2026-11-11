@@ -78,6 +78,8 @@ export interface Template {
    * refused, so a larger result is never cut silently.
    */
   readonly rows?: 'one' | 'bounded';
+  /** For a read of a list: the list parameter whose length may not pass the limit of the request, so the rows of the read (one for each element at most) are never cut. */
+  readonly boundedBy?: string;
   readonly cutMeans?: 'duplicate' | 'lowerBound';
   readonly entityParams: readonly string[];
   readonly relationshipParams: readonly string[];
@@ -144,7 +146,7 @@ export interface Template {
    * `@edgeLoad(<type parameter>)`, and the gate writes the whole statement from the mapping row that joins the two types by the type and holds a `stable_id`; every name is quoted from the allowlist and the
    * request holds values only. The stable ID is the parameter `stableId` (and `stableInteger`, the integer it can be).
    */
-  readonly edgeLoad?: { readonly typeParam: string; readonly fromParam: string; readonly toParam: string };
+  readonly edgeLoad?: { readonly typeParam: string; readonly fromParam: string; readonly toParam: string; /** The list parameter of stable IDs of a read of many edges of the one type and ends, in place of the parameter `stableId`. */ readonly listParam?: string };
   /**
    * The aggregate templates' own declaration, for no other template: a statement that reads the relationships of one type between two entities that no stable ID tells apart (for a type that has a `stable_id`, those whose ID cannot be used).
    * The Cypher is the one marker `@aggregateRead(<type parameter>)`; the type is named in the request and checked, with the entity types of the two ends (the list parameter `endsParam`, the mapping row's `from`, then its `to`), against the mapping,

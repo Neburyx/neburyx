@@ -89,6 +89,11 @@ export function validateRequest(catalog: TemplateCatalog, template: Template, re
       if ('entityType' in used && used.use !== 'fixed-order' && context.model.entitiesByType.get(used.entityType)?.pii.includes(used.property) === true) throw new AppError('INVALID_REQUEST');
     }
   }
+  // a read of a list answers a row for each element at most, so the limit covers the list and no row is ever cut
+  if (template.boundedBy !== undefined) {
+    const list: unknown = Object.getOwnPropertyDescriptor(parsed.data, template.boundedBy)?.value;
+    if (!Array.isArray(list) || list.length > request.limit) throw new AppError('INVALID_REQUEST');
+  }
   const refs = template.refsOf(parsed.data);
   if (refs.some((ref) => ref.sourceId !== context.sourceId)) throw new AppError('SOURCE_MISMATCH');
   if (refs.some((ref) => !context.allowlist.entityLabels.has(ref.entityType))) throw new AppError('INVALID_REQUEST');

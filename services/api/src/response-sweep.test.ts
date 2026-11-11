@@ -38,7 +38,12 @@ const withMemberIds = (outcome: ExecuteOutcome): ExecuteOutcome =>
     ? { ...outcome, rows: outcome.rows.map((row) => (Array.isArray(row['sample']) ? { ...row, sample: row['sample'].map((member: object, index: number) => ({ ...member, elementId: `5:sweep:member${index}` })) } : row)) }
     : outcome;
 const recording = async (call: ExecuteCall): Promise<ExecuteOutcome> => {
-  const outcome = call.templateId === 'edge-load' ? ({ status: 'rows', rows: [storedRow] } as const) : call.templateId === 'aggregate-sample' ? withMemberIds(await respond(call)) : await respond(call);
+  const outcome =
+    call.templateId === 'edge-load-many'
+      ? ({ status: 'rows', rows: (call.parameters['refs'] as readonly unknown[]).map((_ref, i) => ({ i, dup: false, ...storedRow })) } as const)
+      : call.templateId === 'edge-load'
+        ? ({ status: 'rows', rows: [storedRow] } as const)
+        : call.templateId === 'aggregate-sample' ? withMemberIds(await respond(call)) : await respond(call);
   if (outcome.status === 'rows') elementIdsIn(outcome.rows, issued);
   return outcome;
 };
@@ -72,7 +77,7 @@ const SCENARIOS: readonly Scenario[] = [
   { name: 'derived relationship', route: 'GET /v1/edges/:ref', method: 'GET', url: `/v1/edges/${edgeRefSegmentOf(derived)}`, schema: edgeDetailSchema },
   { name: 'source link of an entity', route: 'GET /v1/source-links/:ref', method: 'GET', url: `/v1/source-links/${sourceLinkSegmentOf({ form: 'entity', ref: entity })}` },
   { name: 'source link of a record', route: 'GET /v1/source-links/:ref', method: 'GET', url: `/v1/source-links/${sourceLinkSegmentOf({ form: 'stored', ref: stored })}?record=R-1` },
-  { name: 'read by references', route: 'POST /v1/graph/read-refs', method: 'POST', url: '/v1/graph/read-refs', payload: { sourceId: FUZZ_SOURCE, entities: [{ sourceId: FUZZ_SOURCE, entityType: 'widget', stableId: 'W-1' }] }, schema: readRefsResponseSchema },
+  { name: 'read by references', route: 'POST /v1/graph/read-refs', method: 'POST', url: '/v1/graph/read-refs', payload: { sourceId: FUZZ_SOURCE, entities: [{ sourceId: FUZZ_SOURCE, entityType: 'widget', stableId: 'W-1' }], edges: [stored] }, schema: readRefsResponseSchema },
   { name: 'derived neighbors', route: 'POST /v1/graph/derived-neighbors', method: 'POST', url: '/v1/graph/derived-neighbors', payload: { sourceId: FUZZ_SOURCE, ref: { entityType: 'widget', stableId: 'W-1' } }, schema: derivedNeighborsResponseSchema },
   { name: 'degree preview', route: 'POST /v1/graph/preview-expansion', method: 'POST', url: '/v1/graph/preview-expansion', payload: { sourceId: FUZZ_SOURCE, ref: { entityType: 'widget', stableId: 'W-1' } }, schema: degreePreviewSchema },
   { name: 'expand', route: 'POST /v1/graph/expand', method: 'POST', url: '/v1/graph/expand', payload: { sourceId: FUZZ_SOURCE, ref: { entityType: 'widget', stableId: 'W-1' }, neighborTypes: ['gadget'], direction: 'out' }, schema: expandResponseSchema },
@@ -122,6 +127,14 @@ describe('no response of a route of the inspector holds an element ID of the sou
     }
     expect(issued.size, 'the source answered with element IDs, so the sweep has something to look for').toBeGreaterThan(20);
     expect([...issued], 'the members of the aggregate carried element IDs the answer had to leave out').toContain('5:sweep:member0');
+  });
+
+  it('asks the read by references for a node and an edge, so its answer is swept with something in it', async () => {
+    const scenario = SCENARIOS.find((candidate) => candidate.name === 'read by references') as Scenario;
+    const body = readRefsResponseSchema.parse((await send(scenario)).json());
+    expect(body.nodes).toHaveLength(1);
+    expect(body.edges).toHaveLength(1);
+    expect(body.missing).toEqual({ entities: [], edges: [] });
   });
 
   it('also holds for the refusals of those routes', async () => {

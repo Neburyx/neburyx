@@ -111,6 +111,12 @@ const phoneRow = (index: number) => {
 export function respond(call: ExecuteCall): Promise<ExecuteOutcome> {
   if (call.templateId.startsWith('entity-search') || call.templateId === 'search-facets' || call.templateId === 'relationship-evidence' || call.templateId === 'entity-related') return searchModel(call);
   if (call.templateId === 'entity-load') return Promise.resolve({ status: 'rows', rows: call.cypher.includes('`Widget`') ? [{ n: widget, id: 'W-1' }] : call.cypher.includes('`Handle`') ? [{ n: plainNode(['Handle'], { phoneNumber: call.parameters['stableId'] }, 'e-phone-x'), id: 'p' }] : [] });
+  if (call.templateId === 'entity-load-many') {
+    const refs = call.parameters['refs'] as readonly { readonly stableId: string }[];
+    if (call.cypher.includes('`Widget`')) return Promise.resolve({ status: 'rows', rows: refs.map((_ref, i) => ({ i, dup: false, n: widget, id: 'W-1' })) });
+    if (call.cypher.includes('`Handle`')) return Promise.resolve({ status: 'rows', rows: refs.map((ref, i) => ({ i, dup: false, n: plainNode(['Handle'], { phoneNumber: ref.stableId }, `e-phone-x${i}`), id: 'p' })) });
+    return Promise.resolve({ status: 'rows', rows: [] });
+  }
   if (call.templateId === 'derived-edge-support') return Promise.resolve({ status: 'rows', rows: Array.from({ length: Math.min(call.rowLimit, 3) }, (_, index) => supportRow(index)) });
   if (call.templateId === 'derived-rule-run') return Promise.resolve({ status: 'rows', rows: Array.from({ length: Math.min(call.rowLimit, 3) }, (_, index) => derivedRow(index)) });
   if (call.templateId === 'aggregate-sample') {

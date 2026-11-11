@@ -1,4 +1,4 @@
-import { AGGREGATE_MEMBERS_SCOPE, DERIVED_NEIGHBOR_CAP, NO_STABLE_ID, type AggregateEdgeRef, type DerivedEdgeRef, type EdgeRef, type ElementRef, type GraphEdge, type GraphNode, type ReadRefsRequest, type ReadRefsResponse, type StoredEdgeRef } from '@neburyx/contracts';
+import { AGGREGATE_MEMBERS_SCOPE, DERIVED_NEIGHBOR_CAP, MAX_READ_REFS, NO_STABLE_ID, type AggregateEdgeRef, type DerivedEdgeRef, type EdgeRef, type ElementRef, type GraphEdge, type GraphNode, type ReadRefsRequest, type ReadRefsResponse, type StoredEdgeRef } from '@neburyx/contracts';
 import { AppError } from '../errors.js';
 import { canonicalJson } from '../gate/cursor/binding.js';
 import { isAggregateSample, isAggregateSummary } from '../gate/normalize/aggregate.js';
@@ -6,8 +6,8 @@ import { isNormalizedSupports } from '../gate/normalize/derived-run.js';
 import type { Normalized } from '../gate/normalize/index.js';
 import { AGGREGATE_SAMPLE_ID, AGGREGATE_SUMMARY_ID } from '../gate/templates/aggregate-evidence.js';
 import { DERIVED_EDGE_SUPPORT_ID } from '../gate/templates/derived-edge-support.js';
-import { EDGE_LOAD_ID } from '../gate/templates/edge-load.js';
-import { ENTITY_LOAD_ID } from '../gate/templates/entity-load.js';
+import { EDGE_LOAD_MANY_ID } from '../gate/templates/edge-load-many.js';
+import { ENTITY_LOAD_MANY_ID } from '../gate/templates/entity-load-many.js';
 import type { Gate, GateRequest } from '../gate/types.js';
 import type { SourceAccess } from '../investigations/source-access.js';
 import type { MappingModel, SourceModel } from '../mapping/model.js';
@@ -57,19 +57,33 @@ async function manyThrough(gate: Gate, requests: readonly GateRequest[]) {
   }
 }
 
+/** The references split into runs of one kind (the key says which) of at most `size`, each read by one statement; a run keeps the order the references came in. */
+function runsOf<T>(refs: readonly T[], keyOf: (ref: T) => string, size: number): T[][] {
+  const groups = new Map<string, T[]>();
+  for (const ref of refs) groups.set(keyOf(ref), [...(groups.get(keyOf(ref)) ?? []), ref]);
+  return [...groups.values()].flatMap((group) => Array.from({ length: Math.ceil(group.length / size) }, (_unused, index) => group.slice(index * size, (index + 1) * size)));
+}
+
+/** The position in its run of the reference a row of a batched read answers; a row that names none is no answer. */
+const indexOf = (item: unknown): number | undefined => (typeof item === 'object' && item !== null && 'index' in item && typeof item.index === 'number' ? item.index : undefined);
+
 export function createReadRefsService(deps: ReadRefsDeps): ReadRefsService {
   async function entities(call: ReadRefsCall, source: SourceModel, refs: readonly ElementRef[]) {
     const { request } = call;
     const mapped = refs.filter((ref) => source.entities.some((type) => type.type === ref.entityType));
+    // one statement reads a run of references of one entity type (at most the references of a call and the page of the source); the runs of a call share one lease
+    const runs = runsOf(mapped, (ref) => ref.entityType, Math.min(MAX_READ_REFS, source.budgets.maxPage));
     const pages = await manyThrough(
       deps.gate,
-      mapped.map((ref) => ({ traceId: call.traceId, principal: call.principal, sourceId: request.sourceId, templateId: ENTITY_LOAD_ID, params: { entityType: ref.entityType, stableId: ref.stableId }, limit: 1, mask: request.mask === true, ...(call.signal === undefined ? {} : { signal: call.signal }) })),
+      runs.map((run) => ({ traceId: call.traceId, principal: call.principal, sourceId: request.sourceId, templateId: ENTITY_LOAD_MANY_ID, params: { entityType: run[0]?.entityType, refs: run }, limit: run.length, mask: request.mask === true, ...(call.signal === undefined ? {} : { signal: call.signal }) })),
     );
     const found = new Map<ElementRef, GraphNode>();
-    mapped.forEach((ref, index) => {
-      const [item] = pages[index]?.items ?? [];
-      const node = isNormalized(item) ? item.nodes.find((candidate) => candidate.ref.entityType === ref.entityType) : undefined;
-      if (node !== undefined) found.set(ref, node);
+    runs.forEach((run, position) => {
+      for (const item of pages[position]?.items ?? []) {
+        const ref = run[indexOf(item) ?? -1];
+        const node = ref !== undefined && isNormalized(item) ? item.nodes.find((candidate) => candidate.ref.entityType === ref.entityType) : undefined;
+        if (ref !== undefined && node !== undefined) found.set(ref, node);
+      }
     });
     return { nodes: refs.flatMap((ref) => found.get(ref) ?? []), missing: refs.filter((ref) => !found.has(ref)) };
   }
@@ -77,15 +91,18 @@ export function createReadRefsService(deps: ReadRefsDeps): ReadRefsService {
   async function storedEdges(call: ReadRefsCall, source: SourceModel, refs: readonly StoredEdgeRef[]) {
     const { request } = call;
     const mapped = refs.filter((ref) => source.relationships.some((row) => row.type === ref.type && row.from === ref.from && row.to === ref.to && row.stableId !== undefined));
+    const runs = runsOf(mapped, (ref) => canonicalJson([ref.type, ref.from, ref.to]), Math.min(MAX_READ_REFS, source.budgets.maxPage));
     const pages = await manyThrough(
       deps.gate,
-      mapped.map((ref) => ({ traceId: call.traceId, principal: call.principal, sourceId: request.sourceId, templateId: EDGE_LOAD_ID, params: { type: ref.type, from: ref.from, to: ref.to, stableId: ref.stableId }, limit: 1, mask: request.mask === true, ...(call.signal === undefined ? {} : { signal: call.signal }) })),
+      runs.map((run) => ({ traceId: call.traceId, principal: call.principal, sourceId: request.sourceId, templateId: EDGE_LOAD_MANY_ID, params: { type: run[0]?.type, from: run[0]?.from, to: run[0]?.to, refs: run.map((ref) => ({ stableId: ref.stableId })) }, limit: run.length, mask: request.mask === true, ...(call.signal === undefined ? {} : { signal: call.signal }) })),
     );
     const found = new Map<StoredEdgeRef, GraphEdge>();
-    mapped.forEach((ref, index) => {
-      const [item] = pages[index]?.items ?? [];
-      const edge = isNormalized(item) ? item.edges.find((candidate) => 'stableId' in candidate.ref) : undefined;
-      if (edge !== undefined) found.set(ref, edge);
+    runs.forEach((run, position) => {
+      for (const item of pages[position]?.items ?? []) {
+        const ref = run[indexOf(item) ?? -1];
+        const edge = ref !== undefined && isNormalized(item) ? item.edges.find((candidate) => 'stableId' in candidate.ref) : undefined;
+        if (ref !== undefined && edge !== undefined) found.set(ref, edge);
+      }
     });
     return { edges: refs.flatMap((ref) => found.get(ref) ?? []), missing: refs.filter((ref) => !found.has(ref)) };
   }

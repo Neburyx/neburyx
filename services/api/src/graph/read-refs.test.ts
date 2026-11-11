@@ -68,9 +68,12 @@ async function started(options: Options = {}) {
 
 type Started = Awaited<ReturnType<typeof started>>;
 const post = (app: Started['app'], payload: unknown) => app.inject({ method: 'POST', url: '/v1/graph/read-refs', payload: payload as object });
-const entityCalls = (executor: TestExecutor) => executor.calls.filter((call) => call.templateId === 'entity-load');
-const byId = (call: ExecuteCall): string => String(call.parameters['stableId']);
-const answerWidgets = (known: readonly string[]) => (call: ExecuteCall): ExecuteOutcome => (call.templateId === 'entity-load' && known.includes(byId(call)) ? { status: 'rows', rows: [{ n: widget(byId(call)) }] } : { status: 'rows', rows: [] });
+const entityCalls = (executor: TestExecutor) => executor.calls.filter((call) => call.templateId === 'entity-load-many');
+/** The stable IDs a batched read was given, in order; the scripted source answers a row for each one it holds, as the statement does, with the position of the ID in the list. */
+const idsOf = (call: ExecuteCall): readonly string[] => (call.parameters['refs'] as readonly { readonly stableId: string }[]).map((entry) => entry.stableId);
+const asked = (executor: TestExecutor): number => entityCalls(executor).reduce((sum, call) => sum + idsOf(call).length, 0);
+const answerWidgets = (known: readonly string[]) => (call: ExecuteCall): ExecuteOutcome =>
+  call.templateId === 'entity-load-many' ? { status: 'rows', rows: idsOf(call).flatMap((id, i) => (known.includes(id) ? [{ i, n: widget(id), dup: false }] : [])) } : { status: 'rows', rows: [] };
 
 describe('POST /v1/graph/read-refs: entities', () => {
   it('returns each entity the source still holds, in the order asked, and lists the others as missing, in one read through the gate', async () => {
@@ -80,8 +83,65 @@ describe('POST /v1/graph/read-refs: entities', () => {
     const body = readRefsResponseSchema.parse(response.json());
     expect(body.nodes.map((node) => node.ref.stableId)).toEqual(['W-3', 'W-1']);
     expect(body.missing).toEqual({ entities: [el('widget', 'W-2')], edges: [] });
-    expect(entityCalls(executor)).toHaveLength(3);
+    expect(entityCalls(executor)).toHaveLength(1);
+    expect(asked(executor)).toBe(3);
     expect(events.filter((event) => event.action === 'entity.load')).toHaveLength(1);
+    await app.close();
+  });
+
+  it('reads the references of one entity type in runs of at most the page of the source, the runs of a call under one audit event, and maps each answer back to its reference', async () => {
+    const known = ['W-0', 'W-49', 'W-50', 'W-99'];
+    const { app, executor, events } = await started({ answer: answerWidgets(known) });
+    const ids = Array.from({ length: MAX_READ_REFS }, (_unused, index) => `W-${index}`);
+    const body = readRefsResponseSchema.parse((await post(app, { sourceId: 'demo', entities: ids.map((id) => el('widget', id)) })).json());
+    expect(entityCalls(executor).map((call) => idsOf(call).length)).toEqual([50, 50]);
+    expect(entityCalls(executor).flatMap(idsOf)).toEqual(ids);
+    expect(body.nodes.map((node) => node.ref.stableId)).toEqual(known);
+    expect(body.missing.entities).toHaveLength(MAX_READ_REFS - known.length);
+    expect(events.filter((event) => event.action === 'entity.load')).toHaveLength(1);
+    await app.close();
+  });
+
+  it('reads each entity type in a statement of its own and keeps the order asked', async () => {
+    const { app, executor } = await started({ answer: answerWidgets(['W-1', 'W-2']) });
+    const body = readRefsResponseSchema.parse((await post(app, { sourceId: 'demo', entities: [el('widget', 'W-2'), el('gadget', 'GT-1'), el('widget', 'W-1')] })).json());
+    expect(entityCalls(executor).map((call) => [call.cypher.includes('`Widget`'), idsOf(call)])).toEqual([
+      [true, ['W-2', 'W-1']],
+      [false, ['GT-1']],
+    ]);
+    expect(body.nodes.map((node) => node.ref.stableId)).toEqual(['W-2', 'W-1']);
+    expect(body.missing.entities).toEqual([el('gadget', 'GT-1')]);
+    await app.close();
+  });
+
+  it('masks the personal-data fields of every node of a run when asked, and lists a missing one the same', async () => {
+    const { app } = await started({ answer: answerWidgets(['W-1', 'W-3']) });
+    const masked = readRefsResponseSchema.parse((await post(app, { sourceId: 'demo', mask: true, entities: [el('widget', 'W-1'), el('widget', 'W-2'), el('widget', 'W-3')] })).json());
+    expect(JSON.stringify(masked)).not.toContain('Ana Silva');
+    expect(masked.nodes.map((node) => node.ref.stableId)).toEqual(['W-1', 'W-3']);
+    expect(masked.missing.entities).toEqual([el('widget', 'W-2')]);
+    await app.close();
+  });
+
+  it('lists a node the policy takes out of the middle of a run as missing, and keeps the others with the references they answer', async () => {
+    const { app } = await started({ hideNode: 'W-2', answer: answerWidgets(['W-1', 'W-2', 'W-3']) });
+    const body = readRefsResponseSchema.parse((await post(app, { sourceId: 'demo', entities: [el('widget', 'W-1'), el('widget', 'W-2'), el('widget', 'W-3')] })).json());
+    expect(body.nodes.map((node) => node.ref.stableId)).toEqual(['W-1', 'W-3']);
+    expect(body.missing.entities).toEqual([el('widget', 'W-2')]);
+    await app.close();
+  });
+
+  it('reads the tokens of a keyed type in a batch and masks their values when asked', async () => {
+    const tokens = ['+1-212-555-0100', '+1-212-555-0101'].map((value) => makeToken(TEST_REFERENCE_KEYS, { sourceId: 'demo', entityType: 'phone' }, value));
+    const answer = (call: ExecuteCall): ExecuteOutcome =>
+      call.templateId === 'entity-load-many' ? { status: 'rows', rows: idsOf(call).map((id, i) => ({ i, dup: false, n: plainNode(['Handle'], { phoneNumber: id }, `4:s:p${i}`) })) } : { status: 'rows', rows: [] };
+    const { app, executor } = await started({ answer });
+    const plain = readRefsResponseSchema.parse((await post(app, { sourceId: 'demo', entities: tokens.map((token) => el('phone', token)) })).json());
+    const masked = readRefsResponseSchema.parse((await post(app, { sourceId: 'demo', mask: true, entities: tokens.map((token) => el('phone', token)) })).json());
+    expect(plain.nodes.map((node) => node.ref.stableId)).toEqual(tokens);
+    expect(masked.nodes.map((node) => node.ref.stableId)).toEqual(tokens);
+    expect(JSON.stringify(masked)).not.toMatch(/555-010[01]/);
+    expect(entityCalls(executor).flatMap(idsOf)).toEqual(['+1-212-555-0100', '+1-212-555-0101', '+1-212-555-0100', '+1-212-555-0101']);
     await app.close();
   });
 
@@ -102,9 +162,9 @@ describe('POST /v1/graph/read-refs: entities', () => {
     expect(unmapped.missing.entities).toHaveLength(1);
     expect(Object.keys(gone)).toEqual(Object.keys(unmapped));
     expect(gone.nodes).toEqual(unmapped.nodes);
-    const before = entityCalls(executor).length;
+    const before = asked(executor);
     await post(app, { sourceId: 'demo', entities: [el('widget', 'W-9'), el('widget', 'W-9')] });
-    expect(entityCalls(executor).length - before).toBe(1);
+    expect(asked(executor) - before).toBe(1);
     await app.close();
   });
 
@@ -112,8 +172,11 @@ describe('POST /v1/graph/read-refs: entities', () => {
     const { app, executor } = await started({ answer: answerWidgets(['W-1']) });
     await post(app, { sourceId: 'demo', entities: [el('widget', 'W-1')] });
     const [call] = entityCalls(executor);
-    expect(call?.cypher).toBe('MATCH (n:`Widget`) WHERE n.`widgetId` IN [$stableId, $stableInteger] RETURN n ORDER BY elementId(n) LIMIT $limit + 1');
-    expect(call?.parameters['stableId']).toBe('W-1');
+    expect(call?.cypher).toBe(
+      'UNWIND range(0, size($refs) - 1) AS i CALL { WITH i MATCH (n:`Widget`) WHERE n.`widgetId` IN [$refs[i].stableId, $refs[i].stableInteger] RETURN n ORDER BY elementId(n) LIMIT 2 } WITH i, collect(n) AS found RETURN i, found[0] AS n, size(found) > 1 AS dup ORDER BY i LIMIT $limit + 1',
+    );
+    expect(call === undefined ? [] : idsOf(call)).toEqual(['W-1']);
+    expect(call?.cypher).not.toContain('W-1');
     await app.close();
   });
 
@@ -133,7 +196,7 @@ describe('POST /v1/graph/read-refs: entities', () => {
 
   it('accepts the token of a keyed entity', async () => {
     const token = makeToken(TEST_REFERENCE_KEYS, { sourceId: 'demo', entityType: 'phone' }, '+1-212-555-0100');
-    const { app } = await started({ answer: (call) => (call.templateId === 'entity-load' ? { status: 'rows', rows: [{ n: plainNode(['Handle'], { phoneNumber: '+1-212-555-0100' }, '4:s:p') }] } : { status: 'rows', rows: [] }) });
+    const { app } = await started({ answer: (call) => (call.templateId === 'entity-load-many' ? { status: 'rows', rows: [{ i: 0, dup: false, n: plainNode(['Handle'], { phoneNumber: '+1-212-555-0100' }, '4:s:p') }] } : { status: 'rows', rows: [] }) });
     const response = await post(app, { sourceId: 'demo', entities: [el('phone', token)] });
     expect(response.statusCode).toBe(200);
     expect(readRefsResponseSchema.parse(response.json()).nodes.map((node) => node.ref.stableId)).toEqual([token]);
@@ -144,7 +207,7 @@ describe('POST /v1/graph/read-refs: entities', () => {
     ['times out', { status: 'timeout' as const }, 504, 'QUERY_TIMEOUT'],
     ['is unavailable', { status: 'unavailable' as const, reason: 'unreachable' as const }, 503, 'SOURCE_UNAVAILABLE'],
   ])('returns no node when the source %s', async (_name, outcome, status, code) => {
-    const { app } = await started({ answer: (call) => (call.templateId === 'entity-load' ? outcome : { status: 'rows', rows: [] }) });
+    const { app } = await started({ answer: (call) => (call.templateId === 'entity-load-many' ? outcome : { status: 'rows', rows: [] }) });
     const response = await post(app, { sourceId: 'demo', entities: [el('widget', 'W-1')] });
     expect(response.statusCode).toBe(status);
     expect(response.json()).toMatchObject({ error: { code } });
@@ -194,7 +257,7 @@ describe('POST /v1/graph/read-refs: one answer for an item the person may not re
 
   it('lists a stored edge the policy takes out of the result exactly as it lists one the source no longer holds', async () => {
     const ref = { sourceId: 'demo', type: 'MADE_FROM', from: 'widget', to: 'gadget', stableId: 'L-1' };
-    const hidden = await started({ hideEdge: 'L-1', answer: (call) => (call.templateId === 'edge-load' ? { status: 'rows', rows: [link('L-1')] } : { status: 'rows', rows: [] }) });
+    const hidden = await started({ hideEdge: 'L-1', answer: (call) => (call.templateId === 'edge-load-many' ? { status: 'rows', rows: [{ i: 0, dup: false, ...link('L-1') }] } : { status: 'rows', rows: [] }) });
     const gone = await started({ answer: () => ({ status: 'rows', rows: [] }) });
     const shown = readRefsResponseSchema.parse((await post(hidden.app, { sourceId: 'demo', edges: [ref] })).json());
     const absent = readRefsResponseSchema.parse((await post(gone.app, { sourceId: 'demo', edges: [ref] })).json());
@@ -207,7 +270,8 @@ describe('POST /v1/graph/read-refs: one answer for an item the person may not re
 
 describe('POST /v1/graph/read-refs: stored edges', () => {
   const ref = (id: string) => ({ sourceId: 'demo', type: 'MADE_FROM', from: 'widget', to: 'gadget', stableId: id });
-  const answer = (known: readonly string[]) => (call: ExecuteCall): ExecuteOutcome => (call.templateId === 'edge-load' && known.includes(String(call.parameters['stableId'])) ? { status: 'rows', rows: [link(String(call.parameters['stableId']))] } : { status: 'rows', rows: [] });
+  const answer = (known: readonly string[]) => (call: ExecuteCall): ExecuteOutcome =>
+    call.templateId === 'edge-load-many' ? { status: 'rows', rows: idsOf(call).flatMap((id, i) => (known.includes(id) ? [{ i, dup: false, ...link(id) }] : [])) } : { status: 'rows', rows: [] };
 
   it('returns each stored edge the source still holds and lists the others as missing, including a type with no stable ID in the mapping', async () => {
     const { app, events } = await started({ answer: answer(['L-1']) });
@@ -217,6 +281,19 @@ describe('POST /v1/graph/read-refs: stored edges', () => {
     const body = readRefsResponseSchema.parse(response.json());
     expect(body.edges.map((edge) => edge.ref)).toEqual([ref('L-1')]);
     expect(body.missing.edges).toEqual([ref('L-2'), none]);
+    expect(events.filter((event) => event.action === 'edge.load')).toHaveLength(1);
+    await app.close();
+  });
+
+  it('reads the stored edges of a call in runs of at most the page of the source under one audit event, and maps each answer back to its reference', async () => {
+    const known = ['L-0', 'L-49', 'L-50', 'L-99'];
+    const { app, executor, events } = await started({ answer: answer(known) });
+    const asked = Array.from({ length: MAX_READ_REFS }, (_unused, index) => ref(`L-${index}`));
+    const body = readRefsResponseSchema.parse((await post(app, { sourceId: 'demo', edges: asked })).json());
+    const calls = executor.calls.filter((call) => call.templateId === 'edge-load-many');
+    expect(calls.map((call) => idsOf(call).length)).toEqual([50, 50]);
+    expect(body.edges.map((edge) => edge.ref)).toEqual(known.map(ref));
+    expect(body.missing.edges).toHaveLength(MAX_READ_REFS - known.length);
     expect(events.filter((event) => event.action === 'edge.load')).toHaveLength(1);
     await app.close();
   });
@@ -234,12 +311,12 @@ describe('POST /v1/graph/read-refs: stored edges', () => {
     expect((await post(app, { sourceId: 'demo', edges: Array.from({ length: MAX_READ_REFS + 1 }, (_unused, index) => ref(`L-${index}`)) })).statusCode).toBe(400);
     const other = await post(app, { sourceId: 'demo', edges: [{ ...ref('L-1'), sourceId: 'other' }] });
     expect(other.json()).toMatchObject({ error: { code: 'SOURCE_MISMATCH' } });
-    expect(executor.calls.filter((call) => call.templateId === 'edge-load')).toHaveLength(0);
+    expect(executor.calls.filter((call) => call.templateId === 'edge-load-many')).toHaveLength(0);
     await app.close();
   });
 
   it('returns no edge when the source is slow', async () => {
-    const { app } = await started({ answer: (call) => (call.templateId === 'edge-load' ? { status: 'timeout' } : { status: 'rows', rows: [] }) });
+    const { app } = await started({ answer: (call) => (call.templateId === 'edge-load-many' ? { status: 'timeout' } : { status: 'rows', rows: [] }) });
     const response = await post(app, { sourceId: 'demo', edges: [ref('L-1')] });
     expect(response.statusCode).toBe(504);
     expect(response.json()).not.toHaveProperty('edges');

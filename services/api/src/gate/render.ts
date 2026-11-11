@@ -297,7 +297,12 @@ function edgeLoadOf(template: Template, params: Params, allowlist: SourceAllowli
   const fromLabel = typeof from === 'string' ? allowlist.entityLabels.get(from) : undefined;
   const toLabel = typeof to === 'string' ? allowlist.entityLabels.get(to) : undefined;
   if (row?.stableId === undefined || fromLabel === undefined || toLabel === undefined) throw new AppError('INVALID_REQUEST');
-  return `MATCH (a:${quoteName(fromLabel)})-[r:${quoteName(row.type)}]->(b:${quoteName(toLabel)}) WHERE r.${quoteName(row.stableId)} IN [$stableId, $stableInteger] RETURN r, a, b ORDER BY elementId(r) LIMIT $limit + 1`;
+  const pattern = `(a:${quoteName(fromLabel)})-[r:${quoteName(row.type)}]->(b:${quoteName(toLabel)})`;
+  if (spec.listParam !== undefined) {
+    // one statement for a list of IDs: each ID reads at most two relationships (the second only says that another has the ID) and answers its first by element ID
+    return `UNWIND range(0, size($${spec.listParam}) - 1) AS i CALL { WITH i MATCH ${pattern} WHERE r.${quoteName(row.stableId)} IN [$${spec.listParam}[i].stableId, $${spec.listParam}[i].stableInteger] RETURN r, a, b ORDER BY elementId(r) LIMIT 2 } WITH i, collect([r, a, b]) AS found RETURN i, found[0][0] AS r, found[0][1] AS a, found[0][2] AS b, size(found) > 1 AS dup ORDER BY i LIMIT $limit + 1`;
+  }
+  return `MATCH ${pattern} WHERE r.${quoteName(row.stableId)} IN [$stableId, $stableInteger] RETURN r, a, b ORDER BY elementId(r) LIMIT $limit + 1`;
 }
 
 /** The statement of one aggregate read (see `Template.aggregateRead`): the mapping row that joins the two ends' entity types by the type is looked up in the allowlist, and a request that names none is refused before any read. */
