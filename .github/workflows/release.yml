@@ -1,0 +1,46 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]*.[0-9]*.[0-9]*'
+
+permissions:
+  contents: read
+
+jobs:
+  image:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - uses: docker/setup-qemu-action@v4.3.0
+      - uses: docker/setup-buildx-action@v4.3.0
+      - run: pnpm test:image
+      - name: Make skopeo available
+        run: |
+          skopeo --version || { sudo apt-get update && sudo apt-get install --yes skopeo; }
+          skopeo --version
+      - name: Check the image target
+        id: target
+        run: |
+          output=$(node deploy/release/release-image.mjs --tag "$GITHUB_REF_NAME" --check-target)
+          echo "registry=${output#registry: }" >> "$GITHUB_OUTPUT"
+      - uses: docker/login-action@v4.7.0
+        with:
+          registry: ${{ steps.target.outputs.registry }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_TOKEN }}
+      - name: Push the checked image
+        run: |
+          result=$(node deploy/release/release-image.mjs --tag "$GITHUB_REF_NAME" --push)
+          printf '%s\n' "$result"
+          { echo '### Release image'; echo; echo '```'; printf '%s\n' "$result"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"

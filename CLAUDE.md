@@ -21,6 +21,7 @@ safe on very high-degree nodes. The repo is **pre-release**: the build tooling, 
 | `domain-packs` | Ready-made mapping files, one directory per domain; YAML and Markdown only, no code (see its README) |
 | `deploy/docker` | Container image build (`Dockerfile`; see its README) |
 | `deploy/compose` | Community install: image + Postgres, loopback only (see its README) |
+| `deploy/release` | Release image: the script that builds it for both platforms and pushes the checked archive, the image target, and the workflow that runs it on a version tag (see its README) |
 | `deploy/demo` | Demo environment: the product and two synthetic demo graphs, loopback only (see its README) |
 | `tools/demo-graph` | Synthetic demo graph generator |
 | `tools/dev` | The `pnpm dev` command: runs the app locally against your own Neo4j and Postgres, starting no container (see `docs/run-locally.md`) |
