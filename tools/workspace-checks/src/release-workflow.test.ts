@@ -35,6 +35,8 @@ const TAG_GLOB = 'v[0-9]*.[0-9]*.[0-9]*';
 const pinnedAction = /^[\w-]+\/[\w-]+@v\d+\.\d+\.\d+$/;
 const PUSH_LINE = 'node deploy/release/release-image.mjs --tag "$GITHUB_REF_NAME" --push';
 const CHECK_LINE = 'node deploy/release/release-image.mjs --tag "$GITHUB_REF_NAME" --check-target';
+const JOB_PERMISSIONS = JSON.stringify({ contents: 'read', packages: 'write' });
+const LOGIN_WITH = { registry: '${{ steps.target.outputs.registry }}', username: '${{ github.actor }}', password: '${{ secrets.GITHUB_TOKEN }}' };
 const REGISTRY_HOST = /\b(ghcr\.io|docker\.io|quay\.io|gcr\.io|amazonaws\.com|azurecr\.io)\b/;
 const WRITERS = /(git\s+(push|tag|commit|config)|\bgh\s|create-release|action-gh-release|GIT_AUTHOR|GIT_COMMITTER|user\.(name|email))/;
 
@@ -71,7 +73,7 @@ function violations(workflow: Workflow): string[] {
   if (triggers.length !== 1 || triggers[0] !== 'push') found.push('trigger');
   else if (!push.success || JSON.stringify(push.data.tags) !== JSON.stringify([TAG_GLOB]) || push.data.branches !== undefined) found.push('trigger');
   const jobs = Object.values(workflow.jobs);
-  if (JSON.stringify(workflow.permissions) !== JSON.stringify({ contents: 'read' }) || jobs.some((job) => job.permissions !== undefined)) {
+  if (JSON.stringify(workflow.permissions) !== JSON.stringify({ contents: 'read' }) || jobs.some((job) => JSON.stringify(job.permissions) !== JOB_PERMISSIONS)) {
     found.push('permissions');
   }
   const steps = stepsOf(workflow);
@@ -98,9 +100,9 @@ function violations(workflow: Workflow): string[] {
   if (steps.some((step, at) => ((step.run ?? '').includes('--push') || (step.run ?? '').includes('skopeo copy')) && at !== pushAt)) found.push('order');
   if (!(steps[targetAt]?.run ?? '').includes(CHECK_LINE) || !(steps[pushAt]?.run ?? '').includes(PUSH_LINE)) found.push('commands');
   if (steps.some((step) => WRITERS.test(stepText(step)))) found.push('writers');
-  const loginWith = JSON.stringify(steps[loginAt]?.with ?? {});
-  if (!loginWith.includes('secrets.REGISTRY_USERNAME') || !loginWith.includes('secrets.REGISTRY_TOKEN')) found.push('credentials');
+  if (JSON.stringify(steps[loginAt]?.with) !== JSON.stringify(LOGIN_WITH)) found.push('credentials');
   if (steps.some((step) => (step.run ?? '').includes('secrets.'))) found.push('credentials');
+  if (JSON.stringify(workflow).match(/secrets\.(?!GITHUB_TOKEN\b)/) !== null) found.push('credentials');
   const registry = steps[loginAt]?.with?.['registry'];
   if (registry !== '${{ steps.target.outputs.registry }}' || steps[targetAt]?.id !== 'target') found.push('registry-output');
   if (!(steps[pushAt]?.run ?? '').includes('GITHUB_STEP_SUMMARY')) found.push('summary');
@@ -123,10 +125,10 @@ describe('release workflow', () => {
     expect(workflow.on['push']).toEqual({ tags: [TAG_GLOB] });
   });
 
-  it('asks only for read access to the contents, in no job beyond that', () => {
+  it('asks for read access to the contents at the top, and in the one job for that and package write, nothing else', () => {
     const workflow = copyOf();
     expect(workflow.permissions).toEqual({ contents: 'read' });
-    expect(Object.values(workflow.jobs).filter((job) => job.permissions !== undefined)).toEqual([]);
+    expect(Object.values(workflow.jobs).map((job) => job.permissions)).toEqual([{ contents: 'read', packages: 'write' }]);
   });
 
   it('names a runner image and a timeout for every job and pins every action', () => {
@@ -148,14 +150,11 @@ describe('release workflow', () => {
     expect(steps.findIndex(runIncludes('--check-target'))).toBeLessThan(steps.length - 2);
   });
 
-  it('reads the registry host from the target check and the credentials from two secrets', () => {
+  it('reads the registry host from the target check and logs in with the workflow token only', () => {
     const steps = stepsOf(copyOf());
-    expect(steps.at(-2)?.with).toEqual({
-      registry: '${{ steps.target.outputs.registry }}',
-      username: '${{ secrets.REGISTRY_USERNAME }}',
-      password: '${{ secrets.REGISTRY_TOKEN }}',
-    });
+    expect(steps.at(-2)?.with).toEqual(LOGIN_WITH);
     expect(steps.filter(runIncludes('secrets.'))).toEqual([]);
+    expect(workflowText.match(/secrets\.\w+/g)).toEqual(['secrets.GITHUB_TOKEN']);
   });
 
   it('writes the image reference and digest to the run summary', () => {
@@ -179,7 +178,10 @@ describe('release workflow', () => {
     ['a branch trigger', 'trigger', (w) => void (w.on['push'] = { tags: [TAG_GLOB], branches: ['main'] })],
     ['a wider tag glob', 'trigger', (w) => void (w.on['push'] = { tags: ['v*'] })],
     ['write permission at the top', 'permissions', (w) => void (w.permissions['packages'] = 'write')],
-    ['write permission in a job', 'permissions', (w) => void (firstJob(w).permissions = { packages: 'write' })],
+    ['more write permission in the job', 'permissions', (w) => void (firstJob(w).permissions = { contents: 'write', packages: 'write' })],
+    ['an id-token permission in the job', 'permissions', (w) => void (firstJob(w).permissions = { contents: 'read', packages: 'write', 'id-token': 'write' })],
+    ['no package write in the job', 'permissions', (w) => void (firstJob(w).permissions = { contents: 'read' })],
+    ['no permissions in the job', 'permissions', (w) => void delete firstJob(w).permissions],
     ['an unpinned action', 'pinning', (w) => void patchStep(w, 0, { uses: 'actions/checkout@v7' })],
     ['a default runner', 'runner', (w) => void (firstJob(w)['runs-on'] = 'ubuntu-latest')],
     ['no timeout', 'timeout', (w) => void delete firstJob(w)['timeout-minutes']],
@@ -194,9 +196,11 @@ describe('release workflow', () => {
     ['a gh call', 'writers', (w) => void firstJob(w).steps.splice(4, 0, { run: 'gh release create v1' })],
     ['a release action', 'writers', (w) => void firstJob(w).steps.splice(4, 0, { uses: 'softprops/action-gh-release@v2.0.0' })],
     ['a Git identity', 'writers', (w) => void firstJob(w).steps.splice(4, 0, { run: 'git config user.name bot' })],
-    ['a secret in a run line', 'credentials', (w) => void firstJob(w).steps.splice(4, 0, { run: 'echo ${{ secrets.REGISTRY_TOKEN }}' })],
-    ['a literal registry host', 'registry-output', (w) => void patchStep(w, loginIndex(w), { with: { registry: 'registry.example', username: '${{ secrets.REGISTRY_USERNAME }}', password: '${{ secrets.REGISTRY_TOKEN }}' } })],
-    ['a registry host from a known provider', 'registry-host', (w) => void patchStep(w, loginIndex(w), { with: { registry: 'ghcr.io', username: '${{ secrets.REGISTRY_USERNAME }}', password: '${{ secrets.REGISTRY_TOKEN }}' } })],
+    ['a secret in a run line', 'credentials', (w) => void firstJob(w).steps.splice(4, 0, { run: 'echo ${{ secrets.GITHUB_TOKEN }}' })],
+    ['a personal token in the login', 'credentials', (w) => void patchStep(w, loginIndex(w), { with: { ...LOGIN_WITH, password: '${{ secrets.REGISTRY_TOKEN }}' } })],
+    ['a stored username in the login', 'credentials', (w) => void patchStep(w, loginIndex(w), { with: { ...LOGIN_WITH, username: '${{ secrets.REGISTRY_USERNAME }}' } })],
+    ['a literal registry host', 'registry-output', (w) => void patchStep(w, loginIndex(w), { with: { ...LOGIN_WITH, registry: 'registry.example' } })],
+    ['a registry host from a known provider', 'registry-host', (w) => void patchStep(w, loginIndex(w), { with: { ...LOGIN_WITH, registry: 'ghcr.io' } })],
     ['a target check without its id', 'registry-output', (w) => void patchStep(w, firstJob(w).steps.findIndex(runIncludes('--check-target')), { id: 'other' })],
     ['no summary', 'summary', (w) => void patchStep(w, firstJob(w).steps.length - 1, { run: PUSH_LINE })],
   ];
