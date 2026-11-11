@@ -1,11 +1,14 @@
 import { randomBytes } from 'node:crypto';
-import { readdirSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { networkInterfaces } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { execFileSync } from 'node:child_process';
+import { sourcesResponseSchema } from '@neburyx/contracts';
 import { z } from 'zod';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { docker, dockerOk, dockerStream } from '../image/docker.js';
-import { buildDerivedImage, destroyAll, repository, serviceOf, Stack } from './stack.js';
+import { buildDerivedImage, composeFile, destroyAll, repository, serviceOf, Stack, type StackOptions } from './stack.js';
 
 const IMAGE = 'neburyx-compose-test';
 const TAG_A = `a-${randomBytes(3).toString('hex')}`;
@@ -42,11 +45,163 @@ afterAll(async () => {
   }
 });
 
-async function newStack(extra: { readonly omit?: readonly string[]; readonly overrides?: readonly string[] } = {}): Promise<Stack> {
+async function newStack(extra: { readonly omit?: readonly string[]; readonly overrides?: readonly string[]; readonly settings?: Readonly<Record<string, string>>; readonly mapping?: StackOptions['mapping'] } = {}): Promise<Stack> {
   const stack = await Stack.create({ image: IMAGE, tag: TAG_A, ...extra });
   stacks.push(stack);
   return stack;
 }
+
+describe('the cursor key', () => {
+  const COMPOSE_DIRECTORY = fileURLToPath(new URL('../../../../deploy/compose/', import.meta.url));
+
+  it('is given to the api container, and the api logs no warning about a key it made itself', async () => {
+    const stack = await newStack();
+    expect((await stack.up()).code).toBe(0);
+    const live = (await stack.compose(['exec', '-T', 'api', 'env'])).stdout;
+    expect(live).toContain(`NEBURYX_CURSOR_KEY=${stack.cursorKey}`);
+    const logs = (await stack.compose(['logs', '--no-log-prefix', 'api'])).stdout;
+    expect(logs).not.toContain('cursor.key_not_set');
+    expect(logs).not.toContain(stack.cursorKey);
+  });
+
+  it('keeps a page cursor valid across a restart of the api container', async () => {
+    const stack = await newStack();
+    expect((await stack.up()).code).toBe(0);
+    await stack.psql(
+      `INSERT INTO sources (id, alias, connector, uri, database, secret_ref, config_hash, identity_hash) VALUES ('restart-source', 'restart-source', 'neo4j', 'bolt://unused:7687', 'neo4j', 'U:P', 'c', 'i');
+       INSERT INTO investigations (id, source_id, source_identity_hash, owner_id, title) SELECT gen_random_uuid(), 'restart-source', 'i', id, 'Restart ' || n FROM users, generate_series(1, 3) AS n WHERE issuer = 'local'`,
+    );
+    const first = await fetch(`${stack.url}/v1/investigations?limit=1`);
+    expect(first.status).toBe(200);
+    const body = z.object({ items: z.array(z.unknown()).length(1), nextCursor: z.string() }).parse(await first.json());
+
+    expect((await stack.compose(['restart', 'api'])).code).toBe(0);
+    await vi.waitFor(async () => expect((await fetch(`${stack.url}/readyz`)).status).toBe(200), { timeout: 60_000, interval: 1000 });
+
+    const next = await fetch(`${stack.url}/v1/investigations?limit=1&cursor=${encodeURIComponent(body.nextCursor)}`);
+    expect(next.status).toBe(200);
+    expect(z.object({ items: z.array(z.unknown()).length(1) }).parse(await next.json()).items).toHaveLength(1);
+  });
+
+  it('stops the api with exit code 1 and a message that names the variable and does not repeat its value, for a key that is not a key', async () => {
+    const bad = 'this-is-not-a-cursor-key-value';
+    const stack = await newStack({ settings: { NEBURYX_CURSOR_KEY: bad } });
+    const recorder = await stack.record();
+    try {
+      const since = Date.now() * 1e6;
+      const result = await stack.compose(['up', '--wait', '--wait-timeout', '60']);
+      expect(result.code).not.toBe(0);
+      expect(`${result.stdout}${result.stderr}`).not.toContain(bad);
+      await recorder.sync();
+      const died = recorder.since(since).find((event) => serviceOf(event) === 'api' && event.Action === 'die');
+      expect(died?.Actor.Attributes['exitCode']).toBe('1');
+      const logs = (await stack.compose(['logs', '--no-log-prefix', 'api'])).stdout;
+      expect(logs).toContain('invalid configuration: NEBURYX_CURSOR_KEY');
+      expect(logs).not.toContain(bad);
+    } finally {
+      await recorder.stop();
+    }
+  });
+
+  it('is explained by the settings example and the README, with the command that makes one and the rule that it is never committed', () => {
+    for (const file of ['.env.example', 'README.md']) {
+      const text = readFileSync(`${COMPOSE_DIRECTORY}${file}`, 'utf8');
+      expect(text, file).toContain('NEBURYX_CURSOR_KEY');
+      expect(text, file).toContain('openssl rand -base64 32');
+      expect(text.toLowerCase(), file).toContain('never commit');
+    }
+  });
+});
+
+const SOURCE_ENV_FILE = join(repository, 'deploy/compose/source.env');
+const SOURCE_MAPPING = `sources:
+  - id: compose-source
+    uri: "bolt://neo4j.unused.example:7687"
+    database: neo4j
+    auth: { kind: basic, username_env: COMPOSE_TEST_USER, password_env: COMPOSE_TEST_PASSWORD }
+    entities:
+      - type: account
+        label: Account
+        stable_id: accountId
+`;
+
+/** Writes `deploy/compose/source.env` for the length of one test: the file the shipped compose file reads is the one next to it. */
+async function withSourceEnv<T>(text: string, run: () => Promise<T>): Promise<T> {
+  writeFileSync(SOURCE_ENV_FILE, text, { mode: 0o600 });
+  try {
+    return await run();
+  } finally {
+    rmSync(SOURCE_ENV_FILE, { force: true });
+  }
+}
+
+describe('the mapping and the source login', () => {
+  it('stops the api with a message naming the mapping file when the config folder holds none, and starts with no sources once the example is copied', async () => {
+    const missing = await newStack({ mapping: 'none' });
+    const failed = await missing.compose(['up', '--wait', '--wait-timeout', '60']);
+    expect(failed.code).not.toBe(0);
+    const logs = (await missing.compose(['logs', '--no-log-prefix', 'api'])).stdout;
+    expect(logs).toContain('/etc/neburyx/neburyx.yaml');
+    expect(logs).toContain('cannot be read');
+
+    const copied = await newStack();
+    expect((await copied.up()).code).toBe(0);
+    const listed = sourcesResponseSchema.parse(await (await fetch(`${copied.url}/v1/sources`)).json());
+    expect(listed.items).toEqual([]);
+  });
+
+  it('starts without a source.env, and logs that the source has no credentials without logging a value', async () => {
+    expect(existsSync(SOURCE_ENV_FILE)).toBe(false);
+    const stack = await newStack({ mapping: { text: SOURCE_MAPPING } });
+    expect((await stack.up()).code).toBe(0);
+    await vi.waitFor(async () => expect((await stack.compose(['logs', '--no-log-prefix', 'api'])).stdout).toContain('source.credentials_missing'), { timeout: 60_000, interval: 1000 });
+    expect((await stack.compose(['exec', '-T', 'api', 'env'])).stdout).not.toContain('COMPOSE_TEST_USER');
+  });
+
+  it('lists a source of the mounted mapping, and hands the variables of source.env to the api without any value in a committed file or in the logs', async () => {
+    const user = `user-${randomBytes(6).toString('hex')}`;
+    const password = `pw-${randomBytes(12).toString('hex')}`;
+    await withSourceEnv(`COMPOSE_TEST_USER=${user}\nCOMPOSE_TEST_PASSWORD=${password}\n`, async () => {
+      const stack = await newStack({ mapping: { text: SOURCE_MAPPING } });
+      expect((await stack.up()).code).toBe(0);
+      const live = (await stack.compose(['exec', '-T', 'api', 'env'])).stdout;
+      expect(live).toContain('NEBURYX_CONFIG=/etc/neburyx/neburyx.yaml');
+      expect(live).toContain(`COMPOSE_TEST_USER=${user}`);
+      expect(live).toContain(`COMPOSE_TEST_PASSWORD=${password}`);
+      const listed = sourcesResponseSchema.parse(await (await fetch(`${stack.url}/v1/sources`)).json());
+      expect(listed.items.map((item) => item.id)).toEqual(['compose-source']);
+      const logs = (await stack.compose(['logs', '--no-log-prefix', 'api'])).stdout;
+      expect(logs).not.toContain(password);
+      expect(logs).not.toContain(user);
+      expect(logs).not.toContain('source.credentials_missing');
+      for (const file of [composeFile, join(repository, 'deploy/compose/.env.example'), join(repository, 'deploy/compose/config/neburyx.example.yaml')]) {
+        expect(readFileSync(file, 'utf8')).not.toContain(password);
+      }
+    });
+  });
+
+  it('reads the mapping from the folder NEBURYX_CONFIG_DIR names, mounted read-only', async () => {
+    const stack = await newStack({ mapping: { text: SOURCE_MAPPING } });
+    expect((await stack.up()).code).toBe(0);
+    expect(await dockerOk(['inspect', '--format', '{{range .Mounts}}{{.Destination}} {{.Source}} {{.RW}}\n{{end}}', await stack.containerId('api')])).toMatch(/^\/etc\/neburyx \S+ false$/m);
+    const written = await stack.compose(['exec', '-T', 'api', 'sh', '-c', 'touch /etc/neburyx/written']);
+    expect(written.code).not.toBe(0);
+    expect(sourcesResponseSchema.parse(await (await fetch(`${stack.url}/v1/sources`)).json()).items).toHaveLength(1);
+  });
+
+  it('is kept out of git: the mapping a reader adds and source.env are ignored', () => {
+    for (const path of ['deploy/compose/config/neburyx.yaml', 'deploy/compose/source.env']) {
+      expect(() => execFileSync('git', ['check-ignore', '--quiet', path], { cwd: repository }), path).not.toThrow();
+    }
+  });
+
+  it('is explained by the settings example and the README: the config folder, NEBURYX_CONFIG_DIR, source.env, its mode and the Compose version it needs', () => {
+    for (const file of ['.env.example', 'README.md']) {
+      const text = readFileSync(join(repository, 'deploy/compose', file), 'utf8');
+      for (const word of ['config/neburyx.yaml', 'NEBURYX_CONFIG_DIR', 'source.env', '0600', '2.24']) expect(text, `${file}: ${word}`).toContain(word);
+    }
+  });
+});
 
 /** What `compose port` prints for a port that is exposed but not published: the host part differs between Compose versions (`:0` on v2.38.2 and v5.6.0, `invalid IP:0` on v5.1.3); the host port is 0 or the line is empty. */
 const NO_HOST_PORT = /^(|.*:0)$/;

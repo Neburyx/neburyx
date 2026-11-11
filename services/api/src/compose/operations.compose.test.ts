@@ -58,8 +58,8 @@ function settingsFile(): Record<string, string> {
   return { NEBURYX_CURSOR_KEY: randomBytes(32).toString('base64') };
 }
 
-async function newStack(extra: { readonly omit?: readonly string[]; readonly tag?: string } = {}): Promise<Stack> {
-  const stack = await Stack.create({ image: IMAGE, tag: extra.tag ?? TAG, settings: settingsFile(), ...(extra.omit === undefined ? {} : { omit: extra.omit }) });
+async function newStack(extra: { readonly omit?: readonly string[]; readonly tag?: string; readonly settings?: Readonly<Record<string, string>> } = {}): Promise<Stack> {
+  const stack = await Stack.create({ image: IMAGE, tag: extra.tag ?? TAG, settings: { ...settingsFile(), ...extra.settings }, ...(extra.omit === undefined ? {} : { omit: extra.omit }) });
   stacks.push(stack);
   return stack;
 }
@@ -88,17 +88,19 @@ async function readyz(stack: Stack): Promise<{ status: number; body: unknown }> 
   return { status: response.status, body: await response.json() };
 }
 
-/** The cursor key is not listed: the Community file does not require it yet. */
-const REQUIRED_PASSWORDS = ['NEBURYX_DB_ADMIN_PASSWORD', 'NEBURYX_DB_MIGRATION_PASSWORD', 'NEBURYX_DB_APP_PASSWORD'];
+const REQUIRED_VALUES = ['NEBURYX_DB_ADMIN_PASSWORD', 'NEBURYX_DB_MIGRATION_PASSWORD', 'NEBURYX_DB_APP_PASSWORD', 'NEBURYX_CURSOR_KEY'];
 
-describe('a settings file with a value missing', () => {
-  it.each(REQUIRED_PASSWORDS)('stops docker compose up before any container exists, naming %s', async (name) => {
-    const stack = await newStack({ omit: [name] });
-    const result = await stack.compose(['up', '--no-start']);
-    expect(result.code).not.toBe(0);
-    expect(result.stderr).toContain(name);
-    expect(await dockerOk(['ps', '-aq', '--filter', `label=com.docker.compose.project=${stack.project}`])).toBe('');
-  });
+describe('a settings file with a password or the cursor key missing', () => {
+  it.each(REQUIRED_VALUES.flatMap((name) => [[name, 'missing'] as const, [name, 'empty'] as const]))(
+    'stops docker compose up before any container exists, naming %s when it is %s',
+    async (name, how) => {
+      const stack = await newStack(how === 'missing' ? { omit: [name] } : { settings: { [name]: '' } });
+      const result = await stack.compose(['up', '--no-start']);
+      expect(result.code).not.toBe(0);
+      expect(result.stderr).toContain(name);
+      expect(await dockerOk(['ps', '-aq', '--filter', `label=com.docker.compose.project=${stack.project}`])).toBe('');
+    },
+  );
 });
 
 describe('a fresh install', () => {

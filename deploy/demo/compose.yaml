@@ -92,7 +92,9 @@ services:
       NEBURYX_CURSOR_KEY: ${NEBURYX_CURSOR_KEY:?set NEBURYX_CURSOR_KEY in the .env file}
       DEMO_NEO4J_USER: neo4j
       DEMO_NEO4J_PASSWORD: *graph-password
-    volumes:
+    env_file: !reset []
+    volumes: !override
+      - neburyx-exports:/data/exports
       - demo-config:/config:ro
     depends_on:
       db:
