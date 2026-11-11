@@ -185,6 +185,8 @@ export async function checkOperations(
   const documented = new Set<string>();
   const formatsUnchecked = usesUnsupportedFormat(document);
   if (formatsUnchecked) failures.push({ route: 'document', problem: 'the document uses a format the contract check cannot validate' });
+  // many operations describe the same response schema, and compiling one costs several milliseconds
+  const compiled = new Map<string, ValidateFunction | string>();
 
   for (const [path, item] of Object.entries(document.paths)) {
     if (item['$ref'] !== undefined) {
@@ -224,7 +226,9 @@ export async function checkOperations(
         continue;
       }
       if (formatsUnchecked) continue;
-      const validate = compileAt(ajv, pointer('paths', path, method, 'responses', key, 'content', 'application/json', 'schema'));
+      const shape = JSON.stringify(json.schema ?? null);
+      const validate = compiled.get(shape) ?? compileAt(ajv, pointer('paths', path, method, 'responses', key, 'content', 'application/json', 'schema'));
+      compiled.set(shape, validate);
       if (typeof validate === 'string') {
         failures.push({ route, problem: `the schema cannot be compiled: ${validate}` });
       } else if (!isJson(response.headers['content-type'])) {

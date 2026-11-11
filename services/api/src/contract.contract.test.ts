@@ -125,6 +125,16 @@ describe('a route that disagrees with its document', () => {
     ]);
   });
 
+  it('judges each route against the schema it shares with another, and reports only the one that does not match', async () => {
+    const server = await app();
+    server.get('/v1/test/thing', async () => ({ name: 5 }));
+    server.get('/v1/test/twin', async () => ({ name: 'x' }));
+    const sameSchema = fixtureDocument({}).paths['/v1/test/thing'];
+    expect(await checkOperations(server, fixtureDocument({ '/v1/test/twin': sameSchema }))).toEqual([
+      { route: 'GET /v1/test/thing', problem: 'the response does not match the document' },
+    ]);
+  });
+
   it('is reported by name when the status is not documented', async () => {
     const server = await app();
     server.get('/v1/test/thing', async (_request, reply) => reply.code(201).send({ name: 'x' }));
@@ -190,6 +200,18 @@ describe('a document the check cannot trust', () => {
     expect(failures).toHaveLength(1);
     expect(failures[0]).toMatchObject({ route: 'GET /v1/test/ref' });
     expect(failures[0]?.problem).toContain('cannot be compiled');
+  });
+
+  it('reports a reference that cannot be resolved on every route that uses it', async () => {
+    const server = await app();
+    server.get('/v1/test/thing', async () => ({ name: 'x' }));
+    server.get('/v1/test/ref', async () => ({ name: 'x' }));
+    server.get('/v1/test/ref-again', async () => ({ name: 'x' }));
+    const missing = { $ref: '#/components/schemas/Missing' };
+    const again = { '/v1/test/ref-again': referencing(missing)['/v1/test/ref'] };
+    const failures = await checkOperations(server, fixtureDocument({ ...referencing(missing), ...again }));
+    expect(failures.map((failure) => failure.route)).toEqual(['GET /v1/test/ref', 'GET /v1/test/ref-again']);
+    expect(failures.every((failure) => failure.problem.includes('cannot be compiled'))).toBe(true);
   });
 
   it('reports a schema that uses a format it cannot check', async () => {
