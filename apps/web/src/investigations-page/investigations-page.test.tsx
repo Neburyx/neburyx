@@ -11,9 +11,28 @@ afterAll(() => configure({ reactStrictMode: false }));
 const bodyRows = (): HTMLElement[] => [...document.querySelectorAll<HTMLElement>('.investigations-table tbody tr')];
 const status = (): string => document.querySelector('.investigations-status')?.textContent ?? '';
 
+/**
+ * Each archives 25 rows one after another through the real menu. That takes about 0.3 s here and about 19 times that on the CI runner, which is past the default 5 s, so these two tests state a longer limit.
+ * It is a limit and not a wait: they end as soon as the last step does.
+ */
+const MANY_ARCHIVES_MS = 20_000;
+
 async function openPage(client: ApiClient, path = '/investigations') {
   const view = renderApp(path, client);
   return view;
+}
+
+/**
+ * Archives the row of a case from its actions menu and waits for its link to leave. The queries are by label and text, not by role: a role query walks the accessibility tree of a table of 25 rows, and
+ * 25 rounds of three of them made these tests cost most of their time (and several times that on a slow runner). The tests that use it also set the delay of `userEvent` to none, which skips a timer
+ * between the steps of a click.
+ */
+async function archiveCase(user: ReturnType<typeof userEvent.setup>, index: number) {
+  // the link is there before the archive, so that the wait for it to leave is a wait for something
+  expect(screen.getByText(`Case ${index}`, { selector: 'a' })).toBeTruthy();
+  await user.click(screen.getByLabelText(`Actions for Case ${index}`));
+  await user.click(within(screen.getByRole('menu')).getByText('Archive'));
+  await waitFor(() => expect(screen.queryByText(`Case ${index}`, { selector: 'a' })).toBeNull());
 }
 
 describe('the Investigations page: the table', () => {
@@ -404,16 +423,14 @@ describe('the Investigations page: the heading and a list that runs out of shown
   it('reads the first page again, and not an empty state, when every shown row has left while more remain', async () => {
     const { client, recorded } = pagedClient(rowsOf(30));
     await openPage(client);
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     await screen.findByRole('link', { name: 'Case 1' });
     for (let index = 1; index <= 25; index += 1) {
-      await user.click(screen.getByRole('button', { name: `Actions for Case ${index}` }));
-      await user.click(screen.getByRole('menuitem', { name: 'Archive' }));
-      await waitFor(() => expect(screen.queryByRole('link', { name: new RegExp(`^Case ${index}$`) })).toBeNull());
+      await archiveCase(user, index);
     }
     expect(screen.queryByText(/No investigations/)).toBeNull();
     await waitFor(() => expect(recorded.pages.filter((query) => query.cursor === undefined).length).toBeGreaterThan(1));
-  });
+  }, MANY_ARCHIVES_MS);
 
   it('shows the failure with a retry, and sends no more than one request, when the reload after the last row left fails', async () => {
     const parts = pagedClient(rowsOf(30));
@@ -428,21 +445,19 @@ describe('the Investigations page: the heading and a list that runs out of shown
       },
     };
     await openPage(client);
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     await screen.findByRole('link', { name: 'Case 1' });
     for (let index = 1; index <= 24; index += 1) {
-      await user.click(screen.getByRole('button', { name: `Actions for Case ${index}` }));
-      await user.click(screen.getByRole('menuitem', { name: 'Archive' }));
-      await waitFor(() => expect(screen.queryByRole('link', { name: new RegExp(`^Case ${index}$`) })).toBeNull());
+      await archiveCase(user, index);
     }
     failing = true;
     const before = firsts;
-    await user.click(screen.getByRole('button', { name: 'Actions for Case 25' }));
-    await user.click(screen.getByRole('menuitem', { name: 'Archive' }));
+    await user.click(screen.getByLabelText('Actions for Case 25'));
+    await user.click(within(screen.getByRole('menu')).getByText('Archive'));
     await screen.findByText('The investigations could not be read.');
     await new Promise((resolve) => setTimeout(resolve, 300));
     expect(firsts - before).toBe(1);
     expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
-  });
+  }, MANY_ARCHIVES_MS);
 });
 
