@@ -299,8 +299,8 @@ function edgeLoadOf(template: Template, params: Params, allowlist: SourceAllowli
   if (row?.stableId === undefined || fromLabel === undefined || toLabel === undefined) throw new AppError('INVALID_REQUEST');
   const pattern = `(a:${quoteName(fromLabel)})-[r:${quoteName(row.type)}]->(b:${quoteName(toLabel)})`;
   if (spec.listParam !== undefined) {
-    // one statement for a list of IDs: each ID reads at most two relationships (the second only says that another has the ID) and answers its first by element ID
-    return `UNWIND range(0, size($${spec.listParam}) - 1) AS i CALL { WITH i MATCH ${pattern} WHERE r.${quoteName(row.stableId)} IN [$${spec.listParam}[i].stableId, $${spec.listParam}[i].stableInteger] RETURN r, a, b ORDER BY elementId(r) LIMIT 2 } WITH i, collect([r, a, b]) AS found RETURN i, found[0][0] AS r, found[0][1] AS a, found[0][2] AS b, size(found) > 1 AS dup ORDER BY i LIMIT $limit + 1`;
+    // one statement for a list of IDs: each ID reads at most two relationships (the second only says that another has the ID) and answers its first by element ID; the hint makes the planner seek the ID in the index whatever the statistics say, and never scan the index or start from an end
+    return `UNWIND range(0, size($${spec.listParam}) - 1) AS i CALL { WITH i MATCH ${pattern} USING INDEX SEEK r:${quoteName(row.type)}(${quoteName(row.stableId)}) WHERE r.${quoteName(row.stableId)} IN [$${spec.listParam}[i].stableId, $${spec.listParam}[i].stableInteger] RETURN r, a, b ORDER BY elementId(r) LIMIT 2 } WITH i, collect([r, a, b]) AS found RETURN i, found[0][0] AS r, found[0][1] AS a, found[0][2] AS b, size(found) > 1 AS dup ORDER BY i LIMIT $limit + 1`;
   }
   return `MATCH ${pattern} WHERE r.${quoteName(row.stableId)} IN [$stableId, $stableInteger] RETURN r, a, b ORDER BY elementId(r) LIMIT $limit + 1`;
 }

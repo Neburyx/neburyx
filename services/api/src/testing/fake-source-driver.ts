@@ -68,7 +68,7 @@ const isPrivileges = (cypher: string): boolean => cypher.startsWith('SHOW USER P
 function schemaReadOf(cypher: string): 'tokens' | 'indexes' | 'scan' | undefined {
   if (cypher.startsWith('CALL { CALL db.labels()')) return 'tokens';
   if (cypher.startsWith('SHOW INDEXES')) return 'indexes';
-  return cypher.includes('USING INDEX') ? 'scan' : undefined;
+  return cypher.includes('USING INDEX n:') ? 'scan' : undefined;
 }
 
 function settle(how: CloseBehaviour | undefined): Promise<void> {

@@ -93,7 +93,7 @@ describe('a batched entity read the gate runs', () => {
     expect(executor.calls).toHaveLength(1);
     const [call] = executor.calls;
     expect(call?.cypher).toBe(
-      'UNWIND range(0, size($refs) - 1) AS i CALL { WITH i MATCH (n:`Widget`) WHERE n.`widgetId` IN [$refs[i].stableId, $refs[i].stableInteger] RETURN n ORDER BY elementId(n) LIMIT 2 } WITH i, collect(n) AS found RETURN i, found[0] AS n, size(found) > 1 AS dup ORDER BY i LIMIT $limit + 1',
+      'UNWIND range(0, size($refs) - 1) AS i CALL { WITH i MATCH (n:`Widget`) USING INDEX SEEK n:`Widget`(`widgetId`) WHERE n.`widgetId` IN [$refs[i].stableId, $refs[i].stableInteger] RETURN n ORDER BY elementId(n) LIMIT 2 } WITH i, collect(n) AS found RETURN i, found[0] AS n, size(found) > 1 AS dup ORDER BY i LIMIT $limit + 1',
     );
     expect(call?.cypher).not.toContain('W-1');
     expect(call?.parameters['refs']).toEqual([

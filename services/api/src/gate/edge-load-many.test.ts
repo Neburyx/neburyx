@@ -92,7 +92,7 @@ describe('a batched edge read the gate runs', () => {
     expect(executor.calls).toHaveLength(1);
     const [call] = executor.calls;
     expect(call?.cypher).toBe(
-      'UNWIND range(0, size($refs) - 1) AS i CALL { WITH i MATCH (a:`Widget`)-[r:`MADE_FROM`]->(b:`Gadget`) WHERE r.`linkId` IN [$refs[i].stableId, $refs[i].stableInteger] RETURN r, a, b ORDER BY elementId(r) LIMIT 2 } WITH i, collect([r, a, b]) AS found RETURN i, found[0][0] AS r, found[0][1] AS a, found[0][2] AS b, size(found) > 1 AS dup ORDER BY i LIMIT $limit + 1',
+      'UNWIND range(0, size($refs) - 1) AS i CALL { WITH i MATCH (a:`Widget`)-[r:`MADE_FROM`]->(b:`Gadget`) USING INDEX SEEK r:`MADE_FROM`(`linkId`) WHERE r.`linkId` IN [$refs[i].stableId, $refs[i].stableInteger] RETURN r, a, b ORDER BY elementId(r) LIMIT 2 } WITH i, collect([r, a, b]) AS found RETURN i, found[0][0] AS r, found[0][1] AS a, found[0][2] AS b, size(found) > 1 AS dup ORDER BY i LIMIT $limit + 1',
     );
     expect(call?.cypher).not.toContain('L-1');
     expect(call?.parameters['refs']).toEqual([

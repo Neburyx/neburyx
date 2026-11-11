@@ -5,7 +5,7 @@ import { allowlistFromMapping } from '../gate/allowlist.js';
 import { assembleGate } from '../gate/assemble.js';
 import { createTemplateCatalog } from '../gate/catalog.js';
 import { renderTemplate } from '../gate/render.js';
-import { EDGE_LOAD_ID } from '../gate/templates/edge-load.js';
+import { EDGE_LOAD_ID, edgeLoadTemplate } from '../gate/templates/edge-load.js';
 import { edgeLoadManyTemplate } from '../gate/templates/edge-load-many.js';
 import { ENTITY_LOAD_ID } from '../gate/templates/entity-load.js';
 import { entityLoadManyTemplate } from '../gate/templates/entity-load-many.js';
@@ -32,8 +32,14 @@ const entities = [
   { type: 'maker', label: 'XMaker', stable_id: 'makerId', title: '{makerName}', pii: [{ property: 'makerName', class: 'name' }] },
   { type: 'tool', label: 'XTool', stable_id: 'toolId' },
   { type: 'phone', label: 'XPhone', stable_id: 'phoneNumber', pii: [{ property: 'phoneNumber', class: 'phone' }] },
+  { type: 'bare', label: 'XBare', stable_id: 'bareId' },
+  { type: 'texty', label: 'XTexty', stable_id: 'textyId' },
 ];
-const relationships = [{ type: 'USES_TOOL', from: 'maker', to: 'tool', stable_id: 'useId' }];
+const relationships = [
+  { type: 'USES_TOOL', from: 'maker', to: 'tool', stable_id: 'useId' },
+  { type: 'NOINDEX', from: 'maker', to: 'tool', stable_id: 'bareUseId' },
+  { type: 'TEXTONLY', from: 'maker', to: 'tool', stable_id: 'textUseId' },
+];
 
 const source = () => sourceFor(server, { entities, relationships });
 const el = (entityType: string, stableId: string) => ({ sourceId: 'graph', entityType, stableId });
@@ -51,6 +57,14 @@ beforeAll(async () => {
   await runAdmin(server, "CREATE (:XMaker {makerId: 'm7', makerName: 'Second Seven'}), (:XMaker {makerId: 9007199254740993, makerName: 'Big Number'}), (:XTool {toolId: 't1'})");
   await runAdmin(server, "UNWIND range(0, 119) AS i MATCH (a:XMaker {makerId: 'm' + toString(i), makerName: 'Ana ' + toString(i)}), (d:XTool {toolId: 't1'}) CREATE (a)-[:USES_TOOL {useId: 'u' + toString(i)}]->(d)");
   await runAdmin(server, "MATCH (a:XMaker {makerId: 'm3'}), (d:XTool {toolId: 't1'}) CREATE (a)-[:USES_TOOL {useId: 'u3'}]->(d)");
+  // a tool at the end of many relationships: a read by relationship ID must not start from it, whatever its degree
+  await runAdmin(server, "CREATE (:XTool {toolId: 'hub'})");
+  await runAdmin(server, "MATCH (d:XTool {toolId: 'hub'}) UNWIND range(0, 2999) AS i CREATE (:XMaker {makerId: 'h' + toString(i)})-[:USES_TOOL {useId: 'hu' + toString(i)}]->(d)");
+  // a type with no index, and a type whose only index holds text: the statements of the batched reads name an index by hint
+  await runAdmin(server, 'CREATE TEXT INDEX x_texty FOR (n:XTexty) ON (n.textyId)');
+  await runAdmin(server, 'CREATE TEXT INDEX x_text_use FOR ()-[r:TEXTONLY]-() ON (r.textUseId)');
+  await runAdmin(server, "CREATE (:XBare {bareId: 'b1'}), (:XBare {bareId: 5}), (:XTexty {textyId: 5}), (:XTexty {textyId: 'tx1'})");
+  await runAdmin(server, "MATCH (a:XMaker {makerId: 'm1'}), (d:XTool {toolId: 't1'}) CREATE (a)-[:NOINDEX {bareUseId: 'n1'}]->(d), (a)-[:TEXTONLY {textUseId: 5}]->(d), (a)-[:TEXTONLY {textUseId: 'tu1'}]->(d)");
   await runAdmin(server, 'CALL db.awaitIndexes(120)');
   const mapping = { sources: [source()] };
   const defaults = communitySeams();
@@ -160,8 +174,12 @@ function operatorsOf(plan: ProfiledPlan): string[] {
   return [plan.operatorType, ...plan.children.flatMap(operatorsOf)];
 }
 
-/** The operators of the statement a batched template renders for a list of IDs, run under PROFILE as the admin login. */
-async function profile(template: typeof entityLoadManyTemplate, params: Record<string, unknown>, ids: number): Promise<string[]> {
+function dbHitsOf(plan: ProfiledPlan): number {
+  return plan.dbHits + plan.children.reduce((sum, child) => sum + dbHitsOf(child), 0);
+}
+
+/** The profiled plan of the statement a batched template renders for a list of IDs, run under PROFILE as the admin login. */
+async function profile(template: typeof entityLoadManyTemplate, params: Record<string, unknown>, ids: number): Promise<ProfiledPlan> {
   const built = createTemplateCatalog({ templates: [template] }).find(template.id);
   if (built === undefined) throw new Error('the template is not in its catalog');
   const [model] = [source()];
@@ -169,22 +187,68 @@ async function profile(template: typeof entityLoadManyTemplate, params: Record<s
   const session = server.admin.session({ database: server.database });
   try {
     const result = await session.run(`PROFILE ${rendered.cypher}`, prepareParameters(rendered.parameters, built.integerParameters));
-    return result.summary.profile === false ? [] : operatorsOf(result.summary.profile);
+    if (result.summary.profile === false) throw new Error('the server did not profile the statement');
+    return result.summary.profile;
   } finally {
     await session.close();
   }
 }
 
+/** The statement a batched template renders for a list of IDs, run as the admin login, with the result summary. */
+async function run(template: typeof entityLoadManyTemplate, params: Record<string, unknown>, ids: number) {
+  const built = createTemplateCatalog({ templates: [template] }).find(template.id);
+  if (built === undefined) throw new Error('the template is not in its catalog');
+  const rendered = renderTemplate(built, built.paramsSchema.parse(params), allowlistFromMapping(source()), ids, 500);
+  const session = server.admin.session({ database: server.database });
+  try {
+    return await session.run(rendered.cypher, prepareParameters(rendered.parameters, built.integerParameters));
+  } finally {
+    await session.close();
+  }
+}
+
+/** A plan that finds each ID in the stable ID index by a seek: nothing is scanned (a label, a type or the whole index) and no relationship is expanded from an end. */
+function expectSeekOnly(plan: ProfiledPlan, seek: RegExp): void {
+  const operators = operatorsOf(plan);
+  expect(operators.filter((name) => seek.test(name)).length).toBeGreaterThan(0);
+  expect(operators.filter((name) => /Scan|Expand/.test(name))).toEqual([]);
+}
+
 describe(`the plan of a read of many references in one statement, on ${NEO4J_SERIES}`, () => {
-  it('seeks the node of each ID in the stable ID index, and scans no label', async () => {
-    const operators = await profile(entityLoadManyTemplate, { entityType: 'maker', refs: ['m1', 'm2', 'm3'].map((id) => el('maker', id)) }, 3);
-    expect(operators.filter((name) => /NodeIndexSeek|NodeUniqueIndexSeek/.test(name)).length).toBeGreaterThan(0);
-    expect(operators.filter((name) => /NodeByLabelScan|AllNodesScan|RelationshipTypeScan/.test(name))).toEqual([]);
+  it('seeks the node of each ID in the stable ID index, and scans no label or index', async () => {
+    const plan = await profile(entityLoadManyTemplate, { entityType: 'maker', refs: ['m1', 'm2', 'm3'].map((id) => el('maker', id)) }, 3);
+    expectSeekOnly(plan, /NodeIndexSeek|NodeUniqueIndexSeek/);
   });
 
-  it('seeks the relationship of each ID in the stable ID index, and scans no label or type', async () => {
-    const operators = await profile(edgeLoadManyTemplate, { type: 'USES_TOOL', from: 'maker', to: 'tool', refs: ['u1', 'u2', 'u3'].map((stableId) => ({ stableId })) }, 3);
-    expect(operators.filter((name) => /RelationshipIndexSeek/.test(name)).length).toBeGreaterThan(0);
-    expect(operators.filter((name) => /NodeByLabelScan|AllNodesScan|RelationshipTypeScan/.test(name))).toEqual([]);
+  it('seeks the relationship of each ID in the stable ID index, and scans no label, type or index', async () => {
+    const plan = await profile(edgeLoadManyTemplate, { type: 'USES_TOOL', from: 'maker', to: 'tool', refs: ['u1', 'u2', 'u3'].map((stableId) => ({ stableId })) }, 3);
+    expectSeekOnly(plan, /RelationshipIndexSeek/);
+  });
+
+  it('reads the single relationship of an ID at the end of a tool with thousands of relationships by the index too', async () => {
+    const plan = await profile(edgeLoadTemplate, { type: 'USES_TOOL', from: 'maker', to: 'tool', stableId: 'hu1' }, 1);
+    expectSeekOnly(plan, /RelationshipIndexSeek/);
+    expect(dbHitsOf(plan)).toBeLessThan(40);
+  });
+
+  it('is answered by the server, with a warning and a scan, when the index named by the hint does not exist (the gate refuses such a read first when it can list the indexes)', async () => {
+    const entity = await run(entityLoadManyTemplate, { entityType: 'bare', refs: [el('bare', 'b1'), el('bare', '5')] }, 2);
+    expect(entity.records.map((record) => Number(record.get('i')))).toEqual([0, 1]);
+    expect(entity.summary.notifications.some((notice) => /hint|index/i.test(`${notice.title} ${notice.description}`))).toBe(true);
+    const edge = await run(edgeLoadManyTemplate, { type: 'NOINDEX', from: 'maker', to: 'tool', refs: [{ stableId: 'n1' }] }, 1);
+    expect(edge.records.map((record) => Number(record.get('i')))).toEqual([0]);
+    expect(edge.summary.notifications.some((notice) => /hint|index/i.test(`${notice.title} ${notice.description}`))).toBe(true);
+  });
+
+  it('is refused by the server, never answered as missing, when the only index holds text (the gate refuses such a read first when it can list the indexes)', async () => {
+    for (const id of ['5', 'tx1']) await expect(run(entityLoadManyTemplate, { entityType: 'texty', refs: [el('texty', id)] }, 1)).rejects.toMatchObject({ code: 'Neo.DatabaseError.Statement.ExecutionFailed' });
+    for (const id of ['5', 'tu1']) await expect(run(edgeLoadManyTemplate, { type: 'TEXTONLY', from: 'maker', to: 'tool', refs: [{ stableId: id }] }, 1)).rejects.toMatchObject({ code: 'Neo.DatabaseError.Statement.ExecutionFailed' });
+  });
+
+  it('reads the relationship of an ID at the end of a tool with thousands of relationships by the index too, at a cost of a few database hits for each ID', async () => {
+    const ids = ['hu1', 'hu2', 'hu3', 'u1'];
+    const plan = await profile(edgeLoadManyTemplate, { type: 'USES_TOOL', from: 'maker', to: 'tool', refs: ids.map((stableId) => ({ stableId })) }, ids.length);
+    expectSeekOnly(plan, /RelationshipIndexSeek/);
+    expect(dbHitsOf(plan)).toBeLessThan(ids.length * 40);
   });
 });

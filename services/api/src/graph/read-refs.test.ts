@@ -173,7 +173,7 @@ describe('POST /v1/graph/read-refs: entities', () => {
     await post(app, { sourceId: 'demo', entities: [el('widget', 'W-1')] });
     const [call] = entityCalls(executor);
     expect(call?.cypher).toBe(
-      'UNWIND range(0, size($refs) - 1) AS i CALL { WITH i MATCH (n:`Widget`) WHERE n.`widgetId` IN [$refs[i].stableId, $refs[i].stableInteger] RETURN n ORDER BY elementId(n) LIMIT 2 } WITH i, collect(n) AS found RETURN i, found[0] AS n, size(found) > 1 AS dup ORDER BY i LIMIT $limit + 1',
+      'UNWIND range(0, size($refs) - 1) AS i CALL { WITH i MATCH (n:`Widget`) USING INDEX SEEK n:`Widget`(`widgetId`) WHERE n.`widgetId` IN [$refs[i].stableId, $refs[i].stableInteger] RETURN n ORDER BY elementId(n) LIMIT 2 } WITH i, collect(n) AS found RETURN i, found[0] AS n, size(found) > 1 AS dup ORDER BY i LIMIT $limit + 1',
     );
     expect(call === undefined ? [] : idsOf(call)).toEqual(['W-1']);
     expect(call?.cypher).not.toContain('W-1');
