@@ -5,6 +5,11 @@ test.use({ baseURL: 'http://127.0.0.1:4175' });
 
 const OUTLINE = ['outline-style', 'outline-width', 'outline-color'] as const;
 
+test.beforeEach(async ({ page }) => {
+  await page.request.post('/__support/forget-investigations');
+  expect((await page.request.post('/__support/seed-investigations', { data: { count: 1, sourceId: 'banking-demo', viewEvery: 10 } })).ok()).toBe(true);
+});
+
 async function searchFor(page: Page, text: string): Promise<void> {
   await page.goto('/');
   await page.getByRole('searchbox', { name: 'Search text' }).fill(text);
