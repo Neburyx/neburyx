@@ -84,6 +84,7 @@ export class Stack {
   private readonly envFile = join(this.folder, 'settings.env');
   readonly commands: (readonly string[])[] = [];
   private tag: string;
+  private changes: Readonly<Record<string, string>> = {};
 
   private constructor(
     readonly port: number,
@@ -101,13 +102,19 @@ export class Stack {
     return `http://127.0.0.1:${this.port}`;
   }
 
+  /** Changes values in the settings file, the way an operator edits it between two `up` runs. */
+  updateSettings(changes: Readonly<Record<string, string>>): void {
+    this.changes = { ...this.changes, ...changes };
+    this.writeSettings();
+  }
+
   setTag(tag: string): void {
     this.tag = tag;
     this.writeSettings();
   }
 
   private writeSettings(): void {
-    const values: Record<string, string> = { ...this.passwords, ...this.options.settings, NEBURYX_IMAGE: this.options.image, NEBURYX_TAG: this.tag, NEBURYX_PORT: String(this.port) };
+    const values: Record<string, string> = { ...this.passwords, ...this.options.settings, ...this.changes, NEBURYX_IMAGE: this.options.image, NEBURYX_TAG: this.tag, NEBURYX_PORT: String(this.port) };
     for (const name of this.options.omit ?? []) delete values[name];
     mkdirSync(this.folder, { recursive: true });
     writeFileSync(this.envFile, Object.entries(values).map(([key, value]) => `${key}=${value}`).join('\n') + '\n');
@@ -126,7 +133,7 @@ export class Stack {
 
   /** What each container of the project looked like. Best effort: it never throws, so it cannot replace the failure it explains. */
   async diagnostics(): Promise<string> {
-    const secrets = [...Object.values(this.passwords), ...Object.values(this.options.settings ?? {})];
+    const secrets = [...Object.values(this.passwords), ...Object.values(this.options.settings ?? {}), ...Object.values(this.changes)];
     try {
       const ids = (await dockerOk(['ps', '-aq', '--filter', `label=com.docker.compose.project=${this.project}`])).split('\n').filter(Boolean);
       const inspections = await Promise.all(ids.map(async (id) => (await docker(['inspect', '--format', '{{json .}}', id])).stdout));

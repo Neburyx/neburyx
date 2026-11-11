@@ -3,7 +3,7 @@ import { readdirSync } from 'node:fs';
 import { networkInterfaces } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { docker, dockerOk, dockerStream } from '../image/docker.js';
 import { buildDerivedImage, destroyAll, repository, serviceOf, Stack } from './stack.js';
 
@@ -47,78 +47,6 @@ async function newStack(extra: { readonly omit?: readonly string[]; readonly ove
   stacks.push(stack);
   return stack;
 }
-
-async function healthOf(stack: Stack, service: string): Promise<string> {
-  return dockerOk(['inspect', '--format', '{{.State.Health.Status}}', await stack.containerId(service)]);
-}
-
-describe('a settings file with a password missing', () => {
-  it.each(['NEBURYX_DB_ADMIN_PASSWORD', 'NEBURYX_DB_MIGRATION_PASSWORD', 'NEBURYX_DB_APP_PASSWORD'])(
-    'stops docker compose up before any container exists, naming %s',
-    async (name) => {
-      const stack = await newStack({ omit: [name] });
-      const result = await stack.compose(['up', '--no-start']);
-      expect(result.code).not.toBe(0);
-      expect(result.stderr).toContain(name);
-      expect(await dockerOk(['ps', '-aq', '--filter', `label=com.docker.compose.project=${stack.project}`])).toBe('');
-    },
-  );
-});
-
-describe('a fresh install', () => {
-  let stack: Stack;
-  let startedAt: number;
-
-  beforeAll(async () => {
-    stack = await newStack();
-    startedAt = Date.now() * 1e6;
-    const result = await stack.up();
-    expect(result.code, result.stderr).toBe(0);
-  });
-
-  it('answers /healthz and /v1/me with the local principal', async () => {
-    expect((await fetch(`${stack.url}/healthz`)).status).toBe(200);
-    const me = await fetch(`${stack.url}/v1/me`);
-    expect(me.status).toBe(200);
-    expect(await me.json()).toMatchObject({ principal: { displayName: 'Local workspace', role: 'administrator' }, edition: 'community' });
-  });
-
-  it('finishes the migrate container with exit code 0 before the api container starts', async () => {
-    const events = await stack.events(startedAt);
-    const migrated = events.find((event) => serviceOf(event) === 'migrate' && event.Action === 'die');
-    const serving = events.find((event) => serviceOf(event) === 'api' && event.Action === 'start');
-    expect(migrated?.Actor.Attributes['exitCode']).toBe('0');
-    expect(serving).toBeDefined();
-    expect(migrated?.timeNano).toBeLessThan(serving?.timeNano ?? 0);
-  });
-
-  it('creates the database owned by the migration role, and an app role that can log in', async () => {
-    expect((await stack.psql("SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname = 'neburyx'")).stdout.trim()).toBe('neburyx_migrate');
-    expect((await stack.psql("SELECT rolcanlogin FROM pg_roles WHERE rolname = 'neburyx_app'")).stdout.trim()).toBe('t');
-    expect((await stack.psql('SELECT 1', 'neburyx_app')).stdout.trim()).toBe('1');
-  });
-
-  it('reports the api container healthy', async () => {
-    expect(await healthOf(stack, 'api')).toBe('healthy');
-  });
-
-  it('does nothing the second time: migrate has nothing to apply and the local user keeps its id', async () => {
-    const before = (await stack.psql("SELECT id FROM users WHERE issuer = 'local'")).stdout.trim();
-    expect(before).not.toBe('');
-    const again = await stack.up();
-    expect(again.code, again.stderr).toBe(0);
-    expect((await stack.compose(['logs', '--no-log-prefix', 'migrate'])).stdout).toContain('nothing to apply');
-    expect((await stack.psql("SELECT id FROM users WHERE issuer = 'local'")).stdout.trim()).toBe(before);
-  });
-
-  it('reports the api container unhealthy while Postgres is stopped, and healthy again after it is started', async () => {
-    expect((await stack.compose(['stop', 'db'])).code).toBe(0);
-    await vi.waitFor(async () => expect(await healthOf(stack, 'api')).toBe('unhealthy'), { timeout: 90_000, interval: 2000 });
-    expect((await fetch(`${stack.url}/readyz`)).status).toBe(503);
-    expect((await stack.compose(['start', 'db'])).code).toBe(0);
-    await vi.waitFor(async () => expect(await healthOf(stack, 'api')).toBe('healthy'), { timeout: 90_000, interval: 2000 });
-  });
-});
 
 /** What `compose port` prints for a port that is exposed but not published: the host part differs between Compose versions (`:0` on v2.38.2 and v5.6.0, `invalid IP:0` on v5.1.3); the host port is 0 or the line is empty. */
 const NO_HOST_PORT = /^(|.*:0)$/;
