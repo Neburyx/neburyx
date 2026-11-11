@@ -12,6 +12,7 @@ const stepSchema = z.object({
   'timeout-minutes': z.number().optional(),
 });
 const jobSchema = z.object({
+  if: z.string().optional(),
   'runs-on': z.string(),
   env: z.record(z.string(), z.string()).optional(),
   strategy: z.object({ 'fail-fast': z.boolean().optional(), matrix: z.record(z.string(), z.array(z.string())) }).optional(),
@@ -75,10 +76,25 @@ describe('CI workflow', () => {
     expect(Object.keys(rootScripts)).toContain(script);
   });
 
-  it('defines exactly the nine jobs, and none of them runs the Neo4j tests: those run against the developer\'s Neo4j server', () => {
-    expect(Object.keys(workflow.jobs).sort()).toEqual(['build', 'compose', 'contract', 'image', 'integration', 'lint', 'typecheck', 'unit', 'ux']);
+  it('defines exactly the ten jobs, and none of them runs the Neo4j tests: those run against the developer\'s Neo4j server', () => {
+    expect(Object.keys(workflow.jobs).sort()).toEqual(['build', 'compose', 'contract', 'dco', 'image', 'integration', 'lint', 'typecheck', 'unit', 'ux']);
     const runs = Object.values(workflow.jobs).flatMap((job) => job.steps.flatMap((step) => step.run ?? []));
     expect(runs.filter((run) => run.includes('test:neo4j'))).toEqual([]);
+  });
+
+  it('checks the sign-off of a pull request in the dco job, with the whole history and never on a push', () => {
+    const job = workflow.jobs['dco'];
+    expect(job?.if).toBe("github.event_name == 'pull_request'");
+    const steps = job?.steps ?? [];
+    expect(steps.map((step) => step.uses?.split('@')[0] ?? step.run)).toEqual([
+      'actions/checkout',
+      'actions/setup-node',
+      'corepack enable',
+      'pnpm install --frozen-lockfile',
+      'pnpm check:dco ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }}',
+    ]);
+    expect(steps.find((step) => step.uses?.startsWith('actions/checkout'))?.with).toEqual({ 'fetch-depth': '0' });
+    expect(rootScripts['check:dco']).toBe('pnpm --filter @neburyx/dco-check build && node tools/dco-check/dist/main.js');
   });
 
   it('runs the Neo4j tests of the adapter and of the demo graph tool in the one root script, which builds the package that reaches the dev server', () => {

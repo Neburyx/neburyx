@@ -7,6 +7,8 @@ analysts who investigate fraud, claims and similar networks.
 
 **Licence:** Apache-2.0 (see [LICENSE](LICENSE) and [NOTICE](NOTICE)).
 
+**Contributing:** read [CONTRIBUTING.md](CONTRIBUTING.md) first; every commit of a pull request carries a DCO sign-off. **Security:** report a vulnerability privately as [SECURITY.md](SECURITY.md) says.
+
 ## What it does
 
 - Starts from an entity or a referral and builds a bounded, readable network around it, which you
