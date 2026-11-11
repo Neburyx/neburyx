@@ -4,7 +4,7 @@ import { exportSchema } from '@neburyx/contracts';
 import { afterAll, describe, expect, it } from 'vitest';
 import { expireExports, purgeDeletedInvestigations } from '../jobs/maintenance.js';
 import { createLogger } from '../logger.js';
-import { el, exportWebRoot, startExportRig, type ExportRig } from '../testing/export-rig.js';
+import { el, exportWebRoot, idsOf, startExportRig, type ExportRig } from '../testing/export-rig.js';
 
 afterAll(() => rmSync(exportWebRoot, { recursive: true, force: true }));
 
@@ -363,7 +363,7 @@ describe('calls that were killed, and the codes a retry meets', () => {
     ['QUERY_TIMEOUT', 504, { status: 'timeout' } as const],
   ])('runs the same key again after %s (%i) and builds the export', async (_code, statusCode, outcome) => {
     let broken = true;
-    const rig = await startExportRig({ answer: (call) => (broken && call.templateId === 'entity-load' && call.parameters['stableId'] !== 'W-1' ? outcome : undefined) });
+    const rig = await startExportRig({ answer: (call) => (broken && call.templateId === 'entity-load-many' && idsOf(call).some((id) => id !== 'W-1') ? outcome : undefined) });
     const investigation = await rig.open();
     const key = rig.newKey();
     const first = await rig.create(investigation.id, body(), key);

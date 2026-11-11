@@ -184,6 +184,14 @@ describe('the announcement of a failure', () => {
 });
 
 describe('the other messages of the dialog', () => {
+  it('shows the server sentence, not the busy one, for a conflict with a reason such as a changed source', async () => {
+    const changed: ApiFailure = { code: 'CONFLICT', message: 'This source now points to a different database or is no longer configured. This investigation is read-only.', retryable: false, traceId: 't', details: { reason: 'source-changed', sourceState: 'repointed' } };
+    const { user } = await opened({ createExport: () => fail(changed) });
+    await user.click(within(dialog()).getByRole('button', { name: 'Download JSON' }));
+    await waitFor(() => expect(within(dialog()).getByText(changed.message)).toBeTruthy());
+    expect(dialog().textContent).not.toContain('already being made');
+  });
+
   it('says the export is already being made when the server answers CONFLICT', async () => {
     const conflict: ApiFailure = { code: 'CONFLICT', message: 'This item was changed elsewhere. Reload to continue.', retryable: false, traceId: 't' };
     const { user } = await opened({ createExport: () => fail(conflict) });

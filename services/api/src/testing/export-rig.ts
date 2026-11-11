@@ -54,6 +54,12 @@ export interface ExportRigOptions {
   readonly answer?: (call: ExecuteCall) => ExecuteOutcome | undefined;
 }
 
+/** The stable IDs a batched read was given, in order; the scripted source answers a row for each one it holds, with the position of the ID in the list. */
+export const idsOf = (call: ExecuteCall): readonly string[] => {
+  const refs = call.parameters['refs'];
+  return Array.isArray(refs) ? refs.map((entry: { readonly stableId: string }) => entry.stableId) : [];
+};
+
 const json = { 'content-type': 'application/json' };
 let sequence = 0;
 
@@ -68,13 +74,17 @@ export async function startExportRig(options: ExportRigOptions = {}) {
       async (call): Promise<ExecuteOutcome> => {
         const custom = options.answer?.(call);
         if (custom !== undefined) return custom;
-        const id = String(call.parameters['stableId']);
         if (call.templateId === 'entity-load') {
+          const id = String(call.parameters['stableId']);
           if (known(id)) return { status: 'rows', rows: [{ n: widget(id, options.name?.(id) ?? 'Ana Silva') }] };
-          if (id === 'GT-1') return { status: 'rows', rows: [{ n: gadget() }] };
           return { status: 'rows', rows: [] };
         }
-        if (call.templateId === 'edge-load' && (options.links ?? []).includes(id)) return { status: 'rows', rows: [link(id)] };
+        const ids = idsOf(call);
+        if (call.templateId === 'entity-load-many') {
+          const entityType = String(call.parameters['entityType']);
+          return { status: 'rows', rows: ids.flatMap((id, i) => (entityType === 'gadget' ? (id === 'GT-1' ? [{ i, dup: false, n: gadget() }] : []) : known(id) ? [{ i, dup: false, n: widget(id, options.name?.(id) ?? 'Ana Silva') }] : [])) };
+        }
+        if (call.templateId === 'edge-load-many') return { status: 'rows', rows: ids.flatMap((id, i) => ((options.links ?? []).includes(id) ? [{ i, dup: false, ...link(id) }] : [])) };
         return { status: 'rows', rows: [] };
       },
     ),

@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { exportFileSchema, exportSchema } from '@neburyx/contracts';
 import { afterAll, describe, expect, it } from 'vitest';
-import { el, exportWebRoot, linkRef, startExportRig, type ExportRig } from '../testing/export-rig.js';
+import { el, exportWebRoot, idsOf, linkRef, startExportRig, type ExportRig } from '../testing/export-rig.js';
 
 afterAll(() => rmSync(exportWebRoot, { recursive: true, force: true }));
 
@@ -105,7 +105,7 @@ describe('POST /v1/investigations/{id}/exports', () => {
   });
 
   it('answers the read\'s own code with no row and no file when the source is unavailable', async () => {
-    const rig = await startExportRig({ answer: (call) => (call.templateId === 'entity-load' && call.parameters['stableId'] !== 'W-1' ? { status: 'unavailable', reason: 'unreachable' } : undefined) });
+    const rig = await startExportRig({ answer: (call) => (call.templateId === 'entity-load-many' && idsOf(call).some((id) => id !== 'W-1') ? { status: 'unavailable', reason: 'unreachable' } : undefined) });
     const investigation = await rig.open();
     const response = await rig.create(investigation.id, two);
     expect(response.statusCode).toBe(503);

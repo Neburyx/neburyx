@@ -19,7 +19,8 @@ type Outcome = { readonly kind: 'none' } | { readonly kind: 'failed'; readonly f
 
 export function failureText(failure: ApiFailure): string {
   if (!('message' in failure)) return failure.code === 'SCHEMA_MISMATCH' ? SCHEMA_FAILURE : NETWORK_FAILURE;
-  if (failure.code === 'CONFLICT') return EXPORT_BUSY;
+  // a conflict with no reason is the same key still running; one with a reason (a changed source) has its own sentence
+  if (failure.code === 'CONFLICT' && failure.details?.reason === undefined) return EXPORT_BUSY;
   const limit = failure.details?.maxElements;
   return failure.code === 'INVALID_REQUEST' && limit !== undefined ? tooLargeText(failure.message, limit) : failure.message;
 }
