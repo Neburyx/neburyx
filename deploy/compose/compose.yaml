@@ -1,9 +1,71 @@
 name: neburyx
 
 services:
+  NEBURYX_DB_ADMIN_PASSWORD-letters-and-digits-only:
+    image: postgres:16.15
+    restart: "no"
+    environment:
+      VALUE: ${NEBURYX_DB_ADMIN_PASSWORD:?set NEBURYX_DB_ADMIN_PASSWORD in the .env file}
+    command:
+      - sh
+      - -c
+      - |
+        printf '%s' "$$VALUE" | grep -Eq '^[A-Za-z0-9]+$$' && exit 0
+        echo "NEBURYX_DB_ADMIN_PASSWORD must be letters and digits only, because it is put into a connection string. Make one with: openssl rand -hex 24" >&2
+        exit 1
+
+  NEBURYX_DB_MIGRATION_PASSWORD-letters-and-digits-only:
+    image: postgres:16.15
+    restart: "no"
+    environment:
+      VALUE: ${NEBURYX_DB_MIGRATION_PASSWORD:?set NEBURYX_DB_MIGRATION_PASSWORD in the .env file}
+    command:
+      - sh
+      - -c
+      - |
+        printf '%s' "$$VALUE" | grep -Eq '^[A-Za-z0-9]+$$' && exit 0
+        echo "NEBURYX_DB_MIGRATION_PASSWORD must be letters and digits only, because it is put into a connection string. Make one with: openssl rand -hex 24" >&2
+        exit 1
+
+  NEBURYX_DB_APP_PASSWORD-letters-and-digits-only:
+    image: postgres:16.15
+    restart: "no"
+    environment:
+      VALUE: ${NEBURYX_DB_APP_PASSWORD:?set NEBURYX_DB_APP_PASSWORD in the .env file}
+    command:
+      - sh
+      - -c
+      - |
+        printf '%s' "$$VALUE" | grep -Eq '^[A-Za-z0-9]+$$' && exit 0
+        echo "NEBURYX_DB_APP_PASSWORD must be letters and digits only, because it is put into a connection string. Make one with: openssl rand -hex 24" >&2
+        exit 1
+
+  NEBURYX_CURSOR_KEY-base64-of-at-least-32-bytes:
+    image: postgres:16.15
+    restart: "no"
+    environment:
+      VALUE: ${NEBURYX_CURSOR_KEY:?set NEBURYX_CURSOR_KEY in the .env file}
+    command:
+      - sh
+      - -c
+      - |
+        stripped=$$(printf '%s' "$$VALUE" | sed 's/=*$$//')
+        printf '%s' "$$VALUE" | grep -Eq '^[A-Za-z0-9+/]+={0,2}$$' && [ "$${#stripped}" -ge 43 ] && exit 0
+        echo "NEBURYX_CURSOR_KEY must be base64 text of at least 32 random bytes. Make one with: openssl rand -base64 32" >&2
+        exit 1
+
   db:
     image: postgres:16.15
     restart: unless-stopped
+    depends_on:
+      NEBURYX_DB_ADMIN_PASSWORD-letters-and-digits-only:
+        condition: service_completed_successfully
+      NEBURYX_DB_MIGRATION_PASSWORD-letters-and-digits-only:
+        condition: service_completed_successfully
+      NEBURYX_DB_APP_PASSWORD-letters-and-digits-only:
+        condition: service_completed_successfully
+      NEBURYX_CURSOR_KEY-base64-of-at-least-32-bytes:
+        condition: service_completed_successfully
     environment:
       POSTGRES_PASSWORD: ${NEBURYX_DB_ADMIN_PASSWORD:?set NEBURYX_DB_ADMIN_PASSWORD in the .env file}
       NEBURYX_DB_MIGRATION_PASSWORD: ${NEBURYX_DB_MIGRATION_PASSWORD:?set NEBURYX_DB_MIGRATION_PASSWORD in the .env file}

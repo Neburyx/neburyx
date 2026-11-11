@@ -161,6 +161,18 @@ export class Stack {
     return dockerOk(['ps', '-aq', '--filter', `label=com.docker.compose.project=${this.project}`, '--filter', `label=com.docker.compose.service=${service}`]);
   }
 
+  /** The services of the project that have a container which was ever started (a container that Compose only created has no start time). */
+  async everStarted(): Promise<readonly string[]> {
+    const listed = await dockerOk(['ps', '-aq', '--filter', `label=com.docker.compose.project=${this.project}`]);
+    const started: string[] = [];
+    for (const id of listed.split('\n').filter(Boolean)) {
+      const line = await dockerOk(['inspect', '--format', '{{index .Config.Labels "com.docker.compose.service"}} {{.State.StartedAt}}', id]);
+      const [service, startedAt] = line.split(' ');
+      if (service !== undefined && startedAt !== undefined && !startedAt.startsWith('0001-01-01')) started.push(service);
+    }
+    return started;
+  }
+
   async psql(sql: string, role = 'postgres', database = 'neburyx'): Promise<DockerResult> {
     const password = role === 'neburyx_app' ? this.passwords.NEBURYX_DB_APP_PASSWORD : role === 'neburyx_migrate' ? this.passwords.NEBURYX_DB_MIGRATION_PASSWORD : this.passwords.NEBURYX_DB_ADMIN_PASSWORD;
     return this.compose(['exec', '-T', '-e', `PGPASSWORD=${password}`, 'db', 'psql', '-h', '127.0.0.1', '-U', role, '-d', database, '-tA', '-c', sql]);

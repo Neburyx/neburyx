@@ -9,6 +9,21 @@ cp .env.example .env     # then fill in the passwords and the cursor key (the fi
 docker compose up --wait
 ```
 
+Instead of `cp .env.example .env` and filling it in, write a complete `.env` with random values in one step:
+
+```bash
+[ -e .env ] && echo ".env exists; not overwritten" || ( umask 077; cat > .env <<EOF
+NEBURYX_DB_ADMIN_PASSWORD=$(openssl rand -hex 24)
+NEBURYX_DB_MIGRATION_PASSWORD=$(openssl rand -hex 24)
+NEBURYX_DB_APP_PASSWORD=$(openssl rand -hex 24)
+NEBURYX_CURSOR_KEY=$(openssl rand -base64 32)
+DEMO_NEO4J_PASSWORD=$(openssl rand -hex 24)
+EOF
+)
+```
+
+The command refuses to touch a `.env` that already exists: Postgres sets its role passwords only when its volume is first made, so new passwords written over a running install would lock the app out of its own database, and a new cursor key would make open pages say "Start again". Changing a password after the first start is not done by this command. Never commit `.env`. If `docker compose up` stops at a service named after a setting, such as `NEBURYX_CURSOR_KEY-base64-of-at-least-32-bytes`, that setting breaks the rule in the name; `docker compose logs` on that service says how to make a valid one. The demo's Neo4j password must be at least 8 characters.
+
 Open `http://127.0.0.1:8080`. `GET /v1/sources` lists the two demo sources, each `connected` and `synthetic`.
 
 - **What starts.** Postgres and the product (the same services as `deploy/compose`, reused rather than copied), two Neo4j Community containers (one per pack), a loader for each that builds the demo graph with `tools/demo-graph`, and a step that writes the one mapping file the API reads from the packs' own files. The API starts only after the migration, the mapping step and both loaders have finished.

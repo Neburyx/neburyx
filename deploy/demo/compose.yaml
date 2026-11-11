@@ -22,10 +22,46 @@ x-graph-health: &graph-health
 x-graph-password: &graph-password ${DEMO_NEO4J_PASSWORD:?set DEMO_NEO4J_PASSWORD in the .env file}
 
 services:
+  NEBURYX_DB_ADMIN_PASSWORD-letters-and-digits-only:
+    extends:
+      file: ../compose/compose.yaml
+      service: NEBURYX_DB_ADMIN_PASSWORD-letters-and-digits-only
+
+  NEBURYX_DB_MIGRATION_PASSWORD-letters-and-digits-only:
+    extends:
+      file: ../compose/compose.yaml
+      service: NEBURYX_DB_MIGRATION_PASSWORD-letters-and-digits-only
+
+  NEBURYX_DB_APP_PASSWORD-letters-and-digits-only:
+    extends:
+      file: ../compose/compose.yaml
+      service: NEBURYX_DB_APP_PASSWORD-letters-and-digits-only
+
+  NEBURYX_CURSOR_KEY-base64-of-at-least-32-bytes:
+    extends:
+      file: ../compose/compose.yaml
+      service: NEBURYX_CURSOR_KEY-base64-of-at-least-32-bytes
+
+  DEMO_NEO4J_PASSWORD-at-least-8-characters:
+    image: postgres:16.15
+    restart: "no"
+    environment:
+      VALUE: ${DEMO_NEO4J_PASSWORD:?set DEMO_NEO4J_PASSWORD in the .env file}
+    command:
+      - sh
+      - -c
+      - |
+        [ "$${#VALUE}" -ge 8 ] && exit 0
+        echo "DEMO_NEO4J_PASSWORD must be at least 8 characters: Neo4j refuses a shorter one. Make one with: openssl rand -hex 24" >&2
+        exit 1
+
   db:
     extends:
       file: ../compose/compose.yaml
       service: db
+    depends_on:
+      DEMO_NEO4J_PASSWORD-at-least-8-characters:
+        condition: service_completed_successfully
 
   migrate:
     extends:
@@ -38,6 +74,17 @@ services:
   demo-banking-graph:
     image: ${NEBURYX_DEMO_NEO4J_IMAGE:-neo4j:5.26}
     restart: unless-stopped
+    depends_on:
+      NEBURYX_DB_ADMIN_PASSWORD-letters-and-digits-only:
+        condition: service_completed_successfully
+      NEBURYX_DB_MIGRATION_PASSWORD-letters-and-digits-only:
+        condition: service_completed_successfully
+      NEBURYX_DB_APP_PASSWORD-letters-and-digits-only:
+        condition: service_completed_successfully
+      NEBURYX_CURSOR_KEY-base64-of-at-least-32-bytes:
+        condition: service_completed_successfully
+      DEMO_NEO4J_PASSWORD-at-least-8-characters:
+        condition: service_completed_successfully
     environment:
       NEO4J_AUTH: neo4j/${DEMO_NEO4J_PASSWORD:?set DEMO_NEO4J_PASSWORD in the .env file}
       DEMO_NEO4J_PASSWORD: *graph-password
@@ -49,6 +96,17 @@ services:
   demo-insurance-graph:
     image: ${NEBURYX_DEMO_NEO4J_IMAGE:-neo4j:5.26}
     restart: unless-stopped
+    depends_on:
+      NEBURYX_DB_ADMIN_PASSWORD-letters-and-digits-only:
+        condition: service_completed_successfully
+      NEBURYX_DB_MIGRATION_PASSWORD-letters-and-digits-only:
+        condition: service_completed_successfully
+      NEBURYX_DB_APP_PASSWORD-letters-and-digits-only:
+        condition: service_completed_successfully
+      NEBURYX_CURSOR_KEY-base64-of-at-least-32-bytes:
+        condition: service_completed_successfully
+      DEMO_NEO4J_PASSWORD-at-least-8-characters:
+        condition: service_completed_successfully
     environment:
       NEO4J_AUTH: neo4j/${DEMO_NEO4J_PASSWORD:?set DEMO_NEO4J_PASSWORD in the .env file}
       DEMO_NEO4J_PASSWORD: *graph-password
