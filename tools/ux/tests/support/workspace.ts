@@ -227,3 +227,29 @@ export function apartFromInspector(requests: readonly string[], selected = 1): s
     return true;
   });
 }
+
+const NO_FILTERS = { entityTypes: [], relTypes: [], time: null, properties: [] };
+
+/** Opens `AC-1` from the open-an-entity page and gives its investigation a stored draft of the named accounts, each at the place `at` gives; the page is not reloaded. */
+export async function openWithDraft(page: Page, ids: readonly string[], at: (index: number) => { readonly x: number; readonly y: number }): Promise<string> {
+  await page.goto('/dev/open-entity');
+  await page.getByRole('button', { name: 'banking-demo' }).click();
+  const form = page.getByRole('form', { name: 'Open an entity' });
+  await form.getByLabel('Stable ID').fill('AC-1');
+  await form.getByRole('button', { name: 'Open' }).click();
+  await expect(page).toHaveURL(/\/explore\/[0-9a-f-]{36}$/);
+  const id = page.url().split('/').pop() ?? '';
+  const layout = { schemaVersion: 1, layout: 'force', nodes: ids.map((stable, index) => ({ t: 'account', id: stable, pinned: false, hidden: false, groupId: null, ...at(index) })), edges: [], groups: [] };
+  const queryContext = { schemaVersion: 1, loaded: { nodes: ids.map((stable) => ({ t: 'account', id: stable })), edges: [] }, expansions: [], filters: NO_FILTERS };
+  expect((await page.request.put(`/v1/investigations/${id}/draft`, { headers: { 'If-Match': '"1"' }, data: { layout, queryContext, notes: null } })).status()).toBe(200);
+  return id;
+}
+
+/** True once the stored draft holds, for each entity that has a stored place, the place the canvas draws it at: the autosave has caught up with the last move. */
+export async function storedMatchesDrawn(page: Page, id: string): Promise<boolean> {
+  const body = (await (await page.request.get(`/v1/investigations/${id}`)).json()) as { draft: { layout: { nodes: { id: string; x?: number; y?: number }[] } } };
+  const drawn = await positions(page);
+  const byId = new Map(Object.entries(drawn).map(([key, at]) => [String((JSON.parse(key) as string[]).at(-1)), at]));
+  const placed = body.draft.layout.nodes.filter((node) => node.x !== undefined && node.y !== undefined);
+  return placed.length > 0 && placed.every((node) => Math.abs((byId.get(node.id)?.x ?? NaN) - (node.x ?? 0)) < 0.5 && Math.abs((byId.get(node.id)?.y ?? NaN) - (node.y ?? 0)) < 0.5);
+}
