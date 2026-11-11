@@ -1,17 +1,17 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { dbHitCauseFor } from './db-hit-cause.js';
 import { measureCold, measurePreview, measureReadSet, type Cell, type PreviewCell } from './measure.js';
 import { READ_SETS, SIZES } from './plan.js';
 import { measureCancel } from './cancel-measure.js';
 import { profileReadSet, type Profile } from './profile.js';
+import { recordDirectory } from './record-path.js';
 import { renderRecord, type RunData, type Stopped } from './record.js';
 import { startRig, stopRig, type Rig } from './rig.js';
 
-const RECORD_DIRECTORY = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../../docs/benchmarks');
+const RECORD_DIRECTORY = recordDirectory();
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
 
 /** The section on filtered, ranked and counted reads of the stored record, when it has one. */

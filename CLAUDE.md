@@ -30,6 +30,7 @@ safe on very high-degree nodes. The repo is **pre-release**: the build tooling, 
 | `tools/concurrency-suite` | Tests of the read slots (2 per person, 32 per source, the wait, a lease that expires), the request rate (120 a minute over a sliding window) and the circuit breaker (trip, cool-down, one trial) under many simultaneous requests: the real API, gate, slots, limiter and breaker over a scripted source, on one clock the test moves (in `pnpm test`), and the slots over a real Neo4j (in `pnpm test:neo4j`) (see its README) |
 | `tools/save-suite` | Tests that a saved investigation comes back as it was left: the real API and the real web client, draft sync and client state in one process, over the in-memory store and a scripted source (in `pnpm test`), over real Postgres (in `pnpm test:integration`: races, stored hashes, the purge date, odd identifiers, the real rebind command) and over a real Neo4j (in `pnpm test:neo4j`); lists the tests that prove each promise and fails when one is missing (see its README) |
 | `tools/driver-check` | By-hand check of how `neo4j-driver` and Neo4j behave on a transaction timeout and on a close mid-query (see its README) |
+| `tools/release-checks` | The release checks in one command: the fuzz suite, domain neutrality on every pack, the supernode suite and benchmark, and the demo install timed against 15 minutes; writes a record of the run to a folder outside the repository (see its README) |
 | `docs/` | Public technical documentation |
 
 ## Licensing
@@ -85,6 +86,7 @@ Node 24 LTS (`.nvmrc`; with nvm, `nvm use`) and pnpm through Corepack, at the ve
 | Supernode benchmark (builds synthetic nodes of 1,000, 10,000 and 100,000 relationships in a database of its own on the Neo4j Enterprise server that `test:neo4j` uses, times a page of the paged expand through the gate and writes `docs/benchmarks/supernode.md` and `.json`; takes hours; not in CI; see `docs/benchmarks/README.md`) | `pnpm bench:supernode` |
 | Filtered, ranked and counted reads, only (10,000 and 100,000 relationships; adds a section to `docs/benchmarks/supernode.md` and `.json` and changes nothing else; about 20 to 30 minutes; not in CI) | `pnpm bench:refined` |
 | Render `docs/benchmarks/supernode.md` again from the stored `supernode.json` (no server) | `pnpm bench:render` |
+| The release checks: fuzz, domain neutrality, supernode suite and benchmark, demo install timing; needs Docker, the Neo4j connection of `test:neo4j`, and hours; not in CI; `--dry-run` marks a record that does not count (see `tools/release-checks/README.md`) | `pnpm check:release --record-dir <folder outside the repository> [--dry-run]` |
 | Regenerate `packages/contracts/openapi.json` | `pnpm --filter @neburyx/contracts generate` |
 
 To run the API with the built web app (after `pnpm build` and `neburyx migrate`; `DATABASE_URL` is the app role's connection string):
