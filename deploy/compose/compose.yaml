@@ -39,8 +39,14 @@ services:
         condition: service_completed_successfully
     environment:
       DATABASE_URL: postgres://neburyx_app:${NEBURYX_DB_APP_PASSWORD:?set NEBURYX_DB_APP_PASSWORD in the .env file}@db:5432/neburyx
+      NEBURYX_CURSOR_KEY: ${NEBURYX_CURSOR_KEY:?set NEBURYX_CURSOR_KEY in the .env file}
+      NEBURYX_CONFIG: /etc/neburyx/neburyx.yaml
+    env_file:
+      - path: ./source.env
+        required: false
     volumes:
       - neburyx-exports:/data/exports
+      - ${NEBURYX_CONFIG_DIR:-./config}:/etc/neburyx:ro
     ports:
       - "127.0.0.1:${NEBURYX_PORT:-8080}:8080"
     healthcheck:

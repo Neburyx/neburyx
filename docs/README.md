@@ -2,6 +2,7 @@
 
 Public technical documentation. Pre-release placeholder: the technical architecture will be published here once it has been reviewed for publication.
 
+- [install.md](install.md): install Community with Docker Compose on your own machine, keep it loopback-only, connect your Neo4j with a read-only login, rotate a login, set retention, upgrade and roll back.
 - [run-locally.md](run-locally.md): run the whole app on your machine with one command, against your own Neo4j and Postgres.
 - [coding-guidelines.md](coding-guidelines.md): how code is written here (TypeScript rules, comments, tests, API and web client).
 - [architecture-checks.md](architecture-checks.md): the checks that fail the build (nothing outside the gate reaches the adapter; no domain words in code) and what they cannot see.

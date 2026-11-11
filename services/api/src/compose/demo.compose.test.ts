@@ -394,6 +394,25 @@ describe('a demo stack with a step that fails', () => {
   });
 });
 
+describe('a demo stack next to a source.env of the Community install', () => {
+  it('does not hand that file to its api, and still mounts its own mapping', async () => {
+    const file = join(repository, 'deploy/compose/source.env');
+    writeFileSync(file, 'COMPOSE_TEST_USER=from-the-community-install\n', { mode: 0o600 });
+    try {
+      const stack = await demoStack();
+      onTestFinished(() => release(stack));
+      const resolved = await stack.compose(['config', '--format', 'json']);
+      expect(resolved.code, resolved.stderr).toBe(0);
+      const api = z.object({ services: z.object({ api: z.object({ environment: z.record(z.string(), z.string()), volumes: z.array(z.object({ target: z.string() })) }) }) }).parse(JSON.parse(resolved.stdout)).services.api;
+      expect(api.environment).not.toHaveProperty('COMPOSE_TEST_USER');
+      expect(api.environment['NEBURYX_CONFIG']).toBe('/config/neburyx.yaml');
+      expect(api.volumes.map((volume) => volume.target).sort()).toEqual(['/config', '/data/exports']);
+    } finally {
+      rmSync(file, { force: true });
+    }
+  });
+});
+
 describe('a demo stack with a setting that is missing or wrong', () => {
   const REQUIRED = ['NEBURYX_DB_ADMIN_PASSWORD', 'NEBURYX_DB_MIGRATION_PASSWORD', 'NEBURYX_DB_APP_PASSWORD', 'DEMO_NEO4J_PASSWORD', 'NEBURYX_CURSOR_KEY'];
 

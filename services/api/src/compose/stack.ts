@@ -1,6 +1,6 @@
 import { spawn, type ChildProcessByStdio } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import type { Readable } from 'node:stream';
 import { tmpdir } from 'node:os';
@@ -71,6 +71,8 @@ export interface StackOptions {
   readonly file?: string;
   readonly settings?: Readonly<Record<string, string>>;
   readonly waitSeconds?: number;
+  /** The mapping the stack reads: a copy of the shipped example (the default), none at all, or the text of a mapping file. */
+  readonly mapping?: 'example' | 'none' | { readonly text: string };
 }
 
 export class Stack {
@@ -80,7 +82,9 @@ export class Stack {
     NEBURYX_DB_MIGRATION_PASSWORD: randomBytes(12).toString('hex'),
     NEBURYX_DB_APP_PASSWORD: randomBytes(12).toString('hex'),
   };
+  readonly cursorKey = randomBytes(32).toString('base64');
   private readonly folder = mkdtempSync(join(tmpdir(), 'compose-stack-'));
+  readonly configFolder = join(this.folder, 'config');
   private readonly envFile = join(this.folder, 'settings.env');
   readonly commands: (readonly string[])[] = [];
   private tag: string;
@@ -90,6 +94,7 @@ export class Stack {
     private readonly options: StackOptions,
   ) {
     this.tag = options.tag;
+    this.writeConfigFolder();
     this.writeSettings();
   }
 
@@ -106,8 +111,20 @@ export class Stack {
     this.writeSettings();
   }
 
+  /** The folder `NEBURYX_CONFIG_DIR` names. It is made readable by the container's user, which is not the one that runs the tests on a Linux host. */
+  private writeConfigFolder(): void {
+    mkdirSync(this.configFolder, { recursive: true });
+    chmodSync(this.configFolder, 0o755);
+    const mapping = this.options.mapping ?? 'example';
+    if (mapping === 'none') return;
+    const file = join(this.configFolder, 'neburyx.yaml');
+    if (mapping === 'example') copyFileSync(join(repository, 'deploy/compose/config/neburyx.example.yaml'), file);
+    else writeFileSync(file, mapping.text);
+    chmodSync(file, 0o644);
+  }
+
   private writeSettings(): void {
-    const values: Record<string, string> = { ...this.passwords, ...this.options.settings, NEBURYX_IMAGE: this.options.image, NEBURYX_TAG: this.tag, NEBURYX_PORT: String(this.port) };
+    const values: Record<string, string> = { ...this.passwords, NEBURYX_CURSOR_KEY: this.cursorKey, NEBURYX_CONFIG_DIR: this.configFolder, ...this.options.settings, NEBURYX_IMAGE: this.options.image, NEBURYX_TAG: this.tag, NEBURYX_PORT: String(this.port) };
     for (const name of this.options.omit ?? []) delete values[name];
     mkdirSync(this.folder, { recursive: true });
     writeFileSync(this.envFile, Object.entries(values).map(([key, value]) => `${key}=${value}`).join('\n') + '\n');

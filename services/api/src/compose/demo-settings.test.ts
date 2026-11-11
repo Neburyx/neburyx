@@ -20,8 +20,10 @@ function listed(): { readonly name: string; readonly value: string; readonly des
   });
 }
 
+const NOT_USED_BY_THE_DEMO = new Set(['NEBURYX_CONFIG_DIR']);
+
 function used(): Set<string> {
-  return new Set([...composeText.matchAll(/\$\{([A-Z][A-Z0-9_]*)/g)].flatMap((match) => (match[1] === undefined ? [] : [match[1]])));
+  return new Set([...composeText.matchAll(/\$\{([A-Z][A-Z0-9_]*)/g)].flatMap((match) => (match[1] === undefined || NOT_USED_BY_THE_DEMO.has(match[1]) ? [] : [match[1]])));
 }
 
 describe('the demo settings example', () => {
