@@ -29,7 +29,7 @@ const count = (value: number): string => value.toLocaleString('en-US');
 
 /** The server's sentence for an export that is too large does not carry the numbers; the dialog adds them. */
 export const tooLargeText = (message: string, limits: ExportLimits): string =>
-  `${message} An export holds at most ${count(limits.maxEntities)} entities, ${count(limits.maxRelationships)} stored relationships and ${count(limits.maxAggregates)} aggregated relationships.`;
+  `${message} An export holds at most ${count(limits.maxEntities)} entities, ${count(limits.maxRelationships)} stored relationships and ${count(limits.maxAggregates)} aggregated or derived relationships.`;
 
 export const REFUSED_BANNER_ID = 'export-download-refused';
 export const REFUSED_CHIP = 'Export';

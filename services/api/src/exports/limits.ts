@@ -8,7 +8,7 @@
  * - aggregated relationships (each read on its own, with its ends and one member): 96 take 4.0 to 4.2 s, 193 take 7.6 to 7.7 s, 285 take 16.0 to 16.7 s, 379 take 20.2 to 20.5 s;
  * - mixed: 300 entities and 300 stored relationships take 0.56 to 0.69 s; adding 100 aggregates makes it 4.3 to 4.6 s; 300 entities and 285 aggregates take 11.6 to 16.9 s.
  *
- * Aggregates cost about 40 ms each and more beyond 200, so their limit is lower. A derived relationship is read as one statement of its own too, and counts with the aggregates.
+ * Aggregates cost about 40 ms each and more beyond 200, so their limit is lower. A derived relationship is also read as one statement of its own, so it counts with the aggregates; its own time is not measured yet (see the figures once they are added).
  */
 export const MAX_EXPORT_ENTITIES = 300;
 export const MAX_EXPORT_RELATIONSHIPS = 300;

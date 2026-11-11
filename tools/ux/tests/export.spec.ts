@@ -83,7 +83,7 @@ test.describe('exporting the current view', () => {
     await mode(page, 'large');
     await exportButton(page).click();
     await dialog(page).getByRole('button', { name: 'Download JSON' }).click();
-    await expect(dialog(page).getByRole('status').filter({ hasText: /\S/ })).toContainText('An export holds at most 300 entities, 300 stored relationships and 100 aggregated relationships.');
+    await expect(dialog(page).getByRole('status').filter({ hasText: /\S/ })).toContainText('An export holds at most 300 entities, 300 stored relationships and 100 aggregated or derived relationships.');
   });
 
   test('shows the banner of a refused download, and Export again opens the dialog and takes the banner away', async ({ page }) => {
