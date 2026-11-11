@@ -51,6 +51,38 @@ async function newStack(extra: { readonly omit?: readonly string[]; readonly ove
   return stack;
 }
 
+describe('a password or the cursor key that breaks its rule', () => {
+  const SHELL_HOSTILE = `a"b$(id);c\`d`;
+  const CASES: readonly (readonly [string, string, string, string])[] = [
+    ['a cursor key that is too short', 'NEBURYX_CURSOR_KEY', 'short', 'NEBURYX_CURSOR_KEY-base64-of-at-least-32-bytes'],
+    ['a cursor key of 31 bytes', 'NEBURYX_CURSOR_KEY', randomBytes(31).toString('base64'), 'NEBURYX_CURSOR_KEY-base64-of-at-least-32-bytes'],
+    ['a cursor key with a quote, a dollar sign and a semicolon', 'NEBURYX_CURSOR_KEY', SHELL_HOSTILE, 'NEBURYX_CURSOR_KEY-base64-of-at-least-32-bytes'],
+    ['an admin password with a character that is not a letter or digit', 'NEBURYX_DB_ADMIN_PASSWORD', 'has-a-hyphen', 'NEBURYX_DB_ADMIN_PASSWORD-letters-and-digits-only'],
+    ['a migration password with a quote, a dollar sign and a semicolon', 'NEBURYX_DB_MIGRATION_PASSWORD', SHELL_HOSTILE, 'NEBURYX_DB_MIGRATION_PASSWORD-letters-and-digits-only'],
+    ['an app password with a space', 'NEBURYX_DB_APP_PASSWORD', 'two words', 'NEBURYX_DB_APP_PASSWORD-letters-and-digits-only'],
+  ];
+
+  it.each(CASES)('stops docker compose up naming the setting and the rule, before anything starts, for %s', async (_label, variable, value, service) => {
+    const stack = await newStack({ settings: { [variable]: `'${value}'` } });
+    const result = await stack.compose(['up', '--wait', '--wait-timeout', '60']);
+    const output = `${result.stdout}${result.stderr}`;
+    expect(result.code).not.toBe(0);
+    expect(output).toContain(`service "${service}" didn't complete successfully`);
+    expect(output).not.toContain(value);
+    expect(await stack.everStarted()).not.toEqual(expect.arrayContaining(['db']));
+    for (const started of await stack.everStarted()) expect(started.startsWith('NEBURYX_'), started).toBe(true);
+    const logs = (await stack.compose(['logs', '--no-log-prefix', service])).stdout;
+    expect(logs).toContain(`${variable} must be`);
+    expect(logs).toMatch(/openssl rand -(hex 24|base64 32)/);
+    expect(logs).not.toContain(value);
+  });
+
+  it('lets a valid password and a valid cursor key through (every other test brings the stack up with them)', async () => {
+    const stack = await newStack({ settings: { NEBURYX_CURSOR_KEY: randomBytes(32).toString('base64').replace(/=+$/, '') } });
+    expect((await stack.up()).code).toBe(0);
+  });
+});
+
 describe('the cursor key', () => {
   const COMPOSE_DIRECTORY = fileURLToPath(new URL('../../../../deploy/compose/', import.meta.url));
 
@@ -83,8 +115,8 @@ describe('the cursor key', () => {
     expect(z.object({ items: z.array(z.unknown()).length(1) }).parse(await next.json()).items).toHaveLength(1);
   });
 
-  it('stops the api with exit code 1 and a message that names the variable and does not repeat its value, for a key that is not a key', async () => {
-    const bad = 'this-is-not-a-cursor-key-value';
+  it('stops the api with exit code 1 and a message that names the variable and does not repeat its value, for a key that is base64 of 32 bytes but not in canonical form', async () => {
+    const bad = `${'A'.repeat(42)}B`;
     const stack = await newStack({ settings: { NEBURYX_CURSOR_KEY: bad } });
     const recorder = await stack.record();
     try {

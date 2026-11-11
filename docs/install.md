@@ -28,25 +28,31 @@ You set the tag `local` as `NEBURYX_TAG` in the next section. Each version you b
 
 ## Install
 
-1. Make the settings file and the mapping file:
+1. Make the mapping file:
 
    ```bash
    cd deploy/compose
-   cp .env.example .env
    cp config/neburyx.example.yaml config/neburyx.yaml
-   chmod 600 .env
    ```
 
-   Neither file is committed: git ignores both.
+   Git ignores it, so your mapping is never committed.
 
-2. Put the values in `.env`. Make the three passwords and the cursor key with:
+2. Write the settings file. This one command makes `.env` with random passwords and a cursor key, and sets the tag `local` that the build step above makes:
 
    ```bash
-   openssl rand -hex 24      # run it three times: one for each password
-   openssl rand -base64 32   # the cursor key
+   [ -e .env ] && echo ".env exists; not overwritten" || ( umask 077; cat > .env <<EOF
+   NEBURYX_DB_ADMIN_PASSWORD=$(openssl rand -hex 24)
+   NEBURYX_DB_MIGRATION_PASSWORD=$(openssl rand -hex 24)
+   NEBURYX_DB_APP_PASSWORD=$(openssl rand -hex 24)
+   NEBURYX_CURSOR_KEY=$(openssl rand -base64 32)
+   NEBURYX_TAG=local
+   EOF
+   )
    ```
 
-   The passwords take letters and digits only, because they are put into connection strings. Set `NEBURYX_TAG=local` as well, if that is the tag you built.
+   The command refuses to touch a `.env` that already exists: Postgres sets its role passwords only when its volume is first made, so new passwords written over a running install would lock the app out of its own database, and a new cursor key would make open pages say "Start again". Changing a password after the first start is not done by this command. Never commit `.env`.
+
+   To fill it in by hand instead, copy `.env.example` to `.env`, `chmod 600 .env`, and make the values with `openssl rand -hex 24` (run it three times, one for each password; letters and digits only, because the passwords are put into connection strings) and `openssl rand -base64 32` (the cursor key). Set `NEBURYX_TAG=local` as well, if that is the tag you built.
 
    The cursor key signs the cursors of paged lists. Keep the same key across restarts: with it, a page that a person has open can still load its next page after the API restarts; without it, that page says "Start again". Never commit it.
 
@@ -56,7 +62,7 @@ You set the tag `local` as `NEBURYX_TAG` in the next section. Each version you b
    docker compose up --wait
    ```
 
-   `up` stops before it starts anything, and names the setting, if a password or the cursor key is missing.
+   `up` stops before the database or the app starts if a password or the cursor key is missing or breaks its rule: the error at the end of its output names the service that failed, for example `NEBURYX_CURSOR_KEY-base64-of-at-least-32-bytes`, and `docker compose logs` on that service says how to make a valid value.
 
 4. Check that it is ready:
 

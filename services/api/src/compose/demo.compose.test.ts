@@ -413,6 +413,26 @@ describe('a demo stack next to a source.env of the Community install', () => {
   });
 });
 
+describe('a demo stack with a Neo4j password or a cursor key that breaks its rule', () => {
+  it.each([
+    ['a Neo4j password of 7 characters', 'DEMO_NEO4J_PASSWORD', 'abc1234', 'DEMO_NEO4J_PASSWORD-at-least-8-characters'],
+    ['a cursor key of 7 characters', 'NEBURYX_CURSOR_KEY', 'abc1234', 'NEBURYX_CURSOR_KEY-base64-of-at-least-32-bytes'],
+  ])('stops docker compose up naming the setting and the rule, before any database or app starts, for %s', async (_label, variable, value, service) => {
+    const stack = await demoStack({ settings: { ...settings(), [variable]: value } });
+    onTestFinished(() => release(stack));
+    const result = await stack.compose(['up', '--wait', '--wait-timeout', '120']);
+    const output = `${result.stdout}${result.stderr}`;
+    expect(result.code).not.toBe(0);
+    expect(output).toContain(`service "${service}" didn't complete successfully`);
+    expect(output).not.toContain(value);
+    const started = await stack.everStarted();
+    for (const name of ['db', 'migrate', 'api', 'demo-banking-graph', 'demo-insurance-graph', 'load-banking', 'load-insurance']) expect(started, name).not.toContain(name);
+    const logs = (await stack.compose(['logs', '--no-log-prefix', service])).stdout;
+    expect(logs).toContain(`${variable} must be`);
+    expect(logs).not.toContain(value);
+  });
+});
+
 describe('a demo stack with a setting that is missing or wrong', () => {
   const REQUIRED = ['NEBURYX_DB_ADMIN_PASSWORD', 'NEBURYX_DB_MIGRATION_PASSWORD', 'NEBURYX_DB_APP_PASSWORD', 'DEMO_NEO4J_PASSWORD', 'NEBURYX_CURSOR_KEY'];
 
@@ -426,7 +446,7 @@ describe('a demo stack with a setting that is missing or wrong', () => {
   });
 
   it('stops the api with exit code 1 and a message that names the variable and does not repeat its value, for a cursor key that is not a key', { timeout: STACK_TEST_TIMEOUT_MS }, async () => {
-    const bad = 'this-is-not-a-cursor-key-value';
+    const bad = `${'A'.repeat(42)}B`;
     const stack = await demoStack({ settings: { ...settings(), NEBURYX_CURSOR_KEY: bad }, overrides: [overrideFile(API_WITHOUT_GRAPHS)] });
     const recorder = await stack.record();
     onTestFinished(() => release(stack, recorder));
