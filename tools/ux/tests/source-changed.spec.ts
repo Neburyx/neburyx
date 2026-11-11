@@ -16,12 +16,21 @@ async function openChanged(page: Page, kind: 'repointed' | 'removed'): Promise<{
   await form.getByRole('button', { name: 'Open' }).click();
   await expect(page).toHaveURL(/\/explore\/[0-9a-f-]{36}$/);
   const id = page.url().split('/').pop() ?? '';
-  // only what the page asks for after it is loaded again counts: the first open of the new investigation reads its entity
+  // only what the page asks for after it is loaded again counts. The page that opened the investigation may still be reading its entity and its coverage when the reload starts, and until the reloaded document is committed
+  // (a slow machine takes longer) it may send them, so the count starts when the reloaded document is committed: the old document sends nothing after that, and the new one nothing before it.
   const reads: string[] = [];
-  page.on('request', (request) => {
-    if (SOURCE_READ.test(new URL(request.url()).pathname)) reads.push(request.url());
+  let reloadAsked = false;
+  let committed = false;
+  page.on('framenavigated', (frame) => {
+    if (reloadAsked && frame === page.mainFrame()) committed = true;
   });
+  page.on('request', (request) => {
+    if (committed && SOURCE_READ.test(new URL(request.url()).pathname)) reads.push(request.url());
+  });
+  reloadAsked = true;
   await page.reload();
+  // a count that never started would pass every check that nothing was asked
+  expect(committed).toBe(true);
   return { id, reads };
 }
 

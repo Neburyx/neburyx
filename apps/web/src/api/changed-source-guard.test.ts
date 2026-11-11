@@ -20,7 +20,16 @@ function stateWith(sourceState?: 'available' | 'repointed' | 'removed') {
 
 const call = (client: ApiClient, name: (typeof READS)[number]) => (client[name] as (...args: unknown[]) => Promise<unknown>)({});
 
+/** The calls of the client that do not read the source of the investigation on screen: the person, the registry of sources, the stored profile and the operator's source test, opening a new investigation (which names its own source), and the investigations and views in the application database. A call that is in neither list fails the test below, so a new reader is placed in one of them on purpose. */
+const NOT_READS_OF_THE_SHOWN_INVESTIGATION = ['getMe', 'getSources', 'getProfile', 'testSource', 'openInvestigation', 'getInvestigation', 'saveDraft', 'deleteInvestigation', 'restoreInvestigation', 'deleteView', 'saveView', 'listViews', 'restoreView', 'renameView', 'changeInvestigationStatus', 'renameInvestigation', 'listInvestigations', 'listInvestigationPage', 'listOwnedViews'];
+
 describe('the read guard of a changed source', () => {
+  it('places every call of the client in the guarded reads or in the calls that do not read the source of the investigation on screen, so a new reader cannot be left unguarded', () => {
+    const named = [...READS, ...NOT_READS_OF_THE_SHOWN_INVESTIGATION].sort();
+    expect(Object.keys(fakeClient()).sort()).toEqual(named);
+    expect(new Set(named).size).toBe(named.length);
+  });
+
   it.each(['repointed', 'removed'] as const)('sends no read of any kind while the investigation shown has a source that is %s, and answers that the request ended', async (sourceState) => {
     const { client, sent } = counting();
     const guarded = withoutReadsWhileSourceChanged(client, stateWith(sourceState));
