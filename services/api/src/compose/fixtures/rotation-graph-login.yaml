@@ -1,0 +1,11 @@
+# The graph servers take their first password from a variable of their own, so that changing the login the
+# API uses (DEMO_NEO4J_PASSWORD in the settings file) recreates no graph server.
+services:
+  demo-banking-graph:
+    environment:
+      NEO4J_AUTH: neo4j/${GRAPH_INITIAL_PASSWORD:?set GRAPH_INITIAL_PASSWORD}
+      DEMO_NEO4J_PASSWORD: ${GRAPH_INITIAL_PASSWORD}
+  demo-insurance-graph:
+    environment:
+      NEO4J_AUTH: neo4j/${GRAPH_INITIAL_PASSWORD:?set GRAPH_INITIAL_PASSWORD}
+      DEMO_NEO4J_PASSWORD: ${GRAPH_INITIAL_PASSWORD}
