@@ -1,7 +1,8 @@
 # docs
 
-Public technical documentation. Pre-release placeholder: the technical architecture will be published here once it has been reviewed for publication.
+Public technical documentation.
 
+- [technical-architecture.md](technical-architecture.md): how Neburyx is built: the gate, the schema mapping, the templates, the API, security, deployment and testing, with the decisions behind them.
 - [run-locally.md](run-locally.md): run the whole app on your machine with one command, against your own Neo4j and Postgres.
 - [coding-guidelines.md](coding-guidelines.md): how code is written here (TypeScript rules, comments, tests, API and web client).
 - [architecture-checks.md](architecture-checks.md): the checks that fail the build (nothing outside the gate reaches the adapter; no domain words in code) and what they cannot see.
