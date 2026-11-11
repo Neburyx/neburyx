@@ -50,6 +50,15 @@ describe('the Export button when the source changed', () => {
     expect((screen.getByRole('button', { name: 'Export' }) as HTMLButtonElement).disabled).toBe(false);
   });
 
+  it('takes no focus when the investigation is already blocked on render and no dialog was open', () => {
+    const heading = document.createElement('h1');
+    document.body.append(heading);
+    renderExport(withSource('repointed'));
+    expect(document.activeElement).not.toBe(heading);
+    expect(heading.hasAttribute('tabindex')).toBe(false);
+    heading.remove();
+  });
+
   it('hands the focus to the page heading when an open dialog is closed by the change', async () => {
     const state = withSource('available');
     renderExport(state);
