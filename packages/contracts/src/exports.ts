@@ -16,7 +16,7 @@ export const EXPORT_HIDDEN_NOTE = 'Some items may be hidden by your access.';
 
 /**
  * `POST /v1/investigations/{id}/exports`: the references the person is showing. The server reads each through the gate and never uses the browser's copy. The size of what an export may hold is
- * checked by the server against its limit and answered with `INVALID_REQUEST` and the reason `export-too-large`.
+ * checked by the server against its three limits (entities, stored relationships, aggregated or derived relationships) and answered with `INVALID_REQUEST` and the reason `export-too-large`.
  */
 export const exportRequestSchema = z.strictObject({
   kind: z.literal('view'),

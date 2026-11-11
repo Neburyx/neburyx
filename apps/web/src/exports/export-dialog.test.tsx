@@ -118,10 +118,10 @@ describe('a failed export', () => {
   });
 
   it('names the limit when the view is too large', async () => {
-    const createExport = vi.fn(() => fail(server('INVALID_REQUEST', 'This view holds more than one export can. Hide some items, then export again.', { reason: 'export-too-large', maxElements: 300 })));
+    const createExport = vi.fn(() => fail(server('INVALID_REQUEST', 'This view holds more than one export can. Hide some items, then export again.', { reason: 'export-too-large', maxEntities: 300, maxRelationships: 300, maxAggregates: 100, exceeded: 'aggregates' })));
     const { user } = await opened({ createExport });
     await user.click(within(dialog()).getByRole('button', { name: 'Download JSON' }));
-    expect(within(dialog()).getByRole('status').textContent).toBe('This view holds more than one export can. Hide some items, then export again. An export holds at most 300 entities and 300 relationships.');
+    expect(within(dialog()).getByRole('status').textContent).toBe('This view holds more than one export can. Hide some items, then export again. An export holds at most 300 entities, 300 stored relationships and 100 aggregated relationships.');
   });
 
   it.each([

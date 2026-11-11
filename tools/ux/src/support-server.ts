@@ -501,7 +501,7 @@ function createInvestigations(options: SupportServerOptions) {
       if (found === undefined) return json(response, 404, NOT_FOUND);
       const changed = sourceStateOf(found, false);
       if (changed !== 'available') return json(response, 409, { error: { code: 'CONFLICT', message: 'This source now points to a different database or is no longer configured. This investigation is read-only.', retryable: false, traceId: 'tr-support', details: { reason: 'source-changed', sourceState: changed } } });
-      if (exportMode === 'large') return json(response, 400, { error: { code: 'INVALID_REQUEST', message: 'This view holds more than one export can. Hide some items, then export again.', retryable: false, traceId: 'support', details: { reason: 'export-too-large', maxElements: 300 } } });
+      if (exportMode === 'large') return json(response, 400, { error: { code: 'INVALID_REQUEST', message: 'This view holds more than one export can. Hide some items, then export again.', retryable: false, traceId: 'support', details: { reason: 'export-too-large', maxEntities: 300, maxRelationships: 300, maxAggregates: 100, exceeded: 'aggregates' } } });
       if (exportMode === 'failed') return json(response, 500, { error: { code: 'EXPORT_FAILED', message: 'The export could not be created.', retryable: true, traceId: 'support' } });
       const exportId = randomUUID();
       const filename = parsed.data.format === 'json' ? 'neburyx-export-20261110T101500Z.json' : 'neburyx-export-20261110T101500Z.zip';

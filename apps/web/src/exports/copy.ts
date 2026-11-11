@@ -19,8 +19,17 @@ export const ACCESS_NOTE = 'Some items may be hidden by your access.';
 
 export const downloadLabel = (format: ExportFormat): string => `Download ${FORMAT_NAMES[format]}`;
 
-/** The server's sentence for an export that is too large does not carry the number; the dialog adds it. */
-export const tooLargeText = (message: string, limit: number): string => `${message} An export holds at most ${limit.toLocaleString('en-US')} entities and ${limit.toLocaleString('en-US')} relationships.`;
+export interface ExportLimits {
+  readonly maxEntities: number;
+  readonly maxRelationships: number;
+  readonly maxAggregates: number;
+}
+
+const count = (value: number): string => value.toLocaleString('en-US');
+
+/** The server's sentence for an export that is too large does not carry the numbers; the dialog adds them. */
+export const tooLargeText = (message: string, limits: ExportLimits): string =>
+  `${message} An export holds at most ${count(limits.maxEntities)} entities, ${count(limits.maxRelationships)} stored relationships and ${count(limits.maxAggregates)} aggregated relationships.`;
 
 export const REFUSED_BANNER_ID = 'export-download-refused';
 export const REFUSED_CHIP = 'Export';

@@ -23,9 +23,9 @@ describe('createExport', () => {
   });
 
   it('answers the server\'s failure, with the limit an export that is too large names', async () => {
-    const { fetcher } = once(error('INVALID_REQUEST', 'This view holds more than one export can. Hide some items, then export again.', 400, { reason: 'export-too-large', maxElements: 300 }));
+    const { fetcher } = once(error('INVALID_REQUEST', 'This view holds more than one export can. Hide some items, then export again.', 400, { reason: 'export-too-large', maxEntities: 300, maxRelationships: 300, maxAggregates: 100, exceeded: 'aggregates' }));
     const result = await createApiClient(fetcher).createExport('i', REQUEST, KEY);
-    expect(result).toMatchObject({ ok: false, failure: { code: 'INVALID_REQUEST', details: { reason: 'export-too-large', maxElements: 300 } } });
+    expect(result).toMatchObject({ ok: false, failure: { code: 'INVALID_REQUEST', details: { reason: 'export-too-large', maxEntities: 300, maxRelationships: 300, maxAggregates: 100, exceeded: 'aggregates' } } });
   });
 
   it('refuses an answer that is not a ready export, or does not parse', async () => {

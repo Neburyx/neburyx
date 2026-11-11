@@ -5,7 +5,7 @@ import { DEFAULT_BUDGETS } from '../gate/budgets.js';
 import type { CoverageService } from '../graph/coverage-service.js';
 import type { ReadRefsService } from '../graph/read-refs-service.js';
 import type { Principal } from '../seams/seams.js';
-import { MAX_EXPORT_ENTITIES, MAX_EXPORT_RELATIONSHIPS } from './limits.js';
+import { MAX_EXPORT_AGGREGATES, MAX_EXPORT_ENTITIES, MAX_EXPORT_RELATIONSHIPS } from './limits.js';
 
 export interface ShownReference {
   readonly entities: readonly ElementRef[];
@@ -34,6 +34,7 @@ export interface ShownRead {
 export interface ShownReaderLimits {
   readonly maxEntities: number;
   readonly maxRelationships: number;
+  readonly maxAggregates: number;
   readonly batch: number;
   readonly requestTimeoutMs: number;
   readonly coverageChunk: number;
@@ -42,6 +43,7 @@ export interface ShownReaderLimits {
 export const DEFAULT_SHOWN_LIMITS: ShownReaderLimits = {
   maxEntities: MAX_EXPORT_ENTITIES,
   maxRelationships: MAX_EXPORT_RELATIONSHIPS,
+  maxAggregates: MAX_EXPORT_AGGREGATES,
   batch: MAX_READ_REFS,
   requestTimeoutMs: DEFAULT_BUDGETS.requestTimeoutMs,
   coverageChunk: COVERAGE_MAX_ENTITIES,
@@ -111,8 +113,9 @@ export function createShownReader(deps: Deps): ShownReader {
       const edges = distinct(call.edges);
       const aggregates = distinct(call.aggregates);
       const derived = distinct(call.derived);
-      if (entities.length > limits.maxEntities || edges.length + aggregates.length + derived.length > limits.maxRelationships) {
-        throw new AppError('INVALID_REQUEST', { reason: 'export-too-large', maxElements: Math.max(limits.maxEntities, limits.maxRelationships) });
+      const exceeded = entities.length > limits.maxEntities ? 'entities' : edges.length > limits.maxRelationships ? 'relationships' : aggregates.length + derived.length > limits.maxAggregates ? 'aggregates' : undefined;
+      if (exceeded !== undefined) {
+        throw new AppError('INVALID_REQUEST', { reason: 'export-too-large', maxEntities: limits.maxEntities, maxRelationships: limits.maxRelationships, maxAggregates: limits.maxAggregates, exceeded });
       }
 
       const deadline = AbortSignal.timeout(limits.requestTimeoutMs);

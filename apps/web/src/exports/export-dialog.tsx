@@ -21,8 +21,8 @@ export function failureText(failure: ApiFailure): string {
   if (!('message' in failure)) return failure.code === 'SCHEMA_MISMATCH' ? SCHEMA_FAILURE : NETWORK_FAILURE;
   // a conflict with no reason is the same key still running; one with a reason (a changed source) has its own sentence
   if (failure.code === 'CONFLICT' && failure.details?.reason === undefined) return EXPORT_BUSY;
-  const limit = failure.details?.maxElements;
-  return failure.code === 'INVALID_REQUEST' && limit !== undefined ? tooLargeText(failure.message, limit) : failure.message;
+  const { maxEntities, maxRelationships, maxAggregates } = failure.details ?? {};
+  return failure.code === 'INVALID_REQUEST' && maxEntities !== undefined && maxRelationships !== undefined && maxAggregates !== undefined ? tooLargeText(failure.message, { maxEntities, maxRelationships, maxAggregates }) : failure.message;
 }
 
 /** Whether a failed download says the person's access changed since the export was made. */

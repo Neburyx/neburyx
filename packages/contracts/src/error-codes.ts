@@ -52,6 +52,10 @@ export type AccessDeniedReason = (typeof ACCESS_DENIED_REASONS)[number];
 /** Why an `INVALID_REQUEST` is more than a malformed body: an export names more elements than one export holds. */
 export const INVALID_REQUEST_REASONS = ['export-too-large'] as const;
 
+/** The three limits of one export: entities, stored relationships, and aggregated or derived relationships. */
+export const EXPORT_LIMIT_NAMES = ['entities', 'relationships', 'aggregates'] as const;
+export type ExportLimitName = (typeof EXPORT_LIMIT_NAMES)[number];
+
 export type InvalidRequestReason = (typeof INVALID_REQUEST_REASONS)[number];
 
 /** The status a read-only refusal names. */
@@ -73,7 +77,11 @@ export const errorDetailsSchema = z.strictObject({
   status: z.enum(READ_ONLY_STATUSES).optional(),
   sourceState: z.enum(SOURCE_CHANGED_STATES).optional(),
   /** The most entities, and the most relationships, one export holds. */
-  maxElements: z.number().int().positive().optional(),
+  maxEntities: z.number().int().positive().optional(),
+  maxRelationships: z.number().int().positive().optional(),
+  maxAggregates: z.number().int().positive().optional(),
+  /** Which of the three limits the export went over. */
+  exceeded: z.enum(EXPORT_LIMIT_NAMES).optional(),
 });
 
 export type ErrorDetails = z.infer<typeof errorDetailsSchema>;
@@ -88,7 +96,7 @@ export const errorBodySchema = z.object({
   })
     .refine(({ code, details }) => code !== 'PARTIAL_RESULT' || partialDetailsSchema.safeParse(details).success, { message: 'PARTIAL_RESULT carries retained and requested counts' })
     .refine(({ code, details }) => details?.reason === undefined || reasonsOf(code).some((reason) => reason === details.reason), { message: 'the reason belongs to the code' })
-    .refine(({ code, details }) => details?.maxElements === undefined || (code === 'INVALID_REQUEST' && details.reason === 'export-too-large'), { message: 'only an export that is too large names its limit' })
+    .refine(({ code, details }) => (details?.maxEntities === undefined && details?.maxRelationships === undefined && details?.maxAggregates === undefined && details?.exceeded === undefined) || (code === 'INVALID_REQUEST' && details.reason === 'export-too-large'), { message: 'only an export that is too large names its limits' })
     .refine(({ code, details }) => details?.status === undefined || (code === 'CONFLICT' && details.reason === 'investigation-read-only'), { message: 'only a read-only refusal names the status' }),
 });
 

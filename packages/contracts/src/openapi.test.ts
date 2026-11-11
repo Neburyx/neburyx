@@ -26,7 +26,7 @@ describe('buildOpenApiDocument', () => {
     const text = JSON.stringify(buildOpenApiDocument().components.schemas.ErrorResponse);
     expect(text).toContain('"access-changed"');
     expect(text).toContain('"export-too-large"');
-    expect(text).toContain('"maxElements"');
+    for (const key of ['maxEntities', 'maxRelationships', 'maxAggregates', 'exceeded']) expect(text).toContain(`"${key}"`);
     expect(text).toContain('Export again to get a file that matches your current access.');
   });
 

@@ -35,8 +35,9 @@ describe('the export contract', () => {
     const body = (code: string, details: unknown) => errorBodySchema.safeParse({ error: { code, message: 'm', retryable: false, traceId: 't', details } }).success;
     expect(body('ACCESS_DENIED', { reason: 'access-changed' })).toBe(true);
     expect(body('CONFLICT', { reason: 'access-changed' })).toBe(false);
-    expect(body('INVALID_REQUEST', { reason: 'export-too-large', maxElements: 300 })).toBe(true);
-    expect(body('INVALID_REQUEST', { maxElements: 300 })).toBe(false);
+    expect(body('INVALID_REQUEST', { reason: 'export-too-large', maxEntities: 300, maxRelationships: 300, maxAggregates: 100, exceeded: 'entities' })).toBe(true);
+    expect(body('INVALID_REQUEST', { maxEntities: 300 })).toBe(false);
+    expect(body('INVALID_REQUEST', { reason: 'export-too-large', maxEntities: 300, maxRelationships: 300, maxAggregates: 100, exceeded: 'bytes' })).toBe(false);
     expect(body('NOT_FOUND', { reason: 'export-too-large' })).toBe(false);
   });
 });

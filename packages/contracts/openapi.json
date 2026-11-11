@@ -1184,7 +1184,7 @@
             }
           },
           "400": {
-            "description": "The body is not valid, the key is missing or malformed, a reference of a keyed type is not a token, or the view holds more than one export can (details.reason export-too-large with details.maxElements); SOURCE_MISMATCH when a reference names another source",
+            "description": "The body is not valid, the key is missing or malformed, a reference of a keyed type is not a token, or the view holds more than one export can (details.reason export-too-large with details.maxEntities, maxRelationships, maxAggregates and exceeded); SOURCE_MISMATCH when a reference names another source",
             "content": {
               "application/json": {
                 "schema": {
@@ -7562,15 +7562,36 @@
                         "type": "string",
                         "const": "export-too-large"
                       },
-                      "maxElements": {
+                      "maxEntities": {
                         "type": "integer",
                         "exclusiveMinimum": 0,
                         "maximum": 9007199254740991
+                      },
+                      "maxRelationships": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "maxAggregates": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "exceeded": {
+                        "type": "string",
+                        "enum": [
+                          "entities",
+                          "relationships",
+                          "aggregates"
+                        ]
                       }
                     },
                     "required": [
                       "reason",
-                      "maxElements"
+                      "maxEntities",
+                      "maxRelationships",
+                      "maxAggregates",
+                      "exceeded"
                     ],
                     "additionalProperties": false
                   }

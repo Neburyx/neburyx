@@ -18,7 +18,7 @@ export const ERROR_DETAIL_KEYS: Readonly<Record<ErrorCode, readonly DetailKey[]>
   EXPORT_FAILED: [],
   ASK_UNSUPPORTED: [],
   ASK_PLAN_INVALID: [],
-  INVALID_REQUEST: ['reason', 'maxElements'],
+  INVALID_REQUEST: ['reason', 'maxEntities', 'maxRelationships', 'maxAggregates', 'exceeded'],
   UNSUPPORTED_MEDIA_TYPE: [],
   NOT_FOUND: [],
   INTERNAL_ERROR: [],
@@ -48,7 +48,7 @@ export function allowedDetails(code: ErrorCode, details: unknown): ErrorDetails 
   if (typeof allowed['reason'] === 'string' && !REASONS_OF_CODE[code]?.includes(allowed['reason'])) delete allowed['reason'];
   if (code === 'CONFLICT' && allowed['reason'] !== 'investigation-read-only') delete allowed['status'];
   if (code === 'CONFLICT' && allowed['reason'] !== 'source-changed') delete allowed['sourceState'];
-  if (code === 'INVALID_REQUEST' && allowed['reason'] !== 'export-too-large') delete allowed['maxElements'];
+  if (code === 'INVALID_REQUEST' && allowed['reason'] !== 'export-too-large') for (const key of ['maxEntities', 'maxRelationships', 'maxAggregates', 'exceeded']) delete allowed[key];
   if (Object.keys(allowed).length === 0) return undefined;
   const parsed = errorDetailsSchema.safeParse(allowed);
   return parsed.success ? parsed.data : undefined;

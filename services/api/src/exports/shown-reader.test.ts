@@ -29,6 +29,8 @@ const edgeOf = (id: string, from: string, to: string, over: Partial<GraphEdge> =
   ...over,
 });
 const ref = (id: string) => ({ sourceId: 'demo', entityType: 'widget', stableId: id });
+const aggregateRef = (id: string) => ({ sourceId: 'demo', aggregate: { type: 'BARE', from: ref(`F-${id}`), to: ref(`T-${id}`) } });
+const derivedRef = (id: string) => ({ sourceId: 'demo', derived: { ruleId: 'rule', from: ref(`F-${id}`), to: ref(`T-${id}`) } });
 const storedRef = (id: string) => ({ sourceId: 'demo', type: 'MADE_FROM', from: 'widget', to: 'widget', stableId: id });
 
 function rig(options: { readonly nodes?: (id: string) => GraphNode | undefined; readonly edges?: (id: string) => GraphEdge | undefined; readonly coverage?: (call: CoverageCall) => Count; readonly hang?: boolean; readonly limits?: Partial<ShownReaderLimits> } = {}) {
@@ -50,8 +52,8 @@ function rig(options: { readonly nodes?: (id: string) => GraphNode | undefined; 
     },
   };
   const reader = createShownReader({ readRefs, coverage, limits: { ...DEFAULT_SHOWN_LIMITS, ...options.limits } });
-  const run = (entities: readonly string[], more: { readonly edges?: readonly string[]; readonly signal?: AbortSignal } = {}) =>
-    reader.read({ traceId: 't', principal: principalFixture, sourceId: 'demo', entities: entities.map(ref), edges: (more.edges ?? []).map(storedRef), aggregates: [], derived: [], ...(more.signal === undefined ? {} : { signal: more.signal }) });
+  const run = (entities: readonly string[], more: { readonly edges?: readonly string[]; readonly aggregates?: readonly string[]; readonly derived?: readonly string[]; readonly signal?: AbortSignal } = {}) =>
+    reader.read({ traceId: 't', principal: principalFixture, sourceId: 'demo', entities: entities.map(ref), edges: (more.edges ?? []).map(storedRef), aggregates: (more.aggregates ?? []).map(aggregateRef), derived: (more.derived ?? []).map(derivedRef), ...(more.signal === undefined ? {} : { signal: more.signal }) });
   return { run, reads, asked };
 }
 
@@ -74,8 +76,10 @@ describe('reading the shown elements for an export', () => {
 
   it('refuses more than the limit with the reason and the limit, and reads nothing', async () => {
     const { run, reads } = rig();
-    await expect(run(ids(301))).rejects.toMatchObject({ code: 'INVALID_REQUEST', details: { reason: 'export-too-large', maxElements: 300 } });
-    await expect(run([], { edges: ids(301) })).rejects.toMatchObject({ code: 'INVALID_REQUEST', details: { reason: 'export-too-large' } });
+    const limits = { reason: 'export-too-large', maxEntities: 300, maxRelationships: 300, maxAggregates: 100 };
+    await expect(run(ids(301))).rejects.toMatchObject({ code: 'INVALID_REQUEST', details: { ...limits, exceeded: 'entities' } });
+    await expect(run([], { edges: ids(301) })).rejects.toMatchObject({ code: 'INVALID_REQUEST', details: { ...limits, exceeded: 'relationships' } });
+    await expect(run([], { aggregates: ids(101) })).rejects.toMatchObject({ code: 'INVALID_REQUEST', details: { ...limits, exceeded: 'aggregates' } });
     expect(reads).toHaveLength(0);
   });
 
@@ -83,6 +87,21 @@ describe('reading the shown elements for an export', () => {
     const { run } = rig();
     await expect(run(ids(300))).resolves.toMatchObject({ nodes: expect.any(Array) });
     await expect(run(ids(301))).rejects.toBeInstanceOf(AppError);
+  });
+
+  it('accepts 300 entities, 300 stored relationships and 100 aggregated relationships together, and refuses one over each', async () => {
+    const { run } = rig();
+    await expect(run(ids(300), { edges: ids(300), aggregates: ids(100) })).resolves.toMatchObject({ nodes: expect.any(Array) });
+    await expect(run(ids(301), { edges: ids(300), aggregates: ids(100) })).rejects.toMatchObject({ details: { exceeded: 'entities' } });
+    await expect(run(ids(300), { edges: ids(301), aggregates: ids(100) })).rejects.toMatchObject({ details: { exceeded: 'relationships' } });
+    await expect(run(ids(300), { edges: ids(300), aggregates: ids(101) })).rejects.toMatchObject({ details: { exceeded: 'aggregates' } });
+  });
+
+  it('counts derived relationships with the aggregated ones, and the same item named twice once', async () => {
+    const { run } = rig();
+    await expect(run([], { aggregates: ids(60), derived: ids(40) })).resolves.toMatchObject({ nodes: expect.any(Array) });
+    await expect(run([], { aggregates: ids(60), derived: ids(41) })).rejects.toMatchObject({ details: { exceeded: 'aggregates' } });
+    await expect(run([], { aggregates: [...ids(100), ...ids(100)] })).resolves.toMatchObject({ nodes: expect.any(Array) });
   });
 
   it('leaves out a node that may not be exported with every relationship at it, and says only that something was left out', async () => {

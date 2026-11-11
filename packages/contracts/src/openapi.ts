@@ -304,7 +304,7 @@ export function buildOpenApiDocument(
           requestBody: { required: true, content: jsonBody('ExportRequest') },
           responses: {
             '201': { description: 'The export is ready', headers: { 'Idempotent-Replay': { description: 'true when this is the first answer returned again', schema: { type: 'string' } } }, content: jsonBody('Export') },
-            '400': { description: 'The body is not valid, the key is missing or malformed, a reference of a keyed type is not a token, or the view holds more than one export can (details.reason export-too-large with details.maxElements); SOURCE_MISMATCH when a reference names another source', content: jsonBody('ErrorResponse') },
+            '400': { description: 'The body is not valid, the key is missing or malformed, a reference of a keyed type is not a token, or the view holds more than one export can (details.reason export-too-large with details.maxEntities, maxRelationships, maxAggregates and exceeded); SOURCE_MISMATCH when a reference names another source', content: jsonBody('ErrorResponse') },
             '403': { description: 'ACCESS_DENIED when a replayed key meets access that was revoked', content: jsonBody('ErrorResponse') },
             '404': { description: 'No such investigation of this caller, or the source is not readable', content: jsonBody('ErrorResponse') },
             '409': { description: 'CONFLICT: the same key with another request or while the first call runs, or the policy changed; or the source changed (reason source-changed)', content: jsonBody('ErrorResponse') },

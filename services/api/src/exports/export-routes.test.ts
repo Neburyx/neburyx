@@ -87,7 +87,23 @@ describe('POST /v1/investigations/{id}/exports', () => {
     const entities = Array.from({ length: 301 }, (_unused, index) => el('widget', `W-${index}`));
     const response = await rig.create(investigation.id, { ...two, entities });
     expect(response.statusCode).toBe(400);
-    expect(response.json()).toMatchObject({ error: { code: 'INVALID_REQUEST', details: { reason: 'export-too-large', maxElements: 300 }, message: expect.stringContaining('Hide some items') } });
+    expect(response.json()).toMatchObject({ error: { code: 'INVALID_REQUEST', details: { reason: 'export-too-large', maxEntities: 300, maxRelationships: 300, maxAggregates: 100, exceeded: 'entities' }, message: expect.stringContaining('Hide some items') } });
+    expect(rig.executor.calls.length).toBe(before);
+    expect(rows(rig)).toHaveLength(0);
+    await rig.stop();
+  });
+
+  it('refuses 101 aggregated relationships and 301 stored ones, each naming the limit it went over, and reads nothing', async () => {
+    const rig = await startExportRig();
+    const investigation = await rig.open();
+    const before = rig.executor.calls.length;
+    const aggregates = Array.from({ length: 101 }, (_unused, index) => ({ sourceId: 'demo', aggregate: { type: 'BARE', from: el('widget', `W-${index}`), to: el('gadget', 'GT-1') } }));
+    const first = await rig.create(investigation.id, { ...two, aggregates });
+    expect(first.statusCode).toBe(400);
+    expect(first.json().error.details).toEqual({ reason: 'export-too-large', maxEntities: 300, maxRelationships: 300, maxAggregates: 100, exceeded: 'aggregates' });
+    const edges = Array.from({ length: 301 }, (_unused, index) => linkRef(`L-${index}`));
+    const second = await rig.create(investigation.id, { ...two, edges });
+    expect(second.json().error.details).toMatchObject({ exceeded: 'relationships' });
     expect(rig.executor.calls.length).toBe(before);
     expect(rows(rig)).toHaveLength(0);
     await rig.stop();
