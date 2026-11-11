@@ -7,7 +7,7 @@ How a release image is built and published. A maintainer pushes a version tag; t
 1. Checks out the tag with its full history, installs the dependencies and runs `pnpm test:image`.
 2. Makes `skopeo` available (it installs it when the runner image lacks it).
 3. Checks the image target: `node deploy/release/release-image.mjs --tag "$GITHUB_REF_NAME" --check-target`.
-4. Logs in to the registry with the secrets `REGISTRY_USERNAME` and `REGISTRY_TOKEN`.
+4. Logs in to the registry with the workflow's own `GITHUB_TOKEN` (no personal token is stored). The job asks for `packages: write` in addition to read access to the contents, and for nothing else.
 5. Pushes the image: `node deploy/release/release-image.mjs --tag "$GITHUB_REF_NAME" --push`. The script refuses unless `HEAD` is on `origin/main` and the tag points at `HEAD`. It builds one OCI archive for `linux/amd64` and `linux/arm64`, runs the platform check on it, searches every layer for a release placeholder that was not replaced (a hit stops the run), then pushes that same archive with `skopeo copy --all` as `<registry>/<image>:<version>` (the tag without its `v`; there is no `latest`). The pushed digest must equal the archive's index digest. The image reference and digest go to the run's summary.
 
 ## The image target
