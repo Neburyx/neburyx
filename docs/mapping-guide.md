@@ -92,6 +92,17 @@ Each table lists every key the product accepts at that level. "Required" means t
 | Key | Required | What it does |
 |---|---|---|
 | `sources` | yes | The list of sources. The product reads every source in the file |
+| `retention` | no | How long deleted investigations and export files are kept. It belongs to the deployment, not to a source |
+
+### Retention
+
+The `retention` block is optional, and so is each key in it. Each is a whole number of days from 1 to 365. The settings are described in [configuration](configuration.md#retention).
+
+<!-- keys: retention -->
+| Key | Required | What it does |
+|---|---|---|
+| `deleted_investigations_days` | no | How many days after a person deletes an investigation it can still be restored. The default is 30 |
+| `exports_days` | no | How many days a file made by an export is kept. The default is 7 |
 
 ### A source
 
