@@ -22,6 +22,8 @@ for (const [name, path] of PAGES) {
       await expectContained('the brand', page.locator('.brand'), page.locator('aside.sidebar'));
       await expectEachContained('a navigation item', page.locator('aside.sidebar nav a'), page.locator('aside.sidebar'));
       await expectContained('the identity block', page.locator('.sidebar-bottom'), page.locator('aside.sidebar'));
+      if (path === '/') await expectContained('the Help item', page.getByRole('button', { name: 'Help' }), page.locator('aside.sidebar'));
+      else await expect(page.getByRole('button', { name: 'Help' })).toHaveCount(0);
       await expectContained('the heading', page.locator('h1'), page.locator('main'));
       const heading = await page.locator('h1').evaluate((element) => ({ scrollHeight: element.scrollHeight, clientHeight: element.clientHeight, scrollWidth: element.scrollWidth, clientWidth: element.clientWidth, fontSize: parseFloat(getComputedStyle(element).fontSize) }));
       expect(heading.scrollHeight, 'the heading text is taller than its box').toBeLessThanOrEqual(heading.clientHeight + 1);

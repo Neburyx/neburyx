@@ -1,11 +1,9 @@
-import { useState, type RefObject } from 'react';
+import { useState } from 'react';
 import { SETUP_COPY } from './copy.js';
 
 type CopyStatus = 'idle' | 'copied' | 'failed';
 
-export const SETUP_NOTE_ID = 'source-setup-note';
-
-export function SetupNote({ noteRef }: { readonly noteRef: RefObject<HTMLElement | null> }) {
+export function SetupNote() {
   const [status, setStatus] = useState<CopyStatus>('idle');
   const copy = async (): Promise<void> => {
     try {
@@ -17,7 +15,7 @@ export function SetupNote({ noteRef }: { readonly noteRef: RefObject<HTMLElement
     }
   };
   return (
-    <section id={SETUP_NOTE_ID} ref={noteRef} className="setup-note" aria-label={SETUP_COPY.label} tabIndex={-1}>
+    <section className="setup-note" aria-label={SETUP_COPY.label}>
       <div className="setup-command">
         <span aria-hidden="true">$</span>
         <code>{SETUP_COPY.command}</code>

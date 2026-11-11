@@ -1,6 +1,8 @@
 {
   "pages": [
     { "name": "Home with Recent rows", "route": "" },
+    { "name": "Home with the Help menu open", "route": "" },
+    { "name": "Home with the shortcut sheet open", "route": "" },
     { "name": "Home with the prompt open", "route": "" },
     { "name": "Home with the prompt's problem lines", "route": "" },
     { "name": "Home with the list read failed", "route": "" },

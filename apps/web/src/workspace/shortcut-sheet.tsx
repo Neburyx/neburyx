@@ -1,10 +1,11 @@
 import { useEffect, useId, useRef, type KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { useClientState } from '../state/context.js';
-import { useStoreSelector } from '../state/store.js';
+import { createStore, readable, useStoreSelector } from '../state/store.js';
 import { KEY_SCOPE_ATTRIBUTE } from './key-binding-handler.js';
 import { useKeyBindingRegistry, useKeyBindings, type KeyGroup } from './key-binding-registry.js';
 import { matchesKeys, type Platform } from './key-spec.js';
+import { useWorkspacePresence } from './workspace-presence.js';
 
 export const SHEET_TITLE = 'Keyboard shortcuts';
 export const SHEET_FOOTNOTE = 'Shortcuts work on the selected node or relationship. Nothing loads until you choose it.';
@@ -19,23 +20,30 @@ const GROUPS: readonly { readonly id: KeyGroup; readonly title: string }[] = [
   { id: 'view', title: 'VIEW' },
 ];
 
+const WORKSPACE_ALWAYS_SHOWN = readable(createStore(true));
+
+/** The parts of the page the sheet covers: the workspace, and the pages of the shell. */
+const BEHIND = `[${KEY_SCOPE_ATTRIBUTE}="workspace"], .page-shell`;
+
 const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
 function Sheet() {
   const state = useClientState();
   const registry = useKeyBindingRegistry();
-  const bindings = useKeyBindings();
+  const presence = useWorkspacePresence();
+  const inWorkspace = useStoreSelector(presence?.shown ?? WORKSPACE_ALWAYS_SHOWN, (shown) => shown);
+  const bindings = useKeyBindings().filter((binding) => inWorkspace || binding.scope === 'app');
   const dialog = useRef<HTMLDivElement>(null);
   const title = useId();
   const close = (): void => state.presentation.setSheetOpen(false);
 
   useEffect(() => {
     const returnTo = document.activeElement;
-    const behind = document.querySelector(`[${KEY_SCOPE_ATTRIBUTE}="workspace"]`);
-    behind?.setAttribute('inert', '');
+    const behind = [...document.querySelectorAll(BEHIND)];
+    for (const part of behind) part.setAttribute('inert', '');
     dialog.current?.querySelector<HTMLElement>(FOCUSABLE)?.focus();
     return () => {
-      behind?.removeAttribute('inert');
+      for (const part of behind) part.removeAttribute('inert');
       if (returnTo instanceof HTMLElement && returnTo.isConnected) returnTo.focus();
     };
   }, []);

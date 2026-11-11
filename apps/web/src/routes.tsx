@@ -41,6 +41,7 @@ import { createRecentInvestigations } from './home/recent-store.js';
 import { DeepLinkPage } from './investigations/deep-link-page.js';
 import { ExploreInvestigation } from './investigations/explore-investigation.js';
 import { WorkspaceShell } from './workspace/workspace-shell.js';
+import { ShortcutSheet } from './workspace/shortcut-sheet.js';
 
 function NotFound() {
   return (
@@ -135,6 +136,7 @@ export function appRoutes(client: ApiClient, state: ClientState, banner?: Banner
                 <TestRunsProvider runs={testRuns}>
                   <ExcerptsProvider excerpts={excerpts}>
                     <SearchShortcut />
+                    <ShortcutSheet />
                     <LeaveGuard />
                     <RecentProvider recent={recent}>
                       <Outlet />

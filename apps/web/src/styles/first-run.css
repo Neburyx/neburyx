@@ -111,3 +111,21 @@
   color: var(--color-text-muted);
   font-size: var(--font-size-small);
 }
+
+.empty-state-actions a.secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+  height: var(--button-height);
+  padding: 0 var(--space-12);
+  border: var(--border-width) solid var(--color-control-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: var(--font-size-small);
+  text-decoration: none;
+}
+
+.empty-state-actions a.secondary:hover {
+  background: var(--color-surface-muted);
+}

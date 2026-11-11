@@ -21,7 +21,8 @@ describe('the sidebar', () => {
     expect(within(aside).getAllByRole('link').map((link) => link.textContent)).toEqual(['Home', 'Investigations', 'Sources']);
     const bottom = aside.lastElementChild;
     expect(bottom?.lastElementChild?.getAttribute('aria-label')).toBe('Identity');
-    expect(bottom?.firstElementChild?.getAttribute('aria-label')).toBe('Source');
+    expect(bottom?.children[0]?.className).toBe('help-menu');
+    expect(bottom?.children[1]?.getAttribute('aria-label')).toBe('Source');
     expect(aside.parentElement?.className).toBe('page-shell');
     expect(screen.getByRole('main')).toBeTruthy();
   });

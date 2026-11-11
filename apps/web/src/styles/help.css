@@ -1,0 +1,47 @@
+.help-menu {
+  display: flex;
+  flex-direction: column;
+}
+
+.help-button {
+  display: flex;
+  align-items: center;
+  gap: var(--space-10);
+  height: var(--nav-item-height);
+  padding: 0 var(--space-12);
+  border: none;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--color-text-muted);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.help-button:hover,
+.help-button[aria-expanded='true'] {
+  background: var(--color-surface);
+}
+
+.icon-help {
+  --icon: url('../assets/lucide/circle-help.svg');
+}
+
+.help-menu-panel {
+  position: fixed;
+  z-index: var(--layer-menu);
+  width: var(--menu-width-help);
+  margin-bottom: var(--space-4);
+}
+
+.help-menu-panel .menu-row {
+  text-decoration: none;
+}
+
+.help-menu-panel .menu-label {
+  flex: 1;
+}
+
+.help-menu-panel .menu-hint {
+  color: var(--color-text-muted);
+}

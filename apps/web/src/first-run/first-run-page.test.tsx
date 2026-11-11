@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import type { SourceSummary } from '@neburyx/contracts';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { INVESTIGATION_A, INVESTIGATION_B, investigationOf, knowing, nodeOf, openedOf } from '../investigations/test-data.js';
+import { HELP_LINKS } from '../help/links.js';
 import { renderApp, source } from '../test-utils.js';
 
 beforeAll(() => configure({ reactStrictMode: true }));
@@ -34,7 +35,7 @@ describe('the First run page with one demo source', () => {
     expect(header().getByText('No sign-in')).toBeTruthy();
     expect(within(region).getByText('Open the synthetic demo graph, or connect your own read-only Neo4j.')).toBeTruthy();
     expect(within(region).getByRole('button', { name: 'Open demo case' }).className).toBe('primary');
-    expect(within(region).getByRole('button', { name: 'Connect your Neo4j' }).className).toBe('secondary');
+    expect(within(region).getByRole('link', { name: 'Connect your Neo4j' }).className).toBe('secondary');
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
   });
 
@@ -52,13 +53,36 @@ describe('the First run page with one demo source', () => {
     ]);
   });
 
-  it('moves focus to the setup note on Connect your Neo4j, with no request made and the address unchanged', async () => {
+  it('opens the install guide in a new tab from Connect your Neo4j: a link without the opener or query data, and the focus does not move to the setup note', async () => {
     const { view, calls } = show([demo('source-a')]);
     const user = userEvent.setup();
-    await user.click(await screen.findByRole('button', { name: 'Connect your Neo4j' }));
-    expect(document.activeElement).toBe(screen.getByRole('region', { name: 'Source setup' }));
+    const link = await screen.findByRole('link', { name: 'Connect your Neo4j' });
+    expect(link.getAttribute('href')).toBe(HELP_LINKS.installGuide);
+    expect(link.getAttribute('href')).not.toContain('?');
+    expect(link.getAttribute('target')).toBe('_blank');
+    expect(link.getAttribute('rel')?.split(' ').sort()).toEqual(['noopener', 'noreferrer']);
+    link.addEventListener('click', (event) => event.preventDefault());
+    await user.click(link);
+    expect(document.activeElement).not.toBe(screen.getByRole('region', { name: 'Source setup' }));
+    expect(screen.getByRole('region', { name: 'Source setup' })).toBeTruthy();
     expect(calls).toEqual({ open: 0, list: 1, sources: 1 });
     expect(view.router.state.location.pathname).toBe('/');
+  });
+
+  it('follows the link from the keyboard: Tab reaches it after Open demo case and Enter activates it', async () => {
+    show([demo('source-a')]);
+    const user = userEvent.setup();
+    const link = await screen.findByRole('link', { name: 'Connect your Neo4j' });
+    (await screen.findByRole('button', { name: 'Open demo case' })).focus();
+    await user.tab();
+    expect(document.activeElement).toBe(link);
+    const clicks: number[] = [];
+    link.addEventListener('click', (event) => {
+      event.preventDefault();
+      clicks.push(1);
+    });
+    await user.keyboard('{Enter}');
+    expect(clicks).toEqual([1]);
   });
 
   it('puts the command on the clipboard on Copy and says Copied', async () => {
@@ -99,7 +123,7 @@ describe('the First run page with one demo source', () => {
       await user.tab();
       order.push(document.activeElement?.getAttribute('aria-label') ?? document.activeElement?.textContent ?? '');
     }
-    expect(order.slice(0, 3)).toEqual(['Open demo case', 'Connect your Neo4j', 'Copy']);
+    expect(order).toEqual(['Help', 'Open demo case', 'Connect your Neo4j', 'Copy']);
   });
 });
 

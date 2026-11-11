@@ -159,7 +159,7 @@ export function registerBuiltInKeyBindings(registry: KeyBindingRegistry, schedul
       label: 'Keyboard shortcuts',
       group: 'view',
       order: 20,
-      scope: 'workspace',
+      scope: 'app',
       run: ({ state }) => state.presentation.setSheetOpen(!state.presentation.view.getState().sheetOpen),
     }),
     registry.register({

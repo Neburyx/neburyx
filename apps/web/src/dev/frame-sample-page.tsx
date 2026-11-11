@@ -25,6 +25,7 @@ import { createPanelRegistryFor, PanelsProvider } from '../workspace/panel-regis
 import { createSlotRegistry, SlotsProvider } from '../workspace/slots.js';
 import { createToolRegistry, ToolsProvider } from '../workspace/tool-registry.js';
 import { WorkspaceShell } from '../workspace/workspace-shell.js';
+import { ShortcutSheet } from '../workspace/shortcut-sheet.js';
 import type { SourceProfile } from '@neburyx/contracts';
 import { FIXTURE_RECORD } from './fixture-loader.js';
 import { createFrameSampleState, frameSampleProfile, FRAME_SAMPLE_SOURCE } from './frame-sample.js';
@@ -132,6 +133,7 @@ export function FrameSamplePage() {
             <MenuProvider registry={menus}>
               <PanelsProvider registry={panels}>
                 <KeyBindingsProvider registry={keyBindings}>
+                  <ShortcutSheet />
                   <ProfileProvider store={profile}>
                     {shell === undefined ? (
                       <WorkspaceShell canvasView="as-drawn" />
