@@ -7,6 +7,7 @@ import { DOCS_FOLDER, GUIDE_PATH, guideBlocks, guideTable, guideText, unticked }
 import { BUDGET_DEFAULTS, budgetsSchema } from './budgets.js';
 import { MappingError } from './diagnostics.js';
 import { parseMapping } from './load.js';
+import { RETENTION_DEFAULTS, retentionSchema } from './retention.js';
 import { mappingFileSchema } from './schema.js';
 
 function unwrap(schema: z.ZodType): z.ZodType {
@@ -118,6 +119,27 @@ describe('the key tables', () => {
         const optional = shape[key]?.safeParse(undefined).success === true;
         expect([name, key, row[1]]).toEqual([name, key, optional ? 'no' : 'yes']);
       }
+    }
+  });
+});
+
+describe('the retention table', () => {
+  const KEYS: Readonly<Record<string, keyof typeof RETENTION_DEFAULTS>> = {
+    deleted_investigations_days: 'deletedInvestigationsDays',
+    exports_days: 'exportsDays',
+  };
+
+  it('states the range and the default of each key as the product has them', () => {
+    expect(guideText()).toContain('a whole number of days from 1 to 365');
+    const rows = guideTable('keys: retention');
+    expect(rows.map((row) => unticked(row[0] ?? '')).sort()).toEqual(Object.keys(KEYS).sort());
+    for (const row of rows) {
+      const key = unticked(row[0] ?? '');
+      const field = KEYS[key];
+      if (field === undefined) throw new Error(`no retention key ${key}`);
+      expect(Number(/The default is (\d+)/.exec(row[2] ?? '')?.[1])).toBe(RETENTION_DEFAULTS[field]);
+      for (const days of [1, 365]) expect(retentionSchema.safeParse({ [key]: days }).success).toBe(true);
+      for (const days of [0, 366, 1.5]) expect(retentionSchema.safeParse({ [key]: days }).success).toBe(false);
     }
   });
 });
