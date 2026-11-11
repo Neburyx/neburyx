@@ -45,5 +45,21 @@ describe('the Export button when the source changed', () => {
     act(() => state.describeInvestigation({ ...record, sourceState: 'repointed' }));
     expect(screen.queryByRole('dialog')).toBeNull();
     expect((screen.getByRole('button', { name: 'Export' }) as HTMLButtonElement).disabled).toBe(true);
+    act(() => state.describeInvestigation({ ...record, sourceState: 'available' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect((screen.getByRole('button', { name: 'Export' }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('hands the focus to the page heading when an open dialog is closed by the change', async () => {
+    const state = withSource('available');
+    renderExport(state);
+    const heading = document.createElement('h1');
+    document.body.append(heading);
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Export' }));
+    const record = state.investigation.getState().record;
+    if (record === null) throw new Error('no record');
+    act(() => state.describeInvestigation({ ...record, sourceState: 'removed' }));
+    expect(document.activeElement).toBe(heading);
+    heading.remove();
   });
 });

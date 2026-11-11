@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import type { ApiClient } from '../api/client.js';
 import { useBanner } from '../banner/banner-context.js';
 import { exportBlockedOf } from '../state/investigation-state.js';
@@ -18,6 +18,15 @@ export function ExportButton({ client }: { readonly client: ApiClient }) {
   const [open, setOpen] = useState(false);
   const [done, setDone] = useState(false);
   const button = useRef<HTMLButtonElement>(null);
+  // a dialog open when the source changes is closed, not hidden: it must not come back by itself, and the focus goes to the page heading since the dimmed button cannot take it
+  useEffect(() => {
+    if (!blocked) return;
+    setOpen(false);
+    const heading = document.querySelector<HTMLElement>('h1');
+    if (heading === null) return;
+    heading.tabIndex = -1;
+    heading.focus();
+  }, [blocked]);
   const close = (): void => {
     setOpen(false);
     queueMicrotask(() => button.current?.focus());
