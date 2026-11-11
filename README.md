@@ -8,6 +8,8 @@ to explain every link it shows.
 
 **Licence:** Apache-2.0 (see [LICENSE](LICENSE) and [NOTICE](NOTICE)).
 
+**Contributing:** read [CONTRIBUTING.md](CONTRIBUTING.md) first; every commit of a pull request carries a DCO sign-off. **Security:** report a vulnerability privately as [SECURITY.md](SECURITY.md) says.
+
 ## Layout
 
 | Path | Purpose |
