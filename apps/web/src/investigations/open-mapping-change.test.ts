@@ -126,6 +126,18 @@ describe('opening a draft written under another mapping', () => {
     expect(writes).toHaveLength(1);
   });
 
+  it('writes back, in its one write, the property filters the server kept, and none of the one it dropped', async () => {
+    const body = changed();
+    const kept = [{ key: 'region', op: 'eq', values: ['north'] }];
+    const { client, writes } = rig({ ...body, draft: { ...body.draft, queryContext: { ...body.draft.queryContext, filters: { ...NO_FILTERS, properties: kept } } } });
+    const state = createClientState();
+    await openById(client, state, INVESTIGATION_A, CONTEXT);
+    mappingNoticesOf(state).notice.getState()?.onShown?.();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(writes).toHaveLength(1);
+    expect(writes[0]?.body.queryContext.filters.properties).toEqual(kept);
+  });
+
   it('sends no write for an investigation that cannot be changed, and still records the notice', async () => {
     const { client, writes } = rig(changed({}, 'closed'));
     const state = createClientState();

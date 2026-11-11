@@ -4,7 +4,7 @@ import { createClientState } from '../state/client-state.js';
 import { elementKey } from '../state/keys.js';
 import { deriveLoadedGraph } from '../state/loaded-graph.js';
 import { key, ref, result } from '../state/test-data.js';
-import { draftOf, keptFrom, NOTHING_KEPT, refsOf } from './draft-document.js';
+import { carriedOf, draftOf, keptFrom, NOTHING_KEPT, refsOf } from './draft-document.js';
 
 const PRESENTATION = { layout: 'force' as const, positions: new Map(), pins: new Set<string>(), hidden: new Set<string>(), viewport: undefined, typeFilter: { offEntityTypes: new Set<string>(), offRelationshipTypes: new Set<string>() }, mappedTypes: undefined };
 
@@ -94,5 +94,78 @@ describe('the references a stored draft names', () => {
     const kept = keptFrom('demo', body.layout, body.queryContext, { entities: [ref('demo', 'type-a', 'B')], edges: asked.edges });
     expect(kept.nodes.map((entry) => entry.id)).toEqual(['B']);
     expect(kept.edges).toEqual([{ t: 'rel-a', from: { t: 'type-a', id: 'A' }, to: { t: 'type-a', id: 'B' }, id: 'E-1' }]);
+  });
+});
+
+describe('the parts of a stored draft the web does not edit', () => {
+  const stored = {
+    layout: {
+      schemaVersion: 1 as const,
+      layout: 'a-layout-the-web-does-not-offer',
+      nodes: [
+        { t: 'type-a', id: 'A', pinned: false, hidden: false, groupId: 'g1' },
+        { t: 'type-a', id: 'B', pinned: false, hidden: false, groupId: 'g1' },
+        { t: 'type-a', id: 'C', pinned: false, hidden: false, groupId: 'g2' },
+      ],
+      edges: [{ t: 'rel-a', from: { t: 'type-a', id: 'A' }, to: { t: 'type-a', id: 'B' }, id: 'e1', hidden: true }],
+      groups: [
+        { id: 'g1', label: 'One', by: 'manual', members: [{ t: 'type-a', id: 'A' }, { t: 'type-a', id: 'B' }] },
+        { id: 'g2', label: 'Two', by: 'manual', members: [{ t: 'type-a', id: 'C' }] },
+      ],
+    },
+    queryContext: {
+      schemaVersion: 1 as const,
+      loaded: { nodes: [], edges: [] },
+      expansions: [{ from: { t: 'type-a', id: 'A' }, relTypes: ['rel-a'], neighborTypes: [], window: null, sort: 'default', pages: 2 }],
+      filters: { entityTypes: [], relTypes: [], time: { from: '2024-01-01' }, properties: [{ key: 'prop-x', op: 'gte', values: ['10'] }] },
+    },
+  };
+
+  it('are written back as they were read, whatever the mapping and the type filters are', () => {
+    const { graph, nodeRefs } = loaded(['A']);
+    const carried = carriedOf(stored, 'force', true);
+    const known = { ...PRESENTATION, mappedTypes: { entityTypes: ['type-a', 'type-b'], relationshipTypes: ['rel-a'] } };
+    for (const presentation of [PRESENTATION, known, { ...known, typeFilter: { offEntityTypes: new Set(['type-b']), offRelationshipTypes: new Set<string>() } }]) {
+      const { queryContext } = draftOf({ nodeRefs, graph, presentation, notes: null, kept: NOTHING_KEPT, carried });
+      expect(queryContext.expansions).toEqual(stored.queryContext.expansions);
+      expect(queryContext.filters.time).toEqual(stored.queryContext.filters.time);
+      expect(queryContext.filters.properties).toEqual(stored.queryContext.filters.properties);
+    }
+  });
+
+  it('are written back when the stored filters are held unchanged until the mapping is known', () => {
+    const { graph, nodeRefs } = loaded(['A']);
+    const { queryContext } = draftOf({ nodeRefs, graph, presentation: PRESENTATION, notes: null, kept: NOTHING_KEPT, storedFilters: stored.queryContext.filters, carried: carriedOf(stored, 'force', true) });
+    expect(queryContext.filters).toEqual(stored.queryContext.filters);
+    expect(queryContext.expansions).toEqual(stored.queryContext.expansions);
+  });
+
+  it('are empty when the draft held none', () => {
+    const { graph, nodeRefs } = loaded(['A']);
+    const body = draftOf({ nodeRefs, graph, presentation: PRESENTATION, notes: null, kept: NOTHING_KEPT });
+    expect([body.queryContext.expansions, body.queryContext.filters.time, body.queryContext.filters.properties, body.layout.groups]).toEqual([[], null, [], []]);
+  });
+
+  it('keep the groups with the members still in the draft, the group mark of their nodes, and the hidden mark of a stored relationship', () => {
+    const { graph, nodeRefs } = loaded(['A', 'B'], [['e1', 'A', 'B']]);
+    const body = draftOf({ nodeRefs, graph, presentation: PRESENTATION, notes: null, kept: NOTHING_KEPT, carried: carriedOf(stored, 'force', true) });
+    expect(body.layout.nodes.map((node) => [node.id, node.groupId])).toEqual([['A', 'g1'], ['B', 'g1']]);
+    // g2 had only C, which is not in the draft: the group goes, and so does its mark
+    expect(body.layout.groups).toEqual([stored.layout.groups[0]]);
+    expect(body.layout.edges.map((edge) => edge.hidden)).toEqual([true]);
+  });
+
+  it('keep a group whose member the person removed, with the members left', () => {
+    const { graph, nodeRefs } = loaded(['A']);
+    const body = draftOf({ nodeRefs, graph, presentation: PRESENTATION, notes: null, kept: NOTHING_KEPT, carried: carriedOf(stored, 'force', true) });
+    expect(body.layout.groups).toEqual([{ ...stored.layout.groups[0], members: [{ t: 'type-a', id: 'A' }] }]);
+  });
+
+  it('keep a layout name the web does not offer until the person picks another layout', () => {
+    const { graph, nodeRefs } = loaded(['A']);
+    const carried = carriedOf(stored, 'force', false);
+    const written = (layout: 'force' | 'radial') => draftOf({ nodeRefs, graph, presentation: { ...PRESENTATION, layout }, notes: null, kept: NOTHING_KEPT, carried }).layout.layout;
+    expect(written('force')).toBe('a-layout-the-web-does-not-offer');
+    expect(written('radial')).toBe('radial');
   });
 });

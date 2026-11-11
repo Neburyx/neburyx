@@ -3,7 +3,7 @@ import type { ApiClient, ApiFailure } from '../api/client.js';
 import type { ClientState } from '../state/client-state.js';
 import { createStore, readable, type ReadableStore } from '../state/store.js';
 import { refreshRecord } from '../lifecycle/refresh-record.js';
-import { draftOf, NOTHING_KEPT, type KeptItems } from './draft-document.js';
+import { draftOf, NOTHING_KEPT, type CarriedContext, type KeptItems } from './draft-document.js';
 
 /** How long the draft waits after the last change before it is written. */
 export const AUTOSAVE_DELAY_MS = 3000;
@@ -32,6 +32,8 @@ export interface DraftSession {
   /** The named view the draft was last saved as or restored from. */
   readonly basedOnViewId: string | null;
   readonly kept?: KeptItems;
+  /** What the stored draft holds that the web does not edit (see `CarriedContext`), written back as it was read. */
+  readonly carried?: CarriedContext;
   /** The filters of the stored draft, applied once the mapping of the source is known. */
   readonly filters?: QueryContextDocument['filters'];
   /** False until the draft was restored in full or in part: a write before then would replace it with what was not read. */
@@ -48,6 +50,7 @@ interface Session {
   writable: boolean;
   conflicted: boolean;
   pendingFilters: QueryContextDocument['filters'] | undefined;
+  carried: CarriedContext | undefined;
   rehashHeld: boolean;
   carriedTypes: { readonly entityTypes: readonly string[]; readonly relTypes: readonly string[] } | undefined;
   /** The type filters as applied from the stored draft; `listed` stays true only while the person has not changed that kind. */
@@ -218,7 +221,9 @@ export function createDraftSync(options: DraftSyncOptions): DraftSync {
 
   const documentOf = (session: Session): DraftWriteRequest => {
     const held = state.investigation.getState();
-    return draftOf({ nodeRefs: held.nodeRefs, graph: state.loadedGraph(), presentation: state.presentation.view.getState(), notes: session.notes, kept: session.kept, storedFilters: session.pendingFilters, carriedTypes: session.carriedTypes, keepLists: keepListsOf(session) });
+    // the first other layout the person picks ends the carry of a layout name the web does not offer, for good
+    if (session.carried?.layout !== undefined && state.presentation.view.getState().layout !== session.carried.layout.shown) session.carried = { ...session.carried, layout: undefined };
+    return draftOf({ nodeRefs: held.nodeRefs, graph: state.loadedGraph(), presentation: state.presentation.view.getState(), notes: session.notes, kept: session.kept, storedFilters: session.pendingFilters, carried: session.carried, carriedTypes: session.carriedTypes, keepLists: keepListsOf(session) });
   };
 
   const readOnlyNow = (): boolean => state.investigation.getState().record?.readOnly === true;
@@ -564,7 +569,7 @@ export function createDraftSync(options: DraftSyncOptions): DraftSync {
       return session === undefined ? undefined : { version: session.version, notes: session.notes, basedOnViewId: session.basedOnViewId };
     },
     adopt(investigationId, session) {
-      const adopted: Session = { version: session.version, notes: session.notes, basedOnViewId: session.basedOnViewId, kept: session.kept ?? NOTHING_KEPT, writable: session.writable, conflicted: false, pendingFilters: session.filters, rehashHeld: session.rehash === true, carriedTypes: undefined, applied: undefined, awaitingFit: false, lastJson: undefined };
+      const adopted: Session = { version: session.version, notes: session.notes, basedOnViewId: session.basedOnViewId, kept: session.kept ?? NOTHING_KEPT, writable: session.writable, conflicted: false, pendingFilters: session.filters, carried: session.carried, rehashHeld: session.rehash === true, carriedTypes: undefined, applied: undefined, awaitingFit: false, lastJson: undefined };
       sessions.set(investigationId, adopted);
       if (state.investigation.getState().id === investigationId && adopted.writable) {
         applyFilters(adopted);

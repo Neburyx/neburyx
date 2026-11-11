@@ -42,7 +42,7 @@ interface Options {
 }
 
 function rig(options: Options = {}) {
-  const writes: { version: number; notes: string | null }[] = [];
+  const writes: { version: number; notes: string | null; body?: Parameters<ApiClient['saveDraft']>[2] }[] = [];
   const restores: number[] = [];
   const asked: ReadRefsRequest[] = [];
   let served: Pick<InvestigationResponse, 'draft' | 'save'> & Partial<Pick<InvestigationResponse, 'unmapped' | 'mappingChange'>>;
@@ -63,7 +63,7 @@ function rig(options: Options = {}) {
     saveDraft:
       options.saveDraft ??
       (async (_id, version, body) => {
-        writes.push({ version, notes: body.notes });
+        writes.push({ version, notes: body.notes, body });
         return { ok: true, value: { version: version + 1, save: { state: 'unsaved', savedAt: null }, notes: body.notes } };
       }),
     restoreView: async (_id, _viewId, version) => {
@@ -109,7 +109,20 @@ describe('restoring a view into the draft', () => {
     expect(writes).toEqual([]);
     state.presentation.setPosition(key('A-1'), { x: 1, y: 2 });
     await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
-    expect(writes).toEqual([{ version: 4, notes: 'restored note' }]);
+    expect(writes.map(({ version, notes }) => ({ version, notes }))).toEqual([{ version: 4, notes: 'restored note' }]);
+  });
+
+  it('writes back the property filter, the time filter and the expansion the view held, after the next change', async () => {
+    const properties = [{ key: 'prop-x', op: 'gte', values: ['10'] }];
+    const expansions = [{ from: { t: 'kind-a', id: 'A-1' }, relTypes: ['rel-a'], neighborTypes: [], window: null, sort: 'default', pages: 2 }];
+    const draft = restoredDraft(4);
+    const { client, state, writes } = await opened({ restore: () => ({ ok: true, value: { draft: { ...draft, queryContext: { ...draft.queryContext, expansions, filters: { ...NO_FILTERS, time: { from: '2024-01-01' }, properties } } }, save: { state: 'saved', savedAt: SAVED_AT } } }) });
+    await restoreNamedView(client, state, VIEW);
+    state.presentation.setMappedTypes({ entityTypes: ['kind-a'], relationshipTypes: [] });
+    state.presentation.setPosition(key('A-1'), { x: 1, y: 2 });
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
+    expect(writes.at(-1)?.body?.queryContext.filters).toEqual({ ...NO_FILTERS, time: { from: '2024-01-01' }, properties });
+    expect(writes.at(-1)?.body?.queryContext.expansions).toEqual(expansions);
   });
 
   it('reads "Unsaved" after the next content change once the restored draft is being written again', async () => {
@@ -207,7 +220,7 @@ describe('restoring a view into the draft', () => {
     expect(state.presentation.view.getState().positions.get(key('A-1'))).toEqual({ x: 9, y: 9 });
     expect(draftSyncOf(state, client).stateOf(INVESTIGATION_A)).toEqual({ version: 3, notes: 'old note', basedOnViewId: null });
     await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
-    expect(writes).toEqual([{ version: 3, notes: 'old note' }]);
+    expect(writes.map(({ version, notes }) => ({ version, notes }))).toEqual([{ version: 3, notes: 'old note' }]);
   });
 
   it('puts the draft in its conflict state and says changed-elsewhere when the draft version is stale', async () => {

@@ -6,6 +6,7 @@ import { createClientState, type ClientState } from '../state/client-state.js';
 import { elementKey } from '../state/keys.js';
 import { key, ref, result } from '../state/test-data.js';
 import { AUTOSAVE_DELAY_MS, createDraftSync, KEEPALIVE_LIMIT_BYTES, RETRY_STEADY_MS, STALLED_AFTER_MS, type DraftSync } from './draft-sync.js';
+import { carriedOf } from './draft-document.js';
 
 const ID = '0192f000-0000-7000-8000-0000000000a1';
 const OK = (version: number, notes: string | null = null): ApiResult<DraftWriteResponse> => ({ ok: true, value: { version, save: { state: 'unsaved', savedAt: null }, notes } });
@@ -303,6 +304,49 @@ describe('the filters of a stored draft', () => {
     expect(writes[0]?.body.queryContext.filters).toEqual(filters);
     state.presentation.setMappedTypes({ entityTypes: ['type-a', 'type-b'], relationshipTypes: [] });
     expect(state.presentation.view.getState().typeFilter.offEntityTypes.has('type-b')).toBe(true);
+  });
+});
+
+describe('the parts of a stored draft the web does not edit', () => {
+  const stored = {
+    layout: { schemaVersion: 1 as const, layout: 'force', nodes: [{ t: 'type-a', id: 'A', pinned: false, hidden: false, groupId: 'g1' }], edges: [], groups: [{ id: 'g1', label: 'One', by: 'manual', members: [{ t: 'type-a', id: 'A' }] }] },
+    queryContext: { schemaVersion: 1 as const, loaded: { nodes: [], edges: [] }, expansions: [{ from: { t: 'type-a', id: 'A' }, relTypes: ['rel-a'], neighborTypes: [], window: null, sort: 'default', pages: 2 }], filters: { entityTypes: [], relTypes: [], time: { from: '2024-01-01' }, properties: [{ key: 'prop-x', op: 'gte', values: ['10'] }] } },
+  };
+  const carried = { ...carriedOf(stored, 'force', true), time: stored.queryContext.filters.time, properties: stored.queryContext.filters.properties, expansions: stored.queryContext.expansions };
+  const filters = { entityTypes: ['type-a'], relTypes: [], time: carried.time, properties: carried.properties };
+
+  it('are still in the first write after the mapping is known, and in the ones that follow a change of a type filter', async () => {
+    const { writes, move, sync, state } = rig(undefined, false);
+    sync.adopt(ID, { version: 1, notes: null, basedOnViewId: null, filters, carried, writable: true });
+    state.presentation.setMappedTypes({ entityTypes: ['type-a', 'type-b'], relationshipTypes: [] });
+    move(2);
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
+    expect(writes[0]?.body.queryContext.filters.properties).toEqual(carried.properties);
+    expect(writes[0]?.body.queryContext.filters.time).toEqual(carried.time);
+    expect(writes[0]?.body.queryContext.expansions).toEqual(carried.expansions);
+    state.setEntityTypeOff('type-b', false);
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
+    const last = writes[writes.length - 1]?.body.queryContext;
+    expect(last?.filters.properties).toEqual(carried.properties);
+    expect(last?.expansions).toEqual(carried.expansions);
+    expect(writes[0]?.body.layout.groups).toEqual(stored.layout.groups);
+  });
+});
+
+describe('a layout name of a stored draft that the web does not offer', () => {
+  it('is written back until the person picks another layout, and not again when they pick the one shown at the open', async () => {
+    const { writes, move, sync, state } = rig(undefined, false);
+    const stored = { layout: { schemaVersion: 1 as const, layout: 'an-unoffered-layout', nodes: [], edges: [], groups: [] }, queryContext: { schemaVersion: 1 as const, loaded: { nodes: [], edges: [] }, expansions: [], filters: { entityTypes: [], relTypes: [], time: null, properties: [] } } };
+    sync.adopt(ID, { version: 1, notes: null, basedOnViewId: null, carried: carriedOf(stored, state.presentation.view.getState().layout, false), writable: true });
+    move(2);
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
+    expect(writes.at(-1)?.body.layout.layout).toBe('an-unoffered-layout');
+    state.presentation.setLayout('radial');
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
+    expect(writes.at(-1)?.body.layout.layout).toBe('radial');
+    state.presentation.setLayout('force');
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
+    expect(writes.at(-1)?.body.layout.layout).toBe('force');
   });
 });
 

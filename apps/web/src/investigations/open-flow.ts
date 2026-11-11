@@ -8,7 +8,7 @@ import { DEFAULT_FILTER_HASH, DEFAULT_POLICY_VERSION, type QueryKey } from '../s
 import { LAYOUTS } from '../state/layout-choice.js';
 import { elementKey } from '../state/keys.js';
 import { draftSyncOf } from '../draft/draft-sync.js';
-import type { KeptItems } from '../draft/draft-document.js';
+import { carriedOf, type CarriedContext, type KeptItems } from '../draft/draft-document.js';
 import { isOpeningDraft, readDraftItems } from '../draft/restore.js';
 import { isUnmappedStart, notReadEdge, notReadNode } from '../draft/unmapped.js';
 import { mappingNoticesOf } from '../draft/mapping-notice.js';
@@ -71,7 +71,7 @@ function applyPresentation(state: ClientState, draft: InvestigationResponse['dra
 }
 
 /** The write that stores the draft under the current mapping waits until the banner has been shown, and is not made for an investigation that cannot be changed. */
-function adoptDraft(state: ClientState, sync: ReturnType<typeof draftSyncOf>, read: InvestigationResponse, held: { readonly notes: string | null; readonly kept?: KeptItems; readonly filters?: QueryContextDocument['filters'] }): void {
+function adoptDraft(state: ClientState, sync: ReturnType<typeof draftSyncOf>, read: InvestigationResponse, held: { readonly notes: string | null; readonly kept?: KeptItems; readonly filters?: QueryContextDocument['filters']; readonly carried?: CarriedContext }): void {
   const { investigation, draft, unmapped, mappingChange } = read;
   const canChange = investigation.status === 'open';
   const rehash = mappingChange !== undefined && canChange;
@@ -123,7 +123,7 @@ export async function openById(client: ApiClient, state: ClientState, id: string
   const shown = show(state, investigation, { nodes, edges }, context, signal, save);
   if (shown.kind !== 'shown') return shown;
   if (shown.activation === 'fresh') applyPresentation(state, draft, nodes);
-  adoptDraft(state, sync, read.value, { notes: draft.notes, kept, filters: draft.queryContext.filters });
+  adoptDraft(state, sync, read.value, { notes: draft.notes, kept, filters: draft.queryContext.filters, carried: carriedOf(draft, state.presentation.view.getState().layout, LAYOUTS.some((candidate) => candidate.id === draft.layout.layout)) });
   return someMissing ? { ...shown, someMissing: true } : shown;
 }
 
@@ -177,6 +177,6 @@ export async function replaceWithRead(client: ApiClient, state: ClientState, ans
   applyPresentation(state, draft, nodes);
   // the drawing that stays mounted has no new graph to fit itself to, so a draft that holds no viewport asks for the view to be fitted
   if (draft.layout.viewport === undefined) state.presentation.applyLayout(new Map());
-  adoptDraft(state, draftSyncOf(state, client), answer, { notes: draft.notes, kept, filters: draft.queryContext.filters });
+  adoptDraft(state, draftSyncOf(state, client), answer, { notes: draft.notes, kept, filters: draft.queryContext.filters, carried: carriedOf(draft, state.presentation.view.getState().layout, LAYOUTS.some((candidate) => candidate.id === draft.layout.layout)) });
   return { kind: 'shown', someMissing };
 }

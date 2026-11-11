@@ -35,12 +35,45 @@ function typesLeftOn(known: readonly string[] | undefined, off: ReadonlySet<stri
 
 const withCarried = (left: string[], carried: readonly string[] = [], keepList = false): string[] => (left.length === 0 && !keepList ? left : [...left, ...carried.filter((type) => !left.includes(type))]);
 
+/**
+ * The parts of a stored draft that the web does not edit: a write carries them through as they were read. Expansions are carried even when the node they start from is no longer in the draft. Groups are carried with the members still in the draft,
+ * and a group with none left is dropped with the group marks of its nodes.
+ */
+export interface CarriedContext {
+  readonly expansions: QueryContextDocument['expansions'];
+  readonly time: QueryContextDocument['filters']['time'];
+  readonly properties: QueryContextDocument['filters']['properties'];
+  readonly groups: LayoutDocument['groups'];
+  /** The group of each node that has one, by the identity of the node. */
+  readonly groupIds: ReadonlyMap<string, string>;
+  /** The stored relationships that were hidden, by identity. */
+  readonly hiddenEdges: ReadonlySet<string>;
+  /** A layout name the web does not offer, and the layout shown when it was adopted: written back until the person picks another layout. */
+  readonly layout?: { readonly stored: string; readonly shown: string } | undefined;
+}
+
+/** What the web does not edit in a stored draft; `shown` is the layout the view has once the draft is applied, and `layoutKnown` whether the web offers the stored layout name. */
+export function carriedOf(draft: { readonly layout: LayoutDocument; readonly queryContext: QueryContextDocument }, shown: string, layoutKnown: boolean): CarriedContext {
+  const { layout, queryContext } = draft;
+  return {
+    expansions: queryContext.expansions,
+    time: queryContext.filters.time,
+    properties: queryContext.filters.properties,
+    groups: layout.groups,
+    groupIds: new Map(layout.nodes.flatMap((node) => (node.groupId === null ? [] : [[nodeIdentity(node.t, node.id), node.groupId] as const]))),
+    hiddenEdges: new Set(layout.edges.filter((edge) => edge.hidden).map(edgeIdentity)),
+    ...(layoutKnown ? {} : { layout: { stored: layout.layout, shown } }),
+  };
+}
+
 export interface DraftInputs {
   readonly nodeRefs: readonly ElementRef[];
   readonly graph: LoadedGraph;
   readonly presentation: Pick<PresentationState, 'layout' | 'positions' | 'pins' | 'hidden' | 'viewport' | 'typeFilter' | 'mappedTypes'>;
   readonly notes: string | null;
   readonly kept: KeptItems;
+  /** What the stored draft holds that the web has no way to edit (see `CarriedContext`), written back as it was read. */
+  readonly carried?: CarriedContext | undefined;
   /** The filters of the stored draft, written unchanged until the mapping of the source is known and they can be put back on the view. */
   readonly storedFilters?: QueryContextDocument['filters'] | undefined;
   /** Types the stored filters name that the mapping does not have now: written back with the types left on, so that a type that is mapped again has the state it was saved with. */
@@ -57,28 +90,31 @@ export function draftOf(inputs: DraftInputs): DraftWriteRequest {
     held.add(nodeIdentity(ref.entityType, ref.stableId));
     const key = elementKey(ref);
     const position = presentation.positions.get(key);
-    return { t: ref.entityType, id: ref.stableId, ...(position === undefined ? {} : { x: position.x, y: position.y }), pinned: presentation.pins.has(key), hidden: presentation.hidden.has(key), groupId: null };
+    return { t: ref.entityType, id: ref.stableId, ...(position === undefined ? {} : { x: position.x, y: position.y }), pinned: presentation.pins.has(key), hidden: presentation.hidden.has(key), groupId: inputs.carried?.groupIds.get(nodeIdentity(ref.entityType, ref.stableId)) ?? null };
   });
   const edges: StoredEdge[] = inputs.graph.edges.map(storedEdgeOf);
   const heldEdges = new Set(edges.map(edgeIdentity));
   const keptNodes = inputs.kept.nodes.filter((node) => !held.has(nodeIdentity(node.t, node.id)));
   const keptEdges = inputs.kept.edges.filter((edge) => !heldEdges.has(edgeIdentity(edge)));
-  const allNodes = [...nodes, ...keptNodes];
+  const present = new Set([...nodes, ...keptNodes].map((node) => nodeIdentity(node.t, node.id)));
+  const groups = (inputs.carried?.groups ?? []).map((group) => ({ ...group, members: group.members.filter((member) => present.has(nodeIdentity(member.t, member.id))) })).filter((group) => group.members.length > 0);
+  const live = new Set(groups.map((group) => group.id));
+  const allNodes = [...nodes, ...keptNodes].map((node) => (node.groupId === null || live.has(node.groupId) ? node : { ...node, groupId: null }));
   const allEdges = [...edges, ...keptEdges];
   const mapped: Partial<MappedTypes> = presentation.mappedTypes ?? {};
   const layout: LayoutDocument = {
     schemaVersion: SCHEMA_VERSION,
     ...(presentation.viewport === undefined ? {} : { viewport: { zoom: presentation.viewport.zoom, x: presentation.viewport.x, y: presentation.viewport.y } }),
-    layout: presentation.layout,
+    layout: inputs.carried?.layout !== undefined && presentation.layout === inputs.carried.layout.shown ? inputs.carried.layout.stored : presentation.layout,
     nodes: allNodes,
-    edges: allEdges.map((edge) => ({ ...edge, hidden: false })),
-    groups: [],
+    edges: allEdges.map((edge) => ({ ...edge, hidden: inputs.carried?.hiddenEdges.has(edgeIdentity(edge)) ?? false })),
+    groups,
   };
   const queryContext: QueryContextDocument = {
     schemaVersion: SCHEMA_VERSION,
     loaded: { nodes: allNodes.map(({ t, id }) => ({ t, id })), edges: allEdges },
-    expansions: [],
-    filters: inputs.storedFilters ?? { entityTypes: withCarried(typesLeftOn(mapped.entityTypes, presentation.typeFilter.offEntityTypes, inputs.keepLists?.entityTypes), inputs.carriedTypes?.entityTypes, inputs.keepLists?.entityTypes), relTypes: withCarried(typesLeftOn(mapped.relationshipTypes, presentation.typeFilter.offRelationshipTypes, inputs.keepLists?.relTypes), inputs.carriedTypes?.relTypes, inputs.keepLists?.relTypes), time: null, properties: [] },
+    expansions: inputs.carried?.expansions ?? [],
+    filters: inputs.storedFilters ?? { entityTypes: withCarried(typesLeftOn(mapped.entityTypes, presentation.typeFilter.offEntityTypes, inputs.keepLists?.entityTypes), inputs.carriedTypes?.entityTypes, inputs.keepLists?.entityTypes), relTypes: withCarried(typesLeftOn(mapped.relationshipTypes, presentation.typeFilter.offRelationshipTypes, inputs.keepLists?.relTypes), inputs.carriedTypes?.relTypes, inputs.keepLists?.relTypes), time: inputs.carried?.time ?? null, properties: inputs.carried?.properties ?? [] },
   };
   return { layout, queryContext, notes: inputs.notes };
 }

@@ -20,7 +20,7 @@ function chunks<T>(list: readonly T[]): T[][] {
   return out;
 }
 
-/** Whether a draft is only what opening an investigation writes: its starting entity, with nothing moved, pinned, hidden or filtered. */
+/** Whether a draft is only what opening an investigation writes: its starting entity, with nothing moved, pinned, hidden, filtered or expanded. */
 export function isOpeningDraft(draft: InvestigationResponse['draft'], start: { readonly entityType: string; readonly stableId: string } | null): boolean {
   const [node] = draft.layout.nodes;
   return (
@@ -37,8 +37,16 @@ export function isOpeningDraft(draft: InvestigationResponse['draft'], start: { r
     draft.layout.viewport === undefined &&
     draft.layout.layout === DEFAULT_LAYOUT &&
     draft.queryContext.loaded.edges.length === 0 &&
+    draft.queryContext.loaded.nodes.length === 1 &&
+    draft.queryContext.loaded.nodes[0]?.t === start.entityType &&
+    draft.queryContext.loaded.nodes[0]?.id === start.stableId &&
+    node.groupId === null &&
+    draft.layout.groups.length === 0 &&
     draft.queryContext.filters.entityTypes.length === 0 &&
-    draft.queryContext.filters.relTypes.length === 0
+    draft.queryContext.filters.relTypes.length === 0 &&
+    draft.queryContext.filters.time === null &&
+    draft.queryContext.filters.properties.length === 0 &&
+    draft.queryContext.expansions.length === 0
   );
 }
 

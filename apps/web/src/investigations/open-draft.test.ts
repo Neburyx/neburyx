@@ -150,6 +150,47 @@ describe('opening an investigation whose draft holds more than its first entity'
     await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
     expect(writes[0]?.body.layout.layout).toBe('grid');
   });
+
+  it('restores a draft with only its first entity and a group, and does not lose the group on the first write', async () => {
+    const stored = draftOf(['A-1']);
+    const groups = [{ id: 'g1', label: 'One', by: 'manual', members: [{ t: 'kind-a', id: 'A-1' }] }];
+    const { client, asked, writes } = rig({ ...stored, layout: { ...stored.layout, groups, nodes: stored.layout.nodes.map((node) => ({ ...node, groupId: 'g1' })) } });
+    const state = createClientState();
+    await openById(client, state, INVESTIGATION_A, CONTEXT);
+    expect(asked).toHaveLength(1);
+    state.presentation.setPosition(elementKey({ sourceId: 'source-a', entityType: 'kind-a', stableId: 'A-1' }), { x: 1, y: 1 });
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
+    expect(writes[0]?.body.layout.groups).toEqual(groups);
+    expect(writes[0]?.body.layout.nodes.map((node) => node.groupId)).toEqual(['g1']);
+  });
+
+  it('restores a draft whose query context names another entity than its first, and keeps that entity on the first write', async () => {
+    const stored = draftOf(['A-1']);
+    const { client, asked, writes } = rig({ ...stored, queryContext: { ...stored.queryContext, loaded: { ...stored.queryContext.loaded, nodes: [...stored.queryContext.loaded.nodes, { t: 'kind-a', id: 'Z' }] } } });
+    const state = createClientState();
+    await openById(client, state, INVESTIGATION_A, CONTEXT);
+    expect(asked).toHaveLength(1);
+    state.presentation.setPosition(elementKey({ sourceId: 'source-a', entityType: 'kind-a', stableId: 'A-1' }), { x: 1, y: 1 });
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
+    expect(writes[0]?.body.queryContext.loaded.nodes.map((node) => node.id)).toContain('Z');
+  });
+
+  it('writes back a property filter, a time filter and an expansion the draft held, though it shows none of them and its only entity is the first', async () => {
+    const stored = draftOf(['A-1']);
+    const properties = [{ key: 'prop-x', op: 'gte', values: ['10'] }];
+    const expansions = [{ from: { t: 'kind-a', id: 'A-1' }, relTypes: ['rel-a'], neighborTypes: [], window: null, sort: 'default', pages: 2 }];
+    const draft = { ...stored, queryContext: { ...stored.queryContext, expansions, filters: { ...NO_FILTERS, time: { from: '2024-01-01' }, properties } } };
+    const { client, asked, writes } = rig(draft);
+    const state = createClientState();
+    await openById(client, state, INVESTIGATION_A, CONTEXT);
+    // a draft that holds a filter is not the draft an open writes, so it is restored and not started afresh
+    expect(asked).toHaveLength(1);
+    state.presentation.setMappedTypes({ entityTypes: ['kind-a'], relationshipTypes: [] });
+    state.presentation.setPosition(elementKey({ sourceId: 'source-a', entityType: 'kind-a', stableId: 'A-1' }), { x: 1, y: 1 });
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
+    expect(writes[0]?.body.queryContext.filters).toEqual({ ...NO_FILTERS, time: { from: '2024-01-01' }, properties });
+    expect(writes[0]?.body.queryContext.expansions).toEqual(expansions);
+  });
 });
 
 describe('opening another investigation while the changes of the one shown cannot be written', () => {
