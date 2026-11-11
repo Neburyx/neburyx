@@ -295,7 +295,7 @@ export function serviceOf(event: ContainerEvent): string | undefined {
   return event.Actor.Attributes['com.docker.compose.service'];
 }
 
-async function freePort(): Promise<number> {
+export async function freePort(): Promise<number> {
   return new Promise((resolve, reject) => {
     const server = createServer();
     server.once('error', reject);
