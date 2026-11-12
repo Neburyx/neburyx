@@ -141,6 +141,20 @@ describe('typing a search', () => {
     expect(window.history.length).toBe(lengthBefore);
   });
 
+  it('does not send a text of only spaces, says so, keeps the result and does not change the entry', async () => {
+    const kit = searchKit(['demo'], async () => ok(answerOf('demo', [hit('demo', 'AC-1')])));
+    const view = renderApp(searchAt('demo', 'AC-1'), kit.client);
+    await screen.findByRole('heading', { level: 2, name: 'Exact ID match (1)' });
+    const user = userEvent.setup();
+    await user.clear(box());
+    await user.type(box(), '   ');
+    await user.keyboard('{Enter}');
+    expect(await within(main()).findByText('Type an ID or a value to search.')).toBeDefined();
+    expect(kit.searches).toHaveLength(1);
+    expect(view.router.state.location.state).toEqual({ q: 'AC-1' });
+    expect(within(main()).getByText('Title AC-1')).toBeDefined();
+  });
+
   it('does not send an empty text and says so, and does not change the entry', async () => {
     const kit = searchKit(['demo'], async () => ok(answerOf('demo', [hit('demo', 'AC-1')])));
     const view = renderApp(searchAt('demo', 'AC-1'), kit.client);
@@ -148,7 +162,7 @@ describe('typing a search', () => {
     const user = userEvent.setup();
     await user.clear(box());
     await user.keyboard('{Enter}');
-    expect(await within(main()).findByText('Type something to search.')).toBeDefined();
+    expect(await within(main()).findByText('Type an ID or a value to search.')).toBeDefined();
     expect(kit.searches).toHaveLength(1);
     expect(view.router.state.location.search).toBe('?source=demo');
     expect(view.router.state.location.state).toEqual({ q: 'AC-1' });

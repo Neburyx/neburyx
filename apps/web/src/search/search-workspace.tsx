@@ -70,7 +70,7 @@ export function SearchWorkspace({ client, source, sources, principalId, text }: 
     event.preventDefault();
     const typed = new FormData(event.currentTarget).get('q');
     const entered = typeof typed === 'string' ? typed : '';
-    if (codePoints(entered) < MIN_SEARCH_TEXT_LENGTH) return setNotice(SEARCH_COPY.tooShort);
+    if (codePoints(entered.trim()) < MIN_SEARCH_TEXT_LENGTH) return setNotice(SEARCH_COPY.tooShort);
     if (codePoints(entered) > MAX_SEARCH_TEXT_LENGTH) return setNotice(TOO_LONG);
     setNotice(undefined);
     if (entered === text) return setRepeats((count) => count + 1);
@@ -78,6 +78,7 @@ export function SearchWorkspace({ client, source, sources, principalId, text }: 
   };
 
   const select = (chosen: Selection): void => {
+    setNotice(undefined);
     setParams(addressOf(source.id, chosen), { state: { q: text } });
   };
 

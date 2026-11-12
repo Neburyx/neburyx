@@ -15,7 +15,7 @@ export interface MenuHeader {
 /** What a stored relationship is called where the canvas draws no word for it. */
 const STORED_ORIGIN = 'sourced';
 
-/** The header of the menu of an entity (its ref, then its type and state) or of a relationship (its type, count and origin, then its endpoints and, when it is derived, its rule); none for the canvas, and none for an item that is not loaded. */
+/** The header of the menu of an entity (its ref, then its type and state) or of a relationship (its type, count and origin, then its endpoints by display title and, when it is derived, its rule); none for the canvas, and none for an item that is not loaded. */
 export function menuHeader(open: OpenMenu, graph: LoadedGraph, profile: SourceProfile | undefined): MenuHeader | undefined {
   if (open.kind === 'node') {
     const node = graph.nodes.find((candidate) => elementKey(candidate.ref) === open.key);
@@ -33,7 +33,13 @@ export function menuHeader(open: OpenMenu, graph: LoadedGraph, profile: SourcePr
     if (isUnmappedEdge(edge)) return { title: 'Unmapped relationship', detail: NO_LONGER_MAPPED };
     const { type, count, origin } = relationshipParts(edge);
     const title = [type, count, origin ?? STORED_ORIGIN].filter((part) => part !== undefined).join(' · ');
-    const ends = `${edge.from.stableId} ${arrowOf(edge.ref, profile)} ${edge.to.stableId}`;
+    const nameOf = (end: typeof edge.from): string => {
+      const loaded = graph.nodes.find((candidate) => elementKey(candidate.ref) === elementKey(end));
+      if (loaded !== undefined) return loaded.display.title;
+      const type = profile?.entityTypes.find((candidate) => candidate.type === end.entityType);
+      return type?.keyed === true ? type.displayName : end.stableId;
+    };
+    const ends = `${nameOf(edge.from)} ${arrowOf(edge.ref, profile)} ${nameOf(edge.to)}`;
     const observed = 'aggregate' in edge.ref && edge.observedFirst !== undefined ? ` · first ${edge.observedFirst} · last ${edge.observedLast ?? edge.observedFirst}` : '';
     const rule = edge.semantics === 'derived' && edge.derivation !== undefined ? ` · ${edge.derivation.ruleId} v${edge.derivation.ruleVersion}` : '';
     return { title, detail: `${ends}${observed}${rule}` };

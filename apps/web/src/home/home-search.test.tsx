@@ -81,12 +81,25 @@ describe('the Home search box', () => {
     expect(view.router.state.location.pathname).toBe('/');
   });
 
+  it('stays on Home for a text of only spaces and sends no search', async () => {
+    const sent: string[] = [];
+    const kit = searching({ searchEntities: async (request: { readonly sourceId: string; readonly text: string }) => (sent.push(request.text), { ok: true as const, value: answerOf(request.sourceId, [hit(request.sourceId, request.text)]) }) });
+    const view = renderApp('/', kit.client);
+    const user = userEvent.setup();
+    await screen.findByRole('search');
+    await user.type(boxOf(), '   ');
+    await user.click(within(form()).getByRole('button', { name: 'Search' }));
+    expect(screen.getByText('Type an ID or a value to search.')).toBeTruthy();
+    expect(view.router.state.location.pathname).toBe('/');
+    expect(sent).toEqual([]);
+  });
+
   it('shows the Search page\'s messages beside the box and stays on Home for a text that is too short or too long', async () => {
     const view = renderApp('/', searching().client);
     const user = userEvent.setup();
     await screen.findByRole('search');
     await user.click(within(form()).getByRole('button', { name: 'Search' }));
-    expect(screen.getByText('Type something to search.')).toBeTruthy();
+    expect(screen.getByText('Type an ID or a value to search.')).toBeTruthy();
     await user.type(boxOf(), 'x'.repeat(201));
     await user.click(within(form()).getByRole('button', { name: 'Search' }));
     expect(screen.getByText('Use at most 200 characters.')).toBeTruthy();

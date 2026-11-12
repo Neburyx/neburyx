@@ -6,8 +6,8 @@ import { testProfile } from '../dev/test-profile.js';
 import { RecentRow } from '../home/recent-row.js';
 import { investigationOf, INVESTIGATION_A, listItemOf } from '../investigations/test-data.js';
 import { createClientState } from '../state/client-state.js';
-import { elementKey } from '../state/keys.js';
-import { key, node, ref } from '../state/test-data.js';
+import { edgeKey, elementKey } from '../state/keys.js';
+import { edge as stored, edgeRef, key, node, ref } from '../state/test-data.js';
 import { idsOfSelection } from './copy-ids.js';
 import { menuHeader } from './menu-header.js';
 
@@ -47,6 +47,35 @@ describe('the menu header of a keyed entity', () => {
     const header = menuHeader({ kind: 'node', key: elementKey(ref('a', 'type-a', TOKEN)), x: 0, y: 0 }, graph, keyedProfile());
     expect(header?.title).toBe('+1-•••-•••-0100');
     expect(JSON.stringify(header)).not.toContain(TOKEN);
+  });
+});
+
+describe('the menu header of a relationship', () => {
+  const named = (): GraphNode => ({ ...plainNode(), display: { title: 'Plain Name', type: 'type-b' } });
+  const header = (nodes: readonly GraphNode[], from: GraphNode, to: GraphNode) => {
+    const link = { ...stored('a', 'R-1', 'x', 'y'), ref: edgeRef('a', 'R-1', 'rel-a', 'type-a', 'type-b'), from: from.ref, to: to.ref };
+    const state = createClientState();
+    state.bindSource('a');
+    state.putResult(key('a'), { sourceId: 'a', nodes: [...nodes], edges: [link] });
+    state.setLoaded([key('a')], nodes.map((item) => item.ref), [link.ref]);
+    return menuHeader({ kind: 'relationship', key: edgeKey(link.ref), x: 0, y: 0 }, state.loadedGraph(), keyedProfile());
+  };
+
+  it('names each loaded end by its display title, the masked one under a mask, and never by its token or its stable ID', () => {
+    const masked = { ...keyedNode(null), display: { title: '+1-•••-•••-0100', type: 'type-a' } };
+    const result = header([masked, named()], masked, named());
+    expect(result?.detail).toContain('+1-•••-•••-0100');
+    expect(result?.detail).toContain('Plain Name');
+    expect(result?.detail).not.toContain('N-1');
+    expect(JSON.stringify(result)).not.toContain(TOKEN);
+  });
+
+  it('names an end that is not loaded by its stable ID, and a keyed one by its type, never by its token', () => {
+    const unloadedPlain = header([keyedNode()], keyedNode(), plainNode());
+    expect(unloadedPlain?.detail).toContain('N-1');
+    const unloadedKeyed = header([named()], keyedNode(), named());
+    expect(unloadedKeyed?.detail).toContain('TYPE-A');
+    expect(JSON.stringify(unloadedKeyed)).not.toContain(TOKEN);
   });
 });
 

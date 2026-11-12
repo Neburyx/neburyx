@@ -234,11 +234,26 @@ test('sends a text of one character, and does not send an empty one', async ({ p
   });
   await page.goto(`/search?source=${SOURCE}`);
   await box(page).press('Enter');
-  await expect(page.getByText('Type something to search.')).toBeVisible();
+  await expect(page.getByText('Type an ID or a value to search.')).toBeVisible();
   expect(searched).toEqual([]);
   await box(page).fill('X');
   await box(page).press('Enter');
   await expect(groupTitle(page, 'Exact ID match (1)')).toBeVisible();
+  expect(searched).toHaveLength(1);
+});
+
+test('does not send a text of only spaces, keeps the result and says what to type', async ({ page }) => {
+  const searched: string[] = [];
+  page.on('request', (request) => {
+    if (request.url().includes('/v1/search/entities')) searched.push(request.postData() ?? '');
+  });
+  await searchFor(page, 'AC-1');
+  await expect(page.getByText('account AC-1')).toBeVisible();
+  expect(searched).toHaveLength(1);
+  await box(page).fill('   ');
+  await box(page).press('Enter');
+  await expect(page.getByText('Type an ID or a value to search.')).toBeVisible();
+  await expect(page.getByText('account AC-1')).toBeVisible();
   expect(searched).toHaveLength(1);
 });
 

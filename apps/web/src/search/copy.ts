@@ -8,7 +8,7 @@ export const SEARCH_COPY = {
   searchButton: 'Search',
   sourceLabel: 'Source',
   searching: 'Searching…',
-  tooShort: 'Type something to search.',
+  tooShort: 'Type an ID or a value to search.',
   noSource: 'No source is configured.',
   loadingSources: 'Loading sources…',
   couldNotReadSources: 'The sources could not be read.',
@@ -140,6 +140,7 @@ export const FILTERS_COPY = {
   noResultHint: 'Reset the filters to see the matches of the other entries.',
   unshown: 'Matches were found in the source but none could be shown.',
   nothingForTypes: 'Nothing to search for the selected types.',
+  beforeSelection: 'Before the selection:',
 } as const;
 export const MATCH_MODE_LABELS = { exact: 'Exact ID', related: 'Referenced ID', evidence: 'Evidence record' } as const;
 export const hiddenBySelection = (group: 'exact' | 'related' | 'evidence'): string => `${PAGE_GROUP_NAMES[group]} are hidden by the selection.`;

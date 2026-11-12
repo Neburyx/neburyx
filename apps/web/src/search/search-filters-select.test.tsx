@@ -33,6 +33,18 @@ describe('choosing an entry of the Filters', () => {
     expect(view.router.state.location.pathname).not.toContain('AC');
   });
 
+  it('takes the message about an empty text away when a box is chosen', async () => {
+    await render();
+    const user = userEvent.setup();
+    const text = screen.getByRole('searchbox', { name: 'Search text' });
+    await user.clear(text);
+    await user.type(text, '   ');
+    await user.keyboard('{Enter}');
+    expect(await within(main()).findByText('Type an ID or a value to search.')).toBeDefined();
+    await user.click(box());
+    await waitFor(() => expect(within(main()).queryByText('Type an ID or a value to search.')).toBeNull());
+  });
+
   it('puts the types in the order of the profile and the modes in the order of the modes, however they were chosen', async () => {
     const { kit, view } = await render();
     const user = userEvent.setup();
@@ -133,7 +145,7 @@ describe('a new selection loading', () => {
     await within(main()).findByRole('heading', { level: 2, name: 'Exact ID match (1)' });
     const user = userEvent.setup();
     await user.click(box());
-    expect(panel().getByText('5 entities · exact · 7 supporting relationships · exact')).toBeDefined();
+    expect(panel().getByText('Before the selection: 5 entities · exact · 7 supporting relationships · exact')).toBeDefined();
     expect(screen.getByRole('complementary', { name: 'Filters' }).getAttribute('aria-busy')).toBe('true');
     expect(within(main()).queryByRole('heading', { level: 2, name: 'Exact ID match (1)' })).toBeNull();
     expect(within(main()).getByText('Searching…')).toBeDefined();
@@ -155,7 +167,7 @@ describe('a new selection loading', () => {
     expect(await screen.findByText('Search timed out after 5 s')).toBeDefined();
     expect(screen.getByRole('searchbox', { name: 'Search text' })).toBeDefined();
     expect(box()).toHaveProperty('checked', true);
-    expect(panel().getByText('5 entities · exact · 7 supporting relationships · exact')).toBeDefined();
+    expect(panel().getByText('Before the selection: 5 entities · exact · 7 supporting relationships · exact')).toBeDefined();
     await user.click(within(main()).getByRole('button', { name: 'Retry' }));
     await waitFor(() => expect(kit.searches).toHaveLength(3));
     expect(kit.searches[2]).toEqual(kit.searches[1]);

@@ -40,6 +40,16 @@ test.describe('the relationship evidence panel', () => {
     await expect(canvasOf(page)).toBeFocused();
   });
 
+  test('names the two ends in the relationship menu header by their display titles and not by their IDs', async ({ page }) => {
+    await openSample(page, '?evidence=on');
+    await rightClickBetween(page, 'holder', 'led-1');
+    const detail = menuOf(page).locator('.menu-header-detail');
+    await expect(detail).toContainText('Jordan Lee');
+    await expect(detail).toContainText('LED-48291');
+    await expect(detail).not.toContainText('holder');
+    await expect(detail).not.toContainText('led-1');
+  });
+
   test('opens by keyboard alone: the menu key on the selected relationship, then Enter on the first row', async ({ page }) => {
     await openSample(page, '?evidence=on');
     await canvasOf(page).focus();

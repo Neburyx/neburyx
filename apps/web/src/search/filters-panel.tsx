@@ -75,7 +75,7 @@ export function FiltersPanel({ facets, counted, selection, profile, loading, onC
           })}
         </fieldset>
       )}
-      {total === undefined ? null : <p className="search-filters-total">{total}</p>}
+      {total === undefined ? null : <p className="search-filters-total">{reset === null ? total : `${FILTERS_COPY.beforeSelection} ${total}`}</p>}
       {reset}
     </aside>
   );

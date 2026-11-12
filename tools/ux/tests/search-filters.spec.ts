@@ -22,7 +22,7 @@ test.describe('the Filters of the Search results page', () => {
     await expect(entry(page, /Exact ID/).locator('xpath=ancestor::label')).toContainText('5 · exact');
     await expect(entry(page, /Referenced ID/).locator('xpath=ancestor::label')).toContainText('0 · exact');
     await expect(entry(page, /Evidence record/).locator('xpath=ancestor::label')).toContainText('0 · exact');
-    await expect(panel(page).getByText('5 entities · exact')).toBeVisible();
+    await expect(panel(page).getByText('5 entities · exact', { exact: true })).toBeVisible();
     await expect(panel(page).getByRole('button', { name: 'Reset' })).toHaveCount(0);
   });
 
@@ -72,7 +72,7 @@ test.describe('the Filters of the Search results page', () => {
     await entry(page, /Customer/).click();
     await expect(page.locator('.search-hit')).toHaveCount(2);
     await expect(entry(page, /Account/).locator('xpath=ancestor::label')).toContainText('3');
-    await expect(panel(page).getByText('5 entities · exact')).toBeVisible();
+    await expect(panel(page).getByText('Before the selection: 5 entities · exact', { exact: true })).toBeVisible();
     await entry(page, /Referenced ID/).click();
     await expect(page.getByText('Exact matches are hidden by the selection.')).toBeVisible();
     await panel(page).getByRole('button', { name: 'Reset' }).click();

@@ -44,6 +44,11 @@ describe('the Filters of the Search results page', () => {
     expect(within(filters()).getByText('1 entity · exact')).toBeDefined();
   });
 
+  it('labels the total as the count before the selection while a type or mode is chosen, with the count unchanged, and not otherwise', async () => {
+    await render(() => withFacets('demo', [hit('demo', 'AC-1')], facetsOf({ total: 1, types: [['kind-a', 1], ['kind-b', 0]] })), '&type=kind-b');
+    expect(within(filters()).getByText('Before the selection: 1 entity · exact')).toBeDefined();
+  });
+
   it('shows no Reset while nothing is chosen, and the boxes of the address checked', async () => {
     await render(() => withFacets('demo', [hit('demo', 'AC-1')], FULL), '&type=kind-b&mode=exact');
     const panel = within(filters());
@@ -166,6 +171,6 @@ describe('the total of the Filters says what it counts', () => {
 
   it('is the answer\'s total under a selection, which does not change what it counts', async () => {
     await render(() => withFacets('demo', [], total(0, 25)), '&mode=evidence');
-    expect(within(filters()).getByText('0 entities · exact · 25 supporting relationships · exact')).toBeDefined();
+    expect(within(filters()).getByText('Before the selection: 0 entities · exact · 25 supporting relationships · exact')).toBeDefined();
   });
 });
