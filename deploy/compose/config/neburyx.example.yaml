@@ -13,6 +13,7 @@ sources: []
 #   model: claude-sonnet-5-5
 #   key:
 #     env: ANTHROPIC_API_KEY
+#   effort: medium   # low, medium, high, xhigh or max
 #   prompts:
 #     ask.plan: /etc/neburyx/prompts/ask-plan.txt
 # <<< ai preview example

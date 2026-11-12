@@ -117,19 +117,29 @@ describe('the sources of the package', () => {
   const filesUnder = (folder: string): string[] =>
     readdirSync(folder, { withFileTypes: true }).flatMap((entry) => (entry.isDirectory() ? filesUnder(join(folder, entry.name)) : entry.name.endsWith('.ts') && !entry.name.includes('.test.') ? [join(folder, entry.name)] : []));
   const productionFiles = filesUnder(sourceFolder).map((path) => relative(sourceFolder, path));
+  const SDK_FILE = 'anthropic.ts';
   const FORBIDDEN = [/@anthropic-ai\//, /node:http/, /node:https/, /node:net\b/, /node:tls/, /\bundici\b/, /\bfetch\(/];
 
   it('includes the testing folder in what is scanned', () => {
     expect(productionFiles).toContain(join('testing', 'fixture.ts'));
   });
 
-  it.each(productionFiles)('%s imports no provider SDK and no network module', (file) => {
+  it.each(productionFiles.filter((file) => file !== SDK_FILE))('%s imports no provider SDK and no network module', (file) => {
     const text = readFileSync(join(sourceFolder, file), 'utf8');
     for (const pattern of FORBIDDEN) expect(text, `${file} matches ${pattern}`).not.toMatch(pattern);
   });
 
-  it('lists no provider SDK or network package as a dependency', () => {
+  it('lets only the provider file import the client library, and no other network module', () => {
+    const text = readFileSync(join(sourceFolder, SDK_FILE), 'utf8');
+    for (const pattern of FORBIDDEN.slice(1)) expect(text, `${SDK_FILE} matches ${pattern}`).not.toMatch(pattern);
+    expect([...text.matchAll(/from '(@anthropic-ai\/[^']+)'/g)].map((match) => match[1])).toEqual(['@anthropic-ai/sdk']);
+  });
+
+  it('lists no network package and only one pinned client library as a dependency', () => {
     const manifest = readFileSync(join(sourceFolder, '..', 'package.json'), 'utf8');
-    for (const pattern of [/@anthropic-ai\//, /undici/, /"openai"/, /langchain/i]) expect(manifest).not.toMatch(pattern);
+    for (const pattern of [/undici/, /"openai"/, /langchain/i]) expect(manifest).not.toMatch(pattern);
+    const { dependencies } = JSON.parse(manifest) as { dependencies: Record<string, string> };
+    expect(Object.keys(dependencies).filter((name) => name.startsWith('@anthropic-ai/'))).toEqual(['@anthropic-ai/sdk']);
+    expect(dependencies['@anthropic-ai/sdk']).toMatch(/^\d+\.\d+\.\d+$/);
   });
 });

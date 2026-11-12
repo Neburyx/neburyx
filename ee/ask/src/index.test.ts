@@ -42,6 +42,41 @@ describe('the enterprise extension', () => {
     await mounted?.close();
   });
 
+  describe('the model behind the audit', () => {
+    const SETTINGS = { preview: true, provider: 'anthropic' as const, model: 'claude-sonnet-5-5', key: { env: 'MODEL_TEST_KEY' } };
+    const ENV = { MODEL_TEST_KEY: 'not-a-real-key' };
+    const SINK_CONTEXT = { databaseUrl: 'postgres://app@db.example.test:5432/neburyx', poolSize: 1, connectionTimeoutMs: 100, statementTimeoutMs: 100, queryTimeoutMs: 100, newId: () => 'id', onConnectionError: () => undefined };
+
+    it('is undefined before the configuration and the mounted sink both exist', async () => {
+      const unconfigured = createEnterpriseExtension();
+      expect(unconfigured.model()).toBeUndefined();
+      const mounted = unconfigured.createAuditSink?.(SINK_CONTEXT);
+      expect(unconfigured.model()).toBeUndefined();
+      await mounted?.close();
+
+      const withoutSink = createEnterpriseExtension();
+      expect((await withoutSink.configure?.(SETTINGS, ENV))?.ok).toBe(true);
+      expect(withoutSink.model()).toBeUndefined();
+    });
+
+    it('is the audited call once both exist, and stays undefined when the configuration is refused', async () => {
+      const extension = createEnterpriseExtension();
+      expect((await extension.configure?.(SETTINGS, ENV))?.ok).toBe(true);
+      const mounted = extension.createAuditSink?.(SINK_CONTEXT);
+      const model = extension.model();
+      expect(model).toBeDefined();
+      expect(typeof model?.call).toBe('function');
+      expect(typeof model?.asProvider).toBe('function');
+      await mounted?.close();
+
+      const refused = createEnterpriseExtension();
+      expect((await refused.configure?.({ ...SETTINGS, model: undefined }, ENV))?.ok).toBe(false);
+      const other = refused.createAuditSink?.(SINK_CONTEXT);
+      expect(refused.model()).toBeUndefined();
+      await other?.close();
+    });
+  });
+
   it('builds the sink with the audit package', () => {
     expect(typeof createAuditSink).toBe('function');
     expect(createEnterpriseExtension().createAuditSink).toBeDefined();

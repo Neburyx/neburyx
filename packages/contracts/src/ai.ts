@@ -6,8 +6,12 @@ export type AiStatusResponse = z.infer<typeof aiStatusResponseSchema>;
 
 export const AI_PROVIDERS = ['anthropic'] as const;
 
+export const AI_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
+
+export type AiEffort = (typeof AI_EFFORTS)[number];
+
 /** Hypotheses: they are what the AI settings use when the file does not say, and they are expected to change with measurement. */
-export const AI_DEFAULTS = { timeoutMs: 60_000, maxRetries: 0, maxTokens: 8_192 } as const;
+export const AI_DEFAULTS = { timeoutMs: 60_000, maxRetries: 0, maxTokens: 8_192, effort: 'medium' satisfies AiEffort } as const;
 
 export const AI_LIMITS = {
   timeoutMs: { min: 1_000, max: 600_000 },
@@ -42,6 +46,7 @@ export const aiSettingsSchema = z.strictObject({
   timeout_ms: limitedInteger(AI_LIMITS.timeoutMs).optional(),
   max_retries: limitedInteger(AI_LIMITS.maxRetries).optional(),
   max_tokens: limitedInteger(AI_LIMITS.maxTokens).optional(),
+  effort: z.enum(AI_EFFORTS).optional(),
   properties: z.record(z.string().min(1, { message: 'the key is empty' }), aiPropertyListSchema).optional(),
   pii_override: z.boolean().optional(),
 });

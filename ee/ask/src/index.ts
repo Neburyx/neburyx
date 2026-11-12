@@ -1,12 +1,16 @@
 import { fileURLToPath } from 'node:url';
 import { aiStatusResponseSchema, type AuditSink, type MountedAuditSink, type ProfileExtension } from '@neburyx/contracts';
 import { createAuditSink } from '@neburyx/ee-audit';
+import { createAnthropicProvider } from './anthropic.js';
+import { createAuditedModelCall, type AuditedModelCall } from './audited.js';
 import { configureAsk, type AskConfiguration } from './configure.js';
 import { guardAiRouteGroup } from './route-guard.js';
 import { createRequestBuilder, type RequestBuilder } from './request.js';
 
 export { AUDIT_ACTIONS, AuditUnavailableError, createAuditedModelCall } from './audited.js';
 export type { AuditedCallContext, AuditedModelCall, AuditedModelOptions } from './audited.js';
+export { ANTHROPIC_BASE_URL, createAnthropicProvider } from './anthropic.js';
+export type { AnthropicProviderOptions } from './anthropic.js';
 export { configureAsk } from './configure.js';
 export { ROUTE_REFUSED_ACTION, guardAiRouteGroup } from './route-guard.js';
 export { PII_OVERRIDE_EVENT, type PropertyRules } from './rules.js';
@@ -27,10 +31,18 @@ export interface EnterpriseExtension extends ProfileExtension {
   /** The audit sink the application mounted, or undefined before it was built; the audited model call records through it. */
   readonly auditSink: () => AuditSink | undefined;
   readonly requestBuilder: () => RequestBuilder | undefined;
+  /** The model behind the audit: undefined until both the configuration and the mounted audit sink exist, so no route reaches the provider without the audit. */
+  readonly model: () => AuditedModelCall | undefined;
 }
 
-export function createEnterpriseExtension(): EnterpriseExtension {
+export interface EnterpriseExtensionOptions {
+  /** Only a test sets this, to a stub on the loopback address; the model client otherwise calls the service. */
+  readonly modelBaseUrl?: string;
+}
+
+export function createEnterpriseExtension(options: EnterpriseExtensionOptions = {}): EnterpriseExtension {
   let configuration: AskConfiguration | undefined;
+  let environment: Readonly<Record<string, string | undefined>> = {};
   let mounted: MountedAuditSink | undefined;
   return {
     name: 'ask',
@@ -40,9 +52,11 @@ export function createEnterpriseExtension(): EnterpriseExtension {
     async configure(settings, env, view) {
       const configured = await configureAsk(settings, env, view);
       configuration = configured.configuration;
+      environment = env;
       return configured.outcome;
     },
     auditSink: () => mounted?.sink,
+    model: () => (configuration === undefined || mounted === undefined ? undefined : createAuditedModelCall({ provider: createAnthropicProvider({ configuration, env: environment, baseUrl: options.modelBaseUrl }), configuration, sink: mounted.sink })),
     createAuditSink(context) {
       mounted = createAuditSink(context);
       return mounted;

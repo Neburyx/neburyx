@@ -31,9 +31,28 @@ describe('a complete configuration', () => {
     expect(configuration?.registry.resolve('summary.view', { view: 'v' }).record.source).toBe('builtin');
   });
 
+  it('uses the default effort, and the one it is given', async () => {
+    expect((await configureAsk(COMPLETE, ENV)).configuration?.limits.effort).toBe(AI_DEFAULTS.effort);
+    expect((await configureAsk({ ...COMPLETE, effort: 'max' }, ENV)).configuration?.limits.effort).toBe('max');
+  });
+
+  it('refuses a start while ANTHROPIC_CUSTOM_HEADERS is set, naming the variable and not its value', async () => {
+    const problems = await problemsOf(COMPLETE, { ...ENV, ANTHROPIC_CUSTOM_HEADERS: 'Authorization: Bearer secret-value' });
+    expect(problems.join(' ')).toContain('ANTHROPIC_CUSTOM_HEADERS');
+    expect(problems.join(' ')).not.toContain('secret-value');
+    expect(await problemsOf(COMPLETE, { ...ENV, ANTHROPIC_CUSTOM_HEADERS: '' })).not.toEqual([]);
+  });
+
+  it('refuses a missing key even when the environment holds the usual credential variables, and prints none of their values', async () => {
+    const { key: _key, ...withoutKey } = COMPLETE;
+    const problems = (await problemsOf(withoutKey, { ANTHROPIC_API_KEY: 'value-one', ANTHROPIC_AUTH_TOKEN: 'value-two', ANTHROPIC_PROFILE: 'value-three' })).join(' ');
+    expect(problems).toContain('ai.key');
+    expect(problems).not.toMatch(/value-(one|two|three)/);
+  });
+
   it('keeps the limits it is given', async () => {
     const { configuration } = await configureAsk({ ...COMPLETE, timeout_ms: 5_000, max_retries: 2, max_tokens: 100 }, ENV);
-    expect(configuration?.limits).toEqual({ timeoutMs: 5_000, maxRetries: 2, maxTokens: 100 });
+    expect(configuration?.limits).toEqual({ timeoutMs: 5_000, maxRetries: 2, maxTokens: 100, effort: AI_DEFAULTS.effort });
   });
 
   it('accepts a key file that only its owner can read, also through a symbolic link', async () => {

@@ -1,5 +1,5 @@
 import { access, constants, stat } from 'node:fs/promises';
-import { AI_DEFAULTS, type AiMappingView, type AiSettings, type ConfigureOutcome } from '@neburyx/contracts';
+import { AI_DEFAULTS, type AiEffort, type AiMappingView, type AiSettings, type ConfigureOutcome } from '@neburyx/contracts';
 import { buildPromptRegistry, type PromptRegistry } from './prompts.js';
 import { buildPropertyRules, type PropertyRules } from './rules.js';
 
@@ -9,7 +9,7 @@ export interface AskConfiguration {
   readonly provider: 'anthropic';
   readonly model: string;
   readonly key: KeyReference;
-  readonly limits: { readonly timeoutMs: number; readonly maxRetries: number; readonly maxTokens: number };
+  readonly limits: { readonly timeoutMs: number; readonly maxRetries: number; readonly maxTokens: number; readonly effort: AiEffort };
   readonly registry: PromptRegistry;
   readonly rules: PropertyRules;
 }
@@ -57,6 +57,8 @@ export async function configureAsk(settings: AiSettings, env: Readonly<Record<st
   if (settings.model === undefined) problems.push(requiredProblem('ai.model'));
   if (settings.key === undefined) problems.push(requiredProblem('ai.key'));
   else problems.push(...(await keyProblems(settings.key, env)));
+  // The client library merges this variable into the headers of every request, after the credential headers.
+  if (env.ANTHROPIC_CUSTOM_HEADERS !== undefined) problems.push('ANTHROPIC_CUSTOM_HEADERS is set in the environment; the AI preview refuses it because it would add headers to every call');
   const registry = await buildPromptRegistry(settings.prompts);
   if (!registry.ok) problems.push(...registry.problems);
   const properties = buildPropertyRules(settings, view);
@@ -75,6 +77,7 @@ export async function configureAsk(settings: AiSettings, env: Readonly<Record<st
         timeoutMs: settings.timeout_ms ?? AI_DEFAULTS.timeoutMs,
         maxRetries: settings.max_retries ?? AI_DEFAULTS.maxRetries,
         maxTokens: settings.max_tokens ?? AI_DEFAULTS.maxTokens,
+        effort: settings.effort ?? AI_DEFAULTS.effort,
       },
       registry: registry.registry,
       rules: properties.rules,

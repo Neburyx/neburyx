@@ -16,10 +16,12 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "1.8.0",
     "@neburyx/contracts": "workspace:*",
     "@neburyx/ee-audit": "workspace:*"
   },
   "devDependencies": {
+    "@opentelemetry/api": "1.10.0",
     "@types/node": "24.19.2",
     "vitest": "5.0.5"
   }

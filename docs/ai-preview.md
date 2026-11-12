@@ -19,6 +19,10 @@ The `ai` block is described key by key in the [mapping guide](mapping-guide.md#t
 
 `neburyx.example.yaml` in `deploy/compose/config/` has a commented block to copy.
 
+The model client reads only what the mapping file names. The `ANTHROPIC_*` variables of the environment (a key, a token, a profile, a base address, log or tracing switches) are ignored: the key comes from `key` and nowhere else. The one exception is `ANTHROPIC_CUSTOM_HEADERS`, which would add headers to every call, so the server refuses to start while it is set.
+
+If you name a model that the service has announced as retired, the client library writes one warning to the console with the model's name when a call is made. The warning holds neither the key nor the prompt. Choose a current model to avoid it.
+
 ## The key file
 
 A key in a file is the simplest way to keep it out of the environment of every process:

@@ -72,6 +72,9 @@ describe('the ai section of the mapping file', () => {
     ['a token limit of zero', { max_tokens: 0 }, 'ai.max_tokens'],
     ['a token limit over its range', { max_tokens: 32_769 }, 'ai.max_tokens'],
     ['a limit given as text', { max_tokens: '8192' }, 'ai.max_tokens'],
+    ['an effort that is not one of the five', { effort: 'extreme' }, 'ai.effort'],
+    ['an effort given as a number', { effort: 3 }, 'ai.effort'],
+    ['an empty effort', { effort: '' }, 'ai.effort'],
   ])('refuses %s, naming the key', (_name, ai, path) => {
     expect(refusal(ai).issues.map((issue) => issue.path).some((issuePath) => issuePath.startsWith(path))).toBe(true);
   });
@@ -111,13 +114,17 @@ describe('the ai section of the mapping file', () => {
     expect(() => parseWith({ send_property_values: true })).toThrow(MappingError);
   });
 
+  it.each(['low', 'medium', 'high', 'xhigh', 'max'])('accepts the effort %s', (effort) => {
+    expect(parseWith({ effort }).ai).toEqual({ effort });
+  });
+
   it('accepts the limits at both ends of their ranges', () => {
     expect(parseWith({ timeout_ms: 1_000, max_retries: 0, max_tokens: 1 }).ai).toEqual({ timeout_ms: 1_000, max_retries: 0, max_tokens: 1 });
     expect(parseWith({ timeout_ms: 600_000, max_retries: 5, max_tokens: 32_768 }).ai).toEqual({ timeout_ms: 600_000, max_retries: 5, max_tokens: 32_768 });
   });
 
   it('has hypothesis defaults inside the ranges the file accepts', () => {
-    expect(AI_DEFAULTS).toEqual({ timeoutMs: 60_000, maxRetries: 0, maxTokens: 8_192 });
-    expect(parseWith({ timeout_ms: AI_DEFAULTS.timeoutMs, max_retries: AI_DEFAULTS.maxRetries, max_tokens: AI_DEFAULTS.maxTokens }).ai).toBeDefined();
+    expect(AI_DEFAULTS).toEqual({ timeoutMs: 60_000, maxRetries: 0, maxTokens: 8_192, effort: 'medium' });
+    expect(parseWith({ timeout_ms: AI_DEFAULTS.timeoutMs, max_retries: AI_DEFAULTS.maxRetries, max_tokens: AI_DEFAULTS.maxTokens, effort: AI_DEFAULTS.effort }).ai).toBeDefined();
   });
 });
