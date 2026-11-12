@@ -170,11 +170,11 @@ async function withSourceEnv<T>(text: string, run: () => Promise<T>): Promise<T>
 }
 
 describe('the mapping and the source login', () => {
-  it('stops the api with a message naming the mapping file when the config folder holds none, and starts with no sources once the example is copied', async () => {
+  it('stops the migrate service with a message naming the mapping file when the config folder holds none, and starts with no sources once the example is copied', async () => {
     const missing = await newStack({ mapping: 'none' });
     const failed = await missing.compose(['up', '--wait', '--wait-timeout', '60']);
     expect(failed.code).not.toBe(0);
-    const logs = (await missing.compose(['logs', '--no-log-prefix', 'api'])).stdout;
+    const logs = (await missing.compose(['logs', '--no-log-prefix', 'migrate'])).stdout;
     expect(logs).toContain('/etc/neburyx/neburyx.yaml');
     expect(logs).toContain('cannot be read');
 
@@ -182,6 +182,30 @@ describe('the mapping and the source login', () => {
     expect((await copied.up()).code).toBe(0);
     const listed = sourcesResponseSchema.parse(await (await fetch(`${copied.url}/v1/sources`)).json());
     expect(listed.items).toEqual([]);
+  });
+
+  it('stops the migrate service, before the api starts, when the mapping switches the AI preview on and the profile is not set', async () => {
+    const stack = await newStack({ mapping: { text: 'sources: []\nai:\n  preview: true\n' } });
+    expect((await stack.compose(['up', '--wait', '--wait-timeout', '60'])).code).not.toBe(0);
+    expect((await stack.compose(['logs', '--no-log-prefix', 'migrate'])).stdout).toContain('NEBURYX_PROFILE=enterprise is not set');
+    expect((await stack.compose(['ps', '--all', '--format', '{{.Service}} {{.State}}'])).stdout).not.toMatch(/^api running/m);
+  });
+
+  it('passes the cache setting and the connect limit that are set to the api, and the connect limit to migrate, and starts', async () => {
+    const stack = await newStack({ settings: { NEBURYX_AI_CACHE: 'off', NEBURYX_DATABASE_CONNECT_TIMEOUT_MS: '15000' } });
+    expect((await stack.up()).code).toBe(0);
+    const inApi = (await stack.compose(['exec', '-T', 'api', 'env'])).stdout;
+    expect(inApi).toContain('NEBURYX_AI_CACHE=off');
+    expect(inApi).toContain('NEBURYX_DATABASE_CONNECT_TIMEOUT_MS=15000');
+    const config = JSON.parse((await stack.compose(['config', '--format', 'json'])).stdout) as { services: Record<string, { environment: Record<string, string> }> };
+    expect(config.services['migrate']?.environment['NEBURYX_DATABASE_CONNECT_TIMEOUT_MS']).toBe('15000');
+    expect(config.services['migrate']?.environment).not.toHaveProperty('NEBURYX_AI_CACHE');
+  });
+
+  it('stops the api with the setting named when a setting has a value it does not accept', async () => {
+    const stack = await newStack({ settings: { NEBURYX_READINESS_LIMIT_MS: '1' } });
+    expect((await stack.compose(['up', '--wait', '--wait-timeout', '60'])).code).not.toBe(0);
+    expect((await stack.compose(['logs', '--no-log-prefix', 'api'])).stdout).toContain('NEBURYX_READINESS_LIMIT_MS');
   });
 
   it('starts without a source.env, and logs that the source has no credentials without logging a value', async () => {

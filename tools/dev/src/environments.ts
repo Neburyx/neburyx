@@ -9,6 +9,8 @@ const LIMIT_VARIABLES = [CONNECT_LIMIT_VARIABLE, READINESS_LIMIT_VARIABLE] as co
 /** The API's own default, `CONNECTION_TIMEOUT_MS` in `services/api/src/db/pool.ts`; a workspace check keeps the two equal. */
 export const DEFAULT_CONNECT_LIMIT_MS = 10_000;
 
+export const CACHE_VARIABLES = ['NEBURYX_AI_CACHE', 'NEBURYX_AI_CACHE_TTL'] as const;
+
 type Source = Readonly<Record<string, string | undefined>>;
 export type Environment = Readonly<Record<string, string>>;
 
@@ -28,6 +30,11 @@ export function baseEnvironment(source: Source): Environment {
 /** The two limits on the application database that the developer may set; only the migrate step and the API are given them. */
 export function limitsEnvironment(source: Source): Environment {
   return pick(source, LIMIT_VARIABLES);
+}
+
+/** The two prompt-cache settings the developer may set; only the API reads them, so the migrate step and the web server are not given them. */
+export function cacheEnvironment(source: Source): Environment {
+  return pick(source, CACHE_VARIABLES);
 }
 
 /** The connect limit the children will use, for the wait that must outlast it; a value they would refuse counts as the default, since they stop on it themselves. */

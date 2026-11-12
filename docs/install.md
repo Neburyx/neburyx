@@ -173,7 +173,7 @@ The Community demo prints `Read-only: not verified` for both of its sources. Neo
 
 ### The readiness limit
 
-`/readyz` allows 2 seconds for its check of the database. The API looks the database name up once and keeps the address, so a database name that is slow to resolve (a `.local` name can take about 5 seconds on macOS) costs one lookup at start and `/readyz` stays ready; a start or a `neburyx migrate` that cannot open a connection within 10 seconds stops and says the name lookup or the connection took too long. In this install the database is `db`, so a slow name does not arise. The settings that change these two limits are named in the [API README](../services/api/README.md) (*Probes*); this guide does not change the compose file for them. A source's `uri` is a different path: give it an address, as above.
+`/readyz` allows 2 seconds for its check of the database. The API looks the database name up once and keeps the address, so a database name that is slow to resolve (a `.local` name can take about 5 seconds on macOS) costs one lookup at start and `/readyz` stays ready; a start or a `neburyx migrate` that cannot open a connection within 10 seconds stops and says the name lookup or the connection took too long. In this install the database is `db`, so a slow name does not arise. To change them, set `NEBURYX_READINESS_LIMIT_MS` (500 to 60000, for `/readyz`) or `NEBURYX_DATABASE_CONNECT_TIMEOUT_MS` (1000 to 120000, for a connection; the `migrate` service reads it too) in `.env`: the compose file passes both on, and an empty value counts as not set. The [API README](../services/api/README.md) (*Probes*) describes them. A source's `uri` is a different path: give it an address, as above.
 
 ## Rotate a source's login
 
@@ -217,7 +217,7 @@ Each version you build has its own tag. To upgrade, build the new tag, keep the 
 docker compose up --wait
 ```
 
-The database migrations run before the API starts. With the AI preview switched on, they include the enterprise migrations, which are applied last and recorded in their own history; the `migrate` service then needs the same switch settings as the `api` service (see [the compose README](../deploy/compose/README.md)). If an enterprise migration fails, the others of that run stay applied. [Switch the AI preview on](ai-preview.md) says how to set the preview up.
+The database migrations run before the API starts. With the AI preview switched on, they include the enterprise migrations, which are applied last and recorded in their own history; the `migrate` service reads the same mapping and `NEBURYX_PROFILE` as the `api` service, both set in `.env` and in the mapping, so with only one of the two switch settings `migrate` stops first and says which is missing (see [the compose README](../deploy/compose/README.md)). If an enterprise migration fails, the others of that run stay applied. [Switch the AI preview on](ai-preview.md) says how to set the preview up.
 
 ## Roll back by one tag
 

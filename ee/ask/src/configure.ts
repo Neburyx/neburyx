@@ -56,18 +56,18 @@ const CACHE_TTL_VARIABLE = 'NEBURYX_AI_CACHE_TTL';
 
 type CacheChoice = { readonly enabled: boolean; readonly ttl: AiCacheTtl; readonly problems: readonly string[] };
 
-/** The environment wins over the file; a value that is set and not one of the accepted ones is a problem that names the variable and never repeats the value. */
+/** The environment wins over the file; an empty value counts as not set, and a value that is set and not one of the accepted ones is a problem that names the variable and never repeats the value. */
 function cacheChoice(settings: AiSettings, env: Readonly<Record<string, string | undefined>>): CacheChoice {
   const problems: string[] = [];
   let enabled: boolean = settings.cache?.enabled ?? AI_DEFAULTS.cache.enabled;
   let ttl: AiCacheTtl = settings.cache?.ttl ?? AI_DEFAULTS.cache.ttl;
   const given = env[CACHE_SWITCH_VARIABLE];
-  if (given !== undefined) {
+  if (given !== undefined && given !== '') {
     if (given === 'on' || given === 'off') enabled = given === 'on';
     else problems.push(`${CACHE_SWITCH_VARIABLE} must be on or off`);
   }
   const lifetime = env[CACHE_TTL_VARIABLE];
-  if (lifetime !== undefined) {
+  if (lifetime !== undefined && lifetime !== '') {
     const accepted = AI_CACHE_TTLS.find((candidate) => candidate === lifetime);
     if (accepted !== undefined) ttl = accepted;
     else problems.push(`${CACHE_TTL_VARIABLE} must be ${AI_CACHE_TTLS.join(' or ')}`);

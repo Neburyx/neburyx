@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { apiEnvironment, baseEnvironment, connectLimitMs, limitsEnvironment, migrationEnvironment, webEnvironment } from './environments.js';
+import { apiEnvironment, baseEnvironment, cacheEnvironment, connectLimitMs, limitsEnvironment, migrationEnvironment, webEnvironment } from './environments.js';
 
 const developer = { PATH: '/bin', HOME: '/home/dev', TMPDIR: '/tmp', NODE_ENV: 'development', LANG: 'C', AWS_SECRET_ACCESS_KEY: 'a developer secret', DATABASE_URL: 'postgres://elsewhere', NEBURYX_DB_ADMIN_PASSWORD: 'inherited' };
 const cursorKey = Buffer.alloc(32, 3).toString('base64');
@@ -51,6 +51,12 @@ describe('the environments of the children', () => {
   it('hand on only the two limits of the application database, when they are set', () => {
     expect(limitsEnvironment({ ...developer, NEBURYX_DATABASE_CONNECT_TIMEOUT_MS: '30000', NEBURYX_READINESS_LIMIT_MS: '8000' })).toEqual({ NEBURYX_DATABASE_CONNECT_TIMEOUT_MS: '30000', NEBURYX_READINESS_LIMIT_MS: '8000' });
     expect(limitsEnvironment(developer)).toEqual({});
+  });
+
+  it('pick the two prompt cache settings as they are given, an empty value included, and nothing else', () => {
+    expect(cacheEnvironment({ ...developer, NEBURYX_AI_CACHE: 'off', NEBURYX_AI_CACHE_TTL: '1h', NEBURYX_PORT: '1' })).toEqual({ NEBURYX_AI_CACHE: 'off', NEBURYX_AI_CACHE_TTL: '1h' });
+    expect(cacheEnvironment({ ...developer, NEBURYX_AI_CACHE: '' })).toEqual({ NEBURYX_AI_CACHE: '' });
+    expect(cacheEnvironment(developer)).toEqual({});
   });
 
   it.each([

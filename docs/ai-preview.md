@@ -57,7 +57,7 @@ ai:
     ttl: 5m         # the default; or 1h
 ```
 
-The environment variables `NEBURYX_AI_CACHE` (`on` or `off`) and `NEBURYX_AI_CACHE_TTL` (`5m` or `1h`) win over the file. Any other value refuses the start and names the variable. They are read from the environment of the API process, so a container or service must be given them; `pnpm dev` and the compose files do not pass them on today. Like the other `ai` settings, they are checked only when the preview is on.
+The environment variables `NEBURYX_AI_CACHE` (`on` or `off`) and `NEBURYX_AI_CACHE_TTL` (`5m` or `1h`) win over the file. An empty value counts as not set; any other value that is not accepted refuses the start and names the variable. They are read from the environment of the API process: in Docker Compose, set them in `.env` (the compose file passes them to the `api` service), and with `pnpm dev`, set them in your shell (the dev command passes them to the API). Like the other `ai` settings, they are checked only when the preview is on.
 
 | Lifetime | What it costs to write the cache | When to choose it |
 |---|---|---|

@@ -51,6 +51,7 @@ export function createAuditSink(context: AuditSinkContext, deps: AuditSinkDeps =
   const pool = deps.createPool({
     connectionString: context.databaseUrl,
     max: context.poolSize,
+    ...(context.connectionStream === undefined ? {} : { stream: context.connectionStream }),
     connectionTimeoutMillis: context.connectionTimeoutMs,
     statement_timeout: context.statementTimeoutMs,
     query_timeout: context.queryTimeoutMs,

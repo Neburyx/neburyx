@@ -107,6 +107,19 @@ describe('pnpm dev', () => {
     expect(plain.supervision()?.api.readyTimeoutMs).toBe(120_000);
   });
 
+  it('gives the API, and no other child, the two prompt cache settings when they are set', async () => {
+    const run = rig({ env: { NEBURYX_AI_CACHE: 'off', NEBURYX_AI_CACHE_TTL: '1h', NEBURYX_SECRET: 'not passed' } });
+    await up(run.deps);
+    expect(run.supervision()?.api.env).toMatchObject({ NEBURYX_AI_CACHE: 'off', NEBURYX_AI_CACHE_TTL: '1h' });
+    expect(JSON.stringify(run.supervision()?.api.env)).not.toContain('not passed');
+    for (const call of run.calls) expect(JSON.stringify(call.options.env)).not.toContain('NEBURYX_AI_CACHE');
+    expect(JSON.stringify(run.supervision()?.children.map((child) => child.env))).not.toContain('NEBURYX_AI_CACHE');
+    const plain = rig();
+    await up(plain.deps);
+    expect(plain.supervision()?.api.env).not.toHaveProperty('NEBURYX_AI_CACHE');
+    expect(plain.supervision()?.api.env).not.toHaveProperty('NEBURYX_AI_CACHE_TTL');
+  });
+
   it('does not give an empty profile to any child', async () => {
     const empty = rig({ env: { NEBURYX_PROFILE: '' } });
     await up(empty.deps);

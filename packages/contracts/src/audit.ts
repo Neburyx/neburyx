@@ -1,3 +1,4 @@
+import type { Socket } from 'node:net';
 import { z } from 'zod';
 import { roleSchema } from './me.js';
 
@@ -131,6 +132,8 @@ export interface AuditSinkContext {
   readonly connectionTimeoutMs: number;
   readonly statementTimeoutMs: number;
   readonly queryTimeoutMs: number;
+  /** Makes the socket one connection uses, so the sink looks the database name up through the application's address cache; absent, each connection looks the name up itself. */
+  readonly connectionStream?: () => Socket;
   /** Makes the version 7 uuid of a row. */
   readonly newId: () => string;
   readonly onConnectionError: () => void;

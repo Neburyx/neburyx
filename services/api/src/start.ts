@@ -16,7 +16,7 @@ import { causeOf, EXTENSION_CONFIGURE_FAILED_MESSAGE, loadProfileExtension, regi
 import { decidePreviewSwitch, previewInputsOf } from './profile/switch.js';
 import type { MappingModel } from './mapping/model.js';
 import { createAppStore, STORE_QUERY_TIMEOUT_MS, STORE_STATEMENT_TIMEOUT_MS, type AppStore } from './app-store.js';
-import { createAddressCache } from './db/lookup.js';
+import { createAddressCache, lookupStream } from './db/lookup.js';
 import { POOL_SIZE } from './db/pool.js';
 import { uuidv7 } from './identity/uuid.js';
 import { communitySeams } from './seams/community-seams.js';
@@ -212,6 +212,7 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
       databaseUrl: config.databaseUrl,
       poolSize: POOL_SIZE,
       connectionTimeoutMs: config.connectTimeoutMs,
+      connectionStream: lookupStream(addresses),
       statementTimeoutMs: STORE_STATEMENT_TIMEOUT_MS,
       queryTimeoutMs: STORE_QUERY_TIMEOUT_MS,
       newId: uuidv7,

@@ -187,9 +187,15 @@ describe('the prompt cache settings', () => {
     expect(await cacheOf({ ...COMPLETE, cache }, { ...ENV, ...env })).toEqual(expected);
   });
 
+  it('count an empty value of either variable as not set, over the file and over the default', async () => {
+    expect(await cacheOf(COMPLETE, { ...ENV, NEBURYX_AI_CACHE: '', NEBURYX_AI_CACHE_TTL: '' })).toEqual({ enabled: true, ttl: '5m' });
+    expect(await cacheOf({ ...COMPLETE, cache: { enabled: false, ttl: '1h' } }, { ...ENV, NEBURYX_AI_CACHE: '', NEBURYX_AI_CACHE_TTL: '' })).toEqual({ enabled: false, ttl: '1h' });
+    expect(await problemsOf(COMPLETE, { ...ENV, NEBURYX_AI_CACHE: '', NEBURYX_AI_CACHE_TTL: '' })).toEqual([]);
+  });
+
   it.each([
-    ['NEBURYX_AI_CACHE', ['', 'ON', 'true', '1', 'yes', 'SENTINEL-VALUE'], 'NEBURYX_AI_CACHE must be on or off'],
-    ['NEBURYX_AI_CACHE_TTL', ['', '2h', '5M', '60', 'SENTINEL-VALUE'], 'NEBURYX_AI_CACHE_TTL must be 5m or 1h'],
+    ['NEBURYX_AI_CACHE', ['ON', 'true', '1', 'yes', ' ', 'SENTINEL-VALUE'], 'NEBURYX_AI_CACHE must be on or off'],
+    ['NEBURYX_AI_CACHE_TTL', ['2h', '5M', '60', ' ', 'SENTINEL-VALUE'], 'NEBURYX_AI_CACHE_TTL must be 5m or 1h'],
   ])('refuse a bad value of %s, naming the variable and never the value', async (name, values, problem) => {
     for (const value of values) {
       expect(await problemsOf(COMPLETE, { ...ENV, [name]: value })).toEqual([problem]);

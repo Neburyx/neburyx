@@ -49,6 +49,15 @@ function rig() {
 }
 
 describe('the audit sink of the preview in a start', () => {
+  it('is given the stream factory of the application\'s address cache', async () => {
+    const { io, contexts } = rig();
+    const result = await start({ DATABASE_URL, DATABASE_MIGRATION_URL: 'postgres://owner@db.example.test:5432/neburyx', NEBURYX_CONFIG: previewFile, NEBURYX_PROFILE: 'enterprise' }, io);
+    expect(result.exitCode).toBe(0);
+    if (result.exitCode !== 0) return;
+    expect(typeof contexts[0]?.connectionStream).toBe('function');
+    await result.app.close();
+  });
+
   it('is built once from the application\'s own login and the limits of its pool, and is the audit of the seams, when the switch is on', async () => {
     const { io, contexts, recorded, seams } = rig();
     const result = await start({ DATABASE_URL, DATABASE_MIGRATION_URL: 'postgres://owner@db.example.test:5432/neburyx', NEBURYX_CONFIG: previewFile, NEBURYX_PROFILE: 'enterprise' }, io);

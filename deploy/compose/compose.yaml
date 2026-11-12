@@ -89,6 +89,11 @@ services:
     environment:
       DATABASE_MIGRATION_URL: postgres://neburyx_migrate:${NEBURYX_DB_MIGRATION_PASSWORD:?set NEBURYX_DB_MIGRATION_PASSWORD in the .env file}@db:5432/neburyx
       DATABASE_APP_ROLE: neburyx_app
+      NEBURYX_PROFILE: ${NEBURYX_PROFILE:-}
+      NEBURYX_CONFIG: /etc/neburyx/neburyx.yaml
+      NEBURYX_DATABASE_CONNECT_TIMEOUT_MS: ${NEBURYX_DATABASE_CONNECT_TIMEOUT_MS:-}
+    volumes:
+      - ${NEBURYX_CONFIG_DIR:-./config}:/etc/neburyx:ro
 
   api:
     image: ${NEBURYX_IMAGE:-neburyx}:${NEBURYX_TAG:-latest}
@@ -103,6 +108,11 @@ services:
       DATABASE_URL: postgres://neburyx_app:${NEBURYX_DB_APP_PASSWORD:?set NEBURYX_DB_APP_PASSWORD in the .env file}@db:5432/neburyx
       NEBURYX_CURSOR_KEY: ${NEBURYX_CURSOR_KEY:?set NEBURYX_CURSOR_KEY in the .env file}
       NEBURYX_CONFIG: /etc/neburyx/neburyx.yaml
+      NEBURYX_PROFILE: ${NEBURYX_PROFILE:-}
+      NEBURYX_AI_CACHE: ${NEBURYX_AI_CACHE:-}
+      NEBURYX_AI_CACHE_TTL: ${NEBURYX_AI_CACHE_TTL:-}
+      NEBURYX_DATABASE_CONNECT_TIMEOUT_MS: ${NEBURYX_DATABASE_CONNECT_TIMEOUT_MS:-}
+      NEBURYX_READINESS_LIMIT_MS: ${NEBURYX_READINESS_LIMIT_MS:-}
     env_file:
       - path: ./source.env
         required: false

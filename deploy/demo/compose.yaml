@@ -67,6 +67,9 @@ services:
     extends:
       file: ../compose/compose.yaml
       service: migrate
+    environment:
+      NEBURYX_CONFIG: ""
+    volumes: !reset []
     depends_on:
       db:
         condition: service_healthy

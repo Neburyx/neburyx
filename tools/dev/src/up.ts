@@ -1,7 +1,7 @@
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadDevConfig } from './config.js';
-import { apiEnvironment, baseEnvironment, connectLimitMs, limitsEnvironment, migrationEnvironment, PROFILE_VARIABLE, webEnvironment } from './environments.js';
+import { apiEnvironment, baseEnvironment, cacheEnvironment, connectLimitMs, limitsEnvironment, migrationEnvironment, PROFILE_VARIABLE, webEnvironment } from './environments.js';
 import type { Run } from './exec.js';
 import { externalDatabase } from './external.js';
 import type { Files } from './files.js';
@@ -81,7 +81,7 @@ export async function up(deps: Dependencies): Promise<number> {
         command: deps.nodePath,
         args: [entry, join(deps.root, 'services/api/dist/main.js')],
         cwd: deps.root,
-        env: apiEnvironment(withLimits, { databaseUrl: database.appUrl, mappingPath: own.mappingPath, port: apiPort, webRoot: join(deps.root, 'apps/web/dist'), cursorKey: deps.random(CURSOR_KEY_BYTES).toString('base64'), profile: profile === '' ? undefined : profile, exportDirectory: join(tmpdir(), `neburyx-dev-exports-${apiPort}`), sourceLogins: own.logins }),
+        env: apiEnvironment({ ...withLimits, ...cacheEnvironment(deps.env) }, { databaseUrl: database.appUrl, mappingPath: own.mappingPath, port: apiPort, webRoot: join(deps.root, 'apps/web/dist'), cursorKey: deps.random(CURSOR_KEY_BYTES).toString('base64'), profile: profile === '' ? undefined : profile, exportDirectory: join(tmpdir(), `neburyx-dev-exports-${apiPort}`), sourceLogins: own.logins }),
         healthUrl: `${apiUrl}/healthz`,
         readyTimeoutMs: apiReadyTimeoutMs(connectLimitMs(deps.env)),
         watch: [join(deps.root, 'services/api/dist'), join(deps.root, 'packages/contracts/dist')],

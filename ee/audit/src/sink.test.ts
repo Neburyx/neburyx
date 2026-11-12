@@ -44,6 +44,21 @@ describe('the connection of the audit sink', () => {
   });
 });
 
+describe('the connection stream of the audit sink', () => {
+  it('is the stream of the pool when the context has one, and no stream key when it has none', () => {
+    const configs: Record<string, unknown>[] = [];
+    const pool: AuditPool = { query: () => Promise.resolve(), end: () => Promise.resolve(), on: () => undefined };
+    const base: AuditSinkContext = { databaseUrl: 'postgres://app.example.test/neburyx', poolSize: 1, connectionTimeoutMs: 1, statementTimeoutMs: 1, queryTimeoutMs: 1, newId: () => NEW_ID, onConnectionError: () => undefined };
+    const stream = (): never => {
+      throw new Error('not called');
+    };
+    createAuditSink({ ...base, connectionStream: stream }, { createPool: (config) => (configs.push({ ...config }), pool) });
+    createAuditSink(base, { createPool: (config) => (configs.push({ ...config }), pool) });
+    expect(configs[0]?.['stream']).toBe(stream);
+    expect(configs[1]).not.toHaveProperty('stream');
+  });
+});
+
 describe('recording an event', () => {
   it('inserts one row with every member as sent, the id the context made, and the detail as JSON', async () => {
     const { mounted, calls } = rig();
