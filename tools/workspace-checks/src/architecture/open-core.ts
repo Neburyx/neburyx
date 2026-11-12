@@ -7,8 +7,8 @@ export const OPEN_CORE_SCAN_ROOTS: readonly string[] = ['services', 'packages', 
 
 const EE_FOLDER = 'ee';
 const EE_PACKAGE = /^@neburyx\/ee-/;
-/** The one file that composes the image: it registers the enterprise code for Community code to load when the preview is on. */
-export const ENTRY_SCRIPT = 'deploy/docker/entrypoint.mjs';
+/** The files that compose a run: each registers the enterprise code for Community code to load when the preview is on, the image's entry script and the one of `pnpm dev`. */
+export const ENTRY_SCRIPTS: readonly string[] = ['deploy/docker/entrypoint.mjs', 'tools/dev/entry/enterprise-entry.mjs'];
 const TEST_FILE = /\.test\.[cm]?[jt]sx?$/;
 const TESTING_ZONE = 'services/api/src/testing';
 
@@ -16,7 +16,7 @@ const TESTING_ZONE = 'services/api/src/testing';
 const NAMES_EE = /\bee\b|@neburyx\/ee-/;
 
 function isExempt(path: string): boolean {
-  return path === ENTRY_SCRIPT || TEST_FILE.test(path) || isInside(path, TESTING_ZONE);
+  return ENTRY_SCRIPTS.includes(path) || TEST_FILE.test(path) || isInside(path, TESTING_ZONE);
 }
 
 function reachesEe(file: string, specifier: string): boolean {

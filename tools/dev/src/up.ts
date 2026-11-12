@@ -1,7 +1,7 @@
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadDevConfig } from './config.js';
-import { apiEnvironment, baseEnvironment, migrationEnvironment, webEnvironment } from './environments.js';
+import { apiEnvironment, baseEnvironment, migrationEnvironment, PROFILE_VARIABLE, webEnvironment } from './environments.js';
 import type { Run } from './exec.js';
 import { externalDatabase } from './external.js';
 import type { Files } from './files.js';
@@ -26,11 +26,16 @@ export interface Dependencies {
 
 export const BUILDS: readonly { readonly name: string; readonly filter: string }[] = [
   { name: 'the contracts', filter: '@neburyx/contracts' },
+  { name: 'the enterprise audit sink', filter: '@neburyx/ee-audit' },
+  { name: 'the enterprise extension', filter: '@neburyx/ee-ask' },
   { name: 'the API', filter: '@neburyx/api' },
   { name: 'the web app', filter: '@neburyx/web' },
 ];
 
 const CURSOR_KEY_BYTES = 32;
+
+/** The script that registers the loader of the enterprise extension and then starts the file it is given, as the image's entry script does; the extension loads only when both parts of the switch are set. */
+const ENTRY_SCRIPT = 'tools/dev/entry/enterprise-entry.mjs';
 
 /**
  * Runs the app against the Neo4j and Postgres the developer's settings file names. It starts no container and calls no container
@@ -54,7 +59,9 @@ export async function up(deps: Dependencies): Promise<number> {
     };
 
     for (const build of BUILDS) await step(`building ${build.name}`, 'pnpm', ['--filter', build.filter, 'build']);
-    await step('migrating the database', deps.nodePath, [join(deps.root, 'services/api/dist/cli.js'), 'migrate'], migrationEnvironment(base, database.migrationUrl, database.appRole));
+    const profile = deps.env[PROFILE_VARIABLE];
+    const entry = join(deps.root, ENTRY_SCRIPT);
+    await step('migrating the database', deps.nodePath, [entry, join(deps.root, 'services/api/dist/cli.js'), 'migrate'], migrationEnvironment(base, database.migrationUrl, database.appRole, profile === undefined || profile === '' ? undefined : { profile, mappingPath: own.mappingPath }));
 
     const apiPort = await deps.freePort();
     const webPort = await deps.freePort();
@@ -71,9 +78,9 @@ export async function up(deps: Dependencies): Promise<number> {
       api: {
         name: 'the API',
         command: deps.nodePath,
-        args: [join(deps.root, 'services/api/dist/main.js')],
+        args: [entry, join(deps.root, 'services/api/dist/main.js')],
         cwd: deps.root,
-        env: apiEnvironment(base, { databaseUrl: database.appUrl, mappingPath: own.mappingPath, port: apiPort, webRoot: join(deps.root, 'apps/web/dist'), cursorKey: deps.random(CURSOR_KEY_BYTES).toString('base64'), exportDirectory: join(tmpdir(), `neburyx-dev-exports-${apiPort}`), sourceLogins: own.logins }),
+        env: apiEnvironment(base, { databaseUrl: database.appUrl, mappingPath: own.mappingPath, port: apiPort, webRoot: join(deps.root, 'apps/web/dist'), cursorKey: deps.random(CURSOR_KEY_BYTES).toString('base64'), profile: profile === '' ? undefined : profile, exportDirectory: join(tmpdir(), `neburyx-dev-exports-${apiPort}`), sourceLogins: own.logins }),
         healthUrl: `${apiUrl}/healthz`,
         watch: [join(deps.root, 'services/api/dist'), join(deps.root, 'packages/contracts/dist')],
       },

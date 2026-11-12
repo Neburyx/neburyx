@@ -69,3 +69,11 @@ ai:
 With the switch off the AI paths do not exist: `/v1/ai/status` and every other path under `/v1/ai` answer 404 and nothing is audited. The AI route group also refuses a call as a second check, with `ACCESS_DENIED` and the reason `ai-preview-off`, and audits the refusal, if a loaded extension is ever told that the preview is not on. The switch is a safety rail set by whoever runs the deployment, not a lock; what protects real data is the rules for what a model request may carry and the audit of every model call.
 
 When the API starts with a problem in these settings, it writes one line for each problem, naming the setting, and exits 1. The start-up warnings name the setting too. A start that succeeds answers `GET /v1/ai/status` with `{ "preview": true }`, and `GET /v1/me` reports the edition as `enterprise`.
+
+## What you see in the app
+
+The header of the workspace shows **Ask** and **Summarize**. With the switch off, both show a padlock beside their name; pointing at one, or a screen reader, says "Enterprise capability, locked", and activating it does nothing. With the preview on, both show a sparkle and can be activated. Ask and Summarize do not do anything yet: until the features behind them are in the release, an activated control says that it is not available in this release yet and sends no request. The state comes from the edition that `GET /v1/me` reports, so it is the same after a reload.
+
+## Running it with `pnpm dev`
+
+`pnpm dev` loads the enterprise code when `NEBURYX_PROFILE=enterprise` is set in your shell and `ai.preview: true`, `ai.provider`, `ai.model` and `ai.key` are in the mapping file the settings file names ([Run it locally](run-locally.md)). The migrate step then applies the migrations of the preview too. A key given as `env: NAME` must also be in the env file the settings name, since the dev command gives the API only the variables of that file; a key file works as it does elsewhere. The enterprise code is built once when the command starts: a change under `ee/` needs a restart.

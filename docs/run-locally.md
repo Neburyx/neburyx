@@ -63,9 +63,11 @@ pnpm dev
 `pnpm dev`:
 
 1. reads and checks the settings file;
-2. builds the contracts, the API and the web app;
+2. builds the contracts, the enterprise packages, the API and the web app;
 3. migrates the database with the migration login;
 4. runs the API with the app login and the logins of your mapping, and the web dev server, with their compilers in watch mode.
+
+To run the AI preview, set `NEBURYX_PROFILE=enterprise` in your shell and the preview settings in your mapping file ([Switch the AI preview on](ai-preview.md)): the command then loads the enterprise code (built in step 2) and applies the migrations of the preview. Set neither and it starts as a Community build.
 
 It prints the addresses. Open the web app one; `GET /v1/sources` on the API lists the sources of your mapping. A change to a source file of the contracts, the API or the web app reaches the running app without restarting the command. The command does not check that the source login is read-only; use `test-source` for that (see the repository's `CLAUDE.md`).
 

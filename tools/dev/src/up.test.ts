@@ -72,12 +72,37 @@ const ROOT = '/repo';
 const dockerCalls = (calls: readonly Call[]): Call[] => calls.filter((call) => call.command === 'docker' || call.args.includes('compose'));
 
 describe('pnpm dev', () => {
+  it('starts the migrate step and the API through the entry script, and gives them the profile and the migrate step the mapping, only when the profile is set', async () => {
+    const without = rig();
+    await up(without.deps);
+    expect(JSON.stringify(without.calls.at(-1)?.options.env)).not.toContain('NEBURYX_PROFILE');
+    expect(without.calls.at(-1)?.options.env).not.toHaveProperty('NEBURYX_CONFIG');
+    expect(without.supervision()?.api.args[0]).toBe(join(ROOT, 'tools/dev/entry/enterprise-entry.mjs'));
+    expect(without.supervision()?.api.args[1]).toBe(join(ROOT, 'services/api/dist/main.js'));
+    expect(without.supervision()?.api.env).not.toHaveProperty('NEBURYX_PROFILE');
+
+    const preview = rig({ env: { NEBURYX_PROFILE: 'enterprise', NEBURYX_SECRET: 'not passed' } });
+    await up(preview.deps);
+    expect(preview.calls.at(-1)?.options.env).toMatchObject({ NEBURYX_PROFILE: 'enterprise', NEBURYX_CONFIG: MAPPING });
+    expect(JSON.stringify(preview.calls.at(-1)?.options.env)).not.toContain('not passed');
+    const given = preview.supervision();
+    expect(given?.api.env['NEBURYX_PROFILE']).toBe('enterprise');
+    expect(JSON.stringify(given?.children.map((child) => child.env))).not.toContain('NEBURYX_PROFILE');
+  });
+
+  it('does not give an empty profile to any child', async () => {
+    const empty = rig({ env: { NEBURYX_PROFILE: '' } });
+    await up(empty.deps);
+    expect(JSON.stringify(empty.calls.at(-1)?.options.env)).not.toContain('NEBURYX_PROFILE');
+    expect(empty.supervision()?.api.env).not.toHaveProperty('NEBURYX_PROFILE');
+  });
+
   it('builds, migrates with the migration login, then supervises the compilers, the web dev server and the API', async () => {
     const { deps, calls, supervision } = rig();
     expect(await up(deps)).toBe(0);
     expect(calls.filter((call) => call.command === 'pnpm').map((call) => call.args[1])).toEqual(BUILDS.map((build) => build.filter));
-    expect(BUILDS.map((build) => build.filter)).toEqual(['@neburyx/contracts', '@neburyx/api', '@neburyx/web']);
-    expect(calls.at(-1)?.args).toEqual([join(ROOT, 'services/api/dist/cli.js'), 'migrate']);
+    expect(BUILDS.map((build) => build.filter)).toEqual(['@neburyx/contracts', '@neburyx/ee-audit', '@neburyx/ee-ask', '@neburyx/api', '@neburyx/web']);
+    expect(calls.at(-1)?.args).toEqual([join(ROOT, 'tools/dev/entry/enterprise-entry.mjs'), join(ROOT, 'services/api/dist/cli.js'), 'migrate']);
     expect(calls.at(-1)?.options.env).toEqual({ PATH: '/bin', HOME, DATABASE_MIGRATION_URL: 'postgres://mig:MIGPW@elsewhere.example.test/x', DATABASE_APP_ROLE: 'x_app' });
     const given = supervision();
     expect(given?.children.map((child) => child.name)).toEqual(['the contracts compiler', 'the API compiler', 'the web dev server']);

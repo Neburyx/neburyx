@@ -21,8 +21,8 @@ describe('the open-core line', () => {
     expect(fixture('ee-uses-community-types')).toEqual([]);
   });
 
-  it('exempts the entry script by name and reports another script of deploy/', () => {
-    expect(fixture('ee-entry-script')).toMatchObject([{ rule: 'open-core', file: 'deploy/release/publish.mjs', specifier: '../../ee/ask/dist/index.js' }]);
+  it('exempts the two entry scripts by name and reports another script of deploy/ and another script of tools/dev', () => {
+    expect(fixture('ee-entry-script').map((violation) => violation.file).sort()).toEqual(['deploy/release/publish.mjs', 'tools/dev/other.mjs']);
   });
 
   it('exempts a test file and still reports the production file next to it', () => {

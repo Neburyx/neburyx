@@ -1,3 +1,6 @@
+/** The start-up variable that, with `ai.preview: true` in the mapping, switches the enterprise path on; only the migrate step and the API are given it. */
+export const PROFILE_VARIABLE = 'NEBURYX_PROFILE';
+
 const PASS_THROUGH = ['PATH', 'HOME', 'TMPDIR', 'NODE_ENV', 'LANG'] as const;
 
 type Source = Readonly<Record<string, string | undefined>>;
@@ -16,8 +19,9 @@ export function baseEnvironment(source: Source): Environment {
   return pick(source, PASS_THROUGH);
 }
 
-export function migrationEnvironment(base: Environment, migrationUrl: string, appRole: string): Environment {
-  return { ...base, DATABASE_MIGRATION_URL: migrationUrl, DATABASE_APP_ROLE: appRole };
+/** With the profile set, the migrate step also reads the mapping, to decide the switch and apply the migrations of the enterprise path; with none it is as it was. */
+export function migrationEnvironment(base: Environment, migrationUrl: string, appRole: string, preview?: { readonly profile: string; readonly mappingPath: string }): Environment {
+  return { ...base, DATABASE_MIGRATION_URL: migrationUrl, DATABASE_APP_ROLE: appRole, ...(preview === undefined ? {} : { [PROFILE_VARIABLE]: preview.profile, NEBURYX_CONFIG: preview.mappingPath }) };
 }
 
 export interface ApiSettings {
@@ -31,6 +35,8 @@ export interface ApiSettings {
   readonly exportDirectory: string;
   /** The logins the mapping's sources name: the values of the developer's own env file. */
   readonly sourceLogins: Environment;
+  /** The value of `NEBURYX_PROFILE` in the developer's shell, when it is set and not empty. */
+  readonly profile?: string | undefined;
 }
 
 /** The API holds the app role's URL and the source logins, never the administrator or the migration password. The fixed values come last, so no login can replace one. */
@@ -45,6 +51,7 @@ export function apiEnvironment(base: Environment, api: ApiSettings): Environment
     NEBURYX_WEB_ROOT: api.webRoot,
     NEBURYX_CURSOR_KEY: api.cursorKey,
     NEBURYX_EXPORT_DIR: api.exportDirectory,
+    ...(api.profile === undefined ? {} : { [PROFILE_VARIABLE]: api.profile }),
   };
 }
 

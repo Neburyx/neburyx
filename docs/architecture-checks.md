@@ -95,7 +95,7 @@ The checks read the code. The [input fuzz suite](fuzz-suite.md) tests the same r
 | the workspace check | A package outside `ee/` that lists an `@neburyx/ee-*` package in `dependencies`, `peerDependencies` or `optionalDependencies` |
 
 - Test files (`*.test.*`) and `services/api/src/testing/` are exempt, as in the other checks, and so is `devDependencies`: a test of the real extension in `services/api` uses `@neburyx/ee-ask` that way. A production file next to a test file is still reported.
-- One file may import `ee/`: `deploy/docker/entrypoint.mjs`, the entry script of the image. It registers the loader of the enterprise code, and the rest of `deploy/` is scanned like any other folder. The script is exempt by name, not by folder.
+- Two files may import `ee/`: `deploy/docker/entrypoint.mjs`, the entry script of the image, and `tools/dev/entry/enterprise-entry.mjs`, the one `pnpm dev` starts the migrate step and the API through. Each registers the loader of the enterprise code, and the rest of `deploy/` and `tools/` is scanned like any other folder. The scripts are exempt by name, not by folder.
 - `ee/` code is scanned by the other checks that apply to it: the adapter and gate-capability checks read `ee/` (so it cannot import the Neo4j driver, `sources/`, the gate's executor or the system principal), the test container check reads it, and the domain-word check reads `ee/ask`. `ee/` code may import the types of Community packages.
 - The check reads literal specifiers. A specifier built at run time cannot be read, like the cases in [What the checks cannot see](#what-the-checks-cannot-see); review covers it.
 - Fixtures: one tree for each import form and exemption under `tools/workspace-checks/fixtures/architecture/ee-*`.
