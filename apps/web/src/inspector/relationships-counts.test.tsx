@@ -54,7 +54,7 @@ describe('the Relationships tab: loaded counts per relationship type', () => {
 
   it('draws the rows and "n loaded" with no total while the preview is loading, and says it is counting', async () => {
     await openRelationships([stored('r1', 'n1', 'n2')]);
-    expect(panel().getByText('Counting neighbors…')).toBeTruthy();
+    expect(panel().getByText('Counting relationship ends…')).toBeTruthy();
     expect(headingOf('OWNS')).toBe('OWNS1 loaded');
     expect(rowNames()).toHaveLength(1);
     expect(scope()).toBe('not loaded: no count');
@@ -74,19 +74,19 @@ describe('the Relationships tab: loaded counts per relationship type', () => {
   it('ends with the scope line: what is loaded of the total and what is not', async () => {
     const rig = await openRelationships([stored('r1', 'n1', 'n2'), stored('r2', 'n1', 'n3')]);
     await answerPreview(rig, previewOf({ total: count(22, 'exact') }));
-    expect(scope()).toBe('2 of 22 sourced neighbors on canvas · 20 not loaded');
+    expect(scope()).toBe('2 of 22 sourced relationship ends loaded · 20 not loaded');
   });
 
   it('keeps the quality of the loaded and the total in the scope line and prints no not-loaded number it cannot know', async () => {
     const rig = await openRelationships([aggregateEdge('n1', 'n2', count(4, 'lowerBound'))]);
     await answerPreview(rig, previewOf({ total: count(22, 'lowerBound') }));
-    expect(scope()).toBe('≥ 4 of ≥ 22 sourced neighbors on canvas · not loaded: no count while the loaded count is a lower bound');
+    expect(scope()).toBe('≥ 4 of ≥ 22 sourced relationship ends loaded · not loaded: no count while the loaded count is a lower bound');
   });
 
   it('prints no not-loaded number when more is loaded than the total says', async () => {
     const rig = await openRelationships([stored('r1', 'n1', 'n2'), stored('r2', 'n1', 'n3')]);
     await answerPreview(rig, previewOf({ total: count(1, 'exact') }));
-    expect(scope()).toBe('2 of 1 sourced neighbors on canvas · not loaded: no count');
+    expect(scope()).toBe('2 of 1 sourced relationship ends loaded · not loaded: no count');
   });
 
   it('says how many loaded relationships the view leaves out, counting a hidden end and an off type but not an end that is not loaded', async () => {
@@ -98,16 +98,16 @@ describe('the Relationships tab: loaded counts per relationship type', () => {
     expect(screen.getByText('1 loaded relationship is hidden or filtered out of the view')).toBeTruthy();
     act(() => rig.state.hide([keyOf('n2')]));
     expect(screen.getByText('2 loaded relationships are hidden or filtered out of the view')).toBeTruthy();
-    expect(scope()).toBe('3 of 22 sourced neighbors on canvas · 19 not loaded');
+    expect(scope()).toBe('3 of 22 sourced relationship ends loaded · 19 not loaded');
   });
 
   it('follows an expansion with no new request', async () => {
     const rig = await openRelationships([stored('r1', 'n1', 'n2')]);
     await answerPreview(rig, previewOf());
-    expect(scope()).toBe('1 of 22 sourced neighbors on canvas · 21 not loaded');
+    expect(scope()).toBe('1 of 22 sourced relationship ends loaded · 21 not loaded');
     act(() => loadGraph(rig.state, [entity('n1'), entity('n2'), entity('n3')], [stored('r1', 'n1', 'n2'), stored('r2', 'n1', 'n3')]));
     expect(rowNames()).toHaveLength(2);
-    expect(scope()).toBe('2 of 22 sourced neighbors on canvas · 20 not loaded');
+    expect(scope()).toBe('2 of 22 sourced relationship ends loaded · 20 not loaded');
     expect(rig.previews).toHaveLength(1);
     expect(rig.entityReads).toHaveLength(1);
     select(rig.state, 'n1');

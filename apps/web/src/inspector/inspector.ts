@@ -4,7 +4,7 @@ import { createInspectorTabRegistry, createNeighborRowRegistry, type InspectorTa
 
 export interface Inspector {
   readonly tabs: InspectorTabRegistry;
-  /** Rows a later feature adds to the Overview's sourced neighbors section. */
+  /** Rows a later feature adds to the Overview's sourced relationship ends section. */
   readonly neighborRows: NeighborRowRegistry;
   /** The entity whose inspector the person closed; it stays closed until the selection changes to another single entity. */
   readonly dismissed: ReadableStore<string | undefined>;

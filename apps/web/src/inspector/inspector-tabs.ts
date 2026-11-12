@@ -21,7 +21,7 @@ export const createInspectorTabRegistry = (): InspectorTabRegistry => createOrde
 export const useInspectorTabs = (registry: InspectorTabRegistry): readonly InspectorTab[] => useOrdered(registry);
 
 export interface NeighborRow extends Ordered {
-  /** A row of the Overview's sourced neighbors section, drawn after the per-type rows. */
+  /** A row of the Overview's sourced relationship ends section, drawn after the per-type rows. */
   readonly content: ComponentType<{ readonly entity: ElementRef }>;
 }
 

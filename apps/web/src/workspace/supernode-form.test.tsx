@@ -222,7 +222,7 @@ describe('the rest of the panel', () => {
     await open();
     await answerPreview(previews[0], previewOf({ warnings: [{ code: 'counts-capped', reason: 'Counts stop at 500' }] }));
     expect(inPanel().getByText('Soft limit · aggregates beyond · bounded pages only.')).not.toBeNull();
-    expect(inPanel().getByText('Counts are of relationships.')).not.toBeNull();
+    expect(inPanel().getByText('Counts are of relationship ends.')).not.toBeNull();
     expect(inPanel().getByText('Counts stop at 500.')).not.toBeNull();
     expect(screen.queryByText(/window|event_time/i)).toBeNull();
   });

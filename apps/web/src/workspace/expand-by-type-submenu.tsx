@@ -7,7 +7,7 @@ import { elementKey, nodeRefOfKey } from '../state/keys.js';
 import { useClientState, useLoadedGraph, useSessionMask } from '../state/context.js';
 import { useStoreSelector } from '../state/store.js';
 import { degreeCountText } from './degree-text.js';
-import { COUNTS_ARE_OF_RELATIONSHIPS, CLEAR, DUPLICATE_IDS, EXPAND_HEADING, INVERT_SELECTION, LOADING_NEIGHBORS, NO_LONGER_IN_SOURCE, NO_RELATIONSHIPS, NO_RELATIONSHIPS_FOUND, NO_STABLE_ID, RETRY, SELECT_ALL, SEPARATE_READS, START_OVER, PAGED_NOTE, expandLabel, loadMoreLabel, pageNote } from './expand-copy.js';
+import { COUNTS_ARE_OF_RELATIONSHIP_ENDS, CLEAR, DUPLICATE_IDS, EXPAND_HEADING, INVERT_SELECTION, LOADING_NEIGHBORS, NO_LONGER_IN_SOURCE, NO_RELATIONSHIPS, NO_RELATIONSHIPS_FOUND, NO_STABLE_ID, RETRY, SELECT_ALL, SEPARATE_READS, START_OVER, PAGED_NOTE, expandLabel, loadMoreLabel, pageNote } from './expand-copy.js';
 import { loadedCountText, loadedOf } from './node-counts.js';
 import { neighborTypesOf, relTypesToSend, startUntickedTypes, useExpandStore } from './expand-context.js';
 import { FILTERS_LEAVE_NOTHING } from './expand-copy.js';
@@ -193,7 +193,7 @@ function ChecklistFor({ node, close }: { readonly node: ElementRef; readonly clo
       ) : null}
       <div className="neighbor-types-notes">
         <p className="neighbor-types-note">{pageNote(pageSize)}</p>
-        <p className="neighbor-types-note">{COUNTS_ARE_OF_RELATIONSHIPS}</p>
+        <p className="neighbor-types-note">{COUNTS_ARE_OF_RELATIONSHIP_ENDS}</p>
         {capped === undefined ? null : <p className="neighbor-types-note">{capped.reason}.</p>}
         {anyLoaded ? <p className="neighbor-types-note">{SEPARATE_READS}</p> : null}
         {expansion.duplicates ? <p className="neighbor-types-note">{DUPLICATE_IDS}</p> : null}

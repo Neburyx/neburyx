@@ -200,7 +200,7 @@ test.describe('the inspector Relationships tab', () => {
     await expect(inspector(page).getByRole('region', { name: 'HOLDS' })).toContainText('1 loaded of 1 · exact');
     await expect(inspector(page).getByRole('region', { name: 'USES_GADGET' })).toContainText('loaded of 15 · exact');
     await expect(inspector(page).getByRole('region', { name: 'Rule-derived' })).toBeVisible();
-    await expect(inspector(page).locator('.inspector-relationships > .inspector-scope').last()).toContainText('sourced neighbors on canvas');
+    await expect(inspector(page).locator('.inspector-relationships > .inspector-scope').last()).toContainText('sourced relationship ends loaded');
     const row = rowsOf(page).first();
     const widthsBefore = (await drawing(page)).edges.map((edge) => edge.width);
     await row.click();

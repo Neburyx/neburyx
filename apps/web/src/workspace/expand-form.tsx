@@ -11,7 +11,7 @@ import { degreeCountText } from './degree-text.js';
 import {
   ALL_SOURCED_TYPES,
   CHOOSE_A_TYPE,
-  COUNTS_ARE_OF_RELATIONSHIPS,
+  COUNTS_ARE_OF_RELATIONSHIP_ENDS,
   DUPLICATE_IDS,
   INVERT_SELECTION,
   LOADING_NEIGHBORS,
@@ -328,7 +328,7 @@ export function ExpandForm({ node, only }: { readonly node: ElementRef; /** The 
 
       <div className="neighbor-types-notes">
         <p className="neighbor-types-note">{PANEL_FOOTNOTE}</p>
-        <p className="neighbor-types-note">{COUNTS_ARE_OF_RELATIONSHIPS}</p>
+        <p className="neighbor-types-note">{COUNTS_ARE_OF_RELATIONSHIP_ENDS}</p>
         {capped === undefined ? null : <p className="neighbor-types-note">{capped.reason}.</p>}
         {anyLoaded ? <p className="neighbor-types-note">{SEPARATE_READS}</p> : null}
         {expansion.duplicates ? <p className="neighbor-types-note">{DUPLICATE_IDS}</p> : null}

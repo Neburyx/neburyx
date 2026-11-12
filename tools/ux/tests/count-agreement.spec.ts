@@ -108,12 +108,12 @@ test.describe('the header and the inspector through Expand, a count and Collapse
     await expect(canvasOf(page)).toHaveAttribute('data-drawn-entities', '2');
     await sameInExport(page, '2 shown · ≥ 2 not yet retrieved (lower bound · 1 entity not yet counted)');
     await select(page, 'AC-1');
-    await expect(inspector(page).locator('.inspector-scope').first()).toHaveText('1 of 3 sourced neighbors on canvas · 2 not loaded');
+    await expect(inspector(page).locator('.inspector-scope').first()).toHaveText('1 of 3 sourced relationship ends loaded · 2 not loaded');
 
     await select(page, 'N-1');
     await sameInExport(page, '2 shown · 2 not yet retrieved (exact)');
     await select(page, 'AC-1');
-    await expect(inspector(page).locator('.inspector-scope').first()).toHaveText('1 of 3 sourced neighbors on canvas · 2 not loaded');
+    await expect(inspector(page).locator('.inspector-scope').first()).toHaveText('1 of 3 sourced relationship ends loaded · 2 not loaded');
 
     await canvasOf(page).focus();
     await page.keyboard.press('ContextMenu');
@@ -121,7 +121,7 @@ test.describe('the header and the inspector through Expand, a count and Collapse
     await page.keyboard.press('Enter');
     await expect(canvasOf(page)).toHaveAttribute('data-drawn-entities', '1');
     await sameInExport(page, '1 shown · 3 not yet retrieved (exact)');
-    await expect(inspector(page).locator('.inspector-scope').first()).toHaveText('0 of 3 sourced neighbors on canvas · 3 not loaded');
+    await expect(inspector(page).locator('.inspector-scope').first()).toHaveText('0 of 3 sourced relationship ends loaded · 3 not loaded');
   });
 });
 
@@ -134,7 +134,7 @@ test.describe('the header when several entities have something left, after a loa
     await expect(canvasOf(page)).toHaveAttribute('data-drawn-entities', '2');
     await select(page, 'N-1');
     await sameInExport(page, '2 shown · ~4 not yet retrieved (estimated)');
-    await expect(ANCHOR_SCOPE(page)).toHaveText('1 of 3 sourced neighbors on canvas · 2 not loaded');
+    await expect(ANCHOR_SCOPE(page)).toHaveText('1 of 3 sourced relationship ends loaded · 2 not loaded');
   });
 
   test('keeps the lower bound and its reason through a load by neighbor type, and counts both new entities as not yet counted', async ({ page }) => {
@@ -151,7 +151,7 @@ test.describe('the header when several entities have something left, after a loa
     await expect(canvasOf(page)).toHaveAttribute('data-drawn-entities', '3');
     await sameInExport(page, '3 shown · ≥ 1 not yet retrieved (lower bound · 2 entities not yet counted)');
     await select(page, 'AC-1');
-    await expect(ANCHOR_SCOPE(page)).toHaveText('2 of 3 sourced neighbors on canvas · 1 not loaded');
+    await expect(ANCHOR_SCOPE(page)).toHaveText('2 of 3 sourced relationship ends loaded · 1 not loaded');
   });
 
   test('says the same count with an entity hidden by a filter, and counts what is shown as what is drawn', async ({ page }) => {

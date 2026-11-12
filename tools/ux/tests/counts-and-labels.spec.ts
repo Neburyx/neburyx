@@ -80,7 +80,7 @@ test.describe('the counts of loaded relationships', () => {
     await page.keyboard.press('e');
     await expect(canvasOf(page)).toHaveAttribute('data-drawn-entities', '2');
     await selectAnchor(page);
-    await expect(inspector(page).locator('.inspector-scope').first()).toHaveText('3 of 3 sourced neighbors on canvas · 0 not loaded');
+    await expect(inspector(page).locator('.inspector-scope').first()).toHaveText('3 of 3 sourced relationship ends loaded · 0 not loaded');
     await expect.poll(() => coverage.at(-1)?.entities.find((entity) => entity.ref.stableId === 'AC-1')?.loadedRelationships).toBe(3);
   });
 });
@@ -92,7 +92,7 @@ test.describe('a load that finds nothing new', () => {
     await selectAnchor(page);
     await page.keyboard.press('e');
     await expect(canvasOf(page)).toHaveAttribute('data-drawn-entities', '2');
-    const note = page.getByRole('status').filter({ hasText: 'Nothing new: every neighbor on this page is already on the canvas' });
+    const note = page.getByRole('status').filter({ hasText: 'Nothing new: everything on this page is already loaded' });
     await expect(note).toHaveCount(0);
     await selectAnchor(page);
     await page.keyboard.press('e');
@@ -112,5 +112,34 @@ test.describe('the Expand button of the neighbor type flyout', () => {
     const button = page.locator('.neighbor-types-expand');
     await expect(button).toHaveText(/^Expand \d+ types? \(up to 25 each\)$/);
     await expect(button).not.toContainText('neighbor');
+  });
+});
+
+test.describe('a load of the Expand relationships panel that adds nothing', () => {
+  test('says so beside the open panel each time, and says nothing for a load that adds something', async ({ page }) => {
+    await routeReads(page, false, []);
+    await page.route((url) => url.pathname === '/v1/graph/expand', (route) => {
+      const answer = expandAnswer(route.request().postDataJSON() as AskBody, false);
+      return route.fulfill({ json: { ...answer, pages: answer.pages.map((entry) => ({ ...entry, hasMore: true, nextCursor: 'v1.c.m' })) } });
+    });
+    await openOneEntity(page);
+    await selectAnchor(page);
+    await page.keyboard.press('ContextMenu');
+    await menuOf(page).first().getByRole('menuitem', { name: 'Expand by type', exact: true }).focus();
+    await page.keyboard.press('Enter');
+    const panel = page.getByRole('complementary', { name: 'Expand relationships' });
+    await expect(panel).toBeVisible();
+    const note = page.getByRole('status').filter({ hasText: 'Nothing new: everything on this page is already loaded' });
+    const load = panel.getByRole('button', { name: /^Load \d+ per type$/ });
+    await load.click();
+    await expect(canvasOf(page)).toHaveAttribute('data-drawn-entities', '2');
+    await expect(panel.getByText('Loading neighbors')).toHaveCount(0);
+    await expect(note).toHaveCount(0);
+    await load.click();
+    await expect(note).toBeVisible();
+    await expect(panel).toBeVisible();
+    await expect(load).toBeFocused();
+    await load.click();
+    await expect(note).toBeVisible();
   });
 });

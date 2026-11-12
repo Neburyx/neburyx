@@ -35,7 +35,7 @@ export interface TypeProgress {
 }
 
 const notAskedAfterFailure = (count: number): string => `${count} selected ${count === 1 ? 'node was' : 'nodes were'} not asked after the failure.`;
-export const NOTHING_NEW = 'Nothing new: every neighbor on this page is already on the canvas';
+export const NOTHING_NEW = 'Nothing new: everything on this page is already loaded';
 const notAskedAfterMasking = (count: number): string => `${count} selected ${count === 1 ? 'node was' : 'nodes were'} not asked because the masking changed.`;
 
 /** The most a page may hold until a source says otherwise; the server's `max_page` may be lower, and a refusal that names it lowers this for the source. */

@@ -10,7 +10,7 @@ import { degreeCountText } from '../workspace/degree-text.js';
 import { RETRY } from '../workspace/expand-copy.js';
 import { loadedByRelationshipType, loadedCountText, loadedOf, scopeLineText } from '../workspace/node-counts.js';
 import { usePreviewStoreWhenProvided } from '../workspace/preview-context.js';
-import { COUNTING_NEIGHBORS, FROM_THIS_ENTITY, NO_RELATIONSHIPS_DRAWN, ORIGIN_NOT_STATED_GROUP, RULE_DERIVED, RULE_DERIVED_GROUP, SHOW_MORE, TO_THIS_ENTITY, leftOutText } from './copy.js';
+import { COUNTING_RELATIONSHIP_ENDS, FROM_THIS_ENTITY, NO_RELATIONSHIPS_DRAWN, ORIGIN_NOT_STATED_GROUP, RULE_DERIVED, RULE_DERIVED_GROUP, SHOW_MORE, TO_THIS_ENTITY, leftOutText } from './copy.js';
 import type { InspectorTabProps } from './inspector-tabs.js';
 import { relationshipList, type RelationshipRow } from './relationship-rows.js';
 
@@ -106,7 +106,7 @@ export function RelationshipsTab({ entity }: InspectorTabProps) {
           ) : null}
         </>
       ) : state.phase === 'loading' ? (
-        <p role="status">{COUNTING_NEIGHBORS}</p>
+        <p role="status">{COUNTING_RELATIONSHIP_ENDS}</p>
       ) : null}
       {none ? <p>{NO_RELATIONSHIPS_DRAWN}</p> : null}
       {list.groups.map((group) => {

@@ -9,7 +9,7 @@ import { RETRY } from '../workspace/expand-copy.js';
 import { degreeCountText } from '../workspace/degree-text.js';
 import { loadedOf, scopeLineText } from '../workspace/node-counts.js';
 import { usePreviewStoreWhenProvided } from '../workspace/preview-context.js';
-import { COUNTING_NEIGHBORS, NOT_COUNTED, SOURCED_NEIGHBORS } from './copy.js';
+import { COUNTING_RELATIONSHIP_ENDS, NOT_COUNTED, SOURCED_RELATIONSHIP_ENDS } from './copy.js';
 import { useInspector } from './inspector.js';
 import { useOrdered } from './ordered-registry.js';
 
@@ -32,8 +32,8 @@ export function NeighborsSection({ entity }: { readonly entity: ElementRef }) {
   const displayName = (type: string): string => profile?.entityTypes.find((entry) => entry.type === type)?.displayName ?? type;
   if (state.phase === 'failed') {
     return (
-      <section className="inspector-section" aria-label={SOURCED_NEIGHBORS}>
-        <h3 className="inspector-section-title">{SOURCED_NEIGHBORS}</h3>
+      <section className="inspector-section" aria-label={SOURCED_RELATIONSHIP_ENDS}>
+        <h3 className="inspector-section-title">{SOURCED_RELATIONSHIP_ENDS}</h3>
         <FailureNotice failure={state.failure} />
         {canRetry(state.failure) ? (
           <button type="button" className="neighbor-types-link" onClick={request.reload}>
@@ -46,8 +46,8 @@ export function NeighborsSection({ entity }: { readonly entity: ElementRef }) {
   }
   if (state.phase === 'idle') {
     return (
-      <section className="inspector-section" aria-label={SOURCED_NEIGHBORS}>
-        <h3 className="inspector-section-title">{SOURCED_NEIGHBORS}</h3>
+      <section className="inspector-section" aria-label={SOURCED_RELATIONSHIP_ENDS}>
+        <h3 className="inspector-section-title">{SOURCED_RELATIONSHIP_ENDS}</h3>
         <p>{NOT_COUNTED}</p>
         <button type="button" className="neighbor-types-link" onClick={request.reload}>
           {RETRY}
@@ -58,9 +58,9 @@ export function NeighborsSection({ entity }: { readonly entity: ElementRef }) {
   }
   if (state.phase !== 'ready') {
     return (
-      <section className="inspector-section" aria-label={SOURCED_NEIGHBORS}>
-        <h3 className="inspector-section-title">{SOURCED_NEIGHBORS}</h3>
-        <p role="status">{COUNTING_NEIGHBORS}</p>
+      <section className="inspector-section" aria-label={SOURCED_RELATIONSHIP_ENDS}>
+        <h3 className="inspector-section-title">{SOURCED_RELATIONSHIP_ENDS}</h3>
+        <p role="status">{COUNTING_RELATIONSHIP_ENDS}</p>
         {extra}
       </section>
     );
@@ -69,9 +69,9 @@ export function NeighborsSection({ entity }: { readonly entity: ElementRef }) {
   if (preview.byNeighborType.length === 0) return null;
   const loaded = loadedOf(graph, entity);
   return (
-    <section className="inspector-section" aria-label={SOURCED_NEIGHBORS}>
+    <section className="inspector-section" aria-label={SOURCED_RELATIONSHIP_ENDS}>
       <h3 className="inspector-section-title">
-        {SOURCED_NEIGHBORS}
+        {SOURCED_RELATIONSHIP_ENDS}
         <span className="inspector-section-count">{degreeCountText(preview.total)}</span>
       </h3>
       <dl className="inspector-rows">

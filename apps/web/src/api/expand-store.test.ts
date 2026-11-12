@@ -134,7 +134,7 @@ describe('a load that finds nothing new', () => {
     await store.loadMore(anchor, 'kind-b');
     expect(store.notes.getState()).toEqual([NOTHING_NEW]);
     expect(store.of(anchor).types.get('kind-b')?.hasMore).toBe(true);
-    expect(NOTHING_NEW).toBe('Nothing new: every neighbor on this page is already on the canvas');
+    expect(NOTHING_NEW).toBe('Nothing new: everything on this page is already loaded');
   });
 
   it('does not say it for a node with no relationships, whose answer holds only the node itself, and clears the note when the next load starts', async () => {
@@ -163,5 +163,16 @@ describe('a load that finds nothing new', () => {
     store.report('Narrowed by the filters.');
     await pending;
     expect(store.notes.getState()).toEqual(['Narrowed by the filters.', NOTHING_NEW]);
+  });
+
+  it('says it for a load of the panel with filters over a page that is all loaded, each time it is repeated', async () => {
+    const { store } = rig(() => ok(answer('same')));
+    const plan = { first: ['kind-b'], more: [], relTypes: undefined, refinement: { filters: [{ on: 'neighbor' as const, property: 'p', op: 'eq' as const, value: { kind: 'text' as const, value: 'v' } }], rank: undefined } };
+    await store.load(anchor, plan);
+    expect(store.notes.getState()).toEqual([]);
+    await store.load(anchor, plan);
+    expect(store.notes.getState()).toEqual([NOTHING_NEW]);
+    await store.load(anchor, plan);
+    expect(store.notes.getState()).toEqual([NOTHING_NEW]);
   });
 });

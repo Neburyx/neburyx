@@ -99,10 +99,10 @@ export function countNumber(count: Count): string {
   return count.quality === 'estimated' ? `~ ${number}` : count.quality === 'lowerBound' ? `≥ ${number}` : number;
 }
 
-/** The scope line of an entity's sourced neighbors: what is loaded of the source's total and what is not. Both numbers keep their quality; with either missing no number is drawn. */
+/** The scope line of an entity's sourced relationship ends: what is loaded of the source's total and what is not. Both numbers keep their quality; with either missing no number is drawn. */
 export function scopeLineText(total: Count | undefined, loaded: Count): string {
   if (total?.value === undefined || loaded.value === undefined) return 'not loaded: no count';
-  return `${countNumber(loaded)} of ${countNumber(total)} sourced neighbors on canvas · ${remainderText(total, loaded)}`;
+  return `${countNumber(loaded)} of ${countNumber(total)} sourced relationship ends loaded · ${remainderText(total, loaded)}`;
 }
 
 const LOWER_BOUND_REASON = 'not loaded: no count while the loaded count is a lower bound';

@@ -15,9 +15,9 @@ export function copyLabel(property: string): string {
   return `Copy ${property}`;
 }
 export const COPY_ALL = 'Copy all';
-export const COUNTING_NEIGHBORS = 'Counting neighbors…';
-export const NOT_COUNTED = 'Neighbors were not counted.';
-export const SOURCED_NEIGHBORS = 'Sourced neighbors';
+export const COUNTING_RELATIONSHIP_ENDS = 'Counting relationship ends…';
+export const NOT_COUNTED = 'Relationship ends were not counted.';
+export const SOURCED_RELATIONSHIP_ENDS = 'Sourced relationship ends';
 
 /** The label a quality flag of an entity has; a flag the web does not know has none and is not shown. */
 export const QUALITY_LABELS: ReadonlyMap<string, { readonly label: string; readonly sentence: string | undefined }> = new Map([

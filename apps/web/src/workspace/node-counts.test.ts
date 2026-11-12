@@ -129,13 +129,13 @@ describe('when the card says SUPERNODE', () => {
   });
 });
 
-describe('the scope line of an entity\'s sourced neighbors', () => {
+describe('the scope line of an entity\'s sourced relationship ends', () => {
   const exact = (value: number): Count => ({ value, quality: 'exact', scope: 'x' });
   it('keeps the quality of the loaded and of the total, and draws no number when either has none', () => {
-    expect(scopeLineText(exact(22), exact(4))).toBe('4 of 22 sourced neighbors on canvas · 18 not loaded');
-    expect(scopeLineText(exact(22), { value: 4, quality: 'lowerBound', scope: 'x' })).toBe('≥ 4 of 22 sourced neighbors on canvas · not loaded: no count while the loaded count is a lower bound');
-    expect(scopeLineText(exact(22), { value: 4, quality: 'estimated', scope: 'x' })).toBe('~ 4 of 22 sourced neighbors on canvas · not loaded: no count');
-    expect(scopeLineText({ value: 30, quality: 'lowerBound', scope: 'x' }, exact(4))).toBe('4 of ≥ 30 sourced neighbors on canvas · ≥ 26 not loaded (lower bound)');
+    expect(scopeLineText(exact(22), exact(4))).toBe('4 of 22 sourced relationship ends loaded · 18 not loaded');
+    expect(scopeLineText(exact(22), { value: 4, quality: 'lowerBound', scope: 'x' })).toBe('≥ 4 of 22 sourced relationship ends loaded · not loaded: no count while the loaded count is a lower bound');
+    expect(scopeLineText(exact(22), { value: 4, quality: 'estimated', scope: 'x' })).toBe('~ 4 of 22 sourced relationship ends loaded · not loaded: no count');
+    expect(scopeLineText({ value: 30, quality: 'lowerBound', scope: 'x' }, exact(4))).toBe('4 of ≥ 30 sourced relationship ends loaded · ≥ 26 not loaded (lower bound)');
     expect(scopeLineText({ quality: 'unknown', scope: 'x' }, exact(4))).toBe('not loaded: no count');
     expect(scopeLineText(undefined, exact(4))).toBe('not loaded: no count');
   });
@@ -181,7 +181,7 @@ describe('the relationship ends loaded at a node', () => {
     const edges = [...Array.from({ length: 31 }, (_unused, at) => plain(`r${at}`, `b${at}`)), selfLoop('self')];
     const loaded = loadedOf(graphOf(edges), node).total;
     expect(loaded.value).toBe(33);
-    expect(scopeLineText({ value: 47, quality: 'exact', scope: 'x' }, loaded)).toBe('33 of 47 sourced neighbors on canvas · 14 not loaded');
+    expect(scopeLineText({ value: 47, quality: 'exact', scope: 'x' }, loaded)).toBe('33 of 47 sourced relationship ends loaded · 14 not loaded');
   });
 
   it('agrees with the loaded count the coverage request sends for the node, in value and quality, for every kind of relationship', () => {
@@ -218,14 +218,14 @@ describe('the sentence when the loaded count is a lower bound', () => {
   const reason = 'not loaded: no count while the loaded count is a lower bound';
 
   it('names why there is no remainder, whatever the total, instead of saying only that there is no count', () => {
-    expect(scopeLineText(exact(25), floor(24))).toBe(`≥ 24 of 25 sourced neighbors on canvas · ${reason}`);
-    expect(scopeLineText(exact(25), floor(26))).toBe(`≥ 26 of 25 sourced neighbors on canvas · ${reason}`);
-    expect(scopeLineText({ value: 25, quality: 'lowerBound', scope: 'x' }, floor(24))).toBe(`≥ 24 of ≥ 25 sourced neighbors on canvas · ${reason}`);
-    expect(scopeLineText({ value: 25, quality: 'estimated', scope: 'x' }, floor(24))).toBe(`≥ 24 of ~ 25 sourced neighbors on canvas · ${reason}`);
+    expect(scopeLineText(exact(25), floor(24))).toBe(`≥ 24 of 25 sourced relationship ends loaded · ${reason}`);
+    expect(scopeLineText(exact(25), floor(26))).toBe(`≥ 26 of 25 sourced relationship ends loaded · ${reason}`);
+    expect(scopeLineText({ value: 25, quality: 'lowerBound', scope: 'x' }, floor(24))).toBe(`≥ 24 of ≥ 25 sourced relationship ends loaded · ${reason}`);
+    expect(scopeLineText({ value: 25, quality: 'estimated', scope: 'x' }, floor(24))).toBe(`≥ 24 of ~ 25 sourced relationship ends loaded · ${reason}`);
   });
 
   it('keeps "no count" without the reason when the loaded count is estimated or has no value, and leaves the remainder text of the node card as it was', () => {
-    expect(scopeLineText(exact(22), { value: 4, quality: 'estimated', scope: 'x' })).toBe('~ 4 of 22 sourced neighbors on canvas · not loaded: no count');
+    expect(scopeLineText(exact(22), { value: 4, quality: 'estimated', scope: 'x' })).toBe('~ 4 of 22 sourced relationship ends loaded · not loaded: no count');
     expect(scopeLineText(exact(25), { quality: 'unknown', scope: 'x' })).toBe('not loaded: no count');
     expect(notLoadedText(notLoadedOf(exact(25), floor(24)))).toBe('not loaded: no count');
   });

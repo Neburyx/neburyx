@@ -76,7 +76,7 @@ describe('the rule-derived row of the Overview', () => {
     select(r.state, 'n1');
     await sourced(r);
     await act(async () => r.derived[0]?.answer({ ok: false, failure: failure('SOURCE_UNAVAILABLE', true) }));
-    expect(inInspector().getByRole('region', { name: 'Sourced neighbors' }).textContent).toContain('trace tr-1');
+    expect(inInspector().getByRole('region', { name: 'Sourced relationship ends' }).textContent).toContain('trace tr-1');
     expect(inInspector().getByRole('tab', { name: 'Overview' })).toBeTruthy();
     await userEvent.setup().click(inInspector().getAllByRole('button', { name: 'Retry' }).at(-1) as HTMLElement);
     expect(r.derivedCalls).toHaveLength(2);
