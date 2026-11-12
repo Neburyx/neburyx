@@ -2,6 +2,7 @@ import type { Clock, SystemRunner } from '../gate/types.js';
 import type { MappingModel } from '../mapping/model.js';
 import type { PingResult } from '../source-ping/ping.js';
 import { checkSource, type CheckStore } from './check.js';
+import { failureOfSentence } from './reasons.js';
 import type { UsabilityRecord } from './usability.js';
 
 /** The longest a source that cannot be settled waits between two attempts. */
@@ -13,7 +14,7 @@ export interface FirstContactDeps {
   readonly store: CheckStore;
   readonly record: UsabilityRecord;
   readonly clock?: Clock;
-  readonly logger: { warn(fields: object, message: string): void };
+  readonly logger: { info(fields: object, message: string): void; warn(fields: object, message: string): void };
   /** The time between two ticks of the ping, which the back-off counts in. */
   readonly intervalMs: number;
 }
@@ -50,8 +51,11 @@ export function createFirstContact(deps: FirstContactDeps): FirstContact {
     const source = deps.mapping.sources.find((candidate) => candidate.id === sourceId);
     if (source === undefined) return;
     try {
-      await checkSource({ store: deps.store, clock, logger: deps.logger }, source, (request) => deps.system.run(request), `tr-first-contact-${sourceId}`, null);
+      const report = await checkSource({ store: deps.store, clock, logger: deps.logger }, source, (request) => deps.system.run(request), `tr-first-contact-${sourceId}`, null);
       attempts.delete(sourceId);
+      const failure = report.server === null ? failureOfSentence(report.stateReason) : undefined;
+      const log = report.outcome === 'pass' ? deps.logger.info : deps.logger.warn;
+      log.call(deps.logger, { event: 'source.first_contact_check', sourceId, outcome: report.outcome, ...(failure === undefined ? {} : { failure }) }, 'source first-contact check');
     } catch {
       const failures = (attempts.get(sourceId)?.failures ?? 0) + 1;
       attempts.set(sourceId, { failures, skip: Math.min(2 ** (failures - 1) - 1, maxSkip) });

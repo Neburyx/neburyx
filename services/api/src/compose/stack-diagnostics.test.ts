@@ -14,6 +14,13 @@ describe('masking secrets', () => {
     expect(maskSecrets('login abcdef123456 and abcdef', ['abcdef', 'abcdef123456'])).toBe('login *** and ***');
   });
 
+  it('masks every one of three passwords in one line of a log', () => {
+    const line = '{"event":"source.ping_outcome","note":"initial-pw rotated-pw wrong-pw"}';
+    const masked = maskSecrets(line, ['initial-pw', 'rotated-pw', 'wrong-pw']);
+    for (const password of ['initial-pw', 'rotated-pw', 'wrong-pw']) expect(masked).not.toContain(password);
+    expect(masked).toContain('*** *** ***');
+  });
+
   it('masks a short value and ignores an empty one', () => {
     expect(maskSecrets('pw=ab1 here', ['ab1', ''])).toBe('pw=*** here');
   });

@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url';
 import { sourcesResponseSchema } from '@neburyx/contracts';
 import { afterAll, beforeAll, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { docker, dockerOk, dockerStream } from '../image/docker.js';
-import { buildDerivedImage, DEMO_WAIT_SECONDS, demoComposeFile, destroyAll, repository, serviceOf, Stack } from './stack.js';
+import { buildDerivedImage, DEMO_WAIT_SECONDS, demoComposeFile, destroyAll, maskSecrets, repository, serviceOf, Stack } from './stack.js';
 
 const IMAGE = 'neburyx-operations-test';
 const LOADER_IMAGE = `neburyx-operations-loader-test:${randomBytes(3).toString('hex')}`;
@@ -256,14 +256,14 @@ describe('a change of the login a source uses', () => {
     return Promise.all(GRAPHS.map((graph) => stack.containerId(graph)));
   }
 
-  /** On a timeout, prints the states and the source events of the api's log (start-up checks, failed pings, failed state writes) with the three passwords masked, so a failure on a machine that is not at hand says why. */
+  /** On a timeout, prints the states and the source events of the api's log (start-up checks, ping outcomes, refused sign-ins with the server's code, first-contact checks, failed state writes) with the three passwords masked, so a failure on a machine that is not at hand says why. */
   async function expectBothConnected(timeout: number): Promise<void> {
     try {
       await vi.waitFor(async () => expect(Object.values(await states()).map((found) => found.state)).toEqual(['connected', 'connected']), { timeout, interval: 2000 });
     } catch (error) {
       const events = (await stack.compose(['logs', '--no-log-prefix', 'api'])).stdout.split('\n').filter((line) => line.includes('source.'));
       const text = `states: ${JSON.stringify(await states())}\napi source events:\n${events.join('\n')}\n`;
-      process.stdout.write([initial, rotated, wrong].reduce((masked, password) => masked.split(password).join('***'), text));
+      process.stdout.write(maskSecrets(text, [initial, rotated, wrong]));
       throw error;
     }
   }
@@ -296,6 +296,11 @@ describe('a change of the login a source uses', () => {
     const ready = await fetch(`${stack.url}/readyz`);
     bodies.push(await ready.text());
     expect(ready.status).toBe(200);
+  }
+
+  async function assertPingLinesLogged(): Promise<void> {
+    const events = (await stack.compose(['logs', '--no-log-prefix', 'api'])).stdout.split('\n').filter((line) => line.includes('"source.ping_outcome"'));
+    for (const source of SOURCES) expect(events.some((line) => line.includes(`"sourceId":"${source}"`)), `a ping outcome line of ${source}`).toBe(true);
   }
 
   async function assertNoPasswordAnywhere(): Promise<void> {
@@ -362,6 +367,7 @@ describe('a change of the login a source uses', () => {
     await expectBothConnected(20_000);
     expect(await containerIds()).toEqual(idsBefore);
     expect(await nodeCounts()).toEqual(countsBefore);
+    await assertPingLinesLogged();
     await assertNoPasswordAnywhere();
   });
 });

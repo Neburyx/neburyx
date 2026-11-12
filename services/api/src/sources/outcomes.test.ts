@@ -138,6 +138,30 @@ describe('a source that cannot be reached', () => {
   });
 });
 
+describe('a read whose sign-in the server refuses', () => {
+  it.each(['Neo.ClientError.Security.Unauthorized', 'Neo.ClientError.Security.AuthenticationRateLimit', 'Neo.ClientError.Security.CredentialsExpired'])(
+    'writes one sign_in_refused line with the server code %s and nothing from the driver or the settings',
+    async (code) => {
+      useClock();
+      const made = rig({ beginError: neo4jError(code, 'MARKER_MESSAGE') });
+      expect(await made.executor.execute(callFor())).toEqual({ status: 'unavailable', reason: 'authentication' });
+      await flush();
+      expect(made.logs.map((line) => line.fields)).toEqual([{ event: 'source.sign_in_refused', sourceId: 'demo', serverCode: code }]);
+      const written = JSON.stringify(made.logs);
+      expect(written).not.toContain('MARKER_MESSAGE');
+      expect(written).not.toContain(ENV.DEMO_PASSWORD);
+    },
+  );
+
+  it.each(['Neo.ClientError.Statement.UnsupportedAdministrationCommand', 'Neo.ClientError.Database.DatabaseNotFound', 'ServiceUnavailable'])('writes no sign_in_refused line for %s', async (code) => {
+    useClock();
+    const made = rig({ streamError: neo4jError(code) });
+    await made.executor.execute(callFor());
+    await flush();
+    expect(made.logs.map((line) => line.fields['event'])).not.toContain('source.sign_in_refused');
+  });
+});
+
 describe('a statement the server refuses because of what it is', () => {
   it.each(['Neo.ClientError.Statement.UnsupportedAdministrationCommand', 'Neo.ClientError.Statement.NotSystemDatabaseError'])(
     'answers unavailable with the reason refused for %s, and writes one read_failed line with the server code and no driver text',

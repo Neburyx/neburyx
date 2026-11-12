@@ -4,7 +4,7 @@ import { PING_INTERVAL_MS, startPingSchedule } from './schedule.js';
 
 afterEach(() => vi.useRealTimers());
 
-const RESULT: PingResult = { sourceId: 'alpha', previous: 'reachable', current: 'reachable', reason: null, skipped: false, recovered: false, startedAt: 0 };
+const RESULT: PingResult = { sourceId: 'alpha', previous: 'reachable', current: 'reachable', reason: null, failure: null, skipped: false, cause: null, recovered: false, startedAt: 0 };
 
 function fakePing(run: () => Promise<readonly PingResult[]>): { readonly ping: ScheduledPing; readonly runs: () => number } {
   let count = 0;
@@ -40,6 +40,22 @@ describe('the schedule', () => {
     finish?.();
     await vi.advanceTimersByTimeAsync(100);
     expect(runs()).toBe(2);
+  });
+
+  it('reports a run that is still going once, however many ticks find it, and none when the runs end in time', async () => {
+    vi.useFakeTimers();
+    let finish: (() => void) | undefined;
+    const { ping, runs } = fakePing(() => new Promise((resolve) => (finish = () => resolve([RESULT]))));
+    const overlaps = vi.fn();
+    startPingSchedule({ ping, intervalMs: 100, onOverlap: overlaps });
+    await vi.advanceTimersByTimeAsync(350);
+    expect(runs()).toBe(1);
+    expect(overlaps).toHaveBeenCalledTimes(1);
+    finish?.();
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(runs()).toBe(2);
+    expect(overlaps).toHaveBeenCalledTimes(1);
   });
 
   it('clears the timer on stop, starts no run after it, and drops the results of a run in flight', async () => {

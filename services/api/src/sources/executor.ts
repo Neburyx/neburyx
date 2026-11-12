@@ -144,6 +144,7 @@ export function createNeo4jExecutor(options: Neo4jExecutorOptions): Neo4jExecuto
           if (kind === 'timeout') resolve(TIMEOUT);
           else if (kind === 'unreachable' || kind === 'pool-full') resolve(unavailable(kind));
           else if (kind === 'authentication') {
+            options.logger.warn({ event: 'source.sign_in_refused', sourceId: source.id, serverCode: serverCodeOf(error) }, 'source sign-in refused');
             discard(source, driver);
             resolve(unavailable('authentication'));
           } else if (kind === 'database' || kind === 'refused') {

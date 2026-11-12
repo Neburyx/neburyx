@@ -17,6 +17,11 @@ export const FAILURE_SENTENCES: Readonly<Record<FailureReason, string>> = {
   timeout: 'The source did not answer in time.',
 };
 
+/** The kind of failure a report's sentence says, or undefined for any other reason. */
+export function failureOfSentence(sentence: string | null): FailureReason | undefined {
+  return (Object.keys(FAILURE_SENTENCES) as FailureReason[]).find((kind) => FAILURE_SENTENCES[kind] === sentence);
+}
+
 /**
  * The reason a gate failure says something about the source, or undefined when it does not
  * (a busy or full pool, a closed executor, a refusal by the policy, an internal error): those are rethrown, not reported.

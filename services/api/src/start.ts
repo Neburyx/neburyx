@@ -16,6 +16,7 @@ import { communitySeams } from './seams/community-seams.js';
 import { createSourceGate, type SourceGate, type SourceGateOptions } from './gate/source-gate.js';
 import { SourceGateError } from './gate/allowlist.js';
 import { createReachabilityCache, seedFromStartup } from './source-ping/cache.js';
+import { createPingOutcomeLog } from './source-ping/outcome-log.js';
 import { createScheduledPing } from './source-ping/ping.js';
 import { applyPingResults } from './source-ping/state.js';
 import { createFirstContact, type FirstContact } from './source-test/first-contact.js';
@@ -200,15 +201,18 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
     const pingIntervalMs = io.pingIntervalMs ?? PING_INTERVAL_MS;
     const contact = createFirstContact({ system: gate.system, mapping, store: observingStore, record: usability, logger: io.logger, intervalMs: pingIntervalMs });
     firstContact = contact;
+    const logPingOutcomes = createPingOutcomeLog(io.logger);
     pingSchedule = startPingSchedule({
       ping: createScheduledPing({ system: gate.system, mapping, cache: reachability }),
       intervalMs: pingIntervalMs,
       onResults: async (results) => {
+        logPingOutcomes(results);
         await applyPingResults(openedStore, io.logger, results, { mapping });
         await refreshUsability(openedStore, usability, mapping, startedAt, io.logger);
         contact.afterTick(results);
       },
       onFailure: () => io.logger.warn({ event: 'source.ping_failed' }, 'source ping failed'),
+      onOverlap: () => io.logger.warn({ event: 'source.ping_overlap' }, 'source ping run has not ended before the next one is due'),
     });
     return { exitCode: 0, app };
   } catch (error) {

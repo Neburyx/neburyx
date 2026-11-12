@@ -11,12 +11,13 @@ import { createUsabilityRecord } from './usability.js';
 const mapping = mappingOf(sourceWith('alpha'), sourceWith('beta'));
 const INTERVAL = 30_000;
 const clock = () => Date.UTC(2026, 10, 2, 10, 0, 0);
-const reachable = (sourceId: string, overrides: Partial<PingResult> = {}): PingResult => ({ sourceId, previous: 'unknown', current: 'reachable', reason: null, skipped: false, recovered: true, startedAt: 1_000, ...overrides });
+const reachable = (sourceId: string, overrides: Partial<PingResult> = {}): PingResult => ({ sourceId, previous: 'unknown', current: 'reachable', reason: null, failure: null, skipped: false, cause: null, recovered: true, startedAt: 1_000, ...overrides });
 
 function rig(options: { readonly capabilities?: (call: ExecuteCall) => ExecuteOutcome | Promise<ExecuteOutcome>; readonly schema?: (call: ExecuteCall) => ExecuteOutcome } = {}) {
   const store = memoryAppStore();
   const record = createUsabilityRecord();
   const logs: object[] = [];
+  const lines: { readonly level: 'info' | 'warn'; readonly fields: Record<string, unknown> }[] = [];
   const executor = serverExecutor(options.capabilities ?? { status: 'rows', rows: [SERVER_ROW] }, { status: 'unavailable', reason: 'refused' }, options.schema ?? fittingSchemaAnswer);
   const parts = testSourceGate(mapping, { executor });
   // what start.ts does: a check that is stored sets the record
@@ -27,8 +28,13 @@ function rig(options: { readonly capabilities?: (call: ExecuteCall) => ExecuteOu
       record.observe(check.report);
     },
   };
-  const contact = createFirstContact({ system: parts.system, mapping, store: observing, record, clock, logger: { warn: (fields) => void logs.push(fields) }, intervalMs: INTERVAL });
-  return { contact, store, record, logs, executor };
+  const contact = createFirstContact({ system: parts.system, mapping, store: observing, record, clock, logger: {
+      info: (fields) => void lines.push({ level: 'info', fields: { ...fields } }),
+      warn: (fields) => void (lines.push({ level: 'warn', fields: { ...fields } }), logs.push(fields)),
+    },
+    intervalMs: INTERVAL,
+  });
+  return { contact, store, record, logs, lines, executor };
 }
 
 const states = async (store: ReturnType<typeof memoryAppStore>) => (await store.listSources()).map((row) => [row.id, row.state]);
@@ -115,6 +121,45 @@ describe('the check on first contact', () => {
     expect(store.checks[0]?.report).toMatchObject({ outcome: 'warn', mappingChecks: { status: 'not-run' } });
     expect(record.verdictOf('alpha')).toBe('usable');
     expect((await store.listSources())[0]).toMatchObject({ state: 'degraded' });
+  });
+});
+
+describe('the line a first-contact check writes', () => {
+  const eventsOf = (lines: readonly { readonly fields: Record<string, unknown> }[]) => lines.filter((line) => line.fields['event'] === 'source.first_contact_check');
+
+  it('is an info line with the outcome for a check that passes', async () => {
+    const { contact, store, lines } = rig();
+    await store.syncSources(mapping.sources);
+    contact.afterTick([reachable('alpha')]);
+    await contact.drain();
+    expect(eventsOf(lines)).toEqual([{ level: 'info', fields: { event: 'source.first_contact_check', sourceId: 'alpha', outcome: 'pass' } }]);
+  });
+
+  it('is a warn line with the failure kind for a check refused at sign-in that returns normally', async () => {
+    const { contact, store, lines } = rig({ capabilities: () => ({ status: 'unavailable', reason: 'authentication' }) });
+    await store.syncSources(mapping.sources);
+    contact.afterTick([reachable('alpha')]);
+    await contact.drain();
+    expect(eventsOf(lines)).toEqual([{ level: 'warn', fields: { event: 'source.first_contact_check', sourceId: 'alpha', outcome: 'fail', failure: 'authentication' } }]);
+    expect(lines.some((line) => line.fields['event'] === 'source.first_contact_failed')).toBe(false);
+  });
+
+  it('is a warn line without a failure kind for a report that fails on the mapping', async () => {
+    const { contact, store, lines } = rig({ schema: (call) => (call.templateId === 'schema-tokens' ? { status: 'rows', rows: [{ labels: [], types: [] }] } : fittingSchemaAnswer(call)) });
+    await store.syncSources(mapping.sources);
+    contact.afterTick([reachable('alpha')]);
+    await contact.drain();
+    expect(eventsOf(lines)).toEqual([{ level: 'warn', fields: { event: 'source.first_contact_check', sourceId: 'alpha', outcome: 'fail' } }]);
+  });
+
+  it('is not written for a check that does not settle, which writes the failed line only', async () => {
+    const { contact, store, lines } = rig({ capabilities: () => Promise.reject(new Error('MARKER_MESSAGE')) });
+    await store.syncSources(mapping.sources);
+    contact.afterTick([reachable('alpha')]);
+    await contact.drain();
+    expect(eventsOf(lines)).toEqual([]);
+    expect(lines.map((line) => line.fields['event'])).toEqual(['source.first_contact_failed']);
+    expect(JSON.stringify(lines)).not.toContain('MARKER_MESSAGE');
   });
 });
 

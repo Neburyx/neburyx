@@ -31,6 +31,7 @@
   "devDependencies": {
     "@neburyx/test-containers": "workspace:*",
     "@neburyx/test-neo4j": "workspace:*",
+    "@testcontainers/neo4j": "12.2.1",
     "@testcontainers/postgresql": "12.2.1",
     "@types/node": "24.19.2",
     "@types/pg": "8.23.1",

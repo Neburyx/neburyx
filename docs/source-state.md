@@ -30,3 +30,18 @@ After a restart whose start-up check could not reach the source, the last stored
 - A source keeps its newest 50 checks. Fifty newer checks that did not reach the source remove the last qualifying one, and the state is then `unknown`.
 - Copies running different mappings or connections of one source (during a rolling upgrade, for example) each decide against their own, and each start resets the stored state, so their pings disagree until all copies run the same mapping.
 - The circuit breaker's state is kept in each copy's own memory. Copies can differ on whether they refuse reads of a source; they do not differ on the state shown.
+
+## Reading the log when a source stays unavailable
+
+Each API copy writes the lines below. None holds a password, a server message or an entity ID. Only `source.ping_outcome` is written when the outcome changes; the others are written each time the event happens, as the last column says.
+
+| Line | Level | Fields | Meaning |
+|---|---|---|---|
+| `source.ping_outcome` | `info` | `sourceId`, `outcome: reachable` | The ping reached the source after a tick that did not, or on the first tick. |
+| `source.ping_outcome` | `warn` | `sourceId`, `outcome: unreachable`, `failure` | The ping did not reach the source. `failure` is `unreachable`, `authentication`, `credentials`, `database`, `refused` or `timeout`, the same kinds as the sentences on the Sources page. |
+| `source.ping_outcome` | `info`, then `warn` once | `sourceId`, `outcome: skipped`, `cause` | The ping said nothing about the source, for example because its read slots were busy (`cause` is the error code and tag, such as `SOURCE_UNAVAILABLE:pool-full`). A skipped ping changes no state. The second skipped tick in a row writes the `warn` line; later ones write nothing. |
+| `source.sign_in_refused` | `warn` | `sourceId`, `serverCode` | Written for every read that is refused at sign-in, so once per ping and once per check while the refusal lasts. A read was refused at sign-in. `Neo.ClientError.Security.AuthenticationRateLimit` means the server is locking the login after failed sign-ins and the lock ends by itself after the server's lock time; `Neo.ClientError.Security.Unauthorized` means the user name or password is wrong; `Neo.ClientError.Security.CredentialsExpired` means the password must be changed on the server. |
+| `source.first_contact_check` | `info` for `pass`, `warn` otherwise | `sourceId`, `outcome`, `failure` when the server did not answer | Written each time that check ends. The full check runs after a ping reached a source with no settled check since the start, on every tick while it keeps being refused. A refused check stores its own state, which the next ping that reaches the source replaces. |
+| `source.ping_overlap` | `warn` | none | Written once for a ping run that had not ended when the next one was due, however many ticks follow. |
+
+`source.ping_outcome` is written only when the outcome differs from the tick before (a source skipped on several ticks in a row writes two lines), so a source that stays unavailable for an hour shows its first `source.ping_outcome` line and no more of them.

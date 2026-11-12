@@ -662,6 +662,22 @@ describe('the ping timer in start', () => {
     await result.app.close();
   });
 
+  it('writes the ping outcome line of each source once, also when the state write fails', async () => {
+    const executor = serverExecutor((call) => (call.templateId === 'connectivity' ? { status: 'unavailable', reason: 'authentication' } : { status: 'rows', rows: [SERVER_ROW] }));
+    const lines: string[] = [];
+    const logger = pino({ level: 'info' }, { write: (line: string) => void lines.push(line) });
+    const store = memoryAppStore();
+    const run = io({ ...wired(executor), logger, openStore: () => ({ ...store, applyPingState: () => Promise.reject(new Error('the state could not be written')) }), portOverride: 0, pingIntervalMs: 20 });
+    const result = await start(ENV, run.io);
+    if (result.exitCode !== 0) throw new Error('the API did not start');
+    await vi.waitFor(() => expect(pings(executor).length).toBeGreaterThanOrEqual(6));
+    await result.app.close();
+    const events = lines.map((line) => logLineSchema.parse(JSON.parse(line))).filter((line) => line.event === 'source.ping_outcome' || line.event === 'source.ping_state_failed');
+    const outcomes = lines.map((line) => JSON.parse(line)).filter((line) => line.event === 'source.ping_outcome');
+    expect(outcomes.map((line) => [line.sourceId, line.outcome, line.failure]).sort()).toEqual([['alpha', 'unreachable', 'authentication'], ['beta', 'unreachable', 'authentication']]);
+    expect(events.some((line) => line.event === 'source.ping_state_failed')).toBe(true);
+  });
+
   it('starts no ping and no timer when the start fails, and none after the app closed', async () => {
     const executor = serverExecutor();
     const spy = vi.spyOn(globalThis, 'setInterval');

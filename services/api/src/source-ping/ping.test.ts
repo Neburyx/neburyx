@@ -59,6 +59,7 @@ describe('one run of the ping', () => {
     const { ping, cache } = pingOver(new TestExecutor(() => Promise.resolve(outcome)));
     const results = await ping.run();
     expect(results.map((result) => [result.current, result.reason, result.skipped])).toEqual([['unreachable', sentence, false], ['unreachable', sentence, false]]);
+    expect(results.map((result) => [result.failure, result.cause])).toEqual([[_name === 'a timeout' ? 'timeout' : _name, null], [_name === 'a timeout' ? 'timeout' : _name, null]]);
     expect(cache.get('beta')).toBe('unreachable');
   });
 
@@ -91,6 +92,7 @@ describe('a run that says nothing about the source', () => {
     const results = await ping.run();
     expect(results.every((result) => result.skipped && !result.recovered)).toBe(true);
     expect(cache.get('alpha')).toBe('reachable');
+    expect(results.every((result) => result.cause !== null && result.failure === null && !result.cause.includes('boom'))).toBe(true);
     expect(cache.get('beta')).toBe('unknown');
     expect(ping.metrics.snapshot()['alpha']).toEqual({ attempts: 1, reachable: 0, unreachable: 0, skipped: 1 });
   });
@@ -105,6 +107,7 @@ describe('a run that says nothing about the source', () => {
     const results = await createScheduledPing({ system, mapping, cache }).run();
     expect(results.every((result) => result.skipped)).toBe(true);
     expect(cache.counts()).toEqual({ reachable: 0, unreachable: 0, unknown: 2 });
+    expect(results.map((result) => result.cause)).toEqual([code, code]);
   });
 });
 

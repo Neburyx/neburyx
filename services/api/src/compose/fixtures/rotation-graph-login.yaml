@@ -1,11 +1,27 @@
 # The graph servers take their first password from a variable of their own, so that changing the login the
 # API uses (DEMO_NEO4J_PASSWORD in the settings file) recreates no graph server.
+# Their health check signs in as the shipped one does until it first passes, which shows the database is online
+# for the loaders that wait on it, and from then on sends no sign-in: the shipped one signs in every 3 s with the
+# password the container was created with, which a rotation makes wrong, and a wrong sign-in right after the
+# server's lock ends locks the login again, so the API's right password would be refused most of the time.
+# The marker file survives the restart the test makes, which keeps the container.
+x-graph-health-until-ready: &graph-health-until-ready
+  test: !override
+    - CMD-SHELL
+    - >-
+      if [ -f /tmp/ready ]; then wget -q -O- http://127.0.0.1:7474/ | grep -q neo4j_version;
+      else wget -q -O- --header "Authorization: Basic $$(printf 'neo4j:%s' "$$DEMO_NEO4J_PASSWORD" | base64 -w0)"
+      --header "Content-Type: application/json" --post-data '{"statements":[{"statement":"RETURN 1"}]}'
+      http://127.0.0.1:7474/db/neo4j/tx/commit | grep -q '"errors":\[\]' && touch /tmp/ready; fi
+
 services:
   demo-banking-graph:
     environment:
       NEO4J_AUTH: neo4j/${GRAPH_INITIAL_PASSWORD:?set GRAPH_INITIAL_PASSWORD}
       DEMO_NEO4J_PASSWORD: ${GRAPH_INITIAL_PASSWORD}
+    healthcheck: *graph-health-until-ready
   demo-insurance-graph:
     environment:
       NEO4J_AUTH: neo4j/${GRAPH_INITIAL_PASSWORD:?set GRAPH_INITIAL_PASSWORD}
       DEMO_NEO4J_PASSWORD: ${GRAPH_INITIAL_PASSWORD}
+    healthcheck: *graph-health-until-ready

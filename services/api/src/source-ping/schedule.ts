@@ -9,6 +9,8 @@ export interface PingScheduleOptions {
   /** Called with the results of a run that finished before `stop`. */
   readonly onResults?: (results: readonly PingResult[]) => Promise<void>;
   readonly onFailure?: () => void;
+  /** Called once for a run that has not ended when the next tick is due, so that a run that never ends is seen. */
+  readonly onOverlap?: () => void;
 }
 
 export interface PingSchedule {
@@ -22,10 +24,16 @@ export interface PingSchedule {
 export function startPingSchedule(options: PingScheduleOptions): PingSchedule {
   let stopped = false;
   let running = false;
+  let overlapReported = false;
   let applying: Promise<void> = Promise.resolve();
 
   async function tick(): Promise<void> {
-    if (running || stopped) return;
+    if (stopped) return;
+    if (running) {
+      if (!overlapReported) options.onOverlap?.();
+      overlapReported = true;
+      return;
+    }
     running = true;
     try {
       const results = await options.ping.run();
@@ -36,6 +44,7 @@ export function startPingSchedule(options: PingScheduleOptions): PingSchedule {
       options.onFailure?.();
     } finally {
       running = false;
+      overlapReported = false;
     }
   }
 

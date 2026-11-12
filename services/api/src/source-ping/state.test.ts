@@ -9,7 +9,7 @@ import { applyPingResults } from './state.js';
 const mapping = mappingOf(sourceWith('a'), sourceWith('b'), sourceWith('c'));
 const context = { mapping };
 const [sourceA, sourceB] = mapping.sources;
-const result = (sourceId: string, overrides: Partial<PingResult> = {}): PingResult => ({ sourceId, previous: 'reachable', current: 'unreachable', reason: 'The source could not be reached.', skipped: false, recovered: false, startedAt: 1_000, ...overrides });
+const result = (sourceId: string, overrides: Partial<PingResult> = {}): PingResult => ({ sourceId, previous: 'reachable', current: 'unreachable', reason: 'The source could not be reached.', failure: 'unreachable', skipped: false, cause: null, recovered: false, startedAt: 1_000, ...overrides });
 
 describe('writing the state of the results', () => {
   it('writes the failed and the reached results, with the time the read started, and nothing for a skipped one', async () => {
