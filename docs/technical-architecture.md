@@ -38,9 +38,9 @@ tagged **[W2]** (the second wave) or **[Later]**.
 | ADR-06 | REST for commands. v0.1 runs interactive calls synchronously, with a server timeout and client abort. A durable job table with SSE progress comes later, for long paths and exports **[Later]**. | Simple first; jobs stay auditable once added |
 | ADR-07 | **Ask is template-bound**: the LLM picks a template and its parameters, and never writes Cypher. This includes the conversational assistant (§9.6), which only routes to answer-from-view, a confirmed plan, or a refusal | Safety, auditability and citations by construction |
 | ADR-08 | LLM provider is pluggable and customer-chosen; no data goes to a model unless the policy allows it | Regulated buyers must control where data goes |
-| ADR-09 | Open core: `ee/` directory under a commercial licence; Community under Apache-2.0. For now, `ee/` is a placeholder that may hold `api/` and `web/` subtrees, with no code until its commercial licence text is added. | One repo, one CI, solo-maintainable |
+| ADR-09 | Open core in one repo and one image: Community and the `ee/` directory are both under Apache-2.0. The public image compiles `ee/` in; its code path is off unless both `NEBURYX_PROFILE=enterprise` and `ai.preview: true` in `neburyx.yaml` are set. These switches are safety rails, not a lock. | One repo, one CI, solo-maintainable |
 | ADR-10 | Schema mapping is **declarative YAML**, a strict YAML 1.2 subset (see §5), validated at startup and by `test-source` | Onboarding without code |
-| ADR-11 | **AI output is a reviewable draft**: placeholders in, structural citation check and numeric check on the way out, a fixed prompt with no tools, never auto-saved or exported. The summarizer reuses the `AskPlanner` seam and Ask's model settings. | Gen-AI value without a black box or a data leak |
+| ADR-11 | **AI output is a reviewable draft**: placeholders in, structural citation check and numeric check on the way out, a built-in versioned prompt (the operator may override it, §9.4) with no tools, never auto-saved or exported. The summarizer reuses the `AskPlanner` seam and Ask's model settings. | Gen-AI value without a black box or a data leak |
 | ADR-12 | **Valkey in the Enterprise profile, for coordination only** (2026-10-30). It holds concurrency leases, rate-limit counters, circuit-breaker state, login challenges and sign-in throttles, all with expiries. It **never holds customer data**, query results or PII, and nothing in it needs a backup. Community keeps the same state in process memory. The result cache stays per process in both editions (§3). | Several API copies must share per-user and per-source read limits (§14). Holding a Postgres connection for up to 10 s per Neo4j read does not scale to hundreds of reads in flight. Valkey is the BSD-licensed Linux Foundation fork of Redis, offered as a managed service by AWS and Google Cloud; elsewhere the customer runs it with a replica and failover |
 | ADR-13 | **Single-tenant**: one organization per deployment (2026-10-30). No `tenant_id`. Covers self-hosted deployments now and a dedicated instance run on a customer's behalf later. A multi-tenant SaaS is not built. | Regulated buyers keep the product next to their Neo4j; no tenancy isolation to build or test |
 | ADR-14 | **Domain-neutral engine, configured in three layers** (2026-10-30). *Product* (code): screens, tools, count rules, masking, errors, the gate. *Source* (YAML, per source): types, display, key properties, presets, vocabulary, style rules (§5). *User* (UI): columns, density, layout, saved views. No entity, relationship or property name appears in code. Domain content ships as **domain packs** (§5.1). The mapping is not editable in the UI (validate-only editor Later). | Security-relevant config (pii, search, derived edges) stays under the customer's change control in git. A minimal mapping works with defaults; `neburyx init` drafts one. Domain-specific screens would be customer-specific code |
@@ -112,7 +112,7 @@ services/api/src/
   jobs/          graphile-worker tasks, job table, SSE, cancellation
   diagnostics/   /healthz, diagnostics bundle (redacted)
   db/            Kysely schema types, SQL migrations, repositories
-ee/              (Enterprise, commercial licence)
+ee/              (Enterprise scope; Apache-2.0 like Community; off unless the preview switch is set)
   auth/          OIDC, local accounts with TOTP, sessions, roles, source grants
   policy/        authorization + PII redaction applied inside gate/
   audit/         append-only audit events + minimal viewer API
@@ -125,6 +125,13 @@ Community (`PolicyProvider`, `AuditSink`, `EvidenceStore`, `AskPlanner`, which a
 and `Coordinator`, whose Community default is in-memory and whose Enterprise implementation uses Valkey),
 each with a no-op or single-user default. This keeps the line between editions obvious, and keeps Community fully usable
 by itself.
+
+**The preview switch is a safety rail.** `ee/` is open source and ships in the one public image. Its code path
+runs only when both `NEBURYX_PROFILE=enterprise` and `ai.preview: true` in `neburyx.yaml` are set; a start with only
+one of them is refused with a clear message. With an open licence, nothing stops a person who controls the deployment
+from setting both, so the switches guard against AI features reaching real data by accident, not against a determined
+operator. The AI route group works on any source (accepted 2026-11-12); what protects real data is the request data rules
+(§9.4) and the audit of every model call.
 
 **Client state is kept in four partitions:**
 
@@ -709,8 +716,12 @@ If no template fits, the planner returns `{"kind": "unsupported", "reason": "...
 | The question text | Yes, after local entity resolution: typed names and IDs are replaced with placeholders |
 | Template catalog + type vocabulary | Yes |
 | Focus entity ref | As a placeholder only |
-| Result properties | Not in the W2 preview, whose summaries are deterministic. Later: only after policy redaction, and only if the console setting `ai.send_property_values` is on. **Default off for every model, self-hosted or not** (decided 2026-10-30). In W2, before the console `settings` table exists, it is always off. The YAML can pin it off, so a customer can forbid the console from turning it on |
-| PII-classified properties | Never |
+| Result properties | **Default none, for every model, self-hosted or not** (decided 2026-10-30). In the W2 preview the operator may list, in the YAML, which properties of which entity and relationship types may be sent (`ai.properties`); only listed properties go, and only after the gate has redacted them (the list narrows what is left, it never widens it). Later: the console setting `ai.send_property_values` joins the YAML, and the YAML can pin it off so a customer can forbid the console from turning it on |
+| PII-classified properties | Never, without exception, even if the operator lists one: a list that names a `pii` property is refused at start-up with the setting named |
+
+The preview runs on any source, not only a source flagged `synthetic: true` (decided 2026-11-12). The data rules in this table and the audit of every model call apply to every source alike.
+
+**Operator configuration of the model (decided 2026-11-12).** In the YAML `ai` section the operator sets: `ai.provider` (in the W2 preview the only value is `anthropic`, a native client of the Messages API through the official TypeScript SDK, not through a compatibility layer; an OpenAI-compatible client, which also covers most self-hosted servers, and other providers come when a customer needs one), `ai.model` (a model ID without a date suffix; the example config shows `claude-sonnet-5-5`, with `claude-opus-5-5` as the step up) and the key by reference (an environment variable or a file with owner-only access, never inline); there is no default model, the operator chooses. The provider sets the depth control (effort) explicitly, never switches thinking off, takes token usage from the reply, treats a refusal as a refusal and not as text, and sends no tools. The operator may also point a built-in prompt, by its id, at their own prompt file (`ai.prompts`). Each built-in prompt has an id and a version; the audit records the id, the version and a SHA-256 of the text actually used. An override cannot add tools, and the model's output is still checked against the template catalog, so no free query text reaches the source whatever a prompt says (ADR-07). Operator-defined pipelines of steps, like an agent workflow, are Later.
 
 ### 9.5 AI case summary (Enterprise) [W2]
 
@@ -733,7 +744,7 @@ visible element keys ─► re-read through the gate (policy applies server-side
    any read. Over the cap, the request is refused with a message to narrow the view.
 2. **De-identification.** Display names, IDs and property values become placeholders. The model sees
    structure: types, relationships, derived-rule names, timestamps and counts with their quality label.
-   Property values are sent only if `ai.send_property_values` is on (same switch and default as §9.4: off).
+   Property values are sent only for properties the operator lists (same rule and default as §9.4: none).
    PII-classified properties are never sent.
 3. **Output contract.** The model returns `{"sentences":[{"text":"…","cites":["n3","e7"]}]}`, schema-validated,
    with one repair attempt. It has no tools, no browsing and no memory. The system prompt is fixed.
@@ -805,7 +816,7 @@ visible element keys ─► re-read through the gate (policy applies server-side
 | Entity types, relationship types, derived-rule names | Yes |
 | Display names and IDs | No: placeholders, restored locally |
 | Timestamps, counts and their quality labels | Yes |
-| Property values | Only if `ai.send_property_values` is on (default off for every model, §9.4) |
+| Property values | Only for properties the operator lists (default none for every model, §9.4); `pii` never |
 | PII-classified properties | Never |
 
 ### 9.6 Investigation assistant (Enterprise) [W2]
@@ -815,7 +826,7 @@ front end on §9.1–9.5. It adds routing and follow-up resolution, and no new d
 
 ```
 message ─► local entity resolution (search + the investigation's own entities; mentions → placeholders)
-        ─► router (LLM, fixed prompt, JSON out) ─► one of three routes:
+        ─► router (LLM, built-in prompt, JSON out) ─► one of three routes:
              view    ─► §9.5 summarizer over the visible elements ─► cited reply
              plan    ─► AskPlan (§9.1) ─► plan card ─► user clicks Run ─► gate ─► GraphPage
                         ─► §9.5 summarizer over the returned page ─► cited reply
@@ -1384,7 +1395,7 @@ neburyx/
   apps/web/                 React + TS + Vite client
   services/api/src/         TypeScript API (modules as in §3)
   services/api/tests/       unit, contract, integration (testcontainers: Neo4j, Postgres, Valkey)
-  ee/                       Enterprise modules (commercial licence); may hold api/ and web/ subtrees
+  ee/                       Enterprise modules (Apache-2.0); may hold api/ and web/ subtrees
   packages/contracts/       Zod schemas, generated openapi.json, typed client for the web app
   domain-packs/             banking-fraud/, insurance-claims/: YAML only, no code (§5.1)
   deploy/docker/            Dockerfile (multi-stage: web build → Node runtime)
@@ -1394,7 +1405,7 @@ neburyx/
   tools/ask-eval/           Ask evaluation harness (may be Python; calls the API only)
   docs/                     PUBLIC technical docs only: technical-architecture.md and
                             coding-guidelines.md
-  LICENSE (Apache-2.0)                      ee/LICENSE (commercial)
+  LICENSE (Apache-2.0)                      ee/LICENSE (Apache-2.0)
 ```
 
 **Stack (ADR-01).** One `pnpm` workspace: `apps/web`, `services/api`, `packages/contracts`, `tools/*`.
@@ -1479,7 +1490,7 @@ is configured as its own source. Together they produce:
 1. **Community v0.1.** Demo-graph install ≤ 15 min; supernode suite
    passes; domain-neutrality suite passes (both packs); the author completes the demo case and the mapping task.
 2. **Ask preview [W2].** Plan accuracy meets the eval baseline; every summary statement
-   cites returned elements; the AI case summary and the assistant's replies pass the citation, numeric and leakage suites on the demo views; assistant route accuracy meets its baseline; runs on the demo graph only.
+   cites returned elements; the AI case summary and the assistant's replies pass the citation, numeric and leakage suites on the demo views; assistant route accuracy meets its baseline; the preview itself runs on any source (decided 2026-11-12), under the data rules of §9.4 and the audit.
 3. **Enterprise build [Later].** Evidence-pack suite (`verify-pack`, tamper,
    partial); OIDC/RBAC/audit/PII suites; image signing and SBOM; security checklist; install
    runbook; documented limitations.
