@@ -1,7 +1,7 @@
 import { execFile, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { createServer, type Server } from 'node:net';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -25,7 +25,8 @@ const SECRETS: string[] = [];
 const TIMES: string[] = [];
 
 const BUILD = /^docker build -f deploy\/docker\/Dockerfile -t neburyx \.$/;
-const FORM: readonly RegExp[] = [BUILD, /^cd deploy\/demo$/, /^cp \.env\.example \.env$/, /^docker compose up --wait$/, /^docker compose run --rm --no-deps api test-source --name (banking|insurance)-demo$/, /^docker compose stop$/, /^docker compose down -v$/];
+const GENERATOR = /^\[ -e \.env \] && echo "\.env exists; not overwritten" \|\| \( umask 077; cat > \.env <<EOF\n[\s\S]*\nEOF\n\)$/;
+const FORM: readonly RegExp[] = [BUILD, /^cd deploy\/demo$/, GENERATOR, /^cp \.env\.example \.env$/, /^docker compose up --wait$/, /^docker compose run --rm --no-deps api test-source --name (banking|insurance)-demo$/, /^docker compose stop$/, /^docker compose down -v$/];
 
 interface Outcome {
   readonly code: number;
@@ -155,9 +156,18 @@ describe('the README Quickstart, run as written on a fresh clone', () => {
         if (command === 'cd deploy/demo') {
           cwd = demo;
         } else if (command === 'cp .env.example .env') {
-          await timed(command, async () => {
-            writeFileSync(join(demo, '.env'), envFile(settings(port)));
-            return { code: 0, stdout: '', stderr: '' };
+          TIMES.push('cp .env.example .env: the by-hand alternative, not run (the generator wrote .env)');
+        } else if (GENERATOR.test(command)) {
+          await timed('the command that writes .env', async () => {
+            const written = await execute('bash', ['-c', command], { cwd: demo });
+            expect(written.stdout, 'the command found a .env that was already there').not.toContain('not overwritten');
+            const generated = readFileSync(join(demo, '.env'), 'utf8');
+            const required = [...readFileSync(join(clone, 'deploy/demo/compose.yaml'), 'utf8').matchAll(/\$\{([A-Z_]+):\?/g)].map((match) => match[1] ?? '');
+            for (const name of new Set(required)) expect(new RegExp(`^${name}=.+$`, 'm').test(generated), `${name} has a value in the .env the command wrote`).toBe(true);
+            SECRETS.push(...generated.split('\n').flatMap((line) => (line.includes('=') ? [line.slice(line.indexOf('=') + 1)] : [])));
+            const { NEBURYX_IMAGE, NEBURYX_DEMO_LOADER_IMAGE, NEBURYX_PORT } = settings(port);
+            appendFileSync(join(demo, '.env'), envFile({ NEBURYX_IMAGE, NEBURYX_DEMO_LOADER_IMAGE, NEBURYX_PORT }));
+            return { code: 0, stdout: written.stdout, stderr: written.stderr };
           });
           const config = await run(['compose', 'config', '--format', 'json'], demo, env);
           expect((JSON.parse(config.stdout) as { name: string }).name).toBe(project);

@@ -99,7 +99,8 @@ describe('the install guide', () => {
   });
 });
 
-const WRITE_ENV_FILES = ['docs/install.md', 'deploy/compose/README.md', 'deploy/demo/README.md'] as const;
+const WRITE_ENV_FILES = ['docs/install.md', 'deploy/compose/README.md', 'deploy/demo/README.md', 'README.md'] as const;
+const DEMO_FLAVOUR = (file: string): boolean => file.startsWith('deploy/demo') || file === 'README.md';
 
 function dedent(block: string): string {
   const lines = block.split('\n');
@@ -110,7 +111,11 @@ function dedent(block: string): string {
 function writeEnvCommand(file: string): string {
   const blocks = [...read(file).matchAll(/```bash\n([\s\S]*?)```/g)].map((match) => dedent(match[1] ?? '')).filter((block) => block.includes('cat > .env'));
   expect(blocks, file).toHaveLength(1);
-  return blocks[0] ?? '';
+  const lines = (blocks[0] ?? '').split('\n');
+  const start = lines.findIndex((line) => line.startsWith('[ -e .env ]'));
+  const end = lines.findIndex((line, at) => at > start && line === ')');
+  expect([start, end].every((position) => position >= 0), `${file}: the command that writes .env is not closed by a line that is only ")"`).toBe(true);
+  return lines.slice(start, end + 1).join('\n');
 }
 
 function parseEnv(text: string): Record<string, string> {
@@ -131,13 +136,13 @@ describe('the one command that writes .env', () => {
       const written = readFileSync(join(folder, '.env'), 'utf8');
       expect(statSync(join(folder, '.env')).mode & 0o777).toBe(0o600);
       const values = parseEnv(written);
-      const required = requiredBy(file.startsWith('deploy/demo') ? 'deploy/demo/compose.yaml' : 'deploy/compose/compose.yaml');
+      const required = requiredBy(DEMO_FLAVOUR(file) ? 'deploy/demo/compose.yaml' : 'deploy/compose/compose.yaml');
       for (const name of required) expect(values, name).toHaveProperty(name);
       for (const name of ['NEBURYX_DB_ADMIN_PASSWORD', 'NEBURYX_DB_MIGRATION_PASSWORD', 'NEBURYX_DB_APP_PASSWORD']) expect(values[name], name).toMatch(/^[A-Za-z0-9]{48}$/);
       const key = Buffer.from(values['NEBURYX_CURSOR_KEY'] ?? '', 'base64');
       expect(key.length).toBeGreaterThanOrEqual(32);
       expect(key.toString('base64')).toBe(values['NEBURYX_CURSOR_KEY']);
-      if (file.startsWith('deploy/demo')) expect(values['DEMO_NEO4J_PASSWORD']?.length ?? 0).toBeGreaterThanOrEqual(8);
+      if (DEMO_FLAVOUR(file)) expect(values['DEMO_NEO4J_PASSWORD']?.length ?? 0).toBeGreaterThanOrEqual(8);
       else expect(values['NEBURYX_TAG']).toBe('local');
 
       mkdirSync(join(folder, 'other'));
@@ -163,5 +168,26 @@ describe('the one command that writes .env', () => {
   it.each(WRITE_ENV_FILES)('is explained in %s: never overwrites, a changed password later is not its job, never commit, where the failed check\'s message is', (file) => {
     const text = read(file);
     for (const phrase of ['refuses to touch a `.env` that already exists', 'Changing a password after the first start is not done by this command', 'Never commit `.env`', 'docker compose logs']) expect(text, `${file}: ${phrase}`).toContain(phrase);
+  });
+
+  it.each(WRITE_ENV_FILES)('is the step in %s, and filling in by hand comes after it', (file) => {
+    const text = read(file);
+    const step = text.indexOf('cat > .env');
+    expect(step, file).toBeGreaterThan(-1);
+    expect(text.indexOf('cp .env.example .env', step), file).toBeGreaterThan(step);
+    expect(text.indexOf('cp .env.example .env'), file).toBeGreaterThan(step);
+  });
+
+  it.each(['docs/install.md', 'deploy/compose/README.md'])('names the tag the build makes in the by-hand text of %s', (file) => {
+    const text = read(file);
+    expect(text.slice(text.indexOf('cp .env.example .env', text.indexOf('cat > .env'))), file).toContain('NEBURYX_TAG=local');
+  });
+
+  it.each(['docs/install.md', 'deploy/compose/README.md', 'deploy/demo/README.md', 'README.md'])('in %s, next to up --wait, says to run docker compose logs with the name of the service that failed', (file) => {
+    const text = read(file).replace(/\s+/g, ' ');
+    const service = 'NEBURYX_CURSOR_KEY-base64-of-at-least-32-bytes';
+    expect(text, file).toContain(`docker compose logs ${service}`);
+    expect(text, file).toContain("didn't complete successfully");
+    expect(compose).toContain(`  ${service}:`);
   });
 });

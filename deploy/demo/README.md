@@ -5,13 +5,6 @@ A compose setup that runs Neburyx against two synthetic demo graphs, one for eac
 ```bash
 docker build -f deploy/docker/Dockerfile -t neburyx .   # from the repository root: there is no published image yet
 cd deploy/demo
-cp .env.example .env     # then fill in the passwords and the cursor key (the file says how)
-docker compose up --wait
-```
-
-Instead of `cp .env.example .env` and filling it in, write a complete `.env` with random values in one step:
-
-```bash
 [ -e .env ] && echo ".env exists; not overwritten" || ( umask 077; cat > .env <<EOF
 NEBURYX_DB_ADMIN_PASSWORD=$(openssl rand -hex 24)
 NEBURYX_DB_MIGRATION_PASSWORD=$(openssl rand -hex 24)
@@ -20,9 +13,14 @@ NEBURYX_CURSOR_KEY=$(openssl rand -base64 32)
 DEMO_NEO4J_PASSWORD=$(openssl rand -hex 24)
 EOF
 )
+docker compose up --wait
 ```
 
-The command refuses to touch a `.env` that already exists: Postgres sets its role passwords only when its volume is first made, so new passwords written over a running install would lock the app out of its own database, and a new cursor key would make open pages say "Start again". Changing a password after the first start is not done by this command. Never commit `.env`. If `docker compose up` stops at a service named after a setting, such as `NEBURYX_CURSOR_KEY-base64-of-at-least-32-bytes`, that setting breaks the rule in the name; `docker compose logs` on that service says how to make a valid one. The demo's Neo4j password must be at least 8 characters.
+The command that writes `.env` refuses to touch a `.env` that already exists: Postgres sets its role passwords only when its volume is first made, so new passwords written over a running install would lock the app out of its own database, and a new cursor key would make open pages say "Start again". Changing a password after the first start is not done by this command. Never commit `.env`. The demo's Neo4j password must be at least 8 characters.
+
+If `up` stops with an error that names a service after a setting, for example `service "NEBURYX_CURSOR_KEY-base64-of-at-least-32-bytes" didn't complete successfully`, run `docker compose logs NEBURYX_CURSOR_KEY-base64-of-at-least-32-bytes` with that service's name: it says what is wrong with the setting and how to make a valid one.
+
+To fill in `.env` by hand instead of the command above, run `cp .env.example .env` and give each setting in it a value; the file says how.
 
 Open `http://127.0.0.1:8080`. `GET /v1/sources` lists the two demo sources, each `connected` and `synthetic`.
 
