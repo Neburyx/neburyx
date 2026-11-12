@@ -63,7 +63,9 @@ function stringFieldsOf(reply: FixtureReply): readonly (readonly [string, string
 }
 
 function normalUsage(usage: TokenUsage): TokenUsage {
-  return usage.kind === 'known' ? { kind: 'known', inputTokens: usage.inputTokens, outputTokens: usage.outputTokens } : { kind: 'unknown' };
+  return usage.kind === 'known'
+    ? { kind: 'known', inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, ...(usage.cacheReadTokens === undefined ? {} : { cacheReadTokens: usage.cacheReadTokens }), ...(usage.cacheWriteTokens === undefined ? {} : { cacheWriteTokens: usage.cacheWriteTokens }) }
+    : { kind: 'unknown' };
 }
 
 function normalReply(reply: FixtureReply): FixtureReply {
@@ -125,7 +127,8 @@ function isCount(value: unknown): boolean {
 function isUsage(value: unknown): value is TokenUsage {
   if (typeof value !== 'object' || value === null || !('kind' in value)) return false;
   if (value.kind === 'unknown') return true;
-  return value.kind === 'known' && 'inputTokens' in value && 'outputTokens' in value && isCount(value.inputTokens) && isCount(value.outputTokens);
+  const cacheOk = (!('cacheReadTokens' in value) || value.cacheReadTokens === undefined || isCount(value.cacheReadTokens)) && (!('cacheWriteTokens' in value) || value.cacheWriteTokens === undefined || isCount(value.cacheWriteTokens));
+  return value.kind === 'known' && 'inputTokens' in value && 'outputTokens' in value && isCount(value.inputTokens) && isCount(value.outputTokens) && cacheOk;
 }
 
 function isReply(value: unknown): value is FixtureReply {

@@ -180,6 +180,29 @@ describe('checking a recording for identifiers', () => {
   });
 });
 
+describe('a recording with cache counts in a usage', () => {
+  const usage = { kind: 'known', inputTokens: 12, outputTokens: 5, cacheReadTokens: 300, cacheWriteTokens: 40 } as const;
+
+  it('keeps them through a write, a load and a replay, and loads an entry without them', async () => {
+    const built = await buildPromptRegistry();
+    if (!built.ok) throw new Error(built.problems.join('; '));
+    const recording: Recording = { format: 1, entries: [{ promptId: 'ask.plan', version: 1, reply: { kind: 'ok', text: 'plan', usage } }] };
+    const path = join(folder, 'cache-usage.json');
+    await writeRecording(path, recording);
+    expect(JSON.parse(readFileSync(path, 'utf8'))).toEqual(recording);
+    const loaded = parseRecording(readFileSync(path, 'utf8'));
+    if (!loaded.ok) throw new Error('not loaded');
+    expect(await createFixtureProvider({ registry: built.registry, replies: loaded.replies }).complete(PLAN, SIGNAL)).toMatchObject({ status: 'ok', usage });
+    const older = parseRecording(JSON.stringify({ format: 1, entries: [{ promptId: 'ask.plan', version: 1, reply: { kind: 'ok', text: 'plan', usage: { kind: 'known', inputTokens: 1, outputTokens: 2 } } }] }));
+    expect(older.ok).toBe(true);
+  });
+
+  it.each([[-1], [1.5], ['3']])('refuses a cache count of %s', (value) => {
+    const json = JSON.stringify({ format: 1, entries: [{ promptId: 'ask.plan', version: 1, reply: { kind: 'ok', text: 'plan', usage: { ...usage, cacheReadTokens: value } } }] });
+    expect(parseRecording(json)).toEqual({ ok: false, problems: ['entry 1: the reply is not valid'] });
+  });
+});
+
 describe('a recording with fields the format does not have', () => {
   const withExtra = JSON.stringify({
     format: 1,

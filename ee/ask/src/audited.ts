@@ -66,7 +66,15 @@ export function createAuditedModelCall(options: AuditedModelOptions): AuditedMod
   const { provider, configuration, sink } = options;
 
   function eventOf(request: ModelRequest, context: AuditedCallContext, prompt: PromptRecord, outcome: Outcome): AuditEvent {
-    const counts = outcome.usage.kind === 'known' ? { tokensIn: countOf(outcome.usage.inputTokens), tokensOut: countOf(outcome.usage.outputTokens) } : { tokensIn: 'unknown' as const, tokensOut: 'unknown' as const };
+    const counts =
+      outcome.usage.kind === 'known'
+        ? {
+            tokensIn: countOf(outcome.usage.inputTokens),
+            tokensOut: countOf(outcome.usage.outputTokens),
+            cacheReadTokens: outcome.usage.cacheReadTokens === undefined ? ('unknown' as const) : countOf(outcome.usage.cacheReadTokens),
+            cacheWriteTokens: outcome.usage.cacheWriteTokens === undefined ? ('unknown' as const) : countOf(outcome.usage.cacheWriteTokens),
+          }
+        : { tokensIn: 'unknown' as const, tokensOut: 'unknown' as const, cacheReadTokens: 'unknown' as const, cacheWriteTokens: 'unknown' as const };
     const ai = parseAiAuditDetail({
       modelRef: outcome.modelRef,
       promptId: prompt.id,

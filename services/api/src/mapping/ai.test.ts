@@ -35,6 +35,15 @@ describe('the ai section of the mapping file', () => {
     expect(parseWith({ key: { file: '/home/node/.config/neburyx/anthropic.env' } }).ai).toEqual({ key: { file: '/home/node/.config/neburyx/anthropic.env' } });
   });
 
+  it('holds the cache settings as written, and refuses an unknown value or key, naming ai.cache', () => {
+    expect(parseWith({ cache: { enabled: false, ttl: '1h' } }).ai).toEqual({ cache: { enabled: false, ttl: '1h' } });
+    expect(parseWith({ cache: {} }).ai).toEqual({ cache: {} });
+    for (const cache of [{ ttl: '2h' }, { enabled: 'yes' }, { other: 1 }, 'on']) {
+      expect(refusal({ cache }).issues.map((issue) => issue.path).join(' ')).toContain('ai.cache');
+    }
+    expect(AI_DEFAULTS.cache).toEqual({ enabled: true, ttl: '5m' });
+  });
+
   it('refuses a provider other than anthropic, naming ai.provider', () => {
     expect(refusal({ provider: 'other' }).issues.map((issue) => issue.path)).toContain('ai.provider');
   });
@@ -124,7 +133,7 @@ describe('the ai section of the mapping file', () => {
   });
 
   it('has hypothesis defaults inside the ranges the file accepts', () => {
-    expect(AI_DEFAULTS).toEqual({ timeoutMs: 60_000, maxRetries: 0, maxTokens: 8_192, effort: 'medium' });
+    expect(AI_DEFAULTS).toEqual({ timeoutMs: 60_000, maxRetries: 0, maxTokens: 8_192, effort: 'medium', cache: { enabled: true, ttl: '5m' } });
     expect(parseWith({ timeout_ms: AI_DEFAULTS.timeoutMs, max_retries: AI_DEFAULTS.maxRetries, max_tokens: AI_DEFAULTS.maxTokens, effort: AI_DEFAULTS.effort }).ai).toBeDefined();
   });
 });

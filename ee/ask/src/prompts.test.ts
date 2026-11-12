@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
-import { BUILT_IN_PROMPTS, MAX_OVERRIDE_BYTES, PromptError, buildPromptRegistry, type PromptRegistry } from './prompts.js';
+import { BUILT_IN_PROMPTS, MAX_OVERRIDE_BYTES, PromptError, VALUES_BOUNDARY, buildPromptRegistry, type PromptRegistry } from './prompts.js';
 import { PROMPT_IDS } from './provider.js';
 
 const folder = mkdtempSync(join(tmpdir(), 'ee-ask-prompts-'));
@@ -31,6 +31,87 @@ describe('the built-in prompts', () => {
       const used = [...prompt.text.matchAll(/\{\{([A-Za-z0-9]+)\}\}/g)].map((match) => match[1]);
       expect([...new Set(used)].sort()).toEqual([...prompt.parameters].sort());
     }
+  });
+});
+
+describe('the parts of the built-in prompts', () => {
+  const PINNED: Readonly<Record<string, string>> = {
+    'ask.plan': '376e4f1b612930fbbf2c163af851901402a0d4ef0fdb292b15ef0ea6f58b6711',
+    'summary.view': '4933b5f1fa5581982f16d7a54bf55e02adb7380080cf37426ebeb8f97b3d8cb9',
+    'assistant.route': 'd15cd59e3b7db95e5c77c1c0b999b045b42f94099d9f07a26080a2e100e5a320',
+  };
+
+  it.each(PROMPT_IDS)('join to the text %s had before it had parts: the hash and the version are unchanged', async (id) => {
+    const prompt = BUILT_IN_PROMPTS[id];
+    expect(`${prompt.instructions}\n\n${prompt.values}`).toBe(prompt.text);
+    expect(sha(prompt.text)).toBe(PINNED[id]);
+    expect(prompt.version).toBe(1);
+    expect((await registryWith()).resolve(id, VALUES[id]).record.sha256).toBe(PINNED[id]);
+  });
+
+  it.each(PROMPT_IDS)('hold no parameter in the instructions of %s', (id) => {
+    expect(BUILT_IN_PROMPTS[id].instructions).not.toMatch(/\{\{/);
+  });
+
+  it.each(PROMPT_IDS)('resolve %s to the whole text and to its two parts, the values only in the second', async (id) => {
+    const resolved = (await registryWith()).resolve(id, VALUES[id]);
+    expect(`${resolved.instructions}\n\n${resolved.values}`).toBe(resolved.text);
+    expect(resolved.instructions).toBe(BUILT_IN_PROMPTS[id].instructions);
+    for (const value of Object.values(VALUES[id])) {
+      expect(resolved.values).toContain(String(value));
+      expect(resolved.instructions).not.toContain(String(value));
+    }
+  });
+});
+
+describe('a replacement prompt with a values line', () => {
+  const marked = (before: string, after: string, eol = '\n'): string => [before, VALUES_BOUNDARY, after].join(eol);
+
+  it('is split at the line: instructions before it, values after it with the parameters filled, the line in neither', async () => {
+    const path = file('marked.txt', marked('Plan the question.\nBe brief.\n\n', '\n\nCatalog: {{catalog}}\nQuestion: {{question}}'));
+    const resolved = (await registryWith({ 'ask.plan': path })).resolve('ask.plan', VALUES['ask.plan']);
+    expect(resolved.instructions).toBe('Plan the question.\nBe brief.');
+    expect(resolved.values).toBe('Catalog: T1, T2\nQuestion: who is ‹person#1›?');
+    expect(resolved.text).toBe('Plan the question.\nBe brief.\n\nCatalog: T1, T2\nQuestion: who is ‹person#1›?');
+    expect(resolved.text).not.toContain(VALUES_BOUNDARY);
+  });
+
+  it('keeps the hash of the file as it is, the line included, and treats a CRLF file the same', async () => {
+    const content = marked('Plan.', 'Q: {{question}} {{catalog}}', '\r\n');
+    const path = file('crlf.txt', content);
+    const resolved = (await registryWith({ 'ask.plan': path })).resolve('ask.plan', VALUES['ask.plan']);
+    expect(resolved.record.sha256).toBe(sha(content));
+    expect(resolved.instructions).toBe('Plan.');
+  });
+
+  it('takes a value that looks like the line as a value, not as a boundary', async () => {
+    const path = file('looks-like.txt', marked('Plan.', 'Q: {{question}} {{catalog}}'));
+    const resolved = (await registryWith({ 'ask.plan': path })).resolve('ask.plan', { catalog: 'c', question: `x\n${VALUES_BOUNDARY}\ny` });
+    expect(resolved.instructions).toBe('Plan.');
+    expect(resolved.values).toContain(`x\n${VALUES_BOUNDARY}\ny`);
+  });
+
+  it.each([
+    ['a parameter before the line', marked('Plan {{question}}.', 'Q {{catalog}}'), 'the text before the [[values]] line uses a parameter, and would put a value in the cached part'],
+    ['two lines', marked('A.', 'B.\n[[values]]\nC.'), 'the file has more than one [[values]] line'],
+    ['the line first', `${VALUES_BOUNDARY}\nQ {{question}}`, 'the text before the [[values]] line is empty'],
+    ['spaces before the line', `  \n${VALUES_BOUNDARY}\nQ {{question}}`, 'the text before the [[values]] line is empty'],
+    ['the line last', `Plan.\n${VALUES_BOUNDARY}`, 'the text after the [[values]] line is empty'],
+    ['only spaces after the line', `Plan.\n${VALUES_BOUNDARY}\n  \n\t`, 'the text after the [[values]] line is empty'],
+  ])('is refused for %s, naming the id and the reason and never the text', async (_name, content, reason) => {
+    const built = await buildPromptRegistry({ 'ask.plan': file(`bound-${_name.replaceAll(' ', '-')}.txt`, content) });
+    expect(built).toEqual({ ok: false, problems: [`ai.prompts.ask.plan: ${reason}`] });
+  });
+
+  it('is sent whole as values, with no instructions, when it has no such line', async () => {
+    const resolved = (await registryWith({ 'ask.plan': file('whole.txt', 'Plan {{question}} {{catalog}}') })).resolve('ask.plan', VALUES['ask.plan']);
+    expect(resolved.instructions).toBeUndefined();
+    expect(resolved.values).toBe(resolved.text);
+  });
+
+  it('does not read a line that only contains the marker among other text as a boundary', async () => {
+    const resolved = (await registryWith({ 'ask.plan': file('inline.txt', `Plan {{question}} {{catalog}} ${VALUES_BOUNDARY} more`) })).resolve('ask.plan', VALUES['ask.plan']);
+    expect(resolved.instructions).toBeUndefined();
   });
 });
 

@@ -2,6 +2,7 @@ import { readFile, stat } from 'node:fs/promises';
 import Anthropic, { APIConnectionError, APIConnectionTimeoutError, APIError, APIUserAbortError } from '@anthropic-ai/sdk';
 import type { AskConfiguration } from './configure.js';
 import { parseKeyText } from './key-file.js';
+import type { ResolvedPrompt } from './prompts.js';
 import type { FailureCode, ModelAnswer, ModelProvider, ModelRequest, PromptRecord, TokenUsage } from './provider.js';
 
 /** The address of the service. A test points the provider at a stub instead; the environment's own base address is never used. */
@@ -10,7 +11,7 @@ export const ANTHROPIC_BASE_URL = 'https://api.anthropic.com';
 const GROUP_AND_OTHER_BITS = 0o077;
 
 export interface AnthropicProviderOptions {
-  readonly configuration: Pick<AskConfiguration, 'model' | 'key' | 'limits' | 'registry'>;
+  readonly configuration: Pick<AskConfiguration, 'model' | 'key' | 'limits' | 'registry' | 'cache'>;
   /** Where a key given as an environment variable is read, at each call. The default is the process environment. */
   readonly env?: Readonly<Record<string, string | undefined>>;
   /** Only a test sets this, to a stub on the loopback address. */
@@ -58,11 +59,13 @@ function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
 
 const UNKNOWN_USAGE: TokenUsage = { kind: 'unknown' };
 
+const isCount = (value: unknown): value is number => typeof value === 'number' && Number.isInteger(value) && value >= 0;
+
 function usageOf(value: unknown): TokenUsage {
   if (!isRecord(value)) return UNKNOWN_USAGE;
-  const { input_tokens: input, output_tokens: output } = value;
-  if (typeof input === 'number' && typeof output === 'number' && Number.isInteger(input) && Number.isInteger(output) && input >= 0 && output >= 0) {
-    return { kind: 'known', inputTokens: input, outputTokens: output };
+  const { input_tokens: input, output_tokens: output, cache_read_input_tokens: read, cache_creation_input_tokens: written } = value;
+  if (isCount(input) && isCount(output)) {
+    return { kind: 'known', inputTokens: input, outputTokens: output, ...(isCount(read) ? { cacheReadTokens: read } : {}), ...(isCount(written) ? { cacheWriteTokens: written } : {}) };
   }
   return UNKNOWN_USAGE;
 }
@@ -106,6 +109,13 @@ function codeOf(error: unknown): FailureCode {
   return 'provider-error';
 }
 
+/** The one place that decides what is cached: only the fixed instructions, as the one system block with the one breakpoint, and never a value. With caching off, or with no fixed part, the whole prompt is the user message. */
+function promptParts(resolved: ResolvedPrompt, cache: AskConfiguration['cache']): Pick<Anthropic.Messages.MessageCreateParamsNonStreaming, 'system' | 'messages'> {
+  if (!cache.enabled || resolved.instructions === undefined) return { messages: [{ role: 'user', content: resolved.text }] };
+  const breakpoint = cache.ttl === '1h' ? { type: 'ephemeral' as const, ttl: '1h' as const } : { type: 'ephemeral' as const };
+  return { system: [{ type: 'text', text: resolved.instructions, cache_control: breakpoint }], messages: [{ role: 'user', content: resolved.values }] };
+}
+
 function failureOf(error: unknown, code: FailureCode): ProviderFailure {
   if (!(error instanceof APIError) || error.status === undefined) return { code };
   if (error.status >= 200 && error.status < 300) return { code, status: error.status };
@@ -115,7 +125,7 @@ function failureOf(error: unknown, code: FailureCode): ProviderFailure {
 }
 
 /**
- * The provider for the Messages API: one user message, no tools, no sampling parameters, no prefill, no thinking, the effort always named.
+ * The provider for the Messages API: one user message and, with caching on, the fixed instructions as the one cached system block; no tools, no sampling parameters, no prefill, no thinking, the effort always named.
  * The key is read from its reference at each call and handed to a client built for that call; a failed call is reported to `onFailure` and nothing else is logged.
  */
 export function createAnthropicProvider(options: AnthropicProviderOptions): ModelProvider {
@@ -166,10 +176,7 @@ export function createAnthropicProvider(options: AnthropicProviderOptions): Mode
         maxRetries,
       });
       const sent = client.messages
-        .create(
-          { model: configuration.model, max_tokens: maxTokens, output_config: { effort }, messages: [{ role: 'user', content: resolved.text }] },
-          { signal: deadline.signal },
-        )
+        .create({ model: configuration.model, max_tokens: maxTokens, output_config: { effort }, ...promptParts(resolved, configuration.cache) }, { signal: deadline.signal })
         .then((body): ModelAnswer => answerOf(body, resolved.record, configuration.model));
       // The race keeps a late rejection from the abandoned call from surfacing.
       sent.catch(noop);

@@ -18,7 +18,10 @@ export interface PromptRecord {
   readonly sha256: string;
 }
 
-export type TokenUsage = { readonly kind: 'known'; readonly inputTokens: number; readonly outputTokens: number } | { readonly kind: 'unknown' };
+/** `inputTokens` is what the provider counts after the last cache breakpoint; a cache count the provider did not state is absent, never zero. */
+export type TokenUsage =
+  | { readonly kind: 'known'; readonly inputTokens: number; readonly outputTokens: number; readonly cacheReadTokens?: number; readonly cacheWriteTokens?: number }
+  | { readonly kind: 'unknown' };
 
 export const FAILURE_CODES = ['timeout', 'unreachable', 'rejected', 'rate-limited', 'provider-error', 'bad-reply', 'truncated'] as const;
 

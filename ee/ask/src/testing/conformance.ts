@@ -64,6 +64,9 @@ function assertUsage(usage: TokenUsage | undefined): void {
   if (usage.kind === 'unknown') return;
   assert.ok(Number.isInteger(usage.inputTokens) && usage.inputTokens >= 0);
   assert.ok(Number.isInteger(usage.outputTokens) && usage.outputTokens >= 0);
+  for (const count of [usage.cacheReadTokens, usage.cacheWriteTokens]) {
+    assert.ok(count === undefined || (Number.isInteger(count) && count >= 0), 'a cache count is absent or a whole non-negative number');
+  }
 }
 
 const failureCase = ([scenario, code]: readonly [ConformanceScenario, FailureCode]): ConformanceCase => ({
@@ -88,10 +91,7 @@ export const CONFORMANCE_CASES: readonly ConformanceCase[] = [
       assert.ok(answer.text.length > 0, 'the answer has text');
       assert.ok(answer.model.length > 0, 'the answer names the model');
       assert.equal(answer.usage.kind, 'known');
-      if (answer.usage.kind === 'known') {
-        assert.ok(Number.isInteger(answer.usage.inputTokens) && answer.usage.inputTokens >= 0);
-        assert.ok(Number.isInteger(answer.usage.outputTokens) && answer.usage.outputTokens >= 0);
-      }
+      assertUsage(answer.usage);
       assertPromptRecord(rig, answer);
     },
   },

@@ -42,6 +42,7 @@ const TABLES: readonly (readonly [string, z.ZodType])[] = [
   ['retention', child(mappingFileSchema, 'retention')],
   ['ai', child(mappingFileSchema, 'ai')],
   ['ai.key', child(child(mappingFileSchema, 'ai'), 'key')],
+  ['ai.cache', child(child(mappingFileSchema, 'ai'), 'cache')],
   ['source', SOURCE],
   ['auth', child(SOURCE, 'auth')],
   ['vocabulary', child(SOURCE, 'vocabulary')],

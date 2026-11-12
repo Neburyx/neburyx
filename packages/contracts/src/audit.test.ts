@@ -111,3 +111,16 @@ describe('the audit event', () => {
     expect([event, full]).toHaveLength(2);
   });
 });
+
+describe('the cache counts of an AI audit detail', () => {
+  it('hold a count or unknown, and an event written without them still parses', () => {
+    expect(parseAiAuditDetail(AI)).toEqual(AI);
+    expect(parseAiAuditDetail({ ...AI, cacheReadTokens: 300, cacheWriteTokens: 'unknown' })).toEqual({ ...AI, cacheReadTokens: 300, cacheWriteTokens: 'unknown' });
+    expect(parseAiAuditDetail({ ...AI, cacheReadTokens: 0, cacheWriteTokens: 0 })).toMatchObject({ cacheReadTokens: 0, cacheWriteTokens: 0 });
+  });
+
+  it.each([[-1], [1.5], ['many'], [null]])('refuses %s as a cache count', (value) => {
+    expect(aiAuditDetailSchema.safeParse({ ...AI, cacheReadTokens: value }).success).toBe(false);
+    expect(aiAuditDetailSchema.safeParse({ ...AI, cacheWriteTokens: value }).success).toBe(false);
+  });
+});

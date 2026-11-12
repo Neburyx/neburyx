@@ -98,6 +98,13 @@ describe('the conformance suite on a provider that is wrong', () => {
     expect(await failedCases(await fixtureRig({ truncated: odd }))).toEqual(['scenario truncated']);
   });
 
+  it('passes a known usage with cache counts, and fails one whose cache count is not a whole non-negative number', async () => {
+    const withCache: FixtureReply = { kind: 'ok', text: 'a plan', usage: { kind: 'known', inputTokens: 12, outputTokens: 34, cacheReadTokens: 300, cacheWriteTokens: 40 } };
+    expect(await failedCases(await fixtureRig({ 'ok-known-usage': withCache }))).toEqual([]);
+    const odd: FixtureReply = { kind: 'ok', text: 'a plan', usage: { kind: 'known', inputTokens: 12, outputTokens: 34, cacheReadTokens: -1 } };
+    expect(await failedCases(await fixtureRig({ 'ok-known-usage': odd }))).toEqual(['scenario ok-known-usage']);
+  });
+
   it('fails a tool request that is returned as text', async () => {
     const rig = await fixtureRig({ 'model-asks-for-a-tool': { kind: 'ok', text: '{"tool_use":"run_query"}' } });
     expect(await failedCases(rig)).toEqual(['scenario model-asks-for-a-tool']);

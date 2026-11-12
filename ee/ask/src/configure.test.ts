@@ -165,6 +165,38 @@ describe('a line that is not a NAME=value assignment', () => {
   });
 });
 
+describe('the prompt cache settings', () => {
+  const cacheOf = async (settings: AiSettings, env: Record<string, string | undefined> = ENV) => (await configureAsk(settings, env)).configuration?.cache;
+
+  it('are on with a 5 minute lifetime when nothing is given', async () => {
+    expect(await cacheOf(COMPLETE)).toEqual({ enabled: true, ttl: '5m' });
+  });
+
+  it('take the values of the file', async () => {
+    expect(await cacheOf({ ...COMPLETE, cache: { enabled: false, ttl: '1h' } })).toEqual({ enabled: false, ttl: '1h' });
+    expect(await cacheOf({ ...COMPLETE, cache: { ttl: '1h' } })).toEqual({ enabled: true, ttl: '1h' });
+  });
+
+  it.each([
+    ['on over false', { enabled: false }, { NEBURYX_AI_CACHE: 'on' }, { enabled: true, ttl: '5m' }],
+    ['off over true', { enabled: true }, { NEBURYX_AI_CACHE: 'off' }, { enabled: false, ttl: '5m' }],
+    ['1h over 5m', { ttl: '5m' as const }, { NEBURYX_AI_CACHE_TTL: '1h' }, { enabled: true, ttl: '1h' }],
+    ['5m over 1h', { ttl: '1h' as const }, { NEBURYX_AI_CACHE_TTL: '5m' }, { enabled: true, ttl: '5m' }],
+    ['both', { enabled: true, ttl: '5m' as const }, { NEBURYX_AI_CACHE: 'off', NEBURYX_AI_CACHE_TTL: '1h' }, { enabled: false, ttl: '1h' }],
+  ])('are overridden by the environment: %s', async (_name, cache, env, expected) => {
+    expect(await cacheOf({ ...COMPLETE, cache }, { ...ENV, ...env })).toEqual(expected);
+  });
+
+  it.each([
+    ['NEBURYX_AI_CACHE', ['', 'ON', 'true', '1', 'yes', 'SENTINEL-VALUE'], 'NEBURYX_AI_CACHE must be on or off'],
+    ['NEBURYX_AI_CACHE_TTL', ['', '2h', '5M', '60', 'SENTINEL-VALUE'], 'NEBURYX_AI_CACHE_TTL must be 5m or 1h'],
+  ])('refuse a bad value of %s, naming the variable and never the value', async (name, values, problem) => {
+    for (const value of values) {
+      expect(await problemsOf(COMPLETE, { ...ENV, [name]: value })).toEqual([problem]);
+    }
+  });
+});
+
 describe('the enterprise extension', () => {
   it('defines configure, and keeps the configuration for its routes only when it was accepted', async () => {
     const extension = createEnterpriseExtension();

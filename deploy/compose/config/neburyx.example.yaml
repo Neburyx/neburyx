@@ -15,6 +15,9 @@ sources: []
 #   key:
 #     env: ANTHROPIC_API_KEY
 #   effort: medium   # low, medium, high, xhigh or max
+#   cache:
+#     enabled: true  # prompt caching of the fixed instructions of a prompt
+#     ttl: 5m        # 5m or 1h
 #   prompts:
 #     ask.plan: /etc/neburyx/prompts/ask-plan.txt
 # <<< ai preview example

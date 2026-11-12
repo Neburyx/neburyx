@@ -144,10 +144,11 @@ describe('the provider behind the audited call', () => {
       expect(events[0]?.detail).toMatchObject({ ai: { promptId: id, promptSha256: resolved.record.sha256 } });
       if (templateBytes !== undefined) expect(resolved.record.sha256).toBe(sha256Of(templateBytes));
 
-      const sent = JSON.parse(bodies[0] ?? '') as { messages: { content: string }[] };
-      expect(sent.messages[0]?.content).toBe(resolved.text);
+      const sent = JSON.parse(bodies[0] ?? '') as { system?: { text: string }[]; messages: { content: string }[] };
+      expect(sent.messages[0]?.content).toBe(resolved.values);
+      expect([sent.system?.[0]?.text, sent.messages[0]?.content].filter((part) => part !== undefined).join('\n\n')).toBe(resolved.text);
       const recorded = JSON.stringify(events);
-      for (const hash of [sha256Of(resolved.text), sha256Of(bodies[0] ?? ''), sha256Of(sent.messages[0]?.content ?? '')]) {
+      for (const hash of [sha256Of(resolved.text), sha256Of(bodies[0] ?? ''), sha256Of(sent.messages[0]?.content ?? ''), sha256Of(sent.system?.[0]?.text ?? '')]) {
         expect(recorded).not.toContain(hash);
         expect(recorded).not.toContain(hash.toUpperCase());
       }

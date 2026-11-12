@@ -31,8 +31,13 @@ export interface AiAuditDetail {
   readonly promptSha256: string;
   /** The `type.property` names of the `pii` properties the request held, never their values; absent when none was sent, never an empty list. */
   readonly piiPropertiesSent?: readonly string[];
+  /** The input tokens after the last cache breakpoint, as the provider states them; with caching, the total input is this plus the two cache counts. */
   readonly tokensIn: TokenCount | 'unknown';
   readonly tokensOut: TokenCount | 'unknown';
+  /** The input tokens the call read from the provider's prompt cache; absent on an event written before caching existed. */
+  readonly cacheReadTokens?: TokenCount | 'unknown';
+  /** The input tokens the call wrote to the provider's prompt cache; absent on an event written before caching existed. */
+  readonly cacheWriteTokens?: TokenCount | 'unknown';
 }
 
 const tokensSchema = z.union([tokenCountSchema, z.literal('unknown')]);
@@ -53,6 +58,8 @@ export const aiAuditDetailSchema = z.strictObject({
   piiPropertiesSent: z.array(propertyName).min(1).max(MAX_PII_PROPERTIES).optional(),
   tokensIn: tokensSchema,
   tokensOut: tokensSchema,
+  cacheReadTokens: tokensSchema.optional(),
+  cacheWriteTokens: tokensSchema.optional(),
 });
 
 export function parseAiAuditDetail(value: unknown): AiAuditDetail {

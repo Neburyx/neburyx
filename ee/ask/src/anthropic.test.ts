@@ -79,7 +79,7 @@ const message = (extra: Record<string, unknown> = {}): Record<string, unknown> =
   ...extra,
 });
 
-async function configurationWith(limits: Partial<{ timeout_ms: number; max_retries: number; max_tokens: number; effort: 'low' | 'medium' | 'high' | 'xhigh' | 'max' }> = {}, key: { env: string } | { file: string } = { env: 'STUB_KEY' }, model = 'claude-sonnet-5-5'): Promise<AskConfiguration> {
+async function configurationWith(limits: Partial<{ timeout_ms: number; max_retries: number; max_tokens: number; effort: 'low' | 'medium' | 'high' | 'xhigh' | 'max'; cache: { enabled?: boolean; ttl?: '5m' | '1h' } }> = {}, key: { env: string } | { file: string } = { env: 'STUB_KEY' }, model = 'claude-sonnet-5-5'): Promise<AskConfiguration> {
   const { configuration } = await configureAsk({ preview: true, provider: 'anthropic', model, key, ...limits }, { STUB_KEY: KEY });
   if (configuration === undefined) throw new Error('the configuration of the test is not valid');
   return configuration;
@@ -97,7 +97,7 @@ async function answerTo(handlerOfTest: Handler, limits: Parameters<typeof config
 describe('the request', () => {
   it('is one message to the Messages API, with the model, the limit, the effort and the filled prompt, and the key as the only credential', async () => {
     handler = reply(200, message());
-    const configuration = await configurationWith({ effort: 'high', max_tokens: 321 });
+    const configuration = await configurationWith({ effort: 'high', max_tokens: 321, cache: { enabled: false } });
     // The client library reads these from the process environment, so that is where the test sets them.
     vi.stubEnv('ANTHROPIC_API_KEY', 'ambient-key');
     vi.stubEnv('ANTHROPIC_AUTH_TOKEN', 'ambient-token');
@@ -126,9 +126,9 @@ describe('the request', () => {
     expect((JSON.parse(seen[0]?.body ?? '') as { output_config: { effort: string } }).output_config.effort).toBe(AI_DEFAULTS.effort);
   });
 
-  it('never sends sampling parameters, tools, a system prompt, thinking or an assistant turn', async () => {
+  it('never sends sampling parameters, tools, a system prompt (with caching off), thinking or an assistant turn', async () => {
     handler = reply(200, message());
-    await complete(await configurationWith());
+    await complete(await configurationWith({ cache: { enabled: false } }));
     const text = seen[0]?.body ?? '';
     for (const name of ['temperature', 'top_p', 'top_k', 'tools', 'tool_choice', 'system', 'thinking', 'stop_sequences']) expect(text).not.toContain(`"${name}"`);
     expect((JSON.parse(text) as { messages: { role: string }[] }).messages.map((m) => m.role)).toEqual(['user']);
@@ -540,5 +540,114 @@ describe('the usage of a failed answer', () => {
   it('keeps a refusal and an ok reply as they were', async () => {
     expect(await answerTo(reply(200, message({ stop_reason: 'refusal' })))).toMatchObject({ status: 'refused', usage: { kind: 'known', inputTokens: 12, outputTokens: 5 } });
     expect(await answerTo(reply(200, message()))).toMatchObject({ status: 'ok', usage: { kind: 'known', inputTokens: 12, outputTokens: 5 } });
+  });
+});
+
+describe('prompt caching', () => {
+  type Sent = { model: string; max_tokens: number; output_config: { effort: string }; system?: unknown; messages: { role: string; content: string }[] };
+  const sentBody = (): Sent => JSON.parse(seen[0]?.body ?? '') as Sent;
+  const VALUE_REQUEST: ModelRequest = { promptId: 'ask.plan', parameters: { catalog: 'SENTINEL-CATALOG', question: 'SENTINEL-QUESTION [[values]]' } };
+
+  async function callWith(settings: Parameters<typeof configurationWith>[0], request: ModelRequest = VALUE_REQUEST, prompts?: Record<string, string>): Promise<AskConfiguration> {
+    handler = reply(200, message());
+    const { configuration } = await configureAsk({ preview: true, provider: 'anthropic', model: 'claude-sonnet-5-5', key: { env: 'STUB_KEY' }, ...(prompts === undefined ? {} : { prompts }), ...settings }, { STUB_KEY: KEY });
+    if (configuration === undefined) throw new Error('the configuration of the test is not valid');
+    await createAnthropicProvider({ configuration, env: { STUB_KEY: KEY }, baseUrl }).complete(request, SIGNAL);
+    return configuration;
+  }
+
+  it('sends the instructions as the one system block with the breakpoint, and the values as the user message, by default', async () => {
+    const configuration = await callWith({});
+    const resolved = configuration.registry.resolve('ask.plan', VALUE_REQUEST.parameters);
+    const body = sentBody();
+    expect(body.system).toEqual([{ type: 'text', text: resolved.instructions, cache_control: { type: 'ephemeral' } }]);
+    expect(body.messages).toEqual([{ role: 'user', content: resolved.values }]);
+    expect(JSON.stringify(body.system)).not.toContain('ttl');
+  });
+
+  it('names the one hour lifetime when it is chosen', async () => {
+    await callWith({ cache: { ttl: '1h' } });
+    expect((sentBody().system as { cache_control: unknown }[])[0]?.cache_control).toEqual({ type: 'ephemeral', ttl: '1h' });
+  });
+
+  it.each([['5m'], ['1h']] as const)('never has a value of the request inside the system block, with the lifetime %s', async (ttl) => {
+    await callWith({ cache: { ttl } });
+    const body = sentBody();
+    expect(JSON.stringify(body.system)).not.toMatch(/SENTINEL|\[\[values\]\]/);
+    expect(body.messages[0]?.content).toContain('SENTINEL-CATALOG');
+    expect(body.messages[0]?.content).toContain('SENTINEL-QUESTION [[values]]');
+  });
+
+  it.each([['summary.view', { view: 'v' }], ['assistant.route', { message: 'm', view: 'v' }]] as const)('puts the instructions of %s in the system block too', async (promptId, parameters) => {
+    await callWith({}, { promptId, parameters });
+    expect((sentBody().system as unknown[]).length).toBe(1);
+  });
+
+  it('sends no system field and no cache_control anywhere with caching off, and the whole prompt as the user message', async () => {
+    const configuration = await callWith({ cache: { enabled: false, ttl: '1h' } });
+    const body = seen[0]?.body ?? '';
+    expect(body).not.toContain('cache_control');
+    expect(body).not.toContain('"system"');
+    expect(sentBody().messages).toEqual([{ role: 'user', content: configuration.registry.resolve('ask.plan', VALUE_REQUEST.parameters).text }]);
+  });
+
+  it('sends no system field for a replacement prompt that declares no values line, even with caching on', async () => {
+    const path = join(folder, 'no-boundary.txt');
+    writeFileSync(path, 'Plan {{question}} {{catalog}}');
+    const configuration = await callWith({}, VALUE_REQUEST, { 'ask.plan': path });
+    const body = seen[0]?.body ?? '';
+    expect(body).not.toContain('cache_control');
+    expect(body).not.toContain('"system"');
+    expect(sentBody().messages[0]?.content).toBe(configuration.registry.resolve('ask.plan', VALUE_REQUEST.parameters).text);
+  });
+
+  it('caches the instructions of a replacement prompt with a values line, and sends the marker nowhere', async () => {
+    const path = join(folder, 'boundary.txt');
+    writeFileSync(path, 'Plan the question.\n[[values]]\nQ: {{question}} {{catalog}}');
+    await callWith({}, VALUE_REQUEST, { 'ask.plan': path });
+    const body = sentBody();
+    expect(body.system).toEqual([{ type: 'text', text: 'Plan the question.', cache_control: { type: 'ephemeral' } }]);
+    expect(body.messages[0]?.content).toBe('Q: SENTINEL-QUESTION [[values]] SENTINEL-CATALOG');
+  });
+
+  it('changes nothing else in the request: the model, the limit, the effort, no tools and no sampling parameters', async () => {
+    await callWith({ effort: 'high', max_tokens: 321 });
+    const body = sentBody();
+    expect(Object.keys(body).sort()).toEqual(['max_tokens', 'messages', 'model', 'output_config', 'system']);
+    expect(body).toMatchObject({ model: 'claude-sonnet-5-5', max_tokens: 321, output_config: { effort: 'high' } });
+    expect(seen[0]?.headers.authorization).toBe(`Bearer ${KEY}`);
+  });
+});
+
+describe('the cache counts of the usage', () => {
+  it('are the counts of the reply, next to the input and output counts', async () => {
+    const answer = await answerTo(reply(200, message({ usage: { input_tokens: 12, output_tokens: 5, cache_read_input_tokens: 300, cache_creation_input_tokens: 40 } })));
+    expect(answer).toMatchObject({ status: 'ok', usage: { kind: 'known', inputTokens: 12, outputTokens: 5, cacheReadTokens: 300, cacheWriteTokens: 40 } });
+  });
+
+  it.each([
+    ['null', { cache_read_input_tokens: null, cache_creation_input_tokens: null }],
+    ['absent', {}],
+    ['decimals', { cache_read_input_tokens: 1.5, cache_creation_input_tokens: 2.5 }],
+    ['negative', { cache_read_input_tokens: -1, cache_creation_input_tokens: -2 }],
+    ['text', { cache_read_input_tokens: '3', cache_creation_input_tokens: '4' }],
+  ])('are left out, never zero, when they are %s, and the other counts stay', async (_name, cache) => {
+    const answer = await answerTo(reply(200, message({ usage: { input_tokens: 12, output_tokens: 5, ...cache } })));
+    expect(answer).toMatchObject({ status: 'ok', usage: { kind: 'known', inputTokens: 12, outputTokens: 5 } });
+    expect(answer).not.toHaveProperty('usage.cacheReadTokens');
+    expect(answer).not.toHaveProperty('usage.cacheWriteTokens');
+  });
+
+  it('keep a stated zero as zero, and keep the one that is valid when the other is not', async () => {
+    expect(await answerTo(reply(200, message({ usage: { input_tokens: 1, output_tokens: 2, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } })))).toMatchObject({ usage: { cacheReadTokens: 0, cacheWriteTokens: 0 } });
+    const one = await answerTo(reply(200, message({ usage: { input_tokens: 1, output_tokens: 2, cache_read_input_tokens: 7, cache_creation_input_tokens: null } })));
+    expect(one).toMatchObject({ usage: { cacheReadTokens: 7 } });
+    expect(one).not.toHaveProperty('usage.cacheWriteTokens');
+  });
+
+  it('are carried by a refusal and by a reply cut off at the token limit', async () => {
+    const usage = { input_tokens: 12, output_tokens: 256, cache_read_input_tokens: 300, cache_creation_input_tokens: 40 };
+    expect(await answerTo(reply(200, message({ stop_reason: 'refusal', usage })))).toMatchObject({ status: 'refused', usage: { cacheReadTokens: 300, cacheWriteTokens: 40 } });
+    expect(await answerTo(reply(200, message({ stop_reason: 'max_tokens', usage })))).toMatchObject({ status: 'failed', code: 'truncated', usage: { cacheReadTokens: 300, cacheWriteTokens: 40 } });
   });
 });

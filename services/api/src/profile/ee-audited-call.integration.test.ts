@@ -85,7 +85,7 @@ describe('a model call through the fixture, recorded in audit_events', () => {
         action: { 'ask.plan': 'ask.plan', 'summary.view': 'ai.summary', 'assistant.route': 'assistant.turn' }[id],
         result: 'success',
         trace_id: 'tr-call',
-        detail: { ai: { modelRef: 'fixture-model', promptId: id, promptVersion: '1', promptSha256: registry.resolve(id, REQUESTS[id].parameters).record.sha256, tokensIn: 12, tokensOut: 34 } },
+        detail: { ai: { modelRef: 'fixture-model', promptId: id, promptVersion: '1', promptSha256: registry.resolve(id, REQUESTS[id].parameters).record.sha256, tokensIn: 12, tokensOut: 34, cacheReadTokens: 'unknown', cacheWriteTokens: 'unknown' } },
       },
     ]);
   });

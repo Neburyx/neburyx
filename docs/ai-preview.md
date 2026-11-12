@@ -46,6 +46,32 @@ ai:
 
 The file is plain UTF-8 text of at most 64 KiB. It may use only the parameters of its prompt, written as `{{name}}`: `ask.plan` has `catalog` and `question`, `summary.view` has `view`, `assistant.route` has `message` and `view`. A replacement changes what the model is told; it cannot add tools. The hash of a prompt, which later work records in the audit with its id and version, is the SHA-256 of the prompt text before any parameter is filled in (of the file's bytes, for a replacement), so it names the prompt and holds none of the request. The features that use these prompts come later; today the preview has one route, `GET /v1/ai/status`, and the checks that keep model output from reaching your graph arrive with them.
 
+## Prompt caching
+
+Each prompt has two parts: fixed instructions, and the values of the investigation that follow them. With caching on, the provider is asked to keep the fixed instructions in its prompt cache, so a later call that starts with the same instructions reads them back at a lower price and faster. Only the fixed instructions are marked for the cache. A value of an investigation is never in the cached part: it travels in the user message after it. With caching off, the call is one user message with the whole prompt, as before, and no cache marker is sent.
+
+```yaml
+ai:
+  cache:
+    enabled: true   # the default
+    ttl: 5m         # the default; or 1h
+```
+
+The environment variables `NEBURYX_AI_CACHE` (`on` or `off`) and `NEBURYX_AI_CACHE_TTL` (`5m` or `1h`) win over the file. Any other value refuses the start and names the variable. They are read from the environment of the API process, so a container or service must be given them; `pnpm dev` and the compose files do not pass them on today. Like the other `ai` settings, they are checked only when the preview is on.
+
+| Lifetime | What it costs to write the cache | When to choose it |
+|---|---|---|
+| `5m` (default) | 1.25 times the normal input price of the cached tokens | Calls come often. Each read renews the lifetime at no cost |
+| `1h` | 2 times the normal input price | Calls come less often than every five minutes but the same instructions are reused within the hour |
+
+A read costs a fraction of the normal price (0.1 times on most models, 0.05 times on the current Sonnet and Opus models). The prices are the provider's, and they change; check its price list.
+
+A prefix shorter than the model's minimum is not cached, and no error is raised. The minimum is about 512 tokens on the current models, and more on older ones (1,024 to 4,096). Today's built-in prompts are short, so they will not be cached until later work makes them longer. A replacement prompt reaches the minimum when its fixed instructions are long enough.
+
+A replacement prompt marks where the instructions end with a line that holds only `[[values]]`. The text before the line is the instructions and the text after it is the values; the line itself is not sent. The instructions cannot use a `{{name}}` parameter, and neither part may be empty, or the start is refused. A replacement with no such line is sent whole as the user message and is not cached. (A file that already held such a line is read differently from this version on: the line is removed and the two parts are joined by a blank line.) The hash recorded in the audit is the hash of the whole file, line included.
+
+The audit event of a model call carries `tokensIn` and `tokensOut`, and also `cacheReadTokens` (tokens read from the cache) and `cacheWriteTokens` (tokens written to it), each a number or `unknown` when the provider does not state it. `tokensIn` counts only the input tokens after the cached part, so the total input of a call is `tokensIn` plus the two cache figures.
+
 ## What may be sent to the model
 
 By default no property of any record is sent: the model gets placeholders for the records, their types and the question, and nothing else. To send properties, list them by type in `ai.properties`. The list only narrows what the server already holds back: values that the gate masked are never sent, whatever the list says.

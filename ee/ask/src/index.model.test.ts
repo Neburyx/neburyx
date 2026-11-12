@@ -119,6 +119,22 @@ describe('the failure line of the extension', () => {
     }
   });
 
+  it('records one event with the cache counts the stub states, next to the input and output counts', async () => {
+    events.length = 0;
+    status = 200;
+    failureBody = { id: 'm', type: 'message', role: 'assistant', model: 'claude-sonnet-5-5', content: [{ type: 'text', text: 'A synthetic answer.' }], stop_reason: 'end_turn', usage: { input_tokens: 12, output_tokens: 5, cache_read_input_tokens: 300, cache_creation_input_tokens: 40 } };
+    try {
+      const extension = createEnterpriseExtension({ modelBaseUrl: baseUrl });
+      await extension.configure?.(SETTINGS, { ONLY_IN_THE_START_ENV: 'SENTINEL-KEY' });
+      extension.createAuditSink?.(SINK_CONTEXT);
+      await extension.model()?.call({ promptId: 'summary.view', parameters: { view: 'a view' } }, context, new AbortController().signal);
+      expect(events).toHaveLength(1);
+      expect(events[0]).toMatchObject({ result: 'success', detail: { ai: { tokensIn: 12, tokensOut: 5, cacheReadTokens: 300, cacheWriteTokens: 40 } } });
+    } finally {
+      failureBody = undefined;
+    }
+  });
+
   it('writes nothing for a call that succeeds', async () => {
     const { lines, answer } = await callWith(200);
     expect(answer).toMatchObject({ status: 'ok' });

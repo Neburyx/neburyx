@@ -121,6 +121,7 @@ The `ai` block is optional, and so is each key in it. It belongs to the deployme
 | `max_retries` | no | How many times a failed call is tried again, from 0 to 5. The default is 0 |
 | `max_tokens` | no | The most tokens a reply may use, from 1 to 32768. The default is 8192 |
 | `effort` | no | How much work the model puts into a reply: `low`, `medium`, `high`, `xhigh` or `max`. The default is `medium`, a hypothesis that will change with measurement |
+| `cache` | no | Prompt caching: a map with `enabled` and `ttl`, described below. The default is on, with a 5-minute lifetime |
 | `properties` | no | The properties of each entity or relationship type that may be sent to the model: a map from a type name to a list of property names. The default is none: no property of any record is sent unless it is listed here. The name `*` stands for every property that is not `pii`. A property the gate masked is never sent. `pii` properties are covered by `pii_override` |
 | `pii_override` | no | `true` allows a `pii` property to be sent, but only one that is also named in `properties` (`*` never includes one). The server logs a warning for each at start-up. The default is `false` |
 
@@ -131,6 +132,14 @@ How to switch the preview on, and how to make the key file, is in [Switch the AI
 |---|---|---|
 | `env` | no | The name of the environment variable that holds the key (letters, digits and underscores, not starting with a digit). Give this or `file`, not both |
 | `file` | no | The absolute path of the file that holds the key. Give this or `env`, not both |
+
+<!-- keys: ai.cache -->
+| Key | Required | What it does |
+|---|---|---|
+| `enabled` | no | `true` or `false`: whether the fixed instructions of a prompt are cached by the provider. The default is `true`. The environment variable `NEBURYX_AI_CACHE` (`on` or `off`) wins over this |
+| `ttl` | no | How long the provider keeps the cached instructions: `5m` or `1h`. The default is `5m`. The environment variable `NEBURYX_AI_CACHE_TTL` (`5m` or `1h`) wins over this |
+
+What is cached, what it costs and when it does not apply is in [Switch the AI preview on](ai-preview.md#prompt-caching).
 
 ### A source
 

@@ -69,7 +69,7 @@ describe('an answered model call', () => {
         sourceId: 'src-1',
         investigationId: 'inv-1',
         traceId: 'tr-1',
-        detail: { ai: { modelRef: 'fixture-model', promptId: id, promptVersion: '1', promptSha256: resolved.record.sha256, tokensIn: 12, tokensOut: 34 } },
+        detail: { ai: { modelRef: 'fixture-model', promptId: id, promptVersion: '1', promptSha256: resolved.record.sha256, tokensIn: 12, tokensOut: 34, cacheReadTokens: 'unknown', cacheWriteTokens: 'unknown' } },
       },
     ]);
   });
@@ -237,6 +237,35 @@ describe('a refused, failed or thrown call', () => {
     it('records unknown for a count that is not a whole non-negative number, and keeps the other', async () => {
       expect(await eventFor({ kind: 'known', inputTokens: -1, outputTokens: 2 })).toMatchObject({ detail: { ai: { tokensIn: 'unknown', tokensOut: 2 } } });
       expect(await eventFor({ kind: 'known', inputTokens: 3, outputTokens: 1.5 })).toMatchObject({ detail: { ai: { tokensIn: 3, tokensOut: 'unknown' } } });
+    });
+  });
+
+  describe('the cache counts of the usage', () => {
+    const usage = (extra: Record<string, number>): TokenUsage => ({ kind: 'known', inputTokens: 12, outputTokens: 5, ...extra });
+
+    it.each(['ok', 'refused', 'failed'] as const)('are recorded in the event of a %s answer next to the other counts', async (kind) => {
+      const reply: FixtureReply = kind === 'ok' ? { kind, text: 'a plan', usage: usage({ cacheReadTokens: 300, cacheWriteTokens: 40 }) } : kind === 'refused' ? { kind, usage: usage({ cacheReadTokens: 300, cacheWriteTokens: 40 }) } : { kind, code: 'truncated', usage: usage({ cacheReadTokens: 300, cacheWriteTokens: 40 }) };
+      const { audited, events } = await rig(reply);
+      await audited.call(REQUESTS['ask.plan'], CONTEXT, SIGNAL);
+      expect(events[0]?.detail).toMatchObject({ ai: { tokensIn: 12, tokensOut: 5, cacheReadTokens: 300, cacheWriteTokens: 40 } });
+    });
+
+    it('are unknown when the usage does not state them, zero when it states zero, and each is kept when the other is missing', async () => {
+      const eventFor = async (given: TokenUsage): Promise<AuditEvent | undefined> => {
+        const { audited, events } = await rig({ kind: 'ok', text: 't', usage: given });
+        await audited.call(REQUESTS['ask.plan'], CONTEXT, SIGNAL);
+        return events[0];
+      };
+      expect((await eventFor(usage({})))?.detail).toMatchObject({ ai: { cacheReadTokens: 'unknown', cacheWriteTokens: 'unknown' } });
+      expect((await eventFor(usage({ cacheReadTokens: 0, cacheWriteTokens: 0 })))?.detail).toMatchObject({ ai: { cacheReadTokens: 0, cacheWriteTokens: 0 } });
+      expect((await eventFor(usage({ cacheReadTokens: 7 })))?.detail).toMatchObject({ ai: { cacheReadTokens: 7, cacheWriteTokens: 'unknown' } });
+      expect((await eventFor({ kind: 'unknown' }))?.detail).toMatchObject({ ai: { tokensIn: 'unknown', cacheReadTokens: 'unknown', cacheWriteTokens: 'unknown' } });
+    });
+
+    it('are unknown for a count that is not a whole non-negative number, and the others stay', async () => {
+      const { audited, events } = await rig({ kind: 'ok', text: 't', usage: usage({ cacheReadTokens: -1, cacheWriteTokens: 1.5 }) });
+      await audited.call(REQUESTS['ask.plan'], CONTEXT, SIGNAL);
+      expect(events[0]?.detail).toMatchObject({ ai: { tokensIn: 12, cacheReadTokens: 'unknown', cacheWriteTokens: 'unknown' } });
     });
   });
 
