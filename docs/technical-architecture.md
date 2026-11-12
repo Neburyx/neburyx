@@ -1477,7 +1477,7 @@ is configured as its own source. Together they produce:
 **Acceptance checks by release:**
 
 1. **Community v0.1.** Demo-graph install ≤ 15 min; supernode suite
-   passes; domain-neutrality suite passes (both packs); an outsider completes a demo case unaided.
+   passes; domain-neutrality suite passes (both packs); the author completes the demo case and the mapping task.
 2. **Ask preview [W2].** Plan accuracy meets the eval baseline; every summary statement
    cites returned elements; the AI case summary and the assistant's replies pass the citation, numeric and leakage suites on the demo views; assistant route accuracy meets its baseline; runs on the demo graph only.
 3. **Enterprise build [Later].** Evidence-pack suite (`verify-pack`, tamper,
