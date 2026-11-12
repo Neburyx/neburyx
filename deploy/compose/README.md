@@ -2,16 +2,10 @@
 
 The Community install: the Neburyx image and a Postgres container, reachable only from this machine.
 
+The tag `local` that the command below sets is what `docker build -f deploy/docker/Dockerfile -t neburyx:local .` makes, from the repository root, until an image is published.
+
 ```bash
 cd deploy/compose
-cp .env.example .env     # then put three random passwords and the cursor key in it
-cp config/neburyx.example.yaml config/neburyx.yaml
-docker compose up --wait
-```
-
-Instead of `cp .env.example .env` and filling it in, write a complete `.env` with random values in one step (the tag `local` is what `docker build -f deploy/docker/Dockerfile -t neburyx:local .` makes, from the repository root, until an image is published):
-
-```bash
 [ -e .env ] && echo ".env exists; not overwritten" || ( umask 077; cat > .env <<EOF
 NEBURYX_DB_ADMIN_PASSWORD=$(openssl rand -hex 24)
 NEBURYX_DB_MIGRATION_PASSWORD=$(openssl rand -hex 24)
@@ -20,9 +14,15 @@ NEBURYX_CURSOR_KEY=$(openssl rand -base64 32)
 NEBURYX_TAG=local
 EOF
 )
+cp config/neburyx.example.yaml config/neburyx.yaml
+docker compose up --wait
 ```
 
-The command refuses to touch a `.env` that already exists: Postgres sets its role passwords only when its volume is first made, so new passwords written over a running install would lock the app out of its own database, and a new cursor key would make open pages say "Start again". Changing a password after the first start is not done by this command. Never commit `.env`. If `docker compose up` stops at a service named after a setting, such as `NEBURYX_CURSOR_KEY-base64-of-at-least-32-bytes`, that setting breaks the rule in the name; `docker compose logs` on that service says how to make a valid one.
+The command that writes `.env` refuses to touch a `.env` that already exists: Postgres sets its role passwords only when its volume is first made, so new passwords written over a running install would lock the app out of its own database, and a new cursor key would make open pages say "Start again". Changing a password after the first start is not done by this command. Never commit `.env`.
+
+If `up` stops with an error that names a service after a setting, for example `service "NEBURYX_CURSOR_KEY-base64-of-at-least-32-bytes" didn't complete successfully`, run `docker compose logs NEBURYX_CURSOR_KEY-base64-of-at-least-32-bytes` with that service's name: it says what is wrong with the setting and how to make a valid one.
+
+To fill in `.env` by hand instead of the command above, run `cp .env.example .env` and `chmod 600 .env`, put three random passwords and the cursor key in it, and set `NEBURYX_TAG=local`, the tag that the build above makes.
 
 - `db` is the official Postgres image. Its first start creates the database `neburyx`, a migration role
   that owns it and an app role.

@@ -52,7 +52,7 @@ You set the tag `local` as `NEBURYX_TAG` in the next section. Each version you b
 
    The command refuses to touch a `.env` that already exists: Postgres sets its role passwords only when its volume is first made, so new passwords written over a running install would lock the app out of its own database, and a new cursor key would make open pages say "Start again". Changing a password after the first start is not done by this command. Never commit `.env`.
 
-   To fill it in by hand instead, copy `.env.example` to `.env`, `chmod 600 .env`, and make the values with `openssl rand -hex 24` (run it three times, one for each password; letters and digits only, because the passwords are put into connection strings) and `openssl rand -base64 32` (the cursor key). Set `NEBURYX_TAG=local` as well, if that is the tag you built.
+   To fill it in by hand instead of the command above, run `cp .env.example .env` and `chmod 600 .env`, then make the values with `openssl rand -hex 24` (run it three times, one for each password; letters and digits only, because the passwords are put into connection strings) and `openssl rand -base64 32` (the cursor key). Set `NEBURYX_TAG=local` as well, if that is the tag you built.
 
    The cursor key signs the cursors of paged lists. Keep the same key across restarts: with it, a page that a person has open can still load its next page after the API restarts; without it, that page says "Start again". Never commit it.
 
@@ -62,7 +62,7 @@ You set the tag `local` as `NEBURYX_TAG` in the next section. Each version you b
    docker compose up --wait
    ```
 
-   `up` stops before the database or the app starts if a password or the cursor key is missing or breaks its rule: the error at the end of its output names the service that failed, for example `NEBURYX_CURSOR_KEY-base64-of-at-least-32-bytes`, and `docker compose logs` on that service says how to make a valid value.
+   `up` stops before the database or the app starts if a password or the cursor key is missing or breaks its rule: the error at the end of its output names the service that failed. If `up` stops with an error that names a service after a setting, for example `service "NEBURYX_CURSOR_KEY-base64-of-at-least-32-bytes" didn't complete successfully`, run `docker compose logs NEBURYX_CURSOR_KEY-base64-of-at-least-32-bytes` with that service's name: it says what is wrong with the setting and how to make a valid one.
 
 4. Check that it is ready:
 

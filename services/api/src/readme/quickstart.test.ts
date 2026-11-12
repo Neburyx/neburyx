@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { parse } from 'yaml';
 import { Doc, REPOSITORY_ROOT } from '../testing/doc.js';
-import { inQuickstart, quickstartCommands, readme, stripComment } from '../testing/quickstart.js';
+import { commandsOfBlock, inQuickstart, quickstartCommands, readme } from '../testing/quickstart.js';
 import { reportLines } from '../source-test/command.js';
 import { reportFromServer } from '../source-test/report.js';
 import { baseSource, firstSource, load } from '../testing/mapping.js';
@@ -25,7 +25,7 @@ const flat = (text: string): string => text.replace(/\s+/g, ' ');
 const COMMAND_WORDS = /^(docker|cd|cp|openssl) /;
 
 function demoCommands(): Set<string> {
-  const fenced = demo.blocks().filter((block) => block.info === 'bash').flatMap((block) => block.text.split('\n').map(stripComment).filter((line) => line !== ''));
+  const fenced = demo.blocks().filter((block) => block.info === 'bash').flatMap((block) => commandsOfBlock(block.text));
   const inline = demo.lines.flatMap((line) => (line.startsWith('```') ? [] : [...line.matchAll(/`([^`]+)`/g)].map((match) => match[1] ?? '').filter((span) => COMMAND_WORDS.test(span))));
   const keyMaking = [...envExample.matchAll(/openssl rand -(?:hex|base64) \d+/g)].map((match) => match[0]);
   return new Set([...fenced, ...inline, ...keyMaking]);
@@ -132,5 +132,91 @@ describe('the Quickstart section', () => {
     expect(readme.blocks().filter((block) => inQuickstart(block.line) && block.info.toLowerCase() === 'cypher')).toEqual([]);
     expect(quickstart.split('\n').filter((line) => /^\s*(MATCH|MERGE|CREATE|RETURN|CALL|WITH|UNWIND|DELETE|SET)\b/.test(line))).toEqual([]);
     expect(quickstart).not.toMatch(/\b(EP|OD|DM|F|B)-\d+(\.\d+)*\b|\b[DGQ]\d+\b|\bfound[e]r\b|\borchestrat[o]r\b/i);
+  });
+});
+
+const GENERATOR = /^\[ -e \.env \] && echo "\.env exists; not overwritten" \|\| \( umask 077; cat > \.env <<EOF\n[\s\S]*\nEOF\n\)$/;
+
+describe('the settings step and the failed-check line', () => {
+  it('refuses a here-document that is never closed, instead of reading past it', () => {
+    expect(() => commandsOfBlock('cat > .env <<EOF\nA=1\nEOF')).toThrow('is not closed');
+    expect(commandsOfBlock('cd here\ncat > .env <<EOF\nA=1\nEOF\n)\nnext')).toEqual(['cd here', 'cat > .env <<EOF\nA=1\nEOF\n)', 'next']);
+  });
+
+  it('makes the generator the step and fills in by hand as the alternative after it', () => {
+    const section = sectionText('Fill in the settings');
+    const generator = readme.blocks().find((block) => inQuickstart(block.line) && GENERATOR.test(commandsOfBlock(block.text).find((command) => command.startsWith('[ -e .env ]')) ?? ''));
+    expect(generator).toBeDefined();
+    expect(commandsOfBlock(generator?.text ?? '')[0]).toBe('cd deploy/demo');
+    expect(section.indexOf('cat > .env')).toBeGreaterThan(-1);
+    expect(section.indexOf('Or fill it in by hand')).toBeGreaterThan(section.indexOf('cat > .env'));
+    expect(section.indexOf('cp .env.example .env')).toBeGreaterThan(section.indexOf('Or fill it in by hand'));
+    const demoStep = demo.text.indexOf('cat > .env');
+    expect(demoStep).toBeGreaterThan(-1);
+    expect(demo.text.indexOf('cp .env.example .env')).toBeGreaterThan(demoStep);
+  });
+
+  it('carries the generator command that the demo README carries, word for word', () => {
+    const own = quickstartCommands().filter((command) => command.startsWith('[ -e .env ]'));
+    expect(own).toHaveLength(1);
+    expect(demoCommands().has(own[0] ?? '')).toBe(true);
+  });
+
+  it('tells the reader to run docker compose logs with the name of a service that is named after a setting, which is a service of the demo compose file', () => {
+    const line = 'docker compose logs NEBURYX_CURSOR_KEY-base64-of-at-least-32-bytes';
+    expect(SERVICES).toContain('NEBURYX_CURSOR_KEY-base64-of-at-least-32-bytes');
+    expect(flat(sectionText('If the stack does not start'))).toContain(line);
+    for (const text of [flat(sectionText('Start the demo')), flat(demo.text)]) {
+      expect(text).toContain(line);
+      expect(text).toContain("didn't complete successfully");
+    }
+  });
+});
+
+const BANKING_PACK = parse(readFileSync(join(REPOSITORY_ROOT, 'domain-packs/banking-fraud/neburyx.yaml'), 'utf8')) as { sources: { entities: { type: string; label: string; display?: { name?: string } }[]; derived: { id: string; from: string; to: string }[] }[] };
+const INSURANCE_PACK = parse(readFileSync(join(REPOSITORY_ROOT, 'domain-packs/insurance-claims/neburyx.yaml'), 'utf8')) as { sources: unknown[] };
+
+describe('the walk-through lines about derived links, the evidence panel and record links', () => {
+  const WALK = flat(sectionText('Find the accounts that share a device') + sectionText('Ask why a link is there'));
+
+  it('describes the two Linked Account rows with the client\'s own words, and the dashed style of a derived link', () => {
+    const copy = readFileSync(join(REPOSITORY_ROOT, 'apps/web/src/inspector/copy.ts'), 'utf8');
+    const rows = readFileSync(join(REPOSITORY_ROOT, 'apps/web/src/inspector/derived-rows.tsx'), 'utf8');
+    const derivedText = readFileSync(join(REPOSITORY_ROOT, 'apps/web/src/inspector/derived-text.ts'), 'utf8');
+    const evidence = readFileSync(join(REPOSITORY_ROOT, 'apps/web/src/evidence/copy.ts'), 'utf8');
+    const renderer = readFileSync(join(REPOSITORY_ROOT, 'apps/web/src/canvas/cytoscape-renderer.ts'), 'utf8');
+    expect(copy).toContain("export const LINKED = 'Linked';");
+    expect(copy).toContain("export const RULE_DERIVED = 'rule-derived';");
+    expect(rows).toContain('`${LINKED} ${name} · ${derivedCountText(result.count)}`');
+    expect(derivedText).toContain(": 'Show'");
+    expect(evidence).toContain("export const WHY_HERE = 'Why is this relationship here?';");
+    expect(renderer).toMatch(/selector: 'edge\[origin = "derived"\]',\s*style: \{[^}]*'line-style': 'dashed'/);
+    const banking = BANKING_PACK.sources[0];
+    const sameType = banking?.derived.filter((rule) => rule.from === rule.to) ?? [];
+    expect(sameType).toHaveLength(2);
+    const type = banking?.entities.find((entity) => entity.type === sameType[0]?.from);
+    const name = type?.display?.name ?? type?.label;
+    for (const rule of sameType) expect(WALK).toContain(`the ${rule.id.replace(/-/g, ' ')}`);
+    expect(WALK).toContain(`two "Linked ${name}" rows`);
+    expect(WALK).toContain(`"Linked ${name} · N · rule-derived"`);
+    expect(WALK).toContain('Press "Show" on a row');
+    expect(WALK).toContain('Derived links are dashed.');
+    expect(WALK).toContain('"Why is this relationship here?"');
+  });
+
+  it('says that selecting a relationship opens its evidence panel, and quotes the panel\'s title as the client names it', () => {
+    expect(WALK).toContain('Selecting a relationship opens its evidence panel');
+    expect(WALK).toContain('"Relationship evidence"');
+    const panel = readFileSync(join(REPOSITORY_ROOT, 'apps/web/src/evidence/evidence-kit.tsx'), 'utf8');
+    expect(panel).toContain("name: 'Relationship evidence'");
+  });
+
+  it('names every placeholder host of the demo packs\' record and evidence links, and says opening one fails and that your own source uses its mapping\'s template', () => {
+    const hosts = new Set<string>();
+    for (const pack of [BANKING_PACK, INSURANCE_PACK]) for (const url of JSON.stringify(pack).matchAll(/https:\/\/([a-z0-9.-]+)\//g)) hosts.add(url[1] ?? '');
+    expect([...hosts].sort()).toEqual(['events.example.test', 'records.example.test']);
+    for (const host of hosts) expect(WALK).toContain(`\`${host}\``);
+    expect(WALK).toContain('opening one shows a load error: that is expected');
+    expect(WALK).toContain('record links go to the link template that your mapping sets');
   });
 });

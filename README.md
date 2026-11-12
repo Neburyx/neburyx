@@ -61,8 +61,25 @@ docker build -f deploy/docker/Dockerfile -t neburyx .
 
 ### Fill in the settings
 
+Write a complete `.env` with random values in one step:
+
 ```bash
 cd deploy/demo
+[ -e .env ] && echo ".env exists; not overwritten" || ( umask 077; cat > .env <<EOF
+NEBURYX_DB_ADMIN_PASSWORD=$(openssl rand -hex 24)
+NEBURYX_DB_MIGRATION_PASSWORD=$(openssl rand -hex 24)
+NEBURYX_DB_APP_PASSWORD=$(openssl rand -hex 24)
+NEBURYX_CURSOR_KEY=$(openssl rand -base64 32)
+DEMO_NEO4J_PASSWORD=$(openssl rand -hex 24)
+EOF
+)
+```
+
+The command refuses to touch a `.env` that already exists: Postgres sets its role passwords only when its volume is first made, so new passwords written over a running install would lock the app out of its own database, and a new cursor key would make open pages say "Start again". Changing a password after the first start is not done by this command. Never commit `.env`.
+
+Or fill it in by hand, instead of the command above:
+
+```bash
 cp .env.example .env
 ```
 
@@ -80,6 +97,8 @@ docker compose up --wait
 
 The command returns when the stack is healthy: the database, the migration, both demo graphs and the
 product. Only the product is published, on `127.0.0.1`: see the warning above.
+
+If `up` stops with an error that names a service after a setting, for example `service "NEBURYX_CURSOR_KEY-base64-of-at-least-32-bytes" didn't complete successfully`, run `docker compose logs NEBURYX_CURSOR_KEY-base64-of-at-least-32-bytes` with that service's name: it says what is wrong with the setting and how to make a valid one.
 
 ### Open the first page
 
@@ -107,11 +126,19 @@ expand outward from the starting account:
 The graph now shows six accounts on that device and that address: `AC-0002000`, `AC-0002001`,
 `AC-0002002`, `AC-0002003`, `AC-0002004` and `AC-0002005`.
 
+To see the links that a rule derives, select an account. In the inspector's Overview it has two "Linked Account" rows, one for
+the shared device and one for the shared address, each reading "Linked Account · N · rule-derived". Press "Show" on a row to draw
+those links. Derived links are dashed. Right-click one and choose "Why is this relationship here?".
+
 ### Ask why a link is there
 
-Right-click a line between an account and the device and choose "Why is this relationship here?". The
-"Relationship evidence" panel opens with the tabs "Evidence", "Properties" and "Source". For a stored
+Right-click a line between an account and the device and choose "Why is this relationship here?". Selecting a
+relationship opens its evidence panel too. The "Relationship evidence" panel opens with the tabs "Evidence", "Properties" and "Source". For a stored
 relationship it says "Stored relationship" and lists the source records that support it.
+
+In the demo, the links to source records point to placeholder addresses (`records.example.test` and `events.example.test`), because the demo
+has no record system, so opening one shows a load error: that is expected. With your own source, record links go to the link
+template that your mapping sets.
 
 ### A device that holds 1,000 accounts
 
@@ -184,6 +211,9 @@ docker compose down -v
 - **Port 8080 is in use.** Set `NEBURYX_PORT` in `.env` to a free port, start again and open that port.
 - **A setting is empty.** Compose stops and names it, for example "set NEBURYX_CURSOR_KEY in the .env
   file". Fill it in and start again.
+- **A setting breaks its rule.** Compose stops before the database or the product starts, and the error at the end of its
+  output names a service after the setting, for example `NEBURYX_CURSOR_KEY-base64-of-at-least-32-bytes`. Run
+  `docker compose logs NEBURYX_CURSOR_KEY-base64-of-at-least-32-bytes` with that service's name: it says what is wrong and how to make a valid value.
 - **The image step was skipped.** There is no published image, so Compose cannot find the image called
   `neburyx`. Build it as above.
 - **Docker does not have enough memory.** See the figures under "What you need".
