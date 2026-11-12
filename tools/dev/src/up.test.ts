@@ -262,7 +262,7 @@ describe('no container, ever', () => {
   it('has no root script or file in the tool for the old container path', () => {
     const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
     const scripts: Record<string, string> = (JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { scripts: Record<string, string> }).scripts;
-    expect(scripts['dev']).toBe('pnpm --filter @neburyx/dev build && node tools/dev/dist/main.js');
+    expect(scripts['dev']).toBe('pnpm --fail-if-no-match --filter "@neburyx/dev..." build && node tools/dev/dist/main.js');
     expect(scripts).not.toHaveProperty('dev:down');
     expect(scripts['test:compose']).not.toContain('@neburyx/dev');
     expect(readdirSync(join(root, 'tools/dev')).filter((name) => /compose/i.test(name))).toEqual([]);
