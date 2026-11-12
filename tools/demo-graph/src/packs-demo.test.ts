@@ -101,3 +101,37 @@ describe('the scripted demo cases of the shipped packs', () => {
     expect(counts.find((pack) => pack.name === 'insurance-claims')?.cases).toHaveLength(1);
   });
 });
+
+describe('the banking demo transfers', () => {
+  const files = packFiles('banking-fraud');
+  const mapping = readMappingSource(files.mapping);
+  const definition = readDefinition(files.definition, mapping);
+  const full = generate(mapping, definition, definition.seed);
+  const transfersOf = (generated: typeof full) => generated.files.find((file) => file.type === 'TRANSFERRED_TO')?.lines ?? [];
+  const members = new Map<string, number>();
+  for (const line of transfersOf(full)) {
+    const { f, t } = JSON.parse(line) as { f: string; t: string };
+    members.set(`${f}>${t}`, (members.get(`${f}>${t}`) ?? 0) + 1);
+  }
+
+  it('hold one pair of accounts with several transfers, sent by the account the preset investigation starts at, and every other pair at one', () => {
+    const preset = readCases(files.cases, mapping, definition).preset.entity;
+    const several = [...members].filter(([, count]) => count > 1);
+    expect(several).toHaveLength(1);
+    expect(several[0]?.[1]).toBeGreaterThanOrEqual(5);
+    expect(several[0]?.[1]).toBeLessThanOrEqual(12);
+    expect(several[0]?.[0].startsWith(`${preset.id}>`)).toBe(true);
+  });
+
+  it('leave every other generated line as it was before the extra transfers were added', () => {
+    const added = definition.blocks.filter((block) => block.type === 'TRANSFERRED_TO' && block.fromRange?.count === 1);
+    expect(added.length).toBeGreaterThanOrEqual(5);
+    const before = generate(mapping, { ...definition, blocks: definition.blocks.filter((block) => !added.includes(block)) }, definition.seed);
+    for (const file of full.files) {
+      const earlier = before.files.find((candidate) => candidate.type === file.type);
+      if (file.type === 'TRANSFERRED_TO') expect(file.lines.slice(0, earlier?.lines.length)).toEqual(earlier?.lines);
+      else expect(file.lines).toEqual(earlier?.lines);
+    }
+    expect(transfersOf(full)).toHaveLength(transfersOf(before).length + added.length);
+  });
+});
