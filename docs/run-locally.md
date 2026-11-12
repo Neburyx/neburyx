@@ -50,7 +50,7 @@ psql -v ON_ERROR_STOP=1 -v migration_password=… -v app_password=… -f tools/d
 
 It needs a login to run it that is a superuser or has the `CREATEROLE` and `CREATEDB` attributes (the file grants that login the right to set the role of the new migration login, which Postgres 16 requires to give it the database); the product itself needs no superuser. The data on your Postgres is never removed by this tool.
 
-Give the connection strings and the mapping's `uri` an address rather than a name that takes a while to resolve: the API's readiness check allows 2 seconds, and a `.local` name can take about 5 seconds to resolve on macOS.
+The connection strings may name a host that takes seconds to resolve (a `.local` name takes about 5 seconds on macOS): the migrate step and the API look the name up once and keep the address, wait up to `NEBURYX_DATABASE_CONNECT_TIMEOUT_MS` (default 10000, from 1000 to 120000) to open a connection, and `/readyz` allows `NEBURYX_READINESS_LIMIT_MS` (default 2000, from 500 to 60000). `pnpm dev` hands both settings to the migrate step and the API when they are set in its environment. A step that runs out of the connect limit says the name lookup or the connection took too long and names the setting. Give the mapping's `uri` (the Neo4j source) an address rather than such a name: a read waits at most 2 seconds for a connection to a source.
 
 ## Start
 

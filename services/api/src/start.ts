@@ -16,7 +16,8 @@ import { causeOf, EXTENSION_CONFIGURE_FAILED_MESSAGE, loadProfileExtension, regi
 import { decidePreviewSwitch, previewInputsOf } from './profile/switch.js';
 import type { MappingModel } from './mapping/model.js';
 import { createAppStore, STORE_QUERY_TIMEOUT_MS, STORE_STATEMENT_TIMEOUT_MS, type AppStore } from './app-store.js';
-import { CONNECTION_TIMEOUT_MS, POOL_SIZE } from './db/pool.js';
+import { createAddressCache } from './db/lookup.js';
+import { POOL_SIZE } from './db/pool.js';
 import { uuidv7 } from './identity/uuid.js';
 import { communitySeams } from './seams/community-seams.js';
 import { createSourceGate, type SourceGate, type SourceGateOptions } from './gate/source-gate.js';
@@ -182,7 +183,8 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
   let firstContact: FirstContact | undefined;
   let mountedAudit: MountedAuditSink | undefined;
   try {
-    const openStore = io.openStore ?? ((url, report, directory, preview) => createAppStore(url, report, { migrationsDirectory: directory, ...(preview === undefined ? {} : { previewMigrationsDirectory: preview }) }));
+    const addresses = createAddressCache();
+    const openStore = io.openStore ?? ((url, report, directory, preview) => createAppStore(url, report, { migrationsDirectory: directory, connectionTimeoutMs: config.connectTimeoutMs, readinessLimitMs: config.readinessLimitMs, addresses, ...(preview === undefined ? {} : { previewMigrationsDirectory: preview }) }));
     store = openStore(
       config.databaseUrl,
       () => io.logger.warn({ event: 'database.connection_error' }, 'database connection error'),
@@ -209,7 +211,7 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
     mountedAudit = extension?.createAuditSink?.({
       databaseUrl: config.databaseUrl,
       poolSize: POOL_SIZE,
-      connectionTimeoutMs: CONNECTION_TIMEOUT_MS,
+      connectionTimeoutMs: config.connectTimeoutMs,
       statementTimeoutMs: STORE_STATEMENT_TIMEOUT_MS,
       queryTimeoutMs: STORE_QUERY_TIMEOUT_MS,
       newId: uuidv7,
@@ -230,6 +232,7 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
       tasks,
       io.logger,
       () => io.logger.warn({ event: 'database.connection_error' }, 'database connection error'),
+      { connectionTimeoutMs: config.connectTimeoutMs, addresses },
     );
     warnIfExposed(io.logger, config.host, isInContainer(env, io.fileExists ?? existsSync));
     app = await buildApp({

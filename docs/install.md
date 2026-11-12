@@ -173,7 +173,7 @@ The Community demo prints `Read-only: not verified` for both of its sources. Neo
 
 ### The readiness limit
 
-`/readyz` allows 2 seconds for its check of the database, and that includes the time to resolve the host name. A name that is slow to resolve (a `.local` name can take about 5 seconds on macOS) makes `/readyz` report the database unreachable even though it is up. Give the source `uri` and the connection strings an address instead of such a name.
+`/readyz` allows 2 seconds for its check of the database. The API looks the database name up once and keeps the address, so a database name that is slow to resolve (a `.local` name can take about 5 seconds on macOS) costs one lookup at start and `/readyz` stays ready; a start or a `neburyx migrate` that cannot open a connection within 10 seconds stops and says the name lookup or the connection took too long. In this install the database is `db`, so a slow name does not arise. The settings that change these two limits are named in the [API README](../services/api/README.md) (*Probes*); this guide does not change the compose file for them. A source's `uri` is a different path: give it an address, as above.
 
 ## Rotate a source's login
 

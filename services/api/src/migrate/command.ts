@@ -1,5 +1,6 @@
 import { resolve } from 'node:path';
 import { ConfigError } from '../config.js';
+import { unreachableMessage } from '../db/connect-timeout.js';
 import { MappingError } from '../mapping/diagnostics.js';
 import { loadMappingFile } from '../mapping/load.js';
 import type { MappingModel } from '../mapping/model.js';
@@ -61,13 +62,13 @@ export async function runMigrateCommand(env: Readonly<Record<string, string | un
     eeDirectory = loaded.extension.migrationsDirectory;
   }
 
-  const outcome = await migrate({ url: config.url, appRole: config.appRole, directory: io.directory, ...(eeDirectory === undefined ? {} : { eeDirectory }) });
+  const outcome = await migrate({ url: config.url, appRole: config.appRole, connectTimeoutMs: config.connectTimeoutMs, directory: io.directory, ...(eeDirectory === undefined ? {} : { eeDirectory }) });
   switch (outcome.status) {
     case 'done':
       io.stdout.write(outcome.applied.length > 0 ? `applied ${outcome.applied.join(', ')}\n` : 'nothing to apply\n');
       return 0;
     case 'unreachable':
-      io.stderr.write('the database could not be reached\n');
+      io.stderr.write(`${unreachableMessage(outcome.cause)}\n`);
       return 1;
     case 'unknown-role':
       io.stderr.write('invalid configuration: DATABASE_APP_ROLE names no existing role\n');

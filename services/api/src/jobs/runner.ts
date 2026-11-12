@@ -1,5 +1,6 @@
 import type { FastifyBaseLogger } from 'fastify';
 import { Logger, parseCronItems, run, type TaskList } from 'graphile-worker';
+import type { AddressCache } from '../db/lookup.js';
 import { createPool } from '../db/pool.js';
 import { cronItemsOf, type Task } from './tasks.js';
 
@@ -12,14 +13,24 @@ export interface JobRunner {
   stop(): Promise<void>;
 }
 
+export interface JobRunnerOptions {
+  readonly connectionTimeoutMs?: number;
+  readonly addresses?: AddressCache;
+}
+
 export async function startJobRunner(
   url: string,
   tasks: readonly Task[],
   logger: FastifyBaseLogger,
   onConnectionError: () => void,
+  options: JobRunnerOptions = {},
 ): Promise<JobRunner | undefined> {
   if (tasks.length === 0) return undefined;
-  const pool = createPool(url, onConnectionError, { max: RUNNER_POOL_SIZE });
+  const pool = createPool(url, onConnectionError, {
+    max: RUNNER_POOL_SIZE,
+    ...(options.addresses === undefined ? {} : { addresses: options.addresses }),
+    ...(options.connectionTimeoutMs === undefined ? {} : { connectionTimeoutMs: options.connectionTimeoutMs }),
+  });
   const taskList: TaskList = Object.fromEntries(tasks.map((task) => [task.name, (payload: unknown) => task.run(payload)]));
   try {
     const runner = await run({

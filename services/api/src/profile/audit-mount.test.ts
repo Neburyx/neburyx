@@ -68,6 +68,15 @@ describe('the audit sink of the preview in a start', () => {
     await result.app.close();
   });
 
+  it('is given the connect limit that is set', async () => {
+    const { io, contexts } = rig();
+    const result = await start({ DATABASE_URL, DATABASE_MIGRATION_URL: 'postgres://owner@db.example.test:5432/neburyx', NEBURYX_CONFIG: previewFile, NEBURYX_PROFILE: 'enterprise', NEBURYX_DATABASE_CONNECT_TIMEOUT_MS: '30000' }, io);
+    expect(result.exitCode).toBe(0);
+    if (result.exitCode !== 0) return;
+    expect(contexts[0]?.connectionTimeoutMs).toBe(30_000);
+    await result.app.close();
+  });
+
   it('is not built when the switch is off, and the audit of the seams keeps nothing', async () => {
     const { io, contexts, recorded, seams } = rig();
     const result = await start({ DATABASE_URL, NEBURYX_CONFIG: plainFile }, io);

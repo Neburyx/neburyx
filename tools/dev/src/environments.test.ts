@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { apiEnvironment, baseEnvironment, migrationEnvironment, webEnvironment } from './environments.js';
+import { apiEnvironment, baseEnvironment, connectLimitMs, limitsEnvironment, migrationEnvironment, webEnvironment } from './environments.js';
 
 const developer = { PATH: '/bin', HOME: '/home/dev', TMPDIR: '/tmp', NODE_ENV: 'development', LANG: 'C', AWS_SECRET_ACCESS_KEY: 'a developer secret', DATABASE_URL: 'postgres://elsewhere', NEBURYX_DB_ADMIN_PASSWORD: 'inherited' };
 const cursorKey = Buffer.alloc(32, 3).toString('base64');
@@ -46,5 +46,18 @@ describe('the environments of the children', () => {
 
   it('tell the web dev server where the API is', () => {
     expect(webEnvironment(baseEnvironment(developer), 'http://127.0.0.1:4100')['NEBURYX_DEV_API_URL']).toBe('http://127.0.0.1:4100');
+  });
+
+  it('hand on only the two limits of the application database, when they are set', () => {
+    expect(limitsEnvironment({ ...developer, NEBURYX_DATABASE_CONNECT_TIMEOUT_MS: '30000', NEBURYX_READINESS_LIMIT_MS: '8000' })).toEqual({ NEBURYX_DATABASE_CONNECT_TIMEOUT_MS: '30000', NEBURYX_READINESS_LIMIT_MS: '8000' });
+    expect(limitsEnvironment(developer)).toEqual({});
+  });
+
+  it.each([
+    [undefined, 10_000],
+    ['45000', 45_000],
+    ['soon', 10_000],
+  ])('count the connect limit %j as %i ms for the wait', (value, expected) => {
+    expect(connectLimitMs({ NEBURYX_DATABASE_CONNECT_TIMEOUT_MS: value })).toBe(expected);
   });
 });

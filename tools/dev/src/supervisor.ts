@@ -1,10 +1,16 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, watch, type FSWatcher } from 'node:fs';
+import { DEFAULT_CONNECT_LIMIT_MS } from './environments.js';
 import { probeStatus } from './http-probe.js';
 import { terminateGroup } from './processes.js';
 
 /** The API checks every source before it listens: up to seven gate deadlines of 10 s, plus the database connection and the migration check. 7 x 10 s + 50 s. */
 export const API_READY_TIMEOUT_MS = 7 * 10_000 + 50_000;
+
+/** The wait for the API when the connect limit is set: the 10 s share of the database allowance becomes the limit, so a start that is bounded by the limit never outlasts the wait. */
+export function apiReadyTimeoutMs(connectLimitMs: number): number {
+  return API_READY_TIMEOUT_MS - DEFAULT_CONNECT_LIMIT_MS + connectLimitMs;
+}
 const DEFAULT_STOP_GRACE_MS = 5000;
 const HEALTH_REQUEST_TIMEOUT_MS = 2000;
 const HEALTH_POLL_INTERVAL_MS = 250;

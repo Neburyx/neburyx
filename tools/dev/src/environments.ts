@@ -3,6 +3,12 @@ export const PROFILE_VARIABLE = 'NEBURYX_PROFILE';
 
 const PASS_THROUGH = ['PATH', 'HOME', 'TMPDIR', 'NODE_ENV', 'LANG'] as const;
 
+export const CONNECT_LIMIT_VARIABLE = 'NEBURYX_DATABASE_CONNECT_TIMEOUT_MS';
+export const READINESS_LIMIT_VARIABLE = 'NEBURYX_READINESS_LIMIT_MS';
+const LIMIT_VARIABLES = [CONNECT_LIMIT_VARIABLE, READINESS_LIMIT_VARIABLE] as const;
+/** The API's own default, `CONNECTION_TIMEOUT_MS` in `services/api/src/db/pool.ts`; a workspace check keeps the two equal. */
+export const DEFAULT_CONNECT_LIMIT_MS = 10_000;
+
 type Source = Readonly<Record<string, string | undefined>>;
 export type Environment = Readonly<Record<string, string>>;
 
@@ -17,6 +23,17 @@ function pick(source: Source, names: readonly string[]): Record<string, string> 
 
 export function baseEnvironment(source: Source): Environment {
   return pick(source, PASS_THROUGH);
+}
+
+/** The two limits on the application database that the developer may set; only the migrate step and the API are given them. */
+export function limitsEnvironment(source: Source): Environment {
+  return pick(source, LIMIT_VARIABLES);
+}
+
+/** The connect limit the children will use, for the wait that must outlast it; a value they would refuse counts as the default, since they stop on it themselves. */
+export function connectLimitMs(source: Source): number {
+  const value = source[CONNECT_LIMIT_VARIABLE];
+  return value !== undefined && /^\d+$/.test(value) ? Number(value) : DEFAULT_CONNECT_LIMIT_MS;
 }
 
 /** With the profile set, the migrate step also reads the mapping, to decide the switch and apply the migrations of the enterprise path; with none it is as it was. */

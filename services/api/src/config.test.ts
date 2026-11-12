@@ -58,6 +58,8 @@ describe('parseConfig', () => {
       webRoot: '/srv/web',
       databaseUrl: DATABASE_URL,
       exportDirectory: DEFAULT_EXPORT_DIRECTORY,
+      connectTimeoutMs: 10_000,
+      readinessLimitMs: 2000,
     });
   });
 
@@ -134,5 +136,31 @@ describe('the cursor key', () => {
     expect(failure).toThrow(ConfigError);
     expect(failure).toThrow('NEBURYX_EXPORT_DIR');
     if (directory.length > 0) expect(failure).not.toThrow(directory);
+  });
+});
+
+describe('the connect limit', () => {
+  it('is 10 000 ms by default and takes the value that is set', () => {
+    expect(parseConfig({ ...database }, defaults).connectTimeoutMs).toBe(10_000);
+    expect(parseConfig({ ...database, NEBURYX_DATABASE_CONNECT_TIMEOUT_MS: '45000' }, defaults).connectTimeoutMs).toBe(45_000);
+  });
+
+  it.each(['soon', '999', '120001', '2.5', '-1'])('rejects %j naming only the key', (value) => {
+    const failure = (): unknown => parseConfig({ ...database, NEBURYX_DATABASE_CONNECT_TIMEOUT_MS: value }, defaults);
+    expect(failure).toThrow('invalid configuration: NEBURYX_DATABASE_CONNECT_TIMEOUT_MS');
+    expect(failure).not.toThrow(value);
+  });
+});
+
+describe('the readiness limit', () => {
+  it('is 2 000 ms by default and takes the value that is set', () => {
+    expect(parseConfig({ ...database }, defaults).readinessLimitMs).toBe(2000);
+    expect(parseConfig({ ...database, NEBURYX_READINESS_LIMIT_MS: '8000' }, defaults).readinessLimitMs).toBe(8000);
+  });
+
+  it.each(['soon', '499', '60001', '2.5', '-1'])('rejects %j naming only the key', (value) => {
+    const failure = (): unknown => parseConfig({ ...database, NEBURYX_READINESS_LIMIT_MS: value }, defaults);
+    expect(failure).toThrow('invalid configuration: NEBURYX_READINESS_LIMIT_MS');
+    expect(failure).not.toThrow(value);
   });
 });

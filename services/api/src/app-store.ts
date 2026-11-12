@@ -1,8 +1,9 @@
 import type { ReadyChecks } from '@neburyx/contracts';
 import { createPool } from './db/pool.js';
+import { createAddressCache, type AddressCache } from './db/lookup.js';
 import { checkMigrations, pingDatabase } from './db/readiness-repository.js';
 import { migrationFileNames } from './migrate/provider.js';
-import { PROBE_STEP_MS, READINESS_LIMIT_MS, runReadiness } from './health/readiness.js';
+import { probeStepMs, READINESS_LIMIT_MS, runReadiness } from './health/readiness.js';
 import { readIdentity, seedFirstStart } from './db/identity-repository.js';
 import { createExportStore, type ExportStore } from './db/exports-repository.js';
 import { changeInvestigationStatus, createInvestigation, deleteInvestigation, purgeExpiredInvestigations, restoreInvestigation, findReusableInvestigation, readInvestigation, readLibrary, renameInvestigation, saveDraft, type InvestigationStore } from './db/investigations-repository.js';
@@ -44,15 +45,23 @@ export interface AppStoreOptions {
   /** The migrations of the preview, which count for readiness only when the preview is on. */
   readonly previewMigrationsDirectory?: string;
   readonly connectionTimeoutMs?: number;
+  /** How long `readiness()` waits; absent, the default. */
+  readonly readinessLimitMs?: number;
+  /** Shared by the store's pools; absent, the store makes its own. */
+  readonly addresses?: AddressCache;
 }
 
 export function createAppStore(url: string, onConnectionError: () => void, options: AppStoreOptions): AppStore {
+  const addresses = options.addresses ?? createAddressCache();
   const pool = createPool(url, onConnectionError, {
+    addresses,
     statementTimeoutMs: STORE_STATEMENT_TIMEOUT_MS,
     queryTimeoutMs: STORE_QUERY_TIMEOUT_MS,
     ...(options.connectionTimeoutMs === undefined ? {} : { connectionTimeoutMs: options.connectionTimeoutMs }),
   });
-  const probes = createPool(url, onConnectionError, { max: 2, connectionTimeoutMs: PROBE_STEP_MS, statementTimeoutMs: PROBE_STEP_MS, queryTimeoutMs: PROBE_STEP_MS });
+  const readinessLimitMs = options.readinessLimitMs ?? READINESS_LIMIT_MS;
+  const probeStep = probeStepMs(readinessLimitMs);
+  const probes = createPool(url, onConnectionError, { addresses, max: 2, connectionTimeoutMs: probeStep, statementTimeoutMs: probeStep, queryTimeoutMs: probeStep });
 
   async function shippedMigrations(): Promise<ReadyChecks['migrations']> {
     const shipped = await migrationFileNames(options.migrationsDirectory).catch(() => undefined);
@@ -98,7 +107,7 @@ export function createAppStore(url: string, onConnectionError: () => void, optio
     restoreInvestigation: (change) => restoreInvestigation(pool, change),
     restoreNamedView: (restore) => restoreNamedView(pool, restore),
     readLibrary: (read) => readLibrary(pool, read),
-    readiness: () => runReadiness({ ping: () => pingDatabase(probes), migrations: shippedMigrations }, READINESS_LIMIT_MS),
+    readiness: () => runReadiness({ ping: () => pingDatabase(probes), migrations: shippedMigrations }, readinessLimitMs),
     async close(): Promise<void> {
       await Promise.all([pool.end(), probes.end()]);
     },

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readinessResponse, runReadiness } from './readiness.js';
+import { parseReadinessLimit, probeStepMs, readinessResponse, runReadiness } from './readiness.js';
 
 const NO_SOURCES = { reachable: 0, unreachable: 0, unknown: 0 };
 
@@ -55,5 +55,30 @@ describe('runReadiness', () => {
       database: 'ok',
       migrations: 'unknown',
     });
+  });
+});
+
+describe('probeStepMs', () => {
+  it.each([
+    [2000, 1500],
+    [500, 250],
+    [60_000, 59_500],
+  ])('is the step of a %i ms limit: %i ms', (limit, step) => {
+    expect(probeStepMs(limit)).toBe(step);
+  });
+});
+
+describe('parseReadinessLimit', () => {
+  it('is 2 000 ms when absent or empty', () => {
+    expect(parseReadinessLimit(undefined)).toBe(2000);
+    expect(parseReadinessLimit('')).toBe(2000);
+  });
+
+  it.each(['500', '2000', '60000'])('accepts %s', (value) => {
+    expect(parseReadinessLimit(value)).toBe(Number(value));
+  });
+
+  it.each(['499', '60001', '1e3', 'x', ' 2000'])('refuses %j', (value) => {
+    expect(parseReadinessLimit(value)).toBeUndefined();
   });
 });

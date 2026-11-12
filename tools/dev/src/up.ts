@@ -1,14 +1,14 @@
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadDevConfig } from './config.js';
-import { apiEnvironment, baseEnvironment, migrationEnvironment, PROFILE_VARIABLE, webEnvironment } from './environments.js';
+import { apiEnvironment, baseEnvironment, connectLimitMs, limitsEnvironment, migrationEnvironment, PROFILE_VARIABLE, webEnvironment } from './environments.js';
 import type { Run } from './exec.js';
 import { externalDatabase } from './external.js';
 import type { Files } from './files.js';
 import { Lock, type LockOptions } from './lock.js';
 import { devMapping } from './mapping.js';
 import { StepFailed, Stopped } from './steps.js';
-import type { Supervision } from './supervisor.js';
+import { apiReadyTimeoutMs, type Supervision } from './supervisor.js';
 
 export interface Dependencies {
   readonly root: string;
@@ -51,6 +51,7 @@ export async function up(deps: Dependencies): Promise<number> {
   void deps.stopRequested.then(() => stopping.abort());
   try {
     const base = baseEnvironment(deps.env);
+    const withLimits = { ...base, ...limitsEnvironment(deps.env) };
     const step = async (name: string, command: string, args: readonly string[], env = base, cwd = deps.root): Promise<void> => {
       if (stopping.signal.aborted) throw new Stopped();
       const result = await deps.run(command, args, { cwd, env, show: true, signal: stopping.signal });
@@ -61,7 +62,7 @@ export async function up(deps: Dependencies): Promise<number> {
     for (const build of BUILDS) await step(`building ${build.name}`, 'pnpm', ['--filter', build.filter, 'build']);
     const profile = deps.env[PROFILE_VARIABLE];
     const entry = join(deps.root, ENTRY_SCRIPT);
-    await step('migrating the database', deps.nodePath, [entry, join(deps.root, 'services/api/dist/cli.js'), 'migrate'], migrationEnvironment(base, database.migrationUrl, database.appRole, profile === undefined || profile === '' ? undefined : { profile, mappingPath: own.mappingPath }));
+    await step('migrating the database', deps.nodePath, [entry, join(deps.root, 'services/api/dist/cli.js'), 'migrate'], migrationEnvironment(withLimits, database.migrationUrl, database.appRole, profile === undefined || profile === '' ? undefined : { profile, mappingPath: own.mappingPath }));
 
     const apiPort = await deps.freePort();
     const webPort = await deps.freePort();
@@ -80,8 +81,9 @@ export async function up(deps: Dependencies): Promise<number> {
         command: deps.nodePath,
         args: [entry, join(deps.root, 'services/api/dist/main.js')],
         cwd: deps.root,
-        env: apiEnvironment(base, { databaseUrl: database.appUrl, mappingPath: own.mappingPath, port: apiPort, webRoot: join(deps.root, 'apps/web/dist'), cursorKey: deps.random(CURSOR_KEY_BYTES).toString('base64'), profile: profile === '' ? undefined : profile, exportDirectory: join(tmpdir(), `neburyx-dev-exports-${apiPort}`), sourceLogins: own.logins }),
+        env: apiEnvironment(withLimits, { databaseUrl: database.appUrl, mappingPath: own.mappingPath, port: apiPort, webRoot: join(deps.root, 'apps/web/dist'), cursorKey: deps.random(CURSOR_KEY_BYTES).toString('base64'), profile: profile === '' ? undefined : profile, exportDirectory: join(tmpdir(), `neburyx-dev-exports-${apiPort}`), sourceLogins: own.logins }),
         healthUrl: `${apiUrl}/healthz`,
+        readyTimeoutMs: apiReadyTimeoutMs(connectLimitMs(deps.env)),
         watch: [join(deps.root, 'services/api/dist'), join(deps.root, 'packages/contracts/dist')],
       },
       out: deps.out,

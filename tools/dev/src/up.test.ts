@@ -90,6 +90,23 @@ describe('pnpm dev', () => {
     expect(JSON.stringify(given?.children.map((child) => child.env))).not.toContain('NEBURYX_PROFILE');
   });
 
+  it('gives the migrate step and the API the two database limits when they are set, no other child, and the API a wait that outlasts the connect limit', async () => {
+    const limits = { NEBURYX_DATABASE_CONNECT_TIMEOUT_MS: '30000', NEBURYX_READINESS_LIMIT_MS: '8000', AWS_SECRET_ACCESS_KEY: 'a developer secret' };
+    const run = rig({ env: limits });
+    await up(run.deps);
+    const migrate = run.calls.at(-1)?.options.env;
+    expect(migrate).toMatchObject({ NEBURYX_DATABASE_CONNECT_TIMEOUT_MS: '30000', NEBURYX_READINESS_LIMIT_MS: '8000' });
+    expect(migrate).not.toHaveProperty('AWS_SECRET_ACCESS_KEY');
+    expect(run.supervision()?.api.env).toMatchObject({ NEBURYX_DATABASE_CONNECT_TIMEOUT_MS: '30000', NEBURYX_READINESS_LIMIT_MS: '8000' });
+    expect(run.supervision()?.api.env).not.toHaveProperty('AWS_SECRET_ACCESS_KEY');
+    expect(run.supervision()?.api.readyTimeoutMs).toBe(140_000);
+    for (const build of run.calls.slice(0, -1)) expect(build.options.env).not.toHaveProperty('NEBURYX_DATABASE_CONNECT_TIMEOUT_MS');
+    const plain = rig();
+    await up(plain.deps);
+    expect(plain.calls.at(-1)?.options.env).not.toHaveProperty('NEBURYX_DATABASE_CONNECT_TIMEOUT_MS');
+    expect(plain.supervision()?.api.readyTimeoutMs).toBe(120_000);
+  });
+
   it('does not give an empty profile to any child', async () => {
     const empty = rig({ env: { NEBURYX_PROFILE: '' } });
     await up(empty.deps);

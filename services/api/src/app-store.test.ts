@@ -51,3 +51,27 @@ describe('initializing against a server that is not a usable database', () => {
     expect(error).toMatchObject({ kind: 'unreachable' });
   });
 });
+
+describe('the readiness limit of the store', () => {
+  it('gives the probe pool the connection step derived from the limit that is set', async () => {
+    const url = await listen(() => undefined);
+    const store = createAppStore(url, () => undefined, { migrationsDirectory: '.', readinessLimitMs: 1500 });
+    const started = Date.now();
+    const checks = await store.readiness();
+    const tookMs = Date.now() - started;
+    await store.close();
+    expect(checks.database).toBe('unreachable');
+    expect(tookMs).toBeGreaterThanOrEqual(900);
+    expect(tookMs).toBeLessThan(1400);
+  });
+
+  it('waits the limit that is set for a check that does not finish', async () => {
+    const url = await listen(() => undefined);
+    const store = createAppStore(url, () => undefined, { migrationsDirectory: '.', readinessLimitMs: 500 });
+    const started = Date.now();
+    await store.readiness();
+    const tookMs = Date.now() - started;
+    await store.close();
+    expect(tookMs).toBeLessThan(900);
+  });
+});

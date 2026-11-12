@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { API_READY_TIMEOUT_MS, supervise, type ApiSpec, type ChildSpec } from './supervisor.js';
+import { API_READY_TIMEOUT_MS, apiReadyTimeoutMs, supervise, type ApiSpec, type ChildSpec } from './supervisor.js';
 import { settle } from './testing/settle.js';
 
 const fixtures = join(dirname(fileURLToPath(import.meta.url)), 'testing');
@@ -110,6 +110,12 @@ async function scene(apiEnv: Record<string, string>, options: { readyTimeoutMs?:
 describe('the API supervisor', () => {
   it('uses a startup limit of seven gate deadlines of 10 s plus 50 s', () => {
     expect(API_READY_TIMEOUT_MS).toBe(120_000);
+  });
+
+  it('lengthens the wait by what the connect limit has over its default, so a start bounded by the limit never outlasts it', () => {
+    expect(apiReadyTimeoutMs(10_000)).toBe(120_000);
+    expect(apiReadyTimeoutMs(120_000)).toBe(230_000);
+    expect(apiReadyTimeoutMs(120_000)).toBeGreaterThan(7 * 10_000 + 120_000);
   });
 
   it('waits for an API that becomes ready after a delay shorter than the limit, and stops everything with exit 0 when asked', async () => {

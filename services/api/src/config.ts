@@ -1,6 +1,8 @@
 import { isIP } from 'node:net';
 import { isAbsolute, resolve } from 'node:path';
 import { z } from 'zod';
+import { MAX_READINESS_LIMIT_MS, MIN_READINESS_LIMIT_MS, parseReadinessLimit } from './health/readiness.js';
+import { MAX_CONNECT_TIMEOUT_MS, MIN_CONNECT_TIMEOUT_MS, parseConnectTimeout } from './db/connect-timeout.js';
 
 export const DEFAULT_HOST = '127.0.0.1';
 export const DEFAULT_PORT = 8080;
@@ -23,6 +25,8 @@ const keys = {
   mappingPath: 'NEBURYX_CONFIG',
   cursorKey: 'NEBURYX_CURSOR_KEY',
   exportDirectory: 'NEBURYX_EXPORT_DIR',
+  connectTimeoutMs: 'NEBURYX_DATABASE_CONNECT_TIMEOUT_MS',
+  readinessLimitMs: 'NEBURYX_READINESS_LIMIT_MS',
 } as const;
 
 function isPostgresUrl(value: string): boolean {
@@ -62,6 +66,10 @@ const configSchema = z.object({
   databaseUrl: z.string().refine(isPostgresUrl),
   mappingPath: z.string().min(1).transform((path) => resolve(path)).optional(),
   exportDirectory: z.string().refine((path) => isAbsolute(path)),
+  /** The limit on opening one connection to the application database, the name lookup included. */
+  connectTimeoutMs: z.number().int().min(MIN_CONNECT_TIMEOUT_MS).max(MAX_CONNECT_TIMEOUT_MS),
+  /** How long `/readyz` waits for its check of the database. */
+  readinessLimitMs: z.number().int().min(MIN_READINESS_LIMIT_MS).max(MAX_READINESS_LIMIT_MS),
   /** The key that signs page cursors; absent, the API makes one of its own for the process. */
   cursorKey: z
     .string()
@@ -96,12 +104,14 @@ export function parseConfig(
     mappingPath: env[keys.mappingPath],
     cursorKey: env[keys.cursorKey],
     exportDirectory: env[keys.exportDirectory] ?? defaults.exportDirectory ?? DEFAULT_EXPORT_DIRECTORY,
+    connectTimeoutMs: parseConnectTimeout(env[keys.connectTimeoutMs]),
+    readinessLimitMs: parseReadinessLimit(env[keys.readinessLimitMs]),
   });
   if (result.success) return result.data;
 
   const failed = result.error.issues.flatMap((issue) => {
     const field = issue.path[0];
-    return field === 'host' || field === 'port' || field === 'webRoot' || field === 'databaseUrl' || field === 'mappingPath' || field === 'cursorKey' || field === 'exportDirectory' ? [keys[field]] : [];
+    return field === 'host' || field === 'port' || field === 'webRoot' || field === 'databaseUrl' || field === 'mappingPath' || field === 'cursorKey' || field === 'exportDirectory' || field === 'connectTimeoutMs' || field === 'readinessLimitMs' ? [keys[field]] : [];
   });
   throw new ConfigError([...new Set(failed)]);
 }

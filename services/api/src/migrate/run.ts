@@ -2,13 +2,16 @@ import { Logger, runMigrations } from 'graphile-worker';
 import { Kysely, PostgresDialect } from 'kysely';
 import { Migrator, NO_MIGRATIONS } from 'kysely/migration';
 import pg from 'pg';
-import { isConnectionError } from '../database-errors.js';
+import { connectionCause, isConnectionError, type ConnectionCause } from '../database-errors.js';
+import { createAddressCache, lookupStream } from '../db/lookup.js';
 import { appliedNames, EE_HISTORY_TABLE, EE_LOCK_TABLE, grantDefaultsOnce, grantMigrationNames, grantQueue, historyTablesExist, protectHistory, roleExists, tableExists } from './grants.js';
 import { sqlFileProvider } from './provider.js';
 
 export interface MigrateOptions {
   readonly url: string;
   readonly appRole: string;
+  /** The limit on opening one connection, the name lookup included. */
+  readonly connectTimeoutMs: number;
   readonly directory: string;
   /** The migrations of the enterprise code, applied after the rest and recorded in a history table of their own; absent, none are. */
   readonly eeDirectory?: string;
@@ -16,7 +19,7 @@ export interface MigrateOptions {
 
 export type MigrateOutcome =
   | { readonly status: 'done'; readonly applied: readonly string[] }
-  | { readonly status: 'unreachable' }
+  | { readonly status: 'unreachable'; readonly cause?: ConnectionCause }
   | { readonly status: 'unknown-role' }
   | { readonly status: 'migration-failed'; readonly file: string }
   | { readonly status: 'out-of-order'; readonly file: string }
@@ -37,10 +40,12 @@ function isLost(error: unknown): boolean {
 }
 
 export async function migrate(options: MigrateOptions): Promise<MigrateOutcome> {
-  const pool = new pg.Pool({ connectionString: options.url, max: 3 });
+  const pool = new pg.Pool({ connectionString: options.url, max: 3, connectionTimeoutMillis: options.connectTimeoutMs, stream: lookupStream(createAddressCache()) });
   let lostConnection = false;
-  const markLost = (): void => {
+  let cause: ConnectionCause | undefined;
+  const markLost = (error?: unknown): void => {
     lostConnection = true;
+    cause ??= connectionCause(error);
   };
   pool.on('error', markLost);
   pool.on('connect', (client) => client.on('error', markLost));
@@ -57,7 +62,8 @@ export async function migrate(options: MigrateOptions): Promise<MigrateOutcome> 
     outcome = await runPhases(pool, db, options, stillConnected);
     stillConnected();
   } catch (error) {
-    outcome = { status: isLost(error) ? 'unreachable' : 'failed' };
+    if (isLost(error)) markLost(error);
+    outcome = isLost(error) ? { status: 'unreachable', ...(cause === undefined ? {} : { cause }) } : { status: 'failed' };
   } finally {
     if (lock) {
       // Cleanup must not replace the outcome: a lost connection has already ended the session lock.
@@ -67,7 +73,7 @@ export async function migrate(options: MigrateOptions): Promise<MigrateOutcome> 
     await db.destroy();
     if (!pool.ended) await pool.end();
   }
-  return lostConnection ? { status: 'unreachable' } : outcome;
+  return lostConnection ? { status: 'unreachable', ...(cause === undefined ? {} : { cause }) } : outcome;
 }
 
 async function runPhases(
