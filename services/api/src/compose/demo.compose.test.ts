@@ -7,11 +7,14 @@ import { afterAll, beforeAll, describe, expect, it, onTestFinished, vi } from 'v
 import { parse } from 'yaml';
 import { z } from 'zod';
 import { docker, dockerOk, dockerStream } from '../image/docker.js';
+import { planImages } from './image-plan.js';
 import { DEMO_WAIT_SECONDS, demoComposeFile, destroyAll, repository, serviceOf, Stack, type EventRecorder } from './stack.js';
 
-const IMAGE = 'neburyx-demo-test';
-const TAG = `d-${randomBytes(3).toString('hex')}`;
-const LOADER_IMAGE = `neburyx-demo-loader-test:${TAG}`;
+const ownTag = `d-${randomBytes(3).toString('hex')}`;
+const images = planImages(process.env, { image: 'neburyx-demo-test', tag: ownTag, loader: `neburyx-demo-loader-test:${ownTag}` });
+const IMAGE = images.image;
+const TAG = images.tag;
+const LOADER_IMAGE = images.loader;
 /**
  * Time allowed to a test that starts a demo stack. Measured: one full start (databases, migration, both graph loads,
  * api healthy) takes 38 s on this machine with every container pinned to 2 CPUs. On the CI runner it is inferred, not
@@ -30,8 +33,10 @@ const stacks: Stack[] = [];
 const folders: string[] = [];
 
 beforeAll(async () => {
-  await dockerStream(['build', '-f', 'deploy/docker/Dockerfile', '-t', `${IMAGE}:${TAG}`, '.'], repository);
-  await dockerStream(['build', '-f', 'deploy/demo/loader.Dockerfile', '-t', LOADER_IMAGE, '.'], repository);
+  if (images.built) {
+    await dockerStream(['build', '-f', 'deploy/docker/Dockerfile', '-t', `${IMAGE}:${TAG}`, '.'], repository);
+    await dockerStream(['build', '-f', 'deploy/demo/loader.Dockerfile', '-t', LOADER_IMAGE, '.'], repository);
+  }
 });
 
 afterAll(async () => {
@@ -39,8 +44,10 @@ afterAll(async () => {
     await destroyAll(stacks);
   } finally {
     for (const folder of folders) rmSync(folder, { recursive: true, force: true });
-    await docker(['rmi', '-f', `${IMAGE}:${TAG}`]);
-    await docker(['rmi', '-f', LOADER_IMAGE]);
+    if (images.built) {
+      await docker(['rmi', '-f', `${IMAGE}:${TAG}`]);
+      await docker(['rmi', '-f', LOADER_IMAGE]);
+    }
   }
 });
 

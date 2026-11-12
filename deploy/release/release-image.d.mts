@@ -10,9 +10,11 @@ export interface Deps {
   readonly removeDir: (path: string) => void;
   readonly stdout: (text: string) => void;
   readonly stderr: (text: string) => void;
+  readonly env: Readonly<Record<string, string | undefined>>;
+  readonly fetchRuns: (url: string, token: string | undefined) => Promise<{ readonly status: number; readonly body: unknown }>;
 }
 export type ParsedArgs =
-  | { readonly ok: true; readonly tag: string; readonly mode: 'dry-run' | 'push' | 'check-target' }
+  | { readonly ok: true; readonly tag: string; readonly mode: 'dry-run' | 'push' | 'check-target' | 'check-ci' }
   | { readonly ok: false; readonly message: string };
 export interface Target {
   readonly registry: string;
@@ -33,3 +35,5 @@ export function platformCheckCommand(archive: string): readonly [string, readonl
 export function pushCommand(archive: string, digestFile: string, reference: string): readonly [string, readonly string[]];
 export function archiveIndexDigest(readFile: (path: string) => string): string | undefined;
 export function run(argv: readonly string[], deps: Deps): number;
+export function checkCi(argv: readonly string[], deps: Deps): Promise<number>;
+export function main(argv: readonly string[], deps: Deps): Promise<number>;

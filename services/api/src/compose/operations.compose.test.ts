@@ -17,11 +17,13 @@ import { fileURLToPath } from 'node:url';
 import { sourcesResponseSchema } from '@neburyx/contracts';
 import { afterAll, beforeAll, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { docker, dockerOk, dockerStream } from '../image/docker.js';
+import { planImages } from './image-plan.js';
 import { buildDerivedImage, DEMO_WAIT_SECONDS, demoComposeFile, destroyAll, maskSecrets, repository, serviceOf, Stack } from './stack.js';
 
-const IMAGE = 'neburyx-operations-test';
-const LOADER_IMAGE = `neburyx-operations-loader-test:${randomBytes(3).toString('hex')}`;
-const TAG = `o-${randomBytes(3).toString('hex')}`;
+const images = planImages(process.env, { image: 'neburyx-operations-test', tag: `o-${randomBytes(3).toString('hex')}`, loader: `neburyx-operations-loader-test:${randomBytes(3).toString('hex')}` });
+const IMAGE = images.image;
+const LOADER_IMAGE = images.loader;
+const TAG = images.tag;
 const TAG_NEWER = `n-${randomBytes(3).toString('hex')}`;
 const TAG_EARLY = `e-${randomBytes(3).toString('hex')}`;
 const STACK_TEST_TIMEOUT_MS = 900_000;
@@ -35,10 +37,10 @@ const EARLY_MIGRATION = '0000-sorts-before-every-applied-migration';
 const READY = { status: 'ready', checks: { database: 'ok', migrations: 'ok' }, sources: { reachable: 0, unreachable: 0, unknown: 0 } };
 
 beforeAll(async () => {
-  await dockerStream(['build', '-f', 'deploy/docker/Dockerfile', '-t', `${IMAGE}:${TAG}`, '.'], repository);
+  if (images.built) await dockerStream(['build', '-f', 'deploy/docker/Dockerfile', '-t', `${IMAGE}:${TAG}`, '.'], repository);
   await buildDerivedImage(`${IMAGE}:${TAG}`, `${IMAGE}:${TAG_NEWER}`, `${NEXT_MIGRATION}-newer-marker.sql`, 'CREATE TABLE newer_marker (id integer PRIMARY KEY);\nINSERT INTO newer_marker (id) VALUES (1);\n');
   await buildDerivedImage(`${IMAGE}:${TAG}`, `${IMAGE}:${TAG_EARLY}`, `${EARLY_MIGRATION}.sql`, 'CREATE TABLE sorts_early_marker (id integer);\n');
-  await dockerStream(['build', '-f', 'deploy/demo/loader.Dockerfile', '-t', LOADER_IMAGE, '.'], repository);
+  if (images.built) await dockerStream(['build', '-f', 'deploy/demo/loader.Dockerfile', '-t', LOADER_IMAGE, '.'], repository);
 });
 
 afterAll(async () => {
@@ -49,8 +51,8 @@ afterAll(async () => {
     const dirty = execFileSync('git', ['status', '--porcelain'], { cwd: repository }).toString().trim() === '' ? '' : ' with uncommitted changes';
     const imageId = await dockerOk(['image', 'inspect', '--format', '{{.Id}}', `${IMAGE}:${TAG}`]).catch(() => 'removed');
     process.stdout.write(`operations suite: working tree at ${head}${dirty}, image ${imageId}\n`);
-    for (const tag of [TAG_EARLY, TAG_NEWER, TAG]) await docker(['rmi', '-f', `${IMAGE}:${tag}`]);
-    await docker(['rmi', '-f', LOADER_IMAGE]);
+    for (const tag of images.built ? [TAG_EARLY, TAG_NEWER, TAG] : [TAG_EARLY, TAG_NEWER]) await docker(['rmi', '-f', `${IMAGE}:${tag}`]);
+    if (images.built) await docker(['rmi', '-f', LOADER_IMAGE]);
   }
 });
 

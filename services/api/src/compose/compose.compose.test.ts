@@ -8,10 +8,12 @@ import { sourcesResponseSchema } from '@neburyx/contracts';
 import { z } from 'zod';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { docker, dockerOk, dockerStream } from '../image/docker.js';
+import { planImages } from './image-plan.js';
 import { buildDerivedImage, composeFile, destroyAll, repository, serviceOf, Stack, type StackOptions } from './stack.js';
 
-const IMAGE = 'neburyx-compose-test';
-const TAG_A = `a-${randomBytes(3).toString('hex')}`;
+const images = planImages(process.env, { image: 'neburyx-compose-test', tag: `a-${randomBytes(3).toString('hex')}` });
+const IMAGE = images.image;
+const TAG_A = images.tag;
 const TAG_B = `b-${randomBytes(3).toString('hex')}`;
 const TAG_C = `c-${randomBytes(3).toString('hex')}`;
 const stacks: Stack[] = [];
@@ -22,7 +24,7 @@ const NEXT_MIGRATION = String(
 ).padStart(4, '0');
 
 beforeAll(async () => {
-  await dockerStream(['build', '-f', 'deploy/docker/Dockerfile', '-t', `${IMAGE}:${TAG_A}`, '.'], repository);
+  if (images.built) await dockerStream(['build', '-f', 'deploy/docker/Dockerfile', '-t', `${IMAGE}:${TAG_A}`, '.'], repository);
   await buildDerivedImage(
     `${IMAGE}:${TAG_A}`,
     `${IMAGE}:${TAG_B}`,
@@ -41,7 +43,7 @@ afterAll(async () => {
   try {
     await destroyAll(stacks);
   } finally {
-    for (const tag of [TAG_C, TAG_B, TAG_A]) await docker(['rmi', '-f', `${IMAGE}:${tag}`]);
+    for (const tag of images.built ? [TAG_C, TAG_B, TAG_A] : [TAG_C, TAG_B]) await docker(['rmi', '-f', `${IMAGE}:${tag}`]);
   }
 });
 

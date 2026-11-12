@@ -1,4 +1,5 @@
 import { defineConfig } from '@playwright/test';
+import { BENCHMARK, NARROW, ONLY_1280, patternOf, WIDE, WIDTH_DEPENDENT } from './src/widths.ts';
 
 const UX_PORT = 4173;
 const PRODUCTION_PORT = 4174;
@@ -26,10 +27,11 @@ export default defineConfig({
     launchOptions: chrome === undefined ? {} : { executablePath: chrome },
   },
   projects: [
-    { name: 'laptop-1440', testIgnore: /benchmark/, use: { viewport: { width: 1440, height: 900 } } },
-    { name: 'laptop-1280', testIgnore: /benchmark/, use: { viewport: { width: 1280, height: 720 } } },
+    // every spec at the wide size, except the benchmarks and the specs made for the narrow one; the lists are in src/widths.ts
+    { name: WIDE, testIgnore: [/benchmark/, ...ONLY_1280.map(patternOf)], use: { viewport: { width: 1440, height: 900 } } },
+    { name: NARROW, testMatch: [...WIDTH_DEPENDENT, ...ONLY_1280].map(patternOf), use: { viewport: { width: 1280, height: 720 } } },
     // alone and last, so nothing else runs while a measurement is taken
-    { name: 'benchmark', testMatch: /benchmark/, dependencies: ['laptop-1440', 'laptop-1280'], use: { viewport: { width: 1280, height: 720 } } },
+    { name: BENCHMARK, testMatch: /benchmark/, dependencies: [WIDE, NARROW], use: { viewport: { width: 1280, height: 720 } } },
   ],
   webServer: [serve('../../apps/web/dist-ux', UX_PORT), serve('../../apps/web/dist', PRODUCTION_PORT), serve('../../apps/web/dist-ux', TWO_SOURCES_PORT, 'two-sources')],
 });

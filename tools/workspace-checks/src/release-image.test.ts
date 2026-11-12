@@ -25,7 +25,13 @@ const FILLED = JSON.stringify({ registry: 'registry.example', image: 'team/nebur
 const PLACEHOLDER_TARGET = JSON.stringify({ registry: `${TOKEN}REGISTRY`, image: `${TOKEN}IMAGE` });
 const INDEX = JSON.stringify({ manifests: [{ digest: DIGEST }] });
 
-function harness(options: { target?: string; script?: Script } = {}) {
+interface Answer {
+  readonly status: number;
+  readonly body: unknown;
+}
+
+function harness(options: { target?: string; script?: Script; env?: Record<string, string | undefined>; answer?: Answer | Error } = {}) {
+  const requests: { url: string; token: string | undefined }[] = [];
   const calls: Call[] = [];
   const out: string[] = [];
   const err: string[] = [];
@@ -56,15 +62,21 @@ function harness(options: { target?: string; script?: Script } = {}) {
     removeDir: (path) => removed.push(path),
     stdout: (text) => out.push(text),
     stderr: (text) => err.push(text),
+    env: options.env ?? {},
+    fetchRuns: (url, token) => {
+      requests.push({ url, token });
+      const answer = options.answer ?? { status: 200, body: { workflow_runs: [] } };
+      return answer instanceof Error ? Promise.reject(answer) : Promise.resolve(answer);
+    },
   };
-  return { deps, calls, out, err, removed };
+  return { deps, calls, out, err, removed, requests };
 }
 
 const TAGGED_HEAD = { 'rev-parse v0.1.0^{commit}': { status: 0, stdout: 'abc\n' } };
 
 describe('the tag rule', () => {
   it.each(['v0.1', '0.1.0', 'v0.1.0-rc1', 'v1.2.3.4', '', 'latest'])('refuses %j in every mode, before any command runs', (tag) => {
-    for (const mode of ['--dry-run', '--push', '--check-target']) {
+    for (const mode of ['--dry-run', '--push', '--check-target', '--check-ci']) {
       const { deps, calls, err } = harness();
       expect(release.run(['--tag', tag, mode], deps)).toBe(2);
       expect(calls).toEqual([]);
@@ -388,6 +400,98 @@ describe('the main and tag guards on a throw-away repository', () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  });
+});
+
+describe('the CI check', () => {
+  const SHA = 'abc';
+  const REPOSITORY = 'owner/repo';
+  const env = { GITHUB_REPOSITORY: REPOSITORY, GITHUB_TOKEN: 'MARKER_TOKEN' };
+  const git = { 'rev-parse v0.1.0^{commit}': { status: 0, stdout: `${SHA}\n` } };
+  const found = (over: Record<string, unknown> = {}) => ({ id: 7, head_sha: SHA, head_branch: 'main', event: 'push', status: 'completed', conclusion: 'success', head_repository: { full_name: REPOSITORY }, ...over });
+  const check = (runs: unknown, extra: { answer?: Answer | Error; env?: Record<string, string | undefined> } = {}) => {
+    const made = harness({ script: { git }, env, answer: { status: 200, body: { workflow_runs: runs } }, ...extra });
+    return { made, result: release.checkCi(['--tag', 'v0.1.0', '--check-ci'], made.deps) };
+  };
+
+  it('exits 0 and names the run when the commit has a completed successful push run on main from this repository', async () => {
+    const { made, result } = check([found()]);
+    expect(await result).toBe(0);
+    expect(made.out.join('')).toBe(`ci: run 7 succeeded for ${SHA}\n`);
+  });
+
+  it('asks for the runs of ci.yml of this commit, on main, from a push, with the token, and writes nothing', async () => {
+    const { made, result } = check([found()]);
+    await result;
+    expect(made.requests).toEqual([{ url: `https://api.github.com/repos/${REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${SHA}&branch=main&event=push&per_page=100`, token: 'MARKER_TOKEN' }]);
+    expect(made.calls.map((call) => call.tool)).toEqual(['git']);
+  });
+
+  it.each([
+    ['a failed run', [found({ conclusion: 'failure' })], 'completed/failure'],
+    ['a cancelled run', [found({ conclusion: 'cancelled' })], 'completed/cancelled'],
+    ['a run still in progress', [found({ status: 'in_progress', conclusion: null })], 'in_progress/none'],
+  ])('exits 1 and names what it found for %s', async (_name, runs, described) => {
+    const { made, result } = check(runs);
+    expect(await result).toBe(1);
+    expect(made.err.join('')).toContain(described);
+    expect(made.out).toEqual([]);
+  });
+
+  it.each([
+    ['no run', []],
+    ['a run of another commit', [found({ head_sha: 'def' })]],
+    ['a run of another branch', [found({ head_branch: 'feature' })]],
+    ['a pull request run', [found({ event: 'pull_request' })]],
+    ['a run from a fork whose branch is named main', [found({ head_repository: { full_name: 'someone/repo' } })]],
+  ])('exits 1 for %s, which is not a CI run of this commit on main', async (_name, runs) => {
+    const { made, result } = check(runs);
+    expect(await result).toBe(1);
+    expect(made.err.join('')).toContain('has no CI run');
+  });
+
+  it('is green when one of several runs of the commit succeeded', async () => {
+    expect(await check([found({ id: 1, conclusion: 'failure' }), found({ id: 2 })]).result).toBe(0);
+  });
+
+  it.each([
+    ['a network error', new Error('MARKER_NETWORK'), 'the request failed'],
+    ['a rate limit', { status: 403, body: { message: 'rate limit' } }, 'HTTP 403'],
+    ['a server error', { status: 500, body: undefined }, 'HTTP 500'],
+    ['an answer that is not a list of runs', { status: 200, body: { message: 'x' } }, 'an unexpected answer'],
+  ])('exits 1 and never treats %s as green', async (_name, answer, message) => {
+    const { made, result } = check([], { answer });
+    expect(await result).toBe(1);
+    expect(made.err.join('')).toContain(message);
+    expect(made.err.join('')).not.toContain('MARKER_NETWORK');
+  });
+
+  it('exits 1 when GITHUB_REPOSITORY does not name a repository, and asks for nothing', async () => {
+    const { made, result } = check([found()], { env: {} });
+    expect(await result).toBe(1);
+    expect(made.requests).toEqual([]);
+  });
+
+  it('exits 1 for a tag that does not exist', async () => {
+    const made = harness({ script: { git: { 'rev-parse v0.1.0^{commit}': { status: 1 } } }, env });
+    expect(await release.checkCi(['--tag', 'v0.1.0', '--check-ci'], made.deps)).toBe(1);
+    expect(made.requests).toEqual([]);
+  });
+
+  it('never prints the token', async () => {
+    for (const answer of [{ status: 200, body: { workflow_runs: [found()] } }, { status: 403, body: undefined }, new Error('x')]) {
+      const { made, result } = check([], { answer });
+      await result;
+      expect(made.out.join('') + made.err.join('')).not.toContain('MARKER_TOKEN');
+    }
+  });
+
+  it('is reached through main, and run alone refuses the mode', async () => {
+    const made = harness({ script: { git }, env, answer: { status: 200, body: { workflow_runs: [found()] } } });
+    expect(await release.main(['--tag', 'v0.1.0', '--check-ci'], made.deps)).toBe(0);
+    const alone = harness({ script: { git }, env });
+    expect(release.run(['--tag', 'v0.1.0', '--check-ci'], alone.deps)).toBe(1);
+    expect(alone.calls).toEqual([]);
   });
 });
 

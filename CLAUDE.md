@@ -25,6 +25,7 @@ safe on very high-degree nodes. The repo is **pre-release**: the build tooling, 
 | `deploy/demo` | Demo environment: the product and two synthetic demo graphs, loopback only (see its README) |
 | `tools/demo-graph` | Synthetic demo graph generator |
 | `tools/dev` | The `pnpm dev` command: runs the app locally against your own Neo4j and Postgres, starting no container (see `docs/run-locally.md`) |
+| `tools/ci` | The script the CI workflow runs to decide from the changed files whether the arm64 image build and the README quickstart test are needed (tested in `tools/workspace-checks`) |
 | `tools/renderer-spike` | Harness that draws one synthetic graph with two graph renderers and measures frame rate, node movement on incremental layout, grouping and keyboard access (see its README) |
 | `tools/ux` | Browser tests (Playwright, Chromium) of the web app on a built copy with a small synthetic API: shells, keyboard paths, canvas behaviour, a benchmark guard (see its README) |
 | `tools/cancellation-suite` | Tests of what a cancel, a timeout and a source outage leave of the client: the real API and the real web client and stores in one process, over a scripted source (in `pnpm test`) and over a real Neo4j (in `pnpm test:neo4j`); compares the whole client state before and after (see its README) |
@@ -79,7 +80,7 @@ Node 24 LTS (`.nvmrc`; with nvm, `nvm use`) and pnpm through Corepack, at the ve
 | Supernode suite alone (anchors of 1,000, 10,000 and 100,000 relationships built once in a `nbx-test-` database of the Neo4j server that `test:neo4j` uses; payload bounds, count labels, stable load-more, the cost of each page, written to the file `NBX_SUPERNODE_RECORD` names; also run by `test:neo4j`; takes about 12 minutes on the dev 5.26 server; see `docs/benchmarks/README.md`) | `pnpm test:supernodes` |
 | Build a pack's demo graph into a demo Neo4j (see `tools/demo-graph/README.md`) | `pnpm demo-graph build --pack banking-fraud --uri bolt://localhost:7687` |
 | Image tests (builds the image and runs it; needs Docker, takes minutes) | `pnpm test:image` |
-| Compose tests (bring the Community stack up and upgrade it, bring the demo stack up, and the operations suite in `services/api/src/compose/operations.compose.test.ts`: fresh install, rollback by one image tag and a change of a source's login; need Docker, take minutes) | `pnpm test:compose` |
+| Compose tests (bring the Community stack up and upgrade it, bring the demo stack up, and the operations suite in `services/api/src/compose/operations.compose.test.ts`: fresh install, rollback by one image tag and a change of a source's login; need Docker, take minutes; each file builds its own images unless `NEBURYX_TEST_IMAGE` and `NEBURYX_TEST_LOADER_IMAGE` name ones built already, as CI does; a file path after the command runs that file only) | `pnpm test:compose [file]` |
 | Run the app locally against your own Neo4j and Postgres, with the API and web app in watch mode (reads the settings file `~/.config/neburyx/dev.env`, or the one `NEBURYX_DEV_CONFIG` names; starts no container and never calls Docker; see `docs/run-locally.md`) | `pnpm dev` |
 | Run the demo (the product and two synthetic demo graphs; see `deploy/demo/README.md`) | `cd deploy/demo && cp .env.example .env`, fill it in, then `docker compose up --wait` |
 | Browser (UX) tests, after `pnpm build`, `pnpm --filter @neburyx/web build:ux` and `pnpm --filter @neburyx/renderer-spike build:node` (Chromium; `NEBURYX_UX_CHROME` may name an installed Chrome) | `pnpm test:ux` |
@@ -103,7 +104,7 @@ To create or upgrade the database (after `pnpm build`): `DATABASE_MIGRATION_URL=
 The API listens on `127.0.0.1:8080` unless `NEBURYX_HOST` and `NEBURYX_PORT` say otherwise, and logs a
 warning if started outside a container on a non-loopback address.
 
-CI runs lint, type-check, unit tests, the contract test, the integration tests, the build, the image build (both platforms), the compose test and the browser tests (`ux`) as separate jobs (`.github/workflows/ci.yml`). The demo
+CI (`.github/workflows/ci.yml`) runs on pushes to branches and on pull requests, not on tags. Its jobs are separate: lint, type-check, unit tests, the contract test, the integration tests, the build, `image` (the image test on every push, and the build for both platforms only when `pnpm-lock.yaml`, a `package.json` at the root, `.nvmrc`, a file under `deploy/` or `.github/workflows/` changed, decided by the `changes` job (`tools/ci/changed-paths.mjs`); a release builds both platforms itself), the compose tests (`compose-images` builds the image and the demo loader image once, and the `compose` jobs run the compose test files in parallel on that archive; the README quickstart test runs in the `quickstart` job when the README, `deploy/` or the files it reads changed, and in the release workflow), and the browser tests (`ux` in three shards, and `ux-benchmark` alone). A release refuses a commit that has no green CI run on `main` (`deploy/release/README.md`). The demo
 environment is in `deploy/demo`.
 
 ## Conventions

@@ -35,7 +35,8 @@ const TAG_GLOB = 'v[0-9]*.[0-9]*.[0-9]*';
 const pinnedAction = /^[\w-]+\/[\w-]+@v\d+\.\d+\.\d+$/;
 const PUSH_LINE = 'node deploy/release/release-image.mjs --tag "$GITHUB_REF_NAME" --push';
 const CHECK_LINE = 'node deploy/release/release-image.mjs --tag "$GITHUB_REF_NAME" --check-target';
-const JOB_PERMISSIONS = JSON.stringify({ contents: 'read', packages: 'write' });
+const JOB_PERMISSIONS = JSON.stringify({ contents: 'read', packages: 'write', actions: 'read' });
+const CI_LINE = 'node deploy/release/release-image.mjs --tag "$GITHUB_REF_NAME" --check-ci';
 const LOGIN_WITH = { registry: '${{ steps.target.outputs.registry }}', username: '${{ github.actor }}', password: '${{ secrets.GITHUB_TOKEN }}' };
 const REGISTRY_HOST = /\b(ghcr\.io|docker\.io|quay\.io|gcr\.io|amazonaws\.com|azurecr\.io)\b/;
 const WRITERS = /(git\s+(push|tag|commit|config)|\bgh\s|create-release|action-gh-release|GIT_AUTHOR|GIT_COMMITTER|user\.(name|email))/;
@@ -86,18 +87,22 @@ function violations(workflow: Workflow): string[] {
   const order = [
     steps.findIndex(startsWith('actions/checkout@')),
     steps.findIndex((step) => step.run === 'pnpm install --frozen-lockfile'),
+    steps.findIndex(runIncludes('--check-ci')),
     steps.findIndex(startsWith('docker/setup-qemu-action@')),
     steps.findIndex(startsWith('docker/setup-buildx-action@')),
     steps.findIndex((step) => step.run === 'pnpm test:image'),
+    steps.findIndex(runIncludes('readme-quickstart.compose.test.ts')),
     steps.findIndex(runIncludes('skopeo --version')),
     steps.findIndex(runIncludes('--check-target')),
     steps.findIndex(startsWith('docker/login-action@')),
     steps.findIndex(runIncludes('--push')),
   ];
-  const [, , , , , , targetAt = -1, loginAt = -1, pushAt = -1] = order;
+  const [, , , , , , , , targetAt = -1, loginAt = -1, pushAt = -1] = order;
   const inOrder = order.every((position, at) => position >= 0 && (at === 0 || position > (order[at - 1] ?? -1)));
   if (!inOrder || pushAt !== steps.length - 1 || loginAt !== steps.length - 2) found.push('order');
   if (steps.some((step, at) => ((step.run ?? '').includes('--push') || (step.run ?? '').includes('skopeo copy')) && at !== pushAt)) found.push('order');
+  const ciAt = steps.findIndex(runIncludes('--check-ci'));
+  if (steps[ciAt]?.run !== CI_LINE || JSON.stringify(steps[ciAt]?.env) !== JSON.stringify({ GITHUB_TOKEN: '${{ secrets.GITHUB_TOKEN }}' })) found.push('ci-check');
   if (!(steps[targetAt]?.run ?? '').includes(CHECK_LINE) || !(steps[pushAt]?.run ?? '').includes(PUSH_LINE)) found.push('commands');
   if (steps.some((step) => WRITERS.test(stepText(step)))) found.push('writers');
   if (JSON.stringify(steps[loginAt]?.with) !== JSON.stringify(LOGIN_WITH)) found.push('credentials');
@@ -125,10 +130,10 @@ describe('release workflow', () => {
     expect(workflow.on['push']).toEqual({ tags: [TAG_GLOB] });
   });
 
-  it('asks for read access to the contents at the top, and in the one job for that and package write, nothing else', () => {
+  it('asks for read access to the contents at the top, and in the one job for that, package write and the read of the workflow runs, nothing else', () => {
     const workflow = copyOf();
     expect(workflow.permissions).toEqual({ contents: 'read' });
-    expect(Object.values(workflow.jobs).map((job) => job.permissions)).toEqual([{ contents: 'read', packages: 'write' }]);
+    expect(Object.values(workflow.jobs).map((job) => job.permissions)).toEqual([{ contents: 'read', packages: 'write', actions: 'read' }]);
   });
 
   it('names a runner image and a timeout for every job and pins every action', () => {
@@ -150,11 +155,12 @@ describe('release workflow', () => {
     expect(steps.findIndex(runIncludes('--check-target'))).toBeLessThan(steps.length - 2);
   });
 
-  it('reads the registry host from the target check and logs in with the workflow token only', () => {
+  it('reads the registry host from the target check and uses the workflow token only, in the CI check and the login', () => {
     const steps = stepsOf(copyOf());
     expect(steps.at(-2)?.with).toEqual(LOGIN_WITH);
     expect(steps.filter(runIncludes('secrets.'))).toEqual([]);
-    expect(workflowText.match(/secrets\.\w+/g)).toEqual(['secrets.GITHUB_TOKEN']);
+    expect(workflowText.match(/secrets\.\w+/g)).toEqual(['secrets.GITHUB_TOKEN', 'secrets.GITHUB_TOKEN']);
+    expect(workflowText.match(/secrets\.\w+/g)?.every((name) => name === 'secrets.GITHUB_TOKEN')).toBe(true);
   });
 
   it('writes the image reference and digest to the run summary', () => {
@@ -179,7 +185,14 @@ describe('release workflow', () => {
     ['a wider tag glob', 'trigger', (w) => void (w.on['push'] = { tags: ['v*'] })],
     ['write permission at the top', 'permissions', (w) => void (w.permissions['packages'] = 'write')],
     ['more write permission in the job', 'permissions', (w) => void (firstJob(w).permissions = { contents: 'write', packages: 'write' })],
-    ['an id-token permission in the job', 'permissions', (w) => void (firstJob(w).permissions = { contents: 'read', packages: 'write', 'id-token': 'write' })],
+    ['an id-token permission in the job', 'permissions', (w) => void (firstJob(w).permissions = { contents: 'read', packages: 'write', actions: 'read', 'id-token': 'write' })],
+    ['no read of the workflow runs in the job', 'permissions', (w) => void (firstJob(w).permissions = { contents: 'read', packages: 'write' })],
+    ['a write of the workflow runs in the job', 'permissions', (w) => void (firstJob(w).permissions = { contents: 'read', packages: 'write', actions: 'write' })],
+    ['no quickstart test before the push', 'order', (w) => void firstJob(w).steps.splice(firstJob(w).steps.findIndex(runIncludes('readme-quickstart')), 1)],
+    ['no CI check', 'ci-check', (w) => void firstJob(w).steps.splice(firstJob(w).steps.findIndex(runIncludes('--check-ci')), 1)],
+    ['a CI check without the token', 'ci-check', (w) => void patchStep(w, firstJob(w).steps.findIndex(runIncludes('--check-ci')), { env: {} })],
+    ['a CI check that takes the token in its run line', 'credentials', (w) => void patchStep(w, firstJob(w).steps.findIndex(runIncludes('--check-ci')), { run: `${CI_LINE} --token \${{ secrets.GITHUB_TOKEN }}` })],
+    ['a CI check after the image tests', 'order', (w) => void firstJob(w).steps.splice(firstJob(w).steps.findIndex((step) => step.run === 'pnpm test:image') + 1, 0, ...firstJob(w).steps.splice(firstJob(w).steps.findIndex(runIncludes('--check-ci')), 1))],
     ['no package write in the job', 'permissions', (w) => void (firstJob(w).permissions = { contents: 'read' })],
     ['no permissions in the job', 'permissions', (w) => void delete firstJob(w).permissions],
     ['an unpinned action', 'pinning', (w) => void patchStep(w, 0, { uses: 'actions/checkout@v7' })],

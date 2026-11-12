@@ -2,6 +2,7 @@ name: CI
 
 on:
   push:
+    branches: ['**']
   pull_request:
 
 permissions:
@@ -95,7 +96,26 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm test:integration
 
+  changes:
+    runs-on: ubuntu-26.04
+    outputs:
+      image: ${{ steps.paths.outputs.image }}
+      quickstart: ${{ steps.paths.outputs.quickstart }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: '0'
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - id: paths
+        run: node tools/ci/changed-paths.mjs --base "$BASE" --head "$HEAD" >> "$GITHUB_OUTPUT"
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+
   image:
+    needs: changes
     runs-on: ubuntu-26.04
     timeout-minutes: 60
     steps:
@@ -109,12 +129,68 @@ jobs:
       - run: corepack enable
       - run: pnpm install --frozen-lockfile
       - uses: docker/setup-qemu-action@v4.3.0
+        if: needs.changes.outputs.image == 'true'
       - uses: docker/setup-buildx-action@v4.3.0
       - run: pnpm test:image
+      # the release builds both platforms itself (deploy/release/release-image.mjs), so a run that changed no image file leaves the arm64 build to the release
       - run: docker buildx build --platform linux/amd64,linux/arm64 -f deploy/docker/Dockerfile --output type=oci,dest=${{ runner.temp }}/neburyx.oci.tar .
+        if: needs.changes.outputs.image == 'true'
       - run: node deploy/docker/check-platforms.mjs ${{ runner.temp }}/neburyx.oci.tar
+        if: needs.changes.outputs.image == 'true'
+
+  # the image and the demo loader image the compose tests use are built once and shared as one archive
+  compose-images:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    steps:
+      - run: |
+          docker version
+          docker compose version
+      - uses: actions/checkout@v7.0.1
+      - run: docker build -f deploy/docker/Dockerfile -t neburyx-ci-test:${{ github.sha }} .
+      - run: docker build -f deploy/demo/loader.Dockerfile -t neburyx-ci-test-loader:${{ github.sha }} .
+      - run: docker save --output ${{ runner.temp }}/compose-images.tar neburyx-ci-test:${{ github.sha }} neburyx-ci-test-loader:${{ github.sha }}
+      - uses: actions/upload-artifact@v4.6.2
+        with:
+          name: compose-images
+          path: ${{ runner.temp }}/compose-images.tar
+          retention-days: 1
 
   compose:
+    needs: compose-images
+    runs-on: ubuntu-26.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        files:
+          - src/compose/compose.compose.test.ts src/compose/destroy-all.compose.test.ts
+          - src/compose/operations.compose.test.ts
+          - src/compose/demo.compose.test.ts
+    env:
+      NEBURYX_TEST_IMAGE: neburyx-ci-test:${{ github.sha }}
+      NEBURYX_TEST_LOADER_IMAGE: neburyx-ci-test-loader:${{ github.sha }}
+    steps:
+      - run: |
+          docker version
+          docker compose version
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v4.3.0
+        with:
+          name: compose-images
+          path: ${{ runner.temp }}
+      - run: docker load --input ${{ runner.temp }}/compose-images.tar
+      - run: pnpm test:compose ${{ matrix.files }}
+
+  # builds the README's own docker build in a clone, so it needs no shared image; it runs when the files it reads changed (the release workflow runs it too)
+  quickstart:
+    needs: changes
+    if: needs.changes.outputs.quickstart == 'true'
     runs-on: ubuntu-26.04
     timeout-minutes: 60
     steps:
@@ -127,11 +203,15 @@ jobs:
           node-version-file: .nvmrc
       - run: corepack enable
       - run: pnpm install --frozen-lockfile
-      - run: pnpm test:compose
+      - run: pnpm test:compose src/compose/readme-quickstart.compose.test.ts
 
   ux:
     runs-on: ubuntu-26.04
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ['1', '2', '3']
     # the limits chosen from the runner's own measurements (tools/ux/tests/benchmark.spec.ts, zoomed-out.spec.ts); the default is the laptop's
     env:
       NEBURYX_UX_PROFILE: runner
@@ -154,11 +234,41 @@ jobs:
       # no --with-deps: the runner image has the libraries, and that option downloads fonts through apt on every run, which took ten minutes on a slow mirror; a missing library fails the browser start
       - run: pnpm --filter @neburyx/ux-tests exec playwright install chromium
         timeout-minutes: 10
-      - run: pnpm test:ux
-      # the figures of the benchmark guard are in the log of the previous step and in the attachments of its test
+      - run: pnpm test:ux --project=laptop-1440 --project=laptop-1280 --shard=${{ matrix.shard }}/3
       - uses: actions/upload-artifact@v4.6.2
         if: always()
         with:
-          name: ux-report
+          name: ux-report-${{ matrix.shard }}
+          path: tools/ux/playwright-report
+          if-no-files-found: ignore
+
+  # the benchmark specs measure frame times and run alone, as the last project, on a machine that runs nothing else
+  ux-benchmark:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    env:
+      NEBURYX_UX_PROFILE: runner
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm --filter @neburyx/web build:ux
+      - run: pnpm --filter @neburyx/renderer-spike build:node
+      - run: pnpm --filter @neburyx/ux-tests check:profile
+      - uses: actions/cache@v4.2.3
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-1.64.1-${{ runner.os }}
+      - run: pnpm --filter @neburyx/ux-tests exec playwright install chromium
+        timeout-minutes: 10
+      - run: pnpm test:ux --project=benchmark --no-deps
+      - uses: actions/upload-artifact@v4.6.2
+        if: always()
+        with:
+          name: ux-report-benchmark
           path: tools/ux/playwright-report
           if-no-files-found: ignore

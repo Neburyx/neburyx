@@ -1,6 +1,6 @@
 # UX tests
 
-Browser tests of the web app: Playwright with Chromium, at 1440 × 900 and 1280 × 720, on a **built** copy of `apps/web` served by a small support server (`src/support-server.ts`) that answers the few API reads the pages make with synthetic bodies. No database, no Neo4j, no Docker.
+Browser tests of the web app: Playwright with Chromium, at 1440 × 900 (every spec) and 1280 × 720 (the specs listed under *Widths*), on a **built** copy of `apps/web` served by a small support server (`src/support-server.ts`) that answers the few API reads the pages make with synthetic bodies. No database, no Neo4j, no Docker.
 
 From a fresh checkout:
 
@@ -19,6 +19,16 @@ pnpm test:ux
 The specs that switch source, follow deep links or use Home run against a third copy of the support server on port 4175, which lists a second source (`claims-demo`, the same profile under another ID) and a third that it lists but refuses the person (`restricted-demo`) beside the first; the other two servers list one. Every source it lists is connected and never tested until a spec changes it: `POST /__support/sources` takes a map of source ID to the fields of `GET /v1/sources` to change (`state`, `stateReason`, `lastTest`, `lastTestAt`, `mappingSummary`, `synthetic`, `demoCase`; each call replaces every earlier change, including a last test stored by a test run, and an unknown source, an invalid field or a change that leaves the source summary invalid, such as a demo case on a source that is not synthetic, is refused with 400 and changes nothing), `POST /v1/sources/{id}/test` answers a passing report and stores it as the source's last test, `POST /__support/forget-investigations` removes every investigation opened so far, so a spec can start from an install that has none, `POST /__support/hold-after-test` makes the `GET /v1/sources` that follows a test wait until `POST /__support/release`, `POST /__support/named-views` takes `{ count, lastEditedAt }` for the named views the investigation list counts (none until a spec sets them; a count of 0 goes with a `null` time and any other count with an ISO time, otherwise it is refused with 400), and `POST /__support/reset` puts everything back, the named views too (a spec that changes sources or named views resets before and after). Like the application's own server it serves the page for every address that is not a file, and treats only `/v1`, what is under `/v1/` and the two probe paths as the API.
 
 `fixtures/profile.json` is the synthetic source profile the pages read: the banking pack's, as the API's profile builder makes it. `pnpm --filter @neburyx/ux-tests check:profile` (after `pnpm build`) fails when it is out of date; `node tools/ux/scripts/make-profile.mjs` rewrites it.
+
+## Widths
+
+Each spec runs at 1440 × 900 (project `laptop-1440`). The specs whose result depends on the width of the window also run at 1280 × 720 (project `laptop-1280`): the list `WIDTH_DEPENDENT` in `src/widths.ts`, which holds `compare`, `evidence`, `first-run`, `help-menu`, `home-controls`, `inspector`, `layouts`, `page-shell`, `starting-hint`, `workspace-shell` and `zoomed-out` (a region that must stay inside the window, boxes that must not overlap, or figures kept per width). `ONLY_1280` holds `left-panel` and `short-canvas`, which are made for the narrow window and skip at any other width, so they run at 1280 only. The `benchmark` project runs the two benchmark specs alone and last, at 1280 × 720.
+
+A spec joins a list when it reads the window size, checks a region against the window or the position of one box against another (the hint against the canvas centre, every node inside the canvas). A unit test (`src/widths.test.ts`) scans every spec for those markers and fails when a spec that has one is in neither list nor in `EXEMPT`, where it needs a written reason (for example it sets its own sizes). A spec with no marker runs at one width and asserts there what it always asserted.
+
+## Shards
+
+CI runs the specs as three shards (`--shard=<n>/3` over `laptop-1440` and `laptop-1280`) on separate jobs, and the benchmark project alone in a fourth (`--project=benchmark --no-deps`). The ports 4173 to 4175 are fixed and the support servers keep their state in memory, so shards must run on separate machines, never two on one.
 
 ## The check of the browser's default look
 

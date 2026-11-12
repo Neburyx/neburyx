@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { parse } from 'yaml';
@@ -6,20 +6,25 @@ import { z } from 'zod';
 import { repoRoot } from './workspace.js';
 
 const stepSchema = z.object({
+  id: z.string().optional(),
+  if: z.string().optional(),
   uses: z.string().optional(),
   run: z.string().optional(),
-  with: z.record(z.string(), z.string()).optional(),
+  with: z.record(z.string(), z.union([z.string(), z.number()])).optional(),
+  env: z.record(z.string(), z.string()).optional(),
   'timeout-minutes': z.number().optional(),
 });
 const jobSchema = z.object({
   if: z.string().optional(),
+  needs: z.union([z.string(), z.array(z.string())]).optional(),
+  outputs: z.record(z.string(), z.string()).optional(),
   'runs-on': z.string(),
   env: z.record(z.string(), z.string()).optional(),
   strategy: z.object({ 'fail-fast': z.boolean().optional(), matrix: z.record(z.string(), z.array(z.string())) }).optional(),
   steps: z.array(stepSchema),
 });
 const workflowSchema = z.object({
-  on: z.object({ push: z.unknown(), pull_request: z.unknown() }),
+  on: z.object({ push: z.object({ branches: z.array(z.string()).optional(), tags: z.unknown().optional(), 'tags-ignore': z.unknown().optional() }).passthrough(), pull_request: z.unknown() }),
   permissions: z.record(z.string(), z.string()),
   jobs: z.record(z.string(), jobSchema),
 });
@@ -39,6 +44,12 @@ const PRINT_DOCKER_VERSIONS = 'docker version\ndocker compose version\n';
 describe('CI workflow', () => {
   it('runs on push and pull request', () => {
     expect(Object.keys(workflow.on).sort()).toEqual(['pull_request', 'push']);
+  });
+
+  it('runs a push only for branches, so a pushed tag starts no run', () => {
+    expect(workflow.on.push.branches).toEqual(['**']);
+    expect(workflow.on.push.tags).toBeUndefined();
+    expect(workflow.on.push['tags-ignore']).toBeUndefined();
   });
 
   it('asks only for read access to the contents', () => {
@@ -76,8 +87,8 @@ describe('CI workflow', () => {
     expect(Object.keys(rootScripts)).toContain(script);
   });
 
-  it('defines exactly the ten jobs, and none of them runs the Neo4j tests: those run against the developer\'s Neo4j server', () => {
-    expect(Object.keys(workflow.jobs).sort()).toEqual(['build', 'compose', 'contract', 'dco', 'image', 'integration', 'lint', 'typecheck', 'unit', 'ux']);
+  it('defines exactly these jobs, and none of them runs the Neo4j tests: those run against the developer\'s Neo4j server', () => {
+    expect(Object.keys(workflow.jobs).sort()).toEqual(['build', 'changes', 'compose', 'compose-images', 'contract', 'dco', 'image', 'integration', 'lint', 'quickstart', 'typecheck', 'unit', 'ux', 'ux-benchmark']);
     const runs = Object.values(workflow.jobs).flatMap((job) => job.steps.flatMap((step) => step.run ?? []));
     expect(runs.filter((run) => run.includes('test:neo4j'))).toEqual([]);
   });
@@ -103,21 +114,65 @@ describe('CI workflow', () => {
     expect(rootScripts['test:neo4j']).toContain('--filter @neburyx/test-neo4j build');
   });
 
-  it('installs frozen and ends with the compose test in the compose job', () => {
-    const steps = workflow.jobs['compose']?.steps ?? [];
+  it('works out from the changed files whether the image and the quickstart steps are needed, for a push and for a pull request', () => {
+    const job = workflow.jobs['changes'];
+    expect(job?.steps.map((step) => step.uses?.split('@')[0] ?? step.run)).toEqual(['actions/checkout', 'actions/setup-node', 'node tools/ci/changed-paths.mjs --base "$BASE" --head "$HEAD" >> "$GITHUB_OUTPUT"']);
+    expect(job?.steps[0]?.with).toEqual({ 'fetch-depth': '0' });
+    expect(job?.steps[2]?.id).toBe('paths');
+    expect(job?.steps[2]?.env).toEqual({ BASE: '${{ github.event.pull_request.base.sha || github.event.before }}', HEAD: '${{ github.event.pull_request.head.sha || github.sha }}' });
+    expect(job?.outputs).toEqual({ image: '${{ steps.paths.outputs.image }}', quickstart: '${{ steps.paths.outputs.quickstart }}' });
+  });
+
+  it('builds the compose images once, saves them as one archive and uploads it', () => {
+    const steps = workflow.jobs['compose-images']?.steps ?? [];
+    expect(steps.map((step) => step.uses?.split('@')[0] ?? step.run?.split(' ').slice(0, 2).join(' '))).toEqual(['docker version\ndocker', 'actions/checkout', 'docker build', 'docker build', 'docker save', 'actions/upload-artifact']);
+    expect(steps[2]?.run).toContain('-f deploy/docker/Dockerfile');
+    expect(steps[3]?.run).toContain('-f deploy/demo/loader.Dockerfile');
+    expect(steps[4]?.run).toContain('neburyx-ci-test:${{ github.sha }} neburyx-ci-test-loader:${{ github.sha }}');
+    expect(steps[5]?.with).toEqual({ name: 'compose-images', path: '${{ runner.temp }}/compose-images.tar', 'retention-days': 1 });
+  });
+
+  const composeFiles = (): string[] => readdirSync(join(repoRoot, 'services', 'api', 'src', 'compose')).filter((name) => name.endsWith('.compose.test.ts')).map((name) => `src/compose/${name}`);
+
+  it('runs the compose files as parallel jobs on the shared images, one failure not stopping the others', () => {
+    const job = workflow.jobs['compose'];
+    expect(job?.needs).toBe('compose-images');
+    expect(job?.strategy?.['fail-fast']).toBe(false);
+    expect(job?.env).toEqual({ NEBURYX_TEST_IMAGE: 'neburyx-ci-test:${{ github.sha }}', NEBURYX_TEST_LOADER_IMAGE: 'neburyx-ci-test-loader:${{ github.sha }}' });
+    const steps = job?.steps ?? [];
     expect(steps.map((step) => step.uses?.split('@')[0] ?? step.run)).toEqual([
       PRINT_DOCKER_VERSIONS,
       'actions/checkout',
       'actions/setup-node',
       'corepack enable',
       'pnpm install --frozen-lockfile',
-      'pnpm test:compose',
+      'actions/download-artifact',
+      'docker load --input ${{ runner.temp }}/compose-images.tar',
+      'pnpm test:compose ${{ matrix.files }}',
     ]);
+    expect(steps[5]?.with).toEqual({ name: 'compose-images', path: '${{ runner.temp }}' });
     expect(Object.keys(rootScripts)).toContain('test:compose');
   });
 
-  it('builds the image for both platforms and checks the result, after running the image test', () => {
-    const steps = workflow.jobs['image']?.steps ?? [];
+  it('runs every compose test file in some job: the matrix, or the quickstart job that runs when the files it reads change', () => {
+    const matrixFiles = (workflow.jobs['compose']?.strategy?.matrix['files'] ?? []).flatMap((entry) => entry.split(' '));
+    const quickstart = (workflow.jobs['quickstart']?.steps ?? []).flatMap((step) => step.run?.match(/src\/compose\/\S+\.compose\.test\.ts/g) ?? []);
+    expect([...matrixFiles, ...quickstart].sort()).toEqual(composeFiles().sort());
+    expect(new Set([...matrixFiles, ...quickstart]).size).toBe(matrixFiles.length + quickstart.length);
+  });
+
+  it('runs the quickstart test only when the files it reads changed, in its own job that needs no shared image', () => {
+    const job = workflow.jobs['quickstart'];
+    expect(job?.needs).toBe('changes');
+    expect(job?.if).toBe("needs.changes.outputs.quickstart == 'true'");
+    expect(job?.steps.map((step) => step.uses?.split('@')[0] ?? step.run)).toEqual([PRINT_DOCKER_VERSIONS, 'actions/checkout', 'actions/setup-node', 'corepack enable', 'pnpm install --frozen-lockfile', 'pnpm test:compose src/compose/readme-quickstart.compose.test.ts']);
+    expect(job?.env).toBeUndefined();
+  });
+
+  it('builds the image for both platforms and checks the result only when an image file changed, after running the image test on every push', () => {
+    const job = workflow.jobs['image'];
+    expect(job?.needs).toBe('changes');
+    const steps = job?.steps ?? [];
     expect(steps.map((step) => step.uses?.split('@')[0] ?? step.run?.split(' ').slice(0, 2).join(' '))).toEqual([
       'docker version\ndocker',
       'actions/checkout',
@@ -130,40 +185,57 @@ describe('CI workflow', () => {
       'docker buildx',
       'node deploy/docker/check-platforms.mjs',
     ]);
+    const condition = "needs.changes.outputs.image == 'true'";
+    expect(steps.filter((step) => step.if !== undefined).map((step) => [step.uses?.split('@')[0] ?? step.run?.split(' ').slice(0, 2).join(' '), step.if])).toEqual([
+      ['docker/setup-qemu-action', condition],
+      ['docker buildx', condition],
+      ['node deploy/docker/check-platforms.mjs', condition],
+    ]);
     const build = steps.find((step) => step.run?.startsWith('docker buildx build'))?.run ?? '';
     expect(build).toContain('--platform linux/amd64,linux/arm64');
     expect(build).toContain('-f deploy/docker/Dockerfile');
     expect(Object.keys(rootScripts)).toContain('test:image');
   });
 
-  it('builds the app twice, the spike for the benchmark, caches the browser by its version and ends with the browser tests in the ux job', () => {
-    const steps = workflow.jobs['ux']?.steps ?? [];
-    expect(steps.map((step) => step.uses?.split('@')[0] ?? step.run)).toEqual([
-      'actions/checkout',
-      'actions/setup-node',
-      'corepack enable',
-      'pnpm install --frozen-lockfile',
-      'pnpm build',
-      'pnpm --filter @neburyx/web build:ux',
-      'pnpm --filter @neburyx/renderer-spike build:node',
-      'pnpm --filter @neburyx/ux-tests check:profile',
-      'actions/cache',
-      'pnpm --filter @neburyx/ux-tests exec playwright install chromium',
-      'pnpm test:ux',
-      'actions/upload-artifact',
-    ]);
+  const UX_BUILD_STEPS = [
+    'actions/checkout',
+    'actions/setup-node',
+    'corepack enable',
+    'pnpm install --frozen-lockfile',
+    'pnpm build',
+    'pnpm --filter @neburyx/web build:ux',
+    'pnpm --filter @neburyx/renderer-spike build:node',
+    'pnpm --filter @neburyx/ux-tests check:profile',
+    'actions/cache',
+    'pnpm --filter @neburyx/ux-tests exec playwright install chromium',
+  ];
+
+  it('builds the app twice, the spike for the benchmark, caches the browser by its version and runs one shard of the browser tests in each ux job', () => {
+    const job = workflow.jobs['ux'];
+    expect(job?.strategy).toEqual({ 'fail-fast': false, matrix: { shard: ['1', '2', '3'] } });
+    const steps = job?.steps ?? [];
+    expect(steps.map((step) => step.uses?.split('@')[0] ?? step.run)).toEqual([...UX_BUILD_STEPS, 'pnpm test:ux --project=laptop-1440 --project=laptop-1280 --shard=${{ matrix.shard }}/3', 'actions/upload-artifact']);
     expect(steps.find((step) => step.uses?.startsWith('actions/cache'))?.with).toEqual({ path: '~/.cache/ms-playwright', key: `playwright-${playwrightVersion}-\${{ runner.os }}` });
+    expect(steps.at(-1)?.with).toEqual({ name: 'ux-report-${{ matrix.shard }}', path: 'tools/ux/playwright-report', 'if-no-files-found': 'ignore' });
     expect(Object.keys(rootScripts)).toContain('test:ux');
   });
 
-  it('holds the browser tests of the ux job to the limits of the runner, selected by name and not by the CI variable', () => {
+  it('runs the benchmark project alone, as the last project, on a job of its own with the same setup', () => {
+    const steps = workflow.jobs['ux-benchmark']?.steps ?? [];
+    expect(steps.map((step) => step.uses?.split('@')[0] ?? step.run)).toEqual([...UX_BUILD_STEPS, 'pnpm test:ux --project=benchmark --no-deps', 'actions/upload-artifact']);
+    expect(steps.at(-1)?.with).toEqual({ name: 'ux-report-benchmark', path: 'tools/ux/playwright-report', 'if-no-files-found': 'ignore' });
+  });
+
+  it('holds the browser tests of every ux job to the limits of the runner, selected by name and not by the CI variable', () => {
     expect(workflow.jobs['ux']?.env).toEqual({ NEBURYX_UX_PROFILE: 'runner' });
+    expect(workflow.jobs['ux-benchmark']?.env).toEqual({ NEBURYX_UX_PROFILE: 'runner' });
   });
 
   it('installs the browser without the system packages, whose apt download of fonts took ten minutes on a slow mirror, and gives the install a limit of its own', () => {
-    const install = (workflow.jobs['ux']?.steps ?? []).find((step) => step.run?.includes('playwright install'));
-    expect(install?.run).not.toContain('--with-deps');
-    expect(install?.['timeout-minutes']).toBe(10);
+    for (const name of ['ux', 'ux-benchmark']) {
+      const install = (workflow.jobs[name]?.steps ?? []).find((step) => step.run?.includes('playwright install'));
+      expect(install?.run).not.toContain('--with-deps');
+      expect(install?.['timeout-minutes']).toBe(10);
+    }
   });
 });
-

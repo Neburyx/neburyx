@@ -22,8 +22,12 @@ export const PLATFORMS = 'linux/amd64,linux/arm64';
 const DOCKERFILE = 'deploy/docker/Dockerfile';
 const PLATFORM_CHECK = 'deploy/docker/check-platforms.mjs';
 const DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/;
-const MODES = { '--dry-run': 'dry-run', '--push': 'push', '--check-target': 'check-target' };
-const USAGE = 'usage: release-image.mjs --tag v<major>.<minor>.<patch> [--dry-run | --push | --check-target]';
+const MODES = { '--dry-run': 'dry-run', '--push': 'push', '--check-target': 'check-target', '--check-ci': 'check-ci' };
+const USAGE = 'usage: release-image.mjs --tag v<major>.<minor>.<patch> [--dry-run | --push | --check-target | --check-ci]';
+const CI_WORKFLOW = 'ci.yml';
+const CI_BRANCH = 'main';
+const REPOSITORY_PATTERN = /^[\w.-]+\/[\w.-]+$/;
+const RUNS_PER_PAGE = 100;
 
 export function parseArgs(argv) {
   let tag;
@@ -205,7 +209,52 @@ export function run(argv, deps) {
     deps.stdout(`registry: ${target.registry}\n`);
     return 0;
   }
+  if (parsed.mode === 'check-ci') return fail(deps, '--check-ci is asynchronous: call main() or checkCi(), not run()');
   return parsed.mode === 'push' ? runPush(deps, parsed.tag) : runDry(deps);
+}
+
+function describeRuns(runs) {
+  const states = new Map();
+  for (const found of runs) {
+    const state = `${found.status}/${found.conclusion ?? 'none'}`;
+    states.set(state, (states.get(state) ?? 0) + 1);
+  }
+  return [...states].map(([state, count]) => `${count} ${state}`).join(', ');
+}
+
+/** Whether the commit of the tag has a completed run of the CI workflow on main, from a push to this repository, that succeeded. Reads one list of runs and writes nothing. */
+export async function checkCi(argv, deps) {
+  const parsed = parseArgs(argv);
+  if (!parsed.ok || parsed.mode !== 'check-ci') return fail(deps, `${parsed.ok ? 'not the CI check' : parsed.message}`);
+  const rule = tagProblem(parsed.tag);
+  if (rule !== undefined) return fail(deps, rule);
+  const commit = deps.exec('git', ['rev-parse', `${parsed.tag}^{commit}`], { capture: true });
+  if (!succeeded(commit)) return fail(deps, `the tag ${parsed.tag} does not exist`);
+  const sha = commit.stdout.trim();
+  const repository = deps.env.GITHUB_REPOSITORY ?? '';
+  if (!REPOSITORY_PATTERN.test(repository)) return fail(deps, 'GITHUB_REPOSITORY does not name the repository');
+  const url = `https://api.github.com/repos/${repository}/actions/workflows/${CI_WORKFLOW}/runs?head_sha=${sha}&branch=${CI_BRANCH}&event=push&per_page=${RUNS_PER_PAGE}`;
+  let answer;
+  try {
+    answer = await deps.fetchRuns(url, deps.env.GITHUB_TOKEN);
+  } catch {
+    return fail(deps, 'the CI runs could not be read (the request failed), so the commit is not treated as green');
+  }
+  if (answer.status !== 200) return fail(deps, `the CI runs could not be read (HTTP ${answer.status}), so the commit is not treated as green`);
+  const runs = answer.body?.workflow_runs;
+  if (!Array.isArray(runs)) return fail(deps, 'the CI runs could not be read (an unexpected answer), so the commit is not treated as green');
+  const matching = runs.filter((found) => found?.head_sha === sha && found.head_branch === CI_BRANCH && found.event === 'push' && found.head_repository?.full_name === repository);
+  const green = matching.find((found) => found.status === 'completed' && found.conclusion === 'success');
+  if (green !== undefined) {
+    deps.stdout(`ci: run ${green.id} succeeded for ${sha}\n`);
+    return 0;
+  }
+  if (matching.length === 0) return fail(deps, `the commit ${sha} has no CI run on ${CI_BRANCH} from a push to ${repository}; push it to ${CI_BRANCH} and wait for CI before tagging`);
+  return fail(deps, `the commit ${sha} has no successful CI run on ${CI_BRANCH} (${describeRuns(matching)}); wait for CI to succeed, then run the release again`);
+}
+
+export function main(argv, deps) {
+  return argv.includes('--check-ci') ? checkCi(argv, deps) : Promise.resolve(run(argv, deps));
 }
 
 function realDeps() {
@@ -225,9 +274,16 @@ function realDeps() {
     removeDir: (path) => rmSync(path, { recursive: true, force: true }),
     stdout: (text) => process.stdout.write(text),
     stderr: (text) => process.stderr.write(text),
+    env: process.env,
+    fetchRuns: async (url, token) => {
+      const response = await fetch(url, {
+        headers: { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', ...(token === undefined || token === '' ? {} : { Authorization: `Bearer ${token}` }) },
+      });
+      return { status: response.status, body: await response.json().catch(() => undefined) };
+    },
   };
 }
 
 if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  process.exitCode = run(process.argv.slice(2), realDeps());
+  process.exitCode = await main(process.argv.slice(2), realDeps());
 }

@@ -15,6 +15,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      actions: read
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -25,9 +26,14 @@ jobs:
           node-version-file: .nvmrc
       - run: corepack enable
       - run: pnpm install --frozen-lockfile
+      - name: Check the commit has a green CI run
+        run: node deploy/release/release-image.mjs --tag "$GITHUB_REF_NAME" --check-ci
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - uses: docker/setup-qemu-action@v4.3.0
       - uses: docker/setup-buildx-action@v4.3.0
       - run: pnpm test:image
+      - run: pnpm test:compose src/compose/readme-quickstart.compose.test.ts
       - name: Make skopeo available
         run: |
           skopeo --version || { sudo apt-get update && sudo apt-get install --yes skopeo; }
