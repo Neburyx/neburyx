@@ -61,8 +61,8 @@ export function exportRecordOf(row: ExportRow): ExportRecord {
   return { id: row.id, status: row.status, format: row.format, filename: row.filename, sizeBytes: row.sizeBytes, createdAt: row.createdAt, expiresAt: row.expiresAt };
 }
 
-export function exportBytesOf(format: ExportFormat, source: string, exportedAt: Date, read: { readonly nodes: readonly GraphNode[]; readonly edges: readonly GraphEdge[]; readonly omitted: boolean; readonly maskedFields: number; readonly notRetrieved: Parameters<typeof exportHeaderOf>[0]['notRetrieved'] }): Buffer {
-  const header = exportHeaderOf({ source, exportedAt, shown: read.nodes.length, notRetrieved: read.notRetrieved, maskedFields: read.maskedFields, omitted: read.omitted });
+export function exportBytesOf(format: ExportFormat, source: string, exportedAt: Date, read: { readonly nodes: readonly GraphNode[]; readonly edges: readonly GraphEdge[]; readonly omitted: boolean; readonly maskedFields: number; readonly notRetrieved: Parameters<typeof exportHeaderOf>[0]['notRetrieved']; readonly uncounted: number }): Buffer {
+  const header = exportHeaderOf({ source, exportedAt, shown: read.nodes.length, notRetrieved: read.notRetrieved, uncounted: read.uncounted, maskedFields: read.maskedFields, omitted: read.omitted });
   if (format === 'json') return exportJsonOf(header, read.nodes, read.edges);
   return zipOf([
     { name: ENTITIES_FILE, bytes: entitiesCsvOf(header, read.nodes) },

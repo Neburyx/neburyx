@@ -6,7 +6,8 @@ import { crc32 } from 'node:zlib';
 import { exportFileSchema, exportHeaderSchema, type Count, type GraphEdge, type GraphNode } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
 import { csvCell, entitiesCsvOf, guardedText, relationshipsCsvOf } from './csv.js';
-import { exportHeaderOf, notRetrievedLine } from './header.js';
+import { notRetrievedText } from '@neburyx/contracts';
+import { exportHeaderOf } from './header.js';
 import { exportJsonOf } from './json-file.js';
 import { ZipTooLargeError, zipOf } from './zip.js';
 
@@ -40,13 +41,20 @@ const edge = (id: string, extra: Partial<GraphEdge> = {}): GraphEdge => ({
   qualityFlags: [],
   ...extra,
 });
-const header = (over: Partial<Parameters<typeof exportHeaderOf>[0]> = {}) => exportHeaderOf({ source: 'demo', exportedAt: AT, shown: 10, notRetrieved: { value: 38, quality: 'estimated', scope }, maskedFields: 0, omitted: false, ...over });
+const header = (over: Partial<Parameters<typeof exportHeaderOf>[0]> = {}) => exportHeaderOf({ source: 'demo', exportedAt: AT, shown: 10, notRetrieved: { value: 38, quality: 'estimated', scope }, uncounted: 0, maskedFields: 0, omitted: false, ...over });
 
 describe('the export header', () => {
   it.each(counts)('states a %s count with its label, and no number when it is unknown', (_name, count, line) => {
-    expect(notRetrievedLine(count)).toBe(line);
+    expect(notRetrievedText(count, 0)).toBe(line);
     const built = header({ notRetrieved: count });
     expect(built.lines).toEqual(['source: demo', 'exported: 2026-11-10T10:15:00.000Z', 'scope: current view (partial)', `coverage: 10 shown · ${line}`, 'masking: off']);
+    expect(exportHeaderSchema.parse(built)).toEqual(built);
+  });
+
+  it('says why a lower bound is one, with the entities not yet counted, in the line and in the structured header', () => {
+    const built = header({ notRetrieved: { value: 109, quality: 'lowerBound', scope }, uncounted: 25 });
+    expect(built.lines[3]).toBe('coverage: 10 shown · ≥ 109 not yet retrieved (lower bound · 25 entities not yet counted)');
+    expect(built.coverage.uncounted).toBe(25);
     expect(exportHeaderSchema.parse(built)).toEqual(built);
   });
 

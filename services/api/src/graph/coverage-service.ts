@@ -5,7 +5,7 @@ import type { SourceAccess } from '../investigations/source-access.js';
 import type { MappingModel } from '../mapping/model.js';
 import type { AuditSink, Principal } from '../seams/seams.js';
 import type { DegreeVerdicts } from '../source-test/usability.js';
-import { notRetrievedOf } from './coverage-sum.js';
+import { notRetrievedOf, uncountedOf } from './coverage-sum.js';
 import type { DegreeCache } from './degree-cache.js';
 
 export interface CoverageCall {
@@ -44,9 +44,9 @@ export function createCoverageService(deps: CoverageDeps): CoverageService {
       const parts = call.entities.map((entity) => ({
         loadedRelationships: entity.loadedRelationships,
         loadedQuality: entity.loadedQuality,
-        preview: cache?.store.get({ sourceId: call.sourceId, configHash: source.configHash, principalId: call.principal.id, entityType: entity.ref.entityType, stableId: entity.ref.stableId, mask: call.mask, verdictRevision: revision }),
+        preview: cache?.store.getForCoverage({ sourceId: call.sourceId, configHash: source.configHash, principalId: call.principal.id, entityType: entity.ref.entityType, stableId: entity.ref.stableId, mask: call.mask, verdictRevision: revision }),
       }));
-      const response = { notRetrieved: notRetrievedOf(parts) };
+      const response = { notRetrieved: notRetrievedOf(parts), uncounted: uncountedOf(parts) };
       await recordRead(deps, call);
       return response;
     },

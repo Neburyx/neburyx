@@ -24,7 +24,7 @@ interface Ask {
 }
 
 const counted = (value: number | undefined, quality: Count['quality']): Count => (value === undefined ? { quality: 'unknown', scope: COVERAGE_SCOPE } : { value, quality, scope: COVERAGE_SCOPE });
-const ok = (count: Count): ApiResult<CoverageResponse> => ({ ok: true, value: { notRetrieved: count } });
+const ok = (count: Count, uncounted = 0): ApiResult<CoverageResponse> => ({ ok: true, value: { notRetrieved: count, uncounted } });
 const refused: ApiFailure = { code: 'NETWORK_UNAVAILABLE' };
 
 function load(state: ClientState, ids: readonly string[], links: ReadonlyArray<readonly [string, string, string]> = [], params = 'seed-1'): void {
@@ -75,6 +75,12 @@ describe('the second scope line, with the count the server computed', () => {
     const { asks } = harness();
     await answer(asks[0], ok(count));
     expect(secondLine()).toBe(expected);
+  });
+
+  it('says why a lower bound is one, with the entities the server could not count', async () => {
+    const { asks } = harness();
+    await answer(asks[0], ok(counted(500, 'lowerBound'), 2));
+    expect(secondLine()).toBe('2 shown · ≥ 500 not yet retrieved (lower bound · 2 entities not yet counted)');
   });
 
   it('reads with no number while the request is pending, and keeps the loaded line', () => {
@@ -208,12 +214,21 @@ describe('a loaded graph larger than one request', () => {
     expect(secondLine()).toBe('600 shown · ~7 not yet retrieved (estimated)');
   });
 
-  it('reads with no number, reports the failure and sends no more chunks when a middle chunk fails', async () => {
+  it('adds up the entities not yet counted over every chunk', async () => {
+    const { asks } = harness({ nodes: ids(1200) });
+    await answer(asks[0], ok(counted(500, 'lowerBound'), 3));
+    await answer(asks[1], ok(counted(100, 'lowerBound'), 5));
+    await answer(asks[2], ok(counted(200, 'lowerBound'), 1));
+    expect(secondLine()).toBe('1,200 shown · ≥ 500 not yet retrieved (lower bound · 9 entities not yet counted)');
+  });
+
+  it('reads with no number and no reason, reports the failure and sends no more chunks when a middle chunk fails', async () => {
     const { asks, reported } = harness({ nodes: ids(1200) });
     await answer(asks[0], ok(counted(0, 'exact')));
     await answer(asks[1], { ok: false, failure: refused });
     expect(asks).toHaveLength(2);
     expect(secondLine()).toBe('1,200 shown · more not yet retrieved');
+    expect(secondLine()).not.toMatch(/counted/);
     expect(reported).toHaveLength(1);
   });
 
@@ -247,7 +262,7 @@ describe('the scope lines with a filtered count', () => {
     return deriveLoadedGraph(state.server.getState(), state.investigation.getState());
   };
   const firstKeys = (loaded: ReturnType<typeof graphOf>, count: number): ReadonlySet<string> => new Set(loaded.nodes.slice(0, count).map((node) => elementKey(node.ref)));
-  const linesOf = (filtered: number, loaded = graphOf(10, 13), notRetrieved = counted(5, 'exact'), hidden: ReadonlySet<string> = new Set()) => {
+  const linesOf = (filtered: number, loaded = graphOf(10, 13), notRetrieved = { count: counted(5, 'exact'), uncounted: 0 }, hidden: ReadonlySet<string> = new Set()) => {
     cleanup();
     render(<GraphScopeLines graph={loaded} hidden={hidden} filtered={firstKeys(loaded, filtered)} notRetrieved={notRetrieved} />);
     return lines();
@@ -269,11 +284,11 @@ describe('the scope lines with a filtered count', () => {
     const loaded = graphOf(10, 13);
     const keys = [...firstKeys(loaded, 5)];
     // filtered: the first 2; hidden: the first 3 plus a key that is not loaded; the union of loaded keys is 3
-    expect(linesOf(2, loaded, counted(5, 'exact'), new Set([...keys.slice(0, 3), 'node:gone']))[1]).toBe('7 shown · 5 not yet retrieved (exact)');
+    expect(linesOf(2, loaded, { count: counted(5, 'exact'), uncounted: 0 }, new Set([...keys.slice(0, 3), 'node:gone']))[1]).toBe('7 shown · 5 not yet retrieved (exact)');
   });
 
   it('says every part in words, so no quality rests on colour', () => {
-    linesOf(3, graphOf(10, 13), counted(500, 'lowerBound'));
-    expect(screen.getByRole('group', { name: 'Graph scope' }).textContent).toContain('lower bound');
+    linesOf(3, graphOf(10, 13), { count: counted(500, 'lowerBound'), uncounted: 4 });
+    expect(screen.getByRole('group', { name: 'Graph scope' }).textContent).toContain('lower bound · 4 entities not yet counted');
   });
 });

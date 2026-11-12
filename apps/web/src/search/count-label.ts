@@ -25,10 +25,24 @@ export function evidenceText(count: Count): string | undefined {
   return count.quality === 'exact' ? `${text} supporting ${count.value === 1 ? 'relationship' : 'relationships'}` : `≥ ${count.value} supporting relationships · lower bound`;
 }
 
-/** The total of the entities a text matches as the Filters say it: "3 entities", "1 entity", "≥ 25 entities · lower bound"; nothing for a total that was not read. */
+/** A count beside a Filters entry, with its quality in the shared words: "333 · exact", "≥ 25 · lower bound"; nothing for any other quality. */
+export function facetCountText(count: Count): string | undefined {
+  if (count.value === undefined) return undefined;
+  if (count.quality === 'exact') return `${count.value} · exact`;
+  return count.quality === 'lowerBound' ? `≥ ${count.value} · lower bound` : undefined;
+}
+
+function evidenceTotalText(count: Count): string | undefined {
+  if (count.value === undefined) return undefined;
+  const noun = count.value === 1 ? 'relationship' : 'relationships';
+  if (count.quality === 'exact') return `${count.value} supporting ${noun} · exact`;
+  return count.quality === 'lowerBound' ? `≥ ${count.value} supporting ${noun} · lower bound` : undefined;
+}
+
+/** The total of the entities a text matches as the Filters say it: "3 entities · exact", "1 entity · exact", "≥ 25 entities · lower bound"; nothing for a total that was not read. */
 export function entitiesText(count: Count): string | undefined {
   if (count.value === undefined) return undefined;
-  if (count.quality === 'exact') return `${count.value} ${count.value === 1 ? 'entity' : 'entities'}`;
+  if (count.quality === 'exact') return `${count.value} ${count.value === 1 ? 'entity' : 'entities'} · exact`;
   return count.quality === 'lowerBound' ? `≥ ${count.value} entities · lower bound` : undefined;
 }
 
@@ -39,7 +53,7 @@ export function entitiesText(count: Count): string | undefined {
 export function totalText(entities: Count, evidence: Count | undefined): string | undefined {
   const entitiesPart = entitiesText(entities);
   if (entitiesPart === undefined) return undefined;
-  const evidencePart = evidence === undefined || evidence.value === undefined || evidence.value === 0 ? undefined : evidenceText(evidence);
+  const evidencePart = evidence === undefined || evidence.value === undefined || evidence.value === 0 ? undefined : evidenceTotalText(evidence);
   return evidencePart === undefined ? entitiesPart : `${entitiesPart} · ${evidencePart}`;
 }
 

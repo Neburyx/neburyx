@@ -133,7 +133,7 @@ describe('a new selection loading', () => {
     await within(main()).findByRole('heading', { level: 2, name: 'Exact ID match (1)' });
     const user = userEvent.setup();
     await user.click(box());
-    expect(panel().getByText('5 entities · 7 supporting relationships')).toBeDefined();
+    expect(panel().getByText('5 entities · exact · 7 supporting relationships · exact')).toBeDefined();
     expect(screen.getByRole('complementary', { name: 'Filters' }).getAttribute('aria-busy')).toBe('true');
     expect(within(main()).queryByRole('heading', { level: 2, name: 'Exact ID match (1)' })).toBeNull();
     expect(within(main()).getByText('Searching…')).toBeDefined();
@@ -155,7 +155,7 @@ describe('a new selection loading', () => {
     expect(await screen.findByText('Search timed out after 5 s')).toBeDefined();
     expect(screen.getByRole('searchbox', { name: 'Search text' })).toBeDefined();
     expect(box()).toHaveProperty('checked', true);
-    expect(panel().getByText('5 entities · 7 supporting relationships')).toBeDefined();
+    expect(panel().getByText('5 entities · exact · 7 supporting relationships · exact')).toBeDefined();
     await user.click(within(main()).getByRole('button', { name: 'Retry' }));
     await waitFor(() => expect(kit.searches).toHaveLength(3));
     expect(kit.searches[2]).toEqual(kit.searches[1]);

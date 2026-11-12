@@ -29,11 +29,25 @@ describe('the remainder line', () => {
     ['lower bound', { value: 3281, quality: 'lowerBound', scope: 'x' }, '10 shown · ≥ 3,281 not yet retrieved (lower bound)'],
     ['unknown', { quality: 'unknown', scope: 'x' }, '10 shown · more not yet retrieved'],
   ])('reads a %s count', (_name, remainder, expected) => {
-    expect(remainderLine(10, remainder)).toBe(expected);
+    expect(remainderLine(10, { count: remainder, uncounted: 0 })).toBe(expected);
   });
 
   it('prints no number for a count that says its quality but has no value', () => {
-    expect(remainderLine(10, { quality: 'exact', scope: 'x' })).toBe('10 shown · more not yet retrieved');
+    expect(remainderLine(10, { count: { quality: 'exact', scope: 'x' }, uncounted: 0 })).toBe('10 shown · more not yet retrieved');
+  });
+
+  it('says why a lower bound is one: the entities not yet counted, in the singular and the plural', () => {
+    expect(remainderLine(26, { count: { value: 109, quality: 'lowerBound', scope: 'x' }, uncounted: 25 })).toBe('26 shown · ≥ 109 not yet retrieved (lower bound · 25 entities not yet counted)');
+    expect(remainderLine(2, { count: { value: 3, quality: 'lowerBound', scope: 'x' }, uncounted: 1 })).toBe('2 shown · ≥ 3 not yet retrieved (lower bound · 1 entity not yet counted)');
+  });
+
+  it('says an unknown count with no number and with the entities not yet counted', () => {
+    expect(remainderLine(26, { count: { quality: 'unknown', scope: 'x' }, uncounted: 25 })).toBe('26 shown · more not yet retrieved (25 entities not yet counted)');
+  });
+
+  it('gives an exact and an estimated count no reason', () => {
+    expect(remainderLine(26, { count: { value: 109, quality: 'exact', scope: 'x' }, uncounted: 0 })).toBe('26 shown · 109 not yet retrieved (exact)');
+    expect(remainderLine(26, { count: { value: 109, quality: 'estimated', scope: 'x' }, uncounted: 0 })).toBe('26 shown · ~109 not yet retrieved (estimated)');
   });
 
   it('reads the unknown remainder the shell uses without a number', () => {

@@ -24,7 +24,6 @@ describe('the degree preview cache', () => {
     cache.set(key(), preview('P-1'));
     clock.advance(1000);
     expect(cache.get(key())).toBeUndefined();
-    expect(cache.size()).toBe(0);
   });
 
   it.each([
@@ -60,5 +59,80 @@ describe('the degree preview cache', () => {
     expect(cache.get(key({ stableId: 'b' }))).toBeUndefined();
     expect(cache.get(key({ stableId: 'a' }))).toBeDefined();
     expect(cache.get(key({ stableId: 'c' }))).toBeDefined();
+  });
+});
+
+describe('the degree preview cache read by coverage', () => {
+  const IDLE = 5 * 60 * 1000;
+  const MAX_AGE = 60 * 60 * 1000;
+  const rig = () => {
+    const clock = clockAt();
+    const cache = createDegreeCache({ lifetimeMs: IDLE, coverageMaxAgeMs: MAX_AGE, clock: clock.now });
+    cache.set(key(), preview('P-1'));
+    return { clock, cache };
+  };
+
+  it('still counts a preview after five minutes of use, when each use is within the idle time', () => {
+    const { clock, cache } = rig();
+    for (let use = 0; use < 10; use += 1) {
+      clock.advance(IDLE - 1000);
+      expect(cache.getForCoverage(key())).toEqual(preview('P-1'));
+    }
+  });
+
+  it('stops counting a preview that coverage did not use for the idle time', () => {
+    const { clock, cache } = rig();
+    clock.advance(IDLE - 1);
+    expect(cache.getForCoverage(key())).toEqual(preview('P-1'));
+    clock.advance(IDLE);
+    expect(cache.getForCoverage(key())).toBeUndefined();
+  });
+
+  it('stops counting a preview at the maximum age of its read, however it is used', () => {
+    const { clock, cache } = rig();
+    let counted = true;
+    while (clock.now() < MAX_AGE - IDLE / 2) {
+      clock.advance(IDLE / 2);
+      counted = cache.getForCoverage(key()) !== undefined;
+      expect(counted).toBe(true);
+    }
+    clock.advance(IDLE / 2);
+    expect(cache.getForCoverage(key())).toBeUndefined();
+  });
+
+  it('starts a new age when the preview is read again', () => {
+    const { clock, cache } = rig();
+    clock.advance(MAX_AGE - 1000);
+    cache.set(key(), preview('P-1'));
+    clock.advance(IDLE - 1);
+    expect(cache.getForCoverage(key())).toEqual(preview('P-1'));
+  });
+
+  it('serves a preview request only within five minutes of the read, while coverage still counts the preview', () => {
+    const { clock, cache } = rig();
+    clock.advance(IDLE - 1000);
+    expect(cache.getForCoverage(key())).toEqual(preview('P-1'));
+    clock.advance(1001);
+    expect(cache.get(key())).toBeUndefined();
+    expect(cache.getForCoverage(key())).toEqual(preview('P-1'));
+  });
+
+  it('does not renew a preview for coverage when a preview request is served from it', () => {
+    const { clock, cache } = rig();
+    clock.advance(IDLE - 1000);
+    expect(cache.get(key())).toEqual(preview('P-1'));
+    clock.advance(1001);
+    expect(cache.getForCoverage(key())).toBeUndefined();
+  });
+
+  it.each([
+    ['another mask setting', { mask: true }],
+    ['another person', { principalId: 'p2' }],
+    ['another source', { sourceId: 'beta' }],
+    ['another mapping', { configHash: 'h2' }],
+    ['another degree verdict', { verdictRevision: 1 }],
+  ])('does not count a preview stored for %s', (_name, other) => {
+    const { cache } = rig();
+    expect(cache.getForCoverage(key(other))).toBeUndefined();
   });
 });

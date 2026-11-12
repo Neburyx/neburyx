@@ -45,7 +45,7 @@ export const exportHeaderSchema = z.strictObject({
   source: z.string().min(1),
   exported: z.string().min(1),
   scope: z.literal(EXPORT_SCOPE),
-  coverage: z.strictObject({ shown: z.number().int().nonnegative(), notRetrieved: countSchema }),
+  coverage: z.strictObject({ shown: z.number().int().nonnegative(), notRetrieved: countSchema, uncounted: z.number().int().nonnegative() }),
   masking: exportMaskingSchema,
   /** The same lines as text, as the dialog previews them. */
   lines: z.array(z.string().min(1)).min(5),

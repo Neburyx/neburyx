@@ -2,7 +2,8 @@ import type { SourceProfile } from '@neburyx/contracts';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { ClientState } from '../state/client-state.js';
 import type { Position } from '../state/presentation-state.js';
-import { useClientState, useLoadedGraph, useVisibleGraph } from '../state/context.js';
+import { useClientState, useLoadedGraph } from '../state/context.js';
+import { useDisplayGraph } from './use-display-graph.js';
 import { INSPECT_DRAWING, writeReadout } from '../dev/canvas-readout.js';
 import { StateError } from '../state/errors.js';
 import { drawnKeys, partitionEdges } from '../state/loaded-graph.js';
@@ -54,7 +55,7 @@ export function GraphCanvas({ profile, view = 'fit' }: { readonly profile?: Sour
   const commands = useCanvasCommandsHandle();
   const state = useClientState();
   const loadedGraph = useLoadedGraph();
-  const graph = useVisibleGraph();
+  const graph = useDisplayGraph();
   const positions = useStoreSelector(state.presentation.view, (current) => current.positions);
   const selection = useStoreSelector(state.presentation.view, (current) => current.selection);
   const pins = useStoreSelector(state.presentation.view, (current) => current.pins);

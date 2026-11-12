@@ -1,26 +1,13 @@
-import { EXPORT_HIDDEN_NOTE, EXPORT_SCOPE, type Count, type ExportHeader } from '@neburyx/contracts';
+import { EXPORT_HIDDEN_NOTE, EXPORT_SCOPE, notRetrievedText, type Count, type ExportHeader } from '@neburyx/contracts';
 
 export interface HeaderFacts {
   readonly source: string;
   readonly exportedAt: Date;
   readonly shown: number;
   readonly notRetrieved: Count;
+  readonly uncounted: number;
   readonly maskedFields: number;
   readonly omitted: boolean;
-}
-
-/** The not-yet-retrieved part of the coverage line, with the quality label the count carries; an unknown count has no number. */
-export function notRetrievedLine(count: Count): string {
-  if (count.quality === 'unknown' || count.value === undefined) return 'more not yet retrieved';
-  const number = count.value.toLocaleString('en-US');
-  switch (count.quality) {
-    case 'exact':
-      return `${number} not yet retrieved (exact)`;
-    case 'estimated':
-      return `~${number} not yet retrieved (estimated)`;
-    case 'lowerBound':
-      return `≥ ${number} not yet retrieved (lower bound)`;
-  }
 }
 
 export function maskingLine(maskedFields: number): string {
@@ -34,7 +21,7 @@ export function exportHeaderOf(facts: HeaderFacts): ExportHeader {
     `source: ${facts.source}`,
     `exported: ${exported}`,
     `scope: ${EXPORT_SCOPE}`,
-    `coverage: ${facts.shown.toLocaleString('en-US')} shown · ${notRetrievedLine(facts.notRetrieved)}`,
+    `coverage: ${facts.shown.toLocaleString('en-US')} shown · ${notRetrievedText(facts.notRetrieved, facts.uncounted)}`,
     maskingLine(facts.maskedFields),
     ...(facts.omitted ? [EXPORT_HIDDEN_NOTE] : []),
   ];
@@ -42,7 +29,7 @@ export function exportHeaderOf(facts: HeaderFacts): ExportHeader {
     source: facts.source,
     exported,
     scope: EXPORT_SCOPE,
-    coverage: { shown: facts.shown, notRetrieved: facts.notRetrieved },
+    coverage: { shown: facts.shown, notRetrieved: facts.notRetrieved, uncounted: facts.uncounted },
     masking: facts.maskedFields === 0 ? 'off' : { maskedFields: facts.maskedFields },
     lines,
   };

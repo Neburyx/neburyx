@@ -79,7 +79,8 @@ async function started(options: Options = {}) {
   return { app, record, executor, events, logged, admissions: () => admissions, preview, coverage, coverageEvents };
 }
 
-const unknown = { notRetrieved: { quality: 'unknown', scope: 'not yet retrieved' } };
+const unknown = { notRetrieved: { quality: 'unknown', scope: 'not yet retrieved' }, uncounted: 1 };
+const counted = (notRetrieved: object, uncounted = 0) => ({ notRetrieved, uncounted });
 
 describe('POST /v1/graph/coverage', () => {
   it('answers a previewed node with its total less the relationships loaded, in the quality of the preview (here exact)', async () => {
@@ -87,7 +88,7 @@ describe('POST /v1/graph/coverage', () => {
     await preview('P-1');
     const response = await coverage({ sourceId: 'alpha', entities: [entity('P-1', 2)] });
     expect(response.statusCode).toBe(200);
-    expect(coverageResponseSchema.parse(response.json())).toEqual({ notRetrieved: { value: 5, quality: 'exact', scope: 'not yet retrieved' } });
+    expect(coverageResponseSchema.parse(response.json())).toEqual(counted({ value: 5, quality: 'exact', scope: 'not yet retrieved' }));
     await app.close();
   });
 
@@ -207,7 +208,7 @@ describe('POST /v1/graph/coverage', () => {
     expect(previewed.statusCode).toBe(200);
     const response = await coverage({ sourceId: 'alpha', entities: [entity('T-1', 0, 'alpha', 'twin_a')] });
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ notRetrieved: { value: 2, quality: 'exact', scope: 'not yet retrieved' } });
+    expect(response.json()).toEqual(counted({ value: 2, quality: 'exact', scope: 'not yet retrieved' }));
     await app.close();
   });
 
@@ -228,7 +229,7 @@ describe('POST /v1/graph/coverage', () => {
     await preview('P-1');
     await preview('P-2');
     const response = await coverage({ sourceId: 'alpha', entities: [entity('P-1'), entity('P-2')] });
-    expect(response.json()).toEqual({ notRetrieved: { value: 9, quality: 'estimated', scope: 'not yet retrieved' } });
+    expect(response.json()).toEqual(counted({ value: 9, quality: 'estimated', scope: 'not yet retrieved' }));
     await app.close();
   });
 
@@ -236,7 +237,7 @@ describe('POST /v1/graph/coverage', () => {
     const { app, preview, coverage } = await started();
     await preview('P-1');
     const response = await coverage({ sourceId: 'alpha', entities: [entity('P-1', 2), entity('P-2')] });
-    expect(response.json()).toEqual({ notRetrieved: { value: 5, quality: 'lowerBound', scope: 'not yet retrieved' } });
+    expect(response.json()).toEqual(counted({ value: 5, quality: 'lowerBound', scope: 'not yet retrieved' }, 1));
     await app.close();
   });
 
@@ -244,13 +245,13 @@ describe('POST /v1/graph/coverage', () => {
     const { app, preview, coverage } = await started();
     await preview('P-1');
     const only = await coverage({ sourceId: 'alpha', entities: [entity('P-1', 3)] });
-    expect(only.json()).toEqual({ notRetrieved: { value: 4, quality: 'exact', scope: 'not yet retrieved' } });
+    expect(only.json()).toEqual(counted({ value: 4, quality: 'exact', scope: 'not yet retrieved' }));
     const withUnknown = await coverage({ sourceId: 'alpha', entities: [entity('P-1', 3), entity('P-2')] });
-    expect(withUnknown.json()).toEqual({ notRetrieved: { value: 4, quality: 'lowerBound', scope: 'not yet retrieved' } });
+    expect(withUnknown.json()).toEqual(counted({ value: 4, quality: 'lowerBound', scope: 'not yet retrieved' }, 1));
     const inexact = await coverage({ sourceId: 'alpha', entities: [entity('P-1', 3, 'alpha', 'person', 'estimated')] });
-    expect(inexact.json()).toEqual({ notRetrieved: { value: 4, quality: 'estimated', scope: 'not yet retrieved' } });
+    expect(inexact.json()).toEqual(counted({ value: 4, quality: 'estimated', scope: 'not yet retrieved' }));
     const unknownLoaded = await coverage({ sourceId: 'alpha', entities: [entity('P-1', 3, 'alpha', 'person', 'unknown')] });
-    expect(unknownLoaded.json()).toEqual(unknown);
+    expect(unknownLoaded.json()).toEqual({ ...unknown, uncounted: 0 });
     await app.close();
   });
 
@@ -258,7 +259,7 @@ describe('POST /v1/graph/coverage', () => {
     const { app, preview, coverage } = await started();
     await preview('P-2');
     const response = await coverage({ sourceId: 'alpha', entities: [entity('P-2', 3)] });
-    expect(response.json()).toEqual({ notRetrieved: { value: 0, quality: 'estimated', scope: 'not yet retrieved' } });
+    expect(response.json()).toEqual(counted({ value: 0, quality: 'estimated', scope: 'not yet retrieved' }));
     await app.close();
   });
 
@@ -268,6 +269,46 @@ describe('POST /v1/graph/coverage', () => {
     const response = await coverage({ sourceId: 'alpha', entities: [entity('P-1'), entity('P-1', 1)] });
     expect(response.statusCode).toBe(400);
     expect(response.json().error.code).toBe('INVALID_REQUEST');
+    await app.close();
+  });
+});
+
+describe('POST /v1/graph/coverage, what it could not count and how long it counts a preview', () => {
+  it('counts each entity with no preview once, and one whose preview total has no value, and no other cause', async () => {
+    const { app, preview, coverage } = await started();
+    await preview('P-1');
+    const body = await coverage({ sourceId: 'alpha', entities: [entity('P-1'), entity('P-2'), entity('P-3')] });
+    expect(body.json().uncounted).toBe(2);
+    const loadedUnknown = await coverage({ sourceId: 'alpha', entities: [entity('P-1', 3, 'alpha', 'person', 'unknown')] });
+    expect(loadedUnknown.json().uncounted).toBe(0);
+    await app.close();
+  });
+
+  it('still counts a preview five minutes after it was read when coverage used it in between, and not after an idle five minutes', async () => {
+    let now = 0;
+    const { app, preview, coverage } = await started({ lifetimeMs: 1000, clock: () => now });
+    await preview('P-1');
+    now = 900;
+    expect((await coverage({ sourceId: 'alpha', entities: [entity('P-1')] })).json().uncounted).toBe(0);
+    now = 1800;
+    expect((await coverage({ sourceId: 'alpha', entities: [entity('P-1')] })).json().uncounted).toBe(0);
+    now = 2800;
+    expect((await coverage({ sourceId: 'alpha', entities: [entity('P-1')] })).json().uncounted).toBe(1);
+    await app.close();
+  });
+
+  it('reads the source again for a preview request after the lifetime of its read, while coverage still counts the preview', async () => {
+    let now = 0;
+    const { app, preview, coverage, executor } = await started({ lifetimeMs: 1000, clock: () => now });
+    await preview('P-1');
+    const reads = executor.calls.length;
+    now = 900;
+    await coverage({ sourceId: 'alpha', entities: [entity('P-1')] });
+    now = 1001;
+    await preview('P-1');
+    expect(executor.calls.length).toBeGreaterThan(reads);
+    now = 1500;
+    expect((await coverage({ sourceId: 'alpha', entities: [entity('P-1')] })).json().uncounted).toBe(0);
     await app.close();
   });
 });

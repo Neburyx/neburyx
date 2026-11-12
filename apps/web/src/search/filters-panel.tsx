@@ -1,5 +1,5 @@
 import type { Facets, SearchMatchMode, SourceProfile } from '@neburyx/contracts';
-import { countText, totalText } from './count-label.js';
+import { facetCountText, totalText } from './count-label.js';
 import { FILTERS_COPY, MATCH_MODE_LABELS, RETRY } from './copy.js';
 import { isNarrowed, withEntityType, withMatchMode, type Selection } from './selection.js';
 
@@ -48,7 +48,7 @@ export function FiltersPanel({ facets, counted, selection, profile, loading, onC
           <legend>{FILTERS_COPY.entityType}</legend>
           {typeNames.map((type) => {
             const entry = facets.entityType.find((candidate) => candidate.entityType === type);
-            const number = counted && entry !== undefined ? countText(entry.count) : undefined;
+            const number = counted && entry !== undefined ? facetCountText(entry.count) : undefined;
             return (
               <label key={type} className="search-filter">
                 <input type="checkbox" checked={selection.entityTypes.includes(type)} onChange={(event) => onChange(withEntityType(selection, profile, type, event.target.checked))} />
@@ -64,7 +64,7 @@ export function FiltersPanel({ facets, counted, selection, profile, loading, onC
           <legend>{FILTERS_COPY.matchMode}</legend>
           {modeNames.map((mode) => {
             const entry = facets.matchMode.find((candidate) => candidate.mode === mode);
-            const number = counted && entry !== undefined ? countText(entry.count) : undefined;
+            const number = counted && entry !== undefined ? facetCountText(entry.count) : undefined;
             return (
               <label key={mode} className="search-filter">
                 <input type="checkbox" checked={selection.matchModes.includes(mode)} onChange={(event) => onChange(withMatchMode(selection, mode, event.target.checked))} />

@@ -1,9 +1,10 @@
-import type { Count } from '@neburyx/contracts';
+import { notRetrievedText, type Count } from '@neburyx/contracts';
+import type { NotRetrieved } from '../api/coverage-store.js';
 import { elementKey } from '../state/keys.js';
 import { partitionEdges, type LoadedGraph } from '../state/loaded-graph.js';
 
 /** No loaded node carries a degree preview yet, so what is still out there is not known. */
-export const UNKNOWN_REMAINDER: Count = { quality: 'unknown', scope: 'not yet retrieved' };
+export const UNKNOWN_REMAINDER: NotRetrieved = { count: { quality: 'unknown', scope: 'not yet retrieved' }, uncounted: 0 };
 
 const NUMBER_FORMAT = new Intl.NumberFormat('en-US');
 
@@ -72,10 +73,8 @@ export function savedLayoutShownLine(shown: number): string {
   return `${formatNumber(shown)} shown`;
 }
 
-export function remainderLine(shown: number, remainder: Count): string {
-  const number = numberText(remainder);
-  if (number === undefined) return `${formatNumber(shown)} shown · more not yet retrieved`;
-  return `${formatNumber(shown)} shown · ${number} not yet retrieved (${qualityWord(remainder.quality)})`;
+export function remainderLine(shown: number, remainder: NotRetrieved): string {
+  return `${formatNumber(shown)} shown · ${notRetrievedText(remainder.count, remainder.uncounted)}`;
 }
 
 /** The relationships that are loaded but cannot be drawn, as an exact count the client holds; nothing when there are none. */

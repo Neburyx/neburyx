@@ -24,7 +24,7 @@ describe('the export contract', () => {
   });
 
   it('requires the header first, five lines at least, and the masking as off or a count', () => {
-    const header = { source: 'demo', exported: '2026-11-10T10:15:00.000Z', scope: 'current view (partial)', coverage: { shown: 0, notRetrieved: { value: 0, quality: 'exact', scope: 'not yet retrieved' } }, masking: 'off', lines: ['a', 'b', 'c', 'd', 'e'] };
+    const header = { source: 'demo', exported: '2026-11-10T10:15:00.000Z', scope: 'current view (partial)', coverage: { shown: 0, notRetrieved: { value: 0, quality: 'exact', scope: 'not yet retrieved' }, uncounted: 0 }, masking: 'off', lines: ['a', 'b', 'c', 'd', 'e'] };
     expect(exportFileSchema.safeParse({ header, entities: [], relationships: [] }).success).toBe(true);
     expect(exportFileSchema.safeParse({ header: { ...header, lines: ['a'] }, entities: [], relationships: [] }).success).toBe(false);
     expect(exportFileSchema.safeParse({ header: { ...header, masking: { maskedFields: 3 } }, entities: [], relationships: [] }).success).toBe(true);

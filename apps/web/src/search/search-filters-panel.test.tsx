@@ -24,9 +24,9 @@ describe('the Filters of the Search results page', () => {
     await render(() => withFacets('demo', [hit('demo', 'AC-1')], FULL));
     const panel = within(filters());
     expect(panel.getAllByRole('group').map((group) => group.querySelector('legend')?.textContent)).toEqual(['Entity type', 'Match mode']);
-    expect(panel.getAllByRole('checkbox').map((box) => box.closest('label')?.textContent)).toEqual(['KIND-A3', 'KIND-B2', 'Exact ID4', 'Referenced ID1', 'Evidence record7']);
+    expect(panel.getAllByRole('checkbox').map((box) => box.closest('label')?.textContent)).toEqual(['KIND-A3 · exact', 'KIND-B2 · exact', 'Exact ID4 · exact', 'Referenced ID1 · exact', 'Evidence record7 · exact']);
     expect(panel.getAllByRole('checkbox').every((box) => box instanceof HTMLInputElement && !box.checked)).toBe(true);
-    expect(panel.getByText('5 entities · 7 supporting relationships')).toBeDefined();
+    expect(panel.getByText('5 entities · exact · 7 supporting relationships · exact')).toBeDefined();
   });
 
   it('says a count as the page says every count: the number, "≥ 25 · lower bound" or "0", and the total the same, and says the returned value for a smaller cap', async () => {
@@ -35,13 +35,13 @@ describe('the Filters of the Search results page', () => {
     const panel = within(filters());
     expect(panel.getByText('≥ 25 · lower bound')).toBeDefined();
     expect(panel.getByText('≥ 10 · lower bound')).toBeDefined();
-    expect(panel.getByText('0')).toBeDefined();
+    expect(panel.getByText('0 · exact')).toBeDefined();
     expect(panel.getByText('≥ 25 entities · lower bound')).toBeDefined();
   });
 
   it('says one result in the singular, and adds no count together', async () => {
     await render(() => withFacets('demo', [hit('demo', 'AC-1')], facetsOf({ total: 1, types: [['kind-a', 1], ['kind-b', 1]] })));
-    expect(within(filters()).getByText('1 entity')).toBeDefined();
+    expect(within(filters()).getByText('1 entity · exact')).toBeDefined();
   });
 
   it('shows no Reset while nothing is chosen, and the boxes of the address checked', async () => {
@@ -68,7 +68,7 @@ describe('the Filters of the Search results page', () => {
       await user.tab();
       stops.push(document.activeElement?.closest('label')?.textContent ?? document.activeElement?.textContent ?? '');
     }
-    expect(stops).toEqual(['Search', 'KIND-A3', 'KIND-B2']);
+    expect(stops).toEqual(['Search', 'KIND-A3 · exact', 'KIND-B2 · exact']);
   });
 
   it('gives each checkbox the shared control look: no class of its own and no browser default for the panel', async () => {
@@ -104,7 +104,7 @@ describe('the Filters when the facet read failed', () => {
     let calls = 0;
     const kit = searchKit(['demo'], async () => (calls++ === 0 ? withFacets('demo', [hit('demo', 'AC-1')], FULL) : failedAnswer()), { types: TYPES });
     renderApp(searchAt('demo', 'AC'), kit.client);
-    await screen.findByText('5 entities · 7 supporting relationships');
+    await screen.findByText('5 entities · exact · 7 supporting relationships · exact');
     await userEvent.setup().click(within(filters()).getByRole('checkbox', { name: /KIND-A/ }));
     await screen.findByText('Counts not read');
     const panel = within(filters());
@@ -136,23 +136,23 @@ describe('the total of the Filters says what it counts', () => {
 
   it('reads "0 entities · 25 supporting relationships" for a text that finds only evidence records, and never "0 results"', async () => {
     await render(() => withFacets('demo', [], total(0, 25)));
-    expect(within(filters()).getByText('0 entities · 25 supporting relationships')).toBeDefined();
+    expect(within(filters()).getByText('0 entities · exact · 25 supporting relationships · exact')).toBeDefined();
     expect(within(filters()).queryByText(/results/)).toBeNull();
   });
 
   it('says a lower bound of evidence records as a lower bound', async () => {
     await render(() => withFacets('demo', [], total(0, [25, 'lowerBound'])));
-    expect(within(filters()).getByText('0 entities · ≥ 25 supporting relationships · lower bound')).toBeDefined();
+    expect(within(filters()).getByText('0 entities · exact · ≥ 25 supporting relationships · lower bound')).toBeDefined();
   });
 
   it('adds the evidence part after the entities, whatever the entity total, in the singular and as a lower bound', async () => {
     await render(() => withFacets('demo', [hit('demo', 'AC-1')], total(1, 1)));
-    expect(within(filters()).getByText('1 entity · 1 supporting relationship')).toBeDefined();
+    expect(within(filters()).getByText('1 entity · exact · 1 supporting relationship · exact')).toBeDefined();
   });
 
   it.each([
-    ['an evidence count of zero', total(3, 0), '3 entities'],
-    ['no evidence entry (the mode was not searched)', total(3, undefined), '3 entities'],
+    ['an evidence count of zero', total(3, 0), '3 entities · exact'],
+    ['no evidence entry (the mode was not searched)', total(3, undefined), '3 entities · exact'],
   ])('shows the entity part only for %s', async (_name, facets, text) => {
     await render(() => withFacets('demo', [hit('demo', 'AC-1')], facets));
     expect(within(filters()).getByText(text)).toBeDefined();
@@ -161,11 +161,11 @@ describe('the total of the Filters says what it counts', () => {
   it('shows the entity part only when the evidence count was not read', async () => {
     const unread = { ...facetsOf({ total: 3, types: [['kind-a', 0]] }), matchMode: [{ mode: 'evidence' as const, count: { quality: 'unknown' as const, scope: 'search:facet:matchMode' as const } }] };
     await render(() => withFacets('demo', [hit('demo', 'AC-1')], unread));
-    expect(within(filters()).getByText('3 entities')).toBeDefined();
+    expect(within(filters()).getByText('3 entities · exact')).toBeDefined();
   });
 
   it('is the answer\'s total under a selection, which does not change what it counts', async () => {
     await render(() => withFacets('demo', [], total(0, 25)), '&mode=evidence');
-    expect(within(filters()).getByText('0 entities · 25 supporting relationships')).toBeDefined();
+    expect(within(filters()).getByText('0 entities · exact · 25 supporting relationships · exact')).toBeDefined();
   });
 });

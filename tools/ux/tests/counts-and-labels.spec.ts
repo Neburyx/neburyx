@@ -56,7 +56,7 @@ async function routeReads(page: Page, withSelfLoop: boolean, coverage: CoverageB
   });
   await page.route((url) => url.pathname === '/v1/graph/coverage', async (route) => {
     coverage.push(route.request().postDataJSON() as CoverageBody);
-    await route.fulfill({ json: { notRetrieved: { quality: 'unknown', scope: 'not yet retrieved' } } });
+    await route.fulfill({ json: { notRetrieved: { quality: 'unknown', scope: 'not yet retrieved' }, uncounted: 1 } });
   });
 }
 

@@ -4,13 +4,17 @@ import type { ApiClient, ApiFailure } from '../api/client.js';
 import { createRequestStore, type RequestStore } from '../api/request-store.js';
 import type { RequestState } from '../api/use-request.js';
 import type { ClientState } from '../state/client-state.js';
-import { createStore, readable, useStoreSelector } from '../state/store.js';
+import { createStore, readable, useStoreSelector, type ReadableStore } from '../state/store.js';
 
 export interface EdgeReadStore {
   /** The read of a stored edge under a masking setting in the investigation that asked: made once and kept; ask again with its `reload`. */
   forEdge(ref: EdgeReadRef, mask: boolean): RequestStore<EdgeDetail>;
   /** Says one more part of the panel wants the read; the function it returns says that part is gone. The read in flight is cancelled only when no part wants it any more. */
   hold(ref: EdgeReadRef, mask: boolean): () => void;
+  /** The answered read of an edge under a masking setting in the investigation shown; it never asks, so drawing from it costs no request. */
+  held(ref: EdgeReadRef, mask: boolean): EdgeDetail | undefined;
+  /** How many reads have been answered since the last `clear`, counting each answer once; it changes when a read arrives, so what is drawn from the reads can ask again. */
+  readonly answers: ReadableStore<number>;
   /** Cancels every read in flight and drops every held read. */
   clear(): void;
 }
@@ -21,16 +25,29 @@ const keyOf = (person: string, investigation: string, ref: EdgeReadRef, mask: bo
 export function createEdgeReadStore(client: ApiClient, person: () => string, investigation: () => string): EdgeReadStore {
   const requests = new Map<string, RequestStore<EdgeDetail>>();
   const holds = new Map<string, number>();
+  const answers = createStore(0);
   const forEdge: EdgeReadStore['forEdge'] = (ref, mask) => {
     const key = keyOf(person(), investigation(), ref, mask);
     const held = requests.get(key);
     if (held !== undefined) return held;
     const request = createRequestStore((signal) => client.getEdge(ref, mask ? { mask } : {}, signal));
     requests.set(key, request);
+    let counted: unknown;
+    request.subscribe(() => {
+      const state = request.getState();
+      if (state.phase !== 'ready' || state.data === counted) return;
+      counted = state.data;
+      answers.setState(answers.getState() + 1);
+    });
     return request;
   };
   return {
     forEdge,
+    answers: readable(answers),
+    held(ref, mask) {
+      const state = requests.get(keyOf(person(), investigation(), ref, mask))?.getState();
+      return state?.phase === 'ready' ? state.data : undefined;
+    },
     hold(ref, mask) {
       const key = keyOf(person(), investigation(), ref, mask);
       holds.set(key, (holds.get(key) ?? 0) + 1);
@@ -45,6 +62,7 @@ export function createEdgeReadStore(client: ApiClient, person: () => string, inv
       for (const request of requests.values()) if (request.getState().phase === 'loading') request.cancel();
       requests.clear();
       holds.clear();
+      answers.setState(answers.getState() + 1);
     },
   };
 }

@@ -2,7 +2,8 @@ import { Fragment, useEffect, useId, useLayoutEffect, useMemo, useRef, useState,
 import { useEdgeReadStore } from '../evidence/edge-read.js';
 import { useCanvasCommands } from '../canvas/canvas-commands.js';
 import { useProfile } from '../canvas/profile-context.js';
-import { useClientState, useVisibleGraph } from '../state/context.js';
+import { useClientState } from '../state/context.js';
+import { useDisplayGraph } from '../canvas/use-display-graph.js';
 import { drawnKeys } from '../state/loaded-graph.js';
 import type { OpenMenu } from '../state/presentation-state.js';
 import { useStoreSelector } from '../state/store.js';
@@ -35,7 +36,7 @@ export function ContextMenu() {
   const registered = useMenuItems(open?.kind);
   const leaveOut = open?.leaveOut;
   const items = useMemo(() => (leaveOut === undefined ? registered : registered.filter((item) => !leaveOut.includes(item.id))), [registered, leaveOut]);
-  const graph = useVisibleGraph();
+  const graph = useDisplayGraph();
   const profile = useProfile();
   const edgeReads = useEdgeReadStore();
   const bindings = useKeyBindings();

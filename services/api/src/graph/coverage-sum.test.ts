@@ -1,6 +1,6 @@
 import { COVERAGE_SCOPE, type Count, type DegreePreview } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
-import { notRetrievedOf, type CoveragePart } from './coverage-sum.js';
+import { notRetrievedOf, uncountedOf, type CoveragePart } from './coverage-sum.js';
 
 const preview = (total: Count | undefined): DegreePreview | undefined =>
   total === undefined ? undefined : { ref: { sourceId: 'demo', entityType: 'widget', stableId: 'W' }, total, byType: [], byNeighborType: [], warnings: [], pageSize: 25, heavyOpThreshold: 500 };
@@ -59,5 +59,20 @@ describe('the not-yet-retrieved count of an estimate that has a date', () => {
     expect(notRetrievedOf([part(dated, 100)])).toEqual(answer(9_900, 'estimated'));
     expect(notRetrievedOf([part(dated, 20_000)])).toEqual(answer(0, 'estimated'));
     expect(notRetrievedOf([part(dated, 100)])).not.toHaveProperty('observedAt');
+  });
+});
+
+describe('the entities the count could not count', () => {
+  it('counts an entity with no preview and one whose preview total has no value', () => {
+    const noValue: CoveragePart = { ...part(count(1, 'exact')), preview: { ...(preview(count(1, 'exact')) as NonNullable<ReturnType<typeof preview>>), total: { quality: 'unknown', scope: 'degree:total' } } };
+    expect(uncountedOf([part(count(7, 'exact'), 2), part(undefined), noValue])).toBe(2);
+  });
+
+  it('counts none for a bound with another cause: a loaded count that is unknown, or a lower-bound total', () => {
+    expect(uncountedOf([part(count(7, 'exact'), 2, 'unknown'), part(count(500, 'lowerBound'), 20)])).toBe(0);
+  });
+
+  it('counts none for no entity', () => {
+    expect(uncountedOf([])).toBe(0);
   });
 });

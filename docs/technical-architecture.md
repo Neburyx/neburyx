@@ -499,7 +499,13 @@ something new since the last run") and a channel (email or webhook).
   an unloaded neighbor, and an edge between two loaded nodes appears in both previews. So the total
   is `exact` only when a single loaded node contributes, and at best `estimated` otherwise. It also
   never claims better than the weakest quality of its parts. If any loaded node has no cached
-  preview, the total is `unknown` and no number is shown.
+  preview, the total is a `lowerBound` of the largest remainder known, and `unknown` with no number
+  when that is 0. The response also says how many of the
+  entities in the request it could not count (`uncounted`: no cached preview, or one with no total), so
+  the header, the Export dialog and the exported file can say why a count is a lower bound. A cached
+  preview is counted while it is used at least every five minutes and for at most an hour after it
+  was read (hypotheses); a degree preview request is served from the cache for five minutes after the
+  read, whatever its use by this count.
 - **Heavy-operation estimate** (decided 2026-10-30): an expand reuses the degree preview the panel already
   shows (no extra read). A pattern or path run first does a bounded count probe in the same call.
   If the estimate is over the source's `heavy_op_threshold` (default 500), the run stops with the

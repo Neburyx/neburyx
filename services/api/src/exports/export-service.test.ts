@@ -9,7 +9,7 @@ import type { ShownReader } from './shown-reader.js';
 
 afterAll(() => rmSync(exportWebRoot, { recursive: true, force: true }));
 
-const EMPTY = { nodes: [], edges: [], omitted: false, maskedFields: 0, notRetrieved: { value: 0, quality: 'exact' as const, scope: 'not yet retrieved' } };
+const EMPTY = { nodes: [], edges: [], omitted: false, maskedFields: 0, uncounted: 0, notRetrieved: { value: 0, quality: 'exact' as const, scope: 'not yet retrieved' } };
 const request: ExportRequest = { kind: 'view', format: 'json', entities: [], edges: [], aggregates: [], derived: [] };
 
 async function service(read: ShownReader['read']) {

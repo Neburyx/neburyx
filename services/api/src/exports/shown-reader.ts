@@ -29,6 +29,8 @@ export interface ShownRead {
   /** How many distinct fields in the read items are masked. */
   readonly maskedFields: number;
   readonly notRetrieved: Count;
+  /** How many of the exported entities the coverage count could not count (no cached preview), summed over the chunks. */
+  readonly uncounted: number;
 }
 
 export interface ShownReaderLimits {
@@ -160,16 +162,19 @@ export function createShownReader(deps: Deps): ShownReader {
       const omitted = exportable.length !== nodes.length || relationships.length !== items.length;
 
       let notRetrieved = EMPTY_COUNT;
+      let uncounted = 0;
       if (exportable.length > 0) {
         const wanted = loadedCounts(exportable, relationships);
         const answers: Count[] = [];
         for (const chunk of chunks(wanted, limits.coverageChunk)) {
-          answers.push((await guarded(() => deps.coverage.coverage({ traceId: call.traceId, principal: call.principal, sourceId: call.sourceId, mask: false, entities: chunk, countRate: false }))).notRetrieved);
+          const answered = await guarded(() => deps.coverage.coverage({ traceId: call.traceId, principal: call.principal, sourceId: call.sourceId, mask: false, entities: chunk, countRate: false }));
+          answers.push(answered.notRetrieved);
+          uncounted += answered.uncounted;
         }
         notRetrieved = combineCoverage(answers);
       }
 
-      return { nodes: exportable, edges: relationships, omitted, maskedFields: maskedFieldsOf(exportable, relationships), notRetrieved };
+      return { nodes: exportable, edges: relationships, omitted, maskedFields: maskedFieldsOf(exportable, relationships), notRetrieved, uncounted };
     },
   };
 }

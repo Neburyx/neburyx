@@ -3379,10 +3379,16 @@
               "scope"
             ],
             "additionalProperties": false
+          },
+          "uncounted": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
           }
         },
         "required": [
-          "notRetrieved"
+          "notRetrieved",
+          "uncounted"
         ],
         "additionalProperties": false
       },
@@ -7779,11 +7785,17 @@
                       "scope"
                     ],
                     "additionalProperties": false
+                  },
+                  "uncounted": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
                   }
                 },
                 "required": [
                   "shown",
-                  "notRetrieved"
+                  "notRetrieved",
+                  "uncounted"
                 ],
                 "additionalProperties": false
               },

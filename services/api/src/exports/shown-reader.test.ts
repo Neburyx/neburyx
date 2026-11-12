@@ -33,7 +33,7 @@ const aggregateRef = (id: string) => ({ sourceId: 'demo', aggregate: { type: 'BA
 const derivedRef = (id: string) => ({ sourceId: 'demo', derived: { ruleId: 'rule', from: ref(`F-${id}`), to: ref(`T-${id}`) } });
 const storedRef = (id: string) => ({ sourceId: 'demo', type: 'MADE_FROM', from: 'widget', to: 'widget', stableId: id });
 
-function rig(options: { readonly nodes?: (id: string) => GraphNode | undefined; readonly edges?: (id: string) => GraphEdge | undefined; readonly coverage?: (call: CoverageCall) => Count; readonly hang?: boolean; readonly limits?: Partial<ShownReaderLimits> } = {}) {
+function rig(options: { readonly nodes?: (id: string) => GraphNode | undefined; readonly edges?: (id: string) => GraphEdge | undefined; readonly coverage?: (call: CoverageCall) => Count; readonly uncounted?: (call: CoverageCall) => number; readonly hang?: boolean; readonly limits?: Partial<ShownReaderLimits> } = {}) {
   const reads: ReadRefsCall[] = [];
   const asked: CoverageCall[] = [];
   const readRefs: ReadRefsService = {
@@ -48,7 +48,7 @@ function rig(options: { readonly nodes?: (id: string) => GraphNode | undefined; 
   const coverage: CoverageService = {
     coverage: (call) => {
       asked.push(call);
-      return Promise.resolve({ notRetrieved: options.coverage?.(call) ?? { value: 2, quality: 'exact', scope } });
+      return Promise.resolve({ notRetrieved: options.coverage?.(call) ?? { value: 2, quality: 'exact', scope }, uncounted: options.uncounted?.(call) ?? 0 });
     },
   };
   const reader = createShownReader({ readRefs, coverage, limits: { ...DEFAULT_SHOWN_LIMITS, ...options.limits } });
@@ -132,6 +132,12 @@ describe('reading the shown elements for an export', () => {
     const result = await run(ids(1200));
     expect(asked.map((call) => call.entities.length)).toEqual([500, 500, 200]);
     expect(result.notRetrieved).toMatchObject({ value: 1200, quality: 'estimated' });
+  });
+
+  it('adds up what the chunks could not count, and says none for an empty selection', async () => {
+    const { run } = rig({ limits: { maxEntities: 2000, maxRelationships: 2000 }, uncounted: (call) => call.entities.length / 100 });
+    const result = await run(ids(1200));
+    expect(result.uncounted).toBe(5 + 5 + 2);
   });
 
   it('makes no coverage call for an empty selection and says 0 not yet retrieved, exact', async () => {

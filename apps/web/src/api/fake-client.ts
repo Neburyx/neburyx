@@ -3,7 +3,7 @@ import type { ApiClient } from './client.js';
 
 const UNREACHABLE = async () => ({ ok: false, failure: { code: 'NETWORK_UNAVAILABLE' } }) as const;
 
-const NOT_RETRIEVED_UNKNOWN = async () => ({ ok: true, value: { notRetrieved: { quality: 'unknown', scope: COVERAGE_SCOPE } } }) as const;
+const NOT_RETRIEVED_UNKNOWN = async () => ({ ok: true, value: { notRetrieved: { quality: 'unknown', scope: COVERAGE_SCOPE }, uncounted: 0 } }) as const;
 
 /** A client whose reads fail as unreachable unless a test supplies them. */
 export function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {

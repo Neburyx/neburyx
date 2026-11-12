@@ -96,3 +96,39 @@ describe('dropping the held reads', () => {
     expect(calls).toHaveLength(1);
   });
 });
+
+describe('the answered reads of the edge read store', () => {
+  const DETAIL = { semantics: 'stored' } as unknown as EdgeDetail;
+
+  function answering() {
+    const person = { now: 'p1' };
+    const investigation = { now: 'i1' };
+    const client = fakeClient({ getEdge: async () => ({ ok: true, value: DETAIL }) });
+    return { investigation, store: createEdgeReadStore(client, () => person.now, () => investigation.now) };
+  }
+
+  it('holds an answered read, and none before it answers or for another masking or investigation', async () => {
+    const { store, investigation } = answering();
+    const request = store.forEdge(REF, false);
+    expect(store.held(REF, false)).toBeUndefined();
+    request.reload();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(store.held(REF, false)).toBe(DETAIL);
+    expect(store.held(REF, true)).toBeUndefined();
+    investigation.now = 'i2';
+    expect(store.held(REF, false)).toBeUndefined();
+  });
+
+  it('counts each answer once, and changes the count when the reads are dropped, so what is drawn from them is drawn again', async () => {
+    const { store } = answering();
+    store.forEdge(REF, false).reload();
+    await Promise.resolve();
+    await Promise.resolve();
+    const afterAnswer = store.answers.getState();
+    expect(afterAnswer).toBe(1);
+    store.clear();
+    expect(store.answers.getState()).toBe(2);
+    expect(store.held(REF, false)).toBeUndefined();
+  });
+});

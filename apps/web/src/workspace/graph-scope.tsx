@@ -1,5 +1,6 @@
 import { Fragment, useMemo, type ReactNode } from 'react';
 import type { Count } from '@neburyx/contracts';
+import type { NotRetrieved } from '../api/coverage-store.js';
 import { createStore, readable, useStoreSelector, type ReadableStore } from '../state/store.js';
 import type { RequestState } from '../api/use-request.js';
 import { useClientState, useLoadedGraph, useSessionMask } from '../state/context.js';
@@ -13,10 +14,10 @@ import { leaveFocusAndFocusCanvas } from '../canvas/focus-commands.js';
 import { isSourceChanged } from '../state/investigation-state.js';
 import { filteredOnlyCount, hiddenByFiltersLine, hiddenFromViewLine, outsideFocusLine, formatNumber, loadedLine, notDrawnLine, remainderLine, savedLayoutLine, savedLayoutShownLine, shownCount, UNKNOWN_REMAINDER } from './scope-text.js';
 
-const NOTHING_ASKED: ReadableStore<RequestState<Count>> = readable(createStore<RequestState<Count>>({ phase: 'idle' }));
+const NOTHING_ASKED: ReadableStore<RequestState<NotRetrieved>> = readable(createStore<RequestState<NotRetrieved>>({ phase: 'idle' }));
 
 /** What is not yet retrieved of the loaded graph, as the graph scope lines show it. */
-export function useNotRetrieved(): Count {
+export function useNotRetrieved(): NotRetrieved {
   const graph = useLoadedGraph();
   const mask = useSessionMask();
   const coverage = useCoverageStoreWhenProvided();
@@ -30,7 +31,7 @@ export function useNotRetrieved(): Count {
 
 const NO_KEYS: ReadonlySet<string> = new Set();
 
-export function GraphScopeLines({ graph, hidden, filtered, outside = NO_KEYS, onLeaveFocus, notRetrieved, onShowHidden, savedLayout = false }: { readonly savedLayout?: boolean; readonly graph: LoadedGraph; readonly hidden: ReadonlySet<string>; readonly filtered: ReadonlySet<string>; readonly outside?: ReadonlySet<string>; readonly onLeaveFocus?: () => void; readonly notRetrieved: Count; readonly onShowHidden?: () => void }) {
+export function GraphScopeLines({ graph, hidden, filtered, outside = NO_KEYS, onLeaveFocus, notRetrieved, onShowHidden, savedLayout = false }: { readonly savedLayout?: boolean; readonly graph: LoadedGraph; readonly hidden: ReadonlySet<string>; readonly filtered: ReadonlySet<string>; readonly outside?: ReadonlySet<string>; readonly onLeaveFocus?: () => void; readonly notRetrieved: NotRetrieved; readonly onShowHidden?: () => void }) {
   const loaded = graph.nodes.map((node) => elementKey(node.ref));
   const hiddenCount = loaded.filter((key) => hidden.has(key)).length;
   const show =

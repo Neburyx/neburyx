@@ -11,7 +11,7 @@ describe('the text of a lower bound', () => {
   });
 
   it('reads the part of a lower bound that is not yet retrieved with its quality', () => {
-    expect(remainderLine(25, lowerBound(475))).toBe('25 shown · ≥ 475 not yet retrieved (lower bound)');
+    expect(remainderLine(25, { count: lowerBound(475), uncounted: 0 })).toBe('25 shown · ≥ 475 not yet retrieved (lower bound)');
   });
 
   it('shows no number for an unknown count', () => {

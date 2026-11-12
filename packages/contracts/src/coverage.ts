@@ -25,8 +25,11 @@ export const coverageRequestSchema = z.strictObject({
   mask: z.boolean().optional(),
 });
 
-/** The relationships of the loaded entities that are not loaded, from previews already cached; `unknown`, with no value, when it cannot be told. */
-export const coverageResponseSchema = z.strictObject({ notRetrieved: countSchema });
+/**
+ * The relationships of the loaded entities that are not loaded, from previews already cached; `unknown`, with no value, when it cannot be told. `uncounted` is how many of the entities in the request had no cached
+ * preview, or one with no total, so that the server could not count what is left of them.
+ */
+export const coverageResponseSchema = z.strictObject({ notRetrieved: countSchema, uncounted: z.number().int().nonnegative() });
 
 export type CoverageEntity = z.infer<typeof coverageEntitySchema>;
 export type CoverageRequest = z.infer<typeof coverageRequestSchema>;
@@ -50,4 +53,26 @@ export function combineCoverage(chunks: readonly Count[]): Count {
   if (!Number.isSafeInteger(sum)) return UNKNOWN_COVERAGE;
   const weakened = values.filter((value) => value > 0).length > 1 || chunks.some((chunk) => chunk.quality === 'estimated');
   return { value: sum, quality: weakened ? 'estimated' : 'exact', scope: COVERAGE_SCOPE };
+}
+
+const NUMBER_FORMAT = new Intl.NumberFormat('en-US');
+
+const uncountedReason = (uncounted: number): string => (uncounted > 0 ? `${NUMBER_FORMAT.format(uncounted)} ${uncounted === 1 ? 'entity' : 'entities'} not yet counted` : '');
+
+/**
+ * The not-yet-retrieved part of a coverage line, as the header, the Export dialog and the exported file say it: the number with its quality, and for a lower bound or an unknown count the number of
+ * entities that could not be counted, which is why the count is no more than that. An unknown count has no number.
+ */
+export function notRetrievedText(count: Count, uncounted: number): string {
+  const reason = uncountedReason(uncounted);
+  if (count.quality === 'unknown' || count.value === undefined) return `more not yet retrieved${reason === '' ? '' : ` (${reason})`}`;
+  const number = NUMBER_FORMAT.format(count.value);
+  switch (count.quality) {
+    case 'exact':
+      return `${number} not yet retrieved (exact)`;
+    case 'estimated':
+      return `~${number} not yet retrieved (estimated)`;
+    case 'lowerBound':
+      return `≥ ${number} not yet retrieved (lower bound${reason === '' ? '' : ` · ${reason}`})`;
+  }
 }

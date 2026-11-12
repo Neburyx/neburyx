@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { COVERAGE_MAX_ENTITIES, COVERAGE_SCOPE, combineCoverage, coverageRequestSchema, coverageResponseSchema } from './coverage.js';
+import { COVERAGE_MAX_ENTITIES, COVERAGE_SCOPE, combineCoverage, coverageRequestSchema, coverageResponseSchema, notRetrievedText } from './coverage.js';
 import type { Count } from './graph.js';
 
 const entity = (id: string, loadedRelationships = 0) => ({ ref: { sourceId: 'demo', entityType: 'widget', stableId: id }, loadedRelationships, loadedQuality: 'exact' });
@@ -23,9 +23,9 @@ describe('the coverage request', () => {
 
 describe('the coverage response', () => {
   it('has a value exactly when its quality is not unknown', () => {
-    expect(coverageResponseSchema.safeParse({ notRetrieved: { value: 3, quality: 'exact', scope: 'not yet retrieved' } }).success).toBe(true);
-    expect(coverageResponseSchema.safeParse({ notRetrieved: { quality: 'unknown', scope: 'not yet retrieved' } }).success).toBe(true);
-    expect(coverageResponseSchema.safeParse({ notRetrieved: { value: 3, quality: 'unknown', scope: 'not yet retrieved' } }).success).toBe(false);
+    expect(coverageResponseSchema.safeParse({ notRetrieved: { value: 3, quality: 'exact', scope: 'not yet retrieved' }, uncounted: 0 }).success).toBe(true);
+    expect(coverageResponseSchema.safeParse({ notRetrieved: { quality: 'unknown', scope: 'not yet retrieved' }, uncounted: 2 }).success).toBe(true);
+    expect(coverageResponseSchema.safeParse({ notRetrieved: { value: 3, quality: 'unknown', scope: 'not yet retrieved' }, uncounted: 0 }).success).toBe(false);
   });
 });
 
@@ -69,5 +69,39 @@ describe('combining coverage chunks with an estimate', () => {
   it('carries no date of a chunk', () => {
     expect(combineCoverage([chunk(5, 'estimated', '2026-01-02'), chunk(1, 'exact')])).not.toHaveProperty('observedAt');
     expect(combineCoverage([chunk(5, 'estimated', '2026-01-02')])).not.toHaveProperty('observedAt');
+  });
+});
+
+describe('the coverage response, what could not be counted', () => {
+  const notRetrieved = { value: 3, quality: 'exact', scope: 'not yet retrieved' };
+
+  it('carries a whole number that is not negative, and refuses an answer without it, a negative one and a fraction', () => {
+    expect(coverageResponseSchema.safeParse({ notRetrieved, uncounted: 25 }).success).toBe(true);
+    expect(coverageResponseSchema.safeParse({ notRetrieved }).success).toBe(false);
+    expect(coverageResponseSchema.safeParse({ notRetrieved, uncounted: -1 }).success).toBe(false);
+    expect(coverageResponseSchema.safeParse({ notRetrieved, uncounted: 1.5 }).success).toBe(false);
+  });
+});
+
+describe('the not-yet-retrieved text of a coverage line', () => {
+  const count = (quality: Count['quality'], value?: number): Count => ({ ...(value === undefined ? {} : { value }), quality, scope: COVERAGE_SCOPE });
+
+  it('says a lower bound with the number of entities not yet counted, in the singular and the plural', () => {
+    expect(notRetrievedText(count('lowerBound', 109), 25)).toBe('≥ 109 not yet retrieved (lower bound · 25 entities not yet counted)');
+    expect(notRetrievedText(count('lowerBound', 1_234), 1)).toBe('≥ 1,234 not yet retrieved (lower bound · 1 entity not yet counted)');
+  });
+
+  it('says a lower bound with no entity not yet counted as before, with no reason', () => {
+    expect(notRetrievedText(count('lowerBound', 43), 0)).toBe('≥ 43 not yet retrieved (lower bound)');
+  });
+
+  it('says an unknown count with no number, and with the reason when entities are not yet counted', () => {
+    expect(notRetrievedText(count('unknown'), 25)).toBe('more not yet retrieved (25 entities not yet counted)');
+    expect(notRetrievedText(count('unknown'), 0)).toBe('more not yet retrieved');
+  });
+
+  it('says an exact and an estimated count with their own word', () => {
+    expect(notRetrievedText(count('exact', 109), 0)).toBe('109 not yet retrieved (exact)');
+    expect(notRetrievedText(count('estimated', 38), 0)).toBe('~38 not yet retrieved (estimated)');
   });
 });

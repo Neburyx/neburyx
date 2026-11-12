@@ -53,3 +53,8 @@ export function notRetrievedOf(parts: readonly CoveragePart[]): Count {
   const weakened = contributors > 1 || remainders.some((remainder) => remainder.quality === 'estimated' || remainder.clamped || !remainder.loadedExact);
   return { value: sum, quality: weakened ? 'estimated' : 'exact', scope: COVERAGE_SCOPE };
 }
+
+/** How many entities the sum could not count: those with no preview, or with a preview that has no total. A bound with another cause (a loaded count that is unknown, a lower-bound total) adds nothing. */
+export function uncountedOf(parts: readonly CoveragePart[]): number {
+  return parts.filter((part) => part.preview?.total.value === undefined).length;
+}

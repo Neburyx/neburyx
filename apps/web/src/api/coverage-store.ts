@@ -3,6 +3,12 @@ import type { ApiClient } from './client.js';
 import type { FailureReporter } from './failure-reporter.js';
 import { createRequestStore, type RequestStore } from './request-store.js';
 
+/** What is not yet retrieved of a loaded graph and how many of its entities the server could not count, summed over the chunks. */
+export interface NotRetrieved {
+  readonly count: Count;
+  readonly uncounted: number;
+}
+
 export interface CoverageInput {
   /** Absent when nothing is loaded. */
   readonly sourceId: string | undefined;
@@ -14,7 +20,7 @@ export interface CoverageInput {
 
 export interface CoverageStore {
   /** The request for the not-yet-retrieved count of this loaded graph, asked once for the graph as it stands; asking for another graph stops the earlier request (its remaining chunks are not sent) and ignores its answer. Nothing when nothing is loaded, which also stops the request for the graph that was. */
-  forGraph(input: CoverageInput): RequestStore<Count> | undefined;
+  forGraph(input: CoverageInput): RequestStore<NotRetrieved> | undefined;
 }
 
 function chunksOf(entities: readonly CoverageEntity[]): readonly (readonly CoverageEntity[])[] {
@@ -31,7 +37,7 @@ const keyOf = (person: string, sourceId: string, input: CoverageInput): string =
  * newest graph is kept.
  */
 export function createCoverageStore(client: ApiClient, person: () => string, report?: FailureReporter): CoverageStore {
-  let current: { readonly key: string; readonly request: RequestStore<Count>; readonly stop: AbortController } | undefined;
+  let current: { readonly key: string; readonly request: RequestStore<NotRetrieved>; readonly stop: AbortController } | undefined;
   return {
     forGraph(input) {
       const { sourceId } = input;
@@ -44,17 +50,19 @@ export function createCoverageStore(client: ApiClient, person: () => string, rep
       if (current?.key === key) return current.request;
       current?.stop.abort();
       const stop = new AbortController();
-      const request = createRequestStore<Count>(
+      const request = createRequestStore<NotRetrieved>(
         async (own) => {
           const signal = AbortSignal.any([own, stop.signal]);
           const counts: Count[] = [];
+          let uncounted = 0;
           for (const chunk of chunksOf(input.entities)) {
             if (signal.aborted) return { ok: false, failure: { code: 'ABORTED' } };
             const result = await client.graphCoverage({ sourceId, entities: [...chunk], ...(input.mask ? { mask: input.mask } : {}) }, signal);
             if (!result.ok) return signal.aborted ? { ok: false, failure: { code: 'ABORTED' } } : result;
             counts.push(result.value.notRetrieved);
+            uncounted += result.value.uncounted;
           }
-          return { ok: true, value: combineCoverage(counts) };
+          return { ok: true, value: { count: combineCoverage(counts), uncounted } };
         },
         (failure, reload) => void report?.(failure, sourceId, reload),
       );

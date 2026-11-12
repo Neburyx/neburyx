@@ -50,7 +50,7 @@ test.describe('collapse', () => {
       await route.fulfill({ json: pageFor(route.request().postDataJSON() as Body) });
     });
     await page.route((url) => url.pathname === '/v1/graph/coverage', async (route) => {
-      await route.fulfill({ json: { notRetrieved: { value: 2, quality: 'lowerBound', scope: 'not yet retrieved' } } });
+      await route.fulfill({ json: { notRetrieved: { value: 2, quality: 'lowerBound', scope: 'not yet retrieved' }, uncounted: 1 } });
     });
   });
 
@@ -81,7 +81,7 @@ test.describe('collapse', () => {
     await choose(page, 'Expand by type');
     const panel = page.getByRole('complementary', { name: 'Expand relationships' });
     await expect(panel).toBeVisible();
-    await expect.poll(async () => (await lines(page))[1]).toContain('not yet retrieved (lower bound)');
+    await expect.poll(async () => (await lines(page))[1]).toContain('not yet retrieved (lower bound · 1 entity not yet counted)');
     const captions = async () => ({
       lines: await lines(page),
       description: await canvasOf(page).evaluate((element) => document.getElementById(element.getAttribute('aria-describedby') ?? '')?.textContent ?? '').then((text) => text.replace(/; \d+ selected/, '')),
