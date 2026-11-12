@@ -55,6 +55,13 @@ export function resolvesStrict(dir: string): boolean {
   return showConfigSchema.parse(JSON.parse(output)).compilerOptions.strict === true;
 }
 
+const EE_PACKAGE = /^@neburyx\/ee-/;
+const RUNTIME_DEPENDENCY_FIELDS = ['dependencies', 'peerDependencies', 'optionalDependencies'] as const;
+
+export function eeDependencyViolations(pkg: PackageJson): readonly string[] {
+  return RUNTIME_DEPENDENCY_FIELDS.flatMap((field) => Object.keys(pkg[field] ?? {}).filter((name) => EE_PACKAGE.test(name)).map((name) => `${field}: ${name}`));
+}
+
 export function rangeViolations(pkg: PackageJson): readonly string[] {
   return dependencyFields.flatMap((field) =>
     Object.entries(pkg[field] ?? {})

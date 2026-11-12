@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import type { Socket } from 'node:net';
 import fastifyStatic from '@fastify/static';
-import { type ErrorCode, deleteInvestigationResponseSchema, deleteViewRequestSchema, deleteViewResponseSchema, restoreInvestigationRequestSchema, MAX_DRAFT_DOCUMENT_BYTES, readRefsRequestSchema, readRefsResponseSchema, exportRequestSchema, exportSchema, draftWriteRequestSchema, draftWriteResponseSchema, renameRequestSchema, renameResponseSchema, statusChangeRequestSchema, statusChangeResponseSchema, derivedNeighborsRequestSchema, derivedNeighborsResponseSchema, coverageRequestSchema, coverageResponseSchema, degreePreviewRequestSchema, edgeDetailSchema, edgePathSchema, entityLookupRequestSchema, degreePreviewSchema, entityPathSchema, entityQuerySchema, expandRequestSchema, expandResponseSchema, healthResponseSchema, investigationListQuerySchema, investigationListResponseSchema, investigationResponseSchema, meResponseSchema, nodeSchema, parseEdgeRefSegment, parseSourceLinkSegment, sourceLinkPathSchema, sourceLinkQuerySchema, openInvestigationRequestSchema, openInvestigationResponseSchema, readyResponseSchema, searchMoreRequestSchema, searchMoreResultSchema, searchRequestSchema, searchResultSchema, sourceProfileSchema, sourceTestReportSchema, sourcesResponseSchema, renameViewRequestSchema, restoreViewResponseSchema, saveViewRequestSchema, saveViewResponseSchema, viewListQuerySchema, viewListResponseSchema, ownedViewListResponseSchema, namedViewSchema } from '@neburyx/contracts';
+import { type ErrorCode, type ProfileExtension, deleteInvestigationResponseSchema, deleteViewRequestSchema, deleteViewResponseSchema, restoreInvestigationRequestSchema, MAX_DRAFT_DOCUMENT_BYTES, readRefsRequestSchema, readRefsResponseSchema, exportRequestSchema, exportSchema, draftWriteRequestSchema, draftWriteResponseSchema, renameRequestSchema, renameResponseSchema, statusChangeRequestSchema, statusChangeResponseSchema, derivedNeighborsRequestSchema, derivedNeighborsResponseSchema, coverageRequestSchema, coverageResponseSchema, degreePreviewRequestSchema, edgeDetailSchema, edgePathSchema, entityLookupRequestSchema, degreePreviewSchema, entityPathSchema, entityQuerySchema, expandRequestSchema, expandResponseSchema, healthResponseSchema, investigationListQuerySchema, investigationListResponseSchema, investigationResponseSchema, meResponseSchema, nodeSchema, parseEdgeRefSegment, parseSourceLinkSegment, sourceLinkPathSchema, sourceLinkQuerySchema, openInvestigationRequestSchema, openInvestigationResponseSchema, readyResponseSchema, searchMoreRequestSchema, searchMoreResultSchema, searchRequestSchema, searchResultSchema, sourceProfileSchema, sourceTestReportSchema, sourcesResponseSchema, renameViewRequestSchema, restoreViewResponseSchema, saveViewRequestSchema, saveViewResponseSchema, viewListQuerySchema, viewListResponseSchema, ownedViewListResponseSchema, namedViewSchema } from '@neburyx/contracts';
 import { z } from 'zod';
 import Fastify, {
   type FastifyBaseLogger,
@@ -47,6 +47,7 @@ import { identityHashOf } from './registry/identity-hash.js';
 import { summariesOf } from './registry/summary.js';
 import { readinessResponse } from './health/readiness.js';
 import { communitySeams } from './seams/community-seams.js';
+import { mountExtensionRoutes } from './profile/mount.js';
 import type { Seams } from './seams/seams.js';
 import type { RegisteredRoute } from './permissions.js';
 import { allUnknown, type ReachabilityView } from './source-ping/cache.js';
@@ -80,6 +81,8 @@ export interface AppOptions {
   readonly exportFiles?: ExportFileStore | undefined;
   /** The version of the policy a person's access is under, for an export to be made under and a download to be checked against; Community has none. */
   readonly policyVersion?: ((sourceId: string) => string) | undefined;
+  /** The enterprise extension, only when the preview switch is on; its routes are mounted and `GET /v1/me` says `enterprise`. */
+  readonly extension?: ProfileExtension | undefined;
 }
 
 const API_PREFIX = '/v1';
@@ -333,8 +336,10 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
   app.get('/v1/me', { exposeHeadRoute: false, config: { permission: 'principal' } }, async () => {
     const [identity, rows] = await Promise.all([options.store.current(), options.store.listSources()]);
     const sources = summariesOf(rows, mapping, undefined, options.referenceKeys).map((source) => ({ sourceId: source.id, viewSensitive: true, synthetic: source.synthetic }));
-    return meResponseSchema.parse({ ...identity, sources });
+    return meResponseSchema.parse({ ...identity, edition: options.extension === undefined ? 'community' : 'enterprise', sources });
   });
+
+  if (options.extension !== undefined) mountExtensionRoutes(app, options.extension, options.store);
 
   app.get('/v1/sources', { exposeHeadRoute: false, config: { permission: 'principal' } }, async (request) => {
     if (!noQuerySchema.safeParse(request.query).success) throw new AppError('INVALID_REQUEST');

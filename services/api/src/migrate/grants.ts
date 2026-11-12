@@ -1,6 +1,8 @@
 import type pg from 'pg';
 
 const HISTORY_TABLES = ['kysely_migration', 'kysely_migration_lock'];
+export const EE_HISTORY_TABLE = 'kysely_migration_ee';
+export const EE_LOCK_TABLE = 'kysely_migration_lock_ee';
 const SETUP_TABLE = 'neburyx_setup';
 const POLICY_NAME = 'neburyx_app_access';
 const QUEUE_SCHEMA = 'graphile_worker';
@@ -27,8 +29,13 @@ export async function historyTablesExist(client: pg.PoolClient): Promise<boolean
   return result.rows[0]?.found === true;
 }
 
-export async function protectHistory(client: pg.PoolClient, role: string): Promise<void> {
-  const tables = HISTORY_TABLES.map((table) => client.escapeIdentifier(table)).join(', ');
+export async function tableExists(client: pg.PoolClient, table: string): Promise<boolean> {
+  const result = await client.query(`SELECT to_regclass($1) IS NOT NULL AS found`, [`public.${client.escapeIdentifier(table)}`]);
+  return result.rows[0]?.found === true;
+}
+
+export async function protectHistory(client: pg.PoolClient, role: string, historyTables: readonly string[] = HISTORY_TABLES): Promise<void> {
+  const tables = historyTables.map((table) => client.escapeIdentifier(table)).join(', ');
   await client.query(`REVOKE ALL ON TABLE ${tables} FROM ${client.escapeIdentifier(role)}`);
 }
 
@@ -91,7 +98,7 @@ export async function grantQueue(client: pg.PoolClient, role: string): Promise<v
 }
 
 /** The names the history table holds, read under the run's lock. The history tables must exist. */
-export async function appliedNames(client: pg.PoolClient): Promise<readonly string[]> {
-  const result = await client.query<{ name: string }>('SELECT name FROM kysely_migration');
+export async function appliedNames(client: pg.PoolClient, table = 'kysely_migration'): Promise<readonly string[]> {
+  const result = await client.query<{ name: string }>(`SELECT name FROM ${client.escapeIdentifier(table)}`);
   return result.rows.map((row) => row.name);
 }

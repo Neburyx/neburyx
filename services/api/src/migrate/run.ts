@@ -3,13 +3,15 @@ import { Kysely, PostgresDialect } from 'kysely';
 import { Migrator, NO_MIGRATIONS } from 'kysely/migration';
 import pg from 'pg';
 import { isConnectionError } from '../database-errors.js';
-import { appliedNames, grantDefaultsOnce, grantMigrationNames, grantQueue, historyTablesExist, protectHistory, roleExists } from './grants.js';
+import { appliedNames, EE_HISTORY_TABLE, EE_LOCK_TABLE, grantDefaultsOnce, grantMigrationNames, grantQueue, historyTablesExist, protectHistory, roleExists, tableExists } from './grants.js';
 import { sqlFileProvider } from './provider.js';
 
 export interface MigrateOptions {
   readonly url: string;
   readonly appRole: string;
   readonly directory: string;
+  /** The migrations of the enterprise code, applied after the rest and recorded in a history table of their own; absent, none are. */
+  readonly eeDirectory?: string;
 }
 
 export type MigrateOutcome =
@@ -18,6 +20,9 @@ export type MigrateOutcome =
   | { readonly status: 'unknown-role' }
   | { readonly status: 'migration-failed'; readonly file: string }
   | { readonly status: 'out-of-order'; readonly file: string }
+  | { readonly status: 'ee-migration-failed'; readonly file: string }
+  | { readonly status: 'ee-out-of-order'; readonly file: string }
+  | { readonly status: 'ee-failed' }
   | { readonly status: 'queue-step-failed' }
   | { readonly status: 'failed' };
 
@@ -122,5 +127,40 @@ async function runPhases(
   } catch (error) {
     return { status: isLost(error) ? 'unreachable' : 'queue-step-failed' };
   }
-  return { status: 'done', applied };
+  if (options.eeDirectory === undefined) return { status: 'done', applied };
+
+  const ee = await runEePhase(pool, db, options.eeDirectory, options.appRole, stillConnected);
+  return ee.status === 'done' ? { status: 'done', applied: [...applied, ...ee.applied] } : ee;
+}
+
+async function runEePhase(pool: pg.Pool, db: Kysely<unknown>, directory: string, appRole: string, stillConnected: () => void): Promise<MigrateOutcome> {
+  const tables = { migrationTableName: EE_HISTORY_TABLE, migrationLockTableName: EE_LOCK_TABLE };
+  try {
+    const setup = await pool.connect();
+    let alreadyApplied: readonly string[];
+    try {
+      // migrating to nothing makes the history tables exist; it is done only when they do not, as it would undo what is applied
+      if (!(await tableExists(setup, EE_HISTORY_TABLE))) await new Migrator({ db, provider: sqlFileProvider(directory), ...tables }).migrateTo(NO_MIGRATIONS);
+      await protectHistory(setup, appRole, [EE_HISTORY_TABLE, EE_LOCK_TABLE]);
+      alreadyApplied = await appliedNames(setup, EE_HISTORY_TABLE);
+    } finally {
+      setup.release();
+    }
+    stillConnected();
+
+    const migrator = new Migrator({ db, provider: sqlFileProvider(directory, alreadyApplied), ...tables });
+    const known = await migrator.getMigrations();
+    const lastApplied = known.findLastIndex((migration) => migration.executedAt !== undefined);
+    const stray = known.find((migration, index) => migration.executedAt === undefined && index < lastApplied);
+    if (stray) return { status: 'ee-out-of-order', file: stray.name };
+
+    const { error, results } = await migrator.migrateToLatest();
+    stillConnected();
+    const failed = results?.find((result) => result.status === 'Error');
+    if (failed) return { status: 'ee-migration-failed', file: failed.migrationName };
+    if (error) return { status: isLost(error) ? 'unreachable' : 'ee-failed' };
+    return { status: 'done', applied: (results ?? []).filter((result) => result.status === 'Success').map((result) => result.migrationName) };
+  } catch (error) {
+    return { status: isLost(error) ? 'unreachable' : 'ee-failed' };
+  }
 }

@@ -142,8 +142,13 @@ export interface RetentionModel {
   readonly exportsDays: number;
 }
 
+export interface AiModel {
+  readonly preview: boolean;
+}
+
 export interface MappingModel {
   readonly sources: readonly SourceModel[];
+  readonly ai?: AiModel;
   /** Absent only in a model that was not loaded from a file; read it with `retentionOf`. */
   readonly retention?: RetentionModel;
 }

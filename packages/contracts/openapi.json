@@ -80,6 +80,35 @@
         }
       }
     },
+    "/v1/ai/status": {
+      "get": {
+        "operationId": "getAiStatus",
+        "summary": "Whether the AI preview is switched on",
+        "description": "Present only when the deployment has switched the AI preview on (the environment variable NEBURYX_PROFILE=enterprise together with ai.preview: true in the mapping file); otherwise this path answers 404.",
+        "responses": {
+          "200": {
+            "description": "The preview is on",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiStatusResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The AI preview is not switched on",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/sources/{id}/profile": {
       "get": {
         "operationId": "getSourceProfile",
@@ -3276,6 +3305,19 @@
   },
   "components": {
     "schemas": {
+      "AiStatusResponse": {
+        "type": "object",
+        "properties": {
+          "preview": {
+            "type": "boolean",
+            "const": true
+          }
+        },
+        "required": [
+          "preview"
+        ],
+        "additionalProperties": false
+      },
       "CoverageRequest": {
         "type": "object",
         "properties": {
@@ -11751,7 +11793,8 @@
           "edition": {
             "type": "string",
             "enum": [
-              "community"
+              "community",
+              "enterprise"
             ]
           },
           "identityMode": {

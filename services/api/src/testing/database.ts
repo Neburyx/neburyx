@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import pg from 'pg';
 import { runMigrateCommand } from '../migrate/command.js';
+import type { ExtensionLoader } from '../profile/extension.js';
 import type { TestDatabase } from './postgres.js';
 
 const folders: string[] = [];
@@ -35,6 +36,7 @@ export async function rows(url: string, query: string, parameters: readonly unkn
 export async function runInProcess(
   env: Readonly<Record<string, string | undefined>>,
   directory: string,
+  extra: { readonly extensionLoader?: ExtensionLoader } = {},
 ): Promise<{ readonly code: number; readonly stdout: string; readonly stderr: string }> {
   let stdout = '';
   let stderr = '';
@@ -42,6 +44,7 @@ export async function runInProcess(
     stdout: { write: (text) => (stdout += text) },
     stderr: { write: (text) => (stderr += text) },
     directory,
+    ...extra,
   });
   return { code, stdout, stderr };
 }

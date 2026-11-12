@@ -5,6 +5,7 @@ allowBuilds:
 engineStrict: true
 packages:
   - apps/*
+  - ee/*
   - services/*
   - packages/*
   - tools/*

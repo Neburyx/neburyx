@@ -3,6 +3,9 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { repoRoot } from '../workspace.js';
 import { ADAPTER_SCAN_ROOTS, checkAdapterAccess } from './adapter.js';
+import { CONTAINER_SCAN_ROOTS } from './containers.js';
+import { DOMAIN_WORD_SCAN_ROOTS } from '../domain-words/check.js';
+import { checkOpenCore, OPEN_CORE_SCAN_ROOTS } from './open-core.js';
 import { checkGateCapabilities, GATE_CAPABILITY_SCAN_ROOTS } from './gate-capabilities.js';
 import { createImportReader, readImports } from './imports.js';
 import { loadTree } from './tree.js';
@@ -50,6 +53,23 @@ describe('the real repository tree', () => {
     expect(parsed.size, 'no file was parsed, so the checks above read nothing').toBeGreaterThan(0);
     expect(parsed.size, `${parsed.size} of ${production.length} production files were parsed`).toBeLessThan(production.length * 0.6);
   });
+});
+
+describe('the open-core line on the real tree', () => {
+  it('scans ee/ with the checks that apply to it, and Community code with the import rule', () => {
+    expect(ADAPTER_SCAN_ROOTS).toContain('ee');
+    expect(GATE_CAPABILITY_SCAN_ROOTS).toContain('ee');
+    expect(CONTAINER_SCAN_ROOTS).toContain('ee');
+    expect(DOMAIN_WORD_SCAN_ROOTS).toContain('ee/ask');
+    expect(OPEN_CORE_SCAN_ROOTS).toEqual(['services', 'packages', 'apps', 'tools', 'deploy']);
+    expect(files.map((file) => file.path)).toContain('ee/ask/src/index.ts');
+  });
+
+  it('has no Community file that imports from ee/', () => {
+    const community = loadTree(repoRoot, { include: OPEN_CORE_SCAN_ROOTS, exclude: ['tools/workspace-checks/fixtures'] });
+    expect(community.map((file) => file.path)).toContain('deploy/docker/check-platforms.mjs');
+    expect(formatViolations(checkOpenCore(community, read))).toBe('');
+  }, REAL_TREE_TIMEOUT_MS);
 });
 
 describe('the real web client', () => {

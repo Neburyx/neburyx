@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { accessSync, constants, existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import type { ProfileExtension } from '@neburyx/contracts';
 import type { FastifyBaseLogger, FastifyInstance } from 'fastify';
 import { buildApp } from './app.js';
 import { ConfigError, parseConfig } from './config.js';
@@ -10,6 +11,8 @@ import { isInContainer, warnIfExposed } from './exposure.js';
 import { IdentityStartError } from './identity/errors.js';
 import { MappingError } from './mapping/diagnostics.js';
 import { loadMappingFile } from './mapping/load.js';
+import { loadProfileExtension, registeredExtensionLoader, type ExtensionLoader } from './profile/extension.js';
+import { decidePreviewSwitch, previewInputsOf } from './profile/switch.js';
 import type { MappingModel } from './mapping/model.js';
 import { createAppStore, type AppStore } from './app-store.js';
 import { communitySeams } from './seams/community-seams.js';
@@ -51,6 +54,8 @@ export interface StartIo {
   /** Starts the job runner; the shipped one unless a test says otherwise. */
   readonly startJobRunner?: typeof startJobRunner;
   readonly fileExists?: (path: string) => boolean;
+  /** The loader of the enterprise extension; the registered one unless a test names its own. */
+  readonly extensionLoader?: ExtensionLoader;
 }
 
 class StartupStop extends Error {}
@@ -118,6 +123,31 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
     }
   }
 
+  let decision;
+  try {
+    decision = decidePreviewSwitch(previewInputsOf(env, mapping));
+  } catch (error) {
+    if (!(error instanceof ConfigError)) throw error;
+    io.stderr.write(`${error.message}\n`);
+    return { exitCode: 1 };
+  }
+  if (decision.state === 'refused') {
+    io.stderr.write(`${decision.message}\n`);
+    return { exitCode: 1 };
+  }
+
+  let extension: ProfileExtension | undefined;
+  if (decision.state === 'on') {
+    const loaded = await loadProfileExtension(io.extensionLoader ?? registeredExtensionLoader());
+    if (!loaded.ok) {
+      if (loaded.cause !== undefined) io.logger.error({ event: 'profile.extension_load_failed', cause: loaded.cause }, 'enterprise extension could not be loaded');
+      io.stderr.write(`${loaded.message}\n`);
+      return { exitCode: 1 };
+    }
+    extension = loaded.extension;
+    io.logger.info({ event: 'profile.extension_loaded', extension: extension.name }, 'enterprise extension loaded');
+  }
+
   try {
     if (io.tasks !== undefined) validateTasks(io.tasks);
   } catch (error) {
@@ -180,6 +210,7 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
       sourceTester: createSourceTester({ gate: gate.gate, mapping, store: observingStore, logger: io.logger }),
       gate: gate.gate,
       seams,
+      extension,
       referenceKeys,
       cursors,
       exportFiles,

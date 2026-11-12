@@ -3,7 +3,7 @@ import { scriptKindOf } from './imports.js';
 import type { SourceFile } from './tree.js';
 import type { Violation } from './violations.js';
 
-export const CONTAINER_SCAN_ROOTS: readonly string[] = ['services', 'apps', 'packages', 'tools'];
+export const CONTAINER_SCAN_ROOTS: readonly string[] = ['services', 'apps', 'packages', 'tools', 'ee'];
 
 const HELPER = 'startWithRetry';
 const CONTAINER_CLASS = /Container$/;

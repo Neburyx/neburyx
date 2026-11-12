@@ -29,6 +29,7 @@
     "zod": "4.6.7"
   },
   "devDependencies": {
+    "@neburyx/ee-ask": "workspace:*",
     "@neburyx/test-containers": "workspace:*",
     "@neburyx/test-neo4j": "workspace:*",
     "@testcontainers/neo4j": "12.2.1",

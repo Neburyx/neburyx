@@ -29,6 +29,7 @@ To fill in `.env` by hand instead of the command above, run `cp .env.example .en
 - `migrate` runs `neburyx migrate` with the migration role and exits. `api` starts only after it has
   finished successfully, and connects with the app role. The `api` service never sees the migration
   password.
+- The Community stack runs as it is. To switch the AI preview on, set `NEBURYX_PROFILE=enterprise` on the `api` **and** the `migrate` services, and give both the same `config/neburyx.yaml` (the `migrate` service also needs the mapping mounted and `NEBURYX_CONFIG` set, so that it applies the enterprise migrations). `NEBURYX_PROFILE=enterprise` together with `ai.preview: true` in `config/neburyx.yaml` switches the AI preview on; with only one of the two the `api` service stops and says which is missing.
 - Export files are kept in the `neburyx-exports` volume, mounted at `/data/exports` (the image creates it for the `node` user with mode 0700). Set `NEBURYX_EXPORT_DIR` to keep them elsewhere. `docker compose down -v` removes them with the database.
 - The API is published on `127.0.0.1` only (port 8080, or `NEBURYX_PORT`); Postgres is not published. The
   app has no sign-in yet, so do not change the published address.

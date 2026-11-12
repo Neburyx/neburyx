@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { connect } from 'node:net';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { stringify } from 'yaml';
 import { z } from 'zod';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { startPostgres, type TestDatabase, type TestPostgres } from '../testing/postgres.js';
@@ -153,6 +154,80 @@ describe('the api command', () => {
     expect(await dockerOk(['wait', api.name])).toBe('0');
     expect(Date.now() - sent).toBeLessThan(STOP_WITHIN_MS);
     socket.destroy();
+  });
+});
+
+describe('the enterprise code in the one image', () => {
+  function mappingFolder(ai: unknown): string {
+    const folder = mkdtempSync(join(tmpdir(), 'image-preview-'));
+    scratch.push(folder);
+    writeFileSync(join(folder, 'neburyx.yaml'), stringify({ sources: [], ...(ai === undefined ? {} : { ai }) }));
+    return join(folder, 'neburyx.yaml');
+  }
+
+  const withMapping = (file: string, profile: string | undefined): string[] => [
+    '-v', `${file}:/etc/neburyx/neburyx.yaml:ro`, '-e', 'NEBURYX_CONFIG=/etc/neburyx/neburyx.yaml',
+    ...(profile === undefined ? [] : ['-e', `NEBURYX_PROFILE=${profile}`]),
+  ];
+
+  async function migrateWith(database: TestDatabase, extra: readonly string[]) {
+    return docker([
+      'run', '--rm', '--add-host', `${HOST_ALIAS}:host-gateway`,
+      '-e', `DATABASE_MIGRATION_URL=${viaHost(database.ownerUrl)}`, '-e', `DATABASE_APP_ROLE=${database.appRole}`,
+      ...extra, TAG, 'migrate',
+    ]);
+  }
+
+  async function startWith(database: TestDatabase, extra: readonly string[]): Promise<{ readonly name: string; readonly url: string }> {
+    const name = `neburyx-image-${randomBytes(4).toString('hex')}`;
+    containers.push(name);
+    await dockerOk(['run', '-d', '--name', name, '--add-host', `${HOST_ALIAS}:host-gateway`, '-p', '127.0.0.1::8080', '-e', `DATABASE_URL=${viaHost(database.appUrl)}`, ...extra, TAG]);
+    const mapping = await dockerOk(['port', name, '8080/tcp']);
+    const url = `http://127.0.0.1:${mapping.split('\n')[0]?.split(':').pop()}`;
+    await vi.waitFor(async () => expect((await fetch(`${url}/v1/me`)).status).toBe(200), { timeout: 60_000, interval: 250 });
+    return { name, url };
+  }
+
+  it('holds the extension, its migrations folder, its licence and the entry script', async () => {
+    const found = await insideImage('ls /app/ee/ask/dist/index.js /app/ee/migrations/README.md /app/ee/LICENSE /app/entrypoint.mjs');
+    expect(found.code).toBe(0);
+    expect(JSON.parse(await dockerOk(['inspect', '--format', '{{json .Config.Entrypoint}}', TAG]))).toEqual(['node', 'entrypoint.mjs']);
+  });
+
+  it('starts as Community with no profile: no AI route, community edition, and the extension is never loaded', async () => {
+    const database = await migratedDatabase();
+    const api = await startApi(database);
+    expect((await fetch(`${api.url}/v1/ai/status`)).status).toBe(404);
+    expect(await (await fetch(`${api.url}/v1/me`)).json()).toMatchObject({ edition: 'community' });
+    const logs = await docker(['logs', api.name]);
+    expect(logs.stdout + logs.stderr).not.toContain('profile.extension_loaded');
+  });
+
+  it('migrates and starts as the preview with both parts set: the AI status route answers and the edition is enterprise', async () => {
+    const file = mappingFolder({ preview: true });
+    const database = await postgres.newDatabase();
+    const migrated = await migrateWith(database, withMapping(file, 'enterprise'));
+    expect(migrated.code, migrated.stderr).toBe(0);
+    expect(await rows(database.ownerUrl, `SELECT to_regclass('public.kysely_migration_ee') IS NOT NULL AS found`)).toEqual([{ found: true }]);
+    const api = await startWith(database, withMapping(file, 'enterprise'));
+    expect(await (await fetch(`${api.url}/v1/ai/status`)).json()).toEqual({ preview: true });
+    expect(await (await fetch(`${api.url}/v1/me`)).json()).toMatchObject({ edition: 'enterprise' });
+    const logs = await docker(['logs', api.name]);
+    expect(logs.stdout + logs.stderr).toContain('profile.extension_loaded');
+  });
+
+  it.each([
+    ['the profile without ai.preview', undefined, 'enterprise', 'NEBURYX_PROFILE=enterprise is set but ai.preview: true is not set'],
+    ['ai.preview without the profile', { preview: true }, undefined, 'ai.preview: true is set in the mapping file but NEBURYX_PROFILE=enterprise is not set'],
+  ])('refuses %s, in api and in migrate, with exit 1 and the message', async (_name, ai, profile, message) => {
+    const file = mappingFolder(ai);
+    const database = await postgres.newDatabase();
+    const migrated = await migrateWith(database, withMapping(file, profile));
+    expect(migrated.code).toBe(1);
+    expect(migrated.stderr).toContain(message);
+    const api = await docker(['run', '--rm', '--add-host', `${HOST_ALIAS}:host-gateway`, '-e', `DATABASE_URL=${viaHost(database.appUrl)}`, ...withMapping(file, profile), TAG, 'api']);
+    expect(api.code).toBe(1);
+    expect(api.stderr).toContain(message);
   });
 });
 

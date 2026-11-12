@@ -177,7 +177,9 @@ const sourceSchema = z.strictObject({
   style_rules: z.array(z.unknown().refine(isPlainData, { message: 'is not plain data (text, numbers, true or false, lists and maps)' })).optional(),
 });
 
-export const mappingFileSchema = z.strictObject({ sources: z.array(sourceSchema), retention: retentionSchema.optional() });
+const aiSchema = z.strictObject({ preview: z.boolean().optional() });
+
+export const mappingFileSchema = z.strictObject({ sources: z.array(sourceSchema), retention: retentionSchema.optional(), ai: aiSchema.optional() });
 
 export type RawMappingFile = z.infer<typeof mappingFileSchema>;
 export type RawSource = z.infer<typeof sourceSchema>;

@@ -4,6 +4,7 @@ import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import pino from 'pino';
+import { stringify } from 'yaml';
 import { z } from 'zod';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import type { AppStore } from './app-store.js';
@@ -25,6 +26,10 @@ import { READINESS_LIMIT_MS } from './health/readiness.js';
 import { SHUTDOWN_TIMES } from './serve.js';
 import { createSourceTester } from './source-test/tester.js';
 import { start, type StartIo } from './start.js';
+import { registeredRoutesOf } from './app.js';
+import { routesWithoutPermission } from './permissions.js';
+import { clearRegisteredExtension, EXTENSION_LOAD_FAILED_MESSAGE, NO_EXTENSION_MESSAGE, type ExtensionLoader } from './profile/extension.js';
+import type { ExtensionRoute, ProfileExtension } from '@neburyx/contracts';
 import { LOCAL_IDENTITY, memoryAppStore, memoryStoreWith } from './testing/app-store.js';
 import { makeWebRoot } from './testing/web-root.js';
 import { makeExportDirectory } from './testing/export-directory.js';
@@ -89,6 +94,163 @@ describe('the maintenance tasks at start', () => {
     const result = await start(DATABASE_ENV, run.io);
     expect(seen).toEqual([{ tasks: [{ name: 'mine' }] }]);
     if ('app' in result) await result.app.close();
+  });
+});
+
+describe('the preview switch at start', () => {
+  const folder = mkdtempSync(join(tmpdir(), 'preview-switch-'));
+  afterAll(() => rmSync(folder, { recursive: true, force: true }));
+
+  function mappingFile(name: string, ai: unknown): string {
+    const file = join(folder, `${name}.yaml`);
+    writeFileSync(file, stringify({ sources: [], ...(ai === undefined ? {} : { ai }) }));
+    return file;
+  }
+
+  async function started(profile: string | undefined, ai: unknown, name: string) {
+    const run = io({ portOverride: 0 });
+    const result = await start({ ...DATABASE_ENV, NEBURYX_CONFIG: mappingFile(name, ai), ...(profile === undefined ? {} : { NEBURYX_PROFILE: profile }) }, run.io);
+    return { run, result };
+  }
+
+  it('starts as before with no profile and no ai section', async () => {
+    const { run, result } = await started(undefined, undefined, 'none');
+    expect(result.exitCode).toBe(0);
+    expect(run.errors).toEqual([]);
+    if (result.exitCode === 0) await result.app.close();
+  });
+
+  it('refuses the enterprise profile without ai.preview, naming both and listening on nothing', async () => {
+    const { run, result } = await started('enterprise', undefined, 'profile-only');
+    expect(result).toEqual({ exitCode: 1 });
+    expect(run.errors.join('')).toBe('invalid configuration: NEBURYX_PROFILE=enterprise is set but ai.preview: true is not set in the mapping file; set both or neither\n');
+  });
+
+  it('refuses ai.preview without the enterprise profile, naming both and listening on nothing', async () => {
+    const { run, result } = await started(undefined, { preview: true }, 'preview-only');
+    expect(result).toEqual({ exitCode: 1 });
+    expect(run.errors.join('')).toBe('invalid configuration: ai.preview: true is set in the mapping file but NEBURYX_PROFILE=enterprise is not set; set both or neither\n');
+  });
+
+  it('refuses an unknown profile value naming the key and not the value', async () => {
+    const { run, result } = await started('preview', undefined, 'bad-profile');
+    expect(result).toEqual({ exitCode: 1 });
+    expect(run.errors.join('')).toBe('invalid configuration: NEBURYX_PROFILE\n');
+  });
+
+  it('refuses an ai section with a key other than preview through the mapping diagnostics', async () => {
+    const { run, result } = await started(undefined, { model: 'x' }, 'bad-ai');
+    expect(result).toEqual({ exitCode: 1 });
+    expect(run.errors.join('')).toContain('ai');
+  });
+});
+
+describe('the enterprise extension at start', () => {
+  const folder = mkdtempSync(join(tmpdir(), 'extension-start-'));
+  afterAll(() => rmSync(folder, { recursive: true, force: true }));
+  const previewFile = join(folder, 'preview.yaml');
+  writeFileSync(previewFile, stringify({ sources: [], ai: { preview: true } }));
+  const offFile = join(folder, 'off.yaml');
+  writeFileSync(offFile, stringify({ sources: [] }));
+
+  const statusSchema = z.strictObject({ ok: z.literal(true) });
+  const route = (overrides: Partial<ExtensionRoute> = {}): ExtensionRoute => ({
+    method: 'GET',
+    url: '/v1/fake/status',
+    permission: 'principal',
+    responseSchema: statusSchema,
+    handler: async () => ({ ok: true }),
+    ...overrides,
+  });
+  const extensionWith = (...routes: ExtensionRoute[]): ProfileExtension => ({ name: 'fake', routeGroups: [{ routes }] });
+  const ON = { ...DATABASE_ENV, NEBURYX_CONFIG: previewFile, NEBURYX_PROFILE: 'enterprise' };
+  const OFF = { ...DATABASE_ENV, NEBURYX_CONFIG: offFile };
+
+  function run(extension: () => Promise<ProfileExtension>) {
+    const lines: string[] = [];
+    const calls = { loads: 0 };
+    const loader: ExtensionLoader = { load: () => (calls.loads++, extension()) };
+    const logger = pino({ level: 'info' }, { write: (line: string) => void lines.push(line) });
+    return { ...io({ portOverride: 0, logger, extensionLoader: loader }), lines, calls };
+  }
+
+  it('never calls the loader and mounts nothing when the switch is off', async () => {
+    const rig = run(async () => extensionWith(route()));
+    const result = await start(OFF, rig.io);
+    expect(result.exitCode).toBe(0);
+    if (result.exitCode !== 0) return;
+    expect(rig.calls.loads).toBe(0);
+    expect((await result.app.inject({ url: '/v1/fake/status' })).statusCode).toBe(404);
+    expect(registeredRoutesOf(result.app).some((entry) => entry.url.startsWith('/v1/fake'))).toBe(false);
+    expect(rig.lines.some((line) => line.includes('profile.extension_loaded'))).toBe(false);
+    expect((await result.app.inject({ url: '/v1/me' })).json()).toMatchObject({ edition: 'community' });
+    await result.app.close();
+  });
+
+  it('loads the extension and serves its route with the declared permission when the switch is on', async () => {
+    const rig = run(async () => extensionWith(route()));
+    const result = await start(ON, rig.io);
+    expect(result.exitCode).toBe(0);
+    if (result.exitCode !== 0) return;
+    expect(rig.calls.loads).toBe(1);
+    const answer = await result.app.inject({ url: '/v1/fake/status' });
+    expect([answer.statusCode, answer.json()]).toEqual([200, { ok: true }]);
+    expect(registeredRoutesOf(result.app).find((entry) => entry.url === '/v1/fake/status')).toMatchObject({ method: 'GET', permission: 'principal' });
+    expect(routesWithoutPermission(registeredRoutesOf(result.app))).toEqual([]);
+    expect(rig.lines.filter((line) => line.includes('profile.extension_loaded'))).toHaveLength(1);
+    expect((await result.app.inject({ url: '/v1/me' })).json()).toMatchObject({ edition: 'enterprise' });
+    await result.app.close();
+  });
+
+  it('exits 1 when the switch is on and the build has no enterprise code, listening on nothing', async () => {
+    clearRegisteredExtension();
+    const rig = io({ portOverride: 0 });
+    expect(await start(ON, rig.io)).toEqual({ exitCode: 1 });
+    expect(rig.errors.join('')).toBe(`${NO_EXTENSION_MESSAGE}\n`);
+  });
+
+  it('exits 1 without the cause of a loader that fails, listening on nothing', async () => {
+    const rig = run(async () => {
+      throw new Error('cannot find /secret/place/extension.js');
+    });
+    expect(await start(ON, rig.io)).toEqual({ exitCode: 1 });
+    expect(rig.errors.join('')).toBe(`${EXTENSION_LOAD_FAILED_MESSAGE}\n`);
+  });
+
+  it.each([['a missing permission', undefined], ['an unknown permission', 'admin']])('exits 1 naming the route that has %s', async (_name, permission) => {
+    const rig = run(async () => extensionWith(route({ permission: permission as never })));
+    expect(await start(ON, rig.io)).toEqual({ exitCode: 1 });
+    expect(rig.errors.join('')).toBe('the enterprise route GET /v1/fake/status has no known permission\n');
+  });
+
+  it.each(['/', '/healthz', '/readyz', '/v1', '/fake/status'])('exits 1 naming a route at %s, which is outside /v1/', async (url) => {
+    const rig = run(async () => extensionWith(route({ url })));
+    expect(await start(ON, rig.io)).toEqual({ exitCode: 1 });
+    expect(rig.errors.join('')).toBe(`the enterprise route GET ${url} is outside /v1/\n`);
+  });
+
+  it('logs the code of a loader failure and nothing else of it', async () => {
+    const rig = run(async () => {
+      throw Object.assign(new Error('cannot find /secret/place/extension.js'), { code: 'ERR_MODULE_NOT_FOUND' });
+    });
+    expect(await start(ON, rig.io)).toEqual({ exitCode: 1 });
+    const failed = rig.lines.filter((line) => line.includes('profile.extension_load_failed'));
+    expect(failed).toHaveLength(1);
+    expect(failed[0]).toContain('ERR_MODULE_NOT_FOUND');
+    expect(rig.lines.join('')).not.toContain('/secret/place');
+  });
+
+  it('answers INTERNAL_ERROR, and logs no body, when a reply does not match its schema', async () => {
+    const rig = run(async () => extensionWith(route({ handler: async () => ({ ok: false, secret: 'SENTINEL-VALUE' }) })));
+    const result = await start(ON, rig.io);
+    expect(result.exitCode).toBe(0);
+    if (result.exitCode !== 0) return;
+    const answer = await result.app.inject({ url: '/v1/fake/status' });
+    expect(answer.statusCode).toBe(500);
+    expect(answer.json()).toMatchObject({ error: { code: 'INTERNAL_ERROR' } });
+    expect(answer.body).not.toContain('SENTINEL-VALUE');
+    expect(rig.lines.join('')).not.toContain('SENTINEL-VALUE');
+    await result.app.close();
   });
 });
 

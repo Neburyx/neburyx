@@ -3,7 +3,7 @@ import { z } from 'zod';
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 export const roleSchema = z.enum(['administrator', 'investigator', 'viewer']);
-export const editionSchema = z.enum(['community']);
+export const editionSchema = z.enum(['community', 'enterprise']);
 export const identityModeSchema = z.enum(['none']);
 
 export const permittedSourceSchema = z.strictObject({

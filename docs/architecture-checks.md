@@ -85,9 +85,24 @@ The gate's index guard reads the schema through the system runner only, with the
 
 The checks read the code. The [input fuzz suite](fuzz-suite.md) tests the same rule at run time: it sends hostile requests and shows that every statement the executor sees is a fixed template with allowlisted names.
 
+## Community code never imports `ee/`
+
+`ee/` holds the code of the Enterprise and AI features. It is open source and ships in the one image, but Community code never depends on it: `ee/` plugs in through the contract Community defines (`ProfileExtension` in `packages/contracts`) and the registry in `services/api/src/profile/`.
+
+| Rule | Reported |
+|---|---|
+| `open-core` | A production file under `services/`, `packages/`, `apps/`, `tools/` or `deploy/` that imports a path inside `ee/`, or a package named `@neburyx/ee-*`, in any form: static, type-only, side-effect, `import()` or `require()` with a literal, `export … from`, `export *` |
+| the workspace check | A package outside `ee/` that lists an `@neburyx/ee-*` package in `dependencies`, `peerDependencies` or `optionalDependencies` |
+
+- Test files (`*.test.*`) and `services/api/src/testing/` are exempt, as in the other checks, and so is `devDependencies`: a test of the real extension in `services/api` uses `@neburyx/ee-ask` that way. A production file next to a test file is still reported.
+- One file may import `ee/`: `deploy/docker/entrypoint.mjs`, the entry script of the image. It registers the loader of the enterprise code, and the rest of `deploy/` is scanned like any other folder. The script is exempt by name, not by folder.
+- `ee/` code is scanned by the other checks that apply to it: the adapter and gate-capability checks read `ee/` (so it cannot import the Neo4j driver, `sources/`, the gate's executor or the system principal), the test container check reads it, and the domain-word check reads `ee/ask`. `ee/` code may import the types of Community packages.
+- The check reads literal specifiers. A specifier built at run time cannot be read, like the cases in [What the checks cannot see](#what-the-checks-cannot-see); review covers it.
+- Fixtures: one tree for each import form and exemption under `tools/workspace-checks/fixtures/architecture/ee-*`.
+
 ## What is scanned
 
-The adapter check reads files under `services/`, `packages/` and `apps/`.
+The adapter check reads files under `services/`, `packages/`, `apps/` and `ee/`. The [open-core rule](#community-code-never-imports-ee) reads `services/`, `packages/`, `apps/`, `tools/` and `deploy/`.
 The adapter, gate-capabilities and web-client checks do not parse a file whose text cannot hold what they look for: each has a pattern of the words a violation needs (a folder or module name, `cytoscape`, `fetch`, a query keyword) and a file holding none of them, and no escape sequence that could spell one (`\u0065`, `\x65`, an octal escape), is skipped. The real-tree tests of the first two and of the web-client check run in one file (`src/architecture/real-tree.test.ts`) that reads the tree once and parses a file for both import checks once; the limit on those tests is set from measurements, with the figures, in that file.
 Both skip `node_modules/`, `dist/`, `dist-ux/` (the build of the browser tests) and `.git/` folders and do not follow symbolic links (a scanned folder that is itself a
 link is skipped). A requested folder the repository does not

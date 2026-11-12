@@ -40,6 +40,7 @@ const DEMO_CASE = child(SOURCE, 'demo_case');
 const TABLES: readonly (readonly [string, z.ZodType])[] = [
   ['file', mappingFileSchema],
   ['retention', child(mappingFileSchema, 'retention')],
+  ['ai', child(mappingFileSchema, 'ai')],
   ['source', SOURCE],
   ['auth', child(SOURCE, 'auth')],
   ['vocabulary', child(SOURCE, 'vocabulary')],

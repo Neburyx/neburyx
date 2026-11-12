@@ -93,6 +93,7 @@ Each table lists every key the product accepts at that level. "Required" means t
 |---|---|---|
 | `sources` | yes | The list of sources. The product reads every source in the file |
 | `retention` | no | How long deleted investigations and export files are kept. It belongs to the deployment, not to a source |
+| `ai` | no | Settings of the AI features, which are off unless the deployment also sets `NEBURYX_PROFILE=enterprise` |
 
 ### Retention
 
@@ -103,6 +104,15 @@ The `retention` block is optional, and so is each key in it. Each is a whole num
 |---|---|---|
 | `deleted_investigations_days` | no | How many days after a person deletes an investigation it can still be restored. The default is 30 |
 | `exports_days` | no | How many days a file made by an export is kept. The default is 7 |
+
+### The ai section
+
+The `ai` block is optional, and so is each key in it. It belongs to the deployment, not to a source.
+
+<!-- keys: ai -->
+| Key | Required | What it does |
+|---|---|---|
+| `preview` | no | `true` switches the AI preview on. It takes effect only together with the environment variable `NEBURYX_PROFILE=enterprise`; the server refuses to start when only one of the two is set |
 
 ### A source
 

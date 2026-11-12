@@ -58,6 +58,10 @@ with "the job queue step failed after the application migrations were applied": 
 applies only what is missing and does not run your migrations twice. The history tables stay closed
 to the app role throughout.
 
+## The enterprise migrations
+
+When the AI preview is switched on (`NEBURYX_PROFILE=enterprise` together with `ai.preview: true` in the mapping file; `neburyx migrate` needs both, so it needs `NEBURYX_CONFIG` too), the command applies the migrations of the enterprise code last, after your SQL files and the job queue step. They are recorded in tables of their own, `kysely_migration_ee` and `kysely_migration_lock_ee`, closed to the app role like the others, so a new migration of the product never sorts before one already applied there. If an enterprise migration fails, the command exits 1 and names it; your SQL files and the job queue step of that run are **already committed** and stay applied, as are the enterprise migrations of earlier runs. An enterprise migration that is not applied yet but sorts before one that is applied is refused, as for the others. With the switch off the command ignores them and leaves their tables and history as they are.
+
 ## Rights on new tables
 
 The first run gives the app role read and write rights on tables and sequences that the migration
