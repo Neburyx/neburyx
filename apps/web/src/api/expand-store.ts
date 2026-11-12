@@ -35,6 +35,7 @@ export interface TypeProgress {
 }
 
 const notAskedAfterFailure = (count: number): string => `${count} selected ${count === 1 ? 'node was' : 'nodes were'} not asked after the failure.`;
+export const NOTHING_NEW = 'Nothing new: every neighbor on this page is already on the canvas';
 const notAskedAfterMasking = (count: number): string => `${count} selected ${count === 1 ? 'node was' : 'nodes were'} not asked because the masking changed.`;
 
 /** The most a page may hold until a source says otherwise; the server's `max_page` may be lower, and a refusal that names it lowers this for the source. */
@@ -65,6 +66,8 @@ export type ExpandOutcome = 'sent' | 'held' | 'stale' | 'failed';
 /** A selection that is expanded node after node: how many of its nodes are still to be asked, the held one included, and the rest of the run, which goes on once the held node has been let through. */
 export interface ExpandBatch {
   readonly waiting: number;
+  /** How many nodes the batch asks; absent for a batch of one. */
+  readonly size?: number;
   /** The person let the held node through: a heavy node of the rest goes ahead at its own bounded limit and is not held again. */
   readonly bounded?: boolean;
   readonly after: () => Promise<unknown>;
@@ -247,7 +250,7 @@ export function createExpandStore(client: ApiClient, state: ClientState, person:
     }
   };
 
-  const merge = (ref: ElementRef, answer: ExpandResponse, action: ExpansionAction, nodeKey: string): { readonly duplicates: readonly string[] } => {
+  const merge = (ref: ElementRef, answer: ExpandResponse, action: ExpansionAction, nodeKey: string): { readonly duplicates: readonly string[]; readonly nothingNew: boolean } => {
     const current = state.investigation.getState();
     const heldNodes = new Set(current.nodeRefs.map(elementKey));
     const heldEdges = new Set(current.edgeRefs.map(edgeKey));
@@ -298,7 +301,7 @@ export function createExpandStore(client: ApiClient, state: ClientState, person:
         if (note !== undefined) state.presentation.announceMove(note);
       }
     }
-    return { duplicates: [...new Set(duplicates)] };
+    return { duplicates: [...new Set(duplicates)], nothingNew: freshNodes.length === 0 && fresh.length === 0 && answer.edges.length > 0 };
   };
 
   async function run(ref: ElementRef, action: ExpansionAction): Promise<ExpandOutcome> {
@@ -426,7 +429,10 @@ export function createExpandStore(client: ApiClient, state: ClientState, person:
       write(nodeKey, { ...before, chosenPageSize: lowered, status: 'failed', failure: result.failure, types: progress, failedAction: action });
       return 'failed';
     }
-    const { duplicates } = merge(ref, result.value, action, nodeKey);
+    const { duplicates, nothingNew } = merge(ref, result.value, action, nodeKey);
+    // one note for one node: in a batch of several the nodes run one after another and each run clears the notes, so the last node's page would speak for them all
+    const ofSeveral = action.kind === 'first' && (action.batch?.size ?? 1) > 1;
+    if (nothingNew && !ofSeveral && !notes.getState().includes(NOTHING_NEW)) notes.setState([...notes.getState(), NOTHING_NEW]);
     if (duplicates.length > 0) patchDuplicates(duplicates);
     const progress = new Map(before.types);
     for (const page of result.value.pages) {

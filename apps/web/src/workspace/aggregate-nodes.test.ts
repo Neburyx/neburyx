@@ -57,6 +57,12 @@ describe('the aggregate nodes of the loaded graph', () => {
     expect(drawn[1]?.spoken).toBe('type-c: 0 of ≥ 3,300 relationships loaded, not all loaded');
   });
 
+  it('counts a relationship from the node to itself at both of its ends in the figure of its own type, as the degree total counts it', () => {
+    const selfLoop: GraphEdge = { ...edgeTo('self', 'type-a'), to: anchor, ref: { sourceId: 'a', type: 'link-a', from: 'type-a', to: 'type-a', stableId: 'self' } };
+    const drawn = aggregateNodesOf(input({ graph: graph([edgeTo('r1'), selfLoop]), preview: previewOf({ byNeighborType: [{ entityType: 'type-a', count: count(5, 'exact') }] }), mapped: () => ['type-a'] }));
+    expect(drawn.map((item) => item.figures)).toEqual(['2 / 5']);
+  });
+
   it('uses the entity type\'s display name as the profile gives it, without pluralising', () => {
     const drawn = aggregateNodesOf(input({ graph: graph([edgeTo('r1', 'type-a')]), preview: previewOf({ byNeighborType: [{ entityType: 'type-a', count: count(5, 'exact') }] }), mapped: () => [] }));
     expect(drawn.map((item) => item.label)).toEqual(['TYPE-A · 1 / 5']);

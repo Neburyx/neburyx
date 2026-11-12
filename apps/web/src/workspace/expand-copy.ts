@@ -14,7 +14,7 @@ export const RETRY = 'Retry';
 export const START_OVER = 'Start over for this type';
 
 export const pageNote = (pageSize: number | undefined): string => `Counts show their quality. Loads the first ${pageSize === undefined ? 'page' : pageSize} per type.`;
-export const expandLabel = (count: number): string => `Expand ${count} ${count === 1 ? 'neighbor' : 'neighbors'}`;
+export const expandLabel = (count: number, pageSize: number | undefined): string => `Expand ${count} ${count === 1 ? 'type' : 'types'}${pageSize === undefined ? '' : ` (up to ${pageSize} each)`}`;
 export const loadMoreLabel = (pageSize: number | undefined): string => `Load ${pageSize === undefined ? 'more' : `${pageSize} more`}`;
 export const loadedText = (count: number): string => `${count.toLocaleString('en-US')} loaded`;
 export const PAGED_NOTE = 'More can be loaded page by page.';

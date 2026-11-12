@@ -1,3 +1,4 @@
+import { expandLabel } from './expand-copy.js';
 import { act, cleanup, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { DegreePreview, ExpandRequest, ExpandResponse, GraphEdge } from '@neburyx/contracts';
@@ -123,7 +124,7 @@ describe('the Expand neighbors and Expand by neighbor type entries of the node m
     await userEvent.setup().click(byTypeRow());
     await answerPreview(previews[0]);
     expect(screen.getByText('Counts show their quality. Loads the first 10 per type.')).not.toBeNull();
-    await userEvent.setup().click(within(submenu()).getByRole('button', { name: 'Expand 3 neighbors' }));
+    await userEvent.setup().click(within(submenu()).getByRole('button', { name: 'Expand 3 types (up to 10 each)' }));
     expect(expansions[0]?.body.limit).toBe(10);
   });
 
@@ -137,7 +138,7 @@ describe('the Expand neighbors and Expand by neighbor type entries of the node m
       ['type-c≥ 500 · lower bound', 'true'],
       ['type-dno count', 'true'],
     ]);
-    expect(within(submenu()).getByRole('button', { name: 'Expand 3 neighbors' })).not.toBeNull();
+    expect(within(submenu()).getByRole('button', { name: 'Expand 3 types (up to 25 each)' })).not.toBeNull();
   });
 
   it('changes the ticks with Clear, Select all and Invert selection, and disables the button when none is ticked', async () => {
@@ -147,13 +148,13 @@ describe('the Expand neighbors and Expand by neighbor type entries of the node m
     await answerPreview(previews[0]);
     await user.click(within(submenu()).getByRole('button', { name: 'Clear' }));
     expect(within(submenu()).getAllByRole('checkbox').every((row) => row.getAttribute('aria-checked') === 'false')).toBe(true);
-    expect((within(submenu()).getByRole('button', { name: 'Expand 0 neighbors' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((within(submenu()).getByRole('button', { name: 'Expand 0 types (up to 25 each)' }) as HTMLButtonElement).disabled).toBe(true);
     await user.click(checkbox('type-c'));
     await user.click(within(submenu()).getByRole('button', { name: 'Invert selection' }));
     expect(within(submenu()).getAllByRole('checkbox').map((row) => row.getAttribute('aria-checked'))).toEqual(['true', 'false', 'true']);
-    expect(within(submenu()).getByRole('button', { name: 'Expand 2 neighbors' })).not.toBeNull();
+    expect(within(submenu()).getByRole('button', { name: 'Expand 2 types (up to 25 each)' })).not.toBeNull();
     await user.click(within(submenu()).getByRole('button', { name: 'Select all' }));
-    expect(within(submenu()).getByRole('button', { name: 'Expand 3 neighbors' })).not.toBeNull();
+    expect(within(submenu()).getByRole('button', { name: 'Expand 3 types (up to 25 each)' })).not.toBeNull();
   });
 
   it('says more can be loaded page by page on a row whose count is a bound or unknown, and not on an exact one', async () => {
@@ -178,7 +179,7 @@ describe('the Expand neighbors and Expand by neighbor type entries of the node m
     await userEvent.setup().click(byTypeRow());
     await answerPreview(previews[0], previewOf({ byNeighborType: [{ entityType: 'kind-b', count: count(12, 'exact') }, { entityType: 'type-c', count: count(10_000, 'estimated') }] }));
     expect((checkbox('type-c') as HTMLButtonElement).disabled).toBe(false);
-    expect(within(submenu()).getByRole('button', { name: 'Expand 2 neighbors' })).not.toBeNull();
+    expect(within(submenu()).getByRole('button', { name: 'Expand 2 types (up to 25 each)' })).not.toBeNull();
   });
 
   it('expands an estimated row as it expands a lower-bound one: one request names its type, by mouse and by keyboard', async () => {
@@ -187,7 +188,7 @@ describe('the Expand neighbors and Expand by neighbor type entries of the node m
     const user = userEvent.setup();
     await user.click(byTypeRow());
     await answerPreview(first.previews[0], estimated);
-    await user.click(within(submenu()).getByRole('button', { name: 'Expand 1 neighbor' }));
+    await user.click(within(submenu()).getByRole('button', { name: 'Expand 1 type (up to 25 each)' }));
     expect(first.expansions[0]?.body).toMatchObject({ neighborTypes: ['kind-b'] });
     cleanup();
     const second = opened();
@@ -196,7 +197,7 @@ describe('the Expand neighbors and Expand by neighbor type entries of the node m
     checkbox('kind-b').focus();
     await user.keyboard(' ');
     await user.keyboard(' ');
-    within(submenu()).getByRole('button', { name: 'Expand 1 neighbor' }).focus();
+    within(submenu()).getByRole('button', { name: 'Expand 1 type (up to 25 each)' }).focus();
     await user.keyboard('{Enter}');
     expect(second.expansions[0]?.body).toMatchObject({ neighborTypes: ['kind-b'] });
   });
@@ -208,7 +209,7 @@ describe('the Expand neighbors and Expand by neighbor type entries of the node m
     const page = (cursor: string | undefined) => response({ pages: [{ neighborType: 'kind-b', returned: 1, hasMore: cursor !== undefined, ...(cursor === undefined ? {} : { nextCursor: cursor }), matchingTotal: { quality: 'unknown', scope: 'x' } }] });
     await user.click(byTypeRow());
     await answerPreview(previews[0], estimated);
-    await user.click(within(submenu()).getByRole('button', { name: 'Expand 1 neighbor' }));
+    await user.click(within(submenu()).getByRole('button', { name: 'Expand 1 type (up to 25 each)' }));
     await act(async () => expansions[0]?.answer({ ok: true, value: page('v1.one.mac') }));
     const reopen = async () => {
       view.rightClick(rightClick('n1'));
@@ -264,7 +265,7 @@ describe('the Expand neighbors and Expand by neighbor type entries of the node m
     await user.click(byTypeRow());
     await answerPreview(previews[0]);
     expect(within(submenu()).getAllByRole('checkbox').map((row) => [row.textContent?.slice(0, 6), row.getAttribute('aria-checked')])).toEqual([['kind-b', 'true'], ['type-c', 'false'], ['type-d', 'true']]);
-    await user.click(within(submenu()).getByRole('button', { name: 'Expand 2 neighbors' }));
+    await user.click(within(submenu()).getByRole('button', { name: 'Expand 2 types (up to 25 each)' }));
     expect(expansions[0]?.body.neighborTypes).toEqual(['kind-b', 'type-d']);
     expect(expansions[0]?.body.relTypes).toBeUndefined();
   });
@@ -277,7 +278,7 @@ describe('the Expand neighbors and Expand by neighbor type entries of the node m
     await user.click(byTypeRow());
     await answerPreview(previews[0]);
     expect(within(submenu()).getAllByRole('checkbox').every((row) => row.getAttribute('aria-checked') === 'true')).toBe(true);
-    await user.click(within(submenu()).getByRole('button', { name: 'Expand 3 neighbors' }));
+    await user.click(within(submenu()).getByRole('button', { name: 'Expand 3 types (up to 25 each)' }));
     expect(expansions).toHaveLength(0);
     expect(state.presentation.view.getState().supernodePanel?.key).toBe(nodeKey('n1'));
     expect(expand.notes.getState()).toEqual(['Filters leave no relationship to expand for this entity. Choose types here.']);
@@ -290,7 +291,7 @@ describe('the Expand neighbors and Expand by neighbor type entries of the node m
     await answerPreview(previews[0]);
     await user.click(checkbox('type-c'));
     await user.click(checkbox('type-d'));
-    await user.click(within(submenu()).getByRole('button', { name: 'Expand 1 neighbor' }));
+    await user.click(within(submenu()).getByRole('button', { name: 'Expand 1 type (up to 25 each)' }));
     expect(expansions).toHaveLength(1);
     expect(expansions[0]?.body).toEqual({ sourceId: 'a', ref: { entityType: 'type-a', stableId: 'n1' }, neighborTypes: ['kind-b'], direction: 'both' });
     expect(screen.queryByRole('menu')).toBeNull();
@@ -321,7 +322,7 @@ describe('the Expand neighbors and Expand by neighbor type entries of the node m
     const user = userEvent.setup();
     await user.click(byTypeRow());
     await answerPreview(previews[0]);
-    await user.click(within(submenu()).getByRole('button', { name: 'Expand 3 neighbors' }));
+    await user.click(within(submenu()).getByRole('button', { name: 'Expand 3 types (up to 25 each)' }));
     await act(async () => expansions[0]?.answer({ ok: false, failure: { code: 'QUERY_TIMEOUT', message: 'x', retryable: true, traceId: 'tr-1' } }));
     expect(state.loadedGraph().nodes).toHaveLength(2);
     view.rightClick(rightClick('n1'));
@@ -336,7 +337,7 @@ describe('the Expand neighbors and Expand by neighbor type entries of the node m
     const user = userEvent.setup();
     await user.click(byTypeRow());
     await answerPreview(previews[0]);
-    await user.click(within(submenu()).getByRole('button', { name: 'Expand 3 neighbors' }));
+    await user.click(within(submenu()).getByRole('button', { name: 'Expand 3 types (up to 25 each)' }));
     await act(async () => expansions[0]?.answer({ ok: false, failure: { code: 'SOURCE_UNAVAILABLE', message: 'x', retryable: false, traceId: 'tr-9', details: { reason: 'index-failed' } } }));
     view.rightClick(rightClick('n1'));
     await user.click(byTypeRow());
@@ -531,5 +532,14 @@ describe('what an expansion does to the loaded graph', () => {
     expect(state.loadedGraph().nodes).toHaveLength(3);
     expect(expand.of(ref1).duplicates).toBe(false);
     expect(expand.of(ref1).types.get('kind-b')).toMatchObject({ restartNeeded: false, hasMore: true });
+  });
+});
+
+describe('the label of the Expand button', () => {
+  it('says how many types it loads and how many neighbors at most of each, and not a count of neighbors', () => {
+    expect(expandLabel(4, 25)).toBe('Expand 4 types (up to 25 each)');
+    expect(expandLabel(1, 25)).toBe('Expand 1 type (up to 25 each)');
+    expect(expandLabel(0, 25)).toBe('Expand 0 types (up to 25 each)');
+    expect(expandLabel(4, undefined)).toBe('Expand 4 types');
   });
 });

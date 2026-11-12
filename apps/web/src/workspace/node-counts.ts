@@ -1,8 +1,8 @@
-import type { Count, DegreePreview, ElementRef } from '@neburyx/contracts';
+import type { Count, DegreePreview, ElementRef, GraphEdge } from '@neburyx/contracts';
 import type { LoadedGraph } from '../state/loaded-graph.js';
+import { endContributionOf, LOADED_SCOPE } from './loaded-ends.js';
 import { formatNumber } from './scope-text.js';
 
-const LOADED_SCOPE = 'loaded in this view';
 const REMAINDER_SCOPE = 'not loaded';
 const DIRECTIONS_SCOPE = 'in every direction';
 
@@ -39,14 +39,15 @@ export function loadedOf(graph: LoadedGraph, node: ElementRef): LoadedByType {
   const parts = new Map<string, Count[]>();
   const all: Count[] = [];
   for (const edge of graph.edges) {
-    if (edge.semantics !== 'stored') continue;
     const fromHere = sameNode(edge.from, node);
     const toHere = sameNode(edge.to, node);
     if (!fromHere && !toHere) continue;
     const other = fromHere ? edge.to : edge.from;
-    const contribution: Count = 'aggregate' in edge.ref ? (edge.memberCount ?? { quality: 'unknown', scope: LOADED_SCOPE }) : { value: 1, quality: 'exact', scope: LOADED_SCOPE };
-    parts.set(other.entityType, [...(parts.get(other.entityType) ?? []), contribution]);
-    all.push(contribution);
+    const contribution = endContributionOf(edge);
+    if (contribution === undefined) continue;
+    const ends = fromHere && toHere ? [contribution, contribution] : [contribution];
+    parts.set(other.entityType, [...(parts.get(other.entityType) ?? []), ...ends]);
+    all.push(...ends);
   }
   return { byType: new Map([...parts].map(([type, held]) => [type, sumOf(held)])), total: sumOf(all) };
 }
@@ -101,7 +102,15 @@ export function countNumber(count: Count): string {
 /** The scope line of an entity's sourced neighbors: what is loaded of the source's total and what is not. Both numbers keep their quality; with either missing no number is drawn. */
 export function scopeLineText(total: Count | undefined, loaded: Count): string {
   if (total?.value === undefined || loaded.value === undefined) return 'not loaded: no count';
-  return `${countNumber(loaded)} of ${countNumber(total)} sourced neighbors on canvas · ${notLoadedText(notLoadedOf(total, loaded))}`;
+  return `${countNumber(loaded)} of ${countNumber(total)} sourced neighbors on canvas · ${remainderText(total, loaded)}`;
+}
+
+const LOWER_BOUND_REASON = 'not loaded: no count while the loaded count is a lower bound';
+
+/** The remainder when it can be named; when it cannot because the loaded count is only a floor, that is said, so the sentence does not read as a contradiction of the rows above it. */
+function remainderText(total: Count, loaded: Count): string {
+  const left = notLoadedOf(total, loaded);
+  return left === undefined && loaded.quality === 'lowerBound' ? LOWER_BOUND_REASON : notLoadedText(left);
 }
 
 /** The counts of the same relationship type in the directions a degree preview lists, as one: no number when any has none, estimated when any is estimated, else a lower bound when any is, else exact. Nothing for none. */
@@ -123,9 +132,10 @@ export function combineDegreeCounts(counts: readonly Count[]): Count | undefined
 export function loadedByRelationshipType(graph: LoadedGraph, node: ElementRef): ReadonlyMap<string, Count> {
   const parts = new Map<string, Count[]>();
   for (const edge of graph.edges) {
-    if (edge.semantics !== 'stored' || (!sameNode(edge.from, node) && !sameNode(edge.to, node))) continue;
-    const contribution: Count = 'aggregate' in edge.ref ? (edge.memberCount ?? { quality: 'unknown', scope: LOADED_SCOPE }) : { value: 1, quality: 'exact', scope: LOADED_SCOPE };
-    parts.set(edge.type, [...(parts.get(edge.type) ?? []), contribution]);
+    if (!sameNode(edge.from, node) && !sameNode(edge.to, node)) continue;
+    const contribution = endContributionOf(edge);
+    if (contribution === undefined) continue;
+    parts.set(edge.type, [...(parts.get(edge.type) ?? []), ...(sameNode(edge.from, node) && sameNode(edge.to, node) ? [contribution, contribution] : [contribution])]);
   }
   return new Map([...parts].map(([type, held]) => [type, sumOf(held)]));
 }

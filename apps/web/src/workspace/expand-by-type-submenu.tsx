@@ -172,7 +172,7 @@ function ChecklistFor({ node, close }: { readonly node: ElementRef; readonly clo
               close();
             }}
           >
-            {expandLabel(ticked.length)}
+            {expandLabel(ticked.length, pageSize)}
           </button>
         </>
       )}

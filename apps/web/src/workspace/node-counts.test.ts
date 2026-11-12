@@ -2,6 +2,8 @@ import type { Count, GraphEdge } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
 import type { LoadedGraph } from '../state/loaded-graph.js';
 import { ref } from '../state/test-data.js';
+import { placeholderEdge } from '../draft/unmapped.js';
+import { coverageEntitiesOf } from './coverage-input.js';
 import { combineDegreeCounts, isSupernode, loadedByRelationshipType, loadedCountText, loadedOf, notLoadedOf, notLoadedText, scopeLineText } from './node-counts.js';
 import { count, previewOf } from './supernode-kit.js';
 
@@ -33,14 +35,14 @@ describe('the loaded count of a node', () => {
     expect(loaded.total).toMatchObject({ value: 8, quality: 'exact' });
   });
 
-  it('leaves out derived and unknown-origin relationships and those of other nodes, and counts a self-relationship once', () => {
+  it('leaves out derived and unknown-origin relationships and those of other nodes, and counts a self-relationship at both of its ends', () => {
     const other = ref('a', 'type-a', 'n2');
     const loaded = loadedOf(
       graphOf([plain('r1', 'b1', 'kind-b', { semantics: 'derived' }), plain('r2', 'b2', 'kind-b', { semantics: 'unknown' }), plain('r3', 'b3', 'kind-b', { from: other }), plain('r4', 'n1', 'type-a', { to: node })]),
       node,
     );
     expect(loaded.byType.has('kind-b')).toBe(false);
-    expect(loaded.byType.get('type-a')).toMatchObject({ value: 1, quality: 'exact' });
+    expect(loaded.byType.get('type-a')).toMatchObject({ value: 2, quality: 'exact' });
   });
 
   it.each([
@@ -131,7 +133,7 @@ describe('the scope line of an entity\'s sourced neighbors', () => {
   const exact = (value: number): Count => ({ value, quality: 'exact', scope: 'x' });
   it('keeps the quality of the loaded and of the total, and draws no number when either has none', () => {
     expect(scopeLineText(exact(22), exact(4))).toBe('4 of 22 sourced neighbors on canvas · 18 not loaded');
-    expect(scopeLineText(exact(22), { value: 4, quality: 'lowerBound', scope: 'x' })).toBe('≥ 4 of 22 sourced neighbors on canvas · not loaded: no count');
+    expect(scopeLineText(exact(22), { value: 4, quality: 'lowerBound', scope: 'x' })).toBe('≥ 4 of 22 sourced neighbors on canvas · not loaded: no count while the loaded count is a lower bound');
     expect(scopeLineText(exact(22), { value: 4, quality: 'estimated', scope: 'x' })).toBe('~ 4 of 22 sourced neighbors on canvas · not loaded: no count');
     expect(scopeLineText({ value: 30, quality: 'lowerBound', scope: 'x' }, exact(4))).toBe('4 of ≥ 30 sourced neighbors on canvas · ≥ 26 not loaded (lower bound)');
     expect(scopeLineText({ quality: 'unknown', scope: 'x' }, exact(4))).toBe('not loaded: no count');
@@ -161,5 +163,78 @@ describe('the loaded count by relationship type', () => {
     expect([...counted.keys()].sort()).toEqual(['OWNS', 'SENT']);
     expect(counted.get('OWNS')).toMatchObject({ value: 2, quality: 'exact' });
     expect(counted.get('SENT')).toMatchObject({ value: 7, quality: 'lowerBound' });
+  });
+});
+
+describe('the relationship ends loaded at a node', () => {
+  const selfLoop = (id: string): GraphEdge => ({ ...plain(id, 'n1', 'type-a'), to: node, ref: { sourceId: 'a', type: 'link-a', from: 'type-a', to: 'type-a', stableId: id } });
+
+  it('counts a relationship from the node to itself at both of its ends, as the degree total does, in the total, by neighbor type and by relationship type', () => {
+    const edges = [plain('r1', 'b1'), plain('r2', 'b2'), selfLoop('r3')];
+    const loaded = loadedOf(graphOf(edges), node);
+    expect(loaded.total).toEqual({ value: 4, quality: 'exact', scope: 'loaded in this view' });
+    expect(loaded.byType.get('type-a')?.value).toBe(2);
+    expect(loadedByRelationshipType(graphOf(edges), node).get('link-a')?.value).toBe(4);
+  });
+
+  it('says 14 not loaded, and not 15, for an exact total of 47 with 31 neighbors and one self-relationship loaded', () => {
+    const edges = [...Array.from({ length: 31 }, (_unused, at) => plain(`r${at}`, `b${at}`)), selfLoop('self')];
+    const loaded = loadedOf(graphOf(edges), node).total;
+    expect(loaded.value).toBe(33);
+    expect(scopeLineText({ value: 47, quality: 'exact', scope: 'x' }, loaded)).toBe('33 of 47 sourced neighbors on canvas · 14 not loaded');
+  });
+
+  it('agrees with the loaded count the coverage request sends for the node, in value and quality, for every kind of relationship', () => {
+    const lowerBoundAggregate = aggregate('b5', count(7, 'lowerBound'));
+    const { memberCount: _dropped, ...withoutCount } = aggregate('b6', count(1, 'exact'));
+    const noCountAggregate: GraphEdge = withoutCount;
+    const selfAggregate: GraphEdge = { ...aggregate('b4', count(2, 'exact')), to: node, ref: { sourceId: 'a', aggregate: { type: 'link-a', from: node, to: node } } };
+    const cases: readonly [string, GraphEdge[]][] = [
+      ['plain relationships and a self-relationship', [plain('r1', 'b1'), plain('r2', 'b2'), selfLoop('r3')]],
+      ['an exact aggregate', [plain('r1', 'b1'), aggregate('b3', count(5, 'exact'))]],
+      ['an estimated aggregate', [plain('r1', 'b1'), aggregate('b3', count(5, 'estimated'))]],
+      ['a self-aggregate', [plain('r1', 'b1'), selfAggregate]],
+      ['a lower-bound aggregate', [plain('r1', 'b1'), lowerBoundAggregate]],
+      ['an aggregate with no member count', [plain('r1', 'b1'), noCountAggregate]],
+      ['a derived relationship, which neither counts', [plain('r1', 'b1'), plain('r2', 'b2', 'kind-b', { semantics: 'derived' })]],
+      ['a relationship of unknown origin, which neither counts', [plain('r1', 'b1'), plain('r2', 'b2', 'kind-b', { semantics: 'unknown' })]],
+      ['a draft relationship that is no longer mapped, which neither counts', [plain('r1', 'b1'), placeholderEdge('a', { t: 'link-a', from: { t: 'type-a', id: 'n1' }, to: { t: 'kind-b', id: 'b7' }, id: 'gone' })]],
+    ];
+    for (const [name, edges] of cases) {
+      const nodes = [node, ...['b1', 'b2', 'b3', 'b4', 'b5', 'b6', 'b7'].map((id) => ref('a', 'kind-b', id))].map((entityRef) => ({ ref: entityRef, display: { title: 't', type: entityRef.entityType }, properties: [], qualityFlags: [], provenanceRefs: [], authorization: { canInspect: true, canExport: true } }));
+      const graph: LoadedGraph = { ...graphOf(edges), nodes };
+      const sent = coverageEntitiesOf(graph).find((entity) => entity.ref.stableId === node.stableId);
+      const shown = loadedOf(graph, node).total;
+      const quality = shown.quality === 'lowerBound' ? 'unknown' : shown.quality;
+      expect(sent?.loadedQuality, name).toBe(quality);
+      if (quality !== 'unknown') expect(sent?.loadedRelationships, name).toBe(shown.value);
+    }
+  });
+});
+
+describe('the sentence when the loaded count is a lower bound', () => {
+  const exact = (value: number): Count => ({ value, quality: 'exact', scope: 'x' });
+  const floor = (value: number): Count => ({ value, quality: 'lowerBound', scope: 'x' });
+  const reason = 'not loaded: no count while the loaded count is a lower bound';
+
+  it('names why there is no remainder, whatever the total, instead of saying only that there is no count', () => {
+    expect(scopeLineText(exact(25), floor(24))).toBe(`≥ 24 of 25 sourced neighbors on canvas · ${reason}`);
+    expect(scopeLineText(exact(25), floor(26))).toBe(`≥ 26 of 25 sourced neighbors on canvas · ${reason}`);
+    expect(scopeLineText({ value: 25, quality: 'lowerBound', scope: 'x' }, floor(24))).toBe(`≥ 24 of ≥ 25 sourced neighbors on canvas · ${reason}`);
+    expect(scopeLineText({ value: 25, quality: 'estimated', scope: 'x' }, floor(24))).toBe(`≥ 24 of ~ 25 sourced neighbors on canvas · ${reason}`);
+  });
+
+  it('keeps "no count" without the reason when the loaded count is estimated or has no value, and leaves the remainder text of the node card as it was', () => {
+    expect(scopeLineText(exact(22), { value: 4, quality: 'estimated', scope: 'x' })).toBe('~ 4 of 22 sourced neighbors on canvas · not loaded: no count');
+    expect(scopeLineText(exact(25), { quality: 'unknown', scope: 'x' })).toBe('not loaded: no count');
+    expect(notLoadedText(notLoadedOf(exact(25), floor(24)))).toBe('not loaded: no count');
+  });
+
+  it('is a lower bound when an aggregate has no member count or a lower-bound one, while the rows of the plain relationship types stay exact', () => {
+    const edges = [plain('r1', 'b1'), aggregate('c1', { quality: 'lowerBound', value: 3, scope: 'x' }, { type: 'link-c' })];
+    const loaded = loadedOf(graphOf(edges), node);
+    expect(loaded.total.quality).toBe('lowerBound');
+    expect(loaded.byType.get('kind-b')?.quality).toBe('lowerBound');
+    expect(loadedByRelationshipType(graphOf(edges), node).get('link-a')).toMatchObject({ value: 1, quality: 'exact' });
   });
 });

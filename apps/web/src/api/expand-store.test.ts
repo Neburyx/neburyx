@@ -4,7 +4,7 @@ import { createClientState } from '../state/client-state.js';
 import { edgeRef, node, ref } from '../state/test-data.js';
 import { loadGraph } from '../workspace/context-menu-kit.js';
 import type { ApiResult } from './client.js';
-import { PAGE_CEILING, createExpandStore } from './expand-store.js';
+import { NOTHING_NEW, PAGE_CEILING, createExpandStore } from './expand-store.js';
 import { fakeClient } from './fake-client.js';
 
 const anchor = ref('a', 'type-a', 'n1');
@@ -123,5 +123,45 @@ describe('relationship types on an expansion', () => {
     await store.expand(anchor, ['kind-b'], ['link-a']);
     await store.expand(anchor, ['kind-b']);
     expect(store.relTypesOf(anchor, 'kind-b')).toEqual(['link-a']);
+  });
+});
+
+describe('a load that finds nothing new', () => {
+  it('says so when every entity and relationship of the answer is already on the canvas, and not when the answer adds one', async () => {
+    const { store } = rig((_, at) => ok(answer('same', at < 3 ? 'v1.c.m' : undefined)));
+    await store.expand(anchor, ['kind-b']);
+    expect(store.notes.getState()).toEqual([]);
+    await store.loadMore(anchor, 'kind-b');
+    expect(store.notes.getState()).toEqual([NOTHING_NEW]);
+    expect(store.of(anchor).types.get('kind-b')?.hasMore).toBe(true);
+    expect(NOTHING_NEW).toBe('Nothing new: every neighbor on this page is already on the canvas');
+  });
+
+  it('does not say it for a node with no relationships, whose answer holds only the node itself, and clears the note when the next load starts', async () => {
+    const empty: ExpandResponse = { ...answer('x'), nodes: [nodeOf('type-a', 'n1')], edges: [] };
+    const { store } = rig((_, at) => ok(at === 1 ? answer('same', 'v1.c.m') : at === 2 ? answer('same', 'v1.c.m') : empty));
+    await store.expand(anchor, ['kind-b']);
+    await store.loadMore(anchor, 'kind-b');
+    expect(store.notes.getState()).toEqual([NOTHING_NEW]);
+    await store.loadMore(anchor, 'kind-b');
+    expect(store.notes.getState()).toEqual([]);
+  });
+
+  it('says nothing for the nodes of a batch of several, even when the last one finds nothing new after an earlier one added something', async () => {
+    const { store } = rig(() => ok(answer('first')));
+    const batch = { waiting: 2, size: 2, after: () => Promise.resolve() };
+    await store.expand(anchor, ['kind-b'], undefined, batch);
+    await store.expand(anchor, ['kind-b'], undefined, { ...batch, waiting: 1 });
+    expect(store.notes.getState()).toEqual([]);
+  });
+
+  it('says it for a batch of one node, as the selection action sends it, and keeps the note about the filters that was shown with the load', async () => {
+    const { store } = rig(() => ok(answer('first')));
+    const batch = { waiting: 1, size: 1, after: () => Promise.resolve() };
+    await store.expand(anchor, ['kind-b'], undefined, batch);
+    const pending = store.expand(anchor, ['kind-b'], undefined, batch);
+    store.report('Narrowed by the filters.');
+    await pending;
+    expect(store.notes.getState()).toEqual(['Narrowed by the filters.', NOTHING_NEW]);
   });
 });

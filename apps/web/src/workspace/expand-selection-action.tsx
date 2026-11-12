@@ -53,7 +53,7 @@ export function ExpandSelectionAction() {
           for (let at = index; at < askable.length; at += 1) {
             const item = askable[at];
             if (item === undefined) return;
-            const outcome = await current.store?.expand(item.ref, item.types, item.relTypes, { waiting: askable.length - at, ...(bounded ? { bounded } : {}), after: () => from(at + 1, true) });
+            const outcome = await current.store?.expand(item.ref, item.types, item.relTypes, { waiting: askable.length - at, size: askable.length, ...(bounded ? { bounded } : {}), after: () => from(at + 1, true) });
             if (outcome === 'failed') failed += 1;
             if (outcome === 'held') {
               // the warning replaces the banner an earlier failure of this run may have shown, so it is told here

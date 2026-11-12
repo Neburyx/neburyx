@@ -1,7 +1,8 @@
-import type { CoverageEntity, GraphEdge } from '@neburyx/contracts';
+import type { Count, CoverageEntity } from '@neburyx/contracts';
 import { isUnmappedEdge, isUnmappedNode } from '../draft/unmapped.js';
 import { elementKey } from '../state/keys.js';
 import type { LoadedGraph } from '../state/loaded-graph.js';
+import { endContributionOf } from './loaded-ends.js';
 
 type LoadedQuality = CoverageEntity['loadedQuality'];
 
@@ -14,16 +15,9 @@ const STRENGTH: readonly LoadedQuality[] = ['exact', 'estimated', 'unknown'];
 
 const weakest = (a: LoadedQuality, b: LoadedQuality): LoadedQuality => (STRENGTH.indexOf(a) >= STRENGTH.indexOf(b) ? a : b);
 
-function qualityOfMembers(members: GraphEdge['memberCount']): LoadedQuality {
-  if (members?.quality === 'exact') return 'exact';
-  return members?.quality === 'estimated' && members.value !== undefined ? 'estimated' : 'unknown';
-}
-
-/** What an edge puts at each of its ends: 1 for a stored relationship, its member count for an aggregate (as sure as that count is, and not known for a lower bound or no value), and nothing for a derived edge, which is not stored. */
-function loadedBy(edge: GraphEdge): Loaded | undefined {
-  if ('stableId' in edge.ref) return { relationships: 1, quality: 'exact' };
-  if (!('aggregate' in edge.ref)) return undefined;
-  return { relationships: edge.memberCount?.value ?? 0, quality: qualityOfMembers(edge.memberCount) };
+function qualityOfPut(put: Count): LoadedQuality {
+  if (put.quality === 'exact' && put.value !== undefined) return 'exact';
+  return put.quality === 'estimated' && put.value !== undefined ? 'estimated' : 'unknown';
 }
 
 /** Each loaded entity with the relationships loaded at it, once for each end that is at it, so a self-loop counts twice. */
@@ -31,12 +25,13 @@ export function coverageEntitiesOf(graph: LoadedGraph): readonly CoverageEntity[
   const loaded = new Map<string, Loaded>();
   for (const edge of graph.edges) {
     if (isUnmappedEdge(edge)) continue;
-    const put = loadedBy(edge);
+    const put = endContributionOf(edge);
     if (put === undefined) continue;
+    const quality = qualityOfPut(put);
     for (const end of [edge.from, edge.to]) {
       const key = elementKey(end);
       const held = loaded.get(key);
-      loaded.set(key, { relationships: (held?.relationships ?? 0) + put.relationships, quality: weakest(held?.quality ?? 'exact', put.quality) });
+      loaded.set(key, { relationships: (held?.relationships ?? 0) + (put.value ?? 0), quality: weakest(held?.quality ?? 'exact', quality) });
     }
   }
   return graph.nodes.filter((node) => !isUnmappedNode(node)).map((node) => {

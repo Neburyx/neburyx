@@ -80,7 +80,7 @@ describe('the Relationships tab: loaded counts per relationship type', () => {
   it('keeps the quality of the loaded and the total in the scope line and prints no not-loaded number it cannot know', async () => {
     const rig = await openRelationships([aggregateEdge('n1', 'n2', count(4, 'lowerBound'))]);
     await answerPreview(rig, previewOf({ total: count(22, 'lowerBound') }));
-    expect(scope()).toBe('≥ 4 of ≥ 22 sourced neighbors on canvas · not loaded: no count');
+    expect(scope()).toBe('≥ 4 of ≥ 22 sourced neighbors on canvas · not loaded: no count while the loaded count is a lower bound');
   });
 
   it('prints no not-loaded number when more is loaded than the total says', async () => {
