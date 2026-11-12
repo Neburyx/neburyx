@@ -1,6 +1,7 @@
 import { access, constants, stat } from 'node:fs/promises';
-import { AI_DEFAULTS, type AiSettings, type ConfigureOutcome } from '@neburyx/contracts';
+import { AI_DEFAULTS, type AiMappingView, type AiSettings, type ConfigureOutcome } from '@neburyx/contracts';
 import { buildPromptRegistry, type PromptRegistry } from './prompts.js';
+import { buildPropertyRules, type PropertyRules } from './rules.js';
 
 export type KeyReference = { readonly kind: 'env'; readonly name: string } | { readonly kind: 'file'; readonly path: string };
 
@@ -10,6 +11,7 @@ export interface AskConfiguration {
   readonly key: KeyReference;
   readonly limits: { readonly timeoutMs: number; readonly maxRetries: number; readonly maxTokens: number };
   readonly registry: PromptRegistry;
+  readonly rules: PropertyRules;
 }
 
 const GROUP_AND_OTHER_BITS = 0o077;
@@ -49,7 +51,7 @@ function referenceOf(key: NonNullable<AiSettings['key']>): KeyReference {
 export type Configuration = { readonly outcome: ConfigureOutcome; readonly configuration?: AskConfiguration };
 
 /** Checks the settings of the AI preview without reading the key, and builds what the routes of the extension use. */
-export async function configureAsk(settings: AiSettings, env: Readonly<Record<string, string | undefined>>): Promise<Configuration> {
+export async function configureAsk(settings: AiSettings, env: Readonly<Record<string, string | undefined>>, view?: AiMappingView): Promise<Configuration> {
   const problems: string[] = [];
   if (settings.provider === undefined) problems.push(requiredProblem('ai.provider'));
   if (settings.model === undefined) problems.push(requiredProblem('ai.model'));
@@ -57,12 +59,14 @@ export async function configureAsk(settings: AiSettings, env: Readonly<Record<st
   else problems.push(...(await keyProblems(settings.key, env)));
   const registry = await buildPromptRegistry(settings.prompts);
   if (!registry.ok) problems.push(...registry.problems);
+  const properties = buildPropertyRules(settings, view);
+  problems.push(...properties.problems);
 
-  if (problems.length > 0 || settings.provider === undefined || settings.model === undefined || settings.key === undefined || !registry.ok) {
+  if (problems.length > 0 || settings.provider === undefined || settings.model === undefined || settings.key === undefined || !registry.ok || properties.rules === undefined) {
     return { outcome: { ok: false, problems } };
   }
   return {
-    outcome: { ok: true },
+    outcome: properties.warnings.length > 0 ? { ok: true, warnings: properties.warnings } : { ok: true },
     configuration: {
       provider: settings.provider,
       model: settings.model,
@@ -73,6 +77,7 @@ export async function configureAsk(settings: AiSettings, env: Readonly<Record<st
         maxTokens: settings.max_tokens ?? AI_DEFAULTS.maxTokens,
       },
       registry: registry.registry,
+      rules: properties.rules,
     },
   };
 }

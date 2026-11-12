@@ -120,6 +120,8 @@ The `ai` block is optional, and so is each key in it. It belongs to the deployme
 | `timeout_ms` | no | How long one call to the model may take, from 1000 to 600000. The default is 60000 |
 | `max_retries` | no | How many times a failed call is tried again, from 0 to 5. The default is 0 |
 | `max_tokens` | no | The most tokens a reply may use, from 1 to 32768. The default is 8192 |
+| `properties` | no | The properties of each entity or relationship type that may be sent to the model: a map from a type name to a list of property names. The default is none: no property of any record is sent unless it is listed here. The name `*` stands for every property that is not `pii`. A property the gate masked is never sent. `pii` properties are covered by `pii_override` |
+| `pii_override` | no | `true` allows a `pii` property to be sent, but only one that is also named in `properties` (`*` never includes one). The server logs a warning for each at start-up. The default is `false` |
 
 How to switch the preview on, and how to make the key file, is in [Switch the AI preview on](ai-preview.md). The key is given by reference. `env` names an environment variable that holds it; `file` is the absolute path of a file that holds it, which only its owner may read (mode 0600).
 

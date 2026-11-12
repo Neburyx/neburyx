@@ -80,6 +80,37 @@ describe('the ai section of the mapping file', () => {
     expect(() => parseWith({ [key]: 1 })).toThrow(MappingError);
   });
 
+  it('holds the property list and the pii override as written, and an empty map as none', () => {
+    const ai = { properties: { person: ['full_name', '*'], KNOWS: ['since'] }, pii_override: true };
+    expect(parseWith(ai).ai).toEqual(ai);
+    expect(parseWith({ properties: {} }).ai).toEqual({ properties: {} });
+    expect(parseWith({ pii_override: false }).ai).toEqual({ pii_override: false });
+  });
+
+  it.each([
+    ['a list instead of a map', ['person'], 'ai.properties'],
+    ['an empty list for a type', { person: [] }, 'ai.properties.person'],
+    ['a list that holds a non-text', { person: [1] }, 'ai.properties.person'],
+    ['an empty property name', { person: [''] }, 'ai.properties.person'],
+    ['a property listed twice', { person: ['name', 'name'] }, 'ai.properties.person'],
+    ['an empty type name', { '': ['name'] }, 'ai.properties'],
+    ['a type with a text instead of a list', { person: 'name' }, 'ai.properties.person'],
+  ])('refuses %s, naming ai.properties and the type', (_name, properties, path) => {
+    expect(refusal({ properties }).issues.map((issue) => issue.path).some((issuePath) => issuePath.startsWith(path))).toBe(true);
+  });
+
+  it('names the place of an empty type name with an empty last part of the path', () => {
+    expect(refusal({ properties: { '': ['name'] } }).issues.map((issue) => issue.path)).toContain('ai.properties.');
+  });
+
+  it.each([['a text', 'yes'], ['a number', 1]])('refuses a pii override that is %s, naming ai.pii_override', (_name, value) => {
+    expect(refusal({ pii_override: value }).issues.map((issue) => issue.path)).toContain('ai.pii_override');
+  });
+
+  it('refuses send_property_values as a key the section does not have', () => {
+    expect(() => parseWith({ send_property_values: true })).toThrow(MappingError);
+  });
+
   it('accepts the limits at both ends of their ranges', () => {
     expect(parseWith({ timeout_ms: 1_000, max_retries: 0, max_tokens: 1 }).ai).toEqual({ timeout_ms: 1_000, max_retries: 0, max_tokens: 1 });
     expect(parseWith({ timeout_ms: 600_000, max_retries: 5, max_tokens: 32_768 }).ai).toEqual({ timeout_ms: 600_000, max_retries: 5, max_tokens: 32_768 });

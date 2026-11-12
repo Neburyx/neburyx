@@ -682,8 +682,8 @@ If no template fits, the planner returns `{"kind": "unsupported", "reason": "...
    - **Residual risk, stated:** a name that is also an ordinary word on the list (for example
      "Rose" or "Hunter") and that local resolution did not match passes as that word. The guarantee
      is that no token outside the list ever reaches the model; the "don't type customer names"
-     hint covers the rest. PII-classified **properties** are never sent, without
-     exception (§9.4).
+     hint covers the rest. PII-classified **properties** are never sent by
+     default; only the operator's explicit override can allow one (§9.4).
    - By default no graph data values reach the planner.
 2. **Planner output is validated** against the template's parameter schema and the budgets. Invalid
    output means one repair attempt, then `unsupported`. The LLM never produces Cypher, and there is
@@ -725,9 +725,11 @@ If no template fits, the planner returns `{"kind": "unsupported", "reason": "...
 | Template catalog + type vocabulary | Yes |
 | Focus entity ref | As a placeholder only |
 | Result properties | **Default none, for every model, self-hosted or not** (decided 2026-10-30). In the W2 preview the operator may list, in the YAML, which properties of which entity and relationship types may be sent (`ai.properties`); only listed properties go, and only after the gate has redacted them (the list narrows what is left, it never widens it). Later: the console setting `ai.send_property_values` joins the YAML, and the YAML can pin it off so a customer can forbid the console from turning it on |
-| PII-classified properties | Never, without exception, even if the operator lists one: a list that names a `pii` property is refused at start-up with the setting named |
+| PII-classified properties | **Never by default.** Only when the operator switches on `ai.pii_override` in the YAML **and** names the property in `ai.properties` (a wildcard never includes a `pii` property). A list that names a `pii` property without the override is refused at start-up with the setting named; with the override the server logs a warning at start-up that names each such property, and the audit of every call that sent one records that a `pii` property was sent (names only). A property that the gate masked is never sent, whatever the list and the override say |
 
 The preview runs on any source, not only a source flagged `synthetic: true` (decided 2026-11-12). The data rules in this table and the audit of every model call apply to every source alike.
+
+**One request builder.** A single builder in the enterprise code turns what the gate returned into a model request. It takes the properties of an element only from the gate's output (so what the gate masked is already masked), and sends a property only when the operator's list allows it, the mapping names it for that type, its value is a text, a number, a boolean, a date or a time (not a list, a point or an unknown value), and, if it is a `pii` property, the override is on and it is named. The list is checked at start-up against the types and properties the mapping names, and a type or property it does not have refuses the start. The request for Ask carries no property at all. What is sent is a function of the list and the mapping only; the model and provider settings do not change it.
 
 **Operator configuration of the model (decided 2026-11-12).** In the YAML `ai` section the operator sets: `ai.provider` (in the W2 preview the only value is `anthropic`, a native client of the Messages API through the official TypeScript SDK, not through a compatibility layer; an OpenAI-compatible client, which also covers most self-hosted servers, and other providers come when a customer needs one), `ai.model` (a model ID without a date suffix; the example config shows `claude-sonnet-5-5`, with `claude-opus-5-5` as the step up) and the key by reference (an environment variable or a file with owner-only access, never inline); there is no default model, the operator chooses. The provider sets the depth control (effort) explicitly, never switches thinking off, takes token usage from the reply, treats a refusal as a refusal and not as text, and sends no tools. The operator may also point a built-in prompt, by its id, at their own prompt file (`ai.prompts`). Each built-in prompt has an id and a version; the audit records the id, the version and a SHA-256 of the prompt template used (the built-in text, or the override file's bytes), not of the filled text, which holds the question and any values sent. An override cannot add tools, and the model's output is still checked against the template catalog, so no free query text reaches the source whatever a prompt says (ADR-07). Operator-defined pipelines of steps, like an agent workflow, are Later.
 
@@ -753,7 +755,9 @@ visible element keys ─► re-read through the gate (policy applies server-side
 2. **De-identification.** Display names, IDs and property values become placeholders. The model sees
    structure: types, relationships, derived-rule names, timestamps and counts with their quality label.
    Property values are sent only for properties the operator lists (same rule and default as §9.4: none).
-   PII-classified properties are never sent.
+   PII-classified properties follow the override rule of §9.4 (never by default). A mapped timestamp property,
+   such as a relationship's observed time, is a property and follows the list; the structural time facts of an
+   element are not properties.
 3. **Output contract.** The model returns `{"sentences":[{"text":"…","cites":["n3","e7"]}]}`, schema-validated,
    with one repair attempt. It has no tools, no browsing and no memory. The system prompt is fixed.
    Element values are data, never instructions.
@@ -824,8 +828,8 @@ visible element keys ─► re-read through the gate (policy applies server-side
 | Entity types, relationship types, derived-rule names | Yes |
 | Display names and IDs | No: placeholders, restored locally |
 | Timestamps, counts and their quality labels | Yes |
-| Property values | Only for properties the operator lists (default none for every model, §9.4); `pii` never |
-| PII-classified properties | Never |
+| Property values | Only for properties the operator lists (default none for every model, §9.4) |
+| PII-classified properties | Never by default; only with the operator's explicit override and the property named (§9.4) |
 
 ### 9.6 Investigation assistant (Enterprise) [W2]
 

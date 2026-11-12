@@ -26,13 +26,34 @@ export interface ExtensionRouteGroup {
   readonly routes: readonly ExtensionRoute[];
 }
 
-export type ConfigureOutcome = { readonly ok: true } | { readonly ok: false; readonly problems: readonly string[] };
+export interface AiViewProperty {
+  readonly name: string;
+  readonly pii: boolean;
+}
+
+export interface AiViewType {
+  readonly name: string;
+  readonly kind: 'entity' | 'relationship';
+  readonly properties: readonly AiViewProperty[];
+}
+
+/** The entity and relationship types the mapping names, each with the properties it names for the type: what an operator's property list may refer to. */
+export interface AiMappingView {
+  readonly types: readonly AiViewType[];
+}
+
+export interface ConfigureWarning {
+  readonly event: string;
+  readonly message: string;
+}
+
+export type ConfigureOutcome = { readonly ok: true; readonly warnings?: readonly ConfigureWarning[] } | { readonly ok: false; readonly problems: readonly string[] };
 
 export interface ProfileExtension {
   readonly name: string;
   readonly routeGroups: readonly ExtensionRouteGroup[];
   readonly migrationsDirectory?: string;
-  readonly configure?: (settings: AiSettings, env: Readonly<Record<string, string | undefined>>) => Promise<ConfigureOutcome>;
+  readonly configure?: (settings: AiSettings, env: Readonly<Record<string, string | undefined>>, view?: AiMappingView) => Promise<ConfigureOutcome>;
   /** The audit sink that replaces the Community one, which keeps nothing; given the application's own database login and its limits. */
   readonly createAuditSink?: (context: AuditSinkContext) => MountedAuditSink;
 }

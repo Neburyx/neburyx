@@ -261,8 +261,8 @@ describe('the enterprise extension at start', () => {
 
     function configuring(configure: NonNullable<ProfileExtension['configure']>) {
       const events: string[] = [];
-      const calls: { settings: unknown; env: unknown }[] = [];
-      const extension: ProfileExtension = { ...extensionWith(route()), configure: async (settings, env) => (events.push('configure'), calls.push({ settings, env }), configure(settings, env)) };
+      const calls: { settings: unknown; env: unknown; view: unknown }[] = [];
+      const extension: ProfileExtension = { ...extensionWith(route()), configure: async (settings, env, view) => (events.push('configure'), calls.push({ settings, env, view }), configure(settings, env, view)) };
       const lines: string[] = [];
       const logger = pino({ level: 'info' }, { write: (line: string) => void lines.push(line) });
       const base = io({ portOverride: 0, logger, extensionLoader: { load: async () => extension } });
@@ -275,7 +275,25 @@ describe('the enterprise extension at start', () => {
       const result = await start(CONFIGURED, rig.io);
       expect(result.exitCode).toBe(0);
       expect(rig.events).toEqual(['configure', 'open-store']);
-      expect(rig.calls).toEqual([{ settings: AI, env: CONFIGURED }]);
+      expect(rig.calls).toEqual([{ settings: AI, env: CONFIGURED, view: { types: [] } }]);
+      if (result.exitCode === 0) await result.app.close();
+    });
+
+    it('logs each warning of a successful configure at warn level with its event name, and goes on', async () => {
+      const rig = configuring(async () => ({ ok: true, warnings: [{ event: 'ai.pii_override', message: 'ai.properties.person: ssn is a pii property that may be sent to the model' }] }));
+      const result = await start(CONFIGURED, rig.io);
+      expect(result.exitCode).toBe(0);
+      const warned = rig.lines.filter((line) => line.includes('ai.pii_override'));
+      expect(warned).toHaveLength(1);
+      expect(warned[0]).toContain('"level":40');
+      expect(warned[0]).toContain('ssn is a pii property');
+      if (result.exitCode === 0) await result.app.close();
+    });
+
+    it('logs nothing of the kind when there are no warnings', async () => {
+      const rig = configuring(async () => ({ ok: true }));
+      const result = await start(CONFIGURED, rig.io);
+      expect(rig.lines.filter((line) => line.includes('ai.pii_override'))).toEqual([]);
       if (result.exitCode === 0) await result.app.close();
     });
 

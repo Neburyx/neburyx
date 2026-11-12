@@ -1,7 +1,7 @@
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { AI_DEFAULTS, type AiSettings } from '@neburyx/contracts';
+import { AI_DEFAULTS, type AiMappingView, type AiSettings } from '@neburyx/contracts';
 import { afterAll, describe, expect, it } from 'vitest';
 import { configureAsk } from './configure.js';
 import { createEnterpriseExtension } from './index.js';
@@ -18,8 +18,8 @@ function keyFile(name: string, mode: number, content = 'not-a-real-key'): string
 
 const ENV = { AI_TEST_KEY: 'present' };
 const COMPLETE: AiSettings = { preview: true, provider: 'anthropic', model: 'claude-sonnet-5-5', key: { env: 'AI_TEST_KEY' } };
-const problemsOf = async (settings: AiSettings, env: Record<string, string | undefined> = ENV): Promise<readonly string[]> => {
-  const { outcome } = await configureAsk(settings, env);
+const problemsOf = async (settings: AiSettings, env: Record<string, string | undefined> = ENV, view?: AiMappingView): Promise<readonly string[]> => {
+  const { outcome } = await configureAsk(settings, env, view);
   return outcome.ok ? [] : outcome.problems;
 };
 
@@ -105,5 +105,93 @@ describe('the enterprise extension', () => {
     expect(extension.configuration()).toBeUndefined();
     expect(await extension.configure?.(COMPLETE, ENV)).toEqual({ ok: true });
     expect(extension.configuration()?.model).toBe('claude-sonnet-5-5');
+  });
+});
+
+const VIEW: AiMappingView = {
+  types: [
+    { name: 'person', kind: 'entity', properties: [{ name: 'name', pii: false }, { name: 'locale', pii: false }, { name: 'ssn', pii: true }] },
+    { name: 'KNOWS', kind: 'relationship', properties: [{ name: 'since', pii: false }] },
+    { name: 'link', kind: 'entity', properties: [{ name: 'a', pii: false }] },
+    { name: 'link', kind: 'relationship', properties: [{ name: 'b', pii: false }] },
+  ],
+};
+const withProperties = (properties: Record<string, string[]>, extra: Partial<AiSettings> = {}): AiSettings => ({ ...COMPLETE, properties, ...extra });
+
+describe('the property list', () => {
+  it('is refused, failing closed, when it is not empty and no mapping view is given', async () => {
+    expect(await problemsOf(withProperties({ person: ['name'] }))).toEqual(['ai.properties cannot be checked: the mapping view is missing']);
+    expect(await problemsOf(withProperties({}))).toEqual([]);
+  });
+
+  it('is refused for a type that the mapping does not have, naming ai.properties and the type', async () => {
+    expect(await problemsOf(withProperties({ company: ['name'] }), ENV, VIEW)).toEqual(['ai.properties: company is not an entity type or a relationship type of the mapping']);
+  });
+
+  it('is refused for a name that is both an entity type and a relationship type', async () => {
+    expect(await problemsOf(withProperties({ link: ['a'] }), ENV, VIEW)).toEqual(['ai.properties: link is both an entity type and a relationship type of the mapping, so it cannot be listed']);
+  });
+
+  it('is refused for a property that the mapping does not name for the type, naming the type and the property', async () => {
+    expect(await problemsOf(withProperties({ person: ['name', 'nickname'] }), ENV, VIEW)).toEqual(['ai.properties.person: nickname is not a property the mapping names for it']);
+  });
+
+  it('is refused for a pii property without the override, naming the type, the property and the override', async () => {
+    expect(await problemsOf(withProperties({ person: ['ssn'] }), ENV, VIEW)).toEqual(['ai.properties.person: ssn is a pii property; naming it needs ai.pii_override: true']);
+    expect(await problemsOf(withProperties({ person: ['ssn'] }, { pii_override: false }), ENV, VIEW)).toHaveLength(1);
+  });
+
+  it('starts, with one warning for each pii property named, when the override is on', async () => {
+    const { outcome, configuration } = await configureAsk(withProperties({ person: ['name', 'ssn'] }, { pii_override: true }), ENV, VIEW);
+    expect(outcome).toEqual({ ok: true, warnings: [{ event: 'ai.pii_override', message: 'ai.properties.person: ssn is a pii property and ai.pii_override is on, so it may be sent to the model' }] });
+    expect(configuration?.rules.isSendable('entity', 'person', 'ssn')).toBe(true);
+    expect(configuration?.rules.isPii('entity', 'person', 'ssn')).toBe(true);
+    expect(configuration?.rules.isSendable('entity', 'person', 'name')).toBe(true);
+  });
+
+  it('warns when the override is on and no pii property is named', async () => {
+    const { outcome } = await configureAsk(withProperties({ person: ['name'] }, { pii_override: true }), ENV, VIEW);
+    expect(outcome).toEqual({ ok: true, warnings: [{ event: 'ai.pii_override', message: 'ai.pii_override is on but no pii property is named in ai.properties' }] });
+  });
+
+  it('has no warning when the override is off and nothing pii is named', async () => {
+    expect((await configureAsk(withProperties({ person: ['name'] }), ENV, VIEW)).outcome).toEqual({ ok: true });
+  });
+
+  it('lets the wildcard stand for every property that is not pii, and never a pii one', async () => {
+    const { configuration } = await configureAsk(withProperties({ person: ['*'] }, { pii_override: true }), ENV, VIEW);
+    const rules = configuration?.rules;
+    expect(['name', 'locale'].map((name) => rules?.isSendable('entity', 'person', name))).toEqual([true, true]);
+    expect(rules?.isSendable('entity', 'person', 'ssn')).toBe(false);
+    expect(rules?.isPii('entity', 'person', 'ssn')).toBe(true);
+  });
+
+  it('keeps a pii property named next to the wildcard only with the override', async () => {
+    expect(await problemsOf(withProperties({ person: ['*', 'ssn'] }), ENV, VIEW)).toHaveLength(1);
+    const { configuration } = await configureAsk(withProperties({ person: ['*', 'ssn'] }, { pii_override: true }), ENV, VIEW);
+    expect(configuration?.rules.isSendable('entity', 'person', 'ssn')).toBe(true);
+  });
+
+  it('allows nothing by default, for an unlisted property, another type and another kind', async () => {
+    const none = (await configureAsk(COMPLETE, ENV, VIEW)).configuration?.rules;
+    expect(none?.isSendable('entity', 'person', 'name')).toBe(false);
+    const listed = (await configureAsk(withProperties({ person: ['name'] }), ENV, VIEW)).configuration?.rules;
+    expect(listed?.isSendable('entity', 'person', 'name')).toBe(true);
+    expect(listed?.isSendable('entity', 'person', 'locale')).toBe(false);
+    expect(listed?.isSendable('relationship', 'person', 'name')).toBe(false);
+    expect(listed?.isSendable('entity', 'KNOWS', 'name')).toBe(false);
+  });
+
+  it('reports every problem at once, together with those of the provider, the model and the key', async () => {
+    const problems = await problemsOf({ preview: true, properties: { company: ['x'], person: ['ssn', 'nope'] } }, ENV, VIEW);
+    expect(problems).toEqual(expect.arrayContaining(['ai.provider is required when the AI preview is on', 'ai.model is required when the AI preview is on', 'ai.key is required when the AI preview is on']));
+    expect(problems).toHaveLength(6);
+  });
+
+  it('is kept by the extension for its routes, with the view it was given', async () => {
+    const extension = createEnterpriseExtension();
+    expect(await extension.configure?.(withProperties({ person: ['name'] }), ENV, VIEW)).toEqual({ ok: true });
+    expect(extension.configuration()?.rules.isSendable('entity', 'person', 'name')).toBe(true);
+    expect(await extension.configure?.(withProperties({ person: ['name'] }), ENV)).toMatchObject({ ok: false });
   });
 });

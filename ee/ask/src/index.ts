@@ -3,11 +3,15 @@ import { aiStatusResponseSchema, type AuditSink, type MountedAuditSink, type Pro
 import { createAuditSink } from '@neburyx/ee-audit';
 import { configureAsk, type AskConfiguration } from './configure.js';
 import { guardAiRouteGroup } from './route-guard.js';
+import { createRequestBuilder, type RequestBuilder } from './request.js';
 
 export { AUDIT_ACTIONS, AuditUnavailableError, createAuditedModelCall } from './audited.js';
 export type { AuditedCallContext, AuditedModelCall, AuditedModelOptions } from './audited.js';
 export { configureAsk } from './configure.js';
 export { ROUTE_REFUSED_ACTION, guardAiRouteGroup } from './route-guard.js';
+export { PII_OVERRIDE_EVENT, type PropertyRules } from './rules.js';
+export { createRequestBuilder, piiPropertiesSentOf } from './request.js';
+export type { BuiltRequest, ContextElement, RequestBuilder } from './request.js';
 export type { AskConfiguration, KeyReference } from './configure.js';
 export { BUILT_IN_PROMPTS, MAX_OVERRIDE_BYTES, PromptError, buildPromptRegistry } from './prompts.js';
 export type { BuiltInPrompt, PromptRegistry, PromptRegistryResult, ResolvedPrompt } from './prompts.js';
@@ -22,6 +26,7 @@ export interface EnterpriseExtension extends ProfileExtension {
   readonly configuration: () => AskConfiguration | undefined;
   /** The audit sink the application mounted, or undefined before it was built; the audited model call records through it. */
   readonly auditSink: () => AuditSink | undefined;
+  readonly requestBuilder: () => RequestBuilder | undefined;
 }
 
 export function createEnterpriseExtension(): EnterpriseExtension {
@@ -31,8 +36,9 @@ export function createEnterpriseExtension(): EnterpriseExtension {
     name: 'ask',
     migrationsDirectory: MIGRATIONS_DIRECTORY,
     configuration: () => configuration,
-    async configure(settings, env) {
-      const configured = await configureAsk(settings, env);
+    requestBuilder: () => (configuration === undefined ? undefined : createRequestBuilder(configuration.rules)),
+    async configure(settings, env, view) {
+      const configured = await configureAsk(settings, env, view);
       configuration = configured.configuration;
       return configured.outcome;
     },

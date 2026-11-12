@@ -9,6 +9,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { buildApp, registeredRoutesOf } from '../app.js';
 import { routesWithoutPermission } from '../permissions.js';
 import { start, type StartIo } from '../start.js';
+import { baseSource } from '../testing/mapping.js';
 import { memoryAppStore } from '../testing/app-store.js';
 import { checkOperations } from '../testing/contract-check.js';
 import { loadCommittedDocument } from '../testing/document.js';
@@ -66,6 +67,52 @@ describe('the real enterprise extension in a start', () => {
     const io = { ...startIo(), stderr: { write: (text: string) => errors.push(text) } };
     expect(await start({ DATABASE_URL, NEBURYX_CONFIG: incompleteFile, NEBURYX_PROFILE: 'enterprise' }, io)).toEqual({ exitCode: 1 });
     expect(errors).toEqual(['invalid configuration: ai.model is required when the AI preview is on\n', 'invalid configuration: ai.key.env: the variable AI_TEST_KEY is not set or is empty\n']);
+  });
+
+  describe('the property list of the real extension', () => {
+    const SOURCE = baseSource({
+      id: 'demo',
+      entities: [{ type: 'person', label: 'Person', stable_id: 'id', search: ['name'], pii: [{ property: 'ssn', class: 'text' }] }],
+      relationships: [],
+    });
+    const mappingWith = (name: string, ai: Record<string, unknown>): string => {
+      const file = join(folder, `${name}.yaml`);
+      writeFileSync(file, stringify({ sources: [SOURCE], ai: { ...COMPLETE_AI, ...ai } }));
+      return file;
+    };
+    async function started(name: string, ai: Record<string, unknown>) {
+      const errors: string[] = [];
+      const lines: string[] = [];
+      const io = { ...startIo(), stderr: { write: (text: string) => errors.push(text) }, logger: pino({ level: 'info' }, { write: (line: string) => void lines.push(line) }) };
+      const result = await start({ DATABASE_URL, NEBURYX_CONFIG: mappingWith(name, ai), NEBURYX_PROFILE: 'enterprise', AI_TEST_KEY: 'present' }, io);
+      return { result, errors, lines };
+    }
+
+    it.each([
+      ['an unknown type', { properties: { company: ['name'] } }, 'invalid configuration: ai.properties: company is not an entity type or a relationship type of the mapping\n'],
+      ['an unknown property', { properties: { person: ['nickname'] } }, 'invalid configuration: ai.properties.person: nickname is not a property the mapping names for it\n'],
+      ['a pii property without the override', { properties: { person: ['ssn'] } }, 'invalid configuration: ai.properties.person: ssn is a pii property; naming it needs ai.pii_override: true\n'],
+    ])('refuses %s with exit 1, naming the setting', async (name, ai, message) => {
+      const { result, errors } = await started(`refuse-${name.replaceAll(' ', '-')}`, ai);
+      expect(result).toEqual({ exitCode: 1 });
+      expect(errors).toEqual([message]);
+    });
+
+    it('starts with a listed property, with no warning', async () => {
+      const { result, lines } = await started('listed', { properties: { person: ['name'] } });
+      expect(result.exitCode).toBe(0);
+      expect(lines.filter((line) => line.includes('ai.pii_override'))).toEqual([]);
+      if (result.exitCode === 0) await result.app.close();
+    });
+
+    it('starts with a pii property named and the override on, and warns naming type.property and no value', async () => {
+      const { result, lines } = await started('override', { properties: { person: ['name', 'ssn'] }, pii_override: true });
+      expect(result.exitCode).toBe(0);
+      const warned = lines.filter((line) => line.includes('ai.pii_override'));
+      expect(warned).toHaveLength(1);
+      expect(warned[0]).toContain('ai.properties.person: ssn is a pii property');
+      if (result.exitCode === 0) await result.app.close();
+    });
   });
 
   it.each([true, false])('is described by the committed contract when mounted with the preview on %s', async (previewOn) => {

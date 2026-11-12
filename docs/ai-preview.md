@@ -42,8 +42,26 @@ ai:
 
 The file is plain UTF-8 text of at most 64 KiB. It may use only the parameters of its prompt, written as `{{name}}`: `ask.plan` has `catalog` and `question`, `summary.view` has `view`, `assistant.route` has `message` and `view`. A replacement changes what the model is told; it cannot add tools. The hash of a prompt, which later work records in the audit with its id and version, is the SHA-256 of the prompt text before any parameter is filled in (of the file's bytes, for a replacement), so it names the prompt and holds none of the request. The features that use these prompts come later; today the preview has one route, `GET /v1/ai/status`, and the checks that keep model output from reaching your graph arrive with them.
 
+## What may be sent to the model
+
+By default no property of any record is sent: the model gets placeholders for the records, their types and the question, and nothing else. To send properties, list them by type in `ai.properties`. The list only narrows what the server already holds back: values that the gate masked are never sent, whatever the list says.
+
+```yaml
+ai:
+  properties:
+    person: [locale, status]
+    KNOWS: [since]
+    company: ["*"]
+```
+
+- A type is an entity type or a relationship type of the mapping, and each name must be a property that the mapping names for that type. A type or property the mapping does not have stops the start.
+- `*` stands for every property of the type that is not `pii`. It never includes a `pii` property.
+- A `pii` property can be sent only with the override: set `pii_override: true` **and** name the property in its type's list. With the override off, a list that names a `pii` property stops the start. With it on, the server logs a warning naming each such property when it starts, and the audit of a call that sent one records that a `pii` property was sent (the property names, never the values).
+- Only values that are text, numbers, booleans, dates or times are sent, as text. Lists, points and values of an unknown kind are not.
+- What is sent does not depend on the provider or the model you choose.
+
 ## Checking it
 
 With the switch off the AI paths do not exist: `/v1/ai/status` and every other path under `/v1/ai` answer 404 and nothing is audited. The AI route group also refuses a call as a second check, with `ACCESS_DENIED` and the reason `ai-preview-off`, and audits the refusal, if a loaded extension is ever told that the preview is not on. The switch is a safety rail set by whoever runs the deployment, not a lock; what protects real data is the rules for what a model request may carry and the audit of every model call.
 
-When the API starts with a problem in these settings, it writes one line for each problem, naming the setting, and exits 1. A start that succeeds answers `GET /v1/ai/status` with `{ "preview": true }`, and `GET /v1/me` reports the edition as `enterprise`.
+When the API starts with a problem in these settings, it writes one line for each problem, naming the setting, and exits 1. The start-up warnings name the setting too. A start that succeeds answers `GET /v1/ai/status` with `{ "preview": true }`, and `GET /v1/me` reports the edition as `enterprise`.
