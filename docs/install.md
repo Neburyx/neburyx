@@ -18,7 +18,7 @@ git clone https://github.com/Neburyx/neburyx neburyx
 cd neburyx
 ```
 
-There is no published image yet. Until there is, you build the image from the repository, from its root. When one is published, set `NEBURYX_IMAGE` to `ghcr.io/neburyx/neburyx` and `NEBURYX_TAG` to the version in `.env`, and skip the build:
+The image is published as `ghcr.io/neburyx/neburyx`. To use it, skip the build below and, in the next section, set `NEBURYX_IMAGE=ghcr.io/neburyx/neburyx` and `NEBURYX_TAG=0.1.0` in `.env` in place of `NEBURYX_TAG=local`. Or build the image from the repository, from its root:
 
 ```bash
 docker build -f deploy/docker/Dockerfile -t neburyx:local .

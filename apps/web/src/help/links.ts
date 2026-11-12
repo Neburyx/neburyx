@@ -1,4 +1,3 @@
-/** Replaced with the address of the public repository when it is published. */
 export const REPOSITORY_URL = 'https://github.com/Neburyx/neburyx';
 
 export const QUICKSTART_ANCHOR = 'quickstart';

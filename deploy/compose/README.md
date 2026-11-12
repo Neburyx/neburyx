@@ -2,7 +2,7 @@
 
 The Community install: the Neburyx image and a Postgres container, reachable only from this machine.
 
-The tag `local` that the command below sets is what `docker build -f deploy/docker/Dockerfile -t neburyx:local .` makes, from the repository root, until an image is published.
+The tag `local` that the command below sets is what `docker build -f deploy/docker/Dockerfile -t neburyx:local .` makes, from the repository root. To use the published image instead, skip the build and set `NEBURYX_IMAGE=ghcr.io/neburyx/neburyx` and `NEBURYX_TAG=0.1.0` in `.env` in place of `NEBURYX_TAG=local`.
 
 ```bash
 cd deploy/compose

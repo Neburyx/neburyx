@@ -3,7 +3,7 @@
 A compose setup that runs Neburyx against two synthetic demo graphs, one for each domain pack (`banking-fraud` and `insurance-claims`), so that you can evaluate the product without a graph of your own. It uses synthetic data only.
 
 ```bash
-docker build -f deploy/docker/Dockerfile -t neburyx .   # from the repository root: there is no published image yet
+docker build -f deploy/docker/Dockerfile -t neburyx .   # from the repository root, or set NEBURYX_IMAGE=ghcr.io/neburyx/neburyx and NEBURYX_TAG=0.1.0 in .env
 cd deploy/demo
 [ -e .env ] && echo ".env exists; not overwritten" || ( umask 077; cat > .env <<EOF
 NEBURYX_DB_ADMIN_PASSWORD=$(openssl rand -hex 24)
