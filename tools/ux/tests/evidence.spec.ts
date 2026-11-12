@@ -62,11 +62,14 @@ test.describe('the relationship evidence panel', () => {
     await page.keyboard.press('Enter');
     await walkToRelationship(page);
     await page.keyboard.press('Space');
+    await expect(panel(page)).toBeVisible();
+    await expect(panel(page).getByText('Selected relationship · source is read-only')).toBeVisible();
+    await expect(panel(page).getByText('HAS_LINE', { exact: false }).first()).toBeVisible();
+    await expect(canvasOf(page)).toBeFocused();
     await page.keyboard.press('Escape');
     await expect(announcement(page)).toHaveText('');
     await page.keyboard.press('Enter');
     await expect(announcement(page)).not.toHaveText('');
-    await expect(panel(page)).toHaveCount(0);
   });
 
   test('opens from a row of the inspector Evidence tab, the inspector staying, and Esc returns the focus to the row', async ({ page }) => {
@@ -92,7 +95,7 @@ test.describe('the relationship evidence panel', () => {
     await rightClickBetween(page, 'holder', 'cas');
     await choose(page, /Why is this relationship here/);
     await expect(panel(page).getByText('Evidence not available')).toBeVisible();
-    await expect(panel(page).getByText('For legacy relationships without retained source records.')).toBeVisible();
+    await expect(panel(page).getByText('The source holds no record for this relationship.')).toBeVisible();
     await expect(panel(page).getByRole('alert')).toHaveCount(0);
     await panel(page).getByRole('tab', { name: 'Properties' }).click();
     await expect(panel(page).getByText('21 Oct 2026, 08:15:00 UTC')).toBeVisible();

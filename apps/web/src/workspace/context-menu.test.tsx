@@ -10,6 +10,7 @@ import { edgeKey, elementKey } from '../state/keys.js';
 import type { PointerTool } from '../state/presentation-state.js';
 import type { Count, EdgeRef, GraphEdge, GraphNode } from '@neburyx/contracts';
 import { edge, edgeRef, key, node, ref } from '../state/test-data.js';
+import { testProfile } from '../dev/test-profile.js';
 import { commandItem, ids, item, load, loadGraph, menu, nodeKey, onCanvas, placeOf, selection, show, withBuiltIns, type CommandOptions } from './context-menu-kit.js';
 import { createMenuRegistry, type MenuItem, type MenuRegistry, type MenuItemState, type SubmenuProps } from './menu-registry.js';
 
@@ -314,20 +315,30 @@ describe('the menu of a relationship', () => {
   };
 
   it('names a stored relationship by its type and "sourced", over its endpoints', () => {
-    expect(header(stored)).toEqual({ title: 'rel-a · sourced', detail: 'n1 ↔ n2' });
+    expect(header(stored)).toEqual({ title: 'rel-a · sourced', detail: 'n1 → n2' });
   });
 
-  it('names a derived relationship by its type and "derived", over its endpoints, the rule and its version', () => {
-    expect(header(derived)).toEqual({ title: 'rel-a · derived', detail: 'n1 ↔ n2 · SD-01 v2' });
+  it('names a derived relationship by its type and "derived", over its endpoints, the rule and its version, with a one-way arrow while the profile does not hold a symmetric rule for it', () => {
+    expect(header(derived)).toEqual({ title: 'rel-a · derived', detail: 'n1 → n2 · SD-01 v2' });
+  });
+
+  it('puts a two-way arrow over the endpoints of a derived relationship whose rule in the profile reads the same from either end', () => {
+    cleanup();
+    const state = createClientState();
+    loadGraph(state, [node('a', 'n1'), node('a', 'n2')], [derived]);
+    const profile = { ...testProfile('a', ['type-a']), derivedRules: [{ id: 'SD-01', ruleVersion: 2, from: 'type-a', to: 'type-a', via: ['type-b'] }] };
+    const { rightClick } = show(state, {}, withBuiltIns(), null, (tree) => tree, profile);
+    rightClick(rightClickOn('relationship', edgeKey(derived.ref)));
+    expect(screen.getByRole('menu').querySelector('.menu-header-detail')?.textContent).toBe('n1 ↔ n2 · SD-01 v2');
   });
 
   it('names an unknown origin "origin unknown" and shows no rule', () => {
-    expect(header(unknownOrigin)).toEqual({ title: 'rel-a · origin unknown', detail: 'n1 ↔ n2' });
+    expect(header(unknownOrigin)).toEqual({ title: 'rel-a · origin unknown', detail: 'n1 → n2' });
   });
 
   it('shows the rule of a derived aggregate and not of an aggregate of unknown origin', () => {
-    expect(header(aggregate('e-agg-derived', count(42, 'exact'), { semantics: 'derived', derivation }))).toEqual({ title: 'rel-a · 42 · exact · derived', detail: 'n1 ↔ n2 · SD-01 v2' });
-    expect(header(aggregate('e-agg-unknown', count(42, 'exact'), { semantics: 'unknown' }))).toEqual({ title: 'rel-a · 42 · exact · origin unknown', detail: 'n1 ↔ n2' });
+    expect(header(aggregate('e-agg-derived', count(42, 'exact'), { semantics: 'derived', derivation }))).toEqual({ title: 'rel-a · 42 · exact · derived', detail: 'n1 → n2 · SD-01 v2' });
+    expect(header(aggregate('e-agg-unknown', count(42, 'exact'), { semantics: 'unknown' }))).toEqual({ title: 'rel-a · 42 · exact · origin unknown', detail: 'n1 → n2' });
   });
 
   it.each<[string, Count | undefined, string]>([

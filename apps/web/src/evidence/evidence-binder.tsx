@@ -33,7 +33,7 @@ function EvidenceDock({ evidence }: { readonly evidence: Evidence }) {
 }
 
 /**
- * Keeps the evidence panel in the dock exactly while a relationship is the target, and moves the target to the single selected relationship that a kind builds the evidence of. A change of investigation or of masking closes it.
+ * Keeps the evidence panel in the dock exactly while a relationship is the target, and opens it on the single selected relationship that a kind builds the evidence of and moves it as that selection moves; a panel the selection opened closes when the selection stops being one such relationship. A change of investigation or of masking closes it.
  * It lives outside React, so leaving the page keeps nothing behind.
  */
 export function bindEvidencePanel(state: ClientState, panels: PanelRegistry, evidence: Evidence): () => void {
@@ -50,8 +50,10 @@ export function bindEvidencePanel(state: ClientState, panels: PanelRegistry, evi
     const { selection } = state.presentation.view.getState();
     if (selection !== lastSelection) {
       lastSelection = selection;
-      const followed = selectedEdgeOf(state);
-      if (followed !== undefined) evidence.follow(followed);
+      const selected = selectedEdgeOf(state);
+      if (selected === undefined || !evidence.offers(selected)) evidence.retire();
+      else if (evidence.target.getState() === undefined) evidence.reveal(selected);
+      else evidence.follow(selected);
     }
     const open = evidence.target.getState() !== undefined;
     if (open && remove === undefined) remove = panels.register({ id: EVIDENCE_PANEL_ID, title: EVIDENCE_PANEL_TITLE, placement: { kind: 'dock' }, content: Content });

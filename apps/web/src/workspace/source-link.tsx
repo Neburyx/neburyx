@@ -26,8 +26,13 @@ export function offersRecordLink(profile: SourceProfile | undefined, ref: Stored
   return profile?.relationshipTypes.some((type) => type.type === ref.type && type.from === ref.from && type.to === ref.to && type.recordLink === true) === true;
 }
 
+/** Opens the link as the record links of the panel are: an anchor aimed at a new tab, so the investigation's own tab is never the target. */
 export function openSourceLink(href: string): void {
-  window.open(href, '_blank', 'noopener,noreferrer');
+  const anchor = document.createElement('a');
+  anchor.href = href;
+  anchor.target = '_blank';
+  anchor.rel = 'noopener noreferrer';
+  anchor.click();
 }
 
 export function SourceRecordLink({ href, className, children }: { readonly href: string; readonly className?: string; readonly children: ReactNode }) {

@@ -13,7 +13,7 @@ describe('the not-available state', () => {
     await answerEdge(rig.edgeReads[0], detailOf(OWNS, { observedAt: '2026-10-21T08:15:00Z', evidence: { status: 'not-available', code: 'EVIDENCE_NOT_AVAILABLE' } }));
     expect(inPanel().getByText(NOT_AVAILABLE_BADGE)).toBeTruthy();
     expect(inPanel().getByText('Evidence not available')).toBeTruthy();
-    expect(inPanel().getByText('For legacy relationships without retained source records.')).toBeTruthy();
+    expect(inPanel().getByText('The source holds no record for this relationship.')).toBeTruthy();
     expect(inPanel().queryByRole('alert')).toBeNull();
     expect(inPanel().queryByRole('status')).toBeNull();
     expect(inPanel().queryByText('Supporting source records:')).toBeNull();

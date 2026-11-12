@@ -94,3 +94,5 @@ export const COLLAPSE = 'Collapse';
 /** Shown beside the card's Collapse when it is off. */
 export const COLLAPSE_LOADING = 'Collapse is off while this node is loading.';
 export const COLLAPSE_NOTHING = 'Nothing was loaded from this node.';
+
+export const STARTING_ENTITY_HINT = 'Select the entity and press E, or right-click it, to load its neighbors';

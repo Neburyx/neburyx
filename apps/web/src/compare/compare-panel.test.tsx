@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FIXTURE_RECORD } from '../dev/fixture-loader.js';
 import { aggregateEdge, derivedEdge, stored } from '../inspector/relationship-kit.js';
 import { OWNS } from '../evidence/evidence-kit.js';
+import { edgeKey } from '../state/keys.js';
 import { bar, chooseCompare, columns, compareRig, dock, entity, inDock, keyOf, kindsOf, profileWith, property, rows, select, selectEdges, TYPE } from './compare-kit.js';
 
 afterEach(cleanup);
@@ -111,6 +112,17 @@ describe('the dock', () => {
     act(() => void rig.evidence?.open(OWNS.ref));
     expect(dock()).toBeNull();
     expect(screen.getByRole('complementary', { name: 'Relationship evidence' })).toBeTruthy();
+    rig.unbind();
+  });
+
+  it('is not taken by a relationship that becomes the selection while the comparison holds it', async () => {
+    const rig = compareRig({ evidence: true, edges: [OWNS] });
+    select(rig.state, 'n1', 'n2');
+    await chooseCompare();
+    expect(dock()).not.toBeNull();
+    act(() => rig.state.presentation.select([edgeKey(OWNS.ref)]));
+    expect(screen.queryByRole('complementary', { name: 'Relationship evidence' })).toBeNull();
+    expect(dock()).not.toBeNull();
     rig.unbind();
   });
 });
