@@ -57,6 +57,7 @@ export const ERROR_TABLE: Readonly<Record<ErrorCode, ErrorEntry>> = {
   NOT_FOUND: { message: 'Not found.', status: 404, retryable: false },
   INTERNAL_ERROR: { message: 'Something went wrong. Quote the trace ID if you contact support.', status: 500, retryable: false },
   SOURCE_MISMATCH: { message: 'The request mixes more than one source.', status: 400, retryable: false },
+  AUDIT_UNAVAILABLE: { message: 'The action could not be recorded, so nothing was returned.', status: 503, retryable: true },
 };
 
 export function findMissingCodes(table: Readonly<Record<string, unknown>>): readonly ErrorCode[] {

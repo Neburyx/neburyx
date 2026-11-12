@@ -2,6 +2,8 @@ import { SYSTEM_ACTOR_ID, tokenCount, type AuditEvent, type AuditSinkContext } f
 import { describe, expect, it } from 'vitest';
 import { AuditSinkError, createAuditSink, type AuditPool } from './sink.js';
 
+const SHA = 'a'.repeat(64);
+
 const NEW_ID = '01939999-0000-7000-8000-000000000001';
 
 interface Call {
@@ -65,19 +67,28 @@ describe('recording an event', () => {
 
   it('writes the AI fields of a model call as counts and codes', async () => {
     const { mounted, calls } = rig();
-    await mounted.sink.record({ ...EVENT, action: 'ask.plan', detail: { ai: { modelRef: 'model-a', promptId: 'ask-plan', promptVersion: '1', tokensIn: tokenCount(10), tokensOut: 'unknown' } } });
-    expect(calls[0]?.values[10]).toBe('{"ai":{"modelRef":"model-a","promptId":"ask-plan","promptVersion":"1","tokensIn":10,"tokensOut":"unknown"}}');
+    await mounted.sink.record({ ...EVENT, action: 'ask.plan', detail: { ai: { modelRef: 'model-a', promptId: 'ask-plan', promptVersion: '1', promptSha256: SHA, tokensIn: tokenCount(10), tokensOut: 'unknown' } } });
+    expect(calls[0]?.values[10]).toBe('{"ai":{"modelRef":"model-a","promptId":"ask-plan","promptVersion":"1","promptSha256":"'+SHA+'","tokensIn":10,"tokensOut":"unknown"}}');
+  });
+
+  it('writes the prompt hash and the names of the pii properties, and refuses an event whose AI detail has no hash', async () => {
+    const { mounted, calls } = rig();
+    const ai = { modelRef: 'model-a', promptId: 'ask-plan', promptVersion: '1', promptSha256: SHA, piiPropertiesSent: ['person.phone'], tokensIn: tokenCount(1), tokensOut: 'unknown' } as const;
+    await mounted.sink.record({ ...EVENT, action: 'ask.plan', detail: { ai } });
+    expect(JSON.parse(String(calls[0]?.values[10]))).toEqual({ ai });
+    const { promptSha256: _omitted, ...withoutHash } = ai;
+    await expect(mounted.sink.record({ ...EVENT, detail: { ai: withoutHash } as never })).rejects.toMatchObject({ code: 'AUDIT_DETAIL_REFUSED' });
   });
 
   it.each([
-    ['a prompt', { ai: { modelRef: 'm', promptId: 'p', promptVersion: '1', tokensIn: 'unknown', tokensOut: 'unknown', prompt: 'PROMPT-MARKER' } }],
+    ['a prompt', { ai: { modelRef: 'm', promptId: 'p', promptVersion: '1', promptSha256: SHA, tokensIn: 'unknown', tokensOut: 'unknown', prompt: 'PROMPT-MARKER' } }],
     ['text', { text: 'SUMMARY-MARKER' }],
     ['a summary', { summary: 'SUMMARY-MARKER' }],
     ['an answer', { reason: 'timeout', answer: 'x' }],
-    ['a negative count', { ai: { modelRef: 'm', promptId: 'p', promptVersion: '1', tokensIn: -1, tokensOut: 'unknown' } }],
-    ['a decimal count', { ai: { modelRef: 'm', promptId: 'p', promptVersion: '1', tokensIn: 1.5, tokensOut: 'unknown' } }],
-    ['a label with a space', { ai: { modelRef: 'a prompt as a model', promptId: 'p', promptVersion: '1', tokensIn: 'unknown', tokensOut: 'unknown' } }],
-    ['a text count', { ai: { modelRef: 'm', promptId: 'p', promptVersion: '1', tokensIn: 'many', tokensOut: 'unknown' } }],
+    ['a negative count', { ai: { modelRef: 'm', promptId: 'p', promptVersion: '1', promptSha256: SHA, tokensIn: -1, tokensOut: 'unknown' } }],
+    ['a decimal count', { ai: { modelRef: 'm', promptId: 'p', promptVersion: '1', promptSha256: SHA, tokensIn: 1.5, tokensOut: 'unknown' } }],
+    ['a label with a space', { ai: { modelRef: 'a prompt as a model', promptId: 'p', promptVersion: '1', promptSha256: SHA, tokensIn: 'unknown', tokensOut: 'unknown' } }],
+    ['a text count', { ai: { modelRef: 'm', promptId: 'p', promptVersion: '1', promptSha256: SHA, tokensIn: 'many', tokensOut: 'unknown' } }],
   ])('refuses a detail with %s, writes no row and says nothing of the value', async (_name, detail) => {
     const { mounted, calls } = rig();
     // the detail is ill-typed on purpose: the sink refuses what the type already forbids

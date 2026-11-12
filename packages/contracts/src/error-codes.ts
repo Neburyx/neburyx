@@ -20,6 +20,7 @@ export const ERROR_CODES = [
   'NOT_FOUND',
   'INTERNAL_ERROR',
   'SOURCE_MISMATCH',
+  'AUDIT_UNAVAILABLE',
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];

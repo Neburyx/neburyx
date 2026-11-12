@@ -18,12 +18,12 @@ const TAS_CODES = [
   'ASK_UNSUPPORTED',
   'ASK_PLAN_INVALID',
 ];
-const ADDED_CODES = ['INVALID_REQUEST', 'UNSUPPORTED_MEDIA_TYPE', 'NOT_FOUND', 'INTERNAL_ERROR', 'SOURCE_MISMATCH'];
+const ADDED_CODES = ['INVALID_REQUEST', 'UNSUPPORTED_MEDIA_TYPE', 'NOT_FOUND', 'INTERNAL_ERROR', 'SOURCE_MISMATCH', 'AUDIT_UNAVAILABLE'];
 
 const validBody = { error: { code: 'NOT_FOUND', message: 'Not found.', retryable: false, traceId: 'tr-1' } };
 
 describe('error codes', () => {
-  it('hold the 14 codes of the architecture and the five added ones, each once', () => {
+  it('hold the 14 codes of the architecture and the six added ones, each once', () => {
     expect([...ERROR_CODES].sort()).toEqual([...TAS_CODES, ...ADDED_CODES].sort());
   });
 });

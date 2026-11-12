@@ -25,7 +25,17 @@ describe('the enterprise extension', () => {
     expect(readdirSync(folder).filter((file) => file.endsWith('.sql'))).toEqual(['0001-audit-events.sql', '0002-ask-runs.sql']);
   });
 
-  it('supplies the audit sink of the preview', () => {
-    expect(createEnterpriseExtension().createAuditSink).toBe(createAuditSink);
+  it('hands the sink it mounted to the audited call, which has none before the application built it, and returns the mounted sink unchanged', async () => {
+    const extension = createEnterpriseExtension();
+    expect(extension.auditSink()).toBeUndefined();
+    const mounted = extension.createAuditSink?.({ databaseUrl: 'postgres://app@db.example.test:5432/neburyx', poolSize: 1, connectionTimeoutMs: 100, statementTimeoutMs: 100, queryTimeoutMs: 100, newId: () => 'id', onConnectionError: () => undefined });
+    expect(mounted).toBeDefined();
+    expect(extension.auditSink()).toBe(mounted?.sink);
+    await mounted?.close();
+  });
+
+  it('builds the sink with the audit package', () => {
+    expect(typeof createAuditSink).toBe('function');
+    expect(createEnterpriseExtension().createAuditSink).toBeDefined();
   });
 });

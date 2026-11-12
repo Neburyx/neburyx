@@ -22,11 +22,15 @@ export function tokenCount(value: number): TokenCount {
 
 const tokenCountSchema = z.custom<TokenCount>((value) => typeof value === 'number' && isTokenCount(value));
 
-/** What a model call leaves in the audit event: a model reference, a prompt id and version and token counts; never a prompt, a summary or a value. */
+/** What a model call leaves in the audit event: a model reference, a prompt id and version, the SHA-256 of the prompt text sent, the names of the `pii` properties it held and token counts; never a prompt, a summary or a value. */
 export interface AiAuditDetail {
   readonly modelRef: string;
   readonly promptId: string;
   readonly promptVersion: string;
+  /** The SHA-256, as 64 lower-case hexadecimal digits, of the UTF-8 text the model was sent. */
+  readonly promptSha256: string;
+  /** The `type.property` names of the `pii` properties the request held, never their values; absent when none was sent, never an empty list. */
+  readonly piiPropertiesSent?: readonly string[];
   readonly tokensIn: TokenCount | 'unknown';
   readonly tokensOut: TokenCount | 'unknown';
 }
@@ -35,8 +39,21 @@ const tokensSchema = z.union([tokenCountSchema, z.literal('unknown')]);
 /** A model reference, a prompt id or a prompt version: a short code with no space, so a prompt or a summary cannot be carried in it. The length is a working limit, not taken from a source. */
 const MAX_LABEL_LENGTH = 200;
 const label = z.string().min(1).max(MAX_LABEL_LENGTH).regex(/^[A-Za-z0-9._:/-]+$/);
+const sha256Hex = z.string().regex(/^[0-9a-f]{64}$/);
+/** A property name: no whitespace and a bounded length. The bounds are working limits, not taken from a source. */
+const MAX_PROPERTY_NAME_LENGTH = 200;
+const MAX_PII_PROPERTIES = 100;
+const propertyName = z.string().min(1).max(MAX_PROPERTY_NAME_LENGTH).regex(/^\S+$/);
 
-export const aiAuditDetailSchema = z.strictObject({ modelRef: label, promptId: label, promptVersion: label, tokensIn: tokensSchema, tokensOut: tokensSchema });
+export const aiAuditDetailSchema = z.strictObject({
+  modelRef: label,
+  promptId: label,
+  promptVersion: label,
+  promptSha256: sha256Hex,
+  piiPropertiesSent: z.array(propertyName).min(1).max(MAX_PII_PROPERTIES).optional(),
+  tokensIn: tokensSchema,
+  tokensOut: tokensSchema,
+});
 
 export function parseAiAuditDetail(value: unknown): AiAuditDetail {
   return aiAuditDetailSchema.parse(value);

@@ -7064,6 +7064,34 @@
                 "properties": {
                   "code": {
                     "type": "string",
+                    "const": "AUDIT_UNAVAILABLE"
+                  },
+                  "message": {
+                    "type": "string",
+                    "const": "The action could not be recorded, so nothing was returned."
+                  },
+                  "retryable": {
+                    "type": "boolean",
+                    "const": true
+                  },
+                  "traceId": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "code",
+                  "message",
+                  "retryable",
+                  "traceId"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
                     "const": "SOURCE_UNAVAILABLE"
                   },
                   "message": {

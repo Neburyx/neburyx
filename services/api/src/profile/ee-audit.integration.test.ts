@@ -11,6 +11,8 @@ import { clearRegisteredExtension, type ExtensionLoader } from './extension.js';
 import { fixtureFolder, removeFixtureFolders, rows, runInProcess } from '../testing/database.js';
 import { startPostgres, type TestDatabase, type TestPostgres } from '../testing/postgres.js';
 
+const SHA = 'a'.repeat(64);
+
 const SHIPPED = fileURLToPath(new URL('../../migrations', import.meta.url));
 const PREVIEW_MIGRATIONS = fileURLToPath(new URL('../../../../ee/migrations', import.meta.url));
 const PREVIEW_FILE = join(fixtureFolder({ 'neburyx.yaml': stringify({ sources: [], ai: { preview: true } }) }), 'neburyx.yaml');
@@ -84,7 +86,7 @@ describe('the audit sink over the preview tables', () => {
     { target: 'evidence', type: 'owns' },
     { counts: { nodes: 1, edges: 0, missing: 0 } },
     { export: { format: 'csv', entities: 5, relationships: 4, maskedFields: 2 } },
-    { ai: { modelRef: 'model-a', promptId: 'ask-plan', promptVersion: '1', tokensIn: tokenCount(12), tokensOut: 'unknown' } },
+    { ai: { modelRef: 'model-a', promptId: 'ask-plan', promptVersion: '1', promptSha256: SHA, tokensIn: tokenCount(12), tokensOut: 'unknown' } },
   ] as const)('round-trips the detail shape %j', async (detail) => {
     const database = await migrated();
     await sinkFor(database.appUrl).sink.record({ ...FULL, detail });
@@ -124,10 +126,10 @@ describe('the audit sink over the preview tables', () => {
     const out = vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => (written.push(String(chunk)), true));
     const err = vi.spyOn(process.stderr, 'write').mockImplementation((chunk) => (written.push(String(chunk)), true));
     try {
-      const bad = { ai: { modelRef: 'm', promptId: 'p', promptVersion: '1', tokensIn: 'unknown', tokensOut: 'unknown', prompt: 'PROMPT-MARKER' }, text: 'SUMMARY-MARKER' };
+      const bad = { ai: { modelRef: 'm', promptId: 'p', promptVersion: '1', promptSha256: SHA, tokensIn: 'unknown', tokensOut: 'unknown', prompt: 'PROMPT-MARKER' }, text: 'SUMMARY-MARKER' };
       // ill-typed on purpose: the sink must refuse what the type already forbids
       await expect(entry.sink.record({ ...FULL, detail: bad as never })).rejects.toMatchObject({ code: 'AUDIT_DETAIL_REFUSED' });
-      await entry.sink.record({ ...FULL, detail: { ai: { modelRef: 'model-a', promptId: 'ask-plan', promptVersion: '1', tokensIn: tokenCount(1), tokensOut: tokenCount(2) } } });
+      await entry.sink.record({ ...FULL, detail: { ai: { modelRef: 'model-a', promptId: 'ask-plan', promptVersion: '1', promptSha256: SHA, tokensIn: tokenCount(1), tokensOut: tokenCount(2) } } });
     } finally {
       out.mockRestore();
       err.mockRestore();

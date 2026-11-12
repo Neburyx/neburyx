@@ -23,6 +23,7 @@ export const ERROR_DETAIL_KEYS: Readonly<Record<ErrorCode, readonly DetailKey[]>
   NOT_FOUND: [],
   INTERNAL_ERROR: [],
   SOURCE_MISMATCH: [],
+  AUDIT_UNAVAILABLE: [],
 };
 
 const REASONS_OF_CODE: Partial<Record<ErrorCode, readonly string[]>> = {

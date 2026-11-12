@@ -1,8 +1,10 @@
 import { fileURLToPath } from 'node:url';
-import { aiStatusResponseSchema, type ProfileExtension } from '@neburyx/contracts';
+import { aiStatusResponseSchema, type AuditSink, type MountedAuditSink, type ProfileExtension } from '@neburyx/contracts';
 import { createAuditSink } from '@neburyx/ee-audit';
 import { configureAsk, type AskConfiguration } from './configure.js';
 
+export { AUDIT_ACTIONS, AuditUnavailableError, createAuditedModelCall } from './audited.js';
+export type { AuditedCallContext, AuditedModelCall, AuditedModelOptions } from './audited.js';
 export { configureAsk } from './configure.js';
 export type { AskConfiguration, KeyReference } from './configure.js';
 export { BUILT_IN_PROMPTS, MAX_OVERRIDE_BYTES, PromptError, buildPromptRegistry } from './prompts.js';
@@ -16,10 +18,13 @@ const MIGRATIONS_DIRECTORY = fileURLToPath(new URL('../../migrations', import.me
 
 export interface EnterpriseExtension extends ProfileExtension {
   readonly configuration: () => AskConfiguration | undefined;
+  /** The audit sink the application mounted, or undefined before it was built; the audited model call records through it. */
+  readonly auditSink: () => AuditSink | undefined;
 }
 
 export function createEnterpriseExtension(): EnterpriseExtension {
   let configuration: AskConfiguration | undefined;
+  let mounted: MountedAuditSink | undefined;
   return {
     name: 'ask',
     migrationsDirectory: MIGRATIONS_DIRECTORY,
@@ -29,7 +34,11 @@ export function createEnterpriseExtension(): EnterpriseExtension {
       configuration = configured.configuration;
       return configured.outcome;
     },
-    createAuditSink,
+    auditSink: () => mounted?.sink,
+    createAuditSink(context) {
+      mounted = createAuditSink(context);
+      return mounted;
+    },
     routeGroups: [
       {
         routes: [
