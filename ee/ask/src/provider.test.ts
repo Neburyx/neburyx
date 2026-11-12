@@ -1,5 +1,5 @@
 import { readFileSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { FAILURE_CODES, PROMPT_IDS, type FailureCode, type ModelAnswer, type ModelProvider, type ModelRequest, type PromptId, type TokenUsage } from './index.js';
@@ -114,8 +114,14 @@ describe('the provider', () => {
 
 describe('the sources of the package', () => {
   const sourceFolder = fileURLToPath(new URL('.', import.meta.url));
-  const productionFiles = readdirSync(sourceFolder).filter((file) => file.endsWith('.ts') && !file.includes('.test.'));
+  const filesUnder = (folder: string): string[] =>
+    readdirSync(folder, { withFileTypes: true }).flatMap((entry) => (entry.isDirectory() ? filesUnder(join(folder, entry.name)) : entry.name.endsWith('.ts') && !entry.name.includes('.test.') ? [join(folder, entry.name)] : []));
+  const productionFiles = filesUnder(sourceFolder).map((path) => relative(sourceFolder, path));
   const FORBIDDEN = [/@anthropic-ai\//, /node:http/, /node:https/, /node:net\b/, /node:tls/, /\bundici\b/, /\bfetch\(/];
+
+  it('includes the testing folder in what is scanned', () => {
+    expect(productionFiles).toContain(join('testing', 'fixture.ts'));
+  });
 
   it.each(productionFiles)('%s imports no provider SDK and no network module', (file) => {
     const text = readFileSync(join(sourceFolder, file), 'utf8');
