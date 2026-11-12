@@ -27,6 +27,8 @@ describe('the AI fields of an audit event', () => {
       readonly piiPropertiesSent?: readonly string[];
       readonly tokensIn: TokenCount | 'unknown';
       readonly tokensOut: TokenCount | 'unknown';
+      readonly cacheReadTokens?: TokenCount | 'unknown';
+      readonly cacheWriteTokens?: TokenCount | 'unknown';
     }>();
     const detail: AuditDetail = { ai: { modelRef: 'm', promptId: 'p', promptVersion: '1', promptSha256: SHA, tokensIn: tokenCount(3), tokensOut: 'unknown' } };
     expect(detail.ai?.tokensIn).toBe(3);
