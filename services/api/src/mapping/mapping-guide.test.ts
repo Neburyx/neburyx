@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { PII_CLASSES } from '@neburyx/contracts';
+import { AI_DEFAULTS, AI_LIMITS, PII_CLASSES } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { DOCS_FOLDER, GUIDE_PATH, guideBlocks, guideTable, guideText, unticked } from '../testing/guide.js';
@@ -41,6 +41,7 @@ const TABLES: readonly (readonly [string, z.ZodType])[] = [
   ['file', mappingFileSchema],
   ['retention', child(mappingFileSchema, 'retention')],
   ['ai', child(mappingFileSchema, 'ai')],
+  ['ai.key', child(child(mappingFileSchema, 'ai'), 'key')],
   ['source', SOURCE],
   ['auth', child(SOURCE, 'auth')],
   ['vocabulary', child(SOURCE, 'vocabulary')],
@@ -142,6 +143,22 @@ describe('the retention table', () => {
       for (const days of [1, 365]) expect(retentionSchema.safeParse({ [key]: days }).success).toBe(true);
       for (const days of [0, 366, 1.5]) expect(retentionSchema.safeParse({ [key]: days }).success).toBe(false);
     }
+  });
+});
+
+describe('the ai table', () => {
+  it('states the default and the range of each limit as the product has them', () => {
+    const rows = guideTable('keys: ai');
+    const defaults: Readonly<Record<string, number>> = { timeout_ms: AI_DEFAULTS.timeoutMs, max_retries: AI_DEFAULTS.maxRetries, max_tokens: AI_DEFAULTS.maxTokens };
+    const ranges: Readonly<Record<string, { readonly min: number; readonly max: number }>> = { timeout_ms: AI_LIMITS.timeoutMs, max_retries: AI_LIMITS.maxRetries, max_tokens: AI_LIMITS.maxTokens };
+    for (const [key, value] of Object.entries(defaults)) {
+      const row = rows.find((candidate) => unticked(candidate[0] ?? '') === key);
+      expect(row, key).toBeDefined();
+      expect(Number(/The default is (\d+)/.exec(row?.[2] ?? '')?.[1])).toBe(value);
+      const range = ranges[key];
+      expect(row?.[2]).toContain(`from ${range?.min} to ${range?.max}`);
+    }
+    expect(guideText()).toContain('the defaults are hypotheses');
   });
 });
 

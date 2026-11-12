@@ -107,12 +107,27 @@ The `retention` block is optional, and so is each key in it. Each is a whole num
 
 ### The ai section
 
-The `ai` block is optional, and so is each key in it. It belongs to the deployment, not to a source.
+The `ai` block is optional, and so is each key in it. It belongs to the deployment, not to a source. The AI features are off unless the deployment also sets the environment variable `NEBURYX_PROFILE=enterprise` and `preview: true` here; the server refuses to start when only one of the two is set. When the preview is on, `provider`, `model` and `key` are required too: there is no default model, you choose one. The limits below have defaults, and the defaults are hypotheses that will change with measurement.
 
 <!-- keys: ai -->
 | Key | Required | What it does |
 |---|---|---|
-| `preview` | no | `true` switches the AI preview on. It takes effect only together with the environment variable `NEBURYX_PROFILE=enterprise`; the server refuses to start when only one of the two is set |
+| `preview` | no | `true` switches the AI preview on, together with `NEBURYX_PROFILE=enterprise` |
+| `provider` | no | The model provider. Only `anthropic` is accepted for now; another value is refused |
+| `model` | no | The model to use, for example `claude-sonnet-5-5`. There is no default. Give the name without a date suffix |
+| `key` | no | Where the API key is: a map with exactly one of `env` and `file`, never the key itself |
+| `prompts` | no | A map from a built-in prompt id (`ask.plan`, `summary.view`, `assistant.route`) to the absolute path of a text file that replaces that prompt. A replacement cannot add tools |
+| `timeout_ms` | no | How long one call to the model may take, from 1000 to 600000. The default is 60000 |
+| `max_retries` | no | How many times a failed call is tried again, from 0 to 5. The default is 0 |
+| `max_tokens` | no | The most tokens a reply may use, from 1 to 32768. The default is 8192 |
+
+How to switch the preview on, and how to make the key file, is in [Switch the AI preview on](ai-preview.md). The key is given by reference. `env` names an environment variable that holds it; `file` is the absolute path of a file that holds it, which only its owner may read (mode 0600).
+
+<!-- keys: ai.key -->
+| Key | Required | What it does |
+|---|---|---|
+| `env` | no | The name of the environment variable that holds the key (letters, digits and underscores, not starting with a digit). Give this or `file`, not both |
+| `file` | no | The absolute path of the file that holds the key. Give this or `env`, not both |
 
 ### A source
 

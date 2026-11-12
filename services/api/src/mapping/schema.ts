@@ -1,5 +1,5 @@
 import { RESERVED_SOURCE_IDS } from './reserved-source-ids.js';
-import { addressableTextOfAtMost, iconKeySchema, MAX_CASE_REF_LENGTH, MAX_STABLE_ID_LENGTH, PII_CLASSES, presetTemplateSchema, type PiiClass } from '@neburyx/contracts';
+import { addressableTextOfAtMost, aiSettingsSchema, iconKeySchema, MAX_CASE_REF_LENGTH, MAX_STABLE_ID_LENGTH, PII_CLASSES, presetTemplateSchema, type PiiClass } from '@neburyx/contracts';
 import { z } from 'zod';
 import { isWellFormed } from '../reference/well-formed.js';
 import { budgetsSchema } from './budgets.js';
@@ -177,9 +177,7 @@ const sourceSchema = z.strictObject({
   style_rules: z.array(z.unknown().refine(isPlainData, { message: 'is not plain data (text, numbers, true or false, lists and maps)' })).optional(),
 });
 
-const aiSchema = z.strictObject({ preview: z.boolean().optional() });
-
-export const mappingFileSchema = z.strictObject({ sources: z.array(sourceSchema), retention: retentionSchema.optional(), ai: aiSchema.optional() });
+export const mappingFileSchema = z.strictObject({ sources: z.array(sourceSchema), retention: retentionSchema.optional(), ai: aiSettingsSchema.optional() });
 
 export type RawMappingFile = z.infer<typeof mappingFileSchema>;
 export type RawSource = z.infer<typeof sourceSchema>;

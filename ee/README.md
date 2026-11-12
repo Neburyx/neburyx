@@ -11,7 +11,7 @@ Modules now:
 
 | Folder | What it is |
 |---|---|
-| `ask/` | `@neburyx/ee-ask`: the enterprise extension (`createEnterpriseExtension`) and the AI route group, which has one route, `GET /v1/ai/status`, so far |
+| `ask/` | `@neburyx/ee-ask`: the enterprise extension (`createEnterpriseExtension`), the AI route group (one route, `GET /v1/ai/status`, so far), the provider interface (`ModelProvider`, whose request is only a built-in prompt id and its parameters), the registry of built-in prompts with the override of an id by a file, and `configure`, which checks the AI settings at start-up |
 | `migrations/` | SQL migrations of the `ee/` tables, applied by `neburyx migrate` only when the preview is switched on (none yet) |
 
 How an extension registers: Community code defines a registry and a contract (`ProfileExtension`, in `packages/contracts`) and never imports `ee/`. The image's entry script registers a loader for the extension; Community loads it only when the switch is on, mounts its route groups with the permission each route declares, and applies its migrations folder.

@@ -49,16 +49,16 @@ describe('the preview switch decision', () => {
 });
 
 describe('the ai section of the mapping file', () => {
-  it('reads preview as a boolean and leaves the section out of a model that has none', () => {
+  it('reads preview as a boolean and holds the section as written, or not at all', () => {
     expect(mappingWith({ preview: true }).ai).toEqual({ preview: true });
     expect(mappingWith({ preview: false }).ai).toEqual({ preview: false });
-    expect(mappingWith({}).ai).toEqual({ preview: false });
+    expect(mappingWith({}).ai).toEqual({});
     expect(mappingWith(undefined).ai).toBeUndefined();
   });
 
   it.each([
     ['a text value for preview', { preview: 'yes' }],
-    ['a key other than preview', { model: 'x' }],
+    ['a key the section does not have', { properties: ['x'] }],
     ['a section that is not a map', 'on'],
   ])('refuses %s', (_name, ai) => {
     expect(() => mappingWith(ai)).toThrow(MappingError);

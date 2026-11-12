@@ -11,7 +11,7 @@ import { isInContainer, warnIfExposed } from './exposure.js';
 import { IdentityStartError } from './identity/errors.js';
 import { MappingError } from './mapping/diagnostics.js';
 import { loadMappingFile } from './mapping/load.js';
-import { loadProfileExtension, registeredExtensionLoader, type ExtensionLoader } from './profile/extension.js';
+import { causeOf, EXTENSION_CONFIGURE_FAILED_MESSAGE, loadProfileExtension, registeredExtensionLoader, type ExtensionLoader } from './profile/extension.js';
 import { decidePreviewSwitch, previewInputsOf } from './profile/switch.js';
 import type { MappingModel } from './mapping/model.js';
 import { createAppStore, type AppStore } from './app-store.js';
@@ -146,6 +146,20 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
     }
     extension = loaded.extension;
     io.logger.info({ event: 'profile.extension_loaded', extension: extension.name }, 'enterprise extension loaded');
+    if (extension.configure !== undefined) {
+      let outcome;
+      try {
+        outcome = await extension.configure(mapping.ai ?? {}, env);
+      } catch (error) {
+        io.logger.error({ event: 'profile.extension_configure_failed', cause: causeOf(error) }, 'enterprise extension could not be configured');
+        io.stderr.write(`${EXTENSION_CONFIGURE_FAILED_MESSAGE}\n`);
+        return { exitCode: 1 };
+      }
+      if (!outcome.ok) {
+        for (const problem of outcome.problems) io.stderr.write(`invalid configuration: ${problem}\n`);
+        return { exitCode: 1 };
+      }
+    }
   }
 
   try {

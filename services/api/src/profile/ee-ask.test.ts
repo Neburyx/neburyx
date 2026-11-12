@@ -20,7 +20,10 @@ const folder = mkdtempSync(join(tmpdir(), 'ee-ask-'));
 afterAll(() => rmSync(folder, { recursive: true, force: true }));
 
 const previewFile = join(folder, 'preview.yaml');
-writeFileSync(previewFile, stringify({ sources: [], ai: { preview: true } }));
+const COMPLETE_AI = { preview: true, provider: 'anthropic', model: 'claude-sonnet-5-5', key: { env: 'AI_TEST_KEY' } };
+writeFileSync(previewFile, stringify({ sources: [], ai: COMPLETE_AI }));
+const incompleteFile = join(folder, 'incomplete.yaml');
+writeFileSync(incompleteFile, stringify({ sources: [], ai: { preview: true, provider: 'anthropic', key: { env: 'AI_TEST_KEY' } } }));
 const plainFile = join(folder, 'plain.yaml');
 writeFileSync(plainFile, stringify({ sources: [] }));
 
@@ -47,7 +50,7 @@ describe('the real enterprise extension in a start', () => {
   });
 
   it('answers 200 with the status and declares the principal permission when the switch is on', async () => {
-    const result = await start({ DATABASE_URL, NEBURYX_CONFIG: previewFile, NEBURYX_PROFILE: 'enterprise' }, startIo());
+    const result = await start({ DATABASE_URL, NEBURYX_CONFIG: previewFile, NEBURYX_PROFILE: 'enterprise', AI_TEST_KEY: 'present' }, startIo());
     expect(result.exitCode).toBe(0);
     if (result.exitCode !== 0) return;
     const answer = await result.app.inject({ url: '/v1/ai/status' });
@@ -55,6 +58,13 @@ describe('the real enterprise extension in a start', () => {
     expect(registeredRoutesOf(result.app).find((route) => route.url === '/v1/ai/status')).toMatchObject({ method: 'GET', permission: 'principal' });
     expect(routesWithoutPermission(registeredRoutesOf(result.app))).toEqual([]);
     await result.app.close();
+  });
+
+  it('refuses a start with the real configuration unmet, naming the setting, and a key variable that is not set', async () => {
+    const errors: string[] = [];
+    const io = { ...startIo(), stderr: { write: (text: string) => errors.push(text) } };
+    expect(await start({ DATABASE_URL, NEBURYX_CONFIG: incompleteFile, NEBURYX_PROFILE: 'enterprise' }, io)).toEqual({ exitCode: 1 });
+    expect(errors).toEqual(['invalid configuration: ai.model is required when the AI preview is on\n', 'invalid configuration: ai.key.env: the variable AI_TEST_KEY is not set or is empty\n']);
   });
 
   it('is described by the committed contract when mounted', async () => {

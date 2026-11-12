@@ -217,7 +217,7 @@ Each version you build has its own tag. To upgrade, build the new tag, keep the 
 docker compose up --wait
 ```
 
-The database migrations run before the API starts. With the AI preview switched on, they include the enterprise migrations, which are applied last and recorded in their own history; the `migrate` service then needs the same switch settings as the `api` service (see [the compose README](../deploy/compose/README.md)). If an enterprise migration fails, the others of that run stay applied.
+The database migrations run before the API starts. With the AI preview switched on, they include the enterprise migrations, which are applied last and recorded in their own history; the `migrate` service then needs the same switch settings as the `api` service (see [the compose README](../deploy/compose/README.md)). If an enterprise migration fails, the others of that run stay applied. [Switch the AI preview on](ai-preview.md) says how to set the preview up.
 
 ## Roll back by one tag
 

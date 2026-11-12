@@ -204,12 +204,12 @@ describe('the enterprise code in the one image', () => {
   });
 
   it('migrates and starts as the preview with both parts set: the AI status route answers and the edition is enterprise', async () => {
-    const file = mappingFolder({ preview: true });
+    const file = mappingFolder({ preview: true, provider: 'anthropic', model: 'claude-sonnet-5-5', key: { env: 'AI_TEST_KEY' } });
     const database = await postgres.newDatabase();
     const migrated = await migrateWith(database, withMapping(file, 'enterprise'));
     expect(migrated.code, migrated.stderr).toBe(0);
     expect(await rows(database.ownerUrl, `SELECT to_regclass('public.kysely_migration_ee') IS NOT NULL AS found`)).toEqual([{ found: true }]);
-    const api = await startWith(database, withMapping(file, 'enterprise'));
+    const api = await startWith(database, [...withMapping(file, 'enterprise'), '-e', 'AI_TEST_KEY=not-a-real-key']);
     expect(await (await fetch(`${api.url}/v1/ai/status`)).json()).toEqual({ preview: true });
     expect(await (await fetch(`${api.url}/v1/me`)).json()).toMatchObject({ edition: 'enterprise' });
     const logs = await docker(['logs', api.name]);

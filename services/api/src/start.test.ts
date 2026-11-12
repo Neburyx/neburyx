@@ -28,7 +28,7 @@ import { createSourceTester } from './source-test/tester.js';
 import { start, type StartIo } from './start.js';
 import { registeredRoutesOf } from './app.js';
 import { routesWithoutPermission } from './permissions.js';
-import { clearRegisteredExtension, EXTENSION_LOAD_FAILED_MESSAGE, NO_EXTENSION_MESSAGE, type ExtensionLoader } from './profile/extension.js';
+import { clearRegisteredExtension, EXTENSION_CONFIGURE_FAILED_MESSAGE, EXTENSION_LOAD_FAILED_MESSAGE, NO_EXTENSION_MESSAGE, type ExtensionLoader } from './profile/extension.js';
 import type { ExtensionRoute, ProfileExtension } from '@neburyx/contracts';
 import { LOCAL_IDENTITY, memoryAppStore, memoryStoreWith } from './testing/app-store.js';
 import { makeWebRoot } from './testing/web-root.js';
@@ -138,8 +138,8 @@ describe('the preview switch at start', () => {
     expect(run.errors.join('')).toBe('invalid configuration: NEBURYX_PROFILE\n');
   });
 
-  it('refuses an ai section with a key other than preview through the mapping diagnostics', async () => {
-    const { run, result } = await started(undefined, { model: 'x' }, 'bad-ai');
+  it('refuses an ai section with a key it does not have through the mapping diagnostics', async () => {
+    const { run, result } = await started(undefined, { properties: ['x'] }, 'bad-ai');
     expect(result).toEqual({ exitCode: 1 });
     expect(run.errors.join('')).toContain('ai');
   });
@@ -251,6 +251,63 @@ describe('the enterprise extension at start', () => {
     expect(answer.body).not.toContain('SENTINEL-VALUE');
     expect(rig.lines.join('')).not.toContain('SENTINEL-VALUE');
     await result.app.close();
+  });
+
+  describe('configuring the extension', () => {
+    const aiFile = join(folder, 'ai.yaml');
+    const AI = { preview: true, provider: 'anthropic', model: 'claude-sonnet-5-5', key: { env: 'AI_TEST_KEY' } };
+    writeFileSync(aiFile, stringify({ sources: [], ai: AI }));
+    const CONFIGURED = { ...DATABASE_ENV, NEBURYX_CONFIG: aiFile, NEBURYX_PROFILE: 'enterprise' };
+
+    function configuring(configure: NonNullable<ProfileExtension['configure']>) {
+      const events: string[] = [];
+      const calls: { settings: unknown; env: unknown }[] = [];
+      const extension: ProfileExtension = { ...extensionWith(route()), configure: async (settings, env) => (events.push('configure'), calls.push({ settings, env }), configure(settings, env)) };
+      const lines: string[] = [];
+      const logger = pino({ level: 'info' }, { write: (line: string) => void lines.push(line) });
+      const base = io({ portOverride: 0, logger, extensionLoader: { load: async () => extension } });
+      const opened: StartIo['openStore'] = () => (events.push('open-store'), memoryAppStore());
+      return { ...base, io: { ...base.io, openStore: opened }, events, calls, lines };
+    }
+
+    it('calls configure once, with the settings and the environment, before the store is opened', async () => {
+      const rig = configuring(async () => ({ ok: true }));
+      const result = await start(CONFIGURED, rig.io);
+      expect(result.exitCode).toBe(0);
+      expect(rig.events).toEqual(['configure', 'open-store']);
+      expect(rig.calls).toEqual([{ settings: AI, env: CONFIGURED }]);
+      if (result.exitCode === 0) await result.app.close();
+    });
+
+    it('writes every problem on a line of its own and exits 1 without opening the store', async () => {
+      const rig = configuring(async () => ({ ok: false, problems: ['ai.model is required when the AI preview is on', 'ai.key.env: the variable AI_TEST_KEY is not set or is empty'] }));
+      expect(await start(CONFIGURED, rig.io)).toEqual({ exitCode: 1 });
+      expect(rig.errors.join('')).toBe('invalid configuration: ai.model is required when the AI preview is on\ninvalid configuration: ai.key.env: the variable AI_TEST_KEY is not set or is empty\n');
+      expect(rig.events).toEqual(['configure']);
+    });
+
+    it('exits 1 with a fixed message, naming no error, path or file content, when configure throws', async () => {
+      const rig = configuring(async () => {
+        throw Object.assign(new Error('EACCES: /secret/place/prompt.txt SENTINEL-CONTENT'), { code: 'EACCES' });
+      });
+      expect(await start(CONFIGURED, rig.io)).toEqual({ exitCode: 1 });
+      expect(rig.errors.join('')).toBe(`${EXTENSION_CONFIGURE_FAILED_MESSAGE}\n`);
+      expect(rig.events).toEqual(['configure']);
+      const failed = rig.lines.filter((line) => line.includes('profile.extension_configure_failed'));
+      expect(failed).toHaveLength(1);
+      expect(failed[0]).toContain('EACCES');
+      expect(rig.lines.join('')).not.toContain('SENTINEL-CONTENT');
+    });
+
+    it('never loads the extension or calls configure when the switch is off, whatever ai keys the file has', async () => {
+      const offWithKeys = join(folder, 'off-with-keys.yaml');
+      writeFileSync(offWithKeys, stringify({ sources: [], ai: { provider: 'anthropic', model: 'claude-sonnet-5-5', key: { env: 'AI_TEST_KEY' } } }));
+      const rig = configuring(async () => ({ ok: true }));
+      const result = await start({ ...DATABASE_ENV, NEBURYX_CONFIG: offWithKeys }, rig.io);
+      expect(result.exitCode).toBe(0);
+      expect(rig.events).toEqual(['open-store']);
+      if (result.exitCode === 0) await result.app.close();
+    });
   });
 });
 

@@ -1,4 +1,4 @@
-import type { IconKey, PiiClass, PresetTemplate } from '@neburyx/contracts';
+import type { AiSettings, IconKey, PiiClass, PresetTemplate } from '@neburyx/contracts';
 import { buildLinkAddress } from './link-address.js';
 
 /** The most properties a source may list under `search` in all its entity types: each is a branch of the one search read. */
@@ -142,13 +142,9 @@ export interface RetentionModel {
   readonly exportsDays: number;
 }
 
-export interface AiModel {
-  readonly preview: boolean;
-}
-
 export interface MappingModel {
   readonly sources: readonly SourceModel[];
-  readonly ai?: AiModel;
+  readonly ai?: AiSettings;
   /** Absent only in a model that was not loaded from a file; read it with `retentionOf`. */
   readonly retention?: RetentionModel;
 }

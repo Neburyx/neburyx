@@ -323,5 +323,5 @@ export function buildMapping(raw: RawMappingFile): { readonly model: MappingMode
   const report: Report = (segments, reason) => issues.push({ segments, reason });
   reportDuplicates(raw.sources, (source) => [source.id], (i) => ['sources', i, 'id'], 'source', report);
   const sources = raw.sources.map((source, index) => buildSource(source, index, report));
-  return issues.length > 0 ? { issues } : { model: { sources, retention: resolveRetention(raw.retention), ...(raw.ai === undefined ? {} : { ai: { preview: raw.ai.preview === true } }) } };
+  return issues.length > 0 ? { issues } : { model: { sources, retention: resolveRetention(raw.retention), ...(raw.ai === undefined ? {} : { ai: raw.ai }) } };
 }
