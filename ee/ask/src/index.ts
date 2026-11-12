@@ -4,13 +4,14 @@ import { createAuditSink } from '@neburyx/ee-audit';
 import { createAnthropicProvider } from './anthropic.js';
 import { createAuditedModelCall, type AuditedModelCall } from './audited.js';
 import { configureAsk, type AskConfiguration } from './configure.js';
+import { writeFailureLine } from './failure-line.js';
 import { guardAiRouteGroup } from './route-guard.js';
 import { createRequestBuilder, type RequestBuilder } from './request.js';
 
 export { AUDIT_ACTIONS, AuditUnavailableError, createAuditedModelCall } from './audited.js';
 export type { AuditedCallContext, AuditedModelCall, AuditedModelOptions } from './audited.js';
 export { ANTHROPIC_BASE_URL, createAnthropicProvider } from './anthropic.js';
-export type { AnthropicProviderOptions } from './anthropic.js';
+export type { AnthropicProviderOptions, ProviderFailure } from './anthropic.js';
 export { configureAsk } from './configure.js';
 export { ROUTE_REFUSED_ACTION, guardAiRouteGroup } from './route-guard.js';
 export { PII_OVERRIDE_EVENT, type PropertyRules } from './rules.js';
@@ -56,7 +57,7 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
       return configured.outcome;
     },
     auditSink: () => mounted?.sink,
-    model: () => (configuration === undefined || mounted === undefined ? undefined : createAuditedModelCall({ provider: createAnthropicProvider({ configuration, env: environment, baseUrl: options.modelBaseUrl }), configuration, sink: mounted.sink })),
+    model: () => (configuration === undefined || mounted === undefined ? undefined : createAuditedModelCall({ provider: createAnthropicProvider({ configuration, env: environment, baseUrl: options.modelBaseUrl, onFailure: writeFailureLine }), configuration, sink: mounted.sink })),
     createAuditSink(context) {
       mounted = createAuditSink(context);
       return mounted;

@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { INVALID_SPAN_CONTEXT, trace } from '@opentelemetry/api';
 import { AI_DEFAULTS } from '@neburyx/contracts';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { createAnthropicProvider } from './anthropic.js';
+import { createAnthropicProvider, type ProviderFailure } from './anthropic.js';
 import { configureAsk, type AskConfiguration } from './configure.js';
 import type { ModelAnswer, ModelRequest } from './provider.js';
 
@@ -423,5 +423,70 @@ describe('a model name the client library has retired', () => {
     expect(written).toContain("'claude-sonnet-4-5'");
     expect(written).not.toContain(KEY);
     expect(written).not.toContain('a synthetic view');
+  });
+});
+
+describe('the failure record', () => {
+  async function failureOf(handlerOfTest: Handler, limits: Parameters<typeof configurationWith>[0] = { max_retries: 0 }, env: Record<string, string | undefined> = { STUB_KEY: KEY }): Promise<{ answer: ModelAnswer; records: ProviderFailure[] }> {
+    handler = handlerOfTest;
+    const records: ProviderFailure[] = [];
+    const answer = await createAnthropicProvider({ configuration: await configurationWith(limits), env, baseUrl, onFailure: (record) => void records.push(record) }).complete(REQUEST, SIGNAL);
+    return { answer, records };
+  }
+  const apiError = (type: unknown): unknown => ({ type: 'error', error: { type, message: 'SENTINEL-BODY' } });
+
+  it.each([
+    [401, 'authentication_error', 'rejected'],
+    [429, 'rate_limit_error', 'rate-limited'],
+    [500, 'api_error', 'provider-error'],
+  ])('holds the code, the status %i and the error type once, after the last retry', async (status, type, code) => {
+    const { records } = await failureOf(reply(status, apiError(type)), { max_retries: 1 });
+    expect(records).toEqual([{ code, status, errorType: type }]);
+  });
+
+  it.each([
+    ['a body that is not JSON', 'SENTINEL-BODY not json'],
+    ['a body with no error type', { type: 'error', error: { message: 'SENTINEL-BODY' } }],
+    ['a type that is not text', apiError(7)],
+    ['a type with a space', apiError('bad type')],
+    ['a type with a digit', apiError('error1')],
+    ['a type longer than 64 characters', apiError('a'.repeat(65))],
+  ])('holds status 400 and the type unrecognized for %s', async (_name, body) => {
+    const { records } = await failureOf(reply(400, body));
+    expect(records).toEqual([{ code: 'provider-error', status: 400, errorType: 'unrecognized' }]);
+  });
+
+  it('accepts a type of 64 letters and underscores', async () => {
+    const type = 'a_'.repeat(32);
+    expect((await failureOf(reply(400, apiError(type)))).records).toEqual([{ code: 'provider-error', status: 400, errorType: type }]);
+  });
+
+  it('holds the code only when no reply arrived or its body was not parsed', async () => {
+    const unparsed = await failureOf(reply(200, 'not json at all'));
+    expect(unparsed.records).toEqual([{ code: 'bad-reply' }]);
+    expect(unparsed.answer).toMatchObject({ status: 'failed', code: 'bad-reply' });
+    expect((await failureOf(reply(200, message()), { max_retries: 0 }, {})).records).toEqual([{ code: 'rejected' }]);
+    const timed = await failureOf(() => undefined, { timeout_ms: 100, max_retries: 0 });
+    expect(timed.records).toEqual([{ code: 'timeout' }]);
+  });
+
+  it('holds status 200 and no type for a reply the provider cannot use or one cut off at the token limit', async () => {
+    expect((await failureOf(reply(200, message({ content: 'x' })))).records).toEqual([{ code: 'bad-reply', status: 200 }]);
+    expect((await failureOf(reply(200, message({ stop_reason: 'max_tokens' })))).records).toEqual([{ code: 'truncated', status: 200 }]);
+  });
+
+  it('is not called for an ok or a refused reply, and a throwing report leaves the answer as it was', async () => {
+    expect((await failureOf(reply(200, message()))).records).toEqual([]);
+    expect((await failureOf(reply(200, message({ stop_reason: 'refusal' })))).records).toEqual([]);
+    handler = reply(500, apiError('api_error'));
+    const throwing = createAnthropicProvider({ configuration: await configurationWith({ max_retries: 0 }), env: { STUB_KEY: KEY }, baseUrl, onFailure: () => { throw new Error('SENTINEL-THROW'); } });
+    expect(await throwing.complete(REQUEST, SIGNAL)).toMatchObject({ status: 'failed', code: 'provider-error' });
+  });
+
+  it('holds only the fields code, status and errorType, and no sentinel', async () => {
+    const { records } = await failureOf(reply(500, apiError('api_error')));
+    expect(Object.keys(records[0] ?? {}).sort()).toEqual(['code', 'errorType', 'status']);
+    expect(JSON.stringify(records)).not.toMatch(/SENTINEL|a synthetic view/);
+    expect(JSON.stringify(records)).not.toContain(KEY);
   });
 });
