@@ -55,8 +55,8 @@ describe('the header of an export of a saved investigation', () => {
     expect(ids).not.toContain('P-1');
     expect(parsed.relationships.map((edge) => ('stableId' in edge.ref ? edge.ref.stableId : '')).sort()).toEqual(shown.edges.map((edge) => ('stableId' in edge.ref ? edge.ref.stableId : '')).sort());
     const { header } = parsed;
-    expect(header.lines).toEqual(['source: demo', `exported: ${header.exported}`, 'scope: current view (partial)', `coverage: ${String(shown.nodes.length)} shown · more not yet retrieved`, 'masking: off']);
-    expect(header).toMatchObject({ source: 'demo', scope: 'current view (partial)', masking: 'off', coverage: { shown: shown.nodes.length, notRetrieved: { quality: 'unknown' } } });
+    expect(header.lines).toEqual(['source: demo', `exported: ${header.exported}`, 'scope: current view (partial)', `coverage: ${String(shown.nodes.length)} shown · more not yet retrieved (${String(shown.nodes.length)} entities not yet counted)`, 'masking: off']);
+    expect(header).toMatchObject({ source: 'demo', scope: 'current view (partial)', masking: 'off', coverage: { shown: shown.nodes.length, notRetrieved: { quality: 'unknown' }, uncounted: shown.nodes.length } });
     expect(header.coverage.notRetrieved).not.toHaveProperty('value');
     expect(header.exported).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
     expect(Date.parse(header.exported)).toBeGreaterThanOrEqual(before - 1000);
@@ -121,6 +121,7 @@ describe('the not-yet-retrieved line of an export', () => {
     const remaining = 7 + 1 + 1 + 1 - request.edges.length * 2;
     expect(remaining).toBe(6);
     expect(header.coverage.notRetrieved).toMatchObject({ quality: 'estimated', value: remaining });
+    expect(header.coverage.uncounted).toBe(0);
     expect(header.lines[3]).toBe(`coverage: 4 shown · ~${String(remaining)} not yet retrieved (estimated)`);
   });
 
@@ -133,7 +134,8 @@ describe('the not-yet-retrieved line of an export', () => {
     const { file } = await made(tab, id, 'json', request);
     const { header } = exportFileSchema.parse(JSON.parse(await file.blob.text()));
     expect(header.coverage.notRetrieved).toMatchObject({ quality: 'lowerBound', value: 5 });
-    expect(header.lines[3]).toBe(`coverage: 4 shown · ≥ 5 not yet retrieved (lower bound)`);
+    expect(header.coverage.uncounted).toBe(3);
+    expect(header.lines[3]).toBe('coverage: 4 shown · ≥ 5 not yet retrieved (lower bound · 3 entities not yet counted)');
   });
 
   it('states no number when nothing about the shown entities was previewed', async () => {
@@ -143,7 +145,8 @@ describe('the not-yet-retrieved line of an export', () => {
     const { header } = exportFileSchema.parse(JSON.parse(await file.blob.text()));
     expect(header.coverage.notRetrieved).toMatchObject({ quality: 'unknown' });
     expect(header.coverage.notRetrieved).not.toHaveProperty('value');
-    expect(header.lines[3]).toBe('coverage: 4 shown · more not yet retrieved');
+    expect(header.coverage.uncounted).toBe(4);
+    expect(header.lines[3]).toBe('coverage: 4 shown · more not yet retrieved (4 entities not yet counted)');
   });
 });
 
