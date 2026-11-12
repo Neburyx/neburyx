@@ -79,6 +79,25 @@ describe('the conformance suite on a provider that is wrong', () => {
     expect(await failedCases(await fixtureRig({}, zeros))).toEqual(['scenario ok-unknown-usage']);
   });
 
+  it('fails a failure that carries no usage at all, and passes one that carries a known usage', async () => {
+    const without = (provider: ModelProvider): ModelProvider => ({
+      complete: async (request, signal) => {
+        const answer = await provider.complete(request, signal);
+        if (answer.status !== 'failed') return answer;
+        const { usage: _usage, ...rest } = answer;
+        return rest;
+      },
+    });
+    expect(await failedCases(await fixtureRig({}, without))).toEqual(['scenario timeout', 'scenario rate-limited', 'scenario rejected', 'scenario provider-error', 'scenario unreachable', 'scenario bad-reply', 'scenario truncated', 'scenario model-asks-for-a-tool']);
+    const known: FixtureReply = { kind: 'failed', code: 'truncated', usage: { kind: 'known', inputTokens: 12, outputTokens: 256 } };
+    expect(await failedCases(await fixtureRig({ truncated: known }))).toEqual([]);
+  });
+
+  it('fails a failure whose usage is not whole non-negative counts', async () => {
+    const odd: FixtureReply = { kind: 'failed', code: 'truncated', usage: { kind: 'known', inputTokens: 1.5, outputTokens: 2 } };
+    expect(await failedCases(await fixtureRig({ truncated: odd }))).toEqual(['scenario truncated']);
+  });
+
   it('fails a tool request that is returned as text', async () => {
     const rig = await fixtureRig({ 'model-asks-for-a-tool': { kind: 'ok', text: '{"tool_use":"run_query"}' } });
     expect(await failedCases(rig)).toEqual(['scenario model-asks-for-a-tool']);

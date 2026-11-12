@@ -9,7 +9,7 @@ function replyOf(answer: ModelAnswer): FixtureReply {
     case 'refused':
       return { kind: 'refused', usage: answer.usage };
     case 'failed':
-      return { kind: 'failed', code: answer.code };
+      return { kind: 'failed', code: answer.code, ...(answer.usage === undefined ? {} : { usage: answer.usage }) };
     default: {
       const unreachable: never = answer;
       return unreachable;

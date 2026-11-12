@@ -73,7 +73,7 @@ function normalReply(reply: FixtureReply): FixtureReply {
     case 'refused':
       return { kind: 'refused', ...(reply.usage === undefined ? {} : { usage: normalUsage(reply.usage) }) };
     case 'failed':
-      return { kind: 'failed', code: reply.code };
+      return { kind: 'failed', code: reply.code, ...(reply.usage === undefined ? {} : { usage: normalUsage(reply.usage) }) };
     default: {
       const unreachable: never = reply;
       return unreachable;
@@ -133,7 +133,7 @@ function isReply(value: unknown): value is FixtureReply {
   const usageOk = !('usage' in value) || value.usage === undefined || isUsage(value.usage);
   if (value.kind === 'ok') return 'text' in value && typeof value.text === 'string' && usageOk && (!('model' in value) || value.model === undefined || typeof value.model === 'string');
   if (value.kind === 'refused') return usageOk;
-  return value.kind === 'failed' && 'code' in value && typeof value.code === 'string' && FAILURE_CODES.some((code) => code === value.code);
+  return value.kind === 'failed' && usageOk && 'code' in value && typeof value.code === 'string' && FAILURE_CODES.some((code) => code === value.code);
 }
 
 function isPromptId(value: unknown): value is PromptId {

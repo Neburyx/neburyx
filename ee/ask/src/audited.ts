@@ -118,7 +118,7 @@ export function createAuditedModelCall(options: AuditedModelOptions): AuditedMod
         await record(request, context, resolved.record, { result: 'refused', modelRef: configuration.model, usage: answer.usage });
         return answer;
       case 'failed':
-        await record(request, context, resolved.record, failed);
+        await record(request, context, resolved.record, { ...failed, usage: answer.usage ?? UNKNOWN_USAGE });
         return answer;
       default: {
         const unreachable: never = answer;

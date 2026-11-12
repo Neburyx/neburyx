@@ -28,7 +28,7 @@ export type FailureCode = (typeof FAILURE_CODES)[number];
 export type ModelAnswer =
   | { readonly status: 'ok'; readonly text: string; readonly usage: TokenUsage; readonly model: string; readonly prompt: PromptRecord }
   | { readonly status: 'refused'; readonly usage: TokenUsage; readonly prompt: PromptRecord }
-  | { readonly status: 'failed'; readonly code: FailureCode; readonly prompt: PromptRecord };
+  | { readonly status: 'failed'; readonly code: FailureCode; readonly usage?: TokenUsage; readonly prompt: PromptRecord };
 
 export interface ModelProvider {
   readonly complete: (request: ModelRequest, signal: AbortSignal) => Promise<ModelAnswer>;

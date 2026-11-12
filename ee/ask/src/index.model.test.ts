@@ -100,6 +100,25 @@ describe('the failure line of the extension', () => {
     expect(lines.join('')).not.toMatch(/SENTINEL/);
   });
 
+  it('records one failed audit event with the tokens of a reply cut off at the token limit', async () => {
+    events.length = 0;
+    status = 200;
+    vi.spyOn(process.stdout, 'write').mockImplementation((() => true) as typeof process.stdout.write);
+    failureBody = { id: 'm', type: 'message', role: 'assistant', model: 'claude-sonnet-5-5', content: [{ type: 'text', text: 'cut' }], stop_reason: 'max_tokens', usage: { input_tokens: 12, output_tokens: 256 } };
+    try {
+      const extension = createEnterpriseExtension({ modelBaseUrl: baseUrl });
+      await extension.configure?.({ ...SETTINGS, max_retries: 0 }, { ONLY_IN_THE_START_ENV: 'SENTINEL-KEY' });
+      extension.createAuditSink?.(SINK_CONTEXT);
+      const answer = await extension.model()?.call({ promptId: 'summary.view', parameters: { view: 'a view' } }, context, new AbortController().signal);
+      expect(answer).toMatchObject({ status: 'failed', code: 'truncated', usage: { kind: 'known', inputTokens: 12, outputTokens: 256 } });
+      expect(events).toHaveLength(1);
+      expect(events[0]).toMatchObject({ result: 'failed', detail: { ai: { tokensIn: 12, tokensOut: 256 } } });
+    } finally {
+      failureBody = undefined;
+      vi.restoreAllMocks();
+    }
+  });
+
   it('writes nothing for a call that succeeds', async () => {
     const { lines, answer } = await callWith(200);
     expect(answer).toMatchObject({ status: 'ok' });

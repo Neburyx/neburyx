@@ -205,6 +205,41 @@ describe('a refused, failed or thrown call', () => {
     expect(events[0]).toMatchObject({ result: 'failed', detail: { ai: { modelRef: CONFIGURED_MODEL, tokensIn: 'unknown', tokensOut: 'unknown' } } });
   });
 
+  it.each(['timeout', 'unreachable', 'rejected', 'rate-limited', 'provider-error', 'bad-reply', 'truncated'] as const)('records the usage of the failure %s when the answer carries it', async (code) => {
+    const { audited, events } = await rig({ kind: 'failed', code, usage: { kind: 'known', inputTokens: 12, outputTokens: 256 } });
+    const answer = await audited.call(REQUESTS['ask.plan'], CONTEXT, SIGNAL);
+    expect(answer).toMatchObject({ status: 'failed', code, usage: { kind: 'known', inputTokens: 12, outputTokens: 256 } });
+    expect(events[0]).toMatchObject({ result: 'failed', detail: { ai: { modelRef: CONFIGURED_MODEL, tokensIn: 12, tokensOut: 256 } } });
+  });
+
+  describe('a failed answer whose usage is not known', () => {
+    async function eventFor(usage: unknown): Promise<AuditEvent> {
+      const registry = await registryWith();
+      const inner = createFixtureProvider({ registry, replies: { [replyKey('ask.plan', 1)]: { kind: 'failed', code: 'truncated' } } });
+      const provider: ModelProvider = {
+        complete: async (request, signal) => {
+          const { usage: _usage, ...rest } = await inner.complete(request, signal);
+          return (usage === undefined ? rest : { ...rest, usage }) as never;
+        },
+      };
+      const { audited, events } = await rig(undefined, { provider });
+      await audited.call(REQUESTS['ask.plan'], CONTEXT, SIGNAL);
+      return events[0] as AuditEvent;
+    }
+
+    it.each([
+      ['unknown usage', { kind: 'unknown' }],
+      ['no usage at all', undefined],
+    ])('records unknown for both counts for %s', async (_name, usage) => {
+      expect(await eventFor(usage)).toMatchObject({ result: 'failed', detail: { ai: { tokensIn: 'unknown', tokensOut: 'unknown' } } });
+    });
+
+    it('records unknown for a count that is not a whole non-negative number, and keeps the other', async () => {
+      expect(await eventFor({ kind: 'known', inputTokens: -1, outputTokens: 2 })).toMatchObject({ detail: { ai: { tokensIn: 'unknown', tokensOut: 2 } } });
+      expect(await eventFor({ kind: 'known', inputTokens: 3, outputTokens: 1.5 })).toMatchObject({ detail: { ai: { tokensIn: 3, tokensOut: 'unknown' } } });
+    });
+  });
+
   it('records a failed event and throws the original error when the provider throws', async () => {
     const boom = new Error('the provider broke');
     const { audited, events } = await rig(undefined, { provider: { complete: () => Promise.reject(boom) } });

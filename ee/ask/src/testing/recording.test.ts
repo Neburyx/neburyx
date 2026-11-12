@@ -87,6 +87,7 @@ describe('loading a recording', () => {
     ['an unknown prompt id', entry({ promptId: 'free.text' }), 'entry 1: the prompt id is unknown'],
     ['a version the registry is not at', entry({ version: 2 }), 'entry 1: was recorded against version 2 of ask.plan, and the registry is at 1'],
     ['a reply that is not valid', entry({ reply: { kind: 'ok' } }), 'entry 1: the reply is not valid'],
+    ['a failed reply with a bad usage', entry({ reply: { kind: 'failed', code: 'truncated', usage: { kind: 'known', inputTokens: -1, outputTokens: 2 } } }), 'entry 1: the reply is not valid'],
     ['a failure code that does not exist', entry({ reply: { kind: 'failed', code: 'exploded' } }), 'entry 1: the reply is not valid'],
     ['an entry that is not an object', JSON.stringify({ format: 1, entries: [7] }), 'entry 1: is not an entry'],
   ])('refuses %s, naming the entry', (_name, json, problem) => {
@@ -103,6 +104,36 @@ describe('loading a recording', () => {
       ],
     });
     expect(parseRecording(json).ok).toBe(true);
+  });
+});
+
+describe('a recording of a failed answer', () => {
+  it('keeps the usage through a round trip and replays it', async () => {
+    const built = await buildPromptRegistry();
+    if (!built.ok) throw new Error(built.problems.join('; '));
+    const usage = { kind: 'known', inputTokens: 12, outputTokens: 256 } as const;
+    const inner = createFixtureProvider({ registry: built.registry, replies: { [replyKey('ask.plan', 1)]: { kind: 'failed', code: 'truncated', usage } } });
+    const recorder = createRecorder(inner);
+    await recorder.provider.complete(PLAN, SIGNAL);
+    expect(recorder.recording().entries).toEqual([{ promptId: 'ask.plan', version: 1, reply: { kind: 'failed', code: 'truncated', usage } }]);
+    const path = join(folder, 'failed-usage.json');
+    await writeRecording(path, recorder.recording());
+    const loaded = parseRecording(readFileSync(path, 'utf8'));
+    expect(loaded.ok).toBe(true);
+    if (!loaded.ok) return;
+    const replay = createFixtureProvider({ registry: built.registry, replies: loaded.replies });
+    expect(await replay.complete(PLAN, SIGNAL)).toMatchObject({ status: 'failed', code: 'truncated', usage });
+  });
+
+  it('loads an entry written before the field existed (a failed entry with only a code) and replays it as unknown usage', async () => {
+    const built = await buildPromptRegistry();
+    if (!built.ok) throw new Error(built.problems.join('; '));
+    const loaded = parseRecording(JSON.stringify({ format: 1, entries: [{ promptId: 'ask.plan', version: 1, reply: { kind: 'failed', code: 'truncated' } }] }));
+    expect(loaded.ok).toBe(true);
+    if (!loaded.ok) return;
+    expect(checkRecording({ format: 1, entries: [{ promptId: 'ask.plan', version: 1, reply: { kind: 'failed', code: 'truncated' } }] })).toEqual([]);
+    const replay = createFixtureProvider({ registry: built.registry, replies: loaded.replies });
+    expect(await replay.complete(PLAN, SIGNAL)).toMatchObject({ status: 'failed', code: 'truncated', usage: { kind: 'unknown' } });
   });
 });
 

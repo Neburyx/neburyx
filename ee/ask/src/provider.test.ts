@@ -100,6 +100,17 @@ describe('the answer of the provider interface', () => {
   });
 });
 
+describe('the usage of a failed answer', () => {
+  it('may be absent, known or unknown, and refuses at compile time anything else', () => {
+    const absent: ModelAnswer = { status: 'failed', code: 'truncated', prompt: PROMPT };
+    const known: ModelAnswer = { status: 'failed', code: 'truncated', usage: { kind: 'known', inputTokens: 12, outputTokens: 256 }, prompt: PROMPT };
+    const unknown: ModelAnswer = { status: 'failed', code: 'timeout', usage: { kind: 'unknown' }, prompt: PROMPT };
+    // @ts-expect-error a bare number is not a usage
+    const number: ModelAnswer = { status: 'failed', code: 'truncated', usage: 0, prompt: PROMPT };
+    expect([absent, known, unknown, number]).toHaveLength(4);
+  });
+});
+
 describe('the provider', () => {
   it('is called with a request and an abort signal, and nothing else', async () => {
     const provider: ModelProvider = { complete: async () => ({ status: 'refused', usage: { kind: 'unknown' }, prompt: PROMPT }) };

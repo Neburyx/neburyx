@@ -321,7 +321,7 @@ describe('failures', () => {
     [422, 'provider-error'],
   ])('maps status %i to %s after one request with no retries', async (status, code) => {
     const answer = await answerTo(reply(status, { type: 'error', error: { type: 'x', message: 'the prompt and the key must not appear' } }));
-    expect(answer).toMatchObject({ status: 'failed', code });
+    expect(answer).toMatchObject({ status: 'failed', code, usage: { kind: 'unknown' } });
     expect(seen).toHaveLength(1);
     expect(JSON.stringify(answer)).not.toMatch(/must not appear|a synthetic view/);
     expect(JSON.stringify(answer)).not.toContain(KEY);
@@ -382,7 +382,7 @@ describe('failures', () => {
     };
     const started = Date.now();
     const answer = await complete(await configurationWith({ timeout_ms: 1_000, max_retries: 0 }));
-    expect(answer).toMatchObject({ status: 'failed', code: 'timeout' });
+    expect(answer).toMatchObject({ status: 'failed', code: 'timeout', usage: { kind: 'unknown' } });
     expect(Date.now() - started).toBeLessThan(2_000);
   });
 
@@ -488,5 +488,57 @@ describe('the failure record', () => {
     expect(Object.keys(records[0] ?? {}).sort()).toEqual(['code', 'errorType', 'status']);
     expect(JSON.stringify(records)).not.toMatch(/SENTINEL|a synthetic view/);
     expect(JSON.stringify(records)).not.toContain(KEY);
+  });
+});
+
+describe('the usage of a failed answer', () => {
+  const KNOWN = { kind: 'known', inputTokens: 12, outputTokens: 256 };
+
+  it.each(['max_tokens', 'model_context_window_exceeded'])('is the figures of the reply for a %s stop, with code truncated and no text', async (stop) => {
+    const answer = await answerTo(reply(200, message({ stop_reason: stop, usage: { input_tokens: 12, output_tokens: 256 } })));
+    expect(answer).toMatchObject({ status: 'failed', code: 'truncated', usage: KNOWN });
+    expect(answer).not.toHaveProperty('text');
+  });
+
+  it.each([
+    ['an unknown content block', { content: [{ type: 'tool_use', id: 't', name: 'n', input: {} }] }],
+    ['no text', { content: [] }],
+    ['an unexpected stop reason', { stop_reason: 'pause_turn' }],
+    ['content that is not a list', { content: 'x' }],
+  ])('is the figures of the reply for a body with %s that cannot be used', async (_name, extra) => {
+    const answer = await answerTo(reply(200, message({ usage: { input_tokens: 12, output_tokens: 256 }, ...extra })));
+    expect(answer).toMatchObject({ status: 'failed', code: 'bad-reply', usage: KNOWN });
+  });
+
+  it.each([
+    ['usage absent', { usage: undefined }],
+    ['a decimal count', { usage: { input_tokens: 1.5, output_tokens: 2 } }],
+    ['a negative count', { usage: { input_tokens: -1, output_tokens: 2 } }],
+    ['one count', { usage: { input_tokens: 3 } }],
+    ['a count given as text', { usage: { input_tokens: '3', output_tokens: 2 } }],
+  ])('is unknown for a truncated reply with %s', async (_name, extra) => {
+    expect(await answerTo(reply(200, message({ stop_reason: 'max_tokens', ...extra })))).toMatchObject({ status: 'failed', code: 'truncated', usage: { kind: 'unknown' } });
+  });
+
+  it.each([['a list', '[1,2]'], ['null', 'null'], ['text', '"text"']])('is unknown for a 200 body that is %s', async (_name, body) => {
+    expect(await answerTo(reply(200, body))).toMatchObject({ status: 'failed', code: 'bad-reply', usage: { kind: 'unknown' } });
+  });
+
+  it('is unknown for a body that is not JSON, for a failure with an error body that states usage, for an unreadable key, for a timeout and for a destroyed connection', async () => {
+    expect(await answerTo(reply(200, 'not json at all'))).toMatchObject({ status: 'failed', usage: { kind: 'unknown' } });
+    expect(await answerTo(reply(500, { type: 'error', error: { type: 'api_error', message: 'm' }, usage: { input_tokens: 9, output_tokens: 9 } }))).toMatchObject({ status: 'failed', code: 'provider-error', usage: { kind: 'unknown' } });
+    handler = reply(200, message());
+    expect(await complete(await configurationWith({ max_retries: 0 }), {})).toMatchObject({ status: 'failed', code: 'rejected', usage: { kind: 'unknown' } });
+    handler = () => undefined;
+    expect(await complete(await configurationWith({ timeout_ms: 100, max_retries: 0 }))).toMatchObject({ status: 'failed', code: 'timeout', usage: { kind: 'unknown' } });
+    handler = (_captured, response) => {
+      response.destroy();
+    };
+    expect(await complete(await configurationWith({ max_retries: 0 }))).toMatchObject({ status: 'failed', code: 'unreachable', usage: { kind: 'unknown' } });
+  });
+
+  it('keeps a refusal and an ok reply as they were', async () => {
+    expect(await answerTo(reply(200, message({ stop_reason: 'refusal' })))).toMatchObject({ status: 'refused', usage: { kind: 'known', inputTokens: 12, outputTokens: 5 } });
+    expect(await answerTo(reply(200, message()))).toMatchObject({ status: 'ok', usage: { kind: 'known', inputTokens: 12, outputTokens: 5 } });
   });
 });

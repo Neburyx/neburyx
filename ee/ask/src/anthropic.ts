@@ -56,25 +56,27 @@ function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+const UNKNOWN_USAGE: TokenUsage = { kind: 'unknown' };
+
 function usageOf(value: unknown): TokenUsage {
-  if (!isRecord(value)) return { kind: 'unknown' };
+  if (!isRecord(value)) return UNKNOWN_USAGE;
   const { input_tokens: input, output_tokens: output } = value;
   if (typeof input === 'number' && typeof output === 'number' && Number.isInteger(input) && Number.isInteger(output) && input >= 0 && output >= 0) {
     return { kind: 'known', inputTokens: input, outputTokens: output };
   }
-  return { kind: 'unknown' };
+  return UNKNOWN_USAGE;
 }
 
 /** Maps the body of a reply to an answer; whatever it does not recognize is a bad reply, never text. */
 function answerOf(body: unknown, prompt: PromptRecord, model: string): ModelAnswer {
-  const bad: ModelAnswer = { status: 'failed', code: 'bad-reply', prompt };
-  if (!isRecord(body)) return bad;
+  if (!isRecord(body)) return { status: 'failed', code: 'bad-reply', usage: UNKNOWN_USAGE, prompt };
   const usage = usageOf(body.usage);
+  const bad: ModelAnswer = { status: 'failed', code: 'bad-reply', usage, prompt };
   const stop = body.stop_reason;
   // A refusal is a refusal whatever the content holds, and it never carries text.
   if (stop === 'refusal') return { status: 'refused', usage, prompt };
   if (!Array.isArray(body.content)) return bad;
-  if (stop === 'max_tokens' || stop === 'model_context_window_exceeded') return { status: 'failed', code: 'truncated', prompt };
+  if (stop === 'max_tokens' || stop === 'model_context_window_exceeded') return { status: 'failed', code: 'truncated', usage, prompt };
   if (stop !== 'end_turn' && stop !== 'stop_sequence') return bad;
   const texts: string[] = [];
   for (const block of body.content as readonly unknown[]) {
@@ -138,7 +140,7 @@ export function createAnthropicProvider(options: AnthropicProviderOptions): Mode
 
   async function attempt(request: ModelRequest, signal: AbortSignal, note: (failure: ProviderFailure) => void): Promise<ModelAnswer> {
     const resolved = configuration.registry.resolve(request.promptId, request.parameters);
-    const failed = (code: FailureCode): ModelAnswer => ({ status: 'failed', code, prompt: resolved.record });
+    const failed = (code: FailureCode): ModelAnswer => ({ status: 'failed', code, usage: UNKNOWN_USAGE, prompt: resolved.record });
     const key = await readKey(configuration, options.env ?? process.env);
     if (key === undefined) return failed('rejected');
 

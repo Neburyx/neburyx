@@ -45,6 +45,14 @@ describe('a fixture provider', () => {
     }
   });
 
+  it('answers a failed reply with the usage it was given, or unknown usage when none', async () => {
+    const usage = { kind: 'known', inputTokens: 12, outputTokens: 256 } as const;
+    const given = createFixtureProvider({ registry: await registry(), replies: { [replyKey('ask.plan', 1)]: { kind: 'failed', code: 'truncated', usage } } });
+    expect(await given.complete(REQUEST, SIGNAL)).toMatchObject({ status: 'failed', code: 'truncated', usage });
+    const none = createFixtureProvider({ registry: await registry(), replies: { [replyKey('ask.plan', 1)]: { kind: 'failed', code: 'truncated' } } });
+    expect(await none.complete(REQUEST, SIGNAL)).toMatchObject({ status: 'failed', usage: { kind: 'unknown' } });
+  });
+
   it('uses the model name it is given', async () => {
     const provider = createFixtureProvider({ registry: await registry(), model: 'stub-model', replies: { [replyKey('ask.plan', 1)]: { kind: 'ok', text: 't' } } });
     expect(await provider.complete(REQUEST, SIGNAL)).toMatchObject({ model: 'stub-model' });

@@ -4,7 +4,7 @@ import type { FailureCode, ModelAnswer, ModelProvider, ModelRequest, TokenUsage 
 export type FixtureReply =
   | { readonly kind: 'ok'; readonly text: string; readonly usage?: TokenUsage; readonly model?: string }
   | { readonly kind: 'refused'; readonly usage?: TokenUsage }
-  | { readonly kind: 'failed'; readonly code: FailureCode };
+  | { readonly kind: 'failed'; readonly code: FailureCode; readonly usage?: TokenUsage };
 
 export type FixtureReplySource = FixtureReply | ((request: ModelRequest) => FixtureReply);
 
@@ -48,7 +48,7 @@ export function createFixtureProvider(options: FixtureOptions): FixtureProvider 
         case 'refused':
           return { status: 'refused', usage: reply.usage ?? UNKNOWN_USAGE, prompt: record };
         case 'failed':
-          return { status: 'failed', code: reply.code, prompt: record };
+          return { status: 'failed', code: reply.code, usage: reply.usage ?? UNKNOWN_USAGE, prompt: record };
         default: {
           const unreachable: never = reply;
           return unreachable;

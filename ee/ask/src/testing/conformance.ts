@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { PromptError, type PromptRegistry } from '../prompts.js';
-import type { FailureCode, ModelAnswer, ModelProvider, ModelRequest } from '../provider.js';
+import type { FailureCode, ModelAnswer, ModelProvider, ModelRequest, TokenUsage } from '../provider.js';
 
 export const CONFORMANCE_SCENARIOS = [
   'ok-known-usage',
@@ -59,6 +59,13 @@ function assertNoText(answer: ModelAnswer): void {
   assert.equal('text' in answer, false, 'the answer holds no text');
 }
 
+function assertUsage(usage: TokenUsage | undefined): void {
+  assert.ok(usage !== undefined, 'a failure carries a usage, known or unknown');
+  if (usage.kind === 'unknown') return;
+  assert.ok(Number.isInteger(usage.inputTokens) && usage.inputTokens >= 0);
+  assert.ok(Number.isInteger(usage.outputTokens) && usage.outputTokens >= 0);
+}
+
 const failureCase = ([scenario, code]: readonly [ConformanceScenario, FailureCode]): ConformanceCase => ({
   name: `scenario ${scenario}`,
   async run(rig) {
@@ -67,6 +74,7 @@ const failureCase = ([scenario, code]: readonly [ConformanceScenario, FailureCod
     assert.equal(answer.status === 'failed' ? answer.code : undefined, code);
     assertPromptRecord(rig, answer);
     assertNoText(answer);
+    assertUsage(answer.status === 'failed' ? answer.usage : undefined);
   },
 });
 
