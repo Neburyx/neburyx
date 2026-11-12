@@ -12,7 +12,7 @@ How a release image is built and published. A maintainer pushes a version tag; t
 
 ## The image target
 
-[`image-target.json`](image-target.json) names the registry host (`registry`) and the image path (`image`). It is the only place either appears. Both are not yet chosen: each holds a release placeholder (a name starting `NEBURYX_RELEASE_` and ending `_REGISTRY` or `_IMAGE`) until a maintainer replaces it. While either does, `--check-target` and `--push` exit `1` and the workflow stops at step 3, before it logs in.
+[`image-target.json`](image-target.json) names the registry host (`registry`) and the image path (`image`). It is the only place either appears. Both are chosen. If either field holds a release placeholder (a name starting `NEBURYX_RELEASE_` and ending `_REGISTRY` or `_IMAGE`) or is empty, `--check-target` and `--push` exit `1` and the workflow stops at step 3, before it logs in.
 
 ## Local dry run
 

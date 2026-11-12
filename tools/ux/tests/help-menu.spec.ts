@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 const ITEMS = ['Keyboard shortcuts', 'Documentation', 'Quickstart: the demo case', 'Talk to us about Enterprise', 'Report a problem'];
-const REPOSITORY = 'NEBURYX_RELEASE_PLACEHOLDER_REPOSITORY_URL';
+const REPOSITORY = 'https://github.com/Neburyx/neburyx';
 const EXTERNAL: ReadonlyArray<readonly [string, string]> = [
   ['Documentation', `${REPOSITORY}/tree/main/docs`],
   ['Quickstart: the demo case', `${REPOSITORY}#quickstart`],
@@ -87,11 +87,16 @@ test.describe('the Help menu on Home', () => {
   for (const [name, target] of EXTERNAL) {
     test(`opens ${name} in a new page with no opener and no query data, without following it`, async ({ page, context }) => {
       const requested: URL[] = [];
-      await context.route(`**/${REPOSITORY}/**`, async (route) => {
+      const offsite: string[] = [];
+      await context.route((url) => url.hostname !== '127.0.0.1' && url.hostname !== 'localhost', async (route) => {
+        offsite.push(route.request().url());
+        await route.abort();
+      });
+      await context.route(`${REPOSITORY}/**`, async (route) => {
         requested.push(new URL(route.request().url()));
         await route.fulfill({ status: 200, contentType: 'text/html', body: '<title>stand-in</title>' });
       });
-      await context.route(`**/${REPOSITORY}`, async (route) => {
+      await context.route(REPOSITORY, async (route) => {
         requested.push(new URL(route.request().url()));
         await route.fulfill({ status: 200, contentType: 'text/html', body: '<title>stand-in</title>' });
       });
@@ -104,7 +109,8 @@ test.describe('the Help menu on Home', () => {
       await link.click();
       const popup = await popupPromise;
       await popup.waitForLoadState();
-      expect(requested.map((url) => url.pathname)).toEqual([`/${target.replace(/#.*$/, '')}`]);
+      expect(requested.map((url) => url.pathname)).toEqual([new URL(target).pathname]);
+      expect(offsite).toEqual([]);
       expect(requested.every((url) => url.search === '')).toBe(true);
       expect(new URL(popup.url()).search).toBe('');
       expect(await popup.evaluate(() => window.opener === null)).toBe(true);

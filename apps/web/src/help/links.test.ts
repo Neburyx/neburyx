@@ -10,9 +10,9 @@ describe('the help link targets', () => {
     expect(Object.values(HELP_LINKS).every((target) => target.split(REPOSITORY_URL).length === 2)).toBe(true);
   });
 
-  it('holds the release token in the constant and nothing that looks like an address', () => {
-    expect(REPOSITORY_URL).toBe('NEBURYX_RELEASE_PLACEHOLDER_REPOSITORY_URL');
-    expect(REPOSITORY_URL).not.toMatch(/:\/\//);
+  it('holds the address of the public repository, as an https address with no trailing slash', () => {
+    expect(REPOSITORY_URL).toBe('https://github.com/Neburyx/neburyx');
+    expect(REPOSITORY_URL.endsWith('/')).toBe(false);
   });
 
   it.each(Object.entries(HELP_LINKS))('has %s as an https address with no query string once the repository address is put in', (_name, target) => {

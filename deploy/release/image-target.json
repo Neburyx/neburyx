@@ -1,4 +1,4 @@
 {
-  "registry": "NEBURYX_RELEASE_PLACEHOLDER_REGISTRY",
-  "image": "NEBURYX_RELEASE_PLACEHOLDER_IMAGE"
+  "registry": "ghcr.io",
+  "image": "neburyx/neburyx"
 }

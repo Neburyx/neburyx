@@ -1,5 +1,5 @@
 /** Replaced with the address of the public repository when it is published. */
-export const REPOSITORY_URL = 'NEBURYX_RELEASE_PLACEHOLDER_REPOSITORY_URL';
+export const REPOSITORY_URL = 'https://github.com/Neburyx/neburyx';
 
 export const QUICKSTART_ANCHOR = 'quickstart';
 

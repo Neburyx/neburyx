@@ -14,11 +14,11 @@ Every command runs from `deploy/compose` in the repository unless it says otherw
 Get the repository's files:
 
 ```bash
-git clone NEBURYX_RELEASE_PLACEHOLDER_REPOSITORY_URL neburyx
+git clone https://github.com/Neburyx/neburyx neburyx
 cd neburyx
 ```
 
-There is no published image yet. Until there is, you build the image from the repository, from its root. When one is published, set `NEBURYX_IMAGE` to `NEBURYX_RELEASE_PLACEHOLDER_IMAGE` and `NEBURYX_TAG` to the version in `.env`, and skip the build:
+There is no published image yet. Until there is, you build the image from the repository, from its root. When one is published, set `NEBURYX_IMAGE` to `ghcr.io/neburyx/neburyx` and `NEBURYX_TAG` to the version in `.env`, and skip the build:
 
 ```bash
 docker build -f deploy/docker/Dockerfile -t neburyx:local .
