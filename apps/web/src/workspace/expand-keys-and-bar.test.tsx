@@ -163,7 +163,7 @@ describe('the header of the menu of an aggregate relationship', () => {
     const graph = { nodes: [node('a', 'n1'), node('a', 'n2')], edges: [aggregate], hidden: new Set<string>() } as never;
     const header = menuHeader({ kind: 'relationship', key: edgeKey(aggregate.ref), x: 0, y: 0 }, graph, undefined);
     expect(header?.title).toBe('rel-a · 3 · exact · sourced');
-    expect(header?.detail).toBe('n1 ↔ n2 · first 2026-04-01T00:00:00Z · last 2026-04-02T00:00:00Z');
+    expect(header?.detail).toBe('n1 → n2 · first 2026-04-01T00:00:00Z · last 2026-04-02T00:00:00Z');
     expect(elementKey(ref('a', 'type-a', 'n1'))).toBeDefined();
   });
 });

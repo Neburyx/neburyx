@@ -141,7 +141,7 @@ export const sampleEnvironment: TrustEnvironment = {
         await rightClickBetween(page, 'holder', 'cas');
         await chooseWhy(page);
       },
-      shows: ['Evidence not available', 'For legacy relationships without retained source records.'],
+      shows: ['Evidence not available', 'The source holds no record for this relationship.'],
       notAvailable: true,
     },
   ],

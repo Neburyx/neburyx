@@ -14,6 +14,12 @@ export interface Evidence {
   open(ref: EdgeRef, opener?: HTMLElement | null): boolean;
   /** Opens the panel on another relationship from inside the open panel, by choice: focus goes into the panel and, when it closes, back to the control that opened it first. */
   reopen(ref: EdgeRef): boolean;
+  /** Opens the panel on the relationship the selection holds: no choice is counted and no focus moves, so the canvas keeps the keyboard. false when no kind offers it. */
+  reveal(ref: EdgeRef): boolean;
+  /** Registers a reason for the selection not to open the panel (another panel holds the dock); the function returned takes it back. A choice still opens it. */
+  blockReveal(blocked: () => boolean): () => void;
+  /** Closes a panel that the selection opened, leaving focus where it is; a panel opened by choice stays. */
+  retire(): void;
   /** Moves an open panel to another relationship, as the selection does; it never opens a closed panel and never takes focus. */
   follow(ref: EdgeRef): void;
   close(): void;
@@ -30,7 +36,9 @@ export function createEvidence(covered: (ref: EdgeRef) => boolean = () => true):
   const target = createStore<EdgeRef | undefined>(undefined);
   const choices = createStore(0);
   let opener: HTMLElement | null = null;
+  let revealed = false;
   const listeners = new Set<() => void>();
+  const blockers = new Set<() => boolean>();
   const offers = (ref: EdgeRef): boolean => covered(ref) && kindOf(kinds.view.getState(), ref) !== undefined;
   return {
     kinds,
@@ -41,12 +49,30 @@ export function createEvidence(covered: (ref: EdgeRef) => boolean = () => true):
       if (!offers(ref)) return false;
       for (const listener of [...listeners]) listener();
       opener = from ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
+      revealed = false;
       target.setState(ref);
       choices.setState(choices.getState() + 1);
       return true;
     },
+    reveal(ref) {
+      if (!offers(ref) || [...blockers].some((blocked) => blocked())) return false;
+      opener = null;
+      revealed = true;
+      target.setState(ref);
+      return true;
+    },
+    blockReveal(blocked) {
+      blockers.add(blocked);
+      return () => void blockers.delete(blocked);
+    },
+    retire() {
+      if (!revealed) return;
+      revealed = false;
+      target.setState(undefined);
+    },
     reopen(ref) {
       if (target.getState() === undefined || !offers(ref)) return false;
+      revealed = false;
       target.setState(ref);
       choices.setState(choices.getState() + 1);
       return true;
@@ -57,6 +83,7 @@ export function createEvidence(covered: (ref: EdgeRef) => boolean = () => true):
     close() {
       const back = opener;
       opener = null;
+      revealed = false;
       target.setState(undefined);
       if (back !== null && back.isConnected) back.focus();
       else focusCanvas();

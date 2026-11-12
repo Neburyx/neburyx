@@ -18,6 +18,22 @@ const withLink = (recordLink: 'none' | 'always' | 'unmasked', relationshipLink =
   return { ...base, entityTypes: base.entityTypes.map((type) => ({ ...type, recordLink })), relationshipTypes: [{ type: 'OWNS', from: TYPE, to: TYPE, aggregate: false, observedAt: null, stableIdProperty: 'id', filterable: [], sortable: [], evidence: [], properties: ['id'], recordLink: relationshipLink }] };
 };
 
+interface OpenedLink {
+  readonly href: string | null;
+  readonly target: string;
+  readonly rel: string;
+}
+
+/** Records each anchor the code clicks, and stops jsdom from following it. */
+function recordOpenedLinks(): OpenedLink[] {
+  const opened: OpenedLink[] = [];
+  vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+    opened.push({ href: this.getAttribute('href'), target: this.target, rel: this.rel });
+  });
+  return opened;
+}
+const inNewTab = (href: string): OpenedLink => ({ href, target: '_blank', rel: 'noopener noreferrer' });
+
 const segmentOf = (href: string): string => decodeURIComponent((href.split('?')[0] ?? '').replace('/v1/source-links/', ''));
 const REF = { sourceId: 'a', entityType: TYPE, stableId: 'n1' };
 
@@ -74,11 +90,11 @@ describe('the inspector header and the node menu', () => {
   });
 
   it('lists the item in the entity menu when the type has a link, opens it with noopener and noreferrer, and lists nothing without one', async () => {
-    const open = vi.spyOn(window, 'open').mockReturnValue(null);
+    const opened = recordOpenedLinks();
     const rig = inspectorRig({ profile: withLink('always'), nodes: [entity('n1'), entity('n2')] });
     act(() => rig.state.presentation.setOpenMenu({ kind: 'node', key: keyOf('n1'), x: 10, y: 10 }));
     await userEvent.setup().click(within(screen.getByRole('menu')).getByRole('menuitem', { name: 'Open source record' }));
-    expect(open).toHaveBeenCalledWith(entityLinkHref(REF, false), '_blank', 'noopener,noreferrer');
+    expect(opened).toEqual([inNewTab(entityLinkHref(REF, false))]);
     cleanup();
     const none = inspectorRig({ profile: withLink('none') });
     act(() => none.state.presentation.setOpenMenu({ kind: 'node', key: keyOf('n1'), x: 10, y: 10 }));
@@ -86,14 +102,14 @@ describe('the inspector header and the node menu', () => {
   });
 
   it('reaches the menu item by keyboard', async () => {
-    vi.spyOn(window, 'open').mockReturnValue(null);
+    const opened = recordOpenedLinks();
     const rig = inspectorRig({ profile: withLink('always') });
     act(() => rig.state.presentation.setOpenMenu({ kind: 'node', key: keyOf('n1'), x: 10, y: 10 }));
     await act(async () => undefined);
     const item = within(screen.getByRole('menu')).getByRole('menuitem', { name: 'Open source record' });
     item.focus();
     await userEvent.keyboard('{Enter}');
-    expect(window.open).toHaveBeenCalled();
+    expect(opened).toEqual([inNewTab(entityLinkHref(REF, false))]);
   });
 });
 
@@ -121,11 +137,11 @@ describe('the records of a relationship', () => {
   });
 
   it('lists Open source record in the relationship menu only for a type with an evidence link, and opens the panel when no read is held, starting nothing else', async () => {
-    const open = vi.spyOn(window, 'open').mockReturnValue(null);
+    const opened = recordOpenedLinks();
     const rig = evidenceRig({ profile: withLink('none', true) });
     act(() => rig.state.presentation.setOpenMenu({ kind: 'relationship', key: edgeKey(OWNS.ref), x: 40, y: 40 }));
     await userEvent.setup().click(within(screen.getByRole('menu')).getByRole('menuitem', { name: 'Open source record' }));
-    expect(open).not.toHaveBeenCalled();
+    expect(opened).toEqual([]);
     expect(rig.edgeCalls).toHaveLength(1);
     expect(screen.getByRole('complementary', { name: 'Relationship evidence' })).toBeTruthy();
     rig.unbind();
@@ -137,14 +153,14 @@ describe('the records of a relationship', () => {
   });
 
   it('opens the record at once when the read held has exactly one linkable record, and opens the panel when it has two', async () => {
-    const open = vi.spyOn(window, 'open').mockReturnValue(null);
+    const opened = recordOpenedLinks();
     const rig = evidenceRig({ profile: withLink('none', true) });
     openOn(rig, OWNS);
     await answerEdge(rig.edgeReads[0], detailOf(OWNS, { evidence: { status: 'available', records: [{ sourceRecordId: 'AUTH-1', linkable: true }, { sourceRecordId: 'TXT-2', linkable: false }] } }));
     act(() => rig.evidence.close());
     act(() => rig.state.presentation.setOpenMenu({ kind: 'relationship', key: edgeKey(OWNS.ref), x: 40, y: 40 }));
     await userEvent.setup().click(within(screen.getByRole('menu')).getByRole('menuitem', { name: 'Open source record' }));
-    expect(open).toHaveBeenCalledWith(recordLinkHref(OWNS.ref as never, 'AUTH-1', false), '_blank', 'noopener,noreferrer');
+    expect(opened).toEqual([inNewTab(recordLinkHref(OWNS.ref as never, 'AUTH-1', false))]);
     expect(rig.edgeCalls).toHaveLength(1);
     expect(screen.queryByRole('complementary', { name: 'Relationship evidence' })).toBeNull();
     rig.unbind();

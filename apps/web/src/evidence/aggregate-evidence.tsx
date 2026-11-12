@@ -3,6 +3,7 @@ import { propertyText } from '../inspector/property-text.js';
 import { useEdgeRead, type EdgeRead } from './edge-read.js';
 import { EvidenceFailure } from './failure-view.js';
 import {
+  DIRECTED_ARROW,
   AGGREGATE_RELATIONSHIP,
   EMPTY_MEMBER,
   FIRST_OBSERVED_LABEL,
@@ -45,7 +46,7 @@ const rowText = (observedAt: string | undefined, properties: readonly GraphPrope
 
 function AggregateEndpoints(props: EvidenceKindProps) {
   const { detail } = useAggregateRead(props);
-  return detail === undefined ? null : <p className="evidence-ends">{`${detail.from.title} → ${detail.to.title}`}</p>;
+  return detail === undefined ? null : <p className="evidence-ends">{`${detail.from.title} ${DIRECTED_ARROW} ${detail.to.title}`}</p>;
 }
 
 function Frame({ read, children }: { readonly read: AggregateRead; readonly children: (detail: AggregateEdgeDetail) => React.ReactNode }) {

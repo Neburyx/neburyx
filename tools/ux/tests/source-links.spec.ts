@@ -41,6 +41,20 @@ test.describe('Open source record', () => {
     await expect(inspector(page).getByRole('link', { name: OPEN })).toHaveCount(0);
   });
 
+  test('opens in a new tab from the node menu and leaves the investigation\'s own tab where it was', async ({ page, context }) => {
+    await openSample(page, '?evidence=on&links=on');
+    const before = page.url();
+    const holder = await screenOf(page, 'holder');
+    await page.mouse.click(holder.x, holder.y, { button: 'right' });
+    const opened = context.waitForEvent('page');
+    await menuOf(page).getByRole('menuitem', { name: OPEN }).click();
+    const tab = await opened;
+    await expect.poll(() => tab.url()).toContain('/v1/source-links/');
+    expect(page.url()).toBe(before);
+    expect(context.pages()).toHaveLength(2);
+    await tab.close();
+  });
+
   test('links each linkable record of a relationship, opened from the relationship menu, and never shows an address of the source', async ({ page }) => {
     await openSample(page, '?evidence=on&links=on');
     const a = await screenOf(page, 'holder');

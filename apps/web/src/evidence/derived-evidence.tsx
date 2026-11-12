@@ -4,6 +4,7 @@ import { evidenceRecordText } from '../search/copy.js';
 import { useEdgeRead, type EdgeRead } from './edge-read.js';
 import { EvidenceFailure } from './failure-view.js';
 import {
+  arrowOf,
   aggregateEvidenceLabel,
   derivationSentence,
   DERIVED_RELATIONSHIP,
@@ -38,7 +39,8 @@ function useDerivedRead({ edge, mask }: EvidenceKindProps): DerivedRead {
 
 function DerivedEndpoints(props: EvidenceKindProps) {
   const { detail } = useDerivedRead(props);
-  return detail === undefined ? null : <p className="evidence-ends">{`${detail.from.title} → ${detail.to.title}`}</p>;
+  const profile = useProfileWhenProvided();
+  return detail === undefined ? null : <p className="evidence-ends">{`${detail.from.title} ${arrowOf(props.edge, profile)} ${detail.to.title}`}</p>;
 }
 
 /** The display name of an end's entity type from the source profile when the page has one, else the name the answer gave. */

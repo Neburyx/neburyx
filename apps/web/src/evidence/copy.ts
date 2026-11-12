@@ -1,3 +1,5 @@
+import type { EdgeRef, SourceProfile } from '@neburyx/contracts';
+
 export const EVIDENCE_PANEL_TITLE = 'Relationship evidence';
 export const WHY_HERE = 'Why is this relationship here?';
 export const VIEW_SUPPORTING_RECORDS = 'View supporting records';
@@ -11,7 +13,7 @@ export const READING_EVIDENCE = 'Reading the evidence…';
 export const SUPPORTING_RECORDS = 'Supporting source records:';
 export const NOT_AVAILABLE_BADGE = 'unavailable';
 export const NOT_AVAILABLE_TITLE = 'Evidence not available';
-export const NOT_AVAILABLE_TEXT = 'For legacy relationships without retained source records.';
+export const NOT_AVAILABLE_TEXT = 'The source holds no record for this relationship.';
 export const TRY_AGAIN = 'Try again';
 export const NO_EVIDENCE_RELATIONSHIPS_DRAWN = 'No stored or derived relationships of this entity are drawn.';
 export const STORED_RELATIONSHIP = 'Stored relationship';
@@ -79,3 +81,15 @@ export const sampleOrderText = (order: 'observed-newest' | 'source-order'): stri
 export const moreInSampleLine = (more: number): string => `… ${more.toLocaleString('en-US')} more in this sample. There is no paging.`;
 
 export const aggregateEvidenceLabel = (type: string, from: string, to: string): string => `Evidence of ${type}: ${from} → ${to}`;
+
+export const DIRECTED_ARROW = '→';
+export const SYMMETRIC_ARROW = '↔';
+
+const isSymmetricRule = (rule: SourceProfile['derivedRules'][number]): boolean => rule.from === rule.to && rule.via.every((type, at) => type === rule.via[rule.via.length - 1 - at]);
+
+/** Both ways only for a derived relationship whose rule in the profile reads the same from either end (the same type at both ends and a chain that is its own reverse); every other relationship, and a derived one whose rule the profile does not hold, runs one way. */
+export const arrowOf = (edge: EdgeRef, profile: SourceProfile | undefined): string => {
+  if (!('derived' in edge)) return DIRECTED_ARROW;
+  const rule = profile?.derivedRules.find((candidate) => candidate.id === edge.derived.ruleId);
+  return rule !== undefined && isSymmetricRule(rule) ? SYMMETRIC_ARROW : DIRECTED_ARROW;
+};

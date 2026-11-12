@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import type { EdgeRef } from '@neburyx/contracts';
-import { CLOSE_EVIDENCE, EVIDENCE_PANEL_TITLE, READ_ONLY, SELECTED_READ_ONLY, TAB_EVIDENCE, TAB_PROPERTIES, TAB_SOURCE } from './copy.js';
+import { useProfileWhenProvided } from '../canvas/profile-context.js';
+import { arrowOf, CLOSE_EVIDENCE, EVIDENCE_PANEL_TITLE, READ_ONLY, SELECTED_READ_ONLY, TAB_EVIDENCE, TAB_PROPERTIES, TAB_SOURCE } from './copy.js';
 import { kindOf, useEvidenceKinds, type EvidenceKindRegistry } from './evidence-kinds.js';
 import { SourceTab } from './source-tab.js';
 
@@ -30,6 +31,7 @@ export interface EvidencePanelViewProps {
 /** The relationship evidence panel as every host draws it: the heading, the ends, the sub-tabs and the content of the kind that builds this relationship's evidence. */
 export function EvidencePanelView({ edge, kinds, mask, selected, onClose, onOpen, choice }: EvidencePanelViewProps) {
   const registered = useEvidenceKinds(kinds);
+  const profile = useProfileWhenProvided();
   const kind = kindOf(registered, edge);
   const [tab, setTab] = useState<TabId>('evidence');
   const handled = useRef(0);
@@ -61,7 +63,7 @@ export function EvidencePanelView({ edge, kinds, mask, selected, onClose, onOpen
       }}
     >
       <header className="evidence-header">
-        <p className="evidence-caption">{`${captionOf(edge)} →`}</p>
+        <p className="evidence-caption">{`${captionOf(edge)} ${arrowOf(edge, profile)}`}</p>
         <div className="evidence-heading">
           <h2 className="evidence-title">{EVIDENCE_PANEL_TITLE}</h2>
           <button type="button" className="legend-close" aria-label={CLOSE_EVIDENCE} onClick={onClose}>

@@ -68,6 +68,7 @@ export function bindBuiltInCompare(
       if (evidence?.target.getState() !== undefined) evidence?.close();
     }),
     evidence === undefined ? () => undefined : evidence.onOpening(() => compare.close(false)),
+    evidence === undefined ? () => undefined : evidence.blockReveal(() => compare.target.getState() !== undefined),
     bindComparePanel(state, panels, compare),
     selectionActions.register({
       id: 'compare',

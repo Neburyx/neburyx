@@ -12,6 +12,7 @@ import { MappedTypesSync } from './mapped-types-sync.js';
 import { GraphScope } from './graph-scope.js';
 import { HeaderBar } from './header-bar.js';
 import { KEY_SCOPE_ATTRIBUTE, useKeyHandler } from './key-binding-handler.js';
+import { StartingEntityHint } from './starting-hint.js';
 import { NavigationRail } from './navigation-rail.js';
 import { StatusBanner } from '../banner/status-banner.js';
 import { NoticeStrip } from './notice-strip.js';
@@ -39,6 +40,7 @@ export function WorkspaceShell({ canvasView, notice, status, busy = false }: { r
             <PinSelectionAction />
             <HideSelectionAction />
             <SelectionBar />
+            <StartingEntityHint />
             <ExpansionStatus />
             <ContextMenu />
             <CanvasRegions />

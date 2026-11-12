@@ -1,4 +1,5 @@
 import type { SourceProfile } from '@neburyx/contracts';
+import { arrowOf } from '../evidence/copy.js';
 import { entityLook } from '../canvas/entity-look.js';
 import { relationshipParts } from '../canvas/relationship-look.js';
 import { isNotReadEdge, isNotReadNode, isUnmappedEdge, isUnmappedNode, NO_LONGER_MAPPED, SAVED_LAYOUT_NOT_READ, UNMAPPED_TITLE } from '../draft/unmapped.js';
@@ -32,7 +33,7 @@ export function menuHeader(open: OpenMenu, graph: LoadedGraph, profile: SourcePr
     if (isUnmappedEdge(edge)) return { title: 'Unmapped relationship', detail: NO_LONGER_MAPPED };
     const { type, count, origin } = relationshipParts(edge);
     const title = [type, count, origin ?? STORED_ORIGIN].filter((part) => part !== undefined).join(' · ');
-    const ends = `${edge.from.stableId} ↔ ${edge.to.stableId}`;
+    const ends = `${edge.from.stableId} ${arrowOf(edge.ref, profile)} ${edge.to.stableId}`;
     const observed = 'aggregate' in edge.ref && edge.observedFirst !== undefined ? ` · first ${edge.observedFirst} · last ${edge.observedLast ?? edge.observedFirst}` : '';
     const rule = edge.semantics === 'derived' && edge.derivation !== undefined ? ` · ${edge.derivation.ruleId} v${edge.derivation.ruleVersion}` : '';
     return { title, detail: `${ends}${observed}${rule}` };

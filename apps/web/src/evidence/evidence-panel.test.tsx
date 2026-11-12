@@ -4,8 +4,9 @@ import type { EdgeRef } from '@neburyx/contracts';
 import { createEvidence } from './evidence.js';
 import { createEvidenceKindRegistry, kindOf } from './evidence-kinds.js';
 import { storedEvidenceKind } from './stored-evidence.js';
-import { answerEdge, detailOf, evidenceRig, failEdge, inPanel, keyOf, openOn, OWNS, panel, SENT, SUMMED, selectEdge } from './evidence-kit.js';
+import { aggregateDetailOf, answerEdge, derivedDetailOf, detailOf, evidenceRig, SHARED, failEdge, inPanel, keyOf, openOn, OWNS, panel, SENT, SUMMED, selectEdge } from './evidence-kit.js';
 import { cleanup } from '@testing-library/react';
+import { edgeKey } from '../state/keys.js';
 
 afterEach(cleanup);
 
@@ -34,14 +35,6 @@ describe('the evidence kinds', () => {
 });
 
 describe('the relationship evidence panel', () => {
-  it('is not open until it is chosen, and selecting a relationship reads nothing', () => {
-    const rig = evidenceRig();
-    selectEdge(rig, OWNS);
-    expect(panel()).toBeNull();
-    expect(rig.edgeCalls).toEqual([]);
-    rig.unbind();
-  });
-
   it('docks on a choice, names the relationship, its ends and that it is read-only, with the three sub-tabs, and reads the edge once', async () => {
     const rig = evidenceRig();
     selectEdge(rig, OWNS);
@@ -168,6 +161,120 @@ describe('the relationship evidence panel', () => {
     expect(rig.state.presentation.view.getState().selection.size).toBe(1);
     await failEdge(rig.edgeReads[0], 'SOURCE_BUSY', true);
     expect(screen.getByRole('alert')).toBeTruthy();
+    rig.unbind();
+  });
+});
+
+describe('the arrow between the ends', () => {
+  const endsLine = (): string | undefined => document.querySelector('.evidence-ends')?.textContent ?? undefined;
+  const captionLine = (): string | undefined => document.querySelector('.evidence-caption')?.textContent ?? undefined;
+
+  it('runs one way for a stored relationship and for an aggregate, and both ways for a derived one, in the caption and in the ends line', async () => {
+    const stored = evidenceRig();
+    openOn(stored, OWNS);
+    await answerEdge(stored.edgeReads[0], detailOf(OWNS));
+    expect([captionLine(), endsLine()]).toEqual(['OWNS →', 'Title n1 → Title n2']);
+    stored.unbind();
+    cleanup();
+    const derived = evidenceRig({ derivedRules: [{ id: 'rule-1', ruleVersion: 1, from: 'type-a', to: 'type-a', via: ['type-b'] }] });
+    openOn(derived, SHARED);
+    await answerEdge(derived.edgeReads[0], derivedDetailOf());
+    expect([captionLine(), endsLine()]).toEqual(['rule-1 ↔', 'Title n1 ↔ Title n3']);
+    derived.unbind();
+    cleanup();
+    const aggregate = evidenceRig();
+    openOn(aggregate, SUMMED);
+    await answerEdge(aggregate.edgeReads[0], aggregateDetailOf());
+    expect([captionLine(), endsLine()]).toEqual(['PAID →', 'Title n2 → Title n3']);
+    aggregate.unbind();
+  });
+});
+
+describe('the panel the selection opens', () => {
+  const focusInPanel = (): boolean => document.activeElement instanceof HTMLElement && document.activeElement.closest('.evidence-panel') !== null;
+
+  it('opens when one relationship becomes the selection, reads it once, and takes no focus', async () => {
+    const rig = evidenceRig();
+    const canvas = document.createElement('div');
+    canvas.className = 'graph-canvas';
+    canvas.tabIndex = 0;
+    document.body.append(canvas);
+    canvas.focus();
+    selectEdge(rig, OWNS);
+    await act(async () => undefined);
+    expect(inPanel().getByRole('heading', { name: 'Relationship evidence' })).toBeTruthy();
+    expect(rig.edgeCalls).toHaveLength(1);
+    expect(focusInPanel()).toBe(false);
+    expect(document.activeElement).toBe(canvas);
+    canvas.remove();
+    rig.unbind();
+  });
+
+  it('opens nothing for a selection of several relationships, of an entity, or of nothing', () => {
+    const rig = evidenceRig();
+    act(() => rig.state.presentation.select([edgeKey(OWNS.ref), edgeKey(SENT.ref)]));
+    expect(panel()).toBeNull();
+    act(() => rig.state.presentation.select([keyOf('n1')]));
+    expect(panel()).toBeNull();
+    act(() => rig.state.presentation.select([]));
+    expect(panel()).toBeNull();
+    expect(rig.edgeCalls).toEqual([]);
+    rig.unbind();
+  });
+
+  it('follows the selection to another relationship, and a late answer for the first never shows for the second', async () => {
+    const rig = evidenceRig();
+    selectEdge(rig, OWNS);
+    selectEdge(rig, SENT);
+    expect(rig.edgeCalls.map((call) => call.id)).toEqual(['e1', 'e2']);
+    await answerEdge(rig.edgeReads[0], detailOf(OWNS));
+    expect(inPanel().queryByText('R-e1')).toBeNull();
+    await answerEdge(rig.edgeReads[1], detailOf(SENT));
+    expect(inPanel().getByText('R-e2')).toBeTruthy();
+    rig.unbind();
+  });
+
+  it('closes when the selection becomes nothing, an entity or several elements, and leaves the focus where it is', async () => {
+    const rig = evidenceRig();
+    for (const next of [[], [keyOf('n1')], [edgeKey(OWNS.ref), edgeKey(SENT.ref)]]) {
+      selectEdge(rig, OWNS);
+      await answerEdge(rig.edgeReads[rig.edgeReads.length - 1], detailOf(OWNS));
+      expect(panel()).not.toBeNull();
+      act(() => rig.state.presentation.select(next));
+      expect(panel()).toBeNull();
+    }
+    rig.unbind();
+  });
+
+  it('keeps a panel opened by choice when the selection stops being a relationship', async () => {
+    const rig = evidenceRig();
+    openOn(rig, OWNS);
+    await answerEdge(rig.edgeReads[0], detailOf(OWNS));
+    selectEdge(rig, SENT);
+    act(() => rig.state.presentation.select([]));
+    expect(panel()).not.toBeNull();
+    rig.unbind();
+  });
+
+  it('closes with Esc, stays closed while the selection is the same, and opens again once the selection changes, also to the same relationship after a clear', async () => {
+    const rig = evidenceRig();
+    selectEdge(rig, OWNS);
+    await answerEdge(rig.edgeReads[0], detailOf(OWNS));
+    const tab = inPanel().getByRole('tab', { name: 'Evidence' });
+    tab.focus();
+    act(() => void tab.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })));
+    expect(panel()).toBeNull();
+    act(() => rig.state.setMask(false));
+    act(() => rig.state.setMask(true));
+    act(() => rig.state.setMask(false));
+    expect(panel()).toBeNull();
+    expect(rig.state.presentation.view.getState().selection.size).toBe(1);
+    selectEdge(rig, SENT);
+    expect(panel()).not.toBeNull();
+    act(() => rig.state.presentation.select([]));
+    expect(panel()).toBeNull();
+    selectEdge(rig, SENT);
+    expect(panel()).not.toBeNull();
     rig.unbind();
   });
 });
