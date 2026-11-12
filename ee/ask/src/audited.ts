@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { ERROR_TABLE, isTokenCount, parseAiAuditDetail, tokenCount, type AiAuditDetail, type AuditEvent, type AuditResult, type AuditSink, type ErrorCode } from '@neburyx/contracts';
 import type { AskConfiguration } from './configure.js';
 import type { ModelAnswer, ModelProvider, ModelRequest, PromptId, PromptRecord, TokenUsage } from './provider.js';
@@ -32,7 +31,7 @@ export class AuditUnavailableError extends Error {
 
 export interface AuditedModelOptions {
   readonly provider: ModelProvider;
-  /** The configuration the provider was built from: its registry fills the prompt that is hashed, and its model is the one a refused or failed call is recorded under. */
+  /** The configuration the provider was built from: its registry names the prompt whose template hash is audited, and its model is the one a refused or failed call is recorded under. */
   readonly configuration: Pick<AskConfiguration, 'registry' | 'model'>;
   readonly sink: AuditSink;
 }
@@ -54,8 +53,6 @@ interface Outcome {
 
 const UNKNOWN_USAGE: TokenUsage = { kind: 'unknown' };
 
-const sha256Of = (text: string): string => createHash('sha256').update(text, 'utf8').digest('hex');
-
 /** A count that is not a non-negative whole number is `unknown`, never a number. */
 function countOf(value: number): AiAuditDetail['tokensIn'] {
   return isTokenCount(value) ? tokenCount(value) : 'unknown';
@@ -68,13 +65,13 @@ function sameRecord(left: PromptRecord, right: PromptRecord): boolean {
 export function createAuditedModelCall(options: AuditedModelOptions): AuditedModelCall {
   const { provider, configuration, sink } = options;
 
-  function eventOf(request: ModelRequest, context: AuditedCallContext, resolved: { readonly record: PromptRecord; readonly text: string }, outcome: Outcome): AuditEvent {
+  function eventOf(request: ModelRequest, context: AuditedCallContext, prompt: PromptRecord, outcome: Outcome): AuditEvent {
     const counts = outcome.usage.kind === 'known' ? { tokensIn: countOf(outcome.usage.inputTokens), tokensOut: countOf(outcome.usage.outputTokens) } : { tokensIn: 'unknown' as const, tokensOut: 'unknown' as const };
     const ai = parseAiAuditDetail({
       modelRef: outcome.modelRef,
-      promptId: resolved.record.id,
-      promptVersion: String(resolved.record.version),
-      promptSha256: sha256Of(resolved.text),
+      promptId: prompt.id,
+      promptVersion: String(prompt.version),
+      promptSha256: prompt.sha256,
       ...(context.piiPropertiesSent === undefined || context.piiPropertiesSent.length === 0 ? {} : { piiPropertiesSent: context.piiPropertiesSent }),
       ...counts,
     });
@@ -91,9 +88,9 @@ export function createAuditedModelCall(options: AuditedModelOptions): AuditedMod
   }
 
   /** Records the event, or throws the one error that says it could not be: whatever the detail or the sink did, nothing of the call leaves with it. */
-  async function record(request: ModelRequest, context: AuditedCallContext, resolved: { readonly record: PromptRecord; readonly text: string }, outcome: Outcome): Promise<void> {
+  async function record(request: ModelRequest, context: AuditedCallContext, prompt: PromptRecord, outcome: Outcome): Promise<void> {
     try {
-      await sink.record(eventOf(request, context, resolved, outcome));
+      await sink.record(eventOf(request, context, prompt, outcome));
     } catch {
       throw new AuditUnavailableError();
     }
@@ -106,22 +103,22 @@ export function createAuditedModelCall(options: AuditedModelOptions): AuditedMod
     try {
       answer = await provider.complete(request, signal);
     } catch (error) {
-      await record(request, context, resolved, failed);
+      await record(request, context, resolved.record, failed);
       throw error;
     }
     if (!sameRecord(answer.prompt, resolved.record)) {
-      await record(request, context, resolved, failed);
+      await record(request, context, resolved.record, failed);
       throw new AuditUnavailableError();
     }
     switch (answer.status) {
       case 'ok':
-        await record(request, context, resolved, { result: 'success', modelRef: answer.model, usage: answer.usage });
+        await record(request, context, resolved.record, { result: 'success', modelRef: answer.model, usage: answer.usage });
         return answer;
       case 'refused':
-        await record(request, context, resolved, { result: 'refused', modelRef: configuration.model, usage: answer.usage });
+        await record(request, context, resolved.record, { result: 'refused', modelRef: configuration.model, usage: answer.usage });
         return answer;
       case 'failed':
-        await record(request, context, resolved, failed);
+        await record(request, context, resolved.record, failed);
         return answer;
       default: {
         const unreachable: never = answer;

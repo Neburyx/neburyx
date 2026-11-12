@@ -85,7 +85,7 @@ describe('a model call through the fixture, recorded in audit_events', () => {
         action: { 'ask.plan': 'ask.plan', 'summary.view': 'ai.summary', 'assistant.route': 'assistant.turn' }[id],
         result: 'success',
         trace_id: 'tr-call',
-        detail: { ai: { modelRef: 'fixture-model', promptId: id, promptVersion: '1', promptSha256: sha256Of(registry.resolve(id, REQUESTS[id].parameters).text), tokensIn: 12, tokensOut: 34 } },
+        detail: { ai: { modelRef: 'fixture-model', promptId: id, promptVersion: '1', promptSha256: registry.resolve(id, REQUESTS[id].parameters).record.sha256, tokensIn: 12, tokensOut: 34 } },
       },
     ]);
   });
@@ -110,18 +110,18 @@ describe('a model call through the fixture, recorded in audit_events', () => {
     expect(await rows(database.ownerUrl, 'SELECT count(*)::int AS rows FROM audit_events')).toEqual([{ rows: 3 }]);
   });
 
-  it('records the hash of an operator\'s override, not that of the built-in prompt', async () => {
+  it('records the template hash of an operator\'s override, not that of the built-in prompt', async () => {
     const database = await migrated();
     const file = join(folder, 'summary.txt');
     writeFileSync(file, "An operator's own instruction about {{view}}.");
     const { call } = await audited(database, OK, { 'summary.view': file });
     await call(REQUESTS['summary.view'], CONTEXT, SIGNAL);
     const [row] = await rows(database.appUrl, 'SELECT detail FROM audit_events');
-    const expected = sha256Of(`An operator's own instruction about ${REQUESTS['summary.view'].parameters['view']}.`);
+    const expected = sha256Of("An operator's own instruction about {{view}}.");
     expect(row?.['detail']).toMatchObject({ ai: { promptSha256: expected } });
     const builtIn = await buildPromptRegistry();
     if (!builtIn.ok) throw new Error('the built-in prompts did not load');
-    expect(sha256Of(builtIn.registry.resolve('summary.view', REQUESTS['summary.view'].parameters).text)).not.toBe(expected);
+    expect(builtIn.registry.resolve('summary.view', REQUESTS['summary.view'].parameters).record.sha256).not.toBe(expected);
   });
 
   it('records the model of a fallback answer, unknown counts as unknown, and the names of the pii properties sent', async () => {

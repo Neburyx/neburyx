@@ -69,7 +69,7 @@ describe('an answered model call', () => {
         sourceId: 'src-1',
         investigationId: 'inv-1',
         traceId: 'tr-1',
-        detail: { ai: { modelRef: 'fixture-model', promptId: id, promptVersion: '1', promptSha256: sha256Of(resolved.text), tokensIn: 12, tokensOut: 34 } },
+        detail: { ai: { modelRef: 'fixture-model', promptId: id, promptVersion: '1', promptSha256: resolved.record.sha256, tokensIn: 12, tokensOut: 34 } },
       },
     ]);
   });
@@ -91,7 +91,7 @@ describe('an answered model call', () => {
     expect(events[0]?.detail).toMatchObject({ ai: { tokensIn: 'unknown', tokensOut: 'unknown' } });
   });
 
-  it('records the hash of the override\'s filled text, which is not the built-in\'s', async () => {
+  it('records the hash of the override\'s template, which is not the built-in\'s', async () => {
     const file = join(folder, 'summary.txt');
     writeFileSync(file, 'An operator\'s own instruction about {{view}}.');
     const built = await rig(undefined, { overrides: { 'summary.view': file } });
@@ -99,8 +99,19 @@ describe('an answered model call', () => {
     await built.audited.call(REQUESTS['summary.view'], CONTEXT, SIGNAL);
     await plain.audited.call(REQUESTS['summary.view'], CONTEXT, SIGNAL);
     const hashOf = (events: AuditEvent[]) => (events[0]?.detail && 'ai' in events[0].detail ? events[0].detail.ai?.promptSha256 : undefined);
-    expect(hashOf(built.events)).toBe(sha256Of(`An operator's own instruction about ${REQUESTS['summary.view'].parameters['view']}.`));
+    expect(hashOf(built.events)).toBe(sha256Of("An operator's own instruction about {{view}}."));
     expect(hashOf(built.events)).not.toBe(hashOf(plain.events));
+  });
+
+  it('records the same template hash whatever the request holds, and no hash of the filled text anywhere in the event', async () => {
+    const { audited, events, registry } = await rig();
+    await audited.call(REQUESTS['ask.plan'], CONTEXT, SIGNAL);
+    await audited.call({ promptId: 'ask.plan', parameters: { catalog: 'T3', question: 'another question entirely' } }, CONTEXT, SIGNAL);
+    const hashes = events.map((event) => (event.detail && 'ai' in event.detail ? event.detail.ai?.promptSha256 : undefined));
+    expect(hashes[0]).toBe(hashes[1]);
+    for (const parameters of [REQUESTS['ask.plan'].parameters, { catalog: 'T3', question: 'another question entirely' }]) {
+      expect(JSON.stringify(events)).not.toContain(sha256Of(registry.resolve('ask.plan', parameters).text));
+    }
   });
 
   it('records the names of the pii properties sent when the context has any, and leaves the key out for an empty list', async () => {

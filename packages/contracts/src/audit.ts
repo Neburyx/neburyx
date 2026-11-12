@@ -22,12 +22,12 @@ export function tokenCount(value: number): TokenCount {
 
 const tokenCountSchema = z.custom<TokenCount>((value) => typeof value === 'number' && isTokenCount(value));
 
-/** What a model call leaves in the audit event: a model reference, a prompt id and version, the SHA-256 of the prompt text sent, the names of the `pii` properties it held and token counts; never a prompt, a summary or a value. */
+/** What a model call leaves in the audit event: a model reference, a prompt id and version, the SHA-256 of the prompt template used, the names of the `pii` properties it held and token counts; never a prompt, a summary or a value. */
 export interface AiAuditDetail {
   readonly modelRef: string;
   readonly promptId: string;
   readonly promptVersion: string;
-  /** The SHA-256, as 64 lower-case hexadecimal digits, of the UTF-8 text the model was sent. */
+  /** The SHA-256, as 64 lower-case hexadecimal digits, of the prompt template used (the built-in text or the override file's bytes), never of the text with the request filled in: a hash of the filled text could be confirmed by guessing a value. */
   readonly promptSha256: string;
   /** The `type.property` names of the `pii` properties the request held, never their values; absent when none was sent, never an empty list. */
   readonly piiPropertiesSent?: readonly string[];
