@@ -32,11 +32,17 @@ export const FUZZ_RELATIONSHIPS = [
 
 export const FUZZ_DERIVED = [{ id: 'shared-gadget', from: 'widget', to: 'widget', via: ['MADE_FROM', 'gadget', 'MADE_FROM'], rule_version: 1, stop_list_property: 'weight' }, { id: 'shared-handle', from: 'phone', to: 'phone', via: ['USES', 'widget', 'USES'], rule_version: 1 }];
 
+/** Two presets of the shared-attribute template: one over a relationship type with a stop-list rule, one over a type with no rule. */
+export const FUZZ_PRESETS = [
+  { id: 'shared-gadgets', name: 'Shared gadgets', template: 'shared-attribute', bind: { anchor: 'widget', attribute: 'gadget', via: 'MADE_FROM' } },
+  { id: 'shared-phones', name: 'Shared phones', template: 'shared-attribute', bind: { anchor: 'widget', attribute: 'phone', via: 'USES' } },
+];
+
 /** A second source with the same shape, so a cursor of one can be replayed against the other. */
 export const FUZZ_TWIN_SOURCE = 'twin';
 
 export const FUZZ_MAPPING = parseMapping(
-  fileOf(baseSource({ id: FUZZ_SOURCE, entities: FUZZ_ENTITIES, relationships: FUZZ_RELATIONSHIPS, derived: FUZZ_DERIVED }), baseSource({ id: FUZZ_TWIN_SOURCE, entities: FUZZ_ENTITIES, relationships: FUZZ_RELATIONSHIPS, derived: FUZZ_DERIVED })),
+  fileOf(baseSource({ id: FUZZ_SOURCE, entities: FUZZ_ENTITIES, relationships: FUZZ_RELATIONSHIPS, derived: FUZZ_DERIVED, patterns: FUZZ_PRESETS }), baseSource({ id: FUZZ_TWIN_SOURCE, entities: FUZZ_ENTITIES, relationships: FUZZ_RELATIONSHIPS, derived: FUZZ_DERIVED, patterns: FUZZ_PRESETS })),
   'neburyx.yaml',
 );
 
@@ -71,6 +77,14 @@ const widget = plainNode(['Widget'], { widgetId: 'W-1' }, 'e-widget');
 const neighbor = (id: string) => plainNode(['Gadget'], { gadgetId: id }, `e-${id}`);
 const when = { $type: 'dateTime', value: '2026-03-01T10:00:00Z' };
 const expandRow = (index: number) => ({ a: widget, m: neighbor(`g${index}`), rel: plainRelationship('MADE_FROM', widget, neighbor(`g${index}`), { linkId: `r${index}` }, `rel-${index}`), phase: 2, ts: when, id: `r${index}`, rtype: 'MADE_FROM', dir: 'out', ntype: null, flag: null, members: null, first: null });
+
+const sharedRow = (index: number, call: ExecuteCall) => {
+  const phones = call.cypher.includes('`Handle`');
+  const attribute = phones ? plainNode(['Handle'], { phoneNumber: `+1-212-555-01${index}` }, `e-sp-${index}`) : neighbor(`gs${index}`);
+  const match = plainNode(['Widget'], { widgetId: `W-S${index}` }, `e-ws-${index}`);
+  const type = phones ? 'USES' : 'MADE_FROM';
+  return { a: widget, skipped: false, bounded: false, b: match, xs: [attribute], ras: [plainRelationship(type, widget, attribute, phones ? {} : { linkId: `rsa${index}` }, `rel-sa${index}`)], rbs: [plainRelationship(type, match, attribute, phones ? {} : { linkId: `rsb${index}` }, `rel-sb${index}`)], shared: 1, evidenceCut: false };
+};
 
 const derivedRow = (index: number) => {
   const other = plainNode(['Widget'], { widgetId: `W-D${index}` }, `e-wd-${index}`);
@@ -118,6 +132,7 @@ export function respond(call: ExecuteCall): Promise<ExecuteOutcome> {
     return Promise.resolve({ status: 'rows', rows: [] });
   }
   if (call.templateId === 'derived-edge-support') return Promise.resolve({ status: 'rows', rows: Array.from({ length: Math.min(call.rowLimit, 3) }, (_, index) => supportRow(index)) });
+  if (call.templateId === 'shared-attribute') return Promise.resolve({ status: 'rows', rows: Array.from({ length: Math.min(call.rowLimit, 3) }, (_, index) => sharedRow(index, call)) });
   if (call.templateId === 'derived-rule-run') return Promise.resolve({ status: 'rows', rows: Array.from({ length: Math.min(call.rowLimit, 3) }, (_, index) => derivedRow(index)) });
   if (call.templateId === 'aggregate-sample') {
     const ends = call.parameters['ends'];
@@ -168,9 +183,11 @@ export async function startFuzzRig(options: FuzzRigOptions = {}) {
     appendFileSync(file, `${JSON.stringify({ file: expect.getState().testPath?.split('/').pop(), requests: [...tally.answers.values()].reduce((sum, count) => sum + count, 0), answers, statementsSeen: tally.statements, distinctStatements: tally.distinct.size })}\n`);
   });
   const last = { url: '' };
+  let keys = 0;
   const post = async (url: string, payload: unknown) => {
     last.url = url;
-    const response = await app.inject({ method: 'POST', url, payload: JSON.stringify(payload), headers: { 'content-type': 'application/json' } });
+    const headers = url.startsWith('/v1/templates/') ? { 'content-type': 'application/json', 'idempotency-key': `fuzz-key-of-sixteen-${(keys += 1)}` } : { 'content-type': 'application/json' };
+    const response = await app.inject({ method: 'POST', url, payload: JSON.stringify(payload), headers });
     let code = String(response.statusCode);
     try {
       code = (JSON.parse(response.body) as { error?: { code?: string } }).error?.code ?? 'served';

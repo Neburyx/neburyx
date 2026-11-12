@@ -38,6 +38,7 @@ export const derivedRuleRunTemplate: TemplateDefinition = {
   id: DERIVED_RULE_RUN_ID,
   version: '1',
   auditAction: 'entity.derived_rule_run',
+  description: 'Finds the other ends of one derived rule of the mapping from the anchor, each with the chain that shows the link. Plan this template for a question that asks for the chain that shows the link; a plain question of who shares an attribute plans shared-attribute.',
   cypher: '@derivedRule(ruleId)',
   derivedRule: { ruleParam: 'ruleId', entityTypeParam: 'entityType' },
   paramsSchema,

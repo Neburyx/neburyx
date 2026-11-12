@@ -3,6 +3,7 @@ import {
   readRefsResponseSchema,
   degreePreviewSchema,
   derivedNeighborsResponseSchema,
+  templateRunResponseSchema,
   edgeDetailSchema,
   edgeRefSegmentOf,
   errorResponseSchema,
@@ -64,6 +65,7 @@ interface Scenario {
   readonly method: 'GET' | 'POST';
   readonly url: string;
   readonly payload?: unknown;
+  readonly headers?: Readonly<Record<string, string>>;
   readonly schema?: ZodType;
 }
 
@@ -79,6 +81,7 @@ const SCENARIOS: readonly Scenario[] = [
   { name: 'source link of a record', route: 'GET /v1/source-links/:ref', method: 'GET', url: `/v1/source-links/${sourceLinkSegmentOf({ form: 'stored', ref: stored })}?record=R-1` },
   { name: 'read by references', route: 'POST /v1/graph/read-refs', method: 'POST', url: '/v1/graph/read-refs', payload: { sourceId: FUZZ_SOURCE, entities: [{ sourceId: FUZZ_SOURCE, entityType: 'widget', stableId: 'W-1' }], edges: [stored] }, schema: readRefsResponseSchema },
   { name: 'derived neighbors', route: 'POST /v1/graph/derived-neighbors', method: 'POST', url: '/v1/graph/derived-neighbors', payload: { sourceId: FUZZ_SOURCE, ref: { entityType: 'widget', stableId: 'W-1' } }, schema: derivedNeighborsResponseSchema },
+  { name: 'template run', route: 'POST /v1/templates/:id/run', method: 'POST', url: '/v1/templates/shared-gadgets/run', payload: { sourceId: FUZZ_SOURCE, params: { ref: { entityType: 'widget', stableId: 'W-1' } } }, headers: { 'idempotency-key': 'a-key-of-sixteen-characters' }, schema: templateRunResponseSchema },
   { name: 'degree preview', route: 'POST /v1/graph/preview-expansion', method: 'POST', url: '/v1/graph/preview-expansion', payload: { sourceId: FUZZ_SOURCE, ref: { entityType: 'widget', stableId: 'W-1' } }, schema: degreePreviewSchema },
   { name: 'expand', route: 'POST /v1/graph/expand', method: 'POST', url: '/v1/graph/expand', payload: { sourceId: FUZZ_SOURCE, ref: { entityType: 'widget', stableId: 'W-1' }, neighborTypes: ['gadget'], direction: 'out' }, schema: expandResponseSchema },
   { name: 'search', route: 'POST /v1/search/entities', method: 'POST', url: '/v1/search/entities', payload: { sourceId: FUZZ_SOURCE, text: 'needle' }, schema: searchResultSchema },
@@ -113,7 +116,7 @@ const unswept = (registered: readonly { readonly method: string; readonly url: s
   registered.filter((route) => route.method !== 'HEAD' && route.url.startsWith('/v1')).map((route) => `${route.method} ${route.url}`).filter((key) => !routes.includes(key) && !(key in NOT_SWEPT_HERE));
 
 const send = async (scenario: Scenario) =>
-  rig.app.inject({ method: scenario.method, url: scenario.url, ...(scenario.payload === undefined ? {} : { payload: JSON.stringify(scenario.payload), headers: { 'content-type': 'application/json' } }) });
+  rig.app.inject({ method: scenario.method, url: scenario.url, ...(scenario.payload === undefined ? {} : { payload: JSON.stringify(scenario.payload), headers: { 'content-type': 'application/json', ...scenario.headers } }) });
 
 describe('no response of a route of the inspector holds an element ID of the source', () => {
   it('holds for each route, which is asked the way the inspector asks it and answers', async () => {

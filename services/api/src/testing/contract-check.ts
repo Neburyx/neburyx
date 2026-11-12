@@ -55,6 +55,7 @@ const PRODUCT_EXAMPLES: Readonly<Record<string, OperationExample>> = {
   'POST /v1/investigations/{id}/views/{viewId}/restore': { url: '/v1/investigations/0192f000-0000-7000-8000-000000000001/views/0192f000-0000-7000-8000-0000000000b1/restore', headers: { 'if-match': '"1"' } },
   'POST /v1/investigations/{id}/views': { url: '/v1/investigations/0192f000-0000-7000-8000-000000000001/views', payload: '{}', headers: { 'content-type': 'application/json', 'if-match': '"1"' } },
   'POST /v1/investigations/{id}/exports': { url: '/v1/investigations/0192f000-0000-7000-8000-000000000001/exports', payload: JSON.stringify({ kind: 'view', format: 'json' }), headers: { 'content-type': 'application/json', 'idempotency-key': 'a-key-of-sixteen-chars' } },
+  'POST /v1/templates/{id}/run': { url: '/v1/templates/shared-things/run', payload: JSON.stringify({ sourceId: 'demo', params: {} }), headers: { 'content-type': 'application/json', 'idempotency-key': 'a-key-of-sixteen-characters' } },
   'GET /v1/exports/{id}': { url: '/v1/exports/0192f000-0000-7000-8000-0000000000e1' },
   'GET /v1/exports/{id}/download': { url: '/v1/exports/0192f000-0000-7000-8000-0000000000e1/download' },
   'PUT /v1/investigations/{id}/draft': { url: '/v1/investigations/0192f000-0000-7000-8000-000000000001/draft', payload: '{}', headers: { 'content-type': 'application/json', 'if-match': '"1"' } },

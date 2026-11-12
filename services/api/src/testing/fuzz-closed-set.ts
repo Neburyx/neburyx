@@ -1,6 +1,6 @@
 import { edgeRefSegmentOf, sourceLinkSegmentOf } from '@neburyx/contracts';
 import { registeredRoutesOf } from '../app.js';
-import { FUZZ_SOURCE, FUZZ_TEXT, allowedNames, type FuzzRig } from './fuzz-rig.js';
+import { FUZZ_PRESETS, FUZZ_SOURCE, FUZZ_TEXT, allowedNames, type FuzzRig } from './fuzz-rig.js';
 
 /** The names a statement quotes in backticks. */
 export const quotedNamesOf = (cypher: string): string[] => [...cypher.matchAll(/`([^`]*)`/g)].flatMap((match) => (match[1] === undefined ? [] : [match[1]]));
@@ -75,6 +75,26 @@ async function buildClosedSet(rig: FuzzRig): Promise<{ readonly statements: Set<
   const cursors: string[] = [];
   const expandCursors: { neighborType: string; cursor: string }[] = [];
   const keys: { entityType: string; stableId: string }[] = [];
+  const anchor = { entityType: 'widget', stableId: 'W-1' };
+  const windows = [undefined, { days: 30 }, { from: '2026-01-01', to: '2026-01-31' }];
+  for (const preset of FUZZ_PRESETS) {
+    for (const window of windows) {
+      for (const minShared of [undefined, 2]) {
+        for (const mask of [undefined, true, false]) {
+          await post(`/v1/templates/${preset.id}/run`, { sourceId: FUZZ_SOURCE, params: { ref: anchor, ...(window === undefined ? {} : { window }), ...(minShared === undefined ? {} : { minShared }) }, ...(mask === undefined ? {} : { mask }) });
+          keep();
+        }
+      }
+    }
+  }
+  for (const preset of FUZZ_PRESETS) {
+    for (const window of windows) {
+      for (const minShared of [undefined, 2]) {
+        await post('/v1/templates/shared-attribute/run', { sourceId: FUZZ_SOURCE, params: { ref: anchor, attributeType: preset.bind.attribute, via: preset.bind.via, ...(window === undefined ? {} : { window }), ...(minShared === undefined ? {} : { minShared }) } });
+        keep();
+      }
+    }
+  }
   const types = [['gadget'], ['phone'], ['gadget', 'phone']];
   for (const neighborTypes of types) {
     for (const direction of ['out', 'in', 'both']) {

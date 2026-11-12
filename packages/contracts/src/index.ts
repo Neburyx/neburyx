@@ -143,6 +143,8 @@ export {
   typeaheadTextSchema,
   unreferencedHitSchema,
 } from './search.js';
+export { MIN_SHARED_MAX, TEMPLATE_RUN_NOTICE_CODES, WINDOW_MAX_DAYS, sharedAttributeParamsSchema, templateRunNoticeSchema, templateRunRequestSchema, templateRunResponseSchema, windowSchema } from './template-run.js';
+export type { SharedAttributeParams, TemplateRunNotice, TemplateRunRequest, TemplateRunResponse, Window } from './template-run.js';
 export { DERIVED_NEIGHBOR_CAP, derivedNeighborsRequestSchema, derivedNeighborsResponseSchema, derivedNeighborsResultSchema } from './derived-neighbors.js';
 export type { DerivedNeighborsRequest, DerivedNeighborsResponse, DerivedNeighborsResult } from './derived-neighbors.js';
 export { DEGREE_DIRECTIONS, DEGREE_WARNING_CODES, degreeByNeighborTypeSchema, degreeByTypeSchema, degreePreviewRequestSchema, degreePreviewSchema, degreeWarningSchema } from './degree-preview.js';

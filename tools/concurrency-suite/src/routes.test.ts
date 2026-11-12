@@ -20,6 +20,7 @@ const ELSEWHERE: Readonly<Record<string, string>> = {
   'POST /v1/graph/preview-expansion': 'counted in rate-routes.test.ts; the slot is the gate\'s',
   'POST /v1/graph/expand': 'counted in rate-routes.test.ts; the slot is the gate\'s',
   'POST /v1/investigations': 'counted in rate-routes.test.ts; the slot is the gate\'s',
+  'POST /v1/templates/:id/run': 'counted in rate-routes.test.ts; the slot is the gate\'s',
   'POST /v1/graph/coverage': 'reads no source',
   'POST /v1/graph/read-refs': 'counted in rate-routes.test.ts; the slot is the gate\'s',
   'POST /v1/sources/:id/test': 'counted in rate-routes.test.ts; it runs the source tester, not a gate read',

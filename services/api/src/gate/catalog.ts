@@ -66,8 +66,11 @@ function checkMarkers(definition: TemplateDefinition, shape: Shape): void {
   const degree = markersOf(definition.cypher).filter((marker) => marker.kind === 'degreeCounts');
   // a degree statement reads the entity type's label and stable ID property, so its parameter counts as used by an entity marker and a stable id marker
   const used = [
-    ...markersOf(definition.cypher).filter((marker) => marker.kind !== 'searchBranches' && marker.kind !== 'facetProbes' && marker.kind !== 'degreeCounts' && marker.kind !== 'expandNeighbors' && marker.kind !== 'relatedContext' && marker.kind !== 'edgeLoad' && marker.kind !== 'derivedRule' && marker.kind !== 'derivedSupport' && marker.kind !== 'aggregateRead'),
+    ...markersOf(definition.cypher).filter((marker) => marker.kind !== 'searchBranches' && marker.kind !== 'facetProbes' && marker.kind !== 'degreeCounts' && marker.kind !== 'expandNeighbors' && marker.kind !== 'relatedContext' && marker.kind !== 'edgeLoad' && marker.kind !== 'derivedRule' && marker.kind !== 'derivedSupport' && marker.kind !== 'sharedAttribute' && marker.kind !== 'aggregateRead'),
     ...markersOf(definition.cypher).filter((marker) => marker.kind === 'derivedRule').flatMap(() => (definition.derivedRule === undefined ? [] : [{ kind: 'entity' as const, name: definition.derivedRule.entityTypeParam }, { kind: 'stableId' as const, name: definition.derivedRule.entityTypeParam }])),
+    ...markersOf(definition.cypher)
+      .filter((marker) => marker.kind === 'sharedAttribute')
+      .flatMap(() => (definition.sharedAttribute === undefined ? [] : [{ kind: 'entity' as const, name: definition.sharedAttribute.entityTypeParam }, { kind: 'stableId' as const, name: definition.sharedAttribute.entityTypeParam }, { kind: 'entity' as const, name: definition.sharedAttribute.attributeTypeParam }, { kind: 'relationship' as const, name: definition.sharedAttribute.viaParam }])),
     ...markersOf(definition.cypher).filter((marker) => marker.kind === 'expandNeighbors').flatMap((marker) => [{ kind: 'entity' as const, name: marker.name }, { kind: 'stableId' as const, name: marker.name }]),
     ...degree.flatMap((marker) => [{ kind: 'entity' as const, name: marker.name }, { kind: 'stableId' as const, name: marker.name }]),
   ];
@@ -262,6 +265,30 @@ function checkDerivedRule(definition: TemplateDefinition, shape: Shape): void {
 }
 
 /**
+ * The shared-attribute template's own declaration: its Cypher is exactly the one `@sharedAttribute(<attribute type parameter>)` marker, its schema has the three names (the anchor's entity type, the attribute's entity type and the
+ * relationship type) as text, declared as entity and relationship parameters, it reads the anchor by its reference, it is not paged and not profiled, its cut means a lower bound, it names the stable-ID index it needs and the
+ * properties it uses, and the gate fills `limit` and `countCap` for it (the schema has neither).
+ */
+function checkSharedAttribute(definition: TemplateDefinition, shape: Shape): void {
+  const used = markersOf(definition.cypher).filter((marker) => marker.kind === 'sharedAttribute');
+  const spec = definition.sharedAttribute;
+  if (spec === undefined) {
+    if (used.length > 0) throw new CatalogError(definition.id, 'uses the shared attribute marker without declaring a shared attribute read');
+    return;
+  }
+  if (used.length !== 1 || used[0]?.name !== spec.attributeTypeParam || definition.cypher !== `@sharedAttribute(${spec.attributeTypeParam})`) throw new CatalogError(definition.id, 'declares a shared attribute read and its Cypher is not exactly its one shared attribute marker');
+  const names = [spec.entityTypeParam, spec.attributeTypeParam, spec.viaParam];
+  if (names.some((name) => shape.properties.get(name) !== 'string') || !definition.entityParams.includes(spec.entityTypeParam) || !definition.entityParams.includes(spec.attributeTypeParam) || !definition.relationshipParams.includes(spec.viaParam)) {
+    throw new CatalogError(definition.id, 'declares a shared attribute read for parameters its schema does not have as text or its entity and relationship parameters do not declare');
+  }
+  if (['limit', 'countCap'].some((name) => shape.properties.has(name))) throw new CatalogError(definition.id, 'declares a shared attribute read and has a limit or a count cap in its schema, which the gate fills');
+  if (definition.searchBranches !== undefined || definition.facetProbes !== undefined || definition.degreeCounts !== undefined || definition.expandNeighbors !== undefined || definition.relatedContext !== undefined || definition.derivedRule !== undefined || definition.derivedSupport !== undefined || definition.paged || definition.profile === true || definition.cutMeans !== 'lowerBound') {
+    throw new CatalogError(definition.id, "declares a shared attribute read and is also another kind of template, paged, profiled or not declared cutMeans: 'lowerBound'");
+  }
+  if (definition.indexNeeds === undefined || definition.usedProperties === undefined || definition.referenceParams?.entityType !== spec.entityTypeParam) throw new CatalogError(definition.id, 'declares a shared attribute read and does not name its indexes, the properties it uses and the reference of its anchor');
+}
+
+/**
  * The supports template's own declaration: its Cypher is exactly the one `@derivedSupport(<rule parameter>)` marker, its schema has the rule ID as text and the two ends as a list that it reads back as references, it is
  * not paged and not profiled, its cut means a lower bound, it names the stable-ID indexes it needs and the properties it uses.
  */
@@ -367,6 +394,7 @@ function build(definition: TemplateDefinition): Template {
   checkRelatedContext(definition, shape);
   checkDerivedRule(definition, shape);
   checkDerivedSupport(definition, shape);
+  checkSharedAttribute(definition, shape);
   checkEdgeLoad(definition, shape);
   checkAggregateRead(definition, shape);
   checkBoundedBy(definition, shape);

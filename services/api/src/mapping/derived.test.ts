@@ -69,6 +69,10 @@ function withPresets(...patterns: Json[]): Json {
 }
 
 describe('pattern presets', () => {
+  it.each(['shared-attribute', 'linked-entities'])('refuses a preset whose ID is the ID of the template %s, which a pattern can bind, which the run route resolves first', (id) => {
+    expectRefused(withPresets({ ...sharedPreset, id }), 'sources[0].patterns[0].id', 'names a template a pattern can bind', `source demo, pattern ${id}`);
+  });
+
   it('holds a preset of each template', () => {
     const presets = firstSource(load(withPresets(sharedPreset, linkedPreset))).presets;
     expect(presets).toEqual([

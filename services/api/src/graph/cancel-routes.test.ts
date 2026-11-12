@@ -31,6 +31,7 @@ const mapping = parseMapping(
       ],
       relationships: [{ type: 'LINKED', from: 'hub', to: 'leaf', stable_id: 'relId', evidence: ['recordId'], evidence_link: 'https://records.example.test/r/{recordId}' }],
       derived: [{ id: 'shared-leaf', from: 'hub', to: 'hub', via: ['LINKED', 'leaf', 'LINKED'], rule_version: 1 }],
+      patterns: [{ id: 'shared-hubs', name: 'Shared leaves', template: 'shared-attribute', bind: { anchor: 'hub', attribute: 'leaf', via: 'LINKED' } }],
     }),
   ),
   'neburyx.yaml',
@@ -41,12 +42,13 @@ const STORED = { sourceId: 'demo', type: 'LINKED', from: 'hub', to: 'leaf', stab
 const DERIVED = { sourceId: 'demo', derived: { ruleId: 'shared-leaf', from: { sourceId: 'demo', ...ref }, to: { sourceId: 'demo', entityType: 'hub', stableId: 'H-2' } } };
 
 /** `route` is the registered route a case sends to; the list below is compared with the routes that read the source. */
-const ROUTES: readonly { readonly name: string; readonly route: string; readonly method: 'GET' | 'POST'; readonly path: string; readonly body?: unknown }[] = [
+const ROUTES: readonly { readonly name: string; readonly route: string; readonly method: 'GET' | 'POST'; readonly path: string; readonly body?: unknown; readonly headers?: Readonly<Record<string, string>> }[] = [
   { name: 'entity load', route: 'GET /v1/entities/:sourceId/:entityType/:stableId', method: 'GET', path: '/v1/entities/demo/hub/H-1' },
   { name: 'entity lookup', route: 'POST /v1/entities/lookup', method: 'POST', path: '/v1/entities/lookup', body: { sourceId: 'demo', ref } },
   { name: 'search', route: 'POST /v1/search/entities', method: 'POST', path: '/v1/search/entities', body: { sourceId: 'demo', text: 'abc' } },
   { name: 'degree preview', route: 'POST /v1/graph/preview-expansion', method: 'POST', path: '/v1/graph/preview-expansion', body: { sourceId: 'demo', ref } },
   { name: 'derived neighbors', route: 'POST /v1/graph/derived-neighbors', method: 'POST', path: '/v1/graph/derived-neighbors', body: { sourceId: 'demo', ref } },
+  { name: 'template run', route: 'POST /v1/templates/:id/run', method: 'POST', path: '/v1/templates/shared-hubs/run', body: { sourceId: 'demo', params: { ref } }, headers: { 'idempotency-key': 'a-key-of-sixteen-characters' } },
   { name: 'read by references', route: 'POST /v1/graph/read-refs', method: 'POST', path: '/v1/graph/read-refs', body: { sourceId: 'demo', entities: [{ sourceId: 'demo', ...ref }], edges: [STORED], derived: [DERIVED] } },
   { name: 'expand', route: 'POST /v1/graph/expand', method: 'POST', path: '/v1/graph/expand', body: { sourceId: 'demo', ref, neighborTypes: ['leaf'] } },
   { name: 'source link', route: 'GET /v1/source-links/:ref', method: 'GET', path: `/v1/source-links/${sourceLinkSegmentOf({ form: 'entity', ref: { sourceId: 'demo', ...ref } })}` },
@@ -110,10 +112,10 @@ describe('a request that reads the source, when the client closes the connection
     await app.close();
   });
 
-  it.each(ROUTES)('stops the read of $name, audits it failed with the reason cancelled, and writes no error', async ({ method, path, body }) => {
+  it.each(ROUTES)('stops the read of $name, audits it failed with the reason cancelled, and writes no error', async ({ method, path, body, headers }) => {
     const { app, executor, events, lines } = await listening();
     const text = body === undefined ? undefined : JSON.stringify(body);
-    const request = httpRequest({ host: '127.0.0.1', port: portOf(app), path, method, headers: text === undefined ? {} : { 'content-type': 'application/json', 'content-length': Buffer.byteLength(text) } });
+    const request = httpRequest({ host: '127.0.0.1', port: portOf(app), path, method, headers: text === undefined ? {} : { 'content-type': 'application/json', 'content-length': Buffer.byteLength(text), ...headers } });
     request.on('error', () => undefined);
     request.end(text);
     const isData = (call: ExecuteCall): boolean => call.templateId !== 'schema-indexes';

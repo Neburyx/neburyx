@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import type { Socket } from 'node:net';
 import fastifyStatic from '@fastify/static';
-import { type ErrorCode, type ProfileExtension, deleteInvestigationResponseSchema, deleteViewRequestSchema, deleteViewResponseSchema, restoreInvestigationRequestSchema, MAX_DRAFT_DOCUMENT_BYTES, readRefsRequestSchema, readRefsResponseSchema, exportRequestSchema, exportSchema, draftWriteRequestSchema, draftWriteResponseSchema, renameRequestSchema, renameResponseSchema, statusChangeRequestSchema, statusChangeResponseSchema, derivedNeighborsRequestSchema, derivedNeighborsResponseSchema, coverageRequestSchema, coverageResponseSchema, degreePreviewRequestSchema, edgeDetailSchema, edgePathSchema, entityLookupRequestSchema, degreePreviewSchema, entityPathSchema, entityQuerySchema, expandRequestSchema, expandResponseSchema, healthResponseSchema, investigationListQuerySchema, investigationListResponseSchema, investigationResponseSchema, meResponseSchema, nodeSchema, parseEdgeRefSegment, parseSourceLinkSegment, sourceLinkPathSchema, sourceLinkQuerySchema, openInvestigationRequestSchema, openInvestigationResponseSchema, readyResponseSchema, searchMoreRequestSchema, searchMoreResultSchema, searchRequestSchema, searchResultSchema, sourceProfileSchema, sourceTestReportSchema, sourcesResponseSchema, renameViewRequestSchema, restoreViewResponseSchema, saveViewRequestSchema, saveViewResponseSchema, viewListQuerySchema, viewListResponseSchema, ownedViewListResponseSchema, namedViewSchema } from '@neburyx/contracts';
+import { type ErrorCode, type ProfileExtension, deleteInvestigationResponseSchema, deleteViewRequestSchema, deleteViewResponseSchema, restoreInvestigationRequestSchema, MAX_DRAFT_DOCUMENT_BYTES, readRefsRequestSchema, readRefsResponseSchema, exportRequestSchema, exportSchema, draftWriteRequestSchema, draftWriteResponseSchema, renameRequestSchema, renameResponseSchema, statusChangeRequestSchema, statusChangeResponseSchema, derivedNeighborsRequestSchema, derivedNeighborsResponseSchema, templateRunRequestSchema, templateRunResponseSchema, coverageRequestSchema, coverageResponseSchema, degreePreviewRequestSchema, edgeDetailSchema, edgePathSchema, entityLookupRequestSchema, degreePreviewSchema, entityPathSchema, entityQuerySchema, expandRequestSchema, expandResponseSchema, healthResponseSchema, investigationListQuerySchema, investigationListResponseSchema, investigationResponseSchema, meResponseSchema, nodeSchema, parseEdgeRefSegment, parseSourceLinkSegment, sourceLinkPathSchema, sourceLinkQuerySchema, openInvestigationRequestSchema, openInvestigationResponseSchema, readyResponseSchema, searchMoreRequestSchema, searchMoreResultSchema, searchRequestSchema, searchResultSchema, sourceProfileSchema, sourceTestReportSchema, sourcesResponseSchema, renameViewRequestSchema, restoreViewResponseSchema, saveViewRequestSchema, saveViewResponseSchema, viewListQuerySchema, viewListResponseSchema, ownedViewListResponseSchema, namedViewSchema } from '@neburyx/contracts';
 import { z } from 'zod';
 import Fastify, {
   type FastifyBaseLogger,
@@ -23,6 +23,7 @@ import { createShownReader } from './exports/shown-reader.js';
 import type { ExportFileStore } from './exports/store.js';
 import { createDegreePreviewService } from './graph/degree-preview-service.js';
 import { createDerivedNeighborsService } from './graph/derived-neighbors-service.js';
+import { createTemplateRunService } from './graph/template-run-service.js';
 import { createExpandService } from './graph/expand-service.js';
 import { createDegreeCache, type DegreeCacheOptions } from './graph/degree-cache.js';
 import { NO_DEGREE_VERDICTS, type DegreeVerdicts } from './source-test/usability.js';
@@ -83,6 +84,8 @@ export interface AppOptions {
   readonly exportFiles?: ExportFileStore | undefined;
   /** The version of the policy a person's access is under, for an export to be made under and a download to be checked against; Community has none. */
   readonly policyVersion?: ((sourceId: string) => string) | undefined;
+  /** The time a window of a template run counts back from; a test passes a fixed one. */
+  readonly templateRunClock?: (() => Date) | undefined;
   /** The enterprise extension, only when the preview switch is on; its routes are mounted and `GET /v1/me` says `enterprise`. */
   readonly extension?: ProfileExtension | undefined;
 }
@@ -460,6 +463,30 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       const identity = await options.store.current();
       const answer = await derivedNeighbors.derive({ traceId: request.id, principal: identity.principal, sourceId: body.data.sourceId, ...body.data.ref, mask: body.data.mask === true, signal: signalOf(request) });
       return derivedNeighborsResponseSchema.parse(answer);
+    });
+
+    const templateRuns = createTemplateRunService({ gate: options.gate, mapping, access, ...(options.templateRunClock === undefined ? {} : { now: options.templateRunClock }) });
+    const runSeams = options.seams ?? communitySeams();
+    const runPolicyVersion = options.policyVersion ?? (() => 'none');
+    app.post('/v1/templates/:id/run', { config: { permission: 'principal' } }, async (request, reply) => {
+      const params = profileParamsSchema.safeParse(request.params);
+      const body = templateRunRequestSchema.safeParse(request.body);
+      const key = idempotencyKeyOf(request.headers['idempotency-key']);
+      if (!noQuerySchema.safeParse(request.query).success || !params.success || !body.success || key === undefined) throw new AppError('INVALID_REQUEST');
+      const identity = await options.store.current();
+      const principal = identity.principal;
+      const sourceId = body.data.sourceId;
+      const answer = await runOnce(
+        { store: options.store, policy: runSeams.policy, policyVersion: runPolicyVersion },
+        { principal, sourceId, key, fingerprint: fingerprintOf({ method: 'POST', path: request.url.split('?')[0] ?? '', query: '', body: request.body }), stillReadable: () => Promise.resolve(mapping.sources.some((source) => source.id === sourceId)) },
+        async () => {
+          const made = await templateRuns.run({ traceId: request.id, principal, sourceId, id: params.data.id, params: body.data.params, mask: body.data.mask === true, signal: signalOf(request) });
+          return { statusCode: 200, body: templateRunResponseSchema.parse(made), replayed: false };
+        },
+        (error) => (error instanceof AppError && error.code !== 'RATE_LIMITED' ? { statusCode: errorStatus(error.code), body: errorResponse(error.code, request.id, error.details) } : undefined),
+      );
+      if (answer.replayed) reply.header(IDEMPOTENT_REPLAY_HEADER, 'true');
+      return reply.code(answer.statusCode).send(answer.body);
     });
 
     const readRefs = createReadRefsService({ gate: options.gate, mapping, access, audit: auditSink, logger: options.logger });

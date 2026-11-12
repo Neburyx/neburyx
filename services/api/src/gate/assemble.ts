@@ -17,6 +17,7 @@ import { degreePreviewBoundedTemplate, degreePreviewCheapTemplate } from './temp
 import { degreeProbeTemplate } from './templates/degree-probe.js';
 import { derivedEdgeSupportTemplate } from './templates/derived-edge-support.js';
 import { derivedRuleRunTemplate } from './templates/derived-rule-run.js';
+import { sharedAttributeTemplate } from './templates/shared-attribute.js';
 import { aggregateSampleTemplate, aggregateSummaryTemplate } from './templates/aggregate-evidence.js';
 import { edgeLoadTemplate } from './templates/edge-load.js';
 import { edgeLoadManyTemplate } from './templates/edge-load-many.js';
@@ -54,7 +55,7 @@ export interface AssembleOptions {
 }
 
 export function defaultCatalogTemplates(): readonly TemplateDefinition[] {
-  return [connectivityTemplate, capabilitiesTemplate, privilegesTemplate, schemaTokensTemplate, schemaIndexesTemplate, stableIdDuplicatesTemplate, degreeProbeTemplate, degreePreviewBoundedTemplate, degreePreviewCheapTemplate, entityLoadTemplate, entityLoadManyTemplate, edgeLoadTemplate, edgeLoadManyTemplate, expandNeighborsTemplate, expandCountTemplate, searchExactTemplate, searchRelatedTemplate, searchEvidenceTemplate, searchFacetsTemplate, searchPrefixTemplate, relatedContextTemplate, derivedRuleRunTemplate, derivedEdgeSupportTemplate, aggregateSampleTemplate, aggregateSummaryTemplate];
+  return [connectivityTemplate, capabilitiesTemplate, privilegesTemplate, schemaTokensTemplate, schemaIndexesTemplate, stableIdDuplicatesTemplate, degreeProbeTemplate, degreePreviewBoundedTemplate, degreePreviewCheapTemplate, entityLoadTemplate, entityLoadManyTemplate, edgeLoadTemplate, edgeLoadManyTemplate, expandNeighborsTemplate, expandCountTemplate, searchExactTemplate, searchRelatedTemplate, searchEvidenceTemplate, searchFacetsTemplate, searchPrefixTemplate, relatedContextTemplate, derivedRuleRunTemplate, sharedAttributeTemplate, derivedEdgeSupportTemplate, aggregateSampleTemplate, aggregateSummaryTemplate];
 }
 
 export function defaultCatalog(): TemplateCatalog {

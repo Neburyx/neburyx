@@ -1,5 +1,5 @@
 import { resolveRetention } from './retention.js';
-import type { PresetTemplate } from '@neburyx/contracts';
+import { PRESET_TEMPLATES, type PresetTemplate } from '@neburyx/contracts';
 import { resolveBudgets } from './budgets.js';
 import { hashSource } from './hash.js';
 import { checkLink } from './links.js';
@@ -203,6 +203,7 @@ function buildPreset(
   relationshipTypes: ReadonlySet<string>,
   report: Report,
 ): PresetModel {
+  if (PRESET_TEMPLATES.some((template) => template === raw.id)) report([...path, 'id'], 'names a template a pattern can bind, which a pattern may not use as its ID');
   const required = PRESET_BINDINGS[raw.template];
   const requiredKeys = required.map((binding) => binding.key);
   for (const binding of required) {

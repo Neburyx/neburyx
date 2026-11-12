@@ -83,6 +83,8 @@ export interface Template {
   /** A template whose request names a number of hops: the integer parameter that holds it and the most hops the template reads. The gate refuses more than the lower of that and the source's `max_hops`. */
   readonly hops?: { readonly param: string; readonly max: number };
   readonly cutMeans?: 'duplicate' | 'lowerBound';
+  /** What the template answers, in the words the Ask planner is given to choose between templates. */
+  readonly description?: string;
   readonly entityParams: readonly string[];
   readonly relationshipParams: readonly string[];
   readonly integerParameters: readonly string[];
@@ -143,6 +145,13 @@ export interface Template {
    * from the rule's chain (every label and relationship type quoted from the allowlist). It reads at most `$limit + 1` tuples.
    */
   readonly derivedSupport?: { readonly ruleParam: string; readonly endsParam: string };
+  /**
+   * The shared-attribute template's own declaration, for no other template: a statement that finds the other entities of the anchor's type that share an attribute node with the anchor. The Cypher is the one marker
+   * `@sharedAttribute(<attribute type parameter>)`; the anchor's entity type, the attribute's entity type and the relationship type that joins them are named in the request and checked against the mapping, and the gate writes
+   * the whole statement from the mapping row (every name quoted from the allowlist). An attribute node whose stop-list property is true is skipped. The anchor's attribute nodes and the (match, attribute) pairs it reads are
+   * bounded by `$countCap + 1`, the matches by `$limit + 1` and the evidence shown for a match by a fixed number. A window is a pair of instants, `windowFrom` and `windowTo`, both given or both left out.
+   */
+  readonly sharedAttribute?: { readonly entityTypeParam: string; readonly attributeTypeParam: string; readonly viaParam: string };
   /**
    * The edge template's own declaration, for no other template: a statement that reads one stored edge by its type, the entity types of its two ends and its stable ID. The Cypher is the one marker
    * `@edgeLoad(<type parameter>)`, and the gate writes the whole statement from the mapping row that joins the two types by the type and holds a `stable_id`; every name is quoted from the allowlist and the

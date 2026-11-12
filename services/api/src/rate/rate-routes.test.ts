@@ -34,10 +34,13 @@ const mapping = parseMapping(
 const ref = { entityType: 'node_a', stableId: 'H-1' };
 const element = (sourceId: string) => ({ sourceId, ...ref });
 
+let keyCounter = 0;
+
 interface Call {
   readonly method: 'GET' | 'POST';
   readonly url: (sourceId: string) => string;
   readonly payload?: (sourceId: string) => unknown;
+  readonly headers?: () => Readonly<Record<string, string>>;
 }
 
 /** The ten routes that count, with a request each that passes the route's schema; what the source answers does not matter here. */
@@ -51,6 +54,7 @@ const COUNTED: Readonly<Record<string, Call>> = {
   'search more': { method: 'POST', url: () => '/v1/search/entities/more', payload: (s) => ({ sourceId: s, text: 'needle-text', group: 'exact', cursor: 'x' }) },
   'degree preview': { method: 'POST', url: () => '/v1/graph/preview-expansion', payload: (s) => ({ sourceId: s, ref }) },
   'derived neighbors': { method: 'POST', url: () => '/v1/graph/derived-neighbors', payload: (s) => ({ sourceId: s, ref }) },
+  'template run': { method: 'POST', url: () => '/v1/templates/shared-nodes/run', payload: (s) => ({ sourceId: s, params: { ref } }), headers: () => ({ 'idempotency-key': `key-of-sixteen-${(keyCounter += 1)}-chars` }) },
   coverage: { method: 'POST', url: () => '/v1/graph/coverage', payload: (s) => ({ sourceId: s, entities: [{ ref: element(s), loadedRelationships: 0, loadedQuality: 'exact' }] }) },
   expand: { method: 'POST', url: () => '/v1/graph/expand', payload: (s) => ({ sourceId: s, ref, neighborTypes: ['node_b'] }) },
   'read by references': { method: 'POST', url: () => '/v1/graph/read-refs', payload: (s) => ({ sourceId: s, entities: [element(s)] }) },
@@ -83,7 +87,7 @@ async function started(clock?: () => number, write: (line: string) => void = () 
   const limiter = createRequestLimiter({ ...(clock === undefined ? {} : { clock }), startSweep: () => () => undefined });
   const sourceTester = { run: () => Promise.resolve({ sourceId: 'demo' } as never) };
   const app = await buildApp({ webRoot, logger: createLogger({ write }), store: memoryAppStore(), mapping, gate: parts.gate, seams, limiter, sourceTester });
-  const send = (call: Call, sourceId: string) => app.inject({ method: call.method, url: call.url(sourceId), ...(call.payload === undefined ? {} : { payload: call.payload(sourceId) as object }) });
+  const send = (call: Call, sourceId: string) => app.inject({ method: call.method, url: call.url(sourceId), ...(call.payload === undefined ? {} : { payload: call.payload(sourceId) as object }), ...(call.headers === undefined ? {} : { headers: call.headers() }) });
   return { app, executor, limiter, send, acquired, audited, parts, sourceTester };
 }
 
@@ -239,6 +243,7 @@ const COUNTED_ROUTES = [
   'POST /v1/search/entities/more',
   'POST /v1/graph/preview-expansion',
   'POST /v1/graph/derived-neighbors',
+  'POST /v1/templates/:id/run',
   'POST /v1/graph/coverage',
   'POST /v1/graph/read-refs',
   'POST /v1/graph/expand',
@@ -256,6 +261,25 @@ describe('every route has a decision', () => {
     expect(routes.length).toBeGreaterThan(0);
     for (const route of routes) expect([...COUNTED_ROUTES, ...UNCOUNTED_ROUTES], route).toContain(route);
     for (const route of COUNTED_ROUTES) expect(routes, route).toContain(route);
+    await app.close();
+  });
+});
+
+describe('the template run route and a key that is sent again after a refusal for the rate', () => {
+  it('does not keep the refusal: the same key runs after the wait, and is not a replay', async () => {
+    let now = 5_000_000;
+    const { app, send } = await started(() => now);
+    const counted = COUNTED['template run'] as Call;
+    for (let i = 0; i < LIMIT; i += 1) {
+      await send(counted, 'demo');
+      now += 1_000;
+    }
+    const same: Call = { ...counted, headers: () => ({ 'idempotency-key': 'same-key-of-sixteen-chars' }) };
+    expect((await send(same, 'demo')).statusCode).toBe(429);
+    now += 60_000;
+    const retry = await send(same, 'demo');
+    expect(retry.statusCode).not.toBe(429);
+    expect(retry.headers['idempotent-replay']).toBeUndefined();
     await app.close();
   });
 });
