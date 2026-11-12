@@ -256,6 +256,18 @@ describe('a change of the login a source uses', () => {
     return Promise.all(GRAPHS.map((graph) => stack.containerId(graph)));
   }
 
+  /** On a timeout, prints the states and the source events of the api's log (start-up checks, failed pings, failed state writes) with the three passwords masked, so a failure on a machine that is not at hand says why. */
+  async function expectBothConnected(timeout: number): Promise<void> {
+    try {
+      await vi.waitFor(async () => expect(Object.values(await states()).map((found) => found.state)).toEqual(['connected', 'connected']), { timeout, interval: 2000 });
+    } catch (error) {
+      const events = (await stack.compose(['logs', '--no-log-prefix', 'api'])).stdout.split('\n').filter((line) => line.includes('source.'));
+      const text = `states: ${JSON.stringify(await states())}\napi source events:\n${events.join('\n')}\n`;
+      process.stdout.write([initial, rotated, wrong].reduce((masked, password) => masked.split(password).join('***'), text));
+      throw error;
+    }
+  }
+
   async function revokeOldLogin(): Promise<void> {
     for (const graph of GRAPHS) {
       const changed = await cypherShell(graph, initial, 'system', `ALTER CURRENT USER SET PASSWORD FROM '${initial}' TO '${rotated}'`);
@@ -331,12 +343,23 @@ describe('a change of the login a source uses', () => {
     // 3. recreate only the api service (`docker compose up -d --no-deps api`);  4. run `test-source` for each source.
     stack.updateSettings({ DEMO_NEO4J_PASSWORD: rotated });
     expect((await stack.compose(['up', '-d', '--no-deps', '--wait', 'api'])).code).toBe(0);
-    await vi.waitFor(async () => expect(Object.values(await states()).map((found) => found.state)).toEqual(['connected', 'connected']), { timeout: 60_000, interval: 2000 });
+    // docs/source-state.md: after a restart whose start-up check could not reach the source, the last stored state is shown again once a ping reaches it.
+    // The window holds two ping intervals (30 s each) and the few seconds the server locks a login after failed sign-ins.
+    await expectBothConnected(90_000);
+    // Step 4 of the guide. The server locks a login for a few seconds after failed sign-ins, so a refused run is tried again until the lock has passed.
     for (const source of SOURCES) {
-      const result = await testSource(source);
-      expect(result.code, result.stdout + result.stderr).toBe(0);
-      for (const password of [initial, rotated, wrong]) expect(result.stdout + result.stderr).not.toContain(password);
+      await vi.waitFor(
+        async () => {
+          const result = await testSource(source);
+          for (const password of [initial, rotated, wrong]) expect(result.stdout + result.stderr).not.toContain(password);
+          expect(result.code, result.stdout + result.stderr).toBe(0);
+        },
+        { timeout: 60_000, interval: 3000 },
+      );
     }
+    // The state must hold through a further ping of the api itself, which reaches the source with the new login, not only through the check of the separate test-source process.
+    await new Promise((resolve) => setTimeout(resolve, 35_000));
+    await expectBothConnected(20_000);
     expect(await containerIds()).toEqual(idsBefore);
     expect(await nodeCounts()).toEqual(countsBefore);
     await assertNoPasswordAnywhere();
