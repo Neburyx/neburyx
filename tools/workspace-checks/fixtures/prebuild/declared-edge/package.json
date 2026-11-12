@@ -1,0 +1,8 @@
+{
+  "name": "@neburyx/declared-edge",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "@neburyx/ee-audit": "workspace:*"
+  }
+}

@@ -105,13 +105,13 @@ describe('CI workflow', () => {
       'pnpm check:dco ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }}',
     ]);
     expect(steps.find((step) => step.uses?.startsWith('actions/checkout'))?.with).toEqual({ 'fetch-depth': '0' });
-    expect(rootScripts['check:dco']).toBe('pnpm --filter @neburyx/dco-check build && node tools/dco-check/dist/main.js');
+    expect(rootScripts['check:dco']).toBe('pnpm --fail-if-no-match --filter "@neburyx/dco-check..." build && node tools/dco-check/dist/main.js');
   });
 
   it('runs the Neo4j tests of the adapter and of the demo graph tool in the one root script, which builds the package that reaches the dev server', () => {
-    expect(rootScripts['test:neo4j']).toContain('pnpm --filter @neburyx/api test:neo4j');
-    expect(rootScripts['test:neo4j']).toContain('pnpm --filter @neburyx/demo-graph test:neo4j');
-    expect(rootScripts['test:neo4j']).toContain('--filter @neburyx/test-neo4j build');
+    expect(rootScripts['test:neo4j']).toContain('pnpm --fail-if-no-match --filter @neburyx/api test:neo4j');
+    expect(rootScripts['test:neo4j']).toContain('pnpm --fail-if-no-match --filter @neburyx/demo-graph test:neo4j');
+    expect(rootScripts['test:neo4j']).toContain('--filter "@neburyx/api^..."');
   });
 
   it('works out from the changed files whether the image and the quickstart steps are needed, for a push and for a pull request', () => {

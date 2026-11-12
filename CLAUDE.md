@@ -25,7 +25,7 @@ safe on very high-degree nodes. The repo is **pre-release**: the build tooling, 
 | `deploy/demo` | Demo environment: the product and two synthetic demo graphs, loopback only (see its README) |
 | `tools/demo-graph` | Synthetic demo graph generator |
 | `tools/dev` | The `pnpm dev` command: runs the app locally against your own Neo4j and Postgres, starting no container (see `docs/run-locally.md`) |
-| `tools/ci` | The script the CI workflow runs to decide from the changed files whether the arm64 image build and the README quickstart test are needed (tested in `tools/workspace-checks`) |
+| `tools/ci` | The script the CI workflow runs to decide from the changed files whether the arm64 image build and the README quickstart test are needed, and the script that prints the packages each root script builds first (both tested in `tools/workspace-checks`) |
 | `tools/renderer-spike` | Harness that draws one synthetic graph with two graph renderers and measures frame rate, node movement on incremental layout, grouping and keyboard access (see its README) |
 | `tools/ux` | Browser tests (Playwright, Chromium) of the web app on a built copy with a small synthetic API: shells, keyboard paths, canvas behaviour, a benchmark guard (see its README) |
 | `tools/cancellation-suite` | Tests of what a cancel, a timeout and a source outage leave of the client: the real API and the real web client and stores in one process, over a scripted source (in `pnpm test`) and over a real Neo4j (in `pnpm test:neo4j`); compares the whole client state before and after (see its README) |
@@ -90,6 +90,9 @@ Node 24 LTS (`.nvmrc`; with nvm, `nvm use`) and pnpm through Corepack, at the ve
 | Render `docs/benchmarks/supernode.md` again from the stored `supernode.json` (no server) | `pnpm bench:render` |
 | The release checks: fuzz, domain neutrality, supernode suite, fuzz against a real Neo4j test database, demo install timing; needs Docker and the Neo4j connection of `test:neo4j`, and takes minutes; not in CI; `--dry-run` marks a record that does not count (see `tools/release-checks/README.md`) | `pnpm check:release --record-dir <folder outside the repository> [--dry-run]` |
 | Regenerate `packages/contracts/openapi.json` | `pnpm --filter @neburyx/contracts generate` |
+| Print the packages each root script builds first, in build order (`--from-git <revision>` reads the scripts at that revision) | `pnpm build:lists` |
+
+Root scripts build the packages they need by dependency (`pnpm --filter "<package>..." build`, or `build:deps` (`*^...`) for the packages any workspace package depends on), so a new package needs no edit to the root `package.json`. Every `--filter` step carries `--fail-if-no-match`, and `tools/workspace-checks` fails on a hand-kept package list, an unknown package name, a package a script runs in without building its dependencies, or an import of a workspace package that is not declared.
 
 To run the API with the built web app (after `pnpm build` and `neburyx migrate`; `DATABASE_URL` is the app role's connection string):
 

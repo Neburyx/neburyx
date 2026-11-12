@@ -1,0 +1,8 @@
+{
+  "name": "@neburyx/missing-edge",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@neburyx/contracts": "workspace:*"
+  }
+}
