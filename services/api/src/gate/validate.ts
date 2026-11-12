@@ -4,6 +4,7 @@ import { readToken } from '../reference/token.js';
 import { mapPositionReferences } from './cursor/references.js';
 import type { CursorPosition } from './cursor/codec.js';
 import { canonicalJson, filterHashOf } from './cursor/binding.js';
+import { hopCap } from './hops.js';
 import type { CursorBinding, CursorCodec } from './cursor/codec.js';
 import { renderTemplate, type Rendered } from './render.js';
 import type { GateContext, GateRequest, Params, Template, TemplateCatalog } from './types.js';
@@ -83,6 +84,14 @@ export function validateRequest(catalog: TemplateCatalog, template: Template, re
   if (!parsed.success) throw new AppError('INVALID_REQUEST');
   if (!Number.isInteger(request.limit) || request.limit < 1) throw new AppError('INVALID_REQUEST');
   if (request.limit > context.budgets.maxPage) throw new AppError('QUERY_BUDGET_EXCEEDED', { maxPage: context.budgets.maxPage });
+  const hops = template.hops;
+  if (hops !== undefined) {
+    const requested: unknown = Object.getOwnPropertyDescriptor(parsed.data, hops.param)?.value;
+    // a schema that leaves the declared parameter out of what it parses would skip the bound, so that is a defect and never a pass
+    if (typeof requested !== 'number' || !Number.isSafeInteger(requested)) throw new AppError('INTERNAL_ERROR');
+    const cap = hopCap(hops.max, context.budgets);
+    if (requested > cap) throw new AppError('QUERY_BUDGET_EXCEEDED', { maxHops: cap });
+  }
   // a masked field is not an oracle: while masking is asked, a request cannot search, filter or sort by a pii field
   if (context.mask) {
     for (const used of template.usedProperties?.(parsed.data, context.allowlist) ?? []) {

@@ -4,7 +4,7 @@ import { ACCESS_DENIED_REASONS, CONFLICT_REASONS, errorDetailsSchema, INVALID_RE
 type DetailKey = keyof typeof errorDetailsSchema.shape;
 
 export const ERROR_DETAIL_KEYS: Readonly<Record<ErrorCode, readonly DetailKey[]>> = {
-  QUERY_BUDGET_EXCEEDED: ['maxPage'],
+  QUERY_BUDGET_EXCEEDED: ['maxPage', 'maxHops'],
   QUERY_TIMEOUT: ['timeoutMs'],
   SOURCE_UNAVAILABLE: ['reason', 'retryAfterMs'],
   SOURCE_BUSY: [],

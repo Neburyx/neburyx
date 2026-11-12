@@ -16,6 +16,13 @@ describe('allowedDetails', () => {
     expect(allowedDetails('SOURCE_UNAVAILABLE', { reason: 'repeated-timeouts', retryAfterMs: 2000, maxPage: 50 })).toEqual({ reason: 'repeated-timeouts', retryAfterMs: 2000 });
   });
 
+  it('keeps the hop cap of a refused run as a whole number, with the page maximum if both are given, and drops any other value', () => {
+    expect(allowedDetails('QUERY_BUDGET_EXCEEDED', { maxHops: 2 })).toEqual({ maxHops: 2 });
+    expect(allowedDetails('QUERY_BUDGET_EXCEEDED', { maxHops: 2, maxPage: 50, query: 'MATCH (n)' })).toEqual({ maxHops: 2, maxPage: 50 });
+    for (const value of ['2', 0, 1.5, -1, null]) expect(allowedDetails('QUERY_BUDGET_EXCEEDED', { maxHops: value })).toBeUndefined();
+    expect(allowedDetails('INVALID_REQUEST', { maxHops: 2 })).toBeUndefined();
+  });
+
   it('keeps the timeout of a query that timed out and drops anything else', () => {
     expect(allowedDetails('QUERY_TIMEOUT', { timeoutMs: 5000, maxPage: 50, query: 'MATCH (n)' })).toEqual({ timeoutMs: 5000 });
     expect(allowedDetails('QUERY_TIMEOUT', { timeoutMs: 0 })).toBeUndefined();

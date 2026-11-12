@@ -72,6 +72,8 @@ export const errorDetailsSchema = z.strictObject({
   retained: retainedSchema.optional(),
   requested: requestedSchema.optional(),
   maxPage: z.number().int().positive().optional(),
+  /** The most hops a run of a template may read: the lower of the template's maximum and the source's `max_hops`. */
+  maxHops: z.number().int().positive().optional(),
   retryAfterMs: z.number().int().nonnegative().optional(),
   timeoutMs: z.number().int().positive().optional(),
   reason: z.enum([...SOURCE_UNAVAILABLE_REASONS, ...CONFLICT_REASONS, ...ACCESS_DENIED_REASONS, ...INVALID_REQUEST_REASONS]).optional(),

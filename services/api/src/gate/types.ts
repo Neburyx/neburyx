@@ -80,6 +80,8 @@ export interface Template {
   readonly rows?: 'one' | 'bounded';
   /** For a read of a list: the list parameter whose length may not pass the limit of the request, so the rows of the read (one for each element at most) are never cut. */
   readonly boundedBy?: string;
+  /** A template whose request names a number of hops: the integer parameter that holds it and the most hops the template reads. The gate refuses more than the lower of that and the source's `max_hops`. */
+  readonly hops?: { readonly param: string; readonly max: number };
   readonly cutMeans?: 'duplicate' | 'lowerBound';
   readonly entityParams: readonly string[];
   readonly relationshipParams: readonly string[];
@@ -217,6 +219,8 @@ export interface Budgets {
   readonly requestTimeoutMs: number;
   /** The most rows a bounded count reads: the relationships of one relationship type and direction of a degree count, or the matches of one facet probe; the source's `heavy_op_threshold`, never the page limit. */
   readonly countCap: number;
+  /** The source's `max_hops`: the most hops a template that names hops may read, when its own maximum is not lower. */
+  readonly maxHops: number;
   /** The source's read slots: per person, for everyone, and the wait for both. */
   readonly userConcurrency: number;
   readonly sourceConcurrency: number;

@@ -61,12 +61,13 @@ export function defaultCatalog(): TemplateCatalog {
   return createTemplateCatalog({ templates: defaultCatalogTemplates() });
 }
 
-function budgetsFrom(source: SourceModel): Budgets {
+export function budgetsFrom(source: SourceModel): Budgets {
   return {
     timeoutMs: source.budgets.timeoutMs,
     maxPage: source.budgets.maxPage,
     requestTimeoutMs: DEFAULT_BUDGETS.requestTimeoutMs,
     countCap: source.budgets.heavyOpThreshold,
+    maxHops: source.budgets.maxHops,
     userConcurrency: source.budgets.userConcurrency,
     sourceConcurrency: source.budgets.sourceConcurrency,
     queueWaitMs: source.budgets.queueWaitMs,

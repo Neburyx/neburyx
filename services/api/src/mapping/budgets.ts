@@ -31,6 +31,9 @@ const CEILINGS = {
   breakerTimeMs: 600_000,
 } as const;
 
+/** The most hops the budget `max_hops` may name. */
+export const MAX_HOPS_CEILING = CEILINGS.maxHops;
+
 function bounded(minimum: number, maximum: number): z.ZodNumber {
   return z.number().int().min(minimum).max(maximum);
 }

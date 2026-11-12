@@ -271,7 +271,7 @@ A mapping may only lower a product limit, never raise it. `default_page` is 10 t
 | `timeout_ms` | 1 | 10000 | 5000 | How long one read may run |
 | `max_page` | 1 | 50 | 50 | The largest page a read may return |
 | `default_page` | 10 | 50 | 25 | The page size when none is asked for |
-| `max_hops` | 1 | 4 | 4 | The longest path a path read may take; no read in this release uses it |
+| `max_hops` | 1 | 4 | 4 | The most hops a read may take: the gate refuses a request for more than the lower of this and the template's own maximum, with `QUERY_BUDGET_EXCEEDED` and `details.maxHops` |
 | `path_results_cap` | 1 | 25 | 25 | The most results a path read returns; no read in this release uses it |
 | `user_concurrency` | 1 | 8 | 2 | Reads one person may have running on the source |
 | `source_concurrency` | 1 | 256 | 32 | Reads running on the source at once |

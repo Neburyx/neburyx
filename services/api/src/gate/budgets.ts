@@ -1,3 +1,4 @@
+import { BUDGET_DEFAULTS } from '../mapping/budgets.js';
 import type { Budgets } from './types.js';
 
 export const DEFAULT_BUDGETS: Budgets = {
@@ -5,6 +6,7 @@ export const DEFAULT_BUDGETS: Budgets = {
   maxPage: 50,
   requestTimeoutMs: 10_000,
   countCap: 500,
+  maxHops: BUDGET_DEFAULTS.maxHops,
   userConcurrency: 2,
   sourceConcurrency: 32,
   queueWaitMs: 2000,

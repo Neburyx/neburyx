@@ -86,7 +86,14 @@ describe('details', () => {
     expect(JSON.stringify(body)).not.toContain('retryAfterMs');
   });
 
-  it.each([{ maxPage: '50' }, { maxPage: -1 }, { maxPage: 1.5 }, { other: 1 }, 'text', null])(
+  it('returns the hop cap of a refused run in the HTTP error body, a valid error response', async () => {
+    const { body } = await failureOf(detailsUrl('QUERY_BUDGET_EXCEEDED', { maxHops: 2, query: CYPHER }));
+    expect(body).toMatchObject({ error: { code: 'QUERY_BUDGET_EXCEEDED', details: { maxHops: 2 } } });
+    expect(JSON.stringify(body)).not.toContain('MATCH');
+    expect(validateErrorResponse(body)).toBe(true);
+  });
+
+  it.each([{ maxPage: '50' }, { maxPage: -1 }, { maxPage: 1.5 }, { maxHops: '2' }, { maxHops: 0 }, { other: 1 }, 'text', null])(
     'drops a field of the wrong type or an unknown field (%j)',
     async (details) => {
       const { body } = await failureOf(detailsUrl('QUERY_BUDGET_EXCEEDED', details));

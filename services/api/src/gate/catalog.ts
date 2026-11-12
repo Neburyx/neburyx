@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { MAX_HOPS_CEILING } from '../mapping/budgets.js';
 import { CONTEXT_BRANCHES } from './templates/related-context-statement.js';
 import { BRANCH_ENTITY_TYPES, BRANCH_MARKER, hasStrayMarkerCharacter, markersOf } from './render.js';
 import { GATE_PARAMETERS, type Template, type TemplateCatalog } from './types.js';
@@ -335,6 +336,14 @@ function checkRows(definition: TemplateDefinition): void {
   if (!definition.paged && declared !== 1) throw new CatalogError(definition.id, "is not paged and does not declare exactly one of rows: 'one', rows: 'bounded', cutMeans: 'duplicate' or cutMeans: 'lowerBound'");
 }
 
+/** A template that names hops declares an integer parameter its schema has and a maximum from 1 to the ceiling of the mapping's `max_hops`. */
+function checkHops(definition: TemplateDefinition, shape: Shape): void {
+  const hops = definition.hops;
+  if (hops === undefined) return;
+  if (shape.properties.get(hops.param) !== 'integer') throw new CatalogError(definition.id, 'declares a hop parameter its schema does not have as a whole number');
+  if (!Number.isInteger(hops.max) || hops.max < 1 || hops.max > MAX_HOPS_CEILING) throw new CatalogError(definition.id, `declares a hop maximum outside 1 to ${MAX_HOPS_CEILING}`);
+}
+
 /** A template that reads a list is bounded by it: it is declared rows 'bounded', and the list is a parameter its schema has as a list. */
 function checkBoundedBy(definition: TemplateDefinition, shape: Shape): void {
   if (definition.boundedBy === undefined) return;
@@ -361,6 +370,7 @@ function build(definition: TemplateDefinition): Template {
   checkEdgeLoad(definition, shape);
   checkAggregateRead(definition, shape);
   checkBoundedBy(definition, shape);
+  checkHops(definition, shape);
   checkReferenceParams(definition, shape);
   checkGateParameters(definition, shape);
   const integerParameters = [...shape.properties].flatMap(([name, type]) => (type === 'integer' ? [name] : []));
