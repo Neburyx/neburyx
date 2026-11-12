@@ -4,7 +4,8 @@ sources: []
 
 # The AI preview is off. To switch it on, set NEBURYX_PROFILE=enterprise on the api and migrate services as well as
 # ai.preview: true below, choose a model (there is no default model), and give the key by reference: the name of an
-# environment variable (env), or the absolute path of a file that only its owner can read (file: /run/secrets/...).
+# environment variable (env), or the absolute path of a file that only its owner can read (file: /run/secrets/...),
+# which holds the bare key or one NAME=value line.
 # The key is never written in this file. See docs/ai-preview.md, "Switch the AI preview on".
 # >>> ai preview example
 # ai:

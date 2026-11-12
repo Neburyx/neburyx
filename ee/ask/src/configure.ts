@@ -1,5 +1,6 @@
-import { access, constants, stat } from 'node:fs/promises';
+import { access, constants, readFile, stat } from 'node:fs/promises';
 import { AI_DEFAULTS, type AiEffort, type AiMappingView, type AiSettings, type ConfigureOutcome } from '@neburyx/contracts';
+import { parseKeyText } from './key-file.js';
 import { buildPromptRegistry, type PromptRegistry } from './prompts.js';
 import { buildPropertyRules, type PropertyRules } from './rules.js';
 
@@ -41,7 +42,8 @@ async function keyProblems(key: NonNullable<AiSettings['key']>, env: Readonly<Re
   } catch {
     return ['ai.key.file: the file cannot be read by this process'];
   }
-  return [];
+  const parsed = parseKeyText(await readFile(path, 'utf8').catch(() => ''));
+  return parsed.ok ? [] : [`ai.key.file: ${path}: ${parsed.problem}`];
 }
 
 function referenceOf(key: NonNullable<AiSettings['key']>): KeyReference {

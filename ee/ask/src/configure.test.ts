@@ -5,6 +5,7 @@ import { AI_DEFAULTS, type AiMappingView, type AiSettings } from '@neburyx/contr
 import { afterAll, describe, expect, it } from 'vitest';
 import { configureAsk } from './configure.js';
 import { createEnterpriseExtension } from './index.js';
+import { parseKeyText } from './key-file.js';
 
 const folder = mkdtempSync(join(tmpdir(), 'ee-ask-configure-'));
 afterAll(() => rmSync(folder, { recursive: true, force: true }));
@@ -112,6 +113,55 @@ describe('a key that is given by a file', () => {
   it('is never read: a file with a sentinel is not echoed in any problem', async () => {
     const problems = await problemsOf({ ...COMPLETE, key: { file: keyFile('sentinel-key', 0o640, 'SENTINEL-KEY-CONTENT') } });
     expect(problems.join('')).not.toContain('SENTINEL-KEY-CONTENT');
+  });
+});
+
+describe('the text of a key file', () => {
+  it.each([
+    ['two assignments', 'A_KEY=SENTINEL-ONE\nB_KEY=SENTINEL-TWO\n', 'the file holds more than one assignment; give one key'],
+    ['an empty value', 'ANTHROPIC_API_KEY=\n', 'the assignment has an empty value'],
+    ['an empty quoted value', 'ANTHROPIC_API_KEY=""\n', 'the assignment has an empty value'],
+    ['only comments', '# SENTINEL-NOTE\n', 'the file holds no key'],
+    ['two lines', 'SENTINEL-ONE\nSENTINEL-TWO\n', 'the file holds more than one line; give one key'],
+  ])('is refused for %s, naming the path and holding no part of the file', async (_name, text, reason) => {
+    const path = keyFile('text-key', 0o600, text);
+    const problems = await problemsOf({ ...COMPLETE, key: { file: path } });
+    expect(problems).toEqual([`ai.key.file: ${path}: ${reason}`]);
+    expect(problems.join('')).not.toContain('SENTINEL');
+  });
+
+  it.each([
+    ['a bare key', 'sk-test-123\n'],
+    ['a NAME=value line', 'ANTHROPIC_API_KEY=sk-test-123\n'],
+    ['a name that starts with an underscore', '_KEY=sk-test-123\n'],
+    ['an export line', 'export ANTHROPIC_API_KEY=sk-test-123\n'],
+    ['a double-quoted value', 'ANTHROPIC_API_KEY="sk-test-123"\n'],
+    ['a single-quoted value', "ANTHROPIC_API_KEY='sk-test-123'\n"],
+    ['comments and blank lines around one assignment', '# the key\n\nANTHROPIC_API_KEY = sk-test-123\r\n\n'],
+  ])('is accepted for %s and reads the same key', async (_name, text) => {
+    expect(parseKeyText(text)).toEqual({ ok: true, key: 'sk-test-123' });
+    expect(await problemsOf({ ...COMPLETE, key: { file: keyFile('form-key', 0o600, text) } })).toEqual([]);
+  });
+});
+
+describe('a file that fails an earlier check', () => {
+  it('is not read: a group-readable file with two assignments gets only the mode problem', async () => {
+    const problems = await problemsOf({ ...COMPLETE, key: { file: keyFile('loose-two-key', 0o640, 'A_KEY=one\nB_KEY=two\n') } });
+    expect(problems).toEqual(['ai.key.file: the file can be read by group or others; owner-only access is required (mode 0600)']);
+  });
+});
+
+describe('a line that is not a NAME=value assignment', () => {
+  it.each([
+    ['a lower-case name', 'name=sk-test-123', 'name=sk-test-123'],
+    ['a name that starts with a digit', '1NAME=sk-test-123', '1NAME=sk-test-123'],
+    ['a bare key that ends in padding', 'sk-test-123==', 'sk-test-123=='],
+    ['mismatched quotes', 'ANTHROPIC_API_KEY="sk-test-123\'', "\"sk-test-123'"],
+    ['a one-sided quote', 'ANTHROPIC_API_KEY="sk-test-123', '"sk-test-123'],
+    ['a CRLF file', 'ANTHROPIC_API_KEY=sk-test-123\r\n', 'sk-test-123'],
+    ['surrounding whitespace', '  \t ANTHROPIC_API_KEY=sk-test-123  \n\n', 'sk-test-123'],
+  ])('reads %s as given', (_name, text, key) => {
+    expect(parseKeyText(text)).toEqual({ ok: true, key });
   });
 });
 

@@ -1,6 +1,7 @@
 import { readFile, stat } from 'node:fs/promises';
 import Anthropic, { APIConnectionError, APIConnectionTimeoutError, APIError, APIUserAbortError } from '@anthropic-ai/sdk';
 import type { AskConfiguration } from './configure.js';
+import { parseKeyText } from './key-file.js';
 import type { FailureCode, ModelAnswer, ModelProvider, ModelRequest, PromptRecord, TokenUsage } from './provider.js';
 
 /** The address of the service. A test points the provider at a stub instead; the environment's own base address is never used. */
@@ -29,7 +30,8 @@ async function readKey(configuration: AnthropicProviderOptions['configuration'],
     try {
       const found = await stat(reference.path);
       if (!found.isFile() || found.size === 0 || (found.mode & GROUP_AND_OTHER_BITS) !== 0) return undefined;
-      text = await readFile(reference.path, 'utf8');
+      const parsed = parseKeyText(await readFile(reference.path, 'utf8'));
+      return parsed.ok ? parsed.key : undefined;
     } catch {
       return undefined;
     }

@@ -148,6 +148,31 @@ describe('the request', () => {
     expect(seen[0]?.headers.authorization).toBe('Bearer file-key');
   });
 
+  it.each([
+    ['a NAME=value line', 'ANTHROPIC_API_KEY=file-key\n'],
+    ['an export line with quotes', 'export ANTHROPIC_API_KEY="file-key"\n'],
+  ])('reads the same key from a file with %s', async (_name, text) => {
+    handler = reply(200, message());
+    const path = join(folder, 'assignment-key');
+    writeFileSync(path, text);
+    chmodSync(path, 0o600);
+    await complete(await configurationWith({}, { file: path }));
+    expect(seen[0]?.headers.authorization).toBe('Bearer file-key');
+  });
+
+  it('answers rejected with no request for a file that came to hold two assignments, with no text in the answer', async () => {
+    const path = join(folder, 'two-key');
+    writeFileSync(path, 'file-key');
+    chmodSync(path, 0o600);
+    const configuration = await configurationWith({}, { file: path });
+    writeFileSync(path, 'A_KEY=sentinel-one\nB_KEY=sentinel-two\n');
+    seen = [];
+    const answer = await complete(configuration);
+    expect(answer).toMatchObject({ status: 'failed', code: 'rejected' });
+    expect(JSON.stringify(answer)).not.toMatch(/sentinel|two-key/);
+    expect(seen).toEqual([]);
+  });
+
   it('writes nothing to the process output or error output, and produces no trace span', async () => {
     const out = vi.spyOn(process.stdout, 'write');
     const err = vi.spyOn(process.stderr, 'write');
