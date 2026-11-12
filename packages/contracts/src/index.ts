@@ -6,6 +6,8 @@ export { ACCESS_DENIED_ENTRIES, CONFLICT_ENTRIES, ERROR_TABLE, INVALID_REQUEST_E
 export type { ErrorEntry } from './error-table.js';
 export { buildOpenApiDocument } from './openapi.js';
 export type { OpenApiDocument } from './openapi.js';
+export { ExtensionRefusal, extensionRefusalSchema, parseExtensionRefusal } from './extension.js';
+export type { ExtensionRefusalFields } from './extension.js';
 export type { ConfigureOutcome, ExtensionRequest, ExtensionRoute, ExtensionRouteGroup, ExtensionRoutePermission, ProfileExtension } from './extension.js';
 export { AI_DEFAULTS, AI_LIMITS, AI_PROVIDERS, aiSettingsSchema, aiStatusResponseSchema } from './ai.js';
 export type { AiSettings, AiStatusResponse } from './ai.js';

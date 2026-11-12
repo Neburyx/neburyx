@@ -130,7 +130,9 @@ by itself.
 runs only when both `NEBURYX_PROFILE=enterprise` and `ai.preview: true` in `neburyx.yaml` are set; a start with only
 one of them is refused with a clear message. With an open licence, nothing stops a person who controls the deployment
 from setting both, so the switches guard against AI features reaching real data by accident, not against a determined
-operator. The AI route group works on any source (accepted 2026-11-12); what protects real data is the request data rules
+operator. With the switch off the AI paths are unknown routes (404) and nothing is audited; the AI route group also
+refuses a call (`ACCESS_DENIED`, reason `ai-preview-off`) and audits the refusal if a loaded extension is ever told the
+preview is not on. The AI route group works on any source (accepted 2026-11-12); what protects real data is the request data rules
 (§9.4) and the audit of every model call.
 
 **Client state is kept in four partitions:**

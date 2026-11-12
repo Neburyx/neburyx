@@ -131,6 +131,14 @@ A read that needs several indexes that are not online names the least recoverabl
 
 A reason of `SOURCE_UNAVAILABLE` is not valid on `CONFLICT`, and a reason of `CONFLICT` is not valid on `SOURCE_UNAVAILABLE`.
 
+## A call to an AI route while the preview is off
+
+With neither part of the preview switch set, the enterprise code is not loaded and a path under `/v1/ai` is an unknown route: `404`, as for any path the API does not have, and nothing is audited. If a loaded extension is ever told that the preview is not on, the AI route group refuses each call as a second check: `ACCESS_DENIED` (403) with `details.reason`, and the refusal is audited (action `ai.route_refused`, result `refused`; the event holds no value, source or request text).
+
+| `details.reason` | `message` | `retryable` |
+|---|---|---|
+| `ai-preview-off` | The AI preview is not switched on for this deployment. The switch is a safety rail that whoever runs the deployment sets, not a lock. | `false` |
+
 ## Field limits
 
 Every request is checked against a strict schema: unknown fields are rejected, and a violation is `INVALID_REQUEST`.

@@ -30,6 +30,7 @@ export const CONFLICT_ENTRIES: Readonly<Record<ConflictReason, Omit<ErrorEntry, 
 export const ACCESS_DENIED_ENTRIES: Readonly<Record<AccessDeniedReason, Omit<ErrorEntry, 'status'>>> = {
   'access-changed': { message: 'Your access changed since this export was made. Export again to get a file that matches your current access.', retryable: false },
   'export-source-changed': { message: 'The source of this export changed since it was made. The file is no longer available.', retryable: false },
+  'ai-preview-off': { message: 'The AI preview is not switched on for this deployment. The switch is a safety rail that whoever runs the deployment sets, not a lock.', retryable: false },
 };
 
 /** The sentence of each reason of `INVALID_REQUEST`; the limit itself is in the details. */

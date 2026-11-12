@@ -240,6 +240,7 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
       gate: gate.gate,
       seams,
       extension,
+      previewOn: decision.state === 'on',
       referenceKeys,
       cursors,
       exportFiles,

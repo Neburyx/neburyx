@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { createEnterpriseExtension } from '@neburyx/ee-ask';
 import pino from 'pino';
 import { stringify } from 'yaml';
+import { z } from 'zod';
 import { afterAll, describe, expect, it } from 'vitest';
 import { buildApp, registeredRoutesOf } from '../app.js';
 import { routesWithoutPermission } from '../permissions.js';
@@ -67,10 +68,30 @@ describe('the real enterprise extension in a start', () => {
     expect(errors).toEqual(['invalid configuration: ai.model is required when the AI preview is on\n', 'invalid configuration: ai.key.env: the variable AI_TEST_KEY is not set or is empty\n']);
   });
 
-  it('is described by the committed contract when mounted', async () => {
-    const app = await buildApp({ webRoot, logger: pino({ level: 'silent' }), store: memoryAppStore(), extension: createEnterpriseExtension() });
+  it.each([true, false])('is described by the committed contract when mounted with the preview on %s', async (previewOn) => {
+    const app = await buildApp({ webRoot, logger: pino({ level: 'silent' }), store: memoryAppStore(), extension: createEnterpriseExtension(), previewOn });
     const failures = await checkOperations(app, loadCommittedDocument(), {});
     expect(failures.filter((failure) => failure.route.includes('/v1/ai/status'))).toEqual([]);
     await app.close();
+  });
+
+  it('answers the status route with the 403 of a refusal when the app is told the preview is off', async () => {
+    const app = await buildApp({ webRoot, logger: pino({ level: 'silent' }), store: memoryAppStore(), extension: createEnterpriseExtension(), previewOn: false });
+    const answer = await app.inject({ url: '/v1/ai/status' });
+    expect([answer.statusCode, answer.json().error.code, answer.json().error.details]).toEqual([403, 'ACCESS_DENIED', { reason: 'ai-preview-off' }]);
+    await app.close();
+  });
+});
+
+describe('what a start tells the routes of an extension', () => {
+  it('tells them the preview is on when the switch is on', async () => {
+    const seen: boolean[] = [];
+    const probe = { name: 'probe', routeGroups: [{ routes: [{ method: 'GET' as const, url: '/v1/probe', permission: 'principal' as const, responseSchema: z.unknown(), handler: async (request: { readonly previewOn: boolean }) => (seen.push(request.previewOn), 'ok') }] }] };
+    const result = await start({ DATABASE_URL, NEBURYX_CONFIG: previewFile, NEBURYX_PROFILE: 'enterprise', AI_TEST_KEY: 'present' }, { ...startIo(), extensionLoader: { load: async () => probe } });
+    expect(result.exitCode).toBe(0);
+    if (result.exitCode !== 0) return;
+    expect((await result.app.inject({ url: '/v1/probe' })).statusCode).toBe(200);
+    expect(seen).toEqual([true]);
+    await result.app.close();
   });
 });

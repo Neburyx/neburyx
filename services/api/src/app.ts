@@ -59,6 +59,8 @@ export interface AppOptions {
   readonly store: AppStore;
   readonly jobs?: JobRunner | undefined;
   readonly seams?: Seams | undefined;
+  /** Whether the preview switch is on, which the routes of an extension are told; absent, they are told it is off. */
+  readonly previewOn?: boolean | undefined;
   readonly mapping?: MappingModel | undefined;
   readonly sourceTester?: SourceTester | undefined;
   readonly gate?: Gate | undefined;
@@ -339,7 +341,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
     return meResponseSchema.parse({ ...identity, edition: options.extension === undefined ? 'community' : 'enterprise', sources });
   });
 
-  if (options.extension !== undefined) mountExtensionRoutes(app, options.extension, options.store);
+  if (options.extension !== undefined) mountExtensionRoutes(app, options.extension, options.store, { previewOn: options.previewOn === true, audit: (options.seams ?? communitySeams()).audit });
 
   app.get('/v1/sources', { exposeHeadRoute: false, config: { permission: 'principal' } }, async (request) => {
     if (!noQuerySchema.safeParse(request.query).success) throw new AppError('INVALID_REQUEST');

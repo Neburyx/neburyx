@@ -3,7 +3,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from './app.js';
 import { loadCommittedDocument, validatorFor } from './testing/document.js';
 import { createLogger } from './logger.js';
-import { CONFLICT_ENTRIES, ERROR_TABLE, SOURCE_UNAVAILABLE_ENTRIES } from '@neburyx/contracts';
+import { ACCESS_DENIED_ENTRIES, CONFLICT_ENTRIES, ERROR_TABLE, SOURCE_UNAVAILABLE_ENTRIES } from '@neburyx/contracts';
 import { AppError, detailsOf, errorResponse, unavailableReasonOf } from './errors.js';
 import { CYPHER, IDENTIFIER, registerErrorRoutes } from './testing/error-routes.js';
 import { makeWebRoot } from './testing/web-root.js';
@@ -251,5 +251,17 @@ describe('the reason of an unavailable source', () => {
       expect(body).toEqual({ error: { code: 'CONFLICT', message: ERROR_TABLE.CONFLICT.message, retryable: false, traceId: 'tr-7' } });
       expect(validateErrorResponse(body)).toBe(true);
     }
+  });
+});
+
+describe('the answer of an ACCESS_DENIED with a reason', () => {
+  it.each(['access-changed', 'export-source-changed', 'ai-preview-off'] as const)('carries the sentence and the details of the reason %s', (reason) => {
+    const body = errorResponse('ACCESS_DENIED', 'tr-9', detailsOf(new AppError('ACCESS_DENIED', { reason })));
+    expect(body.error).toEqual({ code: 'ACCESS_DENIED', ...ACCESS_DENIED_ENTRIES[reason], traceId: 'tr-9', details: { reason } });
+  });
+
+  it('keeps the plain sentence for an ACCESS_DENIED with no reason or one it does not know', () => {
+    expect(errorResponse('ACCESS_DENIED', 'tr-9', detailsOf(new AppError('ACCESS_DENIED'))).error.message).toBe('You do not have access to this.');
+    expect(errorResponse('ACCESS_DENIED', 'tr-9', { reason: 'other' }).error.message).toBe('You do not have access to this.');
   });
 });

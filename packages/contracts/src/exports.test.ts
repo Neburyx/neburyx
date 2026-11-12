@@ -35,6 +35,8 @@ describe('the export contract', () => {
     const body = (code: string, details: unknown) => errorBodySchema.safeParse({ error: { code, message: 'm', retryable: false, traceId: 't', details } }).success;
     expect(body('ACCESS_DENIED', { reason: 'access-changed' })).toBe(true);
     expect(body('ACCESS_DENIED', { reason: 'export-source-changed' })).toBe(true);
+    expect(body('ACCESS_DENIED', { reason: 'ai-preview-off' })).toBe(true);
+    expect(body('CONFLICT', { reason: 'ai-preview-off' })).toBe(false);
     expect(body('CONFLICT', { reason: 'access-changed' })).toBe(false);
     expect(body('CONFLICT', { reason: 'export-source-changed' })).toBe(false);
     expect(body('INVALID_REQUEST', { reason: 'export-too-large', maxEntities: 300, maxRelationships: 300, maxAggregates: 100, exceeded: 'entities' })).toBe(true);

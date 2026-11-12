@@ -109,6 +109,7 @@ export function buildOpenApiDocument(
           description: 'Present only when the deployment has switched the AI preview on (the environment variable NEBURYX_PROFILE=enterprise together with ai.preview: true in the mapping file); otherwise this path answers 404.',
           responses: {
             '200': { description: 'The preview is on', content: jsonBody('AiStatusResponse') },
+            '403': { description: 'The route group was called while the preview is not switched on: ACCESS_DENIED with the reason ai-preview-off', content: jsonBody('ErrorResponse') },
             '404': { description: 'The AI preview is not switched on', content: jsonBody('ErrorResponse') },
           },
         },

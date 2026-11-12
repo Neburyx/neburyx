@@ -45,8 +45,8 @@ export const CONFLICT_REASONS = ['status-change-not-allowed', 'investigation-rea
 
 export type ConflictReason = (typeof CONFLICT_REASONS)[number];
 
-/** Why an `ACCESS_DENIED` was given: the person's access changed since an export was made for them, or the export's source did. */
-export const ACCESS_DENIED_REASONS = ['access-changed', 'export-source-changed'] as const;
+/** Why an `ACCESS_DENIED` was given: the person's access changed since an export was made for them, or the export's source did, or an AI route was called while the preview is not switched on. */
+export const ACCESS_DENIED_REASONS = ['access-changed', 'export-source-changed', 'ai-preview-off'] as const;
 
 export type AccessDeniedReason = (typeof ACCESS_DENIED_REASONS)[number];
 

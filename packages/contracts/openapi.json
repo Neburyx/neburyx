@@ -96,6 +96,16 @@
               }
             }
           },
+          "403": {
+            "description": "The route group was called while the preview is not switched on: ACCESS_DENIED with the reason ai-preview-off",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "404": {
             "description": "The AI preview is not switched on",
             "content": {
@@ -7637,6 +7647,48 @@
                       "reason": {
                         "type": "string",
                         "const": "export-source-changed"
+                      }
+                    },
+                    "required": [
+                      "reason"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "code",
+                  "message",
+                  "retryable",
+                  "traceId",
+                  "details"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "const": "ACCESS_DENIED"
+                  },
+                  "message": {
+                    "type": "string",
+                    "const": "The AI preview is not switched on for this deployment. The switch is a safety rail that whoever runs the deployment sets, not a lock."
+                  },
+                  "retryable": {
+                    "type": "boolean",
+                    "const": false
+                  },
+                  "traceId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "details": {
+                    "type": "object",
+                    "properties": {
+                      "reason": {
+                        "type": "string",
+                        "const": "ai-preview-off"
                       }
                     },
                     "required": [

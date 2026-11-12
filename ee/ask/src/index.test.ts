@@ -12,9 +12,17 @@ describe('the enterprise extension', () => {
     const [route, ...more] = group?.routes ?? [];
     expect(more).toEqual([]);
     expect([route?.method, route?.url, route?.permission]).toEqual(['GET', AI_STATUS_URL, 'principal']);
-    const reply = await route?.handler({ principalId: 'p' });
+    const reply = await route?.handler({ principalId: 'p', principalRole: 'investigator', previewOn: true, traceId: 'tr-1', audit: { record: async () => undefined } });
     expect(aiStatusResponseSchema.safeParse(reply).success).toBe(true);
     expect(route?.responseSchema).toBe(aiStatusResponseSchema);
+  });
+
+  it('refuses the status route when the request reports the preview off, and records the refusal', async () => {
+    const [group] = createEnterpriseExtension().routeGroups;
+    const events: unknown[] = [];
+    const request = { principalId: 'p', principalRole: 'investigator' as const, previewOn: false, traceId: 'tr-1', audit: { record: async (event: unknown) => void events.push(event) } };
+    await expect(group?.routes[0]?.handler(request) ?? Promise.resolve()).rejects.toMatchObject({ code: 'ACCESS_DENIED', reason: 'ai-preview-off', audited: true });
+    expect(events).toHaveLength(1);
   });
 
   it('names a migrations folder that exists in the repository and holds the audit and run tables', () => {

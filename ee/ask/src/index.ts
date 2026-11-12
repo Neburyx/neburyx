@@ -2,10 +2,12 @@ import { fileURLToPath } from 'node:url';
 import { aiStatusResponseSchema, type AuditSink, type MountedAuditSink, type ProfileExtension } from '@neburyx/contracts';
 import { createAuditSink } from '@neburyx/ee-audit';
 import { configureAsk, type AskConfiguration } from './configure.js';
+import { guardAiRouteGroup } from './route-guard.js';
 
 export { AUDIT_ACTIONS, AuditUnavailableError, createAuditedModelCall } from './audited.js';
 export type { AuditedCallContext, AuditedModelCall, AuditedModelOptions } from './audited.js';
 export { configureAsk } from './configure.js';
+export { ROUTE_REFUSED_ACTION, guardAiRouteGroup } from './route-guard.js';
 export type { AskConfiguration, KeyReference } from './configure.js';
 export { BUILT_IN_PROMPTS, MAX_OVERRIDE_BYTES, PromptError, buildPromptRegistry } from './prompts.js';
 export type { BuiltInPrompt, PromptRegistry, PromptRegistryResult, ResolvedPrompt } from './prompts.js';
@@ -40,7 +42,7 @@ export function createEnterpriseExtension(): EnterpriseExtension {
       return mounted;
     },
     routeGroups: [
-      {
+      guardAiRouteGroup({
         routes: [
           {
             method: 'GET',
@@ -50,7 +52,7 @@ export function createEnterpriseExtension(): EnterpriseExtension {
             handler: async () => ({ preview: true }),
           },
         ],
-      },
+      }),
     ],
   };
 }

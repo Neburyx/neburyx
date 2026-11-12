@@ -30,6 +30,14 @@ describe('buildOpenApiDocument', () => {
     expect(text).toContain('Export again to get a file that matches your current access.');
   });
 
+  it('lists the reason of a call to an AI route while the preview is off, and declares it on the status route', () => {
+    const document = buildOpenApiDocument();
+    const text = JSON.stringify(document.components.schemas.ErrorResponse);
+    expect(text).toContain('"ai-preview-off"');
+    expect(text).toContain('The AI preview is not switched on for this deployment. The switch is a safety rail that whoever runs the deployment sets, not a lock.');
+    expect(document.paths['/v1/ai/status']).toMatchObject({ get: { responses: { '200': expect.anything(), '403': expect.anything(), '404': expect.anything() } } });
+  });
+
   it('describes the export routes, with the idempotency key required on creation', () => {
     const { paths } = buildOpenApiDocument();
     expect(paths['/v1/investigations/{id}/exports']).toMatchObject({ post: { parameters: expect.arrayContaining([expect.objectContaining({ name: 'Idempotency-Key', in: 'header', required: true })]) } });
