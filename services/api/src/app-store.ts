@@ -41,6 +41,8 @@ export const STORE_QUERY_TIMEOUT_MS = 15_000;
 
 export interface AppStoreOptions {
   readonly migrationsDirectory: string;
+  /** The migrations of the preview, which count for readiness only when the preview is on. */
+  readonly previewMigrationsDirectory?: string;
   readonly connectionTimeoutMs?: number;
 }
 
@@ -54,7 +56,10 @@ export function createAppStore(url: string, onConnectionError: () => void, optio
 
   async function shippedMigrations(): Promise<ReadyChecks['migrations']> {
     const shipped = await migrationFileNames(options.migrationsDirectory).catch(() => undefined);
-    return shipped === undefined ? 'unknown' : checkMigrations(probes, shipped);
+    if (shipped === undefined) return 'unknown';
+    if (options.previewMigrationsDirectory === undefined) return checkMigrations(probes, shipped);
+    const shippedPreview = await migrationFileNames(options.previewMigrationsDirectory).catch(() => undefined);
+    return shippedPreview === undefined ? 'unknown' : checkMigrations(probes, shipped, shippedPreview);
   }
 
   return {

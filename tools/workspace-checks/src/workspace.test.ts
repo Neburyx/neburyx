@@ -24,11 +24,17 @@ describe('workspace layout', () => {
     expect(names).toContain('@neburyx/workspace-checks');
   });
 
-  it('includes the ee/ask package, whose only workspace runtime dependency is the contracts', () => {
-    const pkg = workspacePackageDirs().map((dir) => readPackageJson(dir)).find((candidate) => candidate.name === '@neburyx/ee-ask');
-    expect(pkg).toBeDefined();
-    const runtime = Object.entries(pkg?.dependencies ?? {}).filter(([, range]) => range.startsWith('workspace:')).map(([name]) => name);
-    expect(runtime).toEqual(['@neburyx/contracts']);
+  const workspaceRuntimeOf = (name: string): string[] | undefined => {
+    const pkg = workspacePackageDirs().map((dir) => readPackageJson(dir)).find((candidate) => candidate.name === name);
+    return pkg === undefined ? undefined : Object.entries(pkg.dependencies ?? {}).filter(([, range]) => range.startsWith('workspace:')).map(([found]) => found);
+  };
+
+  it('includes the ee/ask package, whose workspace runtime dependencies are the contracts and the audit package', () => {
+    expect(workspaceRuntimeOf('@neburyx/ee-ask')).toEqual(['@neburyx/contracts', '@neburyx/ee-audit']);
+  });
+
+  it('includes the ee/audit package, whose only workspace runtime dependency is the contracts', () => {
+    expect(workspaceRuntimeOf('@neburyx/ee-audit')).toEqual(['@neburyx/contracts']);
   });
 
   it('has no Community package that depends on an ee package at run time', () => {
@@ -36,6 +42,7 @@ describe('workspace layout', () => {
     expect(community.length).toBeGreaterThan(5);
     for (const dir of community) expect([dir, eeDependencyViolations(readPackageJson(dir))]).toEqual([dir, []]);
     expect(readPackageJson(join(repoRoot, 'services', 'api')).devDependencies).toHaveProperty('@neburyx/ee-ask');
+    expect(readPackageJson(join(repoRoot, 'services', 'api')).devDependencies).toHaveProperty('@neburyx/ee-audit');
   });
 
   it.each(['dependencies', 'peerDependencies', 'optionalDependencies'] as const)('reports an ee package in %s and allows it in devDependencies', (field) => {

@@ -1,5 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { aiStatusResponseSchema, type ProfileExtension } from '@neburyx/contracts';
+import { createAuditSink } from '@neburyx/ee-audit';
 import { configureAsk, type AskConfiguration } from './configure.js';
 
 export { configureAsk } from './configure.js';
@@ -28,6 +29,7 @@ export function createEnterpriseExtension(): EnterpriseExtension {
       configuration = configured.configuration;
       return configured.outcome;
     },
+    createAuditSink,
     routeGroups: [
       {
         routes: [

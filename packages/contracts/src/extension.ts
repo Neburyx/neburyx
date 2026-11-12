@@ -1,5 +1,6 @@
 import type { ZodType } from 'zod';
 import type { AiSettings } from './ai.js';
+import type { AuditSinkContext, MountedAuditSink } from './audit.js';
 
 export type ExtensionRoutePermission = 'public' | 'principal';
 
@@ -26,4 +27,6 @@ export interface ProfileExtension {
   readonly routeGroups: readonly ExtensionRouteGroup[];
   readonly migrationsDirectory?: string;
   readonly configure?: (settings: AiSettings, env: Readonly<Record<string, string | undefined>>) => Promise<ConfigureOutcome>;
+  /** The audit sink that replaces the Community one, which keeps nothing; given the application's own database login and its limits. */
+  readonly createAuditSink?: (context: AuditSinkContext) => MountedAuditSink;
 }

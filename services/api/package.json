@@ -30,6 +30,7 @@
   },
   "devDependencies": {
     "@neburyx/ee-ask": "workspace:*",
+    "@neburyx/ee-audit": "workspace:*",
     "@neburyx/test-containers": "workspace:*",
     "@neburyx/test-neo4j": "workspace:*",
     "@testcontainers/neo4j": "12.2.1",

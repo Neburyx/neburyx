@@ -1,6 +1,6 @@
 import pg from 'pg';
 
-const POOL_SIZE = 5;
+export const POOL_SIZE = 5;
 export const CONNECTION_TIMEOUT_MS = 10_000;
 
 export interface PoolOptions {

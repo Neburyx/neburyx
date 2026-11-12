@@ -66,6 +66,9 @@ export async function grantMigrationNames(client: pg.PoolClient, role: string): 
   const found = await client.query(`SELECT to_regprocedure('public.applied_migrations()') IS NOT NULL AS found`);
   if (found.rows[0]?.found !== true) return;
   await client.query(`GRANT EXECUTE ON FUNCTION public.applied_migrations() TO ${client.escapeIdentifier(role)}`);
+  const preview = await client.query(`SELECT to_regprocedure('public.applied_preview_migrations()') IS NOT NULL AS found`);
+  if (preview.rows[0]?.found !== true) return;
+  await client.query(`GRANT EXECUTE ON FUNCTION public.applied_preview_migrations() TO ${client.escapeIdentifier(role)}`);
 }
 
 export async function grantQueue(client: pg.PoolClient, role: string): Promise<void> {

@@ -1,7 +1,8 @@
+import { SYSTEM_ACTOR_ID } from '@neburyx/contracts';
 import type { Principal } from '../seams/seams.js';
 
 /** A version 4 UUID, so `uuidv7()`, which makes every user id, can never produce it. */
-export const SYSTEM_ID = '00000000-0000-4000-8000-000000000000';
+export const SYSTEM_ID = SYSTEM_ACTOR_ID;
 
 export const SYSTEM_PRINCIPAL: Principal = Object.freeze({ id: SYSTEM_ID, displayName: 'System', role: null });
 

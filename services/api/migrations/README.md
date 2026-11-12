@@ -67,7 +67,7 @@ When the AI preview is switched on (`NEBURYX_PROFILE=enterprise` together with `
 The first run gives the app role read and write rights on tables and sequences that the migration
 role creates later, and records that it did so in a small `neburyx_setup` table. Later runs leave
 those defaults alone, so if you narrow or remove them (for example `ALTER DEFAULT PRIVILEGES … REVOKE`),
-the change stays.
+the change stays. A table that must not be rewritten, such as the preview's `audit_events`, takes the update and delete rights away itself in its own migration (see `ee/migrations/README.md`); if you removed the defaults, grant that table's rights by hand.
 
 ## What the API can see of your migrations
 
@@ -76,3 +76,5 @@ pending, so the migration `0003-applied-migrations-function.sql` adds a function
 `public.applied_migrations()`, that returns only the names of the applied migrations; `neburyx migrate`
 grants it to the app role. The API compares those names with the `.sql` files it ships, so a database
 that has applied a newer migration (after rolling the image back one tag) is still ready.
+
+When the Enterprise and AI preview is on, the preview's migrations have a history table of their own, which the app role cannot read either. `0016-applied-preview-migrations-function.sql` adds `public.applied_preview_migrations()`, which returns the names in that history (and nothing while it does not exist yet); `neburyx migrate` grants it too. With the preview on, `/readyz` answers `pending` until every migration in `ee/migrations` is applied; with it off, the preview's history is not looked at.

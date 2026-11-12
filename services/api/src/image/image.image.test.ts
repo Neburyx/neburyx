@@ -216,6 +216,19 @@ describe('the enterprise code in the one image', () => {
     expect(logs.stdout + logs.stderr).toContain('profile.extension_loaded');
   });
 
+  it('records the audit events of a preview start in audit_events through the extension, and keeps none in a Community start', async () => {
+    const file = mappingFolder({ preview: true, provider: 'anthropic', model: 'claude-sonnet-5-5', key: { env: 'AI_TEST_KEY' } });
+    const database = await postgres.newDatabase();
+    expect((await migrateWith(database, withMapping(file, 'enterprise'))).code).toBe(0);
+    const api = await startWith(database, [...withMapping(file, 'enterprise'), '-e', 'AI_TEST_KEY=not-a-real-key']);
+    expect((await fetch(`${api.url}/v1/entities/no-such-source/thing/1`)).status).toBeGreaterThanOrEqual(400);
+    await vi.waitFor(async () => expect(await rows(database.ownerUrl, 'SELECT result, actor_role FROM audit_events')).toEqual([{ result: 'denied', actor_role: 'administrator' }]), { timeout: 20_000, interval: 250 });
+    const community = await migratedDatabase();
+    const plain = await startApi(community);
+    await fetch(`${plain.url}/v1/entities/no-such-source/thing/1`);
+    expect(await rows(community.ownerUrl, `SELECT to_regclass('public.audit_events') IS NOT NULL AS found`)).toEqual([{ found: false }]);
+  });
+
   it.each([
     ['the profile without ai.preview', undefined, 'enterprise', 'NEBURYX_PROFILE=enterprise is set but ai.preview: true is not set'],
     ['ai.preview without the profile', { preview: true }, undefined, 'ai.preview: true is set in the mapping file but NEBURYX_PROFILE=enterprise is not set'],

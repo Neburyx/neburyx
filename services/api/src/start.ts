@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { accessSync, constants, existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { ProfileExtension } from '@neburyx/contracts';
+import type { MountedAuditSink, ProfileExtension } from '@neburyx/contracts';
 import type { FastifyBaseLogger, FastifyInstance } from 'fastify';
 import { buildApp } from './app.js';
 import { ConfigError, parseConfig } from './config.js';
@@ -14,7 +14,9 @@ import { loadMappingFile } from './mapping/load.js';
 import { causeOf, EXTENSION_CONFIGURE_FAILED_MESSAGE, loadProfileExtension, registeredExtensionLoader, type ExtensionLoader } from './profile/extension.js';
 import { decidePreviewSwitch, previewInputsOf } from './profile/switch.js';
 import type { MappingModel } from './mapping/model.js';
-import { createAppStore, type AppStore } from './app-store.js';
+import { createAppStore, STORE_QUERY_TIMEOUT_MS, STORE_STATEMENT_TIMEOUT_MS, type AppStore } from './app-store.js';
+import { CONNECTION_TIMEOUT_MS, POOL_SIZE } from './db/pool.js';
+import { uuidv7 } from './identity/uuid.js';
 import { communitySeams } from './seams/community-seams.js';
 import { createSourceGate, type SourceGate, type SourceGateOptions } from './gate/source-gate.js';
 import { SourceGateError } from './gate/allowlist.js';
@@ -48,7 +50,7 @@ export interface StartIo {
   readonly pingIntervalMs?: number;
   readonly startupProblem?: (results: readonly StartupResult[]) => string | undefined;
   readonly openSourceGate?: (options: SourceGateOptions) => SourceGate;
-  readonly openStore?: (url: string, onConnectionError: () => void, migrationsDirectory: string) => AppStore;
+  readonly openStore?: (url: string, onConnectionError: () => void, migrationsDirectory: string, previewMigrationsDirectory?: string) => AppStore;
   readonly migrationsDirectory?: string;
   readonly tasks?: readonly Task[];
   /** Starts the job runner; the shipped one unless a test says otherwise. */
@@ -176,12 +178,14 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
   let app: FastifyInstance | undefined;
   let pingSchedule: PingSchedule | undefined;
   let firstContact: FirstContact | undefined;
+  let mountedAudit: MountedAuditSink | undefined;
   try {
-    const openStore = io.openStore ?? ((url, report, directory) => createAppStore(url, report, { migrationsDirectory: directory }));
+    const openStore = io.openStore ?? ((url, report, directory, preview) => createAppStore(url, report, { migrationsDirectory: directory, ...(preview === undefined ? {} : { previewMigrationsDirectory: preview }) }));
     store = openStore(
       config.databaseUrl,
       () => io.logger.warn({ event: 'database.connection_error' }, 'database connection error'),
       io.migrationsDirectory ?? SHIPPED_MIGRATIONS,
+      extension?.migrationsDirectory,
     );
     // the checks that count for this process are the ones stored from here on
     const startedAt = new Date().toISOString();
@@ -198,7 +202,18 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
     const cursors = createCursorCodec({ key: config.cursorKey ?? randomBytes(32), clock: Date.now });
     const referenceKeys = deriveReferenceKeys(await store.referenceKey());
     // one set of seams for the process: the gate's read slots are the app's
-    const seams = communitySeams();
+    const community = communitySeams();
+    // the preview's sink writes with the application's own login and the limits of the application's pool
+    mountedAudit = extension?.createAuditSink?.({
+      databaseUrl: config.databaseUrl,
+      poolSize: POOL_SIZE,
+      connectionTimeoutMs: CONNECTION_TIMEOUT_MS,
+      statementTimeoutMs: STORE_STATEMENT_TIMEOUT_MS,
+      queryTimeoutMs: STORE_QUERY_TIMEOUT_MS,
+      newId: uuidv7,
+      onConnectionError: () => io.logger.warn({ event: 'database.connection_error' }, 'database connection error'),
+    });
+    const seams = mountedAudit === undefined ? community : { ...community, audit: mountedAudit.sink };
     sourceGate = (io.openSourceGate ?? createSourceGate)({ mapping, env, seams, logger: io.logger, cursors, referenceKeys });
     const gate = sourceGate;
     const results = await createStartupChecker({ system: gate.system, mapping, store: observingStore, logger: io.logger }).run();
@@ -240,7 +255,10 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
         await pingSchedule?.drain();
         await firstContact?.drain();
       },
-      closeSources: () => gate.close(),
+      closeSources: async () => {
+        await gate.close();
+        await mountedAudit?.close();
+      },
     });
     await app.listen({ host: config.host, port: io.portOverride ?? config.port });
     const pingIntervalMs = io.pingIntervalMs ?? PING_INTERVAL_MS;
@@ -266,6 +284,7 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
     else {
       await jobs?.stop();
       await sourceGate?.close();
+      await mountedAudit?.close();
       await store?.close();
     }
     return { exitCode: 1 };

@@ -9,6 +9,8 @@ export type { OpenApiDocument } from './openapi.js';
 export type { ConfigureOutcome, ExtensionRequest, ExtensionRoute, ExtensionRouteGroup, ExtensionRoutePermission, ProfileExtension } from './extension.js';
 export { AI_DEFAULTS, AI_LIMITS, AI_PROVIDERS, aiSettingsSchema, aiStatusResponseSchema } from './ai.js';
 export type { AiSettings, AiStatusResponse } from './ai.js';
+export { AUDIT_RESULTS, SYSTEM_ACTOR_ID, aiAuditDetailSchema, auditDetailSchema, isTokenCount, parseAiAuditDetail, parseAuditDetail, tokenCount } from './audit.js';
+export type { AiAuditDetail, AuditDetail, AuditEvent, AuditResult, AuditSink, AuditSinkContext, MountedAuditSink, TokenCount } from './audit.js';
 export { editionSchema, identityModeSchema, meResponseSchema, permittedSourceSchema, roleSchema } from './me.js';
 export type { MeResponse } from './me.js';
 export { healthResponseSchema } from './health.js';

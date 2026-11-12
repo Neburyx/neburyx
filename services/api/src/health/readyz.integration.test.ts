@@ -3,6 +3,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
+import { stringify } from 'yaml';
+import type { ExtensionLoader } from '../profile/extension.js';
+import type { StartIo } from '../start.js';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { runCli } from '../testing/cli.js';
 import { rows, runInProcess } from '../testing/database.js';
@@ -41,10 +44,10 @@ interface Running {
   readonly stop: () => Promise<void>;
 }
 
-async function running(options: { readonly database?: TestDatabase; readonly migrations?: string } = {}): Promise<Running> {
+async function running(options: { readonly database?: TestDatabase; readonly migrations?: string; readonly env?: Readonly<Record<string, string>>; readonly extra?: Partial<StartIo> } = {}): Promise<Running> {
   const database = options.database ?? (await migrated());
   const forwarder = await forwardTo(database.appUrl);
-  const { result } = await startApi({ DATABASE_URL: forwarder.url }, options.migrations);
+  const { result } = await startApi({ DATABASE_URL: forwarder.url, ...options.env }, options.migrations, options.extra);
   if (result.exitCode !== 0) throw new Error('the API did not start');
   const upstream = new URL(database.appUrl);
   const via = new URL(forwarder.url);
@@ -261,6 +264,74 @@ describe('the migrations check of /readyz', () => {
       expect(JSON.parse(down.body).checks).toEqual({ database: 'unreachable', migrations: 'unknown' });
     } finally {
       await api.stop();
+    }
+  });
+});
+
+describe('the migrations check of /readyz with the preview migrations', () => {
+  const PREVIEW_MIGRATIONS = fileURLToPath(new URL('../../../../ee/migrations', import.meta.url));
+  const previewFile = join(mkdtempSync(join(tmpdir(), 'readyz-preview-')), 'neburyx.yaml');
+  writeFileSync(previewFile, stringify({ sources: [], ai: { preview: true } }));
+  scratch.push(join(previewFile, '..'));
+  const loaderFor = (directory: string): ExtensionLoader => ({ load: () => Promise.resolve({ name: 'preview', routeGroups: [], migrationsDirectory: directory }) });
+  const previewOn = { NEBURYX_CONFIG: previewFile, NEBURYX_PROFILE: 'enterprise' };
+
+  async function migratedWithPreview(directory: string): Promise<TestDatabase> {
+    const database = await postgres.newDatabase();
+    const result = await runInProcess({ DATABASE_MIGRATION_URL: database.ownerUrl, DATABASE_APP_ROLE: database.appRole, ...previewOn }, SHIPPED, { extensionLoader: loaderFor(directory) });
+    expect(result.code, result.stderr).toBe(0);
+    return database;
+  }
+
+  const checksOf = async (api: Running) => {
+    const answer = await api.call('/readyz');
+    return { status: answer.status, body: answer.body, migrations: JSON.parse(answer.body).checks.migrations as string };
+  };
+
+  it('is ok when the preview is on and every shipped preview migration is applied', async () => {
+    const api = await running({ database: await migratedWithPreview(PREVIEW_MIGRATIONS), env: previewOn, extra: { extensionLoader: loaderFor(PREVIEW_MIGRATIONS) } });
+    try {
+      const ready = await checksOf(api);
+      expect([ready.status, ready.migrations]).toEqual([200, 'ok']);
+    } finally {
+      await api.stop();
+    }
+  });
+
+  it('is pending when the preview is on and the preview migrations never ran, with no migration name in the body', async () => {
+    const api = await running({ env: previewOn, extra: { extensionLoader: loaderFor(PREVIEW_MIGRATIONS) } });
+    try {
+      const ready = await checksOf(api);
+      expect([ready.status, ready.migrations]).toEqual([503, 'pending']);
+      expectNoSecrets(['0001-audit-events', '0002-ask-runs', 'kysely'], ready.body);
+    } finally {
+      await api.stop();
+    }
+  });
+
+  it('is pending when one of the shipped preview migrations is not applied', async () => {
+    const applied = await migratedWithPreview(PREVIEW_MIGRATIONS);
+    const shipped = mkdtempSync(join(tmpdir(), 'readyz-preview-shipped-'));
+    scratch.push(shipped);
+    cpSync(PREVIEW_MIGRATIONS, shipped, { recursive: true });
+    writeFileSync(join(shipped, '0003-not-applied.sql'), 'SELECT 1;');
+    const api = await running({ database: applied, env: previewOn, extra: { extensionLoader: loaderFor(shipped) } });
+    try {
+      expect((await checksOf(api)).migrations).toBe('pending');
+    } finally {
+      await api.stop();
+    }
+  });
+
+  it('ignores the preview migrations when the preview is off, whether the database holds them or not', async () => {
+    for (const database of [await migratedWithPreview(PREVIEW_MIGRATIONS), undefined]) {
+      const api = await running(database === undefined ? {} : { database });
+      try {
+        const ready = await checksOf(api);
+        expect([ready.status, ready.migrations]).toEqual([200, 'ok']);
+      } finally {
+        await api.stop();
+      }
     }
   });
 });

@@ -77,7 +77,7 @@ describe('the function that lists applied migrations', () => {
     await client.connect();
     try {
       const result = await client.query<{ name: string }>('SELECT public.applied_migrations() AS name');
-      expect(result.rows.map((row) => row.name)).toEqual(['0001-baseline', '0002-deployment-and-users', '0003-applied-migrations-function', '0004-sources', '0005-source-checks', '0006-source-check-identity', '0007-source-check-config', '0008-investigations', '0009-reference-key', '0010-reference-length', '0011-saved-views-listing', '0012-saved-views-deletion', '0013-exports', '0014-export-idempotency', '0015-export-source-identity']);
+      expect(result.rows.map((row) => row.name)).toEqual(['0001-baseline', '0002-deployment-and-users', '0003-applied-migrations-function', '0004-sources', '0005-source-checks', '0006-source-check-identity', '0007-source-check-config', '0008-investigations', '0009-reference-key', '0010-reference-length', '0011-saved-views-listing', '0012-saved-views-deletion', '0013-exports', '0014-export-idempotency', '0015-export-source-identity', '0016-applied-preview-migrations-function']);
       expect(Object.keys(result.fields.map((field) => field.name))).toHaveLength(1);
     } finally {
       await client.end();
@@ -92,5 +92,61 @@ describe('the function that lists applied migrations', () => {
       expect(await attempt(database.appUrl, statement), statement).toMatch(/permission denied/);
     }
     expect(await attempt(database.appUrl, 'SELECT * FROM graphile_worker.migrations')).toBe('allowed');
+  });
+});
+
+describe('the function that lists applied preview migrations', () => {
+  const previewState = async (database: TestDatabase) =>
+    rows(
+      database.ownerUrl,
+      `SELECT p.prosecdef, p.proconfig::text AS config, p.proacl::text AS acl, p.prosrc FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+       WHERE n.nspname = 'public' AND p.proname = 'applied_preview_migrations'`,
+    );
+
+  it('runs with its owner\'s rights, a fixed search path and schema-qualified names, and has execute rights for the app role only', async () => {
+    const { database } = await migrated();
+    const [state] = await previewState(database);
+    expect(state?.['prosecdef']).toBe(true);
+    expect(state?.['config']).toContain('search_path=pg_catalog, pg_temp');
+    expect(String(state?.['prosrc'])).toContain('public.kysely_migration_ee');
+    const acl = String(state?.['acl']);
+    expect(acl).toContain(`${database.appRole}=X/`);
+    expect(acl).not.toMatch(/(^\{|,)=X\//);
+  });
+
+  it('is created once: a second migrate changes nothing', async () => {
+    const { database, env } = await migrated();
+    const before = JSON.stringify(await previewState(database));
+    expect((await runCli(['migrate'], env).done).stdout).toContain('nothing to apply');
+    expect(JSON.stringify(await previewState(database))).toBe(before);
+  });
+
+  it('returns no name while the preview history does not exist, and the names of the applied preview migrations once it does', async () => {
+    const { database } = await migrated();
+    const client = new pg.Client({ connectionString: database.appUrl });
+    await client.connect();
+    try {
+      expect((await client.query('SELECT public.applied_preview_migrations() AS name')).rows).toEqual([]);
+      await rows(database.ownerUrl, 'CREATE TABLE kysely_migration_ee (name varchar(255) PRIMARY KEY, timestamp varchar(255) NOT NULL)');
+      await rows(database.ownerUrl, `INSERT INTO kysely_migration_ee (name, timestamp) VALUES ('0002-b', 't'), ('0001-a', 't')`);
+      expect((await client.query<{ name: string }>('SELECT public.applied_preview_migrations() AS name')).rows.map((row) => row.name)).toEqual(['0001-a', '0002-b']);
+    } finally {
+      await client.end();
+    }
+  });
+
+  it('cannot be run by a role that was not granted it', async () => {
+    const { database } = await migrated();
+    const admin = new pg.Client({ connectionString: database.adminUrl });
+    await admin.connect();
+    try {
+      await admin.query(`CREATE ROLE stranger_preview LOGIN PASSWORD 'stranger-password'`);
+    } finally {
+      await admin.end();
+    }
+    const url = new URL(database.appUrl);
+    url.username = 'stranger_preview';
+    url.password = 'stranger-password';
+    expect(await attempt(url.toString(), 'SELECT public.applied_preview_migrations()')).toMatch(/permission denied/);
   });
 });

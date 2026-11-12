@@ -16,7 +16,8 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@neburyx/contracts": "workspace:*"
+    "@neburyx/contracts": "workspace:*",
+    "@neburyx/ee-audit": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "24.19.2",
