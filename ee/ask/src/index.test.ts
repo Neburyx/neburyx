@@ -1,4 +1,6 @@
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { aiStatusResponseSchema } from '@neburyx/contracts';
 import { createAuditSink } from '@neburyx/ee-audit';
 import { describe, expect, it } from 'vitest';
@@ -30,7 +32,13 @@ describe('the enterprise extension', () => {
     expect(folder).toBeDefined();
     if (folder === undefined) return;
     expect(existsSync(folder)).toBe(true);
-    expect(readdirSync(folder).filter((file) => file.endsWith('.sql'))).toEqual(['0001-audit-events.sql', '0002-ask-runs.sql']);
+    expect(folder).toBe(fileURLToPath(new URL('../../migrations', import.meta.url)));
+    const statements = readdirSync(folder)
+      .filter((file) => file.endsWith('.sql'))
+      .map((file) => readFileSync(join(folder, file), 'utf8'))
+      .join('\n');
+    expect(statements).toContain('CREATE TABLE audit_events');
+    expect(statements).toContain('CREATE TABLE ask_runs');
   });
 
   it('hands the sink it mounted to the audited call, which has none before the application built it, and returns the mounted sink unchanged', async () => {
