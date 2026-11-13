@@ -91,7 +91,7 @@ describe('what a provider receives', () => {
     const settings = { properties: { person: ['name'] } };
     expect(seen((await received(settings, summary)).text, 'ordinary')).toBe(true);
     expect(seen((await received(settings, (builder) => builder.assistant({ message: 'hi ‹person#1›', elements: [PERSON] }))).text, 'ordinary')).toBe(true);
-    const ask = await received(settings, (builder) => builder.ask({ question: 'who is ‹person#1›?', catalog: 'T1', vocabulary: 'V1' }));
+    const ask = await received(settings, (builder) => builder.ask({ question: 'who is ‹person#1›?', catalog: 'T1', vocabulary: 'V1', patterns: '' }));
     for (const key of Object.keys(SENTINELS) as (keyof typeof SENTINELS)[]) expect(seen(ask.text, key), key).toBe(false);
   });
 });

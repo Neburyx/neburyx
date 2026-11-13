@@ -1,4 +1,4 @@
-import { ASK_PLAN_PARAMS, parseExtensionRefusal, type AskPlanRun, type AskPlanRunner, type AskRunResult, type AskRunScope, type ExtensionRefusalFields } from '@neburyx/contracts';
+import { ASK_PLAN_PARAMS, SAVED_PATTERN_TEMPLATE_ID, parseExtensionRefusal, storedSavedPatternParamsSchema, type AskPlanRun, type AskPlanRunner, type AskRunResult, type AskRunScope, type ExtensionRefusalFields } from '@neburyx/contracts';
 import type { EdgeReader } from '../edges/edge-reader.js';
 import type { EntityReader } from '../entities/entity-reader.js';
 import { AppError, detailsOf, errorResponse } from '../errors.js';
@@ -7,6 +7,7 @@ import type { DerivedNeighborsService } from '../graph/derived-neighbors-service
 import type { ExpandService } from '../graph/expand-service.js';
 import type { TemplateRunService } from '../graph/template-run-service.js';
 import type { MappingModel } from '../mapping/model.js';
+import type { SavedPatternRunService } from '../patterns/saved-run-service.js';
 import type { SearchService } from '../search/search-service.js';
 import type { Principal } from '../seams/seams.js';
 
@@ -19,6 +20,7 @@ export interface AskPlanRunnerServices {
   readonly derivedNeighbors: Pick<DerivedNeighborsService, 'derive'>;
   readonly edges: Pick<EdgeReader, 'read'>;
   readonly searching: Pick<SearchService, 'search'>;
+  readonly savedRuns: Pick<SavedPatternRunService, 'find' | 'run'>;
   readonly mapping: MappingModel;
 }
 
@@ -72,7 +74,7 @@ interface Base {
 }
 
 /** The result of one plan, or undefined when the parameters it holds are not the template's. */
-async function runOf(services: AskPlanRunnerServices, base: Base, plan: { readonly templateId: keyof typeof ASK_PLAN_PARAMS; readonly params: unknown }, continuing: boolean): Promise<AskRunResult | undefined> {
+async function runOf(services: AskPlanRunnerServices, base: Base, plan: { readonly templateId: keyof typeof ASK_PLAN_PARAMS | typeof SAVED_PATTERN_TEMPLATE_ID; readonly params: unknown }, continuing: boolean): Promise<AskRunResult | undefined> {
   switch (plan.templateId) {
     case 'shared-attribute':
     case 'linked-entities': {
@@ -80,6 +82,18 @@ async function runOf(services: AskPlanRunnerServices, base: Base, plan: { readon
       if (!parsed.success) return undefined;
       const result = await services.templateRuns.run({ ...base, id: plan.templateId, params: parsed.data, continue: continuing });
       return { templateId: plan.templateId, result };
+    }
+    case SAVED_PATTERN_TEMPLATE_ID: {
+      const parsed = storedSavedPatternParamsSchema.safeParse(plan.params);
+      if (!parsed.success) return undefined;
+      const { patternId, patternVersion, ref } = parsed.data;
+      // the pattern is read again as the saved run reads it, so a pattern that is unshared, deleted or no longer the caller's is as absent as it is to the manual route; the version of this very row is the one compared
+      const pattern = await services.savedRuns.find({ principal: base.principal, id: patternId });
+      if (pattern.sourceId !== base.sourceId) throw new AppError('NOT_FOUND');
+      if (pattern.version !== patternVersion) throw new AppError('CONFLICT', { reason: 'pattern-changed' });
+      const answer = await services.savedRuns.run({ traceId: base.traceId, principal: base.principal, pattern, mask: base.mask, ...(ref === undefined ? {} : { anchor: ref }), continue: continuing, ...(base.signal === undefined ? {} : { signal: base.signal }) });
+      if (answer.status === 'unavailable') throw new AppError('CONFLICT', { reason: 'pattern-unavailable' });
+      return { templateId: SAVED_PATTERN_TEMPLATE_ID, result: answer };
     }
     case 'entity': {
       const parsed = ASK_PLAN_PARAMS.entity.safeParse(plan.params);

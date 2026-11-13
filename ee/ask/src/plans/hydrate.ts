@@ -2,6 +2,12 @@ import { askPlanSchema, type AskPlan } from '@neburyx/contracts';
 import type { PlaceholderEntry } from '../resolution/index.js';
 
 type TemplatePlan = Extract<AskPlan, { kind: 'plan' }>;
+/** What a key of the pattern catalog stood for in the request that made the plan: the pattern's own id and version. */
+export interface PatternTarget {
+  readonly id: string;
+  readonly version: number;
+}
+
 type Anchor = { readonly entityType: string; readonly stableId: string };
 
 export type HydrationFailure = 'unknown-placeholder' | 'not-an-entity' | 'not-a-value' | 'other-source' | 'invalid-plan';
@@ -22,7 +28,7 @@ export class HydrationError extends Error {
  * entity type is the map's, not the model's) and the value placeholder of a search into the text typed. It substitutes only; a placeholder the map does not hold, one of the wrong kind or an
  * entity of another source than the request's fails, and nothing is stored from it.
  */
-export function hydratePlan(plan: TemplatePlan, placeholders: ReadonlyMap<string, PlaceholderEntry>, sourceId: string): TemplatePlan {
+export function hydratePlan(plan: TemplatePlan, placeholders: ReadonlyMap<string, PlaceholderEntry>, sourceId: string, patterns: ReadonlyMap<string, PatternTarget> = new Map()): TemplatePlan {
   const entity = (anchor: Anchor): Anchor => {
     const entry = placeholders.get(anchor.stableId);
     if (entry === undefined) throw new HydrationError('unknown-placeholder');
@@ -50,6 +56,13 @@ export function hydratePlan(plan: TemplatePlan, placeholders: ReadonlyMap<string
     case 'derived-edge-support':
       hydrated = { ...plan, params: { ...plan.params, ends: [entity(plan.params.ends[0]), entity(plan.params.ends[1])] } };
       break;
+    case 'saved-pattern': {
+      if (!('patternKey' in plan.params)) throw new HydrationError('invalid-plan');
+      const target = patterns.get(plan.params.patternKey);
+      if (target === undefined) throw new HydrationError('unknown-placeholder');
+      hydrated = { ...plan, params: { patternId: target.id, patternVersion: target.version, ...(plan.params.ref === undefined ? {} : { ref: entity(plan.params.ref) }) } };
+      break;
+    }
     case 'search':
       hydrated = { ...plan, params: { ...plan.params, text: value(plan.params.text) } };
       break;

@@ -6,6 +6,8 @@ export interface PreviewParts {
   readonly resolutions: readonly AskResolution[];
   readonly policyVersion: string;
   readonly wordListVersion: string;
+  /** The SHA-256 of the text of the saved patterns offered with the question; absent when none is, so a question without patterns is signed as it was. */
+  readonly patternCatalogSha?: string;
 }
 
 /** The signing capability the application hands over: it maps a text to 64 lowercase hex characters and keeps its key to itself. */
@@ -28,7 +30,7 @@ export function canonicalPreview(parts: PreviewParts): string {
     .map((resolution) => ({ resolution, key: JSON.stringify(stable(resolution)) }))
     .sort((left, right) => left.resolution.start - right.resolution.start || left.resolution.end - right.resolution.end || (left.key < right.key ? -1 : left.key > right.key ? 1 : 0))
     .map(({ resolution }) => stable(resolution));
-  return JSON.stringify([DOMAIN, FORMAT_VERSION, parts.text, resolutions, parts.policyVersion, parts.wordListVersion]);
+  return JSON.stringify([DOMAIN, FORMAT_VERSION, parts.text, resolutions, parts.policyVersion, parts.wordListVersion, ...(parts.patternCatalogSha === undefined ? [] : [parts.patternCatalogSha])]);
 }
 
 export function previewHashOf(mac: PreviewMac, parts: PreviewParts): string {

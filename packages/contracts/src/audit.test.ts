@@ -176,3 +176,22 @@ describe('the detail of the audit event of a run of a plan', () => {
     expect(ASK_RUN_PARAMS_LABEL).toBe('ask-run-params');
   });
 });
+
+describe('the audit detail of a saved pattern', () => {
+  const base = { modelRef: 'm', promptId: 'ask.plan', promptVersion: '4', promptSha256: 'a'.repeat(64), tokensIn: 1, tokensOut: 2 };
+
+  it('may say how many patterns a call offered and the hash of the text, and no more', () => {
+    expect(parseAiAuditDetail({ ...base, patternCatalog: { count: 2, sha256: 'b'.repeat(64) } })).toMatchObject({ patternCatalog: { count: 2, sha256: 'b'.repeat(64) } });
+    expect(parseAiAuditDetail(base)).not.toHaveProperty('patternCatalog');
+    expect(() => parseAiAuditDetail({ ...base, patternCatalog: { count: 0, sha256: 'b'.repeat(64) } })).toThrow();
+    expect(() => parseAiAuditDetail({ ...base, patternCatalog: { count: 1, sha256: 'b'.repeat(64), text: 'x' } })).toThrow();
+  });
+
+  it('may name the pattern a run ran by id and version, and no name', () => {
+    const run = { templateId: 'saved-pattern', templateVersion: 1, paramsHash: 'c'.repeat(64), rowCount: 3 };
+    expect(askRunAuditDetailSchema.safeParse({ ...run, patternId: '0195a000-0000-7000-8000-000000000001', patternVersion: 3 }).success).toBe(true);
+    expect(askRunAuditDetailSchema.safeParse(run).success).toBe(true);
+    expect(askRunAuditDetailSchema.safeParse({ ...run, patternId: 'a name' }).success).toBe(false);
+    expect(askRunAuditDetailSchema.safeParse({ ...run, patternName: 'a name' }).success).toBe(false);
+  });
+});

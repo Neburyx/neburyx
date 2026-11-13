@@ -1,5 +1,5 @@
 import { createHmac } from 'node:crypto';
-import { askPlanResponseSchema, parseExtensionRefusal, type AskPlan, type AskPlanner, type AskResolution, type ElementRef, type ExtensionRequest } from '@neburyx/contracts';
+import { askPlanResponseSchema, parseExtensionRefusal, type AiMappingView, type AskPlan, type AskPlanner, type AskResolution, type ElementRef, type ExtensionRequest } from '@neburyx/contracts';
 import { describe, expect, it, vi } from 'vitest';
 import { COMMON_WORDS_VERSION } from '../allowlist/index.js';
 import { AuditUnavailableError } from '../audited.js';
@@ -388,5 +388,136 @@ describe('a plan that is stored', () => {
     expect(thrown).toMatchObject({ name: 'PlanStoreError', code: 'PLAN_STORE_FAILED' });
     expect(rg.calls).toHaveLength(1);
     expect(plans.plans).toEqual([]);
+  });
+});
+
+describe('a plan that names a saved pattern', () => {
+  const TYPED = 'Acme is the same as widgets';
+  const PLACEHOLDER = '‹widget#1›';
+  const PATTERN_ID = '0195a000-0000-7000-8000-000000000001';
+  const OFFER = { id: PATTERN_ID, version: 3, name: 'SECRET-PATTERN-NAME', projection: { kind: 'definition' as const, anchorType: 'widget', startingEntity: 'asked' as const, steps: [{ relationshipTypes: ['link'], direction: 'out' as const, arrivesAt: 'gadget', conditions: [], windowed: false }] } };
+  const named = (ref: unknown = { entityType: 'widget', stableId: PLACEHOLDER }): AskPlan => ({ kind: 'plan', templateId: 'saved-pattern', templateVersion: 1, rationale: 'The pattern fits.', params: { patternKey: 'pat_1', ...(ref === undefined ? {} : { ref }) } }) as AskPlan;
+  const holding: Resolve = async ({ message }) => {
+    const span: PlaceholderSpan = { start: 0, end: PLACEHOLDER.length, placeholder: PLACEHOLDER, typedStart: 0, typedEnd: 4 };
+    return { status: 'resolved', text: `${PLACEHOLDER}${message.slice(4)}`, spans: [span], placeholders: new Map([[PLACEHOLDER, { kind: 'entity' as const, ref: REF }]]), capReached: false };
+  };
+  const VIEW: AiMappingView = { types: [{ name: 'widget', kind: 'entity', properties: [] }, { name: 'gadget', kind: 'entity', properties: [] }, { name: 'link', kind: 'relationship', properties: [] }] };
+  const confirm = async (rg: Rig, overrides: Partial<ExtensionRequest>, extra: Partial<Parameters<typeof createAskPlanRoute>[0]> = {}) => {
+    const plans = createMemoryPlanStore();
+    const r = createAskPlanRoute({ resolve: holding, plans: () => plans, view: () => VIEW, ...extra, vocabulary: () => questionVocabulary({ view: { types: [{ name: 'Widget', kind: 'entity', properties: [] }] } }) });
+    const shown = previewOf(await r.handler(rg.request({ message: TYPED, sourceId: SOURCE }, overrides)));
+    return { plans, send: () => r.handler(rg.request({ message: TYPED, sourceId: SOURCE, send: true, previewHash: shown.previewHash }, overrides)) };
+  };
+
+  it('is offered to the planner by key and structure, with no id, name or version of the pattern in the input', async () => {
+    const rg = rig(async () => named());
+    const { send } = await confirm(rg, { askPatterns: async () => ({ offers: [OFFER], cut: false }) });
+    await send();
+    const [call] = rg.calls;
+    expect(call?.rest).toContain('pat_1');
+    expect(call?.rest).not.toMatch(/SECRET-PATTERN-NAME|0195a000/);
+    expect(call?.rest).not.toContain('"version"');
+  });
+
+  it('is answered with the id and version of the pattern and the reference of the placeholder, stored for the caller and the source, with no key in the row', async () => {
+    const rg = rig(async () => named());
+    const { send, plans } = await confirm(rg, { askPatterns: async () => ({ offers: [OFFER], cut: false }) });
+    const result = askPlanResponseSchema.parse(await send());
+    expect(result).toMatchObject({ plan: { templateId: 'saved-pattern', params: { patternId: PATTERN_ID, patternVersion: 3, ref: { entityType: 'widget', stableId: 'w-1' } } } });
+    const [stored] = plans.plans;
+    expect(stored).toMatchObject({ userId: 'p', sourceId: SOURCE, templateId: 'saved-pattern', templateVersion: 1, state: 'proposed', params: { patternId: PATTERN_ID, patternVersion: 3, ref: { entityType: 'widget', stableId: 'w-1' } } });
+    expect(result).toMatchObject({ planId: stored?.id });
+    const row = JSON.stringify(plans.plans);
+    for (const text of ['pat_1', 'SECRET-PATTERN-NAME', 'Acme', 'widgets', PLACEHOLDER, 'The pattern fits']) expect(row).not.toContain(text);
+  });
+
+  it('says that the catalog was cut, with no count, when the application cut it, and says nothing otherwise', async () => {
+    const cutRg = rig(async () => named());
+    const cut = await confirm(cutRg, { askPatterns: async () => ({ offers: [OFFER], cut: true }) });
+    expect(askPlanResponseSchema.parse(await cut.send())).toMatchObject({ patternCatalogCut: true });
+    expect(cutRg.calls[0]?.rest).toContain('More saved patterns exist');
+    const whole = await confirm(rig(async () => named()), { askPatterns: async () => ({ offers: [OFFER], cut: false }) });
+    expect(await whole.send()).not.toHaveProperty('patternCatalogCut');
+  });
+
+  it('is not offered when the application has no patterns for the caller, and gives the planner no catalog', async () => {
+    const rg = rig();
+    const { send } = await confirm(rg, { askPatterns: async () => ({ offers: [], cut: false }) });
+    await send();
+    expect(rg.calls[0]?.rest).not.toContain('patterns');
+    const absent = rig();
+    const { send: sendAbsent } = await confirm(absent, {});
+    await sendAbsent();
+    expect(absent.calls[0]?.rest).not.toContain('patterns');
+  });
+
+  it('stores nothing and fails closed when the plan names a key the catalog of this request does not hold', async () => {
+    const rg = rig(async () => ({ ...named(), params: { patternKey: 'pat_9', ref: { entityType: 'widget', stableId: PLACEHOLDER } } }) as AskPlan);
+    const { send, plans } = await confirm(rg, { askPatterns: async () => ({ offers: [OFFER], cut: false }) });
+    expect(await send().catch((error: unknown) => error)).toMatchObject({ name: 'HydrationError' });
+    expect(plans.plans).toEqual([]);
+  });
+
+  it('passes on the refusal of the application when it will not list the patterns of the source, and calls no planner', async () => {
+    const rg = rig(async () => named());
+    await expect(confirm(rg, { askPatterns: async () => Promise.reject(new Error('not found')) })).rejects.toThrow('not found');
+    expect(rg.calls).toEqual([]);
+  });
+
+  describe('and the preview that shows it', () => {
+    const LABELLED = { ...OFFER, name: 'Widgets and gadgets' };
+    const shownWith = async (rg: Rig, listing: { offers: readonly (typeof OFFER)[]; cut: boolean }, overrides: Partial<ExtensionRequest> = {}) => {
+      const r = createAskPlanRoute({ resolve: holding, plans: () => createMemoryPlanStore(), view: () => VIEW, vocabulary: () => questionVocabulary({ view: VIEW }) });
+      return { r, shown: previewOf(await r.handler(rg.request({ message: TYPED, sourceId: SOURCE }, { askPatterns: async () => listing, ...overrides }))) };
+    };
+
+    it('lists the names that will be shown to the model, and none when every name was left out', async () => {
+      const labelled = await shownWith(rig(), { offers: [LABELLED], cut: false });
+      expect(labelled.shown).toMatchObject({ patternLabels: ['Widgets and gadgets'], patternText: expect.stringContaining('named "Widgets and gadgets"') });
+      const left = await shownWith(rig(), { offers: [OFFER], cut: false });
+      expect(left.shown).not.toHaveProperty('patternLabels');
+      expect(left.shown).toMatchObject({ patternText: expect.stringContaining('pat_1: starts at') });
+      expect(JSON.stringify(left.shown)).not.toContain('SECRET-PATTERN-NAME');
+      const none = await shownWith(rig(), { offers: [], cut: false });
+      expect(none.shown).not.toHaveProperty('patternLabels');
+      expect(none.shown).not.toHaveProperty('patternText');
+    });
+
+    it('says that the catalog was cut, with no count', async () => {
+      const cut = await shownWith(rig(), { offers: [LABELLED], cut: true });
+      expect(cut.shown).toMatchObject({ patternCatalogCut: true });
+    });
+
+    it('is signed over the pattern catalog, so a question with patterns and one without have different hashes, and one without is signed as it always was', async () => {
+      const withPatterns = await shownWith(rig(), { offers: [OFFER], cut: false });
+      const without = await shownWith(rig(), { offers: [], cut: false });
+      const plain = previewOf(await createAskPlanRoute({ resolve: holding, vocabulary: () => questionVocabulary({ view: VIEW }) }).handler(rig().request({ message: TYPED, sourceId: SOURCE })));
+      expect(withPatterns.shown.previewHash).not.toBe(without.shown.previewHash);
+      expect(without.shown.previewHash).toBe(plain.previewHash);
+    });
+
+    it('sends nothing and answers the new preview with changed when a pattern was renamed or shared between the preview and the send', async () => {
+      const rg = rig(async () => named());
+      const first = await shownWith(rg, { offers: [LABELLED], cut: false });
+      const renamed = { offers: [{ ...LABELLED, name: 'Gadgets and widgets' }], cut: false };
+      const sent = await first.r.handler(rg.request({ message: TYPED, sourceId: SOURCE, send: true, previewHash: first.shown.previewHash }, { askPatterns: async () => renamed }));
+      expect(sent).toMatchObject({ changed: true, patternLabels: ['Gadgets and widgets'] });
+      expect(rg.calls).toEqual([]);
+      const added = await first.r.handler(rg.request({ message: TYPED, sourceId: SOURCE, send: true, previewHash: first.shown.previewHash }, { askPatterns: async () => ({ offers: [LABELLED, { ...LABELLED, id: '0195a000-0000-7000-8000-000000000009' }], cut: false }) }));
+      expect(added).toMatchObject({ changed: true });
+      expect(rg.calls).toEqual([]);
+    });
+
+    it('builds no catalog, lists no label and signs no catalog when the prompt in use has no place for the patterns', async () => {
+      let asked = 0;
+      const rg = rig();
+      const noPlace: AskPlanner = { ...rg.planner, offersPatterns: () => false };
+      const { shown } = await shownWith(rg, { offers: [LABELLED], cut: true }, { askPlanner: noPlace, askPatterns: async () => (asked += 1, { offers: [LABELLED], cut: true }) });
+      expect(asked).toBe(0);
+      expect(shown).not.toHaveProperty('patternLabels');
+      expect(shown).not.toHaveProperty('patternCatalogCut');
+      const plain = previewOf(await createAskPlanRoute({ resolve: holding, vocabulary: () => questionVocabulary({ view: VIEW }) }).handler(rg.request({ message: TYPED, sourceId: SOURCE })));
+      expect(shown.previewHash).toBe(plain.previewHash);
+    });
   });
 });

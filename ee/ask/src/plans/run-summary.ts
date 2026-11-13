@@ -22,6 +22,11 @@ export function summarizeRun(run: AskRunResult): RunSummary {
       if (answer.status === 'heavy') return { rowCount: 0, partial: true };
       return { rowCount: answer.nodes.length, partial: lowerBound(answer.count) || answer.notices.some((notice) => notice.code === 'readBounded') };
     }
+    case 'saved-pattern': {
+      const answer = run.result;
+      if (answer.status === 'heavy') return { rowCount: 0, partial: true };
+      return { rowCount: answer.nodes.length, partial: lowerBound(answer.count) || ('nextCursor' in answer && answer.nextCursor !== undefined) || answer.notices.some((notice) => notice.code === 'readBounded') };
+    }
     case 'entity':
       return { rowCount: 1, partial: false };
     case 'degree-preview':

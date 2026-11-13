@@ -19,6 +19,8 @@ export interface AuditedCallContext {
   readonly sourceId?: string;
   /** The `type.property` names of the `pii` properties the request holds, never their values. */
   readonly piiPropertiesSent?: readonly string[];
+  /** The saved patterns the request offered: their number and the SHA-256 of the text sent, never a pattern. */
+  readonly patternCatalog?: { readonly count: number; readonly sha256: string };
 }
 
 /** Thrown when a model call could not be recorded: the answer is discarded and never carried by the error. */
@@ -38,6 +40,8 @@ export interface AuditedModelOptions {
 }
 
 export interface AuditedModelCall {
+  /** Whether the prompt in use has a place for the parameter. */
+  readonly takes: (id: PromptId, parameter: string) => boolean;
   readonly call: (request: ModelRequest, context: AuditedCallContext, signal: AbortSignal) => Promise<ModelAnswer>;
   /**
    * The same call as a provider, for one context. Unlike a bare provider it can reject with `AuditUnavailableError` (the event could not be written, or the answer's prompt differs from the one resolved),
@@ -83,6 +87,7 @@ export function createAuditedModelCall(options: AuditedModelOptions): AuditedMod
       promptSha256: prompt.sha256,
       ...(prompt.instructionsSha256 === undefined ? {} : { instructionsSha256: prompt.instructionsSha256 }),
       ...(context.piiPropertiesSent === undefined || context.piiPropertiesSent.length === 0 ? {} : { piiPropertiesSent: context.piiPropertiesSent }),
+      ...(context.patternCatalog === undefined ? {} : { patternCatalog: context.patternCatalog }),
       ...counts,
     });
     return {
@@ -137,5 +142,5 @@ export function createAuditedModelCall(options: AuditedModelOptions): AuditedMod
     }
   }
 
-  return { call, asProvider: (context) => ({ complete: (request, signal) => call(request, context, signal) }) };
+  return { takes: (id, parameter) => configuration.registry.takes(id, parameter), call, asProvider: (context) => ({ complete: (request, signal) => call(request, context, signal) }) };
 }

@@ -23,13 +23,15 @@ async function registryWith(overrides: Record<string, string> = {}): Promise<Pro
   return built.registry;
 }
 
-const VALUES = { 'ask.plan': { catalog: 'T1, T2', vocabulary: 'V1', question: 'who is ‹person#1›?' }, 'ask.plan.repair': { catalog: 'T1', vocabulary: 'V1', question: 'who is ‹person#1›?', reply: 'REPLY-VALUE', problems: 'PROBLEM-VALUE' }, 'summary.view': { view: '‹account#1›' }, 'assistant.route': { message: 'hello', view: '‹account#1›' } } as const;
+const VERSIONS: Readonly<Record<string, number>> = { 'ask.plan': 5, 'summary.view': 1, 'assistant.route': 1, 'ask.plan.repair': 3 };
+
+const VALUES = { 'ask.plan': { catalog: 'T1, T2', vocabulary: 'V1', patterns: '', question: 'who is ‹person#1›?' }, 'ask.plan.repair': { catalog: 'T1', vocabulary: 'V1', patterns: '', question: 'who is ‹person#1›?', reply: 'REPLY-VALUE', problems: 'PROBLEM-VALUE' }, 'summary.view': { view: '‹account#1›' }, 'assistant.route': { message: 'hello', view: '‹account#1›' } } as const;
 
 describe('the built-in prompts', () => {
   it('are exactly the prompt ids, each at its version with parameters its text uses and no others', () => {
     expect(Object.keys(BUILT_IN_PROMPTS).sort()).toEqual([...PROMPT_IDS].sort());
     for (const prompt of Object.values(BUILT_IN_PROMPTS)) {
-      expect(prompt.version).toBe(prompt.id === 'ask.plan' ? 4 : prompt.id === 'ask.plan.repair' ? 2 : 1);
+      expect(prompt.version).toBe(VERSIONS[prompt.id]);
       const used = [...prompt.text.matchAll(/\{\{([A-Za-z0-9]+)\}\}/g)].map((match) => match[1]);
       expect([...new Set(used)].sort()).toEqual([...prompt.parameters].sort());
     }
@@ -38,17 +40,17 @@ describe('the built-in prompts', () => {
 
 describe('the parts of the built-in prompts', () => {
   const PINNED: Readonly<Record<string, string>> = {
-    'ask.plan': '9a11d12f487a386d4abe2e997088dcde2d182e6a370be3985d9c602e8a4dde1c',
+    'ask.plan': '28777e4d98eed2e2493a3e76694f6b5542f9dc1a6db7cc59d83bd9578d933295',
     'summary.view': '4933b5f1fa5581982f16d7a54bf55e02adb7380080cf37426ebeb8f97b3d8cb9',
     'assistant.route': 'd15cd59e3b7db95e5c77c1c0b999b045b42f94099d9f07a26080a2e100e5a320',
-    'ask.plan.repair': '1072cd1d34d84a97177770d0c22ce5de2d7d4caf0601ed226385dde61d8030dd',
+    'ask.plan.repair': '73b5574c57cb87166db31956fa5ccf33f525bdd5574ebab016decc4e9e1e9123',
   };
 
   it.each(PROMPT_IDS)('join to their text: the hash and the version are pinned (%s)', async (id) => {
     const prompt = BUILT_IN_PROMPTS[id];
     expect(`${prompt.instructions}\n\n${prompt.values}`).toBe(prompt.text);
     expect(sha(prompt.text)).toBe(PINNED[id]);
-    expect(prompt.version).toBe(id === 'ask.plan' ? 4 : id === 'ask.plan.repair' ? 2 : 1);
+    expect(prompt.version).toBe(VERSIONS[id]);
     expect((await registryWith()).resolve(id, VALUES[id]).record.sha256).toBe(PINNED[id]);
   });
 
@@ -68,7 +70,7 @@ describe('the parts of the built-in prompts', () => {
       if (prompt.staticParameters.includes(name)) {
         expect(resolved.instructions).toContain(String(value));
         expect(resolved.values).not.toContain(String(value));
-      } else {
+      } else if (value !== '') {
         expect(resolved.values).toContain(String(value));
         expect(resolved.instructions).not.toContain(String(value));
       }
@@ -99,7 +101,7 @@ describe('a replacement prompt with a values line', () => {
 
   it('takes a value that looks like the line as a value, not as a boundary', async () => {
     const path = file('looks-like.txt', marked('Plan.', 'Q: {{question}} {{catalog}}'));
-    const resolved = (await registryWith({ 'ask.plan': path })).resolve('ask.plan', { catalog: 'c', vocabulary: 'V1', question: `x\n${VALUES_BOUNDARY}\ny` });
+    const resolved = (await registryWith({ 'ask.plan': path })).resolve('ask.plan', { catalog: 'c', vocabulary: 'V1', patterns: '', question: `x\n${VALUES_BOUNDARY}\ny` });
     expect(resolved.instructions).toBe('Plan.');
     expect(resolved.values).toContain(`x\n${VALUES_BOUNDARY}\ny`);
   });
@@ -140,7 +142,7 @@ describe('resolving a prompt with no override', () => {
   it('refuses a missing parameter and an undeclared one, naming it, and returns no text', async () => {
     const registry = await registryWith();
     expect(() => registry.resolve('ask.plan', { question: 'q' })).toThrow(new PromptError('the prompt ask.plan needs the parameter catalog'));
-    expect(() => registry.resolve('ask.plan', { catalog: 'c', vocabulary: 'V1', question: 'q', extra: 'x' })).toThrow(new PromptError('the prompt ask.plan has no parameter extra'));
+    expect(() => registry.resolve('ask.plan', { catalog: 'c', vocabulary: 'V1', patterns: '', question: 'q', extra: 'x' })).toThrow(new PromptError('the prompt ask.plan has no parameter extra'));
   });
 
   it('inserts a value as it is, with no second pass over the result', async () => {
@@ -156,14 +158,14 @@ describe('resolving a prompt with an override', () => {
     const registry = await registryWith({ 'ask.plan': path });
     const resolved = registry.resolve('ask.plan', VALUES['ask.plan']);
     expect(resolved.text).toBe('Plan for who is ‹person#1›? using T1, T2.');
-    expect(resolved.record).toEqual({ id: 'ask.plan', version: 4, source: 'override', sha256: sha('Plan for {{question}} using {{catalog}}.') });
+    expect(resolved.record).toEqual({ id: 'ask.plan', version: 5, source: 'override', sha256: sha('Plan for {{question}} using {{catalog}}.') });
     expect(resolved.record.sha256).not.toBe((await registryWith()).resolve('ask.plan', VALUES['ask.plan']).record.sha256);
   });
 
   it('gives the same hash whatever the values, so the hash names the prompt and holds no user text', async () => {
     const registry = await registryWith({ 'ask.plan': file('hash.txt', 'Plan {{question}} {{catalog}}') });
-    const first = registry.resolve('ask.plan', { catalog: 'c1', vocabulary: 'V1', question: 'first question' }).record.sha256;
-    const second = registry.resolve('ask.plan', { catalog: 'c2', vocabulary: 'V1', question: 'another question' }).record.sha256;
+    const first = registry.resolve('ask.plan', { catalog: 'c1', vocabulary: 'V1', patterns: '', question: 'first question' }).record.sha256;
+    const second = registry.resolve('ask.plan', { catalog: 'c2', vocabulary: 'V1', patterns: '', question: 'another question' }).record.sha256;
     expect(first).toBe(second);
     expect(first).toBe(createHash('sha256').update(readFileSync(join(folder, 'hash.txt'))).digest('hex'));
   });
@@ -247,23 +249,23 @@ describe('the families in the planner prompts', () => {
 describe('the built-in planner prompt', () => {
   const prompt = BUILT_IN_PROMPTS['ask.plan'];
 
-  it('is version 4 with the parameters catalog, vocabulary and question', () => {
-    expect(prompt.version).toBe(4);
-    expect([...prompt.parameters].sort()).toEqual(['catalog', 'question', 'vocabulary']);
+  it('is version 5 with the parameters catalog, vocabulary, patterns and question', () => {
+    expect(prompt.version).toBe(5);
+    expect([...prompt.parameters].sort()).toEqual(['catalog', 'patterns', 'question', 'vocabulary']);
   });
 
-  it('tells the model to answer unsupported for a judgement, a question about what is on screen and any question no template answers, and to answer with one JSON object', () => {
+  it('tells the model to answer unsupported for a judgement, a question about what is on screen and any question that neither a template nor a saved pattern answers, and to answer with one JSON object', () => {
     expect(prompt.instructions).toContain('unsupported');
     expect(prompt.instructions).toContain('a judgement');
     expect(prompt.instructions).toContain('what is shown on screen');
-    expect(prompt.instructions).toContain('no template answers');
+    expect(prompt.instructions).toContain('neither a template of the catalog nor a saved pattern of the list answers');
     expect(prompt.instructions).toContain('one JSON object');
     expect(prompt.instructions).toContain('Never write a query');
   });
 });
 
 describe('the static part of the planner prompt', () => {
-  const STATIC = { catalog: 'CATALOG-TEXT', vocabulary: 'VOCABULARY-TEXT' };
+  const STATIC = { catalog: 'CATALOG-TEXT', vocabulary: 'VOCABULARY-TEXT', patterns: '' };
   const marked = (before: string, after: string): string => [before, VALUES_BOUNDARY, after].join('\n');
   const problemsOf = async (overrides: Record<string, string>): Promise<readonly string[]> => {
     const built = await buildPromptRegistry(overrides);
@@ -306,7 +308,23 @@ describe('the static part of the planner prompt', () => {
   it('still accepts an override written for version 2, with no boundary line or with the catalog after it, and sends it whole as values with no instructions hash', async () => {
     for (const text of ['Plan {{question}} with {{catalog}} and {{vocabulary}}.', marked('Plan.', 'Q: {{question}} {{catalog}} {{vocabulary}}')]) {
       const resolved = (await registryWith({ 'ask.plan': file(`older-${text.length}.txt`, text) })).resolve('ask.plan', { ...STATIC, question: 'q' });
-      expect(resolved.record).toEqual({ id: 'ask.plan', version: 4, source: 'override', sha256: sha(text) });
+      expect(resolved.record).toEqual({ id: 'ask.plan', version: 5, source: 'override', sha256: sha(text) });
     }
+  });
+
+  it('sends no pattern catalog through an override that has no place for it, and sends it through one that does', async () => {
+    const section = 'pat_1: a structure\n\n';
+    const without = (await registryWith({ 'ask.plan': file('no-patterns.txt', 'Plan {{question}} with {{catalog}} and {{vocabulary}}.') })).resolve('ask.plan', { ...STATIC, patterns: section, question: 'q' });
+    expect(without.text).not.toContain('pat_1');
+    const withSlot = (await registryWith({ 'ask.plan': file('with-patterns.txt', marked('Plan with {{catalog}} and {{vocabulary}}.', '{{patterns}}Q: {{question}}')) })).resolve('ask.plan', { ...STATIC, patterns: section, question: 'q' });
+    expect(withSlot.values).toBe(`${section}Q: q`);
+    expect(withSlot.instructions).not.toContain('pat_1');
+  });
+
+  it('says whether the text in use has a place for a parameter: the built-in does, an override only if it names it', async () => {
+    expect((await registryWith()).takes('ask.plan', 'patterns')).toBe(true);
+    expect((await registryWith({ 'ask.plan': file('without.txt', 'Plan {{question}} with {{catalog}}.') })).takes('ask.plan', 'patterns')).toBe(false);
+    expect((await registryWith({ 'ask.plan': file('with.txt', marked('Plan.', '{{patterns}}Q: {{question}}')) })).takes('ask.plan', 'patterns')).toBe(true);
+    expect((await registryWith()).takes('summary.view', 'patterns')).toBe(false);
   });
 });

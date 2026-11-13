@@ -39,9 +39,9 @@ describe('the planner', () => {
   it('returns the plan a recorded reply holds, after one audited call with the question unchanged and only the catalog and the vocabulary besides', async () => {
     const { planner, provider, events } = await rig(ok(JSON.stringify(PLAN)));
     expect(await planner.plan({ text: TEXT, context: CONTEXT })).toEqual(PLAN);
-    expect(provider.calls).toEqual([{ promptId: 'ask.plan', parameters: { catalog: catalogText(), vocabulary: vocabularyText(DEFAULT_VIEW), question: TEXT } }]);
+    expect(provider.calls).toEqual([{ promptId: 'ask.plan', parameters: { catalog: catalogText(), vocabulary: vocabularyText(DEFAULT_VIEW), patterns: '', question: TEXT } }]);
     expect(events).toHaveLength(1);
-    expect(events[0]).toMatchObject({ action: 'ask.plan', result: 'success', actorId: CONTEXT.actorId, actorRole: 'investigator', traceId: 'tr-9', sourceId: 'demo', detail: { ai: { modelRef: 'fixture-model', promptId: 'ask.plan', promptVersion: '4', tokensIn: 12, tokensOut: 34 } } });
+    expect(events[0]).toMatchObject({ action: 'ask.plan', result: 'success', actorId: CONTEXT.actorId, actorRole: 'investigator', traceId: 'tr-9', sourceId: 'demo', detail: { ai: { modelRef: 'fixture-model', promptId: 'ask.plan', promptVersion: '5', tokensIn: 12, tokensOut: 34 } } });
     expect(JSON.stringify(events)).not.toContain('widget#1');
   });
 
@@ -98,7 +98,7 @@ describe('the prompt the planner sends', () => {
     expect(sent).toContain('LINKS: node_a -> node_a, has a time');
     expect(sent).toContain('shared: node_a -> node_a');
     expect(sent).not.toContain('SECRET');
-    expect(Object.keys(provider.calls[0]?.parameters ?? {}).sort()).toEqual(['catalog', 'question', 'vocabulary']);
+    expect(Object.keys(provider.calls[0]?.parameters ?? {}).sort()).toEqual(['catalog', 'patterns', 'question', 'vocabulary']);
   });
 
   it('accepts an operator\'s override with the parameters of version 2 and audits the hash of the override file', async () => {
@@ -155,7 +155,7 @@ describe('one repair, then unsupported', () => {
     expect(await planner.plan({ text: TEXT, context: CONTEXT })).toEqual(PLAN);
     expect(provider.calls.map((call) => call.promptId)).toEqual(['ask.plan', 'ask.plan.repair']);
     const repair = provider.calls[1]?.parameters;
-    expect(Object.keys(repair ?? {}).sort()).toEqual(['catalog', 'problems', 'question', 'reply', 'vocabulary']);
+    expect(Object.keys(repair ?? {}).sort()).toEqual(['catalog', 'patterns', 'problems', 'question', 'reply', 'vocabulary']);
     expect(repair).toMatchObject({ question: TEXT, reply: BAD_REPLY, problems: 'params.ref.stableId: not an entity placeholder of the question' });
     expect(events).toHaveLength(2);
     expect(events.map((event) => event.action)).toEqual(['ask.plan', 'ask.plan']);
@@ -192,5 +192,74 @@ describe('one repair, then unsupported', () => {
     expect(await refused.planner.plan({ text: TEXT, context: CONTEXT })).toEqual({ kind: 'unsupported', family: 'model-refused', reason: MODEL_REFUSED_REASON });
     const failed = await rig(ok(BAD_REPLY), { repair: { kind: 'failed', code: 'timeout' } });
     await expect(failed.planner.plan({ text: TEXT, context: CONTEXT })).rejects.toBeInstanceOf(PlannerCallFailed);
+  });
+});
+
+describe('saved patterns offered with the question', () => {
+  const CATALOG = { text: 'Saved patterns of the investigator.\npat_1: starts at an entity of type widget that the question gives; step 1: out over attr_link to attr_type, no conditions\n\n', entries: new Map([['pat_1', { anchorType: 'widget', startingEntity: 'asked' as const }]]), cut: false, labels: [], check: () => undefined };
+  const SAVED = { kind: 'plan', templateId: 'saved-pattern', templateVersion: 1, params: { patternKey: 'pat_1', ref: { entityType: 'widget', stableId: '‹widget#1›' } }, rationale: 'The saved pattern fits.' };
+
+  it('sends the pattern catalog as its own parameter, after the catalog and the vocabulary, and returns a plan that names an offered key', async () => {
+    const { planner, provider } = await rig(ok(JSON.stringify(SAVED)));
+    expect(await planner.plan({ text: TEXT, context: CONTEXT, patterns: CATALOG })).toEqual(SAVED);
+    expect(provider.calls).toEqual([{ promptId: 'ask.plan', parameters: { catalog: catalogText(), vocabulary: vocabularyText(DEFAULT_VIEW), patterns: CATALOG.text, question: TEXT } }]);
+  });
+
+  it('sends the catalog again in the repair call and, when the key is not offered, answers unsupported after one repair without the key in either problem list', async () => {
+    const wrong = { ...SAVED, params: { patternKey: 'pat_9', ref: SAVED.params.ref } };
+    const { planner, provider } = await rig(ok(JSON.stringify(wrong)));
+    expect(await planner.plan({ text: TEXT, context: CONTEXT, patterns: CATALOG })).toEqual({ kind: 'unsupported', family: 'plan-not-usable', reason: INVALID_PLAN_REASON });
+    expect(provider.calls.map((call) => call.promptId)).toEqual(['ask.plan', 'ask.plan.repair']);
+    for (const call of provider.calls) expect(call.parameters['patterns']).toBe(CATALOG.text);
+    expect(String(provider.calls[1]?.parameters['problems'])).toBe('params.patternKey: not a key of the saved patterns offered');
+  });
+
+  it('repairs a plan that names the pattern but gives no starting entity, when the repair names it', async () => {
+    const bare = { ...SAVED, params: { patternKey: 'pat_1' } };
+    const { planner, provider } = await rig(ok(JSON.stringify(bare)), { repair: ok(JSON.stringify(SAVED)) });
+    expect(await planner.plan({ text: TEXT, context: CONTEXT, patterns: CATALOG })).toEqual(SAVED);
+    expect(String(provider.calls[1]?.parameters['problems'])).toBe('params.ref: the saved pattern asks for its starting entity');
+  });
+
+  it('offers no key when there is no catalog, so a plan that names a pattern is invalid and the section sent is empty', async () => {
+    const { planner, provider } = await rig(ok(JSON.stringify(SAVED)));
+    expect(await planner.plan({ text: TEXT, context: CONTEXT })).toEqual({ kind: 'unsupported', family: 'plan-not-usable', reason: INVALID_PLAN_REASON });
+    expect(provider.calls.every((call) => call.parameters['patterns'] === '')).toBe(true);
+  });
+
+  it('reports a malformed pattern plan by path and code only', async () => {
+    const malformed = { ...SAVED, params: { patternKey: 'a name', extra: 1 } };
+    const { planner, provider } = await rig(ok(JSON.stringify(malformed)));
+    await planner.plan({ text: TEXT, context: CONTEXT, patterns: CATALOG });
+    const problems = String(provider.calls[1]?.parameters['problems']);
+    expect(problems).toContain('params.patternKey: invalid_format');
+    expect(problems).not.toContain('a name');
+  });
+
+  it('offers patterns exactly when the prompt in use has a place for them', async () => {
+    const { planner } = await rig(ok(JSON.stringify(PLAN)));
+    expect(planner.offersPatterns?.()).toBe(true);
+    const folder = mkdtempSync(join(tmpdir(), 'planner-offers-'));
+    try {
+      const path = join(folder, 'plan.txt');
+      writeFileSync(path, 'Plan {{question}} with {{catalog}} and {{vocabulary}}.');
+      const { planner: overridden } = await rig(ok(JSON.stringify(PLAN)), { overrides: { 'ask.plan': path } });
+      expect(overridden.offersPatterns?.()).toBe(false);
+    } finally {
+      rmSync(folder, { recursive: true, force: true });
+    }
+  });
+
+  it('records how many patterns were offered and the hash of the text sent in the event of each call, and nothing when none was', async () => {
+    const wrong = { ...SAVED, params: { patternKey: 'pat_9', ref: SAVED.params.ref } };
+    const withCatalog = await rig(ok(JSON.stringify(wrong)));
+    await withCatalog.planner.plan({ text: TEXT, context: CONTEXT, patterns: CATALOG });
+    const sha = createHash('sha256').update(CATALOG.text, 'utf8').digest('hex');
+    expect(withCatalog.events).toHaveLength(2);
+    for (const event of withCatalog.events) expect(event.detail).toMatchObject({ ai: { patternCatalog: { count: 1, sha256: sha } } });
+    expect(JSON.stringify(withCatalog.events)).not.toContain('structure');
+    const without = await rig(ok(JSON.stringify(PLAN)));
+    await without.planner.plan({ text: TEXT, context: CONTEXT });
+    expect(JSON.stringify(without.events[0]?.detail)).not.toContain('patternCatalog');
   });
 });

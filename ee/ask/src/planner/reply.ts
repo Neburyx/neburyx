@@ -1,4 +1,4 @@
-import { ASK_PLAN_PARAMS, ASK_TEXT_MAX_LENGTH, askPlanSchema, type AskPlan, type AskRefusalFamily } from '@neburyx/contracts';
+import { ASK_PLAN_PARAMS, ASK_TEXT_MAX_LENGTH, askPlanSchema, plannedSavedPatternParamsSchema, SAVED_PATTERN_TEMPLATE_ID, type AskPlan, type AskRefusalFamily } from '@neburyx/contracts';
 import { isModelFamily } from '../refusal/families.js';
 
 /** What a refusal of the model carries in place of its own words. */
@@ -20,6 +20,10 @@ const isRecord = (value: unknown): value is Record<string, unknown> => typeof va
 function problemsOfValue(value: unknown): readonly string[] {
   if (!isRecord(value)) return ['reply: not a JSON object'];
   const { templateId } = value;
+  if (value['kind'] === 'plan' && templateId === SAVED_PATTERN_TEMPLATE_ID) {
+    const params = plannedSavedPatternParamsSchema.safeParse(value['params']);
+    return params.success ? ['plan: a field is missing or unknown'] : params.error.issues.map((issue) => `params.${issue.path.join('.')}: ${issue.code}`.replace(/\.: /, ': '));
+  }
   if (value['kind'] === 'plan' && typeof templateId === 'string' && Object.hasOwn(ASK_PLAN_PARAMS, templateId)) {
     const schema = ASK_PLAN_PARAMS[templateId as keyof typeof ASK_PLAN_PARAMS];
     const params = schema.safeParse(value['params']);

@@ -1,4 +1,4 @@
-import { ASK_PLAN_PARAMS, type AskPlan } from '@neburyx/contracts';
+import { ASK_PLAN_PARAMS, storedSavedPatternParamsSchema, type AskPlan } from '@neburyx/contracts';
 
 type TemplateId = keyof typeof ASK_PLAN_PARAMS;
 type TemplatePlan = Extract<AskPlan, { kind: 'plan' }>;
@@ -36,4 +36,21 @@ export function editedParams(templateId: TemplateId, params: Record<string, unkn
   if (anchors.some((anchor) => !isRecord(anchor) || typeof anchor['sourceId'] !== 'string')) return { status: 'invalid' };
   const parsed = ASK_PLAN_PARAMS[templateId].safeParse(stripped);
   return parsed.success ? { status: 'ok', params: parsed.data as TemplatePlan['params'] } : { status: 'invalid' };
+}
+
+export type EditedPatternParams = { readonly status: 'ok'; readonly params: { readonly patternId: string; readonly patternVersion: number; readonly ref: { readonly entityType: string; readonly stableId: string } } } | { readonly status: 'other-source' } | { readonly status: 'invalid' };
+
+/**
+ * The parameters of an edit of a saved-pattern plan: only the starting entity may change. The pattern's id and version are the plan's own, and the reference carries the plan's source; anything else, or a missing reference,
+ * is invalid, and a plan that holds no reference (its pattern holds the starting entity) has nothing to edit.
+ */
+export function editedPatternParams(current: { readonly patternId: string; readonly patternVersion: number }, params: Record<string, unknown>, sourceId: string): EditedPatternParams {
+  const { ref, ...rest } = params;
+  if (!isRecord(ref) || typeof ref['sourceId'] !== 'string') return { status: 'invalid' };
+  if (ref['sourceId'] !== sourceId) return { status: 'other-source' };
+  const { sourceId: _own, ...anchor } = ref;
+  const parsed = storedSavedPatternParamsSchema.safeParse({ ...rest, ref: anchor });
+  if (!parsed.success || parsed.data.ref === undefined) return { status: 'invalid' };
+  if (parsed.data.patternId !== current.patternId || parsed.data.patternVersion !== current.patternVersion) return { status: 'invalid' };
+  return { status: 'ok', params: { patternId: parsed.data.patternId, patternVersion: parsed.data.patternVersion, ref: parsed.data.ref } };
 }

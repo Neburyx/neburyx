@@ -1,6 +1,6 @@
 import { z, type ZodType } from 'zod';
 import type { AiSettings } from './ai.js';
-import type { ASK_PLAN_TEMPLATE_IDS, AskEntityLookup, AskEntitySearch, AskPlanner, AskRunResult } from './ask.js';
+import type { ASK_PLAN_TEMPLATE_IDS, SAVED_PATTERN_TEMPLATE_ID, AskEntityLookup, AskEntitySearch, AskPatternListing, AskPatternOffer, AskPlanner, AskRunResult } from './ask.js';
 import { SOURCE_UNAVAILABLE_REASONS } from './error-codes.js';
 import type { AuditEvent, AuditSink, AuditSinkContext, MountedAuditSink } from './audit.js';
 
@@ -28,6 +28,10 @@ export interface ExtensionRequest {
    * scope, and its reads refuse, as `NOT_FOUND` and before anything is read, a source that is not configured or that the caller may not read; that refusal comes with the run, so a plan that meets it is a failed run.
    */
   readonly askPlanRunner?: (scope: AskRunScope) => AskPlanRunner;
+  /** The saved patterns the caller may run on a source, available against the mapping, newest changed first, at most as many as a catalog holds; `NOT_FOUND` for a source the caller may not read. */
+  readonly askPatterns?: (sourceId: string) => Promise<AskPatternListing>;
+  /** One saved pattern the caller may run on a source, found by its id whatever the size of the listing: the same offer `askPatterns` would give, or undefined when it is not one the caller may run now. */
+  readonly askPatternFind?: (sourceId: string, id: string) => Promise<AskPatternOffer | undefined>;
   readonly askEntityTools?: (sourceId: string) => { readonly search: AskEntitySearch; readonly lookup: AskEntityLookup; readonly ensureSource: () => Promise<void> };
 }
 
@@ -42,7 +46,7 @@ export type AskPlanRun = { readonly status: 'ok'; readonly result: AskRunResult 
 
 export interface AskPlanRunner {
   /** Runs a template with the parameters a stored plan holds, as the service of its manual route would; `continue` is set only by a verified token and lets a heavy run read its bounded page. */
-  run(plan: { readonly templateId: (typeof ASK_PLAN_TEMPLATE_IDS)[number]; readonly params: unknown }, options?: { readonly continue?: boolean }): Promise<AskPlanRun>;
+  run(plan: { readonly templateId: (typeof ASK_PLAN_TEMPLATE_IDS)[number] | typeof SAVED_PATTERN_TEMPLATE_ID; readonly params: unknown }, options?: { readonly continue?: boolean }): Promise<AskPlanRun>;
 }
 
 export type ExtensionRouteMethod = 'GET' | 'POST';
@@ -154,8 +158,8 @@ const rateLimitedRefusalSchema = z.object({ name: named, code: z.literal('RATE_L
 const sourceUnavailableRefusalSchema = z
   .object({ name: named, code: z.literal('SOURCE_UNAVAILABLE'), reason: z.enum(SOURCE_UNAVAILABLE_REASONS), retryAfterMs: z.number().int().nonnegative().optional() })
   .refine((fields) => fields.retryAfterMs === undefined || fields.reason === 'repeated-timeouts', { message: 'only repeated-timeouts has a wait' });
-/** A plan refusal names one of the two reasons of a plan, no other reason of `CONFLICT`. */
-export const PLAN_CONFLICT_REASONS = ['plan-expired', 'plan-not-runnable'] as const;
+/** A plan refusal names one of the reasons of a plan or of the pattern it names, no other reason of `CONFLICT`. */
+export const PLAN_CONFLICT_REASONS = ['plan-expired', 'plan-not-runnable', 'pattern-changed', 'pattern-unavailable'] as const;
 const conflictRefusalSchema = z.object({ name: named, code: z.literal('CONFLICT'), reason: z.enum(PLAN_CONFLICT_REASONS) });
 
 const refusalSchemas = [

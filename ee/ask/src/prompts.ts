@@ -26,10 +26,10 @@ function builtIn(id: PromptId, parameters: readonly string[], instructions: stri
 export const BUILT_IN_PROMPTS: Readonly<Record<PromptId, BuiltInPrompt>> = {
   'ask.plan': builtIn(
     'ask.plan',
-    ['catalog', 'vocabulary', 'question'],
-    'Choose the one template from the catalog that answers the question, and give its parameters. Use only the template identifiers of the catalog and only the entity types, relationship types and derived rules of the vocabulary. The question holds placeholders in angle brackets in place of names and IDs: use them as the references and values they stand for, and never write a name or an ID of your own. Answer only with the plan as one JSON object that has the kind plan, the template identifier, its version, the parameters and a one-line rationale. Answer with the kind unsupported, a family and a short reason, as one JSON object, for a question that asks for a judgement, a question about what is shown on screen, and any question that no template answers. The family is exactly one of these identifiers, each followed by what it means: path: how two things are connected through a chain of links; property-selection: picking records by the value of a property; similar-records: records that look alike or nearly match; ranking-or-aggregate: a ranking, a total or another figure across many records; attribute-combination: several attributes combined at once; indirect-attribute: an attribute of a neighbouring record; unnamed-relation: a kind of link the source does not define; judgement: a judgement or conclusion; personal-data: personal details; loaded-view: what is shown on the screen; other: anything else no template answers. Never write a query.\n\nCatalog:\n{{catalog}}\n\nVocabulary:\n{{vocabulary}}',
-    'Question:\n{{question}}',
-    4,
+    ['catalog', 'vocabulary', 'patterns', 'question'],
+    'Choose the one template from the catalog that answers the question, and give its parameters. Use only the template identifiers of the catalog and only the entity types, relationship types and derived rules of the vocabulary. The question holds placeholders in angle brackets in place of names and IDs: use them as the references and values they stand for, and never write a name or an ID of your own. Answer only with the plan as one JSON object that has the kind plan, the template identifier, its version, the parameters and a one-line rationale. Answer with the kind unsupported, a family and a short reason, as one JSON object, for a question that asks for a judgement, a question about what is shown on screen, and any question that neither a template of the catalog nor a saved pattern of the list answers. The family is exactly one of these identifiers, each followed by what it means: path: how two things are connected through a chain of links; property-selection: picking records by the value of a property; similar-records: records that look alike or nearly match; ranking-or-aggregate: a ranking, a total or another figure across many records; attribute-combination: several attributes combined at once; indirect-attribute: an attribute of a neighbouring record; unnamed-relation: a kind of link the source does not define; judgement: a judgement or conclusion; personal-data: personal details; loaded-view: what is shown on the screen; other: anything else that neither a template nor a listed saved pattern answers. A list of saved patterns may come before the question: when one of them answers it, you may answer with that pattern in the form the list gives instead of a template of the catalog. Never write a query.\n\nCatalog:\n{{catalog}}\n\nVocabulary:\n{{vocabulary}}',
+    '{{patterns}}Question:\n{{question}}',
+    5,
     ['catalog', 'vocabulary'],
   ),
   'summary.view': builtIn(
@@ -46,10 +46,10 @@ export const BUILT_IN_PROMPTS: Readonly<Record<PromptId, BuiltInPrompt>> = {
   ),
   'ask.plan.repair': builtIn(
     'ask.plan.repair',
-    ['catalog', 'vocabulary', 'question', 'reply', 'problems'],
-    'Your earlier answer to the question could not be used as a plan. The problems are listed by path. Answer again with one JSON object in the same form, using only the template identifiers of the catalog and only the entity types, relationship types and derived rules of the vocabulary, and the placeholders of the question as the references and values they stand for. If no template answers the question, answer with the kind unsupported, a family and a short reason. The family is exactly one of these identifiers, each followed by what it means: path: how two things are connected through a chain of links; property-selection: picking records by the value of a property; similar-records: records that look alike or nearly match; ranking-or-aggregate: a ranking, a total or another figure across many records; attribute-combination: several attributes combined at once; indirect-attribute: an attribute of a neighbouring record; unnamed-relation: a kind of link the source does not define; judgement: a judgement or conclusion; personal-data: personal details; loaded-view: what is shown on the screen; other: anything else no template answers. Never write a query.',
-    'Catalog:\n{{catalog}}\n\nVocabulary:\n{{vocabulary}}\n\nQuestion:\n{{question}}\n\nYour earlier answer:\n{{reply}}\n\nProblems:\n{{problems}}',
-    2,
+    ['catalog', 'vocabulary', 'patterns', 'question', 'reply', 'problems'],
+    'Your earlier answer to the question could not be used as a plan. The problems are listed by path. Answer again with one JSON object in the same form, using only the template identifiers of the catalog and only the entity types, relationship types and derived rules of the vocabulary, and the placeholders of the question as the references and values they stand for. If neither a template of the catalog nor a saved pattern of the list answers the question, answer with the kind unsupported, a family and a short reason. The family is exactly one of these identifiers, each followed by what it means: path: how two things are connected through a chain of links; property-selection: picking records by the value of a property; similar-records: records that look alike or nearly match; ranking-or-aggregate: a ranking, a total or another figure across many records; attribute-combination: several attributes combined at once; indirect-attribute: an attribute of a neighbouring record; unnamed-relation: a kind of link the source does not define; judgement: a judgement or conclusion; personal-data: personal details; loaded-view: what is shown on the screen; other: anything else that neither a template nor a listed saved pattern answers. A saved pattern from the list before the question may be named in the form the list gives. Never write a query.',
+    'Catalog:\n{{catalog}}\n\nVocabulary:\n{{vocabulary}}\n\n{{patterns}}Question:\n{{question}}\n\nYour earlier answer:\n{{reply}}\n\nProblems:\n{{problems}}',
+    3,
   ),
 };
 
@@ -72,6 +72,8 @@ export interface ResolvedPrompt {
 
 export interface PromptRegistry {
   readonly resolve: (id: PromptId, values: PromptParameters) => ResolvedPrompt;
+  /** Whether the text in use for the prompt (the built-in's, or the operator's file) has a place for the parameter. */
+  readonly takes: (id: PromptId, parameter: string) => boolean;
 }
 
 export type PromptRegistryResult = { readonly ok: true; readonly registry: PromptRegistry } | { readonly ok: false; readonly problems: readonly string[] };
@@ -162,6 +164,10 @@ export async function buildPromptRegistry(overrides: Readonly<Record<string, str
   return {
     ok: true,
     registry: {
+      takes(id, parameter) {
+        const prompt = BUILT_IN_PROMPTS[id];
+        return placeholdersOf(chosen.get(id)?.template ?? prompt.text).includes(parameter);
+      },
       resolve(id, values) {
         const prompt = BUILT_IN_PROMPTS[id];
         checkValues(prompt, values);

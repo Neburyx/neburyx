@@ -15,8 +15,8 @@ const SIGNAL = new AbortController().signal;
 const CONFIGURED_MODEL = 'configured-model';
 const CONTEXT: AuditedCallContext = { actorId: '01939999-0000-7000-8000-0000000000aa', actorRole: 'investigator', traceId: 'tr-1' };
 const REQUESTS: Readonly<Record<PromptId, ModelRequest>> = {
-  'ask.plan': { promptId: 'ask.plan', parameters: { catalog: 'T1, T2', vocabulary: 'V1', question: 'QUESTION-MARKER who is here?' } },
-  'ask.plan.repair': { promptId: 'ask.plan.repair', parameters: { catalog: 'T1, T2', vocabulary: 'V1', question: 'QUESTION-MARKER who is here?', reply: 'REPLY-MARKER', problems: 'params.ref: invalid_type' } },
+  'ask.plan': { promptId: 'ask.plan', parameters: { catalog: 'T1, T2', vocabulary: 'V1', patterns: '', question: 'QUESTION-MARKER who is here?' } },
+  'ask.plan.repair': { promptId: 'ask.plan.repair', parameters: { catalog: 'T1, T2', vocabulary: 'V1', patterns: '', question: 'QUESTION-MARKER who is here?', reply: 'REPLY-MARKER', problems: 'params.ref: invalid_type' } },
   'summary.view': { promptId: 'summary.view', parameters: { view: 'VIEW-MARKER a view' } },
   'assistant.route': { promptId: 'assistant.route', parameters: { message: 'MESSAGE-MARKER hello', view: 'VIEW-MARKER a view' } },
 };
@@ -108,10 +108,10 @@ describe('an answered model call', () => {
   it('records the same template hash whatever the request holds, and no hash of the filled text anywhere in the event', async () => {
     const { audited, events, registry } = await rig();
     await audited.call(REQUESTS['ask.plan'], CONTEXT, SIGNAL);
-    await audited.call({ promptId: 'ask.plan', parameters: { catalog: 'T3', vocabulary: 'V1', question: 'another question entirely' } }, CONTEXT, SIGNAL);
+    await audited.call({ promptId: 'ask.plan', parameters: { catalog: 'T3', vocabulary: 'V1', patterns: '', question: 'another question entirely' } }, CONTEXT, SIGNAL);
     const hashes = events.map((event) => (event.detail && 'ai' in event.detail ? event.detail.ai?.promptSha256 : undefined));
     expect(hashes[0]).toBe(hashes[1]);
-    for (const parameters of [REQUESTS['ask.plan'].parameters, { catalog: 'T3', vocabulary: 'V1', question: 'another question entirely' }]) {
+    for (const parameters of [REQUESTS['ask.plan'].parameters, { catalog: 'T3', vocabulary: 'V1', patterns: '', question: 'another question entirely' }]) {
       expect(JSON.stringify(events)).not.toContain(sha256Of(registry.resolve('ask.plan', parameters).text));
     }
   });

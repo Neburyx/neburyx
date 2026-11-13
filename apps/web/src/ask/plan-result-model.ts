@@ -27,6 +27,7 @@ export function addableOf(result: AskRunResult): Addable | undefined {
   switch (result.templateId) {
     case 'shared-attribute':
     case 'linked-entities':
+    case 'saved-pattern':
       return result.result.status === 'ok' ? { nodes: result.result.nodes, edges: result.result.edges, templateId: result.templateId } : undefined;
     case 'entity':
       return { nodes: [result.result], edges: [], templateId: result.templateId };
@@ -52,6 +53,7 @@ export function resultView(result: AskRunResult): ResultView {
   switch (result.templateId) {
     case 'shared-attribute':
     case 'linked-entities':
+    case 'saved-pattern':
       return result.result.status === 'ok'
         ? { lines: [countLine('Matches', result.result.count)], notices: result.result.notices.map(noticeText), addable }
         : { lines: [countLine('Estimate', result.result.estimate)], notices: result.result.notices.map(noticeText), addable };

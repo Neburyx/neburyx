@@ -1,8 +1,8 @@
-import { askEditRequestSchema, askEditResponseSchema, askPlanSchema, ExtensionRefusal, type AiMappingView, type ExtensionRoute } from '@neburyx/contracts';
+import { askEditRequestSchema, askEditResponseSchema, askPlanSchema, ExtensionRefusal, type ExtensionRequest, SAVED_PATTERN_TEMPLATE_ID, SAVED_PATTERN_TEMPLATE_VERSION, storedSavedPatternParamsSchema, type AiMappingView, type ExtensionRoute } from '@neburyx/contracts';
 import { CATALOG } from '../planner/catalog.js';
 import { problemsOfPlan } from '../planner/check.js';
-import { editedParams } from '../plans/edit-params.js';
-import type { PlanStore } from '../plans/index.js';
+import { editedParams, editedPatternParams } from '../plans/edit-params.js';
+import type { PlanStore, StoredPlan } from '../plans/index.js';
 import { refusalOfPlan } from '../plans/refusals.js';
 
 export const ASK_EDIT_URL = '/v1/ask/edit';
@@ -42,6 +42,7 @@ export function createAskEditRoute(options: AskEditRouteOptions = {}): Extension
       if (current === undefined) throw refusalOfPlan('absent');
       if (current.state !== 'proposed') throw refusalOfPlan(current.state === 'expired' ? 'expired' : 'not-runnable');
       if (body.templateId !== current.templateId) throw invalid();
+      if (body.templateId === SAVED_PATTERN_TEMPLATE_ID) return editedPattern(request, plans, current, body.params);
       const entry = CATALOG.find((candidate) => candidate.id === body.templateId);
       if (entry === undefined) throw invalid();
       const edited = editedParams(body.templateId, body.params, current.sourceId);
@@ -55,6 +56,22 @@ export function createAskEditRoute(options: AskEditRouteOptions = {}): Extension
       return { plan: candidate.data, planId: result.plan.id, expiresAt: result.plan.expiresAt.toISOString() };
     },
   };
+}
+
+async function editedPattern(request: ExtensionRequest, plans: PlanStore, current: StoredPlan, params: Record<string, unknown>) {
+  const held = storedSavedPatternParamsSchema.safeParse(current.params);
+  if (!held.success) throw invalid();
+  const edited = editedPatternParams(held.data, params, current.sourceId);
+  if (edited.status === 'other-source') throw new ExtensionRefusal({ code: 'SOURCE_MISMATCH' });
+  if (edited.status === 'invalid') throw invalid();
+  // the pattern must still be one the caller may run, as it was planned, and the entity must be of the type it starts at
+  const offered = await request.askPatternFind?.(current.sourceId, held.data.patternId);
+  if (offered === undefined || offered.version !== held.data.patternVersion || offered.projection.startingEntity !== 'asked' || edited.params.ref.entityType !== offered.projection.anchorType) throw invalid();
+  const candidate = askPlanSchema.safeParse({ kind: 'plan', templateId: SAVED_PATTERN_TEMPLATE_ID, templateVersion: SAVED_PATTERN_TEMPLATE_VERSION, rationale: EDITED_RATIONALE, params: edited.params });
+  if (!candidate.success || candidate.data.kind !== 'plan') throw invalid();
+  const result = await plans.edit({ planId: current.id, userId: request.principalId, templateId: SAVED_PATTERN_TEMPLATE_ID, templateVersion: SAVED_PATTERN_TEMPLATE_VERSION, params: candidate.data.params });
+  if (result.status !== 'edited') throw refusalOfPlan(result.status);
+  return { plan: candidate.data, planId: result.plan.id, expiresAt: result.plan.expiresAt.toISOString() };
 }
 
 export const askEditRoute = createAskEditRoute();

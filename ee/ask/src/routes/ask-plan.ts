@@ -1,8 +1,10 @@
-import { askPlanRequestSchema, askPlanResponseSchema, ExtensionRefusal, type AskPlan, type AskPlanAnswer, type AskPlanRequest, type ExtensionRequest, type ExtensionRoute } from '@neburyx/contracts';
+import { askPlanRequestSchema, askPlanResponseSchema, ExtensionRefusal, type AiMappingView, type AskPatternCatalog, type AskPlan, type AskPlanAnswer, type AskPlanRequest, type ExtensionRequest, type ExtensionRoute } from '@neburyx/contracts';
 import { AuditUnavailableError } from '../audited.js';
 import { fixedRefusal } from '../refusal/families.js';
 import { COMMON_WORDS_VERSION, allowedWords, rebuildPlannerText } from '../allowlist/index.js';
+import { createHash } from 'node:crypto';
 import { previewHashOf, hashesMatch } from '../preview/preview-hash.js';
+import { PatternGuardError, buildPatternCatalog, type BuiltPatternCatalog } from '../patterns/index.js';
 import { hydratePlan } from '../plans/hydrate.js';
 import type { PlanStore } from '../plans/index.js';
 import { resolveMentions, type PlaceholderEntry, type PlaceholderSpan, type ResolutionOutcome } from '../resolution/index.js';
@@ -18,6 +20,10 @@ export interface AskPlanRouteOptions {
   readonly vocabulary?: () => readonly string[];
   /** The store a plan is kept in; asked each time because the application builds it after the route is made. A question that is sent to the planner needs it, and is refused before the model is called when there is none. */
   readonly plans?: () => PlanStore | undefined;
+  /** The mapping's view the saved patterns are vetted against: their names must be types of it. */
+  readonly view?: () => AiMappingView | undefined;
+  /** Only a test sets this: the builder of the pattern catalog, whose text is compared with the real one's before anything is sent. */
+  readonly patternCatalog?: typeof buildPatternCatalog;
   /** Only a test sets this. */
   readonly resolve?: typeof resolveMentions;
   /** Only a test sets this. */
@@ -32,7 +38,7 @@ interface Capabilities {
 
 type Prepared =
   | { readonly kind: 'answer'; readonly answer: { readonly clarification: Extract<ResolutionOutcome, { status: 'clarification' }>['clarification'] } | { readonly blocked: { readonly tokens: readonly { readonly text: string; readonly start: number; readonly end: number }[] } } }
-  | { readonly kind: 'rebuilt'; readonly text: string; readonly hash: string; readonly placeholders: ReadonlyMap<string, PlaceholderEntry> };
+  | { readonly kind: 'rebuilt'; readonly text: string; readonly hash: string; readonly placeholders: ReadonlyMap<string, PlaceholderEntry>; readonly patterns: BuiltPatternCatalog | undefined };
 
 const unsupported = (): ExtensionRefusal => new ExtensionRefusal({ code: 'ASK_UNSUPPORTED', reason: 'not-in-this-edition' });
 
@@ -56,7 +62,7 @@ function typedOffset(position: number, spans: readonly PlaceholderSpan[], edge: 
   return position + shift;
 }
 
-async function prepare(body: AskPlanRequest, capabilities: Capabilities, options: Required<AskPlanRouteOptions>): Promise<Prepared> {
+async function prepare(request: ExtensionRequest, body: AskPlanRequest, capabilities: Capabilities, options: Required<AskPlanRouteOptions>): Promise<Prepared> {
   const vocabulary = options.vocabulary();
   const { search, lookup, ensureSource } = capabilities.askEntityTools(body.sourceId);
   await ensureSource();
@@ -77,8 +83,10 @@ async function prepare(body: AskPlanRequest, capabilities: Capabilities, options
     });
     return { kind: 'answer', answer: { blocked: { tokens } } };
   }
-  const hash = previewHashOf(capabilities.previewMac, { text: rebuilt.text, resolutions, policyVersion: capabilities.policyVersionOf(body.sourceId), wordListVersion: COMMON_WORDS_VERSION });
-  return { kind: 'rebuilt', text: rebuilt.text, hash, placeholders: resolved.placeholders };
+  const patterns = request.askPlanner.offersPatterns?.() === false ? undefined : await patternsOf(request, body.sourceId, options, vocabulary);
+  const patternCatalogSha = patterns === undefined ? undefined : createHash('sha256').update(patterns.catalog.text, 'utf8').digest('hex');
+  const hash = previewHashOf(capabilities.previewMac, { text: rebuilt.text, resolutions, policyVersion: capabilities.policyVersionOf(body.sourceId), wordListVersion: COMMON_WORDS_VERSION, ...(patternCatalogSha === undefined ? {} : { patternCatalogSha }) });
+  return { kind: 'rebuilt', text: rebuilt.text, hash, placeholders: resolved.placeholders, patterns };
 }
 
 /**
@@ -90,6 +98,8 @@ async function prepare(body: AskPlanRequest, capabilities: Capabilities, options
 export function createAskPlanRoute(options: AskPlanRouteOptions = {}): ExtensionRoute {
   const settled: Required<AskPlanRouteOptions> = {
     vocabulary: options.vocabulary ?? (() => questionVocabulary({ view: undefined })),
+    view: options.view ?? (() => undefined),
+    patternCatalog: options.patternCatalog ?? buildPatternCatalog,
     plans: options.plans ?? (() => undefined),
     resolve: options.resolve ?? resolveMentions,
     resolutionTimeoutMs: options.resolutionTimeoutMs ?? RESOLUTION_TIMEOUT_MS,
@@ -105,31 +115,47 @@ export function createAskPlanRoute(options: AskPlanRouteOptions = {}): Extension
       const body = askPlanRequestSchema.parse(request.body);
       const capabilities = capabilitiesOf(request);
       if (capabilities === undefined) throw unsupported();
-      const prepared = await prepare(body, capabilities, settled);
+      const prepared = await prepare(request, body, capabilities, settled);
       if (prepared.kind === 'answer') return prepared.answer;
-      if (body.send !== true) return { preview: prepared.text, previewHash: prepared.hash };
+      if (body.send !== true) return previewOf(prepared);
       if (body.previewHash !== undefined && hashesMatch(body.previewHash, prepared.hash)) {
         // no store, no plan: refused before the model is called, so no plan is paid for that cannot be kept
         const plans = settled.plans();
         if (plans === undefined) throw unsupported();
-        return answered(request, plans, body.sourceId, prepared.placeholders, await planOf(request, prepared.text, body.sourceId));
+        return answered(request, plans, body.sourceId, prepared.placeholders, await planOf(request, prepared.text, body.sourceId, prepared.patterns?.catalog), prepared.patterns);
       }
-      return { preview: prepared.text, previewHash: prepared.hash, changed: true };
+      return { ...previewOf(prepared), changed: true };
     },
   };
 }
 
-/** What a plan is answered with: a plan of a template is turned back into references, stored, and comes with its ID and expiry; an unsupported plan is made fixed (the family and the sentence of that family, never the planner's reason) and is not stored. */
-async function answered(request: ExtensionRequest, plans: PlanStore, sourceId: string, placeholders: ReadonlyMap<string, PlaceholderEntry>, plan: AskPlan): Promise<{ plan: AskPlanAnswer; planId?: string; expiresAt?: string }> {
-  if (plan.kind !== 'plan') return { plan: fixedRefusal(plan.family) };
-  const hydrated = hydratePlan(plan, placeholders, sourceId);
-  const stored = await plans.insert({ userId: request.principalId, sourceId, templateId: hydrated.templateId, templateVersion: hydrated.templateVersion, params: hydrated.params, planningTraceId: request.traceId });
-  return { plan: hydrated, planId: stored.id, expiresAt: stored.expiresAt.toISOString() };
+/** The preview: the rebuilt text and its hash, and the names of the saved patterns that will be shown with it, so the investigator sees all that the model will receive. */
+function previewOf(prepared: Extract<Prepared, { kind: 'rebuilt' }>): { preview: string; previewHash: string; patternLabels?: string[]; patternText?: string; patternCatalogCut?: true } {
+  const labels = prepared.patterns?.catalog.labels ?? [];
+  return { preview: prepared.text, previewHash: prepared.hash, ...(labels.length === 0 ? {} : { patternLabels: [...labels] }), ...(prepared.patterns === undefined ? {} : { patternText: prepared.patterns.catalog.text.trimEnd() }), ...(prepared.patterns?.catalog.cut === true ? { patternCatalogCut: true as const } : {}) };
 }
 
-async function planOf(request: ExtensionRequest, text: string, sourceId: string): Promise<AskPlan> {
+/** What a plan is answered with: a plan of a template is turned back into references, stored, and comes with its ID and expiry; an unsupported plan is made fixed (the family and the sentence of that family, never the planner's reason) and is not stored. */
+async function answered(request: ExtensionRequest, plans: PlanStore, sourceId: string, placeholders: ReadonlyMap<string, PlaceholderEntry>, plan: AskPlan, patterns: BuiltPatternCatalog | undefined): Promise<{ plan: AskPlanAnswer; planId?: string; expiresAt?: string; patternCatalogCut?: true }> {
+  if (plan.kind !== 'plan') return { plan: fixedRefusal(plan.family) };
+  const hydrated = hydratePlan(plan, placeholders, sourceId, patterns?.targets);
+  const stored = await plans.insert({ userId: request.principalId, sourceId, templateId: hydrated.templateId, templateVersion: hydrated.templateVersion, params: hydrated.params, planningTraceId: request.traceId });
+  return { plan: hydrated, planId: stored.id, expiresAt: stored.expiresAt.toISOString(), ...(patterns?.catalog.cut === true ? { patternCatalogCut: true } : {}) };
+}
+
+/** The catalog of the saved patterns of this question; the pattern text of the application is checked as it is built, and a builder whose text differs from the real one's stops the question before the model is asked. */
+async function patternsOf(request: ExtensionRequest, sourceId: string, options: Required<AskPlanRouteOptions>, vocabulary: readonly string[]): Promise<BuiltPatternCatalog | undefined> {
+  const listing = request.askPatterns === undefined ? { offers: [], cut: false } : await request.askPatterns(sourceId);
+  const view = options.view();
+  const real = buildPatternCatalog(listing, view, vocabulary);
+  const used = options.patternCatalog(listing, view, vocabulary);
+  if (real?.catalog.text !== used?.catalog.text) throw new PatternGuardError('catalog');
+  return real;
+}
+
+async function planOf(request: ExtensionRequest, text: string, sourceId: string, patterns: AskPatternCatalog | undefined): Promise<AskPlan> {
   try {
-    return await request.askPlanner.plan({ text, context: { actorId: request.principalId, actorRole: request.principalRole, traceId: request.traceId, sourceId } });
+    return await request.askPlanner.plan({ text, context: { actorId: request.principalId, actorRole: request.principalRole, traceId: request.traceId, sourceId }, ...(patterns === undefined ? {} : { patterns }) });
   } catch (error) {
     if (error instanceof AuditUnavailableError) throw new ExtensionRefusal({ code: 'AUDIT_UNAVAILABLE' });
     throw error;

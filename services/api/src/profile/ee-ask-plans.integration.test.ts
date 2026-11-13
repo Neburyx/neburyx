@@ -149,6 +149,16 @@ describe('the plan store over the preview tables', () => {
     expect(await rows(database.ownerUrl, 'SELECT count(*)::int AS n FROM ask_plans')).toEqual([{ n: 2 }]);
   });
 
+  it('keeps a plan that names a saved pattern with its id, version and starting entity and nothing else, and edits it like any plan, with no migration of its own', async () => {
+    const { database, owner, store } = await setup();
+    const patternId = uuidv7();
+    const stored = await store.insert({ sourceId: 'demo', userId: owner, templateId: 'saved-pattern', templateVersion: 1, params: { patternId, patternVersion: 3, ref: { entityType: 'node_a', stableId: 'a-1' } }, planningTraceId: 'tr-2' });
+    expect(await rows(database.ownerUrl, `SELECT template_id, template_version, state, params FROM ask_plans WHERE id = $1`, [stored.id])).toEqual([{ template_id: 'saved-pattern', template_version: 1, state: 'proposed', params: { patternId, patternVersion: 3, ref: { entityType: 'node_a', stableId: 'a-1' } } }]);
+    const edited = await store.edit({ planId: stored.id, userId: owner, templateId: 'saved-pattern', templateVersion: 1, params: { patternId, patternVersion: 3, ref: { entityType: 'node_a', stableId: 'a-2' } } });
+    expect(edited).toMatchObject({ status: 'edited', plan: { parentPlanId: stored.id, templateId: 'saved-pattern', params: { ref: { stableId: 'a-2' } } } });
+    expect(await stateOf(database, stored.id)).toBe('cancelled');
+  });
+
   it('writes the run row with the plan becoming run, and not twice', async () => {
     const { database, owner, store } = await setup();
     const plan = await store.insert({ ...PLAN, userId: owner });

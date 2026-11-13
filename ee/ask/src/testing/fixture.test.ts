@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const SIGNAL = new AbortController().signal;
-const REQUEST: ModelRequest = { promptId: 'ask.plan', parameters: { catalog: 'T1, T2', vocabulary: 'V1', question: 'who is ‹person#1›?' } };
+const REQUEST: ModelRequest = { promptId: 'ask.plan', parameters: { catalog: 'T1, T2', vocabulary: 'V1', patterns: '', question: 'who is ‹person#1›?' } };
 
 async function registry(overrides: Record<string, string> = {}): Promise<PromptRegistry> {
   const built = await buildPromptRegistry(overrides);
@@ -25,7 +25,7 @@ describe('a fixture provider', () => {
   it('answers an ok reply with no usage as unknown usage, the fixture model and the prompt record of the registry', async () => {
     const provider = createFixtureProvider({ registry: await registry(), replies: { [replyKey('ask.plan', BUILT_IN_PROMPTS['ask.plan'].version)]: { kind: 'ok', text: 'draft plan' } } });
     const answer = await provider.complete(REQUEST, SIGNAL);
-    expect(answer).toMatchObject({ status: 'ok', text: 'draft plan', usage: { kind: 'unknown' }, model: DEFAULT_FIXTURE_MODEL, prompt: { id: 'ask.plan', version: 4, source: 'builtin' } });
+    expect(answer).toMatchObject({ status: 'ok', text: 'draft plan', usage: { kind: 'unknown' }, model: DEFAULT_FIXTURE_MODEL, prompt: { id: 'ask.plan', version: 5, source: 'builtin' } });
     expect(answer.prompt.sha256).toMatch(/^[0-9a-f]{64}$/);
   });
 
@@ -40,7 +40,7 @@ describe('a fixture provider', () => {
     for (const code of FAILURE_CODES) {
       const failing = createFixtureProvider({ registry: await registry(), replies: { [replyKey('ask.plan', BUILT_IN_PROMPTS['ask.plan'].version)]: { kind: 'failed', code } } });
       const answer = await failing.complete(REQUEST, SIGNAL);
-      expect(answer).toMatchObject({ status: 'failed', code, prompt: { id: 'ask.plan', version: 4 } });
+      expect(answer).toMatchObject({ status: 'failed', code, prompt: { id: 'ask.plan', version: 5 } });
       expect('text' in answer).toBe(false);
     }
   });
@@ -60,14 +60,14 @@ describe('a fixture provider', () => {
 
   it('throws a named error naming the id and version when no reply is scripted, and makes none up', async () => {
     const provider = createFixtureProvider({ registry: await registry(), replies: { [replyKey('summary.view', 1)]: { kind: 'ok', text: 't' } } });
-    await expect(provider.complete(REQUEST, SIGNAL)).rejects.toThrow(new MissingFixtureReplyError('the fixture has no reply for ask.plan@4'));
+    await expect(provider.complete(REQUEST, SIGNAL)).rejects.toThrow(new MissingFixtureReplyError('the fixture has no reply for ask.plan@5'));
     await expect(provider.complete(REQUEST, SIGNAL)).rejects.toBeInstanceOf(MissingFixtureReplyError);
   });
 
   it('throws the registry error before it looks for a reply when a parameter is missing or not declared', async () => {
     const provider = createFixtureProvider({ registry: await registry(), replies: {} });
     await expect(provider.complete({ promptId: 'ask.plan', parameters: { question: 'q' } }, SIGNAL)).rejects.toBeInstanceOf(PromptError);
-    await expect(provider.complete({ promptId: 'ask.plan', parameters: { catalog: 'c', vocabulary: 'V1', question: 'q', extra: 'x' } }, SIGNAL)).rejects.toBeInstanceOf(PromptError);
+    await expect(provider.complete({ promptId: 'ask.plan', parameters: { catalog: 'c', vocabulary: 'V1', patterns: '', question: 'q', extra: 'x' } }, SIGNAL)).rejects.toBeInstanceOf(PromptError);
     expect(provider.calls).toEqual([]);
   });
 
@@ -96,7 +96,7 @@ describe('a fixture provider', () => {
 
   it('has a reply key for every built-in prompt', () => {
     const ids = Object.keys(BUILT_IN_PROMPTS) as PromptId[];
-    expect(ids.map((id) => replyKey(id, BUILT_IN_PROMPTS[id].version))).toEqual(['ask.plan@4', 'summary.view@1', 'assistant.route@1', 'ask.plan.repair@2']);
+    expect(ids.map((id) => replyKey(id, BUILT_IN_PROMPTS[id].version))).toEqual(['ask.plan@5', 'summary.view@1', 'assistant.route@1', 'ask.plan.repair@3']);
   });
 });
 

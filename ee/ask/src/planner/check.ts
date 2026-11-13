@@ -1,4 +1,4 @@
-import type { AiMappingView, AskPlan } from '@neburyx/contracts';
+import { SAVED_PATTERN_TEMPLATE_VERSION, type AiMappingView, type AskPatternEntry, type AskPlan } from '@neburyx/contracts';
 import { CATALOG } from './catalog.js';
 
 const PLACEHOLDER = /‹([^#›]+)#(\d+)›/g;
@@ -11,6 +11,8 @@ export interface PlanCheckInput {
   /** `placeholders` (the default) for a plan the model made, whose references are placeholders of `text`; `references` for the parameters of an edit, whose references are real ones the investigator gave. */
   readonly mode?: 'placeholders' | 'references';
   readonly view: AiMappingView | undefined;
+  /** What a plan that names a saved pattern is checked against: the entries of the pattern catalog the model was shown, by key. */
+  readonly patterns?: ReadonlyMap<string, AskPatternEntry>;
 }
 
 type PlanOf = Extract<AskPlan, { kind: 'plan' }>;
@@ -40,9 +42,13 @@ export function problemsOfPlan(plan: AskPlan, input: PlanCheckInput): readonly s
   const known = names(input.view);
   const present = placeholdersOf(input.text);
   const literal = input.mode === 'references';
-  const entry = CATALOG.find((candidate) => candidate.id === plan.templateId);
-  if (entry === undefined) return ['templateId: not a template of the catalog'];
-  if (plan.templateVersion !== entry.version) problems.push('templateVersion: not the version of the catalog');
+  if (plan.templateId === 'saved-pattern') {
+    if (plan.templateVersion !== SAVED_PATTERN_TEMPLATE_VERSION) problems.push('templateVersion: not the version of the saved pattern plan');
+  } else {
+    const entry = CATALOG.find((candidate) => candidate.id === plan.templateId);
+    if (entry === undefined) return ['templateId: not a template of the catalog'];
+    if (plan.templateVersion !== entry.version) problems.push('templateVersion: not the version of the catalog');
+  }
 
   const entityType = (path: string, value: string | undefined): void => {
     if (value !== undefined && !known.entities.has(value)) problems.push(`${path}: not an entity type of the vocabulary`);
@@ -95,6 +101,29 @@ export function problemsOfPlan(plan: AskPlan, input: PlanCheckInput): readonly s
         rule('params.ruleId', candidate.params.ruleId);
         for (const [index, end] of candidate.params.ends.entries()) entityPlaceholder(`params.ends.${index}`, end);
         break;
+      case 'saved-pattern': {
+        if (!('patternKey' in candidate.params)) {
+          problems.push('params.patternKey: a saved pattern is named by its key');
+          break;
+        }
+        const offered = input.patterns?.get(candidate.params.patternKey);
+        if (offered === undefined) {
+          problems.push('params.patternKey: not a key of the saved patterns offered');
+          break;
+        }
+        const { ref } = candidate.params;
+        if (offered.startingEntity === 'held') {
+          if (ref !== undefined) problems.push('params.ref: the saved pattern holds its starting entity');
+          break;
+        }
+        if (ref === undefined) {
+          problems.push('params.ref: the saved pattern asks for its starting entity');
+          break;
+        }
+        entityPlaceholder('params.ref', ref);
+        if (ref.entityType !== offered.anchorType) problems.push('params.ref.entityType: not the type the saved pattern starts at');
+        break;
+      }
       case 'search':
         for (const [index, type] of candidate.params.entityTypes.entries()) entityType(`params.entityTypes.${index}`, type);
         if (!literal && (kindOf(candidate.params.text) !== VALUE_KIND || !present.has(candidate.params.text))) problems.push('params.text: not a value placeholder of the question');

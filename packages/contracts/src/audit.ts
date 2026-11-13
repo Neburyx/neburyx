@@ -59,6 +59,8 @@ export const aiAuditDetailSchema = z.strictObject({
   promptVersion: label,
   promptSha256: sha256Hex,
   instructionsSha256: sha256Hex.optional(),
+  /** The saved patterns the call offered: how many, and the SHA-256 of the text that was sent, which holds structure and keys only. Absent when no pattern was offered. */
+  patternCatalog: z.strictObject({ count: z.number().int().min(1), sha256: sha256Hex }).optional(),
   piiPropertiesSent: z.array(propertyName).min(1).max(MAX_PII_PROPERTIES).optional(),
   tokensIn: tokensSchema,
   tokensOut: tokensSchema,
@@ -85,6 +87,9 @@ export const askRunAuditDetailSchema = z.strictObject({
   templateVersion: z.number().int().min(1),
   paramsHash: sha256Hex,
   rowCount: wholeCount,
+  /** The saved pattern a plan ran, by id and version: ids only, never a name. Present for a plan that names a saved pattern. */
+  patternId: z.uuid().optional(),
+  patternVersion: z.number().int().min(1).optional(),
 });
 
 export type AskRunAuditDetail = z.infer<typeof askRunAuditDetailSchema>;

@@ -1,4 +1,5 @@
-import type { AiMappingView, AskPlan, AskPlanContext, AskPlanner } from '@neburyx/contracts';
+import { createHash } from 'node:crypto';
+import type { AiMappingView, AskPatternCatalog, AskPlan, AskPlanContext, AskPlanner } from '@neburyx/contracts';
 import type { AuditedModelCall } from '../audited.js';
 import type { FailureCode, ModelAnswer } from '../provider.js';
 import type { BuiltRequest, RequestBuilder } from '../request.js';
@@ -40,7 +41,8 @@ export function createAskPlanner(deps: PlannerDeps): AskPlanner {
   const catalog = catalogText();
   const vocabulary = vocabularyText(deps.view);
 
-  async function ask(built: BuiltRequest, context: AskPlanContext): Promise<ModelAnswer> {
+  async function ask(built: BuiltRequest, context: AskPlanContext, patterns: AskPatternCatalog | undefined): Promise<ModelAnswer> {
+    patterns?.check(built.request.parameters);
     return deps.model.call(
       built.request,
       {
@@ -50,12 +52,13 @@ export function createAskPlanner(deps: PlannerDeps): AskPlanner {
         ...(context.investigationId === undefined ? {} : { investigationId: context.investigationId }),
         ...(context.sourceId === undefined ? {} : { sourceId: context.sourceId }),
         ...(built.sentPii.length === 0 ? {} : { piiPropertiesSent: built.sentPii }),
+        ...(patterns === undefined ? {} : { patternCatalog: { count: patterns.entries.size, sha256: createHash('sha256').update(patterns.text, 'utf8').digest('hex') } }),
       },
       new AbortController().signal,
     );
   }
 
-  function judge(answer: ModelAnswer, text: string): Judged {
+  function judge(answer: ModelAnswer, text: string, patterns: AskPatternCatalog | undefined): Judged {
     switch (answer.status) {
       case 'refused':
         return { kind: 'ended', plan: unsupported('model-refused', MODEL_REFUSED_REASON) };
@@ -63,7 +66,7 @@ export function createAskPlanner(deps: PlannerDeps): AskPlanner {
         throw new PlannerCallFailed(answer.code);
       case 'ok': {
         const reading = readReply(answer.text);
-        const problems = reading.ok ? problemsOfPlan(reading.plan, { text, view: deps.view }) : reading.problems;
+        const problems = reading.ok ? problemsOfPlan(reading.plan, { text, view: deps.view, ...(patterns === undefined ? {} : { patterns: patterns.entries }) }) : reading.problems;
         if (reading.ok && problems.length === 0) return { kind: 'plan', plan: reading.plan };
         return { kind: 'invalid', reply: answer.text, problems };
       }
@@ -76,10 +79,12 @@ export function createAskPlanner(deps: PlannerDeps): AskPlanner {
 
   return {
     availability: () => ({ available: true }),
-    async plan({ text, context }) {
-      const first = judge(await ask(deps.requestBuilder.ask({ question: text, catalog, vocabulary }), context), text);
+    offersPatterns: () => deps.model.takes('ask.plan', 'patterns'),
+    async plan({ text, context, patterns }) {
+      const section = patterns?.text ?? '';
+      const first = judge(await ask(deps.requestBuilder.ask({ question: text, catalog, vocabulary, patterns: section }), context, patterns), text, patterns);
       if (first.kind !== 'invalid') return first.plan;
-      const repaired = judge(await ask(deps.requestBuilder.askRepair({ question: text, catalog, vocabulary, reply: first.reply, problems: first.problems.join('\n') }), context), text);
+      const repaired = judge(await ask(deps.requestBuilder.askRepair({ question: text, catalog, vocabulary, patterns: section, reply: first.reply, problems: first.problems.join('\n') }), context, patterns), text, patterns);
       return repaired.kind === 'invalid' ? unsupported('plan-not-usable', INVALID_PLAN_REASON) : repaired.plan;
     },
   };

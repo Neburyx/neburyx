@@ -1,4 +1,4 @@
-import type { AskPlan } from '@neburyx/contracts';
+import { askPlanSchema, type AskPlan } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
 import type { PlaceholderEntry } from '../resolution/index.js';
 import { HydrationError, hydratePlan } from './hydrate.js';
@@ -87,5 +87,32 @@ describe('a plan with placeholders that the map holds', () => {
     const plan = entity('‹node_a#1›');
     hydratePlan(plan, MAP, SOURCE);
     expect(plan).toEqual(entity('‹node_a#1›'));
+  });
+});
+
+describe('a plan that names a saved pattern', () => {
+  const ID = '0195a000-0000-7000-8000-000000000001';
+  const TARGETS = new Map([['pat_1', { id: ID, version: 3 }]]);
+  const PLACEHOLDERS = new Map([['‹widget#1›', { kind: 'entity' as const, ref: { sourceId: 'demo', entityType: 'widget', stableId: 'w-1' } }]]);
+  const named = (params: Record<string, unknown>): TemplatePlan => {
+    const parsed = askPlanSchema.parse({ kind: 'plan', templateId: 'saved-pattern', templateVersion: 1, rationale: 'A pattern.', params });
+    if (parsed.kind !== 'plan') throw new Error('not a plan');
+    return parsed;
+  };
+
+  it('is given the id and version of the pattern its key stood for and the reference of its placeholder, and keeps no key', () => {
+    const hydrated = hydratePlan(named({ patternKey: 'pat_1', ref: { entityType: 'widget', stableId: '‹widget#1›' } }), PLACEHOLDERS, 'demo', TARGETS);
+    expect(hydrated).toMatchObject({ templateId: 'saved-pattern', params: { patternId: ID, patternVersion: 3, ref: { entityType: 'widget', stableId: 'w-1' } } });
+    expect(JSON.stringify(hydrated)).not.toContain('pat_1');
+  });
+
+  it('has no reference when the pattern holds its starting entity', () => {
+    expect(hydratePlan(named({ patternKey: 'pat_1' }), PLACEHOLDERS, 'demo', TARGETS)).toMatchObject({ params: { patternId: ID, patternVersion: 3 } });
+  });
+
+  it('fails for a key of no catalog of this request, with the placeholder, and for a reference of another source', () => {
+    expect(() => hydratePlan(named({ patternKey: 'pat_2' }), PLACEHOLDERS, 'demo', TARGETS)).toThrow(HydrationError);
+    expect(() => hydratePlan(named({ patternKey: 'pat_1' }), PLACEHOLDERS, 'demo')).toThrow(HydrationError);
+    expect(() => hydratePlan(named({ patternKey: 'pat_1', ref: { entityType: 'widget', stableId: '‹widget#1›' } }), PLACEHOLDERS, 'elsewhere', TARGETS)).toThrow(expect.objectContaining({ reason: 'other-source' }));
   });
 });

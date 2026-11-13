@@ -101,7 +101,7 @@ describe('the failure line of the extension', () => {
   });
 
   it('keeps the question and the key out of the warning for a failing plan call', async () => {
-    const { logged, written } = await callWith(500, { type: 'error', error: { type: 'api_error', message: 'SENTINEL-BODY' } }, undefined, { promptId: 'ask.plan', parameters: { catalog: 'a catalog', vocabulary: 'V1', question: 'SENTINEL-QUESTION' } });
+    const { logged, written } = await callWith(500, { type: 'error', error: { type: 'api_error', message: 'SENTINEL-BODY' } }, undefined, { promptId: 'ask.plan', parameters: { catalog: 'a catalog', vocabulary: 'V1', patterns: '', question: 'SENTINEL-QUESTION' } });
     expect(logged).toHaveLength(1);
     expect(JSON.stringify(logged)).not.toMatch(/SENTINEL/);
     expect(written).toEqual([]);

@@ -104,8 +104,8 @@ describe('the conformance suite on the Anthropic provider, over a stub server', 
 
 const CONTEXT: AuditedCallContext = { actorId: '01939999-0000-7000-8000-0000000000aa', actorRole: 'investigator', traceId: 'tr-1' };
 const REQUESTS: Readonly<Record<PromptId, ModelRequest>> = {
-  'ask.plan': { promptId: 'ask.plan', parameters: { catalog: 'T1, T2', vocabulary: 'V1', question: 'QUESTION-MARKER who is here?' } },
-  'ask.plan.repair': { promptId: 'ask.plan.repair', parameters: { catalog: 'T1, T2', vocabulary: 'V1', question: 'QUESTION-MARKER who is here?', reply: 'REPLY-MARKER', problems: 'params.ref: invalid_type' } },
+  'ask.plan': { promptId: 'ask.plan', parameters: { catalog: 'T1, T2', vocabulary: 'V1', patterns: '', question: 'QUESTION-MARKER who is here?' } },
+  'ask.plan.repair': { promptId: 'ask.plan.repair', parameters: { catalog: 'T1, T2', vocabulary: 'V1', patterns: '', question: 'QUESTION-MARKER who is here?', reply: 'REPLY-MARKER', problems: 'params.ref: invalid_type' } },
   'summary.view': { promptId: 'summary.view', parameters: { view: 'VIEW-MARKER a view' } },
   'assistant.route': { promptId: 'assistant.route', parameters: { message: 'MESSAGE-MARKER hello', view: 'VIEW-MARKER a view' } },
 };

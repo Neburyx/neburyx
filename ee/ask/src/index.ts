@@ -37,6 +37,7 @@ export { PLAN_SWEEP_EVENT, PLAN_SWEEP_FAILED_EVENT, createPlanSweepTask } from '
 export { HydrationError, hydratePlan } from './plans/hydrate.js';
 export type { HydrationFailure } from './plans/hydrate.js';
 export { ASK_PLAN_URL, askPlanRoute, createAskPlanRoute } from './routes/ask-plan.js';
+export { questionVocabulary };
 export { ASK_RUN_ACTION, ASK_RUN_URL, askRunRoute, createAskRunRoute } from './routes/ask-run.js';
 export { paramsHashOf } from './plans/params-hash.js';
 export { summarizeRun } from './plans/run-summary.js';
@@ -122,7 +123,7 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
             responseSchema: aiStatusResponseSchema,
             handler: async () => ({ preview: true }),
           },
-          createAskPlanRoute({ vocabulary: () => questionVocabulary({ view: mappingView, catalogWords: catalogWords() }), plans: () => options.planStore ?? plans }),
+          createAskPlanRoute({ vocabulary: () => questionVocabulary({ view: mappingView, catalogWords: catalogWords() }), view: () => mappingView, plans: () => options.planStore ?? plans }),
           createAskRunRoute({ plans: () => options.planStore ?? plans }),
           createAskEditRoute({ plans: () => options.planStore ?? plans, view: () => mappingView }),
           createAskCancelRoute({ plans: () => options.planStore ?? plans }),

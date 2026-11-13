@@ -10,7 +10,7 @@ import type { ModelRequest } from './provider.js';
 import { BUILT_IN_PROMPTS } from './prompts.js';
 
 const SIGNAL = new AbortController().signal;
-const MODEL_REQUEST: ModelRequest = { promptId: 'ask.plan', parameters: { catalog: 'T1', vocabulary: 'V1', question: 'who is ‹person#1›?' } };
+const MODEL_REQUEST: ModelRequest = { promptId: 'ask.plan', parameters: { catalog: 'T1', vocabulary: 'V1', patterns: '', question: 'who is ‹person#1›?' } };
 
 async function fixture() {
   const built = await buildPromptRegistry({});

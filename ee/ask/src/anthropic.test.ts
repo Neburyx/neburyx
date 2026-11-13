@@ -546,7 +546,7 @@ describe('the usage of a failed answer', () => {
 describe('prompt caching', () => {
   type Sent = { model: string; max_tokens: number; output_config: { effort: string }; system?: unknown; messages: { role: string; content: string }[] };
   const sentBody = (): Sent => JSON.parse(seen[0]?.body ?? '') as Sent;
-  const VALUE_REQUEST: ModelRequest = { promptId: 'ask.plan', parameters: { catalog: 'SENTINEL-CATALOG', vocabulary: 'V1', question: 'SENTINEL-QUESTION [[values]]' } };
+  const VALUE_REQUEST: ModelRequest = { promptId: 'ask.plan', parameters: { catalog: 'SENTINEL-CATALOG', vocabulary: 'V1', patterns: '', question: 'SENTINEL-QUESTION [[values]]' } };
 
   async function callWith(settings: Parameters<typeof configurationWith>[0], request: ModelRequest = VALUE_REQUEST, prompts?: Record<string, string>): Promise<AskConfiguration> {
     handler = reply(200, message());

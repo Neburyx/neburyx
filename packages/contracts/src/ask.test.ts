@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ASK_PLAN_PARAM_NAMES, ASK_PLAN_TEMPLATE_IDS, askPlanRequestSchema, askPlanResponseSchema, askPlanSchema, askResolutionSchema, askResolutionsSchema, askRunRequestSchema, askRunResponseSchema, askRunResultSchema, askEditRequestSchema, askEditResponseSchema, askCancelRequestSchema, askCancelResponseSchema, ASK_MAX_RESOLUTIONS, ASK_MESSAGE_MAX_LENGTH } from './ask.js';
+import { isHeavyResult, ASK_PLAN_PARAM_NAMES, ASK_PLAN_TEMPLATE_IDS, askPlanRequestSchema, askPlanResponseSchema, askPlanSchema, askResolutionSchema, askResolutionsSchema, askRunRequestSchema, askRunResponseSchema, askRunResultSchema, askEditRequestSchema, askEditResponseSchema, askCancelRequestSchema, askCancelResponseSchema, ASK_MAX_RESOLUTIONS, ASK_MESSAGE_MAX_LENGTH } from './ask.js';
 
 const REF = { entityType: 'node_a', stableId: 'A-1' };
 const SHARED = { kind: 'plan', templateId: 'shared-attribute', templateVersion: 1, params: { ref: REF, attributeType: 'attr_type', via: 'attr_link', window: { days: 90 }, limit: 25 }, rationale: 'People who share a device.' };
@@ -159,8 +159,18 @@ describe('the answer of the run endpoint', () => {
     expect(askRunResponseSchema.safeParse(body).success).toBe(false);
   });
 
-  it('has a variant for each template of the catalog, and no other', () => {
-    expect(askRunResultSchema.options).toHaveLength(ASK_PLAN_TEMPLATE_IDS.length);
+  it('has a variant for each template of the catalog and one for a saved pattern, and no other', () => {
+    expect(askRunResultSchema.options).toHaveLength(ASK_PLAN_TEMPLATE_IDS.length + 1);
+    expect(askRunResultSchema.options.map((option) => option.shape.templateId.value).sort()).toEqual([...ASK_PLAN_TEMPLATE_IDS, 'saved-pattern'].sort());
+  });
+
+  it('says a saved run that stopped as heavy is heavy, and a saved run that ran is not', () => {
+    const heavy = { templateId: 'saved-pattern', result: { status: 'heavy', templateVersion: '1', estimate: { quality: 'lowerBound', value: 500, scope: 'matches' }, threshold: 500, continueLimit: 25, notices: [], warnings: [] } };
+    expect(askRunResultSchema.safeParse(heavy).success).toBe(true);
+    expect(isHeavyResult(askRunResultSchema.parse(heavy))).toBe(true);
+    const ok = { templateId: 'saved-pattern', result: { status: 'ok', templateVersion: '1', count: { quality: 'exact', value: 0, scope: 'matches' }, matches: [], nodes: [], edges: [], notices: [], warnings: [] } };
+    expect(isHeavyResult(askRunResultSchema.parse(ok))).toBe(false);
+    expect(askRunResultSchema.safeParse({ ...ok, result: { status: 'unavailable', reasons: [{ code: 'preset-removed' }] } }).success).toBe(false);
   });
 });
 
@@ -265,5 +275,58 @@ describe('the edit and cancel endpoints', () => {
     for (const body of [{}, { planId: 'x' }, { planId, extra: 1 }]) expect(askCancelRequestSchema.safeParse(body).success).toBe(false);
     expect(askCancelResponseSchema.safeParse({ planId, state: 'cancelled' }).success).toBe(true);
     expect(askCancelResponseSchema.safeParse({ planId, state: 'run' }).success).toBe(false);
+  });
+});
+
+describe('a plan that names a saved pattern', () => {
+  const planned = { kind: 'plan', templateId: 'saved-pattern', templateVersion: 1, rationale: 'The saved pattern fits.', params: { patternKey: 'pat_1', ref: { entityType: 'widget', stableId: '‹widget#1›' } } };
+  const stored = { kind: 'plan', templateId: 'saved-pattern', templateVersion: 1, rationale: 'The saved pattern fits.', params: { patternId: '0195a000-0000-7000-8000-000000000001', patternVersion: 3, ref: { entityType: 'widget', stableId: 'w-1' } } };
+
+  it('is read in the form the model gives, with the key and optionally the reference, and in the stored form with the id and version', () => {
+    expect(askPlanSchema.safeParse(planned).success).toBe(true);
+    expect(askPlanSchema.safeParse({ ...planned, params: { patternKey: 'pat_12' } }).success).toBe(true);
+    expect(askPlanSchema.safeParse(stored).success).toBe(true);
+    expect(askPlanSchema.safeParse({ ...stored, params: { patternId: stored.params.patternId, patternVersion: 3 } }).success).toBe(true);
+  });
+
+  it.each([
+    ['a key that is not of the form pat_n', { patternKey: 'Secret name' }],
+    ['a key with a leading zero', { patternKey: 'pat_01' }],
+    ['both a key and an id', { patternKey: 'pat_1', patternId: '0195a000-0000-7000-8000-000000000001', patternVersion: 1 }],
+    ['an id that is not a UUID', { patternId: 'not-an-id', patternVersion: 1 }],
+    ['a version below 1', { patternId: '0195a000-0000-7000-8000-000000000001', patternVersion: 0 }],
+    ['a name beside the key', { patternKey: 'pat_1', name: 'x' }],
+    ['no key and no id', {}],
+  ])('refuses %s', (_name, params) => {
+    expect(askPlanSchema.safeParse({ ...planned, params }).success).toBe(false);
+  });
+
+  it('is not one of the templates of the catalog, so the catalog and the vocabulary do not list it', () => {
+    expect([...ASK_PLAN_TEMPLATE_IDS]).not.toContain('saved-pattern');
+    expect(ASK_PLAN_PARAM_NAMES).not.toContain('patternKey');
+  });
+
+  it('is answered by the plan endpoint with its plan ID and expiry like any template plan', () => {
+    expect(askPlanResponseSchema.safeParse({ plan: stored, planId: '0195a000-0000-7000-8000-000000000002', expiresAt: '2026-11-13T10:00:00.000Z' }).success).toBe(true);
+  });
+
+  it('may say the catalog of patterns was cut, as true and never as a count', () => {
+    const base = { plan: stored, planId: '0195a000-0000-7000-8000-000000000002', expiresAt: '2026-11-13T10:00:00.000Z' };
+    expect(askPlanResponseSchema.safeParse({ ...base, patternCatalogCut: true }).success).toBe(true);
+    expect(askPlanResponseSchema.safeParse({ ...base, patternCatalogCut: false }).success).toBe(false);
+    expect(askPlanResponseSchema.safeParse({ ...base, patternCatalogCut: 31 }).success).toBe(false);
+  });
+
+  it('may list the names offered to the model in a preview, and says the catalog was cut, never with a count', () => {
+    const preview = { preview: 'Which ‹widget#1›?', previewHash: 'a'.repeat(64) };
+    expect(askPlanResponseSchema.safeParse({ ...preview, patternLabels: ['Widgets and gadgets'], patternCatalogCut: true }).success).toBe(true);
+    expect(askPlanResponseSchema.safeParse({ ...preview, patternLabels: [''] }).success).toBe(false);
+    expect(askPlanResponseSchema.safeParse({ ...preview, patternCatalogCut: 3 }).success).toBe(false);
+  });
+
+  it('may be edited: the edit request names the saved-pattern template and the plan answers an edited plan of it', () => {
+    expect(askEditRequestSchema.safeParse({ planId: '0195a000-0000-7000-8000-000000000002', templateId: 'saved-pattern', params: {} }).success).toBe(true);
+    expect(askEditRequestSchema.safeParse({ planId: '0195a000-0000-7000-8000-000000000002', templateId: 'free-query', params: {} }).success).toBe(false);
+    expect(askEditResponseSchema.safeParse({ plan: stored, planId: '0195a000-0000-7000-8000-000000000003', expiresAt: '2026-11-13T10:00:00.000Z' }).success).toBe(true);
   });
 });

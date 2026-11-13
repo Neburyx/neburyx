@@ -1,4 +1,4 @@
-import { askEditResponseSchema, parseExtensionRefusal, type AiMappingView, type AskPlanner, type ExtensionRequest } from '@neburyx/contracts';
+import { askEditResponseSchema, parseExtensionRefusal, type AiMappingView, type AskPatternOffer, type AskPlanner, type ExtensionRequest } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
 import { createMemoryPlanStore } from '../testing/memory-plans.js';
 import { ASK_EDIT_URL, createAskEditRoute } from './ask-edit.js';
@@ -116,5 +116,68 @@ describe('the edit route', () => {
     expect(failure).toMatchObject({ code: 'PLAN_STORE_FAILED' });
     expect(parseExtensionRefusal(failure)).toBeUndefined();
     expect(plans.plans).toEqual([stored]);
+  });
+});
+
+describe('editing a plan that names a saved pattern', () => {
+  const PATTERN = '0195a000-0000-7000-8000-000000000001';
+  const OFFER: AskPatternOffer = { id: PATTERN, version: 3, name: 'A pattern', projection: { kind: 'definition', anchorType: 'node_a', startingEntity: 'asked', steps: [{ relationshipTypes: ['link_a'], direction: 'out', arrivesAt: 'node_b', conditions: [], windowed: false }] } };
+  const held: AskPatternOffer = { ...OFFER, projection: { kind: 'definition', anchorType: 'node_a', startingEntity: 'held', steps: [] } };
+
+  async function pattern(params: Record<string, unknown> = { patternId: PATTERN, patternVersion: 3, ref: { entityType: 'node_a', stableId: 'a-1' } }) {
+    const plans = createMemoryPlanStore();
+    const stored = await plans.insert({ userId: 'u-1', sourceId: 'demo', templateId: 'saved-pattern', templateVersion: 1, params, planningTraceId: 'tr-0' });
+    const route = createAskEditRoute({ plans: () => plans, view: () => VIEW });
+    const edit = (body: Record<string, unknown>, listing: { offers: readonly AskPatternOffer[]; cut: boolean } = { offers: [OFFER], cut: false }) =>
+      route.handler(request({ planId: stored.id, templateId: 'saved-pattern', params: { patternId: PATTERN, patternVersion: 3, ref: ref('a-2') }, ...body }, { askPatternFind: async () => listing.offers[0] }));
+    const refusal = async (promise: Promise<unknown>) => parseExtensionRefusal(await promise.catch((error: unknown) => error));
+    return { plans, stored, edit, refusal };
+  }
+
+  it('stores a new plan with the new starting entity, the same pattern id and version, and cancels the old one', async () => {
+    const { plans, stored, edit } = await pattern();
+    const answer = askEditResponseSchema.parse(await edit({}));
+    expect(answer.plan).toMatchObject({ templateId: 'saved-pattern', params: { patternId: PATTERN, patternVersion: 3, ref: { entityType: 'node_a', stableId: 'a-2' } } });
+    expect(plans.plans.find((plan) => plan.id === stored.id)?.state).toBe('cancelled');
+    expect(plans.plans.find((plan) => plan.id === answer.planId)).toMatchObject({ state: 'proposed', parentPlanId: stored.id, templateId: 'saved-pattern', sourceId: 'demo' });
+  });
+
+  it.each([
+    ['another pattern id', { params: { patternId: '0195a000-0000-7000-8000-000000000002', patternVersion: 3, ref: ref('a-2') } }],
+    ['another version', { params: { patternId: PATTERN, patternVersion: 4, ref: ref('a-2') } }],
+    ['a field beside them', { params: { patternId: PATTERN, patternVersion: 3, ref: ref('a-2'), name: 'x' } }],
+    ['no reference', { params: { patternId: PATTERN, patternVersion: 3 } }],
+    ['a reference of another type than the pattern starts at', { params: { patternId: PATTERN, patternVersion: 3, ref: ref('b-1', 'demo', 'node_b') } }],
+    ['a template other than the plan’s', { templateId: 'entity', params: { ref: ref('a-2') } }],
+  ])('refuses an edit with %s as ASK_PLAN_INVALID and changes nothing', async (_name, body) => {
+    const { plans, stored, edit, refusal } = await pattern();
+    expect(await refusal(edit(body))).toEqual({ code: 'ASK_PLAN_INVALID' });
+    expect(plans.plans).toEqual([stored]);
+  });
+
+  it('refuses a reference of another source with SOURCE_MISMATCH and changes nothing', async () => {
+    const { plans, stored, edit, refusal } = await pattern();
+    expect(await refusal(edit({ params: { patternId: PATTERN, patternVersion: 3, ref: ref('a-2', 'elsewhere') } }))).toEqual({ code: 'SOURCE_MISMATCH' });
+    expect(plans.plans).toEqual([stored]);
+  });
+
+  it('refuses every edit of a plan whose pattern holds its starting entity, which has no reference to change', async () => {
+    const { plans, stored, edit, refusal } = await pattern({ patternId: PATTERN, patternVersion: 3 });
+    expect(await refusal(edit({}, { offers: [held], cut: false }))).toEqual({ code: 'ASK_PLAN_INVALID' });
+    expect(plans.plans).toEqual([stored]);
+  });
+
+  it('refuses an edit when the pattern is no longer one the caller may run, was changed since, or now holds its starting entity', async () => {
+    const { plans, stored, edit, refusal } = await pattern();
+    for (const listing of [{ offers: [], cut: false }, { offers: [{ ...OFFER, version: 4 }], cut: false }, { offers: [held], cut: false }]) {
+      expect(await refusal(edit({}, listing))).toEqual({ code: 'ASK_PLAN_INVALID' });
+    }
+    expect(plans.plans).toEqual([stored]);
+  });
+
+  it('refuses without a way to find the pattern, since it cannot be told to be there', async () => {
+    const { plans, stored, refusal } = await pattern();
+    const route = createAskEditRoute({ plans: () => plans, view: () => VIEW });
+    expect(await refusal(route.handler(request({ planId: stored.id, templateId: 'saved-pattern', params: { patternId: PATTERN, patternVersion: 3, ref: ref('a-2') } })))).toEqual({ code: 'ASK_PLAN_INVALID' });
   });
 });

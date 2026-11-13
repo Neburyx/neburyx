@@ -6,6 +6,7 @@ import { referenceTextSchema } from './entities.js';
 import { EXPAND_DIRECTIONS, EXPAND_SORTS } from './expand.js';
 import { searchResultSchema, searchTextSchema } from './search.js';
 import { degreePreviewSchema } from './degree-preview.js';
+import { patternRunResponseSchema } from './pattern-run.js';
 import { derivedNeighborsResponseSchema } from './derived-neighbors.js';
 import { derivedEdgeDetailSchema } from './edge-detail.js';
 import { expandResponseSchema } from './expand.js';
@@ -64,6 +65,24 @@ export function askPlanParamsJsonSchema(id: keyof typeof ASK_PLAN_PARAMS): Recor
 /** The names of the parameters of every plan schema, for the vocabulary the allowlist reads. */
 export const ASK_PLAN_PARAM_NAMES: readonly string[] = [...new Set(Object.values(ASK_PLAN_PARAMS).flatMap((schema) => Object.keys(schema.shape)))];
 
+/** The template identifier of a plan that runs one of the investigator's saved patterns; it is not a template of the catalog, so the planner is told of it by the pattern catalog of the request. */
+export const SAVED_PATTERN_TEMPLATE_ID = 'saved-pattern';
+export const SAVED_PATTERN_TEMPLATE_VERSION = 1;
+
+/** An opaque key of one request's pattern catalog: it names neither a pattern nor its owner, and means nothing in another request. */
+export const PATTERN_KEY = /^pat_[1-9][0-9]*$/;
+
+const savedPatternPlanShape = { ...planShape, templateId: z.literal(SAVED_PATTERN_TEMPLATE_ID) };
+
+/** What the model answers for a saved pattern: the key of the catalog it was shown, and the placeholder of the starting entity when the pattern asks for one. */
+export const plannedSavedPatternParamsSchema = z.strictObject({ patternKey: z.string().regex(PATTERN_KEY), ref: anchor.optional() });
+const plannedSavedPatternSchema = z.strictObject({ ...savedPatternPlanShape, params: plannedSavedPatternParamsSchema });
+
+/** The same plan once the application has turned the key and the placeholder back into what they stood for: the pattern's own id and version, and the reference. */
+/** The parameters of a saved-pattern plan as it is stored. */
+export const storedSavedPatternParamsSchema = z.strictObject({ patternId: z.uuid(), patternVersion: z.number().int().min(1), ref: anchor.optional() });
+const savedPatternPlanSchema = z.strictObject({ ...savedPatternPlanShape, params: storedSavedPatternParamsSchema });
+
 const planOf = <Id extends keyof typeof ASK_PLAN_PARAMS>(id: Id) => z.strictObject({ ...planShape, templateId: z.literal(id), params: ASK_PLAN_PARAMS[id] });
 
 /** The kinds of question Ask refuses, neutral names; the closed list the refusal answer draws its `family` from. The last two are set by the server only. */
@@ -95,6 +114,8 @@ const templatePlanSchema = z.union([
   planOf('derived-rule-run'),
   planOf('derived-edge-support'),
   planOf('search'),
+  plannedSavedPatternSchema,
+  savedPatternPlanSchema,
 ]);
 
 /** What a planner answers when it refuses: it may name a family, and its `reason` is free text the route never passes on. */
@@ -122,11 +143,11 @@ const askBlockedTokenSchema = z.strictObject({ text: z.string().min(1), start: z
 /** What the plan endpoint answers: a plan, a clarification to resolve, the tokens that stop the question, or the preview with its hash (`changed` when a hash sent with `send: true` was not the one of the current preview). */
 export const askPlanResponseSchema = z.union([
   /** A plan of a template is stored when it is answered: it comes with its ID and the time it stops being runnable. A plan that is `unsupported` is not stored and has neither. */
-  z.strictObject({ plan: templatePlanSchema, planId: z.uuid(), expiresAt: z.iso.datetime() }),
+  z.strictObject({ plan: templatePlanSchema, planId: z.uuid(), expiresAt: z.iso.datetime(), patternCatalogCut: z.literal(true).optional() }),
   z.strictObject({ plan: unsupportedAnswerSchema }),
   z.strictObject({ clarification: askClarificationSchema }),
   z.strictObject({ blocked: z.strictObject({ tokens: z.array(askBlockedTokenSchema).min(1) }) }),
-  z.strictObject({ preview: z.string().min(1), previewHash: z.string().regex(ASK_PREVIEW_HASH_PATTERN), changed: z.literal(true).optional() }),
+  z.strictObject({ preview: z.string().min(1), previewHash: z.string().regex(ASK_PREVIEW_HASH_PATTERN), changed: z.literal(true).optional(), patternLabels: z.array(z.string().min(1)).optional(), patternText: z.string().min(1).optional(), patternCatalogCut: z.literal(true).optional() }),
 ]);
 
 /** The most resolutions one request carries. */
@@ -147,7 +168,7 @@ export const askResolutionsSchema = z.array(askResolutionSchema).max(ASK_MAX_RES
  * What `POST /v1/ask/edit` takes: the plan to change, the template (which must be the plan's own) and the new parameters of it, in which every reference carries the `sourceId` it is in, so a reference
  * of another source than the plan's is refused. The parameters are checked against the template's own schema and the mapping, not here.
  */
-export const askEditRequestSchema = z.strictObject({ planId: z.uuid(), templateId: z.enum(ASK_PLAN_TEMPLATE_IDS), params: z.record(z.string(), z.unknown()) });
+export const askEditRequestSchema = z.strictObject({ planId: z.uuid(), templateId: z.enum([...ASK_PLAN_TEMPLATE_IDS, SAVED_PATTERN_TEMPLATE_ID]), params: z.record(z.string(), z.unknown()) });
 
 /** What `POST /v1/ask/edit` answers: the new plan, stored as `proposed` with its own ID and expiry; the old one is cancelled. */
 export const askEditResponseSchema = z.strictObject({ plan: templatePlanSchema, planId: z.uuid(), expiresAt: z.iso.datetime() });
@@ -173,6 +194,8 @@ export const askRunResultSchema = z.union([
   z.strictObject({ templateId: z.literal('derived-rule-run'), result: derivedNeighborsResponseSchema }),
   z.strictObject({ templateId: z.literal('derived-edge-support'), result: derivedEdgeDetailSchema }),
   z.strictObject({ templateId: z.literal('search'), result: searchResultSchema }),
+  /** A run of a saved pattern is the saved run's own answer for its kind: a pattern answer with `matches`, or a template answer for a saved run of a preset; a pattern that cannot run is a refusal. */
+  z.strictObject({ templateId: z.literal(SAVED_PATTERN_TEMPLATE_ID), result: z.union([patternRunResponseSchema, templateRunResponseSchema]) }),
 ]);
 
 /** `complete` or `partial` (the result reports a cut); a run that failed answers the error of the read, and only the run's own record says `failed`. */
@@ -180,7 +203,7 @@ export const ASK_RUN_ANSWER_OUTCOMES = ['complete', 'partial'] as const;
 
 /** Whether a result is the stop of a run that would read more than the source allows without being asked again: the plan was given back, so the answer carries the token to continue it. */
 export function isHeavyResult(run: AskRunResult): boolean {
-  return (run.templateId === 'shared-attribute' || run.templateId === 'linked-entities') && run.result.status === 'heavy';
+  return (run.templateId === 'shared-attribute' || run.templateId === 'linked-entities' || run.templateId === SAVED_PATTERN_TEMPLATE_ID) && run.result.status === 'heavy';
 }
 
 /**
@@ -240,14 +263,81 @@ export interface AskPlanContext {
   readonly sourceId?: string;
 }
 
+/** What a pattern needs of the plan that names it, by its key: the type of the entity it starts at, and whether the question gives that entity or the pattern holds it. */
+export interface AskPatternEntry {
+  readonly anchorType: string;
+  readonly startingEntity: 'asked' | 'held';
+}
+
+/** The saved patterns offered for one question: the text the model is shown, and what a plan that names a key is checked against. Nothing in it is a pattern's id, a typed value or an owner. */
+export interface AskPatternCatalog {
+  readonly text: string;
+  /** Whether the catalog leaves out saved patterns the caller may run, because there are more than it holds. */
+  readonly cut: boolean;
+  /** The names of saved patterns that passed the allowlist and are shown to the model; the preview lists them. */
+  readonly labels: readonly string[];
+  /** Looks at the parameters of a model request before it is sent and throws when anything of a saved pattern that may not reach the model is in them. The planner calls it for every request of the turn, the repair included. */
+  readonly check: (parameters: Readonly<Record<string, string | number>>) => void;
+  readonly entries: ReadonlyMap<string, AskPatternEntry>;
+}
+
 export interface AskPlanInput {
   /** The previewed text: the question rebuilt from allowed tokens, with placeholders where typed names and IDs were. */
   readonly text: string;
   readonly context: AskPlanContext;
+  /** The saved patterns the caller may run on the question's source, offered by key; absent when there are none. */
+  readonly patterns?: AskPatternCatalog;
+}
+
+/** One step of a saved pattern as a plan may be told of it: types and kinds only, never a property, a value or a name. */
+export interface AskPatternStep {
+  readonly relationshipTypes: readonly string[];
+  readonly direction: 'out' | 'in' | 'both';
+  readonly arrivesAt: string;
+  readonly conditions: readonly { readonly on: 'neighbor' | 'relationship'; readonly kind: 'eq' | 'in' | 'between' }[];
+  readonly windowed: boolean;
+}
+
+/** The structure of a saved pattern that may reach the planner. It has no field for a name, a description, a value, an owner, an identifier or a time. */
+export type AskPatternProjection =
+  | {
+      readonly kind: 'definition';
+      readonly anchorType: string;
+      readonly startingEntity: 'asked' | 'held';
+      readonly steps: readonly AskPatternStep[];
+    }
+  | {
+      /** A saved run of one of the source's presets: the template, the types and relationship types the preset binds, and the numbers the run was saved with. */
+      readonly kind: 'preset-run';
+      readonly template: 'shared-attribute' | 'linked-entities';
+      readonly anchorType: string;
+      readonly startingEntity: 'asked' | 'held';
+      readonly otherType: string;
+      readonly relationshipTypes: readonly string[];
+      readonly direction?: 'out' | 'in' | 'both';
+      readonly maxHops?: number;
+      readonly minShared?: number;
+      readonly windowed: boolean;
+    };
+
+/** What the application lists of a caller's saved patterns on a source: the offers, and whether it left some out because there are more than a catalog holds. */
+export interface AskPatternListing {
+  readonly offers: readonly AskPatternOffer[];
+  readonly cut: boolean;
+}
+
+/** A pattern the caller may run, as the application hands it to the extension: the structure, and the id, version and typed name that only the application and the checks of the extension may hold. */
+export interface AskPatternOffer {
+  readonly id: string;
+  readonly version: number;
+  readonly name: string;
+  readonly projection: AskPatternProjection;
 }
 
 /** The seam Ask plans through: the Community default says it is not available; an installed planner answers a plan for the text it is given. */
 export interface AskPlanner {
   availability(): AskAvailability;
+  /** Whether the prompt the planner uses has a place for the saved patterns; when it has not, none is built, previewed or hashed. Absent means it has. */
+  offersPatterns?(): boolean;
   plan(input: AskPlanInput): Promise<AskPlan>;
 }

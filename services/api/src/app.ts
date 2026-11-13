@@ -59,6 +59,7 @@ import { communityAskPlanner, communitySeams } from './seams/community-seams.js'
 import { searchExactTemplate } from './gate/templates/search-exact.js';
 import { createAskEntityLookup } from './ask/entity-lookup.js';
 import { createAskEntitySearch } from './ask/entity-search.js';
+import { createAskPatternFinder, createAskPatternLister } from './ask/patterns-lister.js';
 import { createAskPlanRunnerFactory } from './ask/plan-runner.js';
 import { createPreviewMac, derivePreviewKey } from './ask/preview-key.js';
 import { COMMUNITY_POLICY_VERSION } from './investigations/draft.js';
@@ -367,6 +368,8 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
   const fallbackKeyMaterial = randomBytes(32);
   const askTools: { current?: NonNullable<ExtensionMount['askEntityToolsFor']> } = {};
   const askRunners: { current?: NonNullable<ExtensionMount['askPlanRunnerFor']> } = {};
+  const askPatternLists: { current?: NonNullable<ExtensionMount['askPatternsFor']> } = {};
+  const askPatternFinders: { current?: NonNullable<ExtensionMount['askPatternFindFor']> } = {};
   if (options.extension !== undefined) {
     mountExtensionRoutes(app, options.extension, options.store, {
       previewOn: options.previewOn === true,
@@ -376,6 +379,8 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       policyVersionOf: options.policyVersion ?? (() => COMMUNITY_POLICY_VERSION),
       askEntityToolsFor: (context) => askTools.current?.(context),
       askPlanRunnerFor: (context) => askRunners.current?.(context),
+      askPatternsFor: (context) => askPatternLists.current?.(context),
+      askPatternFindFor: (context) => askPatternFinders.current?.(context),
       signalOf,
     });
   }
@@ -659,7 +664,9 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       const answer = await expansions.expand({ traceId: request.id, principal: identity.principal, sourceId, entityType: ref.entityType, stableId: ref.stableId, ...(relTypes === undefined ? {} : { relTypes }), neighborTypes, direction: direction ?? 'both', signal: signalOf(request), ...(filters === undefined ? {} : { filters }), ...(rank === undefined ? {} : { rank }), ...(window === undefined ? {} : { window }), ...(limit === undefined ? {} : { limit }), ...(cursors === undefined ? {} : { cursors }), mask: mask === true });
       return expandResponseSchema.parse(answer);
     });
-    askRunners.current = (context) => createAskPlanRunnerFactory({ templateRuns, entities, degrees, expansions, derivedNeighbors, edges, searching, mapping })(context);
+    askPatternLists.current = createAskPatternLister({ store: options.store, mapping, access });
+    askPatternFinders.current = createAskPatternFinder({ store: options.store, mapping, access });
+    askRunners.current = (context) => createAskPlanRunnerFactory({ templateRuns, entities, degrees, expansions, derivedNeighbors, edges, searching, savedRuns, mapping })(context);
 
     const storedReferences = createStoredReferences(mapping, referenceKeys);
     const listCursors = options.cursors ?? createCursorCodec({ key: fallbackKeyMaterial, clock: Date.now });

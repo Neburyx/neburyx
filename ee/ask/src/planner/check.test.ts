@@ -69,3 +69,38 @@ describe('a plan checked against the catalog, the vocabulary and the text', () =
     expect(problems).not.toContain('SENTINEL');
   });
 });
+
+describe('a plan that names a saved pattern', () => {
+  const PATTERNS = new Map([
+    ['pat_1', { anchorType: 'node_a', startingEntity: 'asked' as const }],
+    ['pat_2', { anchorType: 'node_b', startingEntity: 'held' as const }],
+  ]);
+  const saved = (params: Record<string, unknown>, templateVersion = 1): AskPlan => plan('saved-pattern', params, templateVersion);
+  const checked = (candidate: AskPlan) => problemsOfPlan(candidate, { text: TEXT, view: VIEW, patterns: PATTERNS });
+
+  it('has no problem when it names an offered key and, for a pattern that asks for its starting entity, a placeholder of the starting type', () => {
+    expect(checked(saved({ patternKey: 'pat_1', ref: ref() }))).toEqual([]);
+    expect(checked(saved({ patternKey: 'pat_2' }))).toEqual([]);
+  });
+
+  it('has a problem for a key that was not offered, and names the path only, never the key', () => {
+    expect(checked(saved({ patternKey: 'pat_9', ref: ref() }))).toEqual(['params.patternKey: not a key of the saved patterns offered']);
+    expect(problemsOfPlan(saved({ patternKey: 'pat_1', ref: ref() }), { text: TEXT, view: VIEW })).toEqual(['params.patternKey: not a key of the saved patterns offered']);
+  });
+
+  it('has a problem for a pattern that asks for its starting entity when the plan gives none, or one that is not an entity placeholder of the question, or one of another type', () => {
+    expect(checked(saved({ patternKey: 'pat_1' }))).toEqual(['params.ref: the saved pattern asks for its starting entity']);
+    expect(checked(saved({ patternKey: 'pat_1', ref: ref('‹value#1›') }))).toContain('params.ref.stableId: not an entity placeholder of the question');
+    expect(checked(saved({ patternKey: 'pat_1', ref: ref('‹node_a#7›') }))).toContain('params.ref.stableId: not an entity placeholder of the question');
+    expect(checked(saved({ patternKey: 'pat_1', ref: ref('‹entity#1›', 'node_b') }))).toEqual(['params.ref.entityType: not the type the saved pattern starts at']);
+  });
+
+  it('has a problem for a pattern that holds its starting entity when the plan gives one', () => {
+    expect(checked(saved({ patternKey: 'pat_2', ref: ref('‹node_a#1›', 'node_b') }))).toEqual(['params.ref: the saved pattern holds its starting entity']);
+  });
+
+  it('has a problem for another template version, and for a plan in the stored form, which the model never makes', () => {
+    expect(checked(saved({ patternKey: 'pat_2' }, 2))).toEqual(['templateVersion: not the version of the saved pattern plan']);
+    expect(checked(saved({ patternId: '0195a000-0000-7000-8000-000000000001', patternVersion: 1 }))).toEqual(['params.patternKey: a saved pattern is named by its key']);
+  });
+});

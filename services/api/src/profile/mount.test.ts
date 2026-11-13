@@ -59,6 +59,7 @@ describe('what the mount gives an extension handler', () => {
     expect(seen).toBeDefined();
     expect(seen).not.toHaveProperty('askPlanRunner');
     expect(seen).not.toHaveProperty('askEntityTools');
+    expect(seen).not.toHaveProperty('askPatterns');
     await app.close();
   });
 
@@ -326,6 +327,17 @@ describe('the refusals of a read of the gate and of a plan', () => {
     expect(events).toEqual([]);
     expect(lines.filter((line) => line.includes('extension.audit_failed'))).toEqual([]);
     expect(name).not.toBe('');
+    await app.close();
+  });
+
+  it('logs which check stopped a request and which pattern, and nothing of the text it found, and answers an unexpected failure', async () => {
+    const stopped = Object.assign(new Error('SECRET-TEXT would reach the model'), { name: 'PatternGuardError', kind: 'text', position: 2 });
+    const { app, lines } = await started(extensionOf(async () => Promise.reject(stopped)), { previewOn: true });
+    const answer = await app.inject({ url: URL_OF_ROUTE });
+    expect([answer.statusCode, answer.json().error.code]).toEqual([500, 'INTERNAL_ERROR']);
+    const logged = lines.map((line) => JSON.parse(line)).find((line) => line.event === 'extension.handler_failed');
+    expect(logged).toMatchObject({ extension: 'probe', guard: 'text', guardPosition: 2 });
+    expect(lines.join('\n')).not.toContain('SECRET-TEXT');
     await app.close();
   });
 });

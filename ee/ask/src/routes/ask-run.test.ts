@@ -435,3 +435,87 @@ describe('a continue', () => {
   });
 });
 
+
+describe('a plan that names a saved pattern', () => {
+  const PATTERN = '0195a000-0000-7000-8000-000000000001';
+  const SAVED_PARAMS = { patternId: PATTERN, patternVersion: 3, ref: REF };
+  const savedOk = (over: Record<string, unknown> = {}): AskRunResult => ({ templateId: 'saved-pattern', result: { status: 'ok', templateVersion: '1', count: count('exact', 1), matches: [], nodes: [node], edges: [], notices: [], warnings: [], ...over } as never });
+  const savedHeavy: AskRunResult = { templateId: 'saved-pattern', result: { status: 'heavy', templateVersion: '1', estimate: count('lowerBound', 500), threshold: 500, continueLimit: 25, notices: [], warnings: [] } as never };
+
+  it('is run with the id, version and starting entity it holds, and answers the saved run’s result and the outcome of its count', async () => {
+    const rg = rig(async () => ({ status: 'ok', result: savedOk() }));
+    const plan = await rg.plan({ templateId: 'saved-pattern', params: SAVED_PARAMS });
+    const answer = askRunResponseSchema.parse(await route(rg).handler(rg.request({ planId: plan.id })));
+    expect(answer).toMatchObject({ planId: plan.id, outcome: 'complete', result: { templateId: 'saved-pattern' } });
+    expect(rg.runs).toEqual([{ templateId: 'saved-pattern', params: SAVED_PARAMS }]);
+    expect(rg.plans.runs).toMatchObject([{ planId: plan.id, outcome: 'complete', rowCount: 1 }]);
+  });
+
+  it('says partial for a saved run that reports a cut, by a lower-bound count or a next page', async () => {
+    for (const over of [{ count: count('lowerBound', 25) }, { nextCursor: 'c1' }]) {
+      const rg = rig(async () => ({ status: 'ok', result: savedOk(over) }));
+      const plan = await rg.plan({ templateId: 'saved-pattern', params: SAVED_PARAMS });
+      expect(askRunResponseSchema.parse(await route(rg).handler(rg.request({ planId: plan.id }))).outcome).toBe('partial');
+    }
+  });
+
+  it.each([
+    ['a pattern that changed', { code: 'CONFLICT', reason: 'pattern-changed' } as const],
+    ['a pattern that is unavailable', { code: 'CONFLICT', reason: 'pattern-unavailable' } as const],
+    ['a pattern that is no longer the caller’s', { code: 'NOT_FOUND' } as const],
+  ])('answers the refusal for %s, records a failed run with no rows, and writes the event of a failed run', async (_name, refusal) => {
+    const rg = rig(async () => ({ status: 'refused', refusal }));
+    const plan = await rg.plan({ templateId: 'saved-pattern', params: SAVED_PARAMS });
+    expect(await refusalOf(route(rg).handler(rg.request({ planId: plan.id })))).toEqual(refusal);
+    expect(rg.plans.plans[0]?.state).toBe('run');
+    expect(rg.plans.runs).toMatchObject([{ outcome: 'failed', rowCount: 0 }]);
+    expect(rg.events).toMatchObject([{ action: ASK_RUN_ACTION, result: 'failed' }]);
+  });
+
+  it('gives the plan back when the saved run stops as heavy, with a token for the stored id and version, writes no run and no event, and runs it with the token', async () => {
+    const rg = rig(async () => ({ status: 'ok', result: savedHeavy }));
+    const plan = await rg.plan({ templateId: 'saved-pattern', params: SAVED_PARAMS });
+    const answer = askRunResponseSchema.parse(await route(rg).handler(rg.request({ planId: plan.id })));
+    const token = continueTokenOf(mac('key-one'), plan.id, SAVED_PARAMS);
+    expect(answer).toMatchObject({ outcome: 'partial', continueToken: token });
+    expect(rg.plans.plans[0]).toMatchObject({ state: 'proposed', expiresAt: plan.expiresAt });
+    expect(rg.plans.runs).toEqual([]);
+    expect(rg.events).toEqual([]);
+    const next = rig(async (given) => ({ status: 'ok', result: given.templateId === 'saved-pattern' ? savedOk() : entityResult }));
+    const again = await next.plan({ templateId: 'saved-pattern', params: SAVED_PARAMS });
+    const second = await route(next).handler(next.request({ planId: again.id, continue: true, continueToken: continueTokenOf(mac('key-one'), again.id, SAVED_PARAMS) }));
+    expect(askRunResponseSchema.parse(second).outcome).toBe('complete');
+    expect(next.options).toEqual([{ continue: true }]);
+  });
+
+  it('refuses a continue with a token made for another pattern or version of the same plan’s parameters, before anything is read', async () => {
+    const rg = rig();
+    const plan = await rg.plan({ templateId: 'saved-pattern', params: SAVED_PARAMS });
+    const other = continueTokenOf(mac('key-one'), plan.id, { ...SAVED_PARAMS, patternVersion: 4 });
+    expect(await refusalOf(route(rg).handler(rg.request({ planId: plan.id, continue: true, continueToken: other })))).toEqual({ code: 'INVALID_REQUEST', reason: 'continue-token' });
+    expect(rg.runs).toEqual([]);
+    expect(rg.plans.plans[0]?.state).toBe('proposed');
+  });
+
+  it('holds the id and version of the pattern, the same fields as any run, and a refused run holds them too', async () => {
+    const rg = rig(async () => ({ status: 'refused', refusal: { code: 'CONFLICT', reason: 'pattern-changed' } }));
+    const plan = await rg.plan({ templateId: 'saved-pattern', params: SAVED_PARAMS });
+    await refusalOf(route(rg).handler(rg.request({ planId: plan.id })));
+    expect(rg.events[0]).toMatchObject({ result: 'failed', detail: { askRun: { patternId: PATTERN, patternVersion: 3, rowCount: 0 } } });
+  });
+
+  it('holds no pattern id in the event of a run of a template', async () => {
+    const rg = rig();
+    const plan = await rg.plan();
+    await route(rg).handler(rg.request({ planId: plan.id }));
+    expect(rg.events[0]?.detail).not.toHaveProperty('askRun.patternId');
+  });
+
+  it('holds no name, key or typed text in the event of its run', async () => {
+    const rg = rig(async () => ({ status: 'ok', result: savedOk() }));
+    const plan = await rg.plan({ templateId: 'saved-pattern', params: SAVED_PARAMS });
+    await route(rg).handler(rg.request({ planId: plan.id }));
+    expect(rg.events[0]?.detail).toMatchObject({ askRun: { templateId: 'saved-pattern', templateVersion: 1, rowCount: 1, patternId: PATTERN, patternVersion: 3 } });
+    expect(JSON.stringify(rg.events)).not.toMatch(/a-secret-1|pat_/);
+  });
+});

@@ -1,4 +1,4 @@
-import { ASK_PLAN_TEMPLATE_IDS, askRunRequestSchema, isHeavyResult, askRunResponseSchema, ExtensionRefusal, type AuditEvent, type ExtensionRefusalFields, type ExtensionRequest, type ExtensionRoute } from '@neburyx/contracts';
+import { ASK_PLAN_TEMPLATE_IDS, SAVED_PATTERN_TEMPLATE_ID, storedSavedPatternParamsSchema, askRunRequestSchema, isHeavyResult, askRunResponseSchema, ExtensionRefusal, type AuditEvent, type ExtensionRefusalFields, type ExtensionRequest, type ExtensionRoute } from '@neburyx/contracts';
 import { continueTokenOf, verifyContinueToken } from '../plans/continue-token.js';
 import { paramsHashOf } from '../plans/params-hash.js';
 import type { PlanStore, RunOutcome, StoredPlan } from '../plans/index.js';
@@ -18,6 +18,13 @@ const unsupported = (): ExtensionRefusal => new ExtensionRefusal({ code: 'ASK_UN
 
 const RESULTS: Readonly<Record<RunOutcome, AuditEvent['result']>> = { complete: 'success', partial: 'partial', failed: 'failed' };
 
+/** The pattern a plan names, by id and version: never its name, which the plan does not hold. */
+function patternOf(plan: StoredPlan): { readonly patternId?: string; readonly patternVersion?: number } {
+  if (plan.templateId !== SAVED_PATTERN_TEMPLATE_ID) return {};
+  const parsed = storedSavedPatternParamsSchema.safeParse(plan.params);
+  return parsed.success ? { patternId: parsed.data.patternId, patternVersion: parsed.data.patternVersion } : {};
+}
+
 async function record(request: ExtensionRequest, plan: StoredPlan, outcome: RunOutcome, paramsHash: string, rowCount: number): Promise<void> {
   try {
     await request.audit.record({
@@ -29,7 +36,7 @@ async function record(request: ExtensionRequest, plan: StoredPlan, outcome: RunO
       resourceType: 'ask-plan',
       resourceRef: plan.id,
       traceId: request.traceId,
-      detail: { askRun: { templateId: plan.templateId, templateVersion: plan.templateVersion, paramsHash, rowCount } },
+      detail: { askRun: { templateId: plan.templateId, templateVersion: plan.templateVersion, paramsHash, rowCount, ...patternOf(plan) } },
     });
   } catch {
     // the run and its record are written: only the event is missing, and a run that cannot be audited gives no result
@@ -76,7 +83,7 @@ export function createAskRunRoute(options: AskRunRouteOptions = {}): ExtensionRo
       let refusal: ExtensionRefusalFields | undefined;
       let failure: { readonly error: unknown } | undefined;
       let run: Awaited<ReturnType<ReturnType<typeof runnerFor>['run']>> | undefined;
-      const templateId = ASK_PLAN_TEMPLATE_IDS.find((candidate) => candidate === plan.templateId);
+      const templateId = plan.templateId === SAVED_PATTERN_TEMPLATE_ID ? SAVED_PATTERN_TEMPLATE_ID : ASK_PLAN_TEMPLATE_IDS.find((candidate) => candidate === plan.templateId);
       if (templateId === undefined) refusal = { code: 'ASK_PLAN_INVALID' };
       else {
         try {

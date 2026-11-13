@@ -162,7 +162,7 @@ export function buildParams(plan: TemplatePlan, fields: readonly EditField[], va
       } else params['window'] = { from: String(values['windowFrom'] ?? '').trim(), to: String(values['windowTo'] ?? '').trim() };
     }
   }
-  if (Object.keys(errors).length === 0) {
+  if (Object.keys(errors).length === 0 && plan.templateId !== 'saved-pattern') {
     const parsed = ASK_PLAN_PARAMS[plan.templateId].safeParse(params);
     if (!parsed.success) {
       for (const issue of parsed.error.issues) {
