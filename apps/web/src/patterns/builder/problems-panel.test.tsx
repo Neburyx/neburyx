@@ -45,6 +45,12 @@ describe('the problems the source finds', () => {
     expect(screen.getByText('Checked by the source at 09:44 UTC.')).toBeTruthy();
   });
 
+  it('announces the count of the problems in a live region when they appear', async () => {
+    await started(async () => found());
+    const announced = screen.getAllByRole('status').find((region) => region.textContent?.includes('3 problems from the source. Preview is off.'));
+    expect(announced).toBeTruthy();
+  });
+
   it('Show opens the part and puts the focus on the row, or on the start type', async () => {
     await started(async () => found());
     await openStep(1, 'Link');
