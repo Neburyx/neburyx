@@ -7,8 +7,8 @@ export const OPEN_CORE_SCAN_ROOTS: readonly string[] = ['services', 'packages', 
 
 const EE_FOLDER = 'ee';
 const EE_PACKAGE = /^@neburyx\/ee-/;
-/** The files that compose a run: each registers the enterprise code for Community code to load when the preview is on, the image's entry script and the one of `pnpm dev`. */
-export const ENTRY_SCRIPTS: readonly string[] = ['deploy/docker/entrypoint.mjs', 'tools/dev/entry/enterprise-entry.mjs'];
+/** The files that compose a run: the image's entry script and the one of `pnpm dev` register the enterprise code for Community code to load when the preview is on, and the entry script of the Ask evaluation command hands that command the real planner. */
+export const ENTRY_SCRIPTS: readonly string[] = ['deploy/docker/entrypoint.mjs', 'tools/dev/entry/enterprise-entry.mjs', 'tools/ask-eval/entry/ask-eval-entry.mjs'];
 const TEST_FILE = /\.test\.[cm]?[jt]sx?$/;
 const TESTING_ZONE = 'services/api/src/testing';
 

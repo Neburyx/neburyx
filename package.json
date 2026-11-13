@@ -23,6 +23,7 @@
     "demo-graph": "pnpm --fail-if-no-match --filter @neburyx/demo-graph run cli",
     "test:image": "pnpm --fail-if-no-match --filter \"@neburyx/api...\" build && pnpm --fail-if-no-match --filter @neburyx/api test:image",
     "test:compose": "pnpm --fail-if-no-match --filter \"@neburyx/api...\" build && pnpm --fail-if-no-match --filter @neburyx/api test:compose",
+    "ask-eval": "pnpm --fail-if-no-match --filter \"@neburyx/ask-eval...\" build && node tools/ask-eval/entry/ask-eval-entry.mjs",
     "check:release": "pnpm --fail-if-no-match --filter \"@neburyx/release-checks...\" build && node tools/release-checks/dist/main.js",
     "check:driver": "pnpm --fail-if-no-match --filter \"@neburyx/driver-check...\" build && pnpm --fail-if-no-match --filter @neburyx/driver-check check",
     "check:dco": "pnpm --fail-if-no-match --filter \"@neburyx/dco-check...\" build && node tools/dco-check/dist/main.js",
