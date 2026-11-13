@@ -161,9 +161,10 @@ them it offers depends on the investigation's status.
 - **Close and reopen.** "Close" makes the investigation read-only. Its header then shows "Closed ·
   read-only" and says "This investigation is closed and read-only.", with a "Reopen" button.
 - **Delete and restore.** "Delete" asks "Delete this investigation?" and deletes it when you choose
-  "Delete investigation". The "Deleted" chip on the Investigations page lists what you deleted, each
-  with a "Restore" button, and says "Deleted ones stay restorable for 30 days." The number of days is a
-  [deployment setting](docs/configuration.md#retention).
+  "Delete investigation". Beside the "Deleted" chip on the Investigations page, the filter bar says
+  "Deleted ones stay restorable for 30 days." The number of days is a
+  [deployment setting](docs/configuration.md#retention). Choosing the chip lists what you deleted, each
+  with a "Restore" button.
 - **Export.** The "Export" button in the investigation's header opens "Export current view". Choose
   "JSON" or "CSV" and then "Download JSON" or "Download CSV". Every file begins with a header that states
   the source, the time (UTC), that the file is a partial view, how many entities are shown and how many
