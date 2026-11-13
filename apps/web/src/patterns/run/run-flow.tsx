@@ -264,6 +264,7 @@ export function RunFlow({ client, sourceId, sourceName, mask, profile, definitio
         reading={reading}
         mask={mask}
         personal={(type) => profile.entityTypes.find((candidate) => candidate.type === type)?.pii ?? []}
+        keyProperties={(type) => profile.entityTypes.find((candidate) => candidate.type === type)?.keyProperties ?? []}
         startName={startName}
         typeName={typeName}
         add={add}

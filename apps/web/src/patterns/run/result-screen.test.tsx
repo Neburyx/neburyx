@@ -104,13 +104,14 @@ describe('a match', () => {
     expect(second).toEqual(['an entity without an ID', '→ a relationship →', 'an entity without an ID', '→ r-3 →', 'acc-3']);
   });
 
-  it('shows the lines the answer carries, and the value of a personal-data property only while masking is off', async () => {
+  it('shows a type with no key properties by the first three properties the answer carries, as label and value without the entity name, and the value of a personal-data property only while masking is off', async () => {
     const kit = await runWorkspace({ runDefinition: async () => ok(twoHops()) });
     await ran();
-    expect(within(matchCard(1)).getByText('acc-2: p-1 is v-1')).toBeTruthy();
-    expect(within(matchCard(1)).getByText('acc-2: p-2 is secret@example.test')).toBeTruthy();
-    expect(within(matchCard(1)).getByText('acc-2: p-4 is 12')).toBeTruthy();
-    expect(within(matchCard(1)).queryByText(/hidden/)).toBeNull();
+    const card = within(matchCard(1));
+    const rows = card.getAllByRole('term').map((term) => [term.textContent, term.nextElementSibling?.textContent]);
+    expect(rows).toEqual([['p-1', 'v-1'], ['p-2', 'secret@example.test'], ['p-4', '12']]);
+    expect(card.queryByText(/acc-2:/)).toBeNull();
+    expect(card.queryByText(/hidden/)).toBeNull();
     cleanup();
     document.body.replaceChildren();
     const masked = await runWorkspace({ runDefinition: async () => ok(twoHops()) });
@@ -119,9 +120,59 @@ describe('a match', () => {
     const { openBuilder } = await import('./run-kit.js');
     await openBuilder();
     await ran();
-    expect(within(matchCard(1)).getByText('acc-2: p-1 is v-1')).toBeTruthy();
+    expect(within(matchCard(1)).getByText('v-1')).toBeTruthy();
     expect(within(matchCard(1)).queryByText(/secret@example\.test/)).toBeNull();
     expect(kit).toBeTruthy();
+  });
+
+  it('shows only the key properties the mapping names for the type, at most three and in its order, and folds the rest and the properties of the relationships behind "Show all properties (n)"', async () => {
+    const profile = async () => {
+      const { builderProfile } = await import('./run-kit.js');
+      const base = builderProfile();
+      const entity = base.entityTypes[0];
+      if (entity === undefined) throw new Error('no entity type');
+      return { ok: true as const, value: { ...base, entityTypes: [...base.entityTypes, { ...entity, type: 'kind-a', keyProperties: ['p-4', 'missing', 'p-1'] }] } };
+    };
+    await runWorkspace({ profile, runDefinition: async () => ok(twoHops()) });
+    await ran();
+    const card = within(matchCard(1));
+    expect(card.getAllByRole('term').map((term) => term.textContent)).toEqual(['p-4', 'p-1']);
+    const toggle = card.getByRole('button', { name: 'Show all properties (3)' });
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(card.getAllByRole('term')[0]?.closest('dl')?.id).toBe(toggle.getAttribute('aria-controls'));
+    await userEvent.click(toggle);
+    expect(card.getAllByRole('term').map((term) => term.textContent)).toEqual(['p-4', 'p-1', 'p-2']);
+    expect(card.getByRole('button', { name: 'Show fewer properties' }).getAttribute('aria-expanded')).toBe('true');
+    await userEvent.click(card.getByRole('button', { name: 'Show fewer properties' }));
+    expect(card.getAllByRole('term')).toHaveLength(2);
+  });
+
+  it('shows at most three key properties even when the mapping names more', async () => {
+    const profile = async () => {
+      const { builderProfile } = await import('./run-kit.js');
+      const base = builderProfile();
+      const entity = base.entityTypes[0];
+      if (entity === undefined) throw new Error('no entity type');
+      return { ok: true as const, value: { ...base, entityTypes: [...base.entityTypes, { ...entity, type: 'kind-a', keyProperties: ['p-1', 'p-2', 'p-4', 'p-3'] }] } };
+    };
+    await runWorkspace({ profile, runDefinition: async () => ok(twoHops()) });
+    await ran();
+    expect(within(matchCard(1)).getAllByRole('term').map((term) => term.textContent)).toEqual(['p-1', 'p-2', 'p-4']);
+    expect(within(matchCard(1)).queryByRole('button', { name: /Show all properties/ })).toBeNull();
+  });
+
+  it('draws a title that ends with the entity ID as its name and its ID, the ID with the full value for a hover, and keeps the whole title as the text of the chip', async () => {
+    const answer = definitionOk(['acc-2']);
+    if (answer.status !== 'ok') throw new Error('ok');
+    const titled: PatternRunResponse = { ...answer, nodes: answer.nodes.map((node) => (node.ref.stableId === 'acc-2' ? { ...node, display: { ...node.display, title: 'Kind acc-2' } } : node)) };
+    await runWorkspace({ runDefinition: async () => ok(titled) });
+    await ran();
+    const chips = within(matchCard(1)).getAllByRole('listitem').filter((item) => item.classList.contains('run-path-entity'));
+    const last = chips.at(-1);
+    expect(last?.textContent).toBe('Kind acc-2');
+    expect(last?.querySelector('.run-chip-name')?.textContent).toBe('Kind');
+    expect(last?.querySelector('.run-chip-id')?.getAttribute('title')).toBe('acc-2');
+    expect(chips[0]?.querySelector('.run-chip-id')).toBeNull();
   });
 
   it('opens the evidence references of its relationships on Evidence', async () => {
@@ -179,7 +230,7 @@ describe('masking and the personal-data list of the mapping', () => {
     };
     const kit = await runWorkspace({ profile, runDefinition: async () => ok(listedAnswer) });
     await ran();
-    expect(within(matchCard(1)).getByText('acc-2: p-date is 1990-01-01')).toBeTruthy();
+    expect(within(matchCard(1)).getByText('1990-01-01')).toBeTruthy();
     cleanup();
     document.body.replaceChildren();
     const masked = await runWorkspace({ profile, runDefinition: async () => ok(listedAnswer) });
@@ -189,7 +240,7 @@ describe('masking and the personal-data list of the mapping', () => {
     await openBuilder();
     await ran();
     expect(within(matchCard(1)).queryByText(/p-date/)).toBeNull();
-    expect(within(matchCard(1)).getByText('acc-2: p-plain is v')).toBeTruthy();
+    expect(within(matchCard(1)).getByText('p-plain')).toBeTruthy();
     expect(kit).toBeTruthy();
   });
 });

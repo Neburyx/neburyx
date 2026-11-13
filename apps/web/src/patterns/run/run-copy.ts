@@ -46,6 +46,8 @@ export const RUN_COPY = {
   editPattern: 'Edit pattern',
   matches: 'Matches',
   match: 'Match',
+  showAllProperties: (count: number): string => `Show all properties (${count})`,
+  showFewerProperties: 'Show fewer properties',
   evidence: 'Evidence',
   noEvidence: 'No evidence reference came with this match.',
   addToGraph: 'Add to graph',

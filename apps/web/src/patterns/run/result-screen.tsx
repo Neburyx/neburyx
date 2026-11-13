@@ -18,6 +18,7 @@ interface Props {
   readonly mask: boolean;
   /** The properties of an entity type that hold personal data, by the mapping. */
   readonly personal: (entityType: string) => readonly string[];
+  readonly keyProperties: (entityType: string) => readonly string[];
   readonly startName: string;
   readonly typeName: string;
   readonly add: AddResult;
@@ -60,7 +61,7 @@ function summaryOf(count: Count, returned: number, before: number, at: Date, pag
 }
 
 /** A page of a result: the count with its label, Add to graph for the page, a card for each match, and Previous and Next when the run has more pages. */
-export function ResultScreen({ answer, at, page, before, hasNext, reading, mask, personal, startName, typeName, add, evidenceOpener, notice, saveLink, onEdit, onRunAnother, onPrevious, onNext }: Props) {
+export function ResultScreen({ answer, at, page, before, hasNext, reading, mask, personal, keyProperties, startName, typeName, add, evidenceOpener, notice, saveLink, onEdit, onRunAnother, onPrevious, onNext }: Props) {
   const returned = answer.matches.length;
   const summary = summaryOf(answer.count, returned, before, at, page);
   const heading = useRef<HTMLHeadingElement>(null);
@@ -78,11 +79,11 @@ export function ResultScreen({ answer, at, page, before, hasNext, reading, mask,
         {notice}
         <div className="run-card run-summary" tabIndex={-1} ref={summaryRef}>
           <p className="run-count" role="status">
-            <strong>{summary.headline}</strong>
+            <strong className="run-figure">{summary.headline}</strong>
             {summary.chip === undefined ? null : (
               <>
                 <span aria-hidden="true"> · </span>
-                <span className="run-chip">{summary.chip}</span>
+                <span className="run-quality">{summary.chip}</span>
               </>
             )}
           </p>
@@ -117,7 +118,7 @@ export function ResultScreen({ answer, at, page, before, hasNext, reading, mask,
             </h3>
             <ol className="run-cards" aria-label={RUN_COPY.matches}>
               {answer.matches.map((match, index) => (
-                <MatchCard key={`${match.match.entityType}/${match.match.stableId}`} number={before + index + 1} match={match} answer={answer} mask={mask} personal={personal} add={add} evidenceOpener={evidenceOpener} />
+                <MatchCard key={`${match.match.entityType}/${match.match.stableId}`} number={before + index + 1} match={match} answer={answer} mask={mask} personal={personal} keyProperties={keyProperties} add={add} evidenceOpener={evidenceOpener} />
               ))}
             </ol>
             {answer.notices.map((notice, index) => (
