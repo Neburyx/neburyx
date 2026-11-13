@@ -1,0 +1,42 @@
+[
+  {
+    "id": "shared-addresses",
+    "name": "Shared addresses",
+    "template": "shared-attribute",
+    "bind": {
+      "anchor": "claimant",
+      "attribute": "address",
+      "via": "LIVES_AT"
+    },
+    "labels": [
+      {
+        "key": "anchor",
+        "text": "Starting claimant"
+      },
+      {
+        "key": "limit",
+        "text": "Max matching claimants"
+      }
+    ]
+  },
+  {
+    "id": "claimant-claims",
+    "name": "Claims by claimant",
+    "template": "linked-entities",
+    "bind": {
+      "anchor": "claimant",
+      "target": "claim",
+      "via": "FILED_BY"
+    },
+    "labels": [
+      {
+        "key": "anchor",
+        "text": "Starting claimant"
+      },
+      {
+        "key": "limit",
+        "text": "Max claims"
+      }
+    ]
+  }
+]

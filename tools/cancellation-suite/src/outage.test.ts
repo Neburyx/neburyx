@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { unavailableHeadline } from '../../../apps/web/src/banner/copy.js';
-import { HUB, NEIGHBOR_TYPES, personalise, startRig, until, type Rig } from './rig.js';
+import { HUB, NEIGHBOR_TYPES, PATTERN, personalise, startRig, until, type Rig } from './rig.js';
 
 let rig: Rig;
 afterEach(async () => {
@@ -64,5 +64,20 @@ describe('an expansion of three types whose source stops answering after the fir
     await asked;
     const body = JSON.stringify(last(rig)?.body);
     for (const leak of [/MATCH|RETURN|cypher/i, /bolt|neo4j|127\.0\.0\.1|graph\.example/i, /DEMO_USER|DEMO_PASSWORD|password/i]) expect(body).not.toMatch(leak);
+  });
+});
+
+describe('a template run whose source stops answering', () => {
+  it('shows no result, leaves the graph intact and holds no slot', async () => {
+    rig = await startRig();
+    personalise(rig);
+    const before = rig.snapshot();
+    rig.patterns.run({ id: PATTERN, params: { ref: { entityType: 'hub', stableId: 'H-1' } } });
+    (await rig.nextRead()).fail(unreachable);
+    await until(() => !rig.patterns.getState().running, 'the run to end');
+    expect(last(rig)).toMatchObject({ body: { error: { code: 'SOURCE_UNAVAILABLE', retryable: true } } });
+    expect(rig.patterns.getState()).toMatchObject({ failure: { code: 'SOURCE_UNAVAILABLE' }, result: undefined });
+    expect(rig.snapshot()).toBe(before);
+    await until(() => rig.slots.inspect().sources.size === 0 && rig.slots.inspect().users.size === 0, 'the read slots to be free');
   });
 });

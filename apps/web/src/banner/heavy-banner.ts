@@ -25,6 +25,12 @@ export interface HeavyBannerInput {
   readonly proceed: () => void;
 }
 
+/** The headline of a Heavy operation state: the estimate with its quality and the source's threshold. */
+export const heavyHeadline = (estimate: HeavyEstimate, threshold: number): string => `Estimated ${estimateText(estimate)} matches · warning threshold ${WHOLE.format(threshold)}`;
+
+/** The line under it: refine, or continue with a bounded limit. */
+export const heavyLine = (limit: number, perType = false): string => `Refine filters or continue with a bounded limit of ${limit}${perType ? ' per type' : ''}.`;
+
 /** The Heavy operation state: it tells the estimate and the threshold, never refuses, and names no node. */
 export function heavyBannerState(input: HeavyBannerInput): BannerState {
   const waitingText = input.waiting > 1 ? ` ${input.waiting} selected nodes are waiting.` : '';
@@ -32,8 +38,8 @@ export function heavyBannerState(input: HeavyBannerInput): BannerState {
     id: HEAVY_BANNER_ID,
     tone: 'warning',
     chip: HEAVY_CHIP,
-    headline: `Estimated ${estimateText(input.estimate)} matches · warning threshold ${WHOLE.format(input.threshold)}`,
-    text: `Refine filters or continue with a bounded limit of ${input.limit}${input.perType ? ' per type' : ''}.${waitingText}`,
+    headline: heavyHeadline(input.estimate, input.threshold),
+    text: `${heavyLine(input.limit, input.perType)}${waitingText}`,
     sideLabel: HEAVY_SIDE_LABEL,
     actions: [
       { id: 'refine', label: REFINE_FILTERS, run: input.refine },

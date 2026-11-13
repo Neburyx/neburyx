@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { HUB, personalise, startRig, until, type Rig } from './rig.js';
+import { HUB, PATTERN, personalise, startRig, until, type Rig } from './rig.js';
 
 let open: Rig | undefined;
 afterEach(async () => {
@@ -103,4 +103,36 @@ describe('the cancel placed at each point of the path of one answer', () => {
       }
     });
   }
+});
+
+describe('a template run whose answer reaches the client after the person cancelled', () => {
+  it('shows no result when the cancel lands after the whole body was read, and none is merged', async () => {
+    const rig = await begin();
+    personalise(rig);
+    const before = rig.snapshot();
+    rig.at.afterBody = () => rig.patterns.cancel();
+    rig.patterns.run({ id: PATTERN, params: { ref: { entityType: 'hub', stableId: 'H-1' } } });
+    (await rig.nextRead()).answerRows();
+    (await rig.nextRead()).answerRows();
+    await until(() => rig.patterns.getState().cancelled, 'the cancel');
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const view = rig.patterns.getState();
+    expect(view.result).toBeUndefined();
+    expect(view.failure).toBeUndefined();
+    expect(rig.snapshot()).toBe(before);
+  });
+
+  it('keeps the answer and ignores a cancel that comes after it', async () => {
+    const rig = await begin();
+    rig.patterns.run({ id: PATTERN, params: { ref: { entityType: 'hub', stableId: 'H-1' } } });
+    const count = await rig.nextRead();
+    count.answerRows();
+    (await rig.nextRead()).answerRows();
+    await until(() => rig.patterns.getState().result !== undefined, 'the result');
+    const settled = rig.snapshot();
+    rig.patterns.cancel();
+    expect(rig.patterns.getState()).toMatchObject({ cancelled: false });
+    expect(rig.patterns.getState().result).toBeDefined();
+    expect(rig.snapshot()).toBe(settled);
+  });
 });

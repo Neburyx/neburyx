@@ -77,6 +77,8 @@ export interface PresentationState {
   readonly mappedTypes: MappedTypes | undefined;
   /** The Filters panel is open; it and the Search panel are never open together. Not saved with a view, and kept when another source is bound. */
   readonly filtersOpen: boolean;
+  /** The Patterns panel is open; it, the Filters panel and the Search panel are never open together. Not saved with a view, and kept when another source is bound. */
+  readonly patternsOpen: boolean;
   readonly panelSizes: ReadonlyMap<string, number>;
   /** A panel is collapsed under the registration number it was collapsed with, so a panel taken out and registered again opens expanded. Not saved with a view. */
   readonly collapsedPanels: ReadonlyMap<string, number>;
@@ -134,6 +136,7 @@ export const INITIAL_PRESENTATION: PresentationState = {
   typeFilter: NO_TYPE_FILTER,
   mappedTypes: undefined,
   filtersOpen: false,
+  patternsOpen: false,
   panelSizes: new Map(),
   collapsedPanels: new Map(),
   legendOpen: false,
@@ -189,6 +192,7 @@ export interface PresentationActions {
   /** Switches every type on again. */
   resetTypeFilter(): void;
   setFiltersOpen(open: boolean): void;
+  setPatternsOpen(open: boolean): void;
   setPanelSize(panel: string, size: number): void;
   clearPanelSize(panel: string): void;
   setLegendOpen(open: boolean): void;
@@ -398,7 +402,11 @@ export function createPresentationStore(known: KnownElements): PresentationStore
     },
     setFiltersOpen(filtersOpen) {
       if (store.getState().filtersOpen === filtersOpen) return;
-      store.setState({ ...store.getState(), filtersOpen, ...(filtersOpen ? { searchOpen: false } : {}) });
+      store.setState({ ...store.getState(), filtersOpen, ...(filtersOpen ? { searchOpen: false, patternsOpen: false } : {}) });
+    },
+    setPatternsOpen(patternsOpen) {
+      if (store.getState().patternsOpen === patternsOpen) return;
+      store.setState({ ...store.getState(), patternsOpen, ...(patternsOpen ? { searchOpen: false, filtersOpen: false } : {}) });
     },
     replacePins(keys) {
       requireKnown(keys, known.isNode);
@@ -414,7 +422,7 @@ export function createPresentationStore(known: KnownElements): PresentationStore
     },
     setSearchOpen(searchOpen) {
       if (store.getState().searchOpen === searchOpen) return;
-      store.setState({ ...store.getState(), searchOpen, ...(searchOpen ? { filtersOpen: false } : {}) });
+      store.setState({ ...store.getState(), searchOpen, ...(searchOpen ? { filtersOpen: false, patternsOpen: false } : {}) });
     },
     setSearchTab(searchTab) {
       if (store.getState().searchTab === searchTab) return;
@@ -422,7 +430,7 @@ export function createPresentationStore(known: KnownElements): PresentationStore
     },
     requestSearch() {
       const current = store.getState();
-      store.setState({ ...current, searchOpen: true, filtersOpen: false, searchFocus: current.searchFocus + 1 });
+      store.setState({ ...current, searchOpen: true, filtersOpen: false, patternsOpen: false, searchFocus: current.searchFocus + 1 });
     },
     setSheetOpen(sheetOpen) {
       if (store.getState().sheetOpen === sheetOpen) return;
@@ -507,8 +515,8 @@ export function createPresentationStore(known: KnownElements): PresentationStore
       store.setState({ ...store.getState(), ...snapshot, walking: false, focused: undefined, moveNote: undefined, openMenu: undefined });
     },
     reset() {
-      const { tool, panelSizes, collapsedPanels, legendOpen, searchOpen, searchTab, searchFocus, sheetOpen, filtersOpen, mappedTypes } = store.getState();
-      store.setState({ ...INITIAL_PRESENTATION, tool, panelSizes, collapsedPanels, legendOpen, searchOpen, searchTab, searchFocus, sheetOpen, filtersOpen, mappedTypes });
+      const { tool, panelSizes, collapsedPanels, legendOpen, searchOpen, searchTab, searchFocus, sheetOpen, filtersOpen, patternsOpen, mappedTypes } = store.getState();
+      store.setState({ ...INITIAL_PRESENTATION, tool, panelSizes, collapsedPanels, legendOpen, searchOpen, searchTab, searchFocus, sheetOpen, filtersOpen, patternsOpen, mappedTypes });
     },
   };
 }

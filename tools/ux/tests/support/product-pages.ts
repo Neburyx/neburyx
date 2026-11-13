@@ -283,6 +283,22 @@ export const REACH: Readonly<Record<string, (page: Page) => Promise<void>>> = {
     await page.getByRole('menuitem', { name: 'Expand by type', exact: true }).first().click();
     await expect(page.getByRole('complementary', { name: 'Expand relationships' })).toBeVisible();
   },
+  'Explore with the Patterns panel open': async (page) => {
+    await openEntity(page, 'banking-demo', `PP-${unique()}`);
+    await expect(page.getByRole('application', { name: 'Graph canvas' })).toBeVisible();
+    await page.getByRole('button', { name: 'Patterns', exact: true }).click();
+    await expect(page.getByRole('complementary', { name: 'Patterns' }).getByRole('button', { name: 'Run pattern' })).toBeVisible();
+  },
+  "Explore with the Patterns panel's Heavy operation state": async (page) => {
+    await openEntity(page, 'banking-demo', `PH-${unique()}`);
+    await expect(page.getByRole('application', { name: 'Graph canvas' })).toBeVisible();
+    await page.getByRole('button', { name: 'Patterns', exact: true }).click();
+    const panel = page.getByRole('complementary', { name: 'Patterns' });
+    await panel.getByLabel('Starting account').selectOption({ index: 1 });
+    await panel.getByLabel('Min shared').fill('2');
+    await panel.getByRole('button', { name: 'Run pattern' }).click();
+    await expect(panel.getByRole('button', { name: 'Continue with 25' })).toBeVisible();
+  },
   'Explore with the inspector open': async (page) => {
     await openEntity(page, 'banking-demo', `PI-${unique()}`);
     const canvas = page.getByRole('application', { name: 'Graph canvas' });

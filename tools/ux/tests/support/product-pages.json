@@ -33,6 +33,8 @@
     { "name": "Explore with the Search panel open", "route": "explore/:investigationId" },
     { "name": "Explore with the Expand relationships panel open", "route": "explore/:investigationId" },
     { "name": "Explore with the inspector open", "route": "explore/:investigationId" },
+    { "name": "Explore with the Patterns panel open", "route": "explore/:investigationId" },
+    { "name": "Explore with the Patterns panel's Heavy operation state", "route": "explore/:investigationId" },
     { "name": "Explore with the Search panel's Add tab", "route": "explore/:investigationId" },
     { "name": "Explore with the Search panel's Add tab failed", "route": "explore/:investigationId" },
     { "name": "Explore with its read failed", "route": "explore/:investigationId" },

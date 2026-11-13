@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { HUB, NEIGHBOR_TYPES, personalise, startRig, until, type Rig } from './rig.js';
+import { HUB, NEIGHBOR_TYPES, PATTERN, personalise, startRig, until, type Rig } from './rig.js';
 
 let rig: Rig;
 afterEach(async () => {
@@ -92,6 +92,20 @@ describe('an expansion whose read times out', () => {
     expect(await asked).toBe('failed');
     expect(last(rig)).toMatchObject({ status: 504, body: { error: { code: 'QUERY_TIMEOUT', details: { timeoutMs: 10_000 } } } });
     expect(rig.showing()?.headline).toContain('10 s');
+    expect(rig.snapshot()).toBe(before);
+  });
+});
+
+describe('a template run whose read times out', () => {
+  it('answers QUERY_TIMEOUT with the limit, shows no result and leaves the client as it was', async () => {
+    rig = await startRig();
+    personalise(rig);
+    const before = rig.snapshot();
+    rig.patterns.run({ id: PATTERN, params: { ref: { entityType: 'hub', stableId: 'H-1' } } });
+    (await rig.nextRead()).fail(timeout);
+    await until(() => !rig.patterns.getState().running, 'the run to end');
+    expect(last(rig)).toMatchObject({ status: 504, body: { error: { code: 'QUERY_TIMEOUT', retryable: true, details: { timeoutMs: 5000 } } } });
+    expect(rig.patterns.getState()).toMatchObject({ failure: { code: 'QUERY_TIMEOUT' }, result: undefined });
     expect(rig.snapshot()).toBe(before);
   });
 });

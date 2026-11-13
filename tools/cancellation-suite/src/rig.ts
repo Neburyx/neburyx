@@ -2,6 +2,7 @@ import { rmSync } from 'node:fs';
 import type { ElementRef, GraphEdge, GraphNode } from '@neburyx/contracts';
 import { createApiClient, type ApiClient } from '../../../apps/web/src/api/client.js';
 import { createExpandStore, type ExpandStore } from '../../../apps/web/src/api/expand-store.js';
+import { createPatternRunStore, type PatternRunStore } from '../../../apps/web/src/patterns/pattern-run-store.js';
 import { createDerivedStore, type DerivedStore } from '../../../apps/web/src/api/derived-store.js';
 import { createPreviewStore, type PreviewStore } from '../../../apps/web/src/api/preview-store.js';
 import { bannerReporter } from '../../../apps/web/src/banner/banner-reporter.js';
@@ -34,6 +35,8 @@ import { makeWebRoot } from '../../../services/api/src/testing/web-root.js';
 export const SOURCE = 'demo';
 /** The rule of the mapping that starts from the hub. */
 export const RULE = 'shared-leaf';
+/** The preset of the mapping that a pattern run starts from the hub. */
+export const PATTERN = 'shared-leaves';
 export const HUB: ElementRef = ref(SOURCE, 'hub', 'H-1');
 /** A second node to expand, so that two requests are not one node's newer ask replacing its older. */
 export const HUB_TWO: ElementRef = ref(SOURCE, 'hub', 'H-2');
@@ -56,6 +59,7 @@ const mappingWith = (budgets: Record<string, number> | undefined) => parseMappin
         { type: 'HOLDS', from: 'hub', to: 'item', stable_id: 'relId' },
       ],
       derived: [{ id: RULE, from: 'hub', to: 'hub', via: ['LINKED', 'leaf', 'LINKED'], rule_version: 1 }],
+      patterns: [{ id: PATTERN, name: 'Shared leaves', template: 'shared-attribute', bind: { anchor: 'hub', attribute: 'leaf', via: 'LINKED' } }],
     }),
   ),
   'neburyx.yaml',
@@ -109,7 +113,7 @@ function scriptedSource(mapping: ReturnType<typeof mappingWith>) {
     const neighborType = String(call.parameters['neighborType']);
     return new Promise<ExecuteOutcome>((resolve) => {
       const degrees = Object.fromEntries(Array.from({ length: DEGREE_COLUMNS }, (_, index) => [`c${index}`, 1]));
-      const rows = (count: number): readonly Record<string, unknown>[] => (call.templateId === EXPAND_NEIGHBORS_ID ? Array.from({ length: count }, (_, index) => rowFor(neighborType, index + 1)) : call.templateId.startsWith('degree-preview') ? [degrees] : call.templateId === 'edge-load' ? [EDGE_ROW] : call.templateId === 'derived-edge-support' ? [SUPPORT_ROW] : []);
+      const rows = (count: number): readonly Record<string, unknown>[] => (call.templateId === EXPAND_NEIGHBORS_ID ? Array.from({ length: count }, (_, index) => rowFor(neighborType, index + 1)) : call.templateId.startsWith('degree-preview') ? [degrees] : call.templateId === 'shared-attribute-count' ? [{ matches: 0, anchorBounded: false, skipped: false }] : call.templateId === 'shared-attribute' ? [{ a: hubNode, skipped: false, bounded: false, b: null, xs: null, ras: null, rbs: null, shared: null, evidenceCut: null }] : call.templateId === 'edge-load' ? [EDGE_ROW] : call.templateId === 'derived-edge-support' ? [SUPPORT_ROW] : []);
       const read: Read = { call, neighborType, answerRows: (count = 1) => resolve({ status: 'rows', rows: rows(count) }), fail: resolve };
       call.signal?.addEventListener('abort', () => resolve({ status: 'cancelled' }), { once: true });
       if (draining) return read.answerRows();
@@ -138,6 +142,8 @@ export interface Rig {
   readonly expand: ExpandStore;
   readonly preview: PreviewStore;
   readonly derived: DerivedStore;
+  /** The run store of the Patterns panel, over the same client. */
+  readonly patterns: PatternRunStore;
   readonly banner: ReturnType<typeof createBuiltInBannerController>;
   readonly tracker: ReturnType<typeof createRequestTracker>;
   readonly events: AuditEvent[];
@@ -273,6 +279,7 @@ export async function startOn(backing: Backing, options: { readonly delayMs?: nu
   const expand = createExpandStore(client, state, () => 'person-1', report, undefined, tracker);
   const preview = createPreviewStore(client, () => 'person-1', report, tracker);
   const derived = createDerivedStore(client, state, () => 'person-1', () => state.investigation.getState().id ?? '');
+  const patterns = createPatternRunStore(client, SOURCE_ID, false);
   const showing = () => {
     const current = banner.view.getState().banner;
     return current === undefined ? undefined : { id: current.id, headline: current.headline, actions: current.actions.map((action) => action.id) };
@@ -299,9 +306,10 @@ export async function startOn(backing: Backing, options: { readonly delayMs?: nu
     action.run();
   };
   return {
-    state, client, expand, preview, derived, banner, tracker, events, executor, nextRead, drain, loaded, hub: backing.hub, slots, saved, requests, bodies, order, at, cancelNow, responses, advance: (ms: number) => void (time.now += ms), showing, pressCancel, snapshot,
+    state, client, expand, preview, derived, patterns, banner, tracker, events, executor, nextRead, drain, loaded, hub: backing.hub, slots, saved, requests, bodies, order, at, cancelNow, responses, advance: (ms: number) => void (time.now += ms), showing, pressCancel, snapshot,
     logged: () => lines.map((line) => JSON.parse(line) as Record<string, unknown>),
     close: async () => {
+      patterns.dispose();
       app.server.closeAllConnections();
       await app.close();
       rmSync(webRoot, { recursive: true, force: true });

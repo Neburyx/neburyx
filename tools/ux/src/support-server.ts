@@ -2,10 +2,12 @@ import { readFile, stat } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { extname, join, normalize, sep } from 'node:path';
+import { createPatterns } from './support-patterns.ts';
 import { exportRequestSchema, IDEMPOTENCY_KEY_PATTERN, deleteViewRequestSchema, restoreInvestigationRequestSchema, DEFAULT_INVESTIGATION_LIST_LIMIT, DEFAULT_VIEW_PAGE, MAX_INVESTIGATION_LIST_LIMIT, MAX_VIEW_PAGE, viewListQuerySchema, parseEdgeRefSegment, renameRequestSchema, renameViewRequestSchema, saveViewRequestSchema, statusChangeRequestSchema, investigationListCountsSchema, nodeSchema, investigationListQuerySchema, type Investigation, type LastTest, openInvestigationRequestSchema, SEARCH_GROUP_CAP, searchMoreRequestSchema, searchMoreResultSchema, searchRequestSchema, searchResultSchema, type SourceSummary, sourceSummaryFieldsSchema, sourceSummarySchema, type SourceTestReport, type EdgeReadRef, valueOfPathSegment } from '@neburyx/contracts';
 
 interface SupportProfile {
   readonly sourceId: string;
+  readonly presets?: readonly unknown[];
   readonly entityTypes?: readonly { readonly type: string }[];
 }
 
@@ -909,6 +911,7 @@ export function createSupportServer(options: SupportServerOptions): Server {
   const investigations = createInvestigations(options);
   const search = createSearch(options);
   const sources = createSources(options);
+  const patterns = createPatterns(() => profilesOf(options));
   return createServer((request: IncomingMessage, response: ServerResponse) => {
     void (async () => {
       const path = new URL(request.url ?? '/', 'http://localhost').pathname;
@@ -941,6 +944,10 @@ export function createSupportServer(options: SupportServerOptions): Server {
         if (request.method === 'POST' && viewId !== undefined && restoring !== undefined) return investigations.restoreView(id, decodeURIComponent(viewId), request.headers['if-match'], response);
         if (request.method === 'POST' && viewId !== undefined && action === '/delete') return investigations.deleteView(id, decodeURIComponent(viewId), request.headers['if-match'], await bodyOf(request), response);
       }
+      if (request.method === 'GET' && path === '/v1/templates') return patterns.list(new URL(request.url ?? '/', 'http://localhost').searchParams.get('sourceId'), response);
+      const running = /^\/v1\/templates\/([^/]+)\/run$/.exec(path);
+      if (request.method === 'POST' && running?.[1] !== undefined) return patterns.run(decodeURIComponent(running[1]), await bodyOf(request), response, request);
+      if (request.method === 'POST' && path === '/__support/patterns-mode') return patterns.setMode(await bodyOf(request), response);
       if (request.method === 'POST' && path === '/v1/search/entities') return search.run(await bodyOf(request), response);
       if (request.method === 'POST' && path === '/v1/search/entities/more') return search.more(await bodyOf(request), response);
       if (request.method === 'POST' && path === '/__support/seed-investigations') return investigations.seed(await bodyOf(request), response);

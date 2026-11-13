@@ -894,6 +894,10 @@
   --icon: url('../assets/lucide/sliders-horizontal.svg');
 }
 
+.icon-patterns {
+  --icon: url('../assets/lucide/shapes.svg');
+}
+
 .icon-plus {
   --icon: url('../assets/lucide/plus.svg');
 }

@@ -13,6 +13,8 @@ The forced slow read swaps a slow statement into the adapter's call; the session
 
 The reads of the evidence of a relationship are cases too: `edge.test.ts` for a stored one and `derived-edge.test.ts` for a rule-derived one (the answer, a cancel, a timeout and an unreachable source, each leaving the client as it was). `services/api/src/graph/cancel-routes.test.ts` lists every route that reads the source, the evidence reads and the record link among them, and fails for a registered route it does not name.
 
+A pattern run (`POST /v1/templates/{id}/run`) is a case in `abort.test.ts` (cancelled while the estimate is read), `timeout.test.ts`, `outage.test.ts` and `race.test.ts` (the answer and the cancel crossing, and a cancel after the answer), over the same run store the Patterns panel uses; each leaves the client as it was.
+
 `source-change.test.ts` is the one case that is not about a cancel: an investigation whose source was re-pointed or removed, on the same real API and client. It proves that opening it, listing it and every write to it make no read of the source (counted at the scripted source and in the client's requests), that `neburyx source rebind` then lets it open normally without a restart, and that an investigation of another source is not touched.
 
 Synthetic data only. Nothing here prints an address or a login.

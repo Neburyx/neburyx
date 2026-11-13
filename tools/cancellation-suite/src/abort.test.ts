@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { HUB, HUB_THREE, HUB_TWO, NEIGHBOR_TYPES, personalise, RULE, startRig, until, type Rig } from './rig.js';
+import { HUB, HUB_THREE, HUB_TWO, NEIGHBOR_TYPES, PATTERN, personalise, RULE, startRig, until, type Rig } from './rig.js';
 import { elementKey } from '../../../apps/web/src/state/keys.js';
 import { cancelledHeadline } from '../../../apps/web/src/banner/copy.js';
 import { EXPAND_NEIGHBORS_ID } from '../../../services/api/src/gate/templates/expand-neighbors.js';
@@ -190,5 +190,24 @@ describe('the snapshot', () => {
     } finally {
       await other.close();
     }
+  });
+});
+
+describe('cancelling a running template run', () => {
+  it('aborts the estimate read, shows no result and leaves the client as it was, also when the source answers afterwards', async () => {
+    rig = await startRig();
+    personalise(rig);
+    const before = rig.snapshot();
+    rig.patterns.run({ id: PATTERN, params: { ref: { entityType: 'hub', stableId: 'H-1' } } });
+    const read = await rig.nextRead();
+    expect(read.call.templateId).toBe('shared-attribute-count');
+    rig.patterns.cancel();
+    await until(() => read.call.signal?.aborted === true, 'the read to be aborted');
+    expect(rig.patterns.getState()).toMatchObject({ running: false, cancelled: true, result: undefined, failure: undefined });
+    read.answerRows();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(rig.patterns.getState().result).toBeUndefined();
+    expect(rig.snapshot()).toBe(before);
+    await until(() => rig.slots.inspect().sources.size === 0 && rig.slots.inspect().users.size === 0, 'the read slots to be free');
   });
 });
