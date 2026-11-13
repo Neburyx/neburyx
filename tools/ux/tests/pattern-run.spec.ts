@@ -42,7 +42,7 @@ test.describe('running a pattern built in the panel', () => {
     await expect(resultOf(page)).toContainText('AUTH-77300, AUTH-77301');
   });
 
-  test('walks Starts from, its search, Run pattern and Add to graph with Tab and back with Shift+Tab', async ({ page }) => {
+  test('walks Starts from, its search, Run pattern, Save pattern and Add to graph with Tab and back with Shift+Tab', async ({ page }) => {
     await built(page, 'AC-1');
     await runOf(page).click();
     await expect(resultOf(page)).toBeVisible();
@@ -55,7 +55,10 @@ test.describe('running a pattern built in the panel', () => {
     await page.keyboard.press('Tab');
     await expect(runOf(page)).toBeFocused();
     await page.keyboard.press('Tab');
+    await expect(builderOf(page).getByRole('button', { name: 'Save pattern' })).toBeFocused();
+    await page.keyboard.press('Tab');
     await expect(add).toBeFocused();
+    await page.keyboard.press('Shift+Tab');
     await page.keyboard.press('Shift+Tab');
     await expect(runOf(page)).toBeFocused();
     await page.keyboard.press('Shift+Tab');
@@ -97,7 +100,8 @@ test.describe('running a pattern built in the panel', () => {
     const before = (await drawing(page)).nodes.length;
     await runOf(page).click();
     await expect(builderOf(page).getByText(/^Running/)).toBeVisible();
-    await builderOf(page).getByRole('button', { name: 'Cancel' }).click();
+    // the Cancel of the run, not the editor's own in its footer
+    await builderOf(page).locator('.patterns-actions').getByRole('button', { name: 'Cancel' }).click();
     await expect(builderOf(page).getByText('Cancelled. No new matches shown.')).toBeVisible();
     await expect(resultOf(page)).toHaveCount(0);
     expect((await drawing(page)).nodes.length).toBe(before);

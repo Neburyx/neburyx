@@ -58,7 +58,7 @@ test.describe('the pattern builder in the Patterns panel', () => {
     await expect(builderOf(page).getByText('The mapping can follow this pattern')).toBeVisible();
   });
 
-  test('says not valid for the scripted start type, with the problem next to Starts at', async ({ page }) => {
+  test('lists the problem of the scripted start type with Show, which opens the Start tab and focuses its type', async ({ page }) => {
     await openBuilder(page);
     await builderOf(page).getByLabel('Starting entity type').selectOption({ label: 'Merchant' });
     await builderOf(page).getByRole('button', { name: '+ Step' }).click();
@@ -68,9 +68,11 @@ test.describe('the pattern builder in the Patterns panel', () => {
     await stepOf(page, 1).getByRole('button', { name: '+ Add type' }).click();
     await page.getByRole('menuitemcheckbox').first().click();
     await page.keyboard.press('Escape');
-    await expect(builderOf(page).getByText(/^Not valid\./)).toBeVisible();
-    await builderOf(page).getByRole('tab', { name: 'Start' }).click();
-    await expect(builderOf(page).getByText('This type is not in the mapping.')).toBeVisible();
+    await expect(builderOf(page).getByText('1 problem from the source. Preview is off.')).toBeVisible();
+    await expect(builderOf(page).getByRole('group', { name: 'The mapping cannot follow this pattern yet' })).toContainText('Start: This type is not in the mapping.');
+    await builderOf(page).getByRole('button', { name: 'Show problem 1' }).click();
+    await expect(builderOf(page).getByLabel('Starting entity type')).toBeFocused();
+    await expect(builderOf(page).getByText('This type is not in the mapping.').first()).toBeVisible();
   });
 
   test('holds no control that accepts text: every control is a choice, a checkbox or a button', async ({ page }) => {
@@ -90,24 +92,25 @@ test.describe('the pattern builder in the Patterns panel', () => {
     await expect(builderOf(page).getByLabel('Starting entity type')).toBeFocused();
   });
 
-  test.fixme('walks every control in reading order with Tab, and back with Shift+Tab (rewritten with the editing keyboard story)', async ({ page }) => {
+  test('walks the stops of the editor in the frame’s order with Tab: the panel’s Close, the step tabs as one stop, + Step, Remove step, the parts as one stop, the direction, Add type, Arrives at, then Cancel and Preview', async ({ page }) => {
     await openBuilder(page);
     await builderOf(page).getByLabel('Starting entity type').selectOption({ label: 'Account' });
     await buildStep(page, 1, 'out', 'Device', ['USES_DEVICE']);
-    const boxes = stepOf(page, 1).getByRole('checkbox');
-    const order = [builderOf(page).getByLabel('Starting entity type'), stepOf(page, 1).getByLabel('Direction'), stepOf(page, 1).getByLabel('Arrives at')];
-    for (let index = 0; index < (await boxes.count()); index += 1) order.push(boxes.nth(index));
-    order.push(stepOf(page, 1).getByRole('button', { name: 'Add condition' }), stepOf(page, 1).getByRole('combobox', { name: 'Window' }));
-    order.push(stepOf(page, 1).getByRole('button', { name: 'Remove step' }), builderOf(page).getByRole('button', { name: '+ Step' }));
-    await order[0]?.focus();
-    for (const control of order.slice(1)) {
+    await expect(builderOf(page).getByText('The mapping can follow this pattern')).toBeVisible();
+    await panelOf(page).getByRole('button', { name: 'Close Patterns' }).focus();
+    const names: string[] = [];
+    for (let count = 0; count < 40; count += 1) {
+      names.push(await page.evaluate(() => (document.activeElement?.getAttribute('aria-label') ?? document.activeElement?.textContent ?? '').trim()));
+      if (names[names.length - 1] === 'Preview') break;
       await page.keyboard.press('Tab');
-      await expect(control).toBeFocused();
     }
-    for (const control of [...order].reverse().slice(1)) {
-      await page.keyboard.press('Shift+Tab');
-      await expect(control).toBeFocused();
-    }
+    const order = ['Close Patterns', 'Step 1', '+ Step', 'Remove step 1', 'Link', 'Outgoing', 'Incoming', 'Either', 'Remove USES_DEVICE', '+ Add type', 'Cancel', 'Preview'];
+    const at = order.map((name) => names.indexOf(name));
+    expect(at.every((place) => place >= 0), names.join(' | ')).toBe(true);
+    expect([...at].sort((left, right) => left - right)).toEqual(at);
+    // one stop for the step tabs and one for the parts: no other tab of either row is visited
+    expect(names).not.toContain('Start');
+    expect(names).not.toContain('Window · none');
   });
 
   test('keeps every control inside the window with four steps, the panel scrolling inside itself', async ({ page }) => {
@@ -133,47 +136,91 @@ const PACK = { source: 'banking-demo', entity: 'AC-1', start: 'Account', arrives
 test.describe('conditions and a window in the builder', () => {
   test.beforeEach(async ({ page }) => openOneEntity(page, PACK.source, PACK.entity));
 
-  test.fixme('offers only the filterable properties, and a two-step pattern with an equality, a range and a window, built by keyboard alone, makes a definition the server accepts', async ({ page }) => {
+  test('builds a two-step pattern with an equality, a range and a window by keyboard alone, and the source says it is valid', async ({ page }) => {
     await openBuilder(page);
     await pick(page, builderOf(page).getByLabel('Starting entity type'), PACK.start);
     await press(page, builderOf(page).getByRole('button', { name: '+ Step' }));
-    await pick(page, stepOf(page, 1).getByLabel('Direction'), 'Outgoing');
+    await press(page, stepOf(page, 1).getByRole('radio', { name: 'Outgoing' }));
     await pick(page, stepOf(page, 1).getByLabel('Arrives at'), PACK.arrives);
-    await space(page, stepOf(page, 1).getByRole('checkbox', { name: PACK.types[0] }));
+    await press(page, stepOf(page, 1).getByRole('button', { name: '+ Add type' }));
+    await page.keyboard.press('Space');
+    await page.keyboard.press('Escape');
     const step = stepOf(page, 1);
-    await press(page, step.getByRole('button', { name: 'Add condition' }));
-    expect(await step.getByLabel('Step 1 condition 1: Property').locator('option').allTextContents()).toEqual([...PACK.node, ...PACK.relationship]);
+    await step.getByRole('tab', { name: 'Link' }).focus();
+    await page.keyboard.press('ArrowRight');
+    await expect(step.getByRole('tab', { name: /^Conditions/ })).toHaveAttribute('aria-selected', 'true');
+    // the menu offers only what the mapping lets a condition use, node properties first
+    await press(page, step.getByRole('button', { name: '+ Add condition' }));
+    expect(await page.getByRole('menuitem').locator('.popup-menu-type').allTextContents()).toEqual(['platform', 'channel', 'lastSeen']);
+    await page.keyboard.press('Enter');
     await typeInto(page, step.getByLabel('Step 1 condition 1: Value'), 'ios');
-    await press(page, step.getByRole('button', { name: 'Add condition' }));
-    await pick(page, step.getByLabel('Step 1 condition 2: Property'), `Relationship: ${PACK.dated}`);
+    await press(page, step.getByRole('group', { name: 'Step 1 condition 1' }).getByRole('button', { name: 'Done' }));
+    await press(page, step.getByRole('button', { name: '+ Add condition' }));
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('Enter');
     await pick(page, step.getByLabel('Step 1 condition 2: Operator'), 'is between');
     await pick(page, step.getByLabel('Step 1 condition 2: Kind of value'), 'Date');
     await typeInto(page, step.getByLabel('Step 1 condition 2: From'), '2026-01-01');
-    await pick(page, step.getByRole('combobox', { name: 'Window' }), 'Last N days');
+    await press(page, step.getByRole('group', { name: 'Step 1 condition 2' }).getByRole('button', { name: 'Done' }));
+    await step.getByRole('tab', { name: /^Conditions/ }).focus();
+    await page.keyboard.press('ArrowRight');
+    await press(page, step.getByRole('radio', { name: 'Last N days' }));
     await typeInto(page, step.getByLabel('Step 1 window: Days'), '30');
     await press(page, builderOf(page).getByRole('button', { name: '+ Step' }));
-    await pick(page, stepOf(page, 2).getByLabel('Direction'), 'Incoming');
+    await press(page, stepOf(page, 2).getByRole('radio', { name: 'Incoming' }));
     await pick(page, stepOf(page, 2).getByLabel('Arrives at'), PACK.start);
-    await space(page, stepOf(page, 2).getByRole('checkbox', { name: PACK.types[0] }));
+    await press(page, stepOf(page, 2).getByRole('button', { name: '+ Add type' }));
+    await page.keyboard.press('Space');
+    await page.keyboard.press('Escape');
     await expect(builderOf(page).getByText('The mapping can follow this pattern')).toBeVisible();
+    await expect(builderOf(page).getByRole('button', { name: 'Preview' })).toBeEnabled();
   });
 
-  test.fixme('Tab walks a condition row in order and Enter on Remove condition takes it away', async ({ page }) => {
+  test('Tab walks the form of a condition in order, Done closes it, and Enter on Remove condition takes the row away', async ({ page }) => {
     await openBuilder(page);
     await builderOf(page).getByLabel('Starting entity type').selectOption({ label: PACK.start });
     await buildStep(page, 1, 'out', PACK.arrives, PACK.types);
     const step = stepOf(page, 1);
-    await step.getByRole('button', { name: 'Add condition' }).click();
+    await step.getByRole('tab', { name: /^Conditions/ }).click();
+    await step.getByRole('button', { name: '+ Add condition' }).click();
+    await page.keyboard.press('Enter');
     const row = step.getByRole('group', { name: 'Step 1 condition 1' });
-    const order = ['Property', 'Operator', 'Value', 'Kind of value'].map((label) => row.getByLabel(`Step 1 condition 1: ${label}`));
-    await order[0]?.focus();
+    const order = ['Property', 'Operator', 'Kind of value', 'Value'].map((label) => row.getByLabel(`Step 1 condition 1: ${label}`));
+    await expect(order[0]).toBeFocused();
     for (const control of order.slice(1)) {
       await page.keyboard.press('Tab');
       await expect(control).toBeFocused();
     }
+    await typeInto(page, order[3] ?? row, 'ios');
     await page.keyboard.press('Tab');
-    await expect(row.getByRole('button', { name: /^Remove condition/ })).toBeFocused();
+    await expect(row.getByRole('button', { name: 'Done' })).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(row.getByText('platform is ios')).toBeVisible();
+    await row.getByRole('button', { name: /^Edit condition: / }).focus();
+    await page.keyboard.press('Tab');
+    await expect(row.getByRole('button', { name: /^Remove condition: / })).toBeFocused();
     await page.keyboard.press('Enter');
     await expect(row).toHaveCount(0);
+  });
+
+  test('a change to the start leaves the later steps and marks them, and Undo change puts the pattern back', async ({ page }) => {
+    await openBuilder(page);
+    await builderOf(page).getByLabel('Starting entity type').selectOption({ label: 'Account' });
+    await buildStep(page, 1, 'out', 'Device', ['USES_DEVICE']);
+    await buildStep(page, 2, 'in', 'Account', ['USES_DEVICE']);
+    const before = await builderOf(page).getByRole('group', { name: 'Path' }).textContent();
+    await builderOf(page).getByRole('tab', { name: 'Start' }).click();
+    await builderOf(page).getByLabel('Starting entity type').selectOption({ label: 'Device' });
+    const banner = builderOf(page).getByRole('group', { name: 'Changes that break the pattern' });
+    await expect(banner).toContainText('Changing the start leaves');
+    await expect(banner).toContainText('Nothing is removed for you.');
+    await expect(builderOf(page).getByRole('tab', { name: /^Step 1 !$/ })).toBeVisible();
+    await expect(builderOf(page).getByRole('tab', { name: /^Step 2/ })).toBeVisible();
+    await expect(builderOf(page).getByRole('button', { name: 'Preview' })).toBeDisabled();
+    await banner.getByRole('button', { name: 'Undo change' }).click();
+    await expect(banner).toHaveCount(0);
+    await expect(builderOf(page).getByLabel('Starting entity type')).toHaveValue(/account/i);
+    await expect(builderOf(page).getByRole('group', { name: 'Path' })).toHaveText(before ?? '');
   });
 });

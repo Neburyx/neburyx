@@ -37,8 +37,7 @@ export function TabList({ label, idPrefix, tabs, selected, onSelect, trailing, c
     if (next === undefined) return;
     if (activation === 'automatic') onSelect(next.id);
     const target = list.current?.querySelector<HTMLElement>(`#${CSS.escape(tabId(idPrefix, next.id))}`);
-    if (activation === 'manual') target?.focus();
-    else requestAnimationFrame(() => target?.focus());
+    target?.focus();
   };
   return (
     <div className={className === undefined ? 'editor-tabs' : `editor-tabs ${className}`}>

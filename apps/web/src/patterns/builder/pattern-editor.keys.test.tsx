@@ -41,7 +41,7 @@ describe('the keyboard in the editor', () => {
     expect(at.every((place) => place >= 0), stops.join(' | ')).toBe(true);
     expect([...at].sort((left, right) => left - right)).toEqual(at);
     // the inline run is the only thing between Add condition and Cancel, until the run lane replaces it
-    expect(stops.slice(at[0], at[3] + 1)).toEqual(['Close Patterns', 'Step 1', '+ Step', 'Remove step 1']);
+    expect(stops.slice(at[0] ?? 0, (at[3] ?? 0) + 1)).toEqual(['Close Patterns', 'Step 1', '+ Step', 'Remove step 1']);
   });
 
   it('reads a step tab with where it is and whether it is valid, and a part tab with its conditions or problems', async () => {

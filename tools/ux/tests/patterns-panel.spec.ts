@@ -109,7 +109,7 @@ test.describe('the Patterns panel on the canvas', () => {
     await panelOf(page).getByLabel('Max matching accounts').fill(LIMITS.busy);
     await runOf(page).click();
     await expect(panelOf(page).getByText(/is busy\. No read slot freed within the wait\./)).toBeVisible();
-    await expect(panelOf(page).getByRole('button', { name: 'Retry' })).toBeVisible();
+    await expect(panelOf(page).getByRole('button', { name: 'Try again' })).toBeVisible();
     await expect(panelOf(page).getByLabel('Max matching accounts')).toHaveValue(LIMITS.busy);
   });
 
