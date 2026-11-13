@@ -176,3 +176,67 @@ describe('a load that finds nothing new', () => {
     expect(store.notes.getState()).toEqual([NOTHING_NEW]);
   });
 });
+
+describe('the window of an expansion', () => {
+  it('is the last 7 days until the person chooses another, and is sent from every way of asking', async () => {
+    const { asked, store } = rig((_, at) => ok(answer(`r${at}`, at < 3 ? 'v1.c.m' : undefined)));
+    expect(store.windowOf(anchor)).toEqual({ days: 7 });
+    await store.expand(anchor, ['kind-b']);
+    await store.load(anchor, { first: ['kind-b'], more: [], relTypes: undefined });
+    await store.loadMore(anchor, 'kind-b');
+    await store.startOver(anchor, 'kind-b');
+    expect(asked.map((body) => body.window)).toEqual([{ days: 7 }, { days: 7 }, { days: 7 }, { days: 7 }]);
+  });
+
+  it('sends the number of days the person chose, and no window at all for all time', async () => {
+    const { asked, store } = rig(() => ok(answer('r1')));
+    store.setWindow(anchor, { days: 30 });
+    await store.expand(anchor, ['kind-b']);
+    store.setWindow(anchor, 'all');
+    await store.expand(anchor, ['kind-b']);
+    expect(asked[0]?.window).toEqual({ days: 30 });
+    expect(asked[1]).not.toHaveProperty('window');
+  });
+
+  it('keeps the window a chain began with for its next pages, whatever the person has chosen since, and begins the next chain with the new one', async () => {
+    const { asked, store } = rig((_, at) => ok(answer(`r${at}`, at === 1 ? 'v1.c.m' : undefined)));
+    await store.expand(anchor, ['kind-b']);
+    store.setWindow(anchor, { days: 90 });
+    await store.loadMore(anchor, 'kind-b');
+    await store.expand(anchor, ['kind-b']);
+    expect(asked.map((body) => body.window)).toEqual([{ days: 7 }, { days: 7 }, { days: 90 }]);
+    expect(asked[1]?.cursors).toBeDefined();
+    expect(asked[2]).not.toHaveProperty('cursors');
+  });
+
+  it('holds, for each type, how the window applied and the two UTC instants of the first answer of its chain, and the count scoped to the window', async () => {
+    const windowed: ExpandResponse = {
+      ...answer('r1', 'v1.c.m'),
+      window: { from: '2026-11-05T00:00:00.000Z', to: '2026-11-13T00:00:00.000Z' },
+      pages: [{ ...page('v1.c.m'), matchingTotal: { value: 41, quality: 'exact', scope: 'expand:window' }, window: { applied: 'partial', notAppliedTo: ['link-z'], undatedLeftOut: 3 } }],
+    };
+    const { store } = rig(() => ok(windowed));
+    await store.expand(anchor, ['kind-b']);
+    const progress = store.of(anchor).types.get('kind-b');
+    expect(progress?.window).toEqual({ applied: 'partial', notAppliedTo: ['link-z'], undatedLeftOut: 3 });
+    expect(progress?.range).toEqual({ from: '2026-11-05T00:00:00.000Z', to: '2026-11-13T00:00:00.000Z' });
+    expect(progress?.matching).toMatchObject({ value: 41, scope: 'expand:window' });
+  });
+
+  it('keeps the window and its dates when a later page of the chain is read', async () => {
+    const windowed = (cursor: string | undefined): ExpandResponse => ({ ...answer('r', cursor), window: { from: '2026-11-05T00:00:00.000Z', to: '2026-11-13T00:00:00.000Z' }, pages: [{ ...page(cursor), window: { applied: 'full', notAppliedTo: [] } }] });
+    const { store } = rig((_, at) => ok(windowed(at === 1 ? 'v1.c.m' : undefined)));
+    await store.expand(anchor, ['kind-b']);
+    await store.loadMore(anchor, 'kind-b');
+    expect(store.of(anchor).types.get('kind-b')?.window).toEqual({ applied: 'full', notAppliedTo: [] });
+  });
+
+  it('keeps a failed ask and the window chosen: the next ask still sends it', async () => {
+    const { asked, store } = rig((_, at) => (at === 1 ? refused('CURSOR_INVALIDATED') : ok(answer('r2'))));
+    store.setWindow(anchor, { days: 30 });
+    await store.expand(anchor, ['kind-b']);
+    await store.retry(anchor);
+    expect(asked.map((body) => body.window)).toEqual([{ days: 30 }, { days: 30 }]);
+    expect(store.windowOf(anchor)).toEqual({ days: 30 });
+  });
+});

@@ -47,6 +47,8 @@ interface Options {
   readonly answer?: (call: ExecuteCall) => ExecuteOutcome;
   readonly deny?: boolean;
   readonly absent?: boolean;
+  readonly now?: () => Date;
+  readonly mapping?: typeof mapping;
   readonly schema?: 'building' | 'refused';
   /** The coordinator refuses every read after this many have been granted (the index read and the page are two). */
   readonly refuseAfter?: { readonly granted: number; readonly admission: ReadAdmission };
@@ -62,7 +64,8 @@ function defaultAnswer(call: ExecuteCall): ExecuteOutcome {
 }
 
 async function started(options: Options = {}) {
-  const [source] = mapping.sources;
+  const used = options.mapping ?? mapping;
+  const [source] = used.sources;
   if (source === undefined) throw new Error('the mapping has no source');
   const respond = (call: ExecuteCall): Promise<ExecuteOutcome> => {
     if (call.templateId === 'entity-load') return Promise.resolve(options.absent === true ? { status: 'rows', rows: [] } : entityRows(plainNode(['Hub'], { hubId: 'H-1' })));
@@ -89,8 +92,8 @@ async function started(options: Options = {}) {
     } as Seams['coordinator'],
     audit: { record: (event) => (events.push(event), Promise.resolve()) },
   };
-  const parts = testSourceGate(mapping, { executor, seams });
-  const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store: memoryAppStore(), mapping, gate: parts.gate, seams });
+  const parts = testSourceGate(used, { executor, seams });
+  const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store: memoryAppStore(), mapping: used, gate: parts.gate, seams, ...(options.now === undefined ? {} : { templateRunClock: options.now }) });
   return { app, executor, events, lease };
 }
 
@@ -458,5 +461,195 @@ describe('POST /v1/graph/expand', () => {
       expect(executor.calls.filter((call) => call.templateId === EXPAND_COUNT_ID || call.templateId === EXPAND_NEIGHBORS_ID)).toEqual([]);
       await app.close();
     });
+  });
+});
+
+describe('POST /v1/graph/expand with a window', () => {
+  const NOW = () => new Date('2026-11-12T00:30:00.000Z');
+  const DAYS_7 = { windowFrom: '2026-11-05T00:00:00.000Z', windowTo: '2026-11-13T00:00:00.000Z' };
+
+  it('reads as before when no window is asked: no window parameter reaches the gate', async () => {
+    const { app, executor } = await started({ now: NOW });
+    expect((await post(app, request())).statusCode).toBe(200);
+    const [call] = expandCalls(executor);
+    expect(call?.parameters).not.toHaveProperty('windowFrom');
+    expect(call?.parameters).not.toHaveProperty('windowTo');
+    await app.close();
+  });
+
+  it('resolves a number of days to whole UTC days at the clock of the service, and holds the two instants only as parameters', async () => {
+    const { app, executor } = await started({ now: NOW });
+    expect((await post(app, request({ window: { days: 7 } }))).statusCode).toBe(200);
+    const [call] = expandCalls(executor);
+    expect(call?.parameters).toMatchObject(DAYS_7);
+    expect(call?.cypher).not.toContain('2026');
+    expect(call?.cypher).toContain('>= datetime($windowFrom)');
+    expect(call?.cypher).toContain('< datetime($windowTo)');
+    expect(call?.accessMode).toBe('READ');
+    await app.close();
+  });
+
+  it('reads a range of dates as for a template run: from 00:00 UTC on the first day up to the day after the last', async () => {
+    const { app, executor } = await started({ now: NOW });
+    await post(app, request({ window: { from: '2026-01-01', to: '2026-01-31' } }));
+    expect(expandCalls(executor)[0]?.parameters).toMatchObject({ windowFrom: '2026-01-01T00:00:00.000Z', windowTo: '2026-02-01T00:00:00.000Z' });
+    await app.close();
+  });
+
+  it('gives the window to the types that have a relationship type with an observed time and leaves it off the others, and a window that applies to no type reads as none', async () => {
+    const { app, executor } = await started({ now: NOW });
+    expect((await post(app, request({ neighborTypes: ['leaf', 'other'], window: { days: 7 } }))).statusCode).toBe(200);
+    const calls = expandCalls(executor);
+    expect(calls.map((call) => [call.parameters['neighborType'], call.parameters['windowFrom'] !== undefined])).toEqual([['leaf', true], ['other', false]]);
+    expect(calls[1]?.cypher).not.toContain('datetime($windowFrom)');
+    await app.close();
+  });
+
+  it.each([
+    ['an empty window', {}],
+    ['no days', { days: 0 }],
+    ['days over the bound', { days: 3651 }],
+    ['days that are not whole', { days: 1.5 }],
+    ['both forms', { days: 1, from: '2026-01-01', to: '2026-01-02' }],
+    ['a range in the wrong order', { from: '2026-01-31', to: '2026-01-01' }],
+    ['a field that is not named', { days: 1, other: true }],
+    ['text', '7 days'],
+  ])('refuses %s with INVALID_REQUEST and reads nothing', async (_name, window) => {
+    const { app, executor } = await started({ now: NOW });
+    const response = await post(app, request({ window }));
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ error: { code: 'INVALID_REQUEST' } });
+    expect(expandCalls(executor)).toEqual([]);
+    await app.close();
+  });
+
+  it('continues with its cursor on the same window, and refuses it with CURSOR_INVALIDATED for another window or another UTC day', async () => {
+    let now = NOW();
+    const { app, executor } = await started({ now: () => now });
+    const first = expandResponseSchema.parse((await post(app, request({ limit: 2, window: { days: 7 } }))).json());
+    const cursor = first.pages[0]?.nextCursor ?? '';
+    expect(cursor).not.toBe('');
+    executor.calls.length = 0;
+    now = new Date('2026-11-12T23:59:59.000Z');
+    expect((await post(app, request({ limit: 2, window: { days: 7 }, cursors: { leaf: cursor } }))).statusCode).toBe(200);
+    expect((await post(app, request({ limit: 2, window: { days: 30 }, cursors: { leaf: cursor } }))).json()).toMatchObject({ error: { code: 'CURSOR_INVALIDATED' } });
+    expect((await post(app, request({ limit: 2, cursors: { leaf: cursor } }))).json()).toMatchObject({ error: { code: 'CURSOR_INVALIDATED' } });
+    now = new Date('2026-11-13T00:00:00.000Z');
+    expect((await post(app, request({ limit: 2, window: { days: 7 }, cursors: { leaf: cursor } }))).json()).toMatchObject({ error: { code: 'CURSOR_INVALIDATED' } });
+    await app.close();
+  });
+
+  it('binds the cursor with the filters and the window both', async () => {
+    const { app } = await started({ now: NOW });
+    const filters = [{ on: 'relationship', property: 'score', op: 'eq', value: { kind: 'number', value: 1 } }];
+    const first = expandResponseSchema.parse((await post(app, request({ limit: 2, window: { days: 7 }, filters }))).json());
+    const cursor = first.pages[0]?.nextCursor ?? '';
+    expect((await post(app, request({ limit: 2, window: { days: 7 }, cursors: { leaf: cursor } }))).json()).toMatchObject({ error: { code: 'CURSOR_INVALIDATED' } });
+    expect((await post(app, request({ limit: 2, window: { days: 7 }, filters, cursors: { leaf: cursor } }))).statusCode).toBe(200);
+    await app.close();
+  });
+
+  it('fails as before when the source times out, with no page held', async () => {
+    const { app, lease } = await started({ now: NOW, answer: () => ({ status: 'timeout' }) });
+    const response = await post(app, request({ window: { days: 7 } }));
+    expect(response.statusCode).toBe(504);
+    expect(response.json()).not.toHaveProperty('pages');
+    expect(lease.held).toBe(0);
+    await app.close();
+  });
+});
+
+describe('the count and the answer of an expansion with a window', () => {
+  const NOW = () => new Date('2026-11-12T00:30:00.000Z');
+  const countCalls = (executor: TestExecutor) => executor.calls.filter((call) => call.templateId === EXPAND_COUNT_ID);
+  const answering = (total: number, undated?: number) => (call: ExecuteCall): ExecuteOutcome =>
+    call.templateId === EXPAND_COUNT_ID ? { status: 'rows', rows: [{ total, ...(undated === undefined ? {} : { undated }) }] } : defaultAnswer(call);
+
+  it('takes the count of a first page that holds everything from the page, exact, with no count read, scoped to the window', async () => {
+    const { app, executor } = await started({ now: NOW });
+    const body = expandResponseSchema.parse((await post(app, request({ window: { days: 7 } }))).json());
+    expect(body.pages[0]).toMatchObject({ neighborType: 'leaf', hasMore: false, matchingTotal: { value: 3, quality: 'exact', scope: 'expand:window' }, window: { applied: 'full', notAppliedTo: [] } });
+    expect(body.pages[0]?.window).not.toHaveProperty('undatedLeftOut');
+    expect(body.window).toEqual({ from: '2026-11-05T00:00:00.000Z', to: '2026-11-13T00:00:00.000Z' });
+    expect(countCalls(executor)).toEqual([]);
+    await app.close();
+  });
+
+  it('reads the exact count with the same window when the first page is cut, and says how many relationships with no usable time were left out', async () => {
+    const { app, executor } = await started({ now: NOW, answer: answering(41, 6) });
+    const body = expandResponseSchema.parse((await post(app, request({ limit: 2, window: { days: 7 } }))).json());
+    expect(body.pages[0]).toMatchObject({ hasMore: true, matchingTotal: { value: 41, quality: 'exact', scope: 'expand:window' }, window: { applied: 'full', notAppliedTo: [], undatedLeftOut: 6 } });
+    expect(countCalls(executor)).toHaveLength(1);
+    expect(countCalls(executor)[0]?.parameters).toMatchObject({ windowFrom: '2026-11-05T00:00:00.000Z', windowTo: '2026-11-13T00:00:00.000Z' });
+    expect(countCalls(executor)[0]?.cypher).toContain('RETURN sum(c) AS total, sum(u) AS undated');
+    await app.close();
+  });
+
+  it('counts with the filters and the window both, and the filters alone as before (a count read on every first page, scoped as before)', async () => {
+    const filters = [{ on: 'relationship', property: 'score', op: 'eq', value: { kind: 'number', value: 1 } }];
+    const both = await started({ now: NOW, answer: answering(5, 0) });
+    const withWindow = expandResponseSchema.parse((await post(both.app, request({ window: { days: 7 }, filters }))).json());
+    expect(countCalls(both.executor)).toHaveLength(1);
+    expect(countCalls(both.executor)[0]?.parameters).toMatchObject({ windowFrom: '2026-11-05T00:00:00.000Z', filters: expect.any(Array) });
+    expect(withWindow.pages[0]?.matchingTotal).toMatchObject({ value: 5, quality: 'exact', scope: 'expand:window' });
+    await both.app.close();
+    const only = await started({ now: NOW, answer: answering(7) });
+    const filtered = expandResponseSchema.parse((await post(only.app, request({ filters }))).json());
+    expect(countCalls(only.executor)).toHaveLength(1);
+    expect(countCalls(only.executor)[0]?.parameters).not.toHaveProperty('windowFrom');
+    expect(countCalls(only.executor)[0]?.cypher).toContain('RETURN sum(c) AS total\n'.trim());
+    expect(countCalls(only.executor)[0]?.cypher).not.toContain('undated');
+    expect(filtered.pages[0]?.matchingTotal).toMatchObject({ value: 7, quality: 'exact', scope: 'expand:count' });
+    expect(filtered).not.toHaveProperty('window');
+    expect(filtered.pages[0]).not.toHaveProperty('window');
+    await only.app.close();
+  });
+
+  it('says the window applied to none of the types, reads the page as without it, counts it with the scopes it has without a window, and runs no count read', async () => {
+    const { app, executor } = await started({ now: NOW });
+    const body = expandResponseSchema.parse((await post(app, request({ neighborTypes: ['other'], limit: 1, window: { days: 7 } }))).json());
+    expect(body.pages[0]).toMatchObject({ neighborType: 'other', window: { applied: 'none', notAppliedTo: ['MET'] } });
+    expect(body.pages[0]?.matchingTotal.scope).toBe('expand:page');
+    expect(countCalls(executor)).toEqual([]);
+    expect(expandCalls(executor)[0]?.parameters).not.toHaveProperty('windowFrom');
+    await app.close();
+  });
+
+  it('does not count again on a later page, and still answers the window', async () => {
+    const { app, executor } = await started({ now: NOW, answer: answering(41, 6) });
+    const first = expandResponseSchema.parse((await post(app, request({ limit: 2, window: { days: 7 } }))).json());
+    executor.calls.length = 0;
+    const next = expandResponseSchema.parse((await post(app, request({ limit: 2, window: { days: 7 }, cursors: { leaf: first.pages[0]?.nextCursor } }))).json());
+    expect(countCalls(executor)).toEqual([]);
+    expect(next.window).toBeDefined();
+    expect(next.pages[0]).toMatchObject({ window: { applied: 'full' }, matchingTotal: { quality: 'unknown', scope: 'expand:window' } });
+    await app.close();
+  });
+
+  it('leaves the page as it is when the count cannot be read, told in a warning, and the count is unknown for a cut page', async () => {
+    const { app } = await started({ now: NOW, answer: (call) => (call.templateId === EXPAND_COUNT_ID ? { status: 'timeout' } : defaultAnswer(call)) });
+    const body = expandResponseSchema.parse((await post(app, request({ limit: 2, window: { days: 7 } }))).json());
+    expect(body.pages[0]?.matchingTotal).toMatchObject({ quality: 'unknown', scope: 'expand:window' });
+    expect(body.pages[0]?.window).not.toHaveProperty('undatedLeftOut');
+    expect(body.warnings.join(' ')).toContain('in the window could not be counted');
+    await app.close();
+  });
+
+  it('says the window applied partly to a neighbor type joined by a relationship type with a time and one without, and names the one it did not apply to', async () => {
+    const mixed = parseMapping(
+      fileOf(
+        baseSource({
+          id: 'demo',
+          entities: [{ type: 'hub', label: 'Hub', stable_id: 'hubId' }, { type: 'leaf', label: 'Leaf', stable_id: 'leafId' }],
+          relationships: [{ type: 'LINKED', from: 'hub', to: 'leaf', stable_id: 'relId', observed_at: 'seenAt' }, { type: 'TOUCHED', from: 'hub', to: 'leaf' }],
+        }),
+      ),
+      'neburyx.yaml',
+    );
+    const { app, executor } = await started({ now: NOW, mapping: mixed, answer: answering(9, 2) });
+    const body = expandResponseSchema.parse((await post(app, request({ limit: 2, window: { days: 7 } }))).json());
+    expect(body.pages[0]).toMatchObject({ window: { applied: 'partial', notAppliedTo: ['TOUCHED'], undatedLeftOut: 2 }, matchingTotal: { value: 9, quality: 'exact', scope: 'expand:window' } });
+    expect(expandCalls(executor)[0]?.parameters).toHaveProperty('windowFrom');
+    await app.close();
   });
 });

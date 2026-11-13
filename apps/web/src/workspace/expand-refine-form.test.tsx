@@ -178,6 +178,18 @@ describe('a chain under filters', () => {
     expect(screen.getByText('TYPE-B: matching 3,412 · exact')).not.toBeNull();
   });
 
+  it('shows the count for a window once, from the window lines, when filters and a window are both asked', async () => {
+    const { mount, answer } = rig();
+    mount();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Add filter' }));
+    await user.type(text('Filter 1: Value'), 'high');
+    await user.click(load());
+    await answer(response({ nodes: [], edges: [], window: { from: '2026-11-05T00:00:00.000Z', to: '2026-11-13T00:00:00.000Z' }, pages: [page({ returned: 25, hasMore: true, nextCursor: 'v1.a.b', matchingTotal: { value: 9, quality: 'exact', scope: 'expand:window' }, window: { applied: 'full', notAppliedTo: [] } })] }));
+    expect(screen.getAllByText(/9 · exact/)).toHaveLength(1);
+    expect(screen.getByText('TYPE-B: In the last 7 days: 9 · exact')).not.toBeNull();
+  });
+
   it('labels a count that is not known as having no count, and never a number it was not given', async () => {
     const { mount, answer } = rig();
     mount();

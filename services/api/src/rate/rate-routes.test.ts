@@ -58,6 +58,7 @@ const COUNTED: Readonly<Record<string, Call>> = {
   'template run': { method: 'POST', url: () => '/v1/templates/shared-nodes/run', payload: (s) => ({ sourceId: s, params: { ref } }), headers: () => ({ 'idempotency-key': `key-of-sixteen-${(keyCounter += 1)}-chars` }) },
   coverage: { method: 'POST', url: () => '/v1/graph/coverage', payload: (s) => ({ sourceId: s, entities: [{ ref: element(s), loadedRelationships: 0, loadedQuality: 'exact' }] }) },
   expand: { method: 'POST', url: () => '/v1/graph/expand', payload: (s) => ({ sourceId: s, ref, neighborTypes: ['node_b'] }) },
+  'expand with a window': { method: 'POST', url: () => '/v1/graph/expand', payload: (s) => ({ sourceId: s, ref, neighborTypes: ['node_b'], window: { days: 7 } }) },
   'read by references': { method: 'POST', url: () => '/v1/graph/read-refs', payload: (s) => ({ sourceId: s, entities: [element(s)] }) },
   'open investigation': { method: 'POST', url: () => '/v1/investigations', payload: (s) => ({ sourceId: s, entity: element(s) }) },
   'source test': { method: 'POST', url: (s) => `/v1/sources/${s}/test` },

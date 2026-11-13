@@ -217,14 +217,15 @@ describe('the failures of a load', () => {
 });
 
 describe('the rest of the panel', () => {
-  it('carries the footnote and the notes, and no control for a time window', async () => {
+  it('carries the footnote and the notes, and a time window that is the last 7 days until it is changed', async () => {
     const { open, previews } = panelRig();
     await open();
     await answerPreview(previews[0], previewOf({ warnings: [{ code: 'counts-capped', reason: 'Counts stop at 500' }] }));
     expect(inPanel().getByText('Soft limit · aggregates beyond · bounded pages only.')).not.toBeNull();
     expect(inPanel().getByText('Counts are of relationship ends.')).not.toBeNull();
     expect(inPanel().getByText('Counts stop at 500.')).not.toBeNull();
-    expect(screen.queryByText(/window|event_time/i)).toBeNull();
+    expect(inPanel().getByRole('combobox', { name: /Time window/ })).toHaveProperty('value', '7');
+    expect(inPanel().getByText(/Only relationships observed in this period are loaded|does not apply/)).not.toBeNull();
   });
 
   it('previews the 100,000-relationship hub with each count labelled and loads the chosen page size for the type', async () => {

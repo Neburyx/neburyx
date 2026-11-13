@@ -6,7 +6,8 @@ import { benignValuesOf, closedSetOf, leaksOf, quotedNamesOf, statementProblems 
 import { FIELD_NAMES, TEMPLATE_NATIVE, fuzzParams, hostileText, textLeaves, wrongType } from '../testing/fuzz-corpus.js';
 
 const names = new Set([...allowedNames(), 'widget', 'gadget', 'phone', 'MADE_FROM', 'USES', 'out', 'in', 'both', 'observed', FUZZ_SOURCE]);
-const known = new Set([...names, ...FIELD_NAMES, ...TEMPLATE_NATIVE]);
+// `window` and `days` are the names of the window's fields; the statement holds the parameters `$windowFrom` and `$windowTo`, never the field
+const known = new Set([...names, ...FIELD_NAMES, ...TEMPLATE_NATIVE, 'window', 'days']);
 const rig = await startFuzzRig();
 const closed = await closedSetOf(rig);
 
@@ -54,9 +55,10 @@ const bodyOf = (): fc.Arbitrary<Record<string, unknown>> => fc
     cursors: mostly(fc.constant(undefined), fc.dictionary(textOr(['gadget', 'phone']), fc.oneof(hostileText(names), wrongType), { maxKeys: 2 }), 8),
     mask: mostly(fc.option(fc.boolean(), { nil: undefined, freq: 2 }), wrongType, 6),
     rank: fc.oneof({ weight: 8, arbitrary: fc.constant(undefined) }, { weight: 3, arbitrary: rankOf() }, { weight: 1, arbitrary: wrongType }),
+    window: fc.oneof({ weight: 8, arbitrary: fc.constant(undefined) }, { weight: 3, arbitrary: fc.constantFrom({ days: 7 }, { days: 30 }, { from: '2026-01-01', to: '2026-01-31' }) }, { weight: 1, arbitrary: fc.constantFrom({}, { days: 0 }, { days: 3651 }, { days: 1.5 }, { from: '2026-02-30', to: '2026-03-01' }, { from: '2026-01-31', to: '2026-01-01' }, '7 days') }, { weight: 1, arbitrary: wrongType }),
     filters: fc.oneof({ weight: 8, arbitrary: fc.constant(undefined) }, { weight: 3, arbitrary: fc.array(filterOf(), { maxLength: 3 }) }, { weight: 1, arbitrary: fc.array(filterOf(), { minLength: 7, maxLength: 8 }) }, { weight: 1, arbitrary: wrongType }),
   })
-  .map((fields) => ({ sourceId: fields.sourceId, ref: { entityType: fields.entityType, stableId: fields.stableId }, neighborTypes: fields.neighborTypes, ...(fields.relTypes === undefined ? {} : { relTypes: fields.relTypes }), ...(fields.direction === undefined ? {} : { direction: fields.direction }), ...(fields.limit === undefined ? {} : { limit: fields.limit }), ...(fields.cursors === undefined ? {} : { cursors: fields.cursors }), ...(fields.mask === undefined ? {} : { mask: fields.mask }), ...(fields.filters === undefined ? {} : { filters: fields.filters }), ...(fields.rank === undefined ? {} : { rank: fields.rank }) }));
+  .map((fields) => ({ sourceId: fields.sourceId, ref: { entityType: fields.entityType, stableId: fields.stableId }, neighborTypes: fields.neighborTypes, ...(fields.relTypes === undefined ? {} : { relTypes: fields.relTypes }), ...(fields.direction === undefined ? {} : { direction: fields.direction }), ...(fields.limit === undefined ? {} : { limit: fields.limit }), ...(fields.cursors === undefined ? {} : { cursors: fields.cursors }), ...(fields.mask === undefined ? {} : { mask: fields.mask }), ...(fields.filters === undefined ? {} : { filters: fields.filters }), ...(fields.rank === undefined ? {} : { rank: fields.rank }), ...(fields.window === undefined ? {} : { window: fields.window }) }));
 
 describe('the closed set of statement text', () => {
   it('holds statements that quote only the names the mapping allows', () => {
@@ -103,6 +105,7 @@ interface Body {
   mask?: unknown;
   filters?: unknown;
   rank?: unknown;
+  window?: unknown;
 }
 
 const TYPES = ['gadget', 'phone'];

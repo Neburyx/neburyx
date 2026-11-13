@@ -234,16 +234,17 @@ function expandNeighborsOf(template: Template, params: Params, allowlist: Source
   }
   const filters = params['filters'];
   const rank = params['rank'];
-  if (spec.form === 'count' && (filters === undefined || rank !== undefined)) throw new AppError('INVALID_REQUEST');
-  if (filters === undefined && rank === undefined) return expandStatementOf(allowlist, anchor, neighbor, branches);
+  const windowed = params['windowFrom'] !== undefined;
+  if (spec.form === 'count' && ((filters === undefined && !windowed) || rank !== undefined)) throw new AppError('INVALID_REQUEST');
+  if (filters === undefined && rank === undefined && !windowed) return expandStatementOf(allowlist, anchor, neighbor, branches);
   const parsedFilters = filters === undefined ? undefined : z.array(expandFilterSchema).max(MAX_FILTERS).safeParse(filters);
   const parsedRank = rank === undefined ? undefined : expandRankSchema.safeParse(rank);
   if (parsedFilters?.success === false || parsedRank?.success === false) throw new AppError('INVALID_REQUEST');
   const given = parsedFilters?.data ?? [];
   if (given.some((filter) => filterShapeProblem(filter) !== undefined) || undeclaredFilter(allowlist, neighbor, branches, given) !== undefined) throw new AppError('INVALID_REQUEST');
   if (parsedRank?.data !== undefined && undeclaredRank(allowlist, neighbor, branches, parsedRank.data)) throw new AppError('INVALID_REQUEST');
-  if (spec.form === 'count') return expandCountStatementOf(allowlist, anchor, neighbor, branches, given);
-  return expandStatementOf(allowlist, anchor, neighbor, branches, given, parsedRank?.data);
+  if (spec.form === 'count') return expandCountStatementOf(allowlist, anchor, neighbor, branches, given, windowed);
+  return expandStatementOf(allowlist, anchor, neighbor, branches, given, parsedRank?.data, windowed);
 }
 
 const contextRefSchema = z.looseObject({ entityType: z.string() });

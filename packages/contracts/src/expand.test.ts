@@ -27,6 +27,16 @@ describe('the expand request', () => {
   });
 });
 
+describe('the window of the expand request', () => {
+  it.each([[{ days: 7 }], [{ days: 3650 }], [{ from: '2026-01-01', to: '2026-01-31' }]])('takes %j', (window) => {
+    expect(expandRequestSchema.safeParse({ ...request, window }).success).toBe(true);
+  });
+
+  it.each([[{}], [{ days: 0 }], [{ days: 3651 }], [{ days: 1.5 }], [{ days: 1, from: '2026-01-01', to: '2026-01-02' }], [{ from: '2026-01-31', to: '2026-01-01' }], [{ from: '2026-02-30', to: '2026-03-01' }], [{ days: 7, other: 1 }], ['7 days'], [null]])('refuses %j', (window) => {
+    expect(expandRequestSchema.safeParse({ ...request, window }).success).toBe(false);
+  });
+});
+
 describe('the expand response', () => {
   it('holds the node, the page size, the nodes and edges, one page for each type and the warnings', () => {
     expect(expandResponseSchema.safeParse({ ref, pageSize: 25, nodes: [], edges: [edge], pages: [page], warnings: [] }).success).toBe(true);
@@ -43,5 +53,29 @@ describe('the direction of an edge', () => {
   it.each(['from-to', 'out', 'in'])('accepts %s and nothing else', (direction) => {
     expect(edgeSchema.safeParse({ ...edge, direction }).success).toBe(true);
     expect(edgeSchema.safeParse({ ...edge, direction: 'both' }).success).toBe(false);
+  });
+});
+
+describe('what the answer says of a window', () => {
+  const answer = { ref, pageSize: 25, nodes: [], edges: [], pages: [page], warnings: [] };
+
+  it('holds the two instants and, for each page, how the window applied, and accepts an answer with neither', () => {
+    expect(expandResponseSchema.safeParse(answer).success).toBe(true);
+    const windowed = { ...answer, window: { from: '2026-11-05T00:00:00.000Z', to: '2026-11-13T00:00:00.000Z' }, pages: [{ ...page, window: { applied: 'partial', notAppliedTo: ['TOUCHED'], undatedLeftOut: 2 } }] };
+    expect(expandResponseSchema.safeParse(windowed).success).toBe(true);
+    expect(expandPageSchema.safeParse({ ...page, window: { applied: 'full', notAppliedTo: [] } }).success).toBe(true);
+  });
+
+  it.each([
+    ['an applied that is not full, partial or none', { applied: 'most', notAppliedTo: [] }],
+    ['no list of the types it did not apply to', { applied: 'full' }],
+    ['a negative number left out', { applied: 'full', notAppliedTo: [], undatedLeftOut: -1 }],
+    ['a field that is not named', { applied: 'full', notAppliedTo: [], extra: 1 }],
+  ])('refuses %s', (_name, window) => {
+    expect(expandPageSchema.safeParse({ ...page, window }).success).toBe(false);
+  });
+
+  it('refuses instants that are not dates and times', () => {
+    expect(expandResponseSchema.safeParse({ ...answer, window: { from: 'yesterday', to: 'today' } }).success).toBe(false);
   });
 });

@@ -2,6 +2,7 @@ import type { ExpandFilter, ExpandRank, FilterKind } from '@neburyx/contracts';
 import { AppError } from '../../errors.js';
 import { quoteName } from '../render.js';
 import type { SourceAllowlist } from '../types.js';
+import { inWindow, instantOf } from './window-condition.js';
 
 export type ExpandDirection = 'out' | 'in' | 'both';
 
@@ -81,6 +82,9 @@ function predicateOf(filter: ExpandFilter, index: number): string {
 
 const predicatesOf = (filters: readonly ExpandFilter[]): string[] => filters.map(predicateOf);
 
+/** The conditions a branch's rows must meet beyond the pattern: the filters, and, when the request has a window, the window on the relationship's own observed time (a branch whose type has no observed time is not windowed). */
+const conditionsOf = (branch: ExpandBranch, filters: readonly ExpandFilter[], windowed: boolean): string[] => [...predicatesOf(filters), ...(windowed && branch.observedAt !== undefined ? inWindow('r', quoteName(branch.observedAt)) : [])];
+
 const COLUMNS = ['phase', 'tk', 'ts', 'id', 'rtype', 'dir', 'ntype', 'flag', 'members', 'first', 'rel', 'm'] as const;
 /** The columns of a ranked read: the kind and value that order the rows are `sk` and `sv`, and `ts` and `first` stay the observed times that an aggregate reports as its last and earliest. */
 const RANKED_COLUMNS = ['phase', 'sk', 'sv', 'ts', 'id', 'rtype', 'dir', 'ntype', 'flag', 'members', 'first', 'rel', 'm'] as const;
@@ -131,12 +135,12 @@ const rankedValue = (rank: ExpandRank): string => `${rank.on === 'neighbor' ? 'm
 const sortOf = (branch: ExpandBranch, order: Order): string | undefined =>
   order.rank !== undefined ? rankedValue(order.rank) : branch.observedAt === undefined ? undefined : `r.${quoteName(branch.observedAt)}`;
 
-function storedBranch(branch: ExpandBranch, neighborLabel: string, stableId: string, dated: boolean, filters: readonly ExpandFilter[], order: Order): string {
+function storedBranch(branch: ExpandBranch, neighborLabel: string, stableId: string, dated: boolean, filters: readonly ExpandFilter[], order: Order, windowed: boolean): string {
   const id = `r.${quoteName(stableId)}`;
   const given = sortOf(branch, order);
   const sort = given ?? 'null';
   const phase = dated ? PHASE.storedDated : PHASE.storedUndated;
-  const where = [usable(id), ...(given === undefined ? [] : [dated ? supported(sort) : `NOT coalesce(${supported(sort)}, false)`]), ...(branch.excludesLoops ? ['m <> a'] : []), ...predicatesOf(filters), afterCursor(phase, dated, sort, `toString(${id})`, 'type(r)', `'${branch.direction}'`, order)];
+  const where = [usable(id), ...(given === undefined ? [] : [dated ? supported(sort) : `NOT coalesce(${supported(sort)}, false)`]), ...(branch.excludesLoops ? ['m <> a'] : []), ...conditionsOf(branch, filters, windowed), afterCursor(phase, dated, sort, `toString(${id})`, 'type(r)', `'${branch.direction}'`, order)];
   return [
     `WITH a MATCH ${patternOf(branch, neighborLabel)} WHERE ${where.join(' AND ')}`,
     `WITH a, r, m ORDER BY ${dated ? `${kindRank(sort)}, ${sort} ${order.direction}, ` : ''}toString(${id}) DESC LIMIT $limit + 1`,
@@ -144,10 +148,10 @@ function storedBranch(branch: ExpandBranch, neighborLabel: string, stableId: str
   ].join(' ');
 }
 
-function aggregateBranch(branch: ExpandBranch, neighborLabel: string, neighborStableId: string, dated: boolean, fallbackForId: string | undefined, filters: readonly ExpandFilter[], order: Order): string {
+function aggregateBranch(branch: ExpandBranch, neighborLabel: string, neighborStableId: string, dated: boolean, fallbackForId: string | undefined, filters: readonly ExpandFilter[], order: Order, windowed: boolean): string {
   const observed = branch.observedAt === undefined ? 'null' : `r.${quoteName(branch.observedAt)}`;
   const phase = dated ? PHASE.aggregateDated : PHASE.aggregateUndated;
-  const members = [...(fallbackForId === undefined ? [] : [`NOT ${usable(`r.${quoteName(fallbackForId)}`)}`]), ...(branch.excludesLoops ? ['m <> a'] : []), ...predicatesOf(filters)];
+  const members = [...(fallbackForId === undefined ? [] : [`NOT ${usable(`r.${quoteName(fallbackForId)}`)}`]), ...(branch.excludesLoops ? ['m <> a'] : []), ...conditionsOf(branch, filters, windowed)];
   const id = `coalesce(toString(m.${quoteName(neighborStableId)}), '')`;
   const observedTimes = `${branch.observedAt === undefined ? 'null' : `max(CASE WHEN ${supported(observed)} THEN ${observed} END)`} AS ts, ${branch.observedAt === undefined ? 'null' : `min(CASE WHEN ${supported(observed)} THEN ${observed} END)`} AS first`;
   if (order.rank === undefined) {
@@ -173,7 +177,7 @@ function aggregateBranch(branch: ExpandBranch, neighborLabel: string, neighborSt
 }
 
 /** The statement of one page of one neighbor type: the anchor, then the union of the branches, then the order and the cut of the whole page. */
-export function expandStatementOf(allowlist: SourceAllowlist, anchorType: string, neighborType: string, branches: readonly ExpandBranch[], filters: readonly ExpandFilter[] = [], rank?: ExpandRank): string {
+export function expandStatementOf(allowlist: SourceAllowlist, anchorType: string, neighborType: string, branches: readonly ExpandBranch[], filters: readonly ExpandFilter[] = [], rank?: ExpandRank, windowed = false): string {
   const order = orderOf(rank);
   const anchorLabel = allowlist.entityLabels.get(anchorType);
   const anchorId = allowlist.stableIds.get(anchorType);
@@ -182,12 +186,12 @@ export function expandStatementOf(allowlist: SourceAllowlist, anchorType: string
   if (anchorLabel === undefined || anchorId === undefined || neighborLabel === undefined || neighborId === undefined || branches.length === 0) throw new AppError('INVALID_REQUEST');
   const parts = branches.flatMap((branch) => {
     const dated = rank !== undefined || branch.observedAt !== undefined;
-    if (branch.stableId === undefined) return [...(dated ? [aggregateBranch(branch, neighborLabel, neighborId, true, undefined, filters, order)] : []), aggregateBranch(branch, neighborLabel, neighborId, false, undefined, filters, order)];
+    if (branch.stableId === undefined) return [...(dated ? [aggregateBranch(branch, neighborLabel, neighborId, true, undefined, filters, order, windowed)] : []), aggregateBranch(branch, neighborLabel, neighborId, false, undefined, filters, order, windowed)];
     return [
-      ...(dated ? [storedBranch(branch, neighborLabel, branch.stableId, true, filters, order)] : []),
-      storedBranch(branch, neighborLabel, branch.stableId, false, filters, order),
-      ...(dated ? [aggregateBranch(branch, neighborLabel, neighborId, true, branch.stableId, filters, order)] : []),
-      aggregateBranch(branch, neighborLabel, neighborId, false, branch.stableId, filters, order),
+      ...(dated ? [storedBranch(branch, neighborLabel, branch.stableId, true, filters, order, windowed)] : []),
+      storedBranch(branch, neighborLabel, branch.stableId, false, filters, order, windowed),
+      ...(dated ? [aggregateBranch(branch, neighborLabel, neighborId, true, branch.stableId, filters, order, windowed)] : []),
+      aggregateBranch(branch, neighborLabel, neighborId, false, branch.stableId, filters, order, windowed),
     ];
   });
   return [
@@ -201,18 +205,26 @@ export function expandStatementOf(allowlist: SourceAllowlist, anchorType: string
  * The statement of the count that goes with a filtered expansion: how many relationships the branches match for the filters, one number, read from the same anchor with the same conditions and no
  * cursor, order or limit. It reads what a page reads, so it is bounded by the same transaction timeout, and it is exact or it fails; it is never cut short.
  */
-export function expandCountStatementOf(allowlist: SourceAllowlist, anchorType: string, neighborType: string, branches: readonly ExpandBranch[], filters: readonly ExpandFilter[]): string {
+export function expandCountStatementOf(allowlist: SourceAllowlist, anchorType: string, neighborType: string, branches: readonly ExpandBranch[], filters: readonly ExpandFilter[], windowed = false): string {
   const anchorLabel = allowlist.entityLabels.get(anchorType);
   const anchorId = allowlist.stableIds.get(anchorType);
   const neighborLabel = allowlist.entityLabels.get(neighborType);
-  if (anchorLabel === undefined || anchorId === undefined || neighborLabel === undefined || branches.length === 0 || filters.length === 0) throw new AppError('INVALID_REQUEST');
+  if (anchorLabel === undefined || anchorId === undefined || neighborLabel === undefined || branches.length === 0 || (filters.length === 0 && !windowed)) throw new AppError('INVALID_REQUEST');
   const parts = branches.map((branch) => {
+    if (!windowed) {
+      const where = [...(branch.excludesLoops ? ['m <> a'] : []), ...predicatesOf(filters)];
+      return `WITH a MATCH ${patternOf(branch, neighborLabel)} WHERE ${where.join(' AND ')} RETURN count(r) AS c`;
+    }
+    // a windowed count reads every relationship the filters keep, and counts those in the window and, for a type with an observed time, those that have no usable time and are left out
     const where = [...(branch.excludesLoops ? ['m <> a'] : []), ...predicatesOf(filters)];
-    return `WITH a MATCH ${patternOf(branch, neighborLabel)} WHERE ${where.join(' AND ')} RETURN count(r) AS c`;
+    const match = `WITH a MATCH ${patternOf(branch, neighborLabel)}${where.length === 0 ? '' : ` WHERE ${where.join(' AND ')}`}`;
+    if (branch.observedAt === undefined) return `${match} RETURN count(r) AS c, 0 AS u`;
+    const time = quoteName(branch.observedAt);
+    return `${match} RETURN count(CASE WHEN ${inWindow('r', time).join(' AND ')} THEN r END) AS c, count(CASE WHEN ${instantOf('r', time)} IS NULL THEN r END) AS u`;
   });
   return [
     `MATCH (a:${quoteName(anchorLabel)}) WHERE a.${quoteName(anchorId)} IN [$stableId, $stableInteger] WITH a ORDER BY elementId(a) LIMIT 1`,
     `CALL { ${parts.join(' UNION ALL ')} }`,
-    'RETURN sum(c) AS total',
+    windowed ? 'RETURN sum(c) AS total, sum(u) AS undated' : 'RETURN sum(c) AS total',
   ].join('\n');
 }

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { referenceTextSchema } from './entities.js';
 import { countSchema, edgeSchema, nodeSchema } from './graph.js';
+import { windowSchema } from './template-run.js';
 
 const text = z.string().min(1);
 
@@ -97,6 +98,8 @@ export const expandRequestSchema = z.strictObject({
   direction: z.enum(EXPAND_DIRECTIONS).optional(),
   sort: z.enum(EXPAND_SORTS).optional(),
   rank: expandRankSchema.optional(),
+  /** Only the relationships observed in this period; absent, all time. `{days}` is read as whole UTC days (see `docs/filtered-expansion.md`). */
+  window: windowSchema.optional(),
   filters: z
     .array(expandFilterSchema)
     .min(1)
@@ -108,6 +111,13 @@ export const expandRequestSchema = z.strictObject({
   mask: z.boolean().optional(),
 });
 
+/** How the window of a request applied to the page of one neighbor type: to every relationship type it read (`full`), to some (`partial`) or to none (`none`, the page is read as without the window), the relationship types it did not apply to, and, when the count read answered, how many relationships of a dated type had no usable time and were left out. */
+export const expandPageWindowSchema = z.strictObject({
+  applied: z.enum(['full', 'partial', 'none']),
+  notAppliedTo: z.array(text),
+  undatedLeftOut: z.number().int().nonnegative().optional(),
+});
+
 /** The page of one neighbor type: how many relationships it holds, whether there is more, and where the next page starts. `matchingTotal` has a value only when the first page holds everything. */
 export const expandPageSchema = z.strictObject({
   neighborType: text,
@@ -115,11 +125,14 @@ export const expandPageSchema = z.strictObject({
   hasMore: z.boolean(),
   matchingTotal: countSchema,
   nextCursor: text.optional(),
+  window: expandPageWindowSchema.optional(),
 });
 
 export const expandResponseSchema = z.strictObject({
   ref: z.strictObject({ sourceId: text, entityType: text, stableId: referenceTextSchema }),
   pageSize: z.number().int().positive(),
+  /** The two instants a window of the request resolved to (from, and up to but not including `to`); absent when the request had no window. */
+  window: z.strictObject({ from: z.iso.datetime({ offset: true }), to: z.iso.datetime({ offset: true }) }).optional(),
   nodes: z.array(nodeSchema),
   edges: z.array(edgeSchema),
   pages: z.array(expandPageSchema),
@@ -128,4 +141,5 @@ export const expandResponseSchema = z.strictObject({
 
 export type ExpandRequest = z.infer<typeof expandRequestSchema>;
 export type ExpandPage = z.infer<typeof expandPageSchema>;
+export type ExpandPageWindow = z.infer<typeof expandPageWindowSchema>;
 export type ExpandResponse = z.infer<typeof expandResponseSchema>;

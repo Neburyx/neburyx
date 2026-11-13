@@ -1,3 +1,4 @@
+import type { Count } from '@neburyx/contracts';
 export const EXPAND_HEADING = 'Expand by neighbor type';
 export const NO_STABLE_ID = 'This item cannot be expanded: no stable ID.';
 export const NO_RELATIONSHIPS = 'No relationships are mapped for this entity type.';
@@ -96,3 +97,54 @@ export const COLLAPSE_LOADING = 'Collapse is off while this node is loading.';
 export const COLLAPSE_NOTHING = 'Nothing was loaded from this node.';
 
 export const STARTING_ENTITY_HINT = 'Select the entity and press E, or right-click it, to load its neighbors';
+
+export const WINDOW_LABEL = 'Time window';
+export const WINDOW_ALL_TIME = 'All time';
+export const WINDOW_OTHER = 'Other number of days';
+export const WINDOW_DAYS_LABEL = 'Days';
+export const windowDaysLabel = (days: number): string => (days === 1 ? 'Last day' : `Last ${days} days`);
+/** The window as the controls and the result lines say it. */
+export const windowText = (window: 'all' | { readonly days: number }): string => (window === 'all' ? WINDOW_ALL_TIME : windowDaysLabel(window.days));
+export const WINDOW_UTC = 'UTC';
+export const WINDOW_NOTE_ALL = 'Everything is loaded, whenever it was observed.';
+export const WINDOW_NOTE_DAYS = 'Only relationships observed in this period are loaded, by the time of each relationship type.';
+export const WINDOW_NOTE_NONE = 'None of the relationship types here has a date, so the window does not apply.';
+export const windowDatesText = (from: string, to: string): string => {
+  const format = (instant: number): string => new Date(instant).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+  const last = Date.parse(to) - 1;
+  return `${format(Date.parse(from))} to ${format(last)} ${WINDOW_UTC}`;
+};
+
+/** What a count for a window is a count of, beside its quality: never the entity's total. */
+export const windowCountLine = (window: { readonly days: number }, notAppliedTo: readonly string[], countText: string): string =>
+  notAppliedTo.length === 0 ? `In the ${windowDaysLabel(window.days).toLowerCase()}: ${countText}` : `In the ${windowDaysLabel(window.days).toLowerCase()} for dated relationships, all time for ${notAppliedTo.join(', ')}: ${countText}`;
+export const windowEverythingLoaded = (window: { readonly days: number }): string => `Everything in the ${windowDaysLabel(window.days).toLowerCase()} is loaded. Choose a longer window or All time for more.`;
+export const windowNotFilteredText = (types: readonly string[]): string => `Not filtered by date: ${types.join(', ')}.`;
+export const WINDOW_SHOW_ALL_TIME = 'Show all time';
+/** Said when a window leaves nothing: the window named, by type when the line names the type. */
+export const windowEmptyText = (window: { readonly days: number }, typeName?: string): string =>
+  typeName === undefined ? `No relationships in the ${windowDaysLabel(window.days).toLowerCase()}.` : `${typeName}: no relationships in the ${windowDaysLabel(window.days).toLowerCase()}.`;
+/** The all-time degree beside an empty window, with its own quality; nothing for a count that has no number. */
+export function windowAllTimeText(count: Count | undefined): string | undefined {
+  if (count === undefined || count.value === undefined) return undefined;
+  const noun = count.value === 1 ? 'relationship' : 'relationships';
+  const number = count.value.toLocaleString('en-GB');
+  switch (count.quality) {
+    case 'exact':
+      return `${number} ${noun} in all time (exact).`;
+    case 'estimated':
+      return `~ ${number} (estimated) ${noun} in all time.`;
+    case 'lowerBound':
+      return `≥ ${number} · lower bound ${noun} in all time.`;
+    case 'unknown':
+      return undefined;
+    default: {
+      const unreachable: never = count.quality;
+      return unreachable;
+    }
+  }
+}
+export const WINDOW_UNDATED_RULE = 'Relationships with no date are not included.';
+export const windowUndatedText = (count: number | undefined): string => (count === undefined ? WINDOW_UNDATED_RULE : `${count.toLocaleString('en-GB')} ${count === 1 ? 'relationship' : 'relationships'} with no date ${count === 1 ? 'is' : 'are'} not included.`);
+export const WINDOW_NOT_COUNTED = 'The relationships in the window could not be counted.';
+export const NOT_LOADED_ALL_TIME = 'all time';

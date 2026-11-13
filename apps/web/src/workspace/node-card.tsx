@@ -5,7 +5,9 @@ import { useProfileWhenProvided } from '../canvas/profile-context.js';
 import { useLoadedGraph, useSessionMask } from '../state/context.js';
 import { useStoreSelector } from '../state/store.js';
 import { degreeCountText } from './degree-text.js';
-import { COLLAPSE, COLLAPSE_LOADING, COLLAPSE_NOTHING, LEFT_OUT_NOTE, SEPARATE_READS, START_OVER, SUPERNODE, TOTAL_NO_COUNT, loadMoreLabel, loadMoreOverAllLabel } from './expand-copy.js';
+import { COLLAPSE, COLLAPSE_LOADING, COLLAPSE_NOTHING, LEFT_OUT_NOTE, NOT_LOADED_ALL_TIME, SEPARATE_READS, START_OVER, SUPERNODE, TOTAL_NO_COUNT, loadMoreLabel, loadMoreOverAllLabel } from './expand-copy.js';
+import { WINDOW_SHOW_ALL_TIME, windowAllTimeText, windowEmptyText } from './expand-copy.js';
+import { showAllTime, windowStatusOf } from './window-status.js';
 import { neighborTypesOf, useExpandStore } from './expand-context.js';
 import { isSupernode, loadedCountText, loadedOf, notLoadedOf, notLoadedText } from './node-counts.js';
 import { allNeighborTypes } from './supernode-options.js';
@@ -50,8 +52,10 @@ export function NodeCard({ node }: { readonly node: ElementRef }) {
           const progress = expansion.types.get(type);
           const chain = expansions.relTypesOf(node, type);
           const narrowed = chain !== undefined && chain.length > 0;
+          const windowStatus = windowStatusOf(expansions.refinementOf(node, type)?.window, progress, (expansions.refinementOf(node, type)?.filters.length ?? 0) > 0);
+          const windowed = windowStatus !== undefined;
           const finished = left !== undefined && left.value === 0 && left.quality === 'exact';
-          const exhausted = progress !== undefined && !progress.hasMore && !progress.restartNeeded && !narrowed && left !== undefined && left.value !== 0;
+          const exhausted = progress !== undefined && !progress.hasMore && !progress.restartNeeded && !narrowed && !windowed && left !== undefined && left.value !== 0;
           const action = finished
             ? undefined
             : progress?.restartNeeded
@@ -67,7 +71,33 @@ export function NodeCard({ node }: { readonly node: ElementRef }) {
               <span className="neighbor-types-count">{total === undefined ? 'no count' : degreeCountText(total)}</span>
               <span className="neighbor-types-note">
                 {have === undefined ? '0 loaded' : loadedCountText(have)} · {notLoadedText(left)}
+                {windowed ? ` · ${NOT_LOADED_ALL_TIME}` : ''}
               </span>
+              {windowStatus?.count === undefined ? null : <span className="neighbor-types-note">{windowStatus.count}</span>}
+              {windowStatus?.empty === undefined ? null : (
+                <>
+                  <span className="neighbor-types-note">{windowEmptyText(windowStatus.empty)}</span>
+                  {windowAllTimeText(total) === undefined ? null : <span className="neighbor-types-note">{windowAllTimeText(total)}</span>}
+                  <button
+                    type="button"
+                    className="neighbor-types-link"
+                    aria-disabled={busy ? true : undefined}
+                    aria-label={`${WINDOW_SHOW_ALL_TIME}: ${displayName(type)}`}
+                    onClick={() => {
+                      if (busy) return;
+                      showAllTime(expansions, node, type);
+                    }}
+                  >
+                    {WINDOW_SHOW_ALL_TIME}
+                  </button>
+                </>
+              )}
+              {windowStatus?.notes.map((note) => (
+                <span key={note} className="neighbor-types-note">
+                  {note}
+                </span>
+              ))}
+              {windowStatus?.ended === undefined ? null : <span className="neighbor-types-note">{windowStatus.ended}</span>}
               {action === undefined ? null : (
                 <button
                   type="button"

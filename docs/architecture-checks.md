@@ -91,6 +91,8 @@ The catalog also refuses a template that does not say what its row limit means. 
 
 The gate's index guard reads the schema through the system runner only, with the one fixed `schema-indexes` template, for a template that declares `indexNeeds`; the reader the gate hands out (`IndexReader`) runs nothing else, and only for a principal the policy allows, whatever the source's last check showed. The `Gate` itself has the one member `run`.
 
+The paged expand read takes an optional time window the same way. The window is two instants, `windowFrom` and `windowTo`, given together or not at all, and they are parameters: the statement compares each relationship's own `observed_at` property (a name from the mapping allowlist, quoted by `quoteName`) with them and never writes a date into the text. A relationship type with no `observed_at` in the mapping is not filtered, and the answer says so. The count form of the read takes the same two parameters. The three window comparisons (expand, shared-attribute and linked-entities) are written by the one module `gate/templates/window-condition.ts`. See [Filtered expansion](filtered-expansion.md).
+
 The checks read the code. The [input fuzz suite](fuzz-suite.md) tests the same rule at run time: it sends hostile requests and shows that every statement the executor sees is a fixed template with allowlisted names.
 
 ## Community code never imports `ee/`

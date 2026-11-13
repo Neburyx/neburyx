@@ -29,7 +29,7 @@ const mapping = parseMapping(
         { type: 'hub', label: 'Hub', stable_id: 'hubId', search: ['hubId'], link: 'https://records.example.test/{hubId}' },
         { type: 'leaf', label: 'Leaf', stable_id: 'leafId' },
       ],
-      relationships: [{ type: 'LINKED', from: 'hub', to: 'leaf', stable_id: 'relId', evidence: ['recordId'], evidence_link: 'https://records.example.test/r/{recordId}' }],
+      relationships: [{ type: 'LINKED', from: 'hub', to: 'leaf', stable_id: 'relId', observed_at: 'seenAt', evidence: ['recordId'], evidence_link: 'https://records.example.test/r/{recordId}' }],
       derived: [{ id: 'shared-leaf', from: 'hub', to: 'hub', via: ['LINKED', 'leaf', 'LINKED'], rule_version: 1 }],
       patterns: [
         { id: 'shared-hubs', name: 'Shared leaves', template: 'shared-attribute', bind: { anchor: 'hub', attribute: 'leaf', via: 'LINKED' } },
@@ -55,6 +55,7 @@ const ROUTES: readonly { readonly name: string; readonly route: string; readonly
   { name: 'template run of the linked-entities template', route: 'POST /v1/templates/:id/run', method: 'POST', path: '/v1/templates/linked-leaves/run', body: { sourceId: 'demo', params: { ref } }, headers: { 'idempotency-key': 'a-second-key-of-sixteen' } },
   { name: 'read by references', route: 'POST /v1/graph/read-refs', method: 'POST', path: '/v1/graph/read-refs', body: { sourceId: 'demo', entities: [{ sourceId: 'demo', ...ref }], edges: [STORED], derived: [DERIVED] } },
   { name: 'expand', route: 'POST /v1/graph/expand', method: 'POST', path: '/v1/graph/expand', body: { sourceId: 'demo', ref, neighborTypes: ['leaf'] } },
+  { name: 'expand with a window', route: 'POST /v1/graph/expand', method: 'POST', path: '/v1/graph/expand', body: { sourceId: 'demo', ref, neighborTypes: ['leaf'], window: { days: 7 } } },
   { name: 'source link', route: 'GET /v1/source-links/:ref', method: 'GET', path: `/v1/source-links/${sourceLinkSegmentOf({ form: 'entity', ref: { sourceId: 'demo', ...ref } })}` },
   { name: 'stored relationship evidence', route: 'GET /v1/edges/:ref', method: 'GET', path: `/v1/edges/${edgeRefSegmentOf(STORED)}` },
   { name: 'derived relationship evidence', route: 'GET /v1/edges/:ref', method: 'GET', path: `/v1/edges/${edgeRefSegmentOf(DERIVED)}` },

@@ -17,7 +17,7 @@ const isCalendarDate = (value: string): boolean => {
   return !Number.isNaN(time) && new Date(time).toISOString().startsWith(value);
 };
 
-/** A time window: the last `days` x 24 hours up to the request, or the days `from` to `to` inclusive (UTC); exactly one of the two. */
+/** A time window: the last `days` x 24 hours up to the request, or the days `from` to `to` inclusive (UTC); exactly one of the two. An expansion reads `days` as whole UTC days instead (`docs/filtered-expansion.md`). */
 export const windowSchema = z.union([
   z.strictObject({ days: z.number().int().min(1).max(WINDOW_MAX_DAYS) }),
   z

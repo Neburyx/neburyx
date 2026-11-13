@@ -6,6 +6,7 @@ import type { LoadedGraph } from '../state/loaded-graph.js';
 import { useStoreSelector, type ReadableStore } from '../state/store.js';
 import { aggregateNodesOf, type AggregateNode } from '../workspace/aggregate-nodes.js';
 import { neighborTypesOf, useExpandStoreWhenProvided } from '../workspace/expand-context.js';
+import { narrowingWindowOf } from '../workspace/window-status.js';
 import { usePreviewStoreWhenProvided } from '../workspace/preview-context.js';
 
 const NO_EXPANSIONS: ReadonlyMap<string, NodeExpansion> = new Map();
@@ -25,7 +26,7 @@ export function useAggregateNodes(graph: LoadedGraph, profile: SourceProfile | u
   const held = useStoreSelector(previews?.view ?? NO_COUNT, (current) => current);
   return useMemo(() => {
     if (expansions === undefined || previews === undefined || touched.size === 0) return NO_NODES;
-    return aggregateNodesOf({ graph, profile, touched, previewOf: (ref) => previews.held(ref, mask), expansionOf: (ref) => expansions.of(ref), relTypesOf: (ref, type) => expansions.relTypesOf(ref, type), mapped: (entityType) => neighborTypesOf(profile, entityType) });
+    return aggregateNodesOf({ graph, profile, touched, previewOf: (ref) => previews.held(ref, mask), expansionOf: (ref) => expansions.of(ref), relTypesOf: (ref, type) => expansions.relTypesOf(ref, type), windowedOf: (ref, type) => narrowingWindowOf(expansions.refinementOf(ref, type)?.window, expansions.of(ref).types.get(type)) !== undefined, mapped: (entityType) => neighborTypesOf(profile, entityType) });
     // the maps and counters are what changes when a preview answers or an expansion moves
   }, [graph, profile, touched, mask, asked, held, expansions, previews]);
 }

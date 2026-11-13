@@ -152,8 +152,8 @@ export type { DerivedNeighborsRequest, DerivedNeighborsResponse, DerivedNeighbor
 export { DEGREE_DIRECTIONS, DEGREE_WARNING_CODES, degreeByNeighborTypeSchema, degreeByTypeSchema, degreePreviewRequestSchema, degreePreviewSchema, degreeWarningSchema } from './degree-preview.js';
 export { COVERAGE_MAX_ENTITIES, COVERAGE_SCOPE, LOADED_QUALITIES, combineCoverage, notRetrievedText, coverageEntitySchema, coverageRequestSchema, coverageResponseSchema } from './coverage.js';
 export type { CoverageEntity, CoverageRequest, CoverageResponse } from './coverage.js';
-export { EXPAND_DIRECTIONS, EXPAND_SORTS, FILTER_KINDS, MAX_FILTERS, MAX_FILTER_VALUES, expandFilterSchema, expandPageSchema, expandRankSchema, expandRequestSchema, expandResponseSchema, filterShapeProblem, filterValueSchema } from './expand.js';
-export type { ExpandFilter, ExpandPage, ExpandRank, ExpandRequest, ExpandResponse, FilterKind, FilterValue } from './expand.js';
+export { EXPAND_DIRECTIONS, EXPAND_SORTS, FILTER_KINDS, MAX_FILTERS, MAX_FILTER_VALUES, expandFilterSchema, expandPageSchema, expandPageWindowSchema, expandRankSchema, expandRequestSchema, expandResponseSchema, filterShapeProblem, filterValueSchema } from './expand.js';
+export type { ExpandFilter, ExpandPage, ExpandPageWindow, ExpandRank, ExpandRequest, ExpandResponse, FilterKind, FilterValue } from './expand.js';
 export type { DegreeByType, DegreePreview, DegreePreviewRequest, DegreeWarning } from './degree-preview.js';
 export type { AggregateEvidenceHit, AggregateMember, DisabledRelationship, DisabledType, EvidenceGroup, ExactMatch, EvidenceHit, EvidenceRecord, Facets, GroupFailure, RelatedGroup, RelatedHit, RelationshipContext, SearchFailureGroup, SearchFilters, SearchGroup, SearchMatchMode, SearchMoreRequest, SearchMoreResult, SearchPagedGroup, SearchRequest, SearchResult, StartsWithGroup, StoredEvidenceHit, UnreferencedHit } from './search.js';
 export { EXPORT_FORMATS, EXPORT_HIDDEN_NOTE, EXPORT_SCOPE, EXPORT_STATUSES, IDEMPOTENCY_KEY_PATTERN, exportFileSchema, exportHeaderSchema, exportMaskingSchema, exportRequestSchema, exportSchema } from './exports.js';

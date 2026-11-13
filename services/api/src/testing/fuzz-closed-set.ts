@@ -1,5 +1,7 @@
 import { edgeRefSegmentOf, sourceLinkSegmentOf } from '@neburyx/contracts';
 import { registeredRoutesOf } from '../app.js';
+import { expandWindowInstantsOf } from '../graph/expand-window.js';
+import { windowInstantsOf } from '../graph/template-window.js';
 import { FUZZ_HEAVY_ANCHOR, FUZZ_LINKED_PRESETS, FUZZ_SHARED_PRESETS, FUZZ_TIGHT_SOURCE, FUZZ_SOURCE, FUZZ_TEXT, allowedNames, type FuzzRig } from './fuzz-rig.js';
 
 /** The names a statement quotes in backticks. */
@@ -182,12 +184,15 @@ async function buildClosedSet(rig: FuzzRig): Promise<{ readonly statements: Set<
   for (const neighborTypes of types) {
     for (const direction of ['out', 'in', 'both']) {
       for (const relTypes of [undefined, ['MADE_FROM'], ['USES'], ['MADE_FROM', 'USES']]) {
-        for (const mask of [undefined, true, false]) {
-          const response = await post('/v1/graph/expand', { sourceId: FUZZ_SOURCE, ref: { entityType: 'widget', stableId: 'W-1' }, neighborTypes, direction, ...(relTypes === undefined ? {} : { relTypes }), ...(mask === undefined ? {} : { mask }), limit: 2 });
-          const body = jsonOf(response.body);
-          for (const neighborType of neighborTypes) for (const cursor of cursorsOf(body).slice(0, 1)) expandCursors.push({ neighborType, cursor });
-          keys.push(...tokensOf(body).slice(0, 1));
-          keep();
+        // each read is also made with a window (its statements differ from the others only by the window conditions; the instants are parameters)
+        for (const window of [undefined, { days: 7 }]) {
+          for (const mask of [undefined, true, false]) {
+            const response = await post('/v1/graph/expand', { sourceId: FUZZ_SOURCE, ref: { entityType: 'widget', stableId: 'W-1' }, neighborTypes, direction, ...(relTypes === undefined ? {} : { relTypes }), ...(mask === undefined ? {} : { mask }), ...(window === undefined ? {} : { window }), limit: 2 });
+            const body = jsonOf(response.body);
+            for (const neighborType of neighborTypes) for (const cursor of cursorsOf(body).slice(0, 1)) expandCursors.push({ neighborType, cursor });
+            keys.push(...tokensOf(body).slice(0, 1));
+            keep();
+          }
         }
       }
     }
@@ -275,7 +280,8 @@ async function buildClosedSet(rig: FuzzRig): Promise<{ readonly statements: Set<
       keep();
     }
   }
-  return { statements, routes, cases, values: ['W-1', 'GD-0', 'L-1', FUZZ_HEAVY_ANCHOR, '2026-01-01', '2026-01-31', FUZZ_TEXT, 'ne', '+1-212-555-01', ...cursors, ...expandCursors.map((entry) => entry.cursor), ...keys.map((entry) => entry.stableId)] };
+  const instants = windows.flatMap((window) => (window === undefined ? [] : [expandWindowInstantsOf(window, new Date(rig.clock.now())), windowInstantsOf(window, new Date(rig.clock.now()))])).flatMap((pair) => [pair.windowFrom, pair.windowTo]);
+  return { statements, routes, cases, values: ['W-1', 'GD-0', 'L-1', FUZZ_HEAVY_ANCHOR, '2026-01-01', '2026-01-31', ...instants, FUZZ_TEXT, 'ne', '+1-212-555-01', ...cursors, ...expandCursors.map((entry) => entry.cursor), ...keys.map((entry) => entry.stableId)] };
 }
 
 const escaped = (value: string): string => value.replace(/[.*+?^${}()|[\]\\-]/g, '\\$&');

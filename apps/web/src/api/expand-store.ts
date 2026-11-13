@@ -1,4 +1,4 @@
-import type { Count, ElementRef, ExpandFilter, ExpandRank, ExpandRequest, ExpandResponse, GraphEdge } from '@neburyx/contracts';
+import type { Count, ElementRef, ExpandFilter, ExpandPageWindow, ExpandRank, ExpandRequest, ExpandResponse, GraphEdge } from '@neburyx/contracts';
 import type { ClientState } from '../state/client-state.js';
 import { DEFAULT_FILTER_HASH, DEFAULT_POLICY_VERSION, edgeKey, elementKey, queryKeyText, type QueryKey } from '../state/keys.js';
 import { outsideFocusNote } from '../canvas/focus-note.js';
@@ -7,6 +7,7 @@ import { createStore, readable, type ReadableStore } from '../state/store.js';
 import type { ApiClient, ApiFailure } from './client.js';
 import type { RequestTracker } from '../banner/request-tracker.js';
 import type { RequestKind } from '../banner/copy.js';
+import { DEFAULT_WINDOW, windowKey, windowRequestOf, type ExpandWindow } from './expand-window.js';
 import type { FailureReporter } from './failure-reporter.js';
 import { UNEXPECTED } from './use-request.js';
 import { BOUNDED_LIMIT } from './heavy-estimate.js';
@@ -16,10 +17,12 @@ import type { HeavyGuard } from './heavy-guard.js';
 export interface Refinement {
   readonly filters: readonly ExpandFilter[];
   readonly rank: ExpandRank | undefined;
+  /** The window of the ask; absent, the node's own choice (the last 7 days until the person changes it). The store keeps the window it used with the chain, which the cursor binds. */
+  readonly window?: ExpandWindow | undefined;
 }
 
 /** The refinement as text, so that two refinements are the same ask exactly when their texts are equal. */
-export const refinementKey = (refinement: Refinement | undefined): string => JSON.stringify([[...(refinement?.filters ?? [])].map((filter) => JSON.stringify(filter)).sort(), refinement?.rank ?? null]);
+export const refinementKey = (refinement: Refinement | undefined): string => JSON.stringify([[...(refinement?.filters ?? [])].map((filter) => JSON.stringify(filter)).sort(), refinement?.rank ?? null, refinement?.window === undefined ? null : windowKey(refinement.window)]);
 
 /** What the client knows of the pages of one neighbor type of one node: how many of its relationships are on the canvas, where the next page starts, and whether that cursor can still be used. */
 export interface TypeProgress {
@@ -32,6 +35,9 @@ export interface TypeProgress {
   readonly matching?: Count | undefined;
   /** How many relationships the pages of the chain now running brought, whether or not they were already on the canvas. */
   readonly inChain?: number | undefined;
+  /** How the window of the chain's first page applied to this type, and the two UTC instants it resolved to; kept for the later pages. None when the chain had no window. */
+  readonly window?: ExpandPageWindow | undefined;
+  readonly range?: { readonly from: string; readonly to: string } | undefined;
 }
 
 const notAskedAfterFailure = (count: number): string => `${count} selected ${count === 1 ? 'node was' : 'nodes were'} not asked after the failure.`;
@@ -112,6 +118,11 @@ export interface ExpandStore {
   setPageSize(ref: ElementRef, value: number): PageSizeCheck;
   /** The relationship types the loaded chain of a neighbor type was started with; undefined for all sourced types or when there is no chain. */
   relTypesOf(ref: ElementRef, neighborType: string): readonly string[] | undefined;
+  /** The window the node is expanded with: the last 7 days until the person chooses another number of days or all time. Every way of expanding the node sends it. */
+  windowOf(ref: ElementRef): ExpandWindow;
+  setWindow(ref: ElementRef, window: ExpandWindow): void;
+  /** The windows the person chose, by node key; changes when one is chosen. */
+  readonly windows: ReadableStore<ReadonlyMap<string, ExpandWindow>>;
   /** The filters and the rank the loaded chain of a neighbor type was started with; undefined when it has none or there is no chain. */
   refinementOf(ref: ElementRef, neighborType: string): Refinement | undefined;
   loadMore(ref: ElementRef, neighborType: string): Promise<ExpandOutcome>;
@@ -168,6 +179,7 @@ function neighborTypeOf(edge: GraphEdge, ref: ElementRef): string {
  */
 export function createExpandStore(client: ApiClient, state: ClientState, person: () => string, report?: FailureReporter, heavy?: HeavyGuard, tracker?: RequestTracker): ExpandStore {
   const store = createStore<ReadonlyMap<string, NodeExpansion>>(new Map());
+  const choices = createStore<ReadonlyMap<string, ExpandWindow>>(new Map());
   const notes = createStore<readonly string[]>([]);
   const chains = new Map<string, Map<string, Chain>>();
   const newest = new Map<string, number>();
@@ -304,9 +316,11 @@ export function createExpandStore(client: ApiClient, state: ClientState, person:
     return { duplicates: [...new Set(duplicates)], nothingNew: freshNodes.length === 0 && fresh.length === 0 && answer.edges.length > 0 };
   };
 
-  async function run(ref: ElementRef, action: ExpansionAction): Promise<ExpandOutcome> {
+  async function run(ref: ElementRef, given: ExpansionAction): Promise<ExpandOutcome> {
     const nodeKey = elementKey(ref);
     const epoch = epochOf();
+    // an ask that names no window takes the node's own choice, and the chain it begins keeps it: every entry sends the window the person sees
+    let action: ExpansionAction = given.kind === 'first' || given.kind === 'pages' ? { ...given, refinement: { filters: given.refinement?.filters ?? [], rank: given.refinement?.rank, window: given.refinement?.window ?? choices.getState().get(nodeKey) ?? DEFAULT_WINDOW } } : given;
     touch(ref);
     heavy?.release(ref);
     const mine = (newest.get(nodeKey) ?? 0) + 1;
@@ -390,6 +404,7 @@ export function createExpandStore(client: ApiClient, state: ClientState, person:
       ...(Object.keys(cursors).length === 0 ? {} : { cursors }),
       ...(refinement === undefined || refinement.filters.length === 0 ? {} : { filters: [...refinement.filters] }),
       ...(refinement?.rank === undefined ? {} : { rank: refinement.rank }),
+      ...(refinement?.window === undefined ? {} : windowRequestOf(refinement.window)),
     };
     // a newer ask for the node stops the older one's fetch, and the person's Cancel stops this one; either way nothing of the answer is merged
     controllers.get(nodeKey)?.abort();
@@ -438,8 +453,10 @@ export function createExpandStore(client: ApiClient, state: ClientState, person:
     for (const page of result.value.pages) {
       const chain = chainsOf(nodeKey).get(page.neighborType);
       // the first page of a chain with filters counts what they match; the pages after it do not, and keep that number
-      const counted = (refinement?.filters.length ?? 0) > 0 ? (firstTypesOf(action).includes(page.neighborType) ? page.matchingTotal : before.types.get(page.neighborType)?.matching) : undefined;
-      progress.set(page.neighborType, { loaded: chain?.all.size ?? 0, hasMore: page.hasMore, cursor: page.nextCursor, restartNeeded: false, matching: counted, inChain: chain?.chain.size ?? 0 });
+      const refined = (refinement?.filters.length ?? 0) > 0 || (result.value.window !== undefined && page.window !== undefined && page.window.applied !== 'none');
+      const counted = refined ? (firstTypesOf(action).includes(page.neighborType) ? page.matchingTotal : before.types.get(page.neighborType)?.matching) : undefined;
+      const first = firstTypesOf(action).includes(page.neighborType);
+      progress.set(page.neighborType, { loaded: chain?.all.size ?? 0, hasMore: page.hasMore, cursor: page.nextCursor, restartNeeded: false, matching: counted, inChain: chain?.chain.size ?? 0, window: first ? page.window : before.types.get(page.neighborType)?.window, range: first ? result.value.window : before.types.get(page.neighborType)?.range });
     }
     write(nodeKey, { epoch, status: 'idle', failure: undefined, types: progress, pageSize: result.value.pageSize, chosenPageSize: before.chosenPageSize, duplicates: before.duplicates || duplicates.length > 0, warnings: result.value.warnings, failedAction: undefined });
     return 'sent';
@@ -530,6 +547,13 @@ export function createExpandStore(client: ApiClient, state: ClientState, person:
       return { ok: true, value };
     },
     relTypesOf: (ref, neighborType) => chains.get(`${epochOf()}|${elementKey(ref)}`)?.get(neighborType)?.relTypes,
+    windowOf: (ref) => choices.getState().get(elementKey(ref)) ?? DEFAULT_WINDOW,
+    setWindow(ref, window) {
+      const next = new Map(choices.getState());
+      next.set(elementKey(ref), window);
+      choices.setState(next);
+    },
+    windows: readable(choices),
     refinementOf: (ref, neighborType) => chains.get(`${epochOf()}|${elementKey(ref)}`)?.get(neighborType)?.refinement,
     loadMore: (ref, neighborType) => run(ref, { kind: 'more', type: neighborType }),
     startOver: (ref, neighborType) => run(ref, { kind: 'restart', type: neighborType }),

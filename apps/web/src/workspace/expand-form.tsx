@@ -48,6 +48,10 @@ import { allNeighborTypes, neighborCount, relationshipCounts, relationshipOption
 import { usePreviewStore } from './preview-context.js';
 import { declaredProperties, readDrafts, type FilterDraft } from './expand-refine.js';
 import { FilterField, RankField, type RankChoice } from './expand-refine-fields.js';
+import { WINDOW_SHOW_ALL_TIME, windowAllTimeText, windowEmptyText } from './expand-copy.js';
+import { showAllTime as showAllTimeOf, windowStatusOf } from './window-status.js';
+import { DEFAULT_WINDOW, windowKey } from '../api/expand-window.js';
+import { ExpandWindowField } from './expand-window-field.js';
 
 export const PANEL_FIRST_CONTROL = 'data-panel-first';
 
@@ -96,6 +100,7 @@ export function ExpandForm({ node, only }: { readonly node: ElementRef; /** The 
   const [drafts, setDrafts] = useState<readonly FilterDraft[]>([]);
   const [rankChoice, setRankChoice] = useState<RankChoice | undefined>(undefined);
   const [maskNote, setMaskNote] = useState(false);
+  const [windowProblem, setWindowProblem] = useState<string | undefined>(undefined);
   const draftIds = useRef(0);
   const fieldId = useId();
   const askedTypes: readonly string[] | undefined = relationshipType === FILTERS_CHOICE ? onOptions.map((option) => option.type) : relationshipType === undefined ? undefined : [relationshipType];
@@ -116,7 +121,8 @@ export function ExpandForm({ node, only }: { readonly node: ElementRef; /** The 
   // a rank on a property the chosen types do not all declare is not asked for: the order falls back to the observed time
   const rank = rankChoice === undefined || !(rankChoice.on === 'neighbor' ? declaredSortable.neighbor : declaredSortable.relationship).includes(rankChoice.property) ? undefined : rankChoice;
   const read = readDrafts(drafts.filter((draft) => (draft.on === 'neighbor' ? declaredFilterable.neighbor : declaredFilterable.relationship).includes(draft.property)));
-  const refinement: Refinement = { filters: read.filters, rank };
+  const windowChoice = useStoreSelector(expansions.windows, () => expansions.windowOf(node));
+  const refinement: Refinement = { filters: read.filters, rank, window: windowChoice };
   const ceiling = expansions.ceilingOf(node.sourceId);
   const shown = sizeText ?? String(expansion.chosenPageSize ?? expansion.pageSize ?? preview?.pageSize ?? FALLBACK_PAGE_SIZE);
   const size = parsedSize(shown);
@@ -252,6 +258,7 @@ export function ExpandForm({ node, only }: { readonly node: ElementRef; /** The 
         )}
       </div>
 
+      <ExpandWindowField window={windowChoice} onChange={(chosen) => expansions.setWindow(node, chosen)} range={[...expansion.types.entries()].find(([type, progress]) => progress.range !== undefined && windowKey(expansions.refinementOf(node, type)?.window ?? DEFAULT_WINDOW) === windowKey(windowChoice))?.[1].range} dated={dated} onProblem={setWindowProblem} />
       <RankField declared={declaredSortable} neighborName={neighborName} rank={rank} onChange={setRankChoice} observedNote={dated === 'all' ? RANK_NOTE_TIME : dated === 'some' ? RANK_NOTE_MIXED : RANK_NOTE_NONE} />
       <FilterField declared={declaredFilterable} neighborName={neighborName} drafts={drafts} problems={read.problems} next={() => ++draftIds.current} onChange={setDrafts} />
       {personalHidden ? <p className="neighbor-types-note">{PERSONAL_DATA_NOT_OFFERED}</p> : null}
@@ -273,7 +280,7 @@ export function ExpandForm({ node, only }: { readonly node: ElementRef; /** The 
       </div>
 
       {leftOut.length === 0 || relationshipType === undefined || relationshipType === FILTERS_CHOICE ? null : <p className="neighbor-types-note">{leftOutText(leftOut.map((type) => displayNameOf(profile, type)), relationshipType)}</p>}
-      <button type="button" className="primary supernode-load" disabled={!sizeValid || ticked.length === 0 || read.problems.size > 0} aria-disabled={busy ? true : undefined} onClick={load}>
+      <button type="button" className="primary supernode-load" disabled={!sizeValid || ticked.length === 0 || read.problems.size > 0 || windowProblem !== undefined} aria-disabled={busy ? true : undefined} onClick={load}>
         {loadPerTypeLabel(sizeValid ? size : (expansion.chosenPageSize ?? FALLBACK_PAGE_SIZE))}
       </button>
       {ticked.length === 0 ? <p className="neighbor-types-note">{CHOOSE_A_TYPE}</p> : null}
@@ -282,12 +289,39 @@ export function ExpandForm({ node, only }: { readonly node: ElementRef; /** The 
         const progress = expansion.types.get(type);
         const chainRefinement = expansions.refinementOf(node, type);
         // what a chain counted is shown while the panel still asks what the chain was started with
-        if (progress === undefined || (chainRefinement?.filters.length ?? 0) === 0 || progress.matching === undefined || refinementKey(chainRefinement) !== refinementKey(refinement)) return [];
+        if (progress === undefined || (chainRefinement?.filters.length ?? 0) === 0 || progress.matching === undefined || progress.matching.scope === 'expand:window' || refinementKey(chainRefinement) !== refinementKey(refinement)) return [];
+        // a count for a window is shown once, by the window lines, and never beside the all-time total
         const total = relationshipType === FILTERS_CHOICE ? undefined : totalForLine(preview, type, relationshipType);
         return [
           <p key={`matching-${type}`} className="neighbor-types-note" role="status">
             {matchingLine(displayNameOf(profile, type), degreeCountText(progress.matching), total)}
           </p>,
+        ];
+      })}
+      {ticked.flatMap((type) => {
+        const progress = expansion.types.get(type);
+        const chainRefinement = expansions.refinementOf(node, type);
+        // what the window did is shown while the panel still asks the window the chain was started with
+        const status = progress === undefined || chainRefinement?.window === undefined || windowKey(chainRefinement.window) !== windowKey(windowChoice) ? undefined : windowStatusOf(chainRefinement.window, progress, chainRefinement.filters.length > 0);
+        if (status === undefined) return [];
+        return [
+          <div key={`window-${type}`} className="neighbor-types-notes" role="status">
+            {[
+              status.empty !== undefined ? windowEmptyText(status.empty, displayNameOf(profile, type)) : displayNameOf(profile, type) + (status.count === undefined ? '' : `: ${status.count}`),
+              ...(status.empty === undefined ? [] : [windowAllTimeText(preview?.byNeighborType.find((entry) => entry.entityType === type)?.count)].filter((line) => line !== undefined)),
+              ...status.notes,
+              ...(status.ended === undefined ? [] : [status.ended]),
+            ].map((line) => (
+              <p key={line} className="neighbor-types-note">
+                {line}
+              </p>
+            ))}
+            {status.empty === undefined ? null : (
+              <button type="button" className="neighbor-types-link" aria-disabled={busy ? true : undefined} onClick={() => (busy ? undefined : showAllTimeOf(expansions, node, type))}>
+                {WINDOW_SHOW_ALL_TIME}
+              </button>
+            )}
+          </div>,
         ];
       })}
       {ticked.some((type) => {

@@ -1,4 +1,4 @@
-import type { Count, ExpandFilter, ExpandPage, ExpandRank, ExpandRequest, ExpandResponse, GraphEdge, GraphNode } from '@neburyx/contracts';
+import type { Count, ExpandFilter, ExpandPage, ExpandPageWindow, ExpandRank, ExpandRequest, ExpandResponse, GraphEdge, GraphNode, Window } from '@neburyx/contracts';
 import { AppError } from '../errors.js';
 import type { EntityReader } from '../entities/entity-reader.js';
 import { allowlistFromMapping } from '../gate/allowlist.js';
@@ -11,6 +11,7 @@ import type { Gate, GatePage, GateRequest, SourceAllowlist } from '../gate/types
 import type { SourceAccess } from '../investigations/source-access.js';
 import type { MappingModel } from '../mapping/model.js';
 import type { Principal } from '../seams/seams.js';
+import { expandWindowInstantsOf } from './expand-window.js';
 
 export interface ExpandServiceRequest {
   readonly traceId: string;
@@ -23,6 +24,7 @@ export interface ExpandServiceRequest {
   readonly direction: ExpandDirection;
   readonly filters?: readonly ExpandFilter[];
   readonly rank?: ExpandRank;
+  readonly window?: Window;
   readonly limit?: number;
   readonly cursors?: Readonly<Record<string, string>>;
   readonly mask: boolean;
@@ -53,19 +55,28 @@ function plansOf(allowlist: SourceAllowlist, request: ExpandServiceRequest): rea
   return plans.map((plan) => ({ neighborType: plan.neighborType, relTypes: plan.relTypes, reads: plan.relTypes === undefined || plan.relTypes.length > 0 }));
 }
 
-function totalOf(page: ExpansionPage, first: boolean, hasMore: boolean): Count {
-  if (!first || hasMore) return { quality: 'unknown', scope: SCOPE };
+function totalOf(page: ExpansionPage, first: boolean, hasMore: boolean, scope = SCOPE): Count {
+  if (!first || hasMore) return { quality: 'unknown', scope };
   const clean = Object.values(page.dropped).every((count) => count === 0 || count === undefined);
-  return { value: page.returned, quality: clean ? 'exact' : 'lowerBound', scope: SCOPE };
+  return { value: page.returned, quality: clean ? 'exact' : 'lowerBound', scope };
 }
 
 const COUNT_SCOPE = 'expand:count';
+/** The scope of every count that comes from a read a window applied to: a number for the window, never the degree of the entity. */
+const WINDOW_SCOPE = 'expand:window';
 
 /** The relationships a first page that holds everything stands for, when the count could not be read: one for a stored relationship and the members of an aggregate; a lower bound when a member count or a row is not exact. */
-function relationshipsOn(page: ExpansionPage, hasMore: boolean): Count {
-  if (hasMore) return { quality: 'unknown', scope: COUNT_SCOPE };
+function relationshipsOn(page: ExpansionPage, hasMore: boolean, scope = COUNT_SCOPE): Count {
+  if (hasMore) return { quality: 'unknown', scope };
   const clean = Object.values(page.dropped).every((count) => count === 0 || count === undefined) && page.edges.every((edge) => edge.memberCount === undefined || edge.memberCount.quality === 'exact');
-  return { value: page.edges.reduce((sum, edge) => sum + (edge.memberCount?.value ?? 1), 0), quality: clean ? 'exact' : 'lowerBound', scope: COUNT_SCOPE };
+  return { value: page.edges.reduce((sum, edge) => sum + (edge.memberCount?.value ?? 1), 0), quality: clean ? 'exact' : 'lowerBound', scope };
+}
+
+/** How a window applies to the page of one neighbor type: to every relationship type it reads, to some or to none, and to which it does not apply. */
+function windowOf(branches: readonly { readonly type: string; readonly observedAt: string | undefined }[]): { readonly applied: ExpandPageWindow['applied']; readonly notAppliedTo: string[] } {
+  const timed = branches.filter((branch) => branch.observedAt !== undefined);
+  const notAppliedTo = [...new Set(branches.filter((branch) => branch.observedAt === undefined).map((branch) => branch.type))];
+  return { applied: timed.length === 0 ? 'none' : timed.length === branches.length ? 'full' : 'partial', notAppliedTo };
 }
 
 function distinct<T>(values: readonly T[], keyOf: (value: T) => string): T[] {
@@ -78,8 +89,9 @@ function distinct<T>(values: readonly T[], keyOf: (value: T) => string): T[] {
   });
 }
 
-export function createExpandService(deps: { readonly gate: Gate; readonly mapping: MappingModel; readonly access: SourceAccess; readonly entities: EntityReader }): ExpandService {
+export function createExpandService(deps: { readonly gate: Gate; readonly mapping: MappingModel; readonly access: SourceAccess; readonly entities: EntityReader; readonly now?: () => Date }): ExpandService {
   const allowlists = new Map(deps.mapping.sources.map((source) => [source.id, allowlistFromMapping(source)]));
+  const now = deps.now ?? (() => new Date());
   return {
     async expand(request) {
       await deps.access.require({ traceId: request.traceId, principal: request.principal, sourceId: request.sourceId, auditAction: expandNeighborsTemplate.auditAction, rate: 'count' });
@@ -97,6 +109,10 @@ export function createExpandService(deps: { readonly gate: Gate; readonly mappin
         const branches = expandBranchesOf(allowlist, request.entityType, plan.neighborType, plan.relTypes, request.direction);
         return (request.filters !== undefined && undeclaredFilter(allowlist, plan.neighborType, branches, request.filters) !== undefined) || (request.rank !== undefined && undeclaredRank(allowlist, plan.neighborType, branches, request.rank));
       })) throw new AppError('INVALID_REQUEST');
+      // the window is resolved once for the request, so that every page of it holds the same two instants, and is given to the types that have a relationship type with an observed time
+      const instants = request.window === undefined ? undefined : expandWindowInstantsOf(request.window, now());
+      const windows = new Map(reading.map((plan) => [plan.neighborType, windowOf(expandBranchesOf(allowlist, request.entityType, plan.neighborType, plan.relTypes, request.direction))] as const));
+      const windowFor = (plan: (typeof reading)[number]): Record<string, string> => (instants !== undefined && windows.get(plan.neighborType)?.applied !== 'none' ? { ...instants } : {});
       const gateRequests = reading.map((plan): GateRequest => {
         const cursor = request.cursors?.[plan.neighborType];
         return {
@@ -104,7 +120,7 @@ export function createExpandService(deps: { readonly gate: Gate; readonly mappin
           principal: request.principal,
           sourceId: request.sourceId,
           templateId: EXPAND_NEIGHBORS_ID,
-          params: { entityType: request.entityType, stableId: request.stableId, neighborType: plan.neighborType, ...(plan.relTypes === undefined ? {} : { relTypes: plan.relTypes }), direction: request.direction, sort: 'observed', ...(request.filters === undefined ? {} : { filters: request.filters }), ...(request.rank === undefined ? {} : { rank: request.rank }) },
+          params: { entityType: request.entityType, stableId: request.stableId, neighborType: plan.neighborType, ...(plan.relTypes === undefined ? {} : { relTypes: plan.relTypes }), direction: request.direction, sort: 'observed', ...(request.filters === undefined ? {} : { filters: request.filters }), ...(request.rank === undefined ? {} : { rank: request.rank }), ...windowFor(plan) },
           limit,
           mask: request.mask,
           ...(request.signal === undefined ? {} : { signal: request.signal }),
@@ -126,31 +142,33 @@ export function createExpandService(deps: { readonly gate: Gate; readonly mappin
       const anchorFound = items.some((item) => item.anchorFound);
       const anchor: GraphNode[] = anchorFound ? [] : [await deps.entities.read({ traceId: request.traceId, principal: request.principal, sourceId: request.sourceId, entityType: request.entityType, stableId: request.stableId, mask: request.mask, ...(request.signal === undefined ? {} : { signal: request.signal }) })];
       // the count of what a filter matches is a read of its own, after the pages: it is exact or it is `unknown`, and a count that fails never fails a page
-      const counted = new Map<string, Count | undefined>();
+      const counted = new Map<string, { readonly count: Count; readonly undated?: number }>();
       const countWarnings: string[] = [];
-      if (request.filters !== undefined) {
-        // one after another, as the pages are, so that a request holds one read slot at a time and a source is not asked for several counts at once
-        for (const plan of reading) {
-          if (request.cursors?.[plan.neighborType] !== undefined) continue;
-          try {
-            const answer = await deps.gate.run({
-              traceId: request.traceId,
-              principal: request.principal,
-              sourceId: request.sourceId,
-              templateId: EXPAND_COUNT_ID,
-              params: { entityType: request.entityType, stableId: request.stableId, neighborType: plan.neighborType, ...(plan.relTypes === undefined ? {} : { relTypes: plan.relTypes }), direction: request.direction, filters: request.filters },
-              limit: 1,
-              mask: request.mask,
-              ...(request.signal === undefined ? {} : { signal: request.signal }),
-            });
-            const total = (answer.items[0] as Partial<ExpandCountItem> | undefined)?.total;
-            if (typeof total !== 'number') throw new AppError('INTERNAL_ERROR');
-            counted.set(plan.neighborType, { value: total, quality: 'exact', scope: COUNT_SCOPE });
-          } catch (error) {
-            // a cancel is not an AppError and ends the request; a refusal or a failure of the count read leaves the page as it is, told in a warning
-            if (!(error instanceof AppError)) throw error;
-            countWarnings.push(`The relationships to ${plan.neighborType} that match the filters could not be counted.`);
-          }
+      // a count read follows a refined first page: always when filters are asked, and, for a window, when the first page is cut (a page that holds everything is its own count)
+      const needsCount = (plan: (typeof reading)[number], index: number): boolean =>
+        request.cursors?.[plan.neighborType] === undefined && (request.filters !== undefined || (windowFor(plan)['windowFrom'] !== undefined && pages[index]?.hasMore === true));
+      // one after another, as the pages are, so that a request holds one read slot at a time and a source is not asked for several counts at once
+      for (const [index, plan] of reading.entries()) {
+        if (!needsCount(plan, index)) continue;
+        try {
+          const answer = await deps.gate.run({
+            traceId: request.traceId,
+            principal: request.principal,
+            sourceId: request.sourceId,
+            templateId: EXPAND_COUNT_ID,
+            params: { entityType: request.entityType, stableId: request.stableId, neighborType: plan.neighborType, ...(plan.relTypes === undefined ? {} : { relTypes: plan.relTypes }), direction: request.direction, ...(request.filters === undefined ? {} : { filters: request.filters }), ...windowFor(plan) },
+            limit: 1,
+            mask: request.mask,
+            ...(request.signal === undefined ? {} : { signal: request.signal }),
+          });
+          const read = answer.items[0] as Partial<ExpandCountItem> | undefined;
+          if (typeof read?.total !== 'number') throw new AppError('INTERNAL_ERROR');
+          const windowed = windowFor(plan)['windowFrom'] !== undefined;
+          counted.set(plan.neighborType, { count: { value: read.total, quality: 'exact', scope: windowed ? WINDOW_SCOPE : COUNT_SCOPE }, ...(windowed && typeof read.undated === 'number' ? { undated: read.undated } : {}) });
+        } catch (error) {
+          // a cancel is not an AppError and ends the request; a refusal or a failure of the count read leaves the page as it is, told in a warning
+          if (!(error instanceof AppError)) throw error;
+          countWarnings.push(request.filters === undefined ? `The relationships to ${plan.neighborType} in the window could not be counted.` : `The relationships to ${plan.neighborType} that match the filters could not be counted.`);
         }
       }
       const byType = new Map(reading.map((plan, index) => [plan.neighborType, { item: items[index], page: pages[index] }] as const));
@@ -162,12 +180,20 @@ export function createExpandService(deps: { readonly gate: Gate; readonly mappin
         // a page that says there is more and gives no way to ask for it is never shown as the end
         if (page.hasMore && page.nextCursor === undefined) throw new AppError('INTERNAL_ERROR');
         const hasMore = page.hasMore;
-        return { neighborType: plan.neighborType, returned: item.returned, hasMore, matchingTotal: request.filters !== undefined && request.cursors?.[plan.neighborType] === undefined ? (counted.get(plan.neighborType) ?? relationshipsOn(item, hasMore)) : totalOf(item, request.cursors?.[plan.neighborType] === undefined, hasMore), ...(page.nextCursor === undefined ? {} : { nextCursor: page.nextCursor }) };
+        const first = request.cursors?.[plan.neighborType] === undefined;
+        const windowInfo = windows.get(plan.neighborType);
+        const windowed = windowFor(plan)['windowFrom'] !== undefined;
+        const scope = windowed ? WINDOW_SCOPE : undefined;
+        const counting = counted.get(plan.neighborType);
+        const refined = request.filters !== undefined || windowed;
+        const matchingTotal = refined && first ? (counting?.count ?? relationshipsOn(item, hasMore, scope ?? COUNT_SCOPE)) : totalOf(item, first, hasMore, scope ?? SCOPE);
+        const windowPage: ExpandPageWindow | undefined = request.window === undefined || windowInfo === undefined ? undefined : { ...windowInfo, ...(counting?.undated === undefined ? {} : { undatedLeftOut: counting.undated }) };
+        return { neighborType: plan.neighborType, returned: item.returned, hasMore, matchingTotal, ...(page.nextCursor === undefined ? {} : { nextCursor: page.nextCursor }), ...(windowPage === undefined ? {} : { window: windowPage }) };
       });
       const nodes = distinct([...anchor, ...items.flatMap((item) => item.nodes)], (node) => canonicalJson(node.ref));
       const edges = distinct<GraphEdge>(items.flatMap((item) => item.edges), (edge) => canonicalJson(edge.ref));
       const warnings = [...new Set([...items.flatMap((item) => item.warnings), ...countWarnings])];
-      return { ref: { sourceId: request.sourceId, entityType: request.entityType, stableId: request.stableId }, pageSize: limit, nodes, edges, pages: expandPages, warnings } satisfies ExpandResponse;
+      return { ref: { sourceId: request.sourceId, entityType: request.entityType, stableId: request.stableId }, pageSize: limit, ...(instants === undefined ? {} : { window: { from: instants.windowFrom, to: instants.windowTo } }), nodes, edges, pages: expandPages, warnings } satisfies ExpandResponse;
     },
   };
 }

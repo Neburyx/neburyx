@@ -213,7 +213,7 @@ export async function startFuzzRig(options: FuzzRigOptions = {}) {
   const cursors = createCursorCodec({ key: TEST_CURSOR_KEY, clock: clock.now });
   const parts = assembleGate({ mapping: FUZZ_MAPPING, seams, executor, logger: { warn: () => undefined }, clock: clock.now, cursors, referenceKeys: TEST_REFERENCE_KEYS, policyVersion: () => policy.version });
   const webRoot = makeWebRoot();
-  const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store: memoryAppStore(), mapping: FUZZ_MAPPING, seams: { ...defaults, ...seams }, gate: parts.gate, indexes: parts.indexes, referenceKeys: TEST_REFERENCE_KEYS, limiter: neverRefuses });
+  const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store: memoryAppStore(), mapping: FUZZ_MAPPING, seams: { ...defaults, ...seams }, gate: parts.gate, indexes: parts.indexes, referenceKeys: TEST_REFERENCE_KEYS, limiter: neverRefuses, templateRunClock: () => new Date(clock.now()) });
   const tally = { answers: new Map<string, number>(), statements: 0, distinct: new Set<string>() };
   const fold = (): void => {
     for (const call of executor.calls) {

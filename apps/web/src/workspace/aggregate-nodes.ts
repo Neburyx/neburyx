@@ -1,6 +1,7 @@
 import type { Count, DegreePreview, ElementRef, IconKey, SourceProfile } from '@neburyx/contracts';
 import type { NodeExpansion } from '../api/expand-store.js';
 import { degreeCountText } from './degree-text.js';
+import { NOT_LOADED_ALL_TIME } from './expand-copy.js';
 import { formatNumber } from './scope-text.js';
 import type { LoadedGraph } from '../state/loaded-graph.js';
 import { elementKey } from '../state/keys.js';
@@ -51,6 +52,8 @@ export interface AggregateInput {
   readonly expansionOf: (ref: ElementRef) => NodeExpansion;
   /** The relationship types the chain of a neighbor type was started with; none for all sourced types. */
   readonly relTypesOf: (ref: ElementRef, neighborType: string) => readonly string[] | undefined;
+  /** Whether the chain of a neighbor type was read with a window that narrowed it: its pages ending then does not mean everything of the type is loaded. */
+  readonly windowedOf?: ((ref: ElementRef, neighborType: string) => boolean) | undefined;
   readonly mapped: (entityType: string) => readonly string[];
 }
 
@@ -71,13 +74,14 @@ export function aggregateNodesOf(input: AggregateInput): readonly AggregateNode[
       if (!known && progress === undefined) continue;
       const have = loaded.byType.get(type) ?? { value: 0, quality: 'exact' as const, scope: 'loaded in this view' };
       const chain = input.relTypesOf(node.ref, type);
-      const ended = progress !== undefined && !progress.hasMore && !progress.restartNeeded && (chain === undefined || chain.length === 0);
+      const windowed = input.windowedOf?.(node.ref, type) === true;
+      const ended = progress !== undefined && !progress.hasMore && !progress.restartNeeded && (chain === undefined || chain.length === 0) && !windowed;
       const remainder = notLoadedOf(total, have);
       if (ended || (remainder !== undefined && remainder.value === 0 && remainder.quality === 'exact')) continue;
       const entity = input.profile?.entityTypes.find((entry) => entry.type === type);
       const name = entity?.displayName ?? type;
-      const label = known && total !== undefined ? `${name} · ${numberWithQuality(have)} / ${numberWithQuality(total)}` : `${name} · ${numberWithQuality(have)} loaded`;
-      const spoken = known && total !== undefined ? `${name}: ${numberWithQuality(have)} of ${numberWithQuality(total)} relationships loaded, not all loaded` : `${name}: ${numberWithQuality(have)} relationships loaded, not all loaded`;
+      const label = known && total !== undefined ? `${name} · ${numberWithQuality(have)} / ${numberWithQuality(total)}${windowed ? ` ${NOT_LOADED_ALL_TIME}` : ''}` : `${name} · ${numberWithQuality(have)} loaded`;
+      const spoken = known && total !== undefined ? `${name}: ${numberWithQuality(have)} of ${numberWithQuality(total)} relationships loaded${windowed ? ` (${NOT_LOADED_ALL_TIME})` : ''}, not all loaded` : `${name}: ${numberWithQuality(have)} relationships loaded, not all loaded`;
       out.push({ nodeKey, neighborType: type, iconKey: entity?.icon ?? 'generic', label, name, figures: known && total !== undefined ? `${numberWithQuality(have)} / ${numberWithQuality(total)}` : `${numberWithQuality(have)} loaded`, detail: known && total !== undefined ? `total ${degreeCountText(total)}` : 'total: no count', spoken });
     }
   }

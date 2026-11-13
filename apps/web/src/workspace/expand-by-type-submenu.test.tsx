@@ -293,7 +293,7 @@ describe('the Expand neighbors and Expand by neighbor type entries of the node m
     await user.click(checkbox('type-d'));
     await user.click(within(submenu()).getByRole('button', { name: 'Expand 1 type (up to 25 each)' }));
     expect(expansions).toHaveLength(1);
-    expect(expansions[0]?.body).toEqual({ sourceId: 'a', ref: { entityType: 'type-a', stableId: 'n1' }, neighborTypes: ['kind-b'], direction: 'both' });
+    expect(expansions[0]?.body).toEqual({ sourceId: 'a', ref: { entityType: 'type-a', stableId: 'n1' }, neighborTypes: ['kind-b'], direction: 'both', window: { days: 7 } });
     expect(screen.queryByRole('menu')).toBeNull();
     await act(async () => expansions[0]?.answer({ ok: true, value: response() }));
     expect(state.loadedGraph().nodes.map((entry) => entry.ref.stableId).sort()).toEqual(['b1', 'n1', 'n2']);

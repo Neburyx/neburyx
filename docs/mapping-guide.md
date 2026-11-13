@@ -234,7 +234,7 @@ What is cached, what it costs and when it does not apply is in [Switch the AI pr
 | `from` | yes | The entity type at the start |
 | `to` | yes | The entity type at the end |
 | `stable_id` | no | Recommended: with it each relationship is an item of its own and pages continue without a repeat; without it the type is shown as aggregate relationships. See [a paged relationship type](../domain-packs/README.md#a-relationship-type-that-is-paged) |
-| `observed_at` | no | The temporal property used to order and filter |
+| `observed_at` | no | The temporal property used to order and filter, and the one an expansion's time window follows: a relationship type with no `observed_at` is not filtered by a window |
 | `evidence` | no | Properties that refer to source records. Each needs an index |
 | `filterable` | no | Properties the client may filter loaded relationships by |
 | `sortable` | no | Properties a page may be ranked by |

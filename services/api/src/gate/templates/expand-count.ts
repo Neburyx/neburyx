@@ -7,6 +7,8 @@ import { integerCandidateOf } from './stable-id.js';
 
 export const EXPAND_COUNT_ID = 'expand-count';
 
+const instant = z.iso.datetime({ offset: true });
+
 const paramsSchema = z
   .strictObject({
     entityType: z.string().min(1),
@@ -14,24 +16,33 @@ const paramsSchema = z
     neighborType: z.string().min(1),
     relTypes: z.array(z.string().min(1)).min(1).optional(),
     direction: z.enum(['out', 'in', 'both']),
+    windowFrom: instant.optional(),
+    windowTo: instant.optional(),
     filters: z
       .array(expandFilterSchema)
       .min(1)
       .max(MAX_FILTERS)
-      .refine((filters) => filters.every((filter) => filterShapeProblem(filter) === undefined)),
+      .refine((filters) => filters.every((filter) => filterShapeProblem(filter) === undefined))
+      .optional(),
   })
-  .transform(({ filters, ...params }) => ({ ...params, filters: canonicalFiltersOf(filters), stableInteger: integerCandidateOf(params.stableId) }));
+  .refine((params) => (params.windowFrom === undefined) === (params.windowTo === undefined), { message: 'a window has both instants or neither' })
+  .refine((params) => params.filters !== undefined || params.windowFrom !== undefined, { message: 'a count has filters or a window' })
+  .transform(({ filters, ...params }) => ({ ...params, ...(filters === undefined ? {} : { filters: canonicalFiltersOf(filters) }), stableInteger: integerCandidateOf(params.stableId) }));
 
 /** The one number the read returns, or nothing: a count the server did not answer with a whole number is not a count. */
 export interface ExpandCountItem {
   readonly total: number;
+  /** With a window: the relationships of a type with an observed time that have no usable time value and are left out of the total. */
+  readonly undated?: number;
 }
 
 function normalize(rows: readonly Row[]): readonly Item[] {
   const [row] = rows;
   const total = row?.['total'];
   if (rows.length !== 1 || typeof total !== 'number' || !Number.isSafeInteger(total) || total < 0) return [{ unreadable: { rows: String(rows.length) } }];
-  return [{ total } satisfies ExpandCountItem];
+  const undated = row?.['undated'];
+  if (undated !== undefined && (typeof undated !== 'number' || !Number.isSafeInteger(undated) || undated < 0)) return [{ unreadable: { rows: String(rows.length) } }];
+  return [{ total, ...(undated === undefined ? {} : { undated }) } satisfies ExpandCountItem];
 }
 
 /**

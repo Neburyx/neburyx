@@ -1,5 +1,6 @@
 import { AppError } from '../../errors.js';
 import { quoteName } from '../render.js';
+import { inWindow } from './window-condition.js';
 import type { Params, SourceAllowlist } from '../types.js';
 
 /** The most hops this template reads; the source's `max_hops` may lower it (the gate refuses more). */
@@ -111,13 +112,10 @@ function pattern(allowlist: SourceAllowlist, step: LinkedStep, near: string, rel
   return `(${near})-${rel}-(${far}:${label})`;
 }
 
-const instant = (variable: string, time: string): string =>
-  `CASE WHEN ${variable}.${time} IS :: ZONED DATETIME THEN ${variable}.${time} WHEN ${variable}.${time} IS :: LOCAL DATETIME THEN datetime({datetime: ${variable}.${time}, timezone: 'UTC'}) WHEN ${variable}.${time} IS :: DATE THEN datetime({date: ${variable}.${time}, timezone: 'UTC'}) END`;
-
 function windowOf(request: LinkedEntitiesRequest, step: LinkedStep, relationship: string): string[] {
   if (!request.windowed || step.observedAt === undefined) return [];
   const time = quoteName(step.observedAt);
-  return [`${instant(relationship, time)} >= datetime($windowFrom)`, `${instant(relationship, time)} < datetime($windowTo)`];
+  return [...inWindow(relationship, time)];
 }
 
 const where = (conditions: readonly string[]): string => (conditions.length === 0 ? '' : ` WHERE ${conditions.join(' AND ')}`);

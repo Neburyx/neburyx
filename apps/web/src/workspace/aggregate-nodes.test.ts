@@ -129,3 +129,23 @@ describe('the keys of aggregate nodes', () => {
     expect(parseAggregateKey('not json')).toBeUndefined();
   });
 });
+
+describe('the aggregate nodes of a chain that was read with a window', () => {
+  const ended = idle([['kind-b', { hasMore: false, cursor: undefined, loaded: 2 }]]);
+
+  it('keeps the node for a type whose windowed pages ended, since what is outside the window is not loaded, and labels its total as all time', () => {
+    const drawn = aggregateNodesOf(input({ expansionOf: () => ended, windowedOf: (_ref, type) => type === 'kind-b' }));
+    const node = drawn.find((item) => item.neighborType === 'kind-b');
+    expect(node?.label).toBe('kind-b · 2 / 12 all time');
+    expect(node?.spoken).toContain('all time');
+  });
+
+  it('draws none for the same chain when it was read with all time, as before', () => {
+    const drawn = aggregateNodesOf(input({ expansionOf: () => ended, windowedOf: () => false }));
+    expect(drawn.map((item) => item.neighborType)).not.toContain('kind-b');
+  });
+
+  it('is unchanged for every other chain: no windowedOf at all', () => {
+    expect(aggregateNodesOf(input({ expansionOf: () => ended })).map((item) => item.neighborType)).not.toContain('kind-b');
+  });
+});
