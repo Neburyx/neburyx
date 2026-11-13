@@ -3,8 +3,10 @@ import { communitySeams } from '../seams/community-seams.js';
 import { gateRequest, LOCAL_PRINCIPAL } from '../testing/gate.js';
 import { envFor, NEO4J_SERIES, runAdmin, runAll, sourceFor, startNeo4j, type RunningNeo4j } from '../testing/neo4j-server.js';
 import { isNormalizedLinked } from './normalize/linked-entities.js';
+import { isNormalizedLinkedCount } from './normalize/linked-entities-count.js';
 import { createSourceGate, type SourceGate } from './source-gate.js';
 import { LINKED_ENTITIES_ID } from './templates/linked-entities.js';
+import { LINKED_ENTITIES_COUNT_ID } from './templates/linked-entities-count.js';
 
 let server: RunningNeo4j;
 let parts: SourceGate;
@@ -27,6 +29,9 @@ beforeAll(async () => {
   await runAdmin(server, link('w0', 'w1', "datetime('2026-01-10T00:00:00Z')"));
   await runAdmin(server, link('w0', 'w2', "datetime('2026-03-01T00:00:00Z')"));
   await runAdmin(server, link('w0', 'w3'));
+  await runAdmin(server, "UNWIND range(1, 12) AS i CREATE (:LMaker {makerId: 'k' + toString(i)})");
+  await runAdmin(server, "CREATE (:LMaker {makerId: 'f5'})");
+  await runAdmin(server, "MATCH (a:LMaker {makerId: 'f5'}), (k:LMaker) WHERE k.makerId STARTS WITH 'k' AND size(k.makerId) <= 3 CREATE (a)-[:LINKS {linkId: 'kk' + k.makerId}]->(k)");
   await runAdmin(server, 'CALL db.awaitIndexes(300)');
   const defaults = communitySeams();
   const open = (budgets: Record<string, number>): SourceGate => createSourceGate({ mapping: { sources: [sourceFor(server, { entities, relationships, budgets })] }, env: envFor(server), seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit }, logger: { warn: () => undefined } });
@@ -43,6 +48,13 @@ async function run(stableId: string, extra: Record<string, unknown> = {}, limit 
   const [item] = page.items;
   if (!isNormalizedLinked(item)) throw new Error('the read gave no linked-entities result');
   return { page, item, ids: item.matches.map((entry) => entry.match.stableId), hopsOf: Object.fromEntries(item.matches.map((entry) => [entry.match.stableId, entry.hops])) };
+}
+
+async function count(stableId: string, extra: Record<string, unknown> = {}, gate: SourceGate = parts) {
+  const page = await gate.gate.run(gateRequest({ sourceId: 'graph', principal: LOCAL_PRINCIPAL, templateId: LINKED_ENTITIES_COUNT_ID, params: { entityType: 'maker', stableId, targetType: 'maker', via: ['LINKS'], direction: 'out', ...extra }, limit: 1 }));
+  const [item] = page.items;
+  if (!isNormalizedLinkedCount(item)) throw new Error('the read gave no count');
+  return item;
 }
 
 const WINDOW = { windowFrom: '2026-01-01T00:00:00.000Z', windowTo: '2026-02-01T00:00:00.000Z' };
@@ -115,5 +127,42 @@ describe(`the linked-entities run on ${NEO4J_SERIES}`, () => {
     expect(lonely.ids).toEqual([]);
     expect(lonely.item.anchorFound).toBe(true);
     expect((await run('nobody')).item.anchorFound).toBe(false);
+  });
+});
+
+describe(`the count of the linked-entities run on ${NEO4J_SERIES}`, () => {
+  it('counts the matches the run would return, at one hop and at two, in each direction and with a window, each once', async () => {
+    for (const [anchor, extra] of [['a0', {}], ['a0', { maxHops: 2 }], ['a0', { direction: 'in' }], ['a0', { direction: 'both' }], ['a0', { direction: 'both', maxHops: 2 }], ['self', {}], ['lonely', {}], ['w0', WINDOW], ['w0', {}], ['d1', { maxHops: 2 }]] as const) {
+      const counted = await count(anchor, extra);
+      expect(counted.matches, `${anchor} ${JSON.stringify(extra)}`).toBe((await run(anchor, extra)).ids.length);
+      expect(counted.anchorFound).toBe(true);
+    }
+  });
+
+  it('reads one match more than the count cap and no more: four neighbors and a cap of 3 count 4', async () => {
+    expect((await count('f0')).matches).toBe(4);
+    expect((await count('f0', {}, small)).matches).toBe(4);
+    const twoHops = await count('f0', { maxHops: 2 }, small);
+    expect(twoHops.matches).toBe(4);
+    expect(twoHops.frontierBounded).toBe(true);
+  });
+
+  it('stops at the count cap plus one when the anchor has more matching neighbors than that: 12 neighbors and a cap of 3 count 4, at one hop and at two, and 12 under the default cap', async () => {
+    expect((await count('f5', {}, small)).matches).toBe(4);
+    expect((await count('f5', { maxHops: 2 }, small)).matches).toBe(4);
+    expect((await count('f5')).matches).toBe(12);
+    expect((await run('f5')).ids).toHaveLength(12);
+  });
+
+  it('does not traverse a supernode at two hops, says so, and counts the matches of the others', async () => {
+    const wide = await count('a1', { maxHops: 2 }, small);
+    expect(wide.supernodeSkipped).toBe(true);
+    expect(wide.matches).toBe((await run('a1', { maxHops: 2 }, 25, small)).ids.length);
+  });
+
+  it('says no anchor when the entity does not exist', async () => {
+    const nobody = await count('nobody');
+    expect(nobody.anchorFound).toBe(false);
+    expect(nobody.usable).toBe(false);
   });
 });

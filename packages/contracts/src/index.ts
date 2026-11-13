@@ -145,8 +145,8 @@ export {
 } from './search.js';
 export { TEMPLATE_PARAMS_SCHEMAS, listedTemplateSchema, paramsJsonSchemaOf, templateListQuerySchema, templateListResponseSchema } from './template-list.js';
 export type { ListedTemplate, TemplateListResponse } from './template-list.js';
-export { LINKED_HOPS_MAX, MIN_SHARED_MAX, TEMPLATE_RUN_NOTICE_CODES, WINDOW_MAX_DAYS, linkedEntitiesParamsSchema, linkedMatchSchema, sharedAttributeParamsSchema, templateRunNoticeSchema, templateRunRequestSchema, templateRunResponseSchema, windowSchema } from './template-run.js';
-export type { LinkedEntitiesParams, LinkedMatch, SharedAttributeParams, TemplateRunNotice, TemplateRunRequest, TemplateRunResponse, Window } from './template-run.js';
+export { HEAVY_CONTINUE_LIMIT, LINKED_HOPS_MAX, MIN_SHARED_MAX, TEMPLATE_RUN_NOTICE_CODES, WINDOW_MAX_DAYS, linkedEntitiesParamsSchema, linkedMatchSchema, sharedAttributeParamsSchema, templateRunHeavySchema, templateRunNoticeSchema, templateRunOkSchema, templateRunRequestSchema, templateRunResponseSchema, windowSchema } from './template-run.js';
+export type { LinkedEntitiesParams, LinkedMatch, SharedAttributeParams, TemplateRunHeavy, TemplateRunNotice, TemplateRunOk, TemplateRunRequest, TemplateRunResponse, Window } from './template-run.js';
 export { DERIVED_NEIGHBOR_CAP, derivedNeighborsRequestSchema, derivedNeighborsResponseSchema, derivedNeighborsResultSchema } from './derived-neighbors.js';
 export type { DerivedNeighborsRequest, DerivedNeighborsResponse, DerivedNeighborsResult } from './derived-neighbors.js';
 export { DEGREE_DIRECTIONS, DEGREE_WARNING_CODES, degreeByNeighborTypeSchema, degreeByTypeSchema, degreePreviewRequestSchema, degreePreviewSchema, degreeWarningSchema } from './degree-preview.js';

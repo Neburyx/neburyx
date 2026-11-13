@@ -150,6 +150,36 @@ function membersOf(allowlist: SourceAllowlist, request: LinkedEntitiesRequest): 
     : [read('r1', 'members1'), final(', members1', ', size(members1) > $countCap AS membersCut')];
 }
 
+interface Parts {
+  readonly anchorLine: string;
+  readonly neighbors: (targetOnly: boolean) => string;
+  readonly nearLabels: string;
+  /** The line that reads the degree of each distinct neighbor that can be a middle entity and splits them into those that are traversed and the supernodes (and whether a stop-listed one was left out). */
+  readonly intermediates: string;
+  readonly expansions: (returns: string) => string;
+  readonly targetStableId: string;
+}
+
+function partsOf(allowlist: SourceAllowlist, request: LinkedEntitiesRequest): Parts {
+  const [anchorLabel, targetStableId, anchorStableId] = [allowlist.entityLabels.get(request.anchor), allowlist.stableIds.get(request.target), allowlist.stableIds.get(request.anchor)];
+  if (anchorLabel === undefined || targetStableId === undefined || anchorStableId === undefined) throw new AppError('INVALID_REQUEST');
+  const nearLabels = [...new Set(request.second.map((step) => `n:${labelOf(allowlist, step.near)}`))].join(' OR ');
+  const counts = degreePatterns(request).map((text, index) => `CALL { WITH n MATCH ${text} WITH 1 AS hit LIMIT $countCap + 1 RETURN count(*) AS c${index} }`);
+  const total = degreePatterns(request).map((_text, index) => `c${index}`).join(' + ');
+  return {
+    anchorLine: `MATCH (a:${quoteName(anchorLabel)}) WHERE a.${quoteName(anchorStableId)} IN [$stableId, $stableInteger] WITH a ORDER BY elementId(a) LIMIT 1`,
+    neighbors: (targetOnly) =>
+      request.first
+        .filter((step) => !targetOnly || step.far === request.target)
+        .map((step) => `WITH a MATCH ${pattern(allowlist, step, 'a', 'r', 'n')}${where(['n <> a', ...windowOf(request, step, 'r')])} RETURN n, r, ${step.far === request.target} AS isTarget`)
+        .join(' UNION ALL '),
+    nearLabels,
+    intermediates: `CALL { WITH nbs UNWIND nbs AS e WITH DISTINCT e.n AS n WHERE ${nearLabels} ${counts.join(' ')} WITH n, ${total} AS degree, ${stopCondition(allowlist, request)} AS stopped RETURN collect(CASE WHEN degree > $countCap THEN n END) AS heavy, collect(CASE WHEN degree <= $countCap AND NOT stopped THEN n END) AS mids, count(CASE WHEN stopped THEN 1 END) > 0 AS stopListed }`,
+    expansions: (returns) => request.second.map((step) => `WITH a, n MATCH ${pattern(allowlist, step, `n:${labelOf(allowlist, step.near)}`, 'r2', 'x')}${where(['x <> a', ...windowOf(request, step, 'r2')])} RETURN ${returns}`).join(' UNION ALL '),
+    targetStableId,
+  };
+}
+
 /**
  * The statement of a linked-entities run, from the mapping and the request. The anchor is the first node by element ID with the stable ID. Its neighbors over the listed steps are read, at most `$countCap + 1` of them, each
  * with the relationship that joins it and whether it is of the target's type. A run of two hops then reads, for each distinct neighbor, the relationships it has over the listed types, at most `$countCap + 1` for each type: a neighbor
@@ -158,33 +188,45 @@ function membersOf(allowlist: SourceAllowlist, request: LinkedEntitiesRequest): 
  * every request value is a parameter.
  */
 export function linkedEntitiesStatementOf(allowlist: SourceAllowlist, request: LinkedEntitiesRequest): string {
-  const [anchorLabel, targetStableId, anchorStableId] = [allowlist.entityLabels.get(request.anchor), allowlist.stableIds.get(request.target), allowlist.stableIds.get(request.anchor)];
-  if (anchorLabel === undefined || targetStableId === undefined || anchorStableId === undefined) throw new AppError('INVALID_REQUEST');
+  const parts = partsOf(allowlist, request);
   const twoHops = request.maxHops > 1;
-  const neighbors = request.first.map((step) => `WITH a MATCH ${pattern(allowlist, step, 'a', 'r', 'n')}${where(['n <> a', ...windowOf(request, step, 'r')])} RETURN n, r, ${step.far === request.target} AS isTarget`).join(' UNION ALL ');
   const lines = [
-    `MATCH (a:${quoteName(anchorLabel)}) WHERE a.${quoteName(anchorStableId)} IN [$stableId, $stableInteger] WITH a ORDER BY elementId(a) LIMIT 1`,
-    `CALL { WITH a CALL { ${neighbors} } WITH n, r, isTarget LIMIT $countCap + 1 WITH collect({n: n, r: r, isTarget: isTarget}) AS found RETURN size(found) > $countCap AS cutFirst, found[..$countCap] AS nbs }`,
+    parts.anchorLine,
+    `CALL { WITH a CALL { ${parts.neighbors(false)} } WITH n, r, isTarget LIMIT $countCap + 1 WITH collect({n: n, r: r, isTarget: isTarget}) AS found RETURN size(found) > $countCap AS cutFirst, found[..$countCap] AS nbs }`,
   ];
   if (twoHops && request.second.length > 0) {
-    const nearLabels = [...new Set(request.second.map((step) => `n:${labelOf(allowlist, step.near)}`))].join(' OR ');
-    const counts = degreePatterns(request).map((text, index) => `CALL { WITH n MATCH ${text} WITH 1 AS hit LIMIT $countCap + 1 RETURN count(*) AS c${index} }`);
-    const total = degreePatterns(request).map((_text, index) => `c${index}`).join(' + ');
-    const expansions = request.second
-      .map((step) => `WITH a, n MATCH ${pattern(allowlist, step, `n:${labelOf(allowlist, step.near)}`, 'r2', 'x')}${where(['x <> a', ...windowOf(request, step, 'r2')])} RETURN x, r2`)
-      .join(' UNION ALL ');
     lines.push(
-      `CALL { WITH nbs UNWIND nbs AS e WITH DISTINCT e.n AS n WHERE ${nearLabels} ${counts.join(' ')} WITH n, ${total} AS degree, ${stopCondition(allowlist, request)} AS stopped RETURN collect(CASE WHEN degree > $countCap THEN n END) AS heavy, collect(CASE WHEN degree <= $countCap AND NOT stopped THEN n END) AS mids, count(CASE WHEN stopped THEN 1 END) > 0 AS stopListed }`,
-      `CALL { WITH a, mids UNWIND mids AS n CALL { ${expansions} } WITH n, x, r2 LIMIT $countCap + 1 WITH collect({x: x, m: n, r2: r2}) AS found RETURN size(found) > $countCap AS cutSecond, found[..$countCap] AS second }`,
+      parts.intermediates,
+      `CALL { WITH a, mids UNWIND mids AS n CALL { ${parts.expansions('x, r2')} } WITH n, x, r2 LIMIT $countCap + 1 WITH collect({x: x, m: n, r2: r2}) AS found RETURN size(found) > $countCap AS cutSecond, found[..$countCap] AS second }`,
     );
   } else {
     lines.push('WITH a, nbs, cutFirst, [] AS heavy, false AS stopListed, false AS cutSecond, [] AS second');
   }
   lines.push(
     'WITH a, cutFirst OR cutSecond AS bounded, heavy, stopListed, [e IN nbs WHERE e.isTarget | {x: e.n, hops: 1, m: null, r1: e.r, r2: null}] + [h IN second | {x: h.x, hops: 2, m: h.m, r1: [e IN nbs WHERE e.n = h.m][0].r, r2: h.r2}] AS entries',
-    `CALL { WITH entries UNWIND entries AS entry WITH entry ORDER BY entry.hops WITH entry.x AS x, collect(entry)[0] AS best ORDER BY best.hops, x.${quoteName(targetStableId)} LIMIT $limit + 1 RETURN collect(best) AS ms }`,
+    `CALL { WITH entries UNWIND entries AS entry WITH entry ORDER BY entry.hops WITH entry.x AS x, collect(entry)[0] AS best ORDER BY best.hops, x.${quoteName(parts.targetStableId)} LIMIT $limit + 1 RETURN collect(best) AS ms }`,
     'UNWIND CASE WHEN size(ms) = 0 THEN [null] ELSE ms END AS m',
     ...membersOf(allowlist, request),
   );
   return lines.join('\n');
+}
+
+/**
+ * The statement of the count of a linked-entities run, from the mapping and the request: the matches the run would return (the neighbors of the target's type, and for two hops those reached through a middle entity that is
+ * not a supernode and not on a stop-list), each once, streamed and stopped at `$countCap + 1`, counted. The matches of one hop are streamed from the anchor itself, not from the frontier the run keeps (which is cut to the cap, so
+ * it could never read more than the cap). For two hops the frontier of middle entities is read with the run's own bound (at most `$countCap + 1` neighbors) and the run's degree check of each middle entity, so it traverses no supernode; it reads no relationship of the matches and orders nothing. One row: the number of matches read, `frontierBounded` (the frontier reached the cap) and `supernodeSkipped` (a middle entity was
+ * left out as a supernode or on a stop-list); no row when the anchor is not found. It returns numbers and flags only.
+ */
+export function linkedEntitiesCountStatementOf(allowlist: SourceAllowlist, request: LinkedEntitiesRequest): string {
+  const parts = partsOf(allowlist, request);
+  if (request.maxHops === 1 || request.second.length === 0) {
+    return [parts.anchorLine, `CALL { WITH a CALL { ${parts.neighbors(true)} } WITH DISTINCT n LIMIT $countCap + 1 RETURN count(n) AS matches }`, 'RETURN matches, false AS frontierBounded, false AS supernodeSkipped'].join('\n');
+  }
+  return [
+    parts.anchorLine,
+    `CALL { WITH a CALL { ${parts.neighbors(false)} } WITH n, isTarget LIMIT $countCap + 1 WITH collect({n: n, isTarget: isTarget}) AS found RETURN size(found) > $countCap AS frontierBounded, found[..$countCap] AS nbs }`,
+    parts.intermediates,
+    `CALL { WITH a, mids CALL { WITH a CALL { ${parts.neighbors(true)} } RETURN n AS x UNION ALL WITH a, mids UNWIND mids AS n CALL { ${parts.expansions('x')} } RETURN x } WITH DISTINCT x LIMIT $countCap + 1 RETURN count(x) AS matches }`,
+    'RETURN matches, frontierBounded, size(heavy) > 0 OR stopListed AS supernodeSkipped',
+  ].join('\n');
 }

@@ -428,3 +428,45 @@ describe('the API client, listing the templates of a source', () => {
     expect(await createApiClient(async () => new Response(JSON.stringify(list))).listTemplates('a b/c', controller.signal)).toEqual({ ok: false, failure: { code: 'ABORTED' } });
   });
 });
+
+describe('the API client, running a template', () => {
+  const ok = { status: 'ok', templateId: 'shared-attribute', templateVersion: '1', count: { value: 0, quality: 'exact', scope: 'template:shared-attribute' }, matchIds: [], nodes: [], edges: [], notices: [], warnings: [] };
+  const heavy = { status: 'heavy', templateId: 'shared-attribute', templateVersion: '1', estimate: { value: 500, quality: 'lowerBound', scope: 'template:shared-attribute:estimate' }, threshold: 500, continueLimit: 25, notices: [], warnings: [] };
+  const body = { sourceId: 'demo', params: { ref: { entityType: 'maker', stableId: 'A-1' } } };
+
+  it('posts the typed body to the run route of the id, encoded, with the idempotency key, and returns the parsed result', async () => {
+    const asked: { url: string; init: RequestInit | undefined }[] = [];
+    const client = createApiClient(async (input, init) => {
+      asked.push({ url: input, init });
+      return new Response(JSON.stringify(ok));
+    });
+    expect(await client.runTemplate('shared devices', body, 'key-1')).toEqual({ ok: true, value: ok });
+    expect(asked[0]?.url).toBe('/v1/templates/shared%20devices/run');
+    expect(asked[0]?.init?.method).toBe('POST');
+    expect(JSON.parse(String(asked[0]?.init?.body))).toEqual(body);
+    expect(new Headers(asked[0]?.init?.headers).get('idempotency-key')).toBe('key-1');
+  });
+
+  it('returns a heavy answer as a typed result, not an error', async () => {
+    const client = createApiClient(async () => new Response(JSON.stringify(heavy)));
+    expect(await client.runTemplate('shared-attribute', body, 'key-1')).toEqual({ ok: true, value: heavy });
+  });
+
+  it('sends the continue flag with a new key, and nothing else of the request changes', async () => {
+    const seen: { key: string | null; body: unknown }[] = [];
+    const client = createApiClient(async (_input, init) => {
+      seen.push({ key: new Headers(init?.headers).get('idempotency-key'), body: JSON.parse(String(init?.body)) });
+      return new Response(JSON.stringify(ok));
+    });
+    await client.runTemplate('shared-attribute', body, 'key-1');
+    await client.runTemplate('shared-attribute', { ...body, continue: true }, 'key-2');
+    expect(seen).toEqual([{ key: 'key-1', body }, { key: 'key-2', body: { ...body, continue: true } }]);
+  });
+
+  it('gives a schema mismatch for an answer of an unknown status, and keeps the code of an error the route answers with', async () => {
+    expect(await createApiClient(async () => new Response(JSON.stringify({ ...ok, status: 'later' }))).runTemplate('shared-attribute', body, 'key-1')).toEqual({ ok: false, failure: { code: 'SCHEMA_MISMATCH' } });
+    const error = { error: { code: 'CONFLICT', message: ERROR_TABLE.CONFLICT.message, retryable: ERROR_TABLE.CONFLICT.retryable, traceId: 'trace-9' } };
+    const result = await createApiClient(async () => new Response(JSON.stringify(error), { status: 409 })).runTemplate('shared-attribute', body, 'key-1');
+    expect(result).toMatchObject({ ok: false, failure: { code: 'CONFLICT' } });
+  });
+});

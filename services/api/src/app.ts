@@ -25,6 +25,7 @@ import { createDegreePreviewService } from './graph/degree-preview-service.js';
 import { createDerivedNeighborsService } from './graph/derived-neighbors-service.js';
 import { createTemplateListService } from './graph/template-list-service.js';
 import { createTemplateRunService } from './graph/template-run-service.js';
+import type { TemplateProbe } from './graph/template-probes.js';
 import { createExpandService } from './graph/expand-service.js';
 import { createDegreeCache, type DegreeCacheOptions } from './graph/degree-cache.js';
 import { NO_DEGREE_VERDICTS, type DegreeVerdicts } from './source-test/usability.js';
@@ -90,6 +91,8 @@ export interface AppOptions {
   readonly catalog?: TemplateCatalog | undefined;
   /** The time a window of a template run counts back from; a test passes a fixed one. */
   readonly templateRunClock?: (() => Date) | undefined;
+  /** The heavy-operation probes of the pattern templates (tests inject a map without one to reach an `unknown` estimate). */
+  readonly templateProbes?: ReadonlyMap<string, TemplateProbe> | undefined;
   /** The enterprise extension, only when the preview switch is on; its routes are mounted and `GET /v1/me` says `enterprise`. */
   readonly extension?: ProfileExtension | undefined;
 }
@@ -476,7 +479,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       return templateListResponseSchema.parse(templateList.list(query.data.sourceId));
     });
 
-    const templateRuns = createTemplateRunService({ gate: options.gate, mapping, access, ...(options.templateRunClock === undefined ? {} : { now: options.templateRunClock }) });
+    const templateRuns = createTemplateRunService({ gate: options.gate, mapping, access, ...(options.templateRunClock === undefined ? {} : { now: options.templateRunClock }), ...(options.templateProbes === undefined ? {} : { probes: options.templateProbes }) });
     const runSeams = options.seams ?? communitySeams();
     const runPolicyVersion = options.policyVersion ?? (() => 'none');
     app.post('/v1/templates/:id/run', { config: { permission: 'principal' } }, async (request, reply) => {
@@ -491,7 +494,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
         { store: options.store, policy: runSeams.policy, policyVersion: runPolicyVersion },
         { principal, sourceId, key, fingerprint: fingerprintOf({ method: 'POST', path: request.url.split('?')[0] ?? '', query: '', body: request.body }), stillReadable: () => Promise.resolve(mapping.sources.some((source) => source.id === sourceId)) },
         async () => {
-          const made = await templateRuns.run({ traceId: request.id, principal, sourceId, id: params.data.id, params: body.data.params, mask: body.data.mask === true, signal: signalOf(request) });
+          const made = await templateRuns.run({ traceId: request.id, principal, sourceId, id: params.data.id, params: body.data.params, mask: body.data.mask === true, continue: body.data.continue === true, signal: signalOf(request) });
           return { statusCode: 200, body: templateRunResponseSchema.parse(made), replayed: false };
         },
         (error) => (error instanceof AppError && error.code !== 'RATE_LIMITED' ? { statusCode: errorStatus(error.code), body: errorResponse(error.code, request.id, error.details) } : undefined),

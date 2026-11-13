@@ -5,8 +5,8 @@ import { MAX_EVIDENCE_PROPERTIES, MAX_FACET_PROBES, MAX_REFERENCE_PROPERTIES, MA
 import { declarationsOf, degreePairsOf } from './templates/degree-pairs.js';
 import { expandBranchesOf, expandCountStatementOf, expandStatementOf, undeclaredFilter, undeclaredRank, type ExpandDirection } from './templates/expand-statement.js';
 import { aggregateStatementOf } from './templates/aggregate-statement.js';
-import { linkedEntitiesRequestOf, linkedEntitiesStatementOf } from './templates/linked-entities-statement.js';
-import { sharedAttributeRequestOf, sharedAttributeStatementOf } from './templates/shared-attribute-statement.js';
+import { linkedEntitiesCountStatementOf, linkedEntitiesRequestOf, linkedEntitiesStatementOf } from './templates/linked-entities-statement.js';
+import { sharedAttributeCountStatementOf, sharedAttributeRequestOf, sharedAttributeStatementOf } from './templates/shared-attribute-statement.js';
 import { derivedRuleStatementOf, derivedSupportStatementOf, ruleOf } from './templates/derived-rule-statement.js';
 import { CONTEXT_BRANCHES, contextBranchesOf, relatedContextStatementOf, type ContextBranch } from './templates/related-context-statement.js';
 import type { GateParameter, Params, SourceAllowlist, Template } from './types.js';
@@ -279,13 +279,15 @@ function derivedRuleOf(template: Template, params: Params, allowlist: SourceAllo
 /** The statement of a linked-entities run: the entity types and the relationship types the request names, checked against the mapping's rows, written as `linkedEntitiesStatementOf` says. */
 function linkedEntitiesOf(template: Template, params: Params, allowlist: SourceAllowlist): string {
   if (template.linkedEntities === undefined) return '';
-  return linkedEntitiesStatementOf(allowlist, linkedEntitiesRequestOf(allowlist, params));
+  const request = linkedEntitiesRequestOf(allowlist, params);
+  return template.linkedEntities.count === true ? linkedEntitiesCountStatementOf(allowlist, request) : linkedEntitiesStatementOf(allowlist, request);
 }
 
 /** The statement of a shared-attribute run: the entity types and the relationship type the request names, checked against the mapping's rows, written as `sharedAttributeStatementOf` says. */
 function sharedAttributeOf(template: Template, params: Params, allowlist: SourceAllowlist): string {
   if (template.sharedAttribute === undefined) return '';
-  return sharedAttributeStatementOf(allowlist, sharedAttributeRequestOf(allowlist, params));
+  const request = sharedAttributeRequestOf(allowlist, params);
+  return template.sharedAttribute.count === true ? sharedAttributeCountStatementOf(allowlist, request) : sharedAttributeStatementOf(allowlist, request);
 }
 
 /** The statement of the supports of a derived relationship: the rule the request names, checked against the mapping's rules and against the type of the first end, written as `derivedSupportStatementOf` says. */

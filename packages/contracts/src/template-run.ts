@@ -56,6 +56,8 @@ export const templateRunRequestSchema = z.strictObject({
   sourceId: text,
   params: z.record(z.string(), z.unknown()),
   mask: z.boolean().optional(),
+  /** Continue a run that stopped as heavy: it skips the estimate and returns a first page of at most `HEAVY_CONTINUE_LIMIT`. */
+  continue: z.boolean().optional(),
 });
 
 export const TEMPLATE_RUN_NOTICE_CODES = ['stopListSkipped', 'noStopList', 'undatedExcluded', 'readBounded', 'evidenceCut', 'windowNotApplied', 'supernodesSkipped'] as const;
@@ -74,7 +76,10 @@ export const templateRunNoticeSchema = z.discriminatedUnion('code', [
 /** How a match of a linked-entities run was reached: in one or two hops, and through which entity when there were two. */
 export const linkedMatchSchema = z.strictObject({ match: elementRefSchema, hops: z.union([z.literal(1), z.literal(2)]), through: elementRefSchema.optional() });
 
-export const templateRunResponseSchema = z.strictObject({
+/** The page size "Continue with 25" offers after a heavy answer (TAS §8.1): a fixed product value; the source's `max_page` can only lower it. */
+export const HEAVY_CONTINUE_LIMIT = 25;
+
+export const templateRunOkSchema = z.strictObject({
   status: z.literal('ok'),
   templateId: text,
   templateVersion: text,
@@ -89,9 +94,32 @@ export const templateRunResponseSchema = z.strictObject({
   warnings: z.array(z.string()),
 });
 
+/**
+ * A run that would match more than the source's `heavy_op_threshold` stops with the estimate and no rows (TAS §8.1): the estimate is a lower bound at the threshold, `threshold` is the source's, and `continueLimit` is the page
+ * size a continue of this request would use. An estimate that is `exact`, `estimated` or `unknown` is never heavy.
+ */
+export const templateRunHeavySchema = z
+  .strictObject({
+    status: z.literal('heavy'),
+    templateId: text,
+    templateVersion: text,
+    presetId: text.optional(),
+    estimate: countSchema,
+    threshold: z.number().int().min(1),
+    continueLimit: z.number().int().min(1).max(HEAVY_CONTINUE_LIMIT),
+    notices: z.array(templateRunNoticeSchema),
+    warnings: z.array(z.string()),
+  })
+  .refine((answer) => answer.estimate.quality === 'lowerBound' && answer.estimate.value === answer.threshold, { message: 'a heavy answer holds a lower bound at the threshold', path: ['estimate'] });
+
+/** The answer of a run: the result, or the stop of a heavy run; `status` tells them apart. */
+export const templateRunResponseSchema = z.union([templateRunOkSchema, templateRunHeavySchema]);
+
 export type LinkedEntitiesParams = z.infer<typeof linkedEntitiesParamsSchema>;
 export type LinkedMatch = z.infer<typeof linkedMatchSchema>;
 export type SharedAttributeParams = z.infer<typeof sharedAttributeParamsSchema>;
 export type TemplateRunRequest = z.infer<typeof templateRunRequestSchema>;
 export type TemplateRunNotice = z.infer<typeof templateRunNoticeSchema>;
+export type TemplateRunOk = z.infer<typeof templateRunOkSchema>;
+export type TemplateRunHeavy = z.infer<typeof templateRunHeavySchema>;
 export type TemplateRunResponse = z.infer<typeof templateRunResponseSchema>;

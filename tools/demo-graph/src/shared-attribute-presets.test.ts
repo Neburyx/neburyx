@@ -1,10 +1,11 @@
 import { rmSync } from 'node:fs';
-import { templateRunResponseSchema } from '../../../packages/contracts/src/template-run.js';
+import { templateRunOkSchema } from '../../../packages/contracts/src/template-run.js';
 import { afterAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../../../services/api/src/app.js';
 import { allowlistFromMapping } from '../../../services/api/src/gate/allowlist.js';
 import type { ExecuteCall, ExecuteOutcome } from '../../../services/api/src/gate/executor.js';
 import { SHARED_ATTRIBUTE_ID } from '../../../services/api/src/gate/templates/shared-attribute.js';
+import { SHARED_ATTRIBUTE_COUNT_ID } from '../../../services/api/src/gate/templates/shared-attribute-count.js';
 import { createLogger } from '../../../services/api/src/logger.js';
 import { parseMapping } from '../../../services/api/src/mapping/load.js';
 import { communitySeams } from '../../../services/api/src/seams/community-seams.js';
@@ -40,7 +41,7 @@ async function started(layout: Layout, matches: readonly string[], flags: { read
     return { a, skipped: flags.skipped === true, bounded: false, b, xs: [x], ras: [plainRelationship(layout.via, a, x, properties(`${anchorId}-${attributeId}`))], rbs: [plainRelationship(layout.via, b, x, properties(`${match}-${attributeId}`))], shared: 1, evidenceCut: false };
   };
   const rows = matches.map((match) => row('ANCHOR', match, 'SHARED-1'));
-  const answer = (_call: ExecuteCall): Promise<ExecuteOutcome> => Promise.resolve({ status: 'rows', rows });
+  const answer = (call: ExecuteCall): Promise<ExecuteOutcome> => Promise.resolve({ status: 'rows', rows: call.templateId === SHARED_ATTRIBUTE_COUNT_ID ? [{ matches: matches.length, anchorBounded: false, skipped: flags.skipped === true }] : rows });
   const executor = new TestExecutor(withSchema(() => schemaAnswer(onlineIndexesOf(source)), answer));
   const parts = testSourceGate(mapping, { executor });
   const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store: memoryAppStore(), mapping, gate: parts.gate, seams: communitySeams() });
@@ -59,7 +60,7 @@ describe('the presets of the banking pack, run through the route with no code of
 
   it('runs Shared devices from the pack\'s own names: the other accounts of a ring are the matches, never the anchor', async () => {
     const rig = await started(devices, RING);
-    const body = templateRunResponseSchema.parse((await run(rig, 'shared-devices')).json());
+    const body = templateRunOkSchema.parse((await run(rig, 'shared-devices')).json());
     expect(body).toMatchObject({ presetId: 'shared-devices', templateId: 'shared-attribute', count: { value: 5, quality: 'exact' } });
     expect(body.matchIds.map((ref) => ref.stableId).sort()).toEqual(RING);
     expect(body.matchIds.map((ref) => ref.stableId)).not.toContain('ANCHOR');
@@ -72,7 +73,7 @@ describe('the presets of the banking pack, run through the route with no code of
 
   it('says a stop-listed attribute was skipped and still returns the matches through the others', async () => {
     const rig = await started({ ...devices, attribute: 'ip_address', via: 'CONNECTS_FROM' }, RING, { skipped: true });
-    const body = templateRunResponseSchema.parse((await run(rig, 'shared-addresses')).json());
+    const body = templateRunOkSchema.parse((await run(rig, 'shared-addresses')).json());
     expect(body.notices).toEqual([{ code: 'stopListSkipped' }]);
     expect(body.matchIds).toHaveLength(5);
     await rig.app.close();
@@ -80,7 +81,7 @@ describe('the presets of the banking pack, run through the route with no code of
 
   it('answers a lower bound of the limit when the run found one match more', async () => {
     const rig = await started(devices, [...RING.slice(0, 3), 'AC-9', 'AC-10']);
-    const body = templateRunResponseSchema.parse((await run(rig, 'shared-devices', { limit: 3 })).json());
+    const body = templateRunOkSchema.parse((await run(rig, 'shared-devices', { limit: 3 })).json());
     expect(body.count).toMatchObject({ value: 3, quality: 'lowerBound' });
     await rig.app.close();
   });
@@ -98,7 +99,7 @@ describe('the preset of the insurance pack', () => {
 
   it('runs Shared addresses with no code, says there is no stop list over the types, and shows the records as aggregate edges whose count is a lower bound', async () => {
     const rig = await started(addresses, ['CL-2', 'CL-3']);
-    const body = templateRunResponseSchema.parse((await run(rig, 'shared-addresses')).json());
+    const body = templateRunOkSchema.parse((await run(rig, 'shared-addresses')).json());
     expect(body.matchIds.map((ref) => ref.stableId).sort()).toEqual(['CL-2', 'CL-3']);
     expect(body.notices).toEqual([{ code: 'noStopList' }]);
     const aggregates = body.edges.filter((edge) => 'aggregate' in edge.ref);

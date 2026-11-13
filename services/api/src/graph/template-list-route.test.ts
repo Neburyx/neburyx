@@ -33,7 +33,7 @@ async function started(options: { readonly mapping?: ReturnType<typeof mappingOf
   const mapping = options.mapping ?? mappingOf();
   const [source] = mapping.sources;
   if (source === undefined) throw new Error('the mapping has no source');
-  const answer = (call: ExecuteCall): Promise<ExecuteOutcome> => Promise.resolve({ status: 'rows', rows: call.templateId === 'linked-entities' ? [linkedRow({ match: 'O-1' })] : [sharedRow({ match: 'O-1' })] });
+  const answer = (call: ExecuteCall): Promise<ExecuteOutcome> => Promise.resolve({ status: 'rows', rows: call.templateId === 'linked-entities-count' ? [{ matches: 0, frontierBounded: false, supernodeSkipped: false }] : call.templateId === 'shared-attribute-count' ? [{ matches: 0, anchorBounded: false, skipped: false }] : call.templateId === 'linked-entities' ? [linkedRow({ match: 'O-1' })] : [sharedRow({ match: 'O-1' })] });
   const executor = new TestExecutor(withSchema(() => schemaAnswer(onlineIndexesOf(source)), answer));
   const seams = communitySeams();
   const parts = testSourceGate(mapping, { executor, ...(options.catalog === undefined ? {} : { catalog: options.catalog }) });
@@ -61,6 +61,13 @@ describe('GET /v1/templates', () => {
     const [source] = mappingOf().sources;
     expect(body.presets).toEqual(source === undefined ? [] : presetProfilesOf(source));
     expect(body.presets.map((preset) => preset.id)).toEqual([LINKED_PRESET.id, SHARED_PRESET.id]);
+    await app.close();
+  });
+
+  it('does not list the count each pattern template reads before it runs, by ID or in any text', async () => {
+    const { app } = await started();
+    const text = (await list(app)).body;
+    for (const id of ['shared-attribute-count', 'linked-entities-count']) expect(text).not.toContain(id);
     await app.close();
   });
 

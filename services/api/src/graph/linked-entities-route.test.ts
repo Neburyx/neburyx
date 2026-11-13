@@ -1,9 +1,10 @@
 import { rmSync } from 'node:fs';
-import { templateRunResponseSchema } from '@neburyx/contracts';
+import { HEAVY_CONTINUE_LIMIT, templateRunOkSchema, templateRunResponseSchema } from '@neburyx/contracts';
 import { afterAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../app.js';
 import type { ExecuteCall, ExecuteOutcome } from '../gate/executor.js';
 import { LINKED_ENTITIES_ID } from '../gate/templates/linked-entities.js';
+import { LINKED_ENTITIES_COUNT_ID } from '../gate/templates/linked-entities-count.js';
 import { createLogger } from '../logger.js';
 import { communitySeams } from '../seams/community-seams.js';
 import type { AuditEvent, Seams } from '../seams/seams.js';
@@ -23,13 +24,17 @@ interface Options {
   readonly deny?: boolean;
   readonly mapping?: ReturnType<typeof linkedMappingOf>;
   readonly now?: () => Date;
+  /** The matches the estimate reads before the run, or its whole row. */
+  readonly probeMatches?: number;
+  readonly probeRow?: Record<string, unknown>;
 }
 
 async function started(options: Options = {}) {
   const mapping = options.mapping ?? linkedMappingOf();
   const [source] = mapping.sources;
   if (source === undefined) throw new Error('the mapping has no source');
-  const answer = (_call: ExecuteCall): Promise<ExecuteOutcome> => Promise.resolve({ status: 'rows', rows: options.rows ?? [] });
+  const probe = options.probeRow ?? { matches: options.probeMatches ?? 0, frontierBounded: false, supernodeSkipped: false };
+  const answer = (call: ExecuteCall): Promise<ExecuteOutcome> => Promise.resolve({ status: 'rows', rows: call.templateId === LINKED_ENTITIES_COUNT_ID ? [probe] : (options.rows ?? []) });
   const executor = new TestExecutor(withSchema(() => schemaAnswer(onlineIndexesOf(source)), answer));
   const events: AuditEvent[] = [];
   const defaults = communitySeams();
@@ -57,7 +62,7 @@ describe('POST /v1/templates/:id/run for a preset of the linked-entities templat
     const { app, executor } = await started({ rows: [linkedRow({ match: 'O-1' }), linkedRow({ match: 'O-2' })] });
     const response = await post(app, LINKED_PRESET.id, preset());
     expect(response.statusCode).toBe(200);
-    const body = templateRunResponseSchema.parse(response.json());
+    const body = templateRunOkSchema.parse(response.json());
     expect(body).toMatchObject({ status: 'ok', templateId: 'linked-entities', templateVersion: '1', presetId: 'linked-makers', count: { value: 2, quality: 'exact' }, notices: [] });
     expect(body.matchIds.map((ref) => ref.stableId)).toEqual(['O-1', 'O-2']);
     expect(body.matchIds.map((ref) => ref.stableId)).not.toContain('A-1');
@@ -71,7 +76,7 @@ describe('POST /v1/templates/:id/run for a preset of the linked-entities templat
 
   it('answers the entity in between for a match at two hops, once for a match reached at both', async () => {
     const { app, executor } = await started({ rows: [linkedRow({ match: 'O-1' }), linkedRow({ match: 'O-2', through: 'O-1' })] });
-    const body = templateRunResponseSchema.parse((await post(app, LINKED_PRESET.id, preset({ maxHops: 2 }))).json());
+    const body = templateRunOkSchema.parse((await post(app, LINKED_PRESET.id, preset({ maxHops: 2 }))).json());
     expect(body.links).toEqual([
       { match: { sourceId: 'demo', entityType: 'maker', stableId: 'O-1' }, hops: 1 },
       { match: { sourceId: 'demo', entityType: 'maker', stableId: 'O-2' }, hops: 2, through: { sourceId: 'demo', entityType: 'maker', stableId: 'O-1' } },
@@ -85,11 +90,11 @@ describe('POST /v1/templates/:id/run for a preset of the linked-entities templat
   it('answers a lower bound after a cut, and an exact zero for an anchor that exists and has no match, and NOT_FOUND for one that does not', async () => {
     const rows = Array.from({ length: 4 }, (_unused, index) => linkedRow({ match: `O-${index + 1}` }));
     const cut = await started({ rows });
-    const body = templateRunResponseSchema.parse((await post(cut.app, LINKED_PRESET.id, preset({ limit: 3 }))).json());
+    const body = templateRunOkSchema.parse((await post(cut.app, LINKED_PRESET.id, preset({ limit: 3 }))).json());
     expect(body.count).toMatchObject({ value: 3, quality: 'lowerBound' });
     await cut.app.close();
     const none = await started({ rows: [noLinkedRow()] });
-    expect(templateRunResponseSchema.parse((await post(none.app, LINKED_PRESET.id, preset())).json())).toMatchObject({ matchIds: [], count: { value: 0, quality: 'exact' } });
+    expect(templateRunOkSchema.parse((await post(none.app, LINKED_PRESET.id, preset())).json())).toMatchObject({ matchIds: [], count: { value: 0, quality: 'exact' } });
     await none.app.close();
     const missing = await started({ rows: [] });
     const response = await post(missing.app, LINKED_PRESET.id, preset());
@@ -99,7 +104,7 @@ describe('POST /v1/templates/:id/run for a preset of the linked-entities templat
 
   it('names the supernodes that were not traversed and answers a lower bound, and names the bound that was hit', async () => {
     const { app } = await started({ rows: [linkedRow({ match: 'O-1', heavy: ['H-1', 'H-2'], bounded: true })] });
-    const body = templateRunResponseSchema.parse((await post(app, LINKED_PRESET.id, preset({ maxHops: 2 }))).json());
+    const body = templateRunOkSchema.parse((await post(app, LINKED_PRESET.id, preset({ maxHops: 2 }))).json());
     expect(body.count.quality).toBe('lowerBound');
     expect(body.notices).toEqual([{ code: 'noStopList' }, { code: 'supernodesSkipped', entities: [{ sourceId: 'demo', entityType: 'maker', stableId: 'H-1' }, { sourceId: 'demo', entityType: 'maker', stableId: 'H-2' }] }, { code: 'readBounded' }]);
     await app.close();
@@ -109,7 +114,7 @@ describe('POST /v1/templates/:id/run for a preset of the linked-entities templat
     const mapping = linkedMappingOf();
     const { app } = await started({ rows: [linkedRow({ match: 'O-1', stopListed: true })], mapping });
     const request = { sourceId: 'demo', params: { ref: anchor, targetType: 'shop', via: ['USES_TOOL', 'STOCKED_AT'], maxHops: 2 } };
-    const body = templateRunResponseSchema.parse((await post(app, 'linked-entities', request)).json());
+    const body = templateRunOkSchema.parse((await post(app, 'linked-entities', request)).json());
     expect(body.notices).toEqual([{ code: 'stopListSkipped' }]);
     expect(body.count.quality).toBe('lowerBound');
     await app.close();
@@ -118,7 +123,7 @@ describe('POST /v1/templates/:id/run for a preset of the linked-entities templat
   it('applies a window on the clock of the service to the types that have a time, and names the relationship types it could not apply to', async () => {
     const { app, executor } = await started({ rows: [linkedRow({ match: 'O-1' })], now: () => new Date('2026-06-30T12:00:00.000Z') });
     const request = full({ via: ['LINKS', 'USES_TOOL'], maxHops: 2, window: { days: 30 } });
-    const body = templateRunResponseSchema.parse((await post(app, 'linked-entities', request)).json());
+    const body = templateRunOkSchema.parse((await post(app, 'linked-entities', request)).json());
     expect(runs(executor)[0]?.parameters).toMatchObject({ windowFrom: '2026-05-31T12:00:00.000Z', windowTo: '2026-06-30T12:00:00.000Z' });
     expect(body.notices).toEqual([{ code: 'undatedExcluded' }, { code: 'windowNotApplied', relationshipTypes: ['USES_TOOL'] }]);
     await app.close();
@@ -143,13 +148,13 @@ describe('POST /v1/templates/:id/run for a preset of the linked-entities templat
     const row = (members: readonly string[], cut: boolean) => ({ a: t, bounded: false, heavy: [], stopListed: false, x: s, mid: null, r1: member(members[0] ?? 'r0'), r2: null, hops: 1, members1: members.map(member), membersCut: cut });
     const request = { sourceId: 'demo', params: { ref: { entityType: 'tool', stableId: 'T-1' }, targetType: 'shop', via: ['STOCKED_AT'] } };
     const counted = await started({ rows: [row(['r0', 'r1', 'r2'], false)] });
-    const body = templateRunResponseSchema.parse((await post(counted.app, 'linked-entities', request)).json());
+    const body = templateRunOkSchema.parse((await post(counted.app, 'linked-entities', request)).json());
     expect(body.matchIds.map((ref) => ref.stableId)).toEqual(['S-1']);
     expect(body.edges).toHaveLength(1);
     expect(body.edges[0]).toMatchObject({ type: 'STOCKED_AT', memberCount: { value: 3, quality: 'exact' } });
     await counted.app.close();
     const cut = await started({ rows: [row(['r0', 'r1', 'r2'], true)] });
-    expect(templateRunResponseSchema.parse((await post(cut.app, 'linked-entities', request)).json()).edges[0]).toMatchObject({ memberCount: { value: 3, quality: 'lowerBound' } });
+    expect(templateRunOkSchema.parse((await post(cut.app, 'linked-entities', request)).json()).edges[0]).toMatchObject({ memberCount: { value: 3, quality: 'lowerBound' } });
     await cut.app.close();
   });
 });
@@ -157,7 +162,7 @@ describe('POST /v1/templates/:id/run for a preset of the linked-entities templat
 describe('the linked-entities template by its own ID, and what the route refuses', () => {
   it('runs with the target type and the relationship types given, and answers no preset', async () => {
     const { app } = await started({ rows: [linkedRow({ match: 'O-1' })] });
-    const body = templateRunResponseSchema.parse((await post(app, 'linked-entities', full())).json());
+    const body = templateRunOkSchema.parse((await post(app, 'linked-entities', full())).json());
     expect(body.templateId).toBe('linked-entities');
     expect(body).not.toHaveProperty('presetId');
     await app.close();
@@ -207,6 +212,67 @@ describe('the linked-entities template by its own ID, and what the route refuses
     await post(ok.app, LINKED_PRESET.id, preset());
     await post(ok.app, LINKED_PRESET.id, preset({ maxHops: 3 }));
     expect(ok.events.filter((event) => event.action === 'entity.linked_entities_run').map((event) => event.result)).toEqual(['success', 'refused']);
+    expect(ok.events.filter((event) => event.action === 'entity.linked_entities_count').map((event) => event.result)).toEqual(['success']);
     await ok.app.close();
+  });
+});
+
+const small = (budgets: Record<string, number> = {}) => linkedMappingOf({ budgets: { heavy_op_threshold: 3, ...budgets } });
+const probes = (executor: TestExecutor) => executor.calls.filter((call) => call.templateId === LINKED_ENTITIES_COUNT_ID);
+const runsOf = (executor: TestExecutor) => executor.calls.filter((call) => call.templateId === LINKED_ENTITIES_ID);
+
+describe('the audit of the linked-entities estimate', () => {
+  it('records the count under its own action with no value of the request in the record', async () => {
+    const { app, events } = await started({ mapping: small(), probeMatches: 0, rows: [linkedRow({ match: 'O-1' })] });
+    await post(app, LINKED_PRESET.id, preset({ maxHops: 2 }));
+    const counted = events.filter((event) => event.action === 'entity.linked_entities_count');
+    expect(counted.map((event) => event.result)).toEqual(['success']);
+    for (const event of counted) for (const value of ['A-1', 'LINKS', 'maker']) expect(JSON.stringify(event)).not.toContain(value);
+    await app.close();
+  });
+});
+
+describe('a linked-entities run that would match more than the threshold', () => {
+  it('stops with the estimate labelled a lower bound at the threshold and no rows, and does not run the template', async () => {
+    const { app, executor, events } = await started({ mapping: small(), probeMatches: 4, rows: [linkedRow({ match: 'O-1' })] });
+    const response = await post(app, LINKED_PRESET.id, preset({ maxHops: 2 }));
+    expect(templateRunResponseSchema.parse(response.json())).toEqual({ status: 'heavy', templateId: 'linked-entities', templateVersion: '1', presetId: 'linked-makers', estimate: { value: 3, quality: 'lowerBound', scope: 'template:linked-entities:estimate' }, threshold: 3, continueLimit: HEAVY_CONTINUE_LIMIT, notices: [{ code: 'noStopList' }], warnings: [] });
+    expect(response.json()).not.toHaveProperty('matchIds');
+    expect(probes(executor)).toHaveLength(1);
+    expect(runsOf(executor)).toHaveLength(0);
+    expect(events.filter((event) => event.action === 'entity.linked_entities_count').map((event) => event.result)).toEqual(['success']);
+    await app.close();
+  });
+
+  it('runs as before at most the threshold, with the estimate read once first, and does not warn for a bound that left fewer matches than the threshold', async () => {
+    for (const options of [{ probeMatches: 0 }, { probeMatches: 3 }, { probeRow: { matches: 2, frontierBounded: true, supernodeSkipped: true } }]) {
+      const { app, executor } = await started({ mapping: small(), ...options, rows: [linkedRow({ match: 'O-1' })] });
+      expect(templateRunResponseSchema.parse((await post(app, LINKED_PRESET.id, preset())).json()).status).toBe('ok');
+      expect(probes(executor)).toHaveLength(1);
+      expect(runsOf(executor)).toHaveLength(1);
+      await app.close();
+    }
+  });
+
+  it('names a bounded frontier in the stop, and nothing about a window the relationship types cannot apply when none was asked', async () => {
+    const { app } = await started({ mapping: small(), probeRow: { matches: 4, frontierBounded: true, supernodeSkipped: false } });
+    expect(templateRunResponseSchema.parse((await post(app, LINKED_PRESET.id, preset())).json())).toMatchObject({ status: 'heavy', notices: [{ code: 'readBounded' }] });
+    await app.close();
+  });
+
+  it('continues with the first page: no estimate is read, and the page is min(25, the page asked for, max_page)', async () => {
+    const { app, executor } = await started({ mapping: small(), probeMatches: 4, rows: [linkedRow({ match: 'O-1' })] });
+    expect(templateRunOkSchema.parse((await post(app, LINKED_PRESET.id, { ...preset({ limit: 40 }), continue: true })).json()).status).toBe('ok');
+    expect(probes(executor)).toHaveLength(0);
+    expect(runsOf(executor)[0]?.parameters['limit']).toBe(25);
+    await app.close();
+  });
+
+  it('cannot be asked for by the ID of the count', async () => {
+    const { app, executor } = await started();
+    const response = await post(app, LINKED_ENTITIES_COUNT_ID, { sourceId: 'demo', params: { ref: anchor, targetType: 'tool', via: ['USES'] } });
+    expect(response.statusCode).toBe(404);
+    expect(probes(executor)).toHaveLength(0);
+    await app.close();
   });
 });

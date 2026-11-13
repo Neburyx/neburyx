@@ -1,11 +1,13 @@
 import { rmSync } from 'node:fs';
-import { templateRunResponseSchema } from '@neburyx/contracts';
+import { HEAVY_CONTINUE_LIMIT, templateRunOkSchema, templateRunResponseSchema } from '@neburyx/contracts';
 import { afterAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../app.js';
 import type { ExecuteCall, ExecuteOutcome } from '../gate/executor.js';
 import { redactItems } from '../gate/redact/index.js';
 import { SHARED_ATTRIBUTE_ID } from '../gate/templates/shared-attribute.js';
+import { SHARED_ATTRIBUTE_COUNT_ID } from '../gate/templates/shared-attribute-count.js';
 import { createLogger } from '../logger.js';
+import type { TemplateProbe } from './template-probes.js';
 import { communitySeams } from '../seams/community-seams.js';
 import type { AuditEvent, Seams } from '../seams/seams.js';
 import { memoryAppStore } from '../testing/app-store.js';
@@ -29,13 +31,19 @@ interface Options {
   readonly answer?: (call: ExecuteCall) => Promise<ExecuteOutcome>;
   readonly now?: () => Date;
   readonly hide?: string;
+  /** The matches the estimate reads before the run (the probe's one row); no more than the threshold lets the run start. */
+  readonly probeMatches?: number;
+  readonly probeRow?: Record<string, unknown>;
+  readonly probes?: ReadonlyMap<string, TemplateProbe>;
 }
 
 async function started(options: Options = {}) {
   const mapping = options.mapping ?? sharedMappingOf();
   const [source] = mapping.sources;
   if (source === undefined) throw new Error('the mapping has no source');
-  const answer = options.answer ?? ((_call: ExecuteCall): Promise<ExecuteOutcome> => Promise.resolve(options.outcome ?? { status: 'rows', rows: options.rows ?? [] }));
+  const probe: ExecuteOutcome = { status: 'rows', rows: [options.probeRow ?? { matches: options.probeMatches ?? 0, anchorBounded: false, skipped: false }] };
+  const base = options.answer ?? ((_call: ExecuteCall): Promise<ExecuteOutcome> => Promise.resolve(options.outcome ?? { status: 'rows', rows: options.rows ?? [] }));
+  const answer = (call: ExecuteCall): Promise<ExecuteOutcome> => (call.templateId === SHARED_ATTRIBUTE_COUNT_ID && options.answer === undefined && options.outcome === undefined ? Promise.resolve(probe) : base(call));
   const executor = new TestExecutor(withSchema(() => schemaAnswer(onlineIndexesOf(source)), answer));
   const events: AuditEvent[] = [];
   const defaults = communitySeams();
@@ -45,7 +53,7 @@ async function started(options: Options = {}) {
     audit: { record: (event) => (events.push(event), Promise.resolve()) },
   };
   const parts = testSourceGate(mapping, { executor, seams, ...(options.hide === undefined ? {} : { redact: hidingRedact(options.hide, redactItems) }) });
-  const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store: memoryAppStore(), mapping, gate: parts.gate, seams, ...(options.policyVersion === undefined ? {} : { policyVersion: options.policyVersion }), ...(options.now === undefined ? {} : { templateRunClock: options.now }) });
+  const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store: memoryAppStore(), mapping, gate: parts.gate, seams, ...(options.policyVersion === undefined ? {} : { policyVersion: options.policyVersion }), ...(options.probes === undefined ? {} : { templateProbes: options.probes }), ...(options.now === undefined ? {} : { templateRunClock: options.now }) });
   return { app, executor, events };
 }
 
@@ -60,7 +68,7 @@ describe('POST /v1/templates/:id/run for a preset of the shared-attribute templa
     const { app, executor } = await started({ rows: [sharedRow({ match: 'O-1', tools: ['D-1', 'D-2'] }), sharedRow({ match: 'O-2' })] });
     const response = await post(app, SHARED_PRESET.id, preset());
     expect(response.statusCode).toBe(200);
-    const body = templateRunResponseSchema.parse(response.json());
+    const body = templateRunOkSchema.parse(response.json());
     expect(body).toMatchObject({ status: 'ok', templateId: 'shared-attribute', templateVersion: '1', presetId: 'shared-tools', count: { value: 2, quality: 'exact' } });
     expect(body.matchIds.map((ref) => ref.stableId)).toEqual(['O-1', 'O-2']);
     expect(body.matchIds.map((ref) => ref.stableId)).not.toContain('A-1');
@@ -74,7 +82,7 @@ describe('POST /v1/templates/:id/run for a preset of the shared-attribute templa
   it('answers a lower bound of the limit when the read found one match more, and never an exact count after a cut', async () => {
     const rows = Array.from({ length: 4 }, (_unused, index) => sharedRow({ match: `O-${index + 1}` }));
     const { app, executor } = await started({ rows });
-    const body = templateRunResponseSchema.parse((await post(app, SHARED_PRESET.id, preset({ limit: 3 }))).json());
+    const body = templateRunOkSchema.parse((await post(app, SHARED_PRESET.id, preset({ limit: 3 }))).json());
     expect(body.count).toMatchObject({ value: 3, quality: 'lowerBound' });
     expect(body.matchIds).toHaveLength(3);
     expect(runs(executor)[0]?.parameters).toMatchObject({ limit: 3 });
@@ -83,7 +91,7 @@ describe('POST /v1/templates/:id/run for a preset of the shared-attribute templa
 
   it('answers an exact zero for an anchor that exists and has no match, and NOT_FOUND for one that does not', async () => {
     const found = await started({ rows: [noMatchRow()] });
-    expect(templateRunResponseSchema.parse((await post(found.app, SHARED_PRESET.id, preset())).json())).toMatchObject({ matchIds: [], count: { value: 0, quality: 'exact' } });
+    expect(templateRunOkSchema.parse((await post(found.app, SHARED_PRESET.id, preset())).json())).toMatchObject({ matchIds: [], count: { value: 0, quality: 'exact' } });
     await found.app.close();
     const missing = await started({ rows: [] });
     const response = await post(missing.app, SHARED_PRESET.id, preset());
@@ -102,16 +110,16 @@ describe('POST /v1/templates/:id/run for a preset of the shared-attribute templa
 
   it('says that a stop-listed attribute was skipped, and that a mapping with no rule over the types has no stop list', async () => {
     const skipped = await started({ rows: [sharedRow({ match: 'O-1', skipped: true })] });
-    expect(templateRunResponseSchema.parse((await post(skipped.app, SHARED_PRESET.id, preset())).json()).notices).toEqual([{ code: 'stopListSkipped' }]);
+    expect(templateRunOkSchema.parse((await post(skipped.app, SHARED_PRESET.id, preset())).json()).notices).toEqual([{ code: 'stopListSkipped' }]);
     await skipped.app.close();
     const none = await started({ rows: [sharedRow({ match: 'O-1' })], mapping: sharedMappingOf({ derived: [] }) });
-    expect(templateRunResponseSchema.parse((await post(none.app, SHARED_PRESET.id, preset())).json()).notices).toEqual([{ code: 'noStopList' }]);
+    expect(templateRunOkSchema.parse((await post(none.app, SHARED_PRESET.id, preset())).json()).notices).toEqual([{ code: 'noStopList' }]);
     await none.app.close();
   });
 
   it('answers a lower bound with the notice that the read was bounded when a bound of the read was hit', async () => {
     const { app } = await started({ rows: [sharedRow({ match: 'O-1', bounded: true, evidenceCut: true })] });
-    const body = templateRunResponseSchema.parse((await post(app, SHARED_PRESET.id, preset())).json());
+    const body = templateRunOkSchema.parse((await post(app, SHARED_PRESET.id, preset())).json());
     expect(body.count).toMatchObject({ value: 1, quality: 'lowerBound' });
     expect(body.notices).toEqual([{ code: 'readBounded' }, { code: 'evidenceCut' }]);
     await app.close();
@@ -124,7 +132,7 @@ const codeOf = (response: { json(): unknown }): unknown => (response.json() as {
 describe('the shared-attribute template by its own ID, and what the route refuses', () => {
   it('runs with the attribute type and the relationship type given, and answers no preset', async () => {
     const { app } = await started({ rows: [sharedRow({ match: 'O-1' })] });
-    const body = templateRunResponseSchema.parse((await post(app, 'shared-attribute', full())).json());
+    const body = templateRunOkSchema.parse((await post(app, 'shared-attribute', full())).json());
     expect(body.templateId).toBe('shared-attribute');
     expect(body).not.toHaveProperty('presetId');
     expect(body.matchIds.map((ref) => ref.stableId)).toEqual(['O-1']);
@@ -222,7 +230,7 @@ describe('an idempotent run', () => {
   it('answers CONFLICT for a repeat while the first call is still running', async () => {
     let release: () => void = () => undefined;
     const held = new Promise<void>((resolve) => (release = resolve));
-    const { app } = await started({ answer: async () => (await held, { status: 'rows' as const, rows: [sharedRow({ match: 'O-1' })] }) });
+    const { app } = await started({ answer: async (call) => (await held, call.templateId === SHARED_ATTRIBUTE_COUNT_ID ? { status: 'rows' as const, rows: [{ matches: 0, anchorBounded: false, skipped: false }] } : { status: 'rows' as const, rows: [sharedRow({ match: 'O-1' })] }) });
     const first = post(app, SHARED_PRESET.id, preset());
     await new Promise((resolve) => setTimeout(resolve, 100));
     const repeat = await post(app, SHARED_PRESET.id, preset());
@@ -252,12 +260,13 @@ describe('an idempotent run', () => {
 
   it('does not keep a first call that ended in a server error, so a retry runs again', async () => {
     let calls = 0;
-    const { app, executor } = await started({ answer: () => Promise.resolve(++calls === 1 ? { status: 'unavailable' as const, reason: 'unreachable' as const } : { status: 'rows' as const, rows: [sharedRow({ match: 'O-1' })] }) });
+    const { app, executor } = await started({ answer: (call) => Promise.resolve(call.templateId === SHARED_ATTRIBUTE_COUNT_ID ? (++calls === 1 ? { status: 'unavailable' as const, reason: 'unreachable' as const } : { status: 'rows' as const, rows: [{ matches: 0, anchorBounded: false, skipped: false }] }) : { status: 'rows' as const, rows: [sharedRow({ match: 'O-1' })] }) });
     const first = await post(app, SHARED_PRESET.id, preset());
     expect(first.statusCode).toBeGreaterThanOrEqual(500);
     const retry = await post(app, SHARED_PRESET.id, preset());
     expect(retry.statusCode).toBe(200);
-    expect(runs(executor).length).toBeGreaterThanOrEqual(2);
+    expect(executor.calls.filter((call) => call.templateId === SHARED_ATTRIBUTE_COUNT_ID).length).toBeGreaterThanOrEqual(2);
+    expect(runs(executor).length).toBe(1);
     await app.close();
   });
 });
@@ -278,8 +287,8 @@ describe('a window and a minimum of shared attribute nodes', () => {
 
   it('says relationships with no usable date are outside a window, only when a window is given', async () => {
     const { app } = await started({ rows: [sharedRow({ match: 'O-1' })], mapping: sharedMappingOf({ derived: [] }) });
-    expect(templateRunResponseSchema.parse((await post(app, SHARED_PRESET.id, preset({ window: { days: 7 } }), 'window-key-of-sixteen')).json()).notices).toEqual([{ code: 'noStopList' }, { code: 'undatedExcluded' }]);
-    expect(templateRunResponseSchema.parse((await post(app, SHARED_PRESET.id, preset(), 'no-window-key-of-sixteen')).json()).notices).toEqual([{ code: 'noStopList' }]);
+    expect(templateRunOkSchema.parse((await post(app, SHARED_PRESET.id, preset({ window: { days: 7 } }), 'window-key-of-sixteen')).json()).notices).toEqual([{ code: 'noStopList' }, { code: 'undatedExcluded' }]);
+    expect(templateRunOkSchema.parse((await post(app, SHARED_PRESET.id, preset(), 'no-window-key-of-sixteen')).json()).notices).toEqual([{ code: 'noStopList' }]);
     await app.close();
   });
 
@@ -310,9 +319,207 @@ describe('a window and a minimum of shared attribute nodes', () => {
 describe('the count of a run after the gate has hidden what the person may not see', () => {
   it('leaves a hidden match out of the matches and out of the count', async () => {
     const { app } = await started({ rows: [sharedRow({ match: 'O-1' }), sharedRow({ match: 'O-2' })], hide: 'O-1' });
-    const body = templateRunResponseSchema.parse((await post(app, SHARED_PRESET.id, preset())).json());
+    const body = templateRunOkSchema.parse((await post(app, SHARED_PRESET.id, preset())).json());
     expect(body.matchIds.map((ref) => ref.stableId)).toEqual(['O-2']);
     expect(body.count).toMatchObject({ value: 1, quality: 'exact' });
+    await app.close();
+  });
+});
+
+const small = (budgets: Record<string, number> = {}) => sharedMappingOf({ budgets: { heavy_op_threshold: 3, ...budgets } });
+const probes = (executor: TestExecutor) => executor.calls.filter((call) => call.templateId === SHARED_ATTRIBUTE_COUNT_ID);
+const runLimit = (executor: TestExecutor) => runs(executor)[0]?.parameters['limit'];
+
+describe('a run that would match more than the threshold', () => {
+  it('stops with the estimate labelled a lower bound at the threshold, the threshold and the continue size, no rows, and does not run the template', async () => {
+    const { app, executor, events } = await started({ mapping: small(), probeMatches: 4, rows: [sharedRow({ match: 'O-1' })] });
+    const response = await post(app, SHARED_PRESET.id, preset());
+    expect(response.statusCode).toBe(200);
+    const body = templateRunResponseSchema.parse(response.json());
+    expect(body).toEqual({ status: 'heavy', templateId: 'shared-attribute', templateVersion: '1', presetId: 'shared-tools', estimate: { value: 3, quality: 'lowerBound', scope: 'template:shared-attribute:estimate' }, threshold: 3, continueLimit: HEAVY_CONTINUE_LIMIT, notices: [], warnings: [] });
+    expect(response.json()).not.toHaveProperty('matchIds');
+    expect(response.json()).not.toHaveProperty('nodes');
+    expect(probes(executor)).toHaveLength(1);
+    expect(runs(executor)).toHaveLength(0);
+    expect(events.filter((event) => event.action === 'entity.shared_attribute_count').map((event) => event.result)).toEqual(['success']);
+    expect(events.some((event) => event.action === 'entity.shared_attribute_run')).toBe(false);
+    await app.close();
+  });
+
+  it('runs as before when the matches are at most the threshold, with the estimate read once first, and when exactly the threshold', async () => {
+    for (const probeMatches of [0, 2, 3]) {
+      const { app, executor } = await started({ mapping: small(), probeMatches, rows: [sharedRow({ match: 'O-1' })] });
+      const response = await post(app, SHARED_PRESET.id, preset());
+      expect(templateRunResponseSchema.parse(response.json())).toMatchObject({ status: 'ok', count: { value: 1, quality: 'exact' } });
+      expect(probes(executor)).toHaveLength(1);
+      expect(runs(executor)).toHaveLength(1);
+      await app.close();
+    }
+  });
+
+  it('does not warn when the anchor held more attribute nodes than the cap but fewer matches than the threshold were counted, and the run carries its own notice', async () => {
+    const { app } = await started({ mapping: small(), probeRow: { matches: 2, anchorBounded: true, skipped: false }, rows: [sharedRow({ match: 'O-1', bounded: true })] });
+    const body = templateRunResponseSchema.parse((await post(app, SHARED_PRESET.id, preset())).json());
+    expect(body).toMatchObject({ status: 'ok', count: { quality: 'lowerBound' }, notices: expect.arrayContaining([{ code: 'readBounded' }]) });
+    await app.close();
+  });
+
+  it('carries only the notices of the codes it names: a skipped stop-listed node and a bounded anchor read, and a window', async () => {
+    const { app } = await started({ mapping: small(), probeRow: { matches: 4, anchorBounded: true, skipped: true } });
+    const body = templateRunResponseSchema.parse((await post(app, SHARED_PRESET.id, preset({ window: { days: 30 } }))).json());
+    expect(body).toMatchObject({ status: 'heavy', notices: [{ code: 'stopListSkipped' }, { code: 'undatedExcluded' }, { code: 'readBounded' }] });
+    await app.close();
+  });
+
+  it('is the same stop for the template by its own ID, with no preset ID in the answer', async () => {
+    const { app } = await started({ mapping: small(), probeMatches: 4 });
+    const body = templateRunResponseSchema.parse((await post(app, 'shared-attribute', { sourceId: 'demo', params: { ref: { entityType: 'maker', stableId: 'A-1' }, attributeType: 'tool', via: 'USES_TOOL' } })).json());
+    expect(body.status).toBe('heavy');
+    expect(body).not.toHaveProperty('presetId');
+    await app.close();
+  });
+
+  it('cannot be asked for by the ID of the count: NOT_FOUND, and nothing is read', async () => {
+    const { app, executor } = await started({ probeMatches: 4 });
+    const response = await post(app, SHARED_ATTRIBUTE_COUNT_ID, { sourceId: 'demo', params: { ref: { entityType: 'maker', stableId: 'A-1' }, attributeType: 'tool', via: 'USES_TOOL' } });
+    expect({ status: response.statusCode, code: codeOf(response) }).toEqual({ status: 404, code: 'NOT_FOUND' });
+    expect(probes(executor)).toHaveLength(0);
+    await app.close();
+  });
+});
+
+describe('the audit of the estimate', () => {
+  it('records the count under its own action with no value of the request in the record, and the run under its own', async () => {
+    const { app, events } = await started({ mapping: small(), probeMatches: 0, rows: [sharedRow({ match: 'O-1' })] });
+    await post(app, SHARED_PRESET.id, preset({ window: { days: 30 }, minShared: 2 }));
+    const counted = events.filter((event) => event.action === 'entity.shared_attribute_count');
+    expect(counted.map((event) => event.result)).toEqual(['success']);
+    expect(events.filter((event) => event.action === 'entity.shared_attribute_run').map((event) => event.result)).toEqual(['success']);
+    for (const event of counted) {
+      const text = JSON.stringify(event);
+      for (const value of ['A-1', 'USES_TOOL', 'tool', 'maker']) expect(text).not.toContain(value);
+    }
+    await app.close();
+  });
+
+  it('reads the estimate before the run, in that order', async () => {
+    const { app, executor } = await started({ mapping: small(), probeMatches: 0, rows: [sharedRow({ match: 'O-1' })] });
+    await post(app, SHARED_PRESET.id, preset());
+    const order = executor.calls.map((call) => call.templateId).filter((id) => id === SHARED_ATTRIBUTE_ID || id === SHARED_ATTRIBUTE_COUNT_ID);
+    expect(order).toEqual([SHARED_ATTRIBUTE_COUNT_ID, SHARED_ATTRIBUTE_ID]);
+    await app.close();
+  });
+});
+
+describe('continue with the first page', () => {
+  it('skips the estimate and returns a first page of 25 with the cut labelled a lower bound', async () => {
+    const { app, executor } = await started({ mapping: small({ max_page: 50 }), probeMatches: 4, rows: Array.from({ length: 26 }, (_, index) => sharedRow({ match: `O-${index}` })) });
+    const body = templateRunOkSchema.parse((await post(app, SHARED_PRESET.id, { ...preset(), continue: true })).json());
+    expect(body.count).toMatchObject({ value: 25, quality: 'lowerBound' });
+    expect(probes(executor)).toHaveLength(0);
+    expect(runLimit(executor)).toBe(25);
+    await app.close();
+  });
+
+  it.each([
+    ['a page of 40', { limit: 40 }, {}, 25],
+    ['a page of 10', { limit: 10 }, {}, 10],
+    ['a source whose max_page is 10', {}, { max_page: 10 }, 10],
+  ])('uses min(25, the page asked for, max_page) for %s', async (_name, params, budgets, expected) => {
+    const { app, executor } = await started({ mapping: small(budgets), probeMatches: 4, rows: [sharedRow({ match: 'O-1' })] });
+    expect((await post(app, SHARED_PRESET.id, { ...preset(params), continue: true })).statusCode).toBe(200);
+    expect(runLimit(executor)).toBe(expected);
+    await app.close();
+  });
+
+  it('answers the same size in the heavy stop, so the answer says what a continue will return', async () => {
+    const { app } = await started({ mapping: small({ max_page: 10 }), probeMatches: 4 });
+    expect(templateRunResponseSchema.parse((await post(app, SHARED_PRESET.id, preset({ limit: 7 }))).json())).toMatchObject({ status: 'heavy', continueLimit: 7 });
+    expect(templateRunResponseSchema.parse((await post(app, SHARED_PRESET.id, preset(), 'a-second-key-of-sixteen')).json())).toMatchObject({ status: 'heavy', continueLimit: 10 });
+    await app.close();
+  });
+
+  it('refuses a page above max_page with or without the flag before anything is read', async () => {
+    for (const flag of [{}, { continue: true }]) {
+      const { app, executor } = await started({ mapping: small({ max_page: 10 }), probeMatches: 4 });
+      const response = await post(app, SHARED_PRESET.id, { ...preset({ limit: 11 }), ...flag });
+      expect({ status: response.statusCode, code: codeOf(response) }).toEqual({ status: 422, code: 'QUERY_BUDGET_EXCEEDED' });
+      expect(executor.calls.filter((call) => call.templateId === SHARED_ATTRIBUTE_ID || call.templateId === SHARED_ATTRIBUTE_COUNT_ID)).toHaveLength(0);
+      await app.close();
+    }
+  });
+
+  it('runs a run that is not heavy the same way with the flag', async () => {
+    const { app, executor } = await started({ mapping: small(), probeMatches: 0, rows: [sharedRow({ match: 'O-1' })] });
+    expect(templateRunOkSchema.parse((await post(app, SHARED_PRESET.id, { ...preset(), continue: true })).json())).toMatchObject({ status: 'ok', count: { value: 1, quality: 'exact' } });
+    expect(runLimit(executor)).toBe(25);
+    await app.close();
+  });
+
+  it.each([
+    ['a flag that is not a boolean', { continue: 'yes' }],
+    ['an extra top-level key', { continue: true, again: true }],
+    ['the flag inside the parameters', { params: { ref: { entityType: 'maker', stableId: 'A-1' }, continue: true } }],
+  ])('refuses %s with INVALID_REQUEST and reads nothing', async (_name, extra) => {
+    const { app, executor } = await started({ probeMatches: 4 });
+    const response = await post(app, SHARED_PRESET.id, { ...preset(), ...extra });
+    expect({ status: response.statusCode, code: codeOf(response) }).toEqual({ status: 400, code: 'INVALID_REQUEST' });
+    expect(executor.calls.filter((call) => call.templateId === SHARED_ATTRIBUTE_ID || call.templateId === SHARED_ATTRIBUTE_COUNT_ID)).toHaveLength(0);
+    await app.close();
+  });
+
+  it('is a different request under the same idempotency key: CONFLICT; the same body replays the stop without reading again; a new key continues', async () => {
+    const { app, executor } = await started({ mapping: small(), probeMatches: 4, rows: [sharedRow({ match: 'O-1' })] });
+    const first = await post(app, SHARED_PRESET.id, preset());
+    const replay = await post(app, SHARED_PRESET.id, preset());
+    expect(replay.json()).toEqual(first.json());
+    expect(probes(executor)).toHaveLength(1);
+    const clash = await post(app, SHARED_PRESET.id, { ...preset(), continue: true });
+    expect({ status: clash.statusCode, code: codeOf(clash) }).toEqual({ status: 409, code: 'CONFLICT' });
+    const next = await post(app, SHARED_PRESET.id, { ...preset(), continue: true }, 'a-second-key-of-sixteen');
+    expect(templateRunResponseSchema.parse(next.json()).status).toBe('ok');
+    await app.close();
+  });
+});
+
+describe('an estimate that is unknown or cannot be read', () => {
+  it('runs a template with no probe with no warning under the page caps, not the continue size', async () => {
+    const { app, executor } = await started({ mapping: small(), probes: new Map(), rows: [sharedRow({ match: 'O-1' })] });
+    const body = templateRunOkSchema.parse((await post(app, SHARED_PRESET.id, preset({ limit: 40 }))).json());
+    expect(body.status).toBe('ok');
+    expect(probes(executor)).toHaveLength(0);
+    expect(runLimit(executor)).toBe(40);
+    await app.close();
+  });
+
+  it('answers SOURCE_BUSY for an estimate that cannot get a read slot, and starts no run for it', async () => {
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    let probesSeen = 0;
+    const { app, executor } = await started({
+      mapping: small({ user_concurrency: 1, queue_wait_ms: 100 }),
+      answer: async (call) => (call.templateId === SHARED_ATTRIBUTE_COUNT_ID ? (++probesSeen === 1 && (await held), { status: 'rows' as const, rows: [{ matches: 0, anchorBounded: false, skipped: false }] }) : { status: 'rows' as const, rows: [sharedRow({ match: 'O-1' })] }),
+    });
+    const first = post(app, SHARED_PRESET.id, preset());
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const second = await post(app, SHARED_PRESET.id, preset(), 'a-second-key-of-sixteen');
+    expect({ status: second.statusCode, code: codeOf(second) }).toEqual({ status: 503, code: 'SOURCE_BUSY' });
+    expect(runs(executor)).toHaveLength(0);
+    release();
+    expect((await first).statusCode).toBe(200);
+    await app.close();
+  });
+
+  it.each([
+    ['a count row with no usable number', { probeRow: { anchorBounded: false, skipped: false } }, 500, 'INTERNAL_ERROR'],
+    ['an anchor that is not found', { answer: (call: ExecuteCall) => Promise.resolve(call.templateId === SHARED_ATTRIBUTE_COUNT_ID ? { status: 'rows' as const, rows: [] } : { status: 'rows' as const, rows: [] }) }, 404, 'NOT_FOUND'],
+    ['a source that is unavailable for the count', { answer: (call: ExecuteCall) => Promise.resolve(call.templateId === SHARED_ATTRIBUTE_COUNT_ID ? { status: 'unavailable' as const, reason: 'unreachable' as const } : { status: 'rows' as const, rows: [sharedRow({ match: 'O-1' })] }) }, 503, 'SOURCE_UNAVAILABLE'],
+    ['a count that runs out of time', { answer: (call: ExecuteCall) => Promise.resolve(call.templateId === SHARED_ATTRIBUTE_COUNT_ID ? { status: 'timeout' as const } : { status: 'rows' as const, rows: [sharedRow({ match: 'O-1' })] }) }, 504, 'QUERY_TIMEOUT'],
+  ])('ends the request for %s and does not start the run', async (_name, options, status, code) => {
+    const { app, executor } = await started(options);
+    const response = await post(app, SHARED_PRESET.id, preset());
+    expect({ status: response.statusCode, code: codeOf(response) }).toEqual({ status, code });
+    expect(runs(executor)).toHaveLength(0);
     await app.close();
   });
 });

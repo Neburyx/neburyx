@@ -4,7 +4,7 @@ import { fakeClient } from './fake-client.js';
 import type { ApiClient } from './client.js';
 import { withoutReadsWhileSourceChanged } from './changed-source-guard.js';
 
-const READS = ['getEntity', 'getEdge', 'lookupEntity', 'readRefs', 'searchEntities', 'searchMore', 'previewExpansion', 'graphCoverage', 'expandNeighbors', 'derivedNeighbors', 'createExport'] as const;
+const READS = ['getEntity', 'getEdge', 'lookupEntity', 'readRefs', 'searchEntities', 'searchMore', 'previewExpansion', 'graphCoverage', 'expandNeighbors', 'derivedNeighbors', 'createExport', 'runTemplate'] as const;
 
 function counting(): { readonly client: ApiClient; readonly sent: string[] } {
   const sent: string[] = [];

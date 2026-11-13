@@ -1,6 +1,6 @@
-import type { Count, DegreeByType, DegreePreview } from '@neburyx/contracts';
+import { HEAVY_CONTINUE_LIMIT, type Count, type DegreeByType, type DegreePreview, type TemplateRunResponse } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
-import { heavyDecision, type EstimateAsk } from './heavy-estimate.js';
+import { BOUNDED_LIMIT, heavyDecision, heavyDecisionOfRun, type EstimateAsk } from './heavy-estimate.js';
 
 const ref = { sourceId: 'demo', entityType: 'widget', stableId: 'A-1' };
 const count = (value: number | undefined, quality: Count['quality'] = 'exact'): Count => (value === undefined ? { quality: 'unknown', scope: 'x' } : { value, quality, scope: 'x' });
@@ -72,5 +72,24 @@ describe('the estimate of an ask', () => {
 
   it('uses the threshold of the preview', () => {
     expect(heavyDecision(previewOf([pair('SENT', 'out', count(41), ['person'])], 40), ask(['person']))).toEqual(heavy(41, 'exact', 40));
+  });
+});
+
+describe('the stop of a pattern run', () => {
+  const stop: TemplateRunResponse = { status: 'heavy', templateId: 'shared-attribute', templateVersion: '1', estimate: { value: 500, quality: 'lowerBound', scope: 'template:shared-attribute:estimate' }, threshold: 500, continueLimit: 10, notices: [], warnings: [] };
+  const ok: TemplateRunResponse = { status: 'ok', templateId: 'shared-attribute', templateVersion: '1', count: { value: 3, quality: 'exact', scope: 'x' }, matchIds: [], nodes: [], edges: [], notices: [], warnings: [] };
+
+  it('is a heavy decision with the estimate as the server labelled it, the threshold and the page a continue returns', () => {
+    expect(heavyDecisionOfRun(stop)).toEqual({ kind: 'heavy', estimate: { value: 500, quality: 'lowerBound' }, threshold: 500, pageSize: 10 });
+  });
+
+  it('is no warning for an answer with rows, and never turns the lower bound into an exact number', () => {
+    expect(heavyDecisionOfRun(ok)).toEqual({ kind: 'none' });
+    expect(heavyDecisionOfRun(stop)).not.toMatchObject({ estimate: { quality: 'exact' } });
+  });
+
+  it('keeps one value for the page a continue returns, the contract constant', () => {
+    expect(BOUNDED_LIMIT).toBe(HEAVY_CONTINUE_LIMIT);
+    expect(BOUNDED_LIMIT).toBe(25);
   });
 });

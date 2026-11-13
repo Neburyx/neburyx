@@ -31,6 +31,9 @@ import {
   sourcesResponseSchema,
   sourceTestReportSchema,
   templateListResponseSchema,
+  templateRunResponseSchema,
+  type TemplateRunRequest,
+  type TemplateRunResponse,
   type CoverageRequest,
   type CoverageResponse,
   type DegreePreview,
@@ -122,6 +125,11 @@ export interface ApiClient {
   getProfile(sourceId: string, signal?: AbortSignal): Promise<ApiResult<SourceProfile>>;
   /** The built-in templates and the presets of a source, with each template's parameter schema; reads no source. The answer names the source asked for, or it is a `SCHEMA_MISMATCH`. */
   listTemplates(sourceId: string, signal?: AbortSignal): Promise<ApiResult<TemplateListResponse>>;
+  /**
+   * Runs a preset or a built-in template of a source: the answer is the result (`status: 'ok'`) or the stop of a run that would match more than the source's threshold (`status: 'heavy'`, a typed answer and not an error).
+   * `key` is the idempotency key: the same text for a retry of the same attempt, and a new one for a continue (`request.continue`), which is another request.
+   */
+  runTemplate(id: string, request: TemplateRunRequest, key: string, signal?: AbortSignal): Promise<ApiResult<TemplateRunResponse>>;
   testSource(sourceId: string, signal?: AbortSignal): Promise<ApiResult<SourceTestReport>>;
   /** One entity of a source, without its neighbors; `mask` asks for the personal-data fields to be masked. */
   getEntity(ref: ElementRef, options?: { readonly mask?: boolean }, signal?: AbortSignal): Promise<ApiResult<GraphNode>>;
@@ -279,6 +287,7 @@ export function createApiClient(fetcher: Fetcher = (input, init) => fetch(input,
       const result = await request(fetcher, `/v1/templates?sourceId=${encodeURIComponent(sourceId)}`, templateListResponseSchema, signal);
       return result.ok && result.value.sourceId !== sourceId ? failed('SCHEMA_MISMATCH') : result;
     },
+    runTemplate: (id, body, key, signal) => request(fetcher, `/v1/templates/${encodeURIComponent(id)}/run`, templateRunResponseSchema, signal, 'POST', body, { headers: { 'idempotency-key': key } }),
     testSource: async (sourceId, signal) => {
       const result = await request(fetcher, `/v1/sources/${encodeURIComponent(sourceId)}/test`, sourceTestReportSchema, signal, 'POST');
       return result.ok && result.value.sourceId !== sourceId ? failed('SCHEMA_MISMATCH') : result;

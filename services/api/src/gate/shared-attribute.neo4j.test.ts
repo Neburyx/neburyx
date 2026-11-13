@@ -5,10 +5,14 @@ import { envFor, NEO4J_SERIES, runAdmin, runAll, sourceFor, startNeo4j, type Run
 import { isNormalizedShared } from './normalize/shared-attribute.js';
 import { createSourceGate, type SourceGate } from './source-gate.js';
 import { SHARED_ATTRIBUTE_ID } from './templates/shared-attribute.js';
+import { isNormalizedSharedCount } from './normalize/shared-attribute-count.js';
+import { SHARED_ATTRIBUTE_COUNT_ID } from './templates/shared-attribute-count.js';
 
 let server: RunningNeo4j;
 let parts: SourceGate;
 let small: SourceGate;
+let four: SourceGate;
+let five: SourceGate;
 
 const entities = [
   { type: 'maker', label: 'XMaker', stable_id: 'makerId' },
@@ -58,10 +62,12 @@ beforeAll(async () => {
   const open = (budgets: Record<string, number>): SourceGate => createSourceGate({ mapping: { sources: [sourceFor(server, { entities, relationships, derived, budgets })] }, env: envFor(server), seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit }, logger: { warn: () => undefined } });
   parts = open({});
   small = open(SMALL_CAP);
+  four = open({ heavy_op_threshold: 4 });
+  five = open({ heavy_op_threshold: 5 });
 }, 300_000);
 
 afterAll(async () => {
-  await runAll([() => parts?.close(), () => small?.close(), () => server?.stop()]);
+  await runAll([() => parts?.close(), () => small?.close(), () => four?.close(), () => five?.close(), () => server?.stop()]);
 });
 
 async function run(stableId: string, extra: Record<string, unknown> = {}, limit = 25, gate: SourceGate = parts) {
@@ -69,6 +75,13 @@ async function run(stableId: string, extra: Record<string, unknown> = {}, limit 
   const [item] = page.items;
   if (!isNormalizedShared(item)) throw new Error('the read gave no shared-attribute result');
   return { page, item, matches: item.matches.map((ref) => ref.stableId).sort() };
+}
+
+async function count(stableId: string, extra: Record<string, unknown> = {}, gate: SourceGate = parts) {
+  const page = await gate.gate.run(gateRequest({ sourceId: 'graph', principal: LOCAL_PRINCIPAL, templateId: SHARED_ATTRIBUTE_COUNT_ID, params: { entityType: 'maker', stableId, attributeType: 'tool', via: 'USES_TOOL', ...extra }, limit: 1 }));
+  const [item] = page.items;
+  if (!isNormalizedSharedCount(item)) throw new Error('the read gave no count');
+  return item;
 }
 
 const WINDOW = { windowFrom: '2026-01-01T00:00:00.000Z', windowTo: '2026-02-01T00:00:00.000Z' };
@@ -132,5 +145,35 @@ describe(`the shared-attribute run on ${NEO4J_SERIES}`, () => {
     const { matches } = await run('w0', WINDOW);
     expect(matches).toEqual(['w1', 'w2', 'w3']);
     expect((await run('w0')).matches).toEqual(['w1', 'w2', 'w3', 'w4', 'w5', 'w6']);
+  });
+});
+
+describe(`the count of the shared-attribute run on ${NEO4J_SERIES}`, () => {
+  it('counts the matches the run would return, with the stop-list, the minimum and the window applied as in the run, and says so exactly below the cap', async () => {
+    for (const [anchor, extra] of [['r0', {}], ['h1', {}], ['lonely', {}], ['m0', {}], ['m0', { minShared: 2 }], ['m0', { minShared: 3 }], ['p0', {}], ['e0', {}], ['w0', WINDOW], ['w0', {}]] as const) {
+      const counted = await count(anchor, extra);
+      expect(counted.matches, `${anchor} ${JSON.stringify(extra)}`).toBe((await run(anchor, extra)).matches.length);
+      expect(counted.anchorFound).toBe(true);
+      expect(counted.anchorBounded).toBe(false);
+    }
+    expect((await count('r0')).skipped).toBe(true);
+    expect((await count('lonely')).skipped).toBe(false);
+  });
+
+  it('reads one match more than the count cap and no more: 12 holders and a cap of 3 count 4, a cap of 4 counts 5 at most, and the matches of exactly the cap are the cap', async () => {
+    expect((await count('g0')).matches).toBe(12);
+    expect((await count('g0', {}, small)).matches).toBe(4);
+    expect((await count('g0', {}, four)).matches).toBe(5);
+    expect((await count('r0', {}, five)).matches).toBe(5);
+    expect((await count('r0', {}, four)).matches).toBe(5);
+  });
+
+  it('says the anchor held more attribute nodes than the cap, and no anchor when the account does not exist', async () => {
+    const bounded = await count('h0', {}, small);
+    expect(bounded.anchorBounded).toBe(true);
+    expect(bounded.matches).toBeLessThanOrEqual(3);
+    const nobody = await count('nobody');
+    expect(nobody.anchorFound).toBe(false);
+    expect(nobody.usable).toBe(false);
   });
 });

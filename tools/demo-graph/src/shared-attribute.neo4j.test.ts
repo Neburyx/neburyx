@@ -1,7 +1,7 @@
 import { rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { templateRunResponseSchema } from '../../../packages/contracts/src/template-run.js';
+import { templateRunOkSchema } from '../../../packages/contracts/src/template-run.js';
 import { buildApp } from '../../../services/api/src/app.js';
 import { allowlistFromMapping } from '../../../services/api/src/gate/allowlist.js';
 import { createSourceGate, type SourceGate } from '../../../services/api/src/gate/source-gate.js';
@@ -66,7 +66,7 @@ let keys = 0;
 async function run(preset: string, stableId: string, extra: Record<string, unknown> = {}) {
   const response = await app.inject({ method: 'POST', url: `/v1/templates/${preset}/run`, payload: { sourceId: 'banking-demo', params: { ref: { entityType: 'account', stableId }, ...extra } }, headers: { 'idempotency-key': `demo-key-of-sixteen-${(keys += 1)}` } });
   expect(response.statusCode, response.body).toBe(200);
-  return templateRunResponseSchema.parse(response.json());
+  return templateRunOkSchema.parse(response.json());
 }
 
 describe('the Shared devices and Shared addresses presets of the banking pack on its demo graph, through the run route', () => {

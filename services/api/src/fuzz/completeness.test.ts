@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { registeredRoutesOf } from '../app.js';
-import { closedSetOf, routesOfClosedSet } from '../testing/fuzz-closed-set.js';
+import { casesOfClosedSet, closedSetOf, routesOfClosedSet } from '../testing/fuzz-closed-set.js';
 import { startFuzzRig } from '../testing/fuzz-rig.js';
 
 const rig = await startFuzzRig();
@@ -62,6 +62,26 @@ describe('the closed set of the fuzz suite', () => {
       const key = 'POST /v1/templates/:id/run';
       expect(built.has(key)).toBe(true);
       expect(missingFrom(new Set([...built].filter((route) => route !== key)), routes)).toEqual([key]);
+    });
+
+    const sharedProbe = (statements: ReadonlySet<string>): string[] => [...statements].filter((statement) => statement.includes('RETURN matches, anchorBounded, skipped'));
+    const linkedProbe = (statements: ReadonlySet<string>): string[] => [...statements].filter((statement) => statement.includes('AS frontierBounded') && statement.includes('AS supernodeSkipped') && statement.includes('count(n) AS matches') || statement.includes('count(x) AS matches'));
+    const casesBuilt = casesOfClosedSet.get(closed) ?? new Set<string>();
+    const CASES = ['shared-attribute:estimate', 'shared-attribute:continue', 'linked-entities:estimate', 'linked-entities:continue'];
+    /** What the heavy-operation estimate needs of a closed set: the count statement of each pattern template and a run of each case, so a set without any of them is found. */
+    const missingEstimateCases = (statements: ReadonlySet<string>, cases: ReadonlySet<string>): string[] => [
+      ...(sharedProbe(statements).length === 0 ? ['the shared-attribute count statement'] : []),
+      ...(linkedProbe(statements).length === 0 ? ['the linked-entities count statement'] : []),
+      ...CASES.filter((name) => !cases.has(name)),
+    ];
+
+    it('holds the count statement of each pattern template, bounded and with no request value, and builds each case of the estimate; a set without any of them fails', () => {
+      expect(missingEstimateCases(closed, casesBuilt)).toEqual([]);
+      for (const statement of [...sharedProbe(closed), ...linkedProbe(closed)]) expect(statement).toContain('LIMIT $countCap + 1');
+      const without = (drop: readonly string[]): ReadonlySet<string> => new Set([...closed].filter((statement) => !drop.includes(statement)));
+      expect(missingEstimateCases(without(sharedProbe(closed)), casesBuilt)).toEqual(['the shared-attribute count statement']);
+      expect(missingEstimateCases(without(linkedProbe(closed)), casesBuilt)).toEqual(['the linked-entities count statement']);
+      for (const name of CASES) expect(missingEstimateCases(closed, new Set([...casesBuilt].filter((entry) => entry !== name)))).toEqual([name]);
     });
 
     it('holds statements of the linked-entities template for one hop and for two, in each direction, with and without a window', () => {

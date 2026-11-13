@@ -36,6 +36,7 @@ export function tokensOf(value: unknown): { readonly entityType: string; readonl
 export async function closedSetOf(rig: FuzzRig): Promise<ReadonlySet<string>> {
   const set = await buildClosedSet(rig);
   routesOfClosedSet.set(set.statements, set.routes);
+  casesOfClosedSet.set(set.statements, set.cases);
   const leaks = leaksOf(set.statements, set.values);
   if (leaks.length > 0) throw new Error(`the closed set holds request text: ${leaks.join('; ')}`);
   benignValuesOf.set(set.statements, set.values);
@@ -44,6 +45,12 @@ export async function closedSetOf(rig: FuzzRig): Promise<ReadonlySet<string>> {
 
 /** The routes (`METHOD /v1/pattern`) each closed set was built from: a route that is not here has no statement in the set, and a request to it in the fuzz would fail as "not in the closed set" only if it read the source. */
 export const routesOfClosedSet = new WeakMap<ReadonlySet<string>, ReadonlySet<string>>();
+
+/**
+ * The cases of a pattern run each closed set was built from, beyond its route, for each pattern template: `<template>:estimate` (a run that reads the estimate first, so the count statement is in the set) and `<template>:continue` (a run with
+ * the continue flag, which reads no estimate). A test fails when a case is taken out.
+ */
+export const casesOfClosedSet = new WeakMap<ReadonlySet<string>, ReadonlySet<string>>();
 
 /** The registered route (`METHOD pattern`) a request URL goes to. */
 export function routeKeyOf(rig: FuzzRig, method: 'GET' | 'POST', url: string): string {
@@ -56,9 +63,10 @@ export function routeKeyOf(rig: FuzzRig, method: 'GET' | 'POST', url: string): s
 /** The benign values each closed set was built from, for a test that checks the set for them. */
 export const benignValuesOf = new WeakMap<ReadonlySet<string>, readonly string[]>();
 
-async function buildClosedSet(rig: FuzzRig): Promise<{ readonly statements: Set<string>; readonly values: string[]; readonly routes: ReadonlySet<string> }> {
+async function buildClosedSet(rig: FuzzRig): Promise<{ readonly statements: Set<string>; readonly values: string[]; readonly routes: ReadonlySet<string>; readonly cases: ReadonlySet<string> }> {
   const { app, executor } = rig;
   const routes = new Set<string>();
+  const cases = new Set<string>();
   const post = (url: string, payload: unknown) => {
     routes.add(routeKeyOf(rig, 'POST', url));
     return rig.post(url, payload);
@@ -69,6 +77,9 @@ async function buildClosedSet(rig: FuzzRig): Promise<{ readonly statements: Set<
   };
   /** A pattern run the closed set is built from: it must be served, so that what is left out of the set is left out on purpose and a legal run that broke is found here. */
   const served = async (url: string, payload: unknown): Promise<void> => {
+    const id = url.split('/')[3] ?? '';
+    const template = id === 'linked-entities' || FUZZ_LINKED_PRESETS.some((preset) => preset.id === id) || id.startsWith('linked-') ? 'linked-entities' : 'shared-attribute';
+    cases.add(`${template}:${typeof payload === 'object' && payload !== null && 'continue' in payload && payload.continue === true ? 'continue' : 'estimate'}`);
     const response = await post(url, payload);
     if (response.statusCode !== 200) throw new Error(`the closed set expected ${url} to be served, and it answered ${response.statusCode}: ${JSON.stringify(payload)}`);
   };
@@ -95,6 +106,10 @@ async function buildClosedSet(rig: FuzzRig): Promise<{ readonly statements: Set<
     }
   }
   for (const preset of FUZZ_SHARED_PRESETS) {
+    await served(`/v1/templates/${preset.id}/run`, { sourceId: FUZZ_SOURCE, params: { ref: anchor, limit: 10 }, continue: true });
+    keep();
+  }
+  for (const preset of FUZZ_SHARED_PRESETS) {
     for (const window of windows) {
       for (const minShared of [undefined, 2]) {
         for (const mask of [undefined, true, false]) {
@@ -116,6 +131,10 @@ async function buildClosedSet(rig: FuzzRig): Promise<{ readonly statements: Set<
         keep();
       }
     }
+  }
+  for (const preset of FUZZ_LINKED_PRESETS) {
+    await served(`/v1/templates/${preset.id}/run`, { sourceId: FUZZ_SOURCE, params: { ref: anchor, ...choicesOf(preset.bind.target === preset.bind.anchor)[0], limit: 10 }, continue: true });
+    keep();
   }
   const linkedByType = [
     { targetType: 'gadget', via: ['MADE_FROM'] },
@@ -242,7 +261,7 @@ async function buildClosedSet(rig: FuzzRig): Promise<{ readonly statements: Set<
       keep();
     }
   }
-  return { statements, routes, values: ['W-1', 'GD-0', 'L-1', '2026-01-01', '2026-01-31', FUZZ_TEXT, 'ne', '+1-212-555-01', ...cursors, ...expandCursors.map((entry) => entry.cursor), ...keys.map((entry) => entry.stableId)] };
+  return { statements, routes, cases, values: ['W-1', 'GD-0', 'L-1', '2026-01-01', '2026-01-31', FUZZ_TEXT, 'ne', '+1-212-555-01', ...cursors, ...expandCursors.map((entry) => entry.cursor), ...keys.map((entry) => entry.stableId)] };
 }
 
 const escaped = (value: string): string => value.replace(/[.*+?^${}()|[\]\\-]/g, '\\$&');

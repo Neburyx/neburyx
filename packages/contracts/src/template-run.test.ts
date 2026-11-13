@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LINKED_HOPS_MAX, MIN_SHARED_MAX, WINDOW_MAX_DAYS, linkedEntitiesParamsSchema, sharedAttributeParamsSchema, templateRunNoticeSchema, templateRunRequestSchema, templateRunResponseSchema, windowSchema } from './template-run.js';
+import { HEAVY_CONTINUE_LIMIT, LINKED_HOPS_MAX, MIN_SHARED_MAX, WINDOW_MAX_DAYS, linkedEntitiesParamsSchema, sharedAttributeParamsSchema, templateRunHeavySchema, templateRunNoticeSchema, templateRunRequestSchema, templateRunResponseSchema, windowSchema } from './template-run.js';
 
 describe('the window of a template run', () => {
   it.each([[{ days: 14 }], [{ days: 1 }], [{ days: WINDOW_MAX_DAYS }], [{ from: '2026-01-01', to: '2026-01-31' }], [{ from: '2026-01-01', to: '2026-01-01' }], [{ from: '2024-02-29', to: '2024-03-01' }]])('accepts %j', (window) => {
@@ -81,5 +81,35 @@ describe('the request and the answer of a template run', () => {
     expect(templateRunResponseSchema.safeParse({ ...base, count: { quality: 'unknown', scope: 'template:shared-attribute' } }).success).toBe(true);
     expect(templateRunResponseSchema.safeParse({ ...base, count: { value: 2, quality: 'lowerBound', scope: 'template:shared-attribute' } }).success).toBe(true);
     expect(templateRunResponseSchema.safeParse({ ...base, status: 'heavy', count: { value: 2, quality: 'exact', scope: 's' } }).success).toBe(false);
+  });
+
+  describe('the stop of a heavy run', () => {
+    const heavy = { status: 'heavy', templateId: 'shared-attribute', templateVersion: '1', estimate: { value: 500, quality: 'lowerBound', scope: 'template:shared-attribute:estimate' }, threshold: 500, continueLimit: 25, notices: [], warnings: [] };
+
+    it('is a second member of the answer, told apart by its status, and holds no rows', () => {
+      expect(templateRunResponseSchema.safeParse(heavy).success).toBe(true);
+      expect(templateRunHeavySchema.safeParse({ ...heavy, matchIds: [] }).success).toBe(false);
+      expect(templateRunHeavySchema.safeParse({ ...heavy, nodes: [] }).success).toBe(false);
+    });
+
+    it('holds a lower bound at the threshold: no other quality, no other value', () => {
+      for (const estimate of [{ value: 500, quality: 'exact', scope: 's' }, { value: 500, quality: 'estimated', scope: 's' }, { quality: 'unknown', scope: 's' }, { value: 499, quality: 'lowerBound', scope: 's' }]) {
+        expect(templateRunHeavySchema.safeParse({ ...heavy, estimate }).success, JSON.stringify(estimate)).toBe(false);
+      }
+    });
+
+    it('offers a page of at most 25, the one value of the product, and a threshold of at least 1', () => {
+      expect(HEAVY_CONTINUE_LIMIT).toBe(25);
+      expect(templateRunHeavySchema.safeParse({ ...heavy, continueLimit: 26 }).success).toBe(false);
+      expect(templateRunHeavySchema.safeParse({ ...heavy, continueLimit: 7 }).success).toBe(true);
+      expect(templateRunHeavySchema.safeParse({ ...heavy, threshold: 0, estimate: { value: 0, quality: 'lowerBound', scope: 's' } }).success).toBe(false);
+    });
+
+    it('takes the continue flag as a boolean on the request and nothing else new', () => {
+      const request = { sourceId: 's', params: {} };
+      expect(templateRunRequestSchema.safeParse({ ...request, continue: true }).success).toBe(true);
+      expect(templateRunRequestSchema.safeParse({ ...request, continue: 'yes' }).success).toBe(false);
+      expect(templateRunRequestSchema.safeParse({ ...request, again: true }).success).toBe(false);
+    });
   });
 });

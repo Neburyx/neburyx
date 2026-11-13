@@ -1,4 +1,4 @@
-import type { DegreePreview, ElementRef } from '@neburyx/contracts';
+import { HEAVY_CONTINUE_LIMIT, type DegreePreview, type ElementRef, type TemplateRunResponse } from '@neburyx/contracts';
 
 /** What an ask would load first: the neighbor types it names and, when the person narrowed them, the relationship types. */
 export interface EstimateAsk {
@@ -15,7 +15,7 @@ export interface HeavyEstimate {
 }
 
 /** The bounded first page *Continue* offers: a fixed product value and not a source setting. */
-export const BOUNDED_LIMIT = 25;
+export const BOUNDED_LIMIT = HEAVY_CONTINUE_LIMIT;
 
 export type HeavyDecision = { readonly kind: 'none' } | { readonly kind: 'heavy'; readonly estimate: HeavyEstimate; readonly threshold: number; readonly pageSize: number };
 
@@ -56,4 +56,13 @@ export function heavyDecision(preview: DegreePreview, ask: EstimateAsk): HeavyDe
   const threshold = preview.heavyOpThreshold;
   const heavy = quality === 'lowerBound' ? sum >= threshold : sum > threshold;
   return heavy ? { kind: 'heavy', estimate: { value: sum, quality }, threshold, pageSize: preview.pageSize } : NONE;
+}
+
+/**
+ * Whether a pattern run stopped as heavy: the answer of the run route is the stop (`status: 'heavy'`) with the estimate the server read, a lower bound at the threshold, and the page a continue would return. The estimate keeps its
+ * label and is never turned into an exact number; an answer with rows is no warning.
+ */
+export function heavyDecisionOfRun(response: TemplateRunResponse): HeavyDecision {
+  if (response.status !== 'heavy' || response.estimate.value === undefined || response.estimate.quality === 'unknown') return NONE;
+  return { kind: 'heavy', estimate: { value: response.estimate.value, quality: response.estimate.quality }, threshold: response.threshold, pageSize: response.continueLimit };
 }
