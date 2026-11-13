@@ -10,7 +10,7 @@ const INVALID = { error: { code: 'INVALID_REQUEST', message: 'The request is not
 const BUSY = { error: { code: 'SOURCE_BUSY', message: 'The data source is busy. Try again shortly.', retryable: true, traceId: 'tr-support' } };
 
 /** The starting entities for which the support server answers something other than the ring: no match, a heavy stop, a run that waits until the client leaves, a busy source. */
-export const RUN_ANCHORS = { none: 'EMPTY-1', heavy: 'HEAVY-1', slow: 'SLOW-1', busy: 'BUSY-1' } as const;
+export const RUN_ANCHORS = { none: 'EMPTY-1', heavy: 'HEAVY-1', slow: 'SLOW-1', busy: 'BUSY-1', paged: 'PAGED-1' } as const;
 
 const refOf = (sourceId: string, entityType: string, stableId: string) => ({ sourceId, entityType, stableId });
 const nodeOf = (sourceId: string, entityType: string, stableId: string) => ({
@@ -66,19 +66,21 @@ export async function runPattern(body: unknown, response: ServerResponse, reques
     });
     if (response.destroyed) return;
   }
-  if (anchor.stableId === RUN_ANCHORS.heavy && parsed.data.continue !== true) {
+  if (anchor.stableId === RUN_ANCHORS.heavy && parsed.data.continue !== true && parsed.data.cursor === undefined) {
     return json(response, 200, patternRunResponseSchema.parse({ status: 'heavy', templateVersion: '1', estimate: { value: 500, quality: 'lowerBound', scope: 'matches' }, threshold: 500, continueLimit: 25, notices: [], warnings: [] }));
   }
   const arrival = String((definition as { steps: Array<{ arrivesAt: string }> }).steps.at(-1)?.arrivesAt ?? anchorType);
   const none = anchor.stableId === RUN_ANCHORS.none;
   const hops = steps.length;
   const typeOf = (index: number): string => steps[index]?.relationshipTypes[0] ?? 'REL';
-  const matches = none ? [] : ['MATCH-1', 'MATCH-2'];
+  const secondPage = anchor.stableId === RUN_ANCHORS.paged && parsed.data.cursor !== undefined;
+  const matches = none ? [] : secondPage ? ['MATCH-3', 'MATCH-4'] : ['MATCH-1', 'MATCH-2'];
+  const paged = anchor.stableId === RUN_ANCHORS.paged;
   const through = (second: boolean) => Array.from({ length: hops - 1 }, (_, index) => (second && index === 0 ? null : refOf(sourceId, anchorType, `MID-${index + 1}`)));
   const evidenceEdges = none
     ? []
     : matches.map((match, index) => ({
-        ref: { sourceId, type: typeOf(hops - 1), from: arrival, to: arrival, stableId: `pr-${index}` },
+        ref: { sourceId, type: typeOf(hops - 1), from: arrival, to: arrival, stableId: `pr-${match}` },
         from: refOf(sourceId, anchorType, anchor.stableId),
         to: refOf(sourceId, arrival, match),
         type: typeOf(hops - 1),
@@ -94,12 +96,16 @@ export async function runPattern(body: unknown, response: ServerResponse, reques
     patternRunResponseSchema.parse({
       status: 'ok',
       templateVersion: '1',
-      count: { value: matches.length, quality: 'exact', scope: 'matches' },
+      count: paged ? (secondPage ? { value: matches.length, quality: 'lowerBound', scope: 'matches' } : { value: 4, quality: 'exact', scope: 'matches' }) : { value: matches.length, quality: 'exact', scope: 'matches' },
+      ...(paged && !secondPage ? { nextCursor: 'page-2' } : {}),
       matches: matches.map((match, index) => ({
         match: refOf(sourceId, arrival, match),
         hops,
         through: through(index === 1),
-        relationships: Array.from({ length: hops }, (_, hop) => ({ relationshipType: index === 1 && hop === 0 ? null : typeOf(hop), from: null, to: null })),
+        relationships: Array.from({ length: hops }, (_, hop) => {
+          const chain = [refOf(sourceId, anchorType, anchor.stableId), ...through(index === 1), refOf(sourceId, arrival, match)];
+          return { relationshipType: index === 1 && hop === 0 ? null : typeOf(hop), from: chain[hop] ?? null, to: chain[hop + 1] ?? null, ...(hop === hops - 1 ? { stableId: `pr-${match}` } : {}) };
+        }),
       })),
       nodes: none ? [nodeOf(sourceId, anchorType, anchor.stableId)] : [nodeOf(sourceId, anchorType, anchor.stableId), ...matches.map((match) => nodeOf(sourceId, arrival, match))],
       edges: evidenceEdges,

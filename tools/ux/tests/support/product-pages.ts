@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { expect, type Page } from '@playwright/test';
+import { buildTwoSteps, openPatternList, patternBuilder, patternsPanel, previewTwoSteps } from './pattern-editor.ts';
 import { modifier } from './workspace.ts';
 
 export interface ProductPage {
@@ -286,14 +287,22 @@ export const REACH: Readonly<Record<string, (page: Page) => Promise<void>>> = {
   'Explore with the Patterns panel open': async (page) => {
     await openEntity(page, 'banking-demo', `PP-${unique()}`);
     await expect(page.getByRole('application', { name: 'Graph canvas' })).toBeVisible();
-    await page.getByRole('button', { name: 'Patterns', exact: true }).click();
-    await expect(page.getByRole('complementary', { name: 'Patterns' }).getByRole('button', { name: 'Run pattern' })).toBeVisible();
+    await openPatternList(page);
+    await expect(patternsPanel(page).getByRole('button', { name: 'Run Shared devices' })).toBeVisible();
+  },
+  "Explore with the Patterns panel's preset form": async (page) => {
+    await openEntity(page, 'banking-demo', `PF-${unique()}`);
+    await expect(page.getByRole('application', { name: 'Graph canvas' })).toBeVisible();
+    await openPatternList(page);
+    await patternsPanel(page).getByRole('button', { name: 'Run Shared devices' }).click();
+    await expect(patternsPanel(page).getByRole('button', { name: 'Run pattern' })).toBeVisible();
   },
   "Explore with the Patterns panel's Heavy operation state": async (page) => {
     await openEntity(page, 'banking-demo', `PH-${unique()}`);
     await expect(page.getByRole('application', { name: 'Graph canvas' })).toBeVisible();
-    await page.getByRole('button', { name: 'Patterns', exact: true }).click();
-    const panel = page.getByRole('complementary', { name: 'Patterns' });
+    await openPatternList(page);
+    const panel = patternsPanel(page);
+    await panel.getByRole('button', { name: 'Run Shared devices' }).click();
     await panel.getByLabel('Starting account').selectOption({ index: 1 });
     await panel.getByLabel('Min shared').fill('2');
     await panel.getByRole('button', { name: 'Run pattern' }).click();
@@ -302,52 +311,57 @@ export const REACH: Readonly<Record<string, (page: Page) => Promise<void>>> = {
   'Explore with the pattern builder open': async (page) => {
     await openEntity(page, 'banking-demo', `PB-${unique()}`);
     await expect(page.getByRole('application', { name: 'Graph canvas' })).toBeVisible();
-    await page.getByRole('button', { name: 'Patterns', exact: true }).click();
-    await page.getByRole('complementary', { name: 'Patterns' }).getByRole('button', { name: 'New pattern' }).click();
-    await expect(page.getByRole('complementary', { name: 'Patterns' }).getByLabel('Starts at')).toBeVisible();
+    await openPatternList(page);
+    await patternsPanel(page).getByRole('button', { name: 'New pattern' }).click();
+    await expect(patternBuilder(page).getByLabel('Starting entity type')).toBeVisible();
   },
   'Explore with the pattern builder holding a step': async (page) => {
     await openEntity(page, 'banking-demo', `PC-${unique()}`);
     await expect(page.getByRole('application', { name: 'Graph canvas' })).toBeVisible();
-    await page.getByRole('button', { name: 'Patterns', exact: true }).click();
-    const panel = page.getByRole('complementary', { name: 'Patterns' });
-    await panel.getByRole('button', { name: 'New pattern' }).click();
-    await panel.getByLabel('Starts at').selectOption({ label: 'Account' });
-    await panel.getByRole('button', { name: 'Add step' }).click();
-    await panel.getByLabel('Direction').selectOption('out');
-    await panel.getByLabel('Arrives at').selectOption({ label: 'Device' });
-    await panel.getByRole('checkbox', { name: 'USES_DEVICE' }).check();
-    await expect(panel.getByText('Valid: the mapping can follow this pattern.')).toBeVisible();
+    await openPatternList(page);
+    await buildTwoSteps(page);
+  },
+  "Explore with a pattern's preview": async (page) => {
+    await openEntity(page, 'banking-demo', `PV-${unique()}`);
+    await expect(page.getByRole('application', { name: 'Graph canvas' })).toBeVisible();
+    await previewTwoSteps(page);
+    await expect(patternsPanel(page).getByRole('button', { name: 'Run pattern' })).toBeEnabled();
+  },
+  "Explore with a pattern's running screen": async (page) => {
+    await openEntity(page, 'banking-demo', 'SLOW-1');
+    await expect(page.getByRole('application', { name: 'Graph canvas' })).toBeVisible();
+    await previewTwoSteps(page);
+    await patternsPanel(page).getByRole('button', { name: 'Run pattern' }).click();
+    await expect(patternsPanel(page).getByRole('button', { name: 'Cancel run' })).toBeVisible();
   },
   "Explore with a pattern run's result": async (page) => {
     await openEntity(page, 'banking-demo', `PR-${unique()}`);
     await expect(page.getByRole('application', { name: 'Graph canvas' })).toBeVisible();
-    await page.getByRole('button', { name: 'Patterns', exact: true }).click();
-    const panel = page.getByRole('complementary', { name: 'Patterns' });
-    await panel.getByRole('button', { name: 'New pattern' }).click();
-    await panel.getByLabel('Starts at').selectOption({ label: 'Account' });
-    await panel.getByRole('button', { name: 'Add step' }).click();
-    await panel.getByLabel('Direction').selectOption('out');
-    await panel.getByLabel('Arrives at').selectOption({ label: 'Device' });
-    await panel.getByRole('checkbox', { name: 'USES_DEVICE' }).check();
-    await expect(panel.getByRole('region', { name: 'Preview' })).toBeVisible();
-    await panel.getByRole('button', { name: 'Run pattern' }).click();
-    await expect(panel.getByRole('region', { name: 'Result' })).toBeVisible();
+    await previewTwoSteps(page);
+    await patternsPanel(page).getByRole('button', { name: 'Run pattern' }).click();
+    await expect(patternsPanel(page).getByRole('heading', { name: 'Pattern result' })).toBeVisible();
+    await expect(patternsPanel(page).getByRole('button', { name: 'Add all 2 to graph' })).toBeVisible();
   },
   "Explore with a pattern run's Heavy operation state": async (page) => {
     await openEntity(page, 'banking-demo', 'HEAVY-1');
     await expect(page.getByRole('application', { name: 'Graph canvas' })).toBeVisible();
-    await page.getByRole('button', { name: 'Patterns', exact: true }).click();
-    const panel = page.getByRole('complementary', { name: 'Patterns' });
-    await panel.getByRole('button', { name: 'New pattern' }).click();
-    await panel.getByLabel('Starts at').selectOption({ label: 'Account' });
-    await panel.getByRole('button', { name: 'Add step' }).click();
-    await panel.getByLabel('Direction').selectOption('out');
-    await panel.getByLabel('Arrives at').selectOption({ label: 'Device' });
-    await panel.getByRole('checkbox', { name: 'USES_DEVICE' }).check();
-    await expect(panel.getByRole('region', { name: 'Preview' })).toBeVisible();
-    await panel.getByRole('button', { name: 'Run pattern' }).click();
-    await expect(panel.getByRole('button', { name: 'Continue with 25' })).toBeVisible();
+    await previewTwoSteps(page);
+    await patternsPanel(page).getByRole('button', { name: 'Run pattern' }).click();
+    await expect(patternsPanel(page).getByRole('button', { name: 'Continue with 25' })).toBeVisible();
+  },
+  'Explore with the Save pattern dialog open': async (page) => {
+    await openEntity(page, 'banking-demo', `PD-${unique()}`);
+    await expect(page.getByRole('application', { name: 'Graph canvas' })).toBeVisible();
+    await previewTwoSteps(page);
+    await patternsPanel(page).getByRole('button', { name: 'Save pattern…' }).click();
+    await expect(page.getByRole('dialog', { name: 'Save pattern' })).toBeVisible();
+  },
+  'Explore with the pattern row menu open': async (page) => {
+    await openEntity(page, 'banking-demo', `PM-${unique()}`);
+    await expect(page.getByRole('application', { name: 'Graph canvas' })).toBeVisible();
+    await openPatternList(page);
+    await patternsPanel(page).getByRole('button', { name: 'More: Shared by Pat' }).click();
+    await expect(page.getByRole('menu', { name: 'Shared by Pat' })).toBeVisible();
   },
   'Explore with the inspector open': async (page) => {
     await openEntity(page, 'banking-demo', `PI-${unique()}`);

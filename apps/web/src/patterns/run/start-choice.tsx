@@ -1,4 +1,4 @@
-import { useId, useState, type KeyboardEvent } from 'react';
+import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import type { GraphNode } from '@neburyx/contracts';
 import type { ApiClient } from '../../api/client.js';
 import { degreeCountText } from '../../workspace/degree-text.js';
@@ -27,7 +27,7 @@ interface Props {
 export const idOf = (node: GraphNode, showIds: boolean): string | undefined => (showIds ? node.ref.stableId : undefined);
 
 /**
- * "Start from a <Type>": the entity is chosen, never typed as an identifier. Loaded entities of the type are listed, the selected one first, and typed text searches the source narrowed to the type, through the search route; the list is chosen by arrows and Enter.
+ * "Start from: <Type>": the entity is chosen, never typed as an identifier. Loaded entities of the type are listed, the selected one first, and typed text searches the source narrowed to the type, through the search route; the list is chosen by arrows and Enter.
  */
 export function StartChoice({ client, sourceId, sourceName, mask, typeName, entityType, candidates, chosen, onChoose, showIds, inputId }: Props) {
   const [text, setText] = useState('');
@@ -55,12 +55,22 @@ export function StartChoice({ client, sourceId, sourceName, mask, typeName, enti
         event.preventDefault();
         choose(node);
       }
-    } else if (event.key === 'Escape' && listing) {
+    }
+  };
+  const field = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const node = field.current;
+    if (node === null || !listing) return undefined;
+    // the panel's frame listens for Escape before React does: the list closes first, with a listener on the field itself, and the panel only when no list is open
+    const onEscape = (event: globalThis.KeyboardEvent): void => {
+      if (event.key !== 'Escape') return;
       event.preventDefault();
       event.stopPropagation();
       setOpen(false);
-    }
-  };
+    };
+    node.addEventListener('keydown', onEscape);
+    return () => node.removeEventListener('keydown', onEscape);
+  }, [listing]);
   const total = found.kind === 'found' && found.count?.value !== undefined ? degreeCountText(found.count) : undefined;
   return (
     <div className="patterns-field run-start">
@@ -69,6 +79,7 @@ export function StartChoice({ client, sourceId, sourceName, mask, typeName, enti
       </label>
       <input
         id={inputId}
+        ref={field}
         type="search"
         role="combobox"
         className="patterns-input"

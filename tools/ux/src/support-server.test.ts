@@ -64,6 +64,17 @@ describe('the support server, previewing and running a pattern', () => {
     expect(answer.edges.flatMap((edge) => edge.evidenceRefs)).toEqual(['AUTH-77300', 'AUTH-77301']);
   });
 
+  it('gives PAGED-1 two pages: the first with a nextCursor and an exact count, the one read with that cursor a lower bound that is never heavy', async () => {
+    const base = await start();
+    const first = (await (await post(base, '/v1/patterns/run', run('PAGED-1'))).json()) as { count: unknown; nextCursor?: string; matches: Array<{ match: { stableId: string } }> };
+    expect(first.count).toMatchObject({ value: 4, quality: 'exact' });
+    expect(first.nextCursor).toBe('page-2');
+    const second = (await (await post(base, '/v1/patterns/run', run('PAGED-1', { cursor: first.nextCursor }))).json()) as { count: unknown; nextCursor?: string; matches: Array<{ match: { stableId: string } }> };
+    expect(second.count).toMatchObject({ quality: 'lowerBound' });
+    expect(second.nextCursor).toBeUndefined();
+    expect([...first.matches, ...second.matches].map((match) => match.match.stableId)).toEqual(['MATCH-1', 'MATCH-2', 'MATCH-3', 'MATCH-4']);
+  });
+
   it('answers no match, a heavy stop (and the page for the continue), a busy source, and a refusal for a bad body', async () => {
     const base = await start();
     expect(await (await post(base, '/v1/patterns/run', run('EMPTY-1'))).json()).toMatchObject({ status: 'ok', count: { value: 0 }, matches: [] });

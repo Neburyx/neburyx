@@ -151,7 +151,7 @@ export async function previewed(): Promise<void> {
 }
 
 export const runButton = (): HTMLButtonElement => screen.getByRole('button', { name: 'Run pattern' }) as HTMLButtonElement;
-export const startCombo = (): HTMLInputElement => screen.getByRole('combobox', { name: /^Start from a / }) as HTMLInputElement;
+export const startCombo = (): HTMLInputElement => screen.getByRole('combobox', { name: /^Start from: / }) as HTMLInputElement;
 export const startHelp = (): string => document.getElementById('run-start-help')?.textContent ?? '';
 
 /** Chooses a loaded entity of the start type from the list the field opens on focus. */

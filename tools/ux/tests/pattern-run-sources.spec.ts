@@ -1,4 +1,4 @@
-import { buildStepThroughUi } from './support/pattern-editor.ts';
+import { buildTwoSteps, patternBuilder, patternsPanel, openPatternList } from './support/pattern-editor.ts';
 import { expect, test } from '@playwright/test';
 
 test.use({ baseURL: 'http://127.0.0.1:4175' });
@@ -12,20 +12,18 @@ test.describe('running a built pattern on each source of the second server', () 
       await form.getByLabel('Stable ID').fill('AC-1');
       await form.getByRole('button', { name: 'Open' }).click();
       await expect(page).toHaveURL(/\/explore\/[0-9a-f-]{36}$/);
-      await page.getByRole('button', { name: 'Patterns', exact: true }).click();
-      const panel = page.getByRole('complementary', { name: 'Patterns' });
-      await panel.getByRole('button', { name: 'New pattern' }).click();
-      const builder = panel.getByRole('region', { name: 'New pattern' });
-      await builder.getByLabel('Starting entity type').selectOption({ label: 'Account' });
-      await buildStepThroughUi(page, builder, 1, 'out', 'Device', ['USES_DEVICE']);
-      await buildStepThroughUi(page, builder, 2, 'in', 'Account', ['USES_DEVICE']);
-      await expect(builder.getByRole('region', { name: 'Preview' })).toBeVisible();
-      await builder.getByRole('button', { name: 'Run pattern' }).click();
-      const result = builder.getByRole('region', { name: 'Result' });
-      await expect(result).toContainText('2 · exact');
-      await expect(result.getByRole('table')).toContainText('USES_DEVICE');
-      await expect(result).toContainText('1 supernode was not traversed.');
-      await expect(result).toContainText('The window did not apply to 1 relationship type.');
+      await openPatternList(page);
+      await buildTwoSteps(page);
+      await patternBuilder(page).getByRole('button', { name: 'Preview' }).click();
+      const panel = patternsPanel(page);
+      await expect(panel.getByRole('heading', { name: 'Preview pattern' })).toBeVisible();
+      await expect(panel.getByText('Follows USES_DEVICE outgoing to a device.')).toBeVisible();
+      await panel.getByRole('button', { name: 'Run pattern' }).click();
+      await expect(panel.getByRole('heading', { name: 'Pattern result' })).toBeVisible();
+      await expect(panel.getByRole('status').filter({ hasText: 'Exact' }).first()).toHaveText('2 matches · Exact');
+      await expect(panel.locator('.run-match').first().getByRole('list', { name: 'Path' })).toContainText('MID-1');
+      await expect(panel).toContainText('1 supernode was not traversed.');
+      await expect(panel).toContainText('The window did not apply to 1 relationship type.');
     });
   }
 });

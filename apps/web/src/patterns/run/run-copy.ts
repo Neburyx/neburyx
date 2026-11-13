@@ -68,8 +68,8 @@ export const RUN_COPY = {
 
 export const typesMatching = (typeName: string, text: string): string => `${typeName}s matching “${text}”`;
 export const typesOnCanvas = (typeName: string): string => `${typeName}s on the canvas`;
-export const startFrom = (typeName: string): string => `Start from a ${typeName}`;
-export const startHelper = (typeName: string): string => `Prefilled when a ${typeName} is selected or open on the canvas. Otherwise search by name or ID. You must pick one to run.`;
+export const startFrom = (typeName: string): string => `Start from: ${typeName}`;
+export const startHelper = (typeName: string): string => `Prefilled from the ${typeName} selected or open on the canvas. Otherwise search by name or ID. You must pick one to run.`;
 export const boundPage = (limit: number): string => `Up to ${formatNumber(limit)} matches per page.`;
 export const boundCount = (cap: number): string => `A count above ${formatNumber(cap)} is shown as “at least ${formatNumber(cap)}” and labelled lower bound.`;
 export const startingFromLine = (name: string, typeName: string, id: string | undefined): string => [name, typeName, id].filter((part) => part !== undefined && part !== '').join(' · ');

@@ -79,10 +79,9 @@ test.describe('the pattern builder in the Patterns panel', () => {
     await openBuilder(page);
     await builderOf(page).getByLabel('Starting entity type').selectOption({ label: 'Account' });
     await buildStep(page, 1, 'out', 'Device', ['USES_DEVICE']);
-    // the search of Starts from only searches; no typed text becomes an identifier
-    await expect(builderOf(page).locator('input[type="search"]')).toHaveCount(1);
-    await expect(builderOf(page).getByRole('searchbox', { name: 'Search the source' })).toHaveCount(1);
-    expect(await builderOf(page).locator('input:not([type="checkbox"]):not([type="search"]), textarea, [contenteditable="true"]').count()).toBe(0);
+    // the search that picks the starting entity is on the preview screen, so no text goes into an identifier here
+    await expect(builderOf(page).getByRole('searchbox')).toHaveCount(0);
+    expect(await builderOf(page).locator('input:not([type="checkbox"]), textarea, [contenteditable="true"]').count()).toBe(0);
   });
 
   test('opens with Space on New pattern too', async ({ page }) => {

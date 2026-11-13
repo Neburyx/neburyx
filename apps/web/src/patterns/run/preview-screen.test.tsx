@@ -1,4 +1,4 @@
-import { act } from '@testing-library/react';
+import { act, fireEvent } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PatternPreviewResponse } from '@neburyx/contracts';
 import type { ApiResult } from '../../api/client.js';
@@ -51,7 +51,7 @@ describe('the preview screen', () => {
     await runWorkspace();
     await previewed();
     expect(startCombo().placeholder).toBe('Search by name or ID');
-    expect(startHelp()).toBe('Prefilled when a N-A is selected or open on the canvas. Otherwise search by name or ID. You must pick one to run.');
+    expect(startHelp()).toBe('Prefilled from the N-A selected or open on the canvas. Otherwise search by name or ID. You must pick one to run.');
     expect(screen.getByText('Chosen:', { exact: false }).textContent).toContain('x-1');
     expect(runButton().disabled).toBe(false);
   });
@@ -162,3 +162,18 @@ describe('the preview screen', () => {
     expect(signal?.aborted).toBe(true);
   });
 });
+
+describe('Escape in the start field', () => {
+  it('closes the list of entities first, with the panel still open, and the panel only when no list is open', async () => {
+    await runWorkspace();
+    await previewed();
+    await userEvent.click(startCombo());
+    expect(screen.getByRole('listbox')).toBeTruthy();
+    fireEvent.keyDown(startCombo(), { key: 'Escape' });
+    expect(screen.queryByRole('listbox')).toBeNull();
+    expect(screen.getByRole('complementary', { name: 'Patterns' })).toBeTruthy();
+    fireEvent.keyDown(startCombo(), { key: 'Escape' });
+    expect(screen.queryByRole('complementary', { name: 'Patterns' })).toBeNull();
+  });
+});
+

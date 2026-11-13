@@ -1,14 +1,23 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { changePatternRequestSchema, savePatternRequestSchema } from '@neburyx/contracts';
+import { CONFLICT_ENTRIES, ERROR_TABLE, changePatternRequestSchema, savePatternRequestSchema } from '@neburyx/contracts';
 
 const json = (response: ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}): void => {
   response.writeHead(status, { 'content-type': 'application/json', ...headers });
   response.end(JSON.stringify(body));
 };
 
-const failure = (code: string, message: string, extra: Record<string, unknown> = {}) => ({ error: { code, message, retryable: false, traceId: 'tr-support', ...extra } });
 const STATUS: Readonly<Record<string, number>> = { INVALID_REQUEST: 400, ACCESS_DENIED: 403, NOT_FOUND: 404, CONFLICT: 409 };
-const refuse = (response: ServerResponse, code: keyof typeof STATUS & string): void => json(response, STATUS[code] ?? 400, failure(code, code));
+const ENTRY: Readonly<Record<string, { message: string; retryable: boolean }>> = {
+  INVALID_REQUEST: ERROR_TABLE.INVALID_REQUEST,
+  ACCESS_DENIED: ERROR_TABLE.ACCESS_DENIED,
+  NOT_FOUND: ERROR_TABLE.NOT_FOUND,
+  CONFLICT: ERROR_TABLE.CONFLICT,
+};
+const refuse = (response: ServerResponse, code: keyof typeof STATUS & string): void =>
+  json(response, STATUS[code] ?? 400, { error: { code, message: ENTRY[code]?.message ?? code, retryable: ENTRY[code]?.retryable ?? false, traceId: 'tr-support' } });
+/** A name another of the person's patterns on the source already has: a CONFLICT with its own reason, as the API answers. */
+const refuseNameTaken = (response: ServerResponse): void =>
+  json(response, 409, { error: { code: 'CONFLICT', ...CONFLICT_ENTRIES['pattern-name-taken'], traceId: 'tr-support', details: { reason: 'pattern-name-taken' } } });
 
 type Anchor = { readonly entityType: string; readonly stableId: string };
 
@@ -68,6 +77,7 @@ export function createSavedPatterns(runPattern: (body: unknown, response: Server
   let next = 100;
   const visible = (item: Stored): boolean => item.owner === 'me' || item.visibility === 'shared';
   const find = (given: string): Stored | undefined => items.find((item) => item.id === given && visible(item));
+  const nameTaken = (sourceId: string, name: string, except: Stored | undefined): boolean => items.some((item) => item !== except && item.owner === 'me' && item.sourceId === sourceId && item.name === name);
   const versionOf = (header: string | string[] | undefined): number | undefined => {
     const value = typeof header === 'string' ? /^"(\d+)"$/.exec(header)?.[1] : undefined;
     return value === undefined ? undefined : Number(value);
@@ -82,6 +92,7 @@ export function createSavedPatterns(runPattern: (body: unknown, response: Server
     save: (body: unknown, response: ServerResponse): void => {
       const parsed = savePatternRequestSchema.safeParse(body);
       if (!parsed.success || parsed.data.kind !== 'definition') return refuse(response, 'INVALID_REQUEST');
+      if (nameTaken(parsed.data.sourceId, parsed.data.name.trim(), undefined)) return refuseNameTaken(response);
       const item: Stored = { id: id(next++), sourceId: parsed.data.sourceId, name: parsed.data.name.trim(), definition: parsed.data.definition, anchor: parsed.data.anchor ?? null, visibility: 'private', version: 1, owner: 'me', unavailable: false, createdAt: AT };
       items = [item, ...items];
       json(response, 201, storedOf(item), { etag: '"1"' });
@@ -93,6 +104,7 @@ export function createSavedPatterns(runPattern: (body: unknown, response: Server
       if (item === undefined) return refuse(response, 'NOT_FOUND');
       if (item.owner !== 'me') return refuse(response, 'ACCESS_DENIED');
       if (parsed.data.expectedVersion !== item.version) return refuse(response, 'CONFLICT');
+      if (parsed.data.name !== undefined && nameTaken(item.sourceId, parsed.data.name.trim(), item)) return refuseNameTaken(response);
       if (parsed.data.name !== undefined) item.name = parsed.data.name.trim();
       if (parsed.data.definition !== undefined) item.definition = parsed.data.definition;
       if (parsed.data.anchor !== undefined) item.anchor = parsed.data.anchor;
@@ -111,7 +123,9 @@ export function createSavedPatterns(runPattern: (body: unknown, response: Server
     copy: (given: string, response: ServerResponse): void => {
       const item = find(given);
       if (item === undefined) return refuse(response, 'NOT_FOUND');
-      const copy: Stored = { ...item, id: id(next++), name: `${item.name} (copy)`, visibility: 'private', version: 1, owner: 'me' };
+      let copyName = `${item.name} (copy)`;
+      for (let n = 2; nameTaken(item.sourceId, copyName, undefined); n += 1) copyName = `${item.name} (copy ${n})`;
+      const copy: Stored = { ...item, name: copyName, id: id(next++), visibility: 'private', version: 1, owner: 'me' };
       items = [copy, ...items];
       json(response, 201, storedOf(copy), { etag: '"1"' });
     },
@@ -122,7 +136,7 @@ export function createSavedPatterns(runPattern: (body: unknown, response: Server
       const asked = typeof body === 'object' && body !== null ? body : {};
       const anchor = 'anchor' in asked && typeof asked.anchor === 'object' && asked.anchor !== null ? asked.anchor : item.anchor;
       if (anchor === null) return refuse(response, 'INVALID_REQUEST');
-      return runPattern({ sourceId: item.sourceId, definition: item.definition, anchor, ...('continue' in asked && asked.continue === true ? { continue: true, limit: 'limit' in asked ? asked.limit : undefined } : {}) }, response, request);
+      return runPattern({ sourceId: item.sourceId, definition: item.definition, anchor, ...('continue' in asked && asked.continue === true ? { continue: true, limit: 'limit' in asked ? asked.limit : undefined } : {}), ...('cursor' in asked && typeof asked.cursor === 'string' ? { cursor: asked.cursor } : {}) }, response, request);
     },
   };
 }

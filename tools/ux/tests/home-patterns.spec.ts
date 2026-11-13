@@ -48,7 +48,7 @@ test.describe('Home: Start from a pattern', () => {
     await expect(libraryOf(page).locator('.library-figure')).toHaveText('0');
   });
 
-  test('is reached and operated from the keyboard, and opens the panel on the pattern with the focus on it', async ({ page }) => {
+  test('is reached and operated from the keyboard, and opens the panel on the form of the pattern with the focus on its start field', async ({ page }) => {
     await homeWithNothingHeld(page);
     await chooserOf(page).selectOption('banking-demo');
     await chooserOf(page).focus();
@@ -70,7 +70,8 @@ test.describe('Home: Start from a pattern', () => {
     await page.keyboard.press('Enter');
     await expect(panelOf(page)).toBeVisible();
     await expect(page).toHaveURL(/\/explore$/);
-    await expect(panelOf(page).getByRole('radio', { name: 'Shared addresses' })).toBeFocused();
+    await expect(panelOf(page).getByRole('heading', { name: 'Shared addresses', level: 2 })).toBeVisible();
+    await expect(panelOf(page).getByLabel('Starting account')).toBeFocused();
   });
 
   test('opens bare Explore with no starting entity, which is chosen through the panel search, and runs the pattern once', async ({ page }) => {
@@ -80,7 +81,7 @@ test.describe('Home: Start from a pattern', () => {
     await page.getByRole('button', { name: 'Run Shared devices' }).click();
     await expect(panelOf(page)).toBeVisible();
     await expect(page).toHaveURL(/\/explore$/);
-    await expect(panelOf(page).getByRole('radio', { name: 'Shared devices' })).toHaveAttribute('aria-checked', 'true');
+    await expect(panelOf(page).getByRole('heading', { name: 'Shared devices', level: 2 })).toBeVisible();
     await expect(panelOf(page).getByText(/to run this pattern\./)).toBeVisible();
     await expect(panelOf(page).getByRole('button', { name: 'Run pattern' })).toBeDisabled();
     const runs: string[] = [];
@@ -117,7 +118,7 @@ test.describe('Home: Start from a pattern', () => {
     await expect(chooserOf(page)).toHaveCount(0);
     await page.getByRole('button', { name: 'Run Shared addresses' }).click();
     await expect(page).toHaveURL(address);
-    await expect(panelOf(page).getByRole('radio', { name: 'Shared addresses' })).toHaveAttribute('aria-checked', 'true');
+    await expect(panelOf(page).getByRole('heading', { name: 'Shared addresses', level: 2 })).toBeVisible();
     await expect(panelOf(page).getByLabel('Starting account')).toHaveValue(/AC-1/);
   });
 });

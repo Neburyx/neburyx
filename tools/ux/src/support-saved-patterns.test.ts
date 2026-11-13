@@ -3,7 +3,7 @@ import type { Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { patternListResponseSchema, savedPatternRunResponseSchema, savedPatternSchema } from '@neburyx/contracts';
+import { errorResponseSchema, patternListResponseSchema, savedPatternRunResponseSchema, savedPatternSchema } from '@neburyx/contracts';
 import { createSupportServer } from './support-server.ts';
 
 let folder = '';
@@ -59,6 +59,17 @@ describe('the saved patterns of the support server', () => {
     expect((await call('DELETE', `/v1/patterns/${saved.id}`, undefined, { 'if-match': '"2"' })).status).toBe(200);
     expect((await call('DELETE', `/v1/patterns/${saved.id}`, undefined, { 'if-match': '"2"' })).status).toBe(404);
     expect((await call('PUT', `/v1/patterns/not-there`, { expectedVersion: 1, name: 'X' })).status).toBe(404);
+  });
+
+  it('refuses a name the person already has as a CONFLICT with the reason pattern-name-taken, for a save, a rename and a change, and numbers the copies', async () => {
+    const taken = await call('POST', '/v1/patterns', { sourceId: 'banking-demo', kind: 'definition', name: 'Device ring', definition: DEFINITION });
+    expect(taken.status).toBe(409);
+    expect(errorResponseSchema.parse(await taken.json()).error).toMatchObject({ code: 'CONFLICT', details: { reason: 'pattern-name-taken' } });
+    expect((await call('PUT', `/v1/patterns/${OWN}`, { expectedVersion: 1, name: 'Retired pattern' })).status).toBe(409);
+    expect((await call('PUT', `/v1/patterns/${OWN}`, { expectedVersion: 1, name: 'Device ring' })).status).toBe(200);
+    const first = savedPatternSchema.parse(await (await call('POST', `/v1/patterns/${OWN}/copy`)).json());
+    const second = savedPatternSchema.parse(await (await call('POST', `/v1/patterns/${OWN}/copy`)).json());
+    expect([first.name, second.name]).toEqual(['Device ring (copy)', 'Device ring (copy 2)']);
   });
 
   it('runs a saved pattern with its held starting entity, needs one for a pattern that holds none, and answers unavailable for the retired one', async () => {

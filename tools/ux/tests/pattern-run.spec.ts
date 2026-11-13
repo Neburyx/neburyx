@@ -1,135 +1,150 @@
 import { expect, test, type Page } from '@playwright/test';
 import { drawing, openOneEntity } from './support/workspace.ts';
-import { buildStepThroughUi } from './support/pattern-editor.ts';
+import { patternBuilder, patternsPanel as panelOf, previewTwoSteps } from './support/pattern-editor.ts';
 
 const SOURCE = 'banking-demo';
 
-const panelOf = (page: Page) => page.getByRole('complementary', { name: 'Patterns' });
-const builderOf = (page: Page) => panelOf(page).getByRole('region', { name: 'New pattern' });
-const stepOf = (page: Page, n: number) => builderOf(page).getByRole('tabpanel', { name: `Step ${n}` });
-const runOf = (page: Page) => builderOf(page).getByRole('button', { name: 'Run pattern' });
-const resultOf = (page: Page) => builderOf(page).getByRole('region', { name: 'Result' });
+const runOf = (page: Page) => panelOf(page).getByRole('button', { name: 'Run pattern' });
+const headingOf = (page: Page, name: string) => panelOf(page).getByRole('heading', { name });
+const countOf = (page: Page) => panelOf(page).getByRole('status').filter({ hasText: /matches? ·|matches?$|At least/ }).first();
 
-const buildStep = (page: Page, n: number, direction: string, arrivesAt: string, types: readonly string[]): Promise<void> => buildStepThroughUi(page, builderOf(page), n, direction, arrivesAt, types);
-
-/** Opens the builder on the entity `id` and builds Account → Device ← Account with choices only; the preview and the check have answered when it returns. */
-async function built(page: Page, id: string): Promise<void> {
+/** Opens the entity `id`, builds Account → Device ← Account with choices only and shows it on the preview screen. */
+async function previewed(page: Page, id: string): Promise<void> {
   await openOneEntity(page, SOURCE, id);
-  await page.getByRole('button', { name: 'Patterns', exact: true }).click();
-  await panelOf(page).getByRole('button', { name: 'New pattern' }).click();
-  await builderOf(page).getByLabel('Starting entity type').selectOption({ label: 'Account' });
-  await buildStep(page, 1, 'out', 'Device', ['USES_DEVICE']);
-  await buildStep(page, 2, 'in', 'Account', ['USES_DEVICE']);
-  await expect(builderOf(page).getByRole('region', { name: 'Preview' })).toBeVisible();
+  await previewTwoSteps(page);
 }
 
 test.describe('running a pattern built in the panel', () => {
-  test('shows the pattern in words before the first run, then the count, the path of each match, the notices and the evidence', async ({ page }) => {
-    await built(page, 'AC-1');
-    const preview = builderOf(page).getByRole('region', { name: 'Preview' });
-    await expect(preview).toContainText('Starts at a account.');
-    await expect(preview).toContainText('Follows USES_DEVICE outgoing to a device.');
-    await expect(preview).toContainText('At most 4 steps.');
+  test('shows the pattern in words on the preview, then the count, the path of each match, the notices and the evidence', async ({ page }) => {
+    await previewed(page, 'AC-1');
+    await expect(panelOf(page).getByText('Draft · not saved')).toBeVisible();
+    await expect(panelOf(page).locator('.run-ok')).toHaveText('✓ The mapping can follow this pattern');
+    await expect(panelOf(page).getByText('Starts at a account.')).toBeVisible();
+    await expect(panelOf(page).getByText('Follows USES_DEVICE outgoing to a device.')).toBeVisible();
+    await expect(panelOf(page).getByText('Up to 50 matches per page.')).toBeVisible();
     await expect(runOf(page)).toBeEnabled();
     await runOf(page).click();
-    await expect(resultOf(page).getByRole('status').first()).toHaveText('2 · exact');
-    const rows = resultOf(page).getByRole('row');
-    await expect(rows).toHaveCount(3);
-    await expect(rows.nth(1)).toContainText('USES_DEVICE → MID-1 → USES_DEVICE');
-    await expect(rows.nth(2)).toContainText('a relationship → an entity without an ID → USES_DEVICE');
-    await expect(resultOf(page)).toContainText('1 supernode was not traversed.');
-    await expect(resultOf(page)).toContainText('The window did not apply to 1 relationship type.');
-    await expect(resultOf(page)).toContainText('AUTH-77300, AUTH-77301');
+    await expect(headingOf(page, 'Pattern result')).toBeVisible();
+    await expect(countOf(page)).toHaveText('2 matches · Exact');
+    const cards = panelOf(page).locator('.run-match');
+    await expect(cards).toHaveCount(2);
+    await expect(cards.nth(0).getByRole('list', { name: 'Path' })).toContainText('MID-1');
+    await expect(cards.nth(1).getByRole('list', { name: 'Path' })).toContainText('an entity without an ID');
+    await expect(cards.nth(1).getByRole('list', { name: 'Path' })).toContainText('a relationship');
+    await expect(panelOf(page)).toContainText('1 supernode was not traversed.');
+    await expect(panelOf(page)).toContainText('The window did not apply to 1 relationship type.');
+    await cards.nth(0).getByRole('button', { name: /^Evidence/ }).click();
+    await expect(cards.nth(0)).toContainText('AUTH-77300');
   });
 
-  test('walks Starts from, its search, Run pattern, Save pattern and Add to graph with Tab and back with Shift+Tab', async ({ page }) => {
-    await built(page, 'AC-1');
-    await runOf(page).click();
-    await expect(resultOf(page)).toBeVisible();
-    const start = builderOf(page).getByLabel('Starts from');
-    const search = builderOf(page).getByRole('searchbox', { name: 'Search the source' }).last();
-    const add = resultOf(page).getByRole('button', { name: 'Add to graph' });
+  test('walks the start field, Edit, Run pattern and Save pattern with Tab on the preview, and back with Shift+Tab', async ({ page }) => {
+    await previewed(page, 'AC-1');
+    const start = panelOf(page).getByRole('combobox', { name: 'Start from: Account' });
+    const save = panelOf(page).getByRole('button', { name: 'Save pattern…' });
+    const edit = panelOf(page).getByRole('button', { name: 'Edit' });
     await start.focus();
     await page.keyboard.press('Tab');
-    await expect(search).toBeFocused();
+    await expect(save).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(edit).toBeFocused();
     await page.keyboard.press('Tab');
     await expect(runOf(page)).toBeFocused();
-    await page.keyboard.press('Tab');
-    await expect(builderOf(page).getByRole('button', { name: 'Save pattern' })).toBeFocused();
-    await page.keyboard.press('Tab');
-    await expect(add).toBeFocused();
     await page.keyboard.press('Shift+Tab');
     await page.keyboard.press('Shift+Tab');
-    await expect(runOf(page)).toBeFocused();
-    await page.keyboard.press('Shift+Tab');
-    await expect(search).toBeFocused();
+    await expect(save).toBeFocused();
     await page.keyboard.press('Shift+Tab');
     await expect(start).toBeFocused();
   });
 
-  test('stops a heavy run with Refine filters and Continue with 25, and Continue shows the page', async ({ page }) => {
-    await built(page, 'HEAVY-1');
+  test('stops a heavy run with Refine filters and Continue with 25, and Continue shows the page as a lower bound', async ({ page }) => {
+    await previewed(page, 'HEAVY-1');
     await runOf(page).click();
-    await expect(builderOf(page).getByText('Estimated ≥ 500 matches · warning threshold 500')).toBeVisible();
-    await expect(builderOf(page).getByText('Refine filters or continue with a bounded limit of 25.')).toBeVisible();
-    await expect(resultOf(page)).toHaveCount(0);
-    await builderOf(page).getByRole('button', { name: 'Refine filters' }).click();
-    await expect(builderOf(page).getByLabel('Starting entity type')).toBeFocused();
+    await expect(headingOf(page, 'Run paused')).toBeVisible();
+    await expect(panelOf(page).getByText('Estimated ≥ 500 matches')).toBeVisible();
+    await expect(panelOf(page).getByText('The run stopped before reading matches, to protect the source. Nothing was changed.')).toBeVisible();
+    await expect(panelOf(page).locator('.run-match')).toHaveCount(0);
+    await panelOf(page).getByRole('button', { name: 'Refine filters' }).click();
+    await expect(patternBuilder(page)).toBeVisible();
+    await panelOf(page).getByRole('button', { name: 'Preview' }).click();
     await runOf(page).click();
-    await builderOf(page).getByRole('button', { name: 'Continue with 25' }).click();
-    await expect(resultOf(page)).toBeVisible();
-    await expect(builderOf(page).getByText(/Estimated/)).toHaveCount(0);
+    await panelOf(page).getByRole('button', { name: 'Continue with 25' }).first().click();
+    await expect(headingOf(page, 'Pattern result')).toBeVisible();
+    await expect(panelOf(page).locator('.run-match')).toHaveCount(2);
   });
 
   test('adds the result once: the second press finds it on the canvas, and a cancelled run adds nothing', async ({ page }) => {
-    await built(page, 'AC-1');
+    await previewed(page, 'AC-1');
     await runOf(page).click();
+    await expect(headingOf(page, 'Pattern result')).toBeVisible();
     const before = (await drawing(page)).nodes.length;
-    await resultOf(page).getByRole('button', { name: 'Add to graph' }).click();
-    await expect(resultOf(page).getByText(/^Added \d+ entities? and \d+ relationships?\./)).toBeVisible();
-    await expect(resultOf(page).getByRole('button', { name: 'On canvas' })).toBeDisabled();
+    await panelOf(page).getByRole('button', { name: 'Add all 2 to graph' }).click();
+    await expect(panelOf(page).getByText(/^Added \d+ entities? and \d+ relationships?\./)).toBeVisible();
+    await expect(panelOf(page).getByRole('button', { name: 'On the graph' })).toBeDisabled();
+    await expect(panelOf(page).getByText('On the graph').first()).toBeVisible();
     const added = (await drawing(page)).nodes.length;
     expect(added).toBeGreaterThan(before);
+    await panelOf(page).getByRole('button', { name: 'Edit pattern' }).click();
+    await panelOf(page).getByRole('button', { name: 'Preview' }).click();
     await runOf(page).click();
-    await expect(resultOf(page).getByRole('button', { name: /Add to graph|On canvas/ })).toBeVisible();
+    await expect(panelOf(page).getByRole('button', { name: 'On the graph' })).toBeDisabled();
     expect((await drawing(page)).nodes.length).toBe(added);
   });
 
-  test('shows Running with Cancel and adds nothing when the run is cancelled', async ({ page }) => {
-    await built(page, 'SLOW-1');
+  test('shows Running with Cancel run focused, and adds nothing when the run is cancelled', async ({ page }) => {
+    await previewed(page, 'SLOW-1');
     const before = (await drawing(page)).nodes.length;
     await runOf(page).click();
-    await expect(builderOf(page).getByText(/^Running/)).toBeVisible();
-    // the Cancel of the run, not the editor's own in its footer
-    await builderOf(page).locator('.patterns-actions').getByRole('button', { name: 'Cancel' }).click();
-    await expect(builderOf(page).getByText('Cancelled. No new matches shown.')).toBeVisible();
-    await expect(resultOf(page)).toHaveCount(0);
+    await expect(headingOf(page, 'Running pattern')).toBeVisible();
+    await expect(panelOf(page).getByText(/s elapsed\. Large sources can take longer\./)).toBeVisible();
+    await expect(panelOf(page).getByRole('button', { name: 'Cancel run' })).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(panelOf(page).getByText('Run cancelled. Nothing was added to the graph. Your draft is kept.')).toBeVisible();
+    await expect(panelOf(page).getByRole('button', { name: 'Run again' })).toBeVisible();
+    await expect(panelOf(page).locator('.run-match')).toHaveCount(0);
     expect((await drawing(page)).nodes.length).toBe(before);
   });
 
-  test('says the source is busy and keeps the pattern', async ({ page }) => {
-    await built(page, 'BUSY-1');
+  test('says the source is busy and keeps the pattern on the preview', async ({ page }) => {
+    await previewed(page, 'BUSY-1');
     await runOf(page).click();
-    await expect(builderOf(page).getByText(/is busy\. No read slot freed within the wait\./)).toBeVisible();
-    await expect(stepOf(page, 2)).toBeVisible();
+    await expect(panelOf(page).getByText(/is busy\./)).toBeVisible();
+    await expect(runOf(page)).toBeVisible();
+    await expect(panelOf(page).getByText('Follows USES_DEVICE outgoing to a device.')).toBeVisible();
   });
 
-  test('says so plainly for an empty result', async ({ page }) => {
-    await built(page, 'EMPTY-1');
+  test('says so plainly for an empty result and offers another start', async ({ page }) => {
+    await previewed(page, 'EMPTY-1');
     await runOf(page).click();
-    await expect(resultOf(page)).toContainText('No matches found.');
-    await expect(resultOf(page).getByRole('table')).toHaveCount(0);
+    await expect(countOf(page)).toHaveText('0 matches · Exact');
+    await expect(panelOf(page)).toContainText('Nothing in this source follows this pattern from');
+    await expect(panelOf(page).getByRole('button', { name: 'Run from another Account' })).toBeVisible();
+    await expect(panelOf(page).locator('.run-match')).toHaveCount(0);
+  });
+
+  test('reads a second page with Next, keeps the first for Previous, and words the later page as a lower bound', async ({ page }) => {
+    await previewed(page, 'PAGED-1');
+    await runOf(page).click();
+    await expect(countOf(page)).toHaveText('4 matches · Exact');
+    await expect(panelOf(page).getByRole('heading', { name: /^Matches · showing 1 to 2 of 4/ })).toBeVisible();
+    await expect(panelOf(page).getByRole('button', { name: 'Previous' })).toBeDisabled();
+    await panelOf(page).getByRole('button', { name: /^Next/ }).click();
+    await expect(countOf(page)).toHaveText('At least 4 matches · Lower bound');
+    await expect(panelOf(page).getByRole('heading', { name: /^Match 3$/ })).toBeVisible();
+    await expect(panelOf(page).getByRole('button', { name: /^Next/ })).toBeDisabled();
+    await panelOf(page).getByRole('button', { name: /^Previous/ }).click();
+    await expect(countOf(page)).toHaveText('4 matches · Exact');
   });
 
   test('keeps every control and the result inside the window, the panel scrolling inside itself', async ({ page }) => {
-    await built(page, 'AC-1');
+    await previewed(page, 'AC-1');
     await runOf(page).click();
-    await expect(resultOf(page)).toBeVisible();
+    await expect(headingOf(page, 'Pattern result')).toBeVisible();
     const size = page.viewportSize();
     const box = await panelOf(page).boundingBox();
     expect(box, 'the panel is drawn').not.toBeNull();
     expect((box?.y ?? 0) + (box?.height ?? 0)).toBeLessThanOrEqual(size?.height ?? 0);
-    await resultOf(page).getByRole('button', { name: 'Add to graph' }).scrollIntoViewIfNeeded();
-    await expect(resultOf(page).getByRole('button', { name: 'Add to graph' })).toBeVisible();
+    expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(size?.width ?? 0);
+    await panelOf(page).getByRole('button', { name: 'Add all 2 to graph' }).scrollIntoViewIfNeeded();
+    await expect(panelOf(page).getByRole('button', { name: 'Add all 2 to graph' })).toBeVisible();
   });
 });

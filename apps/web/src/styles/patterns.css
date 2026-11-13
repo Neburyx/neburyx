@@ -96,6 +96,8 @@
 .patterns-state[data-tone='warning'] {
   border-color: var(--color-caution-text);
   background: var(--color-caution-surface);
+  color: var(--color-caution-text);
+  font-family: var(--font-family);
 }
 
 .patterns-state p {

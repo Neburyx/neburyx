@@ -92,14 +92,10 @@ function Words({ preview }: { readonly preview: PatternPreview }) {
       <section aria-label={RUN_COPY.inPlainWords}>
         <h3 className="supernode-label">{RUN_COPY.inPlainWords}</h3>
         <div className="run-words">
-          <p>
-            <strong>{RUN_COPY.start}:</strong> <span>{preview.start.text}</span>
-          </p>
+          <p>{preview.start.text}</p>
           {preview.steps.map((step, index) => (
             <div key={index}>
-              <p>
-                <strong>Step {index + 1}:</strong> <span>{step.text}</span>
-              </p>
+              <p>{step.text}</p>
               {step.conditions.map((condition, row) => (
                 <p key={row} className="run-words-sub">
                   {condition.text}
