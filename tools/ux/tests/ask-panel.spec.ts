@@ -80,4 +80,19 @@ test.describe('the Ask panel', () => {
     expect(box.y + box.height).toBeLessThanOrEqual(size.height);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
   });
+
+  test('lists the saved patterns that will go with the question, with their structure and the names that passed, after the question text', async ({ page }) => {
+    await scriptAsk(page);
+    await openAsk(page);
+    await previewQuestion(page, 'Which accounts match my saved pattern?');
+    const card = askPanel(page).getByRole('region', { name: 'What the model will receive' });
+    await expect(card.locator('pre').first()).toHaveText('Which accounts match my saved pattern for ‹account#1›?');
+    await expect(card.getByRole('heading', { level: 4, name: 'Saved patterns listed for the model' })).toBeVisible();
+    const patterns = card.getByLabel('Saved patterns listed for the model');
+    await expect(patterns).toContainText('pat_1, named "Accounts that pay each other"');
+    await expect(patterns).toContainText('pat_2: starts at a held entity of type account');
+    await expect(card.getByRole('button', { name: 'Send' })).toBeVisible();
+    const shot = process.env['NEBURYX_UX_SHOT'];
+    if (shot !== undefined) await page.screenshot({ path: shot });
+  });
 });

@@ -14,7 +14,7 @@ import { PLAN_COPY } from './plan-copy.js';
 export type Clarification = Extract<AskPlanAnswer, { readonly clarification: unknown }>['clarification'];
 
 export type Card =
-  | { readonly kind: 'preview'; readonly preview: string; readonly hash: string; readonly changed: boolean }
+  | { readonly kind: 'preview'; readonly preview: string; readonly hash: string; readonly changed: boolean; readonly patternText: string | undefined; readonly patternsCut: boolean }
   | { readonly kind: 'blocked'; readonly tokens: readonly BlockedToken[] }
   | { readonly kind: 'clarification'; readonly clarification: Clarification };
 
@@ -136,7 +136,7 @@ export function useAsk(): AskPanel {
   const apply = useCallback(
     (answer: AskPlanAnswer): void => {
       const base = { busy: 'idle' as const, failure: undefined, fieldNote: undefined, notice: undefined, picker: undefined, cardId: held.current.cardId + 1 };
-      if ('preview' in answer) patch({ ...base, card: { kind: 'preview', preview: answer.preview, hash: answer.previewHash, changed: answer.changed === true }, sent: undefined, plan: undefined, planId: undefined, expiresAt: undefined });
+      if ('preview' in answer) patch({ ...base, card: { kind: 'preview', preview: answer.preview, hash: answer.previewHash, changed: answer.changed === true, patternText: answer.patternText, patternsCut: answer.patternCatalogCut === true }, sent: undefined, plan: undefined, planId: undefined, expiresAt: undefined });
       else if ('blocked' in answer) patch({ ...base, card: { kind: 'blocked', tokens: answer.blocked.tokens }, sent: undefined, plan: undefined, planId: undefined, expiresAt: undefined });
       else if ('clarification' in answer) patch({ ...base, card: { kind: 'clarification', clarification: answer.clarification }, sent: undefined, plan: undefined, planId: undefined, expiresAt: undefined });
       else patch({ ...base, cardId: held.current.cardId, sent: answer.plan.kind === 'unsupported' ? ASK_COPY.refused : ASK_COPY.sentPlan, plan: answer.plan, planId: 'planId' in answer ? answer.planId : undefined, expiresAt: 'expiresAt' in answer ? answer.expiresAt : undefined });

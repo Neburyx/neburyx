@@ -30,6 +30,18 @@ export function PreviewCard({ card, panel }: { readonly card: Extract<Card, { ki
         {card.preview}
       </pre>
       <p className="ask-note">{ASK_COPY.receivesNote}</p>
+      {card.patternText === undefined ? null : (
+        <>
+          <h4 id="ask-patterns-title" className="ask-card-title">
+            {ASK_COPY.patternsTitle}
+          </h4>
+          <pre className="ask-preview-text" tabIndex={0} aria-labelledby="ask-patterns-title">
+            {card.patternText}
+          </pre>
+          <p className="ask-note">{ASK_COPY.patternsNote}</p>
+          {card.patternsCut ? <p className="ask-note">{ASK_COPY.patternsCut}</p> : null}
+        </>
+      )}
       <div className="ask-actions">
         <button type="button" className="ask-primary" onClick={panel.send} disabled={busy !== 'idle' || done || failure !== undefined}>
           {ASK_COPY.send}
