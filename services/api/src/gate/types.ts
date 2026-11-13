@@ -153,6 +153,13 @@ export interface Template {
    */
   readonly sharedAttribute?: { readonly entityTypeParam: string; readonly attributeTypeParam: string; readonly viaParam: string };
   /**
+   * The linked-entities template's own declaration, for no other template: a statement that finds the entities of one type reached from the anchor over the listed relationship types in one or two hops. The Cypher is the
+   * one marker `@linkedEntities(<target type parameter>)`; the anchor's entity type, the target's entity type and the list of relationship types are named in the request and checked against the mapping, and the gate writes
+   * the whole statement from the mapping rows (every name quoted from the allowlist). The neighbors read are bounded by `$countCap + 1`, an intermediate entity with more relationships than `$countCap` is not traversed, and the
+   * matches are bounded by `$limit + 1`. A window is a pair of instants, `windowFrom` and `windowTo`, both given or both left out.
+   */
+  readonly linkedEntities?: { readonly entityTypeParam: string; readonly targetTypeParam: string; readonly viaParam: string };
+  /**
    * The edge template's own declaration, for no other template: a statement that reads one stored edge by its type, the entity types of its two ends and its stable ID. The Cypher is the one marker
    * `@edgeLoad(<type parameter>)`, and the gate writes the whole statement from the mapping row that joins the two types by the type and holds a `stable_id`; every name is quoted from the allowlist and the
    * request holds values only. The stable ID is the parameter `stableId` (and `stableInteger`, the integer it can be).

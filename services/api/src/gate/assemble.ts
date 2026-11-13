@@ -17,6 +17,7 @@ import { degreePreviewBoundedTemplate, degreePreviewCheapTemplate } from './temp
 import { degreeProbeTemplate } from './templates/degree-probe.js';
 import { derivedEdgeSupportTemplate } from './templates/derived-edge-support.js';
 import { derivedRuleRunTemplate } from './templates/derived-rule-run.js';
+import { linkedEntitiesTemplate } from './templates/linked-entities.js';
 import { sharedAttributeTemplate } from './templates/shared-attribute.js';
 import { aggregateSampleTemplate, aggregateSummaryTemplate } from './templates/aggregate-evidence.js';
 import { edgeLoadTemplate } from './templates/edge-load.js';
@@ -55,7 +56,7 @@ export interface AssembleOptions {
 }
 
 export function defaultCatalogTemplates(): readonly TemplateDefinition[] {
-  return [connectivityTemplate, capabilitiesTemplate, privilegesTemplate, schemaTokensTemplate, schemaIndexesTemplate, stableIdDuplicatesTemplate, degreeProbeTemplate, degreePreviewBoundedTemplate, degreePreviewCheapTemplate, entityLoadTemplate, entityLoadManyTemplate, edgeLoadTemplate, edgeLoadManyTemplate, expandNeighborsTemplate, expandCountTemplate, searchExactTemplate, searchRelatedTemplate, searchEvidenceTemplate, searchFacetsTemplate, searchPrefixTemplate, relatedContextTemplate, derivedRuleRunTemplate, sharedAttributeTemplate, derivedEdgeSupportTemplate, aggregateSampleTemplate, aggregateSummaryTemplate];
+  return [connectivityTemplate, capabilitiesTemplate, privilegesTemplate, schemaTokensTemplate, schemaIndexesTemplate, stableIdDuplicatesTemplate, degreeProbeTemplate, degreePreviewBoundedTemplate, degreePreviewCheapTemplate, entityLoadTemplate, entityLoadManyTemplate, edgeLoadTemplate, edgeLoadManyTemplate, expandNeighborsTemplate, expandCountTemplate, searchExactTemplate, searchRelatedTemplate, searchEvidenceTemplate, searchFacetsTemplate, searchPrefixTemplate, relatedContextTemplate, derivedRuleRunTemplate, sharedAttributeTemplate, linkedEntitiesTemplate, derivedEdgeSupportTemplate, aggregateSampleTemplate, aggregateSummaryTemplate];
 }
 
 export function defaultCatalog(): TemplateCatalog {

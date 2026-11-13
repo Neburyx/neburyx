@@ -54,6 +54,7 @@ const COUNTED: Readonly<Record<string, Call>> = {
   'search more': { method: 'POST', url: () => '/v1/search/entities/more', payload: (s) => ({ sourceId: s, text: 'needle-text', group: 'exact', cursor: 'x' }) },
   'degree preview': { method: 'POST', url: () => '/v1/graph/preview-expansion', payload: (s) => ({ sourceId: s, ref }) },
   'derived neighbors': { method: 'POST', url: () => '/v1/graph/derived-neighbors', payload: (s) => ({ sourceId: s, ref }) },
+  'template run of the linked-entities template': { method: 'POST', url: () => '/v1/templates/linked-nodes/run', payload: (s) => ({ sourceId: s, params: { ref } }), headers: () => ({ 'idempotency-key': `linked-key-of-sixteen-${(keyCounter += 1)}-chars` }) },
   'template run': { method: 'POST', url: () => '/v1/templates/shared-nodes/run', payload: (s) => ({ sourceId: s, params: { ref } }), headers: () => ({ 'idempotency-key': `key-of-sixteen-${(keyCounter += 1)}-chars` }) },
   coverage: { method: 'POST', url: () => '/v1/graph/coverage', payload: (s) => ({ sourceId: s, entities: [{ ref: element(s), loadedRelationships: 0, loadedQuality: 'exact' }] }) },
   expand: { method: 'POST', url: () => '/v1/graph/expand', payload: (s) => ({ sourceId: s, ref, neighborTypes: ['node_b'] }) },

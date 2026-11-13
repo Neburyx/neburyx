@@ -66,11 +66,14 @@ function checkMarkers(definition: TemplateDefinition, shape: Shape): void {
   const degree = markersOf(definition.cypher).filter((marker) => marker.kind === 'degreeCounts');
   // a degree statement reads the entity type's label and stable ID property, so its parameter counts as used by an entity marker and a stable id marker
   const used = [
-    ...markersOf(definition.cypher).filter((marker) => marker.kind !== 'searchBranches' && marker.kind !== 'facetProbes' && marker.kind !== 'degreeCounts' && marker.kind !== 'expandNeighbors' && marker.kind !== 'relatedContext' && marker.kind !== 'edgeLoad' && marker.kind !== 'derivedRule' && marker.kind !== 'derivedSupport' && marker.kind !== 'sharedAttribute' && marker.kind !== 'aggregateRead'),
+    ...markersOf(definition.cypher).filter((marker) => marker.kind !== 'searchBranches' && marker.kind !== 'facetProbes' && marker.kind !== 'degreeCounts' && marker.kind !== 'expandNeighbors' && marker.kind !== 'relatedContext' && marker.kind !== 'edgeLoad' && marker.kind !== 'derivedRule' && marker.kind !== 'derivedSupport' && marker.kind !== 'sharedAttribute' && marker.kind !== 'linkedEntities' && marker.kind !== 'aggregateRead'),
     ...markersOf(definition.cypher).filter((marker) => marker.kind === 'derivedRule').flatMap(() => (definition.derivedRule === undefined ? [] : [{ kind: 'entity' as const, name: definition.derivedRule.entityTypeParam }, { kind: 'stableId' as const, name: definition.derivedRule.entityTypeParam }])),
     ...markersOf(definition.cypher)
       .filter((marker) => marker.kind === 'sharedAttribute')
       .flatMap(() => (definition.sharedAttribute === undefined ? [] : [{ kind: 'entity' as const, name: definition.sharedAttribute.entityTypeParam }, { kind: 'stableId' as const, name: definition.sharedAttribute.entityTypeParam }, { kind: 'entity' as const, name: definition.sharedAttribute.attributeTypeParam }, { kind: 'relationship' as const, name: definition.sharedAttribute.viaParam }])),
+    ...markersOf(definition.cypher)
+      .filter((marker) => marker.kind === 'linkedEntities')
+      .flatMap(() => (definition.linkedEntities === undefined ? [] : [{ kind: 'entity' as const, name: definition.linkedEntities.entityTypeParam }, { kind: 'stableId' as const, name: definition.linkedEntities.entityTypeParam }, { kind: 'entity' as const, name: definition.linkedEntities.targetTypeParam }, { kind: 'relationship' as const, name: definition.linkedEntities.viaParam }])),
     ...markersOf(definition.cypher).filter((marker) => marker.kind === 'expandNeighbors').flatMap((marker) => [{ kind: 'entity' as const, name: marker.name }, { kind: 'stableId' as const, name: marker.name }]),
     ...degree.flatMap((marker) => [{ kind: 'entity' as const, name: marker.name }, { kind: 'stableId' as const, name: marker.name }]),
   ];
@@ -289,6 +292,29 @@ function checkSharedAttribute(definition: TemplateDefinition, shape: Shape): voi
 }
 
 /**
+ * The linked-entities template's own declaration: its Cypher is exactly the one `@linkedEntities(<target type parameter>)` marker, its schema has the anchor's and the target's entity types as text and the relationship types as a
+ * list, declared as entity and relationship parameters, it reads the anchor by its reference, it is not paged and not profiled, its cut means a lower bound, it names the stable-ID index it needs and the properties it uses, and the
+ * gate fills `limit` and `countCap` for it (the schema has neither).
+ */
+function checkLinkedEntities(definition: TemplateDefinition, shape: Shape): void {
+  const used = markersOf(definition.cypher).filter((marker) => marker.kind === 'linkedEntities');
+  const spec = definition.linkedEntities;
+  if (spec === undefined) {
+    if (used.length > 0) throw new CatalogError(definition.id, 'uses the linked entities marker without declaring a linked entities read');
+    return;
+  }
+  if (used.length !== 1 || used[0]?.name !== spec.targetTypeParam || definition.cypher !== `@linkedEntities(${spec.targetTypeParam})`) throw new CatalogError(definition.id, 'declares a linked entities read and its Cypher is not exactly its one linked entities marker');
+  if ([spec.entityTypeParam, spec.targetTypeParam].some((name) => shape.properties.get(name) !== 'string') || shape.properties.get(spec.viaParam) !== 'array' || !definition.entityParams.includes(spec.entityTypeParam) || !definition.entityParams.includes(spec.targetTypeParam) || !definition.relationshipParams.includes(spec.viaParam)) {
+    throw new CatalogError(definition.id, 'declares a linked entities read for parameters its schema does not have as text and as a list or its entity and relationship parameters do not declare');
+  }
+  if (['limit', 'countCap'].some((name) => shape.properties.has(name))) throw new CatalogError(definition.id, 'declares a linked entities read and has a limit or a count cap in its schema, which the gate fills');
+  if (definition.searchBranches !== undefined || definition.facetProbes !== undefined || definition.degreeCounts !== undefined || definition.expandNeighbors !== undefined || definition.relatedContext !== undefined || definition.derivedRule !== undefined || definition.derivedSupport !== undefined || definition.sharedAttribute !== undefined || definition.paged || definition.profile === true || definition.cutMeans !== 'lowerBound') {
+    throw new CatalogError(definition.id, "declares a linked entities read and is also another kind of template, paged, profiled or not declared cutMeans: 'lowerBound'");
+  }
+  if (definition.indexNeeds === undefined || definition.usedProperties === undefined || definition.referenceParams?.entityType !== spec.entityTypeParam) throw new CatalogError(definition.id, 'declares a linked entities read and does not name its indexes, the properties it uses and the reference of its anchor');
+}
+
+/**
  * The supports template's own declaration: its Cypher is exactly the one `@derivedSupport(<rule parameter>)` marker, its schema has the rule ID as text and the two ends as a list that it reads back as references, it is
  * not paged and not profiled, its cut means a lower bound, it names the stable-ID indexes it needs and the properties it uses.
  */
@@ -395,6 +421,7 @@ function build(definition: TemplateDefinition): Template {
   checkDerivedRule(definition, shape);
   checkDerivedSupport(definition, shape);
   checkSharedAttribute(definition, shape);
+  checkLinkedEntities(definition, shape);
   checkEdgeLoad(definition, shape);
   checkAggregateRead(definition, shape);
   checkBoundedBy(definition, shape);

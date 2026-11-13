@@ -37,6 +37,20 @@ export const sharedAttributeParamsSchema = z.strictObject({
   limit: z.number().int().min(1).optional(),
 });
 
+/** The most hops a linked-entities run is asked for; the gate refuses more than the template and the source allow. */
+export const LINKED_HOPS_MAX = 4;
+
+/** What a caller sends for the linked-entities template: the anchor, the target type and the relationship types (with a preset the preset names the target type and one relationship type), the direction, the hops, a window and a page size. */
+export const linkedEntitiesParamsSchema = z.strictObject({
+  ref: z.strictObject({ entityType: text, stableId: referenceTextSchema }),
+  targetType: text.optional(),
+  via: z.array(text).min(1).optional(),
+  direction: z.enum(['out', 'in', 'both']).optional(),
+  maxHops: z.number().int().min(1).max(LINKED_HOPS_MAX).optional(),
+  window: windowSchema.optional(),
+  limit: z.number().int().min(1).optional(),
+});
+
 /** `POST /v1/templates/{id}/run`: the source, the parameters of the template (checked by its own schema) and `mask`, which the nodes of the answer follow. */
 export const templateRunRequestSchema = z.strictObject({
   sourceId: text,
@@ -44,7 +58,7 @@ export const templateRunRequestSchema = z.strictObject({
   mask: z.boolean().optional(),
 });
 
-export const TEMPLATE_RUN_NOTICE_CODES = ['stopListSkipped', 'noStopList', 'undatedExcluded', 'readBounded', 'evidenceCut'] as const;
+export const TEMPLATE_RUN_NOTICE_CODES = ['stopListSkipped', 'noStopList', 'undatedExcluded', 'readBounded', 'evidenceCut', 'windowNotApplied', 'supernodesSkipped'] as const;
 
 /** One notice of a run: a code with the typed payload that code carries (none for these codes); the client writes the sentence. */
 export const templateRunNoticeSchema = z.discriminatedUnion('code', [
@@ -53,7 +67,12 @@ export const templateRunNoticeSchema = z.discriminatedUnion('code', [
   z.strictObject({ code: z.literal('undatedExcluded') }),
   z.strictObject({ code: z.literal('readBounded') }),
   z.strictObject({ code: z.literal('evidenceCut') }),
+  z.strictObject({ code: z.literal('windowNotApplied'), relationshipTypes: z.array(text) }),
+  z.strictObject({ code: z.literal('supernodesSkipped'), entities: z.array(elementRefSchema) }),
 ]);
+
+/** How a match of a linked-entities run was reached: in one or two hops, and through which entity when there were two. */
+export const linkedMatchSchema = z.strictObject({ match: elementRefSchema, hops: z.union([z.literal(1), z.literal(2)]), through: elementRefSchema.optional() });
 
 export const templateRunResponseSchema = z.strictObject({
   status: z.literal('ok'),
@@ -62,12 +81,16 @@ export const templateRunResponseSchema = z.strictObject({
   presetId: text.optional(),
   count: countSchema,
   matchIds: z.array(elementRefSchema),
+  /** For a linked-entities run: how each match was reached. */
+  links: z.array(linkedMatchSchema).optional(),
   nodes: z.array(nodeSchema),
   edges: z.array(edgeSchema),
   notices: z.array(templateRunNoticeSchema),
   warnings: z.array(z.string()),
 });
 
+export type LinkedEntitiesParams = z.infer<typeof linkedEntitiesParamsSchema>;
+export type LinkedMatch = z.infer<typeof linkedMatchSchema>;
 export type SharedAttributeParams = z.infer<typeof sharedAttributeParamsSchema>;
 export type TemplateRunRequest = z.infer<typeof templateRunRequestSchema>;
 export type TemplateRunNotice = z.infer<typeof templateRunNoticeSchema>;

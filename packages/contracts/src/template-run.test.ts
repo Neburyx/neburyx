@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MIN_SHARED_MAX, WINDOW_MAX_DAYS, sharedAttributeParamsSchema, templateRunNoticeSchema, templateRunRequestSchema, templateRunResponseSchema, windowSchema } from './template-run.js';
+import { LINKED_HOPS_MAX, MIN_SHARED_MAX, WINDOW_MAX_DAYS, linkedEntitiesParamsSchema, sharedAttributeParamsSchema, templateRunNoticeSchema, templateRunRequestSchema, templateRunResponseSchema, windowSchema } from './template-run.js';
 
 describe('the window of a template run', () => {
   it.each([[{ days: 14 }], [{ days: 1 }], [{ days: WINDOW_MAX_DAYS }], [{ from: '2026-01-01', to: '2026-01-31' }], [{ from: '2026-01-01', to: '2026-01-01' }], [{ from: '2024-02-29', to: '2024-03-01' }]])('accepts %j', (window) => {
@@ -35,6 +35,19 @@ describe('the parameters of the shared-attribute template', () => {
   });
 });
 
+describe('the parameters of the linked-entities template', () => {
+  const ref = { entityType: 'maker', stableId: 'A-1' };
+
+  it('accepts the anchor alone, and every optional parameter', () => {
+    expect(linkedEntitiesParamsSchema.safeParse({ ref }).success).toBe(true);
+    expect(linkedEntitiesParamsSchema.safeParse({ ref, targetType: 'maker', via: ['LINKS', 'OWNS'], direction: 'both', maxHops: LINKED_HOPS_MAX, window: { days: 30 }, limit: 10 }).success).toBe(true);
+  });
+
+  it.each([[{ via: [] }], [{ via: 'LINKS' }], [{ via: [''] }], [{ direction: 'up' }], [{ maxHops: 0 }], [{ maxHops: LINKED_HOPS_MAX + 1 }], [{ maxHops: 1.5 }], [{ limit: 0 }], [{ targetType: '' }], [{ cypher: 'MATCH (n) RETURN n' }]])('refuses %j', (extra) => {
+    expect(linkedEntitiesParamsSchema.safeParse({ ref, ...extra }).success).toBe(false);
+  });
+});
+
 describe('the request and the answer of a template run', () => {
   it('takes the source, a parameter object and an optional mask, and nothing else', () => {
     expect(templateRunRequestSchema.safeParse({ sourceId: 's', params: { a: 1 }, mask: true }).success).toBe(true);
@@ -46,6 +59,21 @@ describe('the request and the answer of a template run', () => {
     for (const code of ['stopListSkipped', 'noStopList', 'undatedExcluded', 'readBounded', 'evidenceCut']) expect(templateRunNoticeSchema.safeParse({ code }).success).toBe(true);
     expect(templateRunNoticeSchema.safeParse({ code: 'other' }).success).toBe(false);
     expect(templateRunNoticeSchema.safeParse({ code: 'noStopList', extra: 1 }).success).toBe(false);
+  });
+
+  it('carries the window notice with its relationship types and the supernode notice with its entities, and refuses either without its payload', () => {
+    expect(templateRunNoticeSchema.safeParse({ code: 'windowNotApplied', relationshipTypes: ['LINKS'] }).success).toBe(true);
+    expect(templateRunNoticeSchema.safeParse({ code: 'supernodesSkipped', entities: [{ sourceId: 's', entityType: 'maker', stableId: 'H-1' }] }).success).toBe(true);
+    expect(templateRunNoticeSchema.safeParse({ code: 'windowNotApplied' }).success).toBe(false);
+    expect(templateRunNoticeSchema.safeParse({ code: 'supernodesSkipped', entities: [{ entityType: 'maker' }] }).success).toBe(false);
+  });
+
+  it('carries, for a linked-entities run, how each match was reached, and accepts a run without it', () => {
+    const base = { status: 'ok', templateId: 'linked-entities', templateVersion: '1', matchIds: [], nodes: [], edges: [], notices: [], warnings: [], count: { value: 0, quality: 'exact', scope: 'template:linked-entities' } };
+    const match = { sourceId: 's', entityType: 'maker', stableId: 'O-1' };
+    expect(templateRunResponseSchema.safeParse(base).success).toBe(true);
+    expect(templateRunResponseSchema.safeParse({ ...base, links: [{ match, hops: 2, through: { ...match, stableId: 'M-1' } }, { match, hops: 1 }] }).success).toBe(true);
+    expect(templateRunResponseSchema.safeParse({ ...base, links: [{ match, hops: 3 }] }).success).toBe(false);
   });
 
   it('accepts every quality of a count, the quality unknown included, although the shared-attribute template never produces it', () => {
