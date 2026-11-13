@@ -6,15 +6,15 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { COMMON_WORDS } from './common-words.js';
 import * as entry from './index.js';
-import { FUNCTION_WORDS } from './function-words.js';
+import { FUNCTION_WORDS, ORDINARY_WORDS_ALSO_SURNAMES } from './function-words.js';
 import { rebuildPlannerText } from './rebuild.js';
 
 const NAMES = fileURLToPath(new URL('../testing/names/census-2010-surnames.txt', import.meta.url));
 const INDEX = fileURLToPath(new URL('./index.ts', import.meta.url));
 const SOURCE = fileURLToPath(new URL('.', import.meta.url));
 
-const PINNED_VERSION = 'common-words-1';
-const PINNED_HASH = '2fa7696ff60070e67c30c06ff62a5f8dec6981a1c1d1ec918718fe84696f781e';
+const PINNED_VERSION = 'common-words-2';
+const PINNED_HASH = 'b15610934c6f6e7b8b2e35bf89a5037a704c64b0d49ef710e7c842d562e5fa16';
 
 const MIN_SURNAMES = 100_000;
 
@@ -41,15 +41,26 @@ describe('the surname list used by the checks', () => {
 });
 
 describe('the common-word list', () => {
-  it('holds no word that is a surname of the public list, except the closed set of function words', () => {
+  it('holds no word that is a surname of the public list, except the closed set of function words and the named ordinary words', () => {
     const names = surnames();
-    const allowed = new Set(FUNCTION_WORDS);
+    const allowed = new Set([...FUNCTION_WORDS, ...ORDINARY_WORDS_ALSO_SURNAMES]);
     expect(COMMON_WORDS.filter((word) => names.has(word) && !allowed.has(word))).toEqual([]);
   });
 
   it('holds only the function words that are listed, and every one of them is on the list', () => {
     expect(FUNCTION_WORDS.filter((word) => !COMMON_WORDS.includes(word))).toEqual([]);
     expect(new Set(FUNCTION_WORDS).size).toBe(FUNCTION_WORDS.length);
+  });
+
+  it('keeps the seven named ordinary words, which are surnames, and no other word is allowed that way', () => {
+    const names = surnames();
+    expect([...ORDINARY_WORDS_ALSO_SURNAMES]).toEqual(['chain', 'made', 'money', 'payment', 'screen', 'show', 'shows']);
+    for (const word of ORDINARY_WORDS_ALSO_SURNAMES) {
+      expect(names.has(word)).toBe(true);
+      expect(COMMON_WORDS).toContain(word);
+      expect(FUNCTION_WORDS).not.toContain(word);
+      expect(rebuildPlannerText({ text: word, spans: [], vocabulary: [] })).toEqual({ kind: 'rebuilt', text: word });
+    }
   });
 
   it('has only lowercase ASCII letters, no duplicate, in sorted order', () => {
@@ -64,7 +75,7 @@ describe('the common-word list', () => {
   });
 
   it('names the public list, its publisher, its edition, its terms and the residual risks in the version note', () => {
-    for (const part of ['Census Bureau', '2010 Census', 'downloaded', 'Licence terms', 'Given names: not yet removed', 'date of birth', 'adverbs not, here, very, now']) expect(entry.COMMON_WORDS_NOTE).toContain(part);
+    for (const part of ['Census Bureau', '2010 Census', 'downloaded', 'Licence terms', 'Given names: not yet removed', 'date of birth', 'adverbs not, here, very, now', 'ORDINARY_WORDS_ALSO_SURNAMES', '2026-11-13']) expect(entry.COMMON_WORDS_NOTE).toContain(part);
   });
 });
 

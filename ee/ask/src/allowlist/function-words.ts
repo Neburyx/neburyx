@@ -14,3 +14,9 @@ export const FUNCTION_WORDS: readonly string[] = [
   'toward', 'under', 'unless', 'until', 'up', 'upon', 'us', 'very', 'via', 'was', 'we', 'were', 'what', 'when', 'where', 'whether', 'which',
   'while', 'who', 'whom', 'whose', 'why', 'will', 'with', 'within', 'without', 'would', 'yet', 'you', 'your', 'yours',
 ];
+
+/**
+ * Ordinary words that are also surnames in the public list and stay on the common-word list by a decision of 2026-11-13, because
+ * ordinary questions need them. A closed, named list; every word that is a name and is in neither this list nor `FUNCTION_WORDS` is removed.
+ */
+export const ORDINARY_WORDS_ALSO_SURNAMES: readonly string[] = ['chain', 'made', 'money', 'payment', 'screen', 'show', 'shows'];
