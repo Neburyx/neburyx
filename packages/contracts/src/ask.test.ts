@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { askPlanRequestSchema, askPlanSchema, askResolutionSchema, askResolutionsSchema, askRunRequestSchema, ASK_MAX_RESOLUTIONS, ASK_MESSAGE_MAX_LENGTH } from './ask.js';
+import { askPlanRequestSchema, askPlanResponseSchema, askPlanSchema, askResolutionSchema, askResolutionsSchema, askRunRequestSchema, ASK_MAX_RESOLUTIONS, ASK_MESSAGE_MAX_LENGTH } from './ask.js';
 
 const REF = { entityType: 'node_a', stableId: 'A-1' };
 const SHARED = { kind: 'plan', templateId: 'shared-attribute', templateVersion: 1, params: { ref: REF, attributeType: 'attr_type', via: 'attr_link', window: { days: 90 }, limit: 25 }, rationale: 'People who share a device.' };
@@ -24,12 +24,60 @@ describe('the plan a planner answers', () => {
 });
 
 describe('the body of the plan endpoint', () => {
-  it('takes one non-empty message of at most the limit, and nothing else', () => {
-    expect(askPlanRequestSchema.safeParse({ message: 'Who shares a device?' }).success).toBe(true);
-    expect(askPlanRequestSchema.safeParse({ message: '𝒳'.repeat(ASK_MESSAGE_MAX_LENGTH) }).success).toBe(true);
-    for (const body of [{}, { message: '' }, { message: 3 }, { message: '𝒳'.repeat(ASK_MESSAGE_MAX_LENGTH + 1) }, { message: 'x', send: true }]) {
+  it('takes one non-empty message of at most the limit and the source it is asked in, and nothing else', () => {
+    expect(askPlanRequestSchema.safeParse({ message: 'Who shares a device?', sourceId: 's' }).success).toBe(true);
+    expect(askPlanRequestSchema.safeParse({ message: '𝒳'.repeat(ASK_MESSAGE_MAX_LENGTH), sourceId: 's' }).success).toBe(true);
+    for (const body of [{}, { message: 'Who shares a device?' }, { message: '', sourceId: 's' }, { message: 3, sourceId: 's' }, { message: '𝒳'.repeat(ASK_MESSAGE_MAX_LENGTH + 1), sourceId: 's' }, { message: 'x', sourceId: 's', send: true }, { sourceId: 's' }, { message: 'x', sourceId: '' }]) {
       expect(askPlanRequestSchema.safeParse(body).success).toBe(false);
     }
+  });
+});
+
+describe('the body of the plan endpoint with the preview fields', () => {
+  const hash = 'a'.repeat(64);
+  const ref = { sourceId: 's', entityType: 'widget', stableId: 'w-1' };
+
+  it('takes the resolutions, send and a preview hash, all optional', () => {
+    expect(askPlanRequestSchema.safeParse({ message: 'x', sourceId: 's', resolutions: [{ start: 0, end: 1, ref }], send: false }).success).toBe(true);
+    expect(askPlanRequestSchema.safeParse({ message: 'x', sourceId: 's', send: true, previewHash: hash }).success).toBe(true);
+  });
+
+  it('refuses a send without a hash, a hash that is not 64 lowercase hex characters, and an unknown field', () => {
+    for (const body of [
+      { message: 'x', sourceId: 's', send: true },
+      { message: 'x', sourceId: 's', previewHash: 'abc' },
+      { message: 'x', sourceId: 's', previewHash: 'A'.repeat(64) },
+      { message: 'x', sourceId: 's', previewHash: `${hash}0` },
+      { message: 'x', sourceId: 's', resolutions: [{ start: 0, end: 1 }] },
+      { message: 'x', sourceId: '' },
+      { message: 'x', sourceId: 's', allowWords: ['y'] },
+    ]) {
+      expect(askPlanRequestSchema.safeParse(body).success).toBe(false);
+    }
+  });
+});
+
+describe('the answer of the plan endpoint', () => {
+  const hash = 'b'.repeat(64);
+
+  it.each([
+    ['a plan', { plan: { kind: 'unsupported', reason: 'no template' } }],
+    ['a clarification', { clarification: { start: 0, end: 3, choices: [], count: { quality: 'exact', value: 0, scope: 'exact matches' }, unreferenced: 0 } }],
+    ['the blocked tokens', { blocked: { tokens: [{ text: 'zorvath', start: 6, end: 13 }] } }],
+    ['a preview', { preview: 'which widgets', previewHash: hash }],
+    ['a changed preview', { preview: 'which widgets', previewHash: hash, changed: true }],
+  ])('takes %s', (_name, body) => {
+    expect(askPlanResponseSchema.safeParse(body).success).toBe(true);
+  });
+
+  it.each([
+    ['nothing', {}],
+    ['a preview without its hash', { preview: 'x' }],
+    ['a changed flag that is false', { preview: 'x', previewHash: hash, changed: false }],
+    ['blocked tokens that are none', { blocked: { tokens: [] } }],
+    ['two answers at once', { preview: 'x', previewHash: hash, blocked: { tokens: [{ text: 'a', start: 0, end: 1 }] } }],
+  ])('refuses %s', (_name, body) => {
+    expect(askPlanResponseSchema.safeParse(body).success).toBe(false);
   });
 });
 

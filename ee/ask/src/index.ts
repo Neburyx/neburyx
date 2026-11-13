@@ -1,14 +1,15 @@
 import { fileURLToPath } from 'node:url';
-import { aiStatusResponseSchema, type AuditSink, type ExtensionLogger, type MountedAuditSink, type ProfileExtension } from '@neburyx/contracts';
+import { aiStatusResponseSchema, type AiMappingView, type AuditSink, type ExtensionLogger, type MountedAuditSink, type ProfileExtension } from '@neburyx/contracts';
 import { createAuditSink } from '@neburyx/ee-audit';
 import { createAnthropicProvider } from './anthropic.js';
 import { createAuditedModelCall, type AuditedModelCall } from './audited.js';
 import { configureAsk, type AskConfiguration } from './configure.js';
 import { createFailureReporter } from './failure-line.js';
 import { guardAiRouteGroup } from './route-guard.js';
-import { askPlanRoute } from './routes/ask-plan.js';
+import { createAskPlanRoute } from './routes/ask-plan.js';
 import { askRunRoute } from './routes/ask-run.js';
 import { createRequestBuilder, type RequestBuilder } from './request.js';
+import { questionVocabulary } from './vocabulary/vocabulary.js';
 
 export { AUDIT_ACTIONS, AuditUnavailableError, createAuditedModelCall } from './audited.js';
 export type { AuditedCallContext, AuditedModelCall, AuditedModelOptions } from './audited.js';
@@ -25,7 +26,7 @@ export type { BuiltInPrompt, PromptRegistry, PromptRegistryResult, ResolvedPromp
 export { FAILURE_CODES, PROMPT_IDS } from './provider.js';
 export type { FailureCode, ModelAnswer, ModelProvider, ModelRequest, PromptId, PromptParameters, PromptRecord, PromptSource, TokenUsage } from './provider.js';
 
-export { ASK_PLAN_URL, askPlanRoute } from './routes/ask-plan.js';
+export { ASK_PLAN_URL, askPlanRoute, createAskPlanRoute } from './routes/ask-plan.js';
 export { ASK_RUN_URL, askRunRoute } from './routes/ask-run.js';
 
 export const AI_STATUS_URL = '/v1/ai/status';
@@ -51,6 +52,7 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
   let environment: Readonly<Record<string, string | undefined>> = {};
   let mounted: MountedAuditSink | undefined;
   let logger: ExtensionLogger | undefined;
+  let mappingView: AiMappingView | undefined;
   const reportFailure = createFailureReporter(() => logger);
   return {
     name: 'ask',
@@ -61,6 +63,7 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
     configuration: () => configuration,
     requestBuilder: () => (configuration === undefined ? undefined : createRequestBuilder(configuration.rules)),
     async configure(settings, env, view) {
+      mappingView = view;
       const configured = await configureAsk(settings, env, view);
       configuration = configured.configuration;
       environment = env;
@@ -82,7 +85,7 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
             responseSchema: aiStatusResponseSchema,
             handler: async () => ({ preview: true }),
           },
-          askPlanRoute,
+          createAskPlanRoute({ vocabulary: () => questionVocabulary({ view: mappingView }) }),
           askRunRoute,
         ],
       }),

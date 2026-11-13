@@ -1,6 +1,6 @@
 import { z, type ZodType } from 'zod';
 import type { AiSettings } from './ai.js';
-import type { AskPlanner } from './ask.js';
+import type { AskEntityLookup, AskEntitySearch, AskPlanner } from './ask.js';
 import type { AuditEvent, AuditSink, AuditSinkContext, MountedAuditSink } from './audit.js';
 
 export type ExtensionRoutePermission = 'public' | 'principal';
@@ -17,6 +17,12 @@ export interface ExtensionRequest {
   readonly body?: unknown;
   /** The application's `AskPlanner`: the Community default unless the application was given another. */
   readonly askPlanner: AskPlanner;
+  /** Signs a text for the preview of a question: 64 lowercase hex characters, with a key that stays in the application. Absent, a route that needs it refuses. */
+  readonly previewMac?: (canonical: string) => string;
+  /** The caller's policy version for a source; `none` in Community. */
+  readonly policyVersionOf?: (sourceId: string) => string;
+  /** The search and the lookup of the caller's source that resolve a question, read through the gate with the caller's rights; `ensureSource` refuses (as `NOT_FOUND`) a source that is not configured or that the caller may not read, and is asked before anything is signed or sent. */
+  readonly askEntityTools?: (sourceId: string) => { readonly search: AskEntitySearch; readonly lookup: AskEntityLookup; readonly ensureSource: () => Promise<void> };
 }
 
 export type ExtensionRouteMethod = 'GET' | 'POST';
@@ -80,11 +86,13 @@ const previewOffRefusalSchema = z.object({ name: z.literal(EXTENSION_REFUSAL_NAM
 const notInThisEditionRefusalSchema = z.object({ name: z.literal(EXTENSION_REFUSAL_NAME), code: z.literal('ASK_UNSUPPORTED'), reason: z.literal('not-in-this-edition') });
 
 const notFoundRefusalSchema = z.object({ name: z.literal(EXTENSION_REFUSAL_NAME), code: z.literal('NOT_FOUND') });
+const queryTimeoutRefusalSchema = z.object({ name: z.literal(EXTENSION_REFUSAL_NAME), code: z.literal('QUERY_TIMEOUT'), timeoutMs: z.number().int().positive() });
+const invalidRequestRefusalSchema = z.object({ name: z.literal(EXTENSION_REFUSAL_NAME), code: z.literal('INVALID_REQUEST'), reason: z.string().min(1) });
 
-/** What a refusal is made of: the preview being off (with whether the refusal's own audit event was written), Ask having no planner in this build, or a thing the call names not being there. */
-export const extensionRefusalSchema = z.union([previewOffRefusalSchema, notInThisEditionRefusalSchema, notFoundRefusalSchema]);
+/** What a refusal is made of: the preview being off (with whether the refusal's own audit event was written), Ask having no planner in this build, a thing the call names not being there, a request whose parts the route cannot accept (with the reason), or a call that ran out of time (with the limit). */
+export const extensionRefusalSchema = z.union([previewOffRefusalSchema, notInThisEditionRefusalSchema, notFoundRefusalSchema, invalidRequestRefusalSchema, queryTimeoutRefusalSchema]);
 
-export type ExtensionRefusalFields = Omit<z.infer<typeof previewOffRefusalSchema>, 'name'> | Omit<z.infer<typeof notInThisEditionRefusalSchema>, 'name'> | Omit<z.infer<typeof notFoundRefusalSchema>, 'name'>;
+export type ExtensionRefusalFields = Omit<z.infer<typeof previewOffRefusalSchema>, 'name'> | Omit<z.infer<typeof notInThisEditionRefusalSchema>, 'name'> | Omit<z.infer<typeof notFoundRefusalSchema>, 'name'> | Omit<z.infer<typeof invalidRequestRefusalSchema>, 'name'> | Omit<z.infer<typeof queryTimeoutRefusalSchema>, 'name'>;
 
 /** Thrown by a route handler of an extension to refuse a call; the API answers it with the code and reason it names. */
 export class ExtensionRefusal extends Error {
@@ -92,6 +100,7 @@ export class ExtensionRefusal extends Error {
   readonly reason: string | undefined;
   /** Only a refusal that is audited says whether its event was written. */
   readonly audited: boolean | undefined;
+  readonly timeoutMs: number | undefined;
 
   constructor(fields: ExtensionRefusalFields) {
     super();
@@ -99,6 +108,7 @@ export class ExtensionRefusal extends Error {
     this.code = fields.code;
     this.reason = 'reason' in fields ? fields.reason : undefined;
     this.audited = 'audited' in fields ? fields.audited : undefined;
+    this.timeoutMs = 'timeoutMs' in fields ? fields.timeoutMs : undefined;
   }
 }
 

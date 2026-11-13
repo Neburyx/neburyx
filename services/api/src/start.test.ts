@@ -26,6 +26,7 @@ import { createSourceGate, type SourceGate, type SourceGateOptions } from './gat
 import { READINESS_LIMIT_MS } from './health/readiness.js';
 import { SHUTDOWN_TIMES } from './serve.js';
 import { createSourceTester } from './source-test/tester.js';
+import { createPreviewMac, derivePreviewKey } from './ask/preview-key.js';
 import { start, type StartIo } from './start.js';
 import { registeredRoutesOf } from './app.js';
 import { routesWithoutPermission } from './permissions.js';
@@ -174,6 +175,18 @@ describe('the enterprise extension at start', () => {
     const logger = pino({ level: 'info' }, { write: (line: string) => void lines.push(line) });
     return { ...io({ portOverride: 0, logger, extensionLoader: loader }), lines, calls };
   }
+
+  it('hands the extension a signature made with the key derived from the cursor key that signs cursors', async () => {
+    const material = Buffer.alloc(32, 7);
+    let seen: Parameters<ExtensionRoute['handler']>[0] | undefined;
+    const rig = run(async () => extensionWith(route({ handler: async (request) => ((seen = request), { ok: true }) })));
+    const result = await start({ ...ON, NEBURYX_CURSOR_KEY: material.toString('base64') }, rig.io);
+    expect(result.exitCode).toBe(0);
+    if (result.exitCode !== 0) return;
+    await result.app.inject({ url: '/v1/fake/status' });
+    expect(seen?.previewMac?.('a text')).toBe(createPreviewMac(derivePreviewKey(material))('a text'));
+    await result.app.close();
+  });
 
   it('never calls the loader and mounts nothing when the switch is off', async () => {
     const rig = run(async () => extensionWith(route()));
@@ -1109,6 +1122,7 @@ describe('the cursor key at start', () => {
     const warnings = lines.filter((line) => line.includes('cursor.key_not_set'));
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain('NEBURYX_CURSOR_KEY');
+    expect(warnings[0]).toContain('Ask previews');
     expect(cursors[0]).toBeDefined();
     if (result.exitCode === 0) await result.app.close();
   });

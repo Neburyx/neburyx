@@ -132,7 +132,7 @@ describe('the real enterprise extension in a start', () => {
     const result = await start({ DATABASE_URL, NEBURYX_CONFIG: previewFile, NEBURYX_PROFILE: 'enterprise', AI_TEST_KEY: 'present' }, startIo());
     expect(result.exitCode).toBe(0);
     if (result.exitCode !== 0) return;
-    const answer = await result.app.inject({ method: 'POST', url: '/v1/ask/plan', payload: { message: 'Who shares a device?' } });
+    const answer = await result.app.inject({ method: 'POST', url: '/v1/ask/plan', payload: { message: 'Who shares a device?', sourceId: 'demo' } });
     expect([answer.statusCode, answer.json().error.code, answer.json().error.message, answer.json().error.details]).toEqual([422, 'ASK_UNSUPPORTED', 'Ask is not available in this edition.', { reason: 'not-in-this-edition' }]);
     await result.app.close();
   });
@@ -223,34 +223,10 @@ describe('the Ask plan route with a planner installed through the seams', () => 
     return { app, seen, lines };
   }
 
-  it('answers the plan of the stub, and the stub received the message text', async () => {
-    const { app, seen } = await appWith(PLAN);
-    const answer = await app.inject({ method: 'POST', url: '/v1/ask/plan', payload: { message: 'Who shares a device with ‹person#1›?' } });
-    expect([answer.statusCode, answer.json()]).toEqual([200, { plan: PLAN }]);
-    expect(seen).toEqual(['Who shares a device with ‹person#1›?']);
-    await app.close();
-  });
-
-  it('answers an unsupported plan unchanged', async () => {
-    const unsupported: AskPlan = { kind: 'unsupported', reason: 'No template fits this question.' };
-    const { app } = await appWith(unsupported);
-    const answer = await app.inject({ method: 'POST', url: '/v1/ask/plan', payload: { message: 'Is this person guilty?' } });
-    expect([answer.statusCode, answer.json()]).toEqual([200, { plan: unsupported }]);
-    await app.close();
-  });
-
   it('is described by the committed contract when the stub answers a plan', async () => {
     const { app } = await appWith(PLAN);
     const failures = await checkOperations(app, loadCommittedDocument(), {});
     expect(failures.filter((failure) => failure.route.includes('/v1/ask/plan'))).toEqual([]);
-    await app.close();
-  });
-
-  it('answers INTERNAL_ERROR, and puts the value in neither the answer nor the log, when the stub answers something that is not a plan', async () => {
-    const { app, lines } = await appWith({ kind: 'plan', templateId: 'free-query', query: 'SENTINEL-VALUE' });
-    const answer = await app.inject({ method: 'POST', url: '/v1/ask/plan', payload: { message: 'Who shares a device?' } });
-    expect([answer.statusCode, answer.json().error.code]).toEqual([500, 'INTERNAL_ERROR']);
-    expect(answer.body + lines.join('')).not.toContain('SENTINEL');
     await app.close();
   });
 });

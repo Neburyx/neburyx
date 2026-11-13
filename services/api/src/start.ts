@@ -6,6 +6,7 @@ import type { MountedAuditSink, ProfileExtension } from '@neburyx/contracts';
 import type { FastifyBaseLogger, FastifyInstance } from 'fastify';
 import { buildApp } from './app.js';
 import { ConfigError, parseConfig } from './config.js';
+import { derivePreviewKey } from './ask/preview-key.js';
 import { createCursorCodec } from './gate/cursor/codec.js';
 import { isInContainer, warnIfExposed } from './exposure.js';
 import { IdentityStartError } from './identity/errors.js';
@@ -209,8 +210,9 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
       io.logger.warn({ event: 'source.identity_changed', sourceId }, 'source now points to a different database');
     }
     // a key that is not configured is made for this process only, so a page opened before a restart, or on another copy, says "Start again"
-    if (config.cursorKey === undefined) io.logger.warn({ event: 'cursor.key_not_set' }, 'NEBURYX_CURSOR_KEY is not set: page cursors do not survive a restart and are not valid across API copies');
-    const cursors = createCursorCodec({ key: config.cursorKey ?? randomBytes(32), clock: Date.now });
+    if (config.cursorKey === undefined) io.logger.warn({ event: 'cursor.key_not_set' }, 'NEBURYX_CURSOR_KEY is not set: page cursors and Ask previews do not survive a restart and are not valid across API copies');
+    const cursorKeyMaterial = config.cursorKey ?? randomBytes(32);
+    const cursors = createCursorCodec({ key: cursorKeyMaterial, clock: Date.now });
     const referenceKeys = deriveReferenceKeys(await store.referenceKey());
     // one set of seams for the process: the gate's read slots are the app's
     const community = communitySeams();
@@ -257,6 +259,7 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
       previewOn: decision.state === 'on',
       referenceKeys,
       cursors,
+      previewKey: derivePreviewKey(cursorKeyMaterial),
       exportFiles,
       degreeVerdicts: usability,
       indexes: gate.indexes,

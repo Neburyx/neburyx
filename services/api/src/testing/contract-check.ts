@@ -62,7 +62,7 @@ const PRODUCT_EXAMPLES: Readonly<Record<string, OperationExample>> = {
   'POST /v1/templates/{id}/run': { url: '/v1/templates/shared-things/run', payload: JSON.stringify({ sourceId: 'demo', params: {} }), headers: { 'content-type': 'application/json', 'idempotency-key': 'a-key-of-sixteen-characters' } },
   'POST /v1/patterns/{id}/run': { url: '/v1/patterns/0192f000-0000-7000-8000-0000000000aa/run', payload: JSON.stringify({}), headers: { 'content-type': 'application/json', 'idempotency-key': 'a-key-of-sixteen-characters' } },
   'POST /v1/patterns/run': { url: '/v1/patterns/run', payload: JSON.stringify({ sourceId: 'demo', definition: {}, anchor: { entityType: 'maker', stableId: 'W-1' } }), headers: { 'content-type': 'application/json', 'idempotency-key': 'a-key-of-sixteen-characters' } },
-  'POST /v1/ask/plan': { url: '/v1/ask/plan', payload: JSON.stringify({ message: 'Who shares a device with this account?' }), headers: { 'content-type': 'application/json' } },
+  'POST /v1/ask/plan': { url: '/v1/ask/plan', payload: JSON.stringify({ message: 'Who shares a device with this account?', sourceId: 'demo' }), headers: { 'content-type': 'application/json' } },
   'POST /v1/ask/run': { url: '/v1/ask/run', payload: JSON.stringify({ planId: '0192f000-0000-7000-8000-0000000000a1' }), headers: { 'content-type': 'application/json' } },
   'GET /v1/exports/{id}': { url: '/v1/exports/0192f000-0000-7000-8000-0000000000e1' },
   'GET /v1/exports/{id}/download': { url: '/v1/exports/0192f000-0000-7000-8000-0000000000e1/download' },

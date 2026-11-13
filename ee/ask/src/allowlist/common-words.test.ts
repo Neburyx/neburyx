@@ -90,6 +90,6 @@ describe('the list as the rebuild uses it', () => {
     expect(source).not.toContain('checkQuestionWords');
     const importers = readdirSync(SOURCE).filter((file) => file.endsWith('.ts') && !file.endsWith('.test.ts') && readFileSync(join(SOURCE, file), 'utf8').includes('rebuildWithWords'));
     expect(importers.sort()).toEqual(['question-words.ts', 'rebuild.ts']);
-    expect(Object.keys(entry).sort()).toEqual(['AllowlistInputError', 'COMMON_WORDS_NOTE', 'COMMON_WORDS_VERSION', 'rebuildPlannerText', 'runQuestionWordsCommand']);
+    expect(Object.keys(entry).sort()).toEqual(['AllowlistInputError', 'COMMON_WORDS_NOTE', 'COMMON_WORDS_VERSION', 'allowedWords', 'rebuildPlannerText', 'runQuestionWordsCommand']);
   });
 });

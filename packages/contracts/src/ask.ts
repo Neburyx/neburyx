@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { elementRefSchema, type Count, type ElementRef } from './graph.js';
+import { countSchema, elementRefSchema, type Count, type ElementRef } from './graph.js';
 import { codePoints } from './investigations.js';
 import { linkedEntitiesParamsSchema, sharedAttributeParamsSchema } from './template-run.js';
 
@@ -8,14 +8,15 @@ export const ASK_MESSAGE_MAX_LENGTH = 1000;
 /** The longest rationale or reason a plan carries, in characters. */
 export const ASK_TEXT_MAX_LENGTH = 500;
 
+/** A preview hash: the 64 lowercase hex characters of an HMAC. */
+export const ASK_PREVIEW_HASH_PATTERN = /^[0-9a-f]{64}$/;
+
 const askText = (max: number) =>
   z
     .string()
     .min(1)
     .refine((value) => codePoints(value) <= max, { message: `at most ${max} characters` })
     .meta({ maxLength: max });
-
-export const askPlanRequestSchema = z.strictObject({ message: askText(ASK_MESSAGE_MAX_LENGTH) });
 
 const planShape = { kind: z.literal('plan'), templateVersion: z.number().int().min(1), rationale: askText(ASK_TEXT_MAX_LENGTH) };
 
@@ -26,7 +27,23 @@ export const askPlanSchema = z.union([
   z.strictObject({ kind: z.literal('unsupported'), reason: askText(ASK_TEXT_MAX_LENGTH) }),
 ]);
 
-export const askPlanResponseSchema = z.strictObject({ plan: askPlanSchema });
+const askClarificationSchema = z.strictObject({
+  start: z.number().int().min(0),
+  end: z.number().int().min(1),
+  choices: z.array(elementRefSchema),
+  count: countSchema,
+  unreferenced: z.number().int().min(0),
+});
+
+const askBlockedTokenSchema = z.strictObject({ text: z.string().min(1), start: z.number().int().min(0), end: z.number().int().min(1) });
+
+/** What the plan endpoint answers: a plan, a clarification to resolve, the tokens that stop the question, or the preview with its hash (`changed` when a hash sent with `send: true` was not the one of the current preview). */
+export const askPlanResponseSchema = z.union([
+  z.strictObject({ plan: askPlanSchema }),
+  z.strictObject({ clarification: askClarificationSchema }),
+  z.strictObject({ blocked: z.strictObject({ tokens: z.array(askBlockedTokenSchema).min(1) }) }),
+  z.strictObject({ preview: z.string().min(1), previewHash: z.string().regex(ASK_PREVIEW_HASH_PATTERN), changed: z.literal(true).optional() }),
+]);
 
 /** The most resolutions one request carries. */
 export const ASK_MAX_RESOLUTIONS = 10;
@@ -53,6 +70,20 @@ export type AskPlanRequest = z.infer<typeof askPlanRequestSchema>;
 export type AskRunRequest = z.infer<typeof askRunRequestSchema>;
 
 export type AskResolution = z.infer<typeof askResolutionSchema>;
+
+/**
+ * What the plan endpoint takes: the typed message, the source it is asked in (required: a question without a source is malformed), the investigator's choices for spans of it, `send` (false by
+ * default: nothing is sent to a model) and, with `send: true`, the hash of the preview the investigator saw.
+ */
+export const askPlanRequestSchema = z
+  .strictObject({
+    message: askText(ASK_MESSAGE_MAX_LENGTH),
+    sourceId: z.string().min(1),
+    resolutions: askResolutionsSchema.optional(),
+    send: z.boolean().optional(),
+    previewHash: z.string().regex(ASK_PREVIEW_HASH_PATTERN).optional(),
+  })
+  .refine((request) => request.send !== true || request.previewHash !== undefined, { message: 'a send needs the preview hash', path: ['previewHash'] });
 
 /** What an exact search for a typed text found: the references of the hits, how many hits had no reference, and how many hits there are with the quality of that number. */
 export interface AskEntityMatches {

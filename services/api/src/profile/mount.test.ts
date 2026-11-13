@@ -3,6 +3,7 @@ import { ExtensionRefusal, type AuditEvent, type ExtensionRequest, type ProfileE
 import { z } from 'zod';
 import { afterAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../app.js';
+import { AppError } from '../errors.js';
 import { createLogger } from '../logger.js';
 import { communitySeams } from '../seams/community-seams.js';
 import type { Seams } from '../seams/seams.js';
@@ -18,7 +19,7 @@ function extensionOf(handler: (request: ExtensionRequest) => Promise<unknown>): 
   return { name: 'probe', routeGroups: [{ routes: [{ method: 'GET', url: URL_OF_ROUTE, permission: 'principal', responseSchema: z.unknown(), handler }] }] };
 }
 
-async function started(extension: ProfileExtension, options: { readonly previewOn?: boolean; readonly record?: (event: AuditEvent) => Promise<void> } = {}) {
+async function started(extension: ProfileExtension, options: { readonly previewOn?: boolean; readonly record?: (event: AuditEvent) => Promise<void>; readonly app?: Partial<Parameters<typeof buildApp>[0]> } = {}) {
   const lines: string[] = [];
   const events: AuditEvent[] = [];
   const community = communitySeams();
@@ -30,6 +31,7 @@ async function started(extension: ProfileExtension, options: { readonly previewO
     seams,
     extension,
     ...(options.previewOn === undefined ? {} : { previewOn: options.previewOn }),
+    ...options.app,
   });
   return { app, lines, events };
 }
@@ -184,6 +186,63 @@ describe('a refusal that names a thing that is not there', () => {
     expect([answer.statusCode, answer.json().error.code]).toEqual([404, 'NOT_FOUND']);
     expect(events).toEqual([]);
     expect(lines.filter((line) => line.includes('extension.audit_failed'))).toEqual([]);
+    await app.close();
+  });
+});
+
+
+describe('what the mount gives an extension for previews of Ask', () => {
+  it('gives a signing function, a policy version of none and no key bytes', async () => {
+    let seen: ExtensionRequest | undefined;
+    const { app } = await started(extensionOf(async (request) => ((seen = request), 'ok')), { previewOn: true });
+    await app.inject({ url: URL_OF_ROUTE });
+    expect(seen?.previewMac?.('a text')).toMatch(/^[0-9a-f]{64}$/);
+    expect(seen?.policyVersionOf?.('any-source')).toBe('none');
+    const values = Object.values(seen ?? {});
+    expect(values.some((value) => value instanceof Uint8Array)).toBe(false);
+    await app.close();
+  });
+
+  it('signs the same text the same way with the same key and differently with another key', async () => {
+    const macOf = async (previewKey: Buffer) => {
+      let seen: ExtensionRequest | undefined;
+      const { app } = await started(extensionOf(async (request) => ((seen = request), 'ok')), { previewOn: true, app: { previewKey } });
+      await app.inject({ url: URL_OF_ROUTE });
+      await app.close();
+      return seen?.previewMac?.('a text');
+    };
+    const first = await macOf(Buffer.alloc(32, 1));
+    expect(await macOf(Buffer.alloc(32, 1))).toBe(first);
+    expect(await macOf(Buffer.alloc(32, 2))).not.toBe(first);
+  });
+
+  it('answers the policy version the application and its gate use for the source', async () => {
+    let seen: ExtensionRequest | undefined;
+    const { app } = await started(extensionOf(async (request) => ((seen = request), 'ok')), { previewOn: true, app: { policyVersion: (sourceId) => `v-${sourceId}` } });
+    await app.inject({ url: URL_OF_ROUTE });
+    expect(seen?.policyVersionOf?.('demo')).toBe('v-demo');
+    await app.close();
+  });
+
+  it('gives no search tools when the application has no gate', async () => {
+    let seen: ExtensionRequest | undefined;
+    const { app } = await started(extensionOf(async (request) => ((seen = request), 'ok')), { previewOn: true });
+    await app.inject({ url: URL_OF_ROUTE });
+    expect(seen?.askEntityTools).toBeUndefined();
+    await app.close();
+  });
+
+  it('keeps the code of an error of the application that an extension lets through', async () => {
+    const { app } = await started(extensionOf(async () => Promise.reject(new AppError('RATE_LIMITED'))), { previewOn: true });
+    const answer = await app.inject({ url: URL_OF_ROUTE });
+    expect([answer.statusCode, answer.json().error.code]).toEqual([429, 'RATE_LIMITED']);
+    await app.close();
+  });
+
+  it('answers QUERY_TIMEOUT with the limit for the refusal of a call that ran out of time', async () => {
+    const { app } = await started(extensionOf(async () => Promise.reject(new ExtensionRefusal({ code: 'QUERY_TIMEOUT', timeoutMs: 20_000 }))), { previewOn: true });
+    const answer = await app.inject({ url: URL_OF_ROUTE });
+    expect([answer.json().error.code, answer.json().error.details]).toEqual(['QUERY_TIMEOUT', { timeoutMs: 20_000 }]);
     await app.close();
   });
 });

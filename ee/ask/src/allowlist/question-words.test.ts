@@ -68,8 +68,8 @@ describe('no way to send a token that is not allowed', () => {
   });
 
   it('refuses an extra field of the Ask plan request', () => {
-    expect(askPlanRequestSchema.safeParse({ message: 'which widgets', allowWords: ['zorvath'] }).success).toBe(false);
-    expect(askPlanRequestSchema.safeParse({ message: 'which widgets' }).success).toBe(true);
+    expect(askPlanRequestSchema.safeParse({ message: 'which widgets', sourceId: 's', allowWords: ['zorvath'] }).success).toBe(false);
+    expect(askPlanRequestSchema.safeParse({ message: 'which widgets', sourceId: 's' }).success).toBe(true);
   });
 
   it('blocks a word that an extra option of the rebuild names, because the rebuild has no such option', () => {

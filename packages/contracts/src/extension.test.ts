@@ -34,6 +34,22 @@ describe('a refusal of an extension', () => {
   });
 });
 
+describe('the refusal of a request the route cannot accept', () => {
+  it('carries the code and a reason, and is read back from its shape', () => {
+    const invalid = { code: 'INVALID_REQUEST' as const, reason: 'overlap' };
+    expect(parseExtensionRefusal(new ExtensionRefusal(invalid))).toEqual(invalid);
+    expect(parseExtensionRefusal({ name: 'ExtensionRefusal', code: 'INVALID_REQUEST' })).toBeUndefined();
+  });
+});
+
+describe('the refusal of a call that ran out of time', () => {
+  it('carries the code and the limit, and is read back from its shape', () => {
+    const timeout = { code: 'QUERY_TIMEOUT' as const, timeoutMs: 20_000 };
+    expect(parseExtensionRefusal(new ExtensionRefusal(timeout))).toEqual(timeout);
+    expect(parseExtensionRefusal({ name: 'ExtensionRefusal', code: 'QUERY_TIMEOUT', timeoutMs: 0 })).toBeUndefined();
+  });
+});
+
 describe('recognising a refusal by its shape', () => {
   it('reads a refusal of this copy and a plain object or error of the same shape made by another copy', () => {
     expect(parseExtensionRefusal(new ExtensionRefusal(fields))).toEqual(fields);

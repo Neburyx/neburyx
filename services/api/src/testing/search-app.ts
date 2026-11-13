@@ -56,6 +56,8 @@ export interface SearchAppOptions {
   readonly audit?: Seams['audit'];
   readonly redact?: AssembleOptions['redact'];
   readonly catalog?: AssembleOptions['catalog'];
+  /** Further options of the application, which win over the ones this rig sets. */
+  readonly appOptions?: Partial<Parameters<typeof buildApp>[0]>;
 }
 
 export async function startSearchApp(options: SearchAppOptions = {}) {
@@ -77,7 +79,7 @@ export async function startSearchApp(options: SearchAppOptions = {}) {
     referenceKeys: TEST_REFERENCE_KEYS,
   });
   const store = memoryAppStore();
-  const app = await buildApp({ webRoot, logger: createLogger({ write: (line: string) => void lines.push(line) }), store, mapping, seams: { ...defaults, ...seams }, gate: parts.gate, indexes: parts.indexes, referenceKeys: TEST_REFERENCE_KEYS });
+  const app = await buildApp({ webRoot, logger: createLogger({ write: (line: string) => void lines.push(line) }), store, mapping, seams: { ...defaults, ...seams }, gate: parts.gate, indexes: parts.indexes, referenceKeys: TEST_REFERENCE_KEYS, ...options.appOptions });
   return { app, executor, events, lines, gate: parts.gate, mapping, store };
 }
 
