@@ -164,5 +164,7 @@ export { EXPORT_FORMATS, EXPORT_HIDDEN_NOTE, EXPORT_SCOPE, EXPORT_STATUSES, IDEM
 export type { ExportFile, ExportFormat, ExportHeader, ExportRecord, ExportRequest } from './exports.js';
 export { MAX_READ_REFS, readRefsRequestSchema, readRefsResponseSchema } from './read-refs.js';
 export type { ReadRefsRequest, ReadRefsResponse } from './read-refs.js';
-export { changePatternRequestSchema, deletePatternResponseSchema, DEFAULT_PATTERN_LIST_LIMIT, MAX_PATTERN_LIST_LIMIT, patternListQuerySchema, patternListResponseSchema, SAVED_PATTERN_KINDS, SAVED_PATTERN_VISIBILITIES, savedPatternAnchorSchema, savedPatternNameSchema, savedPatternSchema, savePatternRequestSchema, savePatternResponseSchema } from './saved-pattern.js';
-export type { ChangePatternRequest, DeletePatternResponse, PatternListResponse, SavedPattern, SavePatternRequest } from './saved-pattern.js';
+export { changePatternRequestSchema, deletePatternResponseSchema, DEFAULT_PATTERN_LIST_LIMIT, listedPatternSchema, MAX_PATTERN_LIST_LIMIT, PATTERN_UNAVAILABLE_CODES, patternAvailabilitySchema, patternListQuerySchema, patternListResponseSchema, patternUnavailableReasonSchema, SAVED_PATTERN_KINDS, SAVED_PATTERN_VISIBILITIES, savedPatternAnchorSchema, savedPatternNameSchema, savedPatternSchema, savePatternRequestSchema, savePatternResponseSchema } from './saved-pattern.js';
+export type { ChangePatternRequest, DeletePatternResponse, ListedPattern, PatternAvailability, PatternListResponse, SavedPattern, SavePatternRequest } from './saved-pattern.js';
+export { patternUnavailableSchema, savedPatternRunRequestSchema, savedPatternRunResponseSchema } from './saved-pattern-run.js';
+export type { PatternUnavailable, SavedPatternRunRequest, SavedPatternRunResponse } from './saved-pattern-run.js';

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { codePoints, holdsNoNulOrLoneSurrogate } from './investigations.js';
-import { PATTERN_LIMITS } from './pattern.js';
+import { MAX_PATTERN_PROBLEMS, PATTERN_LIMITS } from './pattern.js';
 
 const text = z.string().min(1);
 
@@ -66,9 +66,40 @@ export const patternListQuerySchema = z.strictObject({
   cursor: z.string().min(1).max(2048).optional(),
 });
 
-export const patternListResponseSchema = z.strictObject({ items: z.array(savedPatternSchema), nextCursor: z.string().nullable() });
+/** Why a saved pattern can no longer run against the current mapping: what a definition names that the mapping no longer has, a definition that no longer passes the schema, a held starting entity of a type the pattern no longer starts at, and the three ways a saved run of a preset can be out of date. */
+export const PATTERN_UNAVAILABLE_CODES = [
+  'unknown-entity-type',
+  'unknown-relationship-type',
+  'relationship-does-not-join',
+  'unknown-property',
+  'not-filterable',
+  'bad-definition',
+  'anchor-changed',
+  'preset-removed',
+  'template-changed',
+  'params-invalid',
+] as const;
+
+/** One reason: the code and, for a definition, the path of the problem (keys and indices only: no name and no value of the definition). */
+export const patternUnavailableReasonSchema = z.strictObject({ code: z.enum(PATTERN_UNAVAILABLE_CODES), path: z.array(z.union([z.string(), z.number().int().nonnegative()])).optional() });
+
+/** Whether a saved pattern can run against the current mapping: judged without reading the source. */
+export const patternAvailabilitySchema = z.discriminatedUnion('status', [
+  z.strictObject({ status: z.literal('available') }),
+  z.strictObject({ status: z.literal('unavailable'), reasons: z.array(patternUnavailableReasonSchema).min(1).max(MAX_PATTERN_PROBLEMS) }),
+]);
+
+/** A pattern as the list shows it: a saved pattern and whether it can run now. The save, change and delete answers do not carry it (a pattern just saved is available by construction). */
+export const listedPatternSchema = z.discriminatedUnion('kind', [
+  savedPatternSchema.options[0].extend({ availability: patternAvailabilitySchema }),
+  savedPatternSchema.options[1].extend({ availability: patternAvailabilitySchema }),
+]);
+
+export const patternListResponseSchema = z.strictObject({ items: z.array(listedPatternSchema), nextCursor: z.string().nullable() });
 
 export type PatternListResponse = z.infer<typeof patternListResponseSchema>;
+export type PatternAvailability = z.infer<typeof patternAvailabilitySchema>;
+export type ListedPattern = z.infer<typeof listedPatternSchema>;
 
 /**
  * `PUT /v1/patterns/{id}`: the pattern's version goes in the body as `expectedVersion`, and at least one of the changeable fields. The name changes either kind; `definition` only a pattern built in the app and `params` only a built-in run
