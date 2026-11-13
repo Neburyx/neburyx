@@ -1,3 +1,4 @@
+import { COMMON_WORDS } from './common-words.js';
 import { isCalendarDate } from './dates.js';
 import { vocabularyForms } from './forms.js';
 import { phraseCoverage, type PhraseToken } from './phrases.js';
@@ -12,7 +13,6 @@ export interface RebuildInput {
   readonly text: string;
   readonly spans: readonly ResolvedSpan[];
   readonly vocabulary: readonly string[];
-  readonly commonWords: Iterable<string>;
 }
 
 export interface BlockedToken {
@@ -141,11 +141,16 @@ function withoutNumberRuns(candidates: readonly Candidate[], covered: ReadonlySe
  * `. , ? ! ; :` after a token are kept. Case is kept; matching ignores it.
  */
 export function rebuildPlannerText(input: RebuildInput): RebuildResult {
+  return rebuildWithWords(input, COMMON_WORDS);
+}
+
+/** The rebuild with a list of common words given by the caller. Only tests and the question-word check use it; the package entry does not export it. */
+export function rebuildWithWords(input: RebuildInput, commonWords: Iterable<string>): RebuildResult {
   const spans = checkedSpans(input.text, input.spans);
   const runs = tokenRuns(unitsOf(input.text, spans));
   if (runs.length === 0) throw new AllowlistInputError('the question is empty');
   const forms = vocabularyForms(input.vocabulary);
-  const common = new Set([...input.commonWords].map((word) => word.toLowerCase()));
+  const common = new Set([...commonWords].map((word) => word.toLowerCase()));
   const isWordAllowed = (word: string): boolean => common.has(word.toLowerCase()) || forms.has(word.toLowerCase());
   const candidates = runs.map((run) => candidateOf(run, input.text, isWordAllowed));
   const covered = phraseCoverageOf(candidates);

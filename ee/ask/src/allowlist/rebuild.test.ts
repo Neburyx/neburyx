@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { AllowlistInputError, rebuildPlannerText, type ResolvedSpan } from './rebuild.js';
+import { AllowlistInputError, rebuildWithWords, type ResolvedSpan } from './rebuild.js';
 
 const COMMON = ['which', 'use', 'the', 'same', 'as', 'show', 'me', 'and', 'in', 'what', 's'];
 const VOCABULARY = ['Widget', 'Gadget', 'spare_part'];
 
 function run(text: string, spans: readonly ResolvedSpan[] = [], vocabulary: readonly string[] = VOCABULARY, commonWords: readonly string[] = COMMON) {
-  return rebuildPlannerText({ text, spans, vocabulary, commonWords });
+  return rebuildWithWords({ text, spans, vocabulary }, commonWords);
 }
 
 const blockedTexts = (text: string, spans: readonly ResolvedSpan[] = []): readonly string[] => {

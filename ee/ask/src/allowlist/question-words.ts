@@ -1,4 +1,5 @@
-import { rebuildPlannerText } from './rebuild.js';
+import { COMMON_WORDS } from './common-words.js';
+import { rebuildWithWords } from './rebuild.js';
 
 export interface QuestionWordsInput {
   readonly fileText: string;
@@ -14,7 +15,7 @@ export interface QuestionWordsResult {
 
 function missesOf(text: string, input: QuestionWordsInput): readonly string[] {
   if (text.trim() === '') return [];
-  const result = rebuildPlannerText({ text, spans: [], vocabulary: input.vocabulary, commonWords: input.commonWords });
+  const result = rebuildWithWords({ text, spans: [], vocabulary: input.vocabulary }, input.commonWords);
   return result.kind === 'blocked' ? result.tokens.map((token) => token.text) : [];
 }
 
@@ -43,12 +44,11 @@ export interface CommandIo {
   readonly readText: (path: string) => string;
 }
 
-const USAGE = 'usage: check-question-words <file> --label <text> --common-words <file> [--vocabulary <file>] [--count-only]';
+const USAGE = 'usage: check-question-words <file> --label <text> [--vocabulary <file>] [--count-only]';
 
 interface CommandArguments {
   readonly file: string;
   readonly label: string;
-  readonly commonWords: string;
   readonly vocabulary?: string;
   readonly countOnly: boolean;
 }
@@ -60,21 +60,25 @@ function parseArguments(args: readonly string[]): CommandArguments | undefined {
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index] ?? '';
     if (arg === '--count-only') countOnly = true;
-    else if (arg === '--label' || arg === '--common-words' || arg === '--vocabulary') values.set(arg, args[++index] ?? '');
+    else if (arg === '--label' || arg === '--vocabulary') values.set(arg, args[++index] ?? '');
     else positional.push(arg);
   }
   const [file] = positional;
   const label = values.get('--label');
-  const commonWords = values.get('--common-words');
-  if (positional.length !== 1 || file === undefined || label === undefined || label === '' || commonWords === undefined || commonWords === '') return undefined;
+  if (positional.length !== 1 || file === undefined || label === undefined || label === '') return undefined;
   const vocabulary = values.get('--vocabulary');
-  return { file, label, commonWords, ...(vocabulary === undefined ? {} : { vocabulary }), countOnly };
+  return { file, label, ...(vocabulary === undefined ? {} : { vocabulary }), countOnly };
 }
 
 const linesOf = (text: string): string[] => text.split(/\r?\n/).map((line) => line.trim()).filter((line) => line !== '');
 
-/** Runs the check as a command and returns the exit code: 0 for no miss, 1 for a miss or an unreadable or empty input, 2 for a usage error. */
+/** Runs the check as a command, against the common-word list of the product, and returns the exit code: 0 for no miss, 1 for a miss or an unreadable or empty input, 2 for a usage error. */
 export function runQuestionWordsCommand(args: readonly string[], io: CommandIo): number {
+  return runQuestionWordsCommandWith(args, io, COMMON_WORDS);
+}
+
+/** The command with a list of common words given by the caller; tests use it, the package entry does not export it. */
+export function runQuestionWordsCommandWith(args: readonly string[], io: CommandIo, commonWords: readonly string[]): number {
   const parsed = parseArguments(args);
   if (parsed === undefined) {
     io.stderr(`${USAGE}\n`);
@@ -86,7 +90,7 @@ export function runQuestionWordsCommand(args: readonly string[], io: CommandIo):
       fileText: io.readText(parsed.file),
       label: parsed.label,
       vocabulary: parsed.vocabulary === undefined ? [] : linesOf(io.readText(parsed.vocabulary)),
-      commonWords: linesOf(io.readText(parsed.commonWords)),
+      commonWords,
     };
   } catch {
     io.stderr('a file could not be read\n');

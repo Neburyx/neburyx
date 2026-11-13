@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { rebuildPlannerText } from './rebuild.js';
+import { rebuildWithWords } from './rebuild.js';
 
 const COMMON = ['in', 'the', 'since', 'show', 'me', 'day'];
 
 function run(text: string) {
-  return rebuildPlannerText({ text, spans: [], vocabulary: [], commonWords: COMMON });
+  return rebuildWithWords({ text, spans: [], vocabulary: [] }, COMMON);
 }
 
 const blockedTexts = (text: string): readonly string[] => {
@@ -23,7 +23,7 @@ describe('a time-window phrase or a date', () => {
   });
 
   it('blocks Day when the list lacks it', () => {
-    expect(rebuildPlannerText({ text: 'show me Day', spans: [], vocabulary: [], commonWords: ['show', 'me'] })).toEqual({ kind: 'blocked', tokens: [{ text: 'Day', start: 8, end: 11 }] });
+    expect(rebuildWithWords({ text: 'show me Day', spans: [], vocabulary: [] }, ['show', 'me'])).toEqual({ kind: 'blocked', tokens: [{ text: 'Day', start: 8, end: 11 }] });
   });
 
   it('keeps a word that is on the list as the word it is, even when it is also a unit', () => {

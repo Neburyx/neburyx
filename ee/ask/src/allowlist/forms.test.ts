@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { rebuildPlannerText } from './rebuild.js';
+import { rebuildWithWords } from './rebuild.js';
 
 const COMMON = ['which', 'the', 'of'];
 
 function blocked(text: string, vocabulary: readonly string[], commonWords: readonly string[] = COMMON): readonly string[] {
-  const result = rebuildPlannerText({ text, spans: [], vocabulary, commonWords });
+  const result = rebuildWithWords({ text, spans: [], vocabulary }, commonWords);
   return result.kind === 'blocked' ? result.tokens.map((token) => token.text) : [];
 }
 
@@ -38,7 +38,7 @@ describe('the forms of a vocabulary word', () => {
   });
 
   it('allows the capitals of a form and keeps them in the rebuilt text', () => {
-    expect(rebuildPlannerText({ text: 'WIDGETS', spans: [], vocabulary: ['widget'], commonWords: [] })).toEqual({ kind: 'rebuilt', text: 'WIDGETS' });
+    expect(rebuildWithWords({ text: 'WIDGETS', spans: [], vocabulary: ['widget'] }, [])).toEqual({ kind: 'rebuilt', text: 'WIDGETS' });
   });
 
   it('drops a part of an entry that holds a digit or a non-ASCII character, keeps the others, and does not throw', () => {

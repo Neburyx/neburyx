@@ -1,7 +1,7 @@
 import { aiSettingsSchema, askPlanRequestSchema } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
-import { checkQuestionWords, runQuestionWordsCommand, type CommandIo } from './question-words.js';
-import { rebuildPlannerText } from './rebuild.js';
+import { checkQuestionWords, runQuestionWordsCommandWith, type CommandIo } from './question-words.js';
+import { rebuildPlannerText, rebuildWithWords } from './rebuild.js';
 
 const LABEL = 'Other words:';
 const COMMON = ['as', 'same', 'the', 'which', 'in'];
@@ -18,13 +18,13 @@ function command(args: readonly string[], files: Readonly<Record<string, string>
       return text;
     },
   };
-  const code = runQuestionWordsCommand(args, io);
+  const code = runQuestionWordsCommandWith(args, io, COMMON);
   return { code, out, err };
 }
 
-const FILES = { 'words.txt': COMMON.join('\n'), 'vocabulary.txt': 'Widget\nGadget' };
+const FILES = { 'vocabulary.txt': 'Widget\nGadget' };
 const withLine = (line: string) => ({ ...FILES, 'questions.md': `- Wording: a question\n- ${LABEL} ${line}\n` });
-const ARGS = ['questions.md', '--label', LABEL, '--common-words', 'words.txt', '--vocabulary', 'vocabulary.txt'];
+const ARGS = ['questions.md', '--label', LABEL, '--vocabulary', 'vocabulary.txt'];
 
 describe('the question word check', () => {
   it('fails with a plain message for a file that does not exist, and for a file with no line of the label', () => {
@@ -35,7 +35,7 @@ describe('the question word check', () => {
   it('exits 2 with the usage for missing arguments', () => {
     expect(command(['questions.md'], FILES)).toMatchObject({ code: 2 });
     expect(command([...ARGS, 'second.md'], FILES)).toMatchObject({ code: 2 });
-    expect(command(['questions.md', '--label', '', '--common-words', 'words.txt'], FILES)).toMatchObject({ code: 2 });
+    expect(command(['questions.md', '--label', ''], FILES)).toMatchObject({ code: 2 });
   });
 
   it('exits non-zero and prints a word that is not on the list', () => {
@@ -49,7 +49,7 @@ describe('the question word check', () => {
   it('counts a token the rebuild blocks as a miss, with the same matcher', () => {
     const result = checkQuestionWords({ fileText: `${LABEL} day, 2025, widgets`, label: LABEL, vocabulary: ['Widget'], commonWords: COMMON });
     expect(result.misses).toEqual(['day', '2025']);
-    for (const word of result.misses) expect(rebuildPlannerText({ text: word, spans: [], vocabulary: ['Widget'], commonWords: COMMON }).kind).toBe('blocked');
+    for (const word of result.misses) expect(rebuildWithWords({ text: word, spans: [], vocabulary: ['Widget'] }, COMMON).kind).toBe('blocked');
   });
 
   it('exits 0 with 0 misses when every word is listed, a form of a vocabulary word or in a window phrase', () => {
@@ -73,7 +73,7 @@ describe('no way to send a token that is not allowed', () => {
   });
 
   it('blocks a word that an extra option of the rebuild names, because the rebuild has no such option', () => {
-    const input = { text: 'which zorvath', spans: [], vocabulary: [], commonWords: ['which'], allowWords: ['zorvath'], allow: ['zorvath'] };
+    const input = { text: 'which zorvath', spans: [], vocabulary: [], commonWords: ['zorvath'], allowWords: ['zorvath'], allow: ['zorvath'] };
     expect(rebuildPlannerText(input)).toEqual({ kind: 'blocked', tokens: [{ text: 'zorvath', start: 6, end: 13 }] });
   });
 });
