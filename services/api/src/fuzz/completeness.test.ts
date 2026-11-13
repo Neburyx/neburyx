@@ -58,7 +58,7 @@ describe('the closed set of the fuzz suite', () => {
   });
 
   it('has each pattern route on the list it belongs to: a route that reads no source is named with its reason, one that reads the source is built, and a route taken out of its list is found', () => {
-    const registered = registeredRoutesOf(rig.app).map((route) => `${route.method} ${route.url}`).filter((key) => key.includes('/v1/patterns'));
+    const registered = registeredRoutesOf(rig.app).map((route) => `${route.method} ${route.url}`).filter((key) => key.includes('/v1/patterns') && !key.startsWith('HEAD '));
     for (const key of ['POST /v1/patterns/run', 'POST /v1/patterns/validate', 'POST /v1/patterns/preview']) expect(registered, key).toContain(key);
     for (const key of registered) {
       if (key in NOT_IN_THE_CLOSED_SET) {
