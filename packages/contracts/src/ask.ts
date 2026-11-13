@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { elementRefSchema, type Count, type ElementRef } from './graph.js';
 import { codePoints } from './investigations.js';
 import { linkedEntitiesParamsSchema, sharedAttributeParamsSchema } from './template-run.js';
 
@@ -27,6 +28,20 @@ export const askPlanSchema = z.union([
 
 export const askPlanResponseSchema = z.strictObject({ plan: askPlanSchema });
 
+/** The most resolutions one request carries. */
+export const ASK_MAX_RESOLUTIONS = 10;
+
+const spanShape = { start: z.number().int().min(0), end: z.number().int().min(1) };
+
+/**
+ * What the investigator chose for a span of the typed message, counted in UTF-16 code units: an entity of the source for it (**Pick an entity**), or to use it as a value to search for. A span has one form or the other.
+ */
+export const askResolutionSchema = z
+  .union([z.strictObject({ ...spanShape, ref: elementRefSchema }), z.strictObject({ ...spanShape, value: z.literal(true) })])
+  .refine((resolution) => resolution.end > resolution.start, { message: 'a span is not empty' });
+
+export const askResolutionsSchema = z.array(askResolutionSchema).max(ASK_MAX_RESOLUTIONS);
+
 export const askRunRequestSchema = z.strictObject({ planId: z.uuid() });
 
 export const ASK_RUN_OUTCOMES = ['complete', 'partial', 'failed'] as const;
@@ -36,6 +51,21 @@ export const askRunResponseSchema = z.strictObject({ planId: z.uuid(), outcome: 
 export type AskPlan = z.infer<typeof askPlanSchema>;
 export type AskPlanRequest = z.infer<typeof askPlanRequestSchema>;
 export type AskRunRequest = z.infer<typeof askRunRequestSchema>;
+
+export type AskResolution = z.infer<typeof askResolutionSchema>;
+
+/** What an exact search for a typed text found: the references of the hits, how many hits had no reference, and how many hits there are with the quality of that number. */
+export interface AskEntityMatches {
+  readonly refs: readonly ElementRef[];
+  readonly unreferenced: number;
+  readonly count: Count;
+}
+
+/** The application's exact search of the investigation's source, through the gate, for a typed text; given to the resolution of a question. */
+export type AskEntitySearch = (query: { readonly text: string }, signal: AbortSignal) => Promise<AskEntityMatches>;
+
+/** Whether the investigation's source holds the entity a reference names, read through the gate. */
+export type AskEntityLookup = (ref: ElementRef, signal: AbortSignal) => Promise<boolean>;
 
 export type AskAvailability = { readonly available: true } | { readonly available: false; readonly reason: string };
 

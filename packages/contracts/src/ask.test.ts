@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { askPlanRequestSchema, askPlanSchema, askRunRequestSchema, ASK_MESSAGE_MAX_LENGTH } from './ask.js';
+import { askPlanRequestSchema, askPlanSchema, askResolutionSchema, askResolutionsSchema, askRunRequestSchema, ASK_MAX_RESOLUTIONS, ASK_MESSAGE_MAX_LENGTH } from './ask.js';
 
 const REF = { entityType: 'node_a', stableId: 'A-1' };
 const SHARED = { kind: 'plan', templateId: 'shared-attribute', templateVersion: 1, params: { ref: REF, attributeType: 'attr_type', via: 'attr_link', window: { days: 90 }, limit: 25 }, rationale: 'People who share a device.' };
@@ -39,5 +39,32 @@ describe('the body of the run endpoint', () => {
     for (const body of [{}, { planId: 'plan-1' }, { planId: 7 }, { planId: '0192f000-0000-7000-8000-0000000000a1', send: true }]) {
       expect(askRunRequestSchema.safeParse(body).success).toBe(false);
     }
+  });
+});
+
+describe('the resolutions of a question', () => {
+  const picked = { start: 3, end: 9, ref: { sourceId: 'src', entityType: 'node_a', stableId: 'A-1' } };
+
+  it.each([['a pick of an entity', picked], ['a span marked as a value', { start: 0, end: 4, value: true }]])('accepts %s', (_name, resolution) => {
+    expect(askResolutionSchema.safeParse(resolution).success).toBe(true);
+  });
+
+  it.each([
+    ['an extra field', { ...picked, label: 'x' }],
+    ['a negative start', { ...picked, start: -1 }],
+    ['an empty span', { ...picked, start: 4, end: 4 }],
+    ['a span that ends before it starts', { ...picked, start: 5, end: 4 }],
+    ['no reference and no value', { start: 0, end: 4 }],
+    ['both a reference and a value', { ...picked, value: true }],
+    ['a value other than true', { start: 0, end: 4, value: false }],
+    ['a reference with no stable ID', { ...picked, ref: { sourceId: 'src', entityType: 'node_a' } }],
+  ])('rejects %s', (_name, resolution) => {
+    expect(askResolutionSchema.safeParse(resolution).success).toBe(false);
+  });
+
+  it('takes at most the allowed number of resolutions', () => {
+    const many = (count: number) => Array.from({ length: count }, () => picked);
+    expect(askResolutionsSchema.safeParse(many(ASK_MAX_RESOLUTIONS)).success).toBe(true);
+    expect(askResolutionsSchema.safeParse(many(ASK_MAX_RESOLUTIONS + 1)).success).toBe(false);
   });
 });
