@@ -63,9 +63,13 @@ describe('the Window tab', () => {
     expect(screen.getByText('Before the start date')).toBeTruthy();
     expect(dateFields().to.getAttribute('aria-invalid')).toBe('true');
     set('2010-01-01', '2026-01-01');
-    expect(screen.getByText('At most 3,650 days apart.')).toBeTruthy();
+    expect(screen.getByText('At most 3,650 days, both dates included.')).toBeTruthy();
+    set('2016-01-01', '2025-12-29');
+    expect(screen.getByText('At most 3,650 days, both dates included.')).toBeTruthy();
     await afterDebounce();
     expect(kit.validations.every((sent) => !JSON.stringify(sent).includes('window'))).toBe(true);
+    set('2016-01-01', '2025-12-28');
+    expect(screen.queryByRole('alert')).toBeNull();
     set('2026-03-01', '2026-03-31');
     expect(screen.queryByRole('alert')).toBeNull();
     await afterDebounce();

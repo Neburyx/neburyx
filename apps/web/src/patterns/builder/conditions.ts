@@ -129,7 +129,7 @@ export const WINDOW_SENTENCES = {
   days: `Enter a whole number of days from 1 to ${WINDOW_MAX_DAYS}.`,
   date: 'Enter a calendar date like 2026-03-01.',
   order: 'Before the start date',
-  range: `At most ${WINDOW_MAX_DAYS.toLocaleString('en-US')} days apart.`,
+  range: `At most ${WINDOW_MAX_DAYS.toLocaleString('en-US')} days, both dates included.`,
 } as const;
 
 /** What a window can be wrong in, and at which of its fields: the days, a date, the order of the two or their distance. */

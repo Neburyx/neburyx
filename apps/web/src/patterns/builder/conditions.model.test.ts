@@ -175,7 +175,9 @@ describe('the kinds of properties, the lines of a condition and the reading of a
     expect(readWindow({ kind: 'dates', from: '2026-02-30', to: '2026-03-01' })).toMatchObject({ ok: false, at: 'from', reason: 'Enter a calendar date like 2026-03-01.' });
     expect(readWindow({ kind: 'dates', from: '2026-03-01', to: 'x' })).toMatchObject({ ok: false, at: 'to' });
     expect(readWindow({ kind: 'dates', from: '2026-03-02', to: '2026-03-01' })).toMatchObject({ ok: false, at: 'to', reason: 'Before the start date' });
-    expect(readWindow({ kind: 'dates', from: '2010-01-01', to: '2026-01-01' })).toMatchObject({ ok: false, at: 'range', reason: 'At most 3,650 days apart.' });
+    expect(readWindow({ kind: 'dates', from: '2010-01-01', to: '2026-01-01' })).toMatchObject({ ok: false, at: 'range', reason: 'At most 3,650 days, both dates included.' });
+    expect(readWindow({ kind: 'dates', from: '2016-01-01', to: '2025-12-28' })).toMatchObject({ ok: true });
+    expect(readWindow({ kind: 'dates', from: '2016-01-01', to: '2025-12-29' })).toMatchObject({ ok: false, at: 'range' });
     expect(readWindow({ kind: 'dates', from: '2026-03-01', to: '2026-03-01' })).toEqual({ ok: true, window: { from: '2026-03-01', to: '2026-03-01' } });
   });
 
