@@ -1,0 +1,49 @@
+/* one checkbox for every list of choices: the native input, drawn with the theme's tokens; a switch keeps its own look, and the check box of a row that is a button is a span in the same style */
+input[type='checkbox']:not([role='switch']),
+.neighbor-types-check {
+  display: inline-block;
+  box-sizing: border-box;
+  width: var(--checkbox-size);
+  height: var(--checkbox-size);
+  flex: none;
+  margin: 0;
+  border: var(--border-width) solid var(--color-icon);
+  border-radius: var(--radius-tag);
+  background: var(--color-surface) no-repeat center / 100%;
+  vertical-align: middle;
+}
+
+input[type='checkbox']:not([role='switch']) {
+  appearance: none;
+  cursor: pointer;
+}
+
+input[type='checkbox']:not([role='switch']):checked,
+input[type='checkbox']:not([role='switch']):indeterminate,
+.neighbor-types-row[aria-checked='true'] .neighbor-types-check,
+.neighbor-types-row[aria-checked='mixed'] .neighbor-types-check {
+  border-color: var(--color-accent);
+  background-color: var(--color-accent);
+  background-image: url('../assets/checkbox-check.svg');
+}
+
+input[type='checkbox']:not([role='switch']):hover:not(:disabled):not(:checked),
+.neighbor-types-row:hover .neighbor-types-check {
+  border-color: var(--color-accent);
+}
+
+input[type='checkbox']:not([role='switch']):checked:hover:not(:disabled) {
+  border-color: var(--color-accent-hover);
+  background-color: var(--color-accent-hover);
+}
+
+input[type='checkbox']:not([role='switch']):disabled {
+  border-color: var(--color-workspace-border);
+  background-color: var(--color-surface-muted);
+  cursor: default;
+}
+
+input[type='checkbox']:not([role='switch']):checked:disabled {
+  border-color: var(--color-control-border);
+  background-color: var(--color-icon);
+}

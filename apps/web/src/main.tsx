@@ -45,6 +45,7 @@ import '@fontsource/ibm-plex-mono/latin-ext-500.css';
 import './styles/tokens.css';
 import './styles/base.css';
 import './styles/controls.css';
+import './styles/checkbox.css';
 import './styles/workspace.css';
 import './styles/ai.css';
 import './styles/evidence.css';

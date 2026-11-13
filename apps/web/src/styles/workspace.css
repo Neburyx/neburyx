@@ -664,21 +664,6 @@
   flex: 1;
 }
 
-.neighbor-types-check {
-  display: inline-block;
-  width: var(--tool-check-size);
-  height: var(--tool-check-size);
-  flex: none;
-  border: var(--border-width) solid var(--color-control-border);
-  border-radius: var(--radius-tag);
-  background: var(--color-surface);
-}
-
-.neighbor-types-row[aria-checked='true'] .neighbor-types-check {
-  border-color: var(--color-accent);
-  background: var(--color-accent);
-}
-
 .neighbor-types-item {
   display: flex;
   flex-direction: column;
