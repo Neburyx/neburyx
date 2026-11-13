@@ -60,6 +60,7 @@ export const SAVED_COPY = {
   gone: 'The pattern is not there any more, so the list was read again.',
   notAllowed: 'Only the person who made a shared pattern can do that, so the list was read again.',
   summary: 'The path of the pattern',
+  changeTitle: 'Change pattern',
   saveChanges: 'Save changes',
   saveAsNew: 'Save as new',
   changeUnplaced: 'This part of the pattern cannot be shown because the mapping no longer has it.',

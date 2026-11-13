@@ -42,7 +42,7 @@ async function opened(item: ListedPattern, options: KitOptions = {}) {
   await settle();
   return kit;
 }
-const builder = () => within(screen.getByRole('region', { name: 'New pattern' }));
+const builder = () => within(screen.getByRole('region', { name: 'Change pattern: Alpha' }));
 const calls = (kit: Awaited<ReturnType<typeof opened>>, method: string) => kit.patternCalls.filter((call) => call.method === method);
 
 describe('changing a saved pattern in the builder', () => {
@@ -57,6 +57,8 @@ describe('changing a saved pattern in the builder', () => {
     expect((step.getByLabelText('Step 1 condition 2: From') as HTMLInputElement).value).toBe('2026-01-01');
     expect((step.getByLabelText('Step 1 window: Days') as HTMLInputElement).value).toBe('30');
     expect(screen.getByText('Changing a saved pattern. Save changes keeps it where it is; Save as new makes another.')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Change pattern: Alpha' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'New pattern' })).toBeNull();
   });
 
   it('saves the changes with the definition, the name and the version, leaves the starting entity alone while the start type and the choice are as stored, and returns to the list', async () => {
@@ -72,7 +74,7 @@ describe('changing a saved pattern in the builder', () => {
     expect(call?.args[1]).toMatchObject({ expectedVersion: 4, name: 'Alpha', definition: { anchorType: 'c-a', steps: [{ relationshipTypes: ['k-1'], window: { days: 30 } }] } });
     expect(call?.args[1]).not.toHaveProperty('anchor');
     expect(screen.getByText('Pattern saved.')).toBeTruthy();
-    expect(screen.queryByRole('region', { name: 'New pattern' })).toBeNull();
+    expect(screen.queryByRole('region', { name: /pattern/i })).toBeNull();
   });
 
   it('keeps the starting entity a pattern holds when it is not loaded or another is selected, and clears it only when the person chooses to ask each time', async () => {

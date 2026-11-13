@@ -37,6 +37,7 @@ interface Props {
 /** The builder of a pattern: where it starts and the steps that follow, every control a choice, a checkbox or a button; the server checks what is built. */
 export function PatternBuilder({ profile, retryProfile, client, sourceId, sourceName, mask, maxHops, state, dispatch, onBack, startRef, editing, onSaved }: Props) {
   const { draft } = state;
+  const title = editing === undefined ? BUILDER_COPY.title : `${SAVED_COPY.changeTitle}: ${editing.item.name}`;
   const ready = profile.kind === 'ready' ? profile.profile : undefined;
   const nameOf = (type: string | undefined): string => (type === undefined ? '' : (ready?.entityTypes.find((candidate) => candidate.type === type)?.displayName ?? type));
   const limit = stepLimitOf(maxHops);
@@ -54,9 +55,9 @@ export function PatternBuilder({ profile, retryProfile, client, sourceId, source
   }, [draft.steps.length]);
 
   return (
-    <section className="pattern-builder" aria-label={BUILDER_COPY.title}>
+    <section className="pattern-builder" aria-label={title}>
       <div className="pattern-builder-head">
-        <h3 className="supernode-label">{BUILDER_COPY.title}</h3>
+        <h3 className="supernode-label">{title}</h3>
         <button type="button" className="secondary" onClick={onBack}>
           {BUILDER_COPY.back}
         </button>
