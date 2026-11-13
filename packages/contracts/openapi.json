@@ -16002,6 +16002,48 @@
                 "properties": {
                   "code": {
                     "type": "string",
+                    "const": "CONFLICT"
+                  },
+                  "message": {
+                    "type": "string",
+                    "const": "You already have a pattern with this name on this source. Choose another name."
+                  },
+                  "retryable": {
+                    "type": "boolean",
+                    "const": false
+                  },
+                  "traceId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "details": {
+                    "type": "object",
+                    "properties": {
+                      "reason": {
+                        "type": "string",
+                        "const": "pattern-name-taken"
+                      }
+                    },
+                    "required": [
+                      "reason"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "code",
+                  "message",
+                  "retryable",
+                  "traceId",
+                  "details"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
                     "const": "ACCESS_DENIED"
                   },
                   "message": {

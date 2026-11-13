@@ -91,11 +91,12 @@ export function shownListedPattern(references: StoredReferences, row: ListedPatt
 
 const COPY_SUFFIX = ' (copy)';
 
-/** The name of a copy: the original's name with the suffix, the original cut by code points (and trimmed) when the whole would be over the name limit. */
-export function copyNameOf(name: string): string {
-  const room = PATTERN_LIMITS.nameLength - [...COPY_SUFFIX].length;
+/** The name of a copy: the original's name with the suffix (" (copy)", then " (copy 2)", " (copy 3)" for the later tries), the original cut by code points (and trimmed) when the whole would be over the name limit. */
+export function copyNameOf(name: string, attempt = 1): string {
+  const suffix = attempt <= 1 ? COPY_SUFFIX : ` (copy ${attempt})`;
+  const room = PATTERN_LIMITS.nameLength - [...suffix].length;
   const characters = [...name];
-  return characters.length <= room ? `${name}${COPY_SUFFIX}` : `${characters.slice(0, room).join('').trimEnd()}${COPY_SUFFIX}`;
+  return characters.length <= room ? `${name}${suffix}` : `${characters.slice(0, room).join('').trimEnd()}${suffix}`;
 }
 
 /** A template's version is text in code and an integer of 1 or more in a saved pattern. */
@@ -230,6 +231,7 @@ export function createSavedPatternService(deps: { readonly store: PatternStore; 
       const result = await deps.store.changePattern({ id, ownerId: principal.id, expectedVersion: request.expectedVersion, ...changes }, { principal, traceId, audit: deps.audit });
       if (result.outcome === 'not-found') throw new AppError('NOT_FOUND');
       if (result.outcome === 'conflict') throw new AppError('CONFLICT');
+      if (result.outcome === 'name-taken') throw new AppError('CONFLICT', { reason: 'pattern-name-taken' });
       return shownPattern(deps.references, result.row);
     },
     async delete({ traceId, principal, id, expectedVersion }) {
@@ -267,6 +269,7 @@ export function createSavedPatternService(deps: { readonly store: PatternStore; 
       if (result.outcome === 'not-found') throw new AppError('NOT_FOUND');
       if (result.outcome === 'refused') throw new AppError('INVALID_REQUEST', { reason: 'pattern-personal-condition' });
       if (result.outcome === 'limit') throw new AppError('INVALID_REQUEST', { reason: 'pattern-limit' });
+      if (result.outcome === 'name-taken') throw new AppError('CONFLICT', { reason: 'pattern-name-taken' });
       return shownPattern(deps.references, result.row);
     },
     async save({ traceId, principal, request }) {
@@ -275,6 +278,7 @@ export function createSavedPatternService(deps: { readonly store: PatternStore; 
       const pattern = request.kind === 'definition' ? definitionOf(request, source) : presetRunOf(request, source);
       const result = await deps.store.savePattern(pattern, { principal, traceId, audit: deps.audit });
       if (result.outcome === 'limit') throw new AppError('INVALID_REQUEST', { reason: 'pattern-limit' });
+      if (result.outcome === 'name-taken') throw new AppError('CONFLICT', { reason: 'pattern-name-taken' });
       return shownPattern(deps.references, result.row);
     },
   };

@@ -49,7 +49,7 @@ function valuesOf(owner: string, source: string, row: Row = {}): unknown[] {
     randomUUID(),
     owner,
     source,
-    row.name ?? 'a pattern',
+    row.name ?? `a pattern ${randomUUID()}`,
     kind,
     row.presetId === undefined ? null : row.presetId,
     row.templateId === undefined ? (isDefinition ? null : 'shared-attribute') : row.templateId,

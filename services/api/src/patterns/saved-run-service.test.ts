@@ -34,6 +34,8 @@ interface Options {
   readonly patternRows?: readonly Record<string, unknown>[];
 }
 
+let named = 0;
+
 function rig(options: Options = {}) {
   const mapping = options.mapping ?? savedMappingOf();
   const [source] = mapping.sources;
@@ -61,7 +63,7 @@ function rig(options: Options = {}) {
   const service = createSavedPatternRunService({ store, mapping, access, references: createStoredReferences(mapping, TEST_REFERENCE_KEYS), patternRuns, templateRuns, logger: { warn: (fields: unknown) => void warned.push(fields) } as never });
   const audit = { record: () => Promise.resolve() };
   const save = async (over: Partial<Parameters<MemoryPatterns['savePattern']>[0]> = {}, owner: Principal = OWNER): Promise<PatternRow> => {
-    const saved = await patterns.savePattern({ sourceId: 'demo', name: 'p', kind: 'definition', presetId: null, templateId: null, templateVersion: null, params: null, definition: DEFINITION, anchor: null, ...over }, { principal: owner, traceId: 't', audit });
+    const saved = await patterns.savePattern({ sourceId: 'demo', name: `p${(named += 1)}`, kind: 'definition', presetId: null, templateId: null, templateVersion: null, params: null, definition: DEFINITION, anchor: null, ...over }, { principal: owner, traceId: 't', audit });
     if (saved.outcome !== 'saved') throw new Error('not saved');
     return saved.row;
   };

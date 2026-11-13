@@ -290,3 +290,63 @@ describe('copying a pattern', () => {
     expect(b.audit.events).toEqual([]);
   });
 });
+
+describe('the names of a person’s patterns on a source', () => {
+  const postBody = (name: string) => ({ sourceId: 'demo', kind: 'definition', name, definition: DEFINITION });
+  const post = (context: PatternApp, name: string) => send(context, 'POST', '/v1/patterns', postBody(name));
+
+  it('refuses a name another of the person’s patterns holds, ignoring case, spaces at its ends and Unicode form, with CONFLICT and its own reason, and writes nothing', async () => {
+    const { a } = await two();
+    await save(a, { name: 'Ring' });
+    const events = a.store.patternEvents.length;
+    for (const name of ['Ring', 'ring', '  RING  ', 'rINg']) {
+      const response = await post(a, name);
+      expect(response.statusCode, name).toBe(409);
+      expect(codeOf(response)).toBe('CONFLICT');
+      expect(reasonOf(response)).toBe('pattern-name-taken');
+    }
+    const composed = await save(a, { name: 'Caf\u00e9' });
+    expect(composed.name).toBe('Caf\u00e9');
+    expect(reasonOf(await post(a, 'Cafe\u0301'))).toBe('pattern-name-taken');
+    expect(a.store.patternRows).toHaveLength(2);
+    expect(a.store.patternEvents.length).toBe(events + 1);
+  });
+
+  it('takes the same name for two people and for two sources, and again once the pattern that held it is deleted', async () => {
+    const { a, b } = await two();
+    const first = await save(a, { name: 'Ring' });
+    await save(b, { name: 'Ring' });
+    expect((await send(a, 'DELETE', `/v1/patterns/${first.id}`, undefined, { 'if-match': '"1"' })).statusCode).toBe(200);
+    expect((await post(a, 'Ring')).statusCode).toBe(201);
+  });
+
+  it('refuses a rename to a name another pattern holds, and allows a rename to the pattern’s own name in another case', async () => {
+    const { a } = await two();
+    const ring = await save(a, { name: 'Ring' });
+    const other = await save(a, { name: 'Other' });
+    const taken = await put(a, other.id, { expectedVersion: 1, name: ' ring ' });
+    expect(taken.statusCode).toBe(409);
+    expect(reasonOf(taken)).toBe('pattern-name-taken');
+    expect(a.store.patternRows.find((row) => row.id === other.id)).toMatchObject({ name: 'Other', version: 1 });
+    expect((await put(a, ring.id, { expectedVersion: 1, name: 'RING' })).statusCode).toBe(200);
+    const stale = await put(a, ring.id, { expectedVersion: 1, name: 'Ring' });
+    expect(stale.statusCode).toBe(409);
+    expect(reasonOf(stale)).toBeUndefined();
+  });
+
+  it('names each copy of a pattern the next free number, and cuts a long name so that every copy fits the limit', async () => {
+    const { a, b } = await two();
+    const original = await save(a, { name: 'Ring' });
+    await share(a, original.id, 1);
+    const names: string[] = [];
+    for (let round = 0; round < 3; round += 1) names.push(savedPatternSchema.parse((await send(b, 'POST', `/v1/patterns/${original.id}/copy`)).json()).name);
+    expect(names).toEqual(['Ring (copy)', 'Ring (copy 2)', 'Ring (copy 3)']);
+    const long = await save(a, { name: 'x'.repeat(PATTERN_LIMITS.nameLength) });
+    await share(a, long.id, 1);
+    const copies = [];
+    for (let round = 0; round < 3; round += 1) copies.push(savedPatternSchema.parse((await send(b, 'POST', `/v1/patterns/${long.id}/copy`)).json()).name);
+    expect(new Set(copies).size).toBe(3);
+    expect(copies.every((name) => [...name].length <= PATTERN_LIMITS.nameLength)).toBe(true);
+  });
+});
+

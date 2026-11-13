@@ -7,7 +7,8 @@ import { codeOf, DEFINITION, jsonHeaders, patternApp, SAVED_PATTERN_MAPPING, TES
 import { templateVersionNumber } from './saved-pattern-service.js';
 
 const save = (context: PatternApp, body: unknown) => context.app.inject({ method: 'POST', url: '/v1/patterns', payload: JSON.stringify(body), headers: jsonHeaders });
-const presetBody = (extra: Record<string, unknown> = {}) => ({ sourceId: 'demo', kind: 'preset-run', name: 'Linked makers', presetId: 'linked-makers', params: { maxHops: 2 }, ...extra });
+let named = 0;
+const presetBody = (extra: Record<string, unknown> = {}) => ({ sourceId: 'demo', kind: 'preset-run', name: `Linked makers ${(named += 1)}`, presetId: 'linked-makers', params: { maxHops: 2 }, ...extra });
 
 describe('POST /v1/patterns, a preset run', () => {
   it('saves a run of a preset of each template with its template, version and parameters, and no entity id', async () => {

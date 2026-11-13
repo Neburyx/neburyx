@@ -1,5 +1,6 @@
 import { PATTERN_LIMITS } from '@neburyx/contracts';
 import type { ListedPatternRow, PatternChange, PatternCopy, PatternDeletion, NewPattern, PatternListPosition, PatternRow, PatternStore, PatternWriteContext } from '../db/patterns-repository.js';
+import { patternNameKey } from '../db/patterns-repository.js';
 import { uuidv7 } from '../identity/uuid.js';
 import { AppError } from '../errors.js';
 import { PATTERN_AUDIT_ACTIONS, type PatternEvent } from '../patterns/pattern-events.js';
@@ -49,6 +50,10 @@ export function memoryPatterns(options: MemoryPatternOptions = {}): MemoryPatter
     if (rejected) throw new AppError('INTERNAL_ERROR');
   }
 
+  /** Whether a pattern of the person on the source, not deleted and not the one given, already holds the name as the store compares names. */
+  const nameHeld = (ownerId: string, sourceId: string, name: string, except?: string): boolean =>
+    patternRows.some((row) => row.id !== except && row.ownerId === ownerId && row.sourceId === sourceId && !deleted.has(row.id) && patternNameKey(row.name) === patternNameKey(name));
+
   return {
     patternRows,
     deletedPatterns: deleted,
@@ -57,6 +62,7 @@ export function memoryPatterns(options: MemoryPatternOptions = {}): MemoryPatter
       const ownerId = context.principal.id;
       const held = patternRows.filter((row) => row.ownerId === ownerId && row.sourceId === input.sourceId && !deleted.has(row.id)).length;
       if (held >= PATTERN_LIMITS.patternsPerSource) return { outcome: 'limit' };
+      if (nameHeld(ownerId, input.sourceId, input.name)) return { outcome: 'name-taken' };
       const now = stamp();
       const row: PatternRow = {
         id: uuidv7(),
@@ -104,6 +110,7 @@ export function memoryPatterns(options: MemoryPatternOptions = {}): MemoryPatter
       const held = live(change.id, change.ownerId);
       if (held === undefined) return { outcome: 'not-found' };
       if (held.version !== change.expectedVersion) return { outcome: 'conflict' };
+      if (change.name !== undefined && nameHeld(held.ownerId, held.sourceId, change.name, held.id)) return { outcome: 'name-taken' };
       const row: PatternRow = {
         ...held,
         ...(change.name === undefined ? {} : { name: change.name }),
@@ -147,8 +154,10 @@ export function memoryPatterns(options: MemoryPatternOptions = {}): MemoryPatter
       if (!copy.accept(original)) return { outcome: 'refused' };
       const held = patternRows.filter((row) => row.ownerId === callerId && row.sourceId === original.sourceId && !deleted.has(row.id)).length;
       if (held >= PATTERN_LIMITS.patternsPerSource) return { outcome: 'limit' };
+      let attempt = 1;
+      while (attempt <= PATTERN_LIMITS.patternsPerSource + 1 && nameHeld(callerId, original.sourceId, copy.nameOf(original.name, attempt))) attempt += 1;
       const now = stamp();
-      const row: PatternRow = { ...original, id: uuidv7(), ownerId: callerId, name: copy.nameOf(original.name), visibility: 'private', lastRunAt: null, createdAt: now, updatedAt: now, version: 1 };
+      const row: PatternRow = { ...original, id: uuidv7(), ownerId: callerId, name: copy.nameOf(original.name, attempt), visibility: 'private', lastRunAt: null, createdAt: now, updatedAt: now, version: 1 };
       await commit(
         [
           { id: uuidv7(), sourceId: row.sourceId, patternId: row.id, actorId: callerId, action: 'copied', version: 1 },

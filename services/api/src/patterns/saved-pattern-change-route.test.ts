@@ -4,7 +4,8 @@ import { makeToken } from '../reference/token.js';
 import { codeOf, DEFINITION, jsonHeaders, OTHER_IDENTITY, patternApp, reasonOf, TEST_KEYS, type PatternApp } from '../testing/saved-pattern-rig.js';
 
 const send = (context: PatternApp, method: 'POST' | 'PUT', url: string, body: unknown) => context.app.inject({ method, url, payload: JSON.stringify(body), headers: jsonHeaders });
-const saved = async (context: PatternApp, body: Record<string, unknown> = {}) => savedPatternSchema.parse((await send(context, 'POST', '/v1/patterns', { sourceId: 'demo', kind: 'definition', name: 'Ring', definition: DEFINITION, ...body })).json());
+let named = 0;
+const saved = async (context: PatternApp, body: Record<string, unknown> = {}) => savedPatternSchema.parse((await send(context, 'POST', '/v1/patterns', { sourceId: 'demo', kind: 'definition', name: `Ring ${(named += 1)}`, definition: DEFINITION, ...body })).json());
 const change = (context: PatternApp, id: string, body: unknown) => send(context, 'PUT', `/v1/patterns/${id}`, body);
 const NEW_DEFINITION = { anchorType: 'maker', steps: [{ relationshipTypes: ['USES_TOOL'], direction: 'out', arrivesAt: 'tool' }] };
 
@@ -140,7 +141,7 @@ describe('PUT /v1/patterns/{id}', () => {
     }
     await first.app.inject({ method: 'DELETE', url: `/v1/patterns/${pattern.id}`, headers: { 'if-match': '"1"' } });
     expect(codeOf(await change(first, pattern.id, { expectedVersion: 2, name: 'x' }))).toBe('NOT_FOUND');
-    expect(first.store.patternRows[0]).toMatchObject({ name: 'Ring' });
+    expect(first.store.patternRows[0]).toMatchObject({ name: expect.stringMatching(/^Ring \d+$/) });
     await first.app.close();
     await second.app.close();
   });
@@ -152,7 +153,7 @@ describe('PUT /v1/patterns/{id}', () => {
     const response = await change(failing, pattern.id, { expectedVersion: 1, name: 'x' });
     expect(response.statusCode).toBe(503);
     expect(codeOf(response)).toBe('AUDIT_UNAVAILABLE');
-    expect(context.store.patternRows[0]).toMatchObject({ name: 'Ring', version: 1 });
+    expect(context.store.patternRows[0]).toMatchObject({ name: expect.stringMatching(/^Ring \d+$/), version: 1 });
     await context.app.close();
     await failing.app.close();
   });

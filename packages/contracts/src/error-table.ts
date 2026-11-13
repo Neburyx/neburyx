@@ -24,6 +24,7 @@ export const CONFLICT_ENTRIES: Readonly<Record<ConflictReason, Omit<ErrorEntry, 
   'status-change-not-allowed': { message: 'An archived investigation must be reopened before it can be closed.', retryable: false },
   'investigation-read-only': { message: 'This investigation is closed or archived. Reopen it to make changes.', retryable: false },
   'source-changed': { message: 'This source now points to a different database or is no longer configured. This investigation is read-only.', retryable: false },
+  'pattern-name-taken': { message: 'You already have a pattern with this name on this source. Choose another name.', retryable: false },
 };
 
 /** The sentence of each reason of `ACCESS_DENIED`; a changed access is never said in more than that. */

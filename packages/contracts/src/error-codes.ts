@@ -41,7 +41,7 @@ export const SOURCE_UNAVAILABLE_REASONS = ['unreachable', 'authentication', 'ref
 export type SourceUnavailableReason = (typeof SOURCE_UNAVAILABLE_REASONS)[number];
 
 /** Why an update was refused with `CONFLICT`; a `CONFLICT` with no reason means the item was changed elsewhere. */
-export const CONFLICT_REASONS = ['status-change-not-allowed', 'investigation-read-only', 'source-changed'] as const;
+export const CONFLICT_REASONS = ['status-change-not-allowed', 'investigation-read-only', 'source-changed', 'pattern-name-taken'] as const;
 
 export type ConflictReason = (typeof CONFLICT_REASONS)[number];
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { errorBodySchema } from './error-codes.js';
-import { INVALID_REQUEST_ENTRIES } from './error-table.js';
+import { CONFLICT_ENTRIES, INVALID_REQUEST_ENTRIES } from './error-table.js';
 import { PATTERN_LIMITS } from './pattern.js';
 import { savedPatternSchema, savePatternRequestSchema } from './saved-pattern.js';
 
@@ -44,6 +44,14 @@ describe('a saved pattern', () => {
 });
 
 describe('the reasons of a refused save', () => {
+  it('pattern-name-taken is a reason of CONFLICT with its own sentence, and a CONFLICT with no reason keeps the entry of changed elsewhere', () => {
+    const entry = CONFLICT_ENTRIES['pattern-name-taken'];
+    expect(entry.message).not.toMatch(/\d/);
+    const body = { error: { code: 'CONFLICT', ...entry, traceId: 'trace', details: { reason: 'pattern-name-taken' } } };
+    expect(errorBodySchema.safeParse(body).success).toBe(true);
+    expect(errorBodySchema.safeParse({ error: { ...body.error, code: 'NOT_FOUND', message: 'Not found.', retryable: false } }).success).toBe(false);
+  });
+
   it.each(['pattern-limit', 'pattern-personal-condition'] as const)('%s is a reason of INVALID_REQUEST with its own sentence and no number', (reason) => {
     const entry = INVALID_REQUEST_ENTRIES[reason];
     expect(entry.message).not.toMatch(/\d/);

@@ -48,7 +48,7 @@ export interface NewPattern {
   readonly anchor: { readonly entityType: string; readonly stableId: string } | null;
 }
 
-export type PatternSaveResult = { readonly outcome: 'saved'; readonly row: PatternRow } | { readonly outcome: 'limit' };
+export type PatternSaveResult = { readonly outcome: 'saved'; readonly row: PatternRow } | { readonly outcome: 'limit' } | { readonly outcome: 'name-taken' };
 
 /** Where a page of patterns starts: after the pattern changed at `updatedKey` (microsecond text, as the database holds it) with this `id`. */
 export interface PatternListPosition {
@@ -89,7 +89,7 @@ export interface PatternChange {
   readonly action?: 'changed' | 'shared' | 'unshared';
 }
 
-export type PatternChangeResult = { readonly outcome: 'changed'; readonly row: PatternRow } | { readonly outcome: 'not-found' } | { readonly outcome: 'conflict' };
+export type PatternChangeResult = { readonly outcome: 'changed'; readonly row: PatternRow } | { readonly outcome: 'not-found' } | { readonly outcome: 'conflict' } | { readonly outcome: 'name-taken' };
 
 export interface PatternDeletion {
   readonly id: string;
@@ -99,12 +99,19 @@ export interface PatternDeletion {
   readonly retentionDays: number;
 }
 
+/** The name of a pattern as the store compares it: Unicode form C, then lower case, spaces at its ends left out. The unique index of a person's names on a source is on the same, and where the database lower-cases a letter otherwise than this does, the database decides (through the index) and this only stands in for it in tests. */
+export const patternNameKey = (name: string): string => [...name.replace(/^ +| +$/g, '').normalize('NFC')].map((character) => character.toLowerCase()).join('');
+
+/** At most this many tries for the name of a copy that a concurrent rename takes between the choice of the name and the insert. */
+const COPY_NAME_TRIES = 5;
+
 export type PatternDeleteResult = { readonly outcome: 'deleted'; readonly row: PatternRow; readonly deletedAt: string; readonly purgeAfter: string } | { readonly outcome: 'not-found' } | { readonly outcome: 'conflict' };
 
 /** What a copy needs: the original, the name of the copy from the original's name, and whether the original may be copied now. Both are decided on the row as it is read under the lock. */
 export interface PatternCopy {
   readonly originalId: string;
-  readonly nameOf: (originalName: string) => string;
+  /** The name of the copy for the given try: the first try is the original's name with a suffix, each later one a number more; the store takes the first that the person's patterns on the source do not hold. */
+  readonly nameOf: (originalName: string, attempt: number) => string;
   readonly accept: (original: PatternRow) => boolean;
 }
 
@@ -112,7 +119,8 @@ export type PatternCopyResult =
   | { readonly outcome: 'copied'; readonly row: PatternRow; readonly original: PatternRow }
   | { readonly outcome: 'not-found' }
   | { readonly outcome: 'refused' }
-  | { readonly outcome: 'limit' };
+  | { readonly outcome: 'limit' }
+  | { readonly outcome: 'name-taken' };
 
 /** What the purge reports for each pattern it removes. */
 export interface PurgedPattern {
@@ -209,12 +217,15 @@ async function savePattern(pool: pg.Pool, input: NewPattern, context: PatternWri
     const counted = await transaction.client.query<{ held: number }>('SELECT count(*)::int AS held FROM saved_patterns WHERE owner_id = $1 AND source_id = $2 AND deleted_at IS NULL', [ownerId, input.sourceId]);
     if ((counted.rows[0]?.held ?? 0) >= PATTERN_LIMITS.patternsPerSource) return { outcome: 'limit' } as const;
     const id = uuidv7();
-    const inserted = await transaction.client.query<PatternRecord>(
-      `INSERT INTO saved_patterns (id, owner_id, source_id, name, kind, preset_id, template_id, template_version, params, definition, ask_for_starting_entity, anchor_entity_type, anchor_stable_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING ${PATTERN_COLUMNS}`,
-      [id, ownerId, input.sourceId, input.name, input.kind, input.presetId, input.templateId, input.templateVersion, input.params, input.definition, input.anchor === null, input.anchor?.entityType ?? null, input.anchor?.stableId ?? null],
+    const written = await unlessNameTaken(transaction.client, () =>
+      transaction.client.query<PatternRecord>(
+        `INSERT INTO saved_patterns (id, owner_id, source_id, name, kind, preset_id, template_id, template_version, params, definition, ask_for_starting_entity, anchor_entity_type, anchor_stable_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING ${PATTERN_COLUMNS}`,
+        [id, ownerId, input.sourceId, input.name, input.kind, input.presetId, input.templateId, input.templateVersion, input.params, input.definition, input.anchor === null, input.anchor?.entityType ?? null, input.anchor?.stableId ?? null],
+      ),
     );
-    const record = inserted.rows[0];
+    if (written.taken) return { outcome: 'name-taken' } as const;
+    const record = written.value.rows[0];
     if (record === undefined) throw new Error('the saved pattern was not returned');
     await transaction.record({ sourceId: input.sourceId, patternId: id, action: 'saved', version: 1 });
     return { outcome: 'saved', row: patternRowOf(record) } as const;
@@ -258,6 +269,26 @@ async function recordPatternRun(pool: pg.Pool, id: string, ownerId: string): Pro
   return (done.rowCount ?? 0) > 0;
 }
 
+const NAME_INDEX = 'saved_patterns_owner_name';
+
+function isNameTaken(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && 'code' in error && error.code === '23505' && 'constraint' in error && error.constraint === NAME_INDEX;
+}
+
+/** Runs one write inside a savepoint: a name another of the person's patterns on the source holds (the unique index decides, not a read first) undoes only that write and is reported, so the transaction can go on; any other failure is thrown. */
+async function unlessNameTaken<T>(client: pg.PoolClient, write: () => Promise<T>): Promise<{ readonly taken: false; readonly value: T } | { readonly taken: true }> {
+  await client.query('SAVEPOINT pattern_name');
+  try {
+    const value = await write();
+    await client.query('RELEASE SAVEPOINT pattern_name');
+    return { taken: false, value };
+  } catch (error) {
+    if (!isNameTaken(error)) throw error;
+    await client.query('ROLLBACK TO SAVEPOINT pattern_name');
+    return { taken: true };
+  }
+}
+
 async function lockPattern(client: pg.PoolClient, id: string, ownerId: string): Promise<PatternRecord | undefined> {
   const found = await client.query<PatternRecord>(`SELECT ${PATTERN_COLUMNS} FROM saved_patterns WHERE id = $1 AND owner_id = $2 AND deleted_at IS NULL FOR UPDATE`, [id, ownerId]);
   return found.rows[0];
@@ -283,8 +314,9 @@ async function changePattern(pool: pg.Pool, change: PatternChange, context: Patt
       set('anchor_stable_id', change.anchor?.stableId ?? null);
       set('ask_for_starting_entity', change.anchor === null);
     }
-    const updated = await transaction.client.query<PatternRecord>(`UPDATE saved_patterns SET ${[...sets, 'version = version + 1', 'updated_at = clock_timestamp()'].join(', ')} WHERE id = $1 RETURNING ${PATTERN_COLUMNS}`, values);
-    const record = updated.rows[0];
+    const written = await unlessNameTaken(transaction.client, () => transaction.client.query<PatternRecord>(`UPDATE saved_patterns SET ${[...sets, 'version = version + 1', 'updated_at = clock_timestamp()'].join(', ')} WHERE id = $1 RETURNING ${PATTERN_COLUMNS}`, values));
+    if (written.taken) return { outcome: 'name-taken' } as const;
+    const record = written.value.rows[0];
     if (record === undefined) throw new Error('the changed pattern was not returned');
     await transaction.record({ sourceId: record.source_id, patternId: record.id, action: change.action ?? 'changed', version: record.version });
     return { outcome: 'changed', row: patternRowOf(record) } as const;
@@ -307,6 +339,11 @@ async function deletePattern(pool: pg.Pool, deletion: PatternDeletion, context: 
   });
 }
 
+async function nameHeld(client: pg.PoolClient, ownerId: string, sourceId: string, name: string): Promise<boolean> {
+  const found = await client.query('SELECT 1 FROM saved_patterns WHERE owner_id = $1 AND source_id = $2 AND deleted_at IS NULL AND lower(normalize(btrim(name), NFC)) = lower(normalize(btrim($3::text), NFC)) LIMIT 1', [ownerId, sourceId, name]);
+  return (found.rowCount ?? 0) > 0;
+}
+
 async function copyPattern(pool: pg.Pool, copy: PatternCopy, context: PatternWriteContext): Promise<PatternCopyResult> {
   const callerId = context.principal.id;
   return inPatternTransaction({ pool, audit: context.audit, newId: uuidv7 }, { principal: context.principal, traceId: context.traceId }, async (transaction) => {
@@ -320,13 +357,25 @@ async function copyPattern(pool: pg.Pool, copy: PatternCopy, context: PatternWri
     const counted = await transaction.client.query<{ held: number }>('SELECT count(*)::int AS held FROM saved_patterns WHERE owner_id = $1 AND source_id = $2 AND deleted_at IS NULL', [callerId, record.source_id]);
     if ((counted.rows[0]?.held ?? 0) >= PATTERN_LIMITS.patternsPerSource) return { outcome: 'limit' } as const;
     const id = uuidv7();
-    const inserted = await transaction.client.query<PatternRecord>(
-      `INSERT INTO saved_patterns (id, owner_id, source_id, name, kind, preset_id, template_id, template_version, params, definition, ask_for_starting_entity, anchor_entity_type, anchor_stable_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING ${PATTERN_COLUMNS}`,
-      [id, callerId, record.source_id, copy.nameOf(record.name), record.kind, record.preset_id, record.template_id, record.template_version, record.params, record.definition, record.ask_for_starting_entity, record.anchor_entity_type, record.anchor_stable_id],
-    );
-    const made = inserted.rows[0];
-    if (made === undefined) throw new Error('the copied pattern was not returned');
+    // the first name the person's patterns on the source do not hold; a concurrent rename may still take it before the insert, so a try that loses is followed by the next, up to a few
+    let attempt = 0;
+    let made: PatternRecord | undefined;
+    for (let tries = 0; made === undefined && tries < COPY_NAME_TRIES; tries += 1) {
+      let name: string;
+      do {
+        attempt += 1;
+        name = copy.nameOf(record.name, attempt);
+      } while (attempt <= PATTERN_LIMITS.patternsPerSource + 1 && (await nameHeld(transaction.client, callerId, record.source_id, name)));
+      const written = await unlessNameTaken(transaction.client, () =>
+        transaction.client.query<PatternRecord>(
+          `INSERT INTO saved_patterns (id, owner_id, source_id, name, kind, preset_id, template_id, template_version, params, definition, ask_for_starting_entity, anchor_entity_type, anchor_stable_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING ${PATTERN_COLUMNS}`,
+          [id, callerId, record.source_id, name, record.kind, record.preset_id, record.template_id, record.template_version, record.params, record.definition, record.ask_for_starting_entity, record.anchor_entity_type, record.anchor_stable_id],
+        ),
+      );
+      if (!written.taken) made = written.value.rows[0];
+    }
+    if (made === undefined) return { outcome: 'name-taken' } as const;
     await transaction.record({ sourceId: made.source_id, patternId: made.id, action: 'copied', version: 1 });
     await transaction.record({ sourceId: record.source_id, patternId: record.id, action: 'copied', version: record.version });
     return { outcome: 'copied', row: patternRowOf(made), original } as const;

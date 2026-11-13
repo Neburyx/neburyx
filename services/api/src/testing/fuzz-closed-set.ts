@@ -262,8 +262,10 @@ async function buildClosedSet(rig: FuzzRig): Promise<{ readonly statements: Set<
    * The runs of saved patterns, which write no statement of their own: a saved pattern is run by the pattern run service or the template run service, so every statement of these runs is one the sample above already holds. The patterns are
    * saved through the real save route first, with a held starting entity and without one, and run with the entity given and with the one held.
    */
+  let savedCount = 0;
   const savedPattern = async (body: Record<string, unknown>): Promise<string> => {
-    const made = await app.inject({ method: 'POST', url: '/v1/patterns', payload: JSON.stringify({ sourceId: FUZZ_SOURCE, name: 'A saved pattern', ...body }), headers: { 'content-type': 'application/json' } });
+    savedCount += 1;
+    const made = await app.inject({ method: 'POST', url: '/v1/patterns', payload: JSON.stringify({ sourceId: FUZZ_SOURCE, name: `A saved pattern ${savedCount}`, ...body }), headers: { 'content-type': 'application/json' } });
     if (made.statusCode !== 201) throw new Error(`the closed set expected a pattern to be saved, and it answered ${made.statusCode}: ${made.body.slice(0, 120)}`);
     return (JSON.parse(made.body) as { id: string }).id;
   };
