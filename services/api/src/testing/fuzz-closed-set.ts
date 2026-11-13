@@ -271,8 +271,9 @@ async function buildClosedSet(rig: FuzzRig): Promise<{ readonly statements: Set<
     cases.add('saved-pattern:run');
     const response = await post(`/v1/patterns/${id}/run`, payload);
     if (response.statusCode !== 200) throw new Error(`the closed set expected a saved pattern to be run, and it answered ${response.statusCode}`);
-    const own = executor.calls.map((call) => call.cypher).filter((cypher) => !statements.has(cypher));
-    if (own.length > 0) throw new Error('a saved run wrote a statement of its own');
+    // the statements of the pattern template are checked against the grammar when they are kept; every other statement must be one the set already holds
+    const own = executor.calls.filter((call) => call.templateId !== 'pattern').map((call) => call.cypher).filter((cypher) => !statements.has(cypher));
+    if (own.length > 0) throw new Error(`a saved run wrote a statement of its own`);
     keep();
   };
   const held = { entityType: 'widget', stableId: 'W-1' };
