@@ -110,6 +110,8 @@ export function PatternEditor({ profile, retryProfile, client, sourceId, sourceN
   const key = definition === undefined ? undefined : JSON.stringify(definition);
   const checked = check.state.kind === 'valid' && check.validFor === key && breaks.length === 0;
   const empty = draft.anchorType === undefined && draft.steps.length === 0;
+  /** Leaves the editor: at once while nothing is built, and after asking while a draft would be thrown away. */
+  const cancel = (): void => (empty ? onCancel() : setAsking('discard'));
   const addStep = (): void => {
     dispatch({ type: 'add' });
     setSelected(draft.steps.length);
@@ -168,7 +170,7 @@ export function PatternEditor({ profile, retryProfile, client, sourceId, sourceN
               <button type="button" className="primary" onClick={retryProfile}>
                 {TRY_AGAIN}
               </button>
-              <button type="button" className="secondary" onClick={onCancel}>
+              <button type="button" className="secondary" onClick={cancel}>
                 {CHECK_COPY.close}
               </button>
             </div>
@@ -250,7 +252,7 @@ export function PatternEditor({ profile, retryProfile, client, sourceId, sourceN
         </>
       </div>
       <div className="pattern-editor-actions">
-        <button type="button" className="secondary" onClick={() => (empty ? onCancel() : setAsking('discard'))}>
+        <button type="button" className="secondary" onClick={cancel}>
           {EDITOR_COPY.cancel}
         </button>
         <button type="button" className="primary" disabled={!checked || definition === undefined} onClick={() => definition !== undefined && onPreview(definition)}>

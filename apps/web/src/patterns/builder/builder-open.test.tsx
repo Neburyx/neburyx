@@ -1,6 +1,6 @@
 import { act, fireEvent } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { failure, listOf, patternsWorkspace, openPatterns, selectAccount, settle } from '../patterns-kit.js';
+import { failure, listOf, listed, patternsWorkspace, openPatterns, selectAccount, settle } from '../patterns-kit.js';
 import { builderPanel, builderWorkspace, chooseStart, cleanup, openBuilder, screen, startSelect, userEvent, within } from './builder-kit.js';
 
 afterEach(() => {
@@ -84,6 +84,21 @@ describe('opening the builder from the Patterns panel', () => {
     await userEvent.click(within(builderPanel()).getByRole('button', { name: 'Try again' }));
     await act(async () => void (await Promise.resolve()));
     expect(startSelect().options.length).toBeGreaterThan(1);
+  });
+
+  it('asks before Close of an unreadable mapping throws away a draft that a saved pattern opened', async () => {
+    const item = listed({ id: '0192f000-0000-7000-8000-000000000001', name: 'Alpha', kind: 'definition', definition: { anchorType: 'n-a', steps: [{ relationshipTypes: ['r-1'], direction: 'out', arrivesAt: 'n-b' }] } });
+    await patternsWorkspace({ profile: async () => ({ ok: false, failure: failure('SOURCE_BUSY') }), patterns: { listPatterns: async () => ({ ok: true, value: { items: [item], nextCursor: null } }) } });
+    await openPatterns();
+    await userEvent.click(screen.getByRole('tab', { name: /My patterns/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'More: Alpha' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Change' }));
+    await settle();
+    expect(screen.getByText('Could not read the mapping.')).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }));
+    const dialog = screen.getByRole('dialog', { name: 'Discard this draft?' });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Keep editing' }));
+    expect(screen.getByText('Could not read the mapping.')).toBeTruthy();
   });
 
   it('shows the chosen start type as the first chip of the Path and lets it change', async () => {
