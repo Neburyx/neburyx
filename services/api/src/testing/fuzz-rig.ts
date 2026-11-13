@@ -33,16 +33,36 @@ export const FUZZ_RELATIONSHIPS = [
 export const FUZZ_DERIVED = [{ id: 'shared-gadget', from: 'widget', to: 'widget', via: ['MADE_FROM', 'gadget', 'MADE_FROM'], rule_version: 1, stop_list_property: 'weight' }, { id: 'shared-handle', from: 'phone', to: 'phone', via: ['USES', 'widget', 'USES'], rule_version: 1 }];
 
 /** Two presets of the shared-attribute template: one over a relationship type with a stop-list rule, one over a type with no rule. */
-export const FUZZ_PRESETS = [
+export const FUZZ_SHARED_PRESETS = [
   { id: 'shared-gadgets', name: 'Shared gadgets', template: 'shared-attribute', bind: { anchor: 'widget', attribute: 'gadget', via: 'MADE_FROM' } },
   { id: 'shared-phones', name: 'Shared phones', template: 'shared-attribute', bind: { anchor: 'widget', attribute: 'phone', via: 'USES' } },
 ];
 
+/** Two presets of the linked-entities template: one that reaches a different type in one hop, one whose target is its own anchor type, so that two hops cross a gadget. */
+export const FUZZ_LINKED_PRESETS = [
+  { id: 'linked-gadgets', name: 'Linked gadgets', template: 'linked-entities', bind: { anchor: 'widget', target: 'gadget', via: 'MADE_FROM' } },
+  { id: 'linked-widgets', name: 'Linked widgets', template: 'linked-entities', bind: { anchor: 'widget', target: 'widget', via: 'MADE_FROM' } },
+];
+
+export const FUZZ_PRESETS = [...FUZZ_SHARED_PRESETS, ...FUZZ_LINKED_PRESETS];
+
 /** A second source with the same shape, so a cursor of one can be replayed against the other. */
 export const FUZZ_TWIN_SOURCE = 'twin';
 
+/**
+ * A third source for the pattern runs: a hop budget of one, and a relationship with no mapped time property, so that a run for two hops is over its cap and a run with a window over that
+ * relationship is refused.
+ */
+export const FUZZ_TIGHT_SOURCE = 'tight';
+export const FUZZ_TIGHT_RELATIONSHIPS = [{ type: 'HOLDS', from: 'holder', to: 'widget' }];
+export const FUZZ_TIGHT_PRESETS = [{ id: 'linked-holders', name: 'Linked holders', template: 'linked-entities', bind: { anchor: 'widget', target: 'holder', via: 'HOLDS' } }, ...FUZZ_LINKED_PRESETS];
+
 export const FUZZ_MAPPING = parseMapping(
-  fileOf(baseSource({ id: FUZZ_SOURCE, entities: FUZZ_ENTITIES, relationships: FUZZ_RELATIONSHIPS, derived: FUZZ_DERIVED, patterns: FUZZ_PRESETS }), baseSource({ id: FUZZ_TWIN_SOURCE, entities: FUZZ_ENTITIES, relationships: FUZZ_RELATIONSHIPS, derived: FUZZ_DERIVED, patterns: FUZZ_PRESETS })),
+  fileOf(
+    baseSource({ id: FUZZ_SOURCE, entities: FUZZ_ENTITIES, relationships: FUZZ_RELATIONSHIPS, derived: FUZZ_DERIVED, patterns: FUZZ_PRESETS }),
+    baseSource({ id: FUZZ_TWIN_SOURCE, entities: FUZZ_ENTITIES, relationships: FUZZ_RELATIONSHIPS, derived: FUZZ_DERIVED, patterns: FUZZ_PRESETS }),
+    baseSource({ id: FUZZ_TIGHT_SOURCE, entities: FUZZ_ENTITIES, relationships: [...FUZZ_RELATIONSHIPS, ...FUZZ_TIGHT_RELATIONSHIPS], derived: FUZZ_DERIVED, patterns: FUZZ_TIGHT_PRESETS, budgets: { max_hops: 1 } }),
+  ),
   'neburyx.yaml',
 );
 
@@ -53,6 +73,7 @@ export function allowedNames(): ReadonlySet<string> {
     names.add(entity.label);
     for (const property of [entity.stable_id, ...entity.search, ...(entity.reference ?? []), ...(entity.filterable ?? []), ...(entity.sortable ?? [])]) names.add(property);
   }
+  for (const row of FUZZ_TIGHT_RELATIONSHIPS) names.add(row.type);
   for (const row of FUZZ_RELATIONSHIPS) {
     names.add(row.type);
     names.add(row.observed_at);
@@ -84,6 +105,26 @@ const sharedRow = (index: number, call: ExecuteCall) => {
   const match = plainNode(['Widget'], { widgetId: `W-S${index}` }, `e-ws-${index}`);
   const type = phones ? 'USES' : 'MADE_FROM';
   return { a: widget, skipped: false, bounded: false, b: match, xs: [attribute], ras: [plainRelationship(type, widget, attribute, phones ? {} : { linkId: `rsa${index}` }, `rel-sa${index}`)], rbs: [plainRelationship(type, match, attribute, phones ? {} : { linkId: `rsb${index}` }, `rel-sb${index}`)], shared: 1, evidenceCut: false };
+};
+
+/** One match of a linked-entities read: a gadget or a handle in one hop, or, at two hops over `MADE_FROM`, another widget through a gadget. */
+const linkedRow = (index: number, call: ExecuteCall) => {
+  if (call.parameters['entityType'] === 'gadget') {
+    const anchor = neighbor('GD-0');
+    const other = plainNode(['Widget'], { widgetId: `W-G${index}` }, `e-wg-${index}`);
+    return { a: anchor, bounded: false, heavy: [], stopListed: false, x: other, mid: null, r1: plainRelationship('MADE_FROM', other, anchor, { linkId: `rg${index}` }, `rel-g${index}`), r2: null, hops: 1 };
+  }
+  const [type] = Array.isArray(call.parameters['via']) ? (call.parameters['via'] as string[]) : ['MADE_FROM'];
+  const twoHops = Number(call.parameters['maxHops'] ?? 1) > 1 && type === 'MADE_FROM';
+  const target = call.parameters['targetType'];
+  if (twoHops) {
+    const through = neighbor(`gl${index}`);
+    const other = plainNode(['Widget'], { widgetId: `W-L${index}` }, `e-wl-${index}`);
+    return { a: widget, bounded: false, heavy: [], stopListed: false, x: other, mid: through, r1: plainRelationship('MADE_FROM', widget, through, { linkId: `rl${index}a` }, `rel-l${index}a`), r2: plainRelationship('MADE_FROM', other, through, { linkId: `rl${index}b` }, `rel-l${index}b`), hops: 2 };
+  }
+  const phones = type === 'USES' || target === 'phone';
+  const match = phones ? plainNode(['Handle'], { phoneNumber: `+1-212-555-02${index}` }, `e-pl-${index}`) : neighbor(`gl1-${index}`);
+  return { a: widget, bounded: false, heavy: [], stopListed: false, x: match, mid: null, r1: plainRelationship(phones ? 'USES' : 'MADE_FROM', widget, match, phones ? {} : { linkId: `rl1-${index}` }, `rel-l1-${index}`), r2: null, hops: 1 };
 };
 
 const derivedRow = (index: number) => {
@@ -133,6 +174,7 @@ export function respond(call: ExecuteCall): Promise<ExecuteOutcome> {
   }
   if (call.templateId === 'derived-edge-support') return Promise.resolve({ status: 'rows', rows: Array.from({ length: Math.min(call.rowLimit, 3) }, (_, index) => supportRow(index)) });
   if (call.templateId === 'shared-attribute') return Promise.resolve({ status: 'rows', rows: Array.from({ length: Math.min(call.rowLimit, 3) }, (_, index) => sharedRow(index, call)) });
+  if (call.templateId === 'linked-entities') return Promise.resolve({ status: 'rows', rows: Array.from({ length: Math.min(call.rowLimit, 3) }, (_, index) => linkedRow(index, call)) });
   if (call.templateId === 'derived-rule-run') return Promise.resolve({ status: 'rows', rows: Array.from({ length: Math.min(call.rowLimit, 3) }, (_, index) => derivedRow(index)) });
   if (call.templateId === 'aggregate-sample') {
     const ends = call.parameters['ends'];

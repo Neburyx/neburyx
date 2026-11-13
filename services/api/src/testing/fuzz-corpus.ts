@@ -30,7 +30,7 @@ export const CYPHER_FRAGMENTS: readonly string[] = [
 ];
 
 /** Fragments a template itself holds, so finding one in a statement shows nothing: the closed set is what proves such a request wrote no statement of its own. */
-export const TEMPLATE_NATIVE: readonly string[] = ['$text', '$limit + 1', '$branchEntityTypes[0]'];
+export const TEMPLATE_NATIVE: readonly string[] = ['$text', '$limit + 1', '$branchEntityTypes[0]', 'RANGE', 'TEXT'];
 
 export const UNICODE_SAMPLES: readonly string[] = ['\u0000', 'a\u0000b', '‮', 'é́́', '😀', '﻿', '  ', '\u0085', '\ud800', '\udfff', 'Å', '٣', '​‍'];
 

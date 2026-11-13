@@ -1,6 +1,6 @@
 import { edgeRefSegmentOf, sourceLinkSegmentOf } from '@neburyx/contracts';
 import { registeredRoutesOf } from '../app.js';
-import { FUZZ_PRESETS, FUZZ_SOURCE, FUZZ_TEXT, allowedNames, type FuzzRig } from './fuzz-rig.js';
+import { FUZZ_LINKED_PRESETS, FUZZ_SHARED_PRESETS, FUZZ_TIGHT_SOURCE, FUZZ_SOURCE, FUZZ_TEXT, allowedNames, type FuzzRig } from './fuzz-rig.js';
 
 /** The names a statement quotes in backticks. */
 export const quotedNamesOf = (cypher: string): string[] => [...cypher.matchAll(/`([^`]*)`/g)].flatMap((match) => (match[1] === undefined ? [] : [match[1]]));
@@ -67,6 +67,11 @@ async function buildClosedSet(rig: FuzzRig): Promise<{ readonly statements: Set<
     routes.add(routeKeyOf(rig, 'GET', url));
     return app.inject({ method: 'GET', url });
   };
+  /** A pattern run the closed set is built from: it must be served, so that what is left out of the set is left out on purpose and a legal run that broke is found here. */
+  const served = async (url: string, payload: unknown): Promise<void> => {
+    const response = await post(url, payload);
+    if (response.statusCode !== 200) throw new Error(`the closed set expected ${url} to be served, and it answered ${response.statusCode}: ${JSON.stringify(payload)}`);
+  };
   const statements = new Set<string>();
   const keep = (): void => {
     for (const call of executor.calls) statements.add(call.cypher);
@@ -77,22 +82,65 @@ async function buildClosedSet(rig: FuzzRig): Promise<{ readonly statements: Set<
   const keys: { entityType: string; stableId: string }[] = [];
   const anchor = { entityType: 'widget', stableId: 'W-1' };
   const windows = [undefined, { days: 30 }, { from: '2026-01-01', to: '2026-01-31' }];
-  for (const preset of FUZZ_PRESETS) {
+  for (const preset of FUZZ_SHARED_PRESETS) {
     for (const window of windows) {
       for (const minShared of [undefined, 2]) {
         for (const mask of [undefined, true, false]) {
-          await post(`/v1/templates/${preset.id}/run`, { sourceId: FUZZ_SOURCE, params: { ref: anchor, ...(window === undefined ? {} : { window }), ...(minShared === undefined ? {} : { minShared }) }, ...(mask === undefined ? {} : { mask }) });
+          await served(`/v1/templates/${preset.id}/run`, { sourceId: FUZZ_SOURCE, params: { ref: anchor, ...(window === undefined ? {} : { window }), ...(minShared === undefined ? {} : { minShared }) }, ...(mask === undefined ? {} : { mask }) });
           keep();
         }
       }
     }
   }
-  for (const preset of FUZZ_PRESETS) {
+  for (const preset of FUZZ_SHARED_PRESETS) {
     for (const window of windows) {
       for (const minShared of [undefined, 2]) {
-        await post('/v1/templates/shared-attribute/run', { sourceId: FUZZ_SOURCE, params: { ref: anchor, attributeType: preset.bind.attribute, via: preset.bind.via, ...(window === undefined ? {} : { window }), ...(minShared === undefined ? {} : { minShared }) } });
+        for (const mask of [undefined, true, false]) {
+          await served('/v1/templates/shared-attribute/run', { sourceId: FUZZ_SOURCE, params: { ref: anchor, attributeType: preset.bind.attribute, via: preset.bind.via, ...(window === undefined ? {} : { window }), ...(minShared === undefined ? {} : { minShared }) }, ...(mask === undefined ? {} : { mask }) });
+          keep();
+        }
+      }
+    }
+  }
+  /** The legal choices of a linked run: a target of another type is reached in one hop or two, and in the stored direction or both; a target of the anchor's own type only in two hops through a different type, so only in both directions. */
+  const choicesOf = (own: boolean): { maxHops?: number; direction?: string; window?: unknown }[] =>
+    (own ? [{ maxHops: 2, direction: 'both' }] : [undefined, 1, 2].flatMap((maxHops) => [undefined, 'out', 'both'].map((direction) => ({ ...(maxHops === undefined ? {} : { maxHops }), ...(direction === undefined ? {} : { direction }) })))).flatMap((choice) =>
+      windows.map((window) => ({ ...choice, ...(window === undefined ? {} : { window }) })),
+    );
+  for (const preset of FUZZ_LINKED_PRESETS) {
+    for (const choice of choicesOf(preset.bind.target === preset.bind.anchor)) {
+      for (const mask of [undefined, true, false]) {
+        await served(`/v1/templates/${preset.id}/run`, { sourceId: FUZZ_SOURCE, params: { ref: anchor, ...choice }, ...(mask === undefined ? {} : { mask }) });
         keep();
       }
+    }
+  }
+  const linkedByType = [
+    { targetType: 'gadget', via: ['MADE_FROM'] },
+    { targetType: 'phone', via: ['USES'] },
+    { targetType: 'widget', via: ['MADE_FROM'] },
+  ];
+  for (const bind of linkedByType) {
+    for (const choice of choicesOf(bind.targetType === 'widget')) {
+      for (const mask of [undefined, true]) {
+        await served('/v1/templates/linked-entities/run', { sourceId: FUZZ_SOURCE, params: { ref: anchor, ...bind, ...choice }, ...(mask === undefined ? {} : { mask }) });
+        keep();
+      }
+    }
+  }
+  for (const window of windows) {
+    await served('/v1/templates/linked-entities/run', { sourceId: FUZZ_SOURCE, params: { ref: anchor, targetType: 'gadget', via: ['MADE_FROM', 'USES'], ...(window === undefined ? {} : { window }) } });
+    keep();
+  }
+  /** The runs of the third source that are served: one hop under its budget of one, and the relationship with no time property without a window. */
+  await served('/v1/templates/linked-gadgets/run', { sourceId: FUZZ_TIGHT_SOURCE, params: { ref: anchor, maxHops: 1 } });
+  keep();
+  await served('/v1/templates/linked-holders/run', { sourceId: FUZZ_TIGHT_SOURCE, params: { ref: anchor } });
+  keep();
+  for (const direction of [undefined, 'in', 'both']) {
+    for (const window of windows) {
+      await served('/v1/templates/linked-entities/run', { sourceId: FUZZ_SOURCE, params: { ref: { entityType: 'gadget', stableId: 'GD-0' }, targetType: 'widget', via: ['MADE_FROM'], ...(direction === undefined ? {} : { direction }), ...(window === undefined ? {} : { window }) } });
+      keep();
     }
   }
   const types = [['gadget'], ['phone'], ['gadget', 'phone']];
@@ -192,7 +240,7 @@ async function buildClosedSet(rig: FuzzRig): Promise<{ readonly statements: Set<
       keep();
     }
   }
-  return { statements, routes, values: ['W-1', 'GD-0', 'L-1', FUZZ_TEXT, 'ne', '+1-212-555-01', ...cursors, ...expandCursors.map((entry) => entry.cursor), ...keys.map((entry) => entry.stableId)] };
+  return { statements, routes, values: ['W-1', 'GD-0', 'L-1', '2026-01-01', '2026-01-31', FUZZ_TEXT, 'ne', '+1-212-555-01', ...cursors, ...expandCursors.map((entry) => entry.cursor), ...keys.map((entry) => entry.stableId)] };
 }
 
 const escaped = (value: string): string => value.replace(/[.*+?^${}()|[\]\\-]/g, '\\$&');

@@ -39,6 +39,9 @@ export function sourceReadingRoutesOf(routes: readonly { readonly method: string
 /** The source-reading routes the set does not build. */
 export const missingFrom = (built: ReadonlySet<string>, routes: readonly string[]): string[] => routes.filter((key) => !built.has(key));
 
+const linkedStatements = (statements: ReadonlySet<string>): string[] => [...statements].filter((statement) => statement.includes('cutFirst') && statement.includes('AS isTarget'));
+const hasMatching = (statements: readonly string[], test: (statement: string) => boolean): boolean => statements.some(test);
+
 describe('the closed set of the fuzz suite', () => {
   const built = routesOfClosedSet.get(closed) ?? new Set<string>();
   const routes = sourceReadingRoutesOf(registeredRoutesOf(rig.app));
@@ -50,6 +53,27 @@ describe('the closed set of the fuzz suite', () => {
 
   it('builds the routes of the inspector: the entity read, both forms of the edge read, the source link, derived neighbors and the investigation', () => {
     for (const key of ['GET /v1/entities/:sourceId/:entityType/:stableId', 'GET /v1/edges/:ref', 'GET /v1/source-links/:ref', 'POST /v1/graph/derived-neighbors', 'POST /v1/investigations']) expect(built.has(key), key).toBe(true);
+  });
+
+  describe('the pattern runs', () => {
+    const linked = linkedStatements(closed);
+
+    it('builds the run route, and the completeness test fails when it is taken out of the set', () => {
+      const key = 'POST /v1/templates/:id/run';
+      expect(built.has(key)).toBe(true);
+      expect(missingFrom(new Set([...built].filter((route) => route !== key)), routes)).toEqual([key]);
+    });
+
+    it('holds statements of the linked-entities template for one hop and for two, in each direction, with and without a window', () => {
+      expect(linked.length).toBeGreaterThan(3);
+      expect(hasMatching(linked, (statement) => statement.includes('[] AS second'))).toBe(true);
+      expect(hasMatching(linked, (statement) => !statement.includes('[] AS second'))).toBe(true);
+      expect(hasMatching(linked, (statement) => statement.includes(']->'))).toBe(true);
+      expect(hasMatching(linked, (statement) => statement.includes('<-['))).toBe(true);
+      expect(hasMatching(linked, (statement) => /\)-\[[^\]]*\]-\(/.test(statement))).toBe(true);
+      expect(hasMatching(linked, (statement) => statement.includes('`seenAt`'))).toBe(true);
+      expect(hasMatching(linked, (statement) => !statement.includes('`seenAt`'))).toBe(true);
+    });
   });
 
   it('fails when one route is taken out of the set', () => {

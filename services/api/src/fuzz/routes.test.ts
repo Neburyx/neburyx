@@ -38,6 +38,12 @@ const ROUTES: readonly Route[] = [
   { name: 'derived neighbors', url: '/v1/graph/derived-neighbors', body: { sourceId: FUZZ_SOURCE, ref: REF }, required: [['sourceId'], ['ref'], ['ref', 'entityType'], ['ref', 'stableId']], capped: [{ path: ['ref', 'stableId'], over: 266_692 }] },
   { name: 'coverage', url: '/v1/graph/coverage', body: { sourceId: FUZZ_SOURCE, entities: [{ ref: { sourceId: FUZZ_SOURCE, ...REF }, loadedRelationships: 1, loadedQuality: 'exact' }] }, required: [['sourceId'], ['entities']], capped: [] },
   { name: 'expand', url: '/v1/graph/expand', body: { sourceId: FUZZ_SOURCE, ref: REF, neighborTypes: ['gadget'] }, required: [['sourceId'], ['ref'], ['ref', 'entityType'], ['ref', 'stableId'], ['neighborTypes']], capped: [] },
+  ...[
+    { name: 'run of the shared-attribute template by its ID', url: '/v1/templates/shared-attribute/run', params: { ref: REF, attributeType: 'gadget', via: 'MADE_FROM' } },
+    { name: 'run of the linked-entities template by its ID', url: '/v1/templates/linked-entities/run', params: { ref: REF, targetType: 'gadget', via: ['MADE_FROM'] } },
+    { name: 'run of a shared-attribute preset', url: '/v1/templates/shared-gadgets/run', params: { ref: REF } },
+    { name: 'run of a linked-entities preset', url: '/v1/templates/linked-gadgets/run', params: { ref: REF } },
+  ].map(({ name, url, params }): Route => ({ name, url, body: { sourceId: FUZZ_SOURCE, params }, required: [['sourceId'], ['params'], ['params', 'ref'], ['params', 'ref', 'entityType'], ['params', 'ref', 'stableId']], capped: [{ path: ['params', 'ref', 'stableId'], over: 266_692 }] })),
 ];
 
 const clone = <T,>(value: T): T => structuredClone(value);

@@ -6,7 +6,7 @@ Files are in `services/api/src/fuzz/`, with the rig in `services/api/src/testing
 
 ## What it checks
 
-**The closed set.** The rig runs the real app and gate over a recording executor. Before the fuzz starts it sends every legal choice of each read route once (entity types, relationship types, directions, match modes, groups, masked and unmasked, first pages and next pages) and keeps the statement text the executor saw. That set is the *closed set*: the fixed templates with allowlisted names. For every fuzz request the suite then checks that
+**The closed set.** The rig runs the real app and gate over a recording executor. Before the fuzz starts it sends every legal choice of each read route once (entity types, relationship types, directions, match modes, groups, masked and unmasked, first pages and next pages, and for the pattern routes: every preset and each template by its own ID, one and two hops, each direction, no window, a window of days and a window of dates, with and without a minimum of shared nodes, masked and not, always a first run) and keeps the statement text the executor saw. That set is the *closed set*: the fixed templates with allowlisted names. For every fuzz request the suite then checks that
 
 - the closed set holds none of the values used to build it (`W-1`, the search text, the phone values, the cursors and tokens it minted), so a template that wrote a request value into its text would be found;
 - every statement the executor saw is in the closed set;
@@ -35,9 +35,10 @@ A test feeds the check a statement built from text and shows it fails.
 | Expand `filters` or `rank` that name an operator, a target, an order or a kind outside the closed sets, a property the mapping does not declare (for every asked neighbor type and every row read), more than 6 conditions, an `in` of more than 20 values, a range with no end, values of mixed kinds, a number beyond 2^53, or temporal text that is not ISO; a condition or rank on a personal-data property while masking is asked | `INVALID_REQUEST`, no read |
 | Expand `filters` or `rank` changed, or taken off, when continuing with a cursor | `CURSOR_INVALIDATED` |
 | Expand `limit` above the source's `max_page` (default 50) | `QUERY_BUDGET_EXCEEDED`, with `maxPage` |
-| `POST /v1/templates/{id}/run`: an ID that is neither a preset of the source nor a built-in template, an entity type the mapping does not name, or an anchor that does not resolve | `NOT_FOUND` |
-| `POST /v1/templates/{id}/run`: an attribute or relationship type the mapping does not join, a preset that also receives the types it binds, a list of attribute types, a window or a `minShared` outside its bounds, a window on a relationship type with no mapped time property, a missing or malformed `Idempotency-Key` | `INVALID_REQUEST`, no read |
-| `POST /v1/templates/{id}/run`: a `limit` above the source's `max_page` | `QUERY_BUDGET_EXCEEDED`, with `maxPage` |
+| `POST /v1/templates/{id}/run`: an ID that is neither a preset of the source nor a built-in template, however long (the path segment is not capped at 401 units as the entity path is); an entity type of the anchor the mapping does not name; an unknown source; an anchor that does not resolve | `NOT_FOUND` |
+| `POST /v1/templates/{id}/run`: an attribute type, a target type or a relationship type (each item of `via`) the mapping does not join, a preset that also receives the types it binds, a `via` that is not a non-empty list of texts, a direction that is not `out`, `in` or `both`, a hop count that is not a whole number from 1 to 4, a window that is not days from 1 to 3650 or a range of calendar dates in order and at most 3650 days, a window over a relationship type with no mapped time property, a `limit` that is not a whole number of at least 1, a `minShared` outside 1 to 50, a missing or malformed `Idempotency-Key` (not 16 to 64 letters, digits, `_` and `-`), a `ref` that holds a source ID, a stable ID of a keyed type that is not a token this server made for that source and type (forged, truncated, extended, another spelling, the twin source's token), a missing, mistyped or extra key at any level, text one over its cap, a body over 1 MiB, malformed JSON | `INVALID_REQUEST`, no read |
+| `POST /v1/templates/{id}/run`: a content type that is not JSON | `UNSUPPORTED_MEDIA_TYPE` |
+| `POST /v1/templates/{id}/run`: a `limit` above the source's `max_page`; a hop count above the lower of the template's 2 and the source's `max_hops` budget (3 and 4 on a source with the default budget, 2 on a source whose budget is 1) | `QUERY_BUDGET_EXCEEDED`, with `maxPage` or `maxHops` |
 | Search more with a `limit`, more than 25 exact references, or references of another source, of an unmapped type, or sent to a group other than `related` | `INVALID_REQUEST`, no read |
 | A stable ID of a keyed entity type that is not a token this server made for that source and type (forged, truncated, extended, another spelling, another source or type), in expand, preview, derived neighbors, lookup, the entity path and the exact references of search more | `INVALID_REQUEST`, no read |
 | A cursor that is edited, truncated, extended, of another version or spelling, signed right over a wrong payload, signed right for another source, principal, policy version, template, template version, sort or bound parameter, sent to another search group, expired, or minted before the policy version changed | `CURSOR_INVALIDATED`, with one body for all of them, and no read (search more: only the index-snapshot read it makes before it hands the cursor to the gate) |
@@ -48,19 +49,22 @@ A cursor is stateless and valid for 30 minutes. Replaying it unchanged in the sa
 
 ## A recorded run
 
-Run on the commit that added this page, with `NBX_FUZZ_RECORD` set to a file; the fixed seed is **5017**, 120 runs for a property unless the file says otherwise. The counts include the requests that build the closed set.
+Run on the commit that added the pattern routes to the suite, with `NBX_FUZZ_RECORD` set to a file; the fixed seed is **5017**, 120 runs for a property unless the file says otherwise. The counts include the requests that build the closed set, which now has the pattern runs, so every file's counts are higher than they were before them.
 
 | Route | Answers |
 |---|---|
-| `POST /v1/graph/expand` | `INVALID_REQUEST` 1152, `CURSOR_INVALIDATED` 751, `served` 536, `QUERY_BUDGET_EXCEEDED` 100, `NOT_FOUND` 60 |
-| `POST /v1/search/entities` | `served` 643, `INVALID_REQUEST` 222 |
-| `POST /v1/search/entities/more` | `CURSOR_INVALIDATED` 1938, `INVALID_REQUEST` 330, `served` 312 |
-| `POST /v1/entities/lookup` | `INVALID_REQUEST` 487, `served` 361, `NOT_FOUND` 10 |
-| `POST /v1/graph/preview-expansion` | `INVALID_REQUEST` 210, `NOT_FOUND` 205 |
-| `POST /v1/graph/derived-neighbors` | `INVALID_REQUEST` 206, `served` 151, `NOT_FOUND` 60 (recorded when the route was added; the other rows are from the commit that added this page) |
-| `POST /v1/graph/coverage` | `INVALID_REQUEST` 182, `NOT_FOUND` 64, `SOURCE_MISMATCH` 47, `served` 2 |
+| `POST /v1/graph/expand` | `INVALID_REQUEST` 2033, `CURSOR_INVALIDATED` 949, `served` 696, `QUERY_BUDGET_EXCEEDED` 100, `NOT_FOUND` 61 |
+| `POST /v1/search/entities` | `served` 976, `INVALID_REQUEST` 222 |
+| `POST /v1/search/entities/more` | `CURSOR_INVALIDATED` 2604, `served` 493, `INVALID_REQUEST` 330 |
+| `POST /v1/entities/lookup` | `INVALID_REQUEST` 487, `served` 370, `NOT_FOUND` 16 |
+| `POST /v1/graph/preview-expansion` | `NOT_FOUND` 214, `INVALID_REQUEST` 210 |
+| `POST /v1/graph/derived-neighbors` | `INVALID_REQUEST` 206, `served` 169, `NOT_FOUND` 60 |
+| `POST /v1/graph/coverage` | `INVALID_REQUEST` 180, `NOT_FOUND` 65, `SOURCE_MISMATCH` 48, `served` 2 |
+| `POST /v1/templates/{id}/run` | `served` 2408, `INVALID_REQUEST` 1535, `NOT_FOUND` 321, `QUERY_BUDGET_EXCEEDED` 43 |
 
-7,612 requests, 7,249 statements seen by the executor, at most 24 distinct statements in a file, all in the closed set. The oversized-page case is `fuzz/routes.test.ts`, "answers QUERY_BUDGET_EXCEEDED, naming the maximum".
+14,854 requests, 15,799 statements seen by the executor, at most 54 distinct statements in a file, all in the closed set. The oversized-page case is `fuzz/routes.test.ts`, "answers QUERY_BUDGET_EXCEEDED, naming the maximum".
+
+The pattern routes' own files are `fuzz/templates.test.ts` (the body, the ID, hostile text in every input, and the refusals that depend on the mapping, the budgets and the token) and the entries of the shape table in `fuzz/routes.test.ts`.
 
 `fuzz/real-server.neo4j.test.ts` repeats a fixed sample (the hostile texts above through search, lookup, preview and expand) on a real Neo4j test database. The server reports no syntax error, `' RETURN 1 //` finds nothing, and the nodes, relationships, labels, properties, indexes and constraints are the same before and after. It runs with `pnpm test:neo4j` (a server you own; not in CI).
 
@@ -79,7 +83,11 @@ A failing property prints its seed, the path and the shrunk counterexample. To r
 - A stable ID of a type that is not keyed is accepted by the route schema up to 266,691 units (sized for a token) but refused by the gate above 100,000 units, with `INVALID_REQUEST` before any read. The code is right; the contract's cap is higher than the cap that applies to such an ID.
 - A cursor signed with the right key is accepted if its position holds other fields than its template reads; the position reaches the executor as a parameter and nothing else. Making one needs the cursor key.
 - A refused search-more cursor is refused after one index-snapshot read. Every other refusal above makes no call at all: the gate validates (the cursor included) before its index guard.
+- The run route answers `NOT_FOUND`, not `INVALID_REQUEST`, for a template ID of any length, since a text that is not a preset or a template is an unknown ID; and an unmapped attribute type, target type or relationship type is `INVALID_REQUEST`, since the parameters of a built-in template are checked against the mapping as a request, not looked up as a resource. Only the entity type of the anchor and the ID are `NOT_FOUND`.
+- A hop count of 5 or more is `INVALID_REQUEST` (the parameter schema stops at 4); 3 and 4 are `QUERY_BUDGET_EXCEEDED`, naming the cap, which is the lower of the template's 2 and the source's budget.
+- The `ref` of the run route carries no source ID, so there is no `SOURCE_MISMATCH` to send; an unknown source is `NOT_FOUND`, and a source ID inside the `ref` is an extra key.
+- A two-hop run whose target is its own anchor type needs the direction `both` when the relationship has two different ends; with the stored direction it reaches no such entity and is refused as a request.
 
 ## What it does not cover
 
-Request rate and read slots, cancellation and timeouts (their own suites); the investigation routes, which do not read the source through the gate; the pattern templates; text produced for or by a language model; the web client; the network layer in front of the API. The real-server file uses Neo4j 5.26 only.
+Request rate and read slots, cancellation and timeouts (their own suites); the investigation routes, which do not read the source through the gate; the list route of the templates and the heavy-operation probe of a pattern run, which the API does not have yet; text produced for or by a language model; the web client; the network layer in front of the API. The real-server file uses Neo4j 5.26 only.
