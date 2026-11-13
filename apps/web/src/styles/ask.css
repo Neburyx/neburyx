@@ -188,8 +188,11 @@
 
 .ask-result {
   display: flex;
+  align-items: center;
   gap: var(--space-8);
   width: 100%;
+  padding-top: var(--space-6);
+  padding-bottom: var(--space-6);
   text-align: left;
 }
 
