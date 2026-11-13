@@ -360,6 +360,9 @@ export function grammarCorpus(seed = SEED_OF_RECORD, drawn = 600): Shape[] {
 
 export const SEED_OF_RECORD = 5017;
 
+/** The seed of the random shapes the run route test sends: not the seed of the grammar corpus, so that the grammar is checked on statements it was not learned from. */
+export const RUN_SEED = 8821;
+
 /** The number of draws of the seeded generators of the recorded run. */
 export const RECORDED_RUNS = 400;
 

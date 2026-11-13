@@ -10,7 +10,7 @@ import type { FuzzRig } from '../testing/fuzz-rig.js';
 import { TestExecutor } from '../testing/gate.js';
 import { noMatchRow } from '../testing/pattern-fixtures.js';
 import { learnedGrammar } from '../testing/pattern-grammar-fixture.js';
-import { RECORDED_RUNS, SEED_OF_RECORD, definitionOf, enumerateShapes, randomShapes, shapeAllowlist, shapeMappingOf, type Shape } from '../testing/pattern-shapes.js';
+import { RECORDED_RUNS, RUN_SEED, definitionOf, enumerateShapes, randomShapes, shapeAllowlist, shapeMappingOf, type Shape } from '../testing/pattern-shapes.js';
 import { onlineIndexesOf, schemaAnswer, withSchema } from '../testing/search-fixtures.js';
 import { testSourceGate } from '../testing/source-gate.js';
 import { makeWebRoot } from '../testing/web-root.js';
@@ -58,7 +58,7 @@ describe('the run route over the shapes of the enumerator', () => {
       expect(statementProblems(rig, new Set(), [SENTINEL_TEXT, SENTINEL_ANCHOR], { grammar, allowlist: shapeAllowlist(shape.stopRules), names: NAMES }), JSON.stringify(shape)).toEqual([]);
     };
     for (const shape of enumerateShapes()) await run(shape);
-    for (const shape of randomShapes(SEED_OF_RECORD, RECORDED_RUNS)) await run(shape);
+    for (const shape of randomShapes(RUN_SEED, RECORDED_RUNS)) await run(shape);
     expect(sent).toBeGreaterThan(1000);
   });
 });

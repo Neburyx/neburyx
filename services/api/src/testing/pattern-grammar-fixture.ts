@@ -7,7 +7,7 @@ export const PATH_COUNT = PATHS.length;
 
 let learned: PatternGrammar | undefined;
 
-/** The grammar of the pattern statements, learned once from the shapes of the corpus and the paths over two types: the words are the compiler's, the names are read by their kind, so it holds for any mapping. */
+/** The grammar of the pattern statements, learned once from the shapes of the corpus and the paths over two types: the words are the compiler's, the names are read by their kind, so it holds for a mapping whose names have the kinds the corpus holds (a kind the corpus never saw would be refused). */
 export function learnedGrammar(): PatternGrammar {
   learned ??= learnGrammar([...grammarCorpus().map((shape) => statementOfShape(shape)), ...pathStatements()], GRAMMAR_ALLOWLIST);
   return learned;

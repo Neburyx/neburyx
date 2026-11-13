@@ -51,6 +51,8 @@ export async function closedSetOf(rig: FuzzRig): Promise<ReadonlySet<string>> {
   patternStatementsOfClosedSet.set(set.statements, set.patternStatements);
   const leaks = leaksOf(set.statements, set.values);
   if (leaks.length > 0) throw new Error(`the closed set holds request text: ${leaks.join('; ')}`);
+  const patternLeaks = leaksOf(set.patternStatements, set.values);
+  if (patternLeaks.length > 0) throw new Error(`the pattern statements of the builder hold request text: ${patternLeaks.join('; ')}`);
   benignValuesOf.set(set.statements, set.values);
   return set.statements;
 }
