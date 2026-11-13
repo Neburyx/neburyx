@@ -97,14 +97,14 @@ test.describe('the pattern builder in the Patterns panel', () => {
     await builderOf(page).getByLabel('Starting entity type').selectOption({ label: 'Account' });
     await buildStep(page, 1, 'out', 'Device', ['USES_DEVICE']);
     await expect(builderOf(page).getByText('The mapping can follow this pattern')).toBeVisible();
-    await panelOf(page).getByRole('button', { name: 'Close Patterns' }).focus();
+    await panelOf(page).getByRole('button', { name: 'Close pattern builder' }).focus();
     const names: string[] = [];
     for (let count = 0; count < 40; count += 1) {
       names.push(await page.evaluate(() => (document.activeElement?.getAttribute('aria-label') ?? document.activeElement?.textContent ?? '').trim()));
       if (names[names.length - 1] === 'Preview') break;
       await page.keyboard.press('Tab');
     }
-    const order = ['Close Patterns', 'Step 1', '+ Step', 'Remove step 1', 'Link', 'Outgoing', 'Incoming', 'Either', 'Remove USES_DEVICE', '+ Add type', 'Cancel', 'Preview'];
+    const order = ['Close pattern builder', 'Step 1', '+ Step', 'Remove step 1', 'Link', 'Outgoing', 'Incoming', 'Either', 'Remove USES_DEVICE', '+ Add type', 'Cancel', 'Preview'];
     const at = order.map((name) => names.indexOf(name));
     expect(at.every((place) => place >= 0), names.join(' | ')).toBe(true);
     expect([...at].sort((left, right) => left - right)).toEqual(at);

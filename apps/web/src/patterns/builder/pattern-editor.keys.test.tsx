@@ -27,21 +27,21 @@ async function built(validate?: () => Promise<Answer>) {
 }
 
 describe('the keyboard in the editor', () => {
-  it('visits the stops in the order of the frame: the panel’s Close, the step tabs as one stop, + Step, Remove step, the parts as one stop, the condition’s Edit and Remove, Add condition, then Cancel and Preview', async () => {
+  it('visits the stops in the order of the frame: the Close of the builder, the step tabs as one stop, + Step, Remove step, the parts as one stop, the condition’s Edit and Remove, Add condition, then Cancel and Preview', async () => {
     await built();
-    screen.getByRole('button', { name: 'Close Patterns' }).focus();
+    screen.getByRole('button', { name: 'Close pattern builder' }).focus();
     const stops: string[] = [nameOf(document.activeElement)];
     for (let count = 0; count < 30; count += 1) {
       await userEvent.tab();
       stops.push(nameOf(document.activeElement));
       if (stops[stops.length - 1] === 'Preview') break;
     }
-    const order = ['Close Patterns', 'Step 1', '+ Step', 'Remove step 1', 'Conditions · 1', 'Edit condition: b-name is a', 'Remove condition: b-name is a', '+ Add condition', 'Cancel', 'Preview'];
+    const order = ['Close pattern builder', 'Step 1', '+ Step', 'Remove step 1', 'Conditions · 1', 'Edit condition: b-name is a', 'Remove condition: b-name is a', '+ Add condition', 'Cancel', 'Preview'];
     const at = order.map((name) => stops.indexOf(name));
     expect(at.every((place) => place >= 0), stops.join(' | ')).toBe(true);
     expect([...at].sort((left, right) => left - right)).toEqual(at);
     // the inline run is the only thing between Add condition and Cancel, until the run lane replaces it
-    expect(stops.slice(at[0] ?? 0, (at[3] ?? 0) + 1)).toEqual(['Close Patterns', 'Step 1', '+ Step', 'Remove step 1']);
+    expect(stops.slice(at[0] ?? 0, (at[3] ?? 0) + 1)).toEqual(['Close pattern builder', 'Step 1', '+ Step', 'Remove step 1']);
   });
 
   it('reads a step tab with where it is and whether it is valid, and a part tab with its conditions or problems', async () => {
