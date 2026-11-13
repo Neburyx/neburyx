@@ -29,7 +29,8 @@ describe('opening the builder from the Patterns panel', () => {
     await builderWorkspace();
     await openBuilder();
     const panel = builderPanel();
-    expect(within(panel).getByRole('heading', { name: 'New pattern' })).toBeTruthy();
+    // the title is the panel's heading, above the editor
+    expect(screen.getByRole('heading', { name: 'New pattern' })).toBeTruthy();
     expect(within(panel).getByText('Compose a pattern from your mapping. There is no query text field.')).toBeTruthy();
     expect(within(panel).getByText('Types come from the mapping. A type that is not mapped cannot be chosen.')).toBeTruthy();
     expect(startSelect().value).toBe('');

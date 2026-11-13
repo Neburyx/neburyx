@@ -57,7 +57,10 @@ interface Props {
   readonly maxHops: number | undefined;
   readonly state: BuilderState;
   readonly dispatch: (action: Action) => void;
-  readonly onBack: () => void;
+  /** Leaves the editor for the list. */
+  readonly onCancel: () => void;
+  /** Opens the preview of the finished draft: the run lane's view, drawn by a later story; until then the run is under the editor. */
+  readonly onPreview: (definition: PatternDefinition) => void;
   readonly startRef: React.Ref<HTMLSelectElement>;
   /** The saved pattern the editor was opened from. */
   readonly editing?: EditingView | undefined;
@@ -66,7 +69,7 @@ interface Props {
 }
 
 /** The builder of a pattern: where it starts and the steps that follow, every control a choice, a checkbox or a button; the server checks what is built. */
-export function PatternEditor({ profile, retryProfile, client, sourceId, sourceName, mask, maxHops, state, dispatch, onBack, startRef, editing, footer }: Props) {
+export function PatternEditor({ profile, retryProfile, client, sourceId, sourceName, mask, maxHops, state, dispatch, onCancel, startRef, editing, footer }: Props) {
   const { draft } = state;
   const title = editing === undefined ? BUILDER_COPY.title : editing.title;
   const ready = profile.kind === 'ready' ? profile.profile : undefined;
@@ -88,8 +91,7 @@ export function PatternEditor({ profile, retryProfile, client, sourceId, sourceN
   return (
     <section className="pattern-builder" aria-label={title}>
       <div className="pattern-builder-head">
-        <h3 className="supernode-label">{title}</h3>
-        <button type="button" className="secondary" onClick={onBack}>
+        <button type="button" className="secondary" onClick={onCancel}>
           {BUILDER_COPY.back}
         </button>
       </div>

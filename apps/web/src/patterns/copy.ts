@@ -148,6 +148,12 @@ const PROBLEM_TEXT: Readonly<Record<PatternProblemCode, string>> = {
 export const problemText = (problem: PatternProblem): string => PROBLEM_TEXT[problem.code];
 
 /** The line under the panel's heading in the list: which source, and that the list is read-only. */
-export const listHeader = (source: string): string => `Patterns · Source: ${source} · read-only`;
-/** The line under the panel's heading in the editor: what is being made, and that it is not saved. */
-export const editorHeader = (title: string): string => `${title} · Draft · not saved`;
+export const listSubtitle = (source: string): string => `Source: ${source} · read-only`;
+/** The line under the panel's heading in the editor: that what is being made is not saved. */
+export const EDITOR_SUBTITLE = 'Draft · not saved';
+
+/** The words of the panel's shell that the panel and the editor both use. */
+export const SHELL_COPY = {
+  newPattern: 'New pattern',
+  restartedByMask: 'Masking changed, so the pattern was started again.',
+} as const;

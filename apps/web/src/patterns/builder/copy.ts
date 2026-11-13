@@ -1,13 +1,14 @@
 import type { PatternProblem } from '@neburyx/contracts';
 import { PATTERN_LIMITS } from '@neburyx/contracts';
+import { SHELL_COPY } from '../copy.js';
 import { FILTERS_NONE_OFFERED } from '../../workspace/expand-copy.js';
 import type { AddConditionBlock } from './conditions.js';
 import type { Direction, AddStepBlock } from './model.js';
 
 /** The words of the builder. "Path" and the two notes are frame 28's; the rest is proposed copy (listed with the frame differences). */
 export const BUILDER_COPY = {
-  newPattern: 'New pattern',
-  title: 'New pattern',
+  newPattern: SHELL_COPY.newPattern,
+  title: SHELL_COPY.newPattern,
   back: 'Back to patterns',
   intro: 'Compose a pattern from your mapping. There is no query text field.',
   mappingNote: 'Types come from the mapping. A type that is not mapped cannot be chosen.',
@@ -31,7 +32,7 @@ export const BUILDER_COPY = {
   checkFailed: 'The check could not be made.',
   needsStart: 'Choose where the pattern starts first.',
   needsComplete: 'Complete the last step first.',
-  restartedByMask: 'Masking changed, so the pattern was started again.',
+  restartedByMask: SHELL_COPY.restartedByMask,
 } as const;
 
 export const DIRECTION_TEXT: Readonly<Record<Direction, string>> = { out: 'Outgoing', in: 'Incoming', both: 'Either direction' };

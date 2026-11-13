@@ -1,8 +1,7 @@
-import type { PatternDefinition, SourceProfile } from '@neburyx/contracts';
+import type { ListedPattern, PatternDefinition, SourceProfile } from '@neburyx/contracts';
 import type { ApiClient } from '../../api/client.js';
 import type { Notice } from '../saved/use-row-actions.js';
 import type { SaveMode } from '../saved/save-dialog.js';
-import type { EditingView } from '../builder/pattern-editor.js';
 
 /** What the run lane's view of a finished draft is given: the seam between the editor and the run (see the feature's README). */
 export interface RunFlowProps {
@@ -12,7 +11,8 @@ export interface RunFlowProps {
   readonly mask: boolean;
   readonly profile: SourceProfile;
   readonly definition: PatternDefinition;
-  readonly editing: EditingView | undefined;
+  /** The saved pattern opened for a change, whole, so that a save can name its id and version. */
+  readonly editing: ListedPattern | undefined;
   /** Back to the editor, to the same draft. */
   readonly onEdit: () => void;
   readonly onSaved: (notice: Notice, mode: SaveMode) => void;

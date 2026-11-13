@@ -10,9 +10,11 @@ afterEach(() => {
 describe('the headers of the panel shell', () => {
   it('names the source and says the list is read-only, and in the editor says the pattern is a draft that is not saved', async () => {
     await builderWorkspace();
-    expect(screen.getByText(/^Patterns · Source: .+ · read-only$/)).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 2, name: 'Patterns' })).toBeTruthy();
+    expect(screen.getByText(/^Source: .+ · read-only$/)).toBeTruthy();
     await openBuilder();
-    expect(screen.getByText('New pattern · Draft · not saved')).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 2, name: 'New pattern' })).toBeTruthy();
+    expect(screen.getByText('Draft · not saved')).toBeTruthy();
     expect(screen.queryByText(/read-only$/)).toBeNull();
   });
 
@@ -22,7 +24,7 @@ describe('the headers of the panel shell', () => {
     await userEvent.selectOptions(screen.getByLabelText('Starts at'), 'n-a');
     await userEvent.click(screen.getByRole('button', { name: 'Back to patterns' }));
     await settle();
-    expect(screen.getByText(/^Patterns · Source: /)).toBeTruthy();
+    expect(screen.getByText(/^Source: .+ · read-only$/)).toBeTruthy();
     await userEvent.click(screen.getByRole('button', { name: 'New pattern' }));
     await settle();
     expect((screen.getByLabelText('Starts at') as HTMLSelectElement).value).toBe('n-a');

@@ -18,7 +18,7 @@ import { useStoreSelector } from '../state/store.js';
 import { canRetry } from '../failure-notice.js';
 import { continueWith, rateLimitedRetry } from '../banner/copy.js';
 import { heavyHeadline, heavyLine } from '../banner/heavy-banner.js';
-import { editorHeader, failureView, listHeader, maxHopsOf, maxPageOf, PATTERNS_COPY, startHint, timeoutLabel } from './copy.js';
+import { EDITOR_SUBTITLE, failureView, listSubtitle, maxHopsOf, maxPageOf, PATTERNS_COPY, SHELL_COPY, startHint, timeoutLabel } from './copy.js';
 import { buildParams, fieldsOf, labelOf, type FormValues } from './form-model.js';
 import { PatternForm } from './pattern-form.js';
 import { RunFailure } from './run-failure.js';
@@ -27,7 +27,6 @@ import { focusPatternsTool } from './patterns-tool.js';
 import { StartEntityField } from './start-entity.js';
 import type { RunAsk } from './pattern-run-store.js';
 import { usePatternRun } from './use-pattern-run.js';
-import { BUILDER_COPY } from './builder/copy.js';
 import { useRowActions, RowDialogs, type Notice } from './saved/use-row-actions.js';
 import { useSavedPatterns } from './saved/use-saved-patterns.js';
 import { SavedPatternsTabs } from './saved/saved-tabs.js';
@@ -168,13 +167,13 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
   return (
     <div className="patterns-panel" ref={root}>
       <div className="search-panel-header">
-        <h2 className="search-panel-heading">{PATTERNS_COPY.title}</h2>
+        <h2 className="search-panel-heading">{view === 'list' ? PATTERNS_COPY.title : (editingView?.title ?? SHELL_COPY.newPattern)}</h2>
         <button type="button" className="legend-close" aria-label={PATTERNS_COPY.close} onClick={close}>
           <span className="icon icon-clear" aria-hidden="true" />
         </button>
       </div>
       {sourceId === null ? null : (
-        <p className="search-panel-note patterns-subhead">{view === 'list' ? listHeader(sourceName) : editorHeader(editingView?.title ?? BUILDER_COPY.title)}</p>
+        <p className="search-panel-note patterns-subhead">{view === 'list' ? listSubtitle(sourceName) : EDITOR_SUBTITLE}</p>
       )}
       {view === 'list' ? <p className="search-panel-note">{PATTERNS_COPY.intro}</p> : null}
       {notice === undefined ? null : (
@@ -184,7 +183,7 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
       )}
       {restarted && view === 'list' ? (
         <p className="search-panel-note" role="status">
-          {BUILDER_COPY.restartedByMask}
+          {SHELL_COPY.restartedByMask}
         </p>
       ) : null}
       {sourceId === null ? (
@@ -202,7 +201,7 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
                   }
                   setView('builder');
                 }}>
-                {BUILDER_COPY.newPattern}
+                {SHELL_COPY.newPattern}
               </button>
             </div>
           ) : null}
@@ -220,7 +219,8 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
               maxHops={maxHops}
               state={builder}
               dispatch={dispatch}
-              onBack={back}
+              onCancel={back}
+              onPreview={() => undefined}
               startRef={startRef}
               editing={editingView}
               footer={(footer) => (
