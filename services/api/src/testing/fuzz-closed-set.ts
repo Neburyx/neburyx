@@ -4,7 +4,10 @@ import { makeToken } from '../reference/token.js';
 import { expandWindowInstantsOf } from '../graph/expand-window.js';
 import { windowInstantsOf } from '../graph/template-window.js';
 import { TEST_REFERENCE_KEYS } from './gate.js';
-import { FUZZ_HEAVY_ANCHOR, FUZZ_LINKED_PRESETS, FUZZ_SHARED_PRESETS, FUZZ_TIGHT_SOURCE, FUZZ_SOURCE, FUZZ_TEXT, allowedNames, type FuzzRig } from './fuzz-rig.js';
+import { FUZZ_PATTERN_STOPPED, FUZZ_PATTERN_SUPERNODE, FUZZ_HEAVY_ANCHOR, FUZZ_LINKED_PRESETS, FUZZ_SHARED_PRESETS, FUZZ_TIGHT_SOURCE, FUZZ_SOURCE, FUZZ_TEXT, allowedNames, type FuzzRig } from './fuzz-rig.js';
+
+/** The text a pattern condition of the sample compares with: a benign value that no statement may hold. */
+export const FUZZ_PATTERN_TEXT = 'zz-condition-text';
 
 /** The names a statement quotes in backticks. */
 export const quotedNamesOf = (cypher: string): string[] => [...cypher.matchAll(/`([^`]*)`/g)].flatMap((match) => (match[1] === undefined ? [] : [match[1]]));
@@ -191,6 +194,36 @@ async function buildClosedSet(rig: FuzzRig): Promise<{ readonly statements: Set<
     await served(url, { sourceId: FUZZ_SOURCE, params });
     keep();
   }
+  /**
+   * The pattern runs of the closed set, a sample of shapes and not every statement the compiler can write: over the fuzz source one step out and in both directions, a node condition (a text `eq`) and a relationship condition, a window of each form,
+   * two steps through a gadget (a type on a stop-list) and through a handle (none), four steps, and the reads that skip a supernode and an entity on a stop-list. Each run must be served.
+   */
+  const patternRun = async (steps: readonly unknown[], anchorId = 'W-1', mask?: boolean): Promise<void> => {
+    cases.add('pattern:run');
+    const response = await post('/v1/patterns/run', { sourceId: FUZZ_SOURCE, definition: { anchorType: 'widget', steps }, anchor: { entityType: 'widget', stableId: anchorId }, ...(mask === undefined ? {} : { mask }) });
+    if (response.statusCode !== 200) throw new Error(`the closed set expected a pattern run to be served, and it answered ${response.statusCode}: ${JSON.stringify(steps)}`);
+    keep();
+  };
+  const made = (extra: Record<string, unknown> = {}) => ({ relationshipTypes: ['MADE_FROM'], direction: 'out', arrivesAt: 'gadget', ...extra });
+  const back = (extra: Record<string, unknown> = {}) => ({ relationshipTypes: ['MADE_FROM'], direction: 'in', arrivesAt: 'widget', ...extra });
+  const uses = (extra: Record<string, unknown> = {}) => ({ relationshipTypes: ['USES'], direction: 'out', arrivesAt: 'phone', ...extra });
+  const usedBy = (extra: Record<string, unknown> = {}) => ({ relationshipTypes: ['USES'], direction: 'in', arrivesAt: 'widget', ...extra });
+  const tierIs = { on: 'neighbor', property: 'tier', op: 'eq', value: { kind: 'text', value: FUZZ_PATTERN_TEXT } };
+  const gradeIs = { on: 'relationship', property: 'grade', op: 'eq', value: { kind: 'text', value: FUZZ_PATTERN_TEXT } };
+  for (const mask of [undefined, true, false]) {
+    for (const direction of ['out', 'both']) await patternRun([made({ direction })], 'W-1', mask);
+    await patternRun([made({ conditions: [tierIs] })], 'W-1', mask);
+    await patternRun([made({ conditions: [gradeIs] })], 'W-1', mask);
+    for (const window of windows) {
+      if (window !== undefined) await patternRun([made({ window, conditions: [tierIs, gradeIs] })], 'W-1', mask);
+    }
+    await patternRun([made(), back()], 'W-1', mask);
+    await patternRun([made({ window: { days: 30 } }), back({ window: { from: '2026-01-01', to: '2026-01-31' } })], 'W-1', mask);
+    await patternRun([uses(), usedBy()], 'W-1', mask);
+    await patternRun([made(), back(), uses(), usedBy()], 'W-1', mask);
+  }
+  await patternRun([made(), back()], FUZZ_PATTERN_SUPERNODE);
+  await patternRun([made(), back()], FUZZ_PATTERN_STOPPED);
   const types = [['gadget'], ['phone'], ['gadget', 'phone']];
   for (const neighborTypes of types) {
     for (const direction of ['out', 'in', 'both']) {
@@ -292,7 +325,7 @@ async function buildClosedSet(rig: FuzzRig): Promise<{ readonly statements: Set<
     }
   }
   const instants = windows.flatMap((window) => (window === undefined ? [] : [expandWindowInstantsOf(window, new Date(rig.clock.now())), windowInstantsOf(window, new Date(rig.clock.now()))])).flatMap((pair) => [pair.windowFrom, pair.windowTo]);
-  return { statements, routes, cases, values: ['W-1', 'GD-0', 'L-1', 'H-1', holder.stableId, FUZZ_HEAVY_ANCHOR, '2026-01-01', '2026-01-31', ...instants, FUZZ_TEXT, 'ne', '+1-212-555-01', ...cursors, ...expandCursors.map((entry) => entry.cursor), ...keys.map((entry) => entry.stableId)] };
+  return { statements, routes, cases, values: ['W-1', 'GD-0', FUZZ_PATTERN_TEXT, FUZZ_PATTERN_SUPERNODE, FUZZ_PATTERN_STOPPED, 'L-1', 'H-1', holder.stableId, FUZZ_HEAVY_ANCHOR, '2026-01-01', '2026-01-31', ...instants, FUZZ_TEXT, 'ne', '+1-212-555-01', ...cursors, ...expandCursors.map((entry) => entry.cursor), ...keys.map((entry) => entry.stableId)] };
 }
 
 const escaped = (value: string): string => value.replace(/[.*+?^${}()|[\]\\-]/g, '\\$&');

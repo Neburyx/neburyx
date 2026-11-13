@@ -1,10 +1,12 @@
 import fc from 'fast-check';
 import { patternPreviewResponseSchema, patternValidateResponseSchema } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
-import { FIELD_NAMES, TEMPLATE_NATIVE, fuzzParams, hostileText, wrongType } from '../testing/fuzz-corpus.js';
+import { closedSetOf, statementProblems } from '../testing/fuzz-closed-set.js';
+import { FIELD_NAMES, TEMPLATE_NATIVE, fuzzParams, hostileText, textLeaves, wrongType } from '../testing/fuzz-corpus.js';
 import { FUZZ_SOURCE, allowedNames, startFuzzRig } from '../testing/fuzz-rig.js';
 
 const rig = await startFuzzRig();
+const closed = await closedSetOf(rig);
 const known = new Set([...allowedNames(), ...FIELD_NAMES, ...TEMPLATE_NATIVE, 'widget', 'gadget', 'phone', 'holder', 'MADE_FROM', 'USES', FUZZ_SOURCE]);
 const hostile = hostileText(known).filter((text) => text !== '');
 
@@ -106,6 +108,101 @@ describe.each(ROUTES)('the envelope of %s', (_name, url) => {
     expect(codeOf((await inject('{"sourceId": "demo", "definition"')).body)).toBe('INVALID_REQUEST');
     expect(codeOf((await inject(JSON.stringify({ sourceId: FUZZ_SOURCE, definition: { anchorType: 'a'.repeat(1_100_000) } }))).body)).toBe('INVALID_REQUEST');
     expect(codeOf((await inject(JSON.stringify({ sourceId: FUZZ_SOURCE, definition: {} }), 'application/xml')).body)).toBe('UNSUPPORTED_MEDIA_TYPE');
+    expect(rig.executor.calls).toEqual([]);
+  });
+});
+
+describe('a hostile definition sent to POST /v1/patterns/run', () => {
+  const run = (body: unknown) => rig.post('/v1/patterns/run', body);
+  const anchor = { entityType: 'widget', stableId: 'W-1' };
+
+  it('is refused with INVALID_REQUEST, with none of its text in the answer, and reads nothing from the source, whatever the text is and wherever it is put', async () => {
+    const placed = fc.tuple(hostile, fc.constantFrom('anchorType', 'relationshipTypes', 'arrivesAt', 'direction', 'property', 'key', 'window', 'op'));
+    await fc.assert(
+      fc.asyncProperty(placed, async ([text, where]) => {
+        rig.reset();
+        const condition = { op: where === 'op' ? text : 'eq', on: 'neighbor', property: where === 'property' ? text : 'nickname', value: { kind: 'text', value: 'a' } };
+        const step = {
+          relationshipTypes: [where === 'relationshipTypes' ? text : 'MADE_FROM'],
+          direction: where === 'direction' ? text : 'out',
+          arrivesAt: where === 'arrivesAt' ? text : 'gadget',
+          conditions: [condition],
+          ...(where === 'window' ? { window: { from: text, to: text } } : {}),
+          ...(where === 'key' ? { [text]: 1 } : {}),
+        };
+        const response = await run({ sourceId: FUZZ_SOURCE, definition: { anchorType: where === 'anchorType' ? text : 'widget', steps: [step] }, anchor });
+        expect(response.statusCode).toBe(400);
+        expect(codeOf(response.body)).toBe('INVALID_REQUEST');
+        for (const piece of [text].filter((candidate) => candidate.length >= 4)) expect(response.body).not.toContain(piece);
+        expect(rig.executor.calls).toEqual([]);
+      }),
+      fuzzParams(120),
+    );
+  });
+
+  it('serves hostile text as the value of an accepted condition, and the text reaches the executor as a parameter only, never in a statement', async () => {
+    const seen = { served: 0 };
+    await fc.assert(
+      fc.asyncProperty(hostile, async (raw) => {
+        const text = [...raw].slice(0, 200).join('');
+        const body = { sourceId: FUZZ_SOURCE, definition: { anchorType: 'widget', steps: [{ relationshipTypes: ['MADE_FROM'], direction: 'out', arrivesAt: 'gadget', conditions: [{ on: 'neighbor', property: 'tier', op: 'eq', value: { kind: 'text', value: text } }] }] }, anchor };
+        rig.reset();
+        const response = await run(body);
+        expect(codeOf(response.body)).not.toBe('INVALID_REQUEST');
+        expect(statementProblems(rig, closed, textLeaves(body, new Set([...known, 'steps', 'conditions'])))).toEqual([]);
+        if (response.statusCode === 200) {
+          seen.served += 1;
+          expect(rig.executor.calls.some((call) => JSON.stringify(call.parameters).includes(JSON.stringify(text).slice(1, -1)))).toBe(true);
+        }
+      }),
+      fuzzParams(120),
+    );
+    expect(seen.served).toBeGreaterThan(0);
+  });
+
+  it('answers NOT_FOUND for a source that is not in the mapping, whatever the text, and an anchor of another type than the definition is INVALID_REQUEST, nothing read', async () => {
+    await fc.assert(
+      fc.asyncProperty(hostile, async (sourceId) => {
+        rig.reset();
+        const response = await run({ sourceId, definition: { anchorType: 'widget', steps: [] }, anchor });
+        expect(codeOf(response.body)).toBe('NOT_FOUND');
+        expect(rig.executor.calls).toEqual([]);
+        if (sourceId.length >= 4) expect(response.body).not.toContain(sourceId);
+      }),
+      fuzzParams(60),
+    );
+    rig.reset();
+    expect(codeOf((await run({ sourceId: FUZZ_SOURCE, definition: { anchorType: 'widget', steps: [] }, anchor: { entityType: 'gadget', stableId: 'GD-0' } })).body)).toBe('INVALID_REQUEST');
+    expect(rig.executor.calls).toEqual([]);
+  });
+
+  it('answers INVALID_REQUEST for a missing, extra or mistyped member and a definition that is not an object, and nothing is read', async () => {
+    const mutated = fc.tuple(fc.constantFrom('remove', 'retype', 'extra'), fc.constantFrom('sourceId', 'definition', 'anchor', 'limit', 'mask', 'continue'), wrongType.filter((value) => typeof value !== 'boolean'), hostile);
+    await fc.assert(
+      fc.asyncProperty(mutated, async ([how, member, wrong, key]) => {
+        if (how === 'remove' && ['limit', 'mask', 'continue'].includes(member)) return;
+        rig.reset();
+        const body: Record<string, unknown> = { sourceId: FUZZ_SOURCE, definition: {}, anchor, limit: 5, mask: true, continue: false };
+        if (how === 'remove') delete body[member];
+        else if (how === 'retype') body[member] = member === 'definition' && typeof wrong === 'object' && wrong !== null && !Array.isArray(wrong) ? [wrong] : wrong;
+        else body[key] = 'x';
+        const response = await run(body);
+        expect(response.statusCode).toBe(400);
+        expect(codeOf(response.body)).toBe('INVALID_REQUEST');
+        expect(rig.executor.calls).toEqual([]);
+      }),
+      fuzzParams(80),
+    );
+  });
+
+  it('answers INVALID_REQUEST for malformed JSON, a body over 1 MiB and a missing key, and UNSUPPORTED_MEDIA_TYPE for a content type that is not JSON, and nothing is read', async () => {
+    rig.reset();
+    const headers = { 'content-type': 'application/json', 'idempotency-key': 'fuzz-run-key-of-sixteen' };
+    const inject = (payload: string, over: Record<string, string> = headers) => rig.app.inject({ method: 'POST', url: '/v1/patterns/run', payload, headers: over });
+    expect(codeOf((await inject('{"sourceId": "demo", "definition"')).body)).toBe('INVALID_REQUEST');
+    expect(codeOf((await inject(JSON.stringify({ sourceId: FUZZ_SOURCE, definition: { anchorType: 'a'.repeat(1_100_000) }, anchor }))).body)).toBe('INVALID_REQUEST');
+    expect(codeOf((await inject(JSON.stringify({ sourceId: FUZZ_SOURCE, definition: {}, anchor }), { 'content-type': 'application/json' })).body)).toBe('INVALID_REQUEST');
+    expect(codeOf((await inject(JSON.stringify({ sourceId: FUZZ_SOURCE, definition: {}, anchor }), { ...headers, 'content-type': 'application/xml' })).body)).toBe('UNSUPPORTED_MEDIA_TYPE');
     expect(rig.executor.calls).toEqual([]);
   });
 });

@@ -166,6 +166,32 @@ const phoneRow = (index: number) => {
   return { a: widget, m: handle, rel: null, phase: 1, ts: when, id: `+1-212-555-01${String(99 - index).padStart(2, '0')}`, rtype: 'USES', dir: 'out', ntype: 'phone', flag: null, members: 2, first: when };
 };
 
+/** The anchors of a pattern run that make the read skip an entity: one whose read reports a supernode that was not traversed, and one whose read reports an entity on a stop-list that was not traversed. */
+export const FUZZ_PATTERN_SUPERNODE = 'W-SUPER';
+export const FUZZ_PATTERN_STOPPED = 'W-STOP';
+
+const PATTERN_NODES: Readonly<Record<string, { readonly label: string; readonly key: string }>> = { widget: { label: 'Widget', key: 'widgetId' }, gadget: { label: 'Gadget', key: 'gadgetId' }, phone: { label: 'Handle', key: 'phoneNumber' } };
+const PATTERN_RELATIONSHIP_IDS: Readonly<Record<string, string | undefined>> = { MADE_FROM: 'linkId' };
+
+/** One match of a pattern read, shaped as the normalizer reads it: the anchor, the entities between, the match and the relationship of each hop, over the types and directions of the steps asked. */
+const patternRow = (index: number, call: ExecuteCall) => {
+  const asked = call.parameters['steps'] as readonly { readonly relationshipTypes: readonly string[]; readonly direction: string; readonly arrivesAt: string }[];
+  const anchorId = String(call.parameters['stableId']);
+  const nodeOf = (type: string, id: string, at: number) => plainNode([PATTERN_NODES[type]?.label ?? 'Widget'], { [PATTERN_NODES[type]?.key ?? 'widgetId']: id }, `e-pat-${index}-${at}`);
+  const nodes = [{ ...widget, properties: { widgetId: anchorId } }, ...asked.map((step, at) => nodeOf(step.arrivesAt, step.arrivesAt === 'phone' ? `+1-212-555-03${at}${index}` : `${step.arrivesAt === 'gadget' ? 'GD' : 'W'}-P${index}-${at}`, at + 1))];
+  const relationships = asked.map((step, at) => {
+    const [near, far] = [nodes[at], nodes[at + 1]];
+    if (near === undefined || far === undefined) throw new Error('a step has no ends');
+    const type = step.relationshipTypes[0] ?? 'MADE_FROM';
+    const properties = PATTERN_RELATIONSHIP_IDS[type] === undefined ? {} : { [PATTERN_RELATIONSHIP_IDS[type] ?? '']: `rp${index}-${at}` };
+    return step.direction === 'in' ? plainRelationship(type, far, near, properties, `rel-pat-${index}-${at}`) : plainRelationship(type, near, far, properties, `rel-pat-${index}-${at}`);
+  });
+  const supernode = anchorId === FUZZ_PATTERN_SUPERNODE && asked.length > 1;
+  const row: Record<string, unknown> = { a: nodes[0], bounded: false, stopListed: anchorId === FUZZ_PATTERN_STOPPED && asked.length > 1, heavy: supernode ? [neighbor('GD-SUPER')] : [], x: nodes[nodes.length - 1], mid: nodes.slice(1, -1), hops: asked.length };
+  relationships.forEach((relationship, at) => (row[`r${at + 1}`] = relationship));
+  return row;
+};
+
 /** What the source answers: the search model for the search templates, one full page of neighbors for an expansion, one widget for a load, nothing for the rest. */
 export function respond(call: ExecuteCall): Promise<ExecuteOutcome> {
   if (call.templateId.startsWith('entity-search') || call.templateId === 'search-facets' || call.templateId === 'relationship-evidence' || call.templateId === 'entity-related') return searchModel(call);
@@ -181,6 +207,7 @@ export function respond(call: ExecuteCall): Promise<ExecuteOutcome> {
   if (call.templateId === 'shared-attribute') return Promise.resolve({ status: 'rows', rows: Array.from({ length: Math.min(call.rowLimit, 3) }, (_, index) => sharedRow(index, call)) });
   if (call.templateId === 'linked-entities-count') return Promise.resolve({ status: 'rows', rows: [{ matches: call.parameters['stableId'] === FUZZ_HEAVY_ANCHOR ? FUZZ_HEAVY_MATCHES : 0, frontierBounded: false, supernodeSkipped: false }] });
   if (call.templateId === 'linked-entities') return Promise.resolve({ status: 'rows', rows: Array.from({ length: Math.min(call.rowLimit, 3) }, (_, index) => linkedRow(index, call)) });
+  if (call.templateId === 'pattern') return Promise.resolve({ status: 'rows', rows: Array.from({ length: Math.min(call.rowLimit, 2) }, (_, index) => patternRow(index, call)) });
   if (call.templateId === 'derived-rule-run') return Promise.resolve({ status: 'rows', rows: Array.from({ length: Math.min(call.rowLimit, 3) }, (_, index) => derivedRow(index)) });
   if (call.templateId === 'aggregate-sample') {
     const ends = call.parameters['ends'];
@@ -234,7 +261,7 @@ export async function startFuzzRig(options: FuzzRigOptions = {}) {
   let keys = 0;
   const post = async (url: string, payload: unknown) => {
     last.url = url;
-    const headers = url.startsWith('/v1/templates/') ? { 'content-type': 'application/json', 'idempotency-key': `fuzz-key-of-sixteen-${(keys += 1)}` } : { 'content-type': 'application/json' };
+    const headers = url.startsWith('/v1/templates/') || url === '/v1/patterns/run' ? { 'content-type': 'application/json', 'idempotency-key': `fuzz-key-of-sixteen-${(keys += 1)}` } : { 'content-type': 'application/json' };
     const response = await app.inject({ method: 'POST', url, payload: JSON.stringify(payload), headers });
     let code = String(response.statusCode);
     try {

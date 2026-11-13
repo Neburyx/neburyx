@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { registeredRoutesOf } from '../app.js';
-import { casesOfClosedSet, closedSetOf, routesOfClosedSet } from '../testing/fuzz-closed-set.js';
+import { FUZZ_PATTERN_TEXT, casesOfClosedSet, closedSetOf, routesOfClosedSet } from '../testing/fuzz-closed-set.js';
 import { startFuzzRig } from '../testing/fuzz-rig.js';
 
 const rig = await startFuzzRig();
@@ -64,6 +64,26 @@ describe('the closed set of the fuzz suite', () => {
       const key = 'POST /v1/templates/:id/run';
       expect(built.has(key)).toBe(true);
       expect(missingFrom(new Set([...built].filter((route) => route !== key)), routes)).toEqual([key]);
+    });
+
+    it('builds the pattern run route, its case and a sample of pattern statements for one, two and four steps, bounded and with no request value, and fails when the route or the case is taken out', () => {
+      const key = 'POST /v1/patterns/run';
+      expect(built.has(key)).toBe(true);
+      expect(missingFrom(new Set([...built].filter((route) => route !== key)), routes)).toEqual([key]);
+      const cases = casesOfClosedSet.get(closed) ?? new Set<string>();
+      expect(cases.has('pattern:run')).toBe(true);
+      const statements = [...closed].filter((statement) => statement.includes('AS paths') && statement.includes('AS cut1'));
+      expect(statements.length).toBeGreaterThanOrEqual(8);
+      expect(statements.some((statement) => !statement.includes('AS cut2'))).toBe(true);
+      expect(statements.some((statement) => statement.includes('AS cut2') && !statement.includes('AS cut3'))).toBe(true);
+      expect(statements.some((statement) => statement.includes('AS cut4'))).toBe(true);
+      expect(statements.some((statement) => statement.includes('coalesce(n.`weight`, false) = true'))).toBe(true);
+      expect(statements.some((statement) => statement.includes('AS cut2') && !statement.includes('coalesce('))).toBe(true);
+      for (const statement of statements) {
+        expect(statement).toContain('LIMIT $countCap + 1');
+        expect(statement).toContain('LIMIT $limit + 1');
+        expect(statement).not.toContain(FUZZ_PATTERN_TEXT);
+      }
     });
 
     const sharedProbe = (statements: ReadonlySet<string>): string[] => [...statements].filter((statement) => statement.includes('RETURN matches, anchorBounded, skipped'));

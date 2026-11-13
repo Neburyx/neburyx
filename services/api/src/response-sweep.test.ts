@@ -1,6 +1,6 @@
 import {
   coverageResponseSchema,
-  patternPreviewResponseSchema, patternValidateResponseSchema,
+  patternPreviewResponseSchema, patternRunResponseSchema, patternValidateResponseSchema,
   readRefsResponseSchema,
   degreePreviewSchema,
   derivedNeighborsResponseSchema,
@@ -93,6 +93,7 @@ const SCENARIOS: readonly Scenario[] = [
   { name: 'pattern validation with problems', route: 'POST /v1/patterns/validate', method: 'POST', url: '/v1/patterns/validate', payload: { sourceId: FUZZ_SOURCE, definition: { anchorType: 'widget', steps: [{ relationshipTypes: ['W-1'], direction: 'out', arrivesAt: 'gadget' }] } }, schema: patternValidateResponseSchema },
   { name: 'pattern preview with problems', route: 'POST /v1/patterns/preview', method: 'POST', url: '/v1/patterns/preview', payload: { sourceId: FUZZ_SOURCE, definition: { anchorType: 'widget', steps: [{ relationshipTypes: ['W-1'], direction: 'out', arrivesAt: 'gadget' }] } }, schema: patternPreviewResponseSchema },
   { name: 'pattern preview', route: 'POST /v1/patterns/preview', method: 'POST', url: '/v1/patterns/preview', payload: { sourceId: FUZZ_SOURCE, definition: { anchorType: 'widget', steps: [{ relationshipTypes: ['MADE_FROM'], direction: 'out', arrivesAt: 'gadget' }] } }, schema: patternPreviewResponseSchema },
+  { name: 'pattern run', route: 'POST /v1/patterns/run', method: 'POST', url: '/v1/patterns/run', payload: { sourceId: FUZZ_SOURCE, definition: { anchorType: 'widget', steps: [{ relationshipTypes: ['MADE_FROM'], direction: 'out', arrivesAt: 'gadget' }, { relationshipTypes: ['MADE_FROM'], direction: 'in', arrivesAt: 'widget' }] }, anchor: { entityType: 'widget', stableId: 'W-SUPER' } }, headers: { 'idempotency-key': 'a-run-key-of-sixteen-chars' }, schema: patternRunResponseSchema },
   { name: 'open investigation', route: 'POST /v1/investigations', method: 'POST', url: '/v1/investigations', payload: { sourceId: FUZZ_SOURCE, entity: { sourceId: FUZZ_SOURCE, entityType: 'widget', stableId: 'W-1' } }, schema: openInvestigationResponseSchema },
 ];
 
