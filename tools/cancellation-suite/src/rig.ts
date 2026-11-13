@@ -4,7 +4,7 @@ import { createApiClient, type ApiClient } from '../../../apps/web/src/api/clien
 import { createExpandStore, type ExpandStore } from '../../../apps/web/src/api/expand-store.js';
 import { addResultToGraph } from '../../../apps/web/src/patterns/add-to-graph.js';
 import { createPatternRunStore, type PatternRunStore } from '../../../apps/web/src/patterns/pattern-run-store.js';
-import { createDefinitionRunStore, definitionRunRequest, type DefinitionRunStore } from '../../../apps/web/src/patterns/builder/definition-run-store.js';
+import { createDefinitionRunStore, definitionRunRequest, type DefinitionRunStore } from '../../../apps/web/src/patterns/run/definition-run-store.js';
 import { createDerivedStore, type DerivedStore } from '../../../apps/web/src/api/derived-store.js';
 import { createPreviewStore, type PreviewStore } from '../../../apps/web/src/api/preview-store.js';
 import { bannerReporter } from '../../../apps/web/src/banner/banner-reporter.js';
