@@ -128,6 +128,19 @@ async function previewOf(pack: string, definition: unknown) {
   return { answer: patternPreviewResponseSchema.parse(response.json()), named, budgets: source.budgets };
 }
 
+describe('the two-step patterns the builder builds, put in words', () => {
+  it('lists two steps with their words and the limits of the source for each pack, for the preview of the run section', async () => {
+    const bank = { anchorType: 'account', steps: [{ relationshipTypes: ['USES_DEVICE'], direction: 'out', arrivesAt: 'device' }, { relationshipTypes: ['USES_DEVICE'], direction: 'in', arrivesAt: 'account' }] };
+    for (const [pack, definition] of [['banking-fraud', bank], ['insurance-claims', outAndBack()]] as const) {
+      const { answer } = await previewOf(pack, definition);
+      if (answer.status !== 'ok') throw new Error(`${pack}: not ok`);
+      expect(answer.preview.steps).toHaveLength(2);
+      expect(answer.preview.steps.every((part) => part.text.length > 0)).toBe(true);
+      expect(answer.preview.bounds.hopLimit.text.length).toBeGreaterThan(0);
+    }
+  });
+});
+
 describe('the preview of a pattern over each pack', () => {
   it('lists the step of the banking pack with the display names of its types and the limits of its source', async () => {
     const { answer, named, budgets } = await previewOf('banking-fraud', transfers());

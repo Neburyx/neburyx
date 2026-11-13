@@ -38,6 +38,45 @@ async function start(): Promise<string> {
   return baseOf(server);
 }
 
+describe('the support server, previewing and running a pattern', () => {
+  const definition = { anchorType: 'account', steps: [{ relationshipTypes: ['USES_DEVICE'], direction: 'out', arrivesAt: 'device' }, { relationshipTypes: ['USES_DEVICE'], direction: 'in', arrivesAt: 'account' }] };
+  const post = async (base: string, path: string, body: unknown, key?: string) => fetch(`${base}${path}`, { method: 'POST', headers: { 'content-type': 'application/json', ...(key === undefined ? {} : { 'idempotency-key': key }) }, body: JSON.stringify(body) });
+  const run = (anchor: string, extra: Record<string, unknown> = {}) => ({ sourceId: 'demo', definition, anchor: { entityType: 'account', stableId: anchor }, ...extra });
+
+  it('puts a definition in words with the bounds, parsed by the contract, and answers the problems of a bad shape', async () => {
+    const base = await start();
+    const ok = (await (await post(base, '/v1/patterns/preview', { sourceId: 'demo', definition })).json()) as { status: string; preview: { start: { text: string }; steps: Array<{ text: string }>; bounds: { hopLimit: { text: string } } } };
+    expect(ok.status).toBe('ok');
+    expect(ok.preview.start.text).toBe('Starts at a account.');
+    expect(ok.preview.steps.map((step) => step.text)).toEqual(['Follows USES_DEVICE outgoing to a device.', 'Follows USES_DEVICE incoming to a account.']);
+    expect(ok.preview.bounds.hopLimit.text).toBe('At most 4 steps.');
+    expect(await (await post(base, '/v1/patterns/preview', { sourceId: 'demo', definition: { anchorType: 'account', steps: [] } })).json()).toMatchObject({ status: 'invalid' });
+  });
+
+  it('runs the ring for an ordinary entity: two matches of two hops, a gap, both notices and the evidence references', async () => {
+    const base = await start();
+    const answer = (await (await post(base, '/v1/patterns/run', run('AC-1'), 'a-key-of-sixteen-characters')).json()) as { status: string; count: { value: number }; matches: Array<{ hops: number; through: unknown[] }>; notices: Array<{ code: string }>; edges: Array<{ evidenceRefs: string[] }> };
+    expect(answer.status).toBe('ok');
+    expect(answer.count.value).toBe(2);
+    expect(answer.matches.map((match) => match.hops)).toEqual([2, 2]);
+    expect(answer.matches[1]?.through).toEqual([null]);
+    expect(answer.notices.map((notice) => notice.code)).toEqual(['supernodesSkipped', 'windowNotApplied']);
+    expect(answer.edges.flatMap((edge) => edge.evidenceRefs)).toEqual(['AUTH-77300', 'AUTH-77301']);
+  });
+
+  it('answers no match, a heavy stop (and the page for the continue), a busy source, and a refusal for a bad body', async () => {
+    const base = await start();
+    expect(await (await post(base, '/v1/patterns/run', run('EMPTY-1'))).json()).toMatchObject({ status: 'ok', count: { value: 0 }, matches: [] });
+    expect(await (await post(base, '/v1/patterns/run', run('HEAVY-1'))).json()).toMatchObject({ status: 'heavy', threshold: 500, continueLimit: 25 });
+    expect(await (await post(base, '/v1/patterns/run', run('HEAVY-1', { continue: true, limit: 25 }))).json()).toMatchObject({ status: 'ok' });
+    const busy = await post(base, '/v1/patterns/run', run('BUSY-1'));
+    expect(busy.status).toBe(503);
+    expect(await busy.json()).toMatchObject({ error: { code: 'SOURCE_BUSY' } });
+    expect((await post(base, '/v1/patterns/run', { sourceId: 'demo' })).status).toBe(400);
+    expect((await post(base, '/v1/patterns/preview', { sourceId: 'demo' })).status).toBe(400);
+  });
+});
+
 describe('the support server, the pattern builder', () => {
   const definition = (anchorType: string) => ({ anchorType, steps: [{ relationshipTypes: ['r'], direction: 'out', arrivesAt: 't' }] });
   const validate = async (base: string, body: unknown) => fetch(`${base}/v1/patterns/validate`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });

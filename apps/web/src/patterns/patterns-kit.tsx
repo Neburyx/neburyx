@@ -1,5 +1,5 @@
 import { act, fireEvent, screen } from '@testing-library/react';
-import { paramsJsonSchemaOf, type PatternValidateRequest, type PatternValidateResponse, type SourceProfile, type GraphEdge, type GraphNode, type TemplateListResponse, type TemplateRunRequest, type TemplateRunResponse } from '@neburyx/contracts';
+import { paramsJsonSchemaOf, type PatternValidateRequest, type PatternValidateResponse, type PatternPreviewRequest, type PatternPreviewResponse, type PatternRunRequest, type PatternRunResponse, type SourceProfile, type GraphEdge, type GraphNode, type TemplateListResponse, type TemplateRunRequest, type TemplateRunResponse } from '@neburyx/contracts';
 import { fakeClient } from '../api/fake-client.js';
 import type { ApiClient, ApiFailure, ApiResult } from '../api/client.js';
 import { createClientState, type ClientState } from '../state/client-state.js';
@@ -46,6 +46,32 @@ export const okRun = (matches: readonly string[], overrides: Partial<Extract<Tem
   return { status: 'ok', templateId: 'shared-attribute', templateVersion: '1', presetId: 'shared-devices', count: { value: matches.length, quality: 'exact', scope: 'matches' }, matchIds: matches.map((id) => ref('a', 'kind-a', id)), nodes, edges, notices: [], warnings: [], ...overrides };
 };
 
+/** A preview of the pattern the builder tests build: the words are the server's, so the tests only need distinct, findable ones. */
+export const PREVIEW = {
+  start: { type: 'n-a', name: 'N-A', text: 'Starts at an N-A.' },
+  steps: [{ relationshipTypes: ['r-1'], direction: 'out' as const, arrivesAt: { type: 'n-b', name: 'N-B' }, text: 'Follows r-1 outgoing to an N-B.', conditions: [], }],
+  bounds: { hopLimit: { value: 4, text: 'At most 4 steps.' }, pageLimit: { value: 50, text: 'At most 50 results at a time.' }, countCap: { value: 500, text: 'Counts stop at 500.' } },
+};
+
+/** The `ok` answer of a pattern run: each match is one hop from the anchor, with the shared entity and edge of the scripted ring. */
+export const definitionOk = (matches: readonly string[], overrides: Partial<Extract<PatternRunResponse, { status: 'ok' }>> = {}): PatternRunResponse => {
+  const nodes = [typedNode('acc-1', 'kind-a'), typedNode('dev-1', 'kind-b'), ...matches.map((id) => typedNode(id, 'kind-a'))];
+  const edges: GraphEdge[] = matches.map((id, index) => ({ ...edgeOf('a', `p${index}`, id, 'dev-1'), from: ref('a', 'kind-a', id), to: ref('a', 'kind-b', 'dev-1'), evidenceRefs: [`REC-${index}`] }));
+  return {
+    status: 'ok',
+    templateVersion: '1',
+    count: { value: matches.length, quality: 'exact', scope: 'matches' },
+    matches: matches.map((id) => ({ match: ref('a', 'kind-a', id), hops: 1 as const, through: [], relationships: [{ relationshipType: 'r-1', from: ref('a', 'kind-a', 'acc-1'), to: ref('a', 'kind-a', id) }] })),
+    nodes,
+    edges,
+    notices: [],
+    warnings: [],
+    ...overrides,
+  } as PatternRunResponse;
+};
+
+export const definitionHeavy = (): PatternRunResponse => ({ status: 'heavy', templateVersion: '1', estimate: { value: 500, quality: 'lowerBound', scope: 'matches' }, threshold: 500, continueLimit: 25, notices: [], warnings: [] });
+
 export const heavyRun = (): TemplateRunResponse => ({ status: 'heavy', templateId: 'shared-attribute', templateVersion: '1', presetId: 'shared-devices', estimate: { value: 500, quality: 'lowerBound', scope: 'matches' }, threshold: 500, continueLimit: 25, notices: [], warnings: [] });
 
 export const failure = (code: string, details?: Record<string, unknown>): ApiFailure => ({ code, message: code, traceId: 't-1', retryable: true, ...(details === undefined ? {} : { details }) }) as unknown as ApiFailure;
@@ -65,6 +91,10 @@ export interface PatternsKit {
   readonly searches: unknown[];
   /** The definitions the builder asked the server about, in order. */
   readonly validations: PatternValidateRequest[];
+  /** The definitions the builder asked the server to put in words, in order. */
+  readonly previews: PatternPreviewRequest[];
+  /** The pattern runs the builder sent, with their key and signal, in order. */
+  readonly definitionRuns: Array<{ readonly request: PatternRunRequest; readonly key: string; readonly signal: AbortSignal | undefined }>;
   readonly evidence: Evidence;
   readonly unmount: () => void;
 }
@@ -79,6 +109,8 @@ export interface KitOptions {
   readonly profile?: () => Promise<ApiResult<SourceProfile>>;
   /** The step limit of the source summary; none by default. */
   readonly maxHops?: number;
+  readonly preview?: (request: PatternPreviewRequest, signal: AbortSignal | undefined) => Promise<ApiResult<PatternPreviewResponse>>;
+  readonly runDefinition?: (request: PatternRunRequest, key: string, signal: AbortSignal | undefined) => Promise<ApiResult<PatternRunResponse>>;
   readonly validate?: (request: PatternValidateRequest, signal: AbortSignal | undefined) => Promise<ApiResult<PatternValidateResponse>>;
   /** The entity the investigation was opened on; the first account by default, `null` for none. */
   readonly opened?: { readonly entityType: string; readonly stableId: string } | null;
@@ -90,8 +122,18 @@ export async function patternsWorkspace(options: KitOptions = {}): Promise<Patte
   const sent: Sent[] = [];
   const searches: unknown[] = [];
   const validations: PatternValidateRequest[] = [];
+  const previews: PatternPreviewRequest[] = [];
+  const definitionRuns: PatternsKit['definitionRuns'] = [];
   const client = fakeClient({
     getProfile: options.profile ?? (async (sourceId) => ({ ok: true, value: profiled(sourceId, ['kind-a', 'kind-b', 'kind-c']) })),
+    previewPattern: async (request, signal) => {
+      previews.push(request);
+      return options.preview === undefined ? { ok: true, value: { status: 'ok', preview: PREVIEW } } : options.preview(request, signal);
+    },
+    runPattern: async (request, key, signal) => {
+      definitionRuns.push({ request, key, signal });
+      return options.runDefinition === undefined ? { ok: true, value: definitionOk(['acc-2']) } : options.runDefinition(request, key, signal);
+    },
     validatePattern: async (request, signal) => {
       validations.push(request);
       return options.validate === undefined ? { ok: true, value: { status: 'ok' } } : options.validate(request, signal);
@@ -124,7 +166,7 @@ export async function patternsWorkspace(options: KitOptions = {}): Promise<Patte
   evidence.kinds.register(storedEvidenceKind);
   const view = renderApp('/explore', client, state, slots, stubFactory().create, undefined, tools, undefined, createPanelRegistryFor(state), undefined, banner, evidence);
   await settle();
-  return { state, banner, client, sent, searches, validations, evidence, unmount: view.unmount };
+  return { state, banner, client, sent, searches, validations, previews, definitionRuns, evidence, unmount: view.unmount };
 }
 
 export async function settle(): Promise<void> {

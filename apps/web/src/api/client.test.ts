@@ -159,6 +159,24 @@ describe('the API client, reading sources and a profile', () => {
     expect(asked[0]).toEqual({ path: '/v1/patterns/validate', method: 'POST', body: request });
   });
 
+  it('asks POST /v1/patterns/preview and /v1/patterns/run, sending the idempotency key of a run, and parses ok, heavy and the preview, refusing a malformed answer', async () => {
+    const asked: Array<{ path: string; method: string | undefined; body: unknown; key: unknown }> = [];
+    const answer = (body: unknown) =>
+      createApiClient(async (input, init) => {
+        asked.push({ path: input, method: init?.method, body: typeof init?.body === 'string' ? JSON.parse(init.body) : undefined, key: (init?.headers as Record<string, string> | undefined)?.['idempotency-key'] });
+        return new Response(JSON.stringify(body));
+      });
+    const definition = { anchorType: 't', steps: [] };
+    const heavy = { status: 'heavy', templateVersion: '1', estimate: { value: 500, quality: 'lowerBound', scope: 'matches' }, threshold: 500, continueLimit: 25, notices: [], warnings: [] };
+    const run = { sourceId: 'a', definition, anchor: { entityType: 't', stableId: 'x' } };
+    expect(await answer(heavy).runPattern(run, 'key-1')).toEqual({ ok: true, value: heavy });
+    expect(await answer({ status: 'ok' }).runPattern(run, 'key-2')).toEqual({ ok: false, failure: { code: 'SCHEMA_MISMATCH' } });
+    expect(asked[0]).toEqual({ path: '/v1/patterns/run', method: 'POST', body: run, key: 'key-1' });
+    expect(await answer({ status: 'invalid', problems: [{ path: ['steps'], code: 'too-few' }] }).previewPattern({ sourceId: 'a', definition })).toEqual({ ok: true, value: { status: 'invalid', problems: [{ path: ['steps'], code: 'too-few' }] } });
+    expect(await answer({ status: 'maybe' }).previewPattern({ sourceId: 'a', definition })).toEqual({ ok: false, failure: { code: 'SCHEMA_MISMATCH' } });
+    expect(asked[2]).toEqual({ path: '/v1/patterns/preview', method: 'POST', body: { sourceId: 'a', definition }, key: undefined });
+  });
+
   it('gives a schema mismatch, never a partial value, for a list or a profile that does not match its contract', async () => {
     const client = createApiClient(async () => new Response(JSON.stringify({ items: [{ id: 1 }], nextCursor: null })));
     expect(await client.getSources()).toEqual({ ok: false, failure: { code: 'SCHEMA_MISMATCH' } });

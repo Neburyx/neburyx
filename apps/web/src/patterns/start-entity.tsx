@@ -19,6 +19,8 @@ interface Props {
   readonly chosenKey: string | undefined;
   readonly onChoose: (node: GraphNode) => void;
   readonly selectRef: React.Ref<HTMLSelectElement>;
+  /** The id of the select, so that two fields in one panel (the preset form and the builder's run) each have their label. */
+  readonly id?: string;
 }
 
 type Found = { readonly kind: 'none' } | { readonly kind: 'found'; readonly nodes: readonly GraphNode[] } | { readonly kind: 'failed' };
@@ -26,7 +28,7 @@ type Found = { readonly kind: 'none' } | { readonly kind: 'found'; readonly node
 /**
  * The starting entity is chosen, never typed as an identifier: from the selected and loaded entities of its type, or from a search of the source narrowed to that type. Typed text only ever reaches the search route.
  */
-export function StartEntityField({ client, sourceId, mask, label, entityType, candidates, chosenKey, onChoose, selectRef }: Props) {
+export function StartEntityField({ client, sourceId, mask, label, entityType, candidates, chosenKey, onChoose, selectRef, id = 'patterns-start' }: Props) {
   const [text, setText] = useState('');
   const [found, setFound] = useState<Found>({ kind: 'none' });
   const [asked, setAsked] = useState(false);
@@ -64,11 +66,11 @@ export function StartEntityField({ client, sourceId, mask, label, entityType, ca
   const options = [...candidates, ...extra];
   return (
     <div className="patterns-field">
-      <label className="supernode-label" htmlFor="patterns-start">
+      <label className="supernode-label" htmlFor={id}>
         {label}
       </label>
       <select
-        id="patterns-start"
+        id={id}
         ref={selectRef}
         className="patterns-input"
         value={chosenKey ?? ''}

@@ -15,7 +15,7 @@ The reads of the evidence of a relationship are cases too: `edge.test.ts` for a 
 
 A pattern run (`POST /v1/templates/{id}/run`) is a case in `abort.test.ts` (cancelled while the estimate is read), `timeout.test.ts`, `outage.test.ts` and `race.test.ts` (the answer and the cancel crossing, and a cancel after the answer), over the same run store the Patterns panel uses; each leaves the client as it was.
 
-`POST /v1/patterns/run` is a case in `abort.test.ts` too: the web client has no method for it, so the case posts to the rig's port with the real `fetch` and an `AbortController`, and sees the read's signal aborted, the run audited as failed with the reason cancelled, no answer stored and the slots free.
+`POST /v1/patterns/run` is a case in `abort.test.ts` too: the case posts to the rig's port with the real `fetch` and an `AbortController` (a second set of cases drives the run store of a pattern built in the panel, `definitionRuns`, through the web client's `runPattern`: a cancel, a timeout, a run replaced by a newer one and a stop by a change of the builder), and sees the read's signal aborted, the run audited as failed with the reason cancelled, no answer stored and the slots free.
 
 `POST /v1/patterns/{id}/run` is a case in `abort.test.ts` too, for the read of its estimate and for the read of its run: a saved pattern is saved through the API, the run request is aborted while the read is held, and the case sees the read's signal aborted, the call audited as failed with the reason cancelled, no `lastRunAt` written, no answer stored and the slots free.
 

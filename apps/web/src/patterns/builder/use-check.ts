@@ -15,6 +15,8 @@ export type CheckState =
 
 export interface Check {
   readonly state: CheckState;
+  /** The definition (as its JSON) that the answer `valid` belongs to; none while the definition has changed since or no valid answer is held. */
+  readonly validFor: string | undefined;
   readonly retry: () => void;
 }
 
@@ -24,11 +26,13 @@ export interface Check {
  */
 export function usePatternCheck(client: ApiClient, sourceId: string, mask: boolean, definition: PatternDefinition | undefined): Check {
   const [state, setState] = useState<CheckState>({ kind: 'none' });
+  const [validFor, setValidFor] = useState<string | undefined>(undefined);
   const [attempt, setAttempt] = useState(0);
   const retrying = useRef(false);
   const key = definition === undefined ? undefined : JSON.stringify(definition);
 
   useEffect(() => {
+    setValidFor(undefined);
     if (definition === undefined) {
       setState({ kind: 'none' });
       return undefined;
@@ -48,7 +52,10 @@ export function usePatternCheck(client: ApiClient, sourceId: string, mask: boole
           }
           if (controller.signal.aborted) return;
           if (!result.ok) setState(result.failure.code === 'ABORTED' ? { kind: 'none' } : { kind: 'failed', failure: result.failure });
-          else setState(result.value.status === 'ok' ? { kind: 'valid' } : { kind: 'invalid', problems: result.value.problems });
+          else {
+            setState(result.value.status === 'ok' ? { kind: 'valid' } : { kind: 'invalid', problems: result.value.problems });
+            if (result.value.status === 'ok') setValidFor(key);
+          }
         };
         void send();
       },
@@ -64,5 +71,5 @@ export function usePatternCheck(client: ApiClient, sourceId: string, mask: boole
     retrying.current = true;
     setAttempt((count) => count + 1);
   }, []);
-  return { state, retry };
+  return { state, validFor, retry };
 }

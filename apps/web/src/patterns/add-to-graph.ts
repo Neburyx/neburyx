@@ -1,4 +1,4 @@
-import type { TemplateRunOk } from '@neburyx/contracts';
+import type { GraphEdge, GraphNode } from '@neburyx/contracts';
 import { outsideFocusNote } from '../canvas/focus-note.js';
 import type { ExpandStore } from '../api/expand-store.js';
 import { heldKeysOf, mergeIntoLoaded } from '../api/merge-into-loaded.js';
@@ -21,6 +21,15 @@ export interface AddContext {
   readonly expansions?: Pick<ExpandStore, 'keep'> | undefined;
 }
 
+/** What an add needs of a result: its nodes and edges, and a word for its result key (a preset's or a template's id, or the fixed word of a pattern built in the app). */
+export interface AddableResult {
+  readonly nodes: readonly GraphNode[];
+  readonly edges: readonly GraphEdge[];
+  readonly presetId?: string | undefined;
+  readonly templateId?: string | undefined;
+  readonly keyPart?: string;
+}
+
 /** Makes each result key of the session its own, however often the panel was opened and closed. */
 let added = 0;
 
@@ -28,7 +37,7 @@ let added = 0;
  * Adds a finished result to the loaded graph through the merge core, the way Expand adds what it loaded: the new items are selected where drawn, and when the neighborhood focus is on and some lie outside it a screen reader is told.
  * It makes no read; the result is the page the run returned, so no neighborhood is read in full. Each add has a result key of its own.
  */
-export function addResultToGraph(state: ClientState, result: TemplateRunOk, { sourceId, principalId, expansions }: AddContext): AddedOutcome {
+export function addResultToGraph(state: ClientState, result: AddableResult, { sourceId, principalId, expansions }: AddContext): AddedOutcome {
   const current = state.investigation.getState();
   const held = heldKeysOf(state);
   const serial = ++added;
@@ -36,7 +45,7 @@ export function addResultToGraph(state: ClientState, result: TemplateRunOk, { so
     sourceId,
     nodes: result.nodes,
     edges: result.edges,
-    queryKey: () => ({ sourceId, principalId, policyVersion: DEFAULT_POLICY_VERSION, filterHash: DEFAULT_FILTER_HASH, params: JSON.stringify(['pattern', current.id, result.presetId ?? result.templateId, serial]), mask: state.mask.getState() }),
+    queryKey: () => ({ sourceId, principalId, policyVersion: DEFAULT_POLICY_VERSION, filterHash: DEFAULT_FILTER_HASH, params: JSON.stringify(['pattern', current.id, result.keyPart ?? result.presetId ?? result.templateId, serial]), mask: state.mask.getState() }),
   });
   for (const node of result.nodes) if (held.nodes.has(elementKey(node.ref))) expansions?.keep(node.ref);
   if (merged.freshNodes.length > 0 || merged.freshEdges.length > 0) {

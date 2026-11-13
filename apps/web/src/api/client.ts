@@ -38,6 +38,12 @@ import {
   type CoverageResponse,
   type DegreePreview,
   type DegreePreviewRequest,
+  type PatternPreviewRequest,
+  type PatternPreviewResponse,
+  patternPreviewResponseSchema,
+  type PatternRunRequest,
+  type PatternRunResponse,
+  patternRunResponseSchema,
   type PatternValidateRequest,
   type PatternValidateResponse,
   patternValidateResponseSchema,
@@ -135,6 +141,13 @@ export interface ApiClient {
   runTemplate(id: string, request: TemplateRunRequest, key: string, signal?: AbortSignal): Promise<ApiResult<TemplateRunResponse>>;
   /** Asks whether a pattern definition is acceptable for a source, or what is wrong with it and where; the route reads no source. */
   validatePattern(request: PatternValidateRequest, signal?: AbortSignal): Promise<ApiResult<PatternValidateResponse>>;
+  /** A pattern definition in plain words, as the server writes it, or the problems with it; the route reads no source. */
+  previewPattern(request: PatternPreviewRequest, signal?: AbortSignal): Promise<ApiResult<PatternPreviewResponse>>;
+  /**
+   * Runs a pattern definition from an entity: the answer is the result (`status: 'ok'`) or the stop of a run that would match more than the source's threshold (`status: 'heavy'`, a typed answer and not an error).
+   * `key` is the idempotency key: a new one for each press, and for a continue (`request.continue`), which is another request.
+   */
+  runPattern(request: PatternRunRequest, key: string, signal?: AbortSignal): Promise<ApiResult<PatternRunResponse>>;
   testSource(sourceId: string, signal?: AbortSignal): Promise<ApiResult<SourceTestReport>>;
   /** One entity of a source, without its neighbors; `mask` asks for the personal-data fields to be masked. */
   getEntity(ref: ElementRef, options?: { readonly mask?: boolean }, signal?: AbortSignal): Promise<ApiResult<GraphNode>>;
@@ -292,6 +305,8 @@ export function createApiClient(fetcher: Fetcher = (input, init) => fetch(input,
       const result = await request(fetcher, `/v1/templates?sourceId=${encodeURIComponent(sourceId)}`, templateListResponseSchema, signal);
       return result.ok && result.value.sourceId !== sourceId ? failed('SCHEMA_MISMATCH') : result;
     },
+    previewPattern: (body, signal) => request(fetcher, '/v1/patterns/preview', patternPreviewResponseSchema, signal, 'POST', body),
+    runPattern: (body, key, signal) => request(fetcher, '/v1/patterns/run', patternRunResponseSchema, signal, 'POST', body, { headers: { 'idempotency-key': key } }),
     validatePattern: (body, signal) => request(fetcher, '/v1/patterns/validate', patternValidateResponseSchema, signal, 'POST', body),
     runTemplate: (id, body, key, signal) => request(fetcher, `/v1/templates/${encodeURIComponent(id)}/run`, templateRunResponseSchema, signal, 'POST', body, { headers: { 'idempotency-key': key } }),
     testSource: async (sourceId, signal) => {

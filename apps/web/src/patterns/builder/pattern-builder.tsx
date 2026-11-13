@@ -7,6 +7,7 @@ import { DIRECTIONS, addStepBlock, arrivalTypes, isComplete, lastTypeOf, previou
 import { rowsOf } from './conditions.js';
 import { ConditionsField } from './conditions-field.js';
 import { WindowField } from './window-field.js';
+import { RunSection } from './run-section.js';
 import { usePatternCheck, type CheckState } from './use-check.js';
 
 export type ProfileView = { readonly kind: 'loading' } | { readonly kind: 'failed' } | { readonly kind: 'ready'; readonly profile: SourceProfile };
@@ -31,7 +32,8 @@ export function PatternBuilder({ profile, retryProfile, client, sourceId, source
   const ready = profile.kind === 'ready' ? profile.profile : undefined;
   const nameOf = (type: string | undefined): string => (type === undefined ? '' : (ready?.entityTypes.find((candidate) => candidate.type === type)?.displayName ?? type));
   const limit = stepLimitOf(maxHops);
-  const check = usePatternCheck(client, sourceId, mask, ready === undefined ? undefined : toDefinition(draft, ready, mask));
+  const definition = ready === undefined ? undefined : toDefinition(draft, ready, mask);
+  const check = usePatternCheck(client, sourceId, mask, definition);
   const block = ready === undefined ? undefined : addStepBlock(ready, draft, limit);
   const reasonId = 'pattern-builder-add-reason';
   const problems = check.state.kind === 'invalid' ? check.state.problems : [];
@@ -130,6 +132,7 @@ export function PatternBuilder({ profile, retryProfile, client, sourceId, source
           )}
           <Problems list={at('top')} />
           <CheckResult state={check.state} sourceName={sourceName} retry={check.retry} />
+          <RunSection client={client} sourceId={sourceId} sourceName={sourceName} mask={mask} profile={ready} definition={definition} anchorType={draft.anchorType} check={check.state} validFor={check.validFor} focusBuilder={() => document.getElementById('pattern-builder-start')?.focus()} />
         </>
       )}
     </section>

@@ -316,3 +316,61 @@ describe('cancelling a running saved pattern run', () => {
     await until(() => rig.slots.inspect().sources.size === 0 && rig.slots.inspect().users.size === 0, 'the read slots to be free');
   });
 });
+
+describe('cancelling a pattern built in the panel', () => {
+  const ask = { definition: { anchorType: 'hub', steps: [{ relationshipTypes: ['LINKED'], direction: 'out' as const, arrivesAt: 'leaf' }] }, anchor: { entityType: 'hub', stableId: 'H-1' } };
+
+  it('aborts the estimate read on Cancel, shows no result, ignores an answer that comes after, and leaves the client as it was', async () => {
+    rig = await startRig();
+    personalise(rig);
+    const before = rig.snapshot();
+    rig.definitionRuns.run(ask);
+    const read = await rig.nextRead();
+    expect(read.call.templateId).toBe('pattern-count');
+    rig.definitionRuns.cancel();
+    await until(() => read.call.signal?.aborted === true, 'the read to be aborted');
+    expect(rig.definitionRuns.getState()).toMatchObject({ running: false, cancelled: true, result: undefined, failure: undefined });
+    read.answerRows();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(rig.definitionRuns.getState().result).toBeUndefined();
+    expect(rig.snapshot()).toBe(before);
+    await until(() => rig.slots.inspect().sources.size === 0 && rig.slots.inspect().users.size === 0, 'the read slots to be free');
+  });
+
+  it('shows QUERY_TIMEOUT when the source times out, with no result, and leaves the client as it was', async () => {
+    rig = await startRig();
+    personalise(rig);
+    const before = rig.snapshot();
+    rig.definitionRuns.run(ask);
+    (await rig.nextRead()).fail({ status: 'timeout' });
+    await until(() => !rig.definitionRuns.getState().running, 'the run to end');
+    expect(rig.definitionRuns.getState()).toMatchObject({ failure: { code: 'QUERY_TIMEOUT' }, result: undefined });
+    expect(rig.snapshot()).toBe(before);
+  });
+
+  it('is aborted by a newer run, and the older answer is never shown', async () => {
+    rig = await startRig();
+    rig.definitionRuns.run(ask);
+    const older = await rig.nextRead();
+    rig.definitionRuns.run({ ...ask, anchor: { entityType: 'hub', stableId: 'H-2' } });
+    await until(() => older.call.signal?.aborted === true, 'the older read to be aborted');
+    const newer = await rig.nextRead();
+    older.answerRows();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(rig.definitionRuns.getState()).toMatchObject({ running: true, result: undefined, failure: undefined, ask: { anchor: { stableId: 'H-2' } } });
+    expect(newer.call.signal?.aborted).toBe(false);
+    rig.definitionRuns.cancel();
+    await until(() => newer.call.signal?.aborted === true, 'the newer read to be aborted');
+  });
+
+  it('is stopped by a change of the builder: the read is aborted and nothing is left on screen', async () => {
+    rig = await startRig();
+    rig.definitionRuns.run(ask);
+    const read = await rig.nextRead();
+    rig.definitionRuns.stop();
+    await until(() => read.call.signal?.aborted === true, 'the read to be aborted');
+    read.answerRows();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(rig.definitionRuns.getState()).toMatchObject({ running: false, result: undefined, cancelled: false });
+  });
+});

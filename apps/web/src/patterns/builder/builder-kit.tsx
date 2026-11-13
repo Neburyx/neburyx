@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event';
 import { PATTERN_LIMITS, type SourceProfile } from '@neburyx/contracts';
 import { testProfile } from '../../dev/test-profile.js';
+import { typedNode } from '../../workspace/filters-kit.js';
 import { openPatterns, patternsWorkspace, settle, type KitOptions, type PatternsKit } from '../patterns-kit.js';
 import { CHECK_DEBOUNCE_MS } from './use-check.js';
 import { vi } from 'vitest';
@@ -96,3 +97,20 @@ export const addCondition = async (n: number): Promise<void> => userEvent.click(
 export const conditionRow = (n: number, m: number): HTMLElement => within(stepCard(n)).getByRole('group', { name: `Step ${n} condition ${m}` });
 export const rowField = (n: number, m: number, label: string): HTMLElement => within(conditionRow(n, m)).getByLabelText(`Step ${n} condition ${m}: ${label}`);
 export const optionTexts = (select: HTMLElement): string[] => [...(select as HTMLSelectElement).options].map((option) => option.textContent ?? '');
+
+/** A workspace of two loaded entities of the first node type, the first being the one the investigation was opened on. */
+export async function runWorkspace(options: KitOptions = {}): Promise<PatternsKit> {
+  const kit = await builderWorkspace({ nodes: [typedNode('x-1', 'n-a'), typedNode('x-2', 'n-a')], opened: { entityType: 'n-a', stableId: 'x-1' }, ...options });
+  await openBuilder();
+  return kit;
+}
+
+/** Builds the one-step pattern the run tests use and lets the check and the preview answer. */
+export async function validPattern(): Promise<void> {
+  await chooseStart('n-a');
+  await buildStep(1, 'out', 'n-b', ['r-1']);
+  await afterDebounce();
+}
+
+export const runButton = (): HTMLButtonElement => screen.getByRole('button', { name: 'Run pattern' }) as HTMLButtonElement;
+export const runReason = (): string | undefined => document.getElementById('pattern-run-reason')?.textContent ?? undefined;

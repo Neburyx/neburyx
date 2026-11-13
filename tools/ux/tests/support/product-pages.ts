@@ -319,6 +319,36 @@ export const REACH: Readonly<Record<string, (page: Page) => Promise<void>>> = {
     await panel.getByRole('checkbox', { name: 'USES_DEVICE' }).check();
     await expect(panel.getByText('Valid: the mapping can follow this pattern.')).toBeVisible();
   },
+  "Explore with a pattern run's result": async (page) => {
+    await openEntity(page, 'banking-demo', `PR-${unique()}`);
+    await expect(page.getByRole('application', { name: 'Graph canvas' })).toBeVisible();
+    await page.getByRole('button', { name: 'Patterns', exact: true }).click();
+    const panel = page.getByRole('complementary', { name: 'Patterns' });
+    await panel.getByRole('button', { name: 'New pattern' }).click();
+    await panel.getByLabel('Starts at').selectOption({ label: 'Account' });
+    await panel.getByRole('button', { name: 'Add step' }).click();
+    await panel.getByLabel('Direction').selectOption('out');
+    await panel.getByLabel('Arrives at').selectOption({ label: 'Device' });
+    await panel.getByRole('checkbox', { name: 'USES_DEVICE' }).check();
+    await expect(panel.getByRole('region', { name: 'Preview' })).toBeVisible();
+    await panel.getByRole('button', { name: 'Run pattern' }).click();
+    await expect(panel.getByRole('region', { name: 'Result' })).toBeVisible();
+  },
+  "Explore with a pattern run's Heavy operation state": async (page) => {
+    await openEntity(page, 'banking-demo', 'HEAVY-1');
+    await expect(page.getByRole('application', { name: 'Graph canvas' })).toBeVisible();
+    await page.getByRole('button', { name: 'Patterns', exact: true }).click();
+    const panel = page.getByRole('complementary', { name: 'Patterns' });
+    await panel.getByRole('button', { name: 'New pattern' }).click();
+    await panel.getByLabel('Starts at').selectOption({ label: 'Account' });
+    await panel.getByRole('button', { name: 'Add step' }).click();
+    await panel.getByLabel('Direction').selectOption('out');
+    await panel.getByLabel('Arrives at').selectOption({ label: 'Device' });
+    await panel.getByRole('checkbox', { name: 'USES_DEVICE' }).check();
+    await expect(panel.getByRole('region', { name: 'Preview' })).toBeVisible();
+    await panel.getByRole('button', { name: 'Run pattern' }).click();
+    await expect(panel.getByRole('button', { name: 'Continue with 25' })).toBeVisible();
+  },
   'Explore with the inspector open': async (page) => {
     await openEntity(page, 'banking-demo', `PI-${unique()}`);
     const canvas = page.getByRole('application', { name: 'Graph canvas' });

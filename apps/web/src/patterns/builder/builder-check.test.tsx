@@ -107,7 +107,7 @@ describe('a check that could not be made', () => {
   ])('says so with the reason and Retry for %s, keeps the choices and never says valid', async (code, details, reason) => {
     await oneStep({ validate: async () => ({ ok: false, failure: code === 'SCHEMA_MISMATCH' || code === 'NETWORK_UNAVAILABLE' ? ({ code } as never) : failure(code, details) }) });
     await afterDebounce();
-    expect(screen.getByText('The check could not be made.')).toBeTruthy();
+    expect(within(screen.getByRole('alert')).getByText('The check could not be made.')).toBeTruthy();
     expect(screen.getByText(reason)).toBeTruthy();
     expect(screen.queryByText(/Valid:/)).toBeNull();
     expect(field(1, 'Direction').value).toBe('out');

@@ -4,6 +4,7 @@ import { createApiClient, type ApiClient } from '../../../apps/web/src/api/clien
 import { createExpandStore, type ExpandStore } from '../../../apps/web/src/api/expand-store.js';
 import { addResultToGraph } from '../../../apps/web/src/patterns/add-to-graph.js';
 import { createPatternRunStore, type PatternRunStore } from '../../../apps/web/src/patterns/pattern-run-store.js';
+import { createDefinitionRunStore, definitionRunRequest, type DefinitionRunStore } from '../../../apps/web/src/patterns/builder/definition-run-store.js';
 import { createDerivedStore, type DerivedStore } from '../../../apps/web/src/api/derived-store.js';
 import { createPreviewStore, type PreviewStore } from '../../../apps/web/src/api/preview-store.js';
 import { bannerReporter } from '../../../apps/web/src/banner/banner-reporter.js';
@@ -145,6 +146,8 @@ export interface Rig {
   readonly derived: DerivedStore;
   /** The run store of the Patterns panel, over the same client. */
   readonly patterns: PatternRunStore;
+  /** The run store of a pattern built in the panel, over the same client. */
+  readonly definitionRuns: DefinitionRunStore;
   readonly banner: ReturnType<typeof createBuiltInBannerController>;
   readonly tracker: ReturnType<typeof createRequestTracker>;
   readonly events: AuditEvent[];
@@ -283,6 +286,7 @@ export async function startOn(backing: Backing, options: { readonly delayMs?: nu
   const preview = createPreviewStore(client, () => 'person-1', report, tracker);
   const derived = createDerivedStore(client, state, () => 'person-1', () => state.investigation.getState().id ?? '');
   const patterns = createPatternRunStore(client, SOURCE_ID, false);
+  const definitionRuns = createDefinitionRunStore(definitionRunRequest(client, SOURCE_ID, false));
   const showing = () => {
     const current = banner.view.getState().banner;
     return current === undefined ? undefined : { id: current.id, headline: current.headline, actions: current.actions.map((action) => action.id) };
@@ -310,10 +314,11 @@ export async function startOn(backing: Backing, options: { readonly delayMs?: nu
   };
   return {
     base,
-    state, client, expand, preview, derived, patterns, banner, tracker, events, executor, nextRead, drain, loaded, hub: backing.hub, slots, saved, requests, bodies, order, at, cancelNow, responses, advance: (ms: number) => void (time.now += ms), showing, pressCancel, snapshot,
+    state, client, expand, preview, derived, patterns, definitionRuns, banner, tracker, events, executor, nextRead, drain, loaded, hub: backing.hub, slots, saved, requests, bodies, order, at, cancelNow, responses, advance: (ms: number) => void (time.now += ms), showing, pressCancel, snapshot,
     logged: () => lines.map((line) => JSON.parse(line) as Record<string, unknown>),
     close: async () => {
       patterns.dispose();
+      definitionRuns.dispose();
       app.server.closeAllConnections();
       await app.close();
       rmSync(webRoot, { recursive: true, force: true });
