@@ -100,18 +100,25 @@ describe('the Window tab', () => {
     expect(panel.getByText('It cannot be filtered: k-two is matched without a date limit.')).toBeTruthy();
   });
 
-  it('disables the choices with the reason when no chosen type has a date, and takes a window off when a change leaves none, saying so', async () => {
+  it('keeps a window that no chosen type can use, marked and in words, with Last N days and Between off and None still open to take it away', async () => {
     const kit = await started(['k-1']);
     await userEvent.click(choice('Last N days'));
     fireEvent.change(dayField(), { target: { value: '30' } });
     await toggleType(1, 'k-1');
     await toggleType(1, 'k-2');
     await openStep(1, 'Window');
-    expect(within(stepCard(1)).getAllByRole('radio').every((radio) => (radio as HTMLButtonElement).disabled)).toBe(true);
+    expect(choice('Last N days').getAttribute('aria-checked')).toBe('true');
+    expect((choice('Last N days') as HTMLButtonElement).disabled).toBe(true);
+    expect((choice('Between') as HTMLButtonElement).disabled).toBe(true);
+    expect((choice('None') as HTMLButtonElement).disabled).toBe(false);
     expect(screen.getByText('The window does not apply: no chosen relationship type has an observed time in the mapping.')).toBeTruthy();
-    expect(screen.getByText('The window was taken off because no chosen relationship type has an observed time.')).toBeTruthy();
+    expect(screen.getByText('No chosen relationship type has a date, so the window does not apply. Choose a type with a date, or set the window to None.')).toBeTruthy();
+    expect(within(stepCard(1)).getByRole('tab', { name: 'Window · 30 d !' })).toBeTruthy();
+    expect(screen.getByText('Step 1: the window needs a relationship type with a date.')).toBeTruthy();
+    await userEvent.click(choice('None'));
+    expect(screen.queryByText('Step 1: the window needs a relationship type with a date.')).toBeNull();
     await afterDebounce();
-    expect(JSON.stringify(lastDefinition(kit))).not.toContain('window');
+    expect(kit.validations.every((sent) => !JSON.stringify(sent).includes('"days":30') || JSON.stringify(sent).includes('k-1'))).toBe(true);
   });
 
   it('asks for the relationship types first while none is chosen', async () => {
@@ -121,6 +128,6 @@ describe('the Window tab', () => {
     await userEvent.click(addStepButton());
     await openStep(1, 'Window');
     expect(screen.getByText('Choose the relationship types first.')).toBeTruthy();
-    expect(within(stepCard(1)).getAllByRole('radio').every((radio) => (radio as HTMLButtonElement).disabled)).toBe(true);
+    expect(within(stepCard(1)).getAllByRole('radio').filter((radio) => radio.textContent !== 'None').every((radio) => (radio as HTMLButtonElement).disabled)).toBe(true);
   });
 });

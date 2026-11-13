@@ -422,3 +422,28 @@
   flex-wrap: wrap;
   gap: var(--space-6);
 }
+
+.pattern-chain-note[data-tone='bad'] {
+  color: var(--color-danger);
+}
+
+.pattern-chip[data-broken='true'],
+.pattern-chip-removable[data-broken='true'] {
+  border-color: var(--color-danger);
+  background: var(--color-danger-surface);
+  color: var(--color-danger);
+}
+
+.patterns-input[data-broken='true'] {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}
+
+.pattern-breaks-title {
+  font-weight: var(--font-weight-semibold);
+}
+
+.pattern-breaks-list {
+  margin: 0;
+  padding-left: var(--space-16);
+}

@@ -3,9 +3,10 @@ import type { PatternDefinition, PatternProblem, SourceProfile } from '@neburyx/
 import type { ApiClient } from '../../api/client.js';
 import { Dialog } from '../../views/dialog.js';
 import { failureView, problemText } from '../copy.js';
+import { BreakBanner } from './break-banner.js';
 import { ChainSummary } from './chain-summary.js';
 import { BUILDER_COPY, CONDITIONS_COPY, EDITOR_COPY, blockText, placeOf } from './copy.js';
-import { addStepBlock, hasConditions, previousTypeOf, stepLimitOf, toDefinition, type Action, type BuilderState } from './model.js';
+import { addStepBlock, breaksOf, hasConditions, previousTypeOf, stepLimitOf, toDefinition, type Action, type BuilderState } from './model.js';
 import { rowsOf, totalConditions } from './conditions.js';
 import { StepPanel, type Part } from './step-panel.js';
 import { TabList, panelId, tabId } from './tabs.js';
@@ -81,6 +82,7 @@ export function PatternEditor({ profile, retryProfile, client, sourceId, sourceN
   const reasonId = 'pattern-builder-add-reason';
   const problems = check.state.kind === 'invalid' ? check.state.problems : [];
   const at = (kind: 'top' | 'start'): PatternProblem[] => problems.filter((problem) => placeOf(problem).kind === kind);
+  const breaks = ready === undefined ? [] : breaksOf(ready, draft, mask);
   const [selected, setSelected] = useState<'start' | number>('start');
   const [part, setPart] = useState<Part>('link');
   const [asking, setAsking] = useState<'discard' | { readonly remove: number } | undefined>(undefined);
@@ -103,7 +105,7 @@ export function PatternEditor({ profile, retryProfile, client, sourceId, sourceN
     panel.current?.querySelector<HTMLElement>('[role="radio"]')?.focus();
   }, [draft.steps.length]);
   const key = definition === undefined ? undefined : JSON.stringify(definition);
-  const checked = check.state.kind === 'valid' && check.validFor === key;
+  const checked = check.state.kind === 'valid' && check.validFor === key && breaks.length === 0;
   const empty = draft.anchorType === undefined && draft.steps.length === 0;
   const addStep = (): void => {
     dispatch({ type: 'add' });
@@ -115,7 +117,7 @@ export function PatternEditor({ profile, retryProfile, client, sourceId, sourceN
     setSelected(id === 'start' ? 'start' : Number(id.slice('step-'.length)));
     setPart('link');
   };
-  const tabs = [{ id: 'start', label: EDITOR_COPY.start }, ...draft.steps.map((_, index) => ({ id: `step-${index}`, label: `Step ${index + 1}` }))];
+  const tabs = [{ id: 'start', label: EDITOR_COPY.start }, ...draft.steps.map((_, index) => (breaks.some((found) => found.step === index) ? { id: `step-${index}`, label: `Step ${index + 1} !`, marked: true } : { id: `step-${index}`, label: `Step ${index + 1}` }))];
   const selectedId = current === 'start' ? 'start' : `step-${current}`;
   const step = current === 'start' ? undefined : draft.steps[current];
 
@@ -136,7 +138,8 @@ export function PatternEditor({ profile, retryProfile, client, sourceId, sourceN
             </button>
           </div>
         ) : null}
-        <ChainSummary draft={draft} nameOf={nameOf} valid={checked} />
+        <ChainSummary draft={draft} nameOf={nameOf} valid={checked} problems={breaks.length} brokenSteps={new Set(breaks.map((found) => found.step))} />
+        <BreakBanner breaks={breaks} undo={state.undo} nameOf={nameOf} onUndo={() => dispatch({ type: 'undo' })} />
         <>
             <TabList
               label={EDITOR_COPY.stepsLabel}
@@ -189,6 +192,8 @@ export function PatternEditor({ profile, retryProfile, client, sourceId, sourceN
                   dispatch={dispatch}
                   part={part}
                   onPart={setPart}
+                  breaks={breaks.filter((found) => found.step === current)}
+                  was={state.undo?.draft.steps[current]?.arrivesAt}
                   onRemove={() => (hasConditions(step) ? setAsking({ remove: current }) : dispatch({ type: 'remove', index: current }))}
                   problems={problems.filter((problem) => {
                     const place = placeOf(problem);
@@ -203,16 +208,6 @@ export function PatternEditor({ profile, retryProfile, client, sourceId, sourceN
                 />
               )}
             </div>
-            {state.windowDropped === true ? (
-              <p className="search-panel-note" role="status">
-                {CONDITIONS_COPY.windowDropped}
-              </p>
-            ) : null}
-            {state.removed > 0 ? (
-              <p className="search-panel-note" role="status">
-                {BUILDER_COPY.removed}
-              </p>
-            ) : null}
             <Problems list={at('top')} />
             <CheckResult state={check.state} sourceName={sourceName} retry={check.retry} />
             {footer === undefined || ready === undefined ? null : footer({ profile: ready, definition, anchorType: draft.anchorType, check: check.state, validFor: check.validFor, nameOf, focusStart: () => { setSelected('start'); focusStart.current = true; } })}

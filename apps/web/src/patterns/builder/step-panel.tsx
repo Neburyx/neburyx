@@ -5,7 +5,7 @@ import { conditionsTab, EDITOR_COPY, LINK_COPY, stepSummary, windowTab } from '.
 import { rowsOf, windowOf } from './conditions.js';
 import { LinkTab } from './link-tab.js';
 import { TabList, panelId, tabId } from './tabs.js';
-import type { Action, StepDraft } from './model.js';
+import type { Action, Break, StepDraft } from './model.js';
 import { WindowTab } from './window-tab.js';
 
 export type Part = 'link' | 'conditions' | 'window';
@@ -24,6 +24,10 @@ interface Props {
   readonly part: Part;
   readonly onPart: (part: Part) => void;
   readonly onRemove: () => void;
+  /** The parts of this step the mapping does not follow. */
+  readonly breaks: readonly Break[];
+  /** The arrival type this step had before the change that broke it, when there is one to name. */
+  readonly was: string | undefined;
   readonly problems: readonly PatternProblem[];
   readonly rowProblems: ReadonlyMap<number, readonly PatternProblem[]>;
   readonly windowProblems: readonly PatternProblem[];
@@ -38,9 +42,10 @@ const windowLabel = (step: StepDraft): string => {
 };
 
 /** One step, as the panel under the step tabs: its summary, Remove step and the three parts, Link, Conditions and Window. */
-export function StepPanel({ profile, step, steps, index, previous, mask, nameOf, dispatch, part, onPart, onRemove, problems, rowProblems, windowProblems, unplaced }: Props) {
+export function StepPanel({ profile, step, steps, index, previous, mask, nameOf, dispatch, part, onPart, onRemove, breaks, was, problems, rowProblems, windowProblems, unplaced }: Props) {
   const number = index + 1;
   const prefix = `step-${index}`;
+  const marked = (which: Part): string => (breaks.some((found) => found.part === which) ? ' !' : '');
   return (
     <div role="tabpanel" id={panelId('pattern-steps', `step-${index}`)} aria-labelledby={tabId('pattern-steps', `step-${index}`)} className="pattern-step-panel">
       <div className="pattern-step-head">
@@ -63,14 +68,14 @@ export function StepPanel({ profile, step, steps, index, previous, mask, nameOf,
         selected={part}
         onSelect={(id) => isPart(id) && onPart(id)}
         tabs={[
-          { id: 'link', label: LINK_COPY.link },
-          { id: 'conditions', label: conditionsTab(rowsOf(step).length) },
-          { id: 'window', label: windowLabel(step) },
+          { id: 'link', label: `${LINK_COPY.link}${marked('link')}`, marked: marked('link') !== '' },
+          { id: 'conditions', label: `${conditionsTab(rowsOf(step).length)}${marked('conditions')}`, marked: marked('conditions') !== '' },
+          { id: 'window', label: `${windowLabel(step)}${marked('window')}`, marked: marked('window') !== '' },
         ]}
         className="pattern-parts"
       />
       <div role="tabpanel" id={panelId(prefix, part)} aria-labelledby={tabId(prefix, part)} className="pattern-part">
-        {part === 'link' ? <LinkTab profile={profile} step={step} index={index} previous={previous} nameOf={nameOf} dispatch={dispatch} problems={problems} /> : null}
+        {part === 'link' ? <LinkTab profile={profile} step={step} index={index} previous={previous} nameOf={nameOf} dispatch={dispatch} problems={problems} breaks={breaks.filter((found) => found.part === 'link')} was={was} /> : null}
         {part === 'conditions' ? (
           <>
             <ConditionsTab profile={profile} step={step} steps={steps} index={index} previous={previous} mask={mask} nodeName={nameOf(step.arrivesAt)} dispatch={dispatch} rowProblems={rowProblems} />
@@ -81,7 +86,7 @@ export function StepPanel({ profile, step, steps, index, previous, mask, nameOf,
             ))}
           </>
         ) : null}
-        {part === 'window' ? <WindowTab profile={profile} step={step} index={index} previous={previous} dispatch={dispatch} problems={windowProblems} /> : null}
+        {part === 'window' ? <WindowTab profile={profile} step={step} index={index} previous={previous} dispatch={dispatch} problems={windowProblems} broken={breaks.some((found) => found.part === 'window')} /> : null}
       </div>
     </div>
   );

@@ -1,5 +1,5 @@
 import { PATTERN_LIMITS, type PatternDefinition, type SourceProfile } from '@neburyx/contracts';
-import { NO_WINDOW, addConditionBlock, carryingRows, countOn, firstChoice, isOffered, nextRowId, offeredProperties, propertyKind, readRows, readWindow, rowKindFor, rowsOf, windowOf, windowReach, type ConditionRow, type WindowDraft } from './conditions.js';
+import { addConditionBlock, countOn, firstChoice, isOffered, nextRowId, offeredProperties, propertyKind, readRows, readWindow, rowKindFor, rowsOf, windowOf, windowReach, type ConditionRow, type WindowDraft } from './conditions.js';
 
 export type Direction = 'out' | 'in' | 'both';
 
@@ -84,55 +84,6 @@ export const previousTypeOf = (draft: Draft, index: number): string | undefined 
 /** The node type the pattern has reached so far. */
 export const lastTypeOf = (draft: Draft): string | undefined => (draft.steps.length === 0 ? draft.anchorType : draft.steps[draft.steps.length - 1]?.arrivesAt);
 
-const stepStillJoins = (profile: SourceProfile, from: string | undefined, step: StepDraft): boolean => {
-  if (from === undefined || step.direction === undefined || step.arrivesAt === undefined) return false;
-  if (!arrivalTypes(profile, from, step.direction).includes(step.arrivesAt)) return false;
-  const allowed = relationshipChoices(profile, from, step.arrivesAt, step.direction);
-  return step.relationshipTypes.every((type) => allowed.includes(type));
-};
-
-export interface Repaired {
-  readonly draft: Draft;
-  /** How many steps were removed because they no longer follow from the step before. */
-  readonly removed: number;
-}
-
-/**
- * Keeps the chain one the mapping can follow after a change. The first step the change touched keeps what still joins (its arrival type while the mapping reaches it, its checked relationship types while they join);
- * every later step is kept only while all of its own choices still join from the step before it, and the first one that does not is removed with those after it.
- */
-export function repair(profile: SourceProfile, draft: Draft, changed: number): Repaired {
-  const steps: StepDraft[] = [];
-  for (let index = 0; index < draft.steps.length; index += 1) {
-    const step = draft.steps[index];
-    if (step === undefined) break;
-    const from = index === 0 ? draft.anchorType : steps[index - 1]?.arrivesAt;
-    if (index < changed) {
-      steps.push(step);
-      continue;
-    }
-    if (index === changed) {
-      const direction = step.direction;
-      if (from === undefined || direction === undefined) {
-        steps.push({ ...step, arrivesAt: undefined, relationshipTypes: [] });
-        continue;
-      }
-      const arrival = step.arrivesAt;
-      const carried = { ...(step.conditions === undefined ? {} : { conditions: step.conditions }), ...(step.window === undefined ? {} : { window: step.window }) };
-      if (arrival === undefined) steps.push({ direction, relationshipTypes: [], ...carried });
-      else if (!arrivalTypes(profile, from, direction).includes(arrival)) steps.push({ direction, relationshipTypes: [], ...carried });
-      else {
-        const allowed = relationshipChoices(profile, from, arrival, direction);
-        steps.push({ direction, arrivesAt: arrival, relationshipTypes: step.relationshipTypes.filter((type) => allowed.includes(type)), ...carried });
-      }
-      continue;
-    }
-    if (!stepStillJoins(profile, from, step)) break;
-    steps.push(step);
-  }
-  return { draft: { ...draft, steps }, removed: draft.steps.length - steps.length };
-}
-
 export type Action =
   | { readonly type: 'start'; readonly anchorType: string | undefined }
   | { readonly type: 'add' }
@@ -140,37 +91,55 @@ export type Action =
   | { readonly type: 'arrives'; readonly index: number; readonly arrivesAt: string | undefined }
   | { readonly type: 'toggle'; readonly index: number; readonly relationshipType: string }
   | { readonly type: 'remove'; readonly index?: number }
+  /** Puts the draft back as it was before the change that broke it. */
+  | { readonly type: 'undo' }
   | { readonly type: 'add-condition'; readonly index: number; readonly mask: boolean; /** The property the row starts on; the first one offered when none is named. */ readonly on?: ConditionRow['on']; readonly property?: string }
   | { readonly type: 'change-condition'; readonly index: number; readonly id: number; readonly change: Partial<ConditionRow> }
   | { readonly type: 'remove-condition'; readonly index: number; readonly id: number }
   | { readonly type: 'window'; readonly index: number; readonly window: WindowDraft };
 
-export interface BuilderState {
+/** The draft as it was before the change that broke later parts, and where that change was made: a change leaves what it breaks in place and marked, and this puts it all back. */
+export interface Undo {
   readonly draft: Draft;
-  /** The steps the last change removed; shown once, and cleared by the next change. */
-  readonly removed: number;
-  /** Set when the last change took windows off steps that no longer have a dated relationship type; shown once, cleared by the next change. */
-  readonly windowDropped?: boolean;
+  readonly changed: 'start' | number;
 }
 
-export const INITIAL: BuilderState = { draft: EMPTY_DRAFT, removed: 0 };
+export interface BuilderState {
+  readonly draft: Draft;
+  readonly undo?: Undo;
+}
 
-/** Applies a change to the draft; the profile is the bound source's, which decides what still joins. */
+export const INITIAL: BuilderState = { draft: EMPTY_DRAFT };
+
+/** The changes that can leave a later part of the pattern unfollowed: the ones to the start, a step's direction, arrival or relationship types, and removing a step. */
+const changesLink = (action: Action): boolean => action.type === 'start' || action.type === 'direction' || action.type === 'arrives' || action.type === 'toggle' || action.type === 'remove';
+const placeOf = (action: Action, draft: Draft): 'start' | number => (action.type === 'start' ? 'start' : action.type === 'remove' ? (action.index ?? draft.steps.length - 1) : action.type === 'direction' || action.type === 'arrives' || action.type === 'toggle' ? action.index : 'start');
+
+/**
+ * Applies a change to the draft. A change never removes anything the person built: what the mapping then does not follow is kept and marked (`breaksOf`), and the state keeps the draft as it was before the first change that broke something,
+ * so that `undo` puts it all back; once nothing is broken any more the undo is gone.
+ */
 export function reduce(profile: SourceProfile, state: BuilderState, action: Action): BuilderState {
+  if (action.type === 'undo') return state.undo === undefined ? state : { draft: state.undo.draft };
+  const next = apply(state, action, profile);
+  if (next === state) return state;
+  if (breaksOf(profile, next.draft, false).length === 0) return { draft: next.draft };
+  if (!changesLink(action)) return state.undo === undefined ? { draft: next.draft } : { draft: next.draft, undo: state.undo };
+  const undo = state.undo ?? (breaksOf(profile, state.draft, false).length === 0 ? { draft: state.draft, changed: placeOf(action, state.draft) } : undefined);
+  return undo === undefined ? { draft: next.draft } : { draft: next.draft, undo };
+}
+
+function apply(state: BuilderState, action: Exclude<Action, { readonly type: 'undo' }>, profile: SourceProfile): BuilderState {
   const { draft } = state;
   switch (action.type) {
-    case 'start': {
-      const repaired = repair(profile, { ...draft, anchorType: action.anchorType }, 0);
-      return settled(profile, repaired);
-    }
+    case 'start':
+      return { draft: { ...draft, anchorType: action.anchorType } };
     case 'add':
-      return { draft: { ...draft, steps: [...draft.steps, { relationshipTypes: [] }] }, removed: 0 };
+      return { draft: { ...draft, steps: [...draft.steps, { relationshipTypes: [] }] } };
     case 'remove': {
       const index = action.index ?? draft.steps.length - 1;
       if (index < 0 || index >= draft.steps.length) return state;
-      const steps = draft.steps.filter((_, at) => at !== index);
-      // a step after the one removed now follows from the step before it: what still joins is kept, as for any change to a step
-      return index >= steps.length ? { draft: { ...draft, steps }, removed: 0 } : settled(profile, repair(profile, { ...draft, steps }, index));
+      return { draft: { ...draft, steps: draft.steps.filter((_, at) => at !== index) } };
     }
     case 'direction':
     case 'arrives':
@@ -179,15 +148,13 @@ export function reduce(profile: SourceProfile, state: BuilderState, action: Acti
       if (step === undefined) return state;
       let next: StepDraft = step;
       if (action.type === 'direction') next = { ...step, direction: action.direction };
-      else if (action.type === 'arrives') next = { ...step, arrivesAt: action.arrivesAt, relationshipTypes: [] };
+      else if (action.type === 'arrives') next = { ...step, arrivesAt: action.arrivesAt };
       else {
         const checked = step.relationshipTypes.includes(action.relationshipType);
         if (!checked && step.relationshipTypes.length >= PATTERN_LIMITS.relationshipTypesPerStep) return state;
         next = { ...step, relationshipTypes: checked ? step.relationshipTypes.filter((type) => type !== action.relationshipType) : [...step.relationshipTypes, action.relationshipType] };
       }
-      const steps = draft.steps.map((candidate, index) => (index === action.index ? next : candidate));
-      const repaired = repair(profile, { ...draft, steps }, action.index);
-      return settled(profile, repaired);
+      return { draft: withStep(draft, action.index, next) };
     }
     case 'add-condition': {
       const step = draft.steps[action.index];
@@ -198,23 +165,23 @@ export function reduce(profile: SourceProfile, state: BuilderState, action: Acti
       if (choice === undefined) return state;
       const kind = rowKindFor(propertyKind(profile, previousTypeOf(draft, action.index), step, choice.on, choice.property));
       const row: ConditionRow = { id: nextRowId(draft.steps), on: choice.on, property: choice.property, op: 'eq', text: '', from: '', to: '', kind };
-      return { draft: withStep(draft, action.index, { ...step, conditions: [...rowsOf(step), row] }), removed: 0 };
+      return { draft: withStep(draft, action.index, { ...step, conditions: [...rowsOf(step), row] }) };
     }
     case 'change-condition': {
       const step = draft.steps[action.index];
       if (step === undefined) return state;
       const rows = rowsOf(step).map((row) => (row.id === action.id ? { ...row, ...action.change, touched: true } : row));
-      return { draft: withStep(draft, action.index, { ...step, conditions: rows }), removed: 0 };
+      return { draft: withStep(draft, action.index, { ...step, conditions: rows }) };
     }
     case 'remove-condition': {
       const step = draft.steps[action.index];
       if (step === undefined) return state;
-      return { draft: withStep(draft, action.index, { ...step, conditions: rowsOf(step).filter((row) => row.id !== action.id) }), removed: 0 };
+      return { draft: withStep(draft, action.index, { ...step, conditions: rowsOf(step).filter((row) => row.id !== action.id) }) };
     }
     case 'window': {
       const step = draft.steps[action.index];
       if (step === undefined) return state;
-      return { draft: withStep(draft, action.index, { ...step, window: action.window }), removed: 0 };
+      return { draft: withStep(draft, action.index, { ...step, window: action.window }) };
     }
     default: {
       const unreachable: never = action;
@@ -225,16 +192,58 @@ export function reduce(profile: SourceProfile, state: BuilderState, action: Acti
 
 const withStep = (draft: Draft, index: number, step: StepDraft): Draft => ({ ...draft, steps: draft.steps.map((candidate, at) => (at === index ? step : candidate)) });
 
-/** After a repair: a window on a step none of whose carrying rows is dated is taken off, and the person is told once. */
-function settled(profile: SourceProfile, repaired: Repaired): BuilderState {
-  let dropped = false;
-  const steps = repaired.draft.steps.map((step, index) => {
-    if (windowOf(step).kind === 'none' || windowReach(profile, previousTypeOf(repaired.draft, index), step).appliesTo.length > 0) return step;
-    if (carryingRows(profile, previousTypeOf(repaired.draft, index), step).length === 0 && !isComplete(step)) return step;
-    dropped = true;
-    return { ...step, window: NO_WINDOW };
+/** A part of a step that the mapping does not follow as the draft stands: kept as the person left it, and marked. */
+export type Break =
+  | { readonly kind: 'types-leave'; readonly step: number; readonly part: 'link'; readonly types: readonly string[]; readonly from: string }
+  | { readonly kind: 'types-lead'; readonly step: number; readonly part: 'link'; readonly types: readonly string[]; readonly arrival: string }
+  | { readonly kind: 'arrival'; readonly step: number; readonly part: 'link'; readonly from: string; readonly arrival: string }
+  | { readonly kind: 'condition'; readonly step: number; readonly part: 'conditions'; readonly row: ConditionRow; readonly arrival: string; readonly types: readonly string[] }
+  | { readonly kind: 'window'; readonly step: number; readonly part: 'window' };
+
+type MappingRow = SourceProfile['relationshipTypes'][number];
+
+const leaves = (row: MappingRow, from: string, direction: Direction): boolean => (direction === 'out' ? row.from === from : direction === 'in' ? row.to === from : row.from === from || row.to === from);
+
+/** The node types a relationship type of the mapping leads to from a node type in a direction. */
+export function leadsTo(profile: SourceProfile, type: string, from: string, direction: Direction): readonly string[] {
+  const found: string[] = [];
+  for (const row of profile.relationshipTypes) {
+    if (row.type !== type) continue;
+    if (direction !== 'in' && row.from === from && !found.includes(row.to)) found.push(row.to);
+    if (direction !== 'out' && row.to === from && !found.includes(row.from)) found.push(row.from);
+  }
+  return found;
+}
+
+/**
+ * Every part of the draft that the mapping does not follow, in the order of the steps: a relationship type that does not leave the step's start, one that leads somewhere else than the chosen arrival, an arrival the direction does not reach,
+ * a condition on a property the step no longer offers, and a window on a step none of whose chosen types has a date. Nothing is changed for the person: this only says where.
+ */
+export function breaksOf(profile: SourceProfile, draft: Draft, mask: boolean): readonly Break[] {
+  const found: Break[] = [];
+  draft.steps.forEach((step, index) => {
+    const from = previousTypeOf(draft, index);
+    if (from === undefined) return;
+    const { direction, arrivesAt: arrival } = step;
+    if (direction !== undefined) {
+      if (arrival !== undefined && !arrivalTypes(profile, from, direction).includes(arrival)) found.push({ kind: 'arrival', step: index, part: 'link', from, arrival });
+      const noLeave = step.relationshipTypes.filter((type) => !profile.relationshipTypes.some((row) => row.type === type && leaves(row, from, direction)));
+      if (noLeave.length > 0) found.push({ kind: 'types-leave', step: index, part: 'link', types: noLeave, from });
+      if (arrival !== undefined) {
+        const noLead = step.relationshipTypes.filter((type) => !noLeave.includes(type) && !profile.relationshipTypes.some((row) => row.type === type && joins(row, from, arrival, direction)));
+        if (noLead.length > 0) found.push({ kind: 'types-lead', step: index, part: 'link', types: noLead, arrival });
+      }
+    }
+    if (arrival !== undefined) {
+      const offered = offeredProperties(profile, from, step, mask);
+      for (const row of rowsOf(step)) {
+        if (row.on === 'relationship' && step.relationshipTypes.length === 0) continue;
+        if (!isOffered(row, offered)) found.push({ kind: 'condition', step: index, part: 'conditions', row, arrival, types: step.relationshipTypes });
+      }
+    }
+    if (windowOf(step).kind !== 'none' && direction !== undefined && arrival !== undefined && step.relationshipTypes.length > 0 && windowReach(profile, from, step).appliesTo.length === 0) found.push({ kind: 'window', step: index, part: 'window' });
   });
-  return { draft: { ...repaired.draft, steps }, removed: repaired.removed, ...(dropped ? { windowDropped: true } : {}) };
+  return found;
 }
 
 /**
@@ -242,6 +251,7 @@ function settled(profile: SourceProfile, repaired: Repaired): BuilderState {
  */
 export function toDefinition(draft: Draft, profile: SourceProfile, mask: boolean): PatternDefinition | undefined {
   if (draft.anchorType === undefined || draft.steps.length === 0) return undefined;
+  if (breaksOf(profile, draft, mask).length > 0) return undefined;
   const steps: PatternDefinition['steps'] = [];
   for (const [index, step] of draft.steps.entries()) {
     if (step.direction === undefined || step.arrivesAt === undefined || step.relationshipTypes.length === 0) return undefined;

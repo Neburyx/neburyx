@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { PATTERN_LIMITS } from '@neburyx/contracts';
 import { builderProfile } from './builder-kit.js';
-import { addStepBlock, arrivalTypes, EMPTY_DRAFT, INITIAL, reduce, relationshipChoices, stepLimitOf, toDefinition, typeOptions, type Action, type BuilderState } from './model.js';
+import { addStepBlock, arrivalTypes, breaksOf, EMPTY_DRAFT, INITIAL, reduce, relationshipChoices, stepLimitOf, toDefinition, typeOptions, type Action, type BuilderState } from './model.js';
 
 const profile = builderProfile();
 const run = (state: BuilderState, ...actions: Action[]): BuilderState => actions.reduce((held, action) => reduce(profile, held, action), state);
@@ -45,30 +45,49 @@ describe('keeping the chain valid', () => {
     expect(toDefinition(twoSteps().draft, profile, false)).toEqual({ anchorType: 'n-a', steps: [{ relationshipTypes: ['r-1'], direction: 'out', arrivesAt: 'n-b' }, { relationshipTypes: ['r-3'], direction: 'out', arrivesAt: 'n-c' }] });
   });
 
-  it('keeps the arrival type and the types that still join when the direction changes, and clears the rest', () => {
-    const keeps = run(twoSteps(), { type: 'direction', index: 0, direction: 'both' });
-    expect(keeps.draft.steps[0]).toEqual({ direction: 'both', arrivesAt: 'n-b', relationshipTypes: ['r-1'] });
-    expect(keeps.removed).toBe(0);
-    const clears = run(twoSteps(), { type: 'direction', index: 0, direction: 'in' });
-    expect(clears.draft.steps).toHaveLength(1);
-    expect(clears.draft.steps[0]).toEqual({ direction: 'in', relationshipTypes: [] });
-    expect(clears.removed).toBe(1);
+  it('removes nothing when a change leaves a later part unfollowed: it keeps it, lists it, and keeps the draft as it was for Undo', () => {
+    const before = twoSteps();
+    const changed = run(before, { type: 'direction', index: 0, direction: 'in' });
+    expect(changed.draft.steps).toHaveLength(2);
+    expect(changed.draft.steps[0]).toEqual({ direction: 'in', arrivesAt: 'n-b', relationshipTypes: ['r-1'] });
+    expect(breaksOf(profile, changed.draft, false).map((found) => `${found.kind}@${found.step}`)).toEqual(['arrival@0', 'types-leave@0']);
+    expect(changed.undo).toEqual({ draft: before.draft, changed: 0 });
   });
 
-  it('removes the steps after a step whose arrival type changes so that they no longer follow, and keeps them while they still join', () => {
-    const broken = run(twoSteps(), { type: 'arrives', index: 0, arrivesAt: 'n-a' });
-    expect(broken.draft.steps).toHaveLength(1);
-    expect(broken.removed).toBe(1);
+  it('undoes to exactly the draft before the change, and the marks and the undo go together', () => {
+    const before = twoSteps();
+    const broken = run(before, { type: 'arrives', index: 0, arrivesAt: 'n-a' });
+    expect(breaksOf(profile, broken.draft, false).map((found) => `${found.kind}@${found.step}`)).toEqual(['types-lead@0', 'arrival@1', 'types-leave@1']);
+    const undone = run(broken, { type: 'undo' });
+    expect(undone.draft).toEqual(before.draft);
+    expect(undone.undo).toBeUndefined();
+    const fixed = run(broken, { type: 'arrives', index: 0, arrivesAt: 'n-b' });
+    expect(breaksOf(profile, fixed.draft, false)).toEqual([]);
+    expect(fixed.undo).toBeUndefined();
+    expect(run(before, { type: 'undo' })).toBe(before);
+  });
+
+  it('keeps the first snapshot while later changes pile on, and says where the change began', () => {
+    const before = twoSteps();
+    const first = run(before, { type: 'start', anchorType: 'n-c' });
+    expect(first.undo?.changed).toBe('start');
+    const more = run(first, { type: 'direction', index: 1, direction: 'in' });
+    expect(more.undo).toEqual({ draft: before.draft, changed: 'start' });
+    expect(run(more, { type: 'undo' }).draft).toEqual(before.draft);
+  });
+
+  it('keeps later steps when a middle step is removed, and marks them', () => {
+    const removed = run(twoSteps(), { type: 'remove', index: 0 });
+    expect(removed.draft.steps).toHaveLength(1);
+    expect(breaksOf(profile, removed.draft, false).map((found) => found.kind)).toEqual(['arrival', 'types-leave']);
+    expect(removed.undo?.changed).toBe(0);
+  });
+
+  it('keeps a change that breaks nothing out of the undo, and holds the definition back while anything is broken', () => {
     const kept = run(twoSteps(), { type: 'toggle', index: 0, relationshipType: 'r-2' });
     expect(kept.draft.steps).toHaveLength(2);
-    expect(kept.removed).toBe(0);
-  });
-
-  it('applies the same rules from the first step when the start type changes', () => {
-    const changed = run(twoSteps(), { type: 'start', anchorType: 'n-c' });
-    expect(changed.draft.steps).toHaveLength(1);
-    expect(changed.draft.steps[0]).toEqual({ direction: 'out', relationshipTypes: [] });
-    expect(changed.removed).toBe(1);
+    expect(kept.undo).toBeUndefined();
+    expect(toDefinition(run(twoSteps(), { type: 'direction', index: 0, direction: 'in' }).draft, profile, false)).toBeUndefined();
   });
 
   it('removes the last step only, and refuses a seventh relationship type', () => {
@@ -95,14 +114,10 @@ describe('why a step cannot be added', () => {
 });
 
 describe('removing a step by its place', () => {
-  it('removes the last step with no index, and the step at an index, keeping what still joins after it', () => {
-    const removed = run(twoSteps(), { type: 'remove' });
-    expect(removed.draft.steps).toHaveLength(1);
-    const first = run(twoSteps(), { type: 'remove', index: 0 });
-    // the second step now follows from the start: n-a does not lead to n-c, so its choices no longer join and it keeps only its direction
-    expect(first.draft.steps).toHaveLength(1);
-    expect(first.draft.steps[0]).toMatchObject({ direction: 'out', relationshipTypes: [] });
-    expect(first.draft.steps[0]?.arrivesAt).toBeUndefined();
+  it('removes the last step with no index and the step at an index', () => {
+    expect(run(twoSteps(), { type: 'remove' }).draft.steps).toHaveLength(1);
+    expect(run(twoSteps(), { type: 'remove', index: 1 }).draft.steps).toHaveLength(1);
+    expect(run(twoSteps(), { type: 'remove', index: 0 }).draft.steps[0]?.arrivesAt).toBe('n-c');
   });
 
   it('does nothing for a step that is not there', () => {

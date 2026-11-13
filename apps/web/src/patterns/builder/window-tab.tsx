@@ -1,6 +1,6 @@
 import { type PatternProblem, type SourceProfile } from '@neburyx/contracts';
 import { problemText } from '../copy.js';
-import { CONDITIONS_COPY, WINDOW_COPY, cannotFilter, filteredOn } from './copy.js';
+import { BREAK_COPY, CONDITIONS_COPY, WINDOW_COPY, cannotFilter, filteredOn } from './copy.js';
 import { readWindow, windowOf, windowReach, windowTypeLines, type WindowDraft } from './conditions.js';
 import type { Action, StepDraft } from './model.js';
 
@@ -11,6 +11,8 @@ interface Props {
   readonly previous: string | undefined;
   readonly dispatch: (action: Action) => void;
   readonly problems: readonly PatternProblem[];
+  /** Whether the window is kept on a step none of whose chosen types has a date. */
+  readonly broken: boolean;
 }
 
 type Kind = WindowDraft['kind'];
@@ -22,7 +24,7 @@ const KINDS: readonly { readonly kind: Kind; readonly label: string }[] = [
 ];
 
 /** The window of one step: none, the last days or two UTC dates, and which of the chosen relationship types the date can filter. */
-export function WindowTab({ profile, step, index, previous, dispatch, problems }: Props) {
+export function WindowTab({ profile, step, index, previous, dispatch, problems, broken }: Props) {
   const draft = windowOf(step);
   const reach = windowReach(profile, previous, step);
   const typed = step.relationshipTypes.length > 0 && step.arrivesAt !== undefined;
@@ -39,7 +41,7 @@ export function WindowTab({ profile, step, index, previous, dispatch, problems }
       </span>
       <div role="radiogroup" aria-labelledby={`${id}-label`} aria-describedby={`${id}-note`} className="pattern-segments">
         {KINDS.map((entry) => (
-          <button key={entry.kind} type="button" role="radio" aria-checked={(dated ? draft.kind : 'none') === entry.kind} disabled={!dated} className="pattern-segment" onClick={() => choose(entry.kind)}>
+          <button key={entry.kind} type="button" role="radio" aria-checked={draft.kind === entry.kind} disabled={!dated && entry.kind !== 'none'} className="pattern-segment" onClick={() => choose(entry.kind)}>
             {entry.label}
           </button>
         ))}
@@ -47,6 +49,7 @@ export function WindowTab({ profile, step, index, previous, dispatch, problems }
       <div id={`${id}-note`}>
         {!typed ? <p className="pattern-help">{CONDITIONS_COPY.windowChooseTypes}</p> : null}
         {typed && !dated ? <p className="pattern-help">{CONDITIONS_COPY.windowNoDated}</p> : null}
+        {broken ? <p className="patterns-error">{BREAK_COPY.windowNeedsDate}</p> : null}
       </div>
       {draft.kind === 'days' && dated ? (
         <label className="condition-field">

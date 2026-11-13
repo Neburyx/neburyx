@@ -130,8 +130,8 @@ describe('changing a saved pattern in the builder', () => {
     await opened(listed({ id: ID, name: 'Alpha', definition: gone, availability: { status: 'unavailable', reasons: [{ code: 'unknown-entity-type', path: ['steps', 0, 'arrivesAt'] }] } }), { validate: async () => ({ ok: true, value: { status: 'invalid', problems: [{ path: ['steps', 0, 'arrivesAt'], code: 'unknown-entity-type' }] } }) });
     await vi.advanceTimersByTimeAsync(400);
     await settle();
-    await userEvent.click(builder().getByRole('tab', { name: 'Step 1' }));
-    expect(within(builder().getByRole('tabpanel', { name: 'Step 1' })).getByText(UNAVAILABLE_TEXT['unknown-entity-type'])).toBeTruthy();
+    await userEvent.click(builder().getByRole('tab', { name: /^Step 1/ }));
+    expect(within(builder().getByRole('tabpanel', { name: /^Step 1/ })).getByText(UNAVAILABLE_TEXT['unknown-entity-type'])).toBeTruthy();
     expect((builder().getByRole('button', { name: 'Save changes' }) as HTMLButtonElement).disabled).toBe(true);
   });
 

@@ -35,9 +35,9 @@ export const openBuilder = async (): Promise<void> => {
 export const builderPanel = (): HTMLElement => screen.getByRole('region', { name: 'New pattern' });
 export const startSelect = (): HTMLSelectElement => screen.getByLabelText('Starting entity type') as HTMLSelectElement;
 export const addStepButton = (): HTMLButtonElement => screen.getByRole('button', { name: '+ Step' }) as HTMLButtonElement;
-export const stepTab = (n: number): HTMLElement => within(builderPanel()).getByRole('tab', { name: `Step ${n}` });
+export const stepTab = (n: number): HTMLElement => within(builderPanel()).getByRole('tab', { name: new RegExp(`^Step ${n}( !)?$`) });
 /** The panel of step n, which is the one shown while its tab is selected. */
-export const stepCard = (n: number): HTMLElement => within(builderPanel()).getByRole('tabpanel', { name: `Step ${n}` });
+export const stepCard = (n: number): HTMLElement => within(builderPanel()).getByRole('tabpanel', { name: new RegExp(`^Step ${n}( !)?$`) });
 
 export type PartName = 'Link' | 'Conditions' | 'Window';
 const partTab = (n: number, part: PartName): HTMLElement => within(stepCard(n)).getByRole('tab', { name: new RegExp(`^${part}`) });

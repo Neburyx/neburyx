@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { MAX_FILTER_TEXT, PATTERN_LIMITS, patternProblemsOf } from '@neburyx/contracts';
 import { conditionsProfile } from './builder-kit.js';
 import { addConditionBlock, conditionSummary, hiddenPersonalCount, offeredProperties, operatorsFor, propertyKind, readRows, readWindow, windowReach, windowTypeLines, type ConditionRow } from './conditions.js';
-import { INITIAL, reduce, toDefinition, type Action, type BuilderState, type StepDraft } from './model.js';
+import { INITIAL, breaksOf, reduce, toDefinition, type Action, type BuilderState, type StepDraft } from './model.js';
 import { readValue } from '../../workspace/expand-refine.js';
 
 const profile = conditionsProfile();
@@ -32,9 +32,10 @@ describe('keeping conditions through a change', () => {
     const state = run(withRow(oneStep('k-6')), { type: 'window', index: 0, window: { kind: 'days', text: '7' } });
     const changed = run(state, { type: 'direction', index: 0, direction: 'both' }, { type: 'arrives', index: 0, arrivesAt: 'c-b' });
     expect(changed.draft.steps[0]?.conditions).toHaveLength(1);
-    const cleared = run(withRow(oneStep('k-1')), { type: 'direction', index: 0, direction: 'in' });
-    expect(cleared.draft.steps[0]?.conditions).toHaveLength(1);
-    expect(cleared.draft.steps[0]?.relationshipTypes).toEqual([]);
+    expect(changed.draft.steps[0]?.window).toEqual({ kind: 'days', text: '7' });
+    const turned = run(withRow(oneStep('k-1')), { type: 'direction', index: 0, direction: 'in' });
+    expect(turned.draft.steps[0]?.conditions).toHaveLength(1);
+    expect(turned.draft.steps[0]?.relationshipTypes).toEqual(['k-1']);
   });
 
   it('holds the definition back while a row’s property is not offered and while a value is unread, and sends it when whole', () => {
@@ -50,15 +51,21 @@ describe('keeping conditions through a change', () => {
     expect(toDefinition(stale.draft, profile, false)).toBeUndefined();
   });
 
-  it('drops a window that no chosen type can use, once, and keeps one that a dated type can use', () => {
+  it('keeps a window that no chosen type can use and marks it, and takes the mark away when a dated type is chosen', () => {
     const windowed = run(oneStep('k-1'), { type: 'window', index: 0, window: { kind: 'days', text: '7' } });
     const kept = run(windowed, { type: 'toggle', index: 0, relationshipType: 'k-2' });
     expect(kept.draft.steps[0]?.window).toEqual({ kind: 'days', text: '7' });
-    expect(kept.windowDropped).toBeUndefined();
-    const dropped = run(windowed, { type: 'toggle', index: 0, relationshipType: 'k-1' }, { type: 'toggle', index: 0, relationshipType: 'k-2' });
-    expect(dropped.draft.steps[0]?.window).toEqual({ kind: 'none' });
-    expect(dropped.windowDropped).toBe(true);
-    expect(run(dropped, { type: 'add' }).windowDropped).toBeUndefined();
+    expect(breaksOf(profile, kept.draft, false)).toEqual([]);
+    const marked = run(windowed, { type: 'toggle', index: 0, relationshipType: 'k-1' }, { type: 'toggle', index: 0, relationshipType: 'k-2' });
+    expect(marked.draft.steps[0]?.window).toEqual({ kind: 'days', text: '7' });
+    expect(breaksOf(profile, marked.draft, false).map((found) => found.kind)).toEqual(['window']);
+    expect(marked.undo?.changed).toBe(0);
+    expect(breaksOf(profile, run(marked, { type: 'toggle', index: 0, relationshipType: 'k-1' }).draft, false)).toEqual([]);
+  });
+
+  it('marks a condition whose property the step no longer offers', () => {
+    const stale = run(withRow(oneStep('k-1')), { type: 'change-condition', index: 0, id: 1, change: { on: 'relationship', property: 'q-size' } }, { type: 'toggle', index: 0, relationshipType: 'k-1' }, { type: 'toggle', index: 0, relationshipType: 'k-5' });
+    expect(breaksOf(profile, stale.draft, false).map((found) => found.kind)).toEqual(['condition']);
   });
 
   it('sends every row, the seventh included, and holds the definition back for an unread seventh', () => {

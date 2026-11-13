@@ -165,6 +165,7 @@ describe('conditions on the relationship', () => {
     await toggleType(1, 'k-5');
     await afterDebounce();
     expect(within(conditionRow(1, 1)).getByText('This property is not available for the types now chosen.')).toBeTruthy();
+    expect(screen.getByText('Step 1: the condition on q-size is not available on k-5.')).toBeTruthy();
     expect(kit.validations).toHaveLength(sent);
     await editRow(1, 1);
     await userEvent.selectOptions(rowField(1, 1, 'Property'), 'relationship:q-when');
@@ -172,15 +173,19 @@ describe('conditions on the relationship', () => {
     expect(kit.validations).toHaveLength(sent + 1);
   });
 
-  it('takes a step’s conditions with it when a change removes the step, under the line that says steps were removed', async () => {
+  it('keeps a step’s conditions when a change leaves the step unfollowed, and marks them', async () => {
     await started(['k-1']);
+    await addCondition(1);
+    await type(1, 1, 'Value', 'a');
     await userEvent.click(addStepButton());
     await chooseDirection(2, 'out');
     await chooseArrival(2, 'c-c');
     await toggleType(2, 'k-3');
     await chooseDirection(1, 'in');
-    expect(screen.queryByRole('tab', { name: 'Step 2' })).toBeNull();
-    expect(screen.getByText('Steps after this one were removed because they no longer follow from it.')).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Step 1 !' })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Step 2' })).toBeTruthy();
+    await openStep(1, 'Conditions');
+    expect(within(conditionRow(1, 1)).getByText('b-name is a')).toBeTruthy();
   });
 });
 

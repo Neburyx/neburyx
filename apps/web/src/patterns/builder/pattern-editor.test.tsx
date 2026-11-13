@@ -97,26 +97,29 @@ describe('changing the start and the steps', () => {
     await buildStep(2, 'out', 'n-c', ['r-3']);
   }
 
-  it('removes the steps after a change that breaks them and says so once', async () => {
+  it('keeps the steps after a change that leaves them unfollowed, marks them, and says so', async () => {
     await twoSteps();
     await openStep(1, 'Link');
     await userEvent.selectOptions(field(1, 'Arrives at'), 'n-a');
-    expect(screen.queryByRole('tab', { name: 'Step 2' })).toBeNull();
-    expect(screen.getAllByText('Steps after this one were removed because they no longer follow from it.')).toHaveLength(1);
+    expect(screen.getByRole('tab', { name: 'Step 1 !' })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Step 2 !' })).toBeTruthy();
+    expect(screen.getByText('Changing step 1 leaves 3 problems')).toBeTruthy();
+    expect(screen.getByText('Step 1: r-1 does not lead to N-A in the mapping.')).toBeTruthy();
   });
 
   it('keeps the later steps while they still join', async () => {
     await twoSteps();
     await toggleType(1, 'r-2');
     expect(screen.getByRole('tab', { name: 'Step 2' })).toBeTruthy();
-    expect(screen.queryByText(/were removed/)).toBeNull();
+    expect(screen.queryByText(/leaves \d problem/)).toBeNull();
   });
 
-  it('applies the rule when the start type changes', async () => {
+  it('keeps the steps when the start type changes, and says the change began at the start', async () => {
     await twoSteps();
     await chooseStart('n-c');
-    expect(screen.queryByRole('tab', { name: 'Step 2' })).toBeNull();
-    expect(screen.getByText(/were removed/)).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Step 1 !' })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Step 2' })).toBeTruthy();
+    expect(screen.getByText(/^Changing the start leaves \d problems?$/)).toBeTruthy();
   });
 });
 

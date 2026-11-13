@@ -135,7 +135,7 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
   const editingView = useMemo(() => (editing === undefined ? undefined : editingViewOf(editing.item, editing.whole)), [editing]);
   const change = (item: ListedPattern): void => {
     const opened = fromDefinition(item.kind === 'definition' ? item.definition : undefined);
-    setBuilder({ draft: opened.draft, removed: 0 });
+    setBuilder({ draft: opened.draft });
     setEditing({ item, whole: opened.whole });
     setNotice(undefined);
     setView('builder');

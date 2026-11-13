@@ -3,7 +3,7 @@ import { MAX_FILTER_TEXT, PATTERN_LIMITS } from '@neburyx/contracts';
 import { SHELL_COPY } from '../copy.js';
 import { FILTERS_NONE_OFFERED } from '../../workspace/expand-copy.js';
 import type { AddConditionBlock } from './conditions.js';
-import type { Direction, AddStepBlock } from './model.js';
+import type { AddStepBlock, Break, Direction } from './model.js';
 
 /** The words of the builder. "Path" and the two notes are frame 28's; the rest is proposed copy (listed with the frame differences). */
 export const BUILDER_COPY = {
@@ -241,3 +241,41 @@ export const WINDOW_COPY = {
 
 export const filteredOn = (properties: readonly string[]): string => `filtered on ${properties.join(', ')}`;
 export const cannotFilter = (type: string): string => `It cannot be filtered: ${type} is matched without a date limit.`;
+
+/** The words of a change that leaves later parts unfollowed (frame PB7). */
+const listOf = (items: readonly string[]): string => (items.length <= 2 ? items.join(' and ') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1] ?? ''}`);
+const doesNot = (count: number): string => (count === 1 ? 'does not' : 'do not');
+export const problemCount = (count: number): string => `${count} ${count === 1 ? 'problem' : 'problems'}`;
+
+export function breakText(found: Break, nameOf: (type: string | undefined) => string): string {
+  const step = `Step ${found.step + 1}`;
+  switch (found.kind) {
+    case 'types-leave':
+      return `${step}: ${listOf(found.types)} ${doesNot(found.types.length)} leave a ${nameOf(found.from)}.`;
+    case 'types-lead':
+      return `${step}: ${listOf(found.types)} ${doesNot(found.types.length)} lead to ${nameOf(found.arrival)} in the mapping.`;
+    case 'arrival':
+      return `${step}: ${nameOf(found.from)} does not reach ${nameOf(found.arrival)} in this direction.`;
+    case 'condition':
+      return `${step}: the condition on ${found.row.property} is not available on ${found.row.on === 'neighbor' ? nameOf(found.arrival) : listOf(found.types)}.`;
+    case 'window':
+      return `${step}: the window needs a relationship type with a date.`;
+    default: {
+      const unreachable: never = found;
+      return unreachable;
+    }
+  }
+}
+
+export const BREAK_COPY = {
+  undo: 'Undo change',
+  nothingRemoved: 'Nothing is removed for you. Fix each item, or undo the change.',
+  fixEach: 'Nothing is removed for you. Fix each item.',
+  windowNeedsDate: 'No chosen relationship type has a date, so the window does not apply. Choose a type with a date, or set the window to None.',
+} as const;
+
+export const breakTitle = (changed: 'start' | number | undefined, count: number): string => (changed === undefined ? `${problemCount(count)} the mapping does not follow` : `Changing ${changed === 'start' ? 'the start' : `step ${changed + 1}`} leaves ${problemCount(count)}`);
+export const chainProblems = (count: number): string => `${problemCount(count)}. Preview is off until they are fixed.`;
+export const leadsElsewhere = (type: string, actual: readonly string[], arrival: string): string => `${type} leads to ${actual.join(' or ')}, not ${arrival}.`;
+export const doesNotLeave = (type: string, from: string): string => `${type} does not leave a ${from}.`;
+export const arrivalChanged = (was: string | undefined, arrival: string): string => `${was === undefined ? '' : `Changed from ${was}. `}Choose types that lead to ${arrival}, or change it back.`;
