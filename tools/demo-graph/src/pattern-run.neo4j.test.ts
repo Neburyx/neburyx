@@ -18,8 +18,10 @@ afterAll(async () => {
   await insurance?.close();
 });
 
+const PAGE = 50;
+
 async function reached(pack: PackRun, sourceId: string, anchorType: string, stableId: string, steps: Record<string, unknown>[]) {
-  const page = await pack.gate.run(gateRequest({ sourceId, principal: LOCAL_PRINCIPAL, templateId: PATTERN_ID, params: { anchorType, stableId, steps }, limit: 500 }));
+  const page = await pack.gate.run(gateRequest({ sourceId, principal: LOCAL_PRINCIPAL, templateId: PATTERN_ID, params: { anchorType, stableId, steps }, limit: PAGE }));
   const [item] = page.items;
   if (!isNormalizedPattern(item)) throw new Error('the read gave no pattern result');
   return { item, ids: new Set(item.matches.map((entry) => entry.match.stableId)) };
@@ -31,6 +33,7 @@ describe('a pattern over the banking pack on its demo graph', () => {
     const anchor = 'AC-0000006';
     const expected = expectedReach('account', anchor, [{ edges: transfers, direction: 'out', arrivesAt: 'account' }]);
     expect(expected.size).toBeGreaterThan(0);
+    expect(expected.size).toBeLessThan(PAGE);
     const { item, ids } = await reached(banking, 'banking-demo', 'account', anchor, [{ relationshipTypes: ['TRANSFERRED_TO'], direction: 'out', arrivesAt: 'account' }]);
     expect(ids).toEqual(expected);
     expect(ids.has(anchor)).toBe(false);
@@ -48,6 +51,7 @@ describe('a pattern over the insurance pack on its demo graph', () => {
     const steps = [{ edges: lives, direction: 'out', arrivesAt: 'address' }, { edges: lives, direction: 'in', arrivesAt: 'claimant' }] as const;
     const expected = expectedReach('claimant', anchor, steps);
     expect(expected.size).toBeGreaterThan(0);
+    expect(expected.size).toBeLessThan(PAGE);
     const { item, ids } = await reached(insurance, 'insurance-demo', 'claimant', anchor, [
       { relationshipTypes: ['LIVES_AT'], direction: 'out', arrivesAt: 'address' },
       { relationshipTypes: ['LIVES_AT'], direction: 'in', arrivesAt: 'claimant' },
