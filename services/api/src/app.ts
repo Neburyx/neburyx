@@ -55,7 +55,7 @@ import { matchesEntityTag } from './registry/etag.js';
 import { identityHashOf } from './registry/identity-hash.js';
 import { summariesOf } from './registry/summary.js';
 import { readinessResponse } from './health/readiness.js';
-import { communitySeams } from './seams/community-seams.js';
+import { communityAskPlanner, communitySeams } from './seams/community-seams.js';
 import { mountExtensionRoutes } from './profile/mount.js';
 import type { Seams } from './seams/seams.js';
 import type { RegisteredRoute } from './permissions.js';
@@ -356,7 +356,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
     return meResponseSchema.parse({ ...identity, edition: options.extension === undefined ? 'community' : 'enterprise', sources });
   });
 
-  if (options.extension !== undefined) mountExtensionRoutes(app, options.extension, options.store, { previewOn: options.previewOn === true, audit: (options.seams ?? communitySeams()).audit });
+  if (options.extension !== undefined) mountExtensionRoutes(app, options.extension, options.store, { previewOn: options.previewOn === true, audit: (options.seams ?? communitySeams()).audit, askPlanner: (options.seams ?? communitySeams()).askPlanner ?? communityAskPlanner });
 
   app.get('/v1/sources', { exposeHeadRoute: false, config: { permission: 'principal' } }, async (request) => {
     if (!noQuerySchema.safeParse(request.query).success) throw new AppError('INVALID_REQUEST');

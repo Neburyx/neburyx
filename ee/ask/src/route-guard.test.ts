@@ -1,6 +1,9 @@
 import { ExtensionRefusal, aiStatusResponseSchema, parseExtensionRefusal, type AuditEvent, type ExtensionRequest, type ExtensionRouteGroup } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
+import { createEnterpriseExtension } from './index.js';
 import { ROUTE_REFUSED_ACTION, guardAiRouteGroup } from './route-guard.js';
+import { askPlanRoute } from './routes/ask-plan.js';
+import { askRunRoute } from './routes/ask-run.js';
 import { buildPromptRegistry } from './prompts.js';
 import { replyKey, createFixtureProvider } from './testing/fixture.js';
 import type { ModelRequest } from './provider.js';
@@ -17,7 +20,7 @@ async function fixture() {
 function requestOf(options: { readonly previewOn: boolean; readonly record?: (event: AuditEvent) => Promise<void> }): { readonly request: ExtensionRequest; readonly events: AuditEvent[] } {
   const events: AuditEvent[] = [];
   const record = options.record ?? (async (event: AuditEvent) => void events.push(event));
-  return { events, request: { principalId: 'principal-1', principalRole: 'investigator', previewOn: options.previewOn, traceId: 'tr-1', audit: { record } } };
+  return { events, request: { principalId: 'principal-1', principalRole: 'investigator', previewOn: options.previewOn, traceId: 'tr-1', audit: { record }, askPlanner: { availability: () => ({ available: false, reason: 'x' }), plan: () => Promise.reject(new Error('not used')) } } };
 }
 
 async function groupOf() {
@@ -84,7 +87,7 @@ describe('the route-group hook with the preview off', () => {
   it('refuses every route of the group, one event for each call', async () => {
     const { guarded } = await groupOf();
     const { request, events } = requestOf({ previewOn: false });
-    for (const route of guarded.routes) expect(parseExtensionRefusal(await refusalOf(Promise.resolve(route.handler(request))))?.reason).toBe('ai-preview-off');
+    for (const route of guarded.routes) expect(parseExtensionRefusal(await refusalOf(Promise.resolve(route.handler(request))))).toMatchObject({ reason: 'ai-preview-off' });
     expect(events).toHaveLength(2);
   });
 });
@@ -93,5 +96,20 @@ describe('a group passed to the hook', () => {
   it('keeps the routes in their order with their method, URL, permission and schema', async () => {
     const { guarded } = await groupOf();
     expect(guarded.routes.map((route) => [route.method, route.url, route.permission])).toEqual([['GET', '/v1/ai/probe', 'principal'], ['GET', '/v1/ai/other', 'principal']]);
+  });
+});
+
+describe('the Ask routes of the extension', () => {
+  it.each([askPlanRoute, askRunRoute])('is refused, and the refusal audited, when the preview is off: $url', async (route) => {
+    const [guarded] = guardAiRouteGroup({ routes: [route] }).routes;
+    const { request, events } = requestOf({ previewOn: false });
+    const thrown = await Promise.resolve(guarded?.handler(request)).catch((error: unknown) => error);
+    expect(parseExtensionRefusal(thrown)).toEqual({ code: 'ACCESS_DENIED', reason: 'ai-preview-off', audited: true });
+    expect(events).toHaveLength(1);
+  });
+
+  it('are both in the group the extension mounts, behind the guard', async () => {
+    const urls = createEnterpriseExtension().routeGroups.flatMap((group) => group.routes.map((route) => route.url));
+    expect(urls).toEqual(expect.arrayContaining(['/v1/ask/plan', '/v1/ask/run']));
   });
 });

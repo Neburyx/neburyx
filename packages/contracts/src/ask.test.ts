@@ -1,0 +1,43 @@
+import { describe, expect, it } from 'vitest';
+import { askPlanRequestSchema, askPlanSchema, askRunRequestSchema, ASK_MESSAGE_MAX_LENGTH } from './ask.js';
+
+const REF = { entityType: 'node_a', stableId: 'A-1' };
+const SHARED = { kind: 'plan', templateId: 'shared-attribute', templateVersion: 1, params: { ref: REF, attributeType: 'attr_type', via: 'attr_link', window: { days: 90 }, limit: 25 }, rationale: 'People who share a device.' };
+const LINKED = { kind: 'plan', templateId: 'linked-entities', templateVersion: 1, params: { ref: REF, targetType: 'target_type', via: ['link_type'], maxHops: 2 }, rationale: 'Merchants reached by payments.' };
+
+describe('the plan a planner answers', () => {
+  it.each([['a shared-attribute plan', SHARED], ['a linked-entities plan', LINKED], ['an unsupported plan', { kind: 'unsupported', reason: 'No template fits this question.' }]])('accepts %s', (_name, plan) => {
+    expect(askPlanSchema.safeParse(plan).success).toBe(true);
+  });
+
+  it.each([
+    ['an unknown template', { ...SHARED, templateId: 'free-query' }],
+    ['parameters that do not fit their template', { ...SHARED, params: { ...SHARED.params, direction: 'out' } }],
+    ['parameters of another template', { ...LINKED, params: SHARED.params }],
+    ['a text field beside the parameters', { ...SHARED, query: 'MATCH (n) RETURN n' }],
+    ['a plan with no rationale', { ...SHARED, rationale: '' }],
+    ['an unsupported plan with no reason', { kind: 'unsupported' }],
+    ['an unknown kind', { kind: 'run', templateId: 'shared-attribute' }],
+  ])('rejects %s', (_name, plan) => {
+    expect(askPlanSchema.safeParse(plan).success).toBe(false);
+  });
+});
+
+describe('the body of the plan endpoint', () => {
+  it('takes one non-empty message of at most the limit, and nothing else', () => {
+    expect(askPlanRequestSchema.safeParse({ message: 'Who shares a device?' }).success).toBe(true);
+    expect(askPlanRequestSchema.safeParse({ message: '𝒳'.repeat(ASK_MESSAGE_MAX_LENGTH) }).success).toBe(true);
+    for (const body of [{}, { message: '' }, { message: 3 }, { message: '𝒳'.repeat(ASK_MESSAGE_MAX_LENGTH + 1) }, { message: 'x', send: true }]) {
+      expect(askPlanRequestSchema.safeParse(body).success).toBe(false);
+    }
+  });
+});
+
+describe('the body of the run endpoint', () => {
+  it('takes one plan ID that is a uuid, and nothing else', () => {
+    expect(askRunRequestSchema.safeParse({ planId: '0192f000-0000-7000-8000-0000000000a1' }).success).toBe(true);
+    for (const body of [{}, { planId: 'plan-1' }, { planId: 7 }, { planId: '0192f000-0000-7000-8000-0000000000a1', send: true }]) {
+      expect(askRunRequestSchema.safeParse(body).success).toBe(false);
+    }
+  });
+});

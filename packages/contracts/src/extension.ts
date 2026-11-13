@@ -1,5 +1,6 @@
 import { z, type ZodType } from 'zod';
 import type { AiSettings } from './ai.js';
+import type { AskPlanner } from './ask.js';
 import type { AuditEvent, AuditSink, AuditSinkContext, MountedAuditSink } from './audit.js';
 
 export type ExtensionRoutePermission = 'public' | 'principal';
@@ -12,12 +13,20 @@ export interface ExtensionRequest {
   readonly traceId: string;
   /** The application's audit sink as it is: a failed write rejects, so a call that must fail closed can. */
   readonly audit: AuditSink;
+  /** The body of a `POST` route, already parsed by the route's request schema. */
+  readonly body?: unknown;
+  /** The application's `AskPlanner`: the Community default unless the application was given another. */
+  readonly askPlanner: AskPlanner;
 }
 
+export type ExtensionRouteMethod = 'GET' | 'POST';
+
 export interface ExtensionRoute {
-  readonly method: 'GET';
+  readonly method: ExtensionRouteMethod;
   readonly url: string;
   readonly permission: ExtensionRoutePermission;
+  /** Required for a `POST` route and refused on a `GET` route: the strict schema of the body. */
+  readonly requestSchema?: ZodType;
   readonly responseSchema: ZodType;
   readonly handler: (request: ExtensionRequest) => Promise<unknown>;
 }
@@ -67,28 +76,29 @@ export interface ProfileExtension {
 
 const EXTENSION_REFUSAL_NAME = 'ExtensionRefusal';
 
-/** What a refusal is made of: the one code and the one reason a route group may refuse with today, and whether the refusal's own audit event was written. */
-export const extensionRefusalSchema = z.object({
-  name: z.literal(EXTENSION_REFUSAL_NAME),
-  code: z.literal('ACCESS_DENIED'),
-  reason: z.literal('ai-preview-off'),
-  audited: z.boolean(),
-});
+const previewOffRefusalSchema = z.object({ name: z.literal(EXTENSION_REFUSAL_NAME), code: z.literal('ACCESS_DENIED'), reason: z.literal('ai-preview-off'), audited: z.boolean() });
+const notInThisEditionRefusalSchema = z.object({ name: z.literal(EXTENSION_REFUSAL_NAME), code: z.literal('ASK_UNSUPPORTED'), reason: z.literal('not-in-this-edition') });
 
-export type ExtensionRefusalFields = Omit<z.infer<typeof extensionRefusalSchema>, 'name'>;
+const notFoundRefusalSchema = z.object({ name: z.literal(EXTENSION_REFUSAL_NAME), code: z.literal('NOT_FOUND') });
+
+/** What a refusal is made of: the preview being off (with whether the refusal's own audit event was written), Ask having no planner in this build, or a thing the call names not being there. */
+export const extensionRefusalSchema = z.union([previewOffRefusalSchema, notInThisEditionRefusalSchema, notFoundRefusalSchema]);
+
+export type ExtensionRefusalFields = Omit<z.infer<typeof previewOffRefusalSchema>, 'name'> | Omit<z.infer<typeof notInThisEditionRefusalSchema>, 'name'> | Omit<z.infer<typeof notFoundRefusalSchema>, 'name'>;
 
 /** Thrown by a route handler of an extension to refuse a call; the API answers it with the code and reason it names. */
 export class ExtensionRefusal extends Error {
   readonly code: ExtensionRefusalFields['code'];
-  readonly reason: ExtensionRefusalFields['reason'];
-  readonly audited: boolean;
+  readonly reason: string | undefined;
+  /** Only a refusal that is audited says whether its event was written. */
+  readonly audited: boolean | undefined;
 
   constructor(fields: ExtensionRefusalFields) {
     super();
     this.name = EXTENSION_REFUSAL_NAME;
     this.code = fields.code;
-    this.reason = fields.reason;
-    this.audited = fields.audited;
+    this.reason = 'reason' in fields ? fields.reason : undefined;
+    this.audited = 'audited' in fields ? fields.audited : undefined;
   }
 }
 
@@ -98,5 +108,7 @@ export class ExtensionRefusal extends Error {
  */
 export function parseExtensionRefusal(value: unknown): ExtensionRefusalFields | undefined {
   const parsed = extensionRefusalSchema.safeParse(value);
-  return parsed.success ? { code: parsed.data.code, reason: parsed.data.reason, audited: parsed.data.audited } : undefined;
+  if (!parsed.success) return undefined;
+  const { name: _name, ...fields } = parsed.data;
+  return fields;
 }

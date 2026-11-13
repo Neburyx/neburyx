@@ -1,14 +1,14 @@
-export { ACCESS_DENIED_REASONS, CONFLICT_REASONS, ERROR_CODES, INVALID_REQUEST_REASONS, errorBodySchema, errorCodeSchema, errorDetailsSchema, partialDetailsSchema, SOURCE_UNAVAILABLE_REASONS } from './error-codes.js';
+export { ACCESS_DENIED_REASONS, ASK_UNSUPPORTED_REASONS, CONFLICT_REASONS, ERROR_CODES, INVALID_REQUEST_REASONS, errorBodySchema, errorCodeSchema, errorDetailsSchema, partialDetailsSchema, SOURCE_UNAVAILABLE_REASONS } from './error-codes.js';
 export { errorResponseSchema } from './error-response.js';
-export type { AccessDeniedReason, ConflictReason, InvalidRequestReason, ErrorCode, ErrorDetails, ErrorResponse, SourceUnavailableReason } from './error-codes.js';
+export type { AccessDeniedReason, AskUnsupportedReason, ConflictReason, InvalidRequestReason, ErrorCode, ErrorDetails, ErrorResponse, SourceUnavailableReason } from './error-codes.js';
 export { ERROR_DETAIL_KEYS, allowedDetails } from './error-details.js';
-export { ACCESS_DENIED_ENTRIES, CONFLICT_ENTRIES, ERROR_TABLE, INVALID_REQUEST_ENTRIES, findMissingCodes, SOURCE_UNAVAILABLE_ENTRIES } from './error-table.js';
+export { ACCESS_DENIED_ENTRIES, ASK_UNSUPPORTED_ENTRIES, CONFLICT_ENTRIES, ERROR_TABLE, INVALID_REQUEST_ENTRIES, findMissingCodes, SOURCE_UNAVAILABLE_ENTRIES } from './error-table.js';
 export type { ErrorEntry } from './error-table.js';
 export { buildOpenApiDocument } from './openapi.js';
 export type { OpenApiDocument } from './openapi.js';
 export { ExtensionRefusal, extensionRefusalSchema, parseExtensionRefusal } from './extension.js';
 export type { ExtensionRefusalFields } from './extension.js';
-export type { AiMappingView, AiViewProperty, AiViewType, ConfigureOutcome, ConfigureWarning, ExtensionLogger, ExtensionRequest, ExtensionRoute, ExtensionRouteGroup, ExtensionRoutePermission, ProfileExtension } from './extension.js';
+export type { AiMappingView, AiViewProperty, AiViewType, ConfigureOutcome, ConfigureWarning, ExtensionLogger, ExtensionRequest, ExtensionRoute, ExtensionRouteMethod, ExtensionRouteGroup, ExtensionRoutePermission, ProfileExtension } from './extension.js';
 export { AI_ALL_PROPERTIES, AI_CACHE_TTLS, AI_DEFAULTS, AI_EFFORTS, AI_LIMITS, AI_PROVIDERS, aiSettingsSchema, aiStatusResponseSchema } from './ai.js';
 export type { AiCacheTtl, AiEffort, AiSettings, AiStatusResponse } from './ai.js';
 export { AUDIT_RESULTS, SYSTEM_ACTOR_ID, aiAuditDetailSchema, auditDetailSchema, isTokenCount, parseAiAuditDetail, parseAuditDetail, tokenCount } from './audit.js';
@@ -168,3 +168,5 @@ export { changePatternRequestSchema, deletePatternResponseSchema, DEFAULT_PATTER
 export type { ChangePatternRequest, DeletePatternResponse, ListedPattern, PatternAvailability, PatternListResponse, SavedPattern, SavePatternRequest } from './saved-pattern.js';
 export { patternUnavailableSchema, savedPatternRunRequestSchema, savedPatternRunResponseSchema } from './saved-pattern-run.js';
 export type { PatternUnavailable, SavedPatternRunRequest, SavedPatternRunResponse } from './saved-pattern-run.js';
+export { ASK_MESSAGE_MAX_LENGTH, ASK_RUN_OUTCOMES, ASK_TEXT_MAX_LENGTH, askPlanRequestSchema, askPlanResponseSchema, askPlanSchema, askRunRequestSchema, askRunResponseSchema } from './ask.js';
+export type { AskAvailability, AskPlan, AskPlanner, AskPlanRequest, AskRunRequest } from './ask.js';

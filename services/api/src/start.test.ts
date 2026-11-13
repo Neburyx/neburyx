@@ -224,6 +224,21 @@ describe('the enterprise extension at start', () => {
     expect(rig.errors.join('')).toBe('the enterprise route GET /v1/fake/status has no known permission\n');
   });
 
+  it('exits 1 naming a route with a method other than GET or POST', async () => {
+    const rig = run(async () => extensionWith(route({ method: 'DELETE' as never })));
+    expect(await start(ON, rig.io)).toEqual({ exitCode: 1 });
+    expect(rig.errors.join('')).toBe('the enterprise route DELETE /v1/fake/status has a method other than GET or POST\n');
+  });
+
+  it.each([
+    ['a POST route without a request schema', route({ method: 'POST' }), 'the enterprise route POST /v1/fake/status has no request schema\n'],
+    ['a GET route with a request schema', route({ requestSchema: statusSchema }), 'the enterprise route GET /v1/fake/status has a request schema but is not a POST\n'],
+  ])('exits 1 naming %s', async (_name, declared, message) => {
+    const rig = run(async () => extensionWith(declared));
+    expect(await start(ON, rig.io)).toEqual({ exitCode: 1 });
+    expect(rig.errors.join('')).toBe(message);
+  });
+
   it.each(['/', '/healthz', '/readyz', '/v1', '/fake/status'])('exits 1 naming a route at %s, which is outside /v1/', async (url) => {
     const rig = run(async () => extensionWith(route({ url })));
     expect(await start(ON, rig.io)).toEqual({ exitCode: 1 });

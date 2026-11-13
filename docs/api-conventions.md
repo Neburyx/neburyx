@@ -141,6 +141,14 @@ With neither part of the preview switch set, the enterprise code is not loaded a
 |---|---|---|
 | `ai-preview-off` | The AI preview is not switched on for this deployment. The switch is a safety rail that whoever runs the deployment sets, not a lock. | `false` |
 
+## An Ask call that no planner can answer
+
+With the AI preview on, `POST /v1/ask/plan` and `POST /v1/ask/run` are mounted, and where no planner is installed they answer `ASK_UNSUPPORTED` (422) with `details.reason`. Nothing is audited for this answer. With the switch off the paths do not exist: 404. `POST /v1/ask/run` answers `NOT_FOUND` (404) for a plan that is not there; until plans are stored, none is.
+
+| `details.reason` | `message` | `retryable` |
+|---|---|---|
+| `not-in-this-edition` | Ask is not available in this edition. | `false` |
+
 ## Field limits
 
 Every request is checked against a strict schema: unknown fields are rejected, and a violation is `INVALID_REQUEST`.
@@ -152,6 +160,8 @@ Every request is checked against a strict schema: unknown fields are rejected, a
 | View and pattern names | 120 characters |
 | Notes | 10,000 characters |
 | Search text | 2 to 200 characters |
+| Ask question | 1 to 1,000 characters |
+| Ask plan rationale, and the reason of an unsupported plan | 1 to 500 characters |
 | A template string parameter | 200 characters (a template's schema may be stricter) |
 | A template list parameter | 100 items (a template's schema may be stricter) |
 | Request body | 1 MiB; `PUT /v1/investigations/{id}/draft` 2 MiB and 4 KiB (two documents of at most 1 MiB each, and their envelope) |

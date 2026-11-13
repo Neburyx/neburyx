@@ -3,6 +3,7 @@ import type { AddressInfo } from 'node:net';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { AskPlan, AskPlanner, AuditEvent } from '@neburyx/contracts';
 import { createEnterpriseExtension } from '@neburyx/ee-ask';
 import pino from 'pino';
 import { stringify } from 'yaml';
@@ -10,6 +11,7 @@ import { z } from 'zod';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import { buildApp, registeredRoutesOf } from '../app.js';
 import { routesWithoutPermission } from '../permissions.js';
+import { communitySeams } from '../seams/community-seams.js';
 import { start, type StartIo } from '../start.js';
 import { baseSource } from '../testing/mapping.js';
 import { memoryAppStore } from '../testing/app-store.js';
@@ -122,8 +124,26 @@ describe('the real enterprise extension in a start', () => {
   it.each([true, false])('is described by the committed contract when mounted with the preview on %s', async (previewOn) => {
     const app = await buildApp({ webRoot, logger: pino({ level: 'silent' }), store: memoryAppStore(), extension: createEnterpriseExtension(), previewOn });
     const failures = await checkOperations(app, loadCommittedDocument(), {});
-    expect(failures.filter((failure) => failure.route.includes('/v1/ai/status'))).toEqual([]);
+    expect(failures.filter((failure) => failure.route.includes('/v1/ai/status') || failure.route.includes('/v1/ask/'))).toEqual([]);
     await app.close();
+  });
+
+  it('answers POST /v1/ask/plan with 422 ASK_UNSUPPORTED, the reason not-in-this-edition and its sentence, when no planner is installed', async () => {
+    const result = await start({ DATABASE_URL, NEBURYX_CONFIG: previewFile, NEBURYX_PROFILE: 'enterprise', AI_TEST_KEY: 'present' }, startIo());
+    expect(result.exitCode).toBe(0);
+    if (result.exitCode !== 0) return;
+    const answer = await result.app.inject({ method: 'POST', url: '/v1/ask/plan', payload: { message: 'Who shares a device?' } });
+    expect([answer.statusCode, answer.json().error.code, answer.json().error.message, answer.json().error.details]).toEqual([422, 'ASK_UNSUPPORTED', 'Ask is not available in this edition.', { reason: 'not-in-this-edition' }]);
+    await result.app.close();
+  });
+
+  it.each([['a missing body', undefined], ['no message', {}], ['an empty message', { message: '' }], ['another field', { message: 'x', send: true }]])('answers POST /v1/ask/plan with 400 INVALID_REQUEST for %s', async (_name, payload) => {
+    const result = await start({ DATABASE_URL, NEBURYX_CONFIG: previewFile, NEBURYX_PROFILE: 'enterprise', AI_TEST_KEY: 'present' }, startIo());
+    expect(result.exitCode).toBe(0);
+    if (result.exitCode !== 0) return;
+    const answer = await result.app.inject({ method: 'POST', url: '/v1/ask/plan', ...(payload === undefined ? {} : { payload }) });
+    expect([answer.statusCode, answer.json().error.code]).toEqual([400, 'INVALID_REQUEST']);
+    await result.app.close();
   });
 
   it('answers the status route with the 403 of a refusal when the app is told the preview is off', async () => {
@@ -187,5 +207,97 @@ describe('a model failure in the real enterprise extension in a start', () => {
       err.mockRestore();
       await new Promise<void>((resolve) => provider.close(() => resolve()));
     }
+  });
+});
+
+describe('the Ask plan route with a planner installed through the seams', () => {
+  const REF = { entityType: 'node_a', stableId: 'A-1' };
+  const PLAN: AskPlan = { kind: 'plan', templateId: 'shared-attribute', templateVersion: 1, params: { ref: REF, attributeType: 'attr_type', via: 'attr_link', limit: 25 }, rationale: 'People who share a device.' };
+
+  async function appWith(answer: unknown) {
+    const seen: string[] = [];
+    const lines: string[] = [];
+    // a planner that answers something that is not a plan is the case under test, and the type forbids it
+    const planner: AskPlanner = { availability: () => ({ available: true }), plan: async ({ text }) => (seen.push(text), answer as never) };
+    const app = await buildApp({ webRoot, logger: pino({ level: 'info' }, { write: (line: string) => void lines.push(line) }), store: memoryAppStore(), seams: { ...communitySeams(), askPlanner: planner }, extension: createEnterpriseExtension(), previewOn: true });
+    return { app, seen, lines };
+  }
+
+  it('answers the plan of the stub, and the stub received the message text', async () => {
+    const { app, seen } = await appWith(PLAN);
+    const answer = await app.inject({ method: 'POST', url: '/v1/ask/plan', payload: { message: 'Who shares a device with ‹person#1›?' } });
+    expect([answer.statusCode, answer.json()]).toEqual([200, { plan: PLAN }]);
+    expect(seen).toEqual(['Who shares a device with ‹person#1›?']);
+    await app.close();
+  });
+
+  it('answers an unsupported plan unchanged', async () => {
+    const unsupported: AskPlan = { kind: 'unsupported', reason: 'No template fits this question.' };
+    const { app } = await appWith(unsupported);
+    const answer = await app.inject({ method: 'POST', url: '/v1/ask/plan', payload: { message: 'Is this person guilty?' } });
+    expect([answer.statusCode, answer.json()]).toEqual([200, { plan: unsupported }]);
+    await app.close();
+  });
+
+  it('is described by the committed contract when the stub answers a plan', async () => {
+    const { app } = await appWith(PLAN);
+    const failures = await checkOperations(app, loadCommittedDocument(), {});
+    expect(failures.filter((failure) => failure.route.includes('/v1/ask/plan'))).toEqual([]);
+    await app.close();
+  });
+
+  it('answers INTERNAL_ERROR, and puts the value in neither the answer nor the log, when the stub answers something that is not a plan', async () => {
+    const { app, lines } = await appWith({ kind: 'plan', templateId: 'free-query', query: 'SENTINEL-VALUE' });
+    const answer = await app.inject({ method: 'POST', url: '/v1/ask/plan', payload: { message: 'Who shares a device?' } });
+    expect([answer.statusCode, answer.json().error.code]).toEqual([500, 'INTERNAL_ERROR']);
+    expect(answer.body + lines.join('')).not.toContain('SENTINEL');
+    await app.close();
+  });
+});
+
+describe('the Ask run route', () => {
+  const PLAN_ID = '0192f000-0000-7000-8000-0000000000a1';
+
+  async function appOf(planner: AskPlanner | undefined, previewOn = true) {
+    return buildApp({ webRoot, logger: pino({ level: 'silent' }), store: memoryAppStore(), seams: { ...communitySeams(), ...(planner === undefined ? {} : { askPlanner: planner }) }, extension: createEnterpriseExtension(), previewOn });
+  }
+
+  it('answers 422 ASK_UNSUPPORTED with the reason not-in-this-edition under the Community planner', async () => {
+    const app = await appOf(undefined);
+    const answer = await app.inject({ method: 'POST', url: '/v1/ask/run', payload: { planId: PLAN_ID } });
+    expect([answer.statusCode, answer.json().error.code, answer.json().error.details]).toEqual([422, 'ASK_UNSUPPORTED', { reason: 'not-in-this-edition' }]);
+    await app.close();
+  });
+
+  it('answers 404 NOT_FOUND for any plan under an available planner, since no plan is stored yet', async () => {
+    const app = await appOf({ availability: () => ({ available: true }), plan: () => Promise.reject(new Error('must not be called')) });
+    const answer = await app.inject({ method: 'POST', url: '/v1/ask/run', payload: { planId: PLAN_ID } });
+    expect([answer.statusCode, answer.json().error.code]).toEqual([404, 'NOT_FOUND']);
+    await app.close();
+  });
+
+  it.each([['a missing body', undefined], ['a plan ID that is not a uuid', { planId: 'plan-1' }], ['another field', { planId: PLAN_ID, send: true }]])('answers 400 INVALID_REQUEST for %s', async (_name, payload) => {
+    const app = await appOf(undefined);
+    const answer = await app.inject({ method: 'POST', url: '/v1/ask/run', ...(payload === undefined ? {} : { payload }) });
+    expect([answer.statusCode, answer.json().error.code]).toEqual([400, 'INVALID_REQUEST']);
+    await app.close();
+  });
+
+  it.each([['/v1/ask/plan', { message: 'Who shares a device?' }], ['/v1/ask/run', { planId: PLAN_ID }]])('answers 403 ACCESS_DENIED with the reason ai-preview-off for %s when the preview is off, and never calls the planner', async (url, payload) => {
+    const calls: string[] = [];
+    const app = await appOf({ availability: () => (calls.push('availability'), { available: true }), plan: () => (calls.push('plan'), Promise.reject(new Error('must not be called'))) }, false);
+    const answer = await app.inject({ method: 'POST', url, payload });
+    expect([answer.statusCode, answer.json().error.code, answer.json().error.details]).toEqual([403, 'ACCESS_DENIED', { reason: 'ai-preview-off' }]);
+    expect(calls).toEqual([]);
+    await app.close();
+  });
+
+  it('answers 403 ACCESS_DENIED with one audited refusal, not 400, for a bad body when the preview is off', async () => {
+    const events: AuditEvent[] = [];
+    const app = await buildApp({ webRoot, logger: pino({ level: 'silent' }), store: memoryAppStore(), seams: { ...communitySeams(), audit: { record: async (event) => void events.push(event) } }, extension: createEnterpriseExtension(), previewOn: false });
+    const answer = await app.inject({ method: 'POST', url: '/v1/ask/plan', payload: { nothing: true } });
+    expect([answer.statusCode, answer.json().error.code, answer.json().error.details]).toEqual([403, 'ACCESS_DENIED', { reason: 'ai-preview-off' }]);
+    expect(events).toHaveLength(1);
+    await app.close();
   });
 });

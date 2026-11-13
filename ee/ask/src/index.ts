@@ -6,6 +6,8 @@ import { createAuditedModelCall, type AuditedModelCall } from './audited.js';
 import { configureAsk, type AskConfiguration } from './configure.js';
 import { createFailureReporter } from './failure-line.js';
 import { guardAiRouteGroup } from './route-guard.js';
+import { askPlanRoute } from './routes/ask-plan.js';
+import { askRunRoute } from './routes/ask-run.js';
 import { createRequestBuilder, type RequestBuilder } from './request.js';
 
 export { AUDIT_ACTIONS, AuditUnavailableError, createAuditedModelCall } from './audited.js';
@@ -22,6 +24,9 @@ export { BUILT_IN_PROMPTS, MAX_OVERRIDE_BYTES, PromptError, buildPromptRegistry 
 export type { BuiltInPrompt, PromptRegistry, PromptRegistryResult, ResolvedPrompt } from './prompts.js';
 export { FAILURE_CODES, PROMPT_IDS } from './provider.js';
 export type { FailureCode, ModelAnswer, ModelProvider, ModelRequest, PromptId, PromptParameters, PromptRecord, PromptSource, TokenUsage } from './provider.js';
+
+export { ASK_PLAN_URL, askPlanRoute } from './routes/ask-plan.js';
+export { ASK_RUN_URL, askRunRoute } from './routes/ask-run.js';
 
 export const AI_STATUS_URL = '/v1/ai/status';
 
@@ -77,6 +82,8 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
             responseSchema: aiStatusResponseSchema,
             handler: async () => ({ preview: true }),
           },
+          askPlanRoute,
+          askRunRoute,
         ],
       }),
     ],

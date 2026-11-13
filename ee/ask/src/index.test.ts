@@ -7,14 +7,14 @@ import { describe, expect, it } from 'vitest';
 import { AI_STATUS_URL, createEnterpriseExtension } from './index.js';
 
 describe('the enterprise extension', () => {
-  it('has one route group with the status route, which answers its declared schema', async () => {
+  it('has one route group with the status route, which answers its declared schema, and the two Ask routes', async () => {
     const extension = createEnterpriseExtension();
     const [group, ...others] = extension.routeGroups;
     expect(others).toEqual([]);
     const [route, ...more] = group?.routes ?? [];
-    expect(more).toEqual([]);
+    expect(more.map((other) => [other.method, other.url])).toEqual([['POST', '/v1/ask/plan'], ['POST', '/v1/ask/run']]);
     expect([route?.method, route?.url, route?.permission]).toEqual(['GET', AI_STATUS_URL, 'principal']);
-    const reply = await route?.handler({ principalId: 'p', principalRole: 'investigator', previewOn: true, traceId: 'tr-1', audit: { record: async () => undefined } });
+    const reply = await route?.handler({ principalId: 'p', principalRole: 'investigator', previewOn: true, traceId: 'tr-1', audit: { record: async () => undefined }, askPlanner: { availability: () => ({ available: false, reason: 'x' }), plan: () => Promise.reject(new Error('not used')) } });
     expect(aiStatusResponseSchema.safeParse(reply).success).toBe(true);
     expect(route?.responseSchema).toBe(aiStatusResponseSchema);
   });
@@ -22,7 +22,7 @@ describe('the enterprise extension', () => {
   it('refuses the status route when the request reports the preview off, and records the refusal', async () => {
     const [group] = createEnterpriseExtension().routeGroups;
     const events: unknown[] = [];
-    const request = { principalId: 'p', principalRole: 'investigator' as const, previewOn: false, traceId: 'tr-1', audit: { record: async (event: unknown) => void events.push(event) } };
+    const request = { principalId: 'p', principalRole: 'investigator' as const, previewOn: false, traceId: 'tr-1', audit: { record: async (event: unknown) => void events.push(event) }, askPlanner: { availability: () => ({ available: false, reason: 'x' }), plan: () => Promise.reject(new Error('not used')) } };
     await expect(group?.routes[0]?.handler(request) ?? Promise.resolve()).rejects.toMatchObject({ code: 'ACCESS_DENIED', reason: 'ai-preview-off', audited: true });
     expect(events).toHaveLength(1);
   });

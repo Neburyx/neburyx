@@ -1,11 +1,11 @@
 import { z } from 'zod';
-import { ACCESS_DENIED_REASONS, CONFLICT_REASONS, ERROR_CODES, INVALID_REQUEST_REASONS, errorDetailsSchema, partialDetailsSchema, READ_ONLY_STATUSES, SOURCE_CHANGED_STATES, SOURCE_UNAVAILABLE_REASONS, type ErrorCode } from './error-codes.js';
+import { ACCESS_DENIED_REASONS, ASK_UNSUPPORTED_REASONS, CONFLICT_REASONS, ERROR_CODES, INVALID_REQUEST_REASONS, errorDetailsSchema, partialDetailsSchema, READ_ONLY_STATUSES, SOURCE_CHANGED_STATES, SOURCE_UNAVAILABLE_REASONS, type ErrorCode } from './error-codes.js';
 import { ERROR_DETAIL_KEYS } from './error-details.js';
-import { ACCESS_DENIED_ENTRIES, CONFLICT_ENTRIES, ERROR_TABLE, INVALID_REQUEST_ENTRIES, SOURCE_UNAVAILABLE_ENTRIES } from './error-table.js';
+import { ACCESS_DENIED_ENTRIES, ASK_UNSUPPORTED_ENTRIES, CONFLICT_ENTRIES, ERROR_TABLE, INVALID_REQUEST_ENTRIES, SOURCE_UNAVAILABLE_ENTRIES } from './error-table.js';
 
 function variantFor(code: ErrorCode): z.ZodObject {
   const { message, retryable } = ERROR_TABLE[code];
-  const keys = code === 'CONFLICT' || code === 'ACCESS_DENIED' || code === 'INVALID_REQUEST' ? [] : ERROR_DETAIL_KEYS[code];
+  const keys = code === 'CONFLICT' || code === 'ACCESS_DENIED' || code === 'INVALID_REQUEST' || code === 'ASK_UNSUPPORTED' ? [] : ERROR_DETAIL_KEYS[code];
   const fields = Object.fromEntries(keys.map((key) => [key, errorDetailsSchema.shape[key]]));
   const shape = {
     code: z.literal(code),
@@ -52,6 +52,17 @@ const accessDeniedVariants = ACCESS_DENIED_REASONS.map((reason) =>
   }),
 );
 
+/** An Ask call that no planner can answer says why in its details, with that reason's sentence. */
+const askUnsupportedVariants = ASK_UNSUPPORTED_REASONS.map((reason) =>
+  z.strictObject({
+    code: z.literal('ASK_UNSUPPORTED'),
+    message: z.literal(ASK_UNSUPPORTED_ENTRIES[reason].message),
+    retryable: z.literal(ASK_UNSUPPORTED_ENTRIES[reason].retryable),
+    traceId: z.string().min(1),
+    details: z.strictObject({ reason: z.literal(reason) }),
+  }),
+);
+
 /** A request refused for its size names the three limits and the one it went over in its details. */
 const invalidRequestVariants = INVALID_REQUEST_REASONS.map((reason) =>
   z.strictObject({
@@ -64,5 +75,5 @@ const invalidRequestVariants = INVALID_REQUEST_REASONS.map((reason) =>
 );
 
 export const errorResponseSchema = z.object({
-  error: z.union([...ERROR_CODES.filter((code) => code !== 'SOURCE_UNAVAILABLE').map(variantFor), ...unavailableVariants, ...conflictVariants, ...accessDeniedVariants, ...invalidRequestVariants]),
+  error: z.union([...ERROR_CODES.filter((code) => code !== 'SOURCE_UNAVAILABLE').map(variantFor), ...unavailableVariants, ...conflictVariants, ...accessDeniedVariants, ...invalidRequestVariants, ...askUnsupportedVariants]),
 });

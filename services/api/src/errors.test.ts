@@ -4,7 +4,7 @@ import { buildApp } from './app.js';
 import { loadCommittedDocument, validatorFor } from './testing/document.js';
 import { createLogger } from './logger.js';
 import { ACCESS_DENIED_ENTRIES, CONFLICT_ENTRIES, ERROR_TABLE, SOURCE_UNAVAILABLE_ENTRIES } from '@neburyx/contracts';
-import { AppError, detailsOf, errorResponse, unavailableReasonOf } from './errors.js';
+import { AppError, detailsOf, errorResponse, errorStatus, unavailableReasonOf } from './errors.js';
 import { CYPHER, IDENTIFIER, registerErrorRoutes } from './testing/error-routes.js';
 import { makeWebRoot } from './testing/web-root.js';
 import { memoryAppStore } from './testing/app-store.js';
@@ -270,5 +270,18 @@ describe('the answer of an ACCESS_DENIED with a reason', () => {
   it('keeps the plain sentence for an ACCESS_DENIED with no reason or one it does not know', () => {
     expect(errorResponse('ACCESS_DENIED', 'tr-9', detailsOf(new AppError('ACCESS_DENIED'))).error.message).toBe('You do not have access to this.');
     expect(errorResponse('ACCESS_DENIED', 'tr-9', { reason: 'other' }).error.message).toBe('You do not have access to this.');
+  });
+});
+
+describe('the answer of an ASK_UNSUPPORTED with a reason', () => {
+  it('carries the sentence and the details of the reason not-in-this-edition', () => {
+    const body = errorResponse('ASK_UNSUPPORTED', 'tr-9', detailsOf(new AppError('ASK_UNSUPPORTED', { reason: 'not-in-this-edition' })));
+    expect(body.error).toEqual({ code: 'ASK_UNSUPPORTED', message: 'Ask is not available in this edition.', retryable: false, traceId: 'tr-9', details: { reason: 'not-in-this-edition' } });
+    expect(errorStatus('ASK_UNSUPPORTED')).toBe(422);
+  });
+
+  it('keeps the plain sentence for an ASK_UNSUPPORTED with no reason or one it does not know', () => {
+    expect(errorResponse('ASK_UNSUPPORTED', 'tr-9', undefined).error.message).toBe(ERROR_TABLE.ASK_UNSUPPORTED.message);
+    expect(errorResponse('ASK_UNSUPPORTED', 'tr-9', { reason: 'ai-preview-off' }).error).toEqual({ code: 'ASK_UNSUPPORTED', message: ERROR_TABLE.ASK_UNSUPPORTED.message, retryable: false, traceId: 'tr-9' });
   });
 });

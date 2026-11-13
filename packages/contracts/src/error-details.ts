@@ -1,5 +1,5 @@
 import type { ErrorCode } from './error-codes.js';
-import { ACCESS_DENIED_REASONS, CONFLICT_REASONS, errorDetailsSchema, INVALID_REQUEST_REASONS, partialDetailsSchema, SOURCE_UNAVAILABLE_REASONS, type ErrorDetails } from './error-codes.js';
+import { ACCESS_DENIED_REASONS, ASK_UNSUPPORTED_REASONS, CONFLICT_REASONS, errorDetailsSchema, INVALID_REQUEST_REASONS, partialDetailsSchema, SOURCE_UNAVAILABLE_REASONS, type ErrorDetails } from './error-codes.js';
 
 type DetailKey = keyof typeof errorDetailsSchema.shape;
 
@@ -16,7 +16,7 @@ export const ERROR_DETAIL_KEYS: Readonly<Record<ErrorCode, readonly DetailKey[]>
   CONFLICTED_VIEW_VERSION: [],
   CONFLICT: ['reason', 'status', 'sourceState'],
   EXPORT_FAILED: [],
-  ASK_UNSUPPORTED: [],
+  ASK_UNSUPPORTED: ['reason'],
   ASK_PLAN_INVALID: [],
   INVALID_REQUEST: ['reason', 'maxEntities', 'maxRelationships', 'maxAggregates', 'exceeded'],
   UNSUPPORTED_MEDIA_TYPE: [],
@@ -30,6 +30,7 @@ const REASONS_OF_CODE: Partial<Record<ErrorCode, readonly string[]>> = {
   SOURCE_UNAVAILABLE: SOURCE_UNAVAILABLE_REASONS,
   CONFLICT: CONFLICT_REASONS,
   ACCESS_DENIED: ACCESS_DENIED_REASONS,
+  ASK_UNSUPPORTED: ASK_UNSUPPORTED_REASONS,
   INVALID_REQUEST: INVALID_REQUEST_REASONS,
 };
 

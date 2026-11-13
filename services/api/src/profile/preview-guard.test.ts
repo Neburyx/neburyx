@@ -106,4 +106,13 @@ describe('a Community start', () => {
     expect(events).toEqual([]);
     await app.close();
   });
+
+  it('answers the Ask paths with the unknown-route 404 and records no audit event', async () => {
+    const events: AuditEvent[] = [];
+    const seams: Seams = { ...communitySeams(), audit: { record: async (event) => void events.push(event) } };
+    const app = await buildApp({ webRoot, logger: pino({ level: 'silent' }), store: memoryAppStore(), seams, mapping: mappingOf({ id: 'real-source' }) });
+    for (const url of ['/v1/ask/plan', '/v1/ask/run']) expect((await app.inject({ method: 'POST', url, payload: { message: 'Who shares a device?' } })).statusCode).toBe(404);
+    expect(events).toEqual([]);
+    await app.close();
+  });
 });

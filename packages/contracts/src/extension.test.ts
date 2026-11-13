@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ACCESS_DENIED_ENTRIES } from './error-table.js';
+import { ACCESS_DENIED_ENTRIES, ASK_UNSUPPORTED_ENTRIES } from './error-table.js';
 import { ExtensionRefusal, parseExtensionRefusal, type ExtensionRequest } from './extension.js';
 
 const fields = { code: 'ACCESS_DENIED', reason: 'ai-preview-off', audited: true } as const;
@@ -27,8 +27,8 @@ describe('a refusal of an extension', () => {
   });
 
   it('names no other code or reason', () => {
-    // @ts-expect-error a refusal names one code
-    expect(() => new ExtensionRefusal({ ...fields, code: 'NOT_FOUND' })).not.toThrow();
+    // @ts-expect-error a refusal names a code of the three it knows
+    expect(() => new ExtensionRefusal({ ...fields, code: 'CONFLICT' })).not.toThrow();
     // @ts-expect-error a refusal names one reason
     expect(() => new ExtensionRefusal({ ...fields, reason: 'access-changed' })).not.toThrow();
   });
@@ -43,7 +43,7 @@ describe('recognising a refusal by its shape', () => {
   });
 
   it.each([
-    ['another code', { name: 'ExtensionRefusal', ...fields, code: 'NOT_FOUND' }],
+    ['another code', { name: 'ExtensionRefusal', ...fields, code: 'CONFLICT' }],
     ['another reason', { name: 'ExtensionRefusal', ...fields, reason: 'access-changed' }],
     ['no audited mark', { name: 'ExtensionRefusal', code: 'ACCESS_DENIED', reason: 'ai-preview-off' }],
     ['an audited mark that is not a boolean', { name: 'ExtensionRefusal', ...fields, audited: 'yes' }],
@@ -57,7 +57,7 @@ describe('recognising a refusal by its shape', () => {
 });
 
 describe('the request an extension handler is given', () => {
-  const complete: ExtensionRequest = { principalId: 'p', principalRole: 'investigator', previewOn: true, traceId: 'tr-1', audit: { record: async () => undefined } };
+  const complete: ExtensionRequest = { principalId: 'p', principalRole: 'investigator', previewOn: true, traceId: 'tr-1', audit: { record: async () => undefined }, askPlanner: { availability: () => ({ available: false, reason: 'x' }), plan: () => Promise.reject(new Error('not used')) } };
 
   it('is only added to: a handler that reads the principal alone still takes it', async () => {
     const handler = async (request: ExtensionRequest): Promise<string> => request.principalId;
@@ -82,5 +82,27 @@ describe('the request an extension handler is given', () => {
     const noId: ExtensionRequest = withoutId;
     expect([audit, previewOn, principalRole, traceId, principalId].every((field) => field !== undefined)).toBe(true);
     expect([noAudit, noSwitch, noRole, noTrace, noId]).toHaveLength(5);
+  });
+});
+
+describe('the refusal of an Ask call that no planner can answer', () => {
+  it('is recognised by its shape, carries no audited mark and is never taken for the preview refusal', () => {
+    const thrown = new ExtensionRefusal({ code: 'ASK_UNSUPPORTED', reason: 'not-in-this-edition' });
+    expect([thrown.code, thrown.reason, thrown.audited]).toEqual(['ASK_UNSUPPORTED', 'not-in-this-edition', undefined]);
+    expect(parseExtensionRefusal(thrown)).toEqual({ code: 'ASK_UNSUPPORTED', reason: 'not-in-this-edition' });
+    expect(parseExtensionRefusal({ name: 'ExtensionRefusal', code: 'ASK_UNSUPPORTED', reason: 'ai-preview-off' })).toBeUndefined();
+    expect(parseExtensionRefusal({ name: 'ExtensionRefusal', code: 'ACCESS_DENIED', reason: 'not-in-this-edition', audited: true })).toBeUndefined();
+  });
+
+  it('has its own sentence in the error table', () => {
+    expect(ASK_UNSUPPORTED_ENTRIES['not-in-this-edition']).toEqual({ message: 'Ask is not available in this edition.', retryable: false });
+  });
+});
+
+describe('the refusal of a call that names a thing that is not there', () => {
+  it('is recognised by its shape and carries neither a reason nor an audited mark', () => {
+    const thrown = new ExtensionRefusal({ code: 'NOT_FOUND' });
+    expect([thrown.code, thrown.reason, thrown.audited]).toEqual(['NOT_FOUND', undefined, undefined]);
+    expect(parseExtensionRefusal(thrown)).toEqual({ code: 'NOT_FOUND' });
   });
 });

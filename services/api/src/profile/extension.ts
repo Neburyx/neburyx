@@ -45,6 +45,12 @@ export async function loadProfileExtension(loader: ExtensionLoader | undefined):
   }
   for (const group of extension.routeGroups) {
     for (const route of group.routes) {
+      if (route.method !== 'GET' && route.method !== 'POST') {
+        return { ok: false, message: `the enterprise route ${String(route.method)} ${route.url} has a method other than GET or POST` };
+      }
+      if ((route.method === 'POST') !== (route.requestSchema !== undefined)) {
+        return { ok: false, message: `the enterprise route ${route.method} ${route.url} ${route.method === 'POST' ? 'has no request schema' : 'has a request schema but is not a POST'}` };
+      }
       if (!isRoutePermission(route.permission)) {
         return { ok: false, message: `the enterprise route ${route.method} ${route.url} has no known permission` };
       }

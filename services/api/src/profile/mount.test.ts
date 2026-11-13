@@ -105,7 +105,7 @@ describe('what the mount answers to a refusal', () => {
 
   it.each([
     ['an ordinary error', () => new Error('secret detail of the failure')],
-    ['a refusal with another code', () => ({ name: 'ExtensionRefusal', ...REFUSAL, code: 'NOT_FOUND' })],
+    ['a refusal with another code', () => ({ name: 'ExtensionRefusal', ...REFUSAL, code: 'CONFLICT' })],
     ['a refusal with another reason', () => ({ name: 'ExtensionRefusal', ...REFUSAL, reason: 'access-changed' })],
     ['a refusal without the audited mark', () => ({ name: 'ExtensionRefusal', code: 'ACCESS_DENIED', reason: 'ai-preview-off' })],
   ] as const)('answers INTERNAL_ERROR and logs the event name only for %s', async (_name, make) => {
@@ -132,6 +132,58 @@ describe('what the mount answers to a refusal', () => {
     const { app, lines } = await started(extensionOf(async () => Promise.reject(new ExtensionRefusal(REFUSAL))), { previewOn: false });
     await app.inject({ url: URL_OF_ROUTE });
     expect(lines.join('\n')).not.toContain('extension.audit_failed');
+    await app.close();
+  });
+});
+
+describe('a POST route of an extension', () => {
+  const BODY_SCHEMA = z.strictObject({ message: z.string().min(1) });
+  const postExtension = (handler: (request: ExtensionRequest) => Promise<unknown>): ProfileExtension => ({
+    name: 'probe',
+    routeGroups: [{ routes: [{ method: 'POST', url: URL_OF_ROUTE, permission: 'principal', requestSchema: BODY_SCHEMA, responseSchema: z.unknown(), handler }] }],
+  });
+
+  it('gives the handler the parsed body and the application planner', async () => {
+    let seen: ExtensionRequest | undefined;
+    const { app } = await started(postExtension(async (request) => ((seen = request), 'ok')), { previewOn: true });
+    const answer = await app.inject({ method: 'POST', url: URL_OF_ROUTE, payload: { message: 'hello' } });
+    expect(answer.statusCode).toBe(200);
+    expect(seen).toMatchObject({ body: { message: 'hello' } });
+    expect(seen?.askPlanner.availability()).toEqual({ available: false, reason: 'not_in_this_edition' });
+    await app.close();
+  });
+
+  it.each([['a body that is missing', undefined], ['a field of another name', { message: 'x', secret: 'SENTINEL-VALUE' }], ['an empty message', { message: '' }], ['a message that is not text', { message: 'SENTINEL-VALUE'.length }]])('answers INVALID_REQUEST for %s without running the handler or writing a value to the answer or the log', async (_name, payload) => {
+    let ran = 0;
+    const { app, lines } = await started(postExtension(async () => (ran++, 'ok')), { previewOn: true });
+    const answer = await app.inject({ method: 'POST', url: URL_OF_ROUTE, ...(payload === undefined ? {} : { payload }) });
+    expect(answer.statusCode).toBe(400);
+    expect(answer.json().error.code).toBe('INVALID_REQUEST');
+    expect(ran).toBe(0);
+    expect(answer.body + lines.join('')).not.toContain('SENTINEL');
+    await app.close();
+  });
+});
+
+describe('a refusal that no planner can answer', () => {
+  it('answers 422 ASK_UNSUPPORTED with its reason and sentence, writes no audit event and logs no failed audit', async () => {
+    const { app, lines, events } = await started(extensionOf(async () => Promise.reject(new ExtensionRefusal({ code: 'ASK_UNSUPPORTED', reason: 'not-in-this-edition' }))), { previewOn: true });
+    const answer = await app.inject({ url: URL_OF_ROUTE });
+    expect(answer.statusCode).toBe(422);
+    expect(answer.json().error).toMatchObject({ code: 'ASK_UNSUPPORTED', message: 'Ask is not available in this edition.', retryable: false, details: { reason: 'not-in-this-edition' } });
+    expect(events).toEqual([]);
+    expect(lines.filter((line) => line.includes('extension.audit_failed'))).toEqual([]);
+    await app.close();
+  });
+});
+
+describe('a refusal that names a thing that is not there', () => {
+  it('answers 404 NOT_FOUND, writes no audit event and logs no failed audit', async () => {
+    const { app, lines, events } = await started(extensionOf(async () => Promise.reject(new ExtensionRefusal({ code: 'NOT_FOUND' }))), { previewOn: true });
+    const answer = await app.inject({ url: URL_OF_ROUTE });
+    expect([answer.statusCode, answer.json().error.code]).toEqual([404, 'NOT_FOUND']);
+    expect(events).toEqual([]);
+    expect(lines.filter((line) => line.includes('extension.audit_failed'))).toEqual([]);
     await app.close();
   });
 });

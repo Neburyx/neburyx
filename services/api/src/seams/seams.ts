@@ -1,4 +1,4 @@
-import type { AuditSink, MeResponse } from '@neburyx/contracts';
+import type { AskPlanner, AuditSink, MeResponse } from '@neburyx/contracts';
 
 export type Principal = MeResponse['principal'];
 
@@ -67,8 +67,12 @@ export interface Coordinator {
   acquireRead(request: ReadAccessRequest): Promise<ReadAdmission>;
 }
 
+export type { AskAvailability, AskPlan, AskPlanner } from '@neburyx/contracts';
+
 export interface Seams {
   readonly policy: PolicyProvider;
   readonly audit: AuditSink;
   readonly coordinator: Coordinator;
+  /** Where Ask plans; absent, the application uses the Community default, which says Ask is unavailable. */
+  readonly askPlanner?: AskPlanner;
 }
