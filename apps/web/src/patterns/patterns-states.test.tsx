@@ -29,14 +29,14 @@ describe('the Patterns panel: empty, failure and source-state answers', () => {
     expect(screen.queryByRole('button', { name: 'Run pattern' })).toBeNull();
   });
 
-  it('shows a failed list with Retry, leaves the graph alone and loads again on Retry', async () => {
+  it('shows a failed list with Try again, leaves the graph alone and loads again on Try again', async () => {
     let calls = 0;
     const kit = await patternsWorkspace({ list: async () => (++calls === 1 ? { ok: false, failure: failure('SOURCE_BUSY') } : { ok: true, value: listOf() }) });
     const before = kit.state.visibleGraph().nodes.length;
     await openPatterns();
     expect(screen.getByRole('alert').textContent).toContain('is busy');
     expect(kit.state.visibleGraph().nodes).toHaveLength(before);
-    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
     await settle();
     expect(within(screen.getByRole('region', { name: /^Built-in/ })).getAllByRole('listitem')).toHaveLength(3);
   });

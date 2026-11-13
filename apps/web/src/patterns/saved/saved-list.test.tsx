@@ -59,7 +59,7 @@ describe('the list of the panel', () => {
 
   it('says in each section with no rows that there are none, and starts the chain of a saved definition and of a built-in pattern with the start type', async () => {
     await savedWorkspace();
-    expect(section(/My patterns/).getByText('You have no saved patterns. Choose New pattern to build one.')).toBeTruthy();
+    expect(section(/My patterns/).getByText('Start from a built-in pattern, or create your own. Saved patterns appear here.')).toBeTruthy();
     expect(section(/Shared on this source/).getByText('Nobody has shared a pattern on this source.')).toBeTruthy();
     expect(section(/Built-in/).getAllByText(/→ USES →/)).toHaveLength(1);
   });
@@ -162,12 +162,12 @@ describe('reading the list a page at a time', () => {
     expect(screen.getByRole('alert').textContent).toContain('You can try again in 12 s.');
   });
 
-  it('says why the saved list cannot be read with Retry, and the built-in rows keep working', async () => {
+  it('says why the saved list cannot be read with Try again, and the built-in rows keep working', async () => {
     let calls = 0;
     await savedWorkspace({ patterns: { listPatterns: async () => (++calls === 1 ? { ok: false, failure: failure('ACCESS_DENIED') } : page([MINE])) } });
     expect(screen.getAllByRole('alert').length).toBeGreaterThan(0);
     expect(section(/Built-in/).getAllByRole('listitem')).toHaveLength(3);
-    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     await settle();
     expect(screen.getByText('Alpha')).toBeTruthy();
   });

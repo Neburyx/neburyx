@@ -68,69 +68,66 @@ describe('changing a saved pattern in the builder', () => {
     expect(screen.queryByRole('heading', { name: 'New pattern' })).toBeNull();
   });
 
-  it('saves the changes with the definition, the name and the version, leaves the starting entity alone while the start type and the choice are as stored, and returns to the list', async () => {
+  it('saves a private pattern at once with the definition and the version alone, leaves the starting entity while the start type and the choice are as stored, and returns to the list', async () => {
     const kit = await opened(listed({ id: ID, name: 'Alpha', definition: DEFINITION, version: 4, askForStartingEntity: true, anchor: null }), { patterns: { changePattern: async () => ({ ok: true, value: stored() }) } });
     await vi.advanceTimersByTimeAsync(400);
     await settle();
     await toPreview();
     await userEvent.click(screen.getByRole('button', { name: 'Save changes…' }));
-    expect((within(screen.getByRole('dialog')).getByLabelText('Name') as HTMLInputElement).value).toBe('Alpha');
-    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Save changes' }));
     await settle();
+    expect(screen.queryByRole('dialog')).toBeNull();
     const [call] = calls(kit, 'changePattern');
     expect(call?.args[0]).toBe(ID);
-    expect(call?.args[1]).toMatchObject({ expectedVersion: 4, name: 'Alpha', definition: { anchorType: 'c-a', steps: [{ relationshipTypes: ['k-1'], window: { days: 30 } }] } });
-    expect(call?.args[1]).not.toHaveProperty('anchor');
+    expect(call?.args[1]).toMatchObject({ expectedVersion: 4, definition: { anchorType: 'c-a', steps: [{ relationshipTypes: ['k-1'], window: { days: 30 } }] } });
+    expect(Object.keys(call?.args[1] as object).sort()).toEqual(['definition', 'expectedVersion']);
     expect(screen.getByText('Pattern saved.')).toBeTruthy();
     expect(screen.queryByRole('region', { name: /^Change pattern/ })).toBeNull();
   });
 
-  it('keeps the starting entity a pattern holds when it is not loaded or another is selected, and clears it only when the person chooses to ask each time', async () => {
+  it('keeps the starting entity a pattern holds when it is not loaded or another is selected', async () => {
     const held = listed({ id: ID, name: 'Alpha', definition: DEFINITION, version: 4, askForStartingEntity: false, anchor: { entityType: 'c-a', stableId: 'old' } });
     const kit = await opened(held, { nodes: [], opened: null, patterns: { changePattern: async () => ({ ok: true, value: stored() }) } });
     await vi.advanceTimersByTimeAsync(400);
     await settle();
     await toPreview();
     await userEvent.click(screen.getByRole('button', { name: 'Save changes…' }));
-    const box = within(screen.getByRole('dialog')).getByRole('checkbox', { name: 'Ask for the starting entity each time' }) as HTMLInputElement;
-    expect(box.checked).toBe(false);
-    expect(box.disabled).toBe(false);
-    expect(within(screen.getByRole('dialog')).getByText('The pattern keeps the starting entity it holds.')).toBeTruthy();
-    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Save changes' }));
     await settle();
     expect(calls(kit, 'changePattern')[0]?.args[1]).not.toHaveProperty('anchor');
   });
 
-  it('clears the held starting entity when the person chooses to ask each time', async () => {
-    const held = listed({ id: ID, name: 'Alpha', definition: DEFINITION, version: 4, askForStartingEntity: false, anchor: { entityType: 'c-a', stableId: 'old' } });
-    const kit = await opened(held, { patterns: { changePattern: async () => ({ ok: true, value: stored() }) } });
-    await vi.advanceTimersByTimeAsync(400);
-    await settle();
-    await toPreview();
-    await userEvent.click(screen.getByRole('button', { name: 'Save changes…' }));
-    await userEvent.click(within(screen.getByRole('dialog')).getByRole('checkbox', { name: 'Ask for the starting entity each time' }));
-    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Save changes' }));
-    await settle();
-    expect(calls(kit, 'changePattern')[0]?.args[1]).toMatchObject({ anchor: null });
-  });
-
-  it('keeps the edits and says the pattern changed on CONFLICT, and Save as new is still possible', async () => {
+  it('says the pattern changed on a stale version, keeps the edits and the dialog, and Save as a copy makes a new private pattern with the edited definition', async () => {
     const kit = await opened(listed({ id: ID, name: 'Alpha', definition: DEFINITION, version: 4 }), { patterns: { changePattern: async () => ({ ok: false, failure: failure('CONFLICT') }), savePattern: async () => ({ ok: true, value: stored({ id: '0192f000-0000-7000-8000-0000000000b2', version: 1 }) }) } });
     await vi.advanceTimersByTimeAsync(400);
     await settle();
     await toPreview();
     await userEvent.click(screen.getByRole('button', { name: 'Save changes…' }));
-    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Save changes' }));
     await settle();
-    expect(within(screen.getByRole('dialog')).getByRole('alert').textContent).toContain('The pattern changed since you read the list');
-    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }));
+    const dialog = within(screen.getByRole('dialog'));
+    expect(dialog.getByRole('alert').textContent).toBe('This pattern was changed by someone else after you opened it. Your edits are kept. You can save them as a copy.');
+    expect(dialog.queryByRole('button', { name: 'Save for everyone' })).toBeNull();
+    expect(calls(kit, 'listPatterns').length).toBeGreaterThanOrEqual(2);
+    await userEvent.click(dialog.getByRole('button', { name: 'Cancel' }));
     await userEvent.click(screen.getByRole('button', { name: /Edit$/ }));
     await userEvent.click(builder().getByRole('tab', { name: 'Step 1' }));
     await userEvent.click(builder().getByRole('tab', { name: /^Conditions/ }));
     expect(builder().getByText('b-name is abc')).toBeTruthy();
     await toPreview();
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes…' }));
+    await settle();
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Save as a copy' }));
+    await settle();
+    expect(calls(kit, 'savePattern')).toHaveLength(1);
+    expect(calls(kit, 'savePattern')[0]?.args[0]).toMatchObject({ sourceId: 'a', kind: 'definition', name: 'Alpha (copy)', definition: { anchorType: 'c-a' } });
+    expect(screen.getByText('Saved as a copy.')).toBeTruthy();
+  });
+
+  it('can save the edits as a new pattern from Save as new…, with the dialog of a new pattern', async () => {
+    const kit = await opened(listed({ id: ID, name: 'Alpha', definition: DEFINITION, version: 4 }), { patterns: { savePattern: async () => ({ ok: true, value: stored({ id: '0192f000-0000-7000-8000-0000000000b2', version: 1 }) }) } });
+    await vi.advanceTimersByTimeAsync(400);
+    await settle();
+    await toPreview();
     await userEvent.click(screen.getByRole('button', { name: 'Save as new…' }));
-    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Save pattern' }));
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Save' }));
     await settle();
     expect(calls(kit, 'savePattern')).toHaveLength(1);
   });
@@ -161,5 +158,67 @@ describe('changing a saved pattern in the builder', () => {
     await userEvent.keyboard('{Escape}');
     await userEvent.click(screen.getByRole('button', { name: 'More: Beta' }));
     expect(within(screen.getByRole('menu')).queryByRole('menuitem', { name: 'Change' })).toBeNull();
+  });
+});
+
+describe('changing a pattern others run', () => {
+  const shared = (): ListedPattern => listed({ id: ID, name: 'Alpha', definition: DEFINITION, version: 4, visibility: 'shared' });
+  const toDialog = async (options: KitOptions = {}) => {
+    const kit = await opened(shared(), options);
+    await vi.advanceTimersByTimeAsync(400);
+    await settle();
+    await toPreview();
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes…' }));
+    await settle();
+    return kit;
+  };
+  const dialog = () => within(screen.getByRole('dialog'));
+
+  it('asks first, in the words of PB18, and sends nothing until a choice is made; Cancel gives the focus back to Save changes…', async () => {
+    const kit = await toDialog();
+    expect(dialog().getByRole('heading', { name: 'Save changes to “Alpha”?' })).toBeTruthy();
+    expect(dialog().getByText('Others on this source run this pattern. Save for everyone?')).toBeTruthy();
+    expect(calls(kit, 'changePattern')).toHaveLength(0);
+    await userEvent.click(dialog().getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(calls(kit, 'changePattern')).toHaveLength(0);
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Save changes…' }));
+  });
+
+  it('saves for everyone with the definition and the version, and returns to the list', async () => {
+    const kit = await toDialog({ patterns: { changePattern: async () => ({ ok: true, value: stored({ visibility: 'shared' }) }) } });
+    await userEvent.click(dialog().getByRole('button', { name: 'Save for everyone' }));
+    await settle();
+    expect(calls(kit, 'changePattern')[0]?.args.slice(0, 2)).toEqual([ID, expect.objectContaining({ expectedVersion: 4, definition: expect.objectContaining({ anchorType: 'c-a' }) })]);
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.getByText('Pattern saved.')).toBeTruthy();
+  });
+
+  it('saves as a copy with the next name when the first is used, and sends no change to the shared pattern', async () => {
+    let tries = 0;
+    const kit = await toDialog({ patterns: { savePattern: async () => (++tries === 1 ? { ok: false, failure: failure('CONFLICT', { reason: 'pattern-name-taken' }) } : { ok: true, value: stored({ name: 'Alpha (copy 2)' }) }) } });
+    await userEvent.click(dialog().getByRole('button', { name: 'Save as a copy' }));
+    await settle();
+    expect(calls(kit, 'savePattern').map((call) => (call.args[0] as { name: string }).name)).toEqual(['Alpha (copy)', 'Alpha (copy 2)']);
+    expect(calls(kit, 'changePattern')).toHaveLength(0);
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('keeps the dialog open on a stale version, says the pattern changed and leaves Save as a copy possible', async () => {
+    await toDialog({ patterns: { changePattern: async () => ({ ok: false, failure: failure('CONFLICT') }) } });
+    await userEvent.click(dialog().getByRole('button', { name: 'Save for everyone' }));
+    await settle();
+    expect(dialog().getByRole('alert').textContent).toMatch(/changed by someone else/);
+    expect((dialog().getByRole('button', { name: 'Save as a copy' }) as HTMLButtonElement).disabled).toBe(false);
+    expect(dialog().queryByRole('button', { name: 'Save for everyone' })).toBeNull();
+    expect(dialog().getByRole('button', { name: 'Cancel' })).toBeTruthy();
+  });
+
+  it('keeps the focus inside the dialog', async () => {
+    await toDialog();
+    for (let press = 0; press < 8; press += 1) {
+      await userEvent.tab();
+      expect(screen.getByRole('dialog').contains(document.activeElement)).toBe(true);
+    }
   });
 });

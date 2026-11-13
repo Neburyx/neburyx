@@ -52,6 +52,14 @@ describe('the table of failures in words', () => {
     expect(failureWords(server('QUERY_BUDGET_EXCEEDED'), 's').text).not.toMatch(/\d/);
   });
 
+  it('tells a CONFLICT over a name already used from a CONFLICT that says the item changed elsewhere, with no code in either', () => {
+    const taken = failureWords(server('CONFLICT', { reason: 'pattern-name-taken' }), 's');
+    expect(taken.text).toBe('This name is already used on this source. Choose another.');
+    const elsewhere = failureWords(server('CONFLICT'), 's');
+    expect(elsewhere.text).toBe('This was changed elsewhere. Reload it, then try again.');
+    for (const words of [taken, elsewhere]) expect(codesIn(words.text)).toEqual([]);
+  });
+
   it('has a sentence of its own for each reason of a refused pattern, and keeps the one for any other', () => {
     expect(failureWords(server('INVALID_REQUEST', { reason: 'pattern-limit' }), 's').text).toBe(`This source already holds ${PATTERN_LIMITS.patternsPerSource} saved patterns. Delete one first.`);
     expect(failureWords(server('INVALID_REQUEST', { reason: 'pattern-personal-condition' }), 's').text).toContain('personal data');

@@ -65,21 +65,23 @@ describe('an earlier result under a run that gave none', () => {
     expect(inRun().queryByRole('list', { name: 'Matches' })).toBeNull();
   });
 
-  it('is labelled under a saved pattern when its next run fails', async () => {
+  it('is labelled under a saved run of a built-in pattern when its next run fails', async () => {
     let calls = 0;
     await patternsWorkspace({
       patterns: {
-        listPatterns: async () => ({ ok: true, value: { items: [listed({ id: '0192f000-0000-7000-8000-000000000001', name: 'Alpha' })], nextCursor: null } }),
-        runSavedPattern: async () => (++calls === 1 ? { ok: true, value: definitionOk(['acc-2']) as SavedPatternRunResponse } : BUSY),
+        listPatterns: async () => ({ ok: true, value: { items: [listed({ id: '0192f000-0000-7000-8000-000000000001', name: 'Devices', kind: 'preset-run', presetId: 'shared-devices', templateId: 'shared-attribute', templateVersion: 1, params: {} })], nextCursor: null } }),
+        runSavedPattern: async () => (++calls === 1 ? { ok: true, value: okRun(['acc-2']) as SavedPatternRunResponse } : BUSY),
       },
     });
     await openPatterns();
-    await userEvent.click(screen.getByRole('button', { name: 'Run Alpha' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Run Devices' }));
     await settle();
     expect(screen.queryByText(NOTE)).toBeNull();
-    await userEvent.click(screen.getByRole('button', { name: 'Run Alpha' }));
+    expect(screen.getByRole('region', { name: 'Result' })).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'Back to patterns' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Run Devices' }));
     await settle();
     expect(screen.getByText(NOTE)).toBeTruthy();
+    expect(screen.getByRole('region', { name: 'Result' })).toBeTruthy();
   });
 });
-

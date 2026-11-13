@@ -1,5 +1,5 @@
-import type { PatternDefinition, PatternRunHeavy, PatternRunOk } from '@neburyx/contracts';
-import type { ApiClient, ApiFailure } from '../../api/client.js';
+import type { PatternDefinition, PatternRunHeavy, PatternRunOk, PatternRunResponse, PatternUnavailable } from '@neburyx/contracts';
+import type { ApiClient, ApiFailure, ApiResult } from '../../api/client.js';
 import { UNEXPECTED } from '../../api/use-request.js';
 import { createStore, type ReadableStore } from '../../state/store.js';
 
@@ -8,7 +8,8 @@ import { createStore, type ReadableStore } from '../../state/store.js';
  */
 export interface DefinitionAsk {
   readonly definition: PatternDefinition;
-  readonly anchor: { readonly entityType: string; readonly stableId: string };
+  /** The entity the run starts from; a saved pattern that holds its start sends none. */
+  readonly anchor?: { readonly entityType: string; readonly stableId: string };
   readonly continue?: { readonly limit: number };
   readonly cursor?: string;
 }
@@ -28,6 +29,8 @@ export interface DefinitionRunView {
   /** The index of the page on screen in `pages`. */
   readonly page: number;
   readonly heavy: PatternRunHeavy | undefined;
+  /** The saved pattern cannot run against the current mapping: no source was read. */
+  readonly unavailable: PatternUnavailable | undefined;
   readonly failure: ApiFailure | undefined;
   readonly cancelled: boolean;
   /** The ask the heavy stop, the failure and the cancelled line belong to, for Continue, Retry and Run again. */
@@ -52,13 +55,15 @@ export interface DefinitionRunStore extends ReadableStore<DefinitionRunView> {
 }
 
 /** Sends one ask and answers as the typed client does, so a run of another kind (a saved pattern) can use the same store with its own request. */
-export type RunRequestMaker = (ask: DefinitionAsk, key: string, signal: AbortSignal) => ReturnType<ApiClient['runPattern']>;
+export type RunRequestMaker = (ask: DefinitionAsk, key: string, signal: AbortSignal) => Promise<ApiResult<PatternRunResponse | PatternUnavailable>>;
 
 /** The request of a pattern run from the builder: the definition and the entity it starts from, with the mask of the investigation. */
 export const definitionRunRequest =
   (client: ApiClient, sourceId: string, mask: boolean): RunRequestMaker =>
   (ask, key, signal) =>
-    client.runPattern(
+    ask.anchor === undefined
+      ? Promise.resolve(UNEXPECTED)
+      : client.runPattern(
       {
         sourceId,
         definition: ask.definition,
@@ -73,7 +78,7 @@ export const definitionRunRequest =
 
 const newKey = (): string => globalThis.crypto.randomUUID();
 
-const IDLE: DefinitionRunView = { running: false, result: undefined, pages: [], page: 0, heavy: undefined, failure: undefined, cancelled: false, ask: undefined };
+const IDLE: DefinitionRunView = { running: false, result: undefined, pages: [], page: 0, heavy: undefined, unavailable: undefined, failure: undefined, cancelled: false, ask: undefined };
 
 /**
  * One pattern run at a time: a newer run, a cancel and leaving abort the older one, and an answer to an aborted run is never shown. It lives outside React, as the preset run's store does, so the cancellation suite drives the
@@ -96,9 +101,9 @@ export function createDefinitionRunStore(request: RunRequestMaker): DefinitionRu
     newest = controller;
     const fresh = ask.cursor === undefined;
     if (fresh) origin = ask;
-    patch({ running: true, heavy: undefined, failure: undefined, cancelled: false, ask, ...(fresh ? { result: undefined, pages: [], page: 0 } : {}) });
+    patch({ running: true, heavy: undefined, unavailable: undefined, failure: undefined, cancelled: false, ask, ...(fresh ? { result: undefined, pages: [], page: 0 } : {}) });
     const send = async (): Promise<void> => {
-      let result: Awaited<ReturnType<ApiClient['runPattern']>>;
+      let result: Awaited<ReturnType<RunRequestMaker>>;
       try {
         result = await request(ask, newKey(), controller.signal);
       } catch {
@@ -111,6 +116,10 @@ export function createDefinitionRunStore(request: RunRequestMaker): DefinitionRu
         return;
       }
       const answer = result.value;
+      if (answer.status === 'unavailable') {
+        patch({ running: false, unavailable: answer });
+        return;
+      }
       if (answer.status === 'heavy') {
         patch({ running: false, heavy: answer });
         return;
@@ -158,7 +167,7 @@ export function createDefinitionRunStore(request: RunRequestMaker): DefinitionRu
     stop: () => {
       newest?.abort();
       newest = undefined;
-      patch({ running: false, heavy: undefined, failure: undefined, cancelled: false });
+      patch({ running: false, heavy: undefined, unavailable: undefined, failure: undefined, cancelled: false });
     },
     reset: () => {
       newest?.abort();

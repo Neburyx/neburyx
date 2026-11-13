@@ -21,8 +21,9 @@ const saveButton = (): HTMLButtonElement => screen.getByRole('button', { name: '
 const dialog = () => within(screen.getByRole('dialog'));
 const calls = (kit: Awaited<ReturnType<typeof runWorkspace>>, method: string) => kit.patternCalls.filter((call) => call.method === method);
 const nameField = (): HTMLInputElement => dialog().getByLabelText('Name') as HTMLInputElement;
+const saveInDialog = (): HTMLButtonElement => dialog().getByRole('button', { name: 'Save' }) as HTMLButtonElement;
 const submit = async (): Promise<void> => {
-  await userEvent.click(dialog().getByRole('button', { name: 'Save pattern' }));
+  await userEvent.click(saveInDialog());
   await settle();
 };
 
@@ -37,16 +38,21 @@ describe('saving a built pattern', () => {
     expect(saveButton().disabled).toBe(false);
   });
 
-  it('opens a dialog with the name focused, what is stored, the path, the ask-each-time choice and the visibility, and gives the focus back on Cancel', async () => {
+  it('opens the dialog of PB16: the name focused with its rule line, Who can use it with the two options and their sublines, Cancel and Save, and gives the focus back on Cancel', async () => {
     await runWorkspace();
     await previewed();
     await userEvent.click(saveButton());
+    expect(dialog().getByRole('heading', { name: 'Save pattern' })).toBeTruthy();
     expect(document.activeElement).toBe(nameField());
     expect(nameField().value).toBe('N-A → r-1 → N-B');
-    expect(dialog().getByText('Saves the pattern and its parameters, never query text. Running it applies your own access and limits.')).toBeTruthy();
+    expect(dialog().getByText('1 to 100 characters. Names are unique among your patterns on this source.')).toBeTruthy();
+    expect(nameField().getAttribute('aria-describedby')).toBe(dialog().getByText(/^1 to 100 characters/).id);
+    expect(dialog().getByRole('group', { name: 'Who can use it' })).toBeTruthy();
+    const only = dialog().getByRole('radio', { name: 'Only me' }) as HTMLInputElement;
+    expect(only.checked).toBe(true);
+    expect(only.getAttribute('aria-describedby')).toBe(dialog().getByText('Private. It appears under My patterns.').id);
+    expect(dialog().getByRole('radio', { name: 'Everyone on this source' }).getAttribute('aria-describedby')).toBe(dialog().getByText('Others can run and copy it. They cannot change or delete it.').id);
     expect((dialog().getByRole('checkbox', { name: 'Ask for the starting entity each time' }) as HTMLInputElement).checked).toBe(true);
-    expect((dialog().getByRole('radio', { name: 'Only me' }) as HTMLInputElement).checked).toBe(true);
-    expect(dialog().getByRole('radio', { name: 'Everyone on this source' })).toBeTruthy();
     await userEvent.click(dialog().getByRole('button', { name: 'Cancel' }));
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(document.activeElement).toBe(saveButton());
@@ -91,9 +97,9 @@ describe('saving a built pattern', () => {
     await userEvent.click(saveButton());
     await userEvent.clear(nameField());
     expect(dialog().getByRole('alert').textContent).toBe('Enter a name of 1 to 100 characters.');
-    expect((dialog().getByRole('button', { name: 'Save pattern' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((dialog().getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.change(nameField(), { target: { value: 'x'.repeat(101) } });
-    expect((dialog().getByRole('button', { name: 'Save pattern' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((dialog().getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.submit(nameField().closest('form') as HTMLFormElement);
     await settle();
     expect(calls(kit, 'savePattern')).toHaveLength(0);
@@ -138,3 +144,64 @@ describe('saving a built pattern', () => {
   });
 });
 
+describe('the refusals of a save, and the dialog around them', () => {
+  const taken = (): ApiResult<SavedPattern> => ({ ok: false, failure: failure('CONFLICT', { reason: 'pattern-name-taken' }) });
+
+  it('says "already used" when the name is taken, keeps the dialog open with the name, waits for another name and does not read the list again', async () => {
+    let answer: ApiResult<SavedPattern> = taken();
+    const kit = await runWorkspace({ patterns: { savePattern: async () => answer } });
+    await previewed();
+    await userEvent.click(saveButton());
+    await userEvent.clear(nameField());
+    await userEvent.type(nameField(), 'Mine');
+    await submit();
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    expect(nameField().value).toBe('Mine');
+    expect(dialog().getByRole('alert').textContent).toBe('This name is already used on this source. Choose another.');
+    expect(nameField().getAttribute('aria-invalid')).toBe('true');
+    expect(saveInDialog().disabled).toBe(true);
+    expect(calls(kit, 'listPatterns')).toHaveLength(1);
+    answer = { ok: true, value: stored({ name: 'Other' }) };
+    await userEvent.type(nameField(), '2');
+    expect(saveInDialog().disabled).toBe(false);
+    await submit();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(calls(kit, 'savePattern')).toHaveLength(2);
+  });
+
+  it('keeps the words of "changed elsewhere" for a CONFLICT with no reason, apart from the name being used', async () => {
+    await runWorkspace({ patterns: { savePattern: async () => ({ ok: false, failure: failure('CONFLICT') }) } });
+    await previewed();
+    await userEvent.click(saveButton());
+    await submit();
+    const said = dialog().getByRole('alert').textContent ?? '';
+    expect(said).toMatch(/changed since you read the list/);
+    expect(said).not.toMatch(/already used/);
+  });
+
+  it('keeps the focus inside the dialog on Tab and Shift+Tab, closes on Escape and gives the focus back to Save pattern…', async () => {
+    await runWorkspace();
+    await previewed();
+    await userEvent.click(saveButton());
+    const inside = (): boolean => screen.getByRole('dialog').contains(document.activeElement);
+    for (let press = 0; press < 12; press += 1) {
+      await userEvent.tab();
+      expect(inside()).toBe(true);
+    }
+    await userEvent.tab({ shift: true });
+    expect(inside()).toBe(true);
+    await userEvent.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(document.activeElement).toBe(saveButton());
+  });
+
+  it('hands the name of the saved pattern to the screen, so that the heading says it and Save pattern… goes', async () => {
+    await runWorkspace({ patterns: { savePattern: async () => ({ ok: true, value: stored({ name: 'Mine' }) }) } });
+    await previewed();
+    expect(document.querySelector('.patterns-subhead')?.textContent).toBe('Draft · not saved');
+    await userEvent.click(saveButton());
+    await submit();
+    expect(document.querySelector('.patterns-subhead')?.textContent).toBe('Mine');
+    expect(screen.queryByRole('button', { name: 'Save pattern…' })).toBeNull();
+  });
+});

@@ -1,9 +1,8 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import type { ListedPattern } from '@neburyx/contracts';
 import type { ApiClient, ApiFailure, ApiResult } from '../../api/client.js';
-import { ConfirmDialog } from '../../lifecycle/confirm-dialog.js';
 import { Dialog } from '../../views/dialog.js';
-import { SAVED_COPY, nameLimitText, refusalText } from './saved-copy.js';
+import { SAVED_COPY, deleteTitle, isNameTaken, nameLimitText, refusalText } from './saved-copy.js';
 import { nameFits } from './saved-model.js';
 
 export interface Notice {
@@ -18,6 +17,8 @@ export interface RowActionState {
   readonly busy: boolean;
   /** What the last refusal said, shown in the dialog that is open. */
   readonly message: string | undefined;
+  /** The name the server refused as already used: the dialog keeps the name and waits for another. */
+  readonly refusedName: string | undefined;
   /** The pattern the person deleted last, so that what shows it (a run) goes with it. */
   readonly removed: string | undefined;
   readonly open: (kind: DialogKind, item: ListedPattern) => void;
@@ -40,6 +41,7 @@ export function useRowActions(client: ApiClient, reload: () => void, notify: (no
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | undefined>(undefined);
   const [removed, setRemoved] = useState<string | undefined>(undefined);
+  const [refusedName, setRefusedName] = useState<string | undefined>(undefined);
   const abort = useRef<AbortController | undefined>(undefined);
   const working = useRef(false);
   useEffect(() => {
@@ -47,7 +49,7 @@ export function useRowActions(client: ApiClient, reload: () => void, notify: (no
     return () => abort.current?.abort();
   }, []);
 
-  const perform = async <T,>(call: (signal: AbortSignal | undefined) => Promise<ApiResult<T>>, done: string, gone?: string): Promise<void> => {
+  const perform = async <T,>(call: (signal: AbortSignal | undefined) => Promise<ApiResult<T>>, done: string, gone?: string, name?: string): Promise<void> => {
     if (working.current) return;
     working.current = true;
     const signal = abort.current?.signal;
@@ -65,11 +67,16 @@ export function useRowActions(client: ApiClient, reload: () => void, notify: (no
       return;
     }
     if (result.failure.code === 'ABORTED') return;
-    refuse(result.failure);
+    refuse(result.failure, name);
   };
-  const refuse = (failure: ApiFailure): void => {
+  const refuse = (failure: ApiFailure, name: string | undefined): void => {
     const text = refusalText(failure);
     setMessage(text);
+    if (isNameTaken(failure)) {
+      // the dialog stays open with the name kept, and the list is not read again
+      setRefusedName(name?.trim());
+      return;
+    }
     if (REREAD.has(failure.code)) {
       setDialog(undefined);
       notify({ text, tone: 'problem' });
@@ -83,15 +90,17 @@ export function useRowActions(client: ApiClient, reload: () => void, notify: (no
     dialog,
     busy,
     message,
+    refusedName,
     removed,
     open: (kind, item) => {
       setMessage(undefined);
+      setRefusedName(undefined);
       setDialog({ kind, item });
     },
     close: () => {
       if (!busy) setDialog(undefined);
     },
-    rename: (item, name) => void perform((signal) => client.changePattern(item.id, { expectedVersion: item.version, name: name.trim() }, signal), SAVED_COPY.renamed),
+    rename: (item, name) => void perform((signal) => client.changePattern(item.id, { expectedVersion: item.version, name: name.trim() }, signal), SAVED_COPY.renamed, undefined, name),
     remove: (item) => void perform((signal) => client.deletePattern(item.id, item.version, signal), SAVED_COPY.deleted, item.id),
     share: (item) => void perform((signal) => client.changePattern(item.id, { expectedVersion: item.version, visibility: 'shared' }, signal), SAVED_COPY.sharedDone),
     unshare: (item) => void perform((signal) => client.changePattern(item.id, { expectedVersion: item.version, visibility: 'private' }, signal), SAVED_COPY.unsharedDone),
@@ -104,11 +113,28 @@ export function RowDialogs({ actions }: { readonly actions: RowActionState }) {
   const { dialog } = actions;
   if (dialog === undefined) return null;
   if (dialog.kind === 'delete') {
+    const shared = dialog.item.visibility === 'shared';
     return (
-      <ConfirmDialog title={SAVED_COPY.deleteTitle} confirmLabel={SAVED_COPY.delete} busyLabel={SAVED_COPY.working} busy={actions.busy} canConfirm initialFocus="cancel" onConfirm={() => actions.remove(dialog.item)} onClose={actions.close} {...(actions.message === undefined ? {} : { message: actions.message })}>
-        <p>{dialog.item.name}</p>
-        <p>{dialog.item.visibility === 'shared' ? SAVED_COPY.deleteConfirmShared : SAVED_COPY.deleteConfirmPrivate}</p>
-      </ConfirmDialog>
+      <Dialog title={deleteTitle(dialog.item.name)} onClose={actions.busy ? undefined : actions.close} initialFocus="[data-initial-focus]">
+        {() => (
+          <div className="rename-form">
+            <p>{shared ? SAVED_COPY.deleteConfirmShared : SAVED_COPY.deleteConfirmPrivate}</p>
+            {actions.message === undefined ? null : (
+              <p role="alert" className="rename-problem">
+                {actions.message}
+              </p>
+            )}
+            <div className="rename-actions">
+              <button type="button" className="secondary" data-initial-focus disabled={actions.busy} onClick={actions.close}>
+                {SAVED_COPY.cancel}
+              </button>
+              <button type="button" className="primary confirm-danger" disabled={actions.busy} aria-busy={actions.busy ? true : undefined} onClick={() => actions.remove(dialog.item)}>
+                {actions.busy ? SAVED_COPY.working : shared ? SAVED_COPY.deleteEveryone : SAVED_COPY.deletePattern}
+              </button>
+            </div>
+          </div>
+        )}
+      </Dialog>
     );
   }
   if (dialog.kind === 'share') {
@@ -142,7 +168,9 @@ export function RowDialogs({ actions }: { readonly actions: RowActionState }) {
 function RenameForm({ actions, item }: { readonly actions: RowActionState; readonly item: ListedPattern }) {
   const [name, setName] = useState(item.name);
   const fieldId = useId();
+  const ruleId = useId();
   const fits = nameFits(name);
+  const taken = actions.refusedName !== undefined && actions.refusedName === name.trim();
   return (
     <Dialog title={SAVED_COPY.renameTitle} onClose={actions.busy ? undefined : actions.close} initialFocus="input">
       {() => (
@@ -150,13 +178,16 @@ function RenameForm({ actions, item }: { readonly actions: RowActionState; reado
           className="rename-form"
           onSubmit={(event) => {
             event.preventDefault();
-            if (fits && !actions.busy) actions.rename(item, name);
+            if (fits && !taken && !actions.busy) actions.rename(item, name);
           }}
         >
           <label htmlFor={fieldId} className="supernode-label">
-            {SAVED_COPY.newName}
+            {SAVED_COPY.name}
           </label>
-          <input id={fieldId} className="patterns-input" value={name} aria-invalid={fits ? undefined : true} onChange={(event) => setName(event.target.value)} />
+          <input id={fieldId} className="patterns-input" value={name} aria-invalid={fits && !taken ? undefined : true} aria-describedby={ruleId} onChange={(event) => setName(event.target.value)} />
+          <p id={ruleId} className="rename-hint">
+            {SAVED_COPY.nameRule}
+          </p>
           {fits ? null : (
             <p role="alert" className="rename-problem">
               {nameLimitText}
@@ -171,7 +202,7 @@ function RenameForm({ actions, item }: { readonly actions: RowActionState; reado
             <button type="button" className="secondary" onClick={actions.close}>
               {SAVED_COPY.cancel}
             </button>
-            <button type="submit" className="primary" disabled={!fits || actions.busy} aria-busy={actions.busy ? true : undefined}>
+            <button type="submit" className="primary" disabled={!fits || taken || actions.busy} aria-busy={actions.busy ? true : undefined}>
               {actions.busy ? SAVED_COPY.working : SAVED_COPY.rename}
             </button>
           </div>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type KeyboardEvent } from 'react';
-import type { GraphNode, ListedPattern, PatternDefinition, TemplateListResponse, TemplateRunOk } from '@neburyx/contracts';
+import { patternDefinitionSchema, type GraphNode, type ListedPattern, type PatternDefinition, type SavedPattern, type TemplateListResponse, type TemplateRunOk } from '@neburyx/contracts';
 import { withoutReadsWhileSourceChanged } from '../api/changed-source-guard.js';
 import { useApiClient } from '../api/client-context.js';
 import { heavyDecisionOfRun } from '../api/heavy-estimate.js';
@@ -32,12 +32,16 @@ import { usePatternRun } from './use-pattern-run.js';
 import { useRowActions, RowDialogs, type Notice } from './saved/use-row-actions.js';
 import { useSavedPatterns } from './saved/use-saved-patterns.js';
 import { PatternsHome } from './saved/patterns-home.js';
+import { ownIsEmpty } from './saved/saved-list.js';
 import { fromDefinition } from './builder/from-definition.js';
 import type { SaveMode } from './saved/save-dialog.js';
 import { INITIAL, reduce, type Action, type BuilderState } from './builder/model.js';
 import { PatternEditor, type EditingView, type ProfileView } from './builder/pattern-editor.js';
 import { RunFlow, type RunHeader } from './run/run-flow.js';
-import { SAVED_COPY, UNAVAILABLE_TEXT } from './saved/saved-copy.js';
+import { SAVED_COPY, UNAVAILABLE_TEXT, refusalText } from './saved/saved-copy.js';
+import { SavedPresetRun } from './saved/saved-run-area.js';
+import { createSavedRunStore } from './saved/saved-run-store.js';
+import { kindLineOf } from './saved/saved-model.js';
 
 type Reason = Extract<ListedPattern['availability'], { status: 'unavailable' }>['reasons'][number];
 
@@ -101,7 +105,9 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
   };
   const cancelOrClose = useRef<() => void>(close);
   // the builder is a second view of the panel; the list stays mounted, hidden, so its form is as it was on the way back
-  const [view, setView] = useState<'list' | 'builder' | 'preset' | 'run'>('list');
+  const [view, setView] = useState<'list' | 'builder' | 'preset' | 'run' | 'saved-preset'>('list');
+  // the saved pattern whose run the run view shows, and the store of the saved run of a built-in pattern
+  const [savedItem, setSavedItem] = useState<ListedPattern | undefined>(undefined);
   // the draft the editor handed to the preview, and what the screen of the run says under the heading
   const [previewing, setPreviewing] = useState<PatternDefinition | undefined>(undefined);
   const [runHeader, setRunHeader] = useState<RunHeader | undefined>(undefined);
@@ -126,6 +132,10 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
   const [notice, setNotice] = useState<Notice | undefined>(undefined);
   const saved = useSavedPatterns(client, sourceId);
   const rows = useRowActions(client, saved.reload, setNotice);
+  const presetStore = useMemo(() => createSavedRunStore(client, mask), [client, mask]);
+  useEffect(() => () => presetStore.dispose(), [presetStore]);
+  const presetView = useStoreSelector(presetStore, (current) => current);
+  const timeoutMs = sourceId === null ? undefined : answeredData(shell.sources)?.items.find((item) => item.id === sourceId)?.timeoutMs;
   const [builder, setBuilder] = useState<BuilderState>(INITIAL);
   const [editing, setEditing] = useState<{ readonly item: ListedPattern; readonly whole: boolean } | undefined>(undefined);
   const drafted = builder.draft.anchorType !== undefined;
@@ -153,15 +163,63 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
     setPreviewing(undefined);
     setView('list');
   };
+  const backToList = (): void => {
+    setSavedItem(undefined);
+    setPreviewing(undefined);
+    setView('list');
+  };
   const editingView = useMemo(() => (editing === undefined ? undefined : editingViewOf(editing.item, editing.whole)), [editing]);
   const change = (item: ListedPattern): void => {
     const opened = fromDefinition(item.kind === 'definition' ? item.definition : undefined);
     setBuilder({ draft: opened.draft });
     setEditing({ item, whole: opened.whole });
+    setSavedItem(undefined);
     setNotice(undefined);
     setView('builder');
   };
-  const afterSave = (notice: Notice, mode: SaveMode): void => {
+  // Edit on the run of a saved pattern: the person's own pattern opens for a change; another person's opens as a draft of the person's own
+  const editSaved = (item: ListedPattern): void => {
+    if (item.ownedByYou) return change(item);
+    const opened = fromDefinition(item.kind === 'definition' ? item.definition : undefined);
+    setBuilder({ draft: opened.draft });
+    setEditing(undefined);
+    setSavedItem(undefined);
+    setNotice(undefined);
+    setView('builder');
+  };
+  const principalName = answeredData(shell.me)?.principal.displayName ?? '';
+  const copyAndChange = async (item: ListedPattern): Promise<void> => {
+    const copied = await client.copyPattern(item.id);
+    if (!copied.ok) {
+      if (copied.failure.code !== 'ABORTED') setNotice({ text: refusalText(copied.failure), tone: 'problem' });
+      return;
+    }
+    saved.reload();
+    change({ ...copied.value, ownedByYou: true, owner: { name: principalName }, availability: { status: 'available' } } as ListedPattern);
+  };
+  const presetOf = useRef<string | undefined>(undefined);
+  const runSaved = (item: ListedPattern): void => {
+    setNotice(undefined);
+    setSavedItem(item);
+    if (item.kind === 'preset-run') {
+      // the result of the same saved run stays under a next run that gives none; another pattern starts clean
+      if (presetOf.current !== item.id) presetStore.clear();
+      presetOf.current = item.id;
+      setView('saved-preset');
+      if (!item.askForStartingEntity) presetStore.run({ id: item.id, kind: item.kind });
+      return;
+    }
+    const parsed = patternDefinitionSchema.safeParse(item.definition);
+    if (!parsed.success) {
+      setSavedItem(undefined);
+      setNotice({ text: SAVED_COPY.unavailable, tone: 'problem' });
+      return;
+    }
+    setPreviewing(parsed.data);
+    setRunHeader(undefined);
+    setView('run');
+  };
+  const afterSave = (notice: Notice, mode: SaveMode, _saved?: SavedPattern): void => {
     setNotice(notice);
     saved.reload();
     if (mode.kind === 'change' && notice.tone === 'done') {
@@ -171,6 +229,9 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
       setView('list');
     }
   };
+  useEffect(() => {
+    if (view === 'saved-preset') cancelOrClose.current = presetView.running ? presetStore.cancel : close;
+  }, [view, presetView.running, presetStore]);
   const before = useRef(view);
   useEffect(() => {
     const was = before.current;
@@ -199,13 +260,13 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
   return (
     <div className="patterns-panel" ref={root}>
       <div className="search-panel-header">
-        <h2 className="search-panel-heading">{view === 'list' ? PATTERNS_COPY.title : view === 'preset' ? (templateData?.presets.find((candidate) => candidate.id === presetId)?.name ?? PATTERNS_COPY.title) : view === 'run' ? (runHeader?.title ?? RUN_COPY.previewTitle) : (editingView?.title ?? SHELL_COPY.newPattern)}</h2>
+        <h2 className="search-panel-heading">{view === 'list' ? PATTERNS_COPY.title : view === 'preset' ? (templateData?.presets.find((candidate) => candidate.id === presetId)?.name ?? PATTERNS_COPY.title) : view === 'run' ? (runHeader?.title ?? RUN_COPY.previewTitle) : view === 'saved-preset' ? (savedItem?.name ?? PATTERNS_COPY.title) : (editingView?.title ?? SHELL_COPY.newPattern)}</h2>
         <button type="button" className="legend-close" aria-label={view === 'builder' ? PATTERNS_COPY.closeBuilder : PATTERNS_COPY.close} onClick={close}>
           <span className="icon icon-clear" aria-hidden="true" />
         </button>
       </div>
       {sourceId === null ? null : (
-        <p className="search-panel-note patterns-subhead">{view === 'run' ? (runHeader?.subtitle ?? RUN_COPY.draft) : view === 'builder' ? EDITOR_SUBTITLE : listSubtitle(sourceName)}</p>
+        <p className="search-panel-note patterns-subhead">{view === 'run' ? (runHeader?.subtitle ?? RUN_COPY.draft) : view === 'saved-preset' ? (savedItem === undefined ? '' : kindLineOf(savedItem, templateData?.presets)) : view === 'builder' ? EDITOR_SUBTITLE : listSubtitle(sourceName)}</p>
       )}
       {view === 'list' ? <p className="search-panel-note">{PATTERNS_COPY.intro}</p> : null}
       {notice === undefined ? null : (
@@ -222,11 +283,12 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
         <p className="search-panel-note">{PATTERNS_COPY.noPatterns}</p>
       ) : (
         <>
-          {view === 'list' ? (
+          {view === 'list' && !ownIsEmpty(saved) ? (
             <div className="patterns-actions">
               <button type="button" className="secondary" ref={newButton} onClick={() => {
                   onRestartedSeen();
                   setNotice(undefined);
+                  setSavedItem(undefined);
                   if (editing !== undefined) {
                     setBuilder(INITIAL);
                     setEditing(undefined);
@@ -246,16 +308,19 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
             ) : null}
             {templates.state.phase === 'failed' ? <TemplatesFailure failure={templates.state.failure} sourceName={sourceName} retry={templates.reload} /> : null}
             <PatternsHome
-              client={client}
-              sourceId={sourceId}
               sourceName={sourceName}
-              mask={mask}
-              close={close}
-              escape={cancelOrClose}
               saved={saved}
               rows={rows}
               presets={templateData?.presets}
+              onRun={runSaved}
               onChange={change}
+              onCopyAndChange={(item) => void copyAndChange(item)}
+              newRef={newButton}
+              onNewPattern={() => {
+                onRestartedSeen();
+                setNotice(undefined);
+                setView('builder');
+              }}
               onRunPreset={(preset) => {
                 setNotice(undefined);
                 if (presetRun.ask?.id !== preset.id) presetRun.clear();
@@ -267,7 +332,23 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
           {view === 'preset' && templateData !== undefined && presetId !== undefined && templateData.presets.some((candidate) => candidate.id === presetId) ? (
             <PatternsWorkbench client={client} sourceId={sourceId} sourceName={sourceName} mask={mask} list={templateData} presetId={presetId} run={presetRun} close={close} escape={cancelOrClose} onBack={() => setView('list')} />
           ) : null}
-          {view === 'builder' || view === 'run' ? (
+          {view === 'saved-preset' && savedItem !== undefined ? (
+            <SavedPresetRun
+              client={client}
+              sourceId={sourceId}
+              sourceName={sourceName}
+              mask={mask}
+              store={presetStore}
+              target={saved.state.phase === 'ready' ? (saved.state.items.find((item) => item.id === savedItem.id) ?? savedItem) : savedItem}
+              presets={templateData?.presets}
+              profile={profile}
+              timeoutMs={timeoutMs}
+              onBack={backToList}
+              onStale={saved.reload}
+              onRan={saved.markRun}
+            />
+          ) : null}
+          {view === 'builder' || (view === 'run' && savedItem === undefined) ? (
             <div hidden={view !== 'builder'}>
               <PatternEditor
                 profile={profileView}
@@ -293,15 +374,29 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
           ) : null}
           {view === 'run' && previewing !== undefined && profile !== undefined ? (
             <RunFlow
+              key={savedItem?.id ?? 'draft'}
               client={client}
               sourceId={sourceId}
               sourceName={sourceName}
               mask={mask}
               profile={profile}
               definition={previewing}
-              editing={editing?.item}
-              onEdit={() => setView('builder')}
+              editing={savedItem === undefined ? editing?.item : undefined}
+              onEdit={savedItem === undefined ? () => setView('builder') : () => editSaved(savedItem)}
               onSaved={afterSave}
+              onStale={saved.reload}
+              {...(savedItem === undefined || savedItem.kind !== 'definition'
+                ? {}
+                : {
+                    saved: {
+                      item: saved.state.phase === 'ready' ? (saved.state.items.find((candidate) => candidate.id === savedItem.id) ?? savedItem) : savedItem,
+                      onBack: backToList,
+                      onStale: saved.reload,
+                      onRan: saved.markRun,
+                      onChangePattern: () => editSaved(savedItem),
+                      onCopyAndChange: () => void copyAndChange(savedItem),
+                    },
+                  })}
               onHeader={setRunHeader}
               close={close}
               escape={cancelOrClose}

@@ -39,6 +39,8 @@ const reasonOf = (failure: ApiFailure): string | undefined => {
 export const patternLimitSentence = `This source already holds ${PATTERN_LIMITS.patternsPerSource} saved patterns. Delete one first.`;
 export const personalConditionSentence = 'A condition of this pattern uses a property the mapping marks as personal data, so it cannot be saved, shared or copied.';
 
+export const nameTakenSentence = 'This name is already used on this source. Choose another.';
+
 type Entry = (failure: ApiFailure, source: string) => FailureWords;
 const said = (text: string, action?: FailureAction): Entry => () => ({ text, ...(action === undefined ? {} : { action }) });
 
@@ -66,7 +68,7 @@ const TABLE: { readonly [C in FailureCode]: Entry } = {
   PARTIAL_RESULT: said('Only part of the answer could be read, so it is not complete.', 'close'),
   EVIDENCE_NOT_AVAILABLE: said('The evidence for this is not available.', 'close'),
   CONFLICTED_VIEW_VERSION: said('This view was changed elsewhere. Reload it, then try again.', 'close'),
-  CONFLICT: said('This was changed elsewhere. Reload it, then try again.', 'close'),
+  CONFLICT: (failure) => (reasonOf(failure) === 'pattern-name-taken' ? { text: nameTakenSentence, action: 'close' } : { text: 'This was changed elsewhere. Reload it, then try again.', action: 'close' }),
   EXPORT_FAILED: said('The export could not be made.', 'try-again'),
   ASK_UNSUPPORTED: said('This question cannot be answered here.', 'close'),
   ASK_PLAN_INVALID: said('The plan for this question was not accepted.', 'close'),

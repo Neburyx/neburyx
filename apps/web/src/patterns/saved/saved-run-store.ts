@@ -2,6 +2,7 @@ import { patternRunResponseSchema, templateRunResponseSchema, type PatternRunHea
 import type { ApiClient, ApiFailure } from '../../api/client.js';
 import { UNEXPECTED } from '../../api/use-request.js';
 import { createStore, type ReadableStore } from '../../state/store.js';
+import type { DefinitionAsk, RunRequestMaker } from '../run/definition-run-store.js';
 
 /** What one press of Run on a saved pattern sends: the pattern, the entity it starts from when it holds none, and whether it continues a run that stopped as heavy. */
 /** Whether the saved pattern is a built-in run, whose answer is a template answer: the kind the person pressed Run on says which to expect. */
@@ -102,3 +103,22 @@ export function createSavedRunStore(client: ApiClient, mask: boolean): SavedRunS
     },
   };
 }
+
+/**
+ * The request of a saved pattern built in the app, for the store of the run view: the route of the saved pattern with the entity of the ask (none when the pattern holds its start), the mask of the investigation, the continuation and the cursor.
+ * An answer that says the pattern is unavailable passes through; an answer of the shape of a built-in run is a mismatch, never shown.
+ */
+export const savedRunRequest =
+  (client: ApiClient, id: string, mask: boolean): RunRequestMaker =>
+  async (ask: DefinitionAsk, key, signal) => {
+    const result = await client.runSavedPattern(
+      id,
+      { ...(ask.anchor === undefined ? {} : { anchor: ask.anchor }), ...(mask ? { mask: true } : {}), ...(ask.continue === undefined ? {} : { continue: true, limit: ask.continue.limit }), ...(ask.cursor === undefined ? {} : { cursor: ask.cursor }) },
+      key,
+      signal,
+    );
+    if (!result.ok) return result;
+    if (result.value.status === 'unavailable') return { ok: true, value: result.value };
+    const pattern = patternRunResponseSchema.safeParse(result.value);
+    return pattern.success ? { ok: true, value: pattern.data } : { ok: false, failure: { code: 'SCHEMA_MISMATCH' } };
+  };

@@ -383,7 +383,7 @@ describe('pages of a result', () => {
     await settle();
     expect(kit.definitionRuns).toHaveLength(3);
     expect(within(matchCard(1)).getByText('Match 1')).toBeTruthy();
-    expect(inRun().queryByText(/Estimated/)).toBeNull();
+    expect(inRun().queryByText(/^Estimated/)).toBeNull();
   });
 
   it('shows the failure of a page read with Try again and keeps the page', async () => {

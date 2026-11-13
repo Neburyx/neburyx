@@ -33,7 +33,7 @@ describe('the heavy-operation stop of a pattern run', () => {
     await ran();
     await userEvent.click(inRun().getByRole('button', { name: 'Refine filters' }));
     await settle();
-    expect(screen.queryByText(/Estimated/)).toBeNull();
+    expect(screen.queryByText(/^Estimated/)).toBeNull();
     expect(within(screen.getByRole('region', { name: 'New pattern' })).getByRole('radio', { name: 'Outgoing' }).getAttribute('aria-checked')).toBe('true');
   });
 
@@ -45,14 +45,14 @@ describe('the heavy-operation stop of a pattern run', () => {
     await settle();
     expect(kit.definitionRuns).toHaveLength(2);
     expect(kit.definitionRuns[1]?.request).toEqual({ ...kit.definitionRuns[0]?.request, continue: true, limit: 25 });
-    expect(screen.queryByText(/Estimated/)).toBeNull();
+    expect(screen.queryByText(/^Estimated/)).toBeNull();
     expect(inRun().getByRole('list', { name: 'Matches' })).toBeTruthy();
   });
 
   it('shows no warning for an ok answer whatever its count quality', async () => {
     await runWorkspace({ runDefinition: async () => ok(definitionOk(['acc-2'], { count: { quality: 'unknown', scope: 'matches' } } as never)) });
     await ran();
-    expect(screen.queryByText(/Estimated/)).toBeNull();
+    expect(screen.queryByText(/^Estimated/)).toBeNull();
   });
 });
 

@@ -55,7 +55,8 @@ describe('renaming, copying and deleting', () => {
     await openTab(/My patterns/);
     await userEvent.click(menuOf('Alpha'));
     await choose('Rename');
-    const field = screen.getByLabelText('New name');
+    const field = screen.getByLabelText('Name');
+    expect(screen.getByText('1 to 100 characters. Names are unique among your patterns on this source.')).toBeTruthy();
     await userEvent.clear(field);
     expect(screen.getByRole('alert').textContent).toBe('Enter a name of 1 to 100 characters.');
     expect((screen.getByRole('button', { name: 'Rename' }) as HTMLButtonElement).disabled).toBe(true);
@@ -94,18 +95,61 @@ describe('renaming, copying and deleting', () => {
     expect(screen.getByRole('alert').textContent).toContain('not there any more');
   });
 
+  it('keeps the rename dialog open with the name when the name is already used, says so, holds Rename until the name changes, and does not read the list again', async () => {
+    let answer: ApiResult<SavedPattern> = { ok: false, failure: failure('CONFLICT', { reason: 'pattern-name-taken' }) };
+    const kit = await savedWorkspace({ patterns: { listPatterns: async () => page([listed({ id: ID, name: 'Alpha', version: 3 })]), changePattern: async () => answer } });
+    await userEvent.click(menuOf('Alpha'));
+    await choose('Rename');
+    const field = screen.getByLabelText('Name') as HTMLInputElement;
+    await userEvent.clear(field);
+    await userEvent.type(field, 'Beta');
+    await userEvent.click(screen.getByRole('button', { name: 'Rename' }));
+    await settle();
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    expect(field.value).toBe('Beta');
+    expect(within(screen.getByRole('dialog')).getByRole('alert').textContent).toBe('This name is already used on this source. Choose another.');
+    expect(field.getAttribute('aria-invalid')).toBe('true');
+    expect((screen.getByRole('button', { name: 'Rename' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(calls(kit, 'listPatterns')).toHaveLength(1);
+    answer = { ok: true, value: stored({ name: 'Beta2', version: 4 }) };
+    await userEvent.type(field, '2');
+    expect((screen.getByRole('button', { name: 'Rename' }) as HTMLButtonElement).disabled).toBe(false);
+    await userEvent.click(screen.getByRole('button', { name: 'Rename' }));
+    await settle();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(calls(kit, 'changePattern')).toHaveLength(2);
+    expect(calls(kit, 'listPatterns')).toHaveLength(2);
+  });
+
+  it('keeps the words of "changed elsewhere", and reads the list again, for a CONFLICT with no reason', async () => {
+    const kit = await savedWorkspace({ patterns: { listPatterns: async () => page([listed({ id: ID, name: 'Alpha' })]), changePattern: async () => ({ ok: false, failure: failure('CONFLICT') }) } });
+    await userEvent.click(menuOf('Alpha'));
+    await choose('Rename');
+    await userEvent.click(screen.getByRole('button', { name: 'Rename' }));
+    await settle();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.getByRole('alert').textContent).not.toMatch(/already used/);
+    expect(calls(kit, 'listPatterns')).toHaveLength(2);
+  });
+
   it('deletes after a confirmation, with the version and nothing else; a shared pattern’s confirmation says everyone loses it', async () => {
     const kit = await savedWorkspace({ patterns: { listPatterns: async () => page([listed({ id: ID, name: 'Alpha', version: 5 }), listed({ id: '0192f000-0000-7000-8000-000000000002', name: 'Gamma', visibility: 'shared' })]), deletePattern: async () => ({ ok: true, value: { id: ID, version: 6, deletedAt: '2026-11-12T10:00:00.000Z', purgeAfter: '2026-12-12T10:00:00.000Z' } }) } });
     await openTab(/My patterns/);
     await userEvent.click(menuOf('Gamma'));
     await choose('Delete');
-    expect(screen.getByText('Everyone on this source loses this pattern.')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Delete “Gamma”?' })).toBeTruthy();
+    expect(screen.getByText('This pattern is shared with everyone on this source. Deleting it removes it for all of them, and it cannot be recovered. Patterns they copied are not affected.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Delete for everyone' })).toBeTruthy();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Cancel' }));
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(document.activeElement).toBe(menuOf('Gamma'));
     expect(calls(kit, 'deletePattern')).toHaveLength(0);
     await userEvent.click(menuOf('Alpha'));
     await choose('Delete');
-    expect(screen.getByText('The pattern is deleted and cannot be run again.')).toBeTruthy();
-    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }));
+    expect(screen.getByRole('heading', { name: 'Delete “Alpha”?' })).toBeTruthy();
+    expect(screen.getByText('This pattern is private to you. It is removed from My patterns and cannot be recovered.')).toBeTruthy();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Cancel' }));
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete pattern' }));
     await settle();
     expect(calls(kit, 'deletePattern')[0]?.args.slice(0, 2)).toEqual([ID, 5]);
     expect(screen.getByText('Pattern deleted.')).toBeTruthy();
@@ -141,7 +185,7 @@ describe('renaming, copying and deleting', () => {
     await openTab(/My patterns/);
     await userEvent.click(menuOf('Alpha'));
     await choose('Delete');
-    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }));
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete pattern' }));
     await settle();
     await openTab(/Shared on this source/);
     await userEvent.click(menuOf('Alpha'));

@@ -25,6 +25,7 @@ export const RUN_COPY = {
   runAgain: 'Run again',
   loadingPreview: 'Reading the pattern in words…',
   previewFailed: 'The preview could not be made.',
+  countsAlways: 'Counts are always labelled Exact, Lower bound or Estimated. When a count is unknown, no number is shown.',
   cancelled: 'Run cancelled. Nothing was added to the graph. Your draft is kept.',
   cancelRun: 'Cancel run',
   cancelNote: 'Cancelling stops the run and keeps your draft.',

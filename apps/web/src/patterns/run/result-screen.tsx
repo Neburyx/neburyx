@@ -88,6 +88,7 @@ export function ResultScreen({ answer, at, page, before, hasNext, reading, mask,
           </p>
           <p>{returned === 0 && page === 0 ? noMatchText(startName) : summary.line}</p>
         </div>
+        <p className="search-panel-note">{RUN_COPY.countsAlways}</p>
         {add.added === undefined ? null : (
           <p className="patterns-state" role="status">
             {addedText(add.added, answer.count)}

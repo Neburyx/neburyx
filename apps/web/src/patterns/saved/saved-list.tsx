@@ -1,11 +1,11 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { ListedPattern, TemplateListResponse } from '@neburyx/contracts';
-import { canRetry } from '../../failure-notice.js';
 import { failureView } from '../copy.js';
+import { EmptyMine, ListUnreadable, ReasonSentences } from '../run/state-views.js';
 import type { ApiFailure } from '../../api/client.js';
 import { presetSummary, rowMatches, savedSummary } from './list-model.js';
 import { RowMenu, type MenuEntry } from './row-menu.js';
-import { SAVED_COPY, UNAVAILABLE_TEXT, stepWhere } from './saved-copy.js';
+import { SAVED_COPY } from './saved-copy.js';
 import { controlsOf, countText, kindLineOf, lastRunText } from './saved-model.js';
 import type { SavedList } from './use-saved-patterns.js';
 
@@ -20,7 +20,13 @@ export interface RowActions {
   readonly share: (item: ListedPattern) => void;
   readonly unshare: (item: ListedPattern) => void;
   readonly change: (item: ListedPattern) => void;
+  readonly copyAndChange: (item: ListedPattern) => void;
+  /** + New pattern, from the empty state of My patterns. */
+  readonly newPattern: () => void;
 }
+
+/** Whether the list has no pattern of the person's own: the empty state shows, and it carries + New pattern. */
+export const ownIsEmpty = (list: SavedList): boolean => list.state.phase === 'ready' && list.state.nextCursor === null && !list.state.items.some((item) => item.ownedByYou);
 
 interface Props {
   readonly list: SavedList;
@@ -28,17 +34,16 @@ interface Props {
   /** The built-in patterns of the source, once read. */
   readonly presets: readonly Preset[] | undefined;
   readonly actions: RowActions;
-  /** Whether a run is on its way: Run waits for it. */
-  readonly running: boolean;
   /** The display name of an entity type. */
   readonly nameOf: (type: string) => string;
+  readonly newRef?: React.RefObject<HTMLButtonElement | null>;
 }
 
 /**
  * The one list of the Patterns panel: a search, and three sections: the built-in patterns, the person's own and those shared on the source, each with its count and its rows, then the footnote. The search is on the client and covers the rows
  * read so far; a section whose list has more pages says so and keeps Load more.
  */
-export function SavedList({ list, sourceName, presets, actions, running, nameOf }: Props) {
+export function SavedList({ list, sourceName, presets, actions, nameOf, newRef }: Props) {
   const [text, setText] = useState('');
   const searchId = useId();
   const search = useRef<HTMLInputElement>(null);
@@ -61,6 +66,7 @@ export function SavedList({ list, sourceName, presets, actions, running, nameOf 
   const mine = useMemo(() => (items ?? []).filter((item) => item.ownedByYou), [items]);
   const shared = useMemo(() => (items ?? []).filter((item) => !item.ownedByYou), [items]);
   const searching = text.trim() !== '';
+  const builtIn = useRef<HTMLHeadingElement>(null);
   return (
     <div className="pattern-list">
       <input id={searchId} ref={search} type="search" className="pattern-search" aria-label={SAVED_COPY.searchLabel} placeholder={SAVED_COPY.searchLabel} value={text} onChange={(event) => setText(event.target.value)} />
@@ -69,11 +75,11 @@ export function SavedList({ list, sourceName, presets, actions, running, nameOf 
           {SAVED_COPY.searchLoadedOnly}
         </p>
       ) : null}
-      <Section id="built-in" label={SAVED_COPY.builtIn} count={presets === undefined ? undefined : String(presets.length)}>
+      <Section id="built-in" label={SAVED_COPY.builtIn} count={presets === undefined ? undefined : String(presets.length)} headingRef={builtIn}>
         {presets === undefined ? null : <BuiltInRows presets={presets} text={text} actions={actions} nameOf={nameOf} />}
       </Section>
       {state.phase === 'failed' ? (
-        <ListFailure failure={state.failure} sourceName={sourceName} retry={list.reload} />
+        <ListUnreadable failure={state.failure} sourceName={sourceName} retry={list.reload} />
       ) : state.phase === 'loading' ? (
         <p className="search-panel-note" role="status">
           {SAVED_COPY.loading}
@@ -86,10 +92,10 @@ export function SavedList({ list, sourceName, presets, actions, running, nameOf 
             </p>
           ) : null}
           <Section id="mine" label={SAVED_COPY.mine} count={countText(mine.length, more)}>
-            <SavedRows items={mine} empty={SAVED_COPY.emptyMine} text={text} presets={presets} actions={actions} running={running} nameOf={nameOf} />
+            {mine.length === 0 && !more ? <EmptyMine newRef={newRef} onNew={actions.newPattern} onSeeBuiltIn={() => builtIn.current?.focus()} /> : <SavedRows items={mine} empty={SAVED_COPY.emptyMine} text={text} presets={presets} actions={actions} nameOf={nameOf} />}
           </Section>
           <Section id="shared" label={SAVED_COPY.shared} count={countText(shared.length, more)}>
-            <SavedRows items={shared} empty={SAVED_COPY.emptyShared} text={text} presets={presets} actions={actions} running={running} nameOf={nameOf} />
+            <SavedRows items={shared} empty={SAVED_COPY.emptyShared} text={text} presets={presets} actions={actions} nameOf={nameOf} />
           </Section>
           {state.moreFailure === undefined ? null : (
             <p className="patterns-error" role="alert">
@@ -110,11 +116,11 @@ export function SavedList({ list, sourceName, presets, actions, running, nameOf 
   );
 }
 
-function Section({ id, label, count, children }: { readonly id: string; readonly label: string; readonly count: string | undefined; readonly children: React.ReactNode }) {
+function Section({ id, label, count, headingRef, children }: { readonly id: string; readonly label: string; readonly count: string | undefined; readonly headingRef?: React.RefObject<HTMLHeadingElement | null>; readonly children: React.ReactNode }) {
   const heading = `pattern-section-${id}`;
   return (
     <section className="pattern-section" aria-labelledby={heading}>
-      <h3 className="pattern-section-heading" id={heading}>
+      <h3 className="pattern-section-heading" id={heading} tabIndex={headingRef === undefined ? undefined : -1} ref={headingRef}>
         {count === undefined ? label : `${label} · ${count}`}
       </h3>
       {children}
@@ -145,31 +151,16 @@ function BuiltInRows({ presets, text, actions, nameOf }: { readonly presets: rea
   );
 }
 
-function SavedRows({ items, empty, text, presets, actions, running, nameOf }: { readonly items: readonly ListedPattern[]; readonly empty: string; readonly text: string; readonly presets: Props['presets']; readonly actions: RowActions; readonly running: boolean; readonly nameOf: Props['nameOf'] }) {
+function SavedRows({ items, empty, text, presets, actions, nameOf }: { readonly items: readonly ListedPattern[]; readonly empty: string; readonly text: string; readonly presets: Props['presets']; readonly actions: RowActions; readonly nameOf: Props['nameOf'] }) {
   if (items.length === 0) return <p className="search-panel-note">{empty}</p>;
   const rows = items.map((item) => ({ item, summary: savedSummary(item, presets, nameOf) })).filter((row) => rowMatches(text, row.item.name, row.summary));
   if (rows.length === 0) return <p className="search-panel-note">{SAVED_COPY.noneInSection}</p>;
   return (
     <ul className="pattern-rows">
       {rows.map(({ item, summary }) => (
-        <SavedRow key={item.id} item={item} summary={summary} kindName={item.kind === 'preset-run' ? kindLineOf(item, presets) : undefined} actions={actions} running={running} />
+        <SavedRow key={item.id} item={item} summary={summary} kindName={item.kind === 'preset-run' ? kindLineOf(item, presets) : undefined} actions={actions} />
       ))}
     </ul>
-  );
-}
-
-function ListFailure({ failure, sourceName, retry }: { readonly failure: ApiFailure; readonly sourceName: string; readonly retry: () => void }) {
-  const view = failureView(failure, sourceName);
-  return (
-    <div className="patterns-state" role="alert">
-      <p>{view.text}</p>
-      <p>{view.detail}</p>
-      {canRetry(failure) ? (
-        <button type="button" className="secondary" onClick={retry}>
-          {SAVED_COPY.retry}
-        </button>
-      ) : null}
-    </div>
   );
 }
 
@@ -197,7 +188,7 @@ function menuOf(item: ListedPattern, actions: RowActions): MenuEntry[] {
   ];
 }
 
-function SavedRow({ item, summary, kindName, actions, running }: { readonly item: ListedPattern; readonly summary: string; readonly kindName: string | undefined; readonly actions: RowActions; readonly running: boolean }) {
+function SavedRow({ item, summary, kindName, actions }: { readonly item: ListedPattern; readonly summary: string; readonly kindName: string | undefined; readonly actions: RowActions }) {
   const controls = controlsOf(item);
   const reasons = item.availability.status === 'unavailable' ? item.availability.reasons : [];
   const reasonId = `pattern-row-${item.id}-reason`;
@@ -212,19 +203,23 @@ function SavedRow({ item, summary, kindName, actions, running }: { readonly item
         {[kindName === undefined ? undefined : kindName, summary === '' ? undefined : summary, lastRunText(item), item.ownedByYou ? undefined : SAVED_COPY.sharedBy(item.owner.name)].filter((part): part is string => part !== undefined).join(' · ')}
       </p>
       {reasons.length === 0 ? null : (
-        <ul className="pattern-row-reasons" id={reasonId}>
-          {reasons.map((reason, index) => (
-            <li key={`${reason.code}-${index}`} className="search-panel-note">
-              {UNAVAILABLE_TEXT[reason.code]}
-              {stepWhere(reason.path)}
-            </li>
-          ))}
-        </ul>
+        <div className="pattern-row-reasons" id={reasonId}>
+          <ReasonSentences reasons={reasons} />
+        </div>
       )}
       <div className="patterns-actions">
-        <button type="button" className="primary" disabled={!controls.run || running} aria-label={`${SAVED_COPY.run} ${item.name}`} aria-describedby={controls.run ? undefined : reasonId} onClick={() => actions.run(item)}>
+        <button type="button" className="primary" disabled={!controls.run} aria-label={`${SAVED_COPY.run} ${item.name}`} aria-describedby={controls.run ? undefined : reasonId} onClick={() => actions.run(item)}>
           {SAVED_COPY.run}
         </button>
+        {reasons.length === 0 || item.kind !== 'definition' ? null : item.ownedByYou ? (
+          <button type="button" className="secondary" onClick={() => actions.change(item)}>
+            {SAVED_COPY.changePattern}
+          </button>
+        ) : (
+          <button type="button" className="secondary" onClick={() => actions.copyAndChange(item)}>
+            {SAVED_COPY.copyAndChange}
+          </button>
+        )}
         <RowMenu name={item.name} items={menuOf(item, actions)} />
       </div>
     </li>

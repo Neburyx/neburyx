@@ -2,7 +2,7 @@ import type { ApiFailure } from '../api/client.js';
 import type { Count, TemplateRunNotice } from '@neburyx/contracts';
 import { degreeCountText } from '../workspace/degree-text.js';
 import type { AddedOutcome } from './add-to-graph.js';
-import { BUSY_TEXT, RATE_LIMITED_TEXT, REFINE_FILTERS, RETRY, TIMED_OUT_TEXT, UNAVAILABLE_TEXT } from '../banner/copy.js';
+import { BUSY_TEXT, RATE_LIMITED_TEXT, REFINE_FILTERS, TIMED_OUT_TEXT, UNAVAILABLE_TEXT } from '../banner/copy.js';
 import { GRAPH_UNCHANGED } from '../search/copy.js';
 import { failureWords, TRY_AGAIN } from './failure-words.js';
 import type { PatternProblem, PatternProblemCode } from '@neburyx/contracts';
@@ -18,7 +18,7 @@ export const PATTERNS_COPY = {
   cancel: 'Cancel',
   backToList: 'Back to patterns',
   runAgain: 'Run again',
-  retry: RETRY,
+  retry: TRY_AGAIN,
   /** Proposed copy (the frame and the ui-spec give none). */
   noPatterns: 'This source has no patterns.',
   noMatches: 'No matches found.',

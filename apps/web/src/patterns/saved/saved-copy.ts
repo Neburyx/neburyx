@@ -1,6 +1,6 @@
 import { PATTERN_LIMITS, type PATTERN_UNAVAILABLE_CODES } from '@neburyx/contracts';
 import type { ApiFailure } from '../../api/client.js';
-import { patternLimitSentence, personalConditionSentence } from '../failure-words.js';
+import { nameTakenSentence, patternLimitSentence, personalConditionSentence } from '../failure-words.js';
 
 export const TABS = ['mine', 'shared', 'built-in'] as const;
 export type Tab = (typeof TABS)[number];
@@ -21,16 +21,21 @@ export const SAVED_COPY = {
   ownedBy: (owner: string): string => `Owned by ${owner}. Only the owner can:`,
   ownerOnly: 'owner only',
   loading: 'Loading saved patterns…',
-  emptyMine: 'You have no saved patterns. Choose New pattern to build one.',
+  emptyMine: 'Start from a built-in pattern, or create your own. Saved patterns appear here.',
+  newPattern: 'New pattern',
+  seeBuiltIn: 'See built-in',
   emptyShared: 'Nobody has shared a pattern on this source.',
-  retry: 'Retry',
   loadMore: 'Load more',
   cursorReset: 'The list changed while you were reading it, so it was read again from the start.',
   notRun: 'Not run yet',
   builtInKind: 'Built in this panel',
   onlyMe: 'Only me',
   everyone: 'Everyone on this source',
-  unavailable: 'Unavailable',
+  unavailable: 'Pattern out of date',
+  changePattern: 'Change pattern',
+  copyAndChange: 'Copy and change',
+  copyAndChangeNote: 'A pattern shared by someone else can be copied first.',
+  outOfDateLine: 'Change the pattern to fix it.',
   run: 'Run',
   menu: 'More',
   rename: 'Rename',
@@ -41,14 +46,16 @@ export const SAVED_COPY = {
   change: 'Change',
   cancel: 'Cancel',
   name: 'Name',
-  newName: 'New name',
-  saveButton: 'Save pattern',
+  nameRule: `1 to ${PATTERN_LIMITS.nameLength} characters. Names are unique among your patterns on this source.`,
+  onlyMeLine: 'Private. It appears under My patterns.',
+  everyoneLine: 'Others can run and copy it. They cannot change or delete it.',
+  saveButton: 'Save',
   saveDialog: 'Save pattern',
   saveText: 'Saves the pattern and its parameters, never query text. Running it applies your own access and limits.',
   askEachTime: 'Ask for the starting entity each time',
   keepsEntity: 'The pattern keeps the starting entity it holds.',
   askEachTimeForced: 'No starting entity is chosen, so the pattern will ask for one each time.',
-  visibility: 'Visibility',
+  visibility: 'Who can use it',
   saved: 'Pattern saved.',
   savedNotShared: 'Pattern saved, but not shared.',
   renamed: 'Pattern renamed.',
@@ -58,9 +65,16 @@ export const SAVED_COPY = {
   deleted: 'Pattern deleted.',
   shareConfirm: 'Everyone on this source will be able to run and copy this pattern. They cannot change or delete it.',
   shareTitle: 'Share this pattern?',
-  deleteTitle: 'Delete this pattern?',
-  deleteConfirmPrivate: 'The pattern is deleted and cannot be run again.',
-  deleteConfirmShared: 'Everyone on this source loses this pattern.',
+  deleteConfirmPrivate: 'This pattern is private to you. It is removed from My patterns and cannot be recovered.',
+  deleteConfirmShared: 'This pattern is shared with everyone on this source. Deleting it removes it for all of them, and it cannot be recovered. Patterns they copied are not affected.',
+  deletePattern: 'Delete pattern',
+  deleteEveryone: 'Delete for everyone',
+  changeSharedLine: 'Others on this source run this pattern. Save for everyone?',
+  saveAsCopy: 'Save as a copy',
+  saveForEveryone: 'Save for everyone',
+  changedMeanwhile: 'This pattern was changed by someone else after you opened it. Your edits are kept. You can save them as a copy.',
+  copySaved: 'Saved as a copy.',
+  copyFailed: 'The copy could not be saved.',
   renameTitle: 'Rename pattern',
   saving: 'Saving…',
   working: 'Working…',
@@ -72,25 +86,27 @@ export const SAVED_COPY = {
   summary: 'The path of the pattern',
   changeTitle: 'Change pattern',
   saveChanges: 'Save changes',
-  saveAsNew: 'Save as new',
   changeUnplaced: 'This part of the pattern cannot be shown because the mapping no longer has it.',
   changeLine: 'Changing a saved pattern. Save changes keeps it where it is; Save as new makes another.',
 } as const;
+
+export const deleteTitle = (name: string): string => `Delete “${name}”?`;
+export const changeSharedTitle = (name: string): string => `Save changes to “${name}”?`;
 
 export const nameLimitText = `Enter a name of 1 to ${PATTERN_LIMITS.nameLength} characters.`;
 
 /** The reasons a saved pattern cannot run, in words: one for each code, never the code, and no name or value from the definition. */
 export const UNAVAILABLE_TEXT: Readonly<Record<(typeof PATTERN_UNAVAILABLE_CODES)[number], string>> = {
-  'unknown-entity-type': 'A type it uses is no longer in the mapping.',
-  'unknown-relationship-type': 'A relationship type it uses is no longer in the mapping.',
-  'relationship-does-not-join': 'A relationship type no longer joins the types of one of its steps.',
-  'unknown-property': 'A property it uses is no longer in the mapping.',
-  'not-filterable': 'A property it filters on can no longer be filtered.',
-  'bad-definition': 'Its definition is no longer one the product accepts.',
-  'anchor-changed': 'Its starting entity is of a type the pattern no longer starts at.',
-  'preset-removed': 'The built-in pattern it was saved from is no longer in the mapping.',
-  'template-changed': 'The template it was saved from changed.',
-  'params-invalid': 'Its saved parameters are no longer valid.',
+  'unknown-entity-type': 'This pattern uses a type the mapping no longer has.',
+  'unknown-relationship-type': 'This pattern uses a relationship type the mapping no longer has.',
+  'relationship-does-not-join': 'A relationship type this pattern uses no longer joins the types of its step.',
+  'unknown-property': 'This pattern uses a property the mapping no longer allows.',
+  'not-filterable': 'This pattern filters on a property the mapping no longer lets it filter on.',
+  'bad-definition': 'This pattern is no longer one the product accepts.',
+  'anchor-changed': 'The starting entity of this pattern is of a type it no longer starts at.',
+  'preset-removed': 'The built-in pattern this was saved from is no longer in the mapping.',
+  'template-changed': 'The template this pattern was saved from changed.',
+  'params-invalid': 'The saved parameters of this pattern are no longer valid.',
 };
 
 export const stepWhere = (path: readonly (string | number)[] | undefined): string => {
@@ -107,7 +123,7 @@ export function refusalText(failure: ApiFailure): string {
       if (reason === 'pattern-personal-condition') return personalConditionSentence;
       return 'The server did not accept this pattern.';
     case 'CONFLICT':
-      return SAVED_COPY.changedByOther;
+      return reason === 'pattern-name-taken' ? nameTakenSentence : SAVED_COPY.changedByOther;
     case 'NOT_FOUND':
       return SAVED_COPY.gone;
     case 'ACCESS_DENIED':
@@ -120,3 +136,6 @@ export function refusalText(failure: ApiFailure): string {
       return 'The request could not be made. Try again.';
   }
 }
+
+/** Whether a refusal says the name is used by another of the person's patterns on the source: the dialog stays open and nothing is read again. */
+export const isNameTaken = (failure: ApiFailure): boolean => failure.code === 'CONFLICT' && 'details' in failure && failure.details !== undefined && failure.details['reason'] === 'pattern-name-taken';

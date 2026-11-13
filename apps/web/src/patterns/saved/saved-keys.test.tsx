@@ -40,14 +40,14 @@ describe('the list by keyboard and Escape', () => {
 
   it('cancels a saved run on its way with Escape, and closes the panel with the next Escape', async () => {
     await savedWorkspace({ patterns: { listPatterns: async () => page([listed({ id: ID, name: 'Alpha' })]), runSavedPattern: () => new Promise(() => undefined) } });
-    await openTab(/My patterns/);
     await userEvent.click(screen.getByRole('button', { name: 'Run Alpha' }));
     await settle();
-    fireEvent.keyDown(screen.getByRole('searchbox', { name: 'Search patterns' }), { key: 'Escape' });
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Cancel run' }));
+    fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'Escape' });
     await settle();
-    expect(screen.getByText('Cancelled. No new matches shown.')).toBeTruthy();
+    expect(screen.getByText(/^Run cancelled\./)).toBeTruthy();
     expect(screen.getByRole('complementary', { name: 'Patterns' })).toBeTruthy();
-    fireEvent.keyDown(screen.getByRole('searchbox', { name: 'Search patterns' }), { key: 'Escape' });
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
     await settle();
     expect(screen.queryByRole('complementary', { name: 'Patterns' })).toBeNull();
   });

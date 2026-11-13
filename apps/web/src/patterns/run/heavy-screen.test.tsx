@@ -55,7 +55,7 @@ describe('the heavy stop of a pattern run', () => {
     await userEvent.click(inRun().getByRole('button', { name: 'Refine filters' }));
     await settle();
     expect(panelHeader().title).toBe('New pattern');
-    expect(screen.queryByText(/Estimated/)).toBeNull();
+    expect(screen.queryByText(/^Estimated/)).toBeNull();
     expect(screen.getByRole('tab', { name: /^Step 1/ }).getAttribute('aria-selected')).toBe('true');
     expect(screen.getByRole('radio', { name: 'Outgoing' }).getAttribute('aria-checked')).toBe('true');
   });
@@ -73,7 +73,7 @@ describe('the heavy stop of a pattern run', () => {
     expect(panelHeader()).toEqual({ title: 'Pattern result', subtitle: 'Draft · from x-1' });
     expect(inRun().getByText('At least 500 matches')).toBeTruthy();
     expect(inRun().getByText('Lower bound')).toBeTruthy();
-    expect(inRun().queryByText(/Estimated/)).toBeNull();
+    expect(inRun().queryByText(/^Estimated/)).toBeNull();
   });
 
   it('returns to the preview on Cancel, with the choice of the start kept and nothing run', async () => {
