@@ -25,6 +25,7 @@ export function memoryPatterns(options: MemoryPatternOptions = {}): MemoryPatter
   const patternEvents: PatternEvent[] = [];
   // one second for each write, so that the order of changes is the order of the calls
   let writes = 0;
+  let runs = 0;
   const stamp = (): string => new Date(Date.UTC(2026, 10, 12, 10, 0, 0) + writes++ * 1000).toISOString();
   const keyOf = (row: PatternRow): PatternListPosition => ({ updatedKey: row.updatedAt.replace('Z', '000Z'), id: row.id });
 
@@ -88,6 +89,13 @@ export function memoryPatterns(options: MemoryPatternOptions = {}): MemoryPatter
       return due.length;
     },
     readPattern: (id, ownerId) => Promise.resolve(live(id, ownerId)),
+    readRunnablePattern: (id, principalId) => Promise.resolve(deleted.has(id) ? undefined : patternRows.find((row) => row.id === id && (row.ownerId === principalId || row.visibility === 'shared'))),
+    recordPatternRun(id, ownerId) {
+      const held = live(id, ownerId);
+      if (held === undefined) return Promise.resolve(false);
+      replace({ ...held, lastRunAt: new Date(Date.UTC(2026, 10, 12, 12, 0, 0) + runs++ * 1000).toISOString() });
+      return Promise.resolve(true);
+    },
     async changePattern(change: PatternChange, context) {
       const held = live(change.id, change.ownerId);
       if (held === undefined) return { outcome: 'not-found' };

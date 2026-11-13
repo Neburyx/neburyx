@@ -104,6 +104,10 @@ export interface PatternStore {
   listPatterns(query: PatternListQuery): Promise<PatternListResult>;
   /** The owner's pattern that is not deleted; another owner's, a deleted one and an unknown id are `undefined`. */
   readPattern(id: string, ownerId: string): Promise<PatternRow | undefined>;
+  /** The live pattern a person may run: their own, or one whose visibility is `shared`, whoever owns it (the row says who). Another person's private pattern, a deleted one, an unknown id and an id that is not a uuid are `undefined`. */
+  readRunnablePattern(id: string, principalId: string): Promise<PatternRow | undefined>;
+  /** Records that the owner ran the pattern: `last_run_at` is now. It is a use and not an edit: the version, `updated_at` and the events are not touched. False, with nothing written, for anyone but the owner, a deleted pattern and an unknown id. */
+  recordPatternRun(id: string, ownerId: string): Promise<boolean>;
   /** Changes the owner's pattern in one transaction under a lock on its row: the owner's live pattern, then the version, then the write and its `changed` event. A stale version writes nothing. */
   changePattern(change: PatternChange, context: PatternWriteContext): Promise<PatternChangeResult>;
   /** Marks the owner's pattern deleted (`deleted_at`, `purge_after`) under the same lock and guards, and records the `deleted` event. */
@@ -163,6 +167,8 @@ export function createPatternStore(pool: pg.Pool): PatternStore {
     savePattern: (input, context) => savePattern(pool, input, context),
     listPatterns: (query) => listPatterns(pool, query),
     readPattern: (id, ownerId) => readPattern(pool, id, ownerId),
+    readRunnablePattern: (id, principalId) => readRunnablePattern(pool, id, principalId),
+    recordPatternRun: (id, ownerId) => recordPatternRun(pool, id, ownerId),
     changePattern: (change, context) => changePattern(pool, change, context),
     deletePattern: (deletion, context) => deletePattern(pool, deletion, context),
     purgeExpiredPatterns: (beforeDelete) => purgeExpiredPatterns(pool, beforeDelete),
@@ -207,6 +213,21 @@ async function readPattern(pool: pg.Pool, id: string, ownerId: string): Promise<
   const found = await pool.query<PatternRecord>(`SELECT ${PATTERN_COLUMNS} FROM saved_patterns WHERE id = $1 AND owner_id = $2 AND deleted_at IS NULL`, [id, ownerId]);
   const [record] = found.rows;
   return record === undefined ? undefined : patternRowOf(record);
+}
+
+const PATTERN_ID_TEXT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+async function readRunnablePattern(pool: pg.Pool, id: string, principalId: string): Promise<PatternRow | undefined> {
+  if (!PATTERN_ID_TEXT.test(id) || !PATTERN_ID_TEXT.test(principalId)) return undefined;
+  const found = await pool.query<PatternRecord>(`SELECT ${PATTERN_COLUMNS} FROM saved_patterns WHERE id = $1 AND deleted_at IS NULL AND (owner_id = $2 OR visibility = 'shared')`, [id, principalId]);
+  const [record] = found.rows;
+  return record === undefined ? undefined : patternRowOf(record);
+}
+
+async function recordPatternRun(pool: pg.Pool, id: string, ownerId: string): Promise<boolean> {
+  if (!PATTERN_ID_TEXT.test(id) || !PATTERN_ID_TEXT.test(ownerId)) return false;
+  const done = await pool.query('UPDATE saved_patterns SET last_run_at = now() WHERE id = $1 AND owner_id = $2 AND deleted_at IS NULL', [id, ownerId]);
+  return (done.rowCount ?? 0) > 0;
 }
 
 async function lockPattern(client: pg.PoolClient, id: string, ownerId: string): Promise<PatternRecord | undefined> {

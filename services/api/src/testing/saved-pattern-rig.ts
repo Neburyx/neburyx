@@ -8,7 +8,11 @@ import type { CursorCodec } from '../gate/cursor/codec.js';
 import type { Seams } from '../seams/seams.js';
 import { communitySeams } from '../seams/community-seams.js';
 import { memoryStoreWith, type MemoryAppStore, type MemoryAppStoreOptions } from './app-store.js';
+import type { ExecuteCall, ExecuteOutcome } from '../gate/executor.js';
+import type { TemplateProbe } from '../graph/template-probes.js';
+import type { MappingModel } from '../mapping/model.js';
 import { TestExecutor } from './gate.js';
+import { onlineIndexesOf, schemaAnswer, withSchema } from './search-fixtures.js';
 import { DERIVED_RULE } from './derived-fixtures.js';
 import { LINKED_PRESET, LINKED_RELATIONSHIPS } from './linked-entities-fixtures.js';
 import { baseSource, fileOf } from './mapping.js';
@@ -67,18 +71,31 @@ export interface PatternAppOptions extends MemoryAppStoreOptions {
   readonly cursors?: CursorCodec;
   /** The policy refuses every source. */
   readonly deny?: boolean;
+  /** Another mapping than the shared one (a mapping that changed), and what the source answers to a read: with it the executor answers instead of failing the test. */
+  readonly mapping?: MappingModel;
+  readonly answer?: (call: ExecuteCall) => Promise<ExecuteOutcome>;
+  readonly probes?: ReadonlyMap<string, TemplateProbe>;
+  readonly now?: () => Date;
+  readonly policyVersion?: () => string;
 }
 
 export async function patternApp(options: PatternAppOptions = {}) {
   const base: MemoryAppStore = options.sharing ?? memoryStoreWith(options);
   const store: MemoryAppStore = options.identity === undefined ? base : { ...base, current: () => Promise.resolve(options.identity as Identity) };
   const audit = recordingAudit();
-  const executor = new TestExecutor(() => {
-    throw new Error('a saved-pattern route called the source');
-  });
+  const mapping = options.mapping ?? SAVED_PATTERN_MAPPING;
+  const [first] = mapping.sources;
+  if (first === undefined) throw new Error('the mapping has no source');
+  const executor = new TestExecutor(
+    options.answer === undefined
+      ? () => {
+          throw new Error('a saved-pattern route called the source');
+        }
+      : withSchema(() => schemaAnswer(onlineIndexesOf(first)), options.answer),
+  );
   const seams: Seams = { ...communitySeams(), audit: audit.sink, ...(options.deny === true ? { policy: { authorizeSource: () => Promise.resolve({ allowed: false, reason: 'no' }) } } : {}) };
-  const parts = testSourceGate(SAVED_PATTERN_MAPPING, { executor });
-  const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store, mapping: SAVED_PATTERN_MAPPING, gate: parts.gate, seams, catalog: parts.catalog, referenceKeys: TEST_KEYS, ...(options.cursors === undefined ? {} : { cursors: options.cursors }) });
+  const parts = testSourceGate(mapping, { executor });
+  const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store, mapping, gate: parts.gate, seams, catalog: parts.catalog, referenceKeys: TEST_KEYS, ...(options.cursors === undefined ? {} : { cursors: options.cursors }), ...(options.probes === undefined ? {} : { templateProbes: options.probes }), ...(options.now === undefined ? {} : { templateRunClock: options.now }), ...(options.policyVersion === undefined ? {} : { policyVersion: options.policyVersion }) });
   return { app, store, audit, executor };
 }
 

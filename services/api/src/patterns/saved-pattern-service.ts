@@ -1,10 +1,8 @@
 import { z } from 'zod';
 import { retentionOf } from '../mapping/retention.js';
-import { DEFAULT_PATTERN_LIST_LIMIT, MAX_PATTERN_LIST_LIMIT, linkedEntitiesParamsSchema, patternDefinitionSchema, sharedAttributeParamsSchema, type AuditSink, type ChangePatternRequest, type DeletePatternResponse, type PatternDefinition, type PatternListResponse, type SavedPattern, type SavePatternRequest } from '@neburyx/contracts';
+import { DEFAULT_PATTERN_LIST_LIMIT, MAX_PATTERN_LIST_LIMIT, patternDefinitionSchema, type AuditSink, type ChangePatternRequest, type DeletePatternResponse, type PatternDefinition, type PatternListResponse, type SavedPattern, type SavePatternRequest } from '@neburyx/contracts';
 import type { NewPattern, PatternChange, PatternRow, PatternStore } from '../db/patterns-repository.js';
 import { AppError } from '../errors.js';
-import { LINKED_ENTITIES_ID, linkedEntitiesTemplate } from '../gate/templates/linked-entities.js';
-import { SHARED_ATTRIBUTE_ID, sharedAttributeTemplate } from '../gate/templates/shared-attribute.js';
 import type { CursorBinding, CursorCodec } from '../gate/cursor/codec.js';
 import { COMMUNITY_POLICY_VERSION } from '../investigations/draft.js';
 import type { SourceAccess } from '../investigations/source-access.js';
@@ -12,6 +10,8 @@ import type { StoredReferences } from '../investigations/stored-references.js';
 import type { MappingModel, PresetModel, SourceModel } from '../mapping/model.js';
 import type { Principal } from '../seams/seams.js';
 import { validatePattern } from './validate.js';
+import { availabilityOf } from './availability.js';
+import { presetTemplateOf } from './preset-template.js';
 
 /** The audit action of a source the person may not read, for a save. */
 export const PATTERN_SAVE_AUDIT_ACTION = 'pattern.save';
@@ -76,12 +76,6 @@ export function shownPattern(references: StoredReferences, row: PatternRow): Sav
 export function templateVersionNumber(version: string): number {
   if (!/^[1-9]\d*$/.test(version)) throw new Error('a template version is an integer of 1 or more');
   return Number.parseInt(version, 10);
-}
-
-/** What a preset-run holds of its template: the parameters the caller may send for a preset (the starting entity is held apart, and the preset binds the types and the relationship), and the template's version. */
-function presetTemplateOf(preset: PresetModel): { readonly templateId: string; readonly version: string; readonly schema: { safeParse(input: unknown): { success: boolean } } } {
-  if (preset.template === 'linked-entities') return { templateId: LINKED_ENTITIES_ID, version: linkedEntitiesTemplate.version, schema: linkedEntitiesParamsSchema.omit({ ref: true, targetType: true, via: true }) };
-  return { templateId: SHARED_ATTRIBUTE_ID, version: sharedAttributeTemplate.version, schema: sharedAttributeParamsSchema.omit({ ref: true, attributeType: true, via: true }) };
 }
 
 /** Whether a condition of the definition is on a personal-data property of the type the step arrives at: a stored pattern keeps no such value. A keyed type's stable id is one (it is a `pii` property). */
@@ -211,13 +205,13 @@ export function createSavedPatternService(deps: { readonly store: PatternStore; 
       if (limit !== undefined && limit < 1) throw new AppError('INVALID_REQUEST');
       if (limit !== undefined && limit > MAX_PATTERN_LIST_LIMIT) throw new AppError('QUERY_BUDGET_EXCEEDED', { maxPage: MAX_PATTERN_LIST_LIMIT });
       await deps.access.require({ traceId, principal, sourceId, auditAction: PATTERN_LIST_AUDIT_ACTION });
-      sourceOf(sourceId);
+      const source = sourceOf(sourceId);
       const binding = bindingOf(sourceId, principal);
       const position = cursor === undefined ? undefined : positionSchema.safeParse(deps.cursors.verify(cursor, binding));
       if (position !== undefined && !position.success) throw new AppError('CURSOR_INVALIDATED');
       const page = limit ?? DEFAULT_PATTERN_LIST_LIMIT;
       const found = await deps.store.listPatterns({ ownerId: principal.id, sourceId, limit: page, after: position?.data });
-      return { items: found.rows.map((row) => shownPattern(deps.references, row)), nextCursor: found.next === undefined ? null : deps.cursors.mint(binding, { updatedKey: found.next.updatedKey, id: found.next.id }) };
+      return { items: found.rows.map((row) => ({ ...shownPattern(deps.references, row), availability: availabilityOf(row, source) })), nextCursor: found.next === undefined ? null : deps.cursors.mint(binding, { updatedKey: found.next.updatedKey, id: found.next.id }) };
     },
     async save({ traceId, principal, request }) {
       await deps.access.require({ traceId, principal, sourceId: request.sourceId, auditAction: PATTERN_SAVE_AUDIT_ACTION });

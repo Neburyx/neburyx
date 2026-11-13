@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import type { Socket } from 'node:net';
 import fastifyStatic from '@fastify/static';
-import { type ErrorCode, type ProfileExtension, deleteInvestigationResponseSchema, deleteViewRequestSchema, deleteViewResponseSchema, restoreInvestigationRequestSchema, MAX_DRAFT_DOCUMENT_BYTES, readRefsRequestSchema, readRefsResponseSchema, exportRequestSchema, exportSchema, draftWriteRequestSchema, draftWriteResponseSchema, renameRequestSchema, renameResponseSchema, statusChangeRequestSchema, statusChangeResponseSchema, derivedNeighborsRequestSchema, derivedNeighborsResponseSchema, templateListQuerySchema, patternPreviewRequestSchema, patternRunRequestSchema, patternRunResponseSchema, patternPreviewResponseSchema, patternValidateRequestSchema, patternValidateResponseSchema, savePatternRequestSchema, savedPatternSchema, patternListQuerySchema, patternListResponseSchema, changePatternRequestSchema, deletePatternResponseSchema, templateListResponseSchema, templateRunRequestSchema, templateRunResponseSchema, coverageRequestSchema, coverageResponseSchema, degreePreviewRequestSchema, edgeDetailSchema, edgePathSchema, entityLookupRequestSchema, degreePreviewSchema, entityPathSchema, entityQuerySchema, expandRequestSchema, expandResponseSchema, healthResponseSchema, investigationListQuerySchema, investigationListResponseSchema, investigationResponseSchema, meResponseSchema, nodeSchema, parseEdgeRefSegment, parseSourceLinkSegment, sourceLinkPathSchema, sourceLinkQuerySchema, openInvestigationRequestSchema, openInvestigationResponseSchema, readyResponseSchema, searchMoreRequestSchema, searchMoreResultSchema, searchRequestSchema, searchResultSchema, sourceProfileSchema, sourceTestReportSchema, sourcesResponseSchema, renameViewRequestSchema, restoreViewResponseSchema, saveViewRequestSchema, saveViewResponseSchema, viewListQuerySchema, viewListResponseSchema, ownedViewListResponseSchema, namedViewSchema } from '@neburyx/contracts';
+import { type ErrorCode, type ProfileExtension, deleteInvestigationResponseSchema, deleteViewRequestSchema, deleteViewResponseSchema, restoreInvestigationRequestSchema, MAX_DRAFT_DOCUMENT_BYTES, readRefsRequestSchema, readRefsResponseSchema, exportRequestSchema, exportSchema, draftWriteRequestSchema, draftWriteResponseSchema, renameRequestSchema, renameResponseSchema, statusChangeRequestSchema, statusChangeResponseSchema, derivedNeighborsRequestSchema, derivedNeighborsResponseSchema, templateListQuerySchema, patternPreviewRequestSchema, patternRunRequestSchema, patternRunResponseSchema, savedPatternRunRequestSchema, savedPatternRunResponseSchema, patternPreviewResponseSchema, patternValidateRequestSchema, patternValidateResponseSchema, savePatternRequestSchema, savedPatternSchema, patternListQuerySchema, patternListResponseSchema, changePatternRequestSchema, deletePatternResponseSchema, templateListResponseSchema, templateRunRequestSchema, templateRunResponseSchema, coverageRequestSchema, coverageResponseSchema, degreePreviewRequestSchema, edgeDetailSchema, edgePathSchema, entityLookupRequestSchema, degreePreviewSchema, entityPathSchema, entityQuerySchema, expandRequestSchema, expandResponseSchema, healthResponseSchema, investigationListQuerySchema, investigationListResponseSchema, investigationResponseSchema, meResponseSchema, nodeSchema, parseEdgeRefSegment, parseSourceLinkSegment, sourceLinkPathSchema, sourceLinkQuerySchema, openInvestigationRequestSchema, openInvestigationResponseSchema, readyResponseSchema, searchMoreRequestSchema, searchMoreResultSchema, searchRequestSchema, searchResultSchema, sourceProfileSchema, sourceTestReportSchema, sourcesResponseSchema, renameViewRequestSchema, restoreViewResponseSchema, saveViewRequestSchema, saveViewResponseSchema, viewListQuerySchema, viewListResponseSchema, ownedViewListResponseSchema, namedViewSchema } from '@neburyx/contracts';
 import { z } from 'zod';
 import Fastify, {
   type FastifyBaseLogger,
@@ -28,6 +28,7 @@ import { createPatternPreviewService } from './patterns/preview-service.js';
 import { createPatternRunService } from './patterns/run-service.js';
 import { createPatternValidateService } from './patterns/validate-service.js';
 import { createSavedPatternService } from './patterns/saved-pattern-service.js';
+import { createSavedPatternRunService } from './patterns/saved-run-service.js';
 import { createTemplateRunService } from './graph/template-run-service.js';
 import type { TemplateProbe } from './graph/template-probes.js';
 import { createExpandService } from './graph/expand-service.js';
@@ -730,6 +731,29 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       const identity = await options.store.current();
       const saved = savedPatternSchema.parse(await savedPatterns.save({ traceId: request.id, principal: identity.principal, request: body.data }));
       return reply.code(201).header('etag', `"${saved.version}"`).send(saved);
+    });
+
+    const savedRuns = createSavedPatternRunService({ store: options.store, mapping, access, references: storedReferences, patternRuns, templateRuns, logger: options.logger });
+    app.post('/v1/patterns/:id/run', { config: { permission: 'principal' } }, async (request, reply) => {
+      const params = profileParamsSchema.safeParse(request.params);
+      const body = savedPatternRunRequestSchema.safeParse(request.body);
+      const key = idempotencyKeyOf(request.headers['idempotency-key']);
+      if (!noQuerySchema.safeParse(request.query).success || !params.success || !body.success || key === undefined) throw new AppError('INVALID_REQUEST');
+      const identity = await options.store.current();
+      const principal = identity.principal;
+      const pattern = await savedRuns.find({ principal, id: params.data.id });
+      const sourceId = pattern.sourceId;
+      const answer = await runOnce(
+        { store: options.store, policy: runSeams.policy, policyVersion: runPolicyVersion },
+        { principal, sourceId, key, fingerprint: fingerprintOf({ method: 'POST', path: request.url.split('?')[0] ?? '', query: '', body: request.body }), stillReadable: () => savedRuns.stillRunnable({ principal, id: pattern.id, sourceId }) },
+        async () => {
+          const made = await savedRuns.run({ traceId: request.id, principal, pattern, anchor: body.data.anchor, limit: body.data.limit, mask: body.data.mask === true, continue: body.data.continue === true, signal: signalOf(request) });
+          return { statusCode: 200, body: savedPatternRunResponseSchema.parse(made), replayed: false };
+        },
+        (error) => (error instanceof AppError && error.code !== 'RATE_LIMITED' ? { statusCode: errorStatus(error.code), body: errorResponse(error.code, request.id, error.details) } : undefined),
+      );
+      if (answer.replayed) reply.header(IDEMPOTENT_REPLAY_HEADER, 'true');
+      return reply.code(answer.statusCode).send(answer.body);
     });
 
     const views = createViewService({ store: options.store, references: storedReferences, mapping, cursors: listCursors });

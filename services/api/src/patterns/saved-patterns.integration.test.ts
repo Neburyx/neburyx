@@ -215,3 +215,42 @@ describe('saving a pattern in Postgres', () => {
     expect(await rows(seeded.database.ownerUrl, `SELECT count(*)::int AS n FROM saved_patterns`)).toEqual([{ n: 1 }]);
   });
 });
+
+describe('running a pattern in Postgres', () => {
+  it('finds the caller’s own pattern and a shared one, and none of another person’s private pattern, a deleted one, or an id that is not a uuid', async () => {
+    const { seeded, store, principal, audit } = await started();
+    const saved = await store.savePattern(definitionPattern(seeded.sourceId), { principal, traceId: 't', audit });
+    if (saved.outcome !== 'saved') throw new Error('not saved');
+    const otherPerson = randomUUID();
+    await rows(seeded.database.ownerUrl, `INSERT INTO users (id, issuer, subject, display_name) VALUES ($1, 'issuer', 'second', 'Second')`, [otherPerson]);
+    expect((await store.readRunnablePattern(saved.row.id, principal.id))?.id).toBe(saved.row.id);
+    expect(await store.readRunnablePattern(saved.row.id, otherPerson)).toBeUndefined();
+    await rows(seeded.database.ownerUrl, `UPDATE saved_patterns SET visibility = 'shared' WHERE id = $1`, [saved.row.id]);
+    expect(await store.readRunnablePattern(saved.row.id, otherPerson)).toMatchObject({ id: saved.row.id, ownerId: principal.id, visibility: 'shared' });
+    expect(await store.readRunnablePattern('not-a-uuid', principal.id)).toBeUndefined();
+    expect(await store.readRunnablePattern(saved.row.id, 'not-a-uuid')).toBeUndefined();
+    await rows(seeded.database.ownerUrl, `UPDATE saved_patterns SET deleted_at = now(), purge_after = now() + interval '30 days' WHERE id = $1`, [saved.row.id]);
+    expect(await store.readRunnablePattern(saved.row.id, principal.id)).toBeUndefined();
+  });
+
+  it('records the owner’s run as the time of the last run only, and writes nothing for another person, a deleted pattern or an id that is not a uuid', async () => {
+    const { seeded, store, pool, principal, audit } = await started();
+    const saved = await store.savePattern(definitionPattern(seeded.sourceId), { principal, traceId: 't', audit });
+    if (saved.outcome !== 'saved') throw new Error('not saved');
+    const otherPerson = randomUUID();
+    await rows(seeded.database.ownerUrl, `INSERT INTO users (id, issuer, subject, display_name) VALUES ($1, 'issuer', 'second', 'Second')`, [otherPerson]);
+    await rows(seeded.database.ownerUrl, `UPDATE saved_patterns SET visibility = 'shared' WHERE id = $1`, [saved.row.id]);
+    const snapshot = async () => rows(seeded.database.ownerUrl, `SELECT version, updated_at, last_run_at FROM saved_patterns WHERE id = $1`, [saved.row.id]);
+    const first = await snapshot();
+    expect(await store.recordPatternRun(saved.row.id, otherPerson)).toBe(false);
+    expect(await snapshot()).toEqual(first);
+    expect(await store.recordPatternRun('not-a-uuid', principal.id)).toBe(false);
+    expect(await store.recordPatternRun(saved.row.id, principal.id)).toBe(true);
+    const [after] = await snapshot();
+    expect(after).toMatchObject({ version: 1, updated_at: first[0]?.updated_at });
+    expect(after?.last_run_at).not.toBeNull();
+    expect(await readPatternEvents(pool, { patternId: saved.row.id })).toHaveLength(1);
+    await rows(seeded.database.ownerUrl, `UPDATE saved_patterns SET deleted_at = now(), purge_after = now() + interval '30 days' WHERE id = $1`, [saved.row.id]);
+    expect(await store.recordPatternRun(saved.row.id, principal.id)).toBe(false);
+  });
+});

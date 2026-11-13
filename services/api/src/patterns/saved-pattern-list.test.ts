@@ -3,7 +3,10 @@ import { patternListResponseSchema, type SavedPattern } from '@neburyx/contracts
 import { describe, expect, it } from 'vitest';
 import { createCursorCodec } from '../gate/cursor/codec.js';
 import type { Principal } from '../seams/seams.js';
-import { codeOf, DEFINITION, OTHER_IDENTITY, patternApp, type PatternApp } from '../testing/saved-pattern-rig.js';
+import { baseSource, fileOf } from '../testing/mapping.js';
+import { parseMapping } from '../mapping/load.js';
+import { DERIVED_RULE } from '../testing/derived-fixtures.js';
+import { codeOf, DEFINITION, OTHER_IDENTITY, PATTERN_ENTITIES, PATTERN_RELATIONSHIPS, patternApp, SHARED_PRESET, type PatternApp } from '../testing/saved-pattern-rig.js';
 
 const get = (context: PatternApp, query: string) => context.app.inject({ method: 'GET', url: `/v1/patterns${query}` });
 
@@ -104,5 +107,39 @@ describe('GET /v1/patterns', () => {
     expect(codeOf(await get(first, `?sourceId=demo&cursor=${encodeURIComponent(cursor)}`))).toBe('CURSOR_INVALIDATED');
     await first.app.close();
     await second.app.close();
+  });
+});
+
+describe('GET /v1/patterns and the availability of each pattern', () => {
+  const lost = parseMapping(fileOf(baseSource({ id: 'demo', entities: PATTERN_ENTITIES, relationships: PATTERN_RELATIONSHIPS.filter((row) => row.type !== 'LINKS'), derived: [DERIVED_RULE], patterns: [SHARED_PRESET] })), 'neburyx.yaml');
+
+  it('shows each pattern as available while the mapping supports it', async () => {
+    const context = await patternApp();
+    await fill(context, 2);
+    const page = patternListResponseSchema.parse((await get(context, '?sourceId=demo')).json());
+    expect(page.items.map((item) => item.availability)).toEqual([{ status: 'available' }, { status: 'available' }]);
+    await context.app.close();
+  });
+
+  it('still lists a pattern after a mapping change that removed what it uses, as unavailable with the reason, and reads nothing from the source', async () => {
+    const before = await patternApp();
+    await fill(before, 2);
+    const after = await patternApp({ sharing: before.store, mapping: lost, answer: () => Promise.reject(new Error('the list read the source')) });
+    const page = patternListResponseSchema.parse((await get(after, '?sourceId=demo')).json());
+    const byName = Object.fromEntries(page.items.map((item) => [item.name, item.availability]));
+    expect(byName['p0']).toEqual({ status: 'unavailable', reasons: [{ code: 'unknown-relationship-type', path: ['steps', 0, 'relationshipTypes', 0] }] });
+    expect(byName['p1']).toEqual({ status: 'unavailable', reasons: [{ code: 'preset-removed' }] });
+    expect(after.executor.calls).toEqual([]);
+    await after.app.close();
+    await before.app.close();
+  });
+
+  it('lists no other person\'s pattern, and the save answer has no availability', async () => {
+    const context = await patternApp();
+    await fill(context, 1, OTHER_IDENTITY.principal);
+    expect(patternListResponseSchema.parse((await get(context, '?sourceId=demo')).json()).items).toEqual([]);
+    const saved = await context.app.inject({ method: 'POST', url: '/v1/patterns', payload: { sourceId: 'demo', kind: 'definition', name: 'x', definition: DEFINITION }, headers: { 'content-type': 'application/json' } });
+    expect(saved.json()).not.toHaveProperty('availability');
+    await context.app.close();
   });
 });
