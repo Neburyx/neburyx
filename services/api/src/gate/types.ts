@@ -80,8 +80,8 @@ export interface Template {
   readonly rows?: 'one' | 'bounded';
   /** For a read of a list: the list parameter whose length may not pass the limit of the request, so the rows of the read (one for each element at most) are never cut. */
   readonly boundedBy?: string;
-  /** A template whose request names a number of hops: the integer parameter that holds it and the most hops the template reads. The gate refuses more than the lower of that and the source's `max_hops`. */
-  readonly hops?: { readonly param: string; readonly max: number };
+  /** A template whose request names a number of hops: the integer parameter that holds it and the most hops the template reads. The gate refuses more than the lower of that and the source's `max_hops`. A template whose hops are the steps of a list names the list parameter instead (`listParam`), and its hop count is the length of the list. */
+  readonly hops?: { readonly param: string; readonly max: number } | { readonly listParam: string; readonly max: number };
   readonly cutMeans?: 'duplicate' | 'lowerBound';
   /** A generic name for the template, shown where a source's own preset names are not (the template list); a template a preset can bind has one. */
   readonly name?: string;
@@ -161,6 +161,12 @@ export interface Template {
    * matches are bounded by `$limit + 1`. A window is a pair of instants, `windowFrom` and `windowTo`, both given or both left out.
    */
   readonly linkedEntities?: { readonly entityTypeParam: string; readonly targetTypeParam: string; readonly viaParam: string; /** The count of the run's matches, in place of the matches: at most `$countCap + 1` of them are read and counted (the heavy-operation probe, TAS §8.1). */ readonly count?: true };
+  /**
+   * The pattern template's own declaration, for no other template: a statement that follows the steps of a pattern from the anchor, at most `$countCap + 1` rows at each step. The Cypher is the one marker
+   * `@pattern(<anchor type parameter>)`; the anchor's entity type, the steps and every name in them are checked against the mapping, and the gate writes the whole statement from the mapping rows (every name quoted from the
+   * allowlist). The conditions and windows of the steps are parameters read by position, never text.
+   */
+  readonly pattern?: { readonly entityTypeParam: string; readonly stepsParam: string };
   /**
    * The edge template's own declaration, for no other template: a statement that reads one stored edge by its type, the entity types of its two ends and its stable ID. The Cypher is the one marker
    * `@edgeLoad(<type parameter>)`, and the gate writes the whole statement from the mapping row that joins the two types by the type and holds a `stable_id`; every name is quoted from the allowlist and the

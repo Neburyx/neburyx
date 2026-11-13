@@ -71,16 +71,16 @@ export function undeclaredRank(allowlist: SourceAllowlist, neighborType: string,
  * The condition of one filter on one row of a branch, written from the property the mapping declares and a fixed operator; every value stays a parameter, read from `$filters` by the position of the
  * filter in the request. A stored value of another kind than the filter's makes the condition false.
  */
-function predicateOf(filter: ExpandFilter, index: number): string {
-  const stored = `${filter.on === 'neighbor' ? 'm' : 'r'}.${quoteName(filter.property)}`;
-  const at = `$filters[${index}]`;
+export function conditionPredicateOf(filter: ExpandFilter, variables: { readonly neighbor: string; readonly relationship: string }, at: string): string {
+  const stored = `${filter.on === 'neighbor' ? variables.neighbor : variables.relationship}.${quoteName(filter.property)}`;
   if (filter.op === 'eq') return `(${kindGuard(filter.value.kind, stored)} AND ${stored} = ${kindValue(filter.value.kind, `${at}.value.value`)})`;
   if (filter.op === 'in') return `(${kindGuard(filter.values[0]?.kind ?? 'text', stored)} AND ${stored} IN [v IN ${at}.values | ${kindValue(filter.values[0]?.kind ?? 'text', 'v.value')}])`;
   const kind = (filter.from ?? filter.to)?.kind ?? 'text';
   return `(${[kindGuard(kind, stored), ...(filter.from === undefined ? [] : [`${stored} >= ${kindValue(kind, `${at}.from.value`)}`]), ...(filter.to === undefined ? [] : [`${stored} <= ${kindValue(kind, `${at}.to.value`)}`])].join(' AND ')})`;
 }
 
-const predicatesOf = (filters: readonly ExpandFilter[]): string[] => filters.map(predicateOf);
+const EXPAND_VARIABLES = { neighbor: 'm', relationship: 'r' } as const;
+const predicatesOf = (filters: readonly ExpandFilter[]): string[] => filters.map((filter, index) => conditionPredicateOf(filter, EXPAND_VARIABLES, `$filters[${index}]`));
 
 /** The conditions a branch's rows must meet beyond the pattern: the filters, and, when the request has a window, the window on the relationship's own observed time (a branch whose type has no observed time is not windowed). */
 const conditionsOf = (branch: ExpandBranch, filters: readonly ExpandFilter[], windowed: boolean): string[] => [...predicatesOf(filters), ...(windowed && branch.observedAt !== undefined ? inWindow('r', quoteName(branch.observedAt)) : [])];

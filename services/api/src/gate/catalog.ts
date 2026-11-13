@@ -67,7 +67,7 @@ function checkMarkers(definition: TemplateDefinition, shape: Shape): void {
   const degree = markersOf(definition.cypher).filter((marker) => marker.kind === 'degreeCounts');
   // a degree statement reads the entity type's label and stable ID property, so its parameter counts as used by an entity marker and a stable id marker
   const used = [
-    ...markersOf(definition.cypher).filter((marker) => marker.kind !== 'searchBranches' && marker.kind !== 'facetProbes' && marker.kind !== 'degreeCounts' && marker.kind !== 'expandNeighbors' && marker.kind !== 'relatedContext' && marker.kind !== 'edgeLoad' && marker.kind !== 'derivedRule' && marker.kind !== 'derivedSupport' && marker.kind !== 'sharedAttribute' && marker.kind !== 'linkedEntities' && marker.kind !== 'aggregateRead'),
+    ...markersOf(definition.cypher).filter((marker) => marker.kind !== 'searchBranches' && marker.kind !== 'facetProbes' && marker.kind !== 'degreeCounts' && marker.kind !== 'expandNeighbors' && marker.kind !== 'relatedContext' && marker.kind !== 'edgeLoad' && marker.kind !== 'derivedRule' && marker.kind !== 'derivedSupport' && marker.kind !== 'sharedAttribute' && marker.kind !== 'linkedEntities' && marker.kind !== 'pattern' && marker.kind !== 'aggregateRead'),
     ...markersOf(definition.cypher).filter((marker) => marker.kind === 'derivedRule').flatMap(() => (definition.derivedRule === undefined ? [] : [{ kind: 'entity' as const, name: definition.derivedRule.entityTypeParam }, { kind: 'stableId' as const, name: definition.derivedRule.entityTypeParam }])),
     ...markersOf(definition.cypher)
       .filter((marker) => marker.kind === 'sharedAttribute')
@@ -75,6 +75,9 @@ function checkMarkers(definition: TemplateDefinition, shape: Shape): void {
     ...markersOf(definition.cypher)
       .filter((marker) => marker.kind === 'linkedEntities')
       .flatMap(() => (definition.linkedEntities === undefined ? [] : [{ kind: 'entity' as const, name: definition.linkedEntities.entityTypeParam }, { kind: 'stableId' as const, name: definition.linkedEntities.entityTypeParam }, { kind: 'entity' as const, name: definition.linkedEntities.targetTypeParam }, { kind: 'relationship' as const, name: definition.linkedEntities.viaParam }])),
+    ...markersOf(definition.cypher)
+      .filter((marker) => marker.kind === 'pattern')
+      .flatMap(() => (definition.pattern === undefined ? [] : [{ kind: 'entity' as const, name: definition.pattern.entityTypeParam }, { kind: 'stableId' as const, name: definition.pattern.entityTypeParam }])),
     ...markersOf(definition.cypher).filter((marker) => marker.kind === 'expandNeighbors').flatMap((marker) => [{ kind: 'entity' as const, name: marker.name }, { kind: 'stableId' as const, name: marker.name }]),
     ...degree.flatMap((marker) => [{ kind: 'entity' as const, name: marker.name }, { kind: 'stableId' as const, name: marker.name }]),
   ];
@@ -309,10 +312,33 @@ function checkLinkedEntities(definition: TemplateDefinition, shape: Shape): void
     throw new CatalogError(definition.id, 'declares a linked entities read for parameters its schema does not have as text and as a list or its entity and relationship parameters do not declare');
   }
   if (['limit', 'countCap'].some((name) => shape.properties.has(name))) throw new CatalogError(definition.id, 'declares a linked entities read and has a limit or a count cap in its schema, which the gate fills');
-  if (definition.searchBranches !== undefined || definition.facetProbes !== undefined || definition.degreeCounts !== undefined || definition.expandNeighbors !== undefined || definition.relatedContext !== undefined || definition.derivedRule !== undefined || definition.derivedSupport !== undefined || definition.sharedAttribute !== undefined || definition.paged || definition.profile === true || definition.cutMeans !== 'lowerBound') {
+  if (definition.searchBranches !== undefined || definition.facetProbes !== undefined || definition.degreeCounts !== undefined || definition.expandNeighbors !== undefined || definition.relatedContext !== undefined || definition.derivedRule !== undefined || definition.derivedSupport !== undefined || definition.sharedAttribute !== undefined || definition.pattern !== undefined || definition.paged || definition.profile === true || definition.cutMeans !== 'lowerBound') {
     throw new CatalogError(definition.id, "declares a linked entities read and is also another kind of template, paged, profiled or not declared cutMeans: 'lowerBound'");
   }
   if (definition.indexNeeds === undefined || definition.usedProperties === undefined || definition.referenceParams?.entityType !== spec.entityTypeParam) throw new CatalogError(definition.id, 'declares a linked entities read and does not name its indexes, the properties it uses and the reference of its anchor');
+}
+
+/**
+ * The pattern template's own declaration: its Cypher is exactly the one `@pattern(<anchor type parameter>)` marker, its schema has the anchor's entity type as text and the steps as a list (which is also its hop list), it reads
+ * the anchor by its reference, it is not paged and not profiled, its cut means a lower bound, it names the stable-ID index it needs and the properties it uses, and the gate fills `limit` and `countCap` for it (the schema has neither).
+ */
+function checkPattern(definition: TemplateDefinition, shape: Shape): void {
+  const used = markersOf(definition.cypher).filter((marker) => marker.kind === 'pattern');
+  const spec = definition.pattern;
+  if (spec === undefined) {
+    if (used.length > 0) throw new CatalogError(definition.id, 'uses the pattern marker without declaring a pattern read');
+    return;
+  }
+  if (used.length !== 1 || used[0]?.name !== spec.entityTypeParam || definition.cypher !== `@pattern(${spec.entityTypeParam})`) throw new CatalogError(definition.id, 'declares a pattern read and its Cypher is not exactly its one pattern marker');
+  if (shape.properties.get(spec.entityTypeParam) !== 'string' || shape.properties.get(spec.stepsParam) !== 'array' || !definition.entityParams.includes(spec.entityTypeParam) || definition.relationshipParams.length > 0) {
+    throw new CatalogError(definition.id, 'declares a pattern read for parameters its schema does not have as text and as a list or its entity parameters do not declare');
+  }
+  if (definition.hops === undefined || !('listParam' in definition.hops) || definition.hops.listParam !== spec.stepsParam) throw new CatalogError(definition.id, 'declares a pattern read and does not take its steps as its hop list');
+  if (['limit', 'countCap'].some((name) => shape.properties.has(name))) throw new CatalogError(definition.id, 'declares a pattern read and has a limit or a count cap in its schema, which the gate fills');
+  if (definition.searchBranches !== undefined || definition.facetProbes !== undefined || definition.degreeCounts !== undefined || definition.expandNeighbors !== undefined || definition.relatedContext !== undefined || definition.derivedRule !== undefined || definition.derivedSupport !== undefined || definition.sharedAttribute !== undefined || definition.linkedEntities !== undefined || definition.paged || definition.profile === true || definition.cutMeans !== 'lowerBound') {
+    throw new CatalogError(definition.id, "declares a pattern read and is also another kind of template, paged, profiled or not declared cutMeans: 'lowerBound'");
+  }
+  if (definition.indexNeeds === undefined || definition.usedProperties === undefined || definition.referenceParams?.entityType !== spec.entityTypeParam) throw new CatalogError(definition.id, 'declares a pattern read and does not name its indexes, the properties it uses and the reference of its anchor');
 }
 
 /**
@@ -401,7 +427,9 @@ function checkListed(definition: TemplateDefinition): void {
 function checkHops(definition: TemplateDefinition, shape: Shape): void {
   const hops = definition.hops;
   if (hops === undefined) return;
-  if (shape.properties.get(hops.param) !== 'integer') throw new CatalogError(definition.id, 'declares a hop parameter its schema does not have as a whole number');
+  if ('listParam' in hops) {
+    if (shape.properties.get(hops.listParam) !== 'array') throw new CatalogError(definition.id, 'declares a hop list its schema does not have as a list');
+  } else if (shape.properties.get(hops.param) !== 'integer') throw new CatalogError(definition.id, 'declares a hop parameter its schema does not have as a whole number');
   if (!Number.isInteger(hops.max) || hops.max < 1 || hops.max > MAX_HOPS_CEILING) throw new CatalogError(definition.id, `declares a hop maximum outside 1 to ${MAX_HOPS_CEILING}`);
 }
 
@@ -430,6 +458,7 @@ function build(definition: TemplateDefinition): Template {
   checkDerivedSupport(definition, shape);
   checkSharedAttribute(definition, shape);
   checkLinkedEntities(definition, shape);
+  checkPattern(definition, shape);
   checkEdgeLoad(definition, shape);
   checkAggregateRead(definition, shape);
   checkBoundedBy(definition, shape);

@@ -28,6 +28,8 @@ export interface PackRun {
   readonly relationships: (type: string) => readonly { readonly f: string; readonly t: string }[];
   /** The properties of the generated entities of one type. */
   readonly entities: (type: string) => readonly Record<string, unknown>[];
+  /** The gate of the pack's source, to run a built-in template that no route runs. */
+  readonly gate: SourceGate['gate'];
   /** `POST /v1/templates/{id}/run` for the pack's source; the answer is returned with its status code. */
   readonly run: (id: string, params: Record<string, unknown>) => Promise<{ readonly status: number; readonly json: unknown }>;
   /** A run that must answer 200 with a result, parsed with the contract; a heavy answer or any other status is an error. */
@@ -68,8 +70,11 @@ export async function startPackRun(pack: 'banking-fraud' | 'insurance-claims', s
     const response = await served.inject({ method: 'POST', url: `/v1/templates/${id}/run`, payload: { sourceId, params }, headers: { 'idempotency-key': `pack-proof-key-${pack}-${(keys += 1)}` } });
     return { status: response.statusCode, json: response.json() as unknown };
   };
+  const gate = parts?.gate;
+  if (gate === undefined) throw new Error('the pack run has no gate');
   return {
     generated,
+    gate,
     relationships: (type) => generated.files.filter((file) => file.kind === 'relationship' && file.type === type).flatMap((file) => file.lines).map((line) => {
       const { f, t } = JSON.parse(line) as { f: string; t: string };
       return { f, t };

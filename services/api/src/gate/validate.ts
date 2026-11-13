@@ -86,7 +86,8 @@ export function validateRequest(catalog: TemplateCatalog, template: Template, re
   if (request.limit > context.budgets.maxPage) throw new AppError('QUERY_BUDGET_EXCEEDED', { maxPage: context.budgets.maxPage });
   const hops = template.hops;
   if (hops !== undefined) {
-    const requested: unknown = Object.getOwnPropertyDescriptor(parsed.data, hops.param)?.value;
+    const value: unknown = Object.getOwnPropertyDescriptor(parsed.data, 'listParam' in hops ? hops.listParam : hops.param)?.value;
+    const requested: unknown = 'listParam' in hops && Array.isArray(value) ? value.length : value;
     // a schema that leaves the declared parameter out of what it parses would skip the bound, so that is a defect and never a pass
     if (typeof requested !== 'number' || !Number.isSafeInteger(requested)) throw new AppError('INTERNAL_ERROR');
     const cap = hopCap(hops.max, context.budgets);

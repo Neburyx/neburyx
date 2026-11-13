@@ -5,5 +5,5 @@
 export const instantOf = (variable: string, time: string): string =>
   `CASE WHEN ${variable}.${time} IS :: ZONED DATETIME THEN ${variable}.${time} WHEN ${variable}.${time} IS :: LOCAL DATETIME THEN datetime({datetime: ${variable}.${time}, timezone: 'UTC'}) WHEN ${variable}.${time} IS :: DATE THEN datetime({date: ${variable}.${time}, timezone: 'UTC'}) END`;
 
-/** The two conditions that keep a relationship whose observed time is from `$windowFrom` up to but not including `$windowTo`; both bounds are parameters. */
-export const inWindow = (variable: string, time: string): readonly string[] => [`${instantOf(variable, time)} >= datetime($windowFrom)`, `${instantOf(variable, time)} < datetime($windowTo)`];
+/** The two conditions that keep a relationship whose observed time is from the first bound up to but not including the second (`$windowFrom` and `$windowTo` unless a template reads them from another parameter); both bounds are parameters. */
+export const inWindow = (variable: string, time: string, from = '$windowFrom', to = '$windowTo'): readonly string[] => [`${instantOf(variable, time)} >= datetime(${from})`, `${instantOf(variable, time)} < datetime(${to})`];
