@@ -30,7 +30,8 @@ export const PATTERNS_COPY = {
   evidence: 'Evidence',
 } as const;
 
-export const selectTypeHint = (typeName: string): string => `Select ${typeName === '' ? 'an entity' : `a ${typeName}`} to start.`;
+/** Says what is missing in the words of the form's own field label, so no article is chosen from a type name. */
+export const startHint = (fieldLabel: string): string => `Choose the ${fieldLabel.toLowerCase()} to run this pattern.`;
 export const timeoutLabel = (timeoutMs: number): string => `${Math.round(timeoutMs / 100) / 10} s timeout`;
 
 /** One sentence for a notice of a run; the codes that carry names say how many. */

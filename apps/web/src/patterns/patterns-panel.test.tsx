@@ -53,11 +53,11 @@ describe('the Patterns panel: open and run a preset', () => {
     expect(within(table).getByText('dev-1')).toBeTruthy();
   });
 
-  it('disables Run until an entity of the anchor type is selected, and names the type', async () => {
+  it('disables Run until an entity of the anchor type is selected, and says which entity to choose, in the words of the field label', async () => {
     const kit = await patternsWorkspace({ nodes: [typedNode('dev-1', 'kind-b'), typedNode('acc-1', 'kind-a')], opened: { entityType: 'kind-b', stableId: 'dev-1' } });
     await openPatterns();
     expect(run().hasAttribute('disabled')).toBe(true);
-    expect(screen.getByText('Select a KIND-A to start.')).toBeTruthy();
+    expect(screen.getByText('Choose the starting account to run this pattern.')).toBeTruthy();
     selectAccount(kit.state, 'acc-1');
     expect(run().hasAttribute('disabled')).toBe(false);
   });

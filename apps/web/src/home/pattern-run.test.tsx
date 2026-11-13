@@ -51,7 +51,7 @@ describe('Home: Run → on a pattern', () => {
     expect(view.router.state.location.pathname).toBe(`/explore/${id}`);
     expect(state.investigation.getState().id).toBe(id);
     expect(checked()).toEqual(['Shared addresses']);
-    expect(within(panel()).queryByText(/to start\./)).toBeNull();
+    expect(within(panel()).queryByText(/to run this pattern\./)).toBeNull();
   });
 
   it('opens bare Explore on the source with the panel on that preset, reading and creating nothing, and with no starting entity until one is chosen', async () => {
@@ -64,7 +64,7 @@ describe('Home: Run → on a pattern', () => {
     expect(view.router.state.location.pathname).toBe('/explore');
     expect(state.investigation.getState()).toMatchObject({ id: null, sourceId: 'source-a', nodeRefs: [], edgeRefs: [] });
     expect(checked()).toEqual(['Connected accounts']);
-    expect(within(panel()).getByText(/to start\./)).toBeTruthy();
+    expect(within(panel()).getByText(/to run this pattern\./)).toBeTruthy();
     expect(within(panel()).getByRole('button', { name: 'Run pattern' }).hasAttribute('disabled') || within(panel()).getByRole('button', { name: 'Run pattern' }).getAttribute('aria-disabled') === 'true').toBe(true);
     expect(calls.filter((call) => call !== 'listTemplates' && call !== 'listInvestigations')).toEqual([]);
   });

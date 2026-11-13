@@ -13,7 +13,7 @@ import { useStoreSelector } from '../state/store.js';
 import { canRetry } from '../failure-notice.js';
 import { continueWith, rateLimitedRetry } from '../banner/copy.js';
 import { heavyHeadline, heavyLine } from '../banner/heavy-banner.js';
-import { failureView, maxHopsOf, maxPageOf, PATTERNS_COPY, selectTypeHint, timeoutLabel } from './copy.js';
+import { failureView, maxHopsOf, maxPageOf, PATTERNS_COPY, startHint, timeoutLabel } from './copy.js';
 import { buildParams, fieldsOf, labelOf, type FormValues } from './form-model.js';
 import { PatternForm } from './pattern-form.js';
 import { RunFailure } from './run-failure.js';
@@ -281,7 +281,7 @@ function PatternsWorkbench({ client, sourceId, sourceName, mask, list, first, cl
         )}
         {timeout === undefined ? null : <span className="search-panel-note">{timeoutLabel(timeout)}</span>}
       </div>
-      {hasEntity ? null : <p className="search-panel-note">{selectTypeHint(typeName(anchorType))}</p>}
+      {hasEntity ? null : <p className="search-panel-note">{startHint(labelOf(preset, 'anchor'))}</p>}
       {run.running ? (
         <p className="patterns-state" role="status">
           {`Running${timeout === undefined ? '' : ` · ${timeoutLabel(timeout)}`}`}

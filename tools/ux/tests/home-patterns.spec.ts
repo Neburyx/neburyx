@@ -81,7 +81,7 @@ test.describe('Home: Start from a pattern', () => {
     await expect(panelOf(page)).toBeVisible();
     await expect(page).toHaveURL(/\/explore$/);
     await expect(panelOf(page).getByRole('radio', { name: 'Shared devices' })).toHaveAttribute('aria-checked', 'true');
-    await expect(panelOf(page).getByText(/to start\./)).toBeVisible();
+    await expect(panelOf(page).getByText(/to run this pattern\./)).toBeVisible();
     await expect(panelOf(page).getByRole('button', { name: 'Run pattern' })).toBeDisabled();
     const runs: string[] = [];
     page.on('request', (request) => {
