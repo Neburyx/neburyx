@@ -1,6 +1,6 @@
 import { patternDefinitionSchema, type ExpandFilter, type FilterValue, type PatternDefinition, type PatternPreview, type PatternProblem } from '@neburyx/contracts';
 import type { SourceModel } from '../mapping/model.js';
-import { validatePattern, type PatternValidationOptions } from './validate.js';
+import { carries, validatePattern, type PatternValidationOptions } from './validate.js';
 
 const DIRECTION_WORDS: Readonly<Record<PatternDefinition['steps'][number]['direction'], string>> = { out: 'forward', in: 'backward', both: 'in either direction' };
 
@@ -22,11 +22,15 @@ function conditionPart(condition: ExpandFilter, appliesTo: string): PreviewStep[
   return { ...base, values: [], ...(from === undefined ? {} : { from }), ...(to === undefined ? {} : { to }), text: `${lead} is ${range}` };
 }
 
-/** The window in words, for the types of the step that carry a date in the mapping (`observed_at`) and, said apart, for those that carry none, which a window does not filter. */
-function windowPart(window: NonNullable<Step['window']>, types: readonly string[], source: SourceModel): NonNullable<PreviewStep['window']> {
-  const dated = (type: string): boolean => source.relationships.some((row) => row.type === type && row.observedAt !== undefined);
-  const appliesTo = types.filter(dated);
-  const notAppliedTo = types.filter((type) => !dated(type));
+/**
+ * The window in words, for the types of the step that carry a date in the mapping (`observed_at`) and, said apart, for those that carry none, which a window does not filter. The rows read are the ones that carry the step (the
+ * previous type to the type it arrives at, in its direction), as the run reads them: a type is in `appliesTo` when one of those rows has a date and in `notAppliedTo` when one has none, so a type can be in both.
+ */
+function windowPart(window: NonNullable<Step['window']>, step: Step, previous: string, source: SourceModel): NonNullable<PreviewStep['window']> {
+  const types = step.relationshipTypes;
+  const rowsOf = (type: string) => source.relationships.filter((row) => row.type === type && carries(row, previous, step.arrivesAt, step.direction));
+  const appliesTo = types.filter((type) => rowsOf(type).some((row) => row.observedAt !== undefined));
+  const notAppliedTo = types.filter((type) => rowsOf(type).some((row) => row.observedAt === undefined));
   const span = 'days' in window ? `the last ${plural(window.days, 'day', 'days')} (UTC)` : `from ${window.from} to ${window.to}, both included (UTC)`;
   const parts = [appliesTo.length === 0 ? undefined : `Window on ${appliesTo.join(' or ')}: ${span}`, notAppliedTo.length === 0 ? undefined : `The window does not apply to ${notAppliedTo.join(' or ')}: no date is declared for ${notAppliedTo.length === 1 ? 'it' : 'them'}`].filter((part) => part !== undefined);
   return { appliesTo, notAppliedTo, ...('days' in window ? { days: window.days } : { from: window.from, to: window.to }), text: parts.join('. ') };
@@ -45,6 +49,7 @@ export function previewPattern(definition: PatternDefinition, source: SourceMode
   return {
     start: { type: definition.anchorType, name: start, text: `Start: ${start}` },
     steps: definition.steps.map((step, index) => {
+      const previous = index === 0 ? definition.anchorType : (definition.steps[index - 1]?.arrivesAt ?? definition.anchorType);
       const arrives = nameOf(source, step.arrivesAt);
       const types = step.relationshipTypes.join(' or ');
       return {
@@ -53,7 +58,7 @@ export function previewPattern(definition: PatternDefinition, source: SourceMode
         arrivesAt: { type: step.arrivesAt, name: arrives },
         text: `Step ${index + 1}: follow ${types} ${DIRECTION_WORDS[step.direction]} to ${arrives}`,
         conditions: (step.conditions ?? []).map((condition) => conditionPart(condition, condition.on === 'neighbor' ? arrives : types)),
-        ...(step.window === undefined ? {} : { window: windowPart(step.window, step.relationshipTypes, source) }),
+        ...(step.window === undefined ? {} : { window: windowPart(step.window, step, previous, source) }),
       };
     }),
     bounds: {

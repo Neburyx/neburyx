@@ -1,6 +1,8 @@
 import { MAX_FILTER_TEXT, patternPreviewResponseSchema } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
 import { budgetsFrom } from '../gate/assemble.js';
+import { allowlistFromMapping } from '../gate/allowlist.js';
+import { patternParamsSchema, patternRequestOf } from '../gate/templates/pattern-request.js';
 import { parseMapping } from '../mapping/load.js';
 import { baseSource, fileOf } from '../testing/mapping.js';
 import { previewOrProblems } from './preview.js';
@@ -165,6 +167,42 @@ describe('the window of a step in words', () => {
     expect(mixed).toEqual({ appliesTo: ['LINKS'], notAppliedTo: ['KNOWS'], from: '2026-01-01', to: '2026-01-31', text: 'Window on LINKS: from 2026-01-01 to 2026-01-31, both included (UTC). The window does not apply to KNOWS: no date is declared for it' });
     const none = previewOf(definition([step({ relationshipTypes: ['KNOWS'], window: { days: 7 } })])).steps[0]?.window;
     expect(none).toEqual({ appliesTo: [], notAppliedTo: ['KNOWS'], days: 7, text: 'The window does not apply to KNOWS: no date is declared for it' });
+  });
+});
+
+describe('the window of a step reads the rows that carry the step, as the run does', () => {
+  const rows = [
+    ...RELATIONSHIPS,
+    { type: 'SEES', from: 'maker', to: 'maker', stable_id: 'seeId', observed_at: 'seenAt' },
+    { type: 'SEES', from: 'maker', to: 'tool' },
+    { type: 'OWNS', from: 'maker', to: 'tool', stable_id: 'ownId', observed_at: 'seenAt' },
+    { type: 'OWNS', from: 'tool', to: 'maker' },
+  ];
+  const source = () => {
+    const found = parseMapping(fileOf(baseSource({ id: 'demo', entities: ENTITIES, relationships: rows })), 'neburyx.yaml').sources[0];
+    if (found === undefined) throw new Error('no source');
+    return found;
+  };
+  const windowOf = (extra: Record<string, unknown>) => previewOf(definition([step({ window: { days: 7 }, ...extra })]), source()).steps[0]?.window;
+
+  it('does not count a date a row has that does not carry the step: the type is dated on another pair of entity types and not on this one', () => {
+    expect(windowOf({ relationshipTypes: ['SEES'], arrivesAt: 'tool' })).toMatchObject({ appliesTo: [], notAppliedTo: ['SEES'] });
+    expect(windowOf({ relationshipTypes: ['SEES'], arrivesAt: 'maker' })).toMatchObject({ appliesTo: ['SEES'], notAppliedTo: [] });
+  });
+
+  it('says the same types a run says the window does not apply to', () => {
+    const list = allowlistFromMapping(source());
+    for (const extra of [{ relationshipTypes: ['SEES'], arrivesAt: 'tool' }, { relationshipTypes: ['SEES'], arrivesAt: 'maker' }, { relationshipTypes: ['OWNS'], arrivesAt: 'tool', direction: 'both' }, { relationshipTypes: ['OWNS'], arrivesAt: 'tool' }, { relationshipTypes: ['LINKS', 'KNOWS'] }]) {
+      const preview = windowOf(extra);
+      const run = patternRequestOf(list, patternParamsSchema.parse({ anchorType: 'maker', stableId: 'A-1', steps: [step({ ...extra, windowFrom: '2026-01-01T00:00:00Z', windowTo: '2026-02-01T00:00:00Z' })] }));
+      expect(preview?.notAppliedTo).toEqual(run.untimedTypes);
+      expect(preview?.appliesTo.length === 0).toBe(!run.windowApplied);
+    }
+  });
+
+  it('puts a type in both lists when one row that carries the step has a date and another has none', () => {
+    expect(windowOf({ relationshipTypes: ['OWNS'], arrivesAt: 'tool', direction: 'both' })).toMatchObject({ appliesTo: ['OWNS'], notAppliedTo: ['OWNS'] });
+    expect(windowOf({ relationshipTypes: ['OWNS'], arrivesAt: 'tool', direction: 'out' })).toMatchObject({ appliesTo: ['OWNS'], notAppliedTo: [] });
   });
 });
 

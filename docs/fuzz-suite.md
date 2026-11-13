@@ -58,7 +58,7 @@ A cursor is stateless and valid for 30 minutes. Replaying it unchanged in the sa
 
 ## A recorded run
 
-Run on the commit that added the window of Expand to the suite, with `NBX_FUZZ_RECORD` set to a file; the fixed seed is **5017**, 120 runs for a property unless the file says otherwise. The counts include the requests that build the closed set, which now has the pattern runs, so every file's counts are higher than they were before them.
+Run on the commit that added the pattern compiler, with `NBX_FUZZ_RECORD` set to a file; the fixed seed is **5017**, 120 runs for a property unless the file says otherwise. The counts include the requests that build the closed set, which now has the pattern runs. The two pattern routes read no source, so they add requests and no statements: the statements seen and the distinct statements are the same as before them.
 
 | Route | Answers |
 |---|---|
@@ -69,9 +69,12 @@ Run on the commit that added the window of Expand to the suite, with `NBX_FUZZ_R
 | `POST /v1/graph/preview-expansion` | `NOT_FOUND` 214, `INVALID_REQUEST` 210 |
 | `POST /v1/graph/derived-neighbors` | `INVALID_REQUEST` 206, `served` 169, `NOT_FOUND` 60 |
 | `POST /v1/graph/coverage` | `INVALID_REQUEST` 180, `NOT_FOUND` 65, `SOURCE_MISMATCH` 48, `served` 2 |
+| `POST /v1/graph/read-refs` | `served` 48 |
 | `POST /v1/templates/{id}/run` | `served` 2560, `INVALID_REQUEST` 1715, `NOT_FOUND` 321, `QUERY_BUDGET_EXCEEDED` 43 |
+| `POST /v1/patterns/validate` | `INVALID_REQUEST` 212, `served` 126, `NOT_FOUND` 60 |
+| `POST /v1/patterns/preview` | `INVALID_REQUEST` 212, `served` 126, `NOT_FOUND` 60 |
 
-18,312 requests, 24,803 statements seen by the executor, at most 78 distinct statements in a file, all in the closed set. The oversized-page case is `fuzz/routes.test.ts`, "answers QUERY_BUDGET_EXCEEDED, naming the maximum".
+19,108 requests, 24,803 statements seen by the executor, at most 78 distinct statements in a file, all in the closed set. The oversized-page case is `fuzz/routes.test.ts`, "answers QUERY_BUDGET_EXCEEDED, naming the maximum".
 
 The pattern routes' own files are `fuzz/templates.test.ts` (the body, the ID, hostile text in every input, and the refusals that depend on the mapping, the budgets and the token) and the entries of the shape table in `fuzz/routes.test.ts`.
 

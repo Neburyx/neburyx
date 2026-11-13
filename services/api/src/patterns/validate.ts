@@ -16,7 +16,7 @@ function namedByRelationship(row: RelationshipModel): ReadonlySet<string> {
 }
 
 /** A row of the mapping that carries a step: the previous node type to the type the step arrives at, in the stated direction. */
-function carries(row: RelationshipModel, previous: string, arrives: string, direction: PatternDefinition['steps'][number]['direction']): boolean {
+export function carries(row: RelationshipModel, previous: string, arrives: string, direction: PatternDefinition['steps'][number]['direction']): boolean {
   const forward = row.from === previous && row.to === arrives;
   const backward = row.from === arrives && row.to === previous;
   return direction === 'out' ? forward : direction === 'in' ? backward : forward || backward;
