@@ -2,6 +2,7 @@ import type { PatternProblem } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
 import { parseMapping } from '../mapping/load.js';
 import { baseSource, fileOf } from '../testing/mapping.js';
+import { allowlistFromMapping } from '../gate/allowlist.js';
 import { validatePattern } from './validate.js';
 
 const ENTITIES = [
@@ -110,5 +111,20 @@ describe('the problems', () => {
     expect(check({ anchorType: 'maker', steps: [] })).toEqual([{ path: ['steps'], code: 'too-few' }]);
     expect(check({ anchorType: 'maker', steps: [step({ arrivesAt: 'nothing', direction: 'up' })] })).toEqual([{ path: ['steps', 0, 'direction'], code: 'bad-value' }]);
     expect(validatePattern.length).toBeLessThanOrEqual(3);
+  });
+});
+
+describe('property kinds in the mapping', () => {
+  it('leave the problems of a pattern unchanged: the same definitions give the same problems with and without kinds', () => {
+    const kinded = parseMapping(fileOf(baseSource({ id: 'demo', entities: ENTITIES.map((entity) => (entity.type === 'maker' ? { ...entity, kinds: { grade: 'number', region: 'text' } } : entity)), relationships: RELATIONSHIPS.map((row) => (row.type === 'LINKS' ? { ...row, kinds: { weight: 'number' } } : row)) })), 'neburyx.yaml').sources[0];
+    if (kinded === undefined) throw new Error('no source');
+    const samples = [definition(), definition([step({ conditions: [on('neighbor', 'grade'), on('relationship', 'weight')] })]), definition([step({ conditions: [on('neighbor', 'nothing')] })]), { ...definition(), anchorType: 'nothing' }];
+    for (const sample of samples) expect(validatePattern(sample, kinded)).toEqual(validatePattern(sample, source));
+  });
+
+  it('leave the allowlist the statements are written from unchanged', () => {
+    const kinded = parseMapping(fileOf(baseSource({ id: 'demo', entities: ENTITIES.map((entity) => ({ ...entity, kinds: Object.fromEntries((entity.filterable ?? []).map((property) => [property, 'text'])) })), relationships: RELATIONSHIPS })), 'neburyx.yaml').sources[0];
+    if (kinded === undefined) throw new Error('no source');
+    expect(allowlistFromMapping(kinded)).toEqual(allowlistFromMapping(source));
   });
 });

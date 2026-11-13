@@ -1,5 +1,5 @@
 import { resolveRetention } from './retention.js';
-import { PRESET_TEMPLATES, type PresetTemplate } from '@neburyx/contracts';
+import { PRESET_TEMPLATES, type FilterKind, type PresetTemplate } from '@neburyx/contracts';
 import { resolveBudgets } from './budgets.js';
 import { hashSource } from './hash.js';
 import { checkLink } from './links.js';
@@ -20,6 +20,15 @@ import type { RawDerivedRule, RawEntity, RawMappingFile, RawPreset, RawRelations
 export interface BuildIssue {
   readonly segments: readonly (string | number)[];
   readonly reason: string;
+}
+
+function kindsOf(raw: { readonly kinds?: Readonly<Record<string, FilterKind>> }, allowed: readonly string[], path: readonly (string | number)[], report: Report): { readonly kinds?: Readonly<Record<string, FilterKind>> } {
+  const entries = Object.entries(raw.kinds ?? {});
+  if (entries.length === 0) return {};
+  for (const [property] of entries) {
+    if (!allowed.includes(property)) report([...path, 'kinds', property], `declares a kind for ${property}, which is not a filterable property of this type`);
+  }
+  return { kinds: Object.fromEntries(entries) };
 }
 
 type Report = (segments: readonly (string | number)[], reason: string) => void;
@@ -102,6 +111,7 @@ function buildEntity(raw: RawEntity, path: readonly (string | number)[], report:
     pii,
     ...(Object.keys(piiClasses).length === 0 ? {} : { piiClasses }),
     filterable,
+    ...kindsOf(raw, filterable, path, report),
     ...((raw.sortable ?? []).length === 0 ? {} : { sortable: [...(raw.sortable ?? [])] }),
     ...((raw.degree ?? []).length === 0 ? {} : { degree: (raw.degree ?? []).map((entry) => ({ type: entry.type, direction: entry.direction, property: entry.property, ...(entry.observed_at === undefined ? {} : { observedAt: entry.observed_at }) })) }),
     ...linkOf(raw, path, report),
@@ -163,6 +173,7 @@ function buildRelationship(raw: RawRelationship, path: readonly (string | number
     ...(raw.observed_at === undefined ? {} : { observedAt: raw.observed_at }),
     evidence,
     filterable: raw.filterable ?? [],
+    ...kindsOf(raw, [...(raw.filterable ?? []), ...(raw.observed_at === undefined ? [] : [raw.observed_at])], path, report),
     ...((raw.sortable ?? []).length === 0 ? {} : { sortable: [...(raw.sortable ?? [])] }),
     ...(evidenceLink === undefined ? {} : { evidenceLink }),
   };

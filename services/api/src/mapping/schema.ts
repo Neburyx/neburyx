@@ -1,5 +1,5 @@
 import { RESERVED_SOURCE_IDS } from './reserved-source-ids.js';
-import { addressableTextOfAtMost, aiSettingsSchema, iconKeySchema, MAX_CASE_REF_LENGTH, MAX_STABLE_ID_LENGTH, PII_CLASSES, presetTemplateSchema, type PiiClass } from '@neburyx/contracts';
+import { addressableTextOfAtMost, aiSettingsSchema, FILTER_KINDS, iconKeySchema, MAX_CASE_REF_LENGTH, MAX_STABLE_ID_LENGTH, PII_CLASSES, presetTemplateSchema, type PiiClass } from '@neburyx/contracts';
 import { z } from 'zod';
 import { isWellFormed } from '../reference/well-formed.js';
 import { budgetsSchema } from './budgets.js';
@@ -13,6 +13,9 @@ const URI_SCHEMES = ['neo4j:', 'neo4j+s:', 'neo4j+ssc:', 'bolt:', 'bolt+s:', 'bo
 const name = z.string().min(1).refine((text) => isWellFormed(text) && !text.includes('\u0000'), { message: 'must be well-formed Unicode (no unpaired surrogate, no NUL)' });
 const property = z.string().min(1).regex(/^[^{}]*$/);
 const propertyList = z.array(property);
+
+/** The kind a mapping declares for filterable properties, by property name; a hint for screens, never read by a statement. */
+const kindsSchema = z.record(property, z.enum(FILTER_KINDS));
 
 const envName = z.string().regex(ENV_NAME);
 
@@ -107,6 +110,7 @@ const entitySchema = z.strictObject({
   reference: propertyList.optional(),
   pii: z.array(piiEntry).optional(),
   filterable: propertyList.optional(),
+  kinds: kindsSchema.optional(),
   sortable: propertyList.optional(),
   link: z.string().optional(),
   link_carries_value: z.boolean().optional(),
@@ -122,6 +126,7 @@ const relationshipSchema = z.strictObject({
   observed_at: property.optional(),
   evidence: propertyList.optional(),
   filterable: propertyList.optional(),
+  kinds: kindsSchema.optional(),
   sortable: propertyList.optional(),
   evidence_link: z.string().optional(),
 });

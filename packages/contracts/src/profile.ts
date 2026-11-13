@@ -1,8 +1,13 @@
 import { z } from 'zod';
+import { FILTER_KINDS } from './expand.js';
 import { iconKeySchema, presetTemplateSchema } from './mapping.js';
 
 const name = z.string().min(1);
 const nameList = z.array(name);
+
+/** A property's kind as a client may show it: one of the filter kinds the mapping declares, or `unknown` (never guessed from values or names). */
+export const FILTER_KINDS_OR_UNKNOWN = [...FILTER_KINDS, 'unknown'] as const;
+const filterKindsSchema = z.record(name, z.enum(FILTER_KINDS_OR_UNKNOWN));
 
 export const BIND_KEYS = ['anchor', 'attribute', 'target', 'via'] as const;
 
@@ -19,6 +24,8 @@ export const entityTypeProfileSchema = z.strictObject({
   stateProperty: name.nullable(),
   searchable: nameList,
   filterable: nameList,
+  /** The kind the mapping declares for each filterable property, or `unknown`; a hint for screens, never read by a statement. Absent from an older answer; a property named `__proto__` is never listed. */
+  filterKinds: filterKindsSchema.optional(),
   /** Properties an expansion may rank by. */
   sortable: nameList.default([]),
   pii: nameList,
@@ -37,6 +44,8 @@ export const relationshipTypeProfileSchema = z.strictObject({
   /** The property that holds a relationship's stable ID; none for a type whose relationships are one aggregate. */
   stableIdProperty: name.nullable(),
   filterable: nameList,
+  /** As for an entity type; the row's time property appears when the mapping declares its kind. */
+  filterKinds: filterKindsSchema.optional(),
   /** Properties an expansion may rank by; the row's `observedAt` is sortable and filterable without being listed. */
   sortable: nameList.default([]),
   evidence: nameList,

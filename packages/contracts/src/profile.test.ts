@@ -48,4 +48,15 @@ describe('source profile contract', () => {
     expect(sourceProfileSchema.safeParse(without).success).toBe(false);
     expect(sourceProfileSchema.safeParse({ ...profile, presets: [{ ...profile.presets[0], template: 'free-form' }] }).success).toBe(false);
   });
+
+  it('accepts filterKinds of the filter kinds and unknown, refuses any other kind, and accepts a profile without them', () => {
+    const entity = profile.entityTypes[0] ?? {};
+    const withKinds = (filterKinds: unknown) => sourceProfileSchema.safeParse({ ...profile, entityTypes: [{ ...entity, filterKinds }] }).success;
+    expect(withKinds({ size: 'number', status: 'unknown', seenAt: 'dateTime' })).toBe(true);
+    expect(withKinds({})).toBe(true);
+    expect(withKinds({ size: 'integer' })).toBe(false);
+    expect(withKinds({ size: 7 })).toBe(false);
+    expect(withKinds(['number'])).toBe(false);
+    expect(sourceProfileSchema.safeParse(profile).success).toBe(true);
+  });
 });

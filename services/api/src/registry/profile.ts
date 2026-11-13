@@ -1,4 +1,4 @@
-import type { SourceProfile } from '@neburyx/contracts';
+import type { FilterKind, SourceProfile } from '@neburyx/contracts';
 import { isKeyed, type SourceModel } from '../mapping/model.js';
 import { entityProjection, relationshipProjection } from '../mapping/projection.js';
 import { canonicalBind, sortedEntries } from './canonical.js';
@@ -13,6 +13,13 @@ export function presetProfilesOf(source: SourceModel): SourceProfile['presets'] 
     bind: canonicalBind(preset.bind),
     labels: sortedEntries(preset.labels).map(([key, text]) => ({ key, text })),
   }));
+}
+
+/** The kind of each filterable property as the mapping declares it, `unknown` where it does not; the row's time property is listed when the mapping declares its kind. Nothing is read from the source. */
+function filterKindsOf(filterable: readonly string[], kinds: Readonly<Record<string, FilterKind>> | undefined): Record<string, FilterKind | 'unknown'> {
+  const declared = kinds ?? {};
+  const names = [...filterable, ...Object.keys(declared).filter((property) => !filterable.includes(property))];
+  return Object.fromEntries(names.map((property) => [property, Object.hasOwn(declared, property) ? (declared[property] ?? 'unknown') : 'unknown']));
 }
 
 export function buildSourceProfile(source: SourceModel): SourceProfile {
@@ -33,6 +40,7 @@ export function buildSourceProfile(source: SourceModel): SourceProfile {
       stateProperty: entity.display.stateProperty ?? null,
       searchable: [...entity.search],
       filterable: [...entity.filterable],
+      filterKinds: filterKindsOf(entity.filterable, entity.kinds),
       sortable: [...(entity.sortable ?? [])],
       pii: [...entity.pii],
       properties: entityProjection(entity),
@@ -46,6 +54,7 @@ export function buildSourceProfile(source: SourceModel): SourceProfile {
       observedAt: relationship.observedAt ?? null,
       stableIdProperty: relationship.stableId ?? null,
       filterable: [...relationship.filterable],
+      filterKinds: filterKindsOf(relationship.filterable, relationship.kinds),
       sortable: [...(relationship.sortable ?? [])],
       evidence: [...relationship.evidence],
       properties: relationshipProjection(relationship),

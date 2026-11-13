@@ -197,6 +197,7 @@ What is cached, what it costs and when it does not apply is in [Switch the AI pr
 | `reference` | no | Indexed values that appear on other records; used only to list related records |
 | `pii` | no | Critical fields: maskable on demand. A bare name, or `{ property, class }`; see [keyed identifiers](../domain-packs/README.md#an-entity-type-whose-identifier-is-personal-data) |
 | `filterable` | no | Properties the client may filter loaded items by |
+| `kinds` | no | The kind of a filterable property, by name: one of `text`, `number`, `boolean`, `date`, `dateTime`, `localDateTime`, `time`, `localTime`. Screens show it beside the property; a property without one is shown as `unknown`, and a kind never changes what a pattern or filter does. Declaring `kinds` changes the source's configuration hash, so the source is checked again and open investigations on it show that the mapping changed; an older image refuses the key, so remove `kinds` before rolling back |
 | `sortable` | no | Properties a page may be ranked by |
 | `link` | no | An `https` template that opens the record in your own system; see [links](../domain-packs/README.md#links-to-a-source-record) |
 | `link_carries_value` | no | `true` allows a link on a keyed type to carry the value itself |
@@ -237,6 +238,7 @@ What is cached, what it costs and when it does not apply is in [Switch the AI pr
 | `observed_at` | no | The temporal property used to order and filter, and the one an expansion's time window follows: a relationship type with no `observed_at` is not filtered by a window |
 | `evidence` | no | Properties that refer to source records. Each needs an index |
 | `filterable` | no | Properties the client may filter loaded relationships by |
+| `kinds` | no | As for an entity type; a key is a filterable property, or the row's `observed_at` |
 | `sortable` | no | Properties a page may be ranked by |
 | `evidence_link` | no | An `https` template for opening an evidence record in your own system; see [links](../domain-packs/README.md#links-to-a-source-record) |
 

@@ -26776,6 +26776,27 @@
                     "minLength": 1
                   }
                 },
+                "filterKinds": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "additionalProperties": {
+                    "type": "string",
+                    "enum": [
+                      "text",
+                      "number",
+                      "boolean",
+                      "date",
+                      "dateTime",
+                      "localDateTime",
+                      "time",
+                      "localTime",
+                      "unknown"
+                    ]
+                  }
+                },
                 "sortable": {
                   "default": [],
                   "type": "array",
@@ -26874,6 +26895,27 @@
                   "items": {
                     "type": "string",
                     "minLength": 1
+                  }
+                },
+                "filterKinds": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "additionalProperties": {
+                    "type": "string",
+                    "enum": [
+                      "text",
+                      "number",
+                      "boolean",
+                      "date",
+                      "dateTime",
+                      "localDateTime",
+                      "time",
+                      "localTime",
+                      "unknown"
+                    ]
                   }
                 },
                 "sortable": {

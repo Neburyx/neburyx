@@ -6,6 +6,7 @@ import { buildApp, registeredRoutesOf } from '../app.js';
 import type { AppStore } from '../app-store.js';
 import { createLogger } from '../logger.js';
 import { parseMapping } from '../mapping/load.js';
+import { buildSourceProfile } from './profile.js';
 import type { MappingModel, SourceModel } from '../mapping/model.js';
 import { normalizeModelOf } from '../gate/normalize/model.js';
 import { baseSource, fileOf, type Json } from '../testing/mapping.js';
@@ -95,6 +96,7 @@ describe('the profile of a configured source', () => {
       stateProperty: 'status',
       searchable: ['name', 'code'],
       filterable: ['status'],
+      filterKinds: { status: 'unknown' },
       sortable: ['size'],
       pii: ['name'],
       properties: ['id', 'name', 'code', 'ref', 'status', 'size'],
@@ -130,6 +132,7 @@ describe('the profile of a configured source', () => {
       stateProperty: null,
       searchable: [],
       filterable: [],
+      filterKinds: {},
       sortable: [],
       pii: [],
       properties: ['key'],
@@ -149,8 +152,8 @@ describe('the profile of a configured source', () => {
   it('marks a relationship type with a stable id as stored and one without as aggregate', async () => {
     const { body } = await profileOf(await appFor(mappingOf(fullSource())));
     expect(body.relationshipTypes).toEqual([
-      { type: 'EVENT', from: 'node_a', to: 'node_b', aggregate: false, observedAt: 'seenAt', stableIdProperty: 'entryId', filterable: ['kind'], sortable: ['rank'], evidence: ['recordId'], properties: ['entryId', 'seenAt', 'recordId', 'kind'], recordLink: true },
-      { type: 'LINKS', from: 'node_b', to: 'node_a', aggregate: true, observedAt: null, filterable: [], sortable: [], evidence: [], properties: [], stableIdProperty: null, recordLink: false },
+      { type: 'EVENT', from: 'node_a', to: 'node_b', aggregate: false, observedAt: 'seenAt', stableIdProperty: 'entryId', filterable: ['kind'], filterKinds: { kind: 'unknown' }, sortable: ['rank'], evidence: ['recordId'], properties: ['entryId', 'seenAt', 'recordId', 'kind'], recordLink: true },
+      { type: 'LINKS', from: 'node_b', to: 'node_a', aggregate: true, observedAt: null, filterable: [], filterKinds: {}, sortable: [], evidence: [], properties: [], stableIdProperty: null, recordLink: false },
     ]);
   });
 
@@ -490,5 +493,68 @@ describe('the profile and the excerpt of a source whose pii fields have classes'
     const excerpt = parse(body.mappingExcerpt) as { entities: { pii?: unknown[] }[] };
     expect(excerpt.entities[0]?.pii).toEqual(['plain', 'phone', 'name']);
     expect(body.mappingExcerpt).not.toMatch(/class/);
+  });
+});
+
+describe('the property kinds of a profile', () => {
+  const withKinds = (): Json =>
+    baseSource({
+      entities: [{ type: 'node_a', label: 'NodeA', stable_id: 'id', pii: ['name'], filterable: ['status', 'size', 'name'], kinds: { size: 'number', name: 'text' } }],
+      relationships: [{ type: 'LINKS', from: 'node_a', to: 'node_a', observed_at: 'seenAt', filterable: ['kind'], kinds: { seenAt: 'dateTime' } }],
+    });
+
+  it('lists the declared kind of each filterable property, unknown where none is declared, and the time property when its kind is declared', async () => {
+    const { body } = await profileOf(await appFor(mappingOf(withKinds())));
+    expect(body.entityTypes[0]?.filterKinds).toEqual({ status: 'unknown', size: 'number', name: 'text' });
+    expect(body.relationshipTypes[0]?.filterKinds).toEqual({ kind: 'unknown', seenAt: 'dateTime' });
+  });
+
+  it('is all unknown for a mapping without kinds, and the filterable lists are unchanged', async () => {
+    const { body } = await profileOf(await appFor(mappingOf(fullSource())));
+    for (const type of body.entityTypes) expect(Object.values(type.filterKinds ?? {}).every((kind) => kind === 'unknown')).toBe(true);
+    expect(body.entityTypes[0]?.filterable).toEqual(['status']);
+    expect(body.entityTypes[0]?.filterKinds).toEqual({ status: 'unknown' });
+  });
+});
+
+describe('property kinds beside the rest of the profile', () => {
+  it('change nothing but filterKinds: a profile with kinds equals the one without them once filterKinds is left out', () => {
+    const base = (kinds: Json) => baseSource({ entities: [{ type: 'node_a', label: 'NodeA', stable_id: 'id', filterable: ['size'], ...kinds }], relationships: [] });
+    const strip = (profile: ReturnType<typeof buildSourceProfile>) => JSON.stringify({ ...profile, entityTypes: profile.entityTypes.map(({ filterKinds: _kinds, ...rest }) => rest) });
+    const plain = buildSourceProfile(mappingOf(base({})).sources[0] as SourceModel);
+    const declared = buildSourceProfile(mappingOf(base({ kinds: { size: 'number' } })).sources[0] as SourceModel);
+    expect(strip(declared)).toBe(strip(plain));
+    expect(declared.entityTypes[0]?.filterKinds).toEqual({ size: 'number' });
+  });
+
+  it('keeps the declared kinds out of the mapping excerpt: they travel in filterKinds', async () => {
+    const source = baseSource({ entities: [{ type: 'node_a', label: 'NodeA', stable_id: 'id', filterable: ['size'], kinds: { size: 'number' } }], relationships: [] });
+    const { body } = await profileOf(await appFor(mappingOf(source)));
+    expect(body.mappingExcerpt).not.toContain('kinds');
+    expect(body.entityTypes[0]?.filterKinds).toEqual({ size: 'number' });
+  });
+
+  it('lists a property named like a built-in object member as unknown unless declared, with and without kinds', async () => {
+    const names = ['constructor', 'toString', '__proto__', 'valueOf'];
+    const plain = baseSource({ entities: [{ type: 'node_a', label: 'NodeA', stable_id: 'id', filterable: names }], relationships: [] });
+    const { body } = await profileOf(await appFor(mappingOf(plain)));
+    expect(Object.keys(body.entityTypes[0]?.filterKinds ?? {}).sort()).toEqual(['constructor', 'toString', 'valueOf']);
+    expect(Object.values(body.entityTypes[0]?.filterKinds ?? {}).every((kind) => kind === 'unknown')).toBe(true);
+    const declared = baseSource({ entities: [{ type: 'node_a', label: 'NodeA', stable_id: 'id', filterable: names, kinds: { constructor: 'text' } }], relationships: [] });
+    const second = await profileOf(await appFor(mappingOf(declared)));
+    expect(second.body.entityTypes[0]?.filterKinds?.['constructor']).toBe('text');
+    expect(second.body.entityTypes[0]?.filterKinds?.['toString']).toBe('unknown');
+  });
+
+  it('follows the configuration hash in its tag: the same for a mapping without kinds, changed when kinds are added, and a stale tag is not a match', async () => {
+    const without = baseSource({ entities: [{ type: 'node_a', label: 'NodeA', stable_id: 'id', filterable: ['size'] }], relationships: [] });
+    const withKinds = baseSource({ entities: [{ type: 'node_a', label: 'NodeA', stable_id: 'id', filterable: ['size'], kinds: { size: 'number' } }], relationships: [] });
+    const one = await profileOf(await appFor(mappingOf(without)));
+    const two = await profileOf(await appFor(mappingOf(withKinds)));
+    expect(one.etag).toBe(`"${mappingOf(without).sources[0]?.configHash}"`);
+    expect(two.etag).not.toBe(one.etag);
+    const app = await appFor(mappingOf(withKinds));
+    expect((await app.inject({ method: 'GET', url: '/v1/sources/demo/profile', headers: { 'if-none-match': one.etag } })).statusCode).toBe(200);
+    expect((await app.inject({ method: 'GET', url: '/v1/sources/demo/profile', headers: { 'if-none-match': two.etag } })).statusCode).toBe(304);
   });
 });

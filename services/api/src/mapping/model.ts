@@ -1,4 +1,4 @@
-import type { AiSettings, IconKey, PiiClass, PresetTemplate } from '@neburyx/contracts';
+import type { AiSettings, FilterKind, IconKey, PiiClass, PresetTemplate } from '@neburyx/contracts';
 import { buildLinkAddress } from './link-address.js';
 
 /** The most properties a source may list under `search` in all its entity types: each is a branch of the one search read. */
@@ -42,6 +42,8 @@ export interface EntityModel {
   /** The class the mapping gives a `pii` field, which picks the shape of its mask; a field without one is masked fully. */
   readonly piiClasses?: Readonly<Record<string, PiiClass>>;
   readonly filterable: readonly string[];
+  /** The kind the mapping declares for a filterable property; present only when it declares some, so a mapping without them keeps its configuration hash. */
+  readonly kinds?: Readonly<Record<string, FilterKind>>;
   /** The properties an expansion may rank its pages by; present only when the mapping declares some, so a mapping without them keeps its configuration hash. */
   readonly sortable?: readonly string[];
   /** Present only when the mapping declares degree properties, so a mapping without them keeps its configuration hash. */
@@ -75,6 +77,8 @@ export interface RelationshipModel {
   readonly observedAt?: string;
   readonly evidence: readonly string[];
   readonly filterable: readonly string[];
+  /** As for an entity type: present only when declared. */
+  readonly kinds?: Readonly<Record<string, FilterKind>>;
   /** As for an entity type: present only when declared. */
   readonly sortable?: readonly string[];
   readonly evidenceLink?: LinkTemplate;
