@@ -2,6 +2,7 @@ import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { runCli } from '../testing/cli.js';
 import { attempt, rows } from '../testing/database.js';
+import { shippedMigrationNames } from '../testing/migration-names.js';
 import { startPostgres, type TestDatabase, type TestPostgres } from '../testing/postgres.js';
 
 let postgres: TestPostgres;
@@ -77,7 +78,7 @@ describe('the function that lists applied migrations', () => {
     await client.connect();
     try {
       const result = await client.query<{ name: string }>('SELECT public.applied_migrations() AS name');
-      expect(result.rows.map((row) => row.name)).toEqual(['0001-baseline', '0002-deployment-and-users', '0003-applied-migrations-function', '0004-sources', '0005-source-checks', '0006-source-check-identity', '0007-source-check-config', '0008-investigations', '0009-reference-key', '0010-reference-length', '0011-saved-views-listing', '0012-saved-views-deletion', '0013-exports', '0014-export-idempotency', '0015-export-source-identity', '0016-applied-preview-migrations-function', '0017-pattern-events', '0018-saved-patterns', '0019-saved-patterns-shared-index', '0020-saved-pattern-names']);
+      expect(result.rows.map((row) => row.name)).toEqual(shippedMigrationNames());
       expect(Object.keys(result.fields.map((field) => field.name))).toHaveLength(1);
     } finally {
       await client.end();

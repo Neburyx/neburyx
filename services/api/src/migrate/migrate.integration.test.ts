@@ -2,6 +2,7 @@ import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { runCli } from '../testing/cli.js';
 import { attempt, fixtureFolder, removeFixtureFolders, rows, runInProcess, snapshot, waiters } from '../testing/database.js';
+import { shippedMigrationRows } from '../testing/migration-names.js';
 import { startPostgres, type TestPostgres } from '../testing/postgres.js';
 
 const KYSELY_MIGRATION_LOCK_ID = '3853314791062309107';
@@ -80,28 +81,7 @@ describe('a job queue step that fails after the application migrations were appl
     expect(failed.code).toBe(1);
     expect(failed.stderr).toBe('the job queue step failed after the application migrations were applied; run the command again\n');
     expect(failed.stdout).toBe('');
-    expect(await rows(database.ownerUrl, 'SELECT name FROM kysely_migration ORDER BY name')).toEqual([
-      { name: '0001-baseline' },
-      { name: '0002-deployment-and-users' },
-      { name: '0003-applied-migrations-function' },
-      { name: '0004-sources' },
-      { name: '0005-source-checks' },
-      { name: '0006-source-check-identity' },
-      { name: '0007-source-check-config' },
-      { name: '0008-investigations' },
-      { name: '0009-reference-key' },
-      { name: '0010-reference-length' },
-      { name: '0011-saved-views-listing' },
-      { name: '0012-saved-views-deletion' },
-      { name: '0013-exports' },
-      { name: '0014-export-idempotency' },
-      { name: '0015-export-source-identity' },
-      { name: '0016-applied-preview-migrations-function' },
-      { name: '0017-pattern-events' },
-      { name: '0018-saved-patterns' },
-      { name: '0019-saved-patterns-shared-index' },
-      { name: '0020-saved-pattern-names' },
-    ]);
+    expect(await rows(database.ownerUrl, 'SELECT name FROM kysely_migration ORDER BY name')).toEqual(shippedMigrationRows());
     expect(await attempt(database.appUrl, 'SELECT * FROM kysely_migration')).toMatch(/permission denied/);
     await vi.waitFor(
       async () => {
