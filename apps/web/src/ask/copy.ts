@@ -1,4 +1,4 @@
-import { ASK_MESSAGE_MAX_LENGTH, type Count } from '@neburyx/contracts';
+import { ASK_MESSAGE_MAX_LENGTH, type AskRefusalFamily, type Count } from '@neburyx/contracts';
 import { countText } from '../search/count-label.js';
 
 export const ASK_COPY = {
@@ -25,6 +25,8 @@ export const ASK_COPY = {
   searching: 'Searching…',
   sending: 'Sending…',
   sentPlan: 'Sent. The plan is ready.',
+  refused: 'Not answered · refused',
+  refusalTitle: 'This question was not answered',
   maySent: 'The last question may have been sent.',
   awaiting: 'Awaiting clarification · no plan run',
   doYouMean: 'Do you mean',
@@ -50,4 +52,23 @@ export const moreChoicesText = (shown: number, count: Count): string | undefined
   const text = countText(count);
   if (text === undefined || count.value === undefined || count.value <= shown) return undefined;
   return `${shown} shown of ${text}`;
+};
+
+/** What the investigator can do instead, by the kind of refusal; the server's sentence says why, this says what, and the names of the tools are the client's. */
+export const PATHS_LINE = 'Open Paths to see how two entities are connected.';
+
+export const REFUSAL_LINES: Readonly<Record<AskRefusalFamily, string>> = {
+  path: 'Expand each entity and follow its relationships.',
+  'property-selection': 'Filters narrows the loaded items by type, not by a value. Search also matches the values of indexed properties.',
+  'similar-records': 'Expand an entity and compare the entities around it.',
+  'ranking-or-aggregate': 'There is no alternative for this in this release.',
+  'attribute-combination': 'Expand an entity and look at its properties and its neighbours side by side.',
+  'indirect-attribute': 'Expand the entity and open the one it is linked to.',
+  'unnamed-relation': 'Expand an entity and look at the relationships it has.',
+  judgement: 'Look at what connects the entities and at the evidence of each relationship.',
+  'personal-data': 'If you have a stable ID, search for it.',
+  'loaded-view': 'There is no alternative for this in this release.',
+  other: 'Search by stable ID, narrow with Filters, or expand an entity.',
+  'plan-not-usable': 'Search by stable ID, narrow with Filters, or expand an entity.',
+  'model-refused': 'Search by stable ID, narrow with Filters, or expand an entity.',
 };

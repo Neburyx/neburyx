@@ -147,6 +147,20 @@
   background: var(--color-danger-surface);
 }
 
+.ask-refusal-question {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-style: italic;
+}
+
+.ask-refusal-reason {
+  margin: 0;
+}
+
+.ask-refusal-line {
+  margin: 0;
+}
+
 .ask-card-sent {
   opacity: var(--opacity-disabled);
 }

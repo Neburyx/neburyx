@@ -1,6 +1,6 @@
 import { useId, type KeyboardEvent } from 'react';
 import { useClientState } from '../state/context.js';
-import { BlockedCard, ClarificationCard, PreviewCard } from './cards.js';
+import { BlockedCard, ClarificationCard, PreviewCard, RefusalCard } from './cards.js';
 import { ASK_COPY, notSentText } from './copy.js';
 import { QuestionField } from './question-field.js';
 import { useAsk, type AskModel } from './use-ask.js';
@@ -78,6 +78,7 @@ export function AskPanel() {
         </button>
       ) : null}
       {model.card?.kind === 'preview' ? <PreviewCard key={model.cardId} card={model.card} panel={panel} /> : null}
+      {model.plan?.kind === 'unsupported' ? <RefusalCard key={`refusal-${model.cardId}`} question={model.text} family={model.plan.family} reason={model.plan.reason} /> : null}
       {model.card?.kind === 'blocked' ? <BlockedCard key={model.cardId} tokens={model.card.tokens} panel={panel} /> : null}
       {model.card?.kind === 'clarification' ? <ClarificationCard key={model.cardId} clarification={model.card.clarification} panel={panel} /> : null}
     </div>

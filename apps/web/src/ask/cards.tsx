@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import type { ElementRef, GraphNode } from '@neburyx/contracts';
-import { ASK_COPY, BLOCKED_MANY, blockedTitle, moreChoicesText, pickerTitle } from './copy.js';
+import type { AskRefusalFamily, ElementRef, GraphNode } from '@neburyx/contracts';
+import { ASK_COPY, BLOCKED_MANY, REFUSAL_LINES, PATHS_LINE, blockedTitle, moreChoicesText, pickerTitle } from './copy.js';
+import { useClientState } from '../state/context.js';
+import { useOptionalToolRegistry } from '../workspace/tool-registry.js';
+import { CHIP_LABELS, EXPAND_HINT, PATHS_TOOL_ID, chipsOf, isPathsTool, type RefusalChip } from './refusal-chips.js';
 import type { AskPanel, Card, Clarification, Picker } from './use-ask.js';
 import type { BlockedToken } from './ask-model.js';
 
@@ -167,6 +170,46 @@ export function ClarificationCard({ clarification, panel }: { readonly clarifica
           {ASK_COPY.cancel}
         </button>
       </div>
+    </section>
+  );
+}
+
+/** A refused question: what was asked as typed, the server's fixed sentence, and what to do instead. Nothing else, and no way to run it. */
+export function RefusalCard({ question, family, reason }: { readonly question: string; readonly family: AskRefusalFamily; readonly reason: string }) {
+  const drawn = useFocusOnDraw();
+  const state = useClientState();
+  const registry = useOptionalToolRegistry();
+  const paths = registry?.view.getState().find((tool) => tool.id === PATHS_TOOL_ID);
+  const chips = chipsOf(family, isPathsTool(paths));
+  const run = (chip: RefusalChip): void => {
+    const { presentation } = state;
+    if (chip === 'filters') presentation.setFiltersOpen(true);
+    else if (chip === 'search' || chip === 'search-id') {
+      presentation.setSearchTab('source');
+      presentation.requestSearch();
+    } else if (chip === 'expand') document.querySelector<HTMLElement>('.graph-canvas')?.focus({ preventScroll: true });
+    else if (paths?.kind.type === 'action') paths.kind.activate();
+  };
+  return (
+    <section className="ask-card ask-card-refusal" aria-labelledby="ask-refusal-title" tabIndex={-1} ref={drawn} data-family={family}>
+      <h3 id="ask-refusal-title" className="ask-card-title">
+        {ASK_COPY.refusalTitle}
+      </h3>
+      <p className="ask-refusal-question">{`“${question}”`}</p>
+      <p className="ask-refusal-reason">{reason}</p>
+      <p className="ask-note ask-refusal-line">{family === 'path' && chips.includes('paths') ? PATHS_LINE : REFUSAL_LINES[family]}</p>
+      {chips.includes('expand') ? <p className="ask-note ask-refusal-line">{EXPAND_HINT}</p> : null}
+      {chips.length === 0 ? null : (
+        <ul className="ask-chips">
+          {chips.map((chip) => (
+            <li key={chip}>
+              <button type="button" className="ask-chip" onClick={() => run(chip)}>
+                {CHIP_LABELS[chip]}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }

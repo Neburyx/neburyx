@@ -6,6 +6,7 @@ import type { ApiClient, ApiFailure, ApiResult, AskPlanAnswer } from '../api/cli
 import { fakeClient } from '../api/fake-client.js';
 import { createClientState, type ClientState } from '../state/client-state.js';
 import { ClientStateProvider } from '../state/context.js';
+import { ToolsProvider, type ToolRegistry } from '../workspace/tool-registry.js';
 import { AskPanel } from './ask-panel.js';
 import { useAsk } from './use-ask.js';
 
@@ -48,14 +49,14 @@ export interface AskHarness {
   readonly container: HTMLElement;
 }
 
-export function drawAsk(options: { readonly source?: string | null; readonly state?: ClientState } = {}): AskHarness {
+export function drawAsk(options: { readonly source?: string | null; readonly state?: ClientState; readonly tools?: ToolRegistry } = {}): AskHarness {
   const { client, asks, searches } = askClient();
   const state = options.state ?? createClientState();
   if (options.source !== null) state.bindSource(options.source ?? SOURCE);
   const view = render(
     <ApiClientProvider client={client}>
       <ClientStateProvider state={state}>
-        <AskPanel />
+        {options.tools === undefined ? <AskPanel /> : <ToolsProvider registry={options.tools}><AskPanel /></ToolsProvider>}
       </ClientStateProvider>
     </ApiClientProvider>,
   );

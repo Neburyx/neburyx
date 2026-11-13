@@ -83,6 +83,11 @@ export function useToolRegistry(): ToolRegistry {
   return registry;
 }
 
+/** The registry when one is provided, and nothing otherwise, for a panel that may be drawn without the tool strip. */
+export function useOptionalToolRegistry(): ToolRegistry | undefined {
+  return useContext(ToolsContext);
+}
+
 export function useTools(): readonly RegisteredTool[] {
   return useStoreSelector(useToolRegistry().view, (tools) => tools);
 }

@@ -89,7 +89,7 @@ describe('the Ask panel and its place', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Send' }));
     aiActions.view.getState().get('ask')?.();
     expect(harness.state.presentation.view.getState().askOpen).toBe(true);
-    await answerAsk(harness.asks[1], { ok: true, value: { plan: { kind: 'unsupported', reason: 'No template fits.' } } });
+    await answerAsk(harness.asks[1], { ok: true, value: { plan: { kind: 'unsupported', family: 'other', reason: 'No template fits.' } } });
     aiActions.view.getState().get('ask')?.();
     expect(harness.state.presentation.view.getState().askOpen).toBe(false);
     unbind();

@@ -21,7 +21,7 @@ describe('the API client, asking one question', () => {
       { preview: 'which accounts', previewHash: HASH },
       { preview: 'which accounts', previewHash: HASH, changed: true },
       { blocked: { tokens: [{ text: 'zorvath', start: 6, end: 13 }] } },
-      { plan: { kind: 'unsupported', reason: 'No template fits.' } },
+      { plan: { kind: 'unsupported', family: 'other', reason: 'No template fits.' } },
     ]) {
       const { fetcher, seen } = answering(body);
       expect(await createApiClient(fetcher).askPlan(request)).toEqual({ ok: true, value: body });

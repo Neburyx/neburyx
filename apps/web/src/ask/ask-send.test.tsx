@@ -53,11 +53,45 @@ describe('Send', () => {
     expect(send().disabled).toBe(true);
   });
 
-  it('shows the reason of an unsupported plan', async () => {
+  it('draws the refusal card for an unsupported plan: the heading, the question as typed, the fixed sentence and the line, with no Send and the preview greyed', async () => {
     const { asks } = await previewed();
     await userEvent.click(send());
-    await answerAsk(asks[1], { ok: true, value: { plan: { kind: 'unsupported', reason: 'No template fits this question.' } } });
-    expect(screen.getByRole('status').textContent).toBe('No template fits this question.');
+    await answerAsk(asks[1], { ok: true, value: { plan: { kind: 'unsupported', family: 'judgement', reason: 'Fixed words of the server.' } } });
+    expect(screen.getByRole('status').textContent).toBe('Not answered · refused');
+    const card = screen.getByRole('region', { name: 'This question was not answered' });
+    expect(card.textContent).toBe('This question was not answered“which widgets”Fixed words of the server.Look at what connects the entities and at the evidence of each relationship.To expand an entity, select it and press E, or right-click it.Expand');
+    expect(document.activeElement).toBe(card);
+    expect(screen.getByRole('region', { name: 'What the model will receive' }).className).toContain('ask-card-sent');
+    expect(send().disabled).toBe(true);
+  });
+
+  it('shows the question exactly as typed, a name or an ID included, and never a placeholder mark', async () => {
+    const typed = 'is Jane Roe at w-0001 linked?';
+    const { asks } = await previewed(typed, 'is ‹widget#1› linked?');
+    await userEvent.click(send());
+    await answerAsk(asks[1], { ok: true, value: { plan: { kind: 'unsupported', family: 'other', reason: 'Fixed words of the server.' } } });
+    const card = screen.getByRole('region', { name: 'This question was not answered' });
+    expect(card.textContent).toContain(`“${typed}”`);
+    expect(card.textContent).not.toMatch(/[‹›]/);
+  });
+
+  it.each(['path', 'property-selection', 'similar-records', 'ranking-or-aggregate', 'attribute-combination', 'indirect-attribute', 'unnamed-relation', 'judgement', 'personal-data', 'loaded-view', 'other', 'plan-not-usable', 'model-refused'] as const)('draws one card for the family %s and offers to run nothing', async (family) => {
+    const { asks } = await previewed();
+    await userEvent.click(send());
+    await answerAsk(asks[1], { ok: true, value: { plan: { kind: 'unsupported', family, reason: 'Fixed words of the server.' } } });
+    expect(screen.getAllByRole('region', { name: 'This question was not answered' })).toHaveLength(1);
+    expect(screen.getByRole('status').textContent).toBe('Not answered · refused');
+    expect(send().disabled).toBe(true);
+    expect(screen.queryByRole('button', { name: /run/i })).toBeNull();
+  });
+
+  it('takes the card away when the text is edited, and asks for a new Preview', async () => {
+    const { asks } = await previewed();
+    await userEvent.click(send());
+    await answerAsk(asks[1], { ok: true, value: { plan: { kind: 'unsupported', family: 'other', reason: 'Fixed words of the server.' } } });
+    await userEvent.type(field(), 'x');
+    expect(screen.queryByRole('region', { name: 'This question was not answered' })).toBeNull();
+    expect(screen.getByRole('status').textContent).toBe('');
   });
 
   it('goes back to a preview to check when the answer is a changed preview, with the note and the new hash for the next send', async () => {
@@ -107,7 +141,7 @@ describe('Send', () => {
   it('removes the sent status and the preview on an edit, so another question needs a new preview', async () => {
     const { asks } = await previewed();
     await userEvent.click(send());
-    await answerAsk(asks[1], { ok: true, value: { plan: { kind: 'unsupported', reason: 'No template fits.' } } });
+    await answerAsk(asks[1], { ok: true, value: { plan: { kind: 'unsupported', family: 'other', reason: 'No template fits.' } } });
     await userEvent.type(field(), ' x');
     expect(screen.queryByRole('region', { name: 'What the model will receive' })).toBeNull();
     expect(screen.getByRole('status').textContent).toBe('');
@@ -120,7 +154,7 @@ describe('Send', () => {
     state.bindSource('other');
     await settleAfter();
     expect(sent?.signal).toBeUndefined();
-    await answerAsk(sent, { ok: true, value: { plan: { kind: 'unsupported', reason: 'No template fits.' } } });
+    await answerAsk(sent, { ok: true, value: { plan: { kind: 'unsupported', family: 'other', reason: 'No template fits.' } } });
     expect(screen.queryByText('No template fits.')).toBeNull();
     expect(screen.getByRole('status').textContent).toBe('The last question may have been sent.');
     expect(screen.queryByRole('region', { name: 'What the model will receive' })).toBeNull();
