@@ -254,7 +254,7 @@ describe('a run that fails', () => {
     ['SOURCE_BUSY', undefined, 'is busy. No read slot freed within the wait.', true, true],
     ['SOURCE_UNAVAILABLE', undefined, 'unavailable. The loaded graph remains available.', true, true],
     ['QUERY_TIMEOUT', { timeoutMs: 5000 }, 'did not answer within 5 s.', true, true],
-    ['QUERY_BUDGET_EXCEEDED', { maxHops: 2 }, 'The source allows at most 2 steps; the field is set to it.', false, true],
+    ['QUERY_BUDGET_EXCEEDED', { maxHops: 2 }, 'The source allows at most 2 steps.', false, true],
     ['INVALID_REQUEST', undefined, 'The server did not accept this request.', false, false],
     ['NOT_FOUND', undefined, 'This was not found. It may have been removed.', false, false],
     ['CONFLICT', undefined, 'This was changed elsewhere. Reload it, then try again.', false, false],
@@ -282,6 +282,14 @@ describe('a run that fails', () => {
     await validPattern();
     await press();
     expect(screen.getByText('The answer was not in the form expected.')).toBeTruthy();
+  });
+
+  it('does not say a field is set when a builder run is refused over its steps', async () => {
+    await runWorkspace({ runDefinition: async () => ({ ok: false, failure: { ...failure('QUERY_BUDGET_EXCEEDED', { maxHops: 2 }), retryable: false } as never }) });
+    await validPattern();
+    await press();
+    const alert = screen.getAllByRole('alert').find((node) => node.textContent?.includes('at most 2 steps'));
+    expect(alert?.textContent).not.toMatch(/field/i);
   });
 
   it('keeps the earlier result and the builder after a failure', async () => {

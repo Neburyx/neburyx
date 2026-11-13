@@ -47,8 +47,8 @@ const TABLE: { readonly [C in FailureCode]: Entry } = {
   QUERY_BUDGET_EXCEEDED: (failure) => {
     const hops = maxHopsOf(failure);
     const page = maxPageOf(failure);
-    if (hops !== undefined) return { text: `The source allows at most ${hops} steps; the field is set to it.`, action: 'close' };
-    if (page !== undefined) return { text: `The source allows at most ${page} results at a time; the field is set to it.`, action: 'close' };
+    if (hops !== undefined) return { text: `The source allows at most ${hops} steps.`, action: 'close' };
+    if (page !== undefined) return { text: `The source allows at most ${page} results at a time.`, action: 'close' };
     return { text: 'This asks for more than the source allows. Ask for less.', action: 'close' };
   },
   QUERY_TIMEOUT: (failure, source) => {

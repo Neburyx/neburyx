@@ -496,7 +496,7 @@ function PatternsWorkbench({ client, sourceId, sourceName, mask, list, first, cl
           )}
         </div>
       ) : null}
-      {failure === undefined || run.failure === undefined ? null : <RunFailure key={run.failure.code} failure={failure} canRetry={run.ask !== undefined && canRetry(run.failure)} onRetry={() => submit(run.ask)} />}
+      {failure === undefined || run.failure === undefined ? null : <RunFailure key={run.failure.code} failure={failure} fieldSet={run.failure.code === 'QUERY_BUDGET_EXCEEDED' && (maxPageOf(run.failure) ?? maxHopsOf(run.failure)) !== undefined} canRetry={run.ask !== undefined && canRetry(run.failure)} onRetry={() => submit(run.ask)} />}
       {heavy === undefined || heavy.kind !== 'heavy' || run.ask === undefined ? null : (
         <div className="patterns-state" data-tone="warning" role="alert">
           <p>{heavyHeadline(heavy.estimate, heavy.threshold)}</p>

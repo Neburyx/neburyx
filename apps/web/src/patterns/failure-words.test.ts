@@ -47,8 +47,8 @@ describe('the table of failures in words', () => {
   });
 
   it('names the limit of a refused run from the field', () => {
-    expect(failureWords(server('QUERY_BUDGET_EXCEEDED', { maxHops: 2 }), 's').text).toBe('The source allows at most 2 steps; the field is set to it.');
-    expect(failureWords(server('QUERY_BUDGET_EXCEEDED', { maxPage: 50 }), 's').text).toBe('The source allows at most 50 results at a time; the field is set to it.');
+    expect(failureWords(server('QUERY_BUDGET_EXCEEDED', { maxHops: 2 }), 's').text).toBe('The source allows at most 2 steps.');
+    expect(failureWords(server('QUERY_BUDGET_EXCEEDED', { maxPage: 50 }), 's').text).toBe('The source allows at most 50 results at a time.');
     expect(failureWords(server('QUERY_BUDGET_EXCEEDED'), 's').text).not.toMatch(/\d/);
   });
 
