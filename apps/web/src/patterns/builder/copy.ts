@@ -31,6 +31,7 @@ export const BUILDER_COPY = {
   checkFailed: 'The check could not be made.',
   needsStart: 'Choose where the pattern starts first.',
   needsComplete: 'Complete the last step first.',
+  restartedByMask: 'Masking changed, so the pattern was started again.',
 } as const;
 
 export const DIRECTION_TEXT: Readonly<Record<Direction, string>> = { out: 'Outgoing', in: 'Incoming', both: 'Either direction' };

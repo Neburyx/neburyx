@@ -215,14 +215,16 @@ describe('caps and personal data', () => {
     expect(screen.getByText('Personal-data properties are not offered while masking is on.')).toBeTruthy();
   });
 
-  it('starts a new builder when masking changes, as for a change of source, so no condition on personal data survives', async () => {
+  it('starts a new builder when masking changes, says so, and keeps no condition on personal data', async () => {
     const kit = await started(NODE_ONLY);
     await addCondition(1);
     await userEvent.selectOptions(rowField(1, 1, 'Property'), 'neighbor:b-secret');
     act(() => kit.state.setMask(true));
     await settle();
     expect(screen.queryByRole('region', { name: 'New pattern' })).toBeNull();
+    expect(screen.getByText('Masking changed, so the pattern was started again.')).toBeTruthy();
     await openBuilder();
+    expect(screen.queryByText('Masking changed, so the pattern was started again.')).toBeNull();
     expect(screen.queryByRole('group', { name: 'Step 1' })).toBeNull();
     expect(screen.queryByRole('group', { name: 'Step 1 condition 1' })).toBeNull();
   });
@@ -369,5 +371,27 @@ describe('what the server finds wrong with a condition or a window', () => {
     await settle();
     expect(screen.queryByText('This property cannot be used in a condition.')).toBeNull();
     expect(screen.getByText('Valid: the mapping can follow this pattern.')).toBeTruthy();
+  });
+});
+
+describe('the line about a restart by masking', () => {
+  it('is gone once the source changes', async () => {
+    const kit = await started(NODE_ONLY);
+    await addCondition(1);
+    act(() => kit.state.setMask(true));
+    await settle();
+    expect(screen.getByText('Masking changed, so the pattern was started again.')).toBeTruthy();
+    act(() => kit.state.bindSource('b'));
+    await settle();
+    expect(screen.queryByText('Masking changed, so the pattern was started again.')).toBeNull();
+  });
+});
+
+describe('masking changing with nothing built', () => {
+  it('says nothing when the builder held no draft', async () => {
+    const kit = await conditionsWorkspace();
+    act(() => kit.state.setMask(true));
+    await settle();
+    expect(screen.queryByText('Masking changed, so the pattern was started again.')).toBeNull();
   });
 });

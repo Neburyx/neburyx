@@ -36,10 +36,29 @@ type Preset = TemplateListResponse['presets'][number];
 export function PatternsPanel() {
   const state = useClientState();
   const epoch = useContextEpoch(state);
-  return <PatternsBody key={epoch} />;
+  const mask = useSessionMask();
+  const hasDraft = useRef(false);
+  const previous = useRef({ mask, epoch });
+  const [restarted, setRestarted] = useState(false);
+  useEffect(() => {
+    // the body is remounted by the same change that tells the wrapper the masking changed, so what the body held is read here, before it is forgotten
+    const maskChanged = previous.current.mask !== mask;
+    if (maskChanged && hasDraft.current) setRestarted(true);
+    if (!maskChanged && previous.current.epoch !== epoch) setRestarted(false);
+    if (previous.current.epoch !== epoch) hasDraft.current = false;
+    previous.current = { mask, epoch };
+  }, [mask, epoch]);
+  return <PatternsBody key={epoch} hasDraft={hasDraft} restarted={restarted} onRestartedSeen={() => setRestarted(false)} />;
 }
 
-function PatternsBody() {
+interface BodyProps {
+  /** Whether the builder holds a draft, kept outside the body so that a restart of the panel can tell what was lost. */
+  readonly hasDraft: React.RefObject<boolean>;
+  readonly restarted: boolean;
+  readonly onRestartedSeen: () => void;
+}
+
+function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
   const state = useClientState();
   const open = useApiClient();
   const client = useMemo(() => withoutReadsWhileSourceChanged(open, state), [open, state]);
@@ -58,6 +77,13 @@ function PatternsBody() {
   const viewRef = useRef(view);
   viewRef.current = view;
   const [builder, setBuilder] = useState<BuilderState>(INITIAL);
+  const drafted = builder.draft.anchorType !== undefined;
+  const mounted = useRef(false);
+  useEffect(() => {
+    // not on mount: a restarted panel starts empty, and the wrapper reads what the one before it held
+    if (mounted.current) hasDraft.current = drafted;
+    mounted.current = true;
+  }, [drafted, hasDraft]);
   const profile = useProfile();
   const profileState = useProfileState();
   const profileView: ProfileView = profile !== undefined ? { kind: 'ready', profile } : profileState.sourceId === sourceId && profileState.request.phase === 'failed' ? { kind: 'failed' } : { kind: 'loading' };
@@ -99,13 +125,21 @@ function PatternsBody() {
         </button>
       </div>
       {view === 'list' ? <p className="search-panel-note">{PATTERNS_COPY.intro}</p> : null}
+      {restarted && view === 'list' ? (
+        <p className="search-panel-note" role="status">
+          {BUILDER_COPY.restartedByMask}
+        </p>
+      ) : null}
       {sourceId === null ? (
         <p className="search-panel-note">{PATTERNS_COPY.noPatterns}</p>
       ) : (
         <>
           {view === 'list' ? (
             <div className="patterns-actions">
-              <button type="button" className="secondary" ref={newButton} onClick={() => setView('builder')}>
+              <button type="button" className="secondary" ref={newButton} onClick={() => {
+                  onRestartedSeen();
+                  setView('builder');
+                }}>
                 {BUILDER_COPY.newPattern}
               </button>
             </div>
