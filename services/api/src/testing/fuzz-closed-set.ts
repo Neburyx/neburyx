@@ -1,5 +1,7 @@
 import { edgeRefSegmentOf, sourceLinkSegmentOf } from '@neburyx/contracts';
 import { registeredRoutesOf } from '../app.js';
+import type { SourceAllowlist } from '../gate/types.js';
+import { grammarProblems, type PatternGrammar } from './pattern-grammar.js';
 import { makeToken } from '../reference/token.js';
 import { expandWindowInstantsOf } from '../graph/expand-window.js';
 import { windowInstantsOf } from '../graph/template-window.js';
@@ -350,12 +352,22 @@ export interface StatementProblem {
  * What is wrong with the statements the executor saw: one outside the closed set, one that quotes a name the mapping does not allow, or one that holds a piece of the request's text. Empty when
  * every statement is a fixed template with allowlisted names.
  */
-export function statementProblems(rig: FuzzRig, closed: ReadonlySet<string>, requestTexts: readonly string[]): StatementProblem[] {
+export interface PatternGrammarCheck {
+  readonly grammar: PatternGrammar;
+  readonly allowlist: SourceAllowlist;
+  /** The names a statement of the pattern template may quote, when they are not the rig's own. */
+  readonly names?: ReadonlySet<string>;
+}
+
+export function statementProblems(rig: FuzzRig, closed: ReadonlySet<string>, requestTexts: readonly string[], pattern?: PatternGrammarCheck): StatementProblem[] {
   const names = allowedNames();
   const problems: StatementProblem[] = [];
   for (const call of rig.executor.calls) {
-    if (!closed.has(call.cypher)) problems.push({ cypher: call.cypher, reason: 'not in the closed set' });
-    for (const name of quotedNamesOf(call.cypher)) if (!names.has(name)) problems.push({ cypher: call.cypher, reason: `quotes ${JSON.stringify(name)}` });
+    if (pattern !== undefined && call.templateId === 'pattern') {
+      for (const reason of grammarProblems(call.cypher, pattern.grammar, pattern.allowlist)) problems.push({ cypher: call.cypher, reason });
+    } else if (!closed.has(call.cypher)) problems.push({ cypher: call.cypher, reason: 'not in the closed set' });
+    const mine = pattern !== undefined && call.templateId === 'pattern' && pattern.names !== undefined ? pattern.names : names;
+    for (const name of quotedNamesOf(call.cypher)) if (!mine.has(name)) problems.push({ cypher: call.cypher, reason: `quotes ${JSON.stringify(name)}` });
     for (const text of requestTexts) if (call.cypher.includes(text)) problems.push({ cypher: call.cypher, reason: `holds request text ${JSON.stringify(text)}` });
   }
   return problems;
