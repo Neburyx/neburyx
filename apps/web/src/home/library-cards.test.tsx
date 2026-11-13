@@ -1,10 +1,12 @@
-import { act, configure, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, configure, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { InvestigationListResponse } from '@neburyx/contracts';
-import type { ApiResult } from '../api/client.js';
+import type { ApiClient, ApiFailure, ApiResult } from '../api/client.js';
 import { failsThenWaits, INVESTIGATION_A, INVESTIGATION_B, investigationOf, knowing, listItemOf, listOf, nodeOf, REAL_SOURCE } from '../investigations/test-data.js';
-import { renderApp } from '../test-utils.js';
+import { listOf as presetList, PRESETS } from '../patterns/patterns-kit.js';
+import { createClientState } from '../state/client-state.js';
+import { renderApp, source } from '../test-utils.js';
 
 beforeAll(() => configure({ reactStrictMode: true }));
 afterAll(() => configure({ reactStrictMode: false }));
@@ -180,18 +182,57 @@ describe('Home: the Saved views card', () => {
 });
 
 describe('Home: the Patterns card', () => {
-  it.each([
-    ['answered', () => knowing([A, B]).client, 'kind-a A-1'],
-    ['loading', () => knowing([A], failsThenWaits()).client, 'Loading recent investigations…'],
-    ['failed', () => knowing([A], { listInvestigations: async () => failure }).client, 'Recent investigations could not be read.'],
-  ])('says built-in patterns are not available yet, with no number, when the list is %s', async (state, client, awaited) => {
-    renderApp('/', client());
-    if (state === 'loading') await userEvent.setup().click(await screen.findByRole('button', { name: 'Try again' }));
-    await (state === 'answered' ? screen.findByRole('link', { name: awaited }) : screen.findByText(awaited));
-    const card = cardOf('Patterns');
-    expect(within(card).getByText('Built-in patterns are not available yet.')).toBeTruthy();
-    expect(card.querySelector('.library-figure')).toBeNull();
-    expect(card.textContent).not.toMatch(/[0-9]/);
+  const presetsOf = (count: number) => ({ ok: true as const, value: presetList(PRESETS.slice(0, count)) });
+  const withPresets = (answer: () => ReturnType<typeof presetsOf> | Promise<never> | Promise<{ ok: false; failure: ApiFailure }>, extra: Partial<ApiClient> = {}) =>
+    knowing([A, B], { getSources: async () => ({ ok: true, value: { items: [source('source-a')], nextCursor: null } }), listTemplates: async () => answer(), ...extra });
+
+  it('shows the number of presets of the current source, exact, with the plain note', async () => {
+    renderApp('/', withPresets(() => presetsOf(3)).client);
+    await screen.findByRole('link', { name: 'kind-a A-1' });
+    await waitFor(() => expect(within(cardOf('Patterns')).getByText('3')).toBeTruthy());
+    expect(within(cardOf('Patterns')).getByText('Approved, no query language')).toBeTruthy();
+  });
+
+  it('shows 0 and the line of the panel for a source with no preset', async () => {
+    renderApp('/', withPresets(() => presetsOf(0)).client);
+    await screen.findByRole('link', { name: 'kind-a A-1' });
+    await waitFor(() => expect(within(cardOf('Patterns')).getByText('0')).toBeTruthy());
+    expect(within(cardOf('Patterns')).getByText('This source has no patterns.')).toBeTruthy();
+  });
+
+  it('shows no number, and says it was not read, when the list of presets could not be read', async () => {
+    renderApp('/', knowing([A, B], { getSources: async () => ({ ok: true, value: { items: [source('source-a')], nextCursor: null } }) }).client);
+    await screen.findByRole('link', { name: 'kind-a A-1' });
+    await waitFor(() => expect(within(cardOf('Patterns')).getByText('Not read')).toBeTruthy());
+    expect(cardOf('Patterns').querySelector('.library-figure')).toBeNull();
+  });
+
+  it('shows no number while the list is being read', async () => {
+    renderApp('/', withPresets(() => new Promise<never>(() => undefined)).client);
+    await screen.findByRole('link', { name: 'kind-a A-1' });
+    expect(within(cardOf('Patterns')).getByText('Loading…')).toBeTruthy();
+    expect(cardOf('Patterns').querySelector('.library-figure')).toBeNull();
+  });
+
+  it('shows no number and no claim when several sources are configured and none is bound, and when the bound source is not configured', async () => {
+    renderApp('/', knowing([A, B]).client);
+    await screen.findByRole('link', { name: 'kind-a A-1' });
+    expect(cardOf('Patterns').querySelector('.library-figure')).toBeNull();
+    expect(cardOf('Patterns').querySelector('.library-note')).toBeNull();
+    cleanup();
+    const state = createClientState();
+    state.bindSource('gone');
+    state.setLoaded([], [{ sourceId: 'gone', entityType: 'kind-a', stableId: 'item-g' }], []);
+    renderApp('/', withPresets(() => presetsOf(3)).client, state);
+    await screen.findByRole('link', { name: 'kind-a A-1' });
+    expect(cardOf('Patterns').querySelector('.library-figure')).toBeNull();
+    expect(cardOf('Patterns').querySelector('.library-note')).toBeNull();
+  });
+
+  it('never says built-in patterns are not available', async () => {
+    renderApp('/', withPresets(() => presetsOf(3)).client);
+    await screen.findByRole('link', { name: 'kind-a A-1' });
+    expect(document.body.textContent).not.toContain('are not available yet');
   });
 
   it('is the third card of the group Library, after Investigations and Saved views, and neither a link nor a control', async () => {
@@ -202,10 +243,13 @@ describe('Home: the Patterns card', () => {
     expect(within(cardOf('Patterns')).queryByRole('button')).toBeNull();
   });
 
-  it('causes no request: Home sends only the list, the sources and the identity', async () => {
-    const parts = knowing([A, B]);
-    renderApp('/', parts.client);
+  it('takes its number from the one read of the preset list that the Start from a pattern card also uses', async () => {
+    const asked: string[] = [];
+    renderApp('/', withPresets(() => presetsOf(3), { listTemplates: async (sourceId) => (asked.push(sourceId), presetsOf(3)) }).client);
     await screen.findByRole('link', { name: 'kind-a A-1' });
-    expect(parts.calls).toEqual({ getEntity: [], getInvestigation: [], openInvestigation: [], listInvestigations: [5] });
+    await waitFor(() => expect(within(cardOf('Patterns')).getByText('3')).toBeTruthy());
+    await screen.findByRole('button', { name: 'Run Shared devices' });
+    // strict mode starts the one read twice; pattern-card.test.tsx proves one read with both cards shown
+    expect([...new Set(asked)]).toEqual(['source-a']);
   });
 });

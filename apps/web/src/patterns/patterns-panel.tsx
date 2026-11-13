@@ -134,7 +134,9 @@ function PatternsWorkbench({ client, sourceId, sourceName, mask, list, first, cl
   const shell = useShellData();
   const selection = useStoreSelector(state.presentation.view, (view) => view.selection);
   const run = usePatternRun(client, sourceId, mask);
-  const [selectedId, setSelectedId] = useState(first.id);
+  // the preset Home handed over, read when the list is shown and cleared after the commit; a preset the list does not hold falls back to the first
+  const [selectedId, setSelectedId] = useState(() => state.presentation.view.getState().patternsPreset ?? first.id);
+  useEffect(() => state.presentation.setPatternsPreset(undefined), [state]);
   const [values, setValues] = useState<FormValues>({});
   const [errors, setErrors] = useState<Readonly<Record<string, string>>>({});
   const [chosen, setChosen] = useState<GraphNode | undefined>(undefined);

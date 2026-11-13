@@ -40,7 +40,7 @@ import { InvestigationsPage } from './investigations-page/investigations-page.js
 import { createRecentInvestigations } from './home/recent-store.js';
 import { DeepLinkPage } from './investigations/deep-link-page.js';
 import { ExploreInvestigation } from './investigations/explore-investigation.js';
-import { WorkspaceShell } from './workspace/workspace-shell.js';
+import { BareExplore } from './workspace/bare-explore.js';
 import { ShortcutSheet } from './workspace/shortcut-sheet.js';
 
 function NotFound() {
@@ -167,7 +167,7 @@ export function appRoutes(client: ApiClient, state: ClientState, banner?: Banner
             { path: '*', element: <NotFound /> },
           ],
         },
-        { path: EXPLORE_PATH, element: <WorkspaceShell /> },
+        { path: EXPLORE_PATH, element: <BareExplore /> },
         { path: `${EXPLORE_PATH}/:investigationId`, element: <ExploreInvestigation client={client} /> },
         ...workspaceDevelopmentRoutes(),
       ],

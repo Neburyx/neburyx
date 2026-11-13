@@ -21,6 +21,8 @@ export interface ClientState {
   readonly mask: ReadableStore<boolean>;
   setMask(mask: boolean): void;
   bindSource(sourceId: string): void;
+  /** Returns to no source bound, but only when nothing is shown: no investigation and no loaded entity or relationship. It drops the source's results as `bindSource` does unless an investigation that is set aside still holds the source. */
+  unbindSource(): void;
   /** Whether the session holds the investigation as read for this mask, as the one shown or as one set aside. */
   holds(id: string, mask: boolean): boolean;
   /** Brings back an investigation the session holds as read for this mask, as it was left; the one shown is set aside whole. Nothing is read: results are kept, not dropped. Undefined when the session holds no such investigation, or holds it read for the other mask. */
@@ -81,11 +83,11 @@ export function createClientState(): ClientState {
     isNode: (key) => nodeKeys().has(key),
     isElement: (key) => nodeKeys().has(key) || edgeKeys().has(key),
   });
-  const { view, setTool, setOpenTool, setOpenMenu, select, setLayout, setLayoutDirection, setPhysics, applyLayout, setPosition, setPositions, pin, unpin, setPanelSize, clearPanelSize, setPanelCollapsed, clearPanelCollapsed, setLegendOpen, setSearchOpen, setSearchTab, requestSearch, setSheetOpen, setSupernodePanel, setSceneItems, walkTo, endWalk, forgetFocused, announceMove, setViewport, showAllHidden, showHidden, leaveFocus, setMappedTypes, resetTypeFilter, setFiltersOpen, setPatternsOpen } = presentation;
+  const { view, setTool, setOpenTool, setOpenMenu, select, setLayout, setLayoutDirection, setPhysics, applyLayout, setPosition, setPositions, pin, unpin, setPanelSize, clearPanelSize, setPanelCollapsed, clearPanelCollapsed, setLegendOpen, setSearchOpen, setSearchTab, requestSearch, setSheetOpen, setSupernodePanel, setSceneItems, walkTo, endWalk, forgetFocused, announceMove, setViewport, showAllHidden, showHidden, leaveFocus, setMappedTypes, resetTypeFilter, setFiltersOpen, setPatternsOpen, setPatternsPreset } = presentation;
   return {
     server: { ...server.view, get: server.get },
     investigation: investigation.view,
-    presentation: { view, setTool, setOpenTool, setOpenMenu, select, setLayout, setLayoutDirection, setPhysics, applyLayout, setPosition, setPositions, pin, unpin, setPanelSize, clearPanelSize, setPanelCollapsed, clearPanelCollapsed, setLegendOpen, setSearchOpen, setSearchTab, requestSearch, setSheetOpen, setSupernodePanel, setSceneItems, walkTo, endWalk, forgetFocused, announceMove, setViewport, showAllHidden, showHidden, leaveFocus, setMappedTypes, resetTypeFilter, setFiltersOpen, setPatternsOpen },
+    presentation: { view, setTool, setOpenTool, setOpenMenu, select, setLayout, setLayoutDirection, setPhysics, applyLayout, setPosition, setPositions, pin, unpin, setPanelSize, clearPanelSize, setPanelCollapsed, clearPanelCollapsed, setLegendOpen, setSearchOpen, setSearchTab, requestSearch, setSheetOpen, setSupernodePanel, setSceneItems, walkTo, endWalk, forgetFocused, announceMove, setViewport, showAllHidden, showHidden, leaveFocus, setMappedTypes, resetTypeFilter, setFiltersOpen, setPatternsOpen, setPatternsPreset },
     jobs: createJobStore(),
     mask: readable(mask),
     setMask: (next) => mask.setState(next),
@@ -99,6 +101,15 @@ export function createClientState(): ClientState {
       }
       presentation.reset();
       investigation.bind(sourceId);
+    },
+    unbindSource() {
+      const shown = investigation.view.getState();
+      if (shown.sourceId === null || shown.id !== null || shown.nodeRefs.length > 0 || shown.edgeRefs.length > 0) return;
+      const keptSource = [...setAside.values()].some((held) => held.investigation.sourceId === shown.sourceId);
+      if (!keptSource) server.dropSource(shown.sourceId);
+      presentation.reset();
+      presentation.setPatternsOpen(false);
+      investigation.restore({ id: null, sourceId: null, record: null, resultKeys: [], nodeRefs: [], edgeRefs: [] });
     },
     holds(id, mask) {
       const shown = investigation.view.getState();

@@ -181,7 +181,8 @@ describe('the reads that decide the start address', () => {
     expect((await screen.findByRole('alert')).textContent).toContain('NETWORK_UNAVAILABLE');
     expect(screen.getByRole('heading', { name: 'Recent', level: 2 })).toBeTruthy();
     expect(firstRun()).toBeNull();
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Try again' }));
+    // the Start from a pattern card has its own Try again, so the one of the Recent list is asked for in its region
+    await userEvent.setup().click(within(screen.getByRole('region', { name: 'Recent' })).getByRole('button', { name: 'Try again' }));
     expect(await screen.findByText('Loading recent investigations…')).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Recent', level: 2 })).toBeTruthy();
     await act(async () => release());
@@ -193,7 +194,7 @@ describe('the reads that decide the start address', () => {
     const parts = install([demoSource()], { listInvestigations: async () => down });
     renderApp('/', parts.client);
     const user = userEvent.setup();
-    await user.click(await screen.findByRole('button', { name: 'Try again' }));
+    await user.click(within(await screen.findByRole('region', { name: 'Recent' })).getByRole('button', { name: 'Try again' }));
     await waitFor(() => expect(screen.getAllByRole('alert').length).toBeGreaterThan(0));
     expect(screen.getByRole('heading', { name: 'Recent', level: 2 })).toBeTruthy();
     expect(firstRun()).toBeNull();

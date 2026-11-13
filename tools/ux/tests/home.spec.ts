@@ -86,7 +86,8 @@ test.describe('Home: the Recent list in a browser', () => {
       return sent.splice(0).sort();
     };
     await drain();
-    const atHome = ['GET /v1/investigations', 'GET /v1/sources/banking-demo/profile', 'GET /v1/sources/claims-demo/profile'];
+    // the Start from a pattern card reads the preset list of the source bound to the investigation held
+    const atHome = ['GET /v1/investigations', 'GET /v1/sources/banking-demo/profile', 'GET /v1/sources/claims-demo/profile', 'GET /v1/templates'];
     for (let round = 0; round < 2; round += 1) {
       await page.goBack();
       await expect(page.getByRole('heading', { name: 'Recent', level: 2 })).toBeVisible();
@@ -279,7 +280,8 @@ test.describe('Home: the library cards in a browser', () => {
     await expect(cardOf(page, 'Investigations')).toContainText('Across 2 sources');
     await expect(cardOf(page, 'Saved views').locator('.library-figure')).toHaveText('0');
     await expect(cardOf(page, 'Saved views')).not.toContainText('Last edited');
-    await expect(cardOf(page, 'Patterns')).toContainText('Built-in patterns are not available yet.');
+    // two sources and none bound: the Patterns card shows no number and makes no claim until a source is chosen on the Start from a pattern card
+    await expect(cardOf(page, 'Patterns')).not.toContainText('not available');
     await expect(cardOf(page, 'Patterns').locator('.library-figure')).toHaveCount(0);
     expect(await noHorizontalScroll(page)).toBe(true);
     await expect(library(page).getByRole('link')).toHaveText(['Investigations', 'Saved views']);

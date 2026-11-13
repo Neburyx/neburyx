@@ -33,9 +33,23 @@ export const LIBRARY_COPY = {
   investigations: 'Investigations',
   savedViews: 'Saved views',
   patterns: 'Patterns',
-  noPatterns: 'Built-in patterns are not available yet.',
+  approvedPatterns: 'Approved, no query language',
   loading: 'Loading…',
   notRead: 'Not read',
   acrossSources: (count: number): string => `Across ${count} ${count === 1 ? 'source' : 'sources'}`,
   lastEdited: (clock: string): string => `Last edited ${clock} UTC`,
+} as const;
+
+export const PATTERN_CARD_COPY = {
+  title: 'Start from a pattern',
+  run: 'Run →',
+  runLabel: (name: string): string => `Run ${name}`,
+  noPatterns: 'This source has no patterns.',
+  loading: 'Loading patterns…',
+  chooseSource: 'Choose a source to see its patterns.',
+  sourceLabel: 'Patterns for',
+  sourcePlaceholder: 'Choose a source',
+  notConfigured: (sourceId: string): string => `${sourceId} is not configured, so its patterns cannot be listed.`,
+  couldNotRead: (source: string): string => `The patterns of ${source} could not be read.`,
+  tryAgain: 'Try again',
 } as const;

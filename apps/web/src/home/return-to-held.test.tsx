@@ -77,7 +77,8 @@ describe('going Back and Forward between investigations opened from Recent', () 
     await screen.findByText('1 entity · 0 relationships · loaded · exact');
     const since = (): string[] => watched.calls.splice(0).filter((call) => call !== 'saveDraft');
     since();
-    const arrivalAtHome = ['getProfile source-a', 'getProfile source-b', 'listInvestigations'];
+    // the Start from a pattern card reads the preset list of the bound source; strict mode starts that read twice and aborts the first
+    const arrivalAtHome = ['getProfile source-a', 'getProfile source-b', 'listInvestigations', 'listTemplates', 'listTemplates'];
     for (let round = 0; round < 3; round += 1) {
       await go(view, -1);
       expect(await screen.findByRole('heading', { name: 'Recent', level: 2 })).toBeTruthy();
