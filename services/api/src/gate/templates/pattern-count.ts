@@ -13,6 +13,12 @@ export const PATTERN_COUNT_ID = 'pattern-count';
 export const patternCountTemplate: TemplateDefinition = {
   ...patternTemplate,
   id: PATTERN_COUNT_ID,
+  version: '1',
+  paged: false,
+  cutMeans: 'lowerBound',
+  sort: undefined,
+  referencePositions: undefined,
+  nextPosition: undefined,
   auditAction: 'pattern.count',
   name: undefined,
   description: undefined,

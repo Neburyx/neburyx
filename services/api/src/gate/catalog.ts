@@ -19,6 +19,8 @@ const RESERVED = ['limit', 'cursor', BRANCH_ENTITY_TYPES, CONTEXT_BRANCHES] as c
 const BRANCH_ENTITY_TYPES_REFERENCE = new RegExp(`\\$${BRANCH_ENTITY_TYPES}(?![\\w])`);
 
 const article = (kind: string): string => (kind === 'entity' ? 'an' : 'a');
+const PATTERN_MARKER = /@pattern\(/;
+
 /** The server-side page bound a paged template must carry, as in `LIMIT $limit + 1`. */
 const PAGED_LIMIT = /LIMIT\s+\$limit\s*\+\s*1(?![\w$])/;
 /** The bound of a facet probe, as in `LIMIT $countCap + 1`: the source's count cap, which the gate fills in. */
@@ -318,6 +320,9 @@ function checkLinkedEntities(definition: TemplateDefinition, shape: Shape): void
   if (definition.indexNeeds === undefined || definition.usedProperties === undefined || definition.referenceParams?.entityType !== spec.entityTypeParam) throw new CatalogError(definition.id, 'declares a linked entities read and does not name its indexes, the properties it uses and the reference of its anchor');
 }
 
+/** What a pattern run's cursor binds: its pages are ordered by the end entity's stable ID as text, then its element ID. */
+export const PATTERN_SORT = 'end-id';
+
 /**
  * The pattern template's own declaration: its Cypher is exactly the one `@pattern(<anchor type parameter>)` marker, its schema has the anchor's entity type as text and the steps as a list (which is also its hop list), it reads
  * the anchor by its reference, it is not paged and not profiled, its cut means a lower bound, it names the stable-ID index it needs and the properties it uses, and the gate fills `limit` and `countCap` for it (the schema has neither).
@@ -335,8 +340,13 @@ function checkPattern(definition: TemplateDefinition, shape: Shape): void {
   }
   if (definition.hops === undefined || !('listParam' in definition.hops) || definition.hops.listParam !== spec.stepsParam) throw new CatalogError(definition.id, 'declares a pattern read and does not take its steps as its hop list');
   if (['limit', 'countCap'].some((name) => shape.properties.has(name))) throw new CatalogError(definition.id, 'declares a pattern read and has a limit or a count cap in its schema, which the gate fills');
-  if (definition.searchBranches !== undefined || definition.facetProbes !== undefined || definition.degreeCounts !== undefined || definition.expandNeighbors !== undefined || definition.relatedContext !== undefined || definition.derivedRule !== undefined || definition.derivedSupport !== undefined || definition.sharedAttribute !== undefined || definition.linkedEntities !== undefined || definition.paged || definition.profile === true || definition.cutMeans !== 'lowerBound') {
-    throw new CatalogError(definition.id, "declares a pattern read and is also another kind of template, paged, profiled or not declared cutMeans: 'lowerBound'");
+  if (definition.searchBranches !== undefined || definition.facetProbes !== undefined || definition.degreeCounts !== undefined || definition.expandNeighbors !== undefined || definition.relatedContext !== undefined || definition.derivedRule !== undefined || definition.derivedSupport !== undefined || definition.sharedAttribute !== undefined || definition.linkedEntities !== undefined || definition.profile === true) {
+    throw new CatalogError(definition.id, 'declares a pattern read and is also another kind of template or profiled');
+  }
+  const counting = spec.count === true;
+  if (counting && (definition.paged || definition.cutMeans !== 'lowerBound')) throw new CatalogError(definition.id, "declares a pattern count and is paged or not declared cutMeans: 'lowerBound'");
+  if (!counting && (!definition.paged || definition.sort !== PATTERN_SORT || definition.nextPosition === undefined || definition.referencePositions === undefined || definition.referencePositions.length !== 1)) {
+    throw new CatalogError(definition.id, 'declares a pattern run and is not paged by the end entity with a position and a reference position');
   }
   if (definition.indexNeeds === undefined || definition.usedProperties === undefined || definition.referenceParams?.entityType !== spec.entityTypeParam) throw new CatalogError(definition.id, 'declares a pattern read and does not name its indexes, the properties it uses and the reference of its anchor');
 }
@@ -446,7 +456,7 @@ function build(definition: TemplateDefinition): Template {
   const texts = [definition.cypher, ...(definition.searchBranches === undefined ? [] : [definition.searchBranches.value, definition.searchBranches.text])];
   if (texts.some((text) => BRANCH_ENTITY_TYPES_REFERENCE.test(text))) throw new CatalogError(definition.id, `reads the gate-filled parameter ${BRANCH_ENTITY_TYPES} itself`);
   checkRows(definition);
-  if (definition.paged && definition.expandNeighbors === undefined && !PAGED_LIMIT.test(definition.cypher)) throw new CatalogError(definition.id, 'is paged and its Cypher has no LIMIT $limit + 1');
+  if (definition.paged && definition.expandNeighbors === undefined && definition.pattern === undefined && !PATTERN_MARKER.test(definition.cypher) && !PAGED_LIMIT.test(definition.cypher)) throw new CatalogError(definition.id, 'is paged and its Cypher has no LIMIT $limit + 1');
   checkProfile(definition);
   checkMarkers(definition, shape);
   checkSearchBranches(definition, shape);

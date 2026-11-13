@@ -214,7 +214,7 @@ describe('the templates of the shipped catalog', () => {
       'shared-attribute': 'cut means a lower bound',
       'shared-attribute-count': 'cut means a lower bound',
       'linked-entities': 'cut means a lower bound',
-      pattern: 'cut means a lower bound',
+      pattern: 'paged',
       'linked-entities-count': 'cut means a lower bound',
       'pattern-count': 'cut means a lower bound',
       'derived-edge-support': 'cut means a lower bound',

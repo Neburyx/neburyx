@@ -131,7 +131,7 @@ describe('the pattern template', () => {
   });
 
   it('is built as the template the catalog expects: its marker, its hop list, no listing', () => {
-    expect(patternTemplate).toMatchObject({ id: 'pattern', version: '1', paged: false, cutMeans: 'lowerBound', cypher: '@pattern(anchorType)', hops: { listParam: 'steps', max: 4 } });
+    expect(patternTemplate).toMatchObject({ id: 'pattern', version: '2', paged: true, sort: 'end-id', cypher: '@pattern(anchorType)', hops: { listParam: 'steps', max: 4 } });
     expect(patternMappingOf().sources.length).toBe(1);
   });
 });

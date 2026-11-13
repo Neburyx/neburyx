@@ -1,7 +1,7 @@
 import { AppError } from '../../errors.js';
 import { quoteName } from '../render.js';
 import type { SourceAllowlist } from '../types.js';
-import { conditionPredicateOf, type ExpandBranch } from './expand-statement.js';
+import { conditionPredicateOf, usable, type ExpandBranch } from './expand-statement.js';
 import type { PatternRequest, PatternStepRequest } from './pattern-request.js';
 import { inWindow } from './window-condition.js';
 
@@ -128,7 +128,7 @@ function membersOf(request: PatternRequest): { readonly reads: readonly string[]
  * The statement of a pattern run, from the mapping and the request. The anchor is the first node by element ID with the stable ID. Each step reads, from the nodes the previous step reached, the relationships over its listed types
  * in its direction to nodes of its arrival type that meet its conditions and its window, at most `$countCap + 1` rows for the step, each row carrying its whole path. A node on the path never appears twice on it. Before a step reads from the
  * nodes the previous one reached, a node with more relationships over the step's types than `$countCap` is a supernode and is not traversed, and a node of a type on a stop-list that is on it is not traversed either. The matches are the
- * nodes the last step reached, once each by the first path to them in the order of the stable IDs along the path, ordered by their stable ID, at most `$limit + 1`. Every name comes from the allowlist and every request value is a parameter.
+ * nodes the last step reached, once each by the first path to them in the order of the stable IDs along the path, those with a usable stable ID only, ordered by their stable ID as text and then by element ID, the ones after the position of a cursor (`$cursor`, absent on the first page), at most `$limit + 1`. Every name comes from the allowlist and every request value is a parameter.
  */
 export function patternStatementOf(allowlist: SourceAllowlist, request: PatternRequest): string {
   const count = request.steps.length;
@@ -141,9 +141,10 @@ export function patternStatementOf(allowlist: SourceAllowlist, request: PatternR
   const stopped = later.length === 0 ? 'false' : later.map((index) => `stopped${index}`).join(' OR ');
   const order = [`p.n${count}.${stableIdOf(allowlist, request.steps[count - 1]?.arrivesAt ?? '')}`, ...hops.slice(0, -1).map((index) => `p.n${index}.${stableIdOf(allowlist, request.steps[index - 1]?.arrivesAt ?? '')}`)].join(', ');
   const endId = `x.${stableIdOf(allowlist, request.steps[count - 1]?.arrivesAt ?? '')}`;
+  const after = `$cursor IS NULL OR key > $cursor.endKey OR (key = $cursor.endKey AND elementId(x) > $cursor.endElement)`;
   lines.push(
     `WITH a, ${bounded} AS bounded, ${heavy} AS heavy, ${stopped} AS stopListed, f${count} AS paths`,
-    `CALL { WITH paths UNWIND paths AS p WITH p ORDER BY ${order} WITH p.n${count} AS x, collect(p)[0] AS best ORDER BY ${endId} LIMIT $limit + 1 RETURN collect(best) AS ms }`,
+    `CALL { WITH paths UNWIND paths AS p WITH p ORDER BY ${order} WITH p.n${count} AS x, collect(p)[0] AS best WHERE ${usable(endId)} WITH x, best, toString(${endId}) AS key WHERE ${after} WITH x, best, key ORDER BY key, elementId(x) LIMIT $limit + 1 RETURN collect(best) AS ms }`,
     'UNWIND CASE WHEN size(ms) = 0 THEN [null] ELSE ms END AS m',
   );
   const members = membersOf(request);
@@ -151,7 +152,7 @@ export function patternStatementOf(allowlist: SourceAllowlist, request: PatternR
   const mids = `[${hops.slice(0, -1).map((index) => `m.n${index}`).join(', ')}]`;
   const rels = hops.map((index) => `m.r${index} AS r${index}`).join(', ');
   const cut = members.names.length === 0 ? '' : `, ${members.names.join(', ')}, ${members.names.map((name) => `size(${name}) > $countCap`).join(' OR ')} AS membersCut`;
-  lines.push(`RETURN a, bounded, heavy[..$limit] AS heavy, stopListed, m.n${count} AS x, ${mids} AS mid, ${rels}, ${count} AS hops${cut}`);
+  lines.push(`RETURN a, bounded, heavy[..$limit] AS heavy, stopListed, m.n${count} AS x, toString(m.n${count}.${stableIdOf(allowlist, request.steps[count - 1]?.arrivesAt ?? '')}) AS endKey, elementId(m.n${count}) AS endElement, $endType AS endType, ${mids} AS mid, ${rels}, ${count} AS hops${cut} ORDER BY endKey, endElement`);
   return lines.join('\n');
 }
 

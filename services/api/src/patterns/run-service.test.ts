@@ -149,7 +149,7 @@ describe('a pattern run: the read', () => {
       ['W-3', 1, [], [['LINKS', 'W-1', 'W-3']]],
     ]);
     expect(answer.nodes.length).toBeGreaterThan(0);
-    expect(answer.templateVersion).toBe('1');
+    expect(answer.templateVersion).toBe('2');
   });
 
   it('answers a two-step match with the entity between', async () => {

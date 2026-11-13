@@ -16,9 +16,9 @@ const problem = (overrides: Partial<TemplateDefinition>): string | undefined => 
 const schemaWith = (shape: Record<string, z.ZodType>) => z.strictObject({ anchorType: z.string(), stableId: z.string(), steps: z.array(z.unknown()), ...shape });
 
 describe('the catalog entry of the pattern template', () => {
-  it('is in the default catalog, and is a version 1 read cut to a lower bound whose steps are its hop list', () => {
+  it('is in the default catalog, and is a version 2 read paged by the end entity whose steps are its hop list', () => {
     expect(defaultCatalogTemplates().map((template) => template.id)).toContain(PATTERN_ID);
-    expect(patternTemplate).toMatchObject({ id: 'pattern', version: '1', auditAction: 'pattern.run', paged: false, cutMeans: 'lowerBound', hops: { listParam: 'steps', max: 4 } });
+    expect(patternTemplate).toMatchObject({ id: 'pattern', version: '2', auditAction: 'pattern.run', paged: true, sort: 'end-id', referencePositions: [{ entityType: 'endType', stableId: 'endKey' }], hops: { listParam: 'steps', max: 4 } });
   });
 
   it('accepts the shipped declaration', () => {
@@ -59,12 +59,18 @@ describe('the catalog entry of the pattern template', () => {
     expect(other({ listParam: 'missing', max: 2 })).toBe('the template linked-entities declares a hop list its schema does not have as a list');
   });
 
-  it('refuses a schema that holds a limit or a count cap, a paged or profiled template and a cut that is not a lower bound', () => {
+  it('refuses a schema that holds a limit or a count cap, a profiled template and a run that is not paged by the end entity with its positions', () => {
     expect(problem({ paramsSchema: schemaWith({ limit: z.number() }) })).toBe('the template pattern declares the reserved parameter limit');
     expect(problem({ paramsSchema: schemaWith({ countCap: z.number() }) })).toContain('has a limit or a count cap in its schema');
-    expect(problem({ paged: true })).toBe('the template pattern is paged and declares rows or cutMeans');
+    expect(problem({ paged: false })).toContain('is not paged and does not declare');
+    expect(problem({ sort: 'elementId' })).toContain('is not paged by the end entity');
+    expect(problem({ nextPosition: undefined })).toContain('is not paged by the end entity');
+    expect(problem({ referencePositions: undefined })).toContain('is not paged by the end entity');
+    expect(problem({ referencePositions: [] })).toContain('is not paged by the end entity');
     expect(problem({ profile: true })).toBe('the template pattern is profiled and its Cypher does not start with PROFILE');
-    expect(problem({ cutMeans: 'duplicate' })).toContain('declares a pattern read and is also another kind of template');
+    expect(problem({ searchBranches: { param: 'steps', allowlist: 'search', value: 'x', text: 'y' } })).toBe('the template pattern declares search branches and does not use its branch marker exactly once');
+    expect(problem({ linkedEntities: {} as never })).toBe('the template pattern declares a linked entities read and its Cypher is not exactly its one linked entities marker');
+    expect(problem({ pattern: { entityTypeParam: 'anchorType', stepsParam: 'steps', count: true } })).toBe("the template pattern declares a pattern count and is paged or not declared cutMeans: 'lowerBound'");
   });
 
   it('refuses a read that names no indexes, no used properties or no reference for its anchor', () => {

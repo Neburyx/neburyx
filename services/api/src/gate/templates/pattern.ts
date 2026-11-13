@@ -1,7 +1,8 @@
-import type { TemplateDefinition } from '../catalog.js';
+import { PATTERN_SORT, type TemplateDefinition } from '../catalog.js';
 import { MAX_HOPS_CEILING } from '../../mapping/budgets.js';
 import { normalizePattern } from '../normalize/pattern.js';
 import type { NormalizeContext } from '../normalize/index.js';
+import type { CursorPosition } from '../cursor/codec.js';
 import type { ElementRef, Item, Params, Plan, Row, SourceAllowlist, UsedProperty } from '../types.js';
 import { patternParamsSchema, patternRequestOf } from './pattern-request.js';
 
@@ -27,6 +28,15 @@ function usedProperties(params: Params, allowlist?: SourceAllowlist): readonly U
   return all.filter((used, index) => all.findIndex((other) => JSON.stringify(other) === JSON.stringify(used)) === index);
 }
 
+/** The position after the last row read: the end entity's stable ID as text (its token when the type is keyed), its type and its element ID, the tie-break. */
+function nextPosition(rows: readonly Row[]): CursorPosition | undefined {
+  const last = rows.at(-1);
+  if (last === undefined) return undefined;
+  const { endType, endKey, endElement } = last;
+  if (typeof endType !== 'string' || typeof endKey !== 'string' || typeof endElement !== 'string') return undefined;
+  return { endType, endKey, endElement };
+}
+
 function normalize(rows: readonly Row[], _plan?: Plan, context?: NormalizeContext): readonly Item[] {
   if (context === undefined) throw new Error('the pattern run needs the normalize context');
   return [{ ...normalizePattern(context, rows) }];
@@ -39,7 +49,7 @@ function normalize(rows: readonly Row[], _plan?: Plan, context?: NormalizeContex
  */
 export const patternTemplate: TemplateDefinition = {
   id: PATTERN_ID,
-  version: '1',
+  version: '2',
   auditAction: 'pattern.run',
   name: 'Pattern',
   description: 'Follows the steps of a stated pattern from one entity and finds the entities the last step reaches.',
@@ -48,13 +58,15 @@ export const patternTemplate: TemplateDefinition = {
   hops: { listParam: 'steps', max: MAX_HOPS_CEILING },
   paramsSchema: patternParamsSchema,
   scope: 'user',
-  paged: false,
-  cutMeans: 'lowerBound',
+  paged: true,
+  sort: PATTERN_SORT,
   entityParams: ['anchorType'],
   referenceParams: { entityType: 'anchorType', stableId: 'stableId' },
+  referencePositions: [{ entityType: 'endType', stableId: 'endKey' }],
   relationshipParams: [],
   indexNeeds,
   usedProperties,
   refsOf: (): readonly ElementRef[] => [],
+  nextPosition,
   normalize,
 };

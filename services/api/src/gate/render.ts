@@ -120,6 +120,13 @@ function branchesOf(template: Template, params: Params, allowlist: SourceAllowli
     .join(' UNION ');
 }
 
+/** The entity type the last step of a pattern run arrives at, for the position a page's cursor holds; the count of a pattern run holds no position. */
+function endTypeOf(template: Template, params: Params, allowlist: SourceAllowlist): [string, string][] {
+  if (template.pattern === undefined || template.pattern.count === true) return [];
+  const last = patternRequestOf(allowlist, params).steps.at(-1);
+  return last === undefined ? [] : [['endType', last.arrivesAt]];
+}
+
 /** `$branchEntityTypes`: the entity type of each branch of an entity search, in branch order, from the targets `branchesOf` checked; none for a template without entity branches. */
 function branchEntityTypesOf(template: Template, params: Params): [string, readonly string[]][] {
   const branches = template.searchBranches;
@@ -390,5 +397,5 @@ export function renderTemplate(template: Template, params: Params, allowlist: So
   const markerNames = new Set([...template.entityParams, ...template.relationshipParams, ...(template.searchBranches === undefined ? [] : [template.searchBranches.param]), ...(template.facetProbes === undefined ? [] : [template.facetProbes.param]), ...(template.degreeCounts === undefined ? [] : [template.degreeCounts.param]), ...(template.expandNeighbors === undefined ? [] : [template.expandNeighbors.relTypesParam, template.expandNeighbors.directionParam]), ...(template.derivedRule === undefined ? [] : [template.derivedRule.ruleParam]), ...(template.derivedSupport === undefined ? [] : [template.derivedSupport.ruleParam]), ...(template.edgeLoad === undefined ? [] : [template.edgeLoad.typeParam, template.edgeLoad.fromParam, template.edgeLoad.toParam]), ...(template.aggregateRead === undefined ? [] : [template.aggregateRead.typeParam])]);
   const kept = Object.entries(params).filter(([key]) => !markerNames.has(key));
   const cap: [string, unknown][] = template.degreeCounts?.form === 'bounded' || template.facetProbes !== undefined || template.sharedAttribute !== undefined || template.linkedEntities !== undefined || template.pattern !== undefined ? [['countCap', countCap]] : [];
-  return { cypher, parameters: Object.fromEntries([...kept, ['limit', limit], ...cap, ...gateValuesOf(template, allowlist), ...branchEntityTypesOf(template, params), ...(template.relatedContext === undefined ? [] : [[CONTEXT_BRANCHES, context.branches.map((branch) => ({ hitType: branch.hitType, exactType: branch.exactType, type: branch.type, direction: branch.direction }))] as [string, unknown]])]) };
+  return { cypher, parameters: Object.fromEntries([...kept, ['limit', limit], ...cap, ...gateValuesOf(template, allowlist), ...endTypeOf(template, params, allowlist), ...branchEntityTypesOf(template, params), ...(template.relatedContext === undefined ? [] : [[CONTEXT_BRANCHES, context.branches.map((branch) => ({ hitType: branch.hitType, exactType: branch.exactType, type: branch.type, direction: branch.direction }))] as [string, unknown]])]) };
 }

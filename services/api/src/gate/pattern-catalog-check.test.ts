@@ -83,9 +83,9 @@ describe('the statements of the pattern compiler, over a sample of shapes', () =
           expect(statement).toContain(quoteName(name));
         }
         const literals = [...withoutQuoted(statement).matchAll(/'[^']*'/g)].map((match) => match[0]);
-        expect(literals.every((literal) => literal === "'UTC'")).toBe(true);
+        expect(literals.every((literal) => literal === "'UTC'" || literal === "''")).toBe(true);
         const parameters = new Set([...statement.matchAll(/\$([A-Za-z]+)/g)].map((match) => match[1]));
-        expect([...parameters].every((name) => ['stableId', 'stableInteger', 'countCap', 'limit', 'steps'].includes(name ?? ''))).toBe(true);
+        expect([...parameters].every((name) => ['stableId', 'stableInteger', 'countCap', 'limit', 'steps', 'cursor', 'endType'].includes(name ?? ''))).toBe(true);
       }),
       { seed: 5017, numRuns: 150 },
     );

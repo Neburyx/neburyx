@@ -13,10 +13,13 @@ let small: SourceGate;
 const entities = [
   { type: 'maker', label: 'PMaker', stable_id: 'makerId', filterable: ['region'] },
   { type: 'tool', label: 'PTool', stable_id: 'toolId' },
+  { type: 'dup', label: 'PDup', stable_id: 'dupId' },
 ];
 const relationships = [
   { type: 'LINKS', from: 'maker', to: 'maker', stable_id: 'linkId', observed_at: 'seenAt', filterable: ['lane'] },
   { type: 'USES', from: 'maker', to: 'tool', stable_id: 'useId' },
+  { type: 'HAS', from: 'maker', to: 'dup', stable_id: 'hasId' },
+  { type: 'ALSO', from: 'maker', to: 'maker' },
 ];
 const derived = [{ id: 'shared-tool', from: 'maker', to: 'maker', via: ['USES', 'tool', 'USES'], rule_version: 1, stop_list_property: 'isCommon' }];
 const SMALL_CAP = { heavy_op_threshold: 3 };
@@ -42,6 +45,14 @@ beforeAll(async () => {
   await runAdmin(server, link('w0', 'w2', "seenAt: datetime('2026-03-01T00:00:00Z')"));
   await runAdmin(server, link('w0', 'w3'));
   for (const [maker, tool] of [['m1', 't1'], ['m2', 't1'], ['m3', 't1'], ['m4', 't2'], ['m5', 't2']] as const) await runAdmin(server, uses(maker, tool));
+  const pages = ['pg', 'pg-01', 'pg-02', 'pg-03', 'pg-04', 'pg-05', 'pg-06', 'pg-07', 'pgt', 'pgd'];
+  await runAdmin(server, `UNWIND [${pages.map((id) => `'${id}'`).join(',')}] AS id CREATE (:PMaker {makerId: id})`);
+  for (const id of ['pg-04', 'pg-01', 'pg-07', 'pg-03', 'pg-06', 'pg-02', 'pg-05']) await runAdmin(server, link('pg', id));
+  await runAdmin(server, "UNWIND ['pga'] AS id CREATE (:PMaker {makerId: id})");
+  for (const id of ['pg-05', 'pg-02', 'pg-04', 'pg-01', 'pg-03']) await runAdmin(server, `MATCH (a:PMaker {makerId: 'pga'}), (b:PMaker {makerId: '${id}'}) CREATE (a)-[:ALSO]->(b), (a)-[:ALSO]->(b)`);
+  await runAdmin(server, 'UNWIND [10, 2, 33, 9] AS id CREATE (:PTool {toolId: id})');
+  await runAdmin(server, "MATCH (m:PMaker {makerId: 'pgt'}), (t:PTool) WHERE t.toolId IN [10, 2, 33, 9] CREATE (m)-[:USES {useId: 'pgu' + toString(t.toolId)}]->(t)");
+  await runAdmin(server, "MATCH (m:PMaker {makerId: 'pgd'}) UNWIND ['x', 'y'] AS tag CREATE (m)-[:HAS {hasId: 'h' + tag}]->(:PDup {dupId: 'same'})");
   await runAdmin(server, 'CALL db.awaitIndexes(300)');
   const defaults = communitySeams();
   const open = (budgets: Record<string, number>): SourceGate => createSourceGate({ mapping: { sources: [sourceFor(server, { entities, relationships, derived, budgets })] }, env: envFor(server), seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit }, logger: { warn: () => undefined } });
@@ -57,8 +68,8 @@ const hop = (over: Record<string, unknown> = {}) => ({ relationshipTypes: ['LINK
 const TOOL = hop({ relationshipTypes: ['USES'], arrivesAt: 'tool' });
 const BACK = hop({ relationshipTypes: ['USES'], direction: 'in' });
 
-async function run(stableId: string, steps: Record<string, unknown>[], limit = 25, gate: SourceGate = parts) {
-  const page = await gate.gate.run(gateRequest({ sourceId: 'graph', principal: LOCAL_PRINCIPAL, templateId: PATTERN_ID, params: { anchorType: 'maker', stableId, steps }, limit }));
+async function run(stableId: string, steps: Record<string, unknown>[], limit = 25, gate: SourceGate = parts, cursor?: string) {
+  const page = await gate.gate.run(gateRequest({ sourceId: 'graph', principal: LOCAL_PRINCIPAL, templateId: PATTERN_ID, params: { anchorType: 'maker', stableId, steps }, limit, ...(cursor === undefined ? {} : { cursor }) }));
   const [item] = page.items;
   if (!isNormalizedPattern(item)) throw new Error('the read gave no pattern result');
   return { page, item, ids: item.matches.map((entry) => entry.match.stableId) };
@@ -128,5 +139,44 @@ describe(`the pattern run on ${NEO4J_SERIES}`, () => {
     const { page, ids } = await run('hubmid', [hop()], 2);
     expect(ids).toHaveLength(2);
     expect(page.hasMore).toBe(true);
+  });
+
+  const HAS = hop({ relationshipTypes: ['HAS'], arrivesAt: 'dup' });
+
+  async function pagesOf(stableId: string, steps: Record<string, unknown>[], limit: number, gate: SourceGate = parts): Promise<string[][]> {
+    const pages: string[][] = [];
+    let cursor: string | undefined;
+    for (let round = 0; round < 10; round += 1) {
+      const { page, ids } = await run(stableId, steps, limit, gate, cursor);
+      pages.push(ids.map(String));
+      cursor = page.nextCursor;
+      if (cursor === undefined) break;
+    }
+    return pages;
+  }
+
+  it('reads the matches in pages by the end entity: no repeat and no skip, the last page without a cursor', async () => {
+    const pages = await pagesOf('pg', [hop()], 3);
+    expect(pages).toEqual([['pg-01', 'pg-02', 'pg-03'], ['pg-04', 'pg-05', 'pg-06'], ['pg-07']]);
+    expect((await run('pg', [hop()], 7)).page.nextCursor).toBeUndefined();
+  });
+
+  it('pages the matches of a step whose relationships have no stable ID of their own, whose members are read after the order is set', async () => {
+    const ALSO = hop({ relationshipTypes: ['ALSO'] });
+    expect(await pagesOf('pga', [ALSO], 2)).toEqual([['pg-01', 'pg-02'], ['pg-03', 'pg-04'], ['pg-05']]);
+  });
+
+  it('orders the end IDs as text whatever their type, so an integer ID and a string ID page in one order', async () => {
+    expect(await pagesOf('pgt', [TOOL], 2)).toEqual([['10', '2'], ['33', '9']]);
+  });
+
+  it('pages entities that share a stable ID by their element IDs, so none is repeated or skipped', async () => {
+    expect(await pagesOf('pgd', [HAS], 1)).toEqual([['same'], ['same']]);
+  });
+
+  it('pages inside a run that was cut: the pages are the cut set and never more', async () => {
+    const pages = await pagesOf('f0', [hop()], 2, small);
+    expect(pages.flat()).toHaveLength(3);
+    expect(new Set(pages.flat()).size).toBe(3);
   });
 });
