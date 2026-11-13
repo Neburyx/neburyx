@@ -1,7 +1,7 @@
 import { readFileSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { patternValidateResponseSchema } from '../../../packages/contracts/src/index.js';
+import { patternPreviewResponseSchema, patternValidateResponseSchema } from '../../../packages/contracts/src/index.js';
 import { afterAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../../../services/api/src/app.js';
 import { createLogger } from '../../../services/api/src/logger.js';
@@ -69,5 +69,64 @@ describe('a pattern over the insurance pack', () => {
     });
     const wrong = outAndBack();
     expect(await validate('insurance-claims', { ...wrong, steps: [{ ...wrong.steps[0], direction: 'in' }, wrong.steps[1]] })).toMatchObject({ status: 'invalid', problems: [{ path: ['steps', 0, 'relationshipTypes', 0], code: 'relationship-does-not-join' }] });
+  });
+});
+
+async function previewOf(pack: string, definition: unknown) {
+  const mapping = parseMapping(readFileSync(join(PACKS, pack, 'neburyx.yaml'), 'utf8'), 'neburyx.yaml');
+  const [source] = mapping.sources;
+  if (source === undefined) throw new Error('the pack has no source');
+  const executor = new TestExecutor(() => {
+    throw new Error('the preview route called the source');
+  });
+  const parts = testSourceGate(mapping, { executor });
+  const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store: memoryAppStore(), mapping, gate: parts.gate, seams: communitySeams(), catalog: parts.catalog });
+  const response = await app.inject({ method: 'POST', url: '/v1/patterns/preview', payload: JSON.stringify({ sourceId: source.id, definition }), headers: { 'content-type': 'application/json' } });
+  expect(executor.calls).toEqual([]);
+  await app.close();
+  const named = (type: string): string => {
+    const found = source.entities.find((entity) => entity.type === type);
+    return found?.display.name ?? found?.label ?? type;
+  };
+  return { answer: patternPreviewResponseSchema.parse(response.json()), named, budgets: source.budgets };
+}
+
+describe('the preview of a pattern over each pack', () => {
+  it('lists the step of the banking pack with the display names of its types and the limits of its source', async () => {
+    const { answer, named, budgets } = await previewOf('banking-fraud', transfers());
+    if (answer.status !== 'ok') throw new Error('not ok');
+    expect(answer.preview.start.name).toBe(named('account'));
+    expect(answer.preview.steps.map((part) => part.text)).toEqual([`Step 1: follow TRANSFERRED_TO forward to ${named('account')}`]);
+    expect([answer.preview.bounds.hopLimit.value, answer.preview.bounds.pageLimit.value, answer.preview.bounds.countCap.value]).toEqual([budgets.maxHops, budgets.maxPage, budgets.heavyOpThreshold]);
+  });
+
+  it('lists the two steps of the insurance pack, out to an address and back in to a claimant', async () => {
+    const { answer, named } = await previewOf('insurance-claims', outAndBack());
+    if (answer.status !== 'ok') throw new Error('not ok');
+    expect(answer.preview.steps.map((part) => part.text)).toEqual([`Step 1: follow LIVES_AT forward to ${named('address')}`, `Step 2: follow LIVES_AT backward to ${named('claimant')}`]);
+  });
+
+  it('answers the problems of the validation, and no preview, when a name is changed', async () => {
+    const { answer } = await previewOf('banking-fraud', { ...transfers(), steps: [{ ...transfers().steps[0], relationshipTypes: ['SENT_TO'] }] });
+    expect(answer.status).toBe('invalid');
+  });
+
+  it('lists the two steps of the banking pack with a condition and a window, and says the window does not apply to a relationship type that carries no date', async () => {
+    const two = { anchorType: 'account', steps: [transfers().steps[0], { ...transfers().steps[0], window: { days: 30 } }] };
+    const { answer, named } = await previewOf('banking-fraud', two);
+    if (answer.status !== 'ok') throw new Error('not ok');
+    const [first, second] = answer.preview.steps;
+    expect(first?.conditions.map((part) => part.text)).toEqual([`${named('account')}: status is "frozen"`]);
+    expect(second?.window?.text).toBe('The window does not apply to TRANSFERRED_TO: no date is declared for it');
+    expect(second?.window).toMatchObject({ appliesTo: [], notAppliedTo: ['TRANSFERRED_TO'] });
+  });
+
+  it('lists the two steps of the insurance pack with a condition and a window over a relationship type that carries a date', async () => {
+    const claimOut = { anchorType: 'claim', steps: [{ relationshipTypes: ['FILED_BY'], direction: 'out', arrivesAt: 'claimant', window: { from: '2026-01-01', to: '2026-01-31' } }, { relationshipTypes: ['FILED_BY'], direction: 'in', arrivesAt: 'claim', conditions: [{ op: 'eq', on: 'neighbor', property: 'status', value: { kind: 'text', value: 'open' } }] }] };
+    const { answer, named } = await previewOf('insurance-claims', claimOut);
+    if (answer.status !== 'ok') throw new Error('not ok');
+    const [first, second] = answer.preview.steps;
+    expect(first?.window?.text).toBe('Window on FILED_BY: from 2026-01-01 to 2026-01-31, both included (UTC)');
+    expect(second?.conditions.map((part) => part.text)).toEqual([`${named('claim')}: status is "open"`]);
   });
 });

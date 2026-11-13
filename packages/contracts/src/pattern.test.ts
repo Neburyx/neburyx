@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MAX_FILTER_TEXT, MAX_FILTER_VALUES, MAX_FILTERS } from './expand.js';
-import { MAX_PATTERN_PROBLEMS, PATTERN_LIMITS, PATTERN_PROBLEM_CODES, patternDefinitionSchema, patternProblemsOf, patternValidateRequestSchema, patternValidateResponseSchema } from './pattern.js';
+import { MAX_PATTERN_PROBLEMS, PATTERN_LIMITS, PATTERN_PROBLEM_CODES, patternPreviewRequestSchema, patternPreviewResponseSchema, patternDefinitionSchema, patternProblemsOf, patternValidateRequestSchema, patternValidateResponseSchema } from './pattern.js';
 
 const step = (extra: Record<string, unknown> = {}) => ({ relationshipTypes: ['LINKS'], direction: 'out', arrivesAt: 'maker', ...extra });
 const definition = (extra: Record<string, unknown> = {}) => ({ anchorType: 'maker', steps: [step()], ...extra });
@@ -147,5 +147,30 @@ describe('the request and the answer of the route', () => {
     expect(patternValidateResponseSchema.safeParse({ status: 'invalid', problems: [] }).success).toBe(false);
     expect(patternValidateResponseSchema.safeParse({ status: 'invalid', problems: [{ path: [], code: 'because' }] }).success).toBe(false);
     expect(patternValidateResponseSchema.safeParse({ status: 'ok', problems: [] }).success).toBe(false);
+  });
+});
+
+describe('the request and the answer of the preview route', () => {
+  const name = { type: 'a', name: 'A' };
+  const preview = {
+    start: { ...name, text: 'Start: A' },
+    steps: [{ relationshipTypes: ['R'], direction: 'out', arrivesAt: name, text: 'Step 1: follow R forward to A', conditions: [] }],
+    bounds: { hopLimit: { value: 4, text: 'x' }, pageLimit: { value: 50, text: 'y' }, countCap: { value: 500, text: 'z' } },
+  };
+
+  it('takes the envelope of the validation, and answers a preview of typed parts or the problems of the validation with no preview', () => {
+    expect(patternPreviewRequestSchema.safeParse({ sourceId: 's', definition: {}, mask: true }).success).toBe(true);
+    expect(patternPreviewRequestSchema.safeParse({ sourceId: 's', definition: {}, other: 1 }).success).toBe(false);
+    expect(patternPreviewResponseSchema.safeParse({ status: 'ok', preview }).success).toBe(true);
+    expect(patternPreviewResponseSchema.safeParse({ status: 'ok', preview: { ...preview, extra: 1 } }).success).toBe(false);
+    expect(patternPreviewResponseSchema.safeParse({ status: 'ok', preview: { ...preview, steps: [] } }).success).toBe(false);
+    expect(patternPreviewResponseSchema.safeParse({ status: 'ok', preview: { ...preview, bounds: { ...preview.bounds, hopLimit: { value: -1, text: 'x' } } } }).success).toBe(false);
+    expect(patternPreviewResponseSchema.safeParse({ status: 'invalid', problems: [{ path: ['steps'], code: 'too-many-hops' }] }).success).toBe(true);
+    expect(patternPreviewResponseSchema.safeParse({ status: 'invalid', problems: [{ path: ['steps'], code: 'too-many-hops' }], preview }).success).toBe(false);
+  });
+
+  it('knows the problem code of more steps than the source allows', () => {
+    expect(PATTERN_PROBLEM_CODES).toContain('too-many-hops');
+    expect(patternValidateResponseSchema.safeParse({ status: 'invalid', problems: [{ path: ['steps'], code: 'too-many-hops' }] }).success).toBe(true);
   });
 });

@@ -1,5 +1,5 @@
 import fc from 'fast-check';
-import { patternValidateResponseSchema } from '@neburyx/contracts';
+import { patternPreviewResponseSchema, patternValidateResponseSchema } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
 import { FIELD_NAMES, TEMPLATE_NATIVE, fuzzParams, hostileText, wrongType } from '../testing/fuzz-corpus.js';
 import { FUZZ_SOURCE, allowedNames, startFuzzRig } from '../testing/fuzz-rig.js';
@@ -15,9 +15,13 @@ const codeOf = (body: string): string | undefined => {
     return undefined;
   }
 };
-const validate = (body: unknown) => rig.post('/v1/patterns/validate', body);
+const ROUTES = [
+  ['POST /v1/patterns/validate', '/v1/patterns/validate', patternValidateResponseSchema],
+  ['POST /v1/patterns/preview', '/v1/patterns/preview', patternPreviewResponseSchema],
+] as const;
 
-describe('a hostile definition sent to POST /v1/patterns/validate', () => {
+describe.each(ROUTES)('a hostile definition sent to %s', (_name, url, schema) => {
+  const validate = (body: unknown) => rig.post(url, body);
   it('is answered with problems that hold none of its text, and reads nothing from the source, whatever the text is and wherever it is put', async () => {
     const placed = fc.tuple(hostile, fc.constantFrom('anchorType', 'relationshipTypes', 'arrivesAt', 'direction', 'property', 'key', 'value', 'window', 'op'));
     await fc.assert(
@@ -34,7 +38,7 @@ describe('a hostile definition sent to POST /v1/patterns/validate', () => {
         };
         const response = await validate({ sourceId: FUZZ_SOURCE, definition: { anchorType: where === 'anchorType' ? text : 'widget', steps: [step] } });
         expect(response.statusCode).toBe(200);
-        const answer = patternValidateResponseSchema.parse(JSON.parse(response.body));
+        const answer = schema.parse(JSON.parse(response.body));
         expect(answer.status).toBe('invalid');
         for (const piece of [text].filter((candidate) => candidate.length >= 4)) expect(response.body).not.toContain(piece);
         expect(rig.executor.calls).toEqual([]);
@@ -50,7 +54,7 @@ describe('a hostile definition sent to POST /v1/patterns/validate', () => {
         rig.reset();
         const response = await validate({ sourceId: FUZZ_SOURCE, definition, ...(mask === undefined ? {} : { mask }) });
         if (response.statusCode === 200) {
-          const answer = patternValidateResponseSchema.parse(JSON.parse(response.body));
+          const answer = schema.parse(JSON.parse(response.body));
           if (answer.status === 'invalid') for (const problem of answer.problems) expect(problem.path.every((key) => typeof key === 'string' || Number.isInteger(key))).toBe(true);
         } else {
           expect(codeOf(response.body)).toBe('INVALID_REQUEST');
@@ -62,7 +66,8 @@ describe('a hostile definition sent to POST /v1/patterns/validate', () => {
   });
 });
 
-describe('the envelope of POST /v1/patterns/validate', () => {
+describe.each(ROUTES)('the envelope of %s', (_name, url) => {
+  const validate = (body: unknown) => rig.post(url, body);
   it('answers NOT_FOUND for a source that is not in the mapping, whatever the text, and nothing is read', async () => {
     await fc.assert(
       fc.asyncProperty(hostile, async (sourceId) => {
@@ -97,7 +102,7 @@ describe('the envelope of POST /v1/patterns/validate', () => {
 
   it('answers INVALID_REQUEST for malformed JSON and a body over 1 MiB, and UNSUPPORTED_MEDIA_TYPE for a content type that is not JSON, and nothing is read', async () => {
     rig.reset();
-    const inject = (payload: string, contentType = 'application/json') => rig.app.inject({ method: 'POST', url: '/v1/patterns/validate', payload, headers: { 'content-type': contentType } });
+    const inject = (payload: string, contentType = 'application/json') => rig.app.inject({ method: 'POST', url, payload, headers: { 'content-type': contentType } });
     expect(codeOf((await inject('{"sourceId": "demo", "definition"')).body)).toBe('INVALID_REQUEST');
     expect(codeOf((await inject(JSON.stringify({ sourceId: FUZZ_SOURCE, definition: { anchorType: 'a'.repeat(1_100_000) } }))).body)).toBe('INVALID_REQUEST');
     expect(codeOf((await inject(JSON.stringify({ sourceId: FUZZ_SOURCE, definition: {} }), 'application/xml')).body)).toBe('UNSUPPORTED_MEDIA_TYPE');

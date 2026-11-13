@@ -31,7 +31,7 @@ function propertyProblem(property: string, named: ReadonlySet<string>, filterabl
 }
 
 /**
- * The problems of a pattern against one source's mapping: a type or property the mapping does not name, a step that does not join the previous node type, a property that is not declared `filterable`, and a personal-data
+ * The problems of a pattern against one source's mapping: a type or property the mapping does not name, more steps than the source's `max_hops` allows, a step that does not join the previous node type, a property that is not declared `filterable`, and a personal-data
  * property while masking is asked. The definition must pass the schema first (the schema's own problems are returned alone otherwise). The mapping is the only input: nothing is read from the source, and no name or value of the
  * definition is in a problem.
  */
@@ -41,6 +41,7 @@ export function validatePattern(input: unknown, source: SourceModel, options: Pa
   const definition = patternDefinitionSchema.parse(input);
   const entities = new Map(source.entities.map((entity) => [entity.type, entity]));
   const problems: PatternProblem[] = [];
+  if (definition.steps.length > source.budgets.maxHops) problems.push({ path: ['steps'], code: 'too-many-hops' });
   if (!entities.has(definition.anchorType)) problems.push({ path: ['anchorType'], code: 'unknown-entity-type' });
   let previous = definition.anchorType;
   definition.steps.forEach((step, stepIndex) => {

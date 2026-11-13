@@ -1,10 +1,10 @@
 import { z } from 'zod';
-import { EXPAND_DIRECTIONS, MAX_FILTER_TEXT, MAX_FILTERS, MAX_FILTER_VALUES, expandFilterSchema, filterShapeProblem, type ExpandFilter } from './expand.js';
+import { EXPAND_DIRECTIONS, MAX_FILTER_TEXT, MAX_FILTERS, MAX_FILTER_VALUES, expandFilterSchema, filterShapeProblem, filterValueSchema, type ExpandFilter } from './expand.js';
 import { windowSchema, type Window } from './template-run.js';
 
 /**
  * The limits of a pattern. The ones marked "Builder limit" are builder limits, decided 2026-11-12; the others are the limits the rest of the API already holds, reused so that one number has one home.
- * `steps` equals the API's `MAX_HOPS_CEILING` (a test in the API keeps them equal); the source's own `max_hops` is enforced by the gate at run time.
+ * `steps` equals the API's `MAX_HOPS_CEILING` (a test in the API keeps them equal); the source's own `max_hops` is held by the validation against the source (`too-many-hops`) and by the gate at run time.
  */
 export const PATTERN_LIMITS = {
   steps: 4,
@@ -35,6 +35,8 @@ export const PATTERN_PROBLEM_CODES = [
   'unknown-property',
   'not-filterable',
   'personal-data-masked',
+  /** More steps than the source's `max_hops` allows: raised by the validation against the source's budgets, so that a pattern is never found fine and then refused by the run. */
+  'too-many-hops',
 ] as const;
 /** The most problems one answer lists, so that an input with many faults cannot make an answer of unbounded size. */
 export const MAX_PATTERN_PROBLEMS = 100;
@@ -169,3 +171,60 @@ export const patternValidateResponseSchema = z.discriminatedUnion('status', [
 
 export type PatternValidateRequest = z.infer<typeof patternValidateRequestSchema>;
 export type PatternValidateResponse = z.infer<typeof patternValidateResponseSchema>;
+
+/**
+ * `POST /v1/patterns/preview`: the same envelope as the validation, and the preview of an acceptable definition as typed parts, each with the words the client joins; the server writes every phrase and the client none. A definition that
+ * does not validate answers its problems and no preview. Every number of the bounds is the source's own.
+ */
+export const patternPreviewRequestSchema = patternValidateRequestSchema;
+
+const previewText = z.string().min(1);
+const previewName = z.strictObject({ type: name, name: previewText });
+const previewBound = z.strictObject({ value: z.number().int().nonnegative(), text: previewText });
+
+/** One condition in words: what it applies to (the display name of the type the step arrives at, or the relationship types of the step), the property as the mapping names it, the operator, and the typed values it holds. */
+export const patternPreviewConditionSchema = z.strictObject({
+  on: z.enum(['neighbor', 'relationship']),
+  appliesTo: previewText,
+  property: name,
+  op: z.enum(['eq', 'in', 'between']),
+  values: z.array(filterValueSchema).max(MAX_FILTER_VALUES),
+  from: filterValueSchema.optional(),
+  to: filterValueSchema.optional(),
+  text: previewText,
+});
+
+/** The window of a step in words: the days or the two dates (UTC), the relationship types of the step that carry a date and so are filtered by it, and those that carry none, which a run reads whole (decided from the mapping alone). */
+export const patternPreviewWindowSchema = z.strictObject({
+  appliesTo: z.array(name).max(PATTERN_LIMITS.relationshipTypesPerStep),
+  notAppliedTo: z.array(name).max(PATTERN_LIMITS.relationshipTypesPerStep),
+  days: z.number().int().positive().optional(),
+  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  text: previewText,
+});
+
+export const patternPreviewStepSchema = z.strictObject({
+  relationshipTypes: z.array(name).min(1).max(PATTERN_LIMITS.relationshipTypesPerStep),
+  direction: z.enum(EXPAND_DIRECTIONS),
+  arrivesAt: previewName,
+  text: previewText,
+  conditions: z.array(patternPreviewConditionSchema).max(2 * PATTERN_LIMITS.conditionsPerElement),
+  window: patternPreviewWindowSchema.optional(),
+});
+
+export const patternPreviewSchema = z.strictObject({
+  start: previewName.extend({ text: previewText }),
+  steps: z.array(patternPreviewStepSchema).min(1).max(PATTERN_LIMITS.steps),
+  /** The limits of the source that a run holds to: the steps, the results at a time, and the count the source stops at. */
+  bounds: z.strictObject({ hopLimit: previewBound, pageLimit: previewBound, countCap: previewBound }),
+});
+
+export const patternPreviewResponseSchema = z.discriminatedUnion('status', [
+  z.strictObject({ status: z.literal('ok'), preview: patternPreviewSchema }),
+  z.strictObject({ status: z.literal('invalid'), problems: z.array(patternProblemSchema).min(1) }),
+]);
+
+export type PatternPreviewRequest = z.infer<typeof patternPreviewRequestSchema>;
+export type PatternPreview = z.infer<typeof patternPreviewSchema>;
+export type PatternPreviewResponse = z.infer<typeof patternPreviewResponseSchema>;

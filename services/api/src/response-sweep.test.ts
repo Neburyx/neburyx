@@ -1,6 +1,6 @@
 import {
   coverageResponseSchema,
-  patternValidateResponseSchema,
+  patternPreviewResponseSchema, patternValidateResponseSchema,
   readRefsResponseSchema,
   degreePreviewSchema,
   derivedNeighborsResponseSchema,
@@ -91,6 +91,8 @@ const SCENARIOS: readonly Scenario[] = [
   { name: 'coverage', route: 'POST /v1/graph/coverage', method: 'POST', url: '/v1/graph/coverage', payload: { sourceId: FUZZ_SOURCE, entities: [{ ref: entity, loadedRelationships: 1, loadedQuality: 'exact' }] }, schema: coverageResponseSchema },
   { name: 'pattern validation', route: 'POST /v1/patterns/validate', method: 'POST', url: '/v1/patterns/validate', payload: { sourceId: FUZZ_SOURCE, definition: { anchorType: 'widget', steps: [{ relationshipTypes: ['MADE_FROM'], direction: 'out', arrivesAt: 'gadget' }] } }, schema: patternValidateResponseSchema },
   { name: 'pattern validation with problems', route: 'POST /v1/patterns/validate', method: 'POST', url: '/v1/patterns/validate', payload: { sourceId: FUZZ_SOURCE, definition: { anchorType: 'widget', steps: [{ relationshipTypes: ['W-1'], direction: 'out', arrivesAt: 'gadget' }] } }, schema: patternValidateResponseSchema },
+  { name: 'pattern preview with problems', route: 'POST /v1/patterns/preview', method: 'POST', url: '/v1/patterns/preview', payload: { sourceId: FUZZ_SOURCE, definition: { anchorType: 'widget', steps: [{ relationshipTypes: ['W-1'], direction: 'out', arrivesAt: 'gadget' }] } }, schema: patternPreviewResponseSchema },
+  { name: 'pattern preview', route: 'POST /v1/patterns/preview', method: 'POST', url: '/v1/patterns/preview', payload: { sourceId: FUZZ_SOURCE, definition: { anchorType: 'widget', steps: [{ relationshipTypes: ['MADE_FROM'], direction: 'out', arrivesAt: 'gadget' }] } }, schema: patternPreviewResponseSchema },
   { name: 'open investigation', route: 'POST /v1/investigations', method: 'POST', url: '/v1/investigations', payload: { sourceId: FUZZ_SOURCE, entity: { sourceId: FUZZ_SOURCE, entityType: 'widget', stableId: 'W-1' } }, schema: openInvestigationResponseSchema },
 ];
 

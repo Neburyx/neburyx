@@ -143,8 +143,8 @@ export {
   typeaheadTextSchema,
   unreferencedHitSchema,
 } from './search.js';
-export { MAX_PATTERN_PROBLEMS, PATTERN_LIMITS, PATTERN_PROBLEM_CODES, patternDefinitionSchema, patternProblemSchema, patternProblemsOf, patternValidateRequestSchema, patternValidateResponseSchema } from './pattern.js';
-export type { PatternDefinition, PatternProblem, PatternProblemCode, PatternStep, PatternValidateRequest, PatternValidateResponse } from './pattern.js';
+export { MAX_PATTERN_PROBLEMS, PATTERN_LIMITS, PATTERN_PROBLEM_CODES, patternDefinitionSchema, patternProblemSchema, patternPreviewConditionSchema, patternPreviewRequestSchema, patternPreviewResponseSchema, patternPreviewSchema, patternPreviewStepSchema, patternPreviewWindowSchema, patternProblemsOf, patternValidateRequestSchema, patternValidateResponseSchema } from './pattern.js';
+export type { PatternDefinition, PatternPreview, PatternPreviewRequest, PatternPreviewResponse, PatternProblem, PatternProblemCode, PatternStep, PatternValidateRequest, PatternValidateResponse } from './pattern.js';
 export { TEMPLATE_PARAMS_SCHEMAS, listedTemplateSchema, paramsJsonSchemaOf, templateListQuerySchema, templateListResponseSchema } from './template-list.js';
 export type { ListedTemplate, TemplateListResponse } from './template-list.js';
 export { HEAVY_CONTINUE_LIMIT, LINKED_HOPS_MAX, MIN_SHARED_MAX, TEMPLATE_RUN_NOTICE_CODES, WINDOW_MAX_DAYS, linkedEntitiesParamsSchema, linkedMatchSchema, sharedAttributeParamsSchema, templateRunHeavySchema, templateRunNoticeSchema, templateRunOkSchema, templateRunRequestSchema, templateRunResponseSchema, windowSchema } from './template-run.js';
