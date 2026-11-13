@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { paramsJsonSchemaOf, templateRunRequestSchema, templateRunResponseSchema, type TemplateRunResponse } from '@neburyx/contracts';
+import { paramsJsonSchemaOf, patternProblemsOf, patternValidateRequestSchema, templateRunRequestSchema, templateRunResponseSchema, type TemplateRunResponse } from '@neburyx/contracts';
 
 interface PatternProfile {
   readonly sourceId: string;
@@ -32,6 +32,8 @@ export const RING_MATES = 5;
  */
 export const LIMITS = { none: 1, slow: 3, busy: 4, cut: 5, stopList: 6 } as const;
 export const HEAVY_MIN_SHARED = 2;
+/** The start type for which the support server answers one problem. */
+export const SCRIPTED_START = 'merchant';
 const CONTINUE_LIMIT = 25;
 
 const evidenceEdge = (sourceId: string, type: string, fromType: string, toType: string, id: string, from: string, to: string, evidence: string[]) => ({
@@ -108,6 +110,14 @@ function linked(sourceId: string, anchor: string, presetId: string | undefined):
 export function createPatterns(profiles: () => readonly PatternProfile[]) {
   let noPresets = false;
   return {
+    /** `POST /v1/patterns/validate`: the contract's own check of the definition's shape and caps, and one scripted problem so that a spec reaches the not-valid state: a pattern that starts at a `merchant`. */
+    validate(body: unknown, response: ServerResponse): void {
+      const parsed = patternValidateRequestSchema.safeParse(body);
+      if (!parsed.success) return json(response, 400, { error: { code: 'INVALID_REQUEST', message: 'The request is not valid.', retryable: false, traceId: 'tr-support' } });
+      const problems = patternProblemsOf(parsed.data.definition);
+      if (problems.length === 0 && parsed.data.definition['anchorType'] === SCRIPTED_START) problems.push({ path: ['anchorType'], code: 'unknown-entity-type' });
+      json(response, 200, problems.length === 0 ? { status: 'ok' } : { status: 'invalid', problems });
+    },
     setMode(body: unknown, response: ServerResponse): void {
       noPresets = typeof body === 'object' && body !== null && 'noPresets' in body && body.noPresets === true;
       json(response, 200, {});

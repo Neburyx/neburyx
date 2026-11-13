@@ -38,6 +38,24 @@ async function start(): Promise<string> {
   return baseOf(server);
 }
 
+describe('the support server, the pattern builder', () => {
+  const definition = (anchorType: string) => ({ anchorType, steps: [{ relationshipTypes: ['r'], direction: 'out', arrivesAt: 't' }] });
+  const validate = async (base: string, body: unknown) => fetch(`${base}/v1/patterns/validate`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+
+  it('answers ok for a definition of the right shape, a problem for the scripted start type, the contract’s problems for a bad shape, and a refusal for a malformed body', async () => {
+    const base = await start();
+    expect(await (await validate(base, { sourceId: 'demo', definition: definition('account') })).json()).toEqual({ status: 'ok' });
+    expect(await (await validate(base, { sourceId: 'demo', definition: definition('merchant') })).json()).toEqual({ status: 'invalid', problems: [{ path: ['anchorType'], code: 'unknown-entity-type' }] });
+    expect(await (await validate(base, { sourceId: 'demo', definition: { anchorType: 'account', steps: [] } })).json()).toMatchObject({ status: 'invalid', problems: [{ code: 'too-few' }] });
+    expect((await validate(base, { sourceId: 'demo' })).status).toBe(400);
+  });
+
+  it('lists the step limit of each source', async () => {
+    const base = await start();
+    expect(await (await fetch(`${base}/v1/sources`)).json()).toMatchObject({ items: [{ id: 'demo', maxHops: 4 }] });
+  });
+});
+
 describe('the support server', () => {
   it('answers an unknown API path with 404 and a body, and a method other than GET with 405', async () => {
     const base = await start();

@@ -24,6 +24,12 @@ export function useProfileState(): ProfileState {
   return useStoreSelector(useProfileStore(), (state) => state);
 }
 
+/** Asks again for the profile of the bound source, for a read that failed. */
+export function useProfileReload(): () => void {
+  const store = useContext(ProfileContext);
+  return () => store?.reload();
+}
+
 /** The profile of the bound source once it has been read; undefined while it is not yet known, and never the profile of another source. */
 export function useProfile(): SourceProfile | undefined {
   const state = useProfileState();

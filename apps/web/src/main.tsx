@@ -53,6 +53,7 @@ import './styles/sources.css';
 import './styles/search.css';
 import './styles/filters.css';
 import './styles/patterns.css';
+import './styles/pattern-builder.css';
 import './styles/first-run.css';
 import './styles/home.css';
 import './styles/lifecycle.css';

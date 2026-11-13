@@ -50,7 +50,7 @@ function me(sourceIds: readonly string[]): unknown {
   };
 }
 
-const SOURCE_SUMMARY = { state: 'connected', stateReason: null, readOnly: true, synthetic: true, lastTestAt: null, lastTest: null, mappingSummary: { entityTypes: 4, relationshipTypes: 6, derivedRules: 2 }, demoCase: null } as const;
+const SOURCE_SUMMARY = { state: 'connected', stateReason: null, readOnly: true, synthetic: true, lastTestAt: null, lastTest: null, mappingSummary: { entityTypes: 4, relationshipTypes: 6, derivedRules: 2 }, demoCase: null, maxHops: 4 } as const;
 
 type SourceChange = Partial<Omit<SourceSummary, 'id'>>;
 
@@ -947,6 +947,7 @@ export function createSupportServer(options: SupportServerOptions): Server {
       if (request.method === 'GET' && path === '/v1/templates') return patterns.list(new URL(request.url ?? '/', 'http://localhost').searchParams.get('sourceId'), response);
       const running = /^\/v1\/templates\/([^/]+)\/run$/.exec(path);
       if (request.method === 'POST' && running?.[1] !== undefined) return patterns.run(decodeURIComponent(running[1]), await bodyOf(request), response, request);
+      if (request.method === 'POST' && path === '/v1/patterns/validate') return patterns.validate(await bodyOf(request), response);
       if (request.method === 'POST' && path === '/__support/patterns-mode') return patterns.setMode(await bodyOf(request), response);
       if (request.method === 'POST' && path === '/v1/search/entities') return search.run(await bodyOf(request), response);
       if (request.method === 'POST' && path === '/v1/search/entities/more') return search.more(await bodyOf(request), response);

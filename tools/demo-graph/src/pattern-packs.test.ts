@@ -56,6 +56,15 @@ describe('a pattern over the banking pack', () => {
   });
 });
 
+/** The two-step patterns the browser spec of the builder builds with choices only: out to a node type and back in to the starting type, over one relationship type. */
+describe('the two-step patterns the builder builds', () => {
+  it('validate against the real mapping of each pack', async () => {
+    const bank = { anchorType: 'account', steps: [{ relationshipTypes: ['USES_DEVICE'], direction: 'out', arrivesAt: 'device' }, { relationshipTypes: ['USES_DEVICE'], direction: 'in', arrivesAt: 'account' }] };
+    expect(await validate('banking-fraud', bank)).toEqual({ status: 'ok' });
+    expect(await validate('insurance-claims', outAndBack())).toEqual({ status: 'ok' });
+  });
+});
+
 describe('a pattern over the insurance pack', () => {
   it('over LIVES_AT, out to an address and back in to a claimant, validates', async () => {
     expect(await validate('insurance-claims', outAndBack())).toEqual({ status: 'ok' });

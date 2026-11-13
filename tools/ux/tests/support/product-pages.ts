@@ -299,6 +299,26 @@ export const REACH: Readonly<Record<string, (page: Page) => Promise<void>>> = {
     await panel.getByRole('button', { name: 'Run pattern' }).click();
     await expect(panel.getByRole('button', { name: 'Continue with 25' })).toBeVisible();
   },
+  'Explore with the pattern builder open': async (page) => {
+    await openEntity(page, 'banking-demo', `PB-${unique()}`);
+    await expect(page.getByRole('application', { name: 'Graph canvas' })).toBeVisible();
+    await page.getByRole('button', { name: 'Patterns', exact: true }).click();
+    await page.getByRole('complementary', { name: 'Patterns' }).getByRole('button', { name: 'New pattern' }).click();
+    await expect(page.getByRole('complementary', { name: 'Patterns' }).getByLabel('Starts at')).toBeVisible();
+  },
+  'Explore with the pattern builder holding a step': async (page) => {
+    await openEntity(page, 'banking-demo', `PC-${unique()}`);
+    await expect(page.getByRole('application', { name: 'Graph canvas' })).toBeVisible();
+    await page.getByRole('button', { name: 'Patterns', exact: true }).click();
+    const panel = page.getByRole('complementary', { name: 'Patterns' });
+    await panel.getByRole('button', { name: 'New pattern' }).click();
+    await panel.getByLabel('Starts at').selectOption({ label: 'Account' });
+    await panel.getByRole('button', { name: 'Add step' }).click();
+    await panel.getByLabel('Direction').selectOption('out');
+    await panel.getByLabel('Arrives at').selectOption({ label: 'Device' });
+    await panel.getByRole('checkbox', { name: 'USES_DEVICE' }).check();
+    await expect(panel.getByText('Valid: the mapping can follow this pattern.')).toBeVisible();
+  },
   'Explore with the inspector open': async (page) => {
     await openEntity(page, 'banking-demo', `PI-${unique()}`);
     const canvas = page.getByRole('application', { name: 'Graph canvas' });

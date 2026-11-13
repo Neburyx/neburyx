@@ -1,5 +1,5 @@
 import { act, fireEvent, screen } from '@testing-library/react';
-import { paramsJsonSchemaOf, type GraphEdge, type GraphNode, type TemplateListResponse, type TemplateRunRequest, type TemplateRunResponse } from '@neburyx/contracts';
+import { paramsJsonSchemaOf, type PatternValidateRequest, type PatternValidateResponse, type SourceProfile, type GraphEdge, type GraphNode, type TemplateListResponse, type TemplateRunRequest, type TemplateRunResponse } from '@neburyx/contracts';
 import { fakeClient } from '../api/fake-client.js';
 import type { ApiClient, ApiFailure, ApiResult } from '../api/client.js';
 import { createClientState, type ClientState } from '../state/client-state.js';
@@ -63,6 +63,8 @@ export interface PatternsKit {
   readonly client: ApiClient;
   readonly sent: Sent[];
   readonly searches: unknown[];
+  /** The definitions the builder asked the server about, in order. */
+  readonly validations: PatternValidateRequest[];
   readonly evidence: Evidence;
   readonly unmount: () => void;
 }
@@ -73,6 +75,11 @@ export interface KitOptions {
   readonly nodes?: readonly GraphNode[];
   /** The source's timeout; `null` for a source that does not state one. */
   readonly timeoutMs?: number | null;
+  /** The profile of the source; the three-type profile of the other tests by default. A promise that never settles keeps it loading. */
+  readonly profile?: () => Promise<ApiResult<SourceProfile>>;
+  /** The step limit of the source summary; none by default. */
+  readonly maxHops?: number;
+  readonly validate?: (request: PatternValidateRequest, signal: AbortSignal | undefined) => Promise<ApiResult<PatternValidateResponse>>;
   /** The entity the investigation was opened on; the first account by default, `null` for none. */
   readonly opened?: { readonly entityType: string; readonly stableId: string } | null;
   readonly search?: (request: unknown) => Promise<ApiResult<never>>;
@@ -82,10 +89,15 @@ export interface KitOptions {
 export async function patternsWorkspace(options: KitOptions = {}): Promise<PatternsKit> {
   const sent: Sent[] = [];
   const searches: unknown[] = [];
+  const validations: PatternValidateRequest[] = [];
   const client = fakeClient({
-    getProfile: async (sourceId) => ({ ok: true, value: profiled(sourceId, ['kind-a', 'kind-b', 'kind-c']) }),
+    getProfile: options.profile ?? (async (sourceId) => ({ ok: true, value: profiled(sourceId, ['kind-a', 'kind-b', 'kind-c']) })),
+    validatePattern: async (request, signal) => {
+      validations.push(request);
+      return options.validate === undefined ? { ok: true, value: { status: 'ok' } } : options.validate(request, signal);
+    },
     getMe: async () => ({ ok: true, value: me() }),
-    getSources: async () => ({ ok: true, value: { items: [source('a', options.timeoutMs === null ? {} : { timeoutMs: options.timeoutMs ?? 5000 })], nextCursor: null } }),
+    getSources: async () => ({ ok: true, value: { items: [source('a', { ...(options.timeoutMs === null ? {} : { timeoutMs: options.timeoutMs ?? 5000 }), ...(options.maxHops === undefined ? {} : { maxHops: options.maxHops }) })], nextCursor: null } }),
     listTemplates: options.list ?? (async () => ({ ok: true, value: listOf() })),
     runTemplate: async (id, request, key, signal) => {
       const entry = { id, request, key, signal };
@@ -112,7 +124,7 @@ export async function patternsWorkspace(options: KitOptions = {}): Promise<Patte
   evidence.kinds.register(storedEvidenceKind);
   const view = renderApp('/explore', client, state, slots, stubFactory().create, undefined, tools, undefined, createPanelRegistryFor(state), undefined, banner, evidence);
   await settle();
-  return { state, banner, client, sent, searches, evidence, unmount: view.unmount };
+  return { state, banner, client, sent, searches, validations, evidence, unmount: view.unmount };
 }
 
 export async function settle(): Promise<void> {

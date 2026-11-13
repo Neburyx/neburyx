@@ -24,6 +24,7 @@ function recording(client: ApiClient) {
     getProfile: (sourceId, signal) => (calls.push(`getProfile ${sourceId}`), client.getProfile(sourceId, signal)),
     listTemplates: (sourceId, signal) => (calls.push('listTemplates'), client.listTemplates(sourceId, signal)),
     runTemplate: (id, request, key, signal) => (calls.push('runTemplate'), client.runTemplate(id, request, key, signal)),
+    validatePattern: (request, signal) => (calls.push('validatePattern'), client.validatePattern(request, signal)),
     testSource: (sourceId, signal) => (calls.push('testSource'), client.testSource(sourceId, signal)),
     getEntity: (ref, options, signal) => (calls.push('getEntity'), client.getEntity(ref, options, signal)),
     getEdge: (ref, options, signal) => (calls.push('getEdge'), client.getEdge(ref, options, signal)),

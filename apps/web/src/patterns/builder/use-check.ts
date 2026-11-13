@@ -1,0 +1,68 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { PatternDefinition, PatternProblem } from '@neburyx/contracts';
+import type { ApiClient, ApiFailure } from '../../api/client.js';
+import { UNEXPECTED } from '../../api/use-request.js';
+
+/** The same wait the search's type-ahead makes before it asks (`TYPEAHEAD_DEBOUNCE_MS`). */
+export const CHECK_DEBOUNCE_MS = 250;
+
+export type CheckState =
+  | { readonly kind: 'none' }
+  | { readonly kind: 'checking' }
+  | { readonly kind: 'valid' }
+  | { readonly kind: 'invalid'; readonly problems: readonly PatternProblem[] }
+  | { readonly kind: 'failed'; readonly failure: ApiFailure };
+
+export interface Check {
+  readonly state: CheckState;
+  readonly retry: () => void;
+}
+
+/**
+ * Asks the server whether the definition is acceptable, once the person has stopped changing it for the debounce. A result belongs to the definition it was asked for: a change clears it at once, an incomplete definition has none,
+ * and an answer to an older ask, or to a source that has since changed, is never shown. The route reads no source.
+ */
+export function usePatternCheck(client: ApiClient, sourceId: string, mask: boolean, definition: PatternDefinition | undefined): Check {
+  const [state, setState] = useState<CheckState>({ kind: 'none' });
+  const [attempt, setAttempt] = useState(0);
+  const retrying = useRef(false);
+  const key = definition === undefined ? undefined : JSON.stringify(definition);
+
+  useEffect(() => {
+    if (definition === undefined) {
+      setState({ kind: 'none' });
+      return undefined;
+    }
+    setState({ kind: 'checking' });
+    const delay = retrying.current ? 0 : CHECK_DEBOUNCE_MS;
+    retrying.current = false;
+    const controller = new AbortController();
+    const timer = setTimeout(
+      () => {
+        const send = async (): Promise<void> => {
+          let result: Awaited<ReturnType<ApiClient['validatePattern']>>;
+          try {
+            result = await client.validatePattern({ sourceId, definition, ...(mask ? { mask: true } : {}) }, controller.signal);
+          } catch {
+            result = UNEXPECTED;
+          }
+          if (controller.signal.aborted) return;
+          if (!result.ok) setState(result.failure.code === 'ABORTED' ? { kind: 'none' } : { kind: 'failed', failure: result.failure });
+          else setState(result.value.status === 'ok' ? { kind: 'valid' } : { kind: 'invalid', problems: result.value.problems });
+        };
+        void send();
+      },
+      delay,
+    );
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [client, sourceId, mask, key, attempt]);
+
+  const retry = useCallback((): void => {
+    retrying.current = true;
+    setAttempt((count) => count + 1);
+  }, []);
+  return { state, retry };
+}

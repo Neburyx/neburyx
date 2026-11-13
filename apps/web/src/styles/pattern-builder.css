@@ -1,0 +1,68 @@
+.pattern-builder {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+}
+
+.pattern-builder-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-8);
+}
+
+.pattern-path {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.pattern-path-step {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.pattern-chip {
+  padding: var(--space-2) var(--space-8);
+  border: var(--border-width) solid var(--color-control-border);
+  border-radius: var(--radius-tag);
+  font-size: var(--font-size-small);
+}
+
+.pattern-chip-node {
+  border-color: var(--color-accent);
+  background: var(--color-accent-surface);
+  color: var(--color-accent);
+}
+
+.pattern-chip-rel {
+  background: var(--color-surface);
+  color: var(--color-text-strong);
+}
+
+.pattern-arrow {
+  color: var(--color-text-muted);
+}
+
+.pattern-step {
+  padding: var(--space-8);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-panel);
+  gap: var(--space-8);
+}
+
+.pattern-types {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.pattern-type {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  font-size: var(--font-size-small);
+}

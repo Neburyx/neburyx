@@ -38,6 +38,9 @@ import {
   type CoverageResponse,
   type DegreePreview,
   type DegreePreviewRequest,
+  type PatternValidateRequest,
+  type PatternValidateResponse,
+  patternValidateResponseSchema,
   type DraftWriteRequest,
   type DraftWriteResponse,
   exportSchema,
@@ -130,6 +133,8 @@ export interface ApiClient {
    * `key` is the idempotency key: the same text for a retry of the same attempt, and a new one for a continue (`request.continue`), which is another request.
    */
   runTemplate(id: string, request: TemplateRunRequest, key: string, signal?: AbortSignal): Promise<ApiResult<TemplateRunResponse>>;
+  /** Asks whether a pattern definition is acceptable for a source, or what is wrong with it and where; the route reads no source. */
+  validatePattern(request: PatternValidateRequest, signal?: AbortSignal): Promise<ApiResult<PatternValidateResponse>>;
   testSource(sourceId: string, signal?: AbortSignal): Promise<ApiResult<SourceTestReport>>;
   /** One entity of a source, without its neighbors; `mask` asks for the personal-data fields to be masked. */
   getEntity(ref: ElementRef, options?: { readonly mask?: boolean }, signal?: AbortSignal): Promise<ApiResult<GraphNode>>;
@@ -287,6 +292,7 @@ export function createApiClient(fetcher: Fetcher = (input, init) => fetch(input,
       const result = await request(fetcher, `/v1/templates?sourceId=${encodeURIComponent(sourceId)}`, templateListResponseSchema, signal);
       return result.ok && result.value.sourceId !== sourceId ? failed('SCHEMA_MISMATCH') : result;
     },
+    validatePattern: (body, signal) => request(fetcher, '/v1/patterns/validate', patternValidateResponseSchema, signal, 'POST', body),
     runTemplate: (id, body, key, signal) => request(fetcher, `/v1/templates/${encodeURIComponent(id)}/run`, templateRunResponseSchema, signal, 'POST', body, { headers: { 'idempotency-key': key } }),
     testSource: async (sourceId, signal) => {
       const result = await request(fetcher, `/v1/sources/${encodeURIComponent(sourceId)}/test`, sourceTestReportSchema, signal, 'POST');

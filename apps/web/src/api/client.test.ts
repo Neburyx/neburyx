@@ -145,6 +145,20 @@ describe('the API client, reading sources and a profile', () => {
     expect(await read({ maxHops: 5 })).toEqual({ ok: false, failure: { code: 'SCHEMA_MISMATCH' } });
   });
 
+  it('asks POST /v1/patterns/validate with the typed request and parses ok, the problems, and refuses a malformed answer', async () => {
+    const asked: Array<{ path: string; method: string | undefined; body: unknown }> = [];
+    const answer = (body: unknown) =>
+      createApiClient(async (input, init) => {
+        asked.push({ path: input, method: init?.method, body: typeof init?.body === 'string' ? JSON.parse(init.body) : undefined });
+        return new Response(JSON.stringify(body));
+      });
+    const request = { sourceId: 'a', definition: { anchorType: 't', steps: [] }, mask: true };
+    expect(await answer({ status: 'ok' }).validatePattern(request)).toEqual({ ok: true, value: { status: 'ok' } });
+    expect(await answer({ status: 'invalid', problems: [{ path: ['steps'], code: 'too-few' }] }).validatePattern(request)).toEqual({ ok: true, value: { status: 'invalid', problems: [{ path: ['steps'], code: 'too-few' }] } });
+    expect(await answer({ status: 'maybe' }).validatePattern(request)).toEqual({ ok: false, failure: { code: 'SCHEMA_MISMATCH' } });
+    expect(asked[0]).toEqual({ path: '/v1/patterns/validate', method: 'POST', body: request });
+  });
+
   it('gives a schema mismatch, never a partial value, for a list or a profile that does not match its contract', async () => {
     const client = createApiClient(async () => new Response(JSON.stringify({ items: [{ id: 1 }], nextCursor: null })));
     expect(await client.getSources()).toEqual({ ok: false, failure: { code: 'SCHEMA_MISMATCH' } });

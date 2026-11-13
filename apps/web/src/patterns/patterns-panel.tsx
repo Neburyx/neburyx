@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type KeyboardEvent } from 'react';
 import type { GraphNode, TemplateListResponse, TemplateRunOk } from '@neburyx/contracts';
 import { withoutReadsWhileSourceChanged } from '../api/changed-source-guard.js';
 import { useApiClient } from '../api/client-context.js';
 import { heavyDecisionOfRun } from '../api/heavy-estimate.js';
 import { useRequest } from '../api/use-request.js';
-import { useProfile } from '../canvas/profile-context.js';
+import { useProfile, useProfileReload, useProfileState } from '../canvas/profile-context.js';
 import { useContextEpoch } from '../search/use-context-epoch.js';
 import { answeredData, useShellData } from '../shell/shell-data.js';
 import { useClientState, useLoadedGraph, useSessionMask, useVisibleGraph } from '../state/context.js';
@@ -27,6 +27,9 @@ import { focusPatternsTool } from './patterns-tool.js';
 import { StartEntityField } from './start-entity.js';
 import type { RunAsk } from './pattern-run-store.js';
 import { usePatternRun } from './use-pattern-run.js';
+import { BUILDER_COPY } from './builder/copy.js';
+import { INITIAL, reduce, type Action, type BuilderState } from './builder/model.js';
+import { PatternBuilder, type ProfileView } from './builder/pattern-builder.js';
 
 type Preset = TemplateListResponse['presets'][number];
 
@@ -50,6 +53,31 @@ function PatternsBody() {
     focusPatternsTool();
   };
   const cancelOrClose = useRef<() => void>(close);
+  // the builder is a second view of the panel; the list stays mounted, hidden, so its form is as it was on the way back
+  const [view, setView] = useState<'list' | 'builder'>('list');
+  const [builder, setBuilder] = useState<BuilderState>(INITIAL);
+  const profile = useProfile();
+  const profileState = useProfileState();
+  const profileView: ProfileView = profile !== undefined ? { kind: 'ready', profile } : profileState.sourceId === sourceId && profileState.request.phase === 'failed' ? { kind: 'failed' } : { kind: 'loading' };
+  const reloadProfile = useProfileReload();
+  const maxHops = (sourceId === null ? undefined : answeredData(shell.sources)?.items.find((item) => item.id === sourceId)?.maxHops);
+  const dispatch = (action: Action): void => {
+    if (profile !== undefined) setBuilder((held) => reduce(profile, held, action));
+  };
+  const newButton = useRef<HTMLButtonElement>(null);
+  const startRef = useRef<HTMLSelectElement>(null);
+  const opened = useRef(false);
+  const back = (): void => setView('list');
+  useEffect(() => {
+    if (view === 'builder') {
+      opened.current = true;
+      startRef.current?.focus();
+    } else if (opened.current) newButton.current?.focus();
+  }, [view]);
+  useEffect(() => {
+    // in the builder Escape closes the panel; the list below may have set it to cancel a run that is hidden
+    if (view === 'builder') cancelOrClose.current = close;
+  });
   useEffect(() => {
     const frame = root.current?.closest('.panel-frame');
     if (frame === null || frame === undefined) return undefined;
@@ -71,7 +99,25 @@ function PatternsBody() {
         </button>
       </div>
       <p className="search-panel-note">{PATTERNS_COPY.intro}</p>
-      {sourceId === null ? <p className="search-panel-note">{PATTERNS_COPY.noPatterns}</p> : <PatternsList client={client} sourceId={sourceId} sourceName={sourceName} mask={mask} close={close} escape={cancelOrClose} />}
+      {sourceId === null ? (
+        <p className="search-panel-note">{PATTERNS_COPY.noPatterns}</p>
+      ) : (
+        <>
+          {view === 'list' ? (
+            <div className="patterns-actions">
+              <button type="button" className="secondary" ref={newButton} onClick={() => setView('builder')}>
+                {BUILDER_COPY.newPattern}
+              </button>
+            </div>
+          ) : null}
+          <div hidden={view === 'builder'}>
+            <PatternsList client={client} sourceId={sourceId} sourceName={sourceName} mask={mask} close={close} escape={cancelOrClose} />
+          </div>
+          {view === 'builder' ? (
+            <PatternBuilder profile={profileView} retryProfile={reloadProfile} client={client} sourceId={sourceId} sourceName={sourceName} mask={mask} maxHops={maxHops} state={builder} dispatch={dispatch} onBack={back} startRef={startRef} />
+          ) : null}
+        </>
+      )}
     </div>
   );
 }
