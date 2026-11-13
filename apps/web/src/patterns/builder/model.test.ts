@@ -155,9 +155,9 @@ describe('what a change leaves unfollowed, said once', () => {
   });
 
   it('writes a or an before a type by its first letter', () => {
-    expect(leavingText('Account', 'out')).toBe('Leaving an Account, outgoing');
-    expect(leavingText('Customer', 'in')).toBe('Leaving a Customer, incoming');
-    expect(doesNotLeave('SENT', 'Bank')).toBe('SENT does not leave a Bank.');
-    expect(doesNotLeave('SENT', 'Address')).toBe('SENT does not leave an Address.');
+    expect(leavingText('Alpha', 'out')).toBe('Leaving an Alpha, outgoing');
+    expect(leavingText('Beta', 'in')).toBe('Leaving a Beta, incoming');
+    expect(doesNotLeave('r-1', 'Beta')).toBe('r-1 does not leave a Beta.');
+    expect(doesNotLeave('r-1', 'Echo')).toBe('r-1 does not leave an Echo.');
   });
 });

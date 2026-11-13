@@ -186,13 +186,13 @@ test.describe('conditions and a window in the builder', () => {
     await step.getByRole('button', { name: '+ Add condition' }).click();
     await page.keyboard.press('Enter');
     const row = step.getByRole('group', { name: 'Step 1 condition 1' });
-    const order = ['Property', 'Operator', 'Kind of value', 'Value'].map((label) => row.getByLabel(`Step 1 condition 1: ${label}`));
-    await expect(order[0]).toBeFocused();
-    for (const control of order.slice(1)) {
+    const field = (label: string) => row.getByLabel(`Step 1 condition 1: ${label}`);
+    await expect(field('Property')).toBeFocused();
+    for (const label of ['Operator', 'Kind of value', 'Value']) {
       await page.keyboard.press('Tab');
-      await expect(control).toBeFocused();
+      await expect(field(label)).toBeFocused();
     }
-    await typeInto(page, order[3] ?? row, 'ios');
+    await typeInto(page, field('Value'), 'ios');
     await page.keyboard.press('Tab');
     await expect(row.getByRole('button', { name: 'Done' })).toBeFocused();
     await page.keyboard.press('Enter');
