@@ -164,9 +164,9 @@ function PatternsWorkbench({ client, sourceId, sourceName, mask, list, first, cl
     return [...ofType.filter((node) => chosenKeys.has(elementKey(node.ref))), ...ofType.filter((node) => !chosenKeys.has(elementKey(node.ref)))];
   }, [graph, anchorType, selection]);
   const selected = candidates.filter((node) => selection.has(elementKey(node.ref)));
-  // the person's choice, else the one selected entity of the type, else the entity the investigation was opened on when it is of the type
-  const startRef = useStoreSelector(state.investigation, (investigation) => investigation.nodeRefs[0]);
-  const opened = startRef === undefined ? undefined : candidates.find((node) => elementKey(node.ref) === elementKey(startRef));
+  // the person's choice, else the one selected entity of the type, else the entity the investigation was opened on when it is of the type and loaded
+  const startingEntity = useStoreSelector(state.investigation, (investigation) => investigation.record?.startingEntity);
+  const opened = startingEntity === null || startingEntity === undefined ? undefined : candidates.find((node) => node.ref.entityType === startingEntity.entityType && node.ref.stableId === startingEntity.stableId);
   const anchor: GraphNode | undefined = chosen !== undefined && chosen.ref.entityType === anchorType ? chosen : selected.length === 1 ? selected[0] : opened;
   const hasEntity = anchor !== undefined;
 

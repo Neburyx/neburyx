@@ -20,6 +20,8 @@ export interface InvestigationRecord {
   readonly save: SaveState;
   /** Whether the source is as it was when the investigation was made; a record with none is read as available. A source that was re-pointed or removed makes the investigation read-only, and nothing is read from it. */
   readonly sourceState?: InvestigationSourceState;
+  /** The entity the investigation was opened on, when the server named one. */
+  readonly startingEntity?: { readonly entityType: string; readonly stableId: string } | null;
   /** False when the person may not delete the investigation (it is not theirs); a record with none is read as allowed. */
   readonly canDelete?: boolean;
 }

@@ -37,7 +37,7 @@ function show(state: ClientState, investigation: Investigation, items: { readonl
   const key = openedKey(investigation.sourceId, context.principalId, investigation.id, context.mask);
   try {
     const activation = state.show(
-      { id: investigation.id, sourceId: investigation.sourceId, record: { title: investigation.title, caseRef: investigation.caseRef, status: investigation.status, readOnly: readOnlyOf(investigation.status, investigation.sourceState), sourceState: investigation.sourceState, version: investigation.version, save }, resultKeys: [key], nodeRefs: items.nodes.map((node) => node.ref), edgeRefs: items.edges.map((edge) => edge.ref) },
+      { id: investigation.id, sourceId: investigation.sourceId, record: { title: investigation.title, caseRef: investigation.caseRef, status: investigation.status, readOnly: readOnlyOf(investigation.status, investigation.sourceState), sourceState: investigation.sourceState, startingEntity: investigation.startingEntity === null ? null : { entityType: investigation.startingEntity.entityType, stableId: investigation.startingEntity.stableId }, version: investigation.version, save }, resultKeys: [key], nodeRefs: items.nodes.map((node) => node.ref), edgeRefs: items.edges.map((edge) => edge.ref) },
       [{ key, result: { sourceId: investigation.sourceId, nodes: [...items.nodes], edges: [...items.edges] } }],
     );
     return { kind: 'shown', id: investigation.id, activation };

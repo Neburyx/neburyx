@@ -54,7 +54,7 @@ describe('the Patterns panel: open and run a preset', () => {
   });
 
   it('disables Run until an entity of the anchor type is selected, and names the type', async () => {
-    const kit = await patternsWorkspace({ nodes: [typedNode('dev-1', 'kind-b'), typedNode('acc-1', 'kind-a')] });
+    const kit = await patternsWorkspace({ nodes: [typedNode('dev-1', 'kind-b'), typedNode('acc-1', 'kind-a')], opened: { entityType: 'kind-b', stableId: 'dev-1' } });
     await openPatterns();
     expect(run().hasAttribute('disabled')).toBe(true);
     expect(screen.getByText('Select a KIND-A to start.')).toBeTruthy();
@@ -70,6 +70,13 @@ describe('the Patterns panel: open and run a preset', () => {
     await userEvent.click(run());
     await settle();
     expect(kit.sent[0]?.request.params).toEqual({ ref: { entityType: 'kind-a', stableId: 'acc-1' } });
+  });
+
+  it('does not take the first loaded entity of the type when it is not the one the investigation was opened on', async () => {
+    await patternsWorkspace({ nodes: [typedNode('acc-1', 'kind-a'), typedNode('dev-1', 'kind-b')], opened: { entityType: 'kind-b', stableId: 'dev-1' } });
+    await openPatterns();
+    expect(run().hasAttribute('disabled')).toBe(true);
+    expect((screen.getByLabelText('Starting account') as HTMLSelectElement).value).toBe('');
   });
 
   it('shows a result only under the pattern that produced it, and again when the person goes back to it', async () => {

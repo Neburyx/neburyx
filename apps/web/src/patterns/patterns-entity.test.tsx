@@ -33,7 +33,7 @@ describe('the starting entity', () => {
   });
 
   it('never sends typed text as the ref and leaves Run disabled with nothing chosen', async () => {
-    const kit = await patternsWorkspace({ nodes: [typedNode('dev-1', 'kind-b'), typedNode('acc-1', 'kind-a'), typedNode('acc-2', 'kind-a')] });
+    const kit = await patternsWorkspace({ nodes: [typedNode('dev-1', 'kind-b'), typedNode('acc-1', 'kind-a'), typedNode('acc-2', 'kind-a')], opened: null });
     await openPatterns();
     await userEvent.type(screen.getByRole('searchbox', { name: 'Search the source' }), 'ACC-777');
     expect(run().hasAttribute('disabled')).toBe(true);

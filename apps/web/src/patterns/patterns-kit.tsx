@@ -69,6 +69,8 @@ export interface KitOptions {
   readonly nodes?: readonly GraphNode[];
   /** The source's timeout; `null` for a source that does not state one. */
   readonly timeoutMs?: number | null;
+  /** The entity the investigation was opened on; the first account by default, `null` for none. */
+  readonly opened?: { readonly entityType: string; readonly stableId: string } | null;
   readonly search?: (request: unknown) => Promise<ApiResult<never>>;
 }
 
@@ -93,6 +95,7 @@ export async function patternsWorkspace(options: KitOptions = {}): Promise<Patte
   });
   const state = createClientState();
   loadGraph(state, options.nodes ?? [typedNode('acc-1', 'kind-a'), typedNode('acc-2', 'kind-a'), typedNode('dev-1', 'kind-b')], []);
+  state.describeInvestigation({ title: 'T', caseRef: null, status: 'open', readOnly: false, version: 1, save: { kind: 'unsaved' }, sourceState: 'available', startingEntity: options.opened === undefined ? { entityType: 'kind-a', stableId: 'acc-1' } : options.opened });
   const slots = createSlotRegistry();
   registerBuiltInSlots(slots);
   const tools = createToolRegistry();
