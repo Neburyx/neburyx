@@ -130,3 +130,48 @@ describe('the refusal of a call whose audit event could not be written', () => {
     expect(parseExtensionRefusal(thrown)).toEqual({ code: 'AUDIT_UNAVAILABLE' });
   });
 });
+
+describe('the refusals of a read of the gate and of a plan', () => {
+  const recognised: ReadonlyArray<[string, Record<string, unknown>]> = [
+    ['a query budget with its figures', { code: 'QUERY_BUDGET_EXCEEDED', maxPage: 50, maxHops: 3 }],
+    ['a query budget with none', { code: 'QUERY_BUDGET_EXCEEDED' }],
+    ['a busy source', { code: 'SOURCE_BUSY' }],
+    ['an unavailable source with its reason', { code: 'SOURCE_UNAVAILABLE', reason: 'unreachable' }],
+    ['an unavailable source that waits', { code: 'SOURCE_UNAVAILABLE', reason: 'repeated-timeouts', retryAfterMs: 5000 }],
+    ['a rate limit with its wait', { code: 'RATE_LIMITED', retryAfterMs: 1000 }],
+    ['an access refusal with no reason', { code: 'ACCESS_DENIED' }],
+    ['a source mismatch', { code: 'SOURCE_MISMATCH' }],
+    ['an expired plan', { code: 'CONFLICT', reason: 'plan-expired' }],
+    ['a plan that cannot be run', { code: 'CONFLICT', reason: 'plan-not-runnable' }],
+    ['an invalid plan', { code: 'ASK_PLAN_INVALID' }],
+    ['an audit that is unavailable', { code: 'AUDIT_UNAVAILABLE' }],
+  ];
+
+  it.each(recognised)('reads %s from its shape, with what it holds and nothing else', (_name, held) => {
+    expect(parseExtensionRefusal(new ExtensionRefusal(held as never))).toEqual(held);
+    expect(parseExtensionRefusal({ name: 'ExtensionRefusal', ...held })).toEqual(held);
+  });
+
+  it.each([
+    ['a reason of another code on an unavailable source', { code: 'SOURCE_UNAVAILABLE', reason: 'plan-expired' }],
+    ['an unavailable source with no reason', { code: 'SOURCE_UNAVAILABLE' }],
+    ['a wait on an unavailable source that is not the breaker', { code: 'SOURCE_UNAVAILABLE', reason: 'unreachable', retryAfterMs: 5 }],
+    ['a conflict with no reason', { code: 'CONFLICT' }],
+    ['a conflict with a reason that is not a plan one', { code: 'CONFLICT', reason: 'source-changed' }],
+    ['a reason on an invalid plan', { code: 'ASK_PLAN_INVALID', reason: 'plan-expired' }],
+    ['a reason that is not the preview one on an access refusal', { code: 'ACCESS_DENIED', reason: 'access-changed' }],
+    ['a negative wait on a rate limit', { code: 'RATE_LIMITED', retryAfterMs: -1 }],
+    ['a figure that is not a whole number', { code: 'QUERY_BUDGET_EXCEEDED', maxPage: 1.5 }],
+    ['a code of the error model that a route does not refuse with', { code: 'INTERNAL_ERROR' }],
+    ['an unknown code', { code: 'TEAPOT' }],
+  ])('does not read %s', (_name, held) => {
+    expect(parseExtensionRefusal({ name: 'ExtensionRefusal', ...held })).toBeUndefined();
+  });
+
+  it('keeps an access refusal that has no reason apart from the one that says the preview is off', () => {
+    const plain = new ExtensionRefusal({ code: 'ACCESS_DENIED' });
+    expect(parseExtensionRefusal(plain)).toEqual({ code: 'ACCESS_DENIED' });
+    expect(plain.reason).toBeUndefined();
+    expect(plain.audited).toBeUndefined();
+  });
+});

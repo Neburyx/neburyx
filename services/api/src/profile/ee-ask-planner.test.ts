@@ -4,6 +4,7 @@ import type { AiMappingView, AskPlan, AuditEvent } from '@neburyx/contracts';
 import { createEnterpriseExtension } from '@neburyx/ee-ask';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { communitySeams } from '../seams/community-seams.js';
+import { LISTED_PLAN_EXPIRY, LISTED_PLAN_ID, createListPlanStore } from '../testing/list-plan-store.js';
 import { startSearchApp } from '../testing/search-app.js';
 
 const events: AuditEvent[] = [];
@@ -42,7 +43,7 @@ afterAll(async () => {
 async function startPlanning(options: { readonly configure?: boolean; readonly mount?: boolean; readonly previewOn?: boolean } = {}) {
   events.length = 0;
   received.length = 0;
-  const extension = createEnterpriseExtension({ modelBaseUrl: baseUrl });
+  const extension = createEnterpriseExtension({ modelBaseUrl: baseUrl, planStore: createListPlanStore() });
   if (options.configure !== false) await extension.configure?.(SETTINGS, { PLANNER_TEST_KEY: 'SENTINEL-KEY' }, VIEW);
   if (options.mount !== false) extension.createAuditSink?.(SINK_CONTEXT);
   const rig = await startSearchApp({ appOptions: { extension, previewOn: options.previewOn ?? true, seams: communitySeams() } });
@@ -61,7 +62,8 @@ describe('the plan endpoint with the planner of the real extension', () => {
     replyText = JSON.stringify(PLAN);
     const { post, app } = await startPlanning();
     const answer = await confirmed(post);
-    expect([answer.statusCode, answer.json()]).toEqual([200, { plan: PLAN }]);
+    const hydrated = JSON.parse(JSON.stringify(PLAN).replace('‹widget#1›', 'W-001')) as AskPlan;
+    expect([answer.statusCode, answer.json()]).toEqual([200, { plan: hydrated, planId: LISTED_PLAN_ID, expiresAt: LISTED_PLAN_EXPIRY.toISOString() }]);
     expect(received).toHaveLength(1);
     expect(received[0]).toContain('‹widget#1›');
     expect(received[0]).not.toContain('W-001');

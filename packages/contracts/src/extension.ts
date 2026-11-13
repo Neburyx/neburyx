@@ -1,6 +1,7 @@
 import { z, type ZodType } from 'zod';
 import type { AiSettings } from './ai.js';
-import type { AskEntityLookup, AskEntitySearch, AskPlanner } from './ask.js';
+import type { ASK_PLAN_TEMPLATE_IDS, AskEntityLookup, AskEntitySearch, AskPlanner, AskRunResult } from './ask.js';
+import { SOURCE_UNAVAILABLE_REASONS } from './error-codes.js';
 import type { AuditEvent, AuditSink, AuditSinkContext, MountedAuditSink } from './audit.js';
 
 export type ExtensionRoutePermission = 'public' | 'principal';
@@ -22,7 +23,26 @@ export interface ExtensionRequest {
   /** The caller's policy version for a source; `none` in Community. */
   readonly policyVersionOf?: (sourceId: string) => string;
   /** The search and the lookup of the caller's source that resolve a question, read through the gate with the caller's rights; `ensureSource` refuses (as `NOT_FOUND`) a source that is not configured or that the caller may not read, and is asked before anything is signed or sent. */
+  /**
+   * The run of a plan of the caller on one source, through the gate: the factory is built for this request (its caller, trace ID and abort signal). The runner it returns reads only the source of the
+   * scope, and its reads refuse, as `NOT_FOUND` and before anything is read, a source that is not configured or that the caller may not read; that refusal comes with the run, so a plan that meets it is a failed run.
+   */
+  readonly askPlanRunner?: (scope: AskRunScope) => AskPlanRunner;
   readonly askEntityTools?: (sourceId: string) => { readonly search: AskEntitySearch; readonly lookup: AskEntityLookup; readonly ensureSource: () => Promise<void> };
+}
+
+/** The source a plan is run on and whether the personal data of the nodes of its result is masked. */
+export interface AskRunScope {
+  readonly sourceId: string;
+  readonly mask: boolean;
+}
+
+/** What a run of a plan came to: the result, or the refusal of the gate with the code and details the manual route gives, never a partial result. */
+export type AskPlanRun = { readonly status: 'ok'; readonly result: AskRunResult } | { readonly status: 'refused'; readonly refusal: ExtensionRefusalFields };
+
+export interface AskPlanRunner {
+  /** Runs a template with the parameters a stored plan holds, as the service of its manual route would. */
+  run(plan: { readonly templateId: (typeof ASK_PLAN_TEMPLATE_IDS)[number]; readonly params: unknown }): Promise<AskPlanRun>;
 }
 
 export type ExtensionRouteMethod = 'GET' | 'POST';
@@ -85,6 +105,15 @@ export type ConfigureOutcome = { readonly ok: true; readonly warnings?: readonly
 /** The one method of the API's logger an extension may use. */
 export interface ExtensionLogger {
   readonly warn: (fields: Readonly<Record<string, unknown>>, message: string) => void;
+  /** Says what a task did; the application's logger has it, and an extension must not need it. */
+  readonly info?: (fields: Readonly<Record<string, unknown>>, message: string) => void;
+}
+
+/** One recurring task an extension asks the application's job runner to run: a name that no other task has, a cron schedule and the work. Compatible with the application's own task type. */
+export interface ExtensionTask {
+  readonly name: string;
+  readonly schedule: string;
+  readonly run: (payload: unknown) => Promise<void>;
 }
 
 export interface ProfileExtension {
@@ -96,40 +125,89 @@ export interface ProfileExtension {
   /** The planner of the extension, once it can plan (the model is configured and the audit sink is mounted); a planner given to the application through its seams wins over it, and the Community default is used when there is none. */
   readonly askPlanner?: () => AskPlanner | undefined;
   readonly configure?: (settings: AiSettings, env: Readonly<Record<string, string | undefined>>, view?: AiMappingView) => Promise<ConfigureOutcome>;
+  /** The recurring tasks of the extension for the application's job runner, asked once at start-up after the audit sink is mounted, and only when the preview is on; none before the extension has what they need. */
+  readonly maintenanceTasks?: () => readonly ExtensionTask[];
   /** The audit sink that replaces the Community one, which keeps nothing; given the application's own database login and its limits. */
   readonly createAuditSink?: (context: AuditSinkContext) => MountedAuditSink;
 }
 
 const EXTENSION_REFUSAL_NAME = 'ExtensionRefusal';
 
-const previewOffRefusalSchema = z.object({ name: z.literal(EXTENSION_REFUSAL_NAME), code: z.literal('ACCESS_DENIED'), reason: z.literal('ai-preview-off'), audited: z.boolean() });
-const notInThisEditionRefusalSchema = z.object({ name: z.literal(EXTENSION_REFUSAL_NAME), code: z.literal('ASK_UNSUPPORTED'), reason: z.literal('not-in-this-edition') });
+const named = z.literal(EXTENSION_REFUSAL_NAME);
+/** A key a refusal of this code never carries: absent or undefined, so a value of it is not recognised. */
+const none = z.undefined().optional();
 
-const notFoundRefusalSchema = z.object({ name: z.literal(EXTENSION_REFUSAL_NAME), code: z.literal('NOT_FOUND') });
-const queryTimeoutRefusalSchema = z.object({ name: z.literal(EXTENSION_REFUSAL_NAME), code: z.literal('QUERY_TIMEOUT'), timeoutMs: z.number().int().positive() });
-const auditUnavailableRefusalSchema = z.object({ name: z.literal(EXTENSION_REFUSAL_NAME), code: z.literal('AUDIT_UNAVAILABLE') });
-const invalidRequestRefusalSchema = z.object({ name: z.literal(EXTENSION_REFUSAL_NAME), code: z.literal('INVALID_REQUEST'), reason: z.string().min(1) });
+const previewOffRefusalSchema = z.object({ name: named, code: z.literal('ACCESS_DENIED'), reason: z.literal('ai-preview-off'), audited: z.boolean() });
+const notInThisEditionRefusalSchema = z.object({ name: named, code: z.literal('ASK_UNSUPPORTED'), reason: z.literal('not-in-this-edition') });
 
-/** What a refusal is made of: the preview being off (with whether the refusal's own audit event was written), Ask having no planner in this build, a thing the call names not being there, a request whose parts the route cannot accept (with the reason), or a call that ran out of time (with the limit). */
-export const extensionRefusalSchema = z.union([previewOffRefusalSchema, notInThisEditionRefusalSchema, notFoundRefusalSchema, invalidRequestRefusalSchema, queryTimeoutRefusalSchema, auditUnavailableRefusalSchema]);
+const notFoundRefusalSchema = z.object({ name: named, code: z.literal('NOT_FOUND') });
+const queryTimeoutRefusalSchema = z.object({ name: named, code: z.literal('QUERY_TIMEOUT'), timeoutMs: z.number().int().positive() });
+const auditUnavailableRefusalSchema = z.object({ name: named, code: z.literal('AUDIT_UNAVAILABLE') });
+const invalidRequestRefusalSchema = z.object({ name: named, code: z.literal('INVALID_REQUEST'), reason: z.string().min(1) });
+/** The refusals of the gate's reads and of a plan, which carry no more than their code, or the figures the error model allows for it. */
+const accessDeniedRefusalSchema = z.object({ name: named, code: z.literal('ACCESS_DENIED'), reason: none, audited: none });
+const sourceMismatchRefusalSchema = z.object({ name: named, code: z.literal('SOURCE_MISMATCH'), reason: none });
+const sourceBusyRefusalSchema = z.object({ name: named, code: z.literal('SOURCE_BUSY'), reason: none });
+const askPlanInvalidRefusalSchema = z.object({ name: named, code: z.literal('ASK_PLAN_INVALID'), reason: none });
+const budgetRefusalSchema = z.object({ name: named, code: z.literal('QUERY_BUDGET_EXCEEDED'), reason: none, maxPage: z.number().int().positive().optional(), maxHops: z.number().int().positive().optional() });
+const rateLimitedRefusalSchema = z.object({ name: named, code: z.literal('RATE_LIMITED'), reason: none, retryAfterMs: z.number().int().nonnegative().optional() });
+const sourceUnavailableRefusalSchema = z
+  .object({ name: named, code: z.literal('SOURCE_UNAVAILABLE'), reason: z.enum(SOURCE_UNAVAILABLE_REASONS), retryAfterMs: z.number().int().nonnegative().optional() })
+  .refine((fields) => fields.retryAfterMs === undefined || fields.reason === 'repeated-timeouts', { message: 'only repeated-timeouts has a wait' });
+/** A plan refusal names one of the two reasons of a plan, no other reason of `CONFLICT`. */
+export const PLAN_CONFLICT_REASONS = ['plan-expired', 'plan-not-runnable'] as const;
+const conflictRefusalSchema = z.object({ name: named, code: z.literal('CONFLICT'), reason: z.enum(PLAN_CONFLICT_REASONS) });
 
-export type ExtensionRefusalFields = Omit<z.infer<typeof previewOffRefusalSchema>, 'name'> | Omit<z.infer<typeof notInThisEditionRefusalSchema>, 'name'> | Omit<z.infer<typeof notFoundRefusalSchema>, 'name'> | Omit<z.infer<typeof invalidRequestRefusalSchema>, 'name'> | Omit<z.infer<typeof queryTimeoutRefusalSchema>, 'name'> | Omit<z.infer<typeof auditUnavailableRefusalSchema>, 'name'>;
+const refusalSchemas = [
+  previewOffRefusalSchema,
+  notInThisEditionRefusalSchema,
+  notFoundRefusalSchema,
+  invalidRequestRefusalSchema,
+  queryTimeoutRefusalSchema,
+  auditUnavailableRefusalSchema,
+  accessDeniedRefusalSchema,
+  sourceMismatchRefusalSchema,
+  sourceBusyRefusalSchema,
+  askPlanInvalidRefusalSchema,
+  budgetRefusalSchema,
+  rateLimitedRefusalSchema,
+  sourceUnavailableRefusalSchema,
+  conflictRefusalSchema,
+] as const;
 
-/** Thrown by a route handler of an extension to refuse a call; the API answers it with the code and reason it names. */
+/**
+ * What a refusal is made of: the preview being off (with whether the refusal's own audit event was written), Ask having no planner in this build, a thing the call names not being there, a request
+ * whose parts the route cannot accept (with the reason), a call that ran out of time (with the limit), or one of the gate's refusals of a read or a plan's refusals, each with the figures and the
+ * reason the error model allows for its code and nothing else.
+ */
+export const extensionRefusalSchema = z.union(refusalSchemas);
+
+type FieldsOf<T extends z.ZodType> = T extends z.ZodType ? Omit<z.input<T>, 'name'> : never;
+
+export type ExtensionRefusalFields = FieldsOf<(typeof refusalSchemas)[number]>;
+
+/** Thrown by a route handler of an extension to refuse a call; the API answers it with the code and the details it names. */
 export class ExtensionRefusal extends Error {
   readonly code: ExtensionRefusalFields['code'];
   readonly reason: string | undefined;
   /** Only a refusal that is audited says whether its event was written. */
   readonly audited: boolean | undefined;
   readonly timeoutMs: number | undefined;
+  readonly retryAfterMs: number | undefined;
+  readonly maxPage: number | undefined;
+  readonly maxHops: number | undefined;
 
   constructor(fields: ExtensionRefusalFields) {
     super();
     this.name = EXTENSION_REFUSAL_NAME;
+    const held: { code: string; reason?: string; audited?: boolean; timeoutMs?: number; retryAfterMs?: number; maxPage?: number; maxHops?: number } = fields;
     this.code = fields.code;
-    this.reason = 'reason' in fields ? fields.reason : undefined;
-    this.audited = 'audited' in fields ? fields.audited : undefined;
-    this.timeoutMs = 'timeoutMs' in fields ? fields.timeoutMs : undefined;
+    this.reason = held.reason;
+    this.audited = held.audited;
+    this.timeoutMs = held.timeoutMs;
+    this.retryAfterMs = held.retryAfterMs;
+    this.maxPage = held.maxPage;
+    this.maxHops = held.maxHops;
   }
 }
 
@@ -141,5 +219,6 @@ export function parseExtensionRefusal(value: unknown): ExtensionRefusalFields | 
   const parsed = extensionRefusalSchema.safeParse(value);
   if (!parsed.success) return undefined;
   const { name: _name, ...fields } = parsed.data;
-  return fields;
+  // a key the value holds with no value is left out, so `'audited' in refusal` means the refusal says it
+  return Object.fromEntries(Object.entries(fields).filter(([, entry]) => entry !== undefined)) as ExtensionRefusalFields;
 }

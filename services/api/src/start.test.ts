@@ -188,6 +188,62 @@ describe('the enterprise extension at start', () => {
     await result.app.close();
   });
 
+  describe('the maintenance tasks of the extension', () => {
+    const sweepTask = (ran: string[]): NonNullable<ProfileExtension['maintenanceTasks']> => () => [{ name: 'fake-sweep', schedule: '*/5 * * * *', run: async () => void ran.push('swept') }];
+    const withTasks = (ran: string[]): ProfileExtension => ({ ...extensionWith(route()), maintenanceTasks: sweepTask(ran) });
+    const runner = () => {
+      const seen: { name: string; schedule?: string }[][] = [];
+      const startJobRunner: NonNullable<StartIo['startJobRunner']> = (_url, tasks) => {
+        seen.push(tasks.map((task) => ({ name: task.name, ...(task.schedule === undefined ? {} : { schedule: task.schedule }) })));
+        return Promise.resolve(undefined);
+      };
+      return { seen, startJobRunner };
+    };
+
+    it('adds no task with the switch off, and never asks the extension for one', async () => {
+      const ask = vi.fn(() => []);
+      const rig = run(async () => ({ ...extensionWith(route()), maintenanceTasks: ask }));
+      const jobs = runner();
+      const base = { ...rig.io, startJobRunner: jobs.startJobRunner };
+      delete (base as { tasks?: unknown }).tasks;
+      const result = await start(OFF, base);
+      expect(result.exitCode).toBe(0);
+      expect(ask).not.toHaveBeenCalled();
+      expect(jobs.seen[0]?.map((task) => task.name)).toEqual(['purge-deleted-investigations', 'purge-deleted-patterns', 'expire-exports']);
+      if (result.exitCode === 0) await result.app.close();
+    });
+
+    it('adds the tasks of the extension to the application\u2019s own on the one runner with the switch on', async () => {
+      const rig = run(async () => withTasks([]));
+      const jobs = runner();
+      const base = { ...rig.io, startJobRunner: jobs.startJobRunner };
+      delete (base as { tasks?: unknown }).tasks;
+      const result = await start(ON, base);
+      expect(result.exitCode).toBe(0);
+      expect(jobs.seen).toEqual([[{ name: 'purge-deleted-investigations', schedule: '17 3 * * *' }, { name: 'purge-deleted-patterns', schedule: '29 3 * * *' }, { name: 'expire-exports', schedule: '41 3 * * *' }, { name: 'fake-sweep', schedule: '*/5 * * * *' }]]);
+      if (result.exitCode === 0) await result.app.close();
+    });
+
+    it('stops with the configuration error of a task that has the name of another, and starts nothing', async () => {
+      const rig = run(async () => ({ ...extensionWith(route()), maintenanceTasks: () => [{ name: 'expire-exports', schedule: '*/5 * * * *', run: async () => undefined }] }));
+      const jobs = runner();
+      const base = { ...rig.io, startJobRunner: jobs.startJobRunner };
+      delete (base as { tasks?: unknown }).tasks;
+      const result = await start(ON, base);
+      expect(result.exitCode).not.toBe(0);
+      expect(jobs.seen).toEqual([]);
+    });
+
+    it('leaves an injected list as it is, whatever the extension has', async () => {
+      const rig = run(async () => withTasks([]));
+      const jobs = runner();
+      const result = await start(ON, { ...rig.io, startJobRunner: jobs.startJobRunner, tasks: [{ name: 'mine', run: () => Promise.resolve() }] });
+      expect(result.exitCode).toBe(0);
+      expect(jobs.seen).toEqual([[{ name: 'mine' }]]);
+      if (result.exitCode === 0) await result.app.close();
+    });
+  });
+
   it('never calls the loader and mounts nothing when the switch is off', async () => {
     const rig = run(async () => extensionWith(route()));
     const result = await start(OFF, rig.io);

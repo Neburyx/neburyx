@@ -15,7 +15,8 @@ const DOMAIN = 'ask-preview';
 const FORMAT_VERSION = 1;
 const HASH_SHAPE = /^[0-9a-f]{64}$/;
 
-function stable(value: unknown): unknown {
+/** The value with the keys of every object sorted, so equal values have one text. */
+export function stable(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(stable);
   if (typeof value === 'object' && value !== null) return Object.fromEntries(Object.entries(value).sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0)).map(([key, inner]) => [key, stable(inner)]));
   return value;

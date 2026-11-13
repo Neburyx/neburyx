@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AskPlan, AskPlanner, AuditEvent } from '@neburyx/contracts';
-import { createEnterpriseExtension } from '@neburyx/ee-ask';
+import { createEnterpriseExtension, type PlanStore } from '@neburyx/ee-ask';
 import pino from 'pino';
 import { stringify } from 'yaml';
 import { z } from 'zod';
@@ -16,6 +16,7 @@ import { start, type StartIo } from '../start.js';
 import { baseSource } from '../testing/mapping.js';
 import { memoryAppStore } from '../testing/app-store.js';
 import { checkOperations } from '../testing/contract-check.js';
+import { createListPlanStore } from '../testing/list-plan-store.js';
 import { loadCommittedDocument } from '../testing/document.js';
 import { makeExportDirectory } from '../testing/export-directory.js';
 import { makeWebRoot } from '../testing/web-root.js';
@@ -243,10 +244,17 @@ describe('the Ask run route', () => {
     await app.close();
   });
 
-  it('answers 404 NOT_FOUND for any plan under an available planner, since no plan is stored yet', async () => {
+  it('answers 422 ASK_UNSUPPORTED before any read when the planner is available but the application has no plan store or no runner', async () => {
     const app = await appOf({ availability: () => ({ available: true }), plan: () => Promise.reject(new Error('must not be called')) });
     const answer = await app.inject({ method: 'POST', url: '/v1/ask/run', payload: { planId: PLAN_ID } });
-    expect([answer.statusCode, answer.json().error.code]).toEqual([404, 'NOT_FOUND']);
+    expect([answer.statusCode, answer.json().error.code, answer.json().error.details]).toEqual([422, 'ASK_UNSUPPORTED', { reason: 'not-in-this-edition' }]);
+    await app.close();
+  });
+
+  it('answers 422 ASK_UNSUPPORTED when there is a store but the application built no gate, so no runner', async () => {
+    const app = await buildApp({ webRoot, logger: pino({ level: 'silent' }), store: memoryAppStore(), seams: { ...communitySeams(), askPlanner: { availability: () => ({ available: true }), plan: () => Promise.reject(new Error('must not be called')) } }, extension: createEnterpriseExtension({ planStore: createListPlanStore() }), previewOn: true });
+    const answer = await app.inject({ method: 'POST', url: '/v1/ask/run', payload: { planId: PLAN_ID } });
+    expect([answer.statusCode, answer.json().error.code]).toEqual([422, 'ASK_UNSUPPORTED']);
     await app.close();
   });
 
@@ -257,7 +265,7 @@ describe('the Ask run route', () => {
     await app.close();
   });
 
-  it.each([['/v1/ask/plan', { message: 'Who shares a device?' }], ['/v1/ask/run', { planId: PLAN_ID }]])('answers 403 ACCESS_DENIED with the reason ai-preview-off for %s when the preview is off, and never calls the planner', async (url, payload) => {
+  it.each([['/v1/ask/plan', { message: 'Who shares a device?' }], ['/v1/ask/run', { planId: PLAN_ID }], ['/v1/ask/edit', { planId: PLAN_ID, templateId: 'entity', params: {} }], ['/v1/ask/cancel', { planId: PLAN_ID }]])('answers 403 ACCESS_DENIED with the reason ai-preview-off for %s when the preview is off, and never calls the planner', async (url, payload) => {
     const calls: string[] = [];
     const app = await appOf({ availability: () => (calls.push('availability'), { available: true }), plan: () => (calls.push('plan'), Promise.reject(new Error('must not be called'))) }, false);
     const answer = await app.inject({ method: 'POST', url, payload });
@@ -272,6 +280,88 @@ describe('the Ask run route', () => {
     const answer = await app.inject({ method: 'POST', url: '/v1/ask/plan', payload: { nothing: true } });
     expect([answer.statusCode, answer.json().error.code, answer.json().error.details]).toEqual([403, 'ACCESS_DENIED', { reason: 'ai-preview-off' }]);
     expect(events).toHaveLength(1);
+    await app.close();
+  });
+});
+
+describe('the Ask edit and cancel routes', () => {
+  const PLAN_ID = '0192f000-0000-7000-8000-0000000000a1';
+  const available: AskPlanner = { availability: () => ({ available: true }), plan: () => Promise.reject(new Error('must not be called')) };
+  const base = { id: PLAN_ID, userId: 'u', sourceId: 'demo', turnId: undefined, templateId: 'entity', templateVersion: 1, params: {}, parentPlanId: undefined, planningTraceId: 'tr', createdAt: new Date(), expiresAt: new Date() } as const;
+
+  async function appOf(planner: AskPlanner | undefined, store?: PlanStore) {
+    return buildApp({ webRoot, logger: pino({ level: 'silent' }), store: memoryAppStore(), seams: { ...communitySeams(), ...(planner === undefined ? {} : { askPlanner: planner }) }, extension: createEnterpriseExtension(store === undefined ? {} : { planStore: store }), previewOn: true });
+  }
+  const post = (app: Awaited<ReturnType<typeof appOf>>, url: string, payload: unknown) => app.inject({ method: 'POST', url, payload: payload as never });
+
+  const BODIES = [['/v1/ask/edit', { planId: PLAN_ID, templateId: 'entity', params: {} }], ['/v1/ask/cancel', { planId: PLAN_ID }]] as const;
+
+  it.each(BODIES)('answers 422 ASK_UNSUPPORTED with the reason not-in-this-edition for %s under the Community planner', async (url, payload) => {
+    const app = await appOf(undefined);
+    const answer = await post(app, url, payload);
+    expect([answer.statusCode, answer.json().error.code, answer.json().error.details]).toEqual([422, 'ASK_UNSUPPORTED', { reason: 'not-in-this-edition' }]);
+    await app.close();
+  });
+
+  it.each(BODIES)('answers 422 ASK_UNSUPPORTED for %s when the store is not built', async (url, payload) => {
+    const app = await appOf(available);
+    const answer = await post(app, url, payload);
+    expect([answer.statusCode, answer.json().error.code]).toEqual([422, 'ASK_UNSUPPORTED']);
+    await app.close();
+  });
+
+  it.each([
+    ['/v1/ask/edit', { planId: 'plan-1', templateId: 'entity', params: {} }],
+    ['/v1/ask/edit', { planId: PLAN_ID, templateId: 'free-query', params: {} }],
+    ['/v1/ask/edit', { planId: PLAN_ID, templateId: 'entity' }],
+    ['/v1/ask/cancel', { planId: 'plan-1' }],
+    ['/v1/ask/cancel', { planId: PLAN_ID, extra: 1 }],
+  ])('answers 400 INVALID_REQUEST for a malformed body of %s', async (url, payload) => {
+    const app = await appOf(available, createListPlanStore());
+    const answer = await post(app, url, payload);
+    expect([answer.statusCode, answer.json().error.code]).toEqual([400, 'INVALID_REQUEST']);
+    await app.close();
+  });
+
+  it('answers 404 NOT_FOUND for a plan the store does not hold', async () => {
+    const app = await appOf(available, createListPlanStore());
+    const answer = await post(app, '/v1/ask/edit', { planId: PLAN_ID, templateId: 'entity', params: {} });
+    expect([answer.statusCode, answer.json().error.code]).toEqual([404, 'NOT_FOUND']);
+    await app.close();
+  });
+
+  it('answers 409 CONFLICT with the reason plan-not-runnable and its sentence for a plan that is no longer proposed', async () => {
+    const store: PlanStore = { ...createListPlanStore(), get: async () => ({ ...base, state: 'confirmed' }), cancel: async () => ({ status: 'not-runnable' }) };
+    const app = await appOf(available, store);
+    for (const [url, payload] of [['/v1/ask/edit', { planId: PLAN_ID, templateId: 'entity', params: {} }], ['/v1/ask/cancel', { planId: PLAN_ID }]] as const) {
+      const answer = await post(app, url, payload);
+      expect([answer.statusCode, answer.json().error.code, answer.json().error.details, answer.json().error.message]).toEqual([409, 'CONFLICT', { reason: 'plan-not-runnable' }, 'This plan can no longer be run. Ask the question again to get a new plan.']);
+    }
+    await app.close();
+  });
+
+  it('answers 409 CONFLICT with the reason plan-expired for a plan that expired', async () => {
+    const store: PlanStore = { ...createListPlanStore(), cancel: async () => ({ status: 'expired' }) };
+    const app = await appOf(available, store);
+    const answer = await post(app, '/v1/ask/cancel', { planId: PLAN_ID });
+    expect([answer.statusCode, answer.json().error.details]).toEqual([409, { reason: 'plan-expired' }]);
+    await app.close();
+  });
+
+  it('answers 200 with the plan cancelled for a cancel the store accepts', async () => {
+    const store: PlanStore = { ...createListPlanStore(), cancel: async () => ({ status: 'cancelled' }) };
+    const app = await appOf(available, store);
+    const answer = await post(app, '/v1/ask/cancel', { planId: PLAN_ID });
+    expect([answer.statusCode, answer.json()]).toEqual([200, { planId: PLAN_ID, state: 'cancelled' }]);
+    await app.close();
+  });
+
+  it('answers 500 INTERNAL_ERROR, with no store detail, when the store fails', async () => {
+    const store: PlanStore = { ...createListPlanStore(), cancel: async () => Promise.reject(new Error('relation "ask_plans" does not exist')) };
+    const app = await appOf(available, store);
+    const answer = await post(app, '/v1/ask/cancel', { planId: PLAN_ID });
+    expect([answer.statusCode, answer.json().error.code]).toEqual([500, 'INTERNAL_ERROR']);
+    expect(answer.body).not.toContain('ask_plans');
     await app.close();
   });
 });

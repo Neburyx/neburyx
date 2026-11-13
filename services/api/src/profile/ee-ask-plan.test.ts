@@ -3,9 +3,15 @@ import { createEnterpriseExtension } from '@neburyx/ee-ask';
 import { describe, expect, it, vi } from 'vitest';
 import { communitySeams } from '../seams/community-seams.js';
 import type { Seams } from '../seams/seams.js';
+import { LISTED_PLAN_EXPIRY, LISTED_PLAN_ID, createListPlanStore } from '../testing/list-plan-store.js';
 import { startSearchApp } from '../testing/search-app.js';
 
 vi.mock('@neburyx/ee-audit', () => ({ createAuditSink: () => ({ sink: { record: () => Promise.resolve() }, close: async () => undefined }) }));
+
+const listStore = createListPlanStore();
+const stored = listStore.stored;
+const PLAN_ID = LISTED_PLAN_ID;
+const EXPIRES = LISTED_PLAN_EXPIRY;
 
 const PLAN: AskPlan = { kind: 'unsupported', reason: 'No template fits.' };
 const QUESTION = 'which are the same as W-001?';
@@ -14,7 +20,7 @@ async function startAsk(rows?: readonly Record<string, unknown>[], answer: unkno
   const texts: string[] = [];
   // a planner that answers something that is not a plan is the case under test, and the type forbids it
   const planner: AskPlanner = { availability: () => ({ available: true }), plan: async ({ text }) => (texts.push(text), answer as never) };
-  const extension = createEnterpriseExtension();
+  const extension = createEnterpriseExtension({ planStore: listStore });
   const rig = await startSearchApp({ ...(rows === undefined ? {} : { rows }), appOptions: { extension, previewOn: true, seams: { ...communitySeams(), policy, askPlanner: planner } } });
   const post = (payload: unknown) => rig.app.inject({ method: 'POST', url: '/v1/ask/plan', payload: JSON.stringify(payload), headers: { 'content-type': 'application/json' } });
   return { ...rig, post, texts };
@@ -61,12 +67,14 @@ describe('the plan endpoint of the mounted application', () => {
     await app.close();
   });
 
-  it('answers a plan of the planner unchanged, and the planner received the previewed text', async () => {
+  it('answers the plan of the planner with its placeholder turned back into the entity, stored with an ID, and the planner received the previewed text', async () => {
+    const planned: AskPlan = { kind: 'plan', templateId: 'shared-attribute', templateVersion: 1, params: { ref: { entityType: 'widget', stableId: '‹widget#1›' }, limit: 25 }, rationale: 'Widgets that share a gadget.' };
     const shape: AskPlan = { kind: 'plan', templateId: 'shared-attribute', templateVersion: 1, params: { ref: { entityType: 'widget', stableId: 'W-001' }, limit: 25 }, rationale: 'Widgets that share a gadget.' };
-    const { post, texts, app } = await startAsk(undefined, shape);
+    const { post, texts, app } = await startAsk(undefined, planned);
     const shown = (await post({ message: QUESTION, sourceId: 'demo' })).json();
     const confirmed = await post({ message: QUESTION, sourceId: 'demo', send: true, previewHash: shown.previewHash });
-    expect([confirmed.statusCode, confirmed.json()]).toEqual([200, { plan: shape }]);
+    expect([confirmed.statusCode, confirmed.json()]).toEqual([200, { plan: shape, planId: PLAN_ID, expiresAt: EXPIRES.toISOString() }]);
+    expect(stored.at(-1)).toMatchObject({ sourceId: 'demo', templateId: 'shared-attribute', params: shape.kind === 'plan' ? shape.params : undefined });
     expect(texts).toEqual([shown.preview]);
     await app.close();
   });

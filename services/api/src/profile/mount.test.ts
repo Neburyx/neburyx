@@ -52,6 +52,16 @@ describe('what the mount gives an extension handler', () => {
     await app.close();
   });
 
+  it('gives no runner of plans when the application has no gate to read through, and no search tools either', async () => {
+    let seen: ExtensionRequest | undefined;
+    const { app } = await started(extensionOf(async (request) => ((seen = request), 'ok')), { previewOn: true });
+    await app.inject({ url: URL_OF_ROUTE });
+    expect(seen).toBeDefined();
+    expect(seen).not.toHaveProperty('askPlanRunner');
+    expect(seen).not.toHaveProperty('askEntityTools');
+    await app.close();
+  });
+
   it('tells the handler the switch is off when the app is told it is off, and when it is told nothing', async () => {
     for (const options of [{ previewOn: false }, {}]) {
       const seen: boolean[] = [];
@@ -110,6 +120,10 @@ describe('what the mount answers to a refusal', () => {
     ['a refusal with another code', () => ({ name: 'ExtensionRefusal', ...REFUSAL, code: 'CONFLICT' })],
     ['a refusal with another reason', () => ({ name: 'ExtensionRefusal', ...REFUSAL, reason: 'access-changed' })],
     ['a refusal without the audited mark', () => ({ name: 'ExtensionRefusal', code: 'ACCESS_DENIED', reason: 'ai-preview-off' })],
+    ['an unknown code', () => ({ name: 'ExtensionRefusal', code: 'TEAPOT' })],
+    ['a reason of another code', () => ({ name: 'ExtensionRefusal', code: 'SOURCE_UNAVAILABLE', reason: 'plan-expired' })],
+    ['a conflict with a reason that is not a plan one', () => ({ name: 'ExtensionRefusal', code: 'CONFLICT', reason: 'source-changed' })],
+    ['a reason on a code that has none', () => ({ name: 'ExtensionRefusal', code: 'ASK_PLAN_INVALID', reason: 'plan-expired' })],
   ] as const)('answers INTERNAL_ERROR and logs the event name only for %s', async (_name, make) => {
     const { app, lines } = await started(extensionOf(async () => Promise.reject(make())), { previewOn: true });
     const answer = await app.inject({ url: URL_OF_ROUTE });
@@ -283,6 +297,35 @@ describe('a refusal because the audit event could not be written', () => {
     expect([answer.statusCode, answer.json().error.code]).toEqual([503, 'AUDIT_UNAVAILABLE']);
     expect(events).toEqual([]);
     expect(lines.filter((line) => line.includes('extension.audit_failed'))).toEqual([]);
+    await app.close();
+  });
+});
+
+describe('the refusals of a read of the gate and of a plan', () => {
+  const answers: ReadonlyArray<[string, Record<string, unknown>, number, Record<string, unknown> | undefined]> = [
+    ['QUERY_BUDGET_EXCEEDED', { code: 'QUERY_BUDGET_EXCEEDED', maxPage: 50, maxHops: 2 }, 422, { maxPage: 50, maxHops: 2 }],
+    ['QUERY_TIMEOUT', { code: 'QUERY_TIMEOUT', timeoutMs: 1000 }, 504, { timeoutMs: 1000 }],
+    ['SOURCE_BUSY', { code: 'SOURCE_BUSY' }, 503, undefined],
+    ['SOURCE_UNAVAILABLE with its reason', { code: 'SOURCE_UNAVAILABLE', reason: 'refused' }, 503, { reason: 'refused' }],
+    ['SOURCE_UNAVAILABLE with the wait of the breaker', { code: 'SOURCE_UNAVAILABLE', reason: 'repeated-timeouts', retryAfterMs: 4000 }, 503, { reason: 'repeated-timeouts', retryAfterMs: 4000 }],
+    ['RATE_LIMITED with its wait', { code: 'RATE_LIMITED', retryAfterMs: 2000 }, 429, { retryAfterMs: 2000 }],
+    ['ACCESS_DENIED with no reason', { code: 'ACCESS_DENIED' }, 403, undefined],
+    ['NOT_FOUND', { code: 'NOT_FOUND' }, 404, undefined],
+    ['SOURCE_MISMATCH', { code: 'SOURCE_MISMATCH' }, 400, undefined],
+    ['CONFLICT plan-expired', { code: 'CONFLICT', reason: 'plan-expired' }, 409, { reason: 'plan-expired' }],
+    ['CONFLICT plan-not-runnable', { code: 'CONFLICT', reason: 'plan-not-runnable' }, 409, { reason: 'plan-not-runnable' }],
+    ['INVALID_REQUEST with a reason', { code: 'INVALID_REQUEST', reason: 'overlap' }, 400, undefined],
+    ['ASK_PLAN_INVALID', { code: 'ASK_PLAN_INVALID' }, 422, undefined],
+    ['AUDIT_UNAVAILABLE', { code: 'AUDIT_UNAVAILABLE' }, 503, undefined],
+  ];
+
+  it.each(answers)('answers %s with its status and the details the error model allows, writes no audit event and logs no failed audit', async (name, held, status, details) => {
+    const { app, lines, events } = await started(extensionOf(async () => Promise.reject(new ExtensionRefusal(held as never))), { previewOn: true });
+    const answer = await app.inject({ url: URL_OF_ROUTE });
+    expect([answer.statusCode, answer.json().error.code, answer.json().error.details]).toEqual([status, held['code'], details]);
+    expect(events).toEqual([]);
+    expect(lines.filter((line) => line.includes('extension.audit_failed'))).toEqual([]);
+    expect(name).not.toBe('');
     await app.close();
   });
 });

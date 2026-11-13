@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ASK_PLAN_PARAM_NAMES, ASK_PLAN_TEMPLATE_IDS, askPlanRequestSchema, askPlanResponseSchema, askPlanSchema, askResolutionSchema, askResolutionsSchema, askRunRequestSchema, ASK_MAX_RESOLUTIONS, ASK_MESSAGE_MAX_LENGTH } from './ask.js';
+import { ASK_PLAN_PARAM_NAMES, ASK_PLAN_TEMPLATE_IDS, askPlanRequestSchema, askPlanResponseSchema, askPlanSchema, askResolutionSchema, askResolutionsSchema, askRunRequestSchema, askRunResponseSchema, askRunResultSchema, askEditRequestSchema, askEditResponseSchema, askCancelRequestSchema, askCancelResponseSchema, ASK_MAX_RESOLUTIONS, ASK_MESSAGE_MAX_LENGTH } from './ask.js';
 
 const REF = { entityType: 'node_a', stableId: 'A-1' };
 const SHARED = { kind: 'plan', templateId: 'shared-attribute', templateVersion: 1, params: { ref: REF, attributeType: 'attr_type', via: 'attr_link', window: { days: 90 }, limit: 25 }, rationale: 'People who share a device.' };
@@ -59,9 +59,12 @@ describe('the body of the plan endpoint with the preview fields', () => {
 
 describe('the answer of the plan endpoint', () => {
   const hash = 'b'.repeat(64);
+  const PLAN_ID = '01939999-0000-7000-8000-0000000000bb';
+  const ENTITY_PLAN = { kind: 'plan', templateId: 'entity', templateVersion: 1, rationale: 'one entity', params: { ref: { entityType: 'node_a', stableId: 'a-1' } } };
 
   it.each([
-    ['a plan', { plan: { kind: 'unsupported', reason: 'no template' } }],
+    ['an unsupported plan, with no ID', { plan: { kind: 'unsupported', reason: 'no template' } }],
+    ['a plan of a template, with its ID and expiry', { plan: ENTITY_PLAN, planId: PLAN_ID, expiresAt: '2026-11-13T10:15:00.000Z' }],
     ['a clarification', { clarification: { start: 0, end: 3, choices: [], count: { quality: 'exact', value: 0, scope: 'exact matches' }, unreferenced: 0 } }],
     ['the blocked tokens', { blocked: { tokens: [{ text: 'zorvath', start: 6, end: 13 }] } }],
     ['a preview', { preview: 'which widgets', previewHash: hash }],
@@ -72,6 +75,12 @@ describe('the answer of the plan endpoint', () => {
 
   it.each([
     ['nothing', {}],
+    ['a plan of a template with no ID', { plan: ENTITY_PLAN, expiresAt: '2026-11-13T10:15:00.000Z' }],
+    ['a plan of a template with no expiry', { plan: ENTITY_PLAN, planId: PLAN_ID }],
+    ['an ID that is not a uuid', { plan: ENTITY_PLAN, planId: 'p-1', expiresAt: '2026-11-13T10:15:00.000Z' }],
+    ['an expiry that is not a time', { plan: ENTITY_PLAN, planId: PLAN_ID, expiresAt: 'soon' }],
+    ['an unsupported plan with an ID', { plan: { kind: 'unsupported', reason: 'no template' }, planId: PLAN_ID }],
+    ['an unsupported plan with an expiry', { plan: { kind: 'unsupported', reason: 'no template' }, expiresAt: '2026-11-13T10:15:00.000Z' }],
     ['a preview without its hash', { preview: 'x' }],
     ['a changed flag that is false', { preview: 'x', previewHash: hash, changed: false }],
     ['blocked tokens that are none', { blocked: { tokens: [] } }],
@@ -82,11 +91,54 @@ describe('the answer of the plan endpoint', () => {
 });
 
 describe('the body of the run endpoint', () => {
-  it('takes one plan ID that is a uuid, and nothing else', () => {
-    expect(askRunRequestSchema.safeParse({ planId: '0192f000-0000-7000-8000-0000000000a1' }).success).toBe(true);
-    for (const body of [{}, { planId: 'plan-1' }, { planId: 7 }, { planId: '0192f000-0000-7000-8000-0000000000a1', send: true }]) {
+  const planId = '0192f000-0000-7000-8000-0000000000a1';
+
+  it('takes one plan ID that is a uuid and a mask flag that is a boolean, and nothing else', () => {
+    expect(askRunRequestSchema.safeParse({ planId }).success).toBe(true);
+    expect(askRunRequestSchema.safeParse({ planId, mask: true }).success).toBe(true);
+    expect(askRunRequestSchema.safeParse({ planId, mask: false }).success).toBe(true);
+    for (const body of [{}, { planId: 'plan-1' }, { planId: 7 }, { planId, send: true }, { planId, mask: 'yes' }, { planId, mask: null }, { mask: true }]) {
       expect(askRunRequestSchema.safeParse(body).success).toBe(false);
     }
+  });
+});
+
+describe('the answer of the run endpoint', () => {
+  const planId = '0192f000-0000-7000-8000-0000000000a1';
+  const exact = { quality: 'exact', value: 0, scope: 'test' };
+  const node = { ref: { sourceId: 'demo', entityType: 'node_a', stableId: 'a-1' }, display: { title: 'A', type: 'node_a' }, properties: [], qualityFlags: [], provenanceRefs: [], authorization: { canInspect: true, canExport: true } };
+  const shared = { status: 'ok', templateId: 'shared-attribute', templateVersion: '1', count: exact, matchIds: [], nodes: [], edges: [], notices: [], warnings: [] };
+  const heavy = { status: 'heavy', templateId: 'shared-attribute', templateVersion: '1', estimate: { quality: 'lowerBound', value: 1000, scope: 'test' }, threshold: 1000, continueLimit: 25, notices: [], warnings: [] };
+  const degree = { ref: node.ref, total: exact, byType: [], byNeighborType: [], warnings: [], pageSize: 25, heavyOpThreshold: 1000 };
+  const expanded = { ref: node.ref, pageSize: 25, nodes: [], edges: [], pages: [], warnings: [] };
+  const derived = { ref: node.ref, results: [] };
+
+  it.each([
+    ['a shared-attribute result', { templateId: 'shared-attribute', result: shared }],
+    ['the stop of a heavy shared-attribute run', { templateId: 'shared-attribute', result: heavy }],
+    ['a linked-entities result', { templateId: 'linked-entities', result: { ...shared, templateId: 'linked-entities' } }],
+    ['an entity', { templateId: 'entity', result: node }],
+    ['a degree preview', { templateId: 'degree-preview', result: degree }],
+    ['an expansion', { templateId: 'expand', result: expanded }],
+    ['the derived neighbors of a rule', { templateId: 'derived-rule-run', result: derived }],
+  ])('takes %s with the outcome complete or partial', (_name, result) => {
+    for (const outcome of ['complete', 'partial']) expect(askRunResponseSchema.safeParse({ planId, outcome, result }).success).toBe(true);
+  });
+
+  it.each([
+    ['the outcome failed, which only the record of a run says', { planId, outcome: 'failed', result: { templateId: 'entity', result: node } }],
+    ['no result', { planId, outcome: 'complete' }],
+    ['no outcome', { planId, result: { templateId: 'entity', result: node } }],
+    ['a result of another template than the one it names', { planId, outcome: 'complete', result: { templateId: 'entity', result: degree } }],
+    ['a template of no catalog', { planId, outcome: 'complete', result: { templateId: 'free-query', result: node } }],
+    ['a result with a field it does not know', { planId, outcome: 'complete', result: { templateId: 'entity', result: node, query: 'x' } }],
+    ['a plan ID that is not a uuid', { planId: 'p', outcome: 'complete', result: { templateId: 'entity', result: node } }],
+  ])('refuses %s', (_name, body) => {
+    expect(askRunResponseSchema.safeParse(body).success).toBe(false);
+  });
+
+  it('has a variant for each template of the catalog, and no other', () => {
+    expect(askRunResultSchema.options).toHaveLength(ASK_PLAN_TEMPLATE_IDS.length);
   });
 });
 
@@ -155,5 +207,41 @@ describe('the plans for the other templates', () => {
 
   it('rejects a text field beside the parameters of a new template', () => {
     expect(askPlanSchema.safeParse({ ...planOf('entity', { ref: ANCHOR }), query: 'x' }).success).toBe(false);
+  });
+});
+
+describe('the edit and cancel endpoints', () => {
+  const planId = '01939999-0000-7000-8000-0000000000bb';
+  const plan = { kind: 'plan', templateId: 'entity', templateVersion: 1, rationale: 'one entity', params: { ref: { entityType: 'node_a', stableId: 'a-1' } } };
+
+  it.each([
+    ['an edit with its plan, template and parameters', { planId, templateId: 'entity', params: { ref: { sourceId: 'demo', entityType: 'node_a', stableId: 'a-2' } } }],
+  ])('takes %s', (_name, body) => {
+    expect(askEditRequestSchema.safeParse(body).success).toBe(true);
+  });
+
+  it.each([
+    ['no plan', { templateId: 'entity', params: {} }],
+    ['a plan ID that is not a uuid', { planId: 'p-1', templateId: 'entity', params: {} }],
+    ['no template', { planId, params: {} }],
+    ['a template of no catalog', { planId, templateId: 'free-query', params: {} }],
+    ['no parameters', { planId, templateId: 'entity' }],
+    ['parameters that are not an object', { planId, templateId: 'entity', params: 'ref' }],
+    ['a field it does not know', { planId, templateId: 'entity', params: {}, sourceId: 'demo' }],
+  ])('refuses an edit with %s', (_name, body) => {
+    expect(askEditRequestSchema.safeParse(body).success).toBe(false);
+  });
+
+  it('answers an edit with the new plan, its ID and its expiry, and nothing without them', () => {
+    expect(askEditResponseSchema.safeParse({ plan, planId, expiresAt: '2026-11-13T10:15:00.000Z' }).success).toBe(true);
+    expect(askEditResponseSchema.safeParse({ plan }).success).toBe(false);
+    expect(askEditResponseSchema.safeParse({ plan: { kind: 'unsupported', reason: 'x' }, planId, expiresAt: '2026-11-13T10:15:00.000Z' }).success).toBe(false);
+  });
+
+  it('takes one plan ID that is a uuid to cancel, and answers it as cancelled', () => {
+    expect(askCancelRequestSchema.safeParse({ planId }).success).toBe(true);
+    for (const body of [{}, { planId: 'x' }, { planId, extra: 1 }]) expect(askCancelRequestSchema.safeParse(body).success).toBe(false);
+    expect(askCancelResponseSchema.safeParse({ planId, state: 'cancelled' }).success).toBe(true);
+    expect(askCancelResponseSchema.safeParse({ planId, state: 'run' }).success).toBe(false);
   });
 });

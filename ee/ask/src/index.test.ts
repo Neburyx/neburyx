@@ -3,16 +3,16 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { aiStatusResponseSchema } from '@neburyx/contracts';
 import { createAuditSink } from '@neburyx/ee-audit';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { AI_STATUS_URL, createEnterpriseExtension } from './index.js';
 
 describe('the enterprise extension', () => {
-  it('has one route group with the status route, which answers its declared schema, and the two Ask routes', async () => {
+  it('has one route group with the status route, which answers its declared schema, and the four Ask routes', async () => {
     const extension = createEnterpriseExtension();
     const [group, ...others] = extension.routeGroups;
     expect(others).toEqual([]);
     const [route, ...more] = group?.routes ?? [];
-    expect(more.map((other) => [other.method, other.url])).toEqual([['POST', '/v1/ask/plan'], ['POST', '/v1/ask/run']]);
+    expect(more.map((other) => [other.method, other.url])).toEqual([['POST', '/v1/ask/plan'], ['POST', '/v1/ask/run'], ['POST', '/v1/ask/edit'], ['POST', '/v1/ask/cancel']]);
     expect([route?.method, route?.url, route?.permission]).toEqual(['GET', AI_STATUS_URL, 'principal']);
     const reply = await route?.handler({ principalId: 'p', principalRole: 'investigator', previewOn: true, traceId: 'tr-1', audit: { record: async () => undefined }, askPlanner: { availability: () => ({ available: false, reason: 'x' }), plan: () => Promise.reject(new Error('not used')) } });
     expect(aiStatusResponseSchema.safeParse(reply).success).toBe(true);
@@ -39,6 +39,7 @@ describe('the enterprise extension', () => {
       .join('\n');
     expect(statements).toContain('CREATE TABLE audit_events');
     expect(statements).toContain('CREATE TABLE ask_runs');
+    expect(statements).toContain('CREATE TABLE ask_plans');
   });
 
   it('hands the sink it mounted to the audited call, which has none before the application built it, and returns the mounted sink unchanged', async () => {
@@ -48,6 +49,28 @@ describe('the enterprise extension', () => {
     expect(mounted).toBeDefined();
     expect(extension.auditSink()).toBe(mounted?.sink);
     await mounted?.close();
+  });
+
+  it('builds the plan store with the audit sink, none before, and ends both with the one close, a second close doing nothing', async () => {
+    const extension = createEnterpriseExtension();
+    expect(extension.planStore()).toBeUndefined();
+    const mounted = extension.createAuditSink?.({ databaseUrl: 'postgres://app@db.example.test:5432/neburyx', poolSize: 1, connectionTimeoutMs: 100, statementTimeoutMs: 100, queryTimeoutMs: 100, newId: () => 'id', onConnectionError: () => undefined });
+    const store = extension.planStore();
+    expect(store).toBeDefined();
+    const closed: string[] = [];
+    if (store === undefined || mounted === undefined) return;
+    // the real pools end at once because none ever connected; the counts are proved over a stand-in in the store's own tests
+    const ends = vi.spyOn(store, 'close').mockImplementation(async () => void closed.push('plans'));
+    await Promise.all([mounted.close(), mounted.close()]);
+    expect(ends).toHaveBeenCalledTimes(1);
+    expect(closed).toEqual(['plans']);
+  });
+
+  it('has no task before the plan store is built, and then the sweep of plans', () => {
+    const extension = createEnterpriseExtension();
+    expect(extension.maintenanceTasks?.()).toEqual([]);
+    extension.createAuditSink?.({ databaseUrl: 'postgres://app@db.example.test:5432/neburyx', poolSize: 1, connectionTimeoutMs: 100, statementTimeoutMs: 100, queryTimeoutMs: 100, newId: () => 'id', onConnectionError: () => undefined });
+    expect(extension.maintenanceTasks?.().map((task) => [task.name, task.schedule])).toEqual([['ask-sweep-plans', '*/5 * * * *']]);
   });
 
   describe('the model behind the audit', () => {

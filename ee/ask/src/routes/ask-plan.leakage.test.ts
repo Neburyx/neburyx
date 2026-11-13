@@ -1,6 +1,7 @@
 import { createHmac } from 'node:crypto';
 import { askPlanResponseSchema, type AskEntityMatches, type AskPlan, type AskPlanner, type ElementRef, type ExtensionRequest } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
+import { createMemoryPlanStore } from '../testing/memory-plans.js';
 import { questionVocabulary } from '../vocabulary/vocabulary.js';
 import { createAskPlanRoute } from './ask-plan.js';
 
@@ -20,7 +21,7 @@ interface Run {
   readonly bodies: unknown[];
 }
 
-const route = createAskPlanRoute({ vocabulary: () => questionVocabulary({ view: { types: [{ name: 'Widget', kind: 'entity', properties: [] }] } }) });
+const route = createAskPlanRoute({ vocabulary: () => questionVocabulary({ view: { types: [{ name: 'Widget', kind: 'entity', properties: [] }] } }), plans: () => createMemoryPlanStore() });
 
 async function converse(message: string): Promise<Run> {
   const texts: string[] = [];
@@ -101,7 +102,7 @@ describe('what the planner receives, with the real resolution and the real rebui
   });
 
   it('never calls the planner for a preview, a blocked question or a clarification', async () => {
-    const ambiguous = createAskPlanRoute({ vocabulary: () => [] });
+    const ambiguous = createAskPlanRoute({ vocabulary: () => [], plans: () => createMemoryPlanStore() });
     const texts: string[] = [];
     const planner: AskPlanner = { availability: () => ({ available: true }), plan: async ({ text }) => (texts.push(text), PLAN) };
     const body = { message: 'which Lee', sourceId: SOURCE };

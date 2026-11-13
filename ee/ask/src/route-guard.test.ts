@@ -109,8 +109,8 @@ describe('the Ask routes of the extension', () => {
     expect(events).toHaveLength(1);
   });
 
-  it('are both in the group the extension mounts, behind the guard', async () => {
+  it('are all in the group the extension mounts, behind the guard', async () => {
     const urls = createEnterpriseExtension().routeGroups.flatMap((group) => group.routes.map((route) => route.url));
-    expect(urls).toEqual(expect.arrayContaining(['/v1/ask/plan', '/v1/ask/run']));
+    expect(urls).toEqual(expect.arrayContaining(['/v1/ask/plan', '/v1/ask/run', '/v1/ask/edit', '/v1/ask/cancel']));
   });
 });

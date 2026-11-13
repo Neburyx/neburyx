@@ -72,6 +72,23 @@ export function parseAiAuditDetail(value: unknown): AiAuditDetail {
 
 const wholeCount = z.number().int().nonnegative();
 
+/** The purpose label that opens the canonical text a run's parameters are signed under, so no other use of the signing capability signs the same text. */
+export const ASK_RUN_PARAMS_LABEL = 'ask-run-params';
+
+/**
+ * What a run of a plan leaves in the audit event: the template and its version, a keyed hash of the plan's parameters, and the number of elements the result listed; never a parameter, a value or a question.
+ * The hash is an HMAC made with the signing capability of the application over the canonical text `['ask-run-params', 1, parameters]` (object keys sorted, the label `ask-run-params` first), so a short typed value
+ * cannot be confirmed by guessing; the key is the application's, so without a configured key the hashes differ per process and restart.
+ */
+export const askRunAuditDetailSchema = z.strictObject({
+  templateId: label,
+  templateVersion: z.number().int().min(1),
+  paramsHash: sha256Hex,
+  rowCount: wholeCount,
+});
+
+export type AskRunAuditDetail = z.infer<typeof askRunAuditDetailSchema>;
+
 /** The per-action fields of an audit event, one shape at a time: every shape holds counts and codes only. */
 export const auditDetailSchema = z.union([
   z.strictObject({ reason: z.enum(['cancelled', 'timeout']) }),
@@ -87,13 +104,14 @@ export const auditDetailSchema = z.union([
     }),
   }),
   z.strictObject({ ai: aiAuditDetailSchema }),
+  z.strictObject({ askRun: askRunAuditDetailSchema }),
 ]);
 
 export type AuditDetail =
-  | { readonly reason: 'cancelled' | 'timeout'; readonly target?: never; readonly type?: never; readonly counts?: never; readonly export?: never; readonly ai?: never }
-  | { readonly target: 'entity' | 'evidence'; readonly type: string; readonly reason?: never; readonly counts?: never; readonly export?: never; readonly ai?: never }
+  | { readonly reason: 'cancelled' | 'timeout'; readonly target?: never; readonly type?: never; readonly counts?: never; readonly export?: never; readonly ai?: never; readonly askRun?: never }
+  | { readonly target: 'entity' | 'evidence'; readonly type: string; readonly reason?: never; readonly counts?: never; readonly export?: never; readonly ai?: never; readonly askRun?: never }
   /** How many items a read by references returned and could not find: counts only, never a value or an ID. */
-  | { readonly counts: Readonly<Record<'nodes' | 'edges' | 'missing', number>>; readonly reason?: never; readonly target?: never; readonly type?: never; readonly export?: never; readonly ai?: never }
+  | { readonly counts: Readonly<Record<'nodes' | 'edges' | 'missing', number>>; readonly reason?: never; readonly target?: never; readonly type?: never; readonly export?: never; readonly ai?: never; readonly askRun?: never }
   /** What an export or a download of one was: the format, and for an export how many items it holds and how many fields were masked; never a value, an ID or a file name; a refused download adds which of the two refusals it was. */
   | {
       readonly export: { readonly format: 'json' | 'csv'; readonly entities?: number; readonly relationships?: number; readonly maskedFields?: number; readonly refusal?: 'access-changed' | 'export-source-changed' };
@@ -102,8 +120,11 @@ export type AuditDetail =
       readonly target?: never;
       readonly type?: never;
       readonly ai?: never;
+      readonly askRun?: never;
     }
-  | { readonly ai: AiAuditDetail; readonly counts?: never; readonly export?: never; readonly reason?: never; readonly target?: never; readonly type?: never };
+  | { readonly ai: AiAuditDetail; readonly counts?: never; readonly export?: never; readonly reason?: never; readonly target?: never; readonly type?: never; readonly askRun?: never }
+  /** What a run of a plan was: counts, a template and a keyed hash only. */
+  | { readonly askRun: AskRunAuditDetail; readonly ai?: never; readonly counts?: never; readonly export?: never; readonly reason?: never; readonly target?: never; readonly type?: never };
 
 export function parseAuditDetail(value: unknown): AuditDetail {
   return auditDetailSchema.parse(value);

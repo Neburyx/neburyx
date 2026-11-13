@@ -1,10 +1,11 @@
 import { createHmac } from 'node:crypto';
-import { askPlanResponseSchema, parseExtensionRefusal, type AskPlan, type AskPlanner, type AskResolution, type ExtensionRequest } from '@neburyx/contracts';
+import { askPlanResponseSchema, parseExtensionRefusal, type AskPlan, type AskPlanner, type AskResolution, type ElementRef, type ExtensionRequest } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
 import { COMMON_WORDS_VERSION } from '../allowlist/index.js';
 import { AuditUnavailableError } from '../audited.js';
 import { previewHashOf, type PreviewMac } from '../preview/preview-hash.js';
 import type { PlaceholderSpan, ResolutionOutcome, resolveMentions } from '../resolution/index.js';
+import { createMemoryPlanStore } from '../testing/memory-plans.js';
 import { questionVocabulary } from '../vocabulary/vocabulary.js';
 import { askPlanRoute, createAskPlanRoute } from './ask-plan.js';
 
@@ -60,7 +61,8 @@ const replacingFirst = (length: number, placeholder = '‹widget#1›'): Resolve
 
 const outcome = (value: ResolutionOutcome): Resolve => async () => value;
 
-const route = (resolve: Resolve, vocabulary: readonly string[] = questionVocabulary({ view: { types: [{ name: 'Widget', kind: 'entity', properties: [{ name: 'sprocketTag', pii: false }] }] } })) => createAskPlanRoute({ resolve, vocabulary: () => vocabulary });
+const stored = createMemoryPlanStore();
+const route = (resolve: Resolve, vocabulary: readonly string[] = questionVocabulary({ view: { types: [{ name: 'Widget', kind: 'entity', properties: [{ name: 'sprocketTag', pii: false }] }] } })) => createAskPlanRoute({ resolve, vocabulary: () => vocabulary, plans: () => stored });
 
 const MESSAGE = 'which widgets are the same as widgets?';
 
@@ -269,5 +271,82 @@ describe('the confirmation', () => {
     expect(await post()).toBe('the planner failed');
     expect(await post()).toBe('the planner failed');
     expect(rg.calls.length).toBe(2);
+  });
+});
+
+describe('a plan that is stored', () => {
+  const TYPED = 'Acme is the same as widgets';
+  const PLACEHOLDER = '‹widget#1›';
+  const entityPlan = (stableId = PLACEHOLDER): AskPlan => ({ kind: 'plan', templateId: 'entity', templateVersion: 1, rationale: 'Show the entity.', params: { ref: { entityType: 'widget', stableId } } });
+  const holding = (ref: ElementRef): Resolve => async ({ message }) => {
+    const span: PlaceholderSpan = { start: 0, end: PLACEHOLDER.length, placeholder: PLACEHOLDER, typedStart: 0, typedEnd: 4 };
+    return { status: 'resolved', text: `${PLACEHOLDER}${message.slice(4)}`, spans: [span], placeholders: new Map([[PLACEHOLDER, { kind: 'entity' as const, ref }]]), capReached: false };
+  };
+  const confirm = async (rg: Rig, resolve: Resolve, plans = createMemoryPlanStore(), overrides?: Partial<ExtensionRequest>) => {
+    const r = createAskPlanRoute({ resolve, plans: () => plans, vocabulary: () => questionVocabulary({ view: { types: [{ name: 'Widget', kind: 'entity', properties: [] }] } }) });
+    const shown = previewOf(await r.handler(rg.request({ message: TYPED, sourceId: SOURCE }, overrides)));
+    return { r, plans, send: () => r.handler(rg.request({ message: TYPED, sourceId: SOURCE, send: true, previewHash: shown.previewHash }, overrides)) };
+  };
+
+  it('is turned back into the reference of the map, stored as proposed for the caller and the source, and answered with its ID and expiry', async () => {
+    const rg = rig(async () => entityPlan());
+    const { send, plans } = await confirm(rg, holding(REF));
+    const result = askPlanResponseSchema.parse(await send());
+    expect(result).toMatchObject({ plan: { kind: 'plan', templateId: 'entity', params: { ref: { entityType: 'widget', stableId: 'w-1' } } } });
+    expect(plans.plans).toHaveLength(1);
+    const [stored] = plans.plans;
+    expect(stored).toMatchObject({ userId: 'p', sourceId: SOURCE, templateId: 'entity', templateVersion: 1, state: 'proposed', planningTraceId: 'tr-1', params: { ref: { entityType: 'widget', stableId: 'w-1' } } });
+    expect(result).toMatchObject({ planId: stored?.id, expiresAt: stored?.expiresAt.toISOString() });
+  });
+
+  it('holds no question text, no placeholder and no prompt in the row', async () => {
+    const rg = rig(async () => entityPlan());
+    const { send, plans } = await confirm(rg, holding(REF));
+    await send();
+    const row = JSON.stringify(plans.plans);
+    for (const text of ['Acme', 'widgets', PLACEHOLDER, '‹', 'rationale', 'Show the entity']) expect(row).not.toContain(text);
+  });
+
+  it('stores nothing and has no ID for a plan that is unsupported', async () => {
+    const rg = rig();
+    const { send, plans } = await confirm(rg, holding(REF));
+    expect(await send()).toEqual({ plan: PLAN });
+    expect(plans.plans).toEqual([]);
+  });
+
+  it('stores nothing and answers with the planner’s failure when the plan uses a placeholder the map does not hold', async () => {
+    const rg = rig(async () => entityPlan('‹widget#9›'));
+    const { send, plans } = await confirm(rg, holding(REF));
+    const thrown = await send().catch((error: unknown) => error);
+    expect(thrown).toMatchObject({ name: 'HydrationError', reason: 'unknown-placeholder' });
+    expect(String((thrown as Error).message)).not.toMatch(/w-1|Acme|‹/);
+    expect(plans.plans).toEqual([]);
+  });
+
+  it('refuses a reference of another source than the request’s and stores nothing', async () => {
+    const rg = rig(async () => entityPlan());
+    const { send, plans } = await confirm(rg, holding({ ...REF, sourceId: 'elsewhere' }));
+    expect(await send().catch((error: unknown) => error)).toMatchObject({ name: 'HydrationError', reason: 'other-source' });
+    expect(plans.plans).toEqual([]);
+  });
+
+  it('refuses with ASK_UNSUPPORTED before the planner is called when there is no store, and for the preview still answers it', async () => {
+    const rg = rig(async () => entityPlan());
+    const r = createAskPlanRoute({ resolve: holding(REF), vocabulary: () => questionVocabulary({ view: { types: [{ name: 'Widget', kind: 'entity', properties: [] }] } }) });
+    const shown = previewOf(await r.handler(rg.request({ message: TYPED, sourceId: SOURCE })));
+    const refusal = await r.handler(rg.request({ message: TYPED, sourceId: SOURCE, send: true, previewHash: shown.previewHash })).catch((error: unknown) => error);
+    expect(parseExtensionRefusal(refusal)).toEqual({ code: 'ASK_UNSUPPORTED', reason: 'not-in-this-edition' });
+    expect(rg.calls).toEqual([]);
+  });
+
+  it('returns no plan and no ID when the store fails after the model call, and the model call was made', async () => {
+    const rg = rig(async () => entityPlan());
+    const plans = createMemoryPlanStore();
+    const { send } = await confirm(rg, holding(REF), plans);
+    plans.failNext('insert');
+    const thrown = await send().catch((error: unknown) => error);
+    expect(thrown).toMatchObject({ name: 'PlanStoreError', code: 'PLAN_STORE_FAILED' });
+    expect(rg.calls).toHaveLength(1);
+    expect(plans.plans).toEqual([]);
   });
 });

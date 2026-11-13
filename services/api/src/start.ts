@@ -210,7 +210,7 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
       io.logger.warn({ event: 'source.identity_changed', sourceId }, 'source now points to a different database');
     }
     // a key that is not configured is made for this process only, so a page opened before a restart, or on another copy, says "Start again"
-    if (config.cursorKey === undefined) io.logger.warn({ event: 'cursor.key_not_set' }, 'NEBURYX_CURSOR_KEY is not set: page cursors and Ask previews do not survive a restart and are not valid across API copies');
+    if (config.cursorKey === undefined) io.logger.warn({ event: 'cursor.key_not_set' }, 'NEBURYX_CURSOR_KEY is not set: page cursors and Ask previews do not survive a restart, are not valid across API copies, and the hashes of Ask runs in the audit differ after each restart');
     const cursorKeyMaterial = config.cursorKey ?? randomBytes(32);
     const cursors = createCursorCodec({ key: cursorKeyMaterial, clock: Date.now });
     const referenceKeys = deriveReferenceKeys(await store.referenceKey());
@@ -235,7 +235,8 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
     seedFromStartup(reachability, results);
     const problem = (io.startupProblem ?? startupProblem)(results);
     if (problem !== undefined) throw new StartupStop(problem);
-    const tasks = io.tasks ?? maintenanceTasks({ store: openedStore, exports: openedStore, files: exportFiles, audit: seams.audit, logger: io.logger });
+    // the extension's own recurring tasks run only with the preview on, on the same runner as the application's
+    const tasks = io.tasks ?? [...maintenanceTasks({ store: openedStore, exports: openedStore, files: exportFiles, audit: seams.audit, logger: io.logger }), ...(decision.state === 'on' ? (extension?.maintenanceTasks?.() ?? []) : [])];
     validateTasks(tasks);
     jobs = await (io.startJobRunner ?? startJobRunner)(
       config.databaseUrl,

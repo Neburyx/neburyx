@@ -2,7 +2,9 @@ import { askPlanRequestSchema, askPlanResponseSchema, ExtensionRefusal, type Ask
 import { AuditUnavailableError } from '../audited.js';
 import { COMMON_WORDS_VERSION, allowedWords, rebuildPlannerText } from '../allowlist/index.js';
 import { previewHashOf, hashesMatch } from '../preview/preview-hash.js';
-import { resolveMentions, type PlaceholderSpan, type ResolutionOutcome } from '../resolution/index.js';
+import { hydratePlan } from '../plans/hydrate.js';
+import type { PlanStore } from '../plans/index.js';
+import { resolveMentions, type PlaceholderEntry, type PlaceholderSpan, type ResolutionOutcome } from '../resolution/index.js';
 import { questionVocabulary } from '../vocabulary/vocabulary.js';
 
 export const ASK_PLAN_URL = '/v1/ask/plan';
@@ -13,6 +15,8 @@ export const RESOLUTION_TIMEOUT_MS = 20_000;
 export interface AskPlanRouteOptions {
   /** The entries the rebuild reads as vocabulary for this question; the route asks each time because the mapping is configured after the route is made. */
   readonly vocabulary?: () => readonly string[];
+  /** The store a plan is kept in; asked each time because the application builds it after the route is made. A question that is sent to the planner needs it, and is refused before the model is called when there is none. */
+  readonly plans?: () => PlanStore | undefined;
   /** Only a test sets this. */
   readonly resolve?: typeof resolveMentions;
   /** Only a test sets this. */
@@ -27,7 +31,7 @@ interface Capabilities {
 
 type Prepared =
   | { readonly kind: 'answer'; readonly answer: { readonly clarification: Extract<ResolutionOutcome, { status: 'clarification' }>['clarification'] } | { readonly blocked: { readonly tokens: readonly { readonly text: string; readonly start: number; readonly end: number }[] } } }
-  | { readonly kind: 'rebuilt'; readonly text: string; readonly hash: string };
+  | { readonly kind: 'rebuilt'; readonly text: string; readonly hash: string; readonly placeholders: ReadonlyMap<string, PlaceholderEntry> };
 
 const unsupported = (): ExtensionRefusal => new ExtensionRefusal({ code: 'ASK_UNSUPPORTED', reason: 'not-in-this-edition' });
 
@@ -73,7 +77,7 @@ async function prepare(body: AskPlanRequest, capabilities: Capabilities, options
     return { kind: 'answer', answer: { blocked: { tokens } } };
   }
   const hash = previewHashOf(capabilities.previewMac, { text: rebuilt.text, resolutions, policyVersion: capabilities.policyVersionOf(body.sourceId), wordListVersion: COMMON_WORDS_VERSION });
-  return { kind: 'rebuilt', text: rebuilt.text, hash };
+  return { kind: 'rebuilt', text: rebuilt.text, hash, placeholders: resolved.placeholders };
 }
 
 /**
@@ -85,6 +89,7 @@ async function prepare(body: AskPlanRequest, capabilities: Capabilities, options
 export function createAskPlanRoute(options: AskPlanRouteOptions = {}): ExtensionRoute {
   const settled: Required<AskPlanRouteOptions> = {
     vocabulary: options.vocabulary ?? (() => questionVocabulary({ view: undefined })),
+    plans: options.plans ?? (() => undefined),
     resolve: options.resolve ?? resolveMentions,
     resolutionTimeoutMs: options.resolutionTimeoutMs ?? RESOLUTION_TIMEOUT_MS,
   };
@@ -102,10 +107,23 @@ export function createAskPlanRoute(options: AskPlanRouteOptions = {}): Extension
       const prepared = await prepare(body, capabilities, settled);
       if (prepared.kind === 'answer') return prepared.answer;
       if (body.send !== true) return { preview: prepared.text, previewHash: prepared.hash };
-      if (body.previewHash !== undefined && hashesMatch(body.previewHash, prepared.hash)) return { plan: await planOf(request, prepared.text, body.sourceId) };
+      if (body.previewHash !== undefined && hashesMatch(body.previewHash, prepared.hash)) {
+        // no store, no plan: refused before the model is called, so no plan is paid for that cannot be kept
+        const plans = settled.plans();
+        if (plans === undefined) throw unsupported();
+        return answered(request, plans, body.sourceId, prepared.placeholders, await planOf(request, prepared.text, body.sourceId));
+      }
       return { preview: prepared.text, previewHash: prepared.hash, changed: true };
     },
   };
+}
+
+/** What a plan is answered with: a plan of a template is turned back into references, stored, and comes with its ID and expiry; an unsupported plan is not stored. */
+async function answered(request: ExtensionRequest, plans: PlanStore, sourceId: string, placeholders: ReadonlyMap<string, PlaceholderEntry>, plan: AskPlan): Promise<{ plan: AskPlan; planId?: string; expiresAt?: string }> {
+  if (plan.kind !== 'plan') return { plan };
+  const hydrated = hydratePlan(plan, placeholders, sourceId);
+  const stored = await plans.insert({ userId: request.principalId, sourceId, templateId: hydrated.templateId, templateVersion: hydrated.templateVersion, params: hydrated.params, planningTraceId: request.traceId });
+  return { plan: hydrated, planId: stored.id, expiresAt: stored.expiresAt.toISOString() };
 }
 
 async function planOf(request: ExtensionRequest, text: string, sourceId: string): Promise<AskPlan> {

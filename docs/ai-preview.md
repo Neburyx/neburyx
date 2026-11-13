@@ -92,9 +92,17 @@ ai:
 
 ## Checking it
 
-With the switch on, `POST /v1/ask/plan` and `POST /v1/ask/run` exist too; where no planner is installed they answer `ASK_UNSUPPORTED` with the reason `not-in-this-edition`. With the switch off the AI paths do not exist: `/v1/ai/status` and every other path under `/v1/ai` answer 404 and nothing is audited. The AI route group also refuses a call as a second check, with `ACCESS_DENIED` and the reason `ai-preview-off`, and audits the refusal, if a loaded extension is ever told that the preview is not on. The switch is a safety rail set by whoever runs the deployment, not a lock; what protects real data is the rules for what a model request may carry and the audit of every model call.
+With the switch on, `POST /v1/ask/plan`, `POST /v1/ask/run`, `POST /v1/ask/edit` and `POST /v1/ask/cancel` exist too; where no planner is installed they answer `ASK_UNSUPPORTED` with the reason `not-in-this-edition`. With the switch off the AI paths do not exist: `/v1/ai/status` and every other path under `/v1/ai` answer 404 and nothing is audited. The AI route group also refuses a call as a second check, with `ACCESS_DENIED` and the reason `ai-preview-off`, and audits the refusal, if a loaded extension is ever told that the preview is not on. The switch is a safety rail set by whoever runs the deployment, not a lock; what protects real data is the rules for what a model request may carry and the audit of every model call.
 
 When the API starts with a problem in these settings, it writes one line for each problem, naming the setting, and exits 1. The start-up warnings name the setting too. A start that succeeds answers `GET /v1/ai/status` with `{ "preview": true }`, and `GET /v1/me` reports the edition as `enterprise`.
+
+## Plans, runs and what the database keeps
+
+A plan that Ask proposes is kept in the application's database for 15 minutes, until it is run, cancelled or edited, whichever is first. The row holds the template, the references it names and, for a search, the text the investigator typed; it never holds the question, a placeholder or a prompt. The typed text is removed in the same statement that moves the plan out of "proposed" (a run, a cancel, an edit, or a read that finds it expired), and a task on the application's job runner removes it from plans that expired unread: it runs every five minutes, clears at most 500 plans at a time and logs how many it cleared. A typed value therefore rests in the database for at most 20 minutes after its plan was stored. With the switch off there is no such task.
+
+The plan store uses a database connection pool of its own, of 2 connections, beside the audit sink's; the preview's connections to the database are the application's pool size plus 2.
+
+Each run is one audit event, `ask.run`, with the template, a keyed hash of the parameters and the row count. The events of the call that made the plan share its trace ID, which the plan row keeps (`planning_trace_id`), and the audit table is indexed by trace ID, so one query says which model produced a plan. The hash is keyed with a key derived from `NEBURYX_CURSOR_KEY`: without that key the hashes differ after every restart, and the start-up says so.
 
 ## What you see in the app
 

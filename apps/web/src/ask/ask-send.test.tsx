@@ -47,7 +47,7 @@ describe('Send', () => {
   it('shows the neutral status after a plan, keeps the preview greyed, and offers no second send', async () => {
     const { asks } = await previewed();
     await userEvent.click(send());
-    await answerAsk(asks[1], { ok: true, value: { plan: { kind: 'plan', templateId: 'shared-attribute', templateVersion: 1, params: { ref: { entityType: 'widget', stableId: 'w-1' } }, rationale: 'Widgets that share a gadget.' } } });
+    await answerAsk(asks[1], { ok: true, value: { plan: { kind: 'plan', templateId: 'shared-attribute', templateVersion: 1, params: { ref: { entityType: 'widget', stableId: 'w-1' } }, rationale: 'Widgets that share a gadget.' }, planId: '0192f000-0000-7000-8000-0000000000a1', expiresAt: '2026-11-13T10:15:00.000Z' } });
     expect(screen.getByRole('status').textContent).toBe('Sent. The plan is ready.');
     expect(screen.getByRole('region', { name: 'What the model will receive' }).className).toContain('ask-card-sent');
     expect(send().disabled).toBe(true);
@@ -139,7 +139,7 @@ describe('what the panel keeps of a sent question', () => {
     act(() => harness.current().preview());
     await answerAsk(harness.asks[0], previewOf('which widgets'));
     act(() => harness.current().send());
-    await answerAsk(harness.asks[1], { ok: true, value: { plan } });
+    await answerAsk(harness.asks[1], { ok: true, value: { plan, planId: '0192f000-0000-7000-8000-0000000000a1', expiresAt: '2026-11-13T10:15:00.000Z' } });
     expect(harness.current().model.plan).toEqual(plan);
     expect(harness.current().model.sent).toBe('Sent. The plan is ready.');
     act(() => harness.current().setText('which widgets x'));

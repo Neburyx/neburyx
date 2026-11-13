@@ -1,5 +1,5 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
-import { aiAuditDetailSchema, auditDetailSchema, isTokenCount, parseAiAuditDetail, parseAuditDetail, tokenCount, type AiAuditDetail, type AuditDetail, type AuditEvent, type TokenCount } from './audit.js';
+import { ASK_RUN_PARAMS_LABEL, aiAuditDetailSchema, askRunAuditDetailSchema, auditDetailSchema, isTokenCount, parseAiAuditDetail, parseAuditDetail, tokenCount, type AiAuditDetail, type AuditDetail, type AuditEvent, type TokenCount } from './audit.js';
 
 const SHA = 'a'.repeat(64);
 
@@ -135,5 +135,44 @@ describe('the hash of the filled instructions of an audit event', () => {
     expect(parseAiAuditDetail({ ...base, instructionsSha256: 'b'.repeat(64) })).toMatchObject({ instructionsSha256: 'b'.repeat(64) });
     expect(parseAiAuditDetail(base)).not.toHaveProperty('instructionsSha256');
     for (const bad of ['B'.repeat(64), 'b'.repeat(63), 'a text with a space', 5]) expect(() => parseAiAuditDetail({ ...base, instructionsSha256: bad })).toThrow();
+  });
+});
+
+describe('the detail of the audit event of a run of a plan', () => {
+  const RUN = { templateId: 'shared-attribute', templateVersion: 1, paramsHash: SHA, rowCount: 7 };
+
+  it('holds the template, its version, a keyed hash of the parameters and a row count, and is one of the known detail shapes', () => {
+    expect(askRunAuditDetailSchema.parse(RUN)).toEqual(RUN);
+    expect(parseAuditDetail({ askRun: RUN })).toEqual({ askRun: RUN });
+    expect(askRunAuditDetailSchema.safeParse({ ...RUN, rowCount: 0 }).success).toBe(true);
+  });
+
+  it.each([
+    ['a parameter', { ...RUN, params: { ref: 'a-1' } }],
+    ['a question', { ...RUN, question: 'who' }],
+    ['no hash', { ...RUN, paramsHash: undefined }],
+    ['a hash in upper case', { ...RUN, paramsHash: 'A'.repeat(64) }],
+    ['a short hash', { ...RUN, paramsHash: 'a'.repeat(63) }],
+    ['a template with a space', { ...RUN, templateId: 'shared attribute' }],
+    ['a version below one', { ...RUN, templateVersion: 0 }],
+    ['a version that is not whole', { ...RUN, templateVersion: 1.5 }],
+    ['a negative row count', { ...RUN, rowCount: -1 }],
+    ['a row count that is not whole', { ...RUN, rowCount: 1.5 }],
+    ['a row count that is text', { ...RUN, rowCount: '7' }],
+  ])('refuses %s', (_name, detail) => {
+    expect(askRunAuditDetailSchema.safeParse(detail).success).toBe(false);
+    expect(auditDetailSchema.safeParse({ askRun: detail }).success).toBe(false);
+  });
+
+  it('is kept apart from the other shapes', () => {
+    expect(auditDetailSchema.safeParse({ askRun: RUN, ai: AI }).success).toBe(false);
+    expect(auditDetailSchema.safeParse({ askRun: RUN, counts: { nodes: 1, edges: 0, missing: 0 } }).success).toBe(false);
+    // @ts-expect-error a detail is one shape, not two
+    const both: AuditDetail = { askRun: RUN, reason: 'timeout' };
+    expect(both).toBeDefined();
+  });
+
+  it('names the purpose label its hash is signed under', () => {
+    expect(ASK_RUN_PARAMS_LABEL).toBe('ask-run-params');
   });
 });

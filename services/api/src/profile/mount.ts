@@ -1,5 +1,5 @@
-import { parseExtensionRefusal, type AskPlanner, type AuditSink, type ExtensionRequest, type ProfileExtension } from '@neburyx/contracts';
-import type { FastifyInstance } from 'fastify';
+import { parseExtensionRefusal, type AskPlanner, type ExtensionRefusalFields, type AuditSink, type ExtensionRequest, type ProfileExtension } from '@neburyx/contracts';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { AppStore } from '../app-store.js';
 import { AppError } from '../errors.js';
 import { communityAskPlanner } from '../seams/community-seams.js';
@@ -15,6 +15,10 @@ export interface ExtensionMount {
   readonly policyVersionOf?: ExtensionRequest['policyVersionOf'];
   /** The search and lookup of a source for the caller of one request, read through the gate; absent, the plan route refuses. */
   readonly askEntityToolsFor?: (context: { readonly principal: Principal; readonly traceId: string }) => ExtensionRequest['askEntityTools'];
+  /** The runner of plans for one request, bound to its caller, its trace ID and its abort signal; absent, a route that runs a plan refuses. */
+  readonly askPlanRunnerFor?: (context: { readonly principal: Principal; readonly traceId: string; readonly signal: AbortSignal }) => ExtensionRequest['askPlanRunner'];
+  /** The signal that is aborted when the client gives up the request. */
+  readonly signalOf?: (request: FastifyRequest) => AbortSignal;
 }
 
 export function mountExtensionRoutes(app: FastifyInstance, extension: ProfileExtension, store: Pick<AppStore, 'current'>, mount: ExtensionMount): void {
@@ -37,6 +41,7 @@ export function mountExtensionRoutes(app: FastifyInstance, extension: ProfileExt
           let reply: unknown;
           try {
             const askEntityTools = mount.askEntityToolsFor?.({ principal, traceId: request.id });
+            const askPlanRunner = mount.signalOf === undefined ? undefined : mount.askPlanRunnerFor?.({ principal, traceId: request.id, signal: mount.signalOf(request) });
             reply = await route.handler({
               principalId: principal.id,
               principalRole: principal.role,
@@ -47,6 +52,7 @@ export function mountExtensionRoutes(app: FastifyInstance, extension: ProfileExt
               ...(mount.previewMac === undefined ? {} : { previewMac: mount.previewMac }),
               ...(mount.policyVersionOf === undefined ? {} : { policyVersionOf: mount.policyVersionOf }),
               ...(askEntityTools === undefined ? {} : { askEntityTools }),
+              ...(askPlanRunner === undefined ? {} : { askPlanRunner }),
               ...(body === undefined ? {} : { body }),
             });
           } catch (error) {
@@ -58,7 +64,10 @@ export function mountExtensionRoutes(app: FastifyInstance, extension: ProfileExt
               throw new AppError('INTERNAL_ERROR');
             }
             if ('audited' in refusal && !refusal.audited) request.log.warn({ event: 'extension.audit_failed', extension: extension.name }, 'the audit event of a refusal could not be written');
-            throw new AppError(refusal.code, 'reason' in refusal ? { reason: refusal.reason } : 'timeoutMs' in refusal ? { timeoutMs: refusal.timeoutMs } : undefined);
+            const details = detailsOfRefusal(refusal);
+            // an unavailable source gives its reason as the tag of the error, which is where the answer reads it from
+            if (refusal.code === 'SOURCE_UNAVAILABLE') throw new AppError(refusal.code, details, refusal.reason);
+            throw new AppError(refusal.code, details);
           }
           const parsed = route.responseSchema.safeParse(reply);
           if (!parsed.success) {
@@ -70,4 +79,11 @@ export function mountExtensionRoutes(app: FastifyInstance, extension: ProfileExt
       });
     }
   }
+}
+
+/** The details a refusal names: only the reason and the figures it holds, which `errorResponse` then cuts to what the error model allows for its code. */
+function detailsOfRefusal(refusal: ExtensionRefusalFields): Record<string, unknown> | undefined {
+  const details: Record<string, unknown> = {};
+  for (const key of ['reason', 'timeoutMs', 'retryAfterMs', 'maxPage', 'maxHops'] as const) if (key in refusal) details[key] = (refusal as Record<string, unknown>)[key];
+  return Object.keys(details).length === 0 ? undefined : details;
 }

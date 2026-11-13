@@ -8,6 +8,8 @@ const VALUE_KIND = 'value';
 export interface PlanCheckInput {
   /** The previewed text the plan was made for: the only place a placeholder may come from. */
   readonly text: string;
+  /** `placeholders` (the default) for a plan the model made, whose references are placeholders of `text`; `references` for the parameters of an edit, whose references are real ones the investigator gave. */
+  readonly mode?: 'placeholders' | 'references';
   readonly view: AiMappingView | undefined;
 }
 
@@ -37,6 +39,7 @@ export function problemsOfPlan(plan: AskPlan, input: PlanCheckInput): readonly s
   const problems: string[] = [];
   const known = names(input.view);
   const present = placeholdersOf(input.text);
+  const literal = input.mode === 'references';
   const entry = CATALOG.find((candidate) => candidate.id === plan.templateId);
   if (entry === undefined) return ['templateId: not a template of the catalog'];
   if (plan.templateVersion !== entry.version) problems.push('templateVersion: not the version of the catalog');
@@ -48,6 +51,10 @@ export function problemsOfPlan(plan: AskPlan, input: PlanCheckInput): readonly s
     if (!known.relationships.has(value)) problems.push(`${path}: not a relationship type of the vocabulary`);
   };
   const entityPlaceholder = (path: string, ref: { readonly entityType: string; readonly stableId: string }): void => {
+    if (literal) {
+      entityType(`${path}.entityType`, ref.entityType);
+      return;
+    }
     const kind = kindOf(ref.stableId);
     if (kind === undefined || kind === VALUE_KIND || !present.has(ref.stableId)) {
       problems.push(`${path}.stableId: not an entity placeholder of the question`);
@@ -90,7 +97,7 @@ export function problemsOfPlan(plan: AskPlan, input: PlanCheckInput): readonly s
         break;
       case 'search':
         for (const [index, type] of candidate.params.entityTypes.entries()) entityType(`params.entityTypes.${index}`, type);
-        if (kindOf(candidate.params.text) !== VALUE_KIND || !present.has(candidate.params.text)) problems.push('params.text: not a value placeholder of the question');
+        if (!literal && (kindOf(candidate.params.text) !== VALUE_KIND || !present.has(candidate.params.text))) problems.push('params.text: not a value placeholder of the question');
         break;
       default: {
         const unreachable: never = candidate;
