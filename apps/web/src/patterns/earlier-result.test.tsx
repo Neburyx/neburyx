@@ -3,7 +3,7 @@ import { cleanup, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ApiResult } from '../api/client.js';
 import type { PatternRunResponse, SavedPatternRunResponse, TemplateRunResponse } from '@neburyx/contracts';
-import { definitionOk, failure, heavyRun, listed, okRun, openPatterns, patternsWorkspace, selectAccount, settle } from './patterns-kit.js';
+import { definitionOk, failure, heavyRun, listed, okRun, openBuiltIn, openPatterns, patternsWorkspace, selectAccount, settle } from './patterns-kit.js';
 import { runButton, runWorkspace, validPattern } from './run/run-kit.js';
 
 beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }));
@@ -27,7 +27,7 @@ describe('an earlier result under a run that gave none', () => {
         return new Promise((resolve) => sent.signal?.addEventListener('abort', () => resolve({ ok: false, failure: { code: 'ABORTED' } })));
       },
     });
-    await openPatterns();
+    await openBuiltIn();
     selectAccount(kit.state, 'acc-1');
     const run = (): Promise<void> => userEvent.click(screen.getByRole('button', { name: 'Run pattern' }));
     await run();
@@ -72,7 +72,6 @@ describe('an earlier result under a run that gave none', () => {
       },
     });
     await openPatterns();
-    await userEvent.click(screen.getByRole('tab', { name: /My patterns/ }));
     await userEvent.click(screen.getByRole('button', { name: 'Run Alpha' }));
     await settle();
     expect(screen.queryByText(NOTE)).toBeNull();

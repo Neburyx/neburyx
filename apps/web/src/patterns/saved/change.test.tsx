@@ -36,7 +36,6 @@ const stored = (overrides: Partial<SavedPattern> = {}): SavedPattern => savedPat
 async function opened(item: ListedPattern, options: KitOptions = {}) {
   const kit = await patternsWorkspace({ profile: async () => ({ ok: true, value: conditionsProfile() }), ...options, patterns: { listPatterns: async () => page([item]), ...options.patterns } });
   await openPatterns();
-  await userEvent.click(screen.getByRole('tab', { name: /My patterns/ }));
   await userEvent.click(screen.getByRole('button', { name: `More: ${item.name}` }));
   await userEvent.click(screen.getByRole('menuitem', { name: 'Change' }));
   await settle();
@@ -77,7 +76,7 @@ describe('changing a saved pattern in the builder', () => {
     expect(call?.args[1]).toMatchObject({ expectedVersion: 4, name: 'Alpha', definition: { anchorType: 'c-a', steps: [{ relationshipTypes: ['k-1'], window: { days: 30 } }] } });
     expect(call?.args[1]).not.toHaveProperty('anchor');
     expect(screen.getByText('Pattern saved.')).toBeTruthy();
-    expect(screen.queryByRole('region', { name: /pattern/i })).toBeNull();
+    expect(screen.queryByRole('region', { name: /^Change pattern/ })).toBeNull();
   });
 
   it('keeps the starting entity a pattern holds when it is not loaded or another is selected, and clears it only when the person chooses to ask each time', async () => {
@@ -145,11 +144,9 @@ describe('changing a saved pattern in the builder', () => {
     const kit = await patternsWorkspace({ patterns: { listPatterns: async () => page([listed({ id: ID, name: 'Alpha', kind: 'preset-run', presetId: 'shared-devices', templateId: 'shared-attribute', templateVersion: 1, params: {} }), listed({ id: '0192f000-0000-7000-8000-000000000002', name: 'Beta', ownedByYou: false, visibility: 'shared', owner: { name: 'Pat' } })]) } });
     void kit;
     await openPatterns();
-    await userEvent.click(screen.getByRole('tab', { name: /My patterns/ }));
     await userEvent.click(screen.getByRole('button', { name: 'More: Alpha' }));
     expect(within(screen.getByRole('menu')).queryByRole('menuitem', { name: 'Change' })).toBeNull();
     await userEvent.keyboard('{Escape}');
-    await userEvent.click(screen.getByRole('tab', { name: /Shared on this source/ }));
     await userEvent.click(screen.getByRole('button', { name: 'More: Beta' }));
     expect(within(screen.getByRole('menu')).queryByRole('menuitem', { name: 'Change' })).toBeNull();
   });

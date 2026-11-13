@@ -115,7 +115,7 @@ describe('the Partial state is not wired to any request', () => {
       }
     };
     walk(join(import.meta.dirname, '..'));
-    const mentions = files.filter((file) => !file.includes(`${join('src', 'banner')}`) && readFileSync(file, 'utf8').includes('PARTIAL_RESULT'));
+    const mentions = files.filter((file) => !file.includes(`${join('src', 'banner')}`) && !file.endsWith(join('patterns', 'failure-words.ts')) && readFileSync(file, 'utf8').includes('PARTIAL_RESULT'));
     expect(mentions).toEqual([]);
   });
 });

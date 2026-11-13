@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
-import { failure, listOf, openPatterns, patternsWorkspace, selectAccount, settle, CONNECTED, PRESETS, SHARED_ADDRESSES } from './patterns-kit.js';
+import { choosePreset, failure, listOf, openBuiltIn, openPatterns, patternsWorkspace, selectAccount, settle, CONNECTED, PRESETS, SHARED_ADDRESSES } from './patterns-kit.js';
 
 afterEach(() => {
   cleanup();
@@ -18,15 +18,15 @@ describe('the form of a pattern', () => {
     ['Connected accounts', ['Starting account', 'Direction', 'Hops', 'Window', 'Limit']],
   ])('has the fields the schema declares for %s, with the preset’s labels or plain names, and no other', async (name, expected) => {
     await patternsWorkspace();
-    await openPatterns();
-    await userEvent.click(screen.getByRole('radio', { name }));
+    await openBuiltIn();
+    await choosePreset(name);
     expect(labels()).toEqual(expected);
     expect(document.querySelectorAll('.patterns-panel input[type="text"]')).toBeDefined();
   });
 
   it('shows no free-text field but the two searches and numbers', async () => {
     await patternsWorkspace();
-    await openPatterns();
+    await openBuiltIn();
     const inputs = [...document.querySelectorAll<HTMLInputElement>('.patterns-panel input')].map((input) => input.type);
     expect(inputs.every((type) => ['search', 'date', 'text'].includes(type))).toBe(true);
     expect([...document.querySelectorAll<HTMLInputElement>('.patterns-panel input[type="text"]')].every((input) => input.inputMode === 'numeric')).toBe(true);
@@ -34,13 +34,13 @@ describe('the form of a pattern', () => {
 
   it('shows a preset with no labels with the parameters’ plain names', async () => {
     await patternsWorkspace({ list: async () => ({ ok: true, value: listOf([{ ...SHARED_ADDRESSES, labels: [] }]) }) });
-    await openPatterns();
+    await openBuiltIn('Shared addresses');
     expect(labels()).toEqual(['Anchor', 'Window', 'Min shared', 'Limit']);
   });
 
   it('sends a window of two dates, a limit and a minimum, and sends nothing for a cleared window', async () => {
     const kit = await patternsWorkspace();
-    await openPatterns();
+    await openBuiltIn();
     selectAccount(kit.state, 'acc-1');
     fireEvent.change(screen.getByLabelText('Window: from'), { target: { value: '2026-10-21' } });
     fireEvent.change(screen.getByLabelText('Window: to'), { target: { value: '2026-10-28' } });
@@ -58,7 +58,7 @@ describe('the form of a pattern', () => {
 
   it('refuses a reversed window and a limit below 1 with the reason and sends nothing', async () => {
     const kit = await patternsWorkspace();
-    await openPatterns();
+    await openBuiltIn();
     selectAccount(kit.state, 'acc-1');
     fireEvent.change(screen.getByLabelText('Window: from'), { target: { value: '2026-10-28' } });
     fireEvent.change(screen.getByLabelText('Window: to'), { target: { value: '2026-10-21' } });
@@ -71,7 +71,7 @@ describe('the form of a pattern', () => {
 
   it('keeps every field as filled after INVALID_REQUEST and says it in words', async () => {
     const kit = await patternsWorkspace({ run: async () => ({ ok: false, failure: failure('INVALID_REQUEST') }) });
-    await openPatterns();
+    await openBuiltIn();
     selectAccount(kit.state, 'acc-1');
     await userEvent.type(screen.getByLabelText('Max matching accounts'), '7');
     await userEvent.click(run());

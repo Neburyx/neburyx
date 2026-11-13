@@ -47,11 +47,13 @@ describe('opening the builder from the Patterns panel', () => {
     expect(screen.getByText('Approved ways to explore. No query language needed.')).toBeTruthy();
   });
 
-  it('closes the panel on Escape from the builder even while a preset run is on its way in the hidden list', async () => {
+  it('closes the panel on Escape from the builder even while a preset run is on its way', async () => {
     const kit = await builderWorkspace({ run: () => new Promise(() => undefined) });
+    await userEvent.click(screen.getByRole('button', { name: 'Run Shared devices' }));
     selectAccount(kit.state, 'acc-1');
     await userEvent.click(screen.getByRole('button', { name: 'Run pattern' }));
     await settle();
+    await userEvent.click(screen.getByRole('button', { name: 'Back to patterns' }));
     await openBuilder();
     await chooseStart('n-a');
     fireEvent.keyDown(startSelect(), { key: 'Escape' });
@@ -90,7 +92,6 @@ describe('opening the builder from the Patterns panel', () => {
     const item = listed({ id: '0192f000-0000-7000-8000-000000000001', name: 'Alpha', kind: 'definition', definition: { anchorType: 'n-a', steps: [{ relationshipTypes: ['r-1'], direction: 'out', arrivesAt: 'n-b' }] } });
     await patternsWorkspace({ profile: async () => ({ ok: false, failure: failure('SOURCE_BUSY') }), patterns: { listPatterns: async () => ({ ok: true, value: { items: [item], nextCursor: null } }) } });
     await openPatterns();
-    await userEvent.click(screen.getByRole('tab', { name: /My patterns/ }));
     await userEvent.click(screen.getByRole('button', { name: 'More: Alpha' }));
     await userEvent.click(screen.getByRole('menuitem', { name: 'Change' }));
     await settle();
@@ -123,7 +124,7 @@ describe('leaving and coming back', () => {
     expect(startSelect().value).toBe('n-b');
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     await userEvent.click(within(screen.getByRole('dialog', { name: 'Discard this draft?' })).getByRole('button', { name: 'Discard draft' }));
-    expect(screen.getByRole('radio', { name: 'Shared devices' }).getAttribute('aria-checked')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Run Shared devices' })).toBeTruthy();
     await openBuilder();
     expect(startSelect().value).toBe('');
   });

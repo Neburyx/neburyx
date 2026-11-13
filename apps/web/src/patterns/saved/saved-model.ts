@@ -18,7 +18,7 @@ export const nameFits = (name: string): boolean => {
 export const visibilityText = (item: Pick<ListedPattern, 'visibility'>): string => (item.visibility === 'shared' ? SAVED_COPY.everyone : SAVED_COPY.onlyMe);
 
 /** What kind of pattern a row is, in a line: built in this panel, or the name of the built-in pattern it was saved from. */
-export function kindLineOf(item: ListedPattern, presets: TemplateListResponse['presets'] | undefined): string {
+export function kindLineOf(item: ListedPattern, presets: readonly TemplateListResponse['presets'][number][] | undefined): string {
   if (item.kind === 'definition') return SAVED_COPY.builtInKind;
   return presets?.find((preset) => preset.id === item.presetId)?.name ?? item.presetId;
 }

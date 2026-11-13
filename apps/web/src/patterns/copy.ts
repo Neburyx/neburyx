@@ -15,6 +15,7 @@ export const PATTERNS_COPY = {
   list: 'Patterns',
   run: 'Run pattern',
   cancel: 'Cancel',
+  backToList: 'Back to patterns',
   runAgain: 'Run again',
   retry: RETRY,
   /** Proposed copy (the frame and the ui-spec give none). */

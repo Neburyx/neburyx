@@ -23,15 +23,15 @@ const choose = async (name: string): Promise<void> => {
 const calls = (kit: Awaited<ReturnType<typeof savedWorkspace>>, method: string) => kit.patternCalls.filter((call) => call.method === method);
 
 describe('the menu of a row', () => {
-  it('offers Rename, Share, Copy and Delete on a pattern of the person’s own, and Copy only on another person’s shared one; a built-in row has no menu', async () => {
+  it('offers Rename, Share, Copy and Delete on a pattern of the person’s own, and Run and Copy on another person’s shared one; a built-in row has no menu', async () => {
     await savedWorkspace({ patterns: { listPatterns: async () => page([listed({ id: ID, name: 'Alpha' }), listed({ id: '0192f000-0000-7000-8000-000000000002', name: 'Beta', ownedByYou: false, visibility: 'shared', owner: { name: 'Pat' } })]) } });
     await openTab(/My patterns/);
     await userEvent.click(menuOf('Alpha'));
-    expect(items()).toEqual(['Rename', 'Change', 'Share', 'Copy', 'Delete']);
+    expect(items()).toEqual(['Run', 'Change', 'Rename', 'Share', 'Copy', 'Delete']);
     await userEvent.keyboard('{Escape}');
     await openTab(/Shared on this source/);
     await userEvent.click(menuOf('Beta'));
-    expect(items()).toEqual(['Copy']);
+    expect(items()).toEqual(['Run', 'Copy', 'Changeowner only', 'Renameowner only', 'Deleteowner only']);
   });
 
   it('opens with Enter, moves with the arrow keys, and closes with Escape, giving the focus back to its button without closing the panel', async () => {
@@ -145,7 +145,7 @@ describe('renaming, copying and deleting', () => {
     await settle();
     await openTab(/Shared on this source/);
     await userEvent.click(menuOf('Alpha'));
-    expect(items()).toEqual(['Copy']);
+    expect(items()).toEqual(['Run', 'Copy', 'Changeowner only', 'Renameowner only', 'Deleteowner only']);
   });
 });
 
@@ -160,7 +160,7 @@ describe('sharing and unsharing', () => {
     await settle();
     expect(calls(kit, 'changePattern')[0]?.args.slice(0, 2)).toEqual([ID, { expectedVersion: 2, visibility: 'shared' }]);
     await userEvent.click(menuOf('Gamma'));
-    expect(items()).toEqual(['Rename', 'Change', 'Unshare', 'Copy', 'Delete']);
+    expect(items()).toEqual(['Run', 'Change', 'Rename', 'Unshare', 'Copy', 'Delete']);
     await choose('Unshare');
     expect(calls(kit, 'changePattern')[1]?.args.slice(0, 2)).toEqual(['0192f000-0000-7000-8000-000000000002', { expectedVersion: 7, visibility: 'private' }]);
   });
@@ -174,7 +174,7 @@ describe('sharing and unsharing', () => {
     await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Share' }));
     await settle();
     expect(within(screen.getByRole('dialog')).getByRole('alert').textContent).toMatch(/personal data/);
-    expect(screen.getByText('Not run yet · Only me')).toBeTruthy();
+    expect(screen.getByText(/Not run yet/)).toBeTruthy();
     refusal = failure('CONFLICT');
     await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Share' }));
     await settle();

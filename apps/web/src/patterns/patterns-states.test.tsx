@@ -1,7 +1,7 @@
-import { act, cleanup, screen } from '@testing-library/react';
+import { act, cleanup, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { failure, listOf, okRun, openPatterns, patternsWorkspace, selectAccount, settle, type KitOptions } from './patterns-kit.js';
+import { choosePreset, failure, listOf, okRun, openBuiltIn, openPatterns, patternsWorkspace, selectAccount, settle, type KitOptions } from './patterns-kit.js';
 
 afterEach(() => {
   cleanup();
@@ -13,7 +13,7 @@ const run = (): HTMLElement => screen.getByRole('button', { name: 'Run pattern' 
 
 async function ran(options: KitOptions) {
   const kit = await patternsWorkspace(options);
-  await openPatterns();
+  await openBuiltIn();
   selectAccount(kit.state, 'acc-1');
   await userEvent.click(run());
   await settle();
@@ -21,11 +21,11 @@ async function ran(options: KitOptions) {
 }
 
 describe('the Patterns panel: empty, failure and source-state answers', () => {
-  it('says the source has no patterns and draws no card and no Run when the list holds only the generic templates', async () => {
+  it('says the source has no built-in patterns and draws no row and no Run when the list holds only the generic templates', async () => {
     await patternsWorkspace({ list: async () => ({ ok: true, value: listOf([]) }) });
     await openPatterns();
-    expect(screen.getByText('This source has no patterns.')).toBeTruthy();
-    expect(screen.queryAllByRole('radio')).toHaveLength(0);
+    expect(screen.getByText('This source has no built-in patterns.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /^Run Shared/ })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Run pattern' })).toBeNull();
   });
 
@@ -38,7 +38,7 @@ describe('the Patterns panel: empty, failure and source-state answers', () => {
     expect(kit.state.visibleGraph().nodes).toHaveLength(before);
     await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
     await settle();
-    expect(screen.getAllByRole('radio')).toHaveLength(3);
+    expect(within(screen.getByRole('region', { name: /^Built-in/ })).getAllByRole('listitem')).toHaveLength(3);
   });
 
   it('keeps the earlier table, the fields and the graph when a later run fails', async () => {
@@ -68,7 +68,7 @@ describe('the Patterns panel: empty, failure and source-state answers', () => {
   it('holds the Try again of a rate limit until the server’s wait is over, counting down, and announces it once', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const kit = await patternsWorkspace({ run: async () => ({ ok: false, failure: failure('RATE_LIMITED', { retryAfterMs: 3000 }) }) });
-    await openPatterns();
+    await openBuiltIn();
     selectAccount(kit.state, 'acc-1');
     await userEvent.click(run());
     await settle();
@@ -106,9 +106,9 @@ describe('the Patterns panel: empty, failure and source-state answers', () => {
 
   it('names the hop cap and sets the hops field to it', async () => {
     const kit = await patternsWorkspace({ run: async () => ({ ok: false, failure: failure('QUERY_BUDGET_EXCEEDED', { maxHops: 1 }) }) });
-    await openPatterns();
+    await openBuiltIn();
     selectAccount(kit.state, 'acc-1');
-    await userEvent.click(screen.getByRole('radio', { name: 'Connected accounts' }));
+    await choosePreset('Connected accounts');
     await userEvent.click(run());
     await settle();
     expect(screen.getAllByRole('alert')[0]?.textContent).toContain('at most 1');

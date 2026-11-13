@@ -236,6 +236,22 @@ export const openPatterns = async (): Promise<void> => {
   await settle();
 };
 
+/** Opens the panel and the form of a built-in pattern: Run on its row of the list. */
+export const openBuiltIn = async (name: string = SHARED_DEVICES.name): Promise<void> => {
+  await openPatterns();
+  await settle();
+  fireEvent.click(screen.getByRole('button', { name: `Run ${name}` }));
+  await settle();
+};
+
+/** Goes back to the list from a form and opens the form of another built-in pattern. */
+export const choosePreset = async (name: string): Promise<void> => {
+  fireEvent.click(screen.getByRole('button', { name: 'Back to patterns' }));
+  await settle();
+  fireEvent.click(screen.getByRole('button', { name: `Run ${name}` }));
+  await settle();
+};
+
 export const selectAccount = (state: ClientState, id: string): void => {
   act(() => state.presentation.select([elementKey(ref('a', 'kind-a', id))]));
 };

@@ -4,7 +4,7 @@ import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
 import { typedNode } from '../workspace/filters-kit.js';
-import { listOf, okRun, openPatterns, patternsWorkspace, selectAccount, settle, CONNECTED, SHARED_DEVICES } from './patterns-kit.js';
+import { choosePreset, listOf, okRun, openBuiltIn, openPatterns, patternsWorkspace, selectAccount, settle, CONNECTED, SHARED_DEVICES } from './patterns-kit.js';
 
 afterEach(() => {
   cleanup();
@@ -14,20 +14,24 @@ afterEach(() => {
 const run = (): HTMLElement => screen.getByRole('button', { name: 'Run pattern' });
 
 describe('the Patterns panel: open and run a preset', () => {
-  it('lists exactly the presets of the source, first selected, with the intro line and no other card', async () => {
+  it('lists exactly the presets of the source as rows with Run, with the intro line and no other card, and opens the form of the one chosen', async () => {
     await patternsWorkspace();
     await openPatterns();
-    expect(screen.getByRole('heading', { name: 'Patterns' })).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 2, name: 'Patterns' })).toBeTruthy();
     expect(screen.getByText('Approved ways to explore. No query language needed.')).toBeTruthy();
-    const cards = within(screen.getByRole('radiogroup', { name: 'Patterns' })).getAllByRole('radio');
-    expect(cards.map((card) => card.textContent)).toEqual(['Shared devices', 'Shared addresses', 'Connected accounts']);
-    expect(cards.map((card) => card.getAttribute('aria-checked'))).toEqual(['true', 'false', 'false']);
+    const rows = within(screen.getByRole('region', { name: /^Built-in/ })).getAllByRole('listitem');
+    expect(rows.map((row) => row.querySelector('.pattern-row-name')?.textContent)).toEqual(['Shared devices', 'Shared addresses', 'Connected accounts']);
     expect(screen.queryByText(/Suspicious/)).toBeNull();
+    expect(screen.queryAllByRole('radio')).toHaveLength(0);
+    await userEvent.click(screen.getByRole('button', { name: 'Run Shared addresses' }));
+    expect(screen.getByRole('heading', { level: 2, name: 'Shared addresses' })).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'Back to patterns' }));
+    expect(screen.getByRole('heading', { level: 2, name: 'Patterns' })).toBeTruthy();
   });
 
   it('sends one run with the source, the preset id, only the anchor ref, the mask and a fresh key', async () => {
     const kit = await patternsWorkspace();
-    await openPatterns();
+    await openBuiltIn();
     selectAccount(kit.state, 'acc-1');
     await userEvent.click(run());
     await settle();
@@ -43,7 +47,7 @@ describe('the Patterns panel: open and run a preset', () => {
 
   it('shows the match and what it shares as a table', async () => {
     const kit = await patternsWorkspace({ run: async () => ({ ok: true, value: okRun(['acc-2']) }) });
-    await openPatterns();
+    await openBuiltIn();
     selectAccount(kit.state, 'acc-1');
     await userEvent.click(run());
     await settle();
@@ -55,7 +59,7 @@ describe('the Patterns panel: open and run a preset', () => {
 
   it('disables Run until an entity of the anchor type is selected, and says which entity to choose, in the words of the field label', async () => {
     const kit = await patternsWorkspace({ nodes: [typedNode('dev-1', 'kind-b'), typedNode('acc-1', 'kind-a')], opened: { entityType: 'kind-b', stableId: 'dev-1' } });
-    await openPatterns();
+    await openBuiltIn();
     expect(run().hasAttribute('disabled')).toBe(true);
     expect(screen.getByText('Choose the starting account to run this pattern.')).toBeTruthy();
     selectAccount(kit.state, 'acc-1');
@@ -64,7 +68,7 @@ describe('the Patterns panel: open and run a preset', () => {
 
   it('takes the entity the investigation was opened on as the starting entity, so Run is enabled without a pick', async () => {
     const kit = await patternsWorkspace();
-    await openPatterns();
+    await openBuiltIn();
     expect(run().hasAttribute('disabled')).toBe(false);
     expect((screen.getByLabelText('Starting account') as HTMLSelectElement).value).toContain('acc-1');
     await userEvent.click(run());
@@ -74,22 +78,22 @@ describe('the Patterns panel: open and run a preset', () => {
 
   it('does not take the first loaded entity of the type when it is not the one the investigation was opened on', async () => {
     await patternsWorkspace({ nodes: [typedNode('acc-1', 'kind-a'), typedNode('dev-1', 'kind-b')], opened: { entityType: 'kind-b', stableId: 'dev-1' } });
-    await openPatterns();
+    await openBuiltIn();
     expect(run().hasAttribute('disabled')).toBe(true);
     expect((screen.getByLabelText('Starting account') as HTMLSelectElement).value).toBe('');
   });
 
   it('shows a result only under the pattern that produced it, and again when the person goes back to it', async () => {
     const kit = await patternsWorkspace();
-    await openPatterns();
+    await openBuiltIn();
     selectAccount(kit.state, 'acc-1');
     await userEvent.click(run());
     await settle();
     expect(screen.getByRole('table')).toBeTruthy();
-    await userEvent.click(screen.getByRole('radio', { name: 'Shared addresses' }));
+    await choosePreset('Shared addresses');
     expect(screen.queryByRole('table')).toBeNull();
     expect(screen.queryByRole('region', { name: 'Result' })).toBeNull();
-    await userEvent.click(screen.getByRole('radio', { name: 'Shared devices' }));
+    await choosePreset('Shared devices');
     expect(screen.getByRole('table')).toBeTruthy();
   });
 
@@ -102,18 +106,18 @@ describe('the Patterns panel: open and run a preset', () => {
 
   it('shows the source timeout beside Run, and no number when the source states none', async () => {
     await patternsWorkspace();
-    await openPatterns();
+    await openBuiltIn();
     expect(screen.getByText('5 s timeout')).toBeTruthy();
     cleanup();
     document.body.replaceChildren();
     await patternsWorkspace({ timeoutMs: null });
-    await openPatterns();
+    await openBuiltIn();
     expect(screen.queryByText(/timeout/)).toBeNull();
   });
 
   it('has no Save pattern control in any state', async () => {
     const kit = await patternsWorkspace();
-    await openPatterns();
+    await openBuiltIn();
     selectAccount(kit.state, 'acc-1');
     expect(screen.queryByText(/Save pattern/)).toBeNull();
     await userEvent.click(run());
@@ -121,14 +125,11 @@ describe('the Patterns panel: open and run a preset', () => {
     expect(screen.queryByText(/Save pattern/)).toBeNull();
   });
 
-  it('keeps the first preset and the list order the answer gives', async () => {
+  it('keeps the list order the answer gives', async () => {
     await patternsWorkspace({ list: async () => ({ ok: true, value: listOf([CONNECTED, SHARED_DEVICES]) }) });
     await openPatterns();
-    const cards = screen.getAllByRole('radio');
-    expect(cards.map((card) => card.textContent)).toEqual(['Connected accounts', 'Shared devices']);
-    fireEvent.keyDown(screen.getByRole('radio', { name: 'Connected accounts' }), { key: 'ArrowDown' });
-    await settle();
-    expect(screen.getAllByRole('radio')[1]?.getAttribute('aria-checked')).toBe('true');
+    const rows = within(screen.getByRole('region', { name: /^Built-in/ })).getAllByRole('listitem');
+    expect(rows.map((row) => row.querySelector('.pattern-row-name')?.textContent)).toEqual(['Connected accounts', 'Shared devices']);
   });
 
   it('lists exactly the two presets of the insurance pack for a source that declares them', async () => {
@@ -136,7 +137,8 @@ describe('the Patterns panel: open and run a preset', () => {
     const claims = { ...CONNECTED, id: 'claimant-claims', name: 'Claims by claimant', bind: { anchor: 'kind-a', target: 'kind-b', via: 'LINKS_B' }, labels: [{ key: 'anchor', text: 'Starting claimant' }] };
     await patternsWorkspace({ list: async () => ({ ok: true, value: listOf([claimant, claims]) }) });
     await openPatterns();
-    expect(screen.getAllByRole('radio').map((card) => card.textContent)).toEqual(['Shared addresses', 'Claims by claimant']);
+    expect(within(screen.getByRole('region', { name: /^Built-in/ })).getAllByRole('listitem').map((row) => row.querySelector('.pattern-row-name')?.textContent)).toEqual(['Shared addresses', 'Claims by claimant']);
+    await userEvent.click(screen.getByRole('button', { name: 'Run Shared addresses' }));
     expect(screen.getByLabelText('Starting claimant')).toBeTruthy();
   });
 });

@@ -151,27 +151,33 @@
   border: 0;
 }
 
-.pattern-tabs {
+.pattern-list {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-4);
-  border-bottom: var(--border-width) solid var(--color-border);
+  flex-direction: column;
+  gap: var(--space-12);
 }
 
-.pattern-tab {
-  padding: var(--space-4) var(--space-8);
-  border: 0;
-  border-bottom: var(--border-width-current) solid transparent;
-  background: transparent;
-  color: var(--color-text);
+.pattern-search {
+  width: 100%;
+  box-sizing: border-box;
+  padding: var(--space-6) var(--space-8);
+  border: var(--border-width) solid var(--color-control-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  color: var(--color-text-strong);
   font: inherit;
-  font-size: var(--font-size-small);
-  cursor: pointer;
 }
 
-.pattern-tab[aria-selected='true'] {
-  border-bottom-color: var(--color-accent);
-  color: var(--color-accent);
+.pattern-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.pattern-section-heading {
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-medium);
 }
 
@@ -257,4 +263,40 @@
   gap: var(--space-8);
   padding-top: var(--space-8);
   border-top: var(--border-width) solid var(--color-border);
+}
+
+.pattern-row-badge {
+  padding: 0 var(--space-6);
+  border: var(--border-width) solid var(--color-control-border);
+  border-radius: var(--radius-badge);
+  color: var(--color-text);
+  font-size: var(--font-size-small);
+}
+
+.pattern-menu-note {
+  margin: 0;
+  padding: var(--space-4) var(--space-8);
+  border-top: var(--border-width) solid var(--color-border);
+  color: var(--color-text);
+  font-size: var(--font-size-small);
+}
+
+.pattern-menu-rule {
+  border-top: var(--border-width) solid var(--color-border);
+}
+
+.pattern-menu-danger {
+  color: var(--color-danger);
+}
+
+.pattern-menu-inert {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-8);
+  color: var(--color-text);
+  cursor: default;
+}
+
+.pattern-menu-tag {
+  font-size: var(--font-size-small);
 }

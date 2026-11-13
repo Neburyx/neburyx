@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { edgeKey, elementKey } from '../state/keys.js';
 import { ref } from '../state/test-data.js';
 import { addResultToGraph } from '../patterns/add-to-graph.js';
-import { okRun, openPatterns, patternsWorkspace, selectAccount, settle } from '../patterns/patterns-kit.js';
+import { okRun, openBuiltIn, patternsWorkspace, selectAccount, settle } from '../patterns/patterns-kit.js';
 
 afterEach(() => {
   cleanup();
@@ -13,7 +13,7 @@ afterEach(() => {
 
 async function shown() {
   const kit = await patternsWorkspace({ run: async () => ({ ok: true, value: okRun(['acc-2', 'acc-3']) }) });
-  await openPatterns();
+  await openBuiltIn();
   selectAccount(kit.state, 'acc-1');
   await userEvent.click(screen.getByRole('button', { name: 'Run pattern' }));
   await settle();

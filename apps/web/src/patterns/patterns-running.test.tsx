@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { ApiResult } from '../api/client.js';
 import type { TemplateRunResponse } from '@neburyx/contracts';
-import { failure, heavyRun, okRun, openPatterns, patternsWorkspace, selectAccount, settle, type Sent } from './patterns-kit.js';
+import { choosePreset, failure, heavyRun, okRun, openBuiltIn, openPatterns, patternsWorkspace, selectAccount, settle, type Sent } from './patterns-kit.js';
 
 afterEach(() => {
   cleanup();
@@ -34,7 +34,7 @@ describe('running, cancel and stale answers', () => {
     const { held, handler } = holdingRuns();
     let first = true;
     const kit = await patternsWorkspace({ run: (sent) => (first ? ((first = false), Promise.resolve({ ok: true as const, value: okRun(['acc-2']) })) : handler(sent)) });
-    await openPatterns();
+    await openBuiltIn();
     selectAccount(kit.state, 'acc-1');
     await userEvent.click(run());
     await settle();
@@ -50,7 +50,7 @@ describe('running, cancel and stale answers', () => {
   it('aborts on Cancel, shows the cancelled line with Run again, ignores a late answer and leaves the graph', async () => {
     const { held, handler } = holdingRuns();
     const kit = await patternsWorkspace({ run: handler });
-    await openPatterns();
+    await openBuiltIn();
     selectAccount(kit.state, 'acc-1');
     const nodes = kit.state.visibleGraph().nodes.length;
     await userEvent.click(run());
@@ -71,28 +71,28 @@ describe('running, cancel and stale answers', () => {
   it('cancels on Escape while running and closes the panel on Escape when idle', async () => {
     const { held, handler } = holdingRuns();
     const kit = await patternsWorkspace({ run: handler });
-    await openPatterns();
+    await openBuiltIn();
     selectAccount(kit.state, 'acc-1');
     await userEvent.click(run());
     await settle();
-    fireEvent.keyDown(screen.getByRole('radio', { name: 'Shared devices' }), { key: 'Escape' });
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Back to patterns' }), { key: 'Escape' });
     await settle();
     expect(held[0]?.sent.signal?.aborted).toBe(true);
-    expect(screen.getByRole('heading', { name: 'Patterns' })).toBeTruthy();
-    fireEvent.keyDown(screen.getByRole('radio', { name: 'Shared devices' }), { key: 'Escape' });
+    expect(screen.getByRole('complementary', { name: 'Patterns' })).toBeTruthy();
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Back to patterns' }), { key: 'Escape' });
     await settle();
-    expect(screen.queryByRole('heading', { name: 'Patterns' })).toBeNull();
+    expect(screen.queryByRole('complementary', { name: 'Patterns' })).toBeNull();
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Patterns' }));
   });
 
   it('shows only the newer run’s answer when a run is started over a running one', async () => {
     const { held, handler } = holdingRuns();
     const kit = await patternsWorkspace({ run: handler });
-    await openPatterns();
+    await openBuiltIn();
     selectAccount(kit.state, 'acc-1');
     await userEvent.click(run());
     await settle();
-    await userEvent.click(screen.getByRole('radio', { name: 'Shared addresses' }));
+    await choosePreset('Shared addresses');
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     await userEvent.click(run());
     await settle();
@@ -108,7 +108,7 @@ describe('running, cancel and stale answers', () => {
   it('drops the run when the source changes, and shows nothing of its answer in the new context', async () => {
     const { held, handler } = holdingRuns();
     const kit = await patternsWorkspace({ run: handler });
-    await openPatterns();
+    await openBuiltIn();
     selectAccount(kit.state, 'acc-1');
     await userEvent.click(run());
     await settle();
@@ -123,7 +123,7 @@ describe('running, cancel and stale answers', () => {
   it('raises no canvas banner while running, cancelled, failed, busy or heavy', async () => {
     let answer: Answer = { ok: false, failure: failure('SOURCE_BUSY') };
     const kit = await patternsWorkspace({ run: async () => answer });
-    await openPatterns();
+    await openBuiltIn();
     selectAccount(kit.state, 'acc-1');
     const shown = (): unknown => kit.banner.view.getState().banner;
     await userEvent.click(run());

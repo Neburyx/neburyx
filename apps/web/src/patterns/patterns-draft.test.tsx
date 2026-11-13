@@ -6,7 +6,7 @@ import { fakeClient } from '../api/fake-client.js';
 import { AUTOSAVE_DELAY_MS, createDraftSync } from '../draft/draft-sync.js';
 import { key } from '../state/test-data.js';
 import { ID } from '../lifecycle/harness.js';
-import { failure, heavyRun, okRun, openPatterns, patternsWorkspace, selectAccount, settle, type KitOptions, type PatternsKit } from './patterns-kit.js';
+import { failure, heavyRun, okRun, openBuiltIn, openPatterns, patternsWorkspace, selectAccount, settle, type KitOptions, type PatternsKit } from './patterns-kit.js';
 
 beforeEach(() => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'], now: Date.parse('2026-11-10T10:00:00.000Z') }));
 afterEach(() => {
@@ -35,7 +35,7 @@ async function drafted(run: KitOptions['run'], status: 'open' | 'closed' = 'open
   act(() => void kit.state.show({ id: ID, sourceId: 'a', record: { ...record, status, readOnly: closed }, resultKeys: [key('a')], nodeRefs: graph.nodes.map((n) => n.ref), edgeRefs: [] }, [{ key: key('a'), result: { sourceId: 'a', nodes: [...graph.nodes], edges: [] } }]));
   const sync = createDraftSync({ client, state: kit.state, page, document: page });
   sync.adopt(ID, { version: 1, notes: null, basedOnViewId: null, writable: status === 'open' });
-  await openPatterns();
+  await openBuiltIn();
   selectAccount(kit.state, 'acc-1');
   fireEvent.click(screen.getByRole('button', { name: 'Run pattern' }));
   await settle();

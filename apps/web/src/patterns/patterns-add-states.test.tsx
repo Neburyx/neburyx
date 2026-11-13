@@ -7,7 +7,7 @@ import { loadedOf } from '../workspace/node-counts.js';
 import { addResultToGraph } from './add-to-graph.js';
 import { elementKey } from '../state/keys.js';
 import { ref } from '../state/test-data.js';
-import { heavyRun, okRun, openPatterns, patternsWorkspace, selectAccount, settle, type KitOptions, type Sent } from './patterns-kit.js';
+import { choosePreset, heavyRun, okRun, openBuiltIn, openPatterns, patternsWorkspace, selectAccount, settle, type KitOptions, type Sent } from './patterns-kit.js';
 
 afterEach(() => {
   cleanup();
@@ -21,7 +21,7 @@ const ids = (kit: Awaited<ReturnType<typeof patternsWorkspace>>): string[] => ki
 async function start(run: (sent: Sent, call: number) => ReturnType<NonNullable<KitOptions['run']>>) {
   let call = 0;
   const kit = await patternsWorkspace({ run: (sent) => run(sent, ++call) });
-  await openPatterns();
+  await openBuiltIn();
   selectAccount(kit.state, 'acc-1');
   return kit;
 }
@@ -159,7 +159,7 @@ describe('what the outcome and the canvas show', () => {
     const base = okRun(['acc-2', 'acc-3']);
     if (base.status !== 'ok') throw new Error('not ok');
     const kit = await start(async () => ({ ok: true, value: { ...base, templateId: 'linked-entities', presetId: 'connected-accounts', links: [link('acc-2', 1), link('acc-3', 2, 'acc-2'), link('acc-2', 2, 'acc-3')] } }));
-    await userEvent.click(screen.getByRole('radio', { name: 'Connected accounts' }));
+    await choosePreset('Connected accounts');
     await userEvent.click(runButton());
     await settle();
     await add();

@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { ApiResult } from '../api/client.js';
 import type { TemplateRunResponse } from '@neburyx/contracts';
-import { heavyRun, okRun, openPatterns, patternsWorkspace, selectAccount, settle } from './patterns-kit.js';
+import { choosePreset, heavyRun, okRun, openBuiltIn, openPatterns, patternsWorkspace, selectAccount, settle } from './patterns-kit.js';
 
 afterEach(() => {
   cleanup();
@@ -15,7 +15,7 @@ const run = (): HTMLElement => screen.getByRole('button', { name: 'Run pattern' 
 async function heavyPanel(answers: (call: number) => ApiResult<TemplateRunResponse> = (call) => ({ ok: true, value: call === 1 ? heavyRun() : okRun(['acc-2']) })) {
   let call = 0;
   const kit = await patternsWorkspace({ run: async () => answers(++call) });
-  await openPatterns();
+  await openBuiltIn();
   selectAccount(kit.state, 'acc-1');
   await userEvent.type(screen.getByLabelText('Max matching accounts'), '100');
   await userEvent.click(run());
@@ -67,7 +67,7 @@ describe('the heavy-operation warning in the panel', () => {
     expect(screen.queryByText(/Estimated/)).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: 'Run pattern' }));
     await settle();
-    await userEvent.click(screen.getByRole('radio', { name: 'Shared addresses' }));
+    await choosePreset('Shared addresses');
     expect(screen.queryByText(/Estimated/)).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: 'Run pattern' }));
     await settle();

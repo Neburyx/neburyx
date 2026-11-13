@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { elementKey } from '../state/keys.js';
 import { ref } from '../state/test-data.js';
-import { failure, okRun, openPatterns, patternsWorkspace, selectAccount, settle } from './patterns-kit.js';
+import { failure, okRun, openBuiltIn, openPatterns, patternsWorkspace, selectAccount, settle } from './patterns-kit.js';
 
 afterEach(() => {
   cleanup();
@@ -12,7 +12,7 @@ afterEach(() => {
 
 async function shown(matches: readonly string[]) {
   const kit = await patternsWorkspace({ run: async () => ({ ok: true, value: okRun(matches) }) });
-  await openPatterns();
+  await openBuiltIn();
   selectAccount(kit.state, 'acc-1');
   await userEvent.click(screen.getByRole('button', { name: 'Run pattern' }));
   await settle();
@@ -55,7 +55,7 @@ describe('adding a pattern result to the graph', () => {
 
   it('states a cut result as a lower bound with no remainder number', async () => {
     const kit = await patternsWorkspace({ run: async () => ({ ok: true, value: okRun(['acc-3'], { count: { value: 25, quality: 'lowerBound', scope: 'matches' } }) }) });
-    await openPatterns();
+    await openBuiltIn();
     selectAccount(kit.state, 'acc-1');
     await userEvent.click(screen.getByRole('button', { name: 'Run pattern' }));
     await settle();
@@ -93,14 +93,14 @@ describe('adding a pattern result to the graph', () => {
   it('keeps what an earlier add put on the canvas when the same pattern is added again after the panel was reopened', async () => {
     let call = 0;
     const kit = await patternsWorkspace({ run: async () => ({ ok: true, value: okRun(++call === 1 ? ['acc-2', 'acc-3'] : ['acc-2', 'acc-4']) }) });
-    await openPatterns();
+    await openBuiltIn();
     selectAccount(kit.state, 'acc-1');
     await userEvent.click(screen.getByRole('button', { name: 'Run pattern' }));
     await settle();
     await userEvent.click(screen.getByRole('button', { name: 'Add to graph' }));
     await settle();
     await openPatterns();
-    await openPatterns();
+    await openBuiltIn();
     selectAccount(kit.state, 'acc-1');
     await userEvent.click(screen.getByRole('button', { name: 'Run pattern' }));
     await settle();
@@ -121,7 +121,7 @@ describe('adding a pattern result to the graph', () => {
         return { ok: true, value: okRun(['acc-2']) };
       },
     });
-    await openPatterns();
+    await openBuiltIn();
     selectAccount(kit.state, 'acc-1');
     await userEvent.click(screen.getByRole('button', { name: 'Run pattern' }));
     await settle();
@@ -137,7 +137,7 @@ describe('adding a pattern result to the graph', () => {
   it('still offers the retained result after a later run failed', async () => {
     let call = 0;
     const kit = await patternsWorkspace({ run: async () => (++call === 1 ? { ok: true, value: okRun(['acc-2', 'acc-3']) } : { ok: false, failure: failure('SOURCE_UNAVAILABLE') }) });
-    await openPatterns();
+    await openBuiltIn();
     selectAccount(kit.state, 'acc-1');
     await userEvent.click(screen.getByRole('button', { name: 'Run pattern' }));
     await settle();

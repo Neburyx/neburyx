@@ -2,7 +2,7 @@ import { cleanup, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { TemplateRunResponse } from '@neburyx/contracts';
-import { okRun, openPatterns, patternsWorkspace, selectAccount, settle } from './patterns-kit.js';
+import { choosePreset, okRun, openBuiltIn, openPatterns, patternsWorkspace, selectAccount, settle } from './patterns-kit.js';
 
 afterEach(() => {
   cleanup();
@@ -15,9 +15,9 @@ const run = (): HTMLElement => screen.getByRole('button', { name: 'Run pattern' 
 async function shown(answer: (call: number) => TemplateRunResponse, pattern?: string) {
   let call = 0;
   const kit = await patternsWorkspace({ run: async () => ({ ok: true, value: answer(++call) }) });
-  await openPatterns();
+  await openBuiltIn();
   selectAccount(kit.state, 'acc-1');
-  if (pattern !== undefined) await userEvent.click(screen.getByRole('radio', { name: pattern }));
+  if (pattern !== undefined) await choosePreset(pattern);
   await userEvent.click(run());
   await settle();
   return kit;
@@ -75,7 +75,7 @@ describe('the result of a pattern run', () => {
     let release: (value: { ok: true; value: TemplateRunResponse }) => void = () => undefined;
     let call = 0;
     const kit = await patternsWorkspace({ run: () => (++call === 1 ? Promise.resolve({ ok: true as const, value: okRun(['acc-2']) }) : new Promise((resolve) => (release = resolve))) });
-    await openPatterns();
+    await openBuiltIn();
     selectAccount(kit.state, 'acc-1');
     await userEvent.click(run());
     await settle();

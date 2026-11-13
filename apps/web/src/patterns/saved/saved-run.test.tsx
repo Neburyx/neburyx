@@ -95,7 +95,7 @@ describe('running a saved built pattern', () => {
     await press('Run Alpha');
     await press('Run Alpha');
     expect(screen.getAllByRole('alert').length).toBeGreaterThan(0);
-    expect(within(screen.getByRole('tabpanel', { name: /My patterns/ })).getByText('Alpha')).toBeTruthy();
+    expect(within(screen.getByRole('region', { name: /My patterns/ })).getByText('Alpha')).toBeTruthy();
     expect(result()).toBeTruthy();
   });
 
@@ -113,7 +113,7 @@ describe('running a saved run of a built-in pattern', () => {
   it('shows the kind line with the built-in pattern’s name and answers as a preset answers', async () => {
     const kit = await savedWorkspace({ patterns: { listPatterns: async () => page([preset()]), runSavedPattern: async () => ({ ok: true, value: okRun(['acc-2']) }) } });
     await openTab(/My patterns/);
-    expect(within(screen.getByRole('tabpanel', { name: /My patterns/ })).getByText('Shared devices')).toBeTruthy();
+    expect(within(screen.getByRole('region', { name: /My patterns/ })).getByText(/^Shared devices/)).toBeTruthy();
     await press('Run Devices');
     expect(runOf(savedCalls(kit))[0]?.args[1]).toEqual({});
     expect(within(result()).getByRole('button', { name: 'Add to graph' })).toBeTruthy();
@@ -143,7 +143,7 @@ describe('a saved pattern that cannot run', () => {
   it('says it is unavailable with a sentence for the reason and the step, and disables Run with that reason', async () => {
     await savedWorkspace({ patterns: { listPatterns: async () => page([gone()]) } });
     await openTab(/My patterns/);
-    const panel = within(screen.getByRole('tabpanel', { name: /My patterns/ }));
+    const panel = within(screen.getByRole('region', { name: /My patterns/ }));
     expect(panel.getByText('Unavailable')).toBeTruthy();
     expect(panel.getByText(`${UNAVAILABLE_TEXT['unknown-property']} (step 2)`)).toBeTruthy();
     const run = panel.getByRole('button', { name: 'Run Alpha' }) as HTMLButtonElement;
@@ -154,7 +154,7 @@ describe('a saved pattern that cannot run', () => {
   it('has a sentence in words for each of the reason codes, and none holds a code or a name', async () => {
     await savedWorkspace({ patterns: { listPatterns: async () => page([listed({ id: ID, name: 'Alpha', availability: { status: 'unavailable', reasons } })]) } });
     await openTab(/My patterns/);
-    const panel = within(screen.getByRole('tabpanel', { name: /My patterns/ }));
+    const panel = within(screen.getByRole('region', { name: /My patterns/ }));
     for (const code of PATTERN_UNAVAILABLE_CODES) {
       expect(panel.getByText(UNAVAILABLE_TEXT[code])).toBeTruthy();
       expect(UNAVAILABLE_TEXT[code]).not.toContain(code);
@@ -181,7 +181,7 @@ describe('a saved pattern that cannot run', () => {
     });
     await openTab(/My patterns/);
     await press('Run Alpha');
-    expect((within(screen.getByRole('tabpanel', { name: /My patterns/ })).getByRole('button', { name: 'Run Alpha' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((within(screen.getByRole('region', { name: /My patterns/ })).getByRole('button', { name: 'Run Alpha' }) as HTMLButtonElement).disabled).toBe(true);
   });
 });
 
@@ -189,9 +189,9 @@ describe('what a run leaves in the list', () => {
   it('marks the last run of the person’s own pattern after a result, without reading the list again', async () => {
     const kit = await savedWorkspace({ patterns: { listPatterns: async () => page([listed({ id: ID, name: 'Alpha' })]), runSavedPattern: async () => ({ ok: true, value: definitionOk(['acc-2']) }) } });
     await openTab(/My patterns/);
-    expect(screen.getByText('Not run yet · Only me')).toBeTruthy();
+    expect(screen.getByText(/Not run yet/)).toBeTruthy();
     await press('Run Alpha');
-    expect(screen.getByText(`Last run ${new Date().toISOString().slice(0, 10)} UTC · Only me`)).toBeTruthy();
+    expect(screen.getByText(new RegExp(`Last run ${new Date().toISOString().slice(0, 10)} UTC`))).toBeTruthy();
     expect(kit.patternCalls.filter((call) => call.method === 'listPatterns')).toHaveLength(1);
   });
 
@@ -208,7 +208,7 @@ describe('what a run leaves in the list', () => {
     await settle();
     await press('Run Omega');
     expect(result()).toBeTruthy();
-    expect(within(screen.getByRole('tabpanel', { name: /My patterns/ })).getByText('Alpha')).toBeTruthy();
+    expect(within(screen.getByRole('region', { name: /My patterns/ })).getByText('Alpha')).toBeTruthy();
   });
 
   it('says a pattern that is gone, and reads the list again so that its row goes, when the run answers NOT_FOUND', async () => {
@@ -232,7 +232,7 @@ describe('what a run leaves in the list', () => {
     await press('Run Alpha');
     expect(screen.getByRole('region', { name: 'Run: Alpha' })).toBeTruthy();
     await openTab(/Shared on this source/);
-    expect(screen.queryByRole('region', { name: 'Run: Alpha' })).toBeNull();
+    expect(within(screen.getByRole('region', { name: /Shared on this source/ })).queryByRole('region', { name: 'Run: Alpha' })).toBeNull();
   });
 });
 
