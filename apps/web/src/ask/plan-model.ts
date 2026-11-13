@@ -1,5 +1,7 @@
-import type { AskPlan } from '@neburyx/contracts';
-import { templateName } from './plan-copy.js';
+import type { AskPatternCard, AskPlan } from '@neburyx/contracts';
+import { ARROW } from '../patterns/copy.js';
+import { pathSummary } from '../patterns/saved/path-summary.js';
+import { PLAN_COPY, templateName } from './plan-copy.js';
 
 export type TemplatePlan = Extract<AskPlan, { kind: 'plan' }>;
 
@@ -36,8 +38,15 @@ function plain(value: unknown): string {
   return String(value);
 }
 
+/** The structure of a saved pattern in a line, as the builder draws it: for a built pattern its steps, for a saved run of a preset the start type, the relationship type and the type reached. */
+function projectionPath(card: AskPatternCard, names: Names): string {
+  const { projection } = card;
+  if (projection.kind === 'definition') return pathSummary(projection, (type) => names.entityType(type));
+  return [names.entityType(projection.anchorType), ARROW[projection.direction ?? 'out'], projection.relationshipTypes.join(' or '), ARROW[projection.direction ?? 'out'], names.entityType(projection.otherType)].join(' ');
+}
+
 /** The template and its typed parameters in words, in the order a person reads them; nothing that is not a typed parameter of the plan. */
-export function planView(plan: TemplatePlan, names: Names): PlanView {
+export function planView(plan: TemplatePlan, names: Names, pattern?: AskPatternCard): PlanView {
   const lines: PlanLine[] = [];
   const add = (label: string, value: string | undefined): void => {
     if (value !== undefined) lines.push({ label, value });
@@ -87,6 +96,12 @@ export function planView(plan: TemplatePlan, names: Names): PlanView {
       add('Types', list(plan.params.entityTypes.map((type) => names.entityType(type))));
       add('Text', `“${plan.params.text}”`);
       break;
+    case 'saved-pattern': {
+      add(PLAN_COPY.patternName, pattern?.name);
+      if (pattern !== undefined) add(PLAN_COPY.patternPath, projectionPath(pattern, names));
+      add(PLAN_COPY.patternStart, plan.params.ref === undefined ? undefined : anchorText(plan.params.ref, names));
+      break;
+    }
     default:
       for (const [key, value] of Object.entries(params)) add(key, plain(value));
   }

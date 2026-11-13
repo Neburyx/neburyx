@@ -95,4 +95,20 @@ test.describe('the Ask panel', () => {
     const shot = process.env['NEBURYX_UX_SHOT'];
     if (shot !== undefined) await page.screenshot({ path: shot });
   });
+
+  test('the plan card of a saved pattern names the pattern, shows its steps and start, and keeps Edit off', async ({ page }) => {
+    await scriptAsk(page);
+    await openAsk(page);
+    await previewQuestion(page, 'Which accounts match my saved pattern?');
+    await askPanel(page).getByRole('button', { name: 'Send' }).click();
+    const card = askPanel(page).getByRole('region', { name: 'Review before running' });
+    await expect(card).toBeVisible();
+    await expect(card.getByText('Accounts that pay each other')).toBeVisible();
+    await expect(card.getByText('More saved patterns exist than were offered to Ask.')).toBeVisible();
+    await expect(card.getByRole('button', { name: 'Run', exact: true })).toBeEnabled();
+    await expect(card.getByRole('button', { name: 'Edit' })).toBeDisabled();
+    await expect(card.getByRole('button', { name: 'Ask again' })).toBeVisible();
+    const shot = process.env['NEBURYX_UX_SHOT_10'];
+    if (shot !== undefined) await page.screenshot({ path: `${shot}.png` });
+  });
 });

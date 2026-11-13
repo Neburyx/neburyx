@@ -84,7 +84,7 @@ export function AskPanel() {
       ) : null}
       {model.card?.kind === 'preview' ? <PreviewCard key={model.cardId} card={model.card} panel={panel} /> : null}
       {model.plan?.kind === 'unsupported' ? <RefusalCard key={`refusal-${model.cardId}`} question={model.text} family={model.plan.family} reason={model.plan.reason} /> : null}
-      {model.plan?.kind === 'plan' && model.planId !== undefined && model.expiresAt !== undefined ? <PlanCard ask={panel} plan={model.plan} planId={model.planId} expiresAt={model.expiresAt} /> : null}
+      {model.plan?.kind === 'plan' && model.planId !== undefined && model.expiresAt !== undefined ? <PlanCard ask={panel} plan={model.plan} planId={model.planId} expiresAt={model.expiresAt} patternsCut={model.planCut === true} patternCard={model.planCard} /> : null}
       {model.card?.kind === 'blocked' ? <BlockedCard key={model.cardId} tokens={model.card.tokens} panel={panel} /> : null}
       {model.card?.kind === 'clarification' ? <ClarificationCard key={model.cardId} clarification={model.card.clarification} panel={panel} /> : null}
     </div>

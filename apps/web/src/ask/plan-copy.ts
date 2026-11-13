@@ -27,6 +27,11 @@ export const PLAN_COPY = {
   mayHaveRun: 'A plan was running when the investigation changed. It may have run; ask again to see a result.',
   maskChanged: 'Masking changed, so this result is cleared. Ask again to see it.',
   added: 'Added to the graph.',
+  patternsCut: 'More saved patterns exist than were offered to Ask.',
+  savedNoEdit: 'A saved pattern’s plan cannot be edited here. Ask again to change what it names.',
+  patternName: 'Pattern',
+  patternPath: 'Path',
+  patternStart: 'Starts from',
 } as const;
 
 /** The template in words; a template the app has no words for is shown by its ID. */
@@ -48,6 +53,8 @@ export function templateName(id: string): string {
       return 'Derived relationship support';
     case 'search':
       return 'Search';
+    case 'saved-pattern':
+      return 'Saved pattern';
     default:
       return id;
   }

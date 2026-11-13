@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { MAX_SEARCH_TEXT_LENGTH, type AskPlanAnswer as AskPlanned, type AskResolution, type ElementRef, type GraphNode } from '@neburyx/contracts';
+import { MAX_SEARCH_TEXT_LENGTH, type AskPatternCard, type AskPlanAnswer as AskPlanned, type AskResolution, type ElementRef, type GraphNode } from '@neburyx/contracts';
 import type { AskPlanAnswer, ApiResult } from '../api/client.js';
 import { useApiClient } from '../api/client-context.js';
 import { useClientState } from '../state/context.js';
@@ -49,6 +49,10 @@ export interface AskModel {
   /** The ID and expiry the server gave a plan of a template, for the plan card; none for a plan that is unsupported. */
   readonly planId: string | undefined;
   readonly expiresAt: string | undefined;
+  /** Whether the server said that more saved patterns exist than it offered the planner; read only while a plan is drawn. */
+  readonly planCut?: boolean;
+  /** What the plan card shows of the saved pattern the plan names, as the server read it for the caller; none for a plan of a template. */
+  readonly planCard?: AskPatternCard;
   /** Changes with each card that is drawn, so a card that replaces another of its kind takes the focus again. */
   readonly cardId: number;
   /** Counts up each time the field is to take the focus; `caret` is where its cursor goes. */
@@ -139,7 +143,7 @@ export function useAsk(): AskPanel {
       if ('preview' in answer) patch({ ...base, card: { kind: 'preview', preview: answer.preview, hash: answer.previewHash, changed: answer.changed === true, patternText: answer.patternText, patternsCut: answer.patternCatalogCut === true }, sent: undefined, plan: undefined, planId: undefined, expiresAt: undefined });
       else if ('blocked' in answer) patch({ ...base, card: { kind: 'blocked', tokens: answer.blocked.tokens }, sent: undefined, plan: undefined, planId: undefined, expiresAt: undefined });
       else if ('clarification' in answer) patch({ ...base, card: { kind: 'clarification', clarification: answer.clarification }, sent: undefined, plan: undefined, planId: undefined, expiresAt: undefined });
-      else patch({ ...base, cardId: held.current.cardId, sent: answer.plan.kind === 'unsupported' ? ASK_COPY.refused : ASK_COPY.sentPlan, plan: answer.plan, planId: 'planId' in answer ? answer.planId : undefined, expiresAt: 'expiresAt' in answer ? answer.expiresAt : undefined });
+      else patch({ ...base, cardId: held.current.cardId, sent: answer.plan.kind === 'unsupported' ? ASK_COPY.refused : ASK_COPY.sentPlan, plan: answer.plan, planId: 'planId' in answer ? answer.planId : undefined, expiresAt: 'expiresAt' in answer ? answer.expiresAt : undefined, planCut: 'patternCatalogCut' in answer && answer.patternCatalogCut === true, planCard: 'patternCard' in answer ? answer.patternCard : undefined });
     },
     [patch],
   );

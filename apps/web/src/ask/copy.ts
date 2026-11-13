@@ -12,7 +12,7 @@ export const ASK_COPY = {
   close: 'Close Ask',
   receivesTitle: 'What the model will receive',
   receivesNote: 'Names and IDs are replaced with placeholders. Your typed text is never sent, only these words.',
-  patternsTitle: 'Your saved patterns, listed for the model',
+  patternsTitle: 'Saved patterns listed for the model',
   patternsNote: 'Only their structure goes, and a name only when every word of it is allowed. Nothing from the data goes.',
   patternsCut: 'More saved patterns exist than are listed here.',
   changedNote: 'The preview changed. Check the new text before sending.',

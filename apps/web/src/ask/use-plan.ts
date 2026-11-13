@@ -122,7 +122,7 @@ export function usePlan(ask: AskPanel, plan: TemplatePlan, planId: string, expir
     [ask],
   );
 
-  const fail = useCallback((kind: PlanCall, failure: Parameters<typeof planFailureWords>[0]): void => setStage({ kind: 'failed', call: kind, words: planFailureWords(failure, sourceId, kind) }), [sourceId]);
+  const fail = useCallback((kind: PlanCall, failure: Parameters<typeof planFailureWords>[0]): void => setStage({ kind: 'failed', call: kind, words: planFailureWords(failure, sourceId, kind, held.current.plan.templateId === 'saved-pattern') }), [sourceId]);
 
   const maskNow = useRef(mask);
   maskNow.current = mask;
@@ -181,7 +181,7 @@ export function usePlan(ask: AskPanel, plan: TemplatePlan, planId: string, expir
         () => client.askEdit({ planId: held.current.planId, templateId: held.current.plan.templateId, params: built.params }),
         (result) => {
           if (!result.ok) {
-            const words = planFailureWords(result.failure, sourceId, 'edit');
+            const words = planFailureWords(result.failure, sourceId, 'edit', held.current.plan.templateId === 'saved-pattern');
             // a plan that cannot be used any more is spent and ends the edit; any other refusal keeps what was typed, with the words beside it, and Save sends the same edit again
             return words.action === 'ask-again' ? setStage({ kind: 'failed', call: 'edit', words }) : setStage({ ...editing, failure: words, saving: false });
           }

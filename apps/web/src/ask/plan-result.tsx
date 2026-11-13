@@ -55,7 +55,7 @@ export function HeavyView({ panel }: { readonly panel: PlanPanel }) {
   const { stage } = panel;
   if (stage.kind !== 'heavy') return null;
   const result = stage.run.result;
-  const estimate = result.templateId === 'shared-attribute' || result.templateId === 'linked-entities' ? (result.result.status === 'heavy' ? result.result : undefined) : undefined;
+  const estimate = result.templateId === 'shared-attribute' || result.templateId === 'linked-entities' || result.templateId === 'saved-pattern' ? (result.result.status === 'heavy' ? result.result : undefined) : undefined;
   return (
     <div className="ask-plan-heavy">
       {estimate === undefined ? null : (

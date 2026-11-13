@@ -1,6 +1,6 @@
 import { act, cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { AskCancelRequest, AskEditRequest, AskPlan, AskPlanRequest, AskRunRequest } from '@neburyx/contracts';
+import type { AskCancelRequest, AskEditRequest, AskPatternCard, AskPlan, AskPlanRequest, AskRunRequest } from '@neburyx/contracts';
 import { ProfileProvider } from '../canvas/profile-context.js';
 import { testProfile } from '../dev/test-profile.js';
 import { createShellData, ShellDataProvider } from '../shell/shell-data.js';
@@ -56,12 +56,12 @@ export interface PlanHarness {
 
 const held = <R, A>(list: Held<R, A>[]) => (request: R): Promise<ApiResult<A>> => new Promise((resolve) => list.push({ request, answer: resolve }));
 
-export function planClient(): Omit<PlanHarness, 'state'> {
+export function planClient(extra: Partial<ApiClient> = {}): Omit<PlanHarness, 'state'> {
   const asks: PlanHarness['asks'] = [];
   const runs: PlanHarness['runs'] = [];
   const edits: PlanHarness['edits'] = [];
   const cancels: PlanHarness['cancels'] = [];
-  const client = fakeClient({ askPlan: held(asks), askRun: held(runs), askEdit: held(edits), askCancel: held(cancels) });
+  const client = fakeClient({ askPlan: held(asks), askRun: held(runs), askEdit: held(edits), askCancel: held(cancels), ...extra });
   return { asks, runs, edits, cancels, client };
 }
 
@@ -76,8 +76,8 @@ export async function answer<R, A>(sent: Held<R, A> | undefined, result: ApiResu
 }
 
 /** Draws the Ask panel, asks a question, confirms the preview and has the server answer a plan: the card is on screen and nothing has been run. */
-export async function drawPlan(plan: AskPlan = sharedPlan(), options: { readonly state?: ClientState; readonly planId?: string; readonly shell?: boolean; readonly profile?: boolean } = {}): Promise<PlanHarness> {
-  const parts = planClient();
+export async function drawPlan(plan: AskPlan = sharedPlan(), options: { readonly state?: ClientState; readonly planId?: string; readonly shell?: boolean; readonly profile?: boolean; readonly client?: Partial<ApiClient>; readonly cut?: boolean; readonly card?: AskPatternCard } = {}): Promise<PlanHarness> {
+  const parts = planClient(options.client);
   const state = options.state ?? createClientState();
   state.bindSource(SOURCE);
   const panel = <AskPanel />;
@@ -93,7 +93,7 @@ export async function drawPlan(plan: AskPlan = sharedPlan(), options: { readonly
   await userEvent.click(screen.getByRole('button', { name: 'Preview' }));
   await answer(parts.asks[0], previewOf('which widgets'));
   await userEvent.click(screen.getByRole('button', { name: 'Send' }));
-  await answer(parts.asks[1], ok(plan.kind === 'plan' ? { plan, planId: options.planId ?? PLAN_ID, expiresAt: EXPIRES } : { plan }) as ApiResult<AskPlanAnswer>);
+  await answer(parts.asks[1], ok(plan.kind === 'plan' ? { plan, planId: options.planId ?? PLAN_ID, expiresAt: EXPIRES, ...(options.cut === true ? { patternCatalogCut: true as const } : {}), ...(options.card === undefined ? {} : { patternCard: options.card }) } : { plan }) as ApiResult<AskPlanAnswer>);
   return { state, ...parts };
 }
 

@@ -26,16 +26,21 @@ export const PLAN_FAILURE_COPY = {
   mayHaveRun: 'The plan may have run, and its result cannot be shown again. Ask the question again.',
   notSaved: 'The change may not have been saved. Try again.',
   notCancelled: 'The plan may not have been cancelled. Try again.',
+  planOrPatternGone: 'This plan or its saved pattern is no longer available to you. Ask the question again.',
+  patternChanged: 'The saved pattern changed after the plan was made, so it did not run. Ask the question again.',
+  patternGone: 'The saved pattern is no longer available to you, so it did not run. Ask the question again.',
 } as const;
 
 /**
  * A failure of a call on a plan in words. The call matters because a run claims its plan before it reads: a failure after that leaves a plan that cannot run again (ask again), and a failure that is
  * only a lost answer says the plan may have run. Gate refusals use the product's own sentences; the sentences about Ask not being there are Ask's own. No sentence holds a code, an ID or a value.
  */
-export function planFailureWords(failure: ApiFailure, source: string, call: PlanCall): PlanFailureWords {
+export function planFailureWords(failure: ApiFailure, source: string, call: PlanCall, savedPattern = false): PlanFailureWords {
   const { code } = failure;
   const reason = detailOf(failure, 'reason');
-  if (code === 'NOT_FOUND') return { text: PLAN_FAILURE_COPY.gone, action: 'ask-again' };
+  if (code === 'CONFLICT' && reason === 'pattern-changed') return { text: PLAN_FAILURE_COPY.patternChanged, action: 'ask-again' };
+  if (code === 'CONFLICT' && reason === 'pattern-unavailable') return { text: PLAN_FAILURE_COPY.patternGone, action: 'ask-again' };
+  if (code === 'NOT_FOUND') return { text: savedPattern ? PLAN_FAILURE_COPY.planOrPatternGone : PLAN_FAILURE_COPY.gone, action: 'ask-again' };
   if (code === 'CONFLICT') return { text: reason === 'plan-expired' ? PLAN_FAILURE_COPY.expired : PLAN_FAILURE_COPY.notRunnable, action: 'ask-again' };
   if (code === 'ASK_PLAN_INVALID' || code === 'SOURCE_MISMATCH') return { text: PLAN_FAILURE_COPY.invalidValues, action: 'none' };
   if (code === 'INVALID_REQUEST') return call === 'continue' ? { text: PLAN_FAILURE_COPY.badContinue, action: 'run-again' } : call === 'edit' ? { text: PLAN_FAILURE_COPY.invalidValues, action: 'none' } : { text: failureWords(failure, source).text, action: 'none' };

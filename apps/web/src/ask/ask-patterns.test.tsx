@@ -32,7 +32,7 @@ describe('the preview card of the Ask panel with saved patterns', () => {
     const card = screen.getByRole('region', { name: 'What the model will receive' });
     const blocks = [...card.querySelectorAll('pre')];
     expect(blocks.map((block) => block.textContent)).toEqual(['which ‹widget#1›', PATTERNS]);
-    expect(screen.getByRole('heading', { level: 4, name: 'Your saved patterns, listed for the model' })).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 4, name: 'Saved patterns listed for the model' })).toBeTruthy();
     expect(screen.getByText('Only their structure goes, and a name only when every word of it is allowed. Nothing from the data goes.')).toBeTruthy();
   });
 
@@ -40,7 +40,7 @@ describe('the preview card of the Ask panel with saved patterns', () => {
     await previewWith({});
     const card = screen.getByRole('region', { name: 'What the model will receive' });
     expect(card.querySelectorAll('pre')).toHaveLength(1);
-    expect(screen.queryByRole('heading', { name: 'Your saved patterns, listed for the model' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Saved patterns listed for the model' })).toBeNull();
   });
 
   it('says that more saved patterns exist than are listed when the server says the list was cut, with no number', async () => {
