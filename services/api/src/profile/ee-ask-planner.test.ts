@@ -72,11 +72,11 @@ describe('the plan endpoint with the planner of the real extension', () => {
     await app.close();
   });
 
-  it('answers an unsupported plan, as it came, for a reply that is not a plan', async () => {
+  it('answers the fixed refusal of a plan that could not be used, for a reply that is not a plan', async () => {
     status = 200;
     replyText = 'a free text answer';
     const { post, app } = await startPlanning();
-    expect((await confirmed(post)).json()).toEqual({ plan: { kind: 'unsupported', reason: 'invalid-plan' } });
+    expect((await confirmed(post)).json()).toEqual({ plan: { kind: 'unsupported', family: 'plan-not-usable', reason: 'Ask could not turn this question into a plan it can run.' } });
     await app.close();
   });
 

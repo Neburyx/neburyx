@@ -46,7 +46,7 @@ describe('the whole demo set', () => {
     expect((await cli([...base(replay), '--write-replay'])).code).toBe(EXIT_OK);
     const result = await cli(base(replay));
     expect(result.code).toBe(EXIT_MISS);
-    expect(result.out.slice(0, 5)).toEqual(['refusals: 7 of 8 refused', 'plans: 21 of 25 right (at most 2 may miss)', 'family: not measured', 'blocked: 0 of 0 expected', 'repaired: 0']);
+    expect(result.out.slice(0, 5)).toEqual(['refusals: 7 of 8 refused', 'plans: 21 of 25 right (at most 2 may miss)', 'family: 0 of 0 as expected', 'blocked: 0 of 0 expected', 'repaired: 0']);
     for (const id of KNOWN_BLOCKED) expect(result.out).toContain(`blocked-unexpectedly: ${id}`);
     expect(result.out).toContain('target missed: every refusal must be refused');
     expect(result.out).toContain('answered unsupported: 7 of 33');

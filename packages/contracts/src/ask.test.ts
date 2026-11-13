@@ -63,7 +63,7 @@ describe('the answer of the plan endpoint', () => {
   const ENTITY_PLAN = { kind: 'plan', templateId: 'entity', templateVersion: 1, rationale: 'one entity', params: { ref: { entityType: 'node_a', stableId: 'a-1' } } };
 
   it.each([
-    ['an unsupported plan, with no ID', { plan: { kind: 'unsupported', reason: 'no template' } }],
+    ['a refusal with its family', { plan: { kind: 'unsupported', family: 'judgement', reason: 'no template' } }],
     ['a plan of a template, with its ID and expiry', { plan: ENTITY_PLAN, planId: PLAN_ID, expiresAt: '2026-11-13T10:15:00.000Z' }],
     ['a clarification', { clarification: { start: 0, end: 3, choices: [], count: { quality: 'exact', value: 0, scope: 'exact matches' }, unreferenced: 0 } }],
     ['the blocked tokens', { blocked: { tokens: [{ text: 'zorvath', start: 6, end: 13 }] } }],
@@ -84,9 +84,19 @@ describe('the answer of the plan endpoint', () => {
     ['a preview without its hash', { preview: 'x' }],
     ['a changed flag that is false', { preview: 'x', previewHash: hash, changed: false }],
     ['blocked tokens that are none', { blocked: { tokens: [] } }],
+    ['a refusal without a family', { plan: { kind: 'unsupported', reason: 'no template' } }],
+    ['a refusal with a family off the list', { plan: { kind: 'unsupported', family: 'made-up', reason: 'no template' } }],
     ['two answers at once', { preview: 'x', previewHash: hash, blocked: { tokens: [{ text: 'a', start: 0, end: 1 }] } }],
   ])('refuses %s', (_name, body) => {
     expect(askPlanResponseSchema.safeParse(body).success).toBe(false);
+  });
+});
+
+describe('the plan of a planner', () => {
+  it('takes a refusal with a family, and one without (the add-only change)', () => {
+    expect(askPlanSchema.safeParse({ kind: 'unsupported', family: 'path', reason: 'x' }).success).toBe(true);
+    expect(askPlanSchema.safeParse({ kind: 'unsupported', reason: 'x' }).success).toBe(true);
+    expect(askPlanSchema.safeParse({ kind: 'unsupported', family: 'made-up', reason: 'x' }).success).toBe(false);
   });
 });
 

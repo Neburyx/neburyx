@@ -66,6 +66,25 @@ export const ASK_PLAN_PARAM_NAMES: readonly string[] = [...new Set(Object.values
 
 const planOf = <Id extends keyof typeof ASK_PLAN_PARAMS>(id: Id) => z.strictObject({ ...planShape, templateId: z.literal(id), params: ASK_PLAN_PARAMS[id] });
 
+/** The kinds of question Ask refuses, neutral names; the closed list the refusal answer draws its `family` from. The last two are set by the server only. */
+export const ASK_REFUSAL_FAMILIES = [
+  'path',
+  'property-selection',
+  'similar-records',
+  'ranking-or-aggregate',
+  'attribute-combination',
+  'indirect-attribute',
+  'unnamed-relation',
+  'judgement',
+  'personal-data',
+  'loaded-view',
+  'other',
+  'plan-not-usable',
+  'model-refused',
+] as const;
+
+export const askRefusalFamilySchema = z.enum(ASK_REFUSAL_FAMILIES);
+
 /** A plan of one template of the catalog with its typed parameters. */
 const templatePlanSchema = z.union([
   planOf('shared-attribute'),
@@ -77,10 +96,18 @@ const templatePlanSchema = z.union([
   planOf('derived-edge-support'),
   planOf('search'),
 ]);
-const unsupportedPlanSchema = z.strictObject({ kind: z.literal('unsupported'), reason: askText(ASK_TEXT_MAX_LENGTH) });
+
+/** What a planner answers when it refuses: it may name a family, and its `reason` is free text the route never passes on. */
+const unsupportedPlanSchema = z.strictObject({ kind: z.literal('unsupported'), family: askRefusalFamilySchema.optional(), reason: askText(ASK_TEXT_MAX_LENGTH) });
+
+/** What the plan endpoint answers for a refusal: the family and the fixed sentence of that family. */
+const unsupportedAnswerSchema = z.strictObject({ kind: z.literal('unsupported'), family: askRefusalFamilySchema, reason: askText(ASK_TEXT_MAX_LENGTH) });
 
 /** What a planner answers: a template of the catalog with its typed parameters, or `unsupported`. Nothing in it is query text. */
 export const askPlanSchema = z.union([templatePlanSchema, unsupportedPlanSchema]);
+
+/** What the plan endpoint answers as a plan: a template, or a refusal with its family and fixed sentence. */
+export const askPlanAnswerSchema = z.union([templatePlanSchema, unsupportedAnswerSchema]);
 
 const askClarificationSchema = z.strictObject({
   start: z.number().int().min(0),
@@ -96,7 +123,7 @@ const askBlockedTokenSchema = z.strictObject({ text: z.string().min(1), start: z
 export const askPlanResponseSchema = z.union([
   /** A plan of a template is stored when it is answered: it comes with its ID and the time it stops being runnable. A plan that is `unsupported` is not stored and has neither. */
   z.strictObject({ plan: templatePlanSchema, planId: z.uuid(), expiresAt: z.iso.datetime() }),
-  z.strictObject({ plan: unsupportedPlanSchema }),
+  z.strictObject({ plan: unsupportedAnswerSchema }),
   z.strictObject({ clarification: askClarificationSchema }),
   z.strictObject({ blocked: z.strictObject({ tokens: z.array(askBlockedTokenSchema).min(1) }) }),
   z.strictObject({ preview: z.string().min(1), previewHash: z.string().regex(ASK_PREVIEW_HASH_PATTERN), changed: z.literal(true).optional() }),
@@ -165,6 +192,8 @@ export const askRunResponseSchema = z
   .refine((answer) => isHeavyResult(answer.result) === (answer.continueToken !== undefined), { message: 'a heavy result comes with a continue token and no other result does', path: ['continueToken'] });
 
 export type AskPlan = z.infer<typeof askPlanSchema>;
+export type AskPlanAnswer = z.infer<typeof askPlanAnswerSchema>;
+export type AskRefusalFamily = z.infer<typeof askRefusalFamilySchema>;
 export type AskPlanRequest = z.infer<typeof askPlanRequestSchema>;
 export type AskRunResult = z.infer<typeof askRunResultSchema>;
 export type AskEditRequest = z.infer<typeof askEditRequestSchema>;

@@ -28,7 +28,7 @@ export interface PlannerDeps {
   readonly view?: AiMappingView | undefined;
 }
 
-const unsupported = (reason: string): AskPlan => ({ kind: 'unsupported', reason });
+const unsupported = (family: 'plan-not-usable' | 'model-refused', reason: string): AskPlan => ({ kind: 'unsupported', family, reason });
 
 type Judged = { readonly kind: 'plan'; readonly plan: AskPlan } | { readonly kind: 'invalid'; readonly reply: string; readonly problems: readonly string[] } | { readonly kind: 'ended'; readonly plan: AskPlan };
 
@@ -58,7 +58,7 @@ export function createAskPlanner(deps: PlannerDeps): AskPlanner {
   function judge(answer: ModelAnswer, text: string): Judged {
     switch (answer.status) {
       case 'refused':
-        return { kind: 'ended', plan: unsupported(MODEL_REFUSED_REASON) };
+        return { kind: 'ended', plan: unsupported('model-refused', MODEL_REFUSED_REASON) };
       case 'failed':
         throw new PlannerCallFailed(answer.code);
       case 'ok': {
@@ -80,7 +80,7 @@ export function createAskPlanner(deps: PlannerDeps): AskPlanner {
       const first = judge(await ask(deps.requestBuilder.ask({ question: text, catalog, vocabulary }), context), text);
       if (first.kind !== 'invalid') return first.plan;
       const repaired = judge(await ask(deps.requestBuilder.askRepair({ question: text, catalog, vocabulary, reply: first.reply, problems: first.problems.join('\n') }), context), text);
-      return repaired.kind === 'invalid' ? unsupported(INVALID_PLAN_REASON) : repaired.plan;
+      return repaired.kind === 'invalid' ? unsupported('plan-not-usable', INVALID_PLAN_REASON) : repaired.plan;
     },
   };
 }

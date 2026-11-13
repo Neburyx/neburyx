@@ -1,15 +1,17 @@
 import { createHmac } from 'node:crypto';
 import { askPlanResponseSchema, parseExtensionRefusal, type AskPlan, type AskPlanner, type AskResolution, type ElementRef, type ExtensionRequest } from '@neburyx/contracts';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { COMMON_WORDS_VERSION } from '../allowlist/index.js';
 import { AuditUnavailableError } from '../audited.js';
 import { previewHashOf, type PreviewMac } from '../preview/preview-hash.js';
 import type { PlaceholderSpan, ResolutionOutcome, resolveMentions } from '../resolution/index.js';
 import { createMemoryPlanStore } from '../testing/memory-plans.js';
+import { REFUSAL_SENTENCES } from '../refusal/families.js';
 import { questionVocabulary } from '../vocabulary/vocabulary.js';
 import { askPlanRoute, createAskPlanRoute } from './ask-plan.js';
 
 const PLAN: AskPlan = { kind: 'unsupported', reason: 'No template fits.' };
+const FIXED_PLAN = { kind: 'unsupported', family: 'other', reason: REFUSAL_SENTENCES.other };
 const SOURCE = 'demo';
 const mac: PreviewMac = (canonical) => createHmac('sha256', 'test-key').update(canonical).digest('hex');
 const REF = { sourceId: SOURCE, entityType: 'widget', stableId: 'w-1' };
@@ -210,9 +212,47 @@ describe('the confirmation', () => {
     const rg = rig();
     const shown = await hashOf(rg);
     const result = await route(plain).handler(rg.request({ message: MESSAGE_OK, sourceId: SOURCE, send: true, previewHash: shown.previewHash }));
-    expect(result).toEqual({ plan: PLAN });
+    expect(result).toEqual({ plan: FIXED_PLAN });
     expect(rg.calls.map((call) => call.text)).toEqual([shown.preview]);
     for (const call of rg.calls) for (const word of MESSAGE_OK.split(/\W+/).filter((part) => part !== '')) expect(call.rest).not.toContain(word);
+  });
+
+  it('answers a refusal with the family the planner named and the fixed sentence of that family, never its own reason', async () => {
+    const sentinel = 'Mr Sentinel ‹widget#1› 4111111111 w-1 secret-reason';
+    const logs: string[] = [];
+    const spy = vi.spyOn(console, 'log').mockImplementation((...args) => void logs.push(args.join(' ')));
+    const rg = rig(async () => ({ kind: 'unsupported', family: 'judgement', reason: sentinel }));
+    const shown = await hashOf(rg);
+    const events: unknown[] = [];
+    const result = await route(plain).handler(rg.request({ message: MESSAGE_OK, sourceId: SOURCE, send: true, previewHash: shown.previewHash }, { audit: { record: async (event: unknown) => void events.push(event) } as ExtensionRequest['audit'] }));
+    spy.mockRestore();
+    expect(result).toEqual({ plan: { kind: 'unsupported', family: 'judgement', reason: REFUSAL_SENTENCES.judgement } });
+    expect(JSON.stringify([result, logs, events])).not.toContain('Sentinel');
+    expect(Object.keys((result as { plan: object }).plan)).not.toContain('planId');
+    expect(askPlanResponseSchema.safeParse(result).success).toBe(true);
+  });
+
+  it('answers other for a refusal that names no family, and the fixed sentence of the server-only families as the planner sets them', async () => {
+    for (const family of ['plan-not-usable', 'model-refused'] as const) {
+      const rg = rig(async () => ({ kind: 'unsupported', family, reason: 'x' }));
+      const shown = await hashOf(rg);
+      expect(await route(plain).handler(rg.request({ message: MESSAGE_OK, sourceId: SOURCE, send: true, previewHash: shown.previewHash }))).toEqual({ plan: { kind: 'unsupported', family, reason: REFUSAL_SENTENCES[family] } });
+    }
+  });
+
+  it('makes no source read after the planner answers a refusal', async () => {
+    const rg = rig();
+    const shown = await hashOf(rg);
+    let reads = 0;
+    const tools = { search: async () => { reads += 1; return { refs: [], unreferenced: 0, count: { quality: 'unknown', scope: 'exact matches' } } as never; }, lookup: async () => { reads += 1; return true; }, ensureSource: async () => { reads += 1; } };
+    const counted = rg.request({ message: MESSAGE_OK, sourceId: SOURCE, send: true, previewHash: shown.previewHash }, { askEntityTools: () => tools });
+    const before = reads;
+    const after: number[] = [];
+    const original = counted.askPlanner.plan.bind(counted.askPlanner);
+    await route(plain).handler({ ...counted, askPlanner: { ...counted.askPlanner, plan: async (input) => { after.push(reads); const plan = await original(input); after.push(reads); return plan; } } });
+    expect(before).toBe(0);
+    expect(after[1]).toBe(after[0]);
+    expect(reads).toBe(after[1]);
   });
 
   it('hands the planner the actor, role, trace ID and source of the request as its context, and no text in it', async () => {
@@ -310,7 +350,7 @@ describe('a plan that is stored', () => {
   it('stores nothing and has no ID for a plan that is unsupported', async () => {
     const rg = rig();
     const { send, plans } = await confirm(rg, holding(REF));
-    expect(await send()).toEqual({ plan: PLAN });
+    expect(await send()).toEqual({ plan: FIXED_PLAN });
     expect(plans.plans).toEqual([]);
   });
 

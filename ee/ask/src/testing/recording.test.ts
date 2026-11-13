@@ -15,7 +15,7 @@ const SIGNAL = new AbortController().signal;
 const PLAN: ModelRequest = { promptId: 'ask.plan', parameters: { catalog: 'T1', vocabulary: 'V1', question: 'SENTINEL-QUESTION about ‹person#1›' } };
 const SUMMARY: ModelRequest = { promptId: 'summary.view', parameters: { view: 'SENTINEL-VIEW ‹account#1›' } };
 
-const recordingWith = (text: string): Recording => ({ format: 1, entries: [{ promptId: 'ask.plan', version: 3, reply: { kind: 'ok', text } }] });
+const recordingWith = (text: string): Recording => ({ format: 1, entries: [{ promptId: 'ask.plan', version: 4, reply: { kind: 'ok', text } }] });
 const textsOf = (findings: ReturnType<typeof checkRecording>) => findings.map((finding) => `${finding.kind}: ${finding.token}`);
 
 async function scriptedRecorder() {
@@ -40,7 +40,7 @@ describe('the recorder', () => {
     const json = JSON.stringify(recorder.recording());
     expect(json).toContain('plan for');
     expect(json).not.toContain('SENTINEL');
-    expect(recorder.recording().entries).toEqual([{ promptId: 'ask.plan', version: 3, reply: { kind: 'ok', text: 'plan for ‹person#1›', usage: { kind: 'known', inputTokens: 123_456, outputTokens: 7 }, model: 'claude-sonnet-5-5' } }]);
+    expect(recorder.recording().entries).toEqual([{ promptId: 'ask.plan', version: 4, reply: { kind: 'ok', text: 'plan for ‹person#1›', usage: { kind: 'known', inputTokens: 123_456, outputTokens: 7 }, model: 'claude-sonnet-5-5' } }]);
   });
 
   it('replaces the entry of the same id and version, and orders the entries by id then version', async () => {
@@ -48,7 +48,7 @@ describe('the recorder', () => {
     await recorder.provider.complete(SUMMARY, SIGNAL);
     await recorder.provider.complete(PLAN, SIGNAL);
     await recorder.provider.complete(PLAN, SIGNAL);
-    expect(recorder.recording().entries.map((entry) => `${entry.promptId}@${entry.version}`)).toEqual(['ask.plan@3', 'summary.view@1']);
+    expect(recorder.recording().entries.map((entry) => `${entry.promptId}@${entry.version}`)).toEqual(['ask.plan@4', 'summary.view@1']);
   });
 
   it('writes two recordings of the same answers byte for byte alike', async () => {
@@ -79,14 +79,14 @@ describe('the recorder', () => {
 });
 
 describe('loading a recording', () => {
-  const entry = (over: Record<string, unknown>) => JSON.stringify({ format: 1, entries: [{ promptId: 'ask.plan', version: 3, reply: { kind: 'ok', text: 't' }, ...over }] });
+  const entry = (over: Record<string, unknown>) => JSON.stringify({ format: 1, entries: [{ promptId: 'ask.plan', version: 4, reply: { kind: 'ok', text: 't' }, ...over }] });
 
   it.each([
     ['text that is not JSON', 'not json', 'the recording is not valid JSON'],
     ['another format', JSON.stringify({ format: 2, entries: [] }), 'the recording has a format other than 1'],
     ['no list of entries', JSON.stringify({ format: 1 }), 'the recording has no list of entries'],
     ['an unknown prompt id', entry({ promptId: 'free.text' }), 'entry 1: the prompt id is unknown'],
-    ['a version the registry is not at', entry({ version: 1 }), 'entry 1: was recorded against version 1 of ask.plan, and the registry is at 3'],
+    ['a version the registry is not at', entry({ version: 1 }), 'entry 1: was recorded against version 1 of ask.plan, and the registry is at 4'],
     ['a reply that is not valid', entry({ reply: { kind: 'ok' } }), 'entry 1: the reply is not valid'],
     ['a failed reply with a bad usage', entry({ reply: { kind: 'failed', code: 'truncated', usage: { kind: 'known', inputTokens: -1, outputTokens: 2 } } }), 'entry 1: the reply is not valid'],
     ['a failure code that does not exist', entry({ reply: { kind: 'failed', code: 'exploded' } }), 'entry 1: the reply is not valid'],
@@ -99,7 +99,7 @@ describe('loading a recording', () => {
     const json = JSON.stringify({
       format: 1,
       entries: [
-        { promptId: 'ask.plan', version: 3, reply: { kind: 'ok', text: 't', usage: { kind: 'unknown' }, model: 'm' } },
+        { promptId: 'ask.plan', version: 4, reply: { kind: 'ok', text: 't', usage: { kind: 'unknown' }, model: 'm' } },
         { promptId: 'summary.view', version: 1, reply: { kind: 'refused', usage: { kind: 'known', inputTokens: 1, outputTokens: 2 } } },
         { promptId: 'assistant.route', version: 1, reply: { kind: 'failed', code: 'truncated' } },
       ],
@@ -116,7 +116,7 @@ describe('a recording of a failed answer', () => {
     const inner = createFixtureProvider({ registry: built.registry, replies: { [replyKey('ask.plan', BUILT_IN_PROMPTS['ask.plan'].version)]: { kind: 'failed', code: 'truncated', usage } } });
     const recorder = createRecorder(inner);
     await recorder.provider.complete(PLAN, SIGNAL);
-    expect(recorder.recording().entries).toEqual([{ promptId: 'ask.plan', version: 3, reply: { kind: 'failed', code: 'truncated', usage } }]);
+    expect(recorder.recording().entries).toEqual([{ promptId: 'ask.plan', version: 4, reply: { kind: 'failed', code: 'truncated', usage } }]);
     const path = join(folder, 'failed-usage.json');
     await writeRecording(path, recorder.recording());
     const loaded = parseRecording(readFileSync(path, 'utf8'));
@@ -129,10 +129,10 @@ describe('a recording of a failed answer', () => {
   it('loads an entry written before the field existed (a failed entry with only a code) and replays it as unknown usage', async () => {
     const built = await buildPromptRegistry();
     if (!built.ok) throw new Error(built.problems.join('; '));
-    const loaded = parseRecording(JSON.stringify({ format: 1, entries: [{ promptId: 'ask.plan', version: 3, reply: { kind: 'failed', code: 'truncated' } }] }));
+    const loaded = parseRecording(JSON.stringify({ format: 1, entries: [{ promptId: 'ask.plan', version: 4, reply: { kind: 'failed', code: 'truncated' } }] }));
     expect(loaded.ok).toBe(true);
     if (!loaded.ok) return;
-    expect(checkRecording({ format: 1, entries: [{ promptId: 'ask.plan', version: 3, reply: { kind: 'failed', code: 'truncated' } }] })).toEqual([]);
+    expect(checkRecording({ format: 1, entries: [{ promptId: 'ask.plan', version: 4, reply: { kind: 'failed', code: 'truncated' } }] })).toEqual([]);
     const replay = createFixtureProvider({ registry: built.registry, replies: loaded.replies });
     expect(await replay.complete(PLAN, SIGNAL)).toMatchObject({ status: 'failed', code: 'truncated', usage: { kind: 'unknown' } });
   });
@@ -155,13 +155,13 @@ describe('checking a recording for identifiers', () => {
   ])('reports %s, naming the entry and the field', (_name, text, token) => {
     const findings = checkRecording(recordingWith(text));
     expect(findings.map((finding) => finding.token)).toContain(token);
-    expect(findings[0]).toMatchObject({ entry: 'ask.plan@3', field: 'text' });
+    expect(findings[0]).toMatchObject({ entry: 'ask.plan@4', field: 'text' });
   });
 
   it('finds nothing in words, small numbers, placeholders of the exact form, ISO dates and token counts', () => {
     const text = 'Two accounts (‹account#1› and ‹account#2›) share ‹phone#3›. Opened on 2026-11-12, 3 transfers of 45 and 120.';
     expect(checkRecording(recordingWith(text))).toEqual([]);
-    const counted: Recording = { format: 1, entries: [{ promptId: 'ask.plan', version: 3, reply: { kind: 'ok', text: 'fine', usage: { kind: 'known', inputTokens: 123_456, outputTokens: 654_321 } } }] };
+    const counted: Recording = { format: 1, entries: [{ promptId: 'ask.plan', version: 4, reply: { kind: 'ok', text: 'fine', usage: { kind: 'known', inputTokens: 123_456, outputTokens: 654_321 } } }] };
     expect(checkRecording(counted)).toEqual([]);
   });
 
@@ -170,7 +170,7 @@ describe('checking a recording for identifiers', () => {
   });
 
   it('reads the model and the failure code too', () => {
-    const recording: Recording = { format: 1, entries: [{ promptId: 'ask.plan', version: 3, reply: { kind: 'ok', text: 'fine', model: 'host-10.1.2.3' } }] };
+    const recording: Recording = { format: 1, entries: [{ promptId: 'ask.plan', version: 4, reply: { kind: 'ok', text: 'fine', model: 'host-10.1.2.3' } }] };
     expect(checkRecording(recording)).toMatchObject([{ field: 'model', kind: 'an IPv4 address' }]);
   });
 
@@ -187,19 +187,19 @@ describe('a recording with cache counts in a usage', () => {
   it('keeps them through a write, a load and a replay, and loads an entry without them', async () => {
     const built = await buildPromptRegistry();
     if (!built.ok) throw new Error(built.problems.join('; '));
-    const recording: Recording = { format: 1, entries: [{ promptId: 'ask.plan', version: 3, reply: { kind: 'ok', text: 'plan', usage } }] };
+    const recording: Recording = { format: 1, entries: [{ promptId: 'ask.plan', version: 4, reply: { kind: 'ok', text: 'plan', usage } }] };
     const path = join(folder, 'cache-usage.json');
     await writeRecording(path, recording);
     expect(JSON.parse(readFileSync(path, 'utf8'))).toEqual(recording);
     const loaded = parseRecording(readFileSync(path, 'utf8'));
     if (!loaded.ok) throw new Error('not loaded');
     expect(await createFixtureProvider({ registry: built.registry, replies: loaded.replies }).complete(PLAN, SIGNAL)).toMatchObject({ status: 'ok', usage });
-    const older = parseRecording(JSON.stringify({ format: 1, entries: [{ promptId: 'ask.plan', version: 3, reply: { kind: 'ok', text: 'plan', usage: { kind: 'known', inputTokens: 1, outputTokens: 2 } } }] }));
+    const older = parseRecording(JSON.stringify({ format: 1, entries: [{ promptId: 'ask.plan', version: 4, reply: { kind: 'ok', text: 'plan', usage: { kind: 'known', inputTokens: 1, outputTokens: 2 } } }] }));
     expect(older.ok).toBe(true);
   });
 
   it.each([[-1], [1.5], ['3']])('refuses a cache count of %s', (value) => {
-    const json = JSON.stringify({ format: 1, entries: [{ promptId: 'ask.plan', version: 3, reply: { kind: 'ok', text: 'plan', usage: { ...usage, cacheReadTokens: value } } }] });
+    const json = JSON.stringify({ format: 1, entries: [{ promptId: 'ask.plan', version: 4, reply: { kind: 'ok', text: 'plan', usage: { ...usage, cacheReadTokens: value } } }] });
     expect(parseRecording(json)).toEqual({ ok: false, problems: ['entry 1: the reply is not valid'] });
   });
 });
@@ -208,7 +208,7 @@ describe('a recording with fields the format does not have', () => {
   const withExtra = JSON.stringify({
     format: 1,
     note: 'mail jane.doe@example.com',
-    entries: [{ promptId: 'ask.plan', version: 3, request: { question: 'jane.doe@example.com' }, reply: { kind: 'ok', text: 'fine', note: 'jane.doe@example.com', secret: 1 } }],
+    entries: [{ promptId: 'ask.plan', version: 4, request: { question: 'jane.doe@example.com' }, reply: { kind: 'ok', text: 'fine', note: 'jane.doe@example.com', secret: 1 } }],
   });
 
   it('is not written with them: only the known fields reach the file', async () => {
@@ -217,14 +217,14 @@ describe('a recording with fields the format does not have', () => {
     await writeRecording(path, recording);
     const written = readFileSync(path, 'utf8');
     expect(written).not.toContain('jane.doe');
-    expect(JSON.parse(written)).toEqual({ format: 1, entries: [{ promptId: 'ask.plan', version: 3, reply: { kind: 'ok', text: 'fine' } }] });
+    expect(JSON.parse(written)).toEqual({ format: 1, entries: [{ promptId: 'ask.plan', version: 4, reply: { kind: 'ok', text: 'fine' } }] });
   });
 
   it('does not write or load an extra field inside a usage either', async () => {
     const json = JSON.stringify({
       format: 1,
       entries: [
-        { promptId: 'ask.plan', version: 3, reply: { kind: 'ok', text: 'fine', usage: { kind: 'unknown', note: 'jane.doe@example.com' } } },
+        { promptId: 'ask.plan', version: 4, reply: { kind: 'ok', text: 'fine', usage: { kind: 'unknown', note: 'jane.doe@example.com' } } },
         { promptId: 'summary.view', version: 1, reply: { kind: 'refused', usage: { kind: 'known', inputTokens: 1, outputTokens: 2, note: 'jane.doe@example.com' } } },
       ],
     });
@@ -252,13 +252,13 @@ describe('loading a recording from a file', () => {
     const path = join(folder, 'loaded.json');
     await writeRecording(path, recordingWith('a plan'));
     expect((await loadRecording(path)).ok).toBe(true);
-    const duplicate = JSON.stringify({ format: 1, entries: [{ promptId: 'ask.plan', version: 3, reply: { kind: 'ok', text: 'a' } }, { promptId: 'ask.plan', version: 3, reply: { kind: 'ok', text: 'b' } }] });
-    expect(parseRecording(duplicate)).toEqual({ ok: false, problems: ['entry 2: repeats ask.plan@3, which an earlier entry already holds'] });
-    const negative = JSON.stringify({ format: 1, entries: [{ promptId: 'ask.plan', version: 3, reply: { kind: 'ok', text: 'a', usage: { kind: 'known', inputTokens: -1, outputTokens: 2 } } }] });
+    const duplicate = JSON.stringify({ format: 1, entries: [{ promptId: 'ask.plan', version: 4, reply: { kind: 'ok', text: 'a' } }, { promptId: 'ask.plan', version: 4, reply: { kind: 'ok', text: 'b' } }] });
+    expect(parseRecording(duplicate)).toEqual({ ok: false, problems: ['entry 2: repeats ask.plan@4, which an earlier entry already holds'] });
+    const negative = JSON.stringify({ format: 1, entries: [{ promptId: 'ask.plan', version: 4, reply: { kind: 'ok', text: 'a', usage: { kind: 'known', inputTokens: -1, outputTokens: 2 } } }] });
     expect(parseRecording(negative)).toEqual({ ok: false, problems: ['entry 1: the reply is not valid'] });
     const textVersion = JSON.stringify({ format: 1, entries: [{ promptId: 'ask.plan', version: 'jane.doe@example.com', reply: { kind: 'ok', text: 'a' } }] });
     const refused = parseRecording(textVersion);
-    expect(refused).toEqual({ ok: false, problems: ['entry 1: was recorded against an invalid version of ask.plan, and the registry is at 3'] });
+    expect(refused).toEqual({ ok: false, problems: ['entry 1: was recorded against an invalid version of ask.plan, and the registry is at 4'] });
   });
 });
 
@@ -267,7 +267,7 @@ describe('writing a recording', () => {
     const path = join(folder, 'refused.json');
     const attempt = writeRecording(path, recordingWith('mail jane.doe@example.com, account 123456'));
     await expect(attempt).rejects.toBeInstanceOf(RecordingRefused);
-    await expect(attempt).rejects.toThrow(/ask\.plan@3 text \(an e-mail address\)/);
+    await expect(attempt).rejects.toThrow(/ask\.plan@4 text \(an e-mail address\)/);
     expect(existsSync(path)).toBe(false);
   });
 

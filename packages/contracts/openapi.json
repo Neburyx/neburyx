@@ -5708,6 +5708,24 @@
                     "type": "string",
                     "const": "unsupported"
                   },
+                  "family": {
+                    "type": "string",
+                    "enum": [
+                      "path",
+                      "property-selection",
+                      "similar-records",
+                      "ranking-or-aggregate",
+                      "attribute-combination",
+                      "indirect-attribute",
+                      "unnamed-relation",
+                      "judgement",
+                      "personal-data",
+                      "loaded-view",
+                      "other",
+                      "plan-not-usable",
+                      "model-refused"
+                    ]
+                  },
                   "reason": {
                     "type": "string",
                     "minLength": 1,
@@ -5716,6 +5734,7 @@
                 },
                 "required": [
                   "kind",
+                  "family",
                   "reason"
                 ],
                 "additionalProperties": false

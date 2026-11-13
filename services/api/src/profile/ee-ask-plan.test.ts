@@ -38,7 +38,8 @@ describe('the plan endpoint of the mounted application', () => {
 
     const confirmed = await post({ message: QUESTION, sourceId: 'demo', send: true, previewHash: shown.previewHash });
     expect(confirmed.statusCode).toBe(200);
-    expect(confirmed.json()).toEqual({ plan: PLAN });
+    expect(confirmed.json()).toEqual({ plan: { kind: 'unsupported', family: 'other', reason: expect.any(String) } });
+    expect(confirmed.json().plan.reason).not.toContain('No template fits');
     expect(texts).toEqual([shown.preview]);
     await app.close();
   });

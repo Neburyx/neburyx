@@ -11,6 +11,7 @@ import { buildPropertyRules } from '../rules.js';
 import { createFixtureProvider, replyKey, type FixtureReply } from '../testing/fixture.js';
 import { catalogText } from './catalog.js';
 import { vocabularyText } from './vocabulary-text.js';
+import { MODEL_DECLINED } from './reply.js';
 import { INVALID_PLAN_REASON, MODEL_REFUSED_REASON, PlannerCallFailed, createAskPlanner } from './planner.js';
 import { BUILT_IN_PROMPTS } from '../prompts.js';
 
@@ -40,7 +41,7 @@ describe('the planner', () => {
     expect(await planner.plan({ text: TEXT, context: CONTEXT })).toEqual(PLAN);
     expect(provider.calls).toEqual([{ promptId: 'ask.plan', parameters: { catalog: catalogText(), vocabulary: vocabularyText(DEFAULT_VIEW), question: TEXT } }]);
     expect(events).toHaveLength(1);
-    expect(events[0]).toMatchObject({ action: 'ask.plan', result: 'success', actorId: CONTEXT.actorId, actorRole: 'investigator', traceId: 'tr-9', sourceId: 'demo', detail: { ai: { modelRef: 'fixture-model', promptId: 'ask.plan', promptVersion: '3', tokensIn: 12, tokensOut: 34 } } });
+    expect(events[0]).toMatchObject({ action: 'ask.plan', result: 'success', actorId: CONTEXT.actorId, actorRole: 'investigator', traceId: 'tr-9', sourceId: 'demo', detail: { ai: { modelRef: 'fixture-model', promptId: 'ask.plan', promptVersion: '4', tokensIn: 12, tokensOut: 34 } } });
     expect(JSON.stringify(events)).not.toContain('widget#1');
   });
 
@@ -48,17 +49,17 @@ describe('the planner', () => {
     const fenced = await rig(ok('```json\n' + JSON.stringify(PLAN) + '\n```'));
     expect(await fenced.planner.plan({ text: TEXT, context: CONTEXT })).toEqual(PLAN);
     const chatty = await rig(ok('Here is the plan: ' + JSON.stringify(PLAN)));
-    expect(await chatty.planner.plan({ text: TEXT, context: CONTEXT })).toEqual({ kind: 'unsupported', reason: INVALID_PLAN_REASON });
+    expect(await chatty.planner.plan({ text: TEXT, context: CONTEXT })).toEqual({ kind: 'unsupported', family: 'plan-not-usable', reason: INVALID_PLAN_REASON });
   });
 
   it.each([['text that is not JSON', 'no plan'], ['JSON that is not a plan', '{"kind":"plan","templateId":"free-query","query":"x"}'], ['a plan with a field of text beside its parameters', JSON.stringify({ ...PLAN, query: 'x' })]])('treats %s as an invalid reply', async (_name, text) => {
     const { planner } = await rig(ok(text));
-    expect(await planner.plan({ text: TEXT, context: CONTEXT })).toEqual({ kind: 'unsupported', reason: INVALID_PLAN_REASON });
+    expect(await planner.plan({ text: TEXT, context: CONTEXT })).toEqual({ kind: 'unsupported', family: 'plan-not-usable', reason: INVALID_PLAN_REASON });
   });
 
   it('answers unsupported with the refusal reason when the model refuses, and records the call as refused', async () => {
     const { planner, events } = await rig({ kind: 'refused', usage: { kind: 'unknown' } });
-    expect(await planner.plan({ text: TEXT, context: CONTEXT })).toEqual({ kind: 'unsupported', reason: MODEL_REFUSED_REASON });
+    expect(await planner.plan({ text: TEXT, context: CONTEXT })).toEqual({ kind: 'unsupported', family: 'model-refused', reason: MODEL_REFUSED_REASON });
     expect(events[0]).toMatchObject({ result: 'refused' });
   });
 
@@ -141,7 +142,7 @@ describe('a recorded reply for each template', () => {
 
   it('turns a reply that names a type outside the vocabulary into an unsupported plan', async () => {
     const { planner } = await rig(ok(JSON.stringify(plan('entity', { ref: { entityType: 'gadget', stableId: '‹widget#1›' } }))), { view: VIEW });
-    expect(await planner.plan({ text: QUESTION, context: CONTEXT })).toEqual({ kind: 'unsupported', reason: INVALID_PLAN_REASON });
+    expect(await planner.plan({ text: QUESTION, context: CONTEXT })).toEqual({ kind: 'unsupported', family: 'plan-not-usable', reason: INVALID_PLAN_REASON });
   });
 });
 
@@ -163,7 +164,7 @@ describe('one repair, then unsupported', () => {
 
   it('answers unsupported with the reason invalid-plan, and makes no third call, when the repaired reply is invalid too', async () => {
     const { planner, provider } = await rig(ok(BAD_REPLY), { repair: ok('still no plan') });
-    expect(await planner.plan({ text: TEXT, context: CONTEXT })).toEqual({ kind: 'unsupported', reason: INVALID_PLAN_REASON });
+    expect(await planner.plan({ text: TEXT, context: CONTEXT })).toEqual({ kind: 'unsupported', family: 'plan-not-usable', reason: INVALID_PLAN_REASON });
     expect(provider.calls).toHaveLength(2);
   });
 
@@ -173,8 +174,11 @@ describe('one repair, then unsupported', () => {
     expect(valid.provider.calls).toHaveLength(1);
     const declined = { kind: 'unsupported', reason: 'The question asks for a judgement.' };
     const answered = await rig(ok(JSON.stringify(declined)));
-    expect(await answered.planner.plan({ text: TEXT, context: CONTEXT })).toEqual(declined);
+    expect(await answered.planner.plan({ text: TEXT, context: CONTEXT })).toEqual({ kind: 'unsupported', family: 'other', reason: MODEL_DECLINED });
     expect(answered.provider.calls).toHaveLength(1);
+    const odd = await rig(ok(JSON.stringify({ kind: 'unsupported', family: 'made-up', extra: 1 })));
+    expect(await odd.planner.plan({ text: TEXT, context: CONTEXT })).toEqual({ kind: 'unsupported', family: 'other', reason: MODEL_DECLINED });
+    expect(odd.provider.calls).toHaveLength(1);
   });
 
   it('puts only paths, codes and the model\'s own reply in the repair call, and no word of a value the plan held', async () => {
@@ -185,7 +189,7 @@ describe('one repair, then unsupported', () => {
 
   it('answers a refusal of the repair call as a refusal, and passes a failure of it on, as the first call does', async () => {
     const refused = await rig(ok(BAD_REPLY), { repair: { kind: 'refused', usage: { kind: 'unknown' } } });
-    expect(await refused.planner.plan({ text: TEXT, context: CONTEXT })).toEqual({ kind: 'unsupported', reason: MODEL_REFUSED_REASON });
+    expect(await refused.planner.plan({ text: TEXT, context: CONTEXT })).toEqual({ kind: 'unsupported', family: 'model-refused', reason: MODEL_REFUSED_REASON });
     const failed = await rig(ok(BAD_REPLY), { repair: { kind: 'failed', code: 'timeout' } });
     await expect(failed.planner.plan({ text: TEXT, context: CONTEXT })).rejects.toBeInstanceOf(PlannerCallFailed);
   });

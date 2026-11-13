@@ -1,5 +1,6 @@
-import { askPlanRequestSchema, askPlanResponseSchema, ExtensionRefusal, type AskPlan, type AskPlanRequest, type ExtensionRequest, type ExtensionRoute } from '@neburyx/contracts';
+import { askPlanRequestSchema, askPlanResponseSchema, ExtensionRefusal, type AskPlan, type AskPlanAnswer, type AskPlanRequest, type ExtensionRequest, type ExtensionRoute } from '@neburyx/contracts';
 import { AuditUnavailableError } from '../audited.js';
+import { fixedRefusal } from '../refusal/families.js';
 import { COMMON_WORDS_VERSION, allowedWords, rebuildPlannerText } from '../allowlist/index.js';
 import { previewHashOf, hashesMatch } from '../preview/preview-hash.js';
 import { hydratePlan } from '../plans/hydrate.js';
@@ -118,9 +119,9 @@ export function createAskPlanRoute(options: AskPlanRouteOptions = {}): Extension
   };
 }
 
-/** What a plan is answered with: a plan of a template is turned back into references, stored, and comes with its ID and expiry; an unsupported plan is not stored. */
-async function answered(request: ExtensionRequest, plans: PlanStore, sourceId: string, placeholders: ReadonlyMap<string, PlaceholderEntry>, plan: AskPlan): Promise<{ plan: AskPlan; planId?: string; expiresAt?: string }> {
-  if (plan.kind !== 'plan') return { plan };
+/** What a plan is answered with: a plan of a template is turned back into references, stored, and comes with its ID and expiry; an unsupported plan is made fixed (the family and the sentence of that family, never the planner's reason) and is not stored. */
+async function answered(request: ExtensionRequest, plans: PlanStore, sourceId: string, placeholders: ReadonlyMap<string, PlaceholderEntry>, plan: AskPlan): Promise<{ plan: AskPlanAnswer; planId?: string; expiresAt?: string }> {
+  if (plan.kind !== 'plan') return { plan: fixedRefusal(plan.family) };
   const hydrated = hydratePlan(plan, placeholders, sourceId);
   const stored = await plans.insert({ userId: request.principalId, sourceId, templateId: hydrated.templateId, templateVersion: hydrated.templateVersion, params: hydrated.params, planningTraceId: request.traceId });
   return { plan: hydrated, planId: stored.id, expiresAt: stored.expiresAt.toISOString() };

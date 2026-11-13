@@ -2,7 +2,9 @@ import { createHash } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
+import { MODEL_FAMILIES } from './refusal/families.js';
 import { BUILT_IN_PROMPTS, MAX_OVERRIDE_BYTES, PromptError, VALUES_BOUNDARY, buildPromptRegistry, type PromptRegistry } from './prompts.js';
 import { PROMPT_IDS } from './provider.js';
 
@@ -27,7 +29,7 @@ describe('the built-in prompts', () => {
   it('are exactly the prompt ids, each at its version with parameters its text uses and no others', () => {
     expect(Object.keys(BUILT_IN_PROMPTS).sort()).toEqual([...PROMPT_IDS].sort());
     for (const prompt of Object.values(BUILT_IN_PROMPTS)) {
-      expect(prompt.version).toBe(prompt.id === 'ask.plan' ? 3 : 1);
+      expect(prompt.version).toBe(prompt.id === 'ask.plan' ? 4 : prompt.id === 'ask.plan.repair' ? 2 : 1);
       const used = [...prompt.text.matchAll(/\{\{([A-Za-z0-9]+)\}\}/g)].map((match) => match[1]);
       expect([...new Set(used)].sort()).toEqual([...prompt.parameters].sort());
     }
@@ -36,17 +38,17 @@ describe('the built-in prompts', () => {
 
 describe('the parts of the built-in prompts', () => {
   const PINNED: Readonly<Record<string, string>> = {
-    'ask.plan': 'a1b0878ed226f7c6f86bcd68eb01eb75d29c99346ba4da16b06f4bf9cd428623',
+    'ask.plan': '9a11d12f487a386d4abe2e997088dcde2d182e6a370be3985d9c602e8a4dde1c',
     'summary.view': '4933b5f1fa5581982f16d7a54bf55e02adb7380080cf37426ebeb8f97b3d8cb9',
     'assistant.route': 'd15cd59e3b7db95e5c77c1c0b999b045b42f94099d9f07a26080a2e100e5a320',
-    'ask.plan.repair': '44b40259d8705d060d0fb03604b72232b3dab5e4cfe94f23dd7fc8bf350879e3',
+    'ask.plan.repair': '1072cd1d34d84a97177770d0c22ce5de2d7d4caf0601ed226385dde61d8030dd',
   };
 
-  it.each(PROMPT_IDS)('join to the text %s had before it had parts: the hash and the version are unchanged', async (id) => {
+  it.each(PROMPT_IDS)('join to their text: the hash and the version are pinned (%s)', async (id) => {
     const prompt = BUILT_IN_PROMPTS[id];
     expect(`${prompt.instructions}\n\n${prompt.values}`).toBe(prompt.text);
     expect(sha(prompt.text)).toBe(PINNED[id]);
-    expect(prompt.version).toBe(id === 'ask.plan' ? 3 : 1);
+    expect(prompt.version).toBe(id === 'ask.plan' ? 4 : id === 'ask.plan.repair' ? 2 : 1);
     expect((await registryWith()).resolve(id, VALUES[id]).record.sha256).toBe(PINNED[id]);
   });
 
@@ -154,7 +156,7 @@ describe('resolving a prompt with an override', () => {
     const registry = await registryWith({ 'ask.plan': path });
     const resolved = registry.resolve('ask.plan', VALUES['ask.plan']);
     expect(resolved.text).toBe('Plan for who is ‹person#1›? using T1, T2.');
-    expect(resolved.record).toEqual({ id: 'ask.plan', version: 3, source: 'override', sha256: sha('Plan for {{question}} using {{catalog}}.') });
+    expect(resolved.record).toEqual({ id: 'ask.plan', version: 4, source: 'override', sha256: sha('Plan for {{question}} using {{catalog}}.') });
     expect(resolved.record.sha256).not.toBe((await registryWith()).resolve('ask.plan', VALUES['ask.plan']).record.sha256);
   });
 
@@ -227,11 +229,26 @@ describe('building a registry from unusable overrides', () => {
   });
 });
 
+describe('the families in the planner prompts', () => {
+  it.each(['ask.plan', 'ask.plan.repair'] as const)('%s names every family the model may choose and none of the server-only ones', (id) => {
+    const text = BUILT_IN_PROMPTS[id].instructions;
+    for (const family of MODEL_FAMILIES) expect(text, family).toContain(`${family}: `);
+    for (const family of ['plan-not-usable', 'model-refused']) expect(text).not.toContain(family);
+    expect(text).toContain('family');
+  });
+
+  it('is at the versions the document names, and the document says what a replacement without a family gives', () => {
+    const doc = readFileSync(fileURLToPath(new URL('../../../docs/ai-preview.md', import.meta.url)), 'utf8');
+    for (const id of ['ask.plan', 'ask.plan.repair'] as const) expect(doc).toContain(`\`${id}\` (version ${BUILT_IN_PROMPTS[id].version})`);
+    expect(doc).toContain('gives the family `other`');
+  });
+});
+
 describe('the built-in planner prompt', () => {
   const prompt = BUILT_IN_PROMPTS['ask.plan'];
 
-  it('is version 3 with the parameters catalog, vocabulary and question', () => {
-    expect(prompt.version).toBe(3);
+  it('is version 4 with the parameters catalog, vocabulary and question', () => {
+    expect(prompt.version).toBe(4);
     expect([...prompt.parameters].sort()).toEqual(['catalog', 'question', 'vocabulary']);
   });
 
@@ -289,7 +306,7 @@ describe('the static part of the planner prompt', () => {
   it('still accepts an override written for version 2, with no boundary line or with the catalog after it, and sends it whole as values with no instructions hash', async () => {
     for (const text of ['Plan {{question}} with {{catalog}} and {{vocabulary}}.', marked('Plan.', 'Q: {{question}} {{catalog}} {{vocabulary}}')]) {
       const resolved = (await registryWith({ 'ask.plan': file(`older-${text.length}.txt`, text) })).resolve('ask.plan', { ...STATIC, question: 'q' });
-      expect(resolved.record).toEqual({ id: 'ask.plan', version: 3, source: 'override', sha256: sha(text) });
+      expect(resolved.record).toEqual({ id: 'ask.plan', version: 4, source: 'override', sha256: sha(text) });
     }
   });
 });

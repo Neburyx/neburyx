@@ -646,7 +646,7 @@ question ─► local entity resolution (search; mentions → placeholders)
 }
 ```
 
-If no template fits, the planner returns `{"kind": "unsupported", "reason": "..."}`.
+If no template fits, the planner returns `{"kind": "unsupported", "family": "...", "reason": "..."}`. The plan endpoint never passes the planner's `reason` on: it answers the `family` (from a closed list; `other` when the planner names none) and the fixed sentence of that family, so the `reason` of an `unsupported` plan is fixed server text, not the planner's.
 
 ### 9.2 Rules
 
