@@ -43,6 +43,15 @@ export function useShellData(): ShellData {
   return useStoreSelector(useShellStore(), (data) => data);
 }
 
+const NO_ONE: ReadableStore<undefined> = { getState: () => undefined, subscribe: () => () => undefined };
+
+/** The signed-in person's ID when the shell data is provided, and nothing in a part of the app drawn without it (a test of one tool). */
+export function usePrincipalIdWhenProvided(): string | undefined {
+  const store = useContext(ShellDataContext);
+  const principal = useStoreSelector<ShellData | undefined, string | undefined>(store ?? NO_ONE, (data) => (data === undefined ? undefined : answeredData(data.me)?.principal.id));
+  return principal;
+}
+
 export function answeredData<T>(state: RequestState<T>): T | undefined {
   return state.phase === 'ready' || state.phase === 'loading' ? state.data : undefined;
 }

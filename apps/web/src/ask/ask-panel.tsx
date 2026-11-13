@@ -1,6 +1,9 @@
 import { useId, type KeyboardEvent } from 'react';
 import { useClientState } from '../state/context.js';
+import { useStoreSelector } from '../state/store.js';
+import { planOut } from './plan-activity.js';
 import { BlockedCard, ClarificationCard, PreviewCard, RefusalCard } from './cards.js';
+import { PlanCard } from './plan-card.js';
 import { ASK_COPY, notSentText } from './copy.js';
 import { QuestionField } from './question-field.js';
 import { useAsk, type AskModel } from './use-ask.js';
@@ -25,7 +28,9 @@ export function AskPanel() {
   const { model } = panel;
   const hintId = useId();
   const statusId = useId();
-  const sending = model.busy === 'sending';
+  // a question that is out, and a plan that is being run, edited or cancelled, cannot be taken back, so the panel stays as it is until the answer
+  const planIsOut = useStoreSelector(planOut, (out) => out);
+  const sending = model.busy === 'sending' || planIsOut;
   const blocked = model.card?.kind === 'blocked' ? model.card.tokens : [];
   const close = (): void => {
     if (sending) return;
@@ -79,6 +84,7 @@ export function AskPanel() {
       ) : null}
       {model.card?.kind === 'preview' ? <PreviewCard key={model.cardId} card={model.card} panel={panel} /> : null}
       {model.plan?.kind === 'unsupported' ? <RefusalCard key={`refusal-${model.cardId}`} question={model.text} family={model.plan.family} reason={model.plan.reason} /> : null}
+      {model.plan?.kind === 'plan' && model.planId !== undefined && model.expiresAt !== undefined ? <PlanCard ask={panel} plan={model.plan} planId={model.planId} expiresAt={model.expiresAt} /> : null}
       {model.card?.kind === 'blocked' ? <BlockedCard key={model.cardId} tokens={model.card.tokens} panel={panel} /> : null}
       {model.card?.kind === 'clarification' ? <ClarificationCard key={model.cardId} clarification={model.card.clarification} panel={panel} /> : null}
     </div>

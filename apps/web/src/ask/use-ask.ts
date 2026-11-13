@@ -9,6 +9,7 @@ import { askSending } from './ask-activity.js';
 import { askFailureWords, isPicksRefusal } from './ask-failure.js';
 import { blockedAfter, canBeSearchValue, codePointCount, editBetween, isTooLong, picksAfter, pickLimitReached, rangeAfter, withoutWord, withPick, type BlockedToken, type Edit } from './ask-model.js';
 import { ASK_COPY } from './copy.js';
+import { PLAN_COPY } from './plan-copy.js';
 
 export type Clarification = Extract<AskPlanAnswer, { readonly clarification: unknown }>['clarification'];
 
@@ -45,13 +46,16 @@ export interface AskModel {
   readonly picker: Picker | undefined;
   /** The plan the server answered to a send, for the plan card to draw. */
   readonly plan: AskPlanned | undefined;
+  /** The ID and expiry the server gave a plan of a template, for the plan card; none for a plan that is unsupported. */
+  readonly planId: string | undefined;
+  readonly expiresAt: string | undefined;
   /** Changes with each card that is drawn, so a card that replaces another of its kind takes the focus again. */
   readonly cardId: number;
   /** Counts up each time the field is to take the focus; `caret` is where its cursor goes. */
   readonly focus: { readonly tick: number; readonly caret: number | undefined };
 }
 
-const INITIAL: AskModel = { text: '', picks: [], card: undefined, busy: 'idle', failure: undefined, sent: undefined, fieldNote: undefined, notice: undefined, picker: undefined, plan: undefined, cardId: 0, focus: { tick: 1, caret: undefined } };
+const INITIAL: AskModel = { text: '', picks: [], card: undefined, busy: 'idle', failure: undefined, sent: undefined, fieldNote: undefined, notice: undefined, picker: undefined, plan: undefined, planId: undefined, expiresAt: undefined, cardId: 0, focus: { tick: 1, caret: undefined } };
 
 const isAborted = (result: ApiResult<unknown>): boolean => !result.ok && result.failure.code === 'ABORTED';
 
@@ -71,6 +75,10 @@ export interface AskPanel {
   chooseValue(token: BlockedToken): void;
   chooseChip(ref: ElementRef): void;
   cancelClarification(): void;
+  /** Gives up a plan that cannot be used any more and returns to the question with its preview, so nothing is sent again without Send. */
+  askAgain(): void;
+  /** Says that a plan may have run, when its answer arrived after the investigation changed or the card went away. */
+  noteMayHaveRun(): void;
   retry(): void;
   canUseValue(token: BlockedToken): boolean;
   limitReached: boolean;
@@ -128,10 +136,10 @@ export function useAsk(): AskPanel {
   const apply = useCallback(
     (answer: AskPlanAnswer): void => {
       const base = { busy: 'idle' as const, failure: undefined, fieldNote: undefined, notice: undefined, picker: undefined, cardId: held.current.cardId + 1 };
-      if ('preview' in answer) patch({ ...base, card: { kind: 'preview', preview: answer.preview, hash: answer.previewHash, changed: answer.changed === true }, sent: undefined, plan: undefined });
-      else if ('blocked' in answer) patch({ ...base, card: { kind: 'blocked', tokens: answer.blocked.tokens }, sent: undefined, plan: undefined });
-      else if ('clarification' in answer) patch({ ...base, card: { kind: 'clarification', clarification: answer.clarification }, sent: undefined, plan: undefined });
-      else patch({ ...base, cardId: held.current.cardId, sent: answer.plan.kind === 'unsupported' ? ASK_COPY.refused : ASK_COPY.sentPlan, plan: answer.plan });
+      if ('preview' in answer) patch({ ...base, card: { kind: 'preview', preview: answer.preview, hash: answer.previewHash, changed: answer.changed === true }, sent: undefined, plan: undefined, planId: undefined, expiresAt: undefined });
+      else if ('blocked' in answer) patch({ ...base, card: { kind: 'blocked', tokens: answer.blocked.tokens }, sent: undefined, plan: undefined, planId: undefined, expiresAt: undefined });
+      else if ('clarification' in answer) patch({ ...base, card: { kind: 'clarification', clarification: answer.clarification }, sent: undefined, plan: undefined, planId: undefined, expiresAt: undefined });
+      else patch({ ...base, cardId: held.current.cardId, sent: answer.plan.kind === 'unsupported' ? ASK_COPY.refused : ASK_COPY.sentPlan, plan: answer.plan, planId: 'planId' in answer ? answer.planId : undefined, expiresAt: 'expiresAt' in answer ? answer.expiresAt : undefined });
     },
     [patch],
   );
@@ -178,7 +186,7 @@ export function useAsk(): AskPanel {
       }
       const picker = current.picker !== undefined && card?.kind === 'blocked' && card.tokens.some((token) => token.start === current.picker?.token.start) ? current.picker : undefined;
       if (picker === undefined) pickerControl.current?.abort();
-      put({ ...current, text: cleaned, picks, card, picker, busy: 'idle', failure: undefined, sent: undefined, plan: undefined, fieldNote: undefined, notice: undefined });
+      put({ ...current, text: cleaned, picks, card, picker, busy: 'idle', failure: undefined, sent: undefined, plan: undefined, planId: undefined, expiresAt: undefined, fieldNote: undefined, notice: undefined });
     },
     [put],
   );
@@ -230,7 +238,7 @@ export function useAsk(): AskPanel {
     editQuestion: () => {
       const current = held.current;
       const caret = current.card?.kind === 'blocked' ? current.card.tokens[0]?.end : undefined;
-      put({ ...current, card: current.card?.kind === 'preview' ? undefined : current.card, sent: undefined, plan: undefined, focus: { tick: current.focus.tick + 1, caret } });
+      put({ ...current, card: current.card?.kind === 'preview' ? undefined : current.card, sent: undefined, plan: undefined, planId: undefined, expiresAt: undefined, focus: { tick: current.focus.tick + 1, caret } });
     },
     removeWord: (token) => {
       const current = held.current;
@@ -238,7 +246,7 @@ export function useAsk(): AskPanel {
       previewControl.current?.abort();
       sequence.current += 1;
       pickerControl.current?.abort();
-      put({ ...current, text, picks: picksAfter(current.picks, edit, current.text, text), card: undefined, picker: undefined, busy: 'idle', failure: undefined, sent: undefined, plan: undefined });
+      put({ ...current, text, picks: picksAfter(current.picks, edit, current.text, text), card: undefined, picker: undefined, busy: 'idle', failure: undefined, sent: undefined, plan: undefined, planId: undefined, expiresAt: undefined });
       void askPreview(held.current.picks);
     },
     openPicker: (token) => void search(token, token.text),
@@ -266,6 +274,8 @@ export function useAsk(): AskPanel {
       addPick({ start: card.clarification.start, end: card.clarification.end, ref });
     },
     cancelClarification: () => patch({ card: undefined, failure: undefined }),
+    noteMayHaveRun: () => patch({ notice: PLAN_COPY.mayHaveRun }),
+    askAgain: () => patch({ plan: undefined, planId: undefined, expiresAt: undefined, sent: undefined, busy: 'idle', failure: undefined }),
     retry: () => {
       const failure = held.current.failure;
       if (failure?.retry === 'send') void send();

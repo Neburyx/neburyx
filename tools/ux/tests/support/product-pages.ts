@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { expect, type Page } from '@playwright/test';
 import { buildTwoSteps, openPatternList, patternBuilder, patternsPanel, previewTwoSteps } from './pattern-editor.ts';
 import { openAsk, previewQuestion, scriptAsk, askPanel } from './ask-panel.ts';
+import { openPlanCard, scriptPlan } from './ask-plan.ts';
 import { modifier } from './workspace.ts';
 
 export interface ProductPage {
@@ -444,6 +445,25 @@ export const REACH: Readonly<Record<string, (page: Page) => Promise<void>>> = {
     await openAsk(page);
     await previewQuestion(page, 'Which accounts share a device with Qux?');
     await expect(askPanel(page).getByRole('button', { name: 'account · AC-1' })).toBeVisible();
+  },
+  'Explore with the Ask plan card': async (page) => {
+    await scriptAsk(page);
+    await scriptPlan(page);
+    await openPlanCard(page);
+  },
+  'Explore with the Ask plan card result': async (page) => {
+    await scriptAsk(page);
+    await scriptPlan(page);
+    await openPlanCard(page);
+    await askPanel(page).getByRole('button', { name: 'Run' }).click();
+    await expect(askPanel(page).getByText(/^Ran shared-attribute/)).toBeVisible();
+  },
+  'Explore with the Ask plan card editing': async (page) => {
+    await scriptAsk(page);
+    await scriptPlan(page);
+    await openPlanCard(page);
+    await askPanel(page).getByRole('button', { name: 'Edit', exact: true }).click();
+    await expect(askPanel(page).getByRole('button', { name: 'Save' })).toBeVisible();
   },
   'Explore with a re-pointed source': async (page) => {
     await openChangedSource(page, 'repointed');

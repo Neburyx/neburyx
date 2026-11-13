@@ -1,5 +1,6 @@
 import { registerAiAction } from '../ai/ai-actions.js';
 import { askSending } from './ask-activity.js';
+import { planOut } from './plan-activity.js';
 import type { ClientState } from '../state/client-state.js';
 import { INSPECTOR_PANEL_TOP } from '../inspector/inspector-layout.js';
 import type { PanelRegistry } from '../workspace/panel-registry.js';
@@ -23,7 +24,7 @@ export function bindAskPanel(state: ClientState, panels: PanelRegistry): () => v
   };
   const unsubscribe = state.presentation.view.subscribe(sync);
   const unregister = registerAiAction('ask', () => {
-    if (askSending.getState()) return;
+    if (askSending.getState() || planOut.getState()) return;
     state.presentation.setAskOpen(!state.presentation.view.getState().askOpen);
   });
   sync();

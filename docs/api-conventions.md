@@ -189,7 +189,7 @@ Characters are counted as code points, as the database counts them, so the API a
 A retried create must not run twice.
 
 - Send `Idempotency-Key`: 16 to 64 characters from letters, digits, `_` and `-` (a UUID fits). It is **required** on calls that
-  create or run something that a retry could repeat: export creation, template and pattern runs, Ask runs, summary runs and
+  create or run something that a retry could repeat: export creation, template and pattern runs, summary runs and
   alert creation. It is not asked of reads, of writes guarded by a version, or of deletes. A missing or malformed key is
   `INVALID_REQUEST`.
 - For 24 hours the server keeps, for the user, the key, a fingerprint of the request (a SHA-256 of the method, the concrete
@@ -234,7 +234,7 @@ Every edit of a resource that has a `version` is guarded, so a stale edit never 
 
 | Convention | Applies to |
 |---|---|
-| `Idempotency-Key` required | export creation, template and pattern runs, Ask runs, summary runs, alert creation |
+| `Idempotency-Key` required | export creation, template and pattern runs, summary runs, alert creation |
 | `If-Match` | draft saves, view saves, renames, deletes and restores, and every delete of a versioned resource |
 | `expectedVersion` in the body | investigation edits, status changes and restores; grants; settings; limits; saved-pattern edits |
 | Neither | reads, and calls that create or change nothing that has a version |

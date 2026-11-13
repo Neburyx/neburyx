@@ -32,6 +32,12 @@ import {
   sourceTestReportSchema,
   templateListResponseSchema,
   askPlanResponseSchema,
+  askRunResponseSchema,
+  askEditResponseSchema,
+  askCancelResponseSchema,
+  type AskRunRequest,
+  type AskEditRequest,
+  type AskCancelRequest,
   templateRunResponseSchema,
   type TemplateRunRequest,
   type TemplateRunResponse,
@@ -144,6 +150,12 @@ export interface InvestigationPageQuery {
 /** What the plan endpoint answers: a plan, a clarification, the blocked tokens, or the preview with its hash. */
 export type AskPlanAnswer = z.infer<typeof askPlanResponseSchema>;
 
+/** What a run of a plan answers, as the contract has it. */
+export type AskRunAnswer = z.infer<typeof askRunResponseSchema>;
+/** What an edit of a plan answers: the new plan with its own ID and expiry. */
+export type AskEditAnswer = z.infer<typeof askEditResponseSchema>;
+export type AskCancelAnswer = z.infer<typeof askCancelResponseSchema>;
+
 export interface ApiClient {
   getMe(signal?: AbortSignal): Promise<ApiResult<MeResponse>>;
   getSources(signal?: AbortSignal): Promise<ApiResult<SourcesResponse>>;
@@ -220,6 +232,12 @@ export interface ApiClient {
   listOwnedViews(page: { readonly cursor?: string; readonly limit?: number }, signal?: AbortSignal): Promise<ApiResult<OwnedViewListResponse>>;
   /** Asks the Ask endpoint about one question in one source: with `send` false the preview, the blocked tokens or a clarification, and nothing reaches a model; with `send` true and the hash of a preview, the plan. */
   askPlan(request: AskPlanRequest, signal?: AbortSignal): Promise<ApiResult<AskPlanAnswer>>;
+  /** Runs a proposed plan once, or continues one that stopped as heavy with its token; the answer names the plan that was sent, or it is refused. */
+  askRun(request: AskRunRequest, signal?: AbortSignal): Promise<ApiResult<AskRunAnswer>>;
+  /** Changes the parameters of a proposed plan: the answer is a new plan with its own ID. */
+  askEdit(request: AskEditRequest, signal?: AbortSignal): Promise<ApiResult<AskEditAnswer>>;
+  /** Cancels a proposed plan; the answer names the plan that was sent, or it is refused. */
+  askCancel(request: AskCancelRequest, signal?: AbortSignal): Promise<ApiResult<AskCancelAnswer>>;
   /** The exact matches of a text in one source, and with `typeahead` the entities that start with it; every hit and the answer name the source that was asked, or the answer is refused. */
   searchEntities(request: SearchRequest, signal?: AbortSignal): Promise<ApiResult<SearchResult>>;
   /** The next page of one group of a search, from that group's cursor; the page names the source and the group that were asked, or it is refused. */
@@ -383,6 +401,15 @@ export function createApiClient(fetcher: Fetcher = (input, init) => fetch(input,
       return investigation.sourceId !== open.sourceId || !named || ('entity' in result.value && !sameEntity(result.value.entity.ref)) ? failed('SCHEMA_MISMATCH') : result;
     },
     askPlan: (body, signal) => request(fetcher, '/v1/ask/plan', askPlanResponseSchema, signal, 'POST', body),
+    askRun: async (body, signal) => {
+      const result = await request(fetcher, '/v1/ask/run', askRunResponseSchema, signal, 'POST', body);
+      return result.ok && result.value.planId !== body.planId ? failed('SCHEMA_MISMATCH') : result;
+    },
+    askEdit: (body, signal) => request(fetcher, '/v1/ask/edit', askEditResponseSchema, signal, 'POST', body),
+    askCancel: async (body, signal) => {
+      const result = await request(fetcher, '/v1/ask/cancel', askCancelResponseSchema, signal, 'POST', body);
+      return result.ok && result.value.planId !== body.planId ? failed('SCHEMA_MISMATCH') : result;
+    },
     searchEntities: async (search, signal) => {
       const result = await request(fetcher, '/v1/search/entities', searchResultSchema, signal, 'POST', search);
       if (!result.ok) return result;

@@ -69,6 +69,9 @@
     { "name": "Explore with the Ask panel open", "route": "explore" },
     { "name": "Explore with the Ask panel preview", "route": "explore" },
     { "name": "Explore with the Ask panel blocked word", "route": "explore" },
-    { "name": "Explore with the Ask panel clarification", "route": "explore" }
+    { "name": "Explore with the Ask panel clarification", "route": "explore" },
+    { "name": "Explore with the Ask plan card", "route": "explore" },
+    { "name": "Explore with the Ask plan card result", "route": "explore" },
+    { "name": "Explore with the Ask plan card editing", "route": "explore" }
   ]
 }
