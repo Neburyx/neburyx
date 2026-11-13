@@ -81,8 +81,11 @@ test.describe('the steps of the README Quickstart, in the built app', () => {
     const confirm = page.getByRole('dialog', { name: quoted('Delete this investigation?') });
     await confirm.getByRole('button', { name: quoted('Delete investigation') }).click();
     await expect(page).toHaveURL(/\/investigations$/);
-    await page.getByRole('button', { name: quoted('Deleted') }).click();
+    // the line sits beside the chip in the default view and appears once the first page of the list has answered; choosing the chip replaces it with the Deleted view's own sentence
     await expect(page.getByText(/Deleted ones stay restorable for \d+ days\./)).toBeVisible();
+    const deletedChip = page.getByRole('button', { name: quoted('Deleted') });
+    await deletedChip.click();
+    await expect(deletedChip).toHaveAttribute('aria-pressed', 'true');
     await expect(page.getByRole('button', { name: /^Restore/ }).first()).toBeVisible();
     quoted('Restore');
   });
