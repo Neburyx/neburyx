@@ -1,0 +1,18 @@
+{
+  "note": "Synthetic questions for the leakage suite. `known` maps a typed mention to the stable ID the stand-in search finds for it. `reachesModel` is whether the question is expected to reach the model; `tokens` are what must not be in any request.",
+  "questions": [
+    { "message": "which are the same as Mira Zorvath", "known": { "Mira Zorvath": "fixture-a" }, "tokens": [{ "kind": "name", "text": "Mira Zorvath" }], "reachesModel": true },
+    { "message": "which are the same as KQ/48/2130", "known": { "KQ/48/2130": "fixture-b" }, "tokens": [{ "kind": "id", "text": "KQ/48/2130" }], "reachesModel": true },
+    { "message": "which are the same as zorvath.quillan@mail.example.test", "known": { "zorvath.quillan@mail.example.test": "fixture-c" }, "tokens": [{ "kind": "email", "text": "zorvath.quillan@mail.example.test" }], "reachesModel": true },
+    { "message": "which are the same as <zorvath.quillan@mail.example.test>", "known": { "zorvath.quillan@mail.example.test": "fixture-c" }, "tokens": [{ "kind": "email", "text": "zorvath.quillan@mail.example.test" }], "reachesModel": false },
+    { "message": "which are the same as mailto:zorvath.quillan@mail.example.test", "known": { "zorvath.quillan@mail.example.test": "fixture-c" }, "tokens": [{ "kind": "email", "text": "zorvath.quillan@mail.example.test" }], "reachesModel": false },
+    { "message": "which are the same as 4821 7730 19", "known": {}, "tokens": [{ "kind": "number", "text": "4821 7730 19" }], "reachesModel": false },
+    { "message": "which are the same as 4821-7730-19", "known": {}, "tokens": [{ "kind": "number", "text": "4821-7730-19" }], "reachesModel": false },
+    { "message": "which are the same as 482177301", "known": {}, "tokens": [{ "kind": "number", "text": "482177301" }], "reachesModel": false },
+    { "message": "which are the same as Mira Zorvath and KQ/48/2130", "known": { "Mira Zorvath": "fixture-a", "KQ/48/2130": "fixture-b" }, "tokens": [{ "kind": "name", "text": "Mira Zorvath" }, { "kind": "id", "text": "KQ/48/2130" }], "reachesModel": true }
+  ],
+  "kept": [
+    { "message": "which are the same as 12", "why": "a number of three digits or fewer is kept by the allowlist", "text": "12" },
+    { "message": "which are the same as 2020-03-15", "why": "a full calendar date is a date and is kept by the allowlist (a documented residual risk: it can be a date of birth)", "text": "2020-03-15" }
+  ]
+}
