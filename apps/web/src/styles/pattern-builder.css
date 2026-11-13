@@ -98,7 +98,7 @@
 
 .pattern-editor-actions {
   position: sticky;
-  bottom: calc(-1 * var(--space-16));
+  bottom: 0;
   display: flex;
   justify-content: space-between;
   gap: var(--space-8);

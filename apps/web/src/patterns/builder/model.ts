@@ -197,7 +197,7 @@ export type Break =
   | { readonly kind: 'types-leave'; readonly step: number; readonly part: 'link'; readonly types: readonly string[]; readonly from: string }
   | { readonly kind: 'types-lead'; readonly step: number; readonly part: 'link'; readonly types: readonly string[]; readonly arrival: string }
   | { readonly kind: 'arrival'; readonly step: number; readonly part: 'link'; readonly from: string; readonly arrival: string }
-  | { readonly kind: 'condition'; readonly step: number; readonly part: 'conditions'; readonly row: ConditionRow; readonly arrival: string; readonly types: readonly string[] }
+  | { readonly kind: 'condition'; readonly step: number; readonly part: 'conditions'; readonly row: ConditionRow; /** How many conditions of the step are on this property of this side and are not offered: they are said once. */ readonly rows: number; readonly arrival: string; readonly types: readonly string[] }
   | { readonly kind: 'window'; readonly step: number; readonly part: 'window' };
 
 type MappingRow = SourceProfile['relationshipTypes'][number];
@@ -238,7 +238,11 @@ export function breaksOf(profile: SourceProfile, draft: Draft, mask: boolean): r
       const offered = offeredProperties(profile, from, step, mask);
       for (const row of rowsOf(step)) {
         if (row.on === 'relationship' && step.relationshipTypes.length === 0) continue;
-        if (!isOffered(row, offered)) found.push({ kind: 'condition', step: index, part: 'conditions', row, arrival, types: step.relationshipTypes });
+        if (isOffered(row, offered)) continue;
+        const same = found.findIndex((held) => held.kind === 'condition' && held.step === index && held.row.on === row.on && held.row.property === row.property);
+        const held = found[same];
+        if (held !== undefined && held.kind === 'condition') found[same] = { ...held, rows: held.rows + 1 };
+        else found.push({ kind: 'condition', step: index, part: 'conditions', row, rows: 1, arrival, types: step.relationshipTypes });
       }
     }
     if (windowOf(step).kind !== 'none' && direction !== undefined && arrival !== undefined && step.relationshipTypes.length > 0 && windowReach(profile, from, step).appliesTo.length === 0) found.push({ kind: 'window', step: index, part: 'window' });

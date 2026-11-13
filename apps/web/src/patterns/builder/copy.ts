@@ -221,7 +221,9 @@ export const directionMeaning = (direction: Direction, from: string): string => 
   if (direction === 'in') return `Incoming: the relationship points to ${from} from the next entity.`;
   return `Either: the relationship may point either way between ${from} and the next entity.`;
 };
-export const leavingText = (type: string, direction: Direction): string => `Leaving a ${type}, ${direction === 'out' ? 'outgoing' : direction === 'in' ? 'incoming' : 'either direction'}`;
+/** "a" or "an" before a type's name, by its first letter. */
+export const article = (name: string): string => (/^[aeiou]/i.test(name) ? 'an' : 'a');
+export const leavingText = (type: string, direction: Direction): string => `Leaving ${article(type)} ${type}, ${direction === 'out' ? 'outgoing' : direction === 'in' ? 'incoming' : 'either direction'}`;
 export const removeTypeLabel = (type: string): string => `Remove ${type}`;
 
 /** The Window tab (frame PB6). */
@@ -251,13 +253,13 @@ export function breakText(found: Break, nameOf: (type: string | undefined) => st
   const step = `Step ${found.step + 1}`;
   switch (found.kind) {
     case 'types-leave':
-      return `${step}: ${listOf(found.types)} ${doesNot(found.types.length)} leave a ${nameOf(found.from)}.`;
+      return `${step}: ${listOf(found.types)} ${doesNot(found.types.length)} leave ${article(nameOf(found.from))} ${nameOf(found.from)}.`;
     case 'types-lead':
       return `${step}: ${listOf(found.types)} ${doesNot(found.types.length)} lead to ${nameOf(found.arrival)} in the mapping.`;
     case 'arrival':
       return `${step}: ${nameOf(found.from)} does not reach ${nameOf(found.arrival)} in this direction.`;
     case 'condition':
-      return `${step}: the condition on ${found.row.property} is not available on ${found.row.on === 'neighbor' ? nameOf(found.arrival) : listOf(found.types)}.`;
+      return `${step}: the condition on ${found.row.property} is not available on ${found.row.on === 'neighbor' ? nameOf(found.arrival) : listOf(found.types)}${found.rows > 1 ? ` (${found.rows} conditions)` : ''}.`;
     case 'window':
       return `${step}: the window needs a relationship type with a date.`;
     default: {
@@ -277,7 +279,7 @@ export const BREAK_COPY = {
 export const breakTitle = (changed: 'start' | number | undefined, count: number): string => (changed === undefined ? `${problemCount(count)} the mapping does not follow` : `Changing ${changed === 'start' ? 'the start' : `step ${changed + 1}`} leaves ${problemCount(count)}`);
 export const chainProblems = (count: number): string => `${problemCount(count)}. Preview is off until they are fixed.`;
 export const leadsElsewhere = (type: string, actual: readonly string[], arrival: string): string => `${type} leads to ${actual.join(' or ')}, not ${arrival}.`;
-export const doesNotLeave = (type: string, from: string): string => `${type} does not leave a ${from}.`;
+export const doesNotLeave = (type: string, from: string): string => `${type} does not leave ${article(from)} ${from}.`;
 export const arrivalChanged = (was: string | undefined, arrival: string): string => `${was === undefined ? '' : `Changed from ${was}. `}Choose types that lead to ${arrival}, or change it back.`;
 
 /** The problems the source found, the checking states and the states of the mapping (frames PB9 and PB19 states 1 to 4). */

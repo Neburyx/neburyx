@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { PATTERN_LIMITS } from '@neburyx/contracts';
-import { builderProfile } from './builder-kit.js';
-import { addStepBlock, arrivalTypes, breaksOf, EMPTY_DRAFT, INITIAL, reduce, relationshipChoices, stepLimitOf, toDefinition, typeOptions, type Action, type BuilderState } from './model.js';
+import { builderProfile, conditionsProfile } from './builder-kit.js';
+import { breakText, doesNotLeave, leavingText } from './copy.js';
+import { addStepBlock, arrivalTypes, breaksOf, type Break, EMPTY_DRAFT, INITIAL, reduce, relationshipChoices, stepLimitOf, toDefinition, typeOptions, type Action, type BuilderState } from './model.js';
 
 const profile = builderProfile();
 const run = (state: BuilderState, ...actions: Action[]): BuilderState => actions.reduce((held, action) => reduce(profile, held, action), state);
@@ -139,5 +140,24 @@ describe('the relationship types a step may take', () => {
     expect(typeOptions(profile, 'n-a', 'out', 'n-b').every((option) => !option.dated)).toBe(true);
     const dated = { ...profile, relationshipTypes: profile.relationshipTypes.map((row) => (row.type === 'r-1' ? { ...row, observedAt: 'when' } : row)) };
     expect(typeOptions(dated, 'n-a', 'out', 'n-b').map((option) => option.dated)).toEqual([true, false]);
+  });
+});
+
+describe('what a change leaves unfollowed, said once', () => {
+  it('merges conditions on the same property into one break with their number, and says it', () => {
+    const base = conditionsProfile();
+    const row = (id: number) => ({ id, on: 'neighbor' as const, property: 'b-name', op: 'eq' as const, text: 'x', from: '', to: '', kind: 'auto' as const });
+    const draft = { anchorType: 'c-a', steps: [{ direction: 'out' as const, arrivesAt: 'c-c', relationshipTypes: ['k-1'], conditions: [row(1), row(2), row(3)] }] };
+    const found = breaksOf(base, draft, false).filter((candidate) => candidate.kind === 'condition');
+    expect(found).toHaveLength(1);
+    expect(found[0]).toMatchObject({ rows: 3 });
+    expect(breakText(found[0] as Break, (type) => (type === undefined ? '' : type.toUpperCase()))).toBe('Step 1: the condition on b-name is not available on C-C (3 conditions).');
+  });
+
+  it('writes a or an before a type by its first letter', () => {
+    expect(leavingText('Account', 'out')).toBe('Leaving an Account, outgoing');
+    expect(leavingText('Customer', 'in')).toBe('Leaving a Customer, incoming');
+    expect(doesNotLeave('SENT', 'Bank')).toBe('SENT does not leave a Bank.');
+    expect(doesNotLeave('SENT', 'Address')).toBe('SENT does not leave an Address.');
   });
 });
