@@ -4,7 +4,7 @@ import { PATTERN_ID } from '../../../services/api/src/gate/templates/pattern.js'
 import { gateRequest, LOCAL_PRINCIPAL } from '../../../services/api/src/testing/gate.js';
 import { expectedReach } from './pattern-expected.js';
 import { patternRunResponseSchema } from '../../../packages/contracts/src/pattern-run.js';
-import { startPackRun, type PackRun } from './testing/pack-run.js';
+import { startPackRun, withBudgets, type PackRun } from './testing/pack-run.js';
 
 let banking: PackRun;
 let insurance: PackRun;
@@ -151,5 +151,82 @@ describe('a run through POST /v1/patterns/run on the insurance pack, whose max_h
     expect(first.replayed).toBe(false);
     expect(second.replayed).toBe(true);
     expect(patternRunResponseSchema.parse(second.json)).toEqual(patternRunResponseSchema.parse(first.json));
+  });
+});
+
+const lastRunOf = async (pack: { readonly saved: PackRun['saved'] }, id: string) => (await pack.saved.list()).items.find((item) => item.id === id)?.['lastRunAt'];
+const savedIdOf = (answer: { readonly status: number; readonly json: unknown }): string => {
+  if (answer.status !== 201) throw new Error(`the save answered ${answer.status}: ${JSON.stringify(answer.json)}`);
+  return (answer.json as { id: string }).id;
+};
+
+describe('a saved pattern run through POST /v1/patterns/{id}/run on the banking pack', () => {
+  const definition = { anchorType: 'account', steps: [transfersOut, transfersOut] };
+  const anchor = { entityType: 'account', stableId: 'AC-0000006' };
+
+  it('returns what the same definition returns through the run route, from the entity given and from the one held, and records the creator’s run', async () => {
+    const direct = await banking.patternRun({ definition, anchor, limit: PAGE });
+    expect(direct.status).toBe(200);
+    const given = savedIdOf(await banking.saved.save({ name: 'Two steps', kind: 'definition', definition }));
+    const held = savedIdOf(await banking.saved.save({ name: 'Two steps held', kind: 'definition', definition, anchor }));
+    expect(await lastRunOf(banking, given)).toBeNull();
+    const fromGiven = await banking.saved.run(given, { anchor, limit: PAGE });
+    const fromHeld = await banking.saved.run(held, { limit: PAGE });
+    expect(fromGiven.json).toEqual(direct.json);
+    expect(fromHeld.json).toEqual(direct.json);
+    expect(await lastRunOf(banking, given)).not.toBeNull();
+    expect(await lastRunOf(banking, held)).not.toBeNull();
+  });
+
+  it('returns what the template route returns for a saved run of a pack preset', async () => {
+    const id = savedIdOf(await banking.saved.save({ name: 'Connected accounts', kind: 'preset-run', presetId: 'connected-accounts', params: { maxHops: 2 } }));
+    const answer = await banking.saved.ok(id, { anchor: { entityType: 'account', stableId: 'AC-0000006' } });
+    const direct = await banking.ok('connected-accounts', { ref: { entityType: 'account', stableId: 'AC-0000006' }, maxHops: 2 });
+    expect(answer).toEqual(direct);
+  });
+
+  it('stops as heavy with the real estimate when the source’s threshold is low, and a continue reads the first page', async () => {
+    const id = savedIdOf(await banking.saved.save({ name: 'Heavy at one', kind: 'definition', definition: { anchorType: 'account', steps: [transfersOut] } }));
+    const lowered = await banking.reopen((text) => withBudgets(text, { heavy_op_threshold: 1 }));
+    try {
+      const stopped = await lowered.saved.ok(id, { anchor });
+      expect(stopped).toMatchObject({ status: 'heavy', threshold: 1, estimate: { value: 1, quality: 'lowerBound' } });
+      const continued = await lowered.saved.ok(id, { anchor, continue: true });
+      expect(continued.status).toBe('ok');
+      expect(await lastRunOf(lowered, id)).not.toBeNull();
+    } finally {
+      await lowered.close();
+    }
+  });
+});
+
+describe('a saved pattern run on the insurance pack', () => {
+  it('returns what the run route returns for the out-and-back definition', async () => {
+    const lives = insurance.relationships('LIVES_AT');
+    const sharing = new Map<string, number>();
+    for (const edge of lives) sharing.set(edge.t, (sharing.get(edge.t) ?? 0) + 1);
+    const start = lives.find((edge) => (sharing.get(edge.t) ?? 0) > 1)?.f;
+    if (start === undefined) throw new Error('the export has no address shared by two claimants');
+    const definition = { anchorType: 'claimant', steps: [livesOut, livesBack] };
+    const anchor = { entityType: 'claimant', stableId: start };
+    const direct = await insurance.patternRun({ definition, anchor, limit: PAGE });
+    const id = savedIdOf(await insurance.saved.save({ name: 'Out and back', kind: 'definition', definition }));
+    expect((await insurance.saved.run(id, { anchor, limit: PAGE })).json).toEqual(direct.json);
+  });
+
+  it('lists a pattern as unavailable after a mapping change and answers that on a run, and the gate made no call for it', async () => {
+    const definition = { anchorType: 'claimant', steps: [livesOut] };
+    const id = savedIdOf(await insurance.saved.save({ name: 'Where they live', kind: 'definition', definition }));
+    const changed = await insurance.reopen((text) => text.replaceAll('LIVES_AT', 'LIVES_NEAR'));
+    try {
+      const listed = (await changed.saved.list()).items.find((item) => item['id'] === id);
+      expect(listed?.['availability']).toEqual({ status: 'unavailable', reasons: [{ code: 'unknown-relationship-type', path: ['steps', 0, 'relationshipTypes', 0] }] });
+      const calls = changed.gateCalls();
+      const answer = await changed.saved.run(id, { anchor: { entityType: 'claimant', stableId: 'any-claimant' } });
+      expect(answer).toMatchObject({ status: 200, json: { status: 'unavailable', reasons: [{ code: 'unknown-relationship-type' }] } });
+      expect(changed.gateCalls()).toBe(calls);
+    } finally {
+      await changed.close();
+    }
   });
 });

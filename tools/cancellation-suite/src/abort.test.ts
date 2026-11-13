@@ -276,3 +276,43 @@ describe('cancelling a running pattern run', () => {
     await until(() => rig.slots.inspect().sources.size === 0 && rig.slots.inspect().users.size === 0, 'the read slots to be free');
   });
 });
+
+describe('cancelling a running saved pattern run', () => {
+  const body = JSON.stringify({ anchor: { entityType: 'hub', stableId: 'H-1' } });
+  const saving = JSON.stringify({ sourceId: 'demo', name: 'A saved pattern', kind: 'definition', definition: { anchorType: 'hub', steps: [{ relationshipTypes: ['LINKED'], direction: 'out', arrivesAt: 'leaf' }] } });
+
+  it.each([
+    ['its estimate', 'pattern-count', 'pattern.count'],
+    ['its run', 'pattern', 'pattern.run'],
+  ])('aborts the read of %s when the request is aborted, audits the call as failed with the reason cancelled, records no run, stores no answer and frees the slots', async (_name, templateId, action) => {
+    rig = await startRig();
+    const made = await fetch(`${rig.base}/v1/patterns`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: saving });
+    const { id } = (await made.json()) as { id: string };
+    const before = rig.snapshot();
+    const controller = new AbortController();
+    const url = `${rig.base}/v1/patterns/${id}/run`;
+    const sent = fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', 'idempotency-key': 'cancel-saved-run-key-1' }, body, signal: controller.signal }).catch(() => undefined);
+    let read = await rig.nextRead();
+    expect(read.call.templateId).toBe('pattern-count');
+    if (templateId === 'pattern') {
+      read.fail({ status: 'rows', rows: [{ matches: 1, bounded: false, stopListed: false, supernodes: 0 }] });
+      read = await rig.nextRead();
+    }
+    expect(read.call.templateId).toBe(templateId);
+    expect(read.call.signal?.aborted).toBe(false);
+    controller.abort();
+    await until(() => read.call.signal?.aborted === true, 'the read to be aborted');
+    await until(() => rig.events.some((event) => event.action === action && event.detail?.reason === 'cancelled'), 'the audit event');
+    expect(rig.events.find((each) => each.action === action)).toMatchObject({ result: 'failed', detail: { reason: 'cancelled' } });
+    read.answerRows();
+    await sent;
+    rig.drain();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const listed = (await (await fetch(`${rig.base}/v1/patterns?sourceId=demo`)).json()) as { items: { lastRunAt: string | null }[] };
+    expect(listed.items.map((item) => item.lastRunAt)).toEqual([null]);
+    const replay = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', 'idempotency-key': 'cancel-saved-run-key-1' }, body });
+    expect(replay.headers.get('idempotent-replay')).toBeNull();
+    expect(rig.snapshot()).toBe(before);
+    await until(() => rig.slots.inspect().sources.size === 0 && rig.slots.inspect().users.size === 0, 'the read slots to be free');
+  });
+});

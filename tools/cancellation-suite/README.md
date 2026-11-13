@@ -17,6 +17,8 @@ A pattern run (`POST /v1/templates/{id}/run`) is a case in `abort.test.ts` (canc
 
 `POST /v1/patterns/run` is a case in `abort.test.ts` too: the web client has no method for it, so the case posts to the rig's port with the real `fetch` and an `AbortController`, and sees the read's signal aborted, the run audited as failed with the reason cancelled, no answer stored and the slots free.
 
+`POST /v1/patterns/{id}/run` is a case in `abort.test.ts` too, for the read of its estimate and for the read of its run: a saved pattern is saved through the API, the run request is aborted while the read is held, and the case sees the read's signal aborted, the call audited as failed with the reason cancelled, no `lastRunAt` written, no answer stored and the slots free.
+
 `source-change.test.ts` is the one case that is not about a cancel: an investigation whose source was re-pointed or removed, on the same real API and client. It proves that opening it, listing it and every write to it make no read of the source (counted at the scripted source and in the client's requests), that `neburyx source rebind` then lets it open normally without a restart, and that an investigation of another source is not touched.
 
 Synthetic data only. Nothing here prints an address or a login.

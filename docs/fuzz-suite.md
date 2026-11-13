@@ -60,6 +60,10 @@ That product is not enumerated and cannot be. The suite enumerates the **1,357**
 | `POST /v1/patterns/run`: hostile text as the value of an accepted condition | served; the text reaches the executor as a parameter only, in no statement |
 | `POST /v1/patterns/run`: an unknown source, or one the person may not read | `NOT_FOUND` |
 | `POST /v1/patterns/run`: a body that is not the envelope, malformed JSON, a body over 1 MiB, or no key | `INVALID_REQUEST`, no read; a content type that is not JSON: `UNSUPPORTED_MEDIA_TYPE` |
+| `POST /v1/patterns/{id}/run`: an id of any text, a very long one, or a mapping preset's id | `NOT_FOUND`, nothing read, none of the text in the answer |
+| `POST /v1/patterns/{id}/run`: hostile text as the type of the entity | `INVALID_REQUEST`, nothing read |
+| `POST /v1/patterns/{id}/run`: hostile text as the stable ID of the entity of a type that is not keyed | served; the text reaches the executor as a parameter only, in no statement |
+| `POST /v1/patterns/{id}/run`: a body with a mistyped or extra member, or no key | `INVALID_REQUEST`, nothing read |
 | `GET /v1/templates`: an unknown source | `NOT_FOUND` |
 | `GET /v1/templates`: no `sourceId`, an empty or repeated one, or another query member | `INVALID_REQUEST` |
 | `POST /v1/templates/{id}/run`: an ID that is neither a preset of the source nor a built-in template, however long (the path segment is not capped at 401 units as the entity path is); an entity type of the anchor the mapping does not name; an unknown source; an anchor that does not resolve | `NOT_FOUND` |

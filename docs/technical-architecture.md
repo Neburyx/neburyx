@@ -1148,7 +1148,8 @@ normalized errors. The OpenAPI document is generated from the code and published
 | `POST /v1/admin/users` · `PUT …/{id}/role` · `POST …/{id}/reset-password` · `POST …/{id}/reset-mfa` · `GET/POST/PUT/DELETE /v1/admin/teams` | User-based mode only: invite users, set roles, issue password-reset or TOTP-reset links (audited), manage teams **[Later]** | E |
 | `GET /v1/admin/sources` | Data-store state, last test, limits. No secrets | E |
 | `GET /v1/admin/settings` · `PUT /v1/admin/settings/{key}` | Feature switches and retention (versioned) | E |
-| `GET/POST /v1/patterns` · `PUT/DELETE …/{id}` · `POST …/{id}/run` | Saved patterns; a run calls `POST /v1/templates/{id}/run` with the stored parameters **[W2]**, sharing **[Later]** | C / E |
+| `GET/POST /v1/patterns` · `PUT/DELETE …/{id}` | Saved patterns: the list shows each pattern's availability against the current mapping; sharing **[Later]** | C / E |
+| `POST /v1/patterns/{id}/run` | Run a saved pattern, with an `Idempotency-Key`, under the runner's own access, budgets and masking: a pattern built in the app is run by the pattern run, a saved run of a preset by the template run, an unavailable pattern answers `unavailable` with no read of the source; sets `last_run_at` for the creator's own run only | C |
 | `POST /v1/admin/templates` · `POST …/{id}/approve` · `POST …/{id}/withdraw` | Template drafts, approval, withdrawal **[Later]** | E |
 | `GET/POST /v1/alerts` · `PUT/DELETE …/{id}` | Alert rules and runs **[Later]** | E |
 
