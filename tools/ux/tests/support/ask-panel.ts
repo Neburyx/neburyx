@@ -33,7 +33,7 @@ export async function scriptAsk(page: Page): Promise<AskRequests> {
       const ref = (stableId: string) => ({ sourceId: 'banking-demo', entityType: 'account', stableId });
       return route.fulfill({ json: { clarification: { start: clarify, end: clarify + 3, choices: [ref('AC-1'), ref('AC-2')], count: { value: 2, quality: 'exact', scope: 'exact matches' }, unreferenced: 0 } } });
     }
-    if (body.send === true) return route.fulfill({ json: { plan: { kind: 'unsupported', reason: 'No template fits this question.' } } });
+    if (body.send === true) return route.fulfill({ json: { plan: { kind: 'unsupported', family: 'other', reason: 'Ask has no way to answer this question.' } } });
     return route.fulfill({ json: { preview: 'Which accounts share the same device as ‹account#1›?', previewHash: ASK_HASH } });
   });
   return seen;

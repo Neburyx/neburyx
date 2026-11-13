@@ -22,7 +22,10 @@ test.describe('the Ask panel', () => {
     await expect(card.getByText('Names and IDs are replaced with placeholders. Your typed text is never sent, only these words.')).toBeVisible();
     expect(seen.bodies.map((body) => body.send)).toEqual([false]);
     await card.getByRole('button', { name: 'Send' }).click();
-    await expect(askPanel(page).getByRole('status')).toHaveText('No template fits this question.');
+    await expect(askPanel(page).getByRole('status')).toHaveText('Not answered · refused');
+    const refusal = askPanel(page).getByRole('region', { name: 'This question was not answered' });
+    await expect(refusal).toContainText('Ask has no way to answer this question.');
+    await expect(refusal.getByRole('button', { name: 'Search by stable ID' })).toBeVisible();
     expect(seen.bodies[1]).toMatchObject({ send: true, previewHash: 'a'.repeat(64) });
   });
 
