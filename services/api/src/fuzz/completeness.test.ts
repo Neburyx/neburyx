@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { registeredRoutesOf } from '../app.js';
-import { FUZZ_PATTERN_TEXT, casesOfClosedSet, closedSetOf, routesOfClosedSet } from '../testing/fuzz-closed-set.js';
+import { FUZZ_PATTERN_TEXT, casesOfClosedSet, closedSetOf, patternStatementsOfClosedSet, routesOfClosedSet } from '../testing/fuzz-closed-set.js';
 import { startFuzzRig } from '../testing/fuzz-rig.js';
 
 const rig = await startFuzzRig();
@@ -57,6 +57,22 @@ describe('the closed set of the fuzz suite', () => {
     expect(missingFrom(built, routes)).toEqual([]);
   });
 
+  it('has each pattern route on the list it belongs to: a route that reads no source is named with its reason, one that reads the source is built, and a route taken out of its list is found', () => {
+    const registered = registeredRoutesOf(rig.app).map((route) => `${route.method} ${route.url}`).filter((key) => key.includes('/v1/patterns'));
+    for (const key of ['POST /v1/patterns/run', 'POST /v1/patterns/validate', 'POST /v1/patterns/preview']) expect(registered, key).toContain(key);
+    for (const key of registered) {
+      if (key in NOT_IN_THE_CLOSED_SET) {
+        expect(NOT_IN_THE_CLOSED_SET[key], key).toEqual(expect.stringContaining('reads no source'));
+        expect(built.has(key), `${key} is on the list of routes that read no source and also built`).toBe(false);
+        const without = Object.fromEntries(Object.entries(NOT_IN_THE_CLOSED_SET).filter(([entry]) => entry !== key));
+        expect(sourceReadingRoutesOf(registeredRoutesOf(rig.app), without)).toContain(key);
+      } else {
+        expect(built.has(key), `${key} is on no list`).toBe(true);
+        expect(missingFrom(new Set([...built].filter((entry) => entry !== key)), routes)).toEqual([key]);
+      }
+    }
+  });
+
   it('builds the routes of the inspector: the entity read, both forms of the edge read, the source link, derived neighbors and the investigation', () => {
     for (const key of ['GET /v1/entities/:sourceId/:entityType/:stableId', 'GET /v1/edges/:ref', 'GET /v1/source-links/:ref', 'POST /v1/graph/derived-neighbors', 'POST /v1/investigations']) expect(built.has(key), key).toBe(true);
   });
@@ -70,13 +86,14 @@ describe('the closed set of the fuzz suite', () => {
       expect(missingFrom(new Set([...built].filter((route) => route !== key)), routes)).toEqual([key]);
     });
 
-    it('builds the pattern run route, its case and a sample of pattern statements for one, two and four steps, bounded and with no request value, and fails when the route or the case is taken out', () => {
+    it('builds the pattern run route, its case and a sample of pattern statements for one, two and four steps, bounded, with no request value and accepted by the grammar, none of them in the closed set, and fails when the route or the case is taken out', () => {
       const key = 'POST /v1/patterns/run';
       expect(built.has(key)).toBe(true);
       expect(missingFrom(new Set([...built].filter((route) => route !== key)), routes)).toEqual([key]);
       const cases = casesOfClosedSet.get(closed) ?? new Set<string>();
       expect(cases.has('pattern:run')).toBe(true);
-      const statements = [...closed].filter((statement) => statement.includes('AS paths') && statement.includes('AS cut1'));
+      expect([...closed].filter((statement) => statement.includes('AS paths') && statement.includes('AS cut1'))).toEqual([]);
+      const statements = [...(patternStatementsOfClosedSet.get(closed) ?? new Set<string>())];
       expect(statements.length).toBeGreaterThanOrEqual(8);
       expect(statements.some((statement) => !statement.includes('AS cut2'))).toBe(true);
       expect(statements.some((statement) => statement.includes('AS cut2') && !statement.includes('AS cut3'))).toBe(true);

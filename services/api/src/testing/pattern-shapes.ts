@@ -60,9 +60,12 @@ const TOOL_RULES = [
 ];
 
 /** The mapping of the fixture, with the stop-list rules on the first type and on the second. */
+export function shapeMappingOf(stopRules: 0 | 1 | 2 = 0, toolRules: 0 | 1 | 2 = 0) {
+  return linkedMappingOf({ entities: SHAPE_ENTITIES, relationships: [...SHAPE_RELATIONSHIPS, ...TOOL_RELATIONSHIPS], derived: [...STOP_RULES.slice(0, stopRules), ...TOOL_RULES.slice(0, toolRules)], patterns: [] });
+}
+
 export function shapeSource(stopRules: 0 | 1 | 2 = 0, toolRules: 0 | 1 | 2 = 0) {
-  const mapping = linkedMappingOf({ entities: SHAPE_ENTITIES, relationships: [...SHAPE_RELATIONSHIPS, ...TOOL_RELATIONSHIPS], derived: [...STOP_RULES.slice(0, stopRules), ...TOOL_RULES.slice(0, toolRules)], patterns: [] });
-  const [source] = mapping.sources;
+  const [source] = shapeMappingOf(stopRules, toolRules).sources;
   if (source === undefined) throw new Error('the mapping has no source');
   return source;
 }
@@ -133,8 +136,8 @@ const LATER: Readonly<Record<FilterKind, string | number | boolean>> = { ...SAMP
 
 const valueOf = (kind: FilterKind, table: Readonly<Record<FilterKind, string | number | boolean>> = SAMPLE) => ({ kind, value: table[kind] });
 
-function conditionOf(form: Form, alternate = false): Record<string, unknown> {
-  const first = alternate ? LATER : SAMPLE;
+function conditionOf(form: Form, alternate = false, text?: string): Record<string, unknown> {
+  const first = text === undefined ? (alternate ? LATER : SAMPLE) : { ...(alternate ? LATER : SAMPLE), text };
   const second = alternate ? SAMPLE : LATER;
   const property = form.target === 'neighbor' ? 'region' : 'lane';
   const base = { on: form.target, property };
@@ -169,10 +172,10 @@ export function statementOfShape(shape: Shape, alternate = false, allowlist: Sou
 }
 
 /** The same shape as a definition, as a person writes it (a window of days), for the validation. */
-export function definitionOf(shape: Shape): unknown {
+export function definitionOf(shape: Shape, text?: string): unknown {
   return {
     anchorType: 'maker',
-    steps: shape.steps.map((step) => ({ relationshipTypes: TYPE_CLASSES[step.typeClass]?.types ?? [], direction: step.direction, arrivesAt: 'maker', ...(step.conditions.length === 0 ? {} : { conditions: step.conditions.map((form) => conditionOf(form)) }), ...(step.windowed ? { window: { days: 7 } } : {}) })),
+    steps: shape.steps.map((step) => ({ relationshipTypes: TYPE_CLASSES[step.typeClass]?.types ?? [], direction: step.direction, arrivesAt: 'maker', ...(step.conditions.length === 0 ? {} : { conditions: step.conditions.map((form) => conditionOf(form, false, text)) }), ...(step.windowed ? { window: { days: 7 } } : {}) })),
   };
 }
 

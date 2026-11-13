@@ -6,7 +6,7 @@ import { patternParamsSchema, patternRequestOf } from '../gate/templates/pattern
 import { patternStatementOf } from '../gate/templates/pattern-statement.js';
 import { validatePattern } from '../patterns/validate.js';
 import { FUZZ_RUNS, fuzzParams, hostileText, wrongType, UNICODE_SAMPLES } from '../testing/fuzz-corpus.js';
-import { GRAMMAR, GRAMMAR_ALLOWLIST } from '../testing/pattern-grammar-fixture.js';
+import { GRAMMAR_ALLOWLIST, learnedGrammar } from '../testing/pattern-grammar-fixture.js';
 import { grammarProblems } from '../testing/pattern-grammar.js';
 import { RECORDED_RUNS, SHAPE_RELATIONSHIPS, definitionOf, randomShapes, shapeSource } from '../testing/pattern-shapes.js';
 import { linkedMappingOf } from '../testing/linked-entities-fixtures.js';
@@ -16,7 +16,7 @@ vi.setConfig({ testTimeout: 60_000 });
 
 const allowlist = GRAMMAR_ALLOWLIST;
 const source = shapeSource(2, 2);
-const grammar = GRAMMAR;
+const grammar = learnedGrammar();
 const known = new Set(['maker', 'Maker', 'makerId', 'region', 'rank', 'lane', 'LINKS', 'ALLIES', 'TRUSTS', 'KNOWS', 'SERVES', 'PAIRS', 'seenAt', 'spottedAt', 'out', 'in', 'both', 'eq', 'in', 'between', 'neighbor', 'relationship', 'kind', 'value', 'text', 'days', 'from', 'to', 'op', 'on', 'property', 'values', 'conditions', 'window', 'steps', 'anchorType', 'direction', 'arrivesAt', 'relationshipTypes']);
 const hostile = hostileText(known).filter((text) => text.length >= 4 && !known.has(text));
 

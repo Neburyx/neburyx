@@ -1,12 +1,14 @@
 import { edgeRefSegmentOf, sourceLinkSegmentOf } from '@neburyx/contracts';
 import { registeredRoutesOf } from '../app.js';
+import { allowlistFromMapping } from '../gate/allowlist.js';
 import type { SourceAllowlist } from '../gate/types.js';
+import { learnedGrammar } from './pattern-grammar-fixture.js';
 import { grammarProblems, type PatternGrammar } from './pattern-grammar.js';
 import { makeToken } from '../reference/token.js';
 import { expandWindowInstantsOf } from '../graph/expand-window.js';
 import { windowInstantsOf } from '../graph/template-window.js';
 import { TEST_REFERENCE_KEYS } from './gate.js';
-import { FUZZ_PATTERN_STOPPED, FUZZ_PATTERN_SUPERNODE, FUZZ_HEAVY_ANCHOR, FUZZ_LINKED_PRESETS, FUZZ_SHARED_PRESETS, FUZZ_TIGHT_SOURCE, FUZZ_SOURCE, FUZZ_TEXT, allowedNames, type FuzzRig } from './fuzz-rig.js';
+import { FUZZ_PATTERN_STOPPED, FUZZ_PATTERN_SUPERNODE, FUZZ_HEAVY_ANCHOR, FUZZ_MAPPING, FUZZ_LINKED_PRESETS, FUZZ_SHARED_PRESETS, FUZZ_TIGHT_SOURCE, FUZZ_SOURCE, FUZZ_TEXT, allowedNames, type FuzzRig } from './fuzz-rig.js';
 
 /** The text a pattern condition of the sample compares with: a benign value that no statement may hold. */
 export const FUZZ_PATTERN_TEXT = 'zz-condition-text';
@@ -46,6 +48,7 @@ export async function closedSetOf(rig: FuzzRig): Promise<ReadonlySet<string>> {
   const set = await buildClosedSet(rig);
   routesOfClosedSet.set(set.statements, set.routes);
   casesOfClosedSet.set(set.statements, set.cases);
+  patternStatementsOfClosedSet.set(set.statements, set.patternStatements);
   const leaks = leaksOf(set.statements, set.values);
   if (leaks.length > 0) throw new Error(`the closed set holds request text: ${leaks.join('; ')}`);
   benignValuesOf.set(set.statements, set.values);
@@ -61,6 +64,9 @@ export const routesOfClosedSet = new WeakMap<ReadonlySet<string>, ReadonlySet<st
  */
 export const casesOfClosedSet = new WeakMap<ReadonlySet<string>, ReadonlySet<string>>();
 
+/** The pattern statements each closed set builder saw: they are not in the set (their text varies with the request) and each was accepted by the grammar of the compiler's words when it was seen. */
+export const patternStatementsOfClosedSet = new WeakMap<ReadonlySet<string>, ReadonlySet<string>>();
+
 /** The registered route (`METHOD pattern`) a request URL goes to. */
 export function routeKeyOf(rig: FuzzRig, method: 'GET' | 'POST', url: string): string {
   const path = url.split('?')[0] ?? url;
@@ -72,8 +78,9 @@ export function routeKeyOf(rig: FuzzRig, method: 'GET' | 'POST', url: string): s
 /** The benign values each closed set was built from, for a test that checks the set for them. */
 export const benignValuesOf = new WeakMap<ReadonlySet<string>, readonly string[]>();
 
-async function buildClosedSet(rig: FuzzRig): Promise<{ readonly statements: Set<string>; readonly values: string[]; readonly routes: ReadonlySet<string>; readonly cases: ReadonlySet<string> }> {
+async function buildClosedSet(rig: FuzzRig): Promise<{ readonly statements: Set<string>; readonly values: string[]; readonly routes: ReadonlySet<string>; readonly cases: ReadonlySet<string>; readonly patternStatements: ReadonlySet<string> }> {
   const { app, executor } = rig;
+  const patternStatements = new Set<string>();
   const routes = new Set<string>();
   const cases = new Set<string>();
   const post = (url: string, payload: unknown) => {
@@ -96,7 +103,14 @@ async function buildClosedSet(rig: FuzzRig): Promise<{ readonly statements: Set<
   };
   const statements = new Set<string>();
   const keep = (): void => {
-    for (const call of executor.calls) statements.add(call.cypher);
+    for (const call of executor.calls) {
+      // a statement of the pattern template is not in the set: it varies with the request, so it is checked against the grammar of the compiler's words instead
+      if (call.templateId === 'pattern') {
+        const found = grammarProblems(call.cypher, learnedGrammar(), patternAllowlistOf());
+        if (found.length > 0) throw new Error(`the closed set expected a pattern statement the grammar accepts: ${found.join('; ')}\n${call.cypher}`);
+        patternStatements.add(call.cypher);
+      } else statements.add(call.cypher);
+    }
     rig.reset();
   };
   const cursors: string[] = [];
@@ -337,7 +351,7 @@ async function buildClosedSet(rig: FuzzRig): Promise<{ readonly statements: Set<
     }
   }
   const instants = windows.flatMap((window) => (window === undefined ? [] : [expandWindowInstantsOf(window, new Date(rig.clock.now())), windowInstantsOf(window, new Date(rig.clock.now()))])).flatMap((pair) => [pair.windowFrom, pair.windowTo]);
-  return { statements, routes, cases, values: ['W-1', 'GD-0', FUZZ_PATTERN_TEXT, FUZZ_PATTERN_SUPERNODE, FUZZ_PATTERN_STOPPED, 'L-1', 'H-1', holder.stableId, FUZZ_HEAVY_ANCHOR, '2026-01-01', '2026-01-31', ...instants, FUZZ_TEXT, 'ne', '+1-212-555-01', ...cursors, ...expandCursors.map((entry) => entry.cursor), ...keys.map((entry) => entry.stableId)] };
+  return { statements, routes, cases, patternStatements, values: ['W-1', 'GD-0', FUZZ_PATTERN_TEXT, FUZZ_PATTERN_SUPERNODE, FUZZ_PATTERN_STOPPED, 'L-1', 'H-1', holder.stableId, FUZZ_HEAVY_ANCHOR, '2026-01-01', '2026-01-31', ...instants, FUZZ_TEXT, 'ne', '+1-212-555-01', ...cursors, ...expandCursors.map((entry) => entry.cursor), ...keys.map((entry) => entry.stableId)] };
 }
 
 const escaped = (value: string): string => value.replace(/[.*+?^${}()|[\]\\-]/g, '\\$&');
@@ -369,14 +383,23 @@ export interface PatternGrammarCheck {
   readonly names?: ReadonlySet<string>;
 }
 
+let fuzzAllowlist: SourceAllowlist | undefined;
+/** The names of the fuzz source, for the grammar check of its pattern statements. */
+function patternAllowlistOf(): SourceAllowlist {
+  const [source] = FUZZ_MAPPING.sources;
+  if (source === undefined) throw new Error('the mapping has no source');
+  fuzzAllowlist ??= allowlistFromMapping(source);
+  return fuzzAllowlist;
+}
+
 export function statementProblems(rig: FuzzRig, closed: ReadonlySet<string>, requestTexts: readonly string[], pattern?: PatternGrammarCheck): StatementProblem[] {
   const names = allowedNames();
   const problems: StatementProblem[] = [];
   for (const call of rig.executor.calls) {
-    if (pattern !== undefined && call.templateId === 'pattern') {
-      for (const reason of grammarProblems(call.cypher, pattern.grammar, pattern.allowlist)) problems.push({ cypher: call.cypher, reason });
+    if (call.templateId === 'pattern') {
+      for (const reason of grammarProblems(call.cypher, pattern?.grammar ?? learnedGrammar(), pattern?.allowlist ?? patternAllowlistOf())) problems.push({ cypher: call.cypher, reason });
     } else if (!closed.has(call.cypher)) problems.push({ cypher: call.cypher, reason: 'not in the closed set' });
-    const mine = pattern !== undefined && call.templateId === 'pattern' && pattern.names !== undefined ? pattern.names : names;
+    const mine = call.templateId === 'pattern' && pattern?.names !== undefined ? pattern.names : names;
     for (const name of quotedNamesOf(call.cypher)) if (!mine.has(name)) problems.push({ cypher: call.cypher, reason: `quotes ${JSON.stringify(name)}` });
     for (const text of requestTexts) if (call.cypher.includes(text)) problems.push({ cypher: call.cypher, reason: `holds request text ${JSON.stringify(text)}` });
   }

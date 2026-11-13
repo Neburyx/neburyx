@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import { patternRequestOf } from '../gate/templates/pattern-request.js';
 import { patternStatementOf } from '../gate/templates/pattern-statement.js';
-import { GRAMMAR, GRAMMAR_ALLOWLIST } from '../testing/pattern-grammar-fixture.js';
+import { GRAMMAR_ALLOWLIST, learnedGrammar } from '../testing/pattern-grammar-fixture.js';
 import { grammarProblems, learnGrammar, K } from '../testing/pattern-grammar.js';
 import { PATHS, SHAPE_RELATIONSHIPS, enumerateShapes, formsOf, pathStatements, paramsOf, randomShapes, shapeAllowlist, statementOfShape } from '../testing/pattern-shapes.js';
 import { linkedMappingOf } from '../testing/linked-entities-fixtures.js';
@@ -16,7 +16,7 @@ import type { FuzzRig } from '../testing/fuzz-rig.js';
 vi.setConfig({ testTimeout: 60_000 });
 
 const allowlist = GRAMMAR_ALLOWLIST;
-const grammar = GRAMMAR;
+const grammar = learnedGrammar();
 const problems = (statement: string): string[] => grammarProblems(statement, grammar, allowlist);
 const NAMES = new Set(['Maker', 'Tool', 'makerId', 'region', 'rank', 'lane', 'seenAt', 'spottedAt', 'linkId', 'trustId', 'serveId', 'pairId', 'isCommon', 'isHub', 'LINKS', 'ALLIES', 'TRUSTS', 'KNOWS', 'SERVES', 'PAIRS']);
 
@@ -110,14 +110,17 @@ describe('a statement outside the grammar', () => {
 describe('the check of a recorded call', () => {
   const rig = (calls: readonly { templateId: string; cypher: string }[]): FuzzRig => ({ executor: { calls } }) as unknown as FuzzRig;
 
-  it('applies the grammar to the statements of the pattern template in place of the closed set, and the closed set to every other template', () => {
+  it('applies the grammar to the statements of the pattern template, which are never in the closed set, and the closed set to every other template', () => {
     const calls = [
       { templateId: 'pattern', cypher: TWO_STEPS },
       { templateId: 'shared-attribute', cypher: 'RETURN 1' },
     ];
     const found = statementProblems(rig(calls), new Set(), [], { grammar, allowlist, names: NAMES });
     expect(found).toEqual([{ cypher: 'RETURN 1', reason: 'not in the closed set' }]);
-    expect(statementProblems(rig([calls[0] as { templateId: string; cypher: string }]), new Set(), [])).toContainEqual({ cypher: TWO_STEPS, reason: 'not in the closed set' });
+    // with no grammar given, a pattern statement is read against the fuzz source's own names, so the fixture's names are not mapped there, and it is still never asked to be in the closed set
+    const bare = statementProblems(rig([calls[0] as { templateId: string; cypher: string }]), new Set(), []);
+    expect(bare.map((problem) => problem.reason)).not.toContain('not in the closed set');
+    expect(bare.length).toBeGreaterThan(0);
   });
 
   it('fails a statement of the pattern template that wrote a value of the request into its text', () => {
