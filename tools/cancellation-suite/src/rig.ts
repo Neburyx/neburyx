@@ -174,6 +174,8 @@ export interface Rig {
   readonly nextRead: () => Promise<Read>;
   /** The read slots of the API: what is held and what waits, by person and by source. */
   readonly slots: ReturnType<typeof createReadSlots>;
+  /** The address of the API's loopback port, for a request the web client has no method for. */
+  readonly base: string;
   /** The node the cases expand. */
   readonly hub: ElementRef;
   /** Answers every later read at once; see the scripted source. */
@@ -307,6 +309,7 @@ export async function startOn(backing: Backing, options: { readonly delayMs?: nu
     action.run();
   };
   return {
+    base,
     state, client, expand, preview, derived, patterns, banner, tracker, events, executor, nextRead, drain, loaded, hub: backing.hub, slots, saved, requests, bodies, order, at, cancelNow, responses, advance: (ms: number) => void (time.now += ms), showing, pressCancel, snapshot,
     logged: () => lines.map((line) => JSON.parse(line) as Record<string, unknown>),
     close: async () => {

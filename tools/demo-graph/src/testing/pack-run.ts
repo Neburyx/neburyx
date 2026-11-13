@@ -1,5 +1,6 @@
 import { rmSync } from 'node:fs';
 import { join } from 'node:path';
+import { patternRunResponseSchema, type PatternRunResponse } from '../../../../packages/contracts/src/pattern-run.js';
 import { templateRunResponseSchema, type TemplateRunOk } from '../../../../packages/contracts/src/template-run.js';
 import { buildApp } from '../../../../services/api/src/app.js';
 import { createSourceGate, type SourceGate } from '../../../../services/api/src/gate/source-gate.js';
@@ -32,13 +33,23 @@ export interface PackRun {
   readonly gate: SourceGate['gate'];
   /** `POST /v1/templates/{id}/run` for the pack's source; the answer is returned with its status code. */
   readonly run: (id: string, params: Record<string, unknown>) => Promise<{ readonly status: number; readonly json: unknown }>;
+  /** `POST /v1/patterns/run` for the pack's source with a key of its own: the answer with its status code and the replay header. */
+  readonly patternRun: (body: Record<string, unknown>, key?: string) => Promise<{ readonly status: number; readonly json: unknown; readonly replayed: boolean }>;
+  /** A pattern run that must answer 200, parsed with the contract. */
+  readonly patternOk: (body: Record<string, unknown>) => Promise<PatternRunResponse>;
   /** A run that must answer 200 with a result, parsed with the contract; a heavy answer or any other status is an error. */
   readonly ok: (id: string, params: Record<string, unknown>) => Promise<TemplateRunOk>;
   readonly close: () => Promise<void>;
 }
 
+/** The mapping text with a `budgets` section of the numbers given, under the source's database line (a pack's mapping has none), so that a test can lower a budget of the source it serves. */
+export function withBudgets(text: string, budgets: Readonly<Record<string, number>> | undefined): string {
+  if (budgets === undefined) return text;
+  return text.replace(/^(\s*)(database:\s*\S+)\s*$/m, (_whole, indent: string, line: string) => `${indent}${line}\n${indent}budgets:\n${Object.entries(budgets).map(([name, value]) => `${indent}  ${name}: ${value}`).join('\n')}`);
+}
+
 /** Loads the shipped pack's demo graph into a database of its own and serves the API over it, as the shipped mapping describes it. Test tooling: it writes only to that database. */
-export async function startPackRun(pack: 'banking-fraud' | 'insurance-claims', sourceId: string): Promise<PackRun> {
+export async function startPackRun(pack: 'banking-fraud' | 'insurance-claims', sourceId: string, options: { readonly budgets?: Readonly<Record<string, number>> } = {}): Promise<PackRun> {
   const files = packFiles(pack);
   const webRoot = makeWebRoot();
   const mapping = readMappingSource(files.mapping);
@@ -51,7 +62,7 @@ export async function startPackRun(pack: 'banking-fraud' | 'insurance-claims', s
   let app: Awaited<ReturnType<typeof buildApp>> | undefined;
   try {
     await loadExport({ directory, source: { ...mapping, database: server.database }, override: server.boltUri, env: { [mapping.usernameEnv]: server.user, [mapping.passwordEnv]: server.password }, reset: false });
-    const text = packMappingText(pack, server.boltUri, server.database).replace(/username_env: [A-Z0-9_]+/, `username_env: ${ENV_USER}`).replace(/password_env: [A-Z0-9_]+/, `password_env: ${ENV_PASSWORD}`);
+    const text = withBudgets(packMappingText(pack, server.boltUri, server.database), options.budgets).replace(/username_env: [A-Z0-9_]+/, `username_env: ${ENV_USER}`).replace(/password_env: [A-Z0-9_]+/, `password_env: ${ENV_PASSWORD}`);
     const model = parseMapping(text, 'neburyx.yaml');
     const defaults = communitySeams();
     parts = createSourceGate({ mapping: model, env: { [ENV_USER]: server.user, [ENV_PASSWORD]: server.password }, seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit }, logger: { warn: () => undefined } });
@@ -70,11 +81,22 @@ export async function startPackRun(pack: 'banking-fraud' | 'insurance-claims', s
     const response = await served.inject({ method: 'POST', url: `/v1/templates/${id}/run`, payload: { sourceId, params }, headers: { 'idempotency-key': `pack-proof-key-${pack}-${(keys += 1)}` } });
     return { status: response.statusCode, json: response.json() as unknown };
   };
+  let patternKeys = 0;
+  const patternRun: PackRun['patternRun'] = async (body, key = `pattern-proof-key-${pack}-${(patternKeys += 1)}`) => {
+    const response = await served.inject({ method: 'POST', url: '/v1/patterns/run', payload: { sourceId, ...body }, headers: { 'idempotency-key': key } });
+    return { status: response.statusCode, json: response.json() as unknown, replayed: response.headers['idempotent-replay'] === 'true' };
+  };
   const gate = parts?.gate;
   if (gate === undefined) throw new Error('the pack run has no gate');
   return {
     generated,
     gate,
+    patternRun,
+    patternOk: async (body) => {
+      const answer = await patternRun(body);
+      if (answer.status !== 200) throw new Error(`the pattern run answered ${answer.status}: ${JSON.stringify(answer.json)}`);
+      return patternRunResponseSchema.parse(answer.json);
+    },
     relationships: (type) => generated.files.filter((file) => file.kind === 'relationship' && file.type === type).flatMap((file) => file.lines).map((line) => {
       const { f, t } = JSON.parse(line) as { f: string; t: string };
       return { f, t };

@@ -20,6 +20,8 @@ A test feeds the check a statement built from text and shows it fails.
 
 **The estimate cases are in the set.** Beside the routes, the closed set records the pattern-run cases it was built from for each pattern template (`shared-attribute:estimate`, `shared-attribute:continue`, `shared-attribute:heavy`, `linked-entities:estimate`, `linked-entities:continue`, `linked-entities:heavy`) and the completeness test requires each of them and the count statement of each template (a negative feeds it a set without one). The `heavy` case runs each preset and each template for an anchor whose count probe answers more matches than the source's threshold: the answer is the stop, with a lower bound at the threshold and no rows, and the set is built only if it is. `fuzz/templates.test.ts` also checks that the stop reads nothing but the count statement, that a continue reads no estimate and no more than a first page of 25, and that hostile text in the anchor reaches the count statement as a parameter only.
 
+**The pattern runs are a sample.** `POST /v1/patterns/run` is built into the set with the case `pattern:run`: one step out and in both directions, a node condition and a relationship condition, a window of each form (a list of relationship types for one step is in the golden tests of the compiler: the fuzz source has no two types between one pair of entity types), two steps through a type on a stop-list and through one with none, four steps, and the reads that skip a supernode and a stop-listed entity. The statements the compiler writes for a definition are a function of its shape, and the set holds a sample of the shapes, not every one: a grammar check that closes the set comes with a later feature. The values of the sample (the condition text, the instants, the anchors) are in the leak check, so a statement that held one would be found.
+
 **The matched properties.** The exact group of a search answer and of a next page names the `search` properties that held the typed text (`exactMatches` and `matches`). `fuzz/routes.test.ts` sends hostile texts, masked and not, and checks that every name is a `search` property of the mapping; the answer adds no statement, so the closed set is the one above.
 
 **The refusals.** Each of these is a property over generated input, with the codes the API returns:
@@ -41,6 +43,10 @@ A test feeds the check a statement built from text and shows it fails.
 | `POST /v1/patterns/validate` and `POST /v1/patterns/preview`: an unknown source, or one the person may not read | `NOT_FOUND` |
 | `POST /v1/patterns/validate` and `POST /v1/patterns/preview`: a body that is not the envelope (a missing, extra or mistyped member, a definition that is not an object), malformed JSON, a body over 1 MiB | `INVALID_REQUEST`, no read; a content type that is not JSON: `UNSUPPORTED_MEDIA_TYPE` |
 | `POST /v1/patterns/validate` and `POST /v1/patterns/preview`: a definition with hostile text in a name, a key, a value, a window or an operator | answered `200` with problems that hold none of the text, no read (for the preview an acceptable definition answers `ok` and carries its values as data, quoted in the words and escaped by JSON) |
+| `POST /v1/patterns/run`: a definition with hostile text in a name, a key, a window or an operator, or an anchor of another type than the definition starts from | `INVALID_REQUEST`, nothing read, none of the text in the answer |
+| `POST /v1/patterns/run`: hostile text as the value of an accepted condition | served; the text reaches the executor as a parameter only, in no statement |
+| `POST /v1/patterns/run`: an unknown source, or one the person may not read | `NOT_FOUND` |
+| `POST /v1/patterns/run`: a body that is not the envelope, malformed JSON, a body over 1 MiB, or no key | `INVALID_REQUEST`, no read; a content type that is not JSON: `UNSUPPORTED_MEDIA_TYPE` |
 | `GET /v1/templates`: an unknown source | `NOT_FOUND` |
 | `GET /v1/templates`: no `sourceId`, an empty or repeated one, or another query member | `INVALID_REQUEST` |
 | `POST /v1/templates/{id}/run`: an ID that is neither a preset of the source nor a built-in template, however long (the path segment is not capped at 401 units as the entity path is); an entity type of the anchor the mapping does not name; an unknown source; an anchor that does not resolve | `NOT_FOUND` |
@@ -58,23 +64,24 @@ A cursor is stateless and valid for 30 minutes. Replaying it unchanged in the sa
 
 ## A recorded run
 
-Run on the commit that added the pattern compiler, with `NBX_FUZZ_RECORD` set to a file; the fixed seed is **5017**, 120 runs for a property unless the file says otherwise. The counts include the requests that build the closed set, which now has the pattern runs. The two pattern routes read no source, so they add requests and no statements: the statements seen and the distinct statements are the same as before them.
+Run on the commit that added the pattern run route, with `NBX_FUZZ_RECORD` set to a file; the fixed seed is **5017**, 120 runs for a property unless the file says otherwise. The counts include the requests that build the closed set, which now has the pattern runs. The pattern run route adds requests and a sample of statements; the validation and the preview read no source, so they add requests and no statements.
 
 | Route | Answers |
 |---|---|
-| `POST /v1/graph/expand` | `INVALID_REQUEST` 3202, `CURSOR_INVALIDATED` 2106, `served` 1506, `QUERY_BUDGET_EXCEEDED` 100, `NOT_FOUND` 51 |
-| `POST /v1/search/entities` | `served` 976, `INVALID_REQUEST` 222 |
-| `POST /v1/search/entities/more` | `CURSOR_INVALIDATED` 2604, `served` 493, `INVALID_REQUEST` 330 |
-| `POST /v1/entities/lookup` | `INVALID_REQUEST` 487, `served` 370, `NOT_FOUND` 16 |
-| `POST /v1/graph/preview-expansion` | `NOT_FOUND` 214, `INVALID_REQUEST` 210 |
-| `POST /v1/graph/derived-neighbors` | `INVALID_REQUEST` 206, `served` 169, `NOT_FOUND` 60 |
+| `POST /v1/graph/expand` | `INVALID_REQUEST` 3382, `CURSOR_INVALIDATED` 2316, `served` 1660, `QUERY_BUDGET_EXCEEDED` 100, `NOT_FOUND` 51 |
+| `POST /v1/search/entities` | `served` 1053, `INVALID_REQUEST` 222 |
+| `POST /v1/search/entities/more` | `CURSOR_INVALIDATED` 2826, `served` 553, `INVALID_REQUEST` 330 |
+| `POST /v1/entities/lookup` | `INVALID_REQUEST` 487, `served` 373, `NOT_FOUND` 18 |
+| `POST /v1/graph/preview-expansion` | `NOT_FOUND` 217, `INVALID_REQUEST` 210 |
+| `POST /v1/graph/derived-neighbors` | `INVALID_REQUEST` 206, `served` 175, `NOT_FOUND` 60 |
 | `POST /v1/graph/coverage` | `INVALID_REQUEST` 180, `NOT_FOUND` 65, `SOURCE_MISMATCH` 48, `served` 2 |
-| `POST /v1/graph/read-refs` | `served` 48 |
-| `POST /v1/templates/{id}/run` | `served` 2560, `INVALID_REQUEST` 1715, `NOT_FOUND` 321, `QUERY_BUDGET_EXCEEDED` 43 |
+| `POST /v1/graph/read-refs` | `served` 54 |
+| `POST /v1/templates/{id}/run` | `served` 2860, `INVALID_REQUEST` 1715, `NOT_FOUND` 321, `QUERY_BUDGET_EXCEEDED` 43 |
+| `POST /v1/patterns/run` | `served` 408, `INVALID_REQUEST` 191, `NOT_FOUND` 60 |
 | `POST /v1/patterns/validate` | `INVALID_REQUEST` 212, `served` 126, `NOT_FOUND` 60 |
 | `POST /v1/patterns/preview` | `INVALID_REQUEST` 212, `served` 126, `NOT_FOUND` 60 |
 
-19,108 requests, 24,803 statements seen by the executor, at most 78 distinct statements in a file, all in the closed set. The oversized-page case is `fuzz/routes.test.ts`, "answers QUERY_BUDGET_EXCEEDED, naming the maximum".
+20,991 requests, 28,077 statements seen by the executor, at most 86 distinct statements in a file, all in the closed set. The oversized-page case is `fuzz/routes.test.ts`, "answers QUERY_BUDGET_EXCEEDED, naming the maximum".
 
 The pattern routes' own files are `fuzz/templates.test.ts` (the body, the ID, hostile text in every input, and the refusals that depend on the mapping, the budgets and the token) and the entries of the shape table in `fuzz/routes.test.ts`.
 

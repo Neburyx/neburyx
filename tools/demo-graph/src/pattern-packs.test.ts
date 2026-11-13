@@ -10,7 +10,9 @@ import { communitySeams } from '../../../services/api/src/seams/community-seams.
 import { memoryAppStore } from '../../../services/api/src/testing/app-store.js';
 import { TestExecutor } from '../../../services/api/src/testing/gate.js';
 import { testSourceGate } from '../../../services/api/src/testing/source-gate.js';
+import { packMappingText } from '../../../services/api/src/testing/pack-fixtures.js';
 import { makeWebRoot } from '../../../services/api/src/testing/web-root.js';
+import { withBudgets } from './testing/pack-run.js';
 
 const PACKS = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'domain-packs');
 const webRoot = makeWebRoot();
@@ -128,5 +130,13 @@ describe('the preview of a pattern over each pack', () => {
     const [first, second] = answer.preview.steps;
     expect(first?.window?.text).toBe('Window on FILED_BY: from 2026-01-01 to 2026-01-31, both included (UTC)');
     expect(second?.conditions.map((part) => part.text)).toEqual([`${named('claim')}: status is "open"`]);
+  });
+});
+
+describe('the mapping text of a pack run with a budget lowered', () => {
+  it.each(['banking-fraud', 'insurance-claims'] as const)('keeps the %s mapping valid and gives its source the budget', (pack) => {
+    const [source] = parseMapping(withBudgets(packMappingText(pack, 'bolt://localhost:7687', 'run-db'), { max_hops: 2 }), 'neburyx.yaml').sources;
+    expect(source?.budgets.maxHops).toBe(2);
+    expect(withBudgets('x', undefined)).toBe('x');
   });
 });
