@@ -75,8 +75,13 @@
 
 .patterns-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-12);
+}
+
+.patterns-actions button {
+  white-space: nowrap;
 }
 
 .patterns-state {

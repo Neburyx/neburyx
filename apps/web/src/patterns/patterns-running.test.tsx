@@ -97,8 +97,8 @@ describe('running, cancel and stale answers', () => {
     await userEvent.click(run());
     await settle();
     expect(held[0]?.sent.signal?.aborted).toBe(true);
-    act(() => held[0]?.answer({ ok: true, value: okRun(['old-1']) }));
-    act(() => held[1]?.answer({ ok: true, value: okRun(['new-1']) }));
+    act(() => held[0]?.answer({ ok: true, value: okRun(['old-1'], { presetId: 'shared-addresses' }) }));
+    act(() => held[1]?.answer({ ok: true, value: okRun(['new-1'], { presetId: 'shared-addresses' }) }));
     await settle();
     const table = screen.getByRole('table');
     expect(within(table).getByText('new-1')).toBeTruthy();

@@ -76,6 +76,10 @@ describe('the Patterns panel: empty, failure and source-state answers', () => {
     expect(retry().textContent).toBe('Retry in 3 s');
     expect(retry().disabled).toBe(true);
     expect(screen.getByText('Too many requests. Retry after 3 s.')).toBeTruthy();
+    const lines = screen.getAllByRole('alert')[0]?.querySelectorAll('p, button') ?? [];
+    expect([...lines].map((line) => line.tagName)).toEqual(['P', 'P', 'BUTTON']);
+    expect(lines[0]?.textContent).toBe('Too many requests. Retry after 3 s.');
+    expect(lines[1]?.textContent).toContain('The wait is set by the server');
     await act(async () => void (await vi.advanceTimersByTimeAsync(1000)));
     expect(retry().textContent).toBe('Retry in 2 s');
     expect(screen.getByText('Too many requests. Retry after 2 s.')).toBeTruthy();

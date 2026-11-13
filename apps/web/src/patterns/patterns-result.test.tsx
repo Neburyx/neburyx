@@ -12,11 +12,12 @@ afterEach(() => {
 const summary = (): HTMLElement => screen.getByRole('region', { name: 'Result' });
 const run = (): HTMLElement => screen.getByRole('button', { name: 'Run pattern' });
 
-async function shown(answer: (call: number) => TemplateRunResponse) {
+async function shown(answer: (call: number) => TemplateRunResponse, pattern?: string) {
   let call = 0;
   const kit = await patternsWorkspace({ run: async () => ({ ok: true, value: answer(++call) }) });
   await openPatterns();
   selectAccount(kit.state, 'acc-1');
+  if (pattern !== undefined) await userEvent.click(screen.getByRole('radio', { name: pattern }));
   await userEvent.click(run());
   await settle();
   return kit;
@@ -58,7 +59,7 @@ describe('the result of a pattern run', () => {
   });
 
   it('shows how a linked match was reached', async () => {
-    await shown(() => okRun(['acc-2'], { templateId: 'linked-entities', presetId: 'connected-accounts', links: [{ match: { sourceId: 'a', entityType: 'kind-a', stableId: 'acc-2' }, hops: 2, through: { sourceId: 'a', entityType: 'kind-a', stableId: 'acc-1' } }] }));
+    await shown(() => okRun(['acc-2'], { templateId: 'linked-entities', presetId: 'connected-accounts', links: [{ match: { sourceId: 'a', entityType: 'kind-a', stableId: 'acc-2' }, hops: 2, through: { sourceId: 'a', entityType: 'kind-a', stableId: 'acc-1' } }] }), 'Connected accounts');
     expect(screen.getByText('2 hops via acc-1')).toBeTruthy();
   });
 

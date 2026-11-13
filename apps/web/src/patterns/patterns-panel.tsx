@@ -16,7 +16,7 @@ import { heavyHeadline, heavyLine } from '../banner/heavy-banner.js';
 import { failureView, maxHopsOf, maxPageOf, PATTERNS_COPY, selectTypeHint, timeoutLabel } from './copy.js';
 import { buildParams, fieldsOf, labelOf, type FormValues } from './form-model.js';
 import { PatternForm } from './pattern-form.js';
-import { RetryAction } from './retry-action.js';
+import { RunFailure } from './run-failure.js';
 import { PatternResult } from './pattern-result.js';
 import { focusPatternsTool } from './patterns-tool.js';
 import { StartEntityField } from './start-entity.js';
@@ -164,7 +164,10 @@ function PatternsWorkbench({ client, sourceId, sourceName, mask, list, first, cl
     return [...ofType.filter((node) => chosenKeys.has(elementKey(node.ref))), ...ofType.filter((node) => !chosenKeys.has(elementKey(node.ref)))];
   }, [graph, anchorType, selection]);
   const selected = candidates.filter((node) => selection.has(elementKey(node.ref)));
-  const anchor: GraphNode | undefined = chosen !== undefined && chosen.ref.entityType === anchorType ? chosen : selected.length === 1 ? selected[0] : undefined;
+  // the person's choice, else the one selected entity of the type, else the entity the investigation was opened on when it is of the type
+  const startRef = useStoreSelector(state.investigation, (investigation) => investigation.nodeRefs[0]);
+  const opened = startRef === undefined ? undefined : candidates.find((node) => elementKey(node.ref) === elementKey(startRef));
+  const anchor: GraphNode | undefined = chosen !== undefined && chosen.ref.entityType === anchorType ? chosen : selected.length === 1 ? selected[0] : opened;
   const hasEntity = anchor !== undefined;
 
   useEffect(() => {
@@ -224,8 +227,9 @@ function PatternsWorkbench({ client, sourceId, sourceName, mask, list, first, cl
   const timeout = source?.timeoutMs;
   const failure = run.failure === undefined ? undefined : failureView(run.failure, sourceName);
   const budgetCap = run.failure === undefined || run.failure.code !== 'QUERY_BUDGET_EXCEEDED' ? undefined : (maxPageOf(run.failure) ?? maxHopsOf(run.failure));
-  const resultPreset = run.result === undefined ? undefined : list.presets.find((candidate) => candidate.id === run.result?.presetId);
-  const firstMatch = run.result?.matchIds[0];
+  // a result is shown only under the pattern that produced it
+  const result = run.result !== undefined && run.result.presetId === preset.id ? run.result : undefined;
+  const firstMatch = result?.matchIds[0];
 
   return (
     <>
@@ -291,13 +295,7 @@ function PatternsWorkbench({ client, sourceId, sourceName, mask, list, first, cl
           )}
         </div>
       ) : null}
-      {failure === undefined || run.failure === undefined ? null : (
-        <div className="patterns-state" role="alert">
-          {failure.waitMs === undefined ? <p>{budgetCap === undefined ? failure.text : `${failure.text} The source allows at most ${budgetCap}; the field is set to it.`}</p> : null}
-          <p>{failure.detail}</p>
-          {failure.action !== undefined && run.ask !== undefined && canRetry(run.failure) ? <RetryAction key={String(run.failure.code)} label={failure.action} waitMs={failure.waitMs} onRetry={() => submit(run.ask)} /> : null}
-        </div>
-      )}
+      {failure === undefined || run.failure === undefined ? null : <RunFailure key={run.failure.code} failure={failure} budgetCap={budgetCap} canRetry={run.ask !== undefined && canRetry(run.failure)} onRetry={() => submit(run.ask)} />}
       {heavy === undefined || heavy.kind !== 'heavy' || run.ask === undefined ? null : (
         <div className="patterns-state" data-tone="warning" role="alert">
           <p>{heavyHeadline(heavy.estimate, heavy.threshold)}</p>
@@ -328,11 +326,11 @@ function PatternsWorkbench({ client, sourceId, sourceName, mask, list, first, cl
           </div>
         </div>
       )}
-      {run.result === undefined ? null : (
+      {result === undefined ? null : (
         <PatternResult
-          result={run.result}
+          result={result}
           matchHeading={firstMatch === undefined ? PATTERNS_COPY.matchHeading : typeName(firstMatch.entityType)}
-          sharedHeading={run.result.links !== undefined ? PATTERNS_COPY.reachedHeading : `Shared ${typeName(resultPreset?.bind.attribute).toLowerCase() || 'attribute'}`}
+          sharedHeading={result.links !== undefined ? PATTERNS_COPY.reachedHeading : `Shared ${typeName(preset.bind.attribute).toLowerCase() || 'attribute'}`}
         />
       )}
     </>

@@ -1,6 +1,9 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
+import { typedNode } from '../workspace/filters-kit.js';
 import { listOf, okRun, openPatterns, patternsWorkspace, selectAccount, settle, CONNECTED, SHARED_DEVICES } from './patterns-kit.js';
 
 afterEach(() => {
@@ -51,12 +54,43 @@ describe('the Patterns panel: open and run a preset', () => {
   });
 
   it('disables Run until an entity of the anchor type is selected, and names the type', async () => {
-    const kit = await patternsWorkspace();
+    const kit = await patternsWorkspace({ nodes: [typedNode('dev-1', 'kind-b'), typedNode('acc-1', 'kind-a')] });
     await openPatterns();
     expect(run().hasAttribute('disabled')).toBe(true);
     expect(screen.getByText('Select a KIND-A to start.')).toBeTruthy();
     selectAccount(kit.state, 'acc-1');
     expect(run().hasAttribute('disabled')).toBe(false);
+  });
+
+  it('takes the entity the investigation was opened on as the starting entity, so Run is enabled without a pick', async () => {
+    const kit = await patternsWorkspace();
+    await openPatterns();
+    expect(run().hasAttribute('disabled')).toBe(false);
+    expect((screen.getByLabelText('Starting account') as HTMLSelectElement).value).toContain('acc-1');
+    await userEvent.click(run());
+    await settle();
+    expect(kit.sent[0]?.request.params).toEqual({ ref: { entityType: 'kind-a', stableId: 'acc-1' } });
+  });
+
+  it('shows a result only under the pattern that produced it, and again when the person goes back to it', async () => {
+    const kit = await patternsWorkspace();
+    await openPatterns();
+    selectAccount(kit.state, 'acc-1');
+    await userEvent.click(run());
+    await settle();
+    expect(screen.getByRole('table')).toBeTruthy();
+    await userEvent.click(screen.getByRole('radio', { name: 'Shared addresses' }));
+    expect(screen.queryByRole('table')).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Result' })).toBeNull();
+    await userEvent.click(screen.getByRole('radio', { name: 'Shared devices' }));
+    expect(screen.getByRole('table')).toBeTruthy();
+  });
+
+  it('lets the buttons of a state wrap, so that a label never breaks inside a button', () => {
+    const css = readFileSync(join(import.meta.dirname, '../styles/patterns.css'), 'utf8');
+    const actions = /\.patterns-actions \{[^}]*\}/.exec(css)?.[0] ?? '';
+    expect(actions).toContain('flex-wrap: wrap');
+    expect(/\.patterns-actions button \{[^}]*white-space: nowrap/.test(css)).toBe(true);
   });
 
   it('shows the source timeout beside Run, and no number when the source states none', async () => {
