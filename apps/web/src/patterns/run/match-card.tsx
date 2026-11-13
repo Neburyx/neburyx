@@ -13,12 +13,13 @@ interface Props {
   readonly mask: boolean;
   readonly personal: (entityType: string) => readonly string[];
   readonly keyProperties: (entityType: string) => readonly string[];
+  readonly keyed: (entityType: string) => boolean;
   readonly add: AddResult;
   readonly evidenceOpener: ((reference: string) => (() => void) | undefined) | undefined;
 }
 
 /** One match: its path as chips, the lines the answer carries for it, the evidence of its relationships, and Add to graph (or On the graph once its entities and relationships are there). */
-export function MatchCard({ number, match, answer, mask, personal, keyProperties, add, evidenceOpener }: Props) {
+export function MatchCard({ number, match, answer, mask, personal, keyProperties, keyed, add, evidenceOpener }: Props) {
   const [open, setOpen] = useState(false);
   const [all, setAll] = useState(false);
   const evidenceId = useId();
@@ -26,8 +27,8 @@ export function MatchCard({ number, match, answer, mask, personal, keyProperties
   const part = partOf(match, answer);
   const onGraph = add.onGraph(part);
   const { shown, more } = detailsOf(match, answer, mask, personal, keyProperties);
-  const titles = new Map(answer.nodes.map((node) => [elementKey(node.ref), node.display.title]));
-  const titleOf = (ref: PatternMatch['match']): string => titles.get(elementKey(ref)) ?? (mask ? RUN_COPY.hiddenEntity : ref.stableId);
+  const titles = new Map(answer.nodes.flatMap((node) => (node.display.title.trim() === '' ? [] : [[elementKey(node.ref), node.display.title] as const])));
+  const titleOf = (ref: PatternMatch['match']): string => titles.get(elementKey(ref)) ?? (mask || keyed(ref.entityType) ? RUN_COPY.hiddenEntity : ref.stableId);
   const withEvidence = edgesOfMatch(match, answer).filter((edge) => edge.evidenceRefs.length > 0);
   return (
     <li className="run-card run-match">
@@ -38,7 +39,7 @@ export function MatchCard({ number, match, answer, mask, personal, keyProperties
         {onGraph ? <span className="run-chip run-chip-accent">{RUN_COPY.onGraph}</span> : null}
       </div>
       <ol className="run-path" aria-label={RUN_COPY.path}>
-        {pathOf(match, answer, mask).map((part, index) => (
+        {pathOf(match, answer, mask, keyed).map((part, index) => (
           <li key={index} className={part.kind === 'entity' ? 'run-chip run-path-entity' : 'run-path-relationship'} data-gap={part.kind === 'entity' && part.gap ? 'true' : undefined}>
             {part.kind === 'relationship' ? <span aria-hidden="true">→ </span> : null}
             {part.kind === 'entity' && part.name !== undefined && part.id !== undefined ? (

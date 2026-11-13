@@ -21,7 +21,7 @@ test.describe('running a pattern built in the panel', () => {
     await expect(panelOf(page).locator('.run-ok')).toHaveText('✓ The mapping can follow this pattern');
     await expect(panelOf(page).getByText('Starts at a account.')).toBeVisible();
     await expect(panelOf(page).getByText('Follows USES_DEVICE outgoing to a device.')).toBeVisible();
-    await expect(panelOf(page).getByText('Up to 50 matches per page.')).toBeVisible();
+    await expect(panelOf(page).locator('.run-bounds')).toHaveText('Read-only · up to 50 matches per page · a count above 500 shows as “at least 500”');
     await expect(runOf(page)).toBeEnabled();
     await runOf(page).click();
     await expect(headingOf(page, 'Pattern result')).toBeVisible();

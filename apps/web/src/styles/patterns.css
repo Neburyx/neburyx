@@ -373,17 +373,8 @@
 }
 
 .run-bounds {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-  padding: var(--space-10);
-  border-radius: var(--radius-panel);
-  background: var(--color-surface-muted);
-}
-
-.run-bounds ul {
-  padding-left: var(--space-16);
-  color: var(--color-text);
+  margin: 0;
+  color: var(--color-text-muted);
   font-size: var(--font-size-small);
   font-variant-numeric: tabular-nums;
 }
@@ -424,7 +415,9 @@
 
 .run-start-list li {
   display: flex;
+  align-items: baseline;
   justify-content: space-between;
+  min-width: 0;
   gap: var(--space-8);
   padding: var(--space-6) var(--space-10);
   cursor: pointer;
@@ -436,13 +429,66 @@
 }
 
 .run-start-id {
+  min-width: 0;
+  overflow: hidden;
   color: var(--color-text-muted);
   font-family: var(--font-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .run-start-chosen {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  min-width: 0;
+  gap: var(--space-2) var(--space-6);
   margin: 0;
   color: var(--color-text);
+}
+
+.run-start-label {
+  color: var(--color-text-muted);
+}
+
+.run-start-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.run-start-chosen .run-start-id {
+  font-size: var(--font-size-small);
+}
+
+.run-count-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+.run-info {
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--space-16);
+  height: var(--space-16);
+  padding: 0;
+  border: var(--border-width) solid var(--color-control-border);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-caption);
+  line-height: 1;
+}
+
+.run-info-text {
+  flex-basis: 100%;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-small);
 }
 
 .run-card {
@@ -631,10 +677,12 @@
   border: var(--border-width) solid var(--color-border);
   color: var(--color-text-strong);
   font-size: var(--font-size-body);
+  overflow-wrap: anywhere;
 }
 
 .run-chip-name {
-  flex: none;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .run-chip-id {

@@ -5,6 +5,7 @@ import { degreeCountText } from '../../workspace/degree-text.js';
 import { elementKey } from '../../state/keys.js';
 import { failureView, PATTERNS_COPY } from '../copy.js';
 import { useEntitySearch } from '../start-entity.js';
+import { entityLabel } from './entity-label.js';
 import { RUN_COPY, searchSummary, startFrom, startHelper, typesMatching, typesOnCanvas } from './run-copy.js';
 
 interface Props {
@@ -22,9 +23,6 @@ interface Props {
   readonly showIds: boolean;
   readonly inputId: string;
 }
-
-/** What a person reads for an entity: its name and, where it may be shown, its ID. */
-export const idOf = (node: GraphNode, showIds: boolean): string | undefined => (showIds ? node.ref.stableId : undefined);
 
 /**
  * "Start from: <Type>": the entity is chosen, never typed as an identifier. Loaded entities of the type are listed, the selected one first, and typed text searches the source narrowed to the type, through the search route; the list is chosen by arrows and Enter.
@@ -88,7 +86,7 @@ export function StartChoice({ client, sourceId, sourceName, mask, typeName, enti
         aria-expanded={listing}
         {...(listing && !(found.kind === 'failed' && typed) ? { 'aria-controls': listId } : {})}
         aria-autocomplete="list"
-        aria-describedby={`${inputId}-help`}
+        {...(chosen === undefined ? { 'aria-describedby': `${inputId}-help` } : {})}
         {...(listing && options[active] !== undefined ? { 'aria-activedescendant': `${listId}-${active}` } : {})}
         value={text}
         onChange={(event) => {
@@ -109,12 +107,15 @@ export function StartChoice({ client, sourceId, sourceName, mask, typeName, enti
             </p>
           ) : (
             <ul id={listId} role="listbox" aria-label={typed ? typesMatching(typeName, text.trim()) : typesOnCanvas(typeName)}>
-              {options.map((node, index) => (
-                <li key={elementKey(node.ref)} id={`${listId}-${index}`} role="option" aria-selected={index === active} data-active={index === active ? 'true' : undefined} onClick={() => choose(node)}>
-                  <span>{node.display.title}</span>
-                  {idOf(node, showIds) === undefined ? null : <span className="run-start-id">{idOf(node, showIds)}</span>}
-                </li>
-              ))}
+              {options.map((node, index) => {
+                const label = entityLabel(node, showIds);
+                return (
+                  <li key={elementKey(node.ref)} id={`${listId}-${index}`} role="option" aria-selected={index === active} data-active={index === active ? 'true' : undefined} title={label.id === undefined ? label.title : `${label.title} · ${label.id}`} onClick={() => choose(node)}>
+                    <span className={label.titleIsId ? 'run-start-id run-start-title' : 'run-start-title'}>{label.title}</span>
+                    {label.id === undefined ? null : <span className="run-start-id">{label.id}</span>}
+                  </li>
+                );
+              })}
             </ul>
           )}
           {typed && found.kind === 'found' ? (
@@ -124,15 +125,23 @@ export function StartChoice({ client, sourceId, sourceName, mask, typeName, enti
           ) : null}
         </div>
       ) : null}
-      {chosen === undefined ? null : (
-        <p className="run-start-chosen" role="status">
-          {RUN_COPY.chosen}: <strong>{chosen.display.title}</strong>
-          {idOf(chosen, showIds) === undefined ? '' : ` · ${idOf(chosen, showIds)}`}
+      {chosen === undefined ? null : <ChosenLine node={chosen} showIds={showIds} />}
+      {chosen === undefined ? (
+        <p className="search-panel-note" id={`${inputId}-help`}>
+          {startHelper(typeName)}
         </p>
-      )}
-      <p className="search-panel-note" id={`${inputId}-help`}>
-        {startHelper(typeName)}
-      </p>
+      ) : null}
     </div>
+  );
+}
+
+function ChosenLine({ node, showIds }: { readonly node: GraphNode; readonly showIds: boolean }) {
+  const label = entityLabel(node, showIds);
+  return (
+    <p className="run-start-chosen" role="status" title={label.id === undefined ? label.title : `${label.title} · ${label.id}`}>
+      <span className="run-start-label">{RUN_COPY.chosen}: </span>
+      <strong className={label.titleIsId ? 'run-start-id run-start-title' : 'run-start-title'}>{label.title}</strong>
+      {label.id === undefined ? null : <span className="run-start-id">{label.id}</span>}
+    </p>
   );
 }

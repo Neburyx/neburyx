@@ -240,7 +240,7 @@ export function RunFlow({ client, sourceId, sourceName, mask, profile, definitio
     const own = saved?.item.ownedByYou === true;
     body = <OutOfDate reasons={reasons} offer={saved?.item.kind !== 'definition' ? undefined : own ? 'change' : 'copy'} onChange={() => saved?.onChangePattern()} onCopyAndChange={() => saved?.onCopyAndChange()} />;
   } else if (screen === 'running') {
-    body = <RunningScreen startLine={startingFromLine(startName, typeName, startedFrom === undefined ? undefined : showIds ? startedFrom.ref.stableId : undefined)} startName={startName} definition={definition} nameOf={nameOf} onCancel={store.cancel} />;
+    body = <RunningScreen startLine={startingFromLine(startName, typeName, startedFrom === undefined ? undefined : showIds && !keyedStart ? startedFrom.ref.stableId : undefined)} startName={startName} definition={definition} nameOf={nameOf} onCancel={store.cancel} />;
   } else if (screen === 'heavy' && run.heavy !== undefined) {
     const heavy = run.heavy;
     body = (
@@ -265,6 +265,7 @@ export function RunFlow({ client, sourceId, sourceName, mask, profile, definitio
         mask={mask}
         personal={(type) => profile.entityTypes.find((candidate) => candidate.type === type)?.pii ?? []}
         keyProperties={(type) => profile.entityTypes.find((candidate) => candidate.type === type)?.keyProperties ?? []}
+        keyed={(type) => profile.entityTypes.find((candidate) => candidate.type === type)?.keyed === true}
         startName={startName}
         typeName={typeName}
         add={add}
@@ -295,7 +296,7 @@ export function RunFlow({ client, sourceId, sourceName, mask, profile, definitio
         candidates={start.candidates}
         chosen={start.anchor}
         onChoose={start.choose}
-        showIds={showIds}
+        showIds={showIds && !keyedStart}
         notice={
           run.cancelled ? (
             <div className="patterns-state" role="status" ref={noticeBox}>

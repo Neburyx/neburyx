@@ -10,7 +10,9 @@ const INVALID = { error: { code: 'INVALID_REQUEST', message: 'The request is not
 const BUSY = { error: { code: 'SOURCE_BUSY', message: 'The data source is busy. Try again shortly.', retryable: true, traceId: 'tr-support' } };
 
 /** The starting entities for which the support server answers something other than the ring: no match, a heavy stop, a run that waits until the client leaves, a busy source. */
-export const RUN_ANCHORS = { none: 'EMPTY-1', heavy: 'HEAVY-1', slow: 'SLOW-1', busy: 'BUSY-1', paged: 'PAGED-1' } as const;
+export const RUN_ANCHORS = { none: 'EMPTY-1', heavy: 'HEAVY-1', slow: 'SLOW-1', busy: 'BUSY-1', paged: 'PAGED-1', long: 'LONG-1' } as const;
+
+export const LONG_MATCHES = { titled: `Ørestad Hafenbetriebsgesellschaft ${'mit sehr langem Namen '.repeat(6)}`.trim(), untitledId: `IMO-${'9'.repeat(70)}` } as const;
 
 const refOf = (sourceId: string, entityType: string, stableId: string) => ({ sourceId, entityType, stableId });
 const nodeOf = (sourceId: string, entityType: string, stableId: string) => ({
@@ -24,6 +26,17 @@ const nodeOf = (sourceId: string, entityType: string, stableId: string) => ({
 const DIRECTION_WORD = { out: 'outgoing', in: 'incoming', both: 'either way' } as const;
 
 /** `POST /v1/patterns/preview`: the definition in words the support server writes, with the bounds of the sources it lists; a bad shape answers the contract's problems. */
+/** A match whose labels are the worst a mapping can give: a long title with non-ASCII text, an entity with no title at all, a very long ID, many properties, and some empty. */
+const longNode = (sourceId: string, entityType: string, stableId: string) => ({
+  ...nodeOf(sourceId, entityType, stableId),
+  display: { title: stableId === LONG_MATCHES.untitledId ? '' : `${LONG_MATCHES.titled} ${stableId}`, type: entityType },
+  properties: [
+    { key: 'a-property-with-a-label-that-runs-on-and-on', value: LONG_MATCHES.titled, dataClass: 'text', masked: false },
+    { key: 'empty', value: '', dataClass: 'text', masked: false },
+    ...Array.from({ length: 24 }, (_, index) => ({ key: `attribute ${index + 1}`, value: `Wert ${index + 1} · ååå`, dataClass: 'text', masked: false })),
+  ],
+});
+
 export function previewPattern(body: unknown, response: ServerResponse): void {
   const parsed = patternValidateRequestSchema.safeParse(body);
   if (!parsed.success) return json(response, 400, INVALID);
@@ -74,7 +87,8 @@ export async function runPattern(body: unknown, response: ServerResponse, reques
   const hops = steps.length;
   const typeOf = (index: number): string => steps[index]?.relationshipTypes[0] ?? 'REL';
   const secondPage = anchor.stableId === RUN_ANCHORS.paged && parsed.data.cursor !== undefined;
-  const matches = none ? [] : secondPage ? ['MATCH-3', 'MATCH-4'] : ['MATCH-1', 'MATCH-2'];
+  const long = anchor.stableId === RUN_ANCHORS.long;
+  const matches = none ? [] : long ? ['LONG-A', LONG_MATCHES.untitledId] : secondPage ? ['MATCH-3', 'MATCH-4'] : ['MATCH-1', 'MATCH-2'];
   const paged = anchor.stableId === RUN_ANCHORS.paged;
   const through = (second: boolean) => Array.from({ length: hops - 1 }, (_, index) => (second && index === 0 ? null : refOf(sourceId, anchorType, `MID-${index + 1}`)));
   const evidenceEdges = none
@@ -107,7 +121,7 @@ export async function runPattern(body: unknown, response: ServerResponse, reques
           return { relationshipType: index === 1 && hop === 0 ? null : typeOf(hop), from: chain[hop] ?? null, to: chain[hop + 1] ?? null, ...(hop === hops - 1 ? { stableId: `pr-${match}` } : {}) };
         }),
       })),
-      nodes: none ? [nodeOf(sourceId, anchorType, anchor.stableId)] : [nodeOf(sourceId, anchorType, anchor.stableId), ...matches.map((match) => nodeOf(sourceId, arrival, match))],
+      nodes: none ? [nodeOf(sourceId, anchorType, anchor.stableId)] : [nodeOf(sourceId, anchorType, anchor.stableId), ...matches.map((match) => (long ? longNode(sourceId, arrival, match) : nodeOf(sourceId, arrival, match)))],
       edges: evidenceEdges,
       notices: none ? [] : [{ code: 'supernodesSkipped', entities: [refOf(sourceId, anchorType, 'HUB-1')] }, { code: 'windowNotApplied', relationshipTypes: [typeOf(0)] }],
       warnings: [],

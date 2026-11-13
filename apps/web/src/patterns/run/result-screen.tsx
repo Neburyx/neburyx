@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import type { Count, PatternRunOk } from '@neburyx/contracts';
 import { formatNumber } from '../../workspace/scope-text.js';
 import { addedText, noticeText } from '../copy.js';
@@ -19,6 +19,8 @@ interface Props {
   /** The properties of an entity type that hold personal data, by the mapping. */
   readonly personal: (entityType: string) => readonly string[];
   readonly keyProperties: (entityType: string) => readonly string[];
+  /** Whether the stored ID of an entity type is a token, never shown. */
+  readonly keyed: (entityType: string) => boolean;
   readonly startName: string;
   readonly typeName: string;
   readonly add: AddResult;
@@ -61,7 +63,7 @@ function summaryOf(count: Count, returned: number, before: number, at: Date, pag
 }
 
 /** A page of a result: the count with its label, Add to graph for the page, a card for each match, and Previous and Next when the run has more pages. */
-export function ResultScreen({ answer, at, page, before, hasNext, reading, mask, personal, keyProperties, startName, typeName, add, evidenceOpener, notice, saveLink, onEdit, onRunAnother, onPrevious, onNext }: Props) {
+export function ResultScreen({ answer, at, page, before, hasNext, reading, mask, personal, keyProperties, keyed, startName, typeName, add, evidenceOpener, notice, saveLink, onEdit, onRunAnother, onPrevious, onNext }: Props) {
   const returned = answer.matches.length;
   const summary = summaryOf(answer.count, returned, before, at, page);
   const heading = useRef<HTMLHeadingElement>(null);
@@ -78,18 +80,20 @@ export function ResultScreen({ answer, at, page, before, hasNext, reading, mask,
       <div className="run-body">
         {notice}
         <div className="run-card run-summary" tabIndex={-1} ref={summaryRef}>
-          <p className="run-count" role="status">
-            <strong className="run-figure">{summary.headline}</strong>
-            {summary.chip === undefined ? null : (
-              <>
-                <span aria-hidden="true"> · </span>
-                <span className="run-quality">{summary.chip}</span>
-              </>
-            )}
-          </p>
+          <div className="run-count-row">
+            <p className="run-count" role="status">
+              <strong className="run-figure">{summary.headline}</strong>
+              {summary.chip === undefined ? null : (
+                <>
+                  <span aria-hidden="true"> · </span>
+                  <span className="run-quality">{summary.chip}</span>
+                </>
+              )}
+            </p>
+            <AboutCounts />
+          </div>
           <p>{returned === 0 && page === 0 ? noMatchText(startName) : summary.line}</p>
         </div>
-        <p className="search-panel-note">{RUN_COPY.countsAlways}</p>
         {add.added === undefined ? null : (
           <p className="patterns-state" role="status">
             {addedText(add.added, answer.count)}
@@ -118,7 +122,7 @@ export function ResultScreen({ answer, at, page, before, hasNext, reading, mask,
             </h3>
             <ol className="run-cards" aria-label={RUN_COPY.matches}>
               {answer.matches.map((match, index) => (
-                <MatchCard key={`${match.match.entityType}/${match.match.stableId}`} number={before + index + 1} match={match} answer={answer} mask={mask} personal={personal} keyProperties={keyProperties} add={add} evidenceOpener={evidenceOpener} />
+                <MatchCard key={`${match.match.entityType}/${match.match.stableId}`} number={before + index + 1} match={match} answer={answer} mask={mask} personal={personal} keyProperties={keyProperties} keyed={keyed} add={add} evidenceOpener={evidenceOpener} />
               ))}
             </ol>
             {answer.notices.map((notice, index) => (
@@ -146,6 +150,24 @@ export function ResultScreen({ answer, at, page, before, hasNext, reading, mask,
           </button>
         </div>
       )}
+    </>
+  );
+}
+
+/** The rule for counts, behind a small button: the label beside each count carries it, and the sentence is there for whoever asks. */
+function AboutCounts() {
+  const [open, setOpen] = useState(false);
+  const id = useId();
+  return (
+    <>
+      <button type="button" className="run-info" aria-expanded={open} aria-controls={id} aria-label={RUN_COPY.aboutCounts} title={RUN_COPY.aboutCounts} onClick={() => setOpen((value) => !value)}>
+        <span aria-hidden="true">i</span>
+      </button>
+      {open ? (
+        <span id={id} className="run-info-text">
+          {RUN_COPY.countsAlways}
+        </span>
+      ) : null}
     </>
   );
 }

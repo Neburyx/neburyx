@@ -8,13 +8,13 @@ export type PathPart = { readonly kind: 'entity'; readonly text: string; readonl
 const keyOf = (ref: ElementRef | null): string | undefined => (ref === null ? undefined : elementKey(ref));
 
 /** The path that reached a match, as parts: an entity (a gap kept where it has no usable ID) and the relationship of each hop between. */
-export function pathOf(match: PatternMatch, answer: PatternRunOk, mask: boolean): readonly PathPart[] {
-  const titles = new Map(answer.nodes.map((node) => [elementKey(node.ref), node.display.title]));
+export function pathOf(match: PatternMatch, answer: PatternRunOk, mask: boolean, keyed: (entityType: string) => boolean = () => false): readonly PathPart[] {
+  const titles = new Map(answer.nodes.flatMap((node) => (node.display.title.trim() === '' ? [] : [[elementKey(node.ref), node.display.title] as const])));
   const entity = (ref: ElementRef | null | undefined): PathPart => {
     if (ref === null || ref === undefined) return { kind: 'entity', text: RUN_COPY.gap, gap: true };
     const title = titles.get(elementKey(ref));
-    // an ID can be a personal-data value, so it is not the fallback while masking is on
-    const text = title ?? (mask ? RUN_COPY.hiddenEntity : ref.stableId);
+    // an ID can be a personal-data value, and the stored ID of a keyed type is a token: neither is the fallback
+    const text = title ?? (mask || keyed(ref.entityType) ? RUN_COPY.hiddenEntity : ref.stableId);
     // a title that ends with the entity's ID is drawn as its name and its ID, the ID in the mono face
     const split = title !== undefined && ref.stableId !== '' && title.length > ref.stableId.length + 1 && title.endsWith(` ${ref.stableId}`);
     return split ? { kind: 'entity', text, gap: false, name: title.slice(0, title.length - ref.stableId.length - 1), id: ref.stableId } : { kind: 'entity', text, gap: false };
@@ -65,7 +65,7 @@ export function partOf(match: PatternMatch, answer: PatternRunOk): { readonly no
 
 const PERSONAL_CLASSES: ReadonlySet<GraphProperty['dataClass']> = new Set(['name', 'email', 'phone']);
 
-const valueText = (value: unknown): string | undefined => (typeof value === 'string' ? value : typeof value === 'number' ? formatNumber(value) : typeof value === 'boolean' ? String(value) : undefined);
+const valueText = (value: unknown): string | undefined => (typeof value === 'string' ? (value.trim() === '' ? undefined : value) : typeof value === 'number' ? formatNumber(value) : typeof value === 'boolean' ? String(value) : undefined);
 
 export interface DetailRow {
   readonly label: string;
@@ -97,7 +97,9 @@ export function detailsOf(
   const node = answer.nodes.find((candidate) => elementKey(candidate.ref) === elementKey(match.match));
   const own = node === undefined ? [] : rowsOfProperties(node.properties, mask, personal(node.ref.entityType));
   const keys = node === undefined ? [] : keyProperties(node.ref.entityType);
-  const shown = keys.length === 0 ? own.slice(0, MAX_KEY_ROWS) : keys.flatMap((key) => own.filter((row) => row.label === key)).slice(0, MAX_KEY_ROWS);
+  const named = keys.flatMap((key) => own.filter((row) => row.label === key)).slice(0, MAX_KEY_ROWS);
+  // a type with no key properties, or none of them in the answer (missing, empty or hidden), shows the first rows the answer carries
+  const shown = named.length === 0 ? own.slice(0, MAX_KEY_ROWS) : named;
   const relationships = edgesOfMatch(match, answer).flatMap((edge) => rowsOfProperties(edge.properties, mask, []).map((row) => ({ label: `${edge.type} · ${row.label}`, value: row.value })));
   return { shown, more: [...own.filter((row) => !shown.includes(row)), ...relationships] };
 }

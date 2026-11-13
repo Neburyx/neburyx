@@ -15,6 +15,8 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+const chosenText = (): string => document.querySelector('.run-start-chosen')?.textContent ?? '';
+
 describe('the preview screen', () => {
   it('opens from Preview with the header of a draft, the mapping line, the pattern in words, the bounds, Save pattern… and the footer', async () => {
     const kit = await runWorkspace();
@@ -23,10 +25,7 @@ describe('the preview screen', () => {
     expect(inRun().getByText('The mapping can follow this pattern')).toBeTruthy();
     const words = screen.getByRole('region', { name: 'In plain words' });
     for (const text of ['Starts at an N-A.', 'Follows r-1 outgoing to an N-B.']) expect(within(words).getByText(text)).toBeTruthy();
-    const bounds = screen.getByRole('region', { name: 'Bounds' });
-    expect(within(bounds).getByText('Up to 50 matches per page.')).toBeTruthy();
-    expect(within(bounds).getByText('A count above 500 is shown as “at least 500” and labelled lower bound.')).toBeTruthy();
-    expect(within(bounds).getByText('Read-only: nothing in the source is changed.')).toBeTruthy();
+    expect(document.querySelector('.run-bounds')?.textContent).toBe('Read-only · up to 50 matches per page · a count above 500 shows as “at least 500”');
     expect(screen.getByRole('button', { name: 'Save pattern…' })).toBeTruthy();
     expect(screen.getByRole('button', { name: /Edit$/ })).toBeTruthy();
     expect(runButton()).toBeTruthy();
@@ -38,8 +37,7 @@ describe('the preview screen', () => {
   it('takes every number of the bounds from the answer', async () => {
     await runWorkspace({ preview: async () => ({ ok: true, value: { status: 'ok', preview: { ...PREVIEW, bounds: { ...PREVIEW.bounds, pageLimit: { value: 7, text: 'x' }, countCap: { value: 90, text: 'y' } } } } }) });
     await previewed();
-    expect(screen.getByText('Up to 7 matches per page.')).toBeTruthy();
-    expect(screen.getByText(/A count above 90 is shown as “at least 90”/)).toBeTruthy();
+    expect(document.querySelector('.run-bounds')?.textContent).toBe('Read-only · up to 7 matches per page · a count above 90 shows as “at least 90”');
   });
 
   it('names the saved pattern in the header when it was opened from the list', async () => {
@@ -51,8 +49,8 @@ describe('the preview screen', () => {
     await runWorkspace();
     await previewed();
     expect(startCombo().placeholder).toBe('Search by name or ID');
-    expect(startHelp()).toBe('Prefilled from the N-A selected or open on the canvas. Otherwise search by name or ID. You must pick one to run.');
-    expect(screen.getByText('Chosen:', { exact: false }).textContent).toContain('x-1');
+    expect(chosenText()).toContain('x-1');
+    expect(screen.queryByText('From the N-A selected on the canvas, or search.')).toBeNull();
     expect(runButton().disabled).toBe(false);
   });
 
@@ -71,7 +69,7 @@ describe('the preview screen', () => {
     await runWorkspace();
     await previewed();
     await chooseEntity('x-2');
-    expect(screen.getByText('Chosen:', { exact: false }).textContent).toContain('x-2');
+    expect(chosenText()).toContain('x-2');
   });
 
   it('lists the matches of the typed text with their names, IDs and the count of the page, and chooses with arrows and Enter', async () => {
@@ -84,10 +82,10 @@ describe('the preview screen', () => {
     expect(kit.searches).toHaveLength(1);
     expect(kit.searches[0]).toMatchObject({ sourceId: 'a', text: 'jord', entityTypes: ['n-a'] });
     const list = screen.getByRole('listbox', { name: 'N-As matching “jord”' });
-    expect(within(list).getAllByRole('option').map((option) => option.textContent)).toEqual(['s-1s-1', 's-2s-2', 's-3s-3']);
+    expect(within(list).getAllByRole('option').map((option) => option.textContent)).toEqual(['s-1', 's-2', 's-3']);
     expect(screen.getByText('3 matches on this page of 3 · exact. Type more to narrow.')).toBeTruthy();
     await userEvent.keyboard('{ArrowDown}{ArrowDown}{Enter}');
-    expect(screen.getByText('Chosen:', { exact: false }).textContent).toContain('s-3');
+    expect(chosenText()).toContain('s-3');
     expect(runButton().disabled).toBe(false);
   });
 
@@ -98,8 +96,8 @@ describe('the preview screen', () => {
     const { openBuilder } = await import('./run-kit.js');
     await openBuilder();
     await previewed();
-    expect(screen.getByText('Chosen:', { exact: false }).textContent).not.toContain('x-1 ·');
-    expect(screen.getByText('Chosen:', { exact: false }).textContent).toBe('Chosen: x-1');
+    expect(chosenText()).not.toContain('x-1 ·');
+    expect(chosenText()).toBe('Chosen: x-1');
   });
 
   it('says why a search failed in words and keeps the field and its text', async () => {

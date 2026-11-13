@@ -1,6 +1,7 @@
 import type { ApiFailure } from '../../api/client.js';
 import { canRetry } from '../../failure-notice.js';
 import { formatNumber } from '../../workspace/scope-text.js';
+import { titleHoldsId } from './id-in-title.js';
 import { failureView, type FailureView } from '../copy.js';
 
 /** The words of the run screens: the frames' own where the frames give them, and proposed copy where they do not (listed with the frame differences). Every number comes from an answer. */
@@ -14,7 +15,7 @@ export const RUN_COPY = {
   inPlainWords: 'In plain words',
   start: 'Start',
   bounds: 'Bounds',
-  readOnly: 'Read-only: nothing in the source is changed.',
+  readOnly: 'Read-only',
   searchPlaceholder: 'Search by name or ID',
   savePattern: 'Save pattern…',
   saveChanges: 'Save changes…',
@@ -26,6 +27,7 @@ export const RUN_COPY = {
   loadingPreview: 'Reading the pattern in words…',
   previewFailed: 'The preview could not be made.',
   countsAlways: 'Counts are always labelled Exact, Lower bound or Estimated. When a count is unknown, no number is shown.',
+  aboutCounts: 'About these counts',
   cancelled: 'Run cancelled. Nothing was added to the graph. Your draft is kept.',
   cancelRun: 'Cancel run',
   cancelNote: 'Cancelling stops the run and keeps your draft.',
@@ -71,10 +73,9 @@ export const RUN_COPY = {
 export const typesMatching = (typeName: string, text: string): string => `${typeName}s matching “${text}”`;
 export const typesOnCanvas = (typeName: string): string => `${typeName}s on the canvas`;
 export const startFrom = (typeName: string): string => `Start from: ${typeName}`;
-export const startHelper = (typeName: string): string => `Prefilled from the ${typeName} selected or open on the canvas. Otherwise search by name or ID. You must pick one to run.`;
-export const boundPage = (limit: number): string => `Up to ${formatNumber(limit)} matches per page.`;
-export const boundCount = (cap: number): string => `A count above ${formatNumber(cap)} is shown as “at least ${formatNumber(cap)}” and labelled lower bound.`;
-export const startingFromLine = (name: string, typeName: string, id: string | undefined): string => [name, typeName, id].filter((part) => part !== undefined && part !== '').join(' · ');
+export const startHelper = (typeName: string): string => `From the ${typeName} selected on the canvas, or search.`;
+export const boundsLine = (limit: number, cap: number): string => `${RUN_COPY.readOnly} · up to ${formatNumber(limit)} matches per page · a count above ${formatNumber(cap)} shows as “at least ${formatNumber(cap)}”`;
+export const startingFromLine = (name: string, typeName: string, id: string | undefined): string => [name, typeName, id !== undefined && titleHoldsId(name, id) ? undefined : id].filter((part) => part !== undefined && part !== '').join(' · ');
 export const elapsedText = (seconds: number): string => `${seconds} s elapsed. ${RUN_COPY.slow}`;
 export const pausedHeadline = (count: number): string => `Estimated ≥ ${formatNumber(count)} matches`;
 export const pausedLine = (name: string): string => `This pattern may match a lot from ${name}. ${RUN_COPY.heavyNumberUnknown}`;
@@ -85,8 +86,8 @@ export const runFromAnother = (typeName: string): string => `Run from another ${
 export const countedBy = (time: string): string => `Counted by the source. Run at ${time} UTC.`;
 export const estimatedBy = (time: string): string => `Estimated by the source. Run at ${time} UTC.`;
 export const noCountBy = (time: string): string => `The source gave no count. Run at ${time} UTC.`;
-export const showingFirst = (returned: number): string => `Showing the first ${formatNumber(returned)}. The real number may be higher; it is not known.`;
-export const showingPage = (from: number, to: number): string => `Showing ${formatNumber(from)} to ${formatNumber(to)}. The real number may be higher; it is not known.`;
+export const showingFirst = (returned: number): string => `Showing the first ${formatNumber(returned)}; the total is not known.`;
+export const showingPage = (from: number, to: number): string => `Showing ${formatNumber(from)} to ${formatNumber(to)}; the total is not known.`;
 export const showingHeading = (from: number, to: number, of: string | undefined): string => `${RUN_COPY.matches} · showing ${formatNumber(from)} to ${formatNumber(to)}${of === undefined ? '' : ` of ${of}`}`;
 export const matchesWord = (count: number): string => `${formatNumber(count)} ${count === 1 ? 'match' : 'matches'}`;
 export const addAll = (count: number): string => `Add all ${formatNumber(count)} to graph`;

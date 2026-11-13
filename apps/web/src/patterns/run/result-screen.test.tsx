@@ -257,7 +257,7 @@ describe('a lower-bound result', () => {
     const here = inRun();
     expect(here.getByText('At least 500 matches')).toBeTruthy();
     expect(here.getByText('Lower bound')).toBeTruthy();
-    expect(here.getByText('Showing the first 2. The real number may be higher; it is not known.')).toBeTruthy();
+    expect(here.getByText('Showing the first 2; the total is not known.')).toBeTruthy();
     expect(here.getByText('Matches · showing 1 to 2 of at least 500')).toBeTruthy();
     expect(here.getByRole('button', { name: 'Add these 2 to graph' })).toBeTruthy();
   });
@@ -389,7 +389,7 @@ describe('pages of a result', () => {
     expect(kit.definitionRuns[1]?.request).toEqual({ ...kit.definitionRuns[0]?.request, cursor: 'cur-1' });
     expect(inRun().getByText('At least 3 matches')).toBeTruthy();
     expect(inRun().getByText('Matches · showing 3 to 3 of at least 3')).toBeTruthy();
-    expect(inRun().getByText('Showing 3 to 3. The real number may be higher; it is not known.')).toBeTruthy();
+    expect(inRun().getByText('Showing 3 to 3; the total is not known.')).toBeTruthy();
     expect(within(matchCard(1)).getByText('Match 3')).toBeTruthy();
     await userEvent.click(previous());
     await settle();

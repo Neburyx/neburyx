@@ -3,7 +3,7 @@ import type { GraphNode, PatternPreview } from '@neburyx/contracts';
 import type { ApiClient } from '../../api/client.js';
 import { failureView, problemText } from '../copy.js';
 import type { PreviewState } from './use-preview.js';
-import { RUN_COPY, boundCount, boundPage } from './run-copy.js';
+import { RUN_COPY, boundsLine } from './run-copy.js';
 import { StartChoice } from './start-choice.js';
 
 interface Props {
@@ -106,14 +106,9 @@ function Words({ preview }: { readonly preview: PatternPreview }) {
           ))}
         </div>
       </section>
-      <section className="run-bounds" aria-label={RUN_COPY.bounds}>
-        <h3 className="supernode-label">{RUN_COPY.bounds}</h3>
-        <ul>
-          <li>{boundPage(preview.bounds.pageLimit.value)}</li>
-          <li>{boundCount(preview.bounds.countCap.value)}</li>
-          <li>{RUN_COPY.readOnly}</li>
-        </ul>
-      </section>
+      <p className="run-bounds">
+        {boundsLine(preview.bounds.pageLimit.value, preview.bounds.countCap.value)}
+      </p>
     </>
   );
 }

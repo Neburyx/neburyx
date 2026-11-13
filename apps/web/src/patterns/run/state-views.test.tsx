@@ -100,6 +100,8 @@ describe('a result with no match, and the footer line about counts', () => {
     expect(inRun().getByText('0 matches')).toBeTruthy();
     expect(inRun().getByText('Exact')).toBeTruthy();
     expect(inRun().getByText(/^Nothing in this source follows this pattern from /)).toBeTruthy();
+    expect(inRun().queryByText(/^Counts are always labelled/)).toBeNull();
+    await userEvent.click(inRun().getByRole('button', { name: 'About these counts' }));
     expect(inRun().getByText('Counts are always labelled Exact, Lower bound or Estimated. When a count is unknown, no number is shown.')).toBeTruthy();
   });
 

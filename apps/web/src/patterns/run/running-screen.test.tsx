@@ -32,7 +32,7 @@ describe('a run in progress', () => {
     expect(panelHeader()).toEqual({ title: 'Running pattern', subtitle: 'Draft · not saved' });
     const screenText = inRun();
     expect(screenText.getByText('Starting from')).toBeTruthy();
-    expect(screenText.getByText('x-1 · N-A · x-1')).toBeTruthy();
+    expect(screenText.getByText('x-1 · N-A')).toBeTruthy();
     const bar = screenText.getByRole('progressbar');
     expect(bar.getAttribute('aria-valuenow')).toBeNull();
     expect(screenText.getByText('0 s elapsed. Large sources can take longer.')).toBeTruthy();
