@@ -31,6 +31,7 @@ import {
   sourcesResponseSchema,
   sourceTestReportSchema,
   templateListResponseSchema,
+  askPlanResponseSchema,
   templateRunResponseSchema,
   type TemplateRunRequest,
   type TemplateRunResponse,
@@ -92,6 +93,7 @@ import {
   type OpenInvestigationResponse,
   type SearchMoreRequest,
   type SearchMoreResult,
+  type AskPlanRequest,
   type SearchRequest,
   type SearchResult,
   type SourceProfile,
@@ -138,6 +140,9 @@ export interface InvestigationPageQuery {
   readonly cursor?: string;
   readonly limit?: number;
 }
+
+/** What the plan endpoint answers: a plan, a clarification, the blocked tokens, or the preview with its hash. */
+export type AskPlanAnswer = z.infer<typeof askPlanResponseSchema>;
 
 export interface ApiClient {
   getMe(signal?: AbortSignal): Promise<ApiResult<MeResponse>>;
@@ -213,6 +218,8 @@ export interface ApiClient {
   listInvestigationPage(query: InvestigationPageQuery, signal?: AbortSignal): Promise<ApiResult<InvestigationListResponse>>;
   /** One page of the named views of all the caller's investigations, newest first; `count` is the exact number of all of them. */
   listOwnedViews(page: { readonly cursor?: string; readonly limit?: number }, signal?: AbortSignal): Promise<ApiResult<OwnedViewListResponse>>;
+  /** Asks the Ask endpoint about one question in one source: with `send` false the preview, the blocked tokens or a clarification, and nothing reaches a model; with `send` true and the hash of a preview, the plan. */
+  askPlan(request: AskPlanRequest, signal?: AbortSignal): Promise<ApiResult<AskPlanAnswer>>;
   /** The exact matches of a text in one source, and with `typeahead` the entities that start with it; every hit and the answer name the source that was asked, or the answer is refused. */
   searchEntities(request: SearchRequest, signal?: AbortSignal): Promise<ApiResult<SearchResult>>;
   /** The next page of one group of a search, from that group's cursor; the page names the source and the group that were asked, or it is refused. */
@@ -375,6 +382,7 @@ export function createApiClient(fetcher: Fetcher = (input, init) => fetch(input,
       const sameEntity = (node: ElementRef): boolean => node.sourceId === open.entity.sourceId && node.entityType === open.entity.entityType && ('stableId' in open.entity ? node.stableId === open.entity.stableId : startsAt !== null && node.stableId === startsAt.stableId);
       return investigation.sourceId !== open.sourceId || !named || ('entity' in result.value && !sameEntity(result.value.entity.ref)) ? failed('SCHEMA_MISMATCH') : result;
     },
+    askPlan: (body, signal) => request(fetcher, '/v1/ask/plan', askPlanResponseSchema, signal, 'POST', body),
     searchEntities: async (search, signal) => {
       const result = await request(fetcher, '/v1/search/entities', searchResultSchema, signal, 'POST', search);
       if (!result.ok) return result;

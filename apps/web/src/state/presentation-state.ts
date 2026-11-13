@@ -79,6 +79,8 @@ export interface PresentationState {
   readonly filtersOpen: boolean;
   /** The Patterns panel is open; it, the Filters panel and the Search panel are never open together. Not saved with a view, and kept when another source is bound. */
   readonly patternsOpen: boolean;
+  /** Whether the Ask panel is open: it is a panel of its own and does not close or open the others. */
+  readonly askOpen: boolean;
   /** The preset the Patterns panel selects when it next shows its list: handed over by the way into the panel from Home, read once and cleared by the panel, and cleared when the panel closes. Not saved with a view, and not kept when another source is bound. */
   readonly patternsPreset: string | undefined;
   readonly panelSizes: ReadonlyMap<string, number>;
@@ -139,6 +141,7 @@ export const INITIAL_PRESENTATION: PresentationState = {
   mappedTypes: undefined,
   filtersOpen: false,
   patternsOpen: false,
+  askOpen: false,
   patternsPreset: undefined,
   panelSizes: new Map(),
   collapsedPanels: new Map(),
@@ -196,6 +199,7 @@ export interface PresentationActions {
   resetTypeFilter(): void;
   setFiltersOpen(open: boolean): void;
   setPatternsOpen(open: boolean): void;
+  setAskOpen(open: boolean): void;
   setPatternsPreset(preset: string | undefined): void;
   setPanelSize(panel: string, size: number): void;
   clearPanelSize(panel: string): void;
@@ -412,6 +416,10 @@ export function createPresentationStore(known: KnownElements): PresentationStore
       if (store.getState().patternsOpen === patternsOpen) return;
       store.setState({ ...store.getState(), patternsOpen, ...(patternsOpen ? { searchOpen: false, filtersOpen: false } : { patternsPreset: undefined }) });
     },
+    setAskOpen(askOpen) {
+      if (store.getState().askOpen === askOpen) return;
+      store.setState({ ...store.getState(), askOpen });
+    },
     setPatternsPreset(patternsPreset) {
       if (store.getState().patternsPreset === patternsPreset) return;
       store.setState({ ...store.getState(), patternsPreset });
@@ -523,8 +531,8 @@ export function createPresentationStore(known: KnownElements): PresentationStore
       store.setState({ ...store.getState(), ...snapshot, walking: false, focused: undefined, moveNote: undefined, openMenu: undefined });
     },
     reset() {
-      const { tool, panelSizes, collapsedPanels, legendOpen, searchOpen, searchTab, searchFocus, sheetOpen, filtersOpen, patternsOpen, mappedTypes } = store.getState();
-      store.setState({ ...INITIAL_PRESENTATION, tool, panelSizes, collapsedPanels, legendOpen, searchOpen, searchTab, searchFocus, sheetOpen, filtersOpen, patternsOpen, mappedTypes });
+      const { tool, panelSizes, collapsedPanels, legendOpen, searchOpen, searchTab, searchFocus, sheetOpen, filtersOpen, patternsOpen, askOpen, mappedTypes } = store.getState();
+      store.setState({ ...INITIAL_PRESENTATION, tool, panelSizes, collapsedPanels, legendOpen, searchOpen, searchTab, searchFocus, sheetOpen, filtersOpen, patternsOpen, askOpen, mappedTypes });
     },
   };
 }

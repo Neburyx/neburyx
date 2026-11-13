@@ -19,6 +19,7 @@ const NEWER = { investigation: investigationOf(C_ID, 'source-a', 'kind-a', 'N-1'
 function recording(client: ApiClient) {
   const calls: string[] = [];
   const wrapped: ApiClient = {
+    askPlan: (request, signal) => (calls.push('askPlan'), client.askPlan(request, signal)),
     getMe: (signal) => (calls.push('getMe'), client.getMe(signal)),
     getSources: (signal) => (calls.push('getSources'), client.getSources(signal)),
     getProfile: (sourceId, signal) => (calls.push(`getProfile ${sourceId}`), client.getProfile(sourceId, signal)),
