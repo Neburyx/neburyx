@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { extname, join, normalize, sep } from 'node:path';
 import { createPatterns } from './support-patterns.ts';
 import { previewPattern, runPattern } from './support-pattern-runs.ts';
+import { createSavedPatterns } from './support-saved-patterns.ts';
 import { exportRequestSchema, IDEMPOTENCY_KEY_PATTERN, deleteViewRequestSchema, restoreInvestigationRequestSchema, DEFAULT_INVESTIGATION_LIST_LIMIT, DEFAULT_VIEW_PAGE, MAX_INVESTIGATION_LIST_LIMIT, MAX_VIEW_PAGE, viewListQuerySchema, parseEdgeRefSegment, renameRequestSchema, renameViewRequestSchema, saveViewRequestSchema, statusChangeRequestSchema, investigationListCountsSchema, nodeSchema, investigationListQuerySchema, type Investigation, type LastTest, openInvestigationRequestSchema, SEARCH_GROUP_CAP, searchMoreRequestSchema, searchMoreResultSchema, searchRequestSchema, searchResultSchema, type SourceSummary, sourceSummaryFieldsSchema, sourceSummarySchema, type SourceTestReport, type EdgeReadRef, valueOfPathSegment } from '@neburyx/contracts';
 
 interface SupportProfile {
@@ -913,6 +914,7 @@ export function createSupportServer(options: SupportServerOptions): Server {
   const search = createSearch(options);
   const sources = createSources(options);
   const patterns = createPatterns(() => profilesOf(options));
+  const savedPatterns = createSavedPatterns(runPattern);
   return createServer((request: IncomingMessage, response: ServerResponse) => {
     void (async () => {
       const path = new URL(request.url ?? '/', 'http://localhost').pathname;
@@ -948,6 +950,14 @@ export function createSupportServer(options: SupportServerOptions): Server {
       if (request.method === 'GET' && path === '/v1/templates') return patterns.list(new URL(request.url ?? '/', 'http://localhost').searchParams.get('sourceId'), response);
       const running = /^\/v1\/templates\/([^/]+)\/run$/.exec(path);
       if (request.method === 'POST' && running?.[1] !== undefined) return patterns.run(decodeURIComponent(running[1]), await bodyOf(request), response, request);
+      const savedRoute = /^\/v1\/patterns\/([^/]+?)(\/copy|\/run)?$/.exec(path);
+      const savedId = savedRoute?.[1] === undefined || ['preview', 'run', 'validate'].includes(savedRoute[1]) ? undefined : decodeURIComponent(savedRoute[1]);
+      if (request.method === 'GET' && path === '/v1/patterns') return savedPatterns.list(new URL(request.url ?? '/', 'http://localhost').searchParams.get('sourceId'), response);
+      if (request.method === 'POST' && path === '/v1/patterns') return savedPatterns.save(await bodyOf(request), response);
+      if (savedId !== undefined && request.method === 'PUT' && savedRoute?.[2] === undefined) return savedPatterns.change(savedId, await bodyOf(request), response);
+      if (savedId !== undefined && request.method === 'DELETE' && savedRoute?.[2] === undefined) return savedPatterns.remove(savedId, request.headers['if-match'], response);
+      if (savedId !== undefined && request.method === 'POST' && savedRoute?.[2] === '/copy') return savedPatterns.copy(savedId, response);
+      if (savedId !== undefined && request.method === 'POST' && savedRoute?.[2] === '/run') return savedPatterns.run(savedId, await bodyOf(request), response, request);
       if (request.method === 'POST' && path === '/v1/patterns/preview') return previewPattern(await bodyOf(request), response);
       if (request.method === 'POST' && path === '/v1/patterns/run') return runPattern(await bodyOf(request), response, request);
       if (request.method === 'POST' && path === '/v1/patterns/validate') return patterns.validate(await bodyOf(request), response);
@@ -961,7 +971,10 @@ export function createSupportServer(options: SupportServerOptions): Server {
         return json(response, 200, {});
       }
       if (request.method === 'POST' && path.startsWith('/__support/')) {
-        if (path === '/__support/reset') investigations.forgetNamedViews();
+        if (path === '/__support/reset') {
+          investigations.forgetNamedViews();
+          savedPatterns.reset();
+        }
         return sources.control(path, await bodyOf(request), response);
       }
       const testing = /^\/v1\/sources\/([^/]+)\/test$/.exec(path);
