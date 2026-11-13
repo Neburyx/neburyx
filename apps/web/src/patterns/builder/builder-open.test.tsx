@@ -1,6 +1,6 @@
 import { act, fireEvent } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { failure, listOf, patternsWorkspace, openPatterns, selectAccount } from '../patterns-kit.js';
+import { failure, listOf, patternsWorkspace, openPatterns, selectAccount, settle } from '../patterns-kit.js';
 import { builderPanel, builderWorkspace, chooseStart, cleanup, openBuilder, screen, startSelect, userEvent, within } from './builder-kit.js';
 
 afterEach(() => {
@@ -35,6 +35,26 @@ describe('opening the builder from the Patterns panel', () => {
     expect(startSelect().value).toBe('');
     expect([...startSelect().options].map((option) => option.textContent)).toEqual(['Choose a type', 'N-A', 'N-B', 'N-C', 'N-D', 'N-E']);
     expect(panel.querySelectorAll('input[type="text"], input[type="search"], textarea')).toHaveLength(0);
+  });
+
+  it('hides the panel’s own intro while the builder is open, and shows it again on Back', async () => {
+    await builderWorkspace();
+    expect(screen.getByText('Approved ways to explore. No query language needed.')).toBeTruthy();
+    await openBuilder();
+    expect(screen.queryByText('Approved ways to explore. No query language needed.')).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Back to patterns' }));
+    expect(screen.getByText('Approved ways to explore. No query language needed.')).toBeTruthy();
+  });
+
+  it('closes the panel on Escape from the builder even while a preset run is on its way in the hidden list', async () => {
+    const kit = await builderWorkspace({ run: () => new Promise(() => undefined) });
+    selectAccount(kit.state, 'acc-1');
+    await userEvent.click(screen.getByRole('button', { name: 'Run pattern' }));
+    await settle();
+    await openBuilder();
+    await chooseStart('n-a');
+    fireEvent.keyDown(startSelect(), { key: 'Escape' });
+    expect(screen.queryByRole('heading', { name: 'Patterns' })).toBeNull();
   });
 
   it('moves the focus to Starts at, and back to New pattern on Back to patterns', async () => {

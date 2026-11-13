@@ -80,13 +80,25 @@ describe('adding a step', () => {
     expect(optionTexts(field(1, 'Arrives at'))).toEqual(['Choose a type', 'N-A', 'N-C']);
   });
 
-  it('refuses a seventh relationship type with the reason and keeps the six checked', async () => {
+  it('refuses a seventh relationship type: at six the other boxes are disabled with the reason as their description, and the six stay checked', async () => {
     await started('n-c');
-    await buildStep(1, 'out', 'n-d', ['r-d1', 'r-d2', 'r-d3', 'r-d4', 'r-d5', 'r-d6']);
-    await userEvent.click(within(stepCard(1)).getByRole('checkbox', { name: 'r-d7' }));
-    expect(screen.getByText('At most 6 relationship types in a step.')).toBeTruthy();
+    await buildStep(1, 'out', 'n-d', ['r-d1', 'r-d2', 'r-d3', 'r-d4', 'r-d5']);
+    expect(screen.queryByText('At most 6 relationship types in a step.')).toBeNull();
+    await userEvent.click(within(stepCard(1)).getByRole('checkbox', { name: 'r-d6' }));
+    const seventh = within(stepCard(1)).getByRole('checkbox', { name: 'r-d7' }) as HTMLInputElement;
+    expect(seventh.disabled).toBe(true);
+    expect(document.getElementById(seventh.getAttribute('aria-describedby') ?? '')?.textContent).toBe('At most 6 relationship types in a step.');
+    await userEvent.click(seventh);
+    expect(seventh.checked).toBe(false);
     expect(within(stepCard(1)).getAllByRole('checkbox').filter((box) => (box as HTMLInputElement).checked)).toHaveLength(6);
-    expect((within(stepCard(1)).getByRole('checkbox', { name: 'r-d7' }) as HTMLInputElement).checked).toBe(false);
+  });
+
+  it('gives each step of the Path a spoken name with its direction, as the arrows are decoration', async () => {
+    await started();
+    await buildStep(1, 'out', 'n-b', ['r-1']);
+    expect(screen.getByRole('group', { name: 'Outgoing: r-1' })).toBeTruthy();
+    await userEvent.selectOptions(field(1, 'Direction'), 'both');
+    expect(screen.getByRole('group', { name: 'Either direction: r-1' })).toBeTruthy();
   });
 });
 

@@ -100,11 +100,12 @@ describe('what the server finds wrong', () => {
 describe('a check that could not be made', () => {
   it.each([
     ['RATE_LIMITED', { retryAfterMs: 12000 }, 'Too many requests. Retry after 12 s.'],
-    ['NOT_FOUND', undefined, 'NOT_FOUND'],
-    ['ACCESS_DENIED', undefined, 'ACCESS_DENIED'],
-    ['SCHEMA_MISMATCH', undefined, 'SCHEMA_MISMATCH'],
+    ['NOT_FOUND', undefined, 'The server does not know this source.'],
+    ['ACCESS_DENIED', undefined, 'You may not check patterns on this source.'],
+    ['SCHEMA_MISMATCH', undefined, 'The answer was not in the form expected.'],
+    ['NETWORK_UNAVAILABLE', undefined, 'The server could not be reached.'],
   ])('says so with the reason and Retry for %s, keeps the choices and never says valid', async (code, details, reason) => {
-    await oneStep({ validate: async () => ({ ok: false, failure: code === 'SCHEMA_MISMATCH' ? ({ code } as never) : failure(code, details) }) });
+    await oneStep({ validate: async () => ({ ok: false, failure: code === 'SCHEMA_MISMATCH' || code === 'NETWORK_UNAVAILABLE' ? ({ code } as never) : failure(code, details) }) });
     await afterDebounce();
     expect(screen.getByText('The check could not be made.')).toBeTruthy();
     expect(screen.getByText(reason)).toBeTruthy();

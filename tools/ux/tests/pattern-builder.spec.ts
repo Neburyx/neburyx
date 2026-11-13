@@ -39,7 +39,7 @@ test.describe('the pattern builder in the Patterns panel', () => {
     await builderOf(page).getByLabel('Starts at').selectOption({ label: 'Account' });
     await buildStep(page, 1, 'out', 'Device', ['USES_DEVICE']);
     await buildStep(page, 2, 'in', 'Account', ['USES_DEVICE']);
-    await expect(builderOf(page).getByRole('group', { name: 'Path' })).toContainText('Account');
+    await expect(builderOf(page).getByRole('group', { name: 'Path' })).toHaveText('Account→USES_DEVICE→Device←USES_DEVICE←Account');
     await expect(builderOf(page).getByText('Valid: the mapping can follow this pattern.')).toBeVisible();
   });
 
@@ -64,22 +64,30 @@ test.describe('the pattern builder in the Patterns panel', () => {
     expect(texts).toBe(0);
   });
 
-  test('walks the controls in reading order with Tab and back with Shift+Tab', async ({ page }) => {
+  test('opens with Space on New pattern too', async ({ page }) => {
+    await toolOf(page).click();
+    await panelOf(page).getByRole('button', { name: 'New pattern' }).focus();
+    await page.keyboard.press('Space');
+    await expect(builderOf(page).getByLabel('Starts at')).toBeFocused();
+  });
+
+  test('walks every control in reading order with Tab, and back with Shift+Tab', async ({ page }) => {
     await openBuilder(page);
     await builderOf(page).getByLabel('Starts at').selectOption({ label: 'Account' });
-    await builderOf(page).getByRole('button', { name: 'Add step' }).click();
-    await expect(stepOf(page, 1).getByLabel('Direction')).toBeFocused();
-    await stepOf(page, 1).getByLabel('Direction').selectOption('out');
-    await stepOf(page, 1).getByLabel('Arrives at').selectOption({ label: 'Device' });
-    await stepOf(page, 1).getByLabel('Direction').focus();
-    const arrives = stepOf(page, 1).getByLabel('Arrives at');
-    const firstType = stepOf(page, 1).getByRole('checkbox').first();
-    await page.keyboard.press('Tab');
-    await expect(arrives).toBeFocused();
-    await page.keyboard.press('Tab');
-    await expect(firstType).toBeFocused();
-    await page.keyboard.press('Shift+Tab');
-    await expect(arrives).toBeFocused();
+    await buildStep(page, 1, 'out', 'Device', ['USES_DEVICE']);
+    const boxes = stepOf(page, 1).getByRole('checkbox');
+    const order = [builderOf(page).getByLabel('Starts at'), stepOf(page, 1).getByLabel('Direction'), stepOf(page, 1).getByLabel('Arrives at')];
+    for (let index = 0; index < (await boxes.count()); index += 1) order.push(boxes.nth(index));
+    order.push(stepOf(page, 1).getByRole('button', { name: 'Remove step' }), builderOf(page).getByRole('button', { name: 'Add step' }));
+    await order[0]?.focus();
+    for (const control of order.slice(1)) {
+      await page.keyboard.press('Tab');
+      await expect(control).toBeFocused();
+    }
+    for (const control of [...order].reverse().slice(1)) {
+      await page.keyboard.press('Shift+Tab');
+      await expect(control).toBeFocused();
+    }
   });
 
   test('keeps every control inside the window with four steps, the panel scrolling inside itself', async ({ page }) => {

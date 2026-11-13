@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { PATTERN_LIMITS, type PatternProblem, type SourceProfile } from '@neburyx/contracts';
 import { failureView } from '../copy.js';
 import type { ApiClient } from '../../api/client.js';
-import { ARROW, BUILDER_COPY, DIRECTION_TEXT, blockText, noArrival, placeOf, problemText, stepTitle, stepsLine, tooManyTypes } from './copy.js';
+import { ARROW, BUILDER_COPY, DIRECTION_TEXT, blockText, checkFailureText, noArrival, placeOf, problemText, stepTitle, stepsLine, tooManyTypes } from './copy.js';
 import { DIRECTIONS, addStepBlock, arrivalTypes, isComplete, lastTypeOf, previousTypeOf, relationshipChoices, stepLimitOf, toDefinition, type Action, type BuilderState, type Direction, type StepDraft } from './model.js';
 import { usePatternCheck, type CheckState } from './use-check.js';
 
@@ -140,7 +140,7 @@ function PathLine({ draft, nameOf }: { readonly draft: BuilderStateDraft; readon
       <span className="pattern-chip pattern-chip-node">{nameOf(draft.anchorType)}</span>
       {draft.steps.map((step, index) =>
         isComplete(step) && step.direction !== undefined && step.arrivesAt !== undefined ? (
-          <span className="pattern-path-step" key={index}>
+          <span className="pattern-path-step" key={index} role="group" aria-label={`${DIRECTION_TEXT[step.direction]}: ${step.relationshipTypes.join(' or ')}`}>
             <span className="pattern-arrow" aria-hidden="true">
               {ARROW[step.direction]}
             </span>
@@ -174,13 +174,14 @@ function StepCard({ profile, step, index, previous, last, nameOf, dispatch, prob
   const reached = previous === undefined || step.direction === undefined ? [] : arrivalTypes(profile, previous, step.direction);
   const choices = previous === undefined || step.direction === undefined || step.arrivesAt === undefined ? [] : relationshipChoices(profile, previous, step.arrivesAt, step.direction);
   const id = `pattern-step-${index}`;
+  const atMost = step.relationshipTypes.length >= PATTERN_LIMITS.relationshipTypesPerStep;
   return (
     <fieldset className="patterns-field patterns-group pattern-step" ref={ref}>
       <legend className="supernode-label">{stepTitle(index)}</legend>
       <label className="supernode-label" htmlFor={`${id}-direction`}>
         {BUILDER_COPY.direction}
       </label>
-      <select id={`${id}-direction`} className="patterns-input" value={step.direction ?? ''} onChange={(event) => dispatch({ type: 'direction', index, direction: event.target.value === '' ? undefined : (event.target.value as Direction) })}>
+      <select id={`${id}-direction`} className="patterns-input" value={step.direction ?? ''} onChange={(event) => dispatch({ type: 'direction', index, direction: DIRECTIONS.find((candidate) => candidate === event.target.value) })}>
         <option value="">{BUILDER_COPY.chooseDirection}</option>
         {DIRECTIONS.map((direction) => (
           <option key={direction} value={direction}>
@@ -207,13 +208,13 @@ function StepCard({ profile, step, index, previous, last, nameOf, dispatch, prob
             const checked = step.relationshipTypes.includes(type);
             return (
               <label className="pattern-type" key={type}>
-                <input type="checkbox" checked={checked} onChange={() => dispatch({ type: 'toggle', index, relationshipType: type })} />
+                <input type="checkbox" checked={checked} disabled={!checked && atMost} aria-describedby={!checked && atMost ? `${id}-types-reason` : undefined} onChange={() => dispatch({ type: 'toggle', index, relationshipType: type })} />
                 {type}
               </label>
             );
           })}
-          {step.relationshipTypes.length >= PATTERN_LIMITS.relationshipTypesPerStep ? (
-            <p className="patterns-error" role="status">
+          {atMost ? (
+            <p className="search-panel-note" id={`${id}-types-reason`}>
               {tooManyTypes}
             </p>
           ) : null}
@@ -236,7 +237,7 @@ function CheckResult({ state, sourceName, retry }: { readonly state: CheckState;
     return (
       <div className="patterns-state" role="alert">
         <p>{BUILDER_COPY.checkFailed}</p>
-        <p>{view.text}</p>
+        <p>{checkFailureText(state.failure.code, view.text)}</p>
         <button type="button" className="secondary" onClick={retry}>
           {BUILDER_COPY.retry}
         </button>

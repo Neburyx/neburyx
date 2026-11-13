@@ -34,6 +34,17 @@ export const BUILDER_COPY = {
 export const DIRECTION_TEXT: Readonly<Record<Direction, string>> = { out: 'Outgoing', in: 'Incoming', both: 'Either direction' };
 export const ARROW: Readonly<Record<Direction, string>> = { out: '→', in: '←', both: '↔' };
 
+const CHECK_FAILURE_TEXT: Readonly<Record<string, string>> = {
+  NOT_FOUND: 'The server does not know this source.',
+  ACCESS_DENIED: 'You may not check patterns on this source.',
+  SCHEMA_MISMATCH: 'The answer was not in the form expected.',
+  NETWORK_UNAVAILABLE: 'The server could not be reached.',
+  UNEXPECTED_FAILURE: 'Something went wrong.',
+};
+
+/** The reason a check could not be made, in a sentence: one for each code that has none of its own in the panel's failure texts. */
+export const checkFailureText = (code: string, fallback: string): string => CHECK_FAILURE_TEXT[code] ?? fallback;
+
 export const stepTitle = (index: number): string => `Step ${index + 1}`;
 export const tooManyTypes = `At most ${PATTERN_LIMITS.relationshipTypesPerStep} relationship types in a step.`;
 export const stepsLine = (count: number, limit: number): string => `Steps ${count} (source limit ${limit})`;

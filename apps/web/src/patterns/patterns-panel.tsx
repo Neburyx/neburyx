@@ -55,6 +55,8 @@ function PatternsBody() {
   const cancelOrClose = useRef<() => void>(close);
   // the builder is a second view of the panel; the list stays mounted, hidden, so its form is as it was on the way back
   const [view, setView] = useState<'list' | 'builder'>('list');
+  const viewRef = useRef(view);
+  viewRef.current = view;
   const [builder, setBuilder] = useState<BuilderState>(INITIAL);
   const profile = useProfile();
   const profileState = useProfileState();
@@ -75,17 +77,15 @@ function PatternsBody() {
     } else if (opened.current) newButton.current?.focus();
   }, [view]);
   useEffect(() => {
-    // in the builder Escape closes the panel; the list below may have set it to cancel a run that is hidden
-    if (view === 'builder') cancelOrClose.current = close;
-  });
-  useEffect(() => {
     const frame = root.current?.closest('.panel-frame');
     if (frame === null || frame === undefined) return undefined;
     const onKey = (event: Event): void => {
       if (!(event instanceof KeyboardEvent) || event.key !== 'Escape') return;
       event.preventDefault();
       event.stopPropagation();
-      cancelOrClose.current();
+      // in the builder Escape closes the panel; the list below, hidden, may hold a run that Escape would cancel
+      if (viewRef.current === 'builder') close();
+      else cancelOrClose.current();
     };
     frame.addEventListener('keydown', onKey);
     return () => frame.removeEventListener('keydown', onKey);
@@ -98,7 +98,7 @@ function PatternsBody() {
           <span className="icon icon-clear" aria-hidden="true" />
         </button>
       </div>
-      <p className="search-panel-note">{PATTERNS_COPY.intro}</p>
+      {view === 'list' ? <p className="search-panel-note">{PATTERNS_COPY.intro}</p> : null}
       {sourceId === null ? (
         <p className="search-panel-note">{PATTERNS_COPY.noPatterns}</p>
       ) : (
