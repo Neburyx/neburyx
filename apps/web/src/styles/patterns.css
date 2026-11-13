@@ -150,3 +150,111 @@
   padding: 0;
   border: 0;
 }
+
+.pattern-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  border-bottom: var(--border-width) solid var(--color-border);
+}
+
+.pattern-tab {
+  padding: var(--space-4) var(--space-8);
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--font-size-small);
+  cursor: pointer;
+}
+
+.pattern-tab[aria-selected='true'] {
+  border-bottom-color: var(--color-accent);
+  color: var(--color-accent);
+  font-weight: var(--font-weight-medium);
+}
+
+.pattern-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pattern-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-8) var(--space-10);
+  border: var(--border-width) solid var(--color-control-border);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface-muted);
+}
+
+.pattern-row-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-8);
+}
+
+.pattern-row-name {
+  margin: 0;
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-medium);
+  overflow-wrap: anywhere;
+}
+
+.pattern-row-flag {
+  color: var(--color-caution-text);
+  font-size: var(--font-size-small);
+}
+
+.pattern-row-reasons {
+  margin: 0;
+  padding-left: var(--space-16);
+}
+
+.pattern-row-menu {
+  position: relative;
+}
+
+.pattern-menu {
+  position: absolute;
+  z-index: 2;
+  top: 100%;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  min-width: 140px;
+  padding: var(--space-4);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface);
+}
+
+.pattern-menu-item {
+  padding: var(--space-4) var(--space-8);
+  border: 0;
+  background: transparent;
+  color: var(--color-text-strong);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pattern-menu-item:hover,
+.pattern-menu-item:focus-visible {
+  background: var(--color-accent-surface);
+}
+
+.pattern-saved-run {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  padding-top: var(--space-8);
+  border-top: var(--border-width) solid var(--color-border);
+}

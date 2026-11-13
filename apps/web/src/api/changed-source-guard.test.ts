@@ -4,7 +4,7 @@ import { fakeClient } from './fake-client.js';
 import type { ApiClient } from './client.js';
 import { withoutReadsWhileSourceChanged } from './changed-source-guard.js';
 
-const READS = ['getEntity', 'getEdge', 'lookupEntity', 'readRefs', 'searchEntities', 'searchMore', 'previewExpansion', 'graphCoverage', 'expandNeighbors', 'derivedNeighbors', 'createExport', 'runPattern', 'runTemplate'] as const;
+const READS = ['getEntity', 'getEdge', 'lookupEntity', 'readRefs', 'searchEntities', 'searchMore', 'previewExpansion', 'graphCoverage', 'expandNeighbors', 'derivedNeighbors', 'createExport', 'runPattern', 'runSavedPattern', 'runTemplate'] as const;
 
 function counting(): { readonly client: ApiClient; readonly sent: string[] } {
   const sent: string[] = [];
@@ -21,7 +21,7 @@ function stateWith(sourceState?: 'available' | 'repointed' | 'removed') {
 const call = (client: ApiClient, name: (typeof READS)[number]) => (client[name] as (...args: unknown[]) => Promise<unknown>)({});
 
 /** The calls of the client that do not read the source of the investigation on screen: the person, the registry of sources, the stored profile and the operator's source test, opening a new investigation (which names its own source), and the investigations and views in the application database. A call that is in neither list fails the test below, so a new reader is placed in one of them on purpose. */
-const NOT_READS_OF_THE_SHOWN_INVESTIGATION = ['getMe', 'getSources', 'getProfile', 'listTemplates', 'validatePattern', 'previewPattern', 'testSource', 'openInvestigation', 'getInvestigation', 'saveDraft', 'deleteInvestigation', 'restoreInvestigation', 'deleteView', 'saveView', 'listViews', 'restoreView', 'renameView', 'changeInvestigationStatus', 'renameInvestigation', 'listInvestigations', 'listInvestigationPage', 'listOwnedViews', 'downloadExport'];
+const NOT_READS_OF_THE_SHOWN_INVESTIGATION = ['getMe', 'getSources', 'getProfile', 'listTemplates', 'validatePattern', 'previewPattern', 'listPatterns', 'savePattern', 'changePattern', 'deletePattern', 'copyPattern', 'testSource', 'openInvestigation', 'getInvestigation', 'saveDraft', 'deleteInvestigation', 'restoreInvestigation', 'deleteView', 'saveView', 'listViews', 'restoreView', 'renameView', 'changeInvestigationStatus', 'renameInvestigation', 'listInvestigations', 'listInvestigationPage', 'listOwnedViews', 'downloadExport'];
 
 describe('the read guard of a changed source', () => {
   it('places every call of the client in the guarded reads or in the calls that do not read the source of the investigation on screen, so a new reader cannot be left unguarded', () => {

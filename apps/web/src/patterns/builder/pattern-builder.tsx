@@ -5,6 +5,11 @@ import type { ApiClient } from '../../api/client.js';
 import { ARROW, BUILDER_COPY, CONDITIONS_COPY, DIRECTION_TEXT, blockText, checkFailureText, noArrival, placeOf, problemText, stepTitle, stepsLine, tooManyTypes } from './copy.js';
 import { DIRECTIONS, addStepBlock, arrivalTypes, isComplete, lastTypeOf, previousTypeOf, relationshipChoices, stepLimitOf, toDefinition, type Action, type BuilderState, type Direction, type StepDraft } from './model.js';
 import { rowsOf } from './conditions.js';
+import type { ListedPattern } from '@neburyx/contracts';
+import { SaveControls } from '../saved/save-controls.js';
+import type { SaveMode } from '../saved/save-dialog.js';
+import { SAVED_COPY, UNAVAILABLE_TEXT } from '../saved/saved-copy.js';
+import type { Notice } from '../saved/use-row-actions.js';
 import { ConditionsField } from './conditions-field.js';
 import { WindowField } from './window-field.js';
 import { RunSection } from './run-section.js';
@@ -24,10 +29,13 @@ interface Props {
   readonly dispatch: (action: Action) => void;
   readonly onBack: () => void;
   readonly startRef: React.Ref<HTMLSelectElement>;
+  /** The saved pattern the builder was opened from, with whether its stored definition could be shown whole. */
+  readonly editing?: { readonly item: ListedPattern; readonly whole: boolean } | undefined;
+  readonly onSaved: (notice: Notice, mode: SaveMode) => void;
 }
 
 /** The builder of a pattern: where it starts and the steps that follow, every control a choice, a checkbox or a button; the server checks what is built. */
-export function PatternBuilder({ profile, retryProfile, client, sourceId, sourceName, mask, maxHops, state, dispatch, onBack, startRef }: Props) {
+export function PatternBuilder({ profile, retryProfile, client, sourceId, sourceName, mask, maxHops, state, dispatch, onBack, startRef, editing, onSaved }: Props) {
   const { draft } = state;
   const ready = profile.kind === 'ready' ? profile.profile : undefined;
   const nameOf = (type: string | undefined): string => (type === undefined ? '' : (ready?.entityTypes.find((candidate) => candidate.type === type)?.displayName ?? type));
@@ -53,6 +61,7 @@ export function PatternBuilder({ profile, retryProfile, client, sourceId, source
           {BUILDER_COPY.back}
         </button>
       </div>
+      {editing === undefined ? null : <EditingNotes editing={editing} />}
       <p className="search-panel-note">{BUILDER_COPY.intro}</p>
       <p className="search-panel-note">{BUILDER_COPY.mappingNote}</p>
       {profile.kind === 'loading' ? (
@@ -104,6 +113,7 @@ export function PatternBuilder({ profile, retryProfile, client, sourceId, source
                 return (place.kind === 'step' && place.index === index) || (place.kind === 'condition' && place.index === index && place.row >= rowsOf(step).length);
               })}
               rowProblems={rowProblemsOf(problems, index)}
+              unplaced={reasonsOf(editing).filter((reason) => stepOfReason(reason) === index).map((reason) => UNAVAILABLE_TEXT[reason.code])}
               windowProblems={problems.filter((problem) => {
                 const place = placeOf(problem);
                 return place.kind === 'window' && place.index === index;
@@ -132,10 +142,35 @@ export function PatternBuilder({ profile, retryProfile, client, sourceId, source
           )}
           <Problems list={at('top')} />
           <CheckResult state={check.state} sourceName={sourceName} retry={check.retry} />
-          <RunSection client={client} sourceId={sourceId} sourceName={sourceName} mask={mask} profile={ready} definition={definition} anchorType={draft.anchorType} check={check.state} validFor={check.validFor} focusBuilder={() => document.getElementById('pattern-builder-start')?.focus()} />
+          <RunSection client={client} sourceId={sourceId} sourceName={sourceName} mask={mask} profile={ready} definition={definition} anchorType={draft.anchorType} check={check.state} validFor={check.validFor} focusBuilder={() => document.getElementById('pattern-builder-start')?.focus()} saveControls={(context) => <SaveControls client={client} sourceId={sourceId} definition={definition} context={context} nameOf={(type) => nameOf(type)} editing={editing?.item} onSaved={onSaved} />} />
         </>
       )}
     </section>
+  );
+}
+
+type Reason = Extract<ListedPattern['availability'], { status: 'unavailable' }>['reasons'][number];
+
+const reasonsOf = (editing: Props['editing']): readonly Reason[] => (editing === undefined || editing.item.availability.status !== 'unavailable' ? [] : editing.item.availability.reasons);
+const stepOfReason = (reason: Reason): number | undefined => (reason.path?.[0] === 'steps' && typeof reason.path[1] === 'number' ? reason.path[1] : undefined);
+
+/** What the builder says of a saved pattern it was opened from: that it is a change, and the reasons that have no step to sit beside (the ones that have one are in that step's card). */
+function EditingNotes({ editing }: { readonly editing: NonNullable<Props['editing']> }) {
+  const loose = reasonsOf(editing).filter((reason) => stepOfReason(reason) === undefined);
+  return (
+    <>
+      <p className="search-panel-note">{SAVED_COPY.changeLine}</p>
+      {editing.whole ? null : <p className="search-panel-note">{SAVED_COPY.changeUnplaced}</p>}
+      {loose.length === 0 ? null : (
+        <ul className="pattern-row-reasons">
+          {loose.map((reason, index) => (
+            <li key={`${reason.code}-${index}`} className="search-panel-note">
+              {UNAVAILABLE_TEXT[reason.code]}
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
   );
 }
 
@@ -198,11 +233,13 @@ interface StepProps {
   readonly mask: boolean;
   readonly problems: readonly PatternProblem[];
   readonly rowProblems: ReadonlyMap<number, readonly PatternProblem[]>;
+  /** What the mapping no longer has in this step, said in words, when the builder was opened from a saved pattern. */
+  readonly unplaced: readonly string[];
   readonly windowProblems: readonly PatternProblem[];
   readonly ref?: React.Ref<HTMLFieldSetElement> | undefined;
 }
 
-function StepCard({ profile, step, steps, index, previous, last, mask, nameOf, dispatch, problems, rowProblems, windowProblems, ref }: StepProps) {
+function StepCard({ profile, step, steps, index, previous, last, mask, nameOf, dispatch, problems, rowProblems, unplaced, windowProblems, ref }: StepProps) {
   const reached = previous === undefined || step.direction === undefined ? [] : arrivalTypes(profile, previous, step.direction);
   const choices = previous === undefined || step.direction === undefined || step.arrivesAt === undefined ? [] : relationshipChoices(profile, previous, step.arrivesAt, step.direction);
   const id = `pattern-step-${index}`;
@@ -210,6 +247,11 @@ function StepCard({ profile, step, steps, index, previous, last, mask, nameOf, d
   return (
     <fieldset className="patterns-field patterns-group pattern-step" ref={ref}>
       <legend className="supernode-label">{stepTitle(index)}</legend>
+      {unplaced.map((text) => (
+        <p key={text} className="search-panel-note" role="status">
+          {text}
+        </p>
+      ))}
       <label className="supernode-label" htmlFor={`${id}-direction`}>
         {BUILDER_COPY.direction}
       </label>

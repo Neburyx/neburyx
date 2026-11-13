@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, type ReactNode } from 'react';
 import type { PatternDefinition, PatternRunHeavy, SourceProfile } from '@neburyx/contracts';
 import { continueWith } from '../../banner/copy.js';
 import { heavyHeadline, heavyLine } from '../../banner/heavy-banner.js';
@@ -16,6 +16,7 @@ import { createDefinitionRunStore, definitionRunRequest, type DefinitionRunView 
 import { DefinitionResult } from './definition-result.js';
 import { useAddResult } from './use-add-result.js';
 import { PreviewArea } from './preview-area.js';
+import type { SaveContext } from '../saved/save-controls.js';
 import { RUN_COPY, runFailureView } from './run-copy.js';
 import type { CheckState } from './use-check.js';
 import { usePatternPreview } from './use-preview.js';
@@ -34,6 +35,8 @@ interface Props {
   readonly validFor: string | undefined;
   /** Puts the focus on the builder's first choice, where Refine filters returns the person to. */
   readonly focusBuilder: () => void;
+  /** Save pattern, beside Run: given the starting entity and why nothing can be saved yet. */
+  readonly saveControls?: (context: SaveContext) => ReactNode;
 }
 
 /** Why Run pattern cannot be pressed, in the order the person meets it, or nothing when it can. */
@@ -52,7 +55,7 @@ function runBlock(definition: PatternDefinition | undefined, check: CheckState, 
 const estimateOf = (answer: PatternRunHeavy) => ({ value: answer.estimate.value ?? answer.threshold, quality: 'lowerBound' as const });
 
 /** The preview, the starting entity, Run pattern and what a run gives: running, cancelled, failed, the heavy stop, and the result with Add to graph. */
-export function RunSection({ client, sourceId, sourceName, mask, profile, definition, anchorType, check, validFor, focusBuilder }: Props) {
+export function RunSection({ client, sourceId, sourceName, mask, profile, definition, anchorType, check, validFor, focusBuilder, saveControls }: Props) {
   const shell = useShellData();
   const evidence = useEvidenceHandle();
   const visible = useVisibleGraph();
@@ -93,7 +96,14 @@ export function RunSection({ client, sourceId, sourceName, mask, profile, defini
           return edge === undefined ? undefined : () => void evidence.open(edge.ref);
         };
 
-  if (anchorType === undefined) return <RunButton block={RUN_COPY.needComplete} running={false} timeout={timeout} onRun={press} onCancel={store.cancel} />;
+  if (anchorType === undefined) {
+    return (
+      <>
+        <RunButton block={RUN_COPY.needComplete} running={false} timeout={timeout} onRun={press} onCancel={store.cancel} />
+        {saveControls === undefined ? null : saveControls({ anchor: undefined, block: RUN_COPY.needComplete })}
+      </>
+    );
+  }
   return (
     <>
       <PreviewArea state={preview.state} sourceName={sourceName} retry={preview.retry} />
@@ -110,6 +120,7 @@ export function RunSection({ client, sourceId, sourceName, mask, profile, defini
         id="pattern-run-start"
       />
       <RunButton block={block} running={run.running} timeout={timeout} onRun={press} onCancel={store.cancel} />
+      {saveControls === undefined ? null : saveControls({ anchor, block: runBlock(definition, check.kind === 'valid' && validFor !== definitionKey ? { kind: 'checking' } : check, 'ok', true) })}
       {run.running ? (
         <p className="patterns-state" role="status">
           {`Running${timeout === undefined ? '' : ` · ${timeoutLabel(timeout)}`}`}

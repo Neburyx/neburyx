@@ -45,6 +45,17 @@ import {
   type PatternRunResponse,
   patternRunResponseSchema,
   type PatternValidateRequest,
+  type ChangePatternRequest,
+  type PatternListResponse,
+  type SavedPattern,
+  type SavedPatternRunRequest,
+  type SavedPatternRunResponse,
+  type SavePatternRequest,
+  type DeletePatternResponse,
+  patternListResponseSchema,
+  savedPatternSchema,
+  savedPatternRunResponseSchema,
+  deletePatternResponseSchema,
   type PatternValidateResponse,
   patternValidateResponseSchema,
   type DraftWriteRequest,
@@ -148,6 +159,18 @@ export interface ApiClient {
    * `key` is the idempotency key: a new one for each press, and for a continue (`request.continue`), which is another request.
    */
   runPattern(request: PatternRunRequest, key: string, signal?: AbortSignal): Promise<ApiResult<PatternRunResponse>>;
+  /** One page of the saved patterns of a source: the caller's own and the shared ones of other people, each with its creator's name, whether it is the caller's and whether it can run against the current mapping; reads no source. */
+  listPatterns(query: { readonly sourceId: string; readonly limit?: number; readonly cursor?: string }, signal?: AbortSignal): Promise<ApiResult<PatternListResponse>>;
+  /** Saves a pattern; the answer is the pattern as stored (private, version 1). */
+  savePattern(request: SavePatternRequest, signal?: AbortSignal): Promise<ApiResult<SavedPattern>>;
+  /** Changes one saved pattern of the caller's own; `expectedVersion` is the version the caller holds, and `visibility` is sent alone. */
+  changePattern(id: string, request: ChangePatternRequest, signal?: AbortSignal): Promise<ApiResult<SavedPattern>>;
+  /** Deletes one saved pattern of the caller's own; the version is the `If-Match` header and there is no body. */
+  deletePattern(id: string, version: number, signal?: AbortSignal): Promise<ApiResult<DeletePatternResponse>>;
+  /** Copies a pattern the caller may see into a new private pattern of their own. */
+  copyPattern(id: string, signal?: AbortSignal): Promise<ApiResult<SavedPattern>>;
+  /** Runs a saved pattern the caller may see: a pattern answer, a template answer or that the pattern cannot run now; `key` is the idempotency key, new for each press and for a continue. */
+  runSavedPattern(id: string, request: SavedPatternRunRequest, key: string, signal?: AbortSignal): Promise<ApiResult<SavedPatternRunResponse>>;
   testSource(sourceId: string, signal?: AbortSignal): Promise<ApiResult<SourceTestReport>>;
   /** One entity of a source, without its neighbors; `mask` asks for the personal-data fields to be masked. */
   getEntity(ref: ElementRef, options?: { readonly mask?: boolean }, signal?: AbortSignal): Promise<ApiResult<GraphNode>>;
@@ -308,6 +331,15 @@ export function createApiClient(fetcher: Fetcher = (input, init) => fetch(input,
     previewPattern: (body, signal) => request(fetcher, '/v1/patterns/preview', patternPreviewResponseSchema, signal, 'POST', body),
     runPattern: (body, key, signal) => request(fetcher, '/v1/patterns/run', patternRunResponseSchema, signal, 'POST', body, { headers: { 'idempotency-key': key } }),
     validatePattern: (body, signal) => request(fetcher, '/v1/patterns/validate', patternValidateResponseSchema, signal, 'POST', body),
+    listPatterns: (query, signal) => {
+      const parts = [['sourceId', query.sourceId], ['limit', query.limit === undefined ? undefined : String(query.limit)], ['cursor', query.cursor]].flatMap(([name, value]) => (value === undefined ? [] : [`${name}=${encodeURIComponent(value)}`]));
+      return request(fetcher, `/v1/patterns?${parts.join('&')}`, patternListResponseSchema, signal);
+    },
+    savePattern: (body, signal) => request(fetcher, '/v1/patterns', savedPatternSchema, signal, 'POST', body),
+    changePattern: (id, body, signal) => request(fetcher, `/v1/patterns/${encodeURIComponent(id)}`, savedPatternSchema, signal, 'PUT', body),
+    deletePattern: (id, version, signal) => request(fetcher, `/v1/patterns/${encodeURIComponent(id)}`, deletePatternResponseSchema, signal, 'DELETE', undefined, { headers: { 'if-match': `"${version}"` } }),
+    copyPattern: (id, signal) => request(fetcher, `/v1/patterns/${encodeURIComponent(id)}/copy`, savedPatternSchema, signal, 'POST'),
+    runSavedPattern: (id, body, key, signal) => request(fetcher, `/v1/patterns/${encodeURIComponent(id)}/run`, savedPatternRunResponseSchema, signal, 'POST', body, { headers: { 'idempotency-key': key } }),
     runTemplate: (id, body, key, signal) => request(fetcher, `/v1/templates/${encodeURIComponent(id)}/run`, templateRunResponseSchema, signal, 'POST', body, { headers: { 'idempotency-key': key } }),
     testSource: async (sourceId, signal) => {
       const result = await request(fetcher, `/v1/sources/${encodeURIComponent(sourceId)}/test`, sourceTestReportSchema, signal, 'POST');

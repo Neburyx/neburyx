@@ -177,6 +177,34 @@ describe('the API client, reading sources and a profile', () => {
     expect(asked[2]).toEqual({ path: '/v1/patterns/preview', method: 'POST', body: { sourceId: 'a', definition }, key: undefined });
   });
 
+  it('asks the saved-pattern routes with the typed requests, the version in If-Match for a delete, the idempotency key for a run, and refuses a malformed answer', async () => {
+    const asked: Array<{ path: string; method: string | undefined; body: unknown; headers: Record<string, string> | undefined }> = [];
+    const answer = (body: unknown) =>
+      createApiClient(async (input, init) => {
+        asked.push({ path: input, method: init?.method, body: typeof init?.body === 'string' ? JSON.parse(init.body) : undefined, headers: init?.headers as Record<string, string> | undefined });
+        return new Response(JSON.stringify(body));
+      });
+    const id = '0192f000-0000-7000-8000-0000000000a1';
+    const saved = { id, sourceId: 'a', name: 'Mine', askForStartingEntity: true, anchor: null, visibility: 'private', lastRunAt: null, createdAt: '2026-11-12T10:00:00.000Z', updatedAt: '2026-11-12T10:00:00.000Z', version: 1, kind: 'definition', definition: {} };
+    const listed = { ...saved, owner: { name: 'Someone' }, ownedByYou: true, availability: { status: 'available' } };
+    expect(await answer({ items: [listed], nextCursor: null }).listPatterns({ sourceId: 'a', limit: 25, cursor: 'c 1' })).toMatchObject({ ok: true });
+    expect(asked[0]?.path).toBe('/v1/patterns?sourceId=a&limit=25&cursor=c%201');
+    expect(await answer({ items: [saved], nextCursor: null }).listPatterns({ sourceId: 'a' })).toEqual({ ok: false, failure: { code: 'SCHEMA_MISMATCH' } });
+    const request = { sourceId: 'a', kind: 'definition' as const, name: 'Mine', definition: {} };
+    expect(await answer(saved).savePattern(request)).toMatchObject({ ok: true });
+    expect(asked[2]).toEqual({ path: '/v1/patterns', method: 'POST', body: request, headers: { 'content-type': 'application/json' } });
+    expect(await answer(saved).changePattern(id, { expectedVersion: 1, visibility: 'shared' })).toMatchObject({ ok: true });
+    expect(asked[3]).toMatchObject({ path: `/v1/patterns/${id}`, method: 'PUT', body: { expectedVersion: 1, visibility: 'shared' } });
+    const deleted = { id, version: 2, deletedAt: '2026-11-12T10:00:00.000Z', purgeAfter: '2026-12-12T10:00:00.000Z' };
+    expect(await answer(deleted).deletePattern(id, 1)).toMatchObject({ ok: true });
+    expect(asked[4]).toEqual({ path: `/v1/patterns/${id}`, method: 'DELETE', body: undefined, headers: { 'if-match': '"1"' } });
+    expect(await answer(saved).copyPattern(id)).toMatchObject({ ok: true });
+    expect(asked[5]).toMatchObject({ path: `/v1/patterns/${id}/copy`, method: 'POST', body: undefined });
+    expect(await answer({ status: 'unavailable', reasons: [{ code: 'unknown-property', path: ['steps', 0] }] }).runSavedPattern(id, { mask: true }, 'key-1')).toMatchObject({ ok: true, value: { status: 'unavailable' } });
+    expect(asked[6]).toEqual({ path: `/v1/patterns/${id}/run`, method: 'POST', body: { mask: true }, headers: { 'content-type': 'application/json', 'idempotency-key': 'key-1' } });
+    expect(await answer({ status: 'maybe' }).runSavedPattern(id, {}, 'key-2')).toEqual({ ok: false, failure: { code: 'SCHEMA_MISMATCH' } });
+  });
+
   it('gives a schema mismatch, never a partial value, for a list or a profile that does not match its contract', async () => {
     const client = createApiClient(async () => new Response(JSON.stringify({ items: [{ id: 1 }], nextCursor: null })));
     expect(await client.getSources()).toEqual({ ok: false, failure: { code: 'SCHEMA_MISMATCH' } });

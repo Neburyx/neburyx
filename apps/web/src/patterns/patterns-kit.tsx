@@ -1,5 +1,5 @@
 import { act, fireEvent, screen } from '@testing-library/react';
-import { paramsJsonSchemaOf, type PatternValidateRequest, type PatternValidateResponse, type PatternPreviewRequest, type PatternPreviewResponse, type PatternRunRequest, type PatternRunResponse, type SourceProfile, type GraphEdge, type GraphNode, type TemplateListResponse, type TemplateRunRequest, type TemplateRunResponse } from '@neburyx/contracts';
+import { listedPatternSchema, paramsJsonSchemaOf, type ListedPattern, type PatternValidateRequest, type PatternValidateResponse, type PatternPreviewRequest, type PatternPreviewResponse, type PatternRunRequest, type PatternRunResponse, type SourceProfile, type GraphEdge, type GraphNode, type TemplateListResponse, type TemplateRunRequest, type TemplateRunResponse } from '@neburyx/contracts';
 import { fakeClient } from '../api/fake-client.js';
 import type { ApiClient, ApiFailure, ApiResult } from '../api/client.js';
 import { createClientState, type ClientState } from '../state/client-state.js';
@@ -76,6 +76,33 @@ export const heavyRun = (): TemplateRunResponse => ({ status: 'heavy', templateI
 
 export const failure = (code: string, details?: Record<string, unknown>): ApiFailure => ({ code, message: code, traceId: 't-1', retryable: true, ...(details === undefined ? {} : { details }) }) as unknown as ApiFailure;
 
+const SAVED_TIME = '2026-11-12T10:00:00.000Z';
+
+/** A saved pattern as the list shows it: a built pattern of the person's own, private, never run, able to run; a field can be overridden, and `kind: 'preset-run'` makes a saved run of a built-in pattern. The contract's schema checks it. */
+export const listed = (overrides: { readonly id: string; readonly name: string } & Record<string, unknown>): ListedPattern => {
+  const common = {
+    sourceId: 'a',
+    askForStartingEntity: false,
+    anchor: { entityType: 'kind-a', stableId: 'acc-1' },
+    visibility: 'private',
+    lastRunAt: null,
+    createdAt: SAVED_TIME,
+    updatedAt: SAVED_TIME,
+    version: 1,
+    owner: { name: 'Me' },
+    ownedByYou: true,
+    availability: { status: 'available' },
+  };
+  const own = overrides['kind'] === 'preset-run' ? { kind: 'preset-run', presetId: 'shared-devices', templateId: 'shared-attribute', templateVersion: 1, params: {} } : { kind: 'definition', definition: { anchorType: 'kind-a', steps: [{ relationshipTypes: ['link-a'], direction: 'out', arrivesAt: 'kind-b' }] } };
+  return listedPatternSchema.parse({ ...common, ...own, ...overrides });
+};
+
+/** What the saved-pattern routes were asked, in order, with the method that asked. */
+export interface PatternCall {
+  readonly method: 'listPatterns' | 'savePattern' | 'changePattern' | 'deletePattern' | 'copyPattern' | 'runSavedPattern';
+  readonly args: readonly unknown[];
+}
+
 export interface Sent {
   readonly id: string;
   readonly request: TemplateRunRequest;
@@ -93,6 +120,8 @@ export interface PatternsKit {
   readonly validations: PatternValidateRequest[];
   /** The definitions the builder asked the server to put in words, in order. */
   readonly previews: PatternPreviewRequest[];
+  /** The calls the panel made to the saved-pattern routes. */
+  readonly patternCalls: PatternCall[];
   /** The pattern runs the builder sent, with their key and signal, in order. */
   readonly definitionRuns: Array<{ readonly request: PatternRunRequest; readonly key: string; readonly signal: AbortSignal | undefined }>;
   readonly evidence: Evidence;
@@ -100,6 +129,8 @@ export interface PatternsKit {
 }
 
 export interface KitOptions {
+  /** Answers of the saved-pattern routes; the list is empty and the others are unreachable by default. */
+  readonly patterns?: Partial<Pick<ApiClient, 'listPatterns' | 'savePattern' | 'changePattern' | 'deletePattern' | 'copyPattern' | 'runSavedPattern'>>;
   readonly list?: () => Promise<ApiResult<TemplateListResponse>>;
   readonly run?: (sent: Sent) => Promise<ApiResult<TemplateRunResponse>>;
   readonly nodes?: readonly GraphNode[];
@@ -124,6 +155,8 @@ export async function patternsWorkspace(options: KitOptions = {}): Promise<Patte
   const validations: PatternValidateRequest[] = [];
   const previews: PatternPreviewRequest[] = [];
   const definitionRuns: PatternsKit['definitionRuns'] = [];
+  const patternCalls: PatternCall[] = [];
+  const saved = options.patterns ?? {};
   const client = fakeClient({
     getProfile: options.profile ?? (async (sourceId) => ({ ok: true, value: profiled(sourceId, ['kind-a', 'kind-b', 'kind-c']) })),
     previewPattern: async (request, signal) => {
@@ -137,6 +170,30 @@ export async function patternsWorkspace(options: KitOptions = {}): Promise<Patte
     validatePattern: async (request, signal) => {
       validations.push(request);
       return options.validate === undefined ? { ok: true, value: { status: 'ok' } } : options.validate(request, signal);
+    },
+    listPatterns: async (query, signal) => {
+      patternCalls.push({ method: 'listPatterns', args: [query, signal] });
+      return saved.listPatterns === undefined ? { ok: true, value: { items: [], nextCursor: null } } : saved.listPatterns(query, signal);
+    },
+    savePattern: async (request, signal) => {
+      patternCalls.push({ method: 'savePattern', args: [request, signal] });
+      return saved.savePattern === undefined ? { ok: false, failure: { code: 'NETWORK_UNAVAILABLE' } } : saved.savePattern(request, signal);
+    },
+    changePattern: async (id, request, signal) => {
+      patternCalls.push({ method: 'changePattern', args: [id, request, signal] });
+      return saved.changePattern === undefined ? { ok: false, failure: { code: 'NETWORK_UNAVAILABLE' } } : saved.changePattern(id, request, signal);
+    },
+    deletePattern: async (id, version, signal) => {
+      patternCalls.push({ method: 'deletePattern', args: [id, version, signal] });
+      return saved.deletePattern === undefined ? { ok: false, failure: { code: 'NETWORK_UNAVAILABLE' } } : saved.deletePattern(id, version, signal);
+    },
+    copyPattern: async (id, signal) => {
+      patternCalls.push({ method: 'copyPattern', args: [id, signal] });
+      return saved.copyPattern === undefined ? { ok: false, failure: { code: 'NETWORK_UNAVAILABLE' } } : saved.copyPattern(id, signal);
+    },
+    runSavedPattern: async (id, request, key, signal) => {
+      patternCalls.push({ method: 'runSavedPattern', args: [id, request, key, signal] });
+      return saved.runSavedPattern === undefined ? { ok: false, failure: { code: 'NETWORK_UNAVAILABLE' } } : saved.runSavedPattern(id, request, key, signal);
     },
     getMe: async () => ({ ok: true, value: me() }),
     getSources: async () => ({ ok: true, value: { items: [source('a', { ...(options.timeoutMs === null ? {} : { timeoutMs: options.timeoutMs ?? 5000 }), ...(options.maxHops === undefined ? {} : { maxHops: options.maxHops }) })], nextCursor: null } }),
@@ -166,7 +223,7 @@ export async function patternsWorkspace(options: KitOptions = {}): Promise<Patte
   evidence.kinds.register(storedEvidenceKind);
   const view = renderApp('/explore', client, state, slots, stubFactory().create, undefined, tools, undefined, createPanelRegistryFor(state), undefined, banner, evidence);
   await settle();
-  return { state, banner, client, sent, searches, validations, previews, definitionRuns, evidence, unmount: view.unmount };
+  return { state, banner, client, sent, searches, validations, previews, patternCalls, definitionRuns, evidence, unmount: view.unmount };
 }
 
 export async function settle(): Promise<void> {

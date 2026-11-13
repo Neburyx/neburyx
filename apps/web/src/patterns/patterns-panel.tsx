@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type KeyboardEvent } from 'react';
-import type { GraphNode, TemplateListResponse, TemplateRunOk } from '@neburyx/contracts';
+import type { GraphNode, ListedPattern, TemplateListResponse, TemplateRunOk } from '@neburyx/contracts';
 import { withoutReadsWhileSourceChanged } from '../api/changed-source-guard.js';
 import { useApiClient } from '../api/client-context.js';
 import { heavyDecisionOfRun } from '../api/heavy-estimate.js';
@@ -28,6 +28,11 @@ import { StartEntityField } from './start-entity.js';
 import type { RunAsk } from './pattern-run-store.js';
 import { usePatternRun } from './use-pattern-run.js';
 import { BUILDER_COPY } from './builder/copy.js';
+import { useRowActions, RowDialogs, type Notice } from './saved/use-row-actions.js';
+import { useSavedPatterns } from './saved/use-saved-patterns.js';
+import { SavedPatternsTabs } from './saved/saved-tabs.js';
+import { fromDefinition } from './saved/from-definition.js';
+import type { SaveMode } from './saved/save-dialog.js';
 import { INITIAL, reduce, type Action, type BuilderState } from './builder/model.js';
 import { PatternBuilder, type ProfileView } from './builder/pattern-builder.js';
 
@@ -76,7 +81,11 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
   const [view, setView] = useState<'list' | 'builder'>('list');
   const viewRef = useRef(view);
   viewRef.current = view;
+  const [notice, setNotice] = useState<Notice | undefined>(undefined);
+  const saved = useSavedPatterns(client, sourceId);
+  const rows = useRowActions(client, saved.reload, setNotice);
   const [builder, setBuilder] = useState<BuilderState>(INITIAL);
+  const [editing, setEditing] = useState<{ readonly item: ListedPattern; readonly whole: boolean } | undefined>(undefined);
   const drafted = builder.draft.anchorType !== undefined;
   const mounted = useRef(false);
   useEffect(() => {
@@ -96,6 +105,22 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
   const startRef = useRef<HTMLSelectElement>(null);
   const opened = useRef(false);
   const back = (): void => setView('list');
+  const change = (item: ListedPattern): void => {
+    const opened = fromDefinition(item.kind === 'definition' ? item.definition : undefined);
+    setBuilder({ draft: opened.draft, removed: 0 });
+    setEditing({ item, whole: opened.whole });
+    setNotice(undefined);
+    setView('builder');
+  };
+  const afterSave = (notice: Notice, mode: SaveMode): void => {
+    setNotice(notice);
+    saved.reload();
+    if (mode.kind === 'change' && notice.tone === 'done') {
+      setBuilder(INITIAL);
+      setEditing(undefined);
+      setView('list');
+    }
+  };
   useEffect(() => {
     if (view === 'builder') {
       opened.current = true;
@@ -125,6 +150,11 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
         </button>
       </div>
       {view === 'list' ? <p className="search-panel-note">{PATTERNS_COPY.intro}</p> : null}
+      {notice === undefined ? null : (
+        <p className="search-panel-note" role={notice.tone === 'problem' ? 'alert' : 'status'}>
+          {notice.text}
+        </p>
+      )}
       {restarted && view === 'list' ? (
         <p className="search-panel-note" role="status">
           {BUILDER_COPY.restartedByMask}
@@ -138,6 +168,11 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
             <div className="patterns-actions">
               <button type="button" className="secondary" ref={newButton} onClick={() => {
                   onRestartedSeen();
+                  setNotice(undefined);
+                  if (editing !== undefined) {
+                    setBuilder(INITIAL);
+                    setEditing(undefined);
+                  }
                   setView('builder');
                 }}>
                 {BUILDER_COPY.newPattern}
@@ -145,18 +180,19 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
             </div>
           ) : null}
           <div hidden={view === 'builder'}>
-            <PatternsList client={client} sourceId={sourceId} sourceName={sourceName} mask={mask} close={close} escape={cancelOrClose} />
+            <SavedPatternsTabs client={client} sourceId={sourceId} sourceName={sourceName} mask={mask} close={close} escape={cancelOrClose} saved={saved} rows={rows} onChange={change} renderBuiltIn={(list, presetEscape) => <PatternsList client={client} sourceId={sourceId} sourceName={sourceName} mask={mask} close={close} escape={presetEscape} list={list} />} />
           </div>
           {view === 'builder' ? (
-            <PatternBuilder profile={profileView} retryProfile={reloadProfile} client={client} sourceId={sourceId} sourceName={sourceName} mask={mask} maxHops={maxHops} state={builder} dispatch={dispatch} onBack={back} startRef={startRef} />
+            <PatternBuilder profile={profileView} retryProfile={reloadProfile} client={client} sourceId={sourceId} sourceName={sourceName} mask={mask} maxHops={maxHops} state={builder} dispatch={dispatch} onBack={back} startRef={startRef} editing={editing} onSaved={afterSave} />
           ) : null}
         </>
       )}
+      <RowDialogs actions={rows} />
     </div>
   );
 }
 
-interface ListProps {
+export interface ListProps {
   readonly client: ReturnType<typeof withoutReadsWhileSourceChanged>;
   readonly sourceId: string;
   readonly sourceName: string;
@@ -165,9 +201,7 @@ interface ListProps {
   readonly escape: React.MutableRefObject<() => void>;
 }
 
-function PatternsList({ client, sourceId, sourceName, mask, close, escape }: ListProps) {
-  const load = useCallback((signal: AbortSignal) => client.listTemplates(sourceId, signal), [client, sourceId]);
-  const list = useRequest(load);
+export function PatternsList({ client, sourceId, sourceName, mask, close, escape, list }: ListProps & { readonly list: ReturnType<typeof useRequest<TemplateListResponse>> }) {
   const held = list.state.phase === 'ready' || list.state.phase === 'loading' ? list.state.data : undefined;
   if (held === undefined && list.state.phase !== 'failed') {
     escape.current = close;
