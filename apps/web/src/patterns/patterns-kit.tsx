@@ -4,7 +4,7 @@ import { fakeClient } from '../api/fake-client.js';
 import type { ApiClient, ApiFailure, ApiResult } from '../api/client.js';
 import { createClientState, type ClientState } from '../state/client-state.js';
 import { elementKey } from '../state/keys.js';
-import { edge as edgeOf, ref } from '../state/test-data.js';
+import { edge as edgeOf, edgeRef, ref } from '../state/test-data.js';
 import { createBuiltInBannerController } from '../banner/built-in-causes.js';
 import type { BannerController } from '../banner/banner-controller.js';
 import { me, renderApp, source, stubFactory } from '../test-utils.js';
@@ -55,8 +55,8 @@ export const PREVIEW = {
 
 /** The `ok` answer of a pattern run: each match is one hop from the anchor, with the shared entity and edge of the scripted ring. */
 export const definitionOk = (matches: readonly string[], overrides: Partial<Extract<PatternRunResponse, { status: 'ok' }>> = {}): PatternRunResponse => {
-  const nodes = [typedNode('acc-1', 'kind-a'), typedNode('dev-1', 'kind-b'), ...matches.map((id) => typedNode(id, 'kind-a'))];
-  const edges: GraphEdge[] = matches.map((id, index) => ({ ...edgeOf('a', `p${index}`, id, 'dev-1'), from: ref('a', 'kind-a', id), to: ref('a', 'kind-b', 'dev-1'), evidenceRefs: [`REC-${index}`] }));
+  const nodes = [typedNode('acc-1', 'kind-a'), ...matches.map((id) => typedNode(id, 'kind-a'))];
+  const edges: GraphEdge[] = matches.map((id, index) => ({ ...edgeOf('a', `p${index}`, 'acc-1', id), ref: edgeRef('a', `p${index}`, 'r-1', 'kind-a', 'kind-a'), type: 'r-1', from: ref('a', 'kind-a', 'acc-1'), to: ref('a', 'kind-a', id), evidenceRefs: [`REC-${index}`] }));
   return {
     status: 'ok',
     templateVersion: '1',

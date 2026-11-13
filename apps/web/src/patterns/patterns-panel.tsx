@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type KeyboardEvent } from 'react';
-import type { GraphNode, ListedPattern, TemplateListResponse, TemplateRunOk } from '@neburyx/contracts';
+import type { GraphNode, ListedPattern, PatternDefinition, TemplateListResponse, TemplateRunOk } from '@neburyx/contracts';
 import { withoutReadsWhileSourceChanged } from '../api/changed-source-guard.js';
 import { useApiClient } from '../api/client-context.js';
 import { heavyDecisionOfRun } from '../api/heavy-estimate.js';
@@ -19,6 +19,7 @@ import { canRetry } from '../failure-notice.js';
 import type { ApiFailure } from '../api/client.js';
 import { continueWith, rateLimitedRetry } from '../banner/copy.js';
 import { heavyHeadline, heavyLine } from '../banner/heavy-banner.js';
+import { RUN_COPY } from './run/run-copy.js';
 import { EDITOR_SUBTITLE, failureView, listSubtitle, maxHopsOf, maxPageOf, PATTERNS_COPY, SHELL_COPY, startHint, timeoutLabel } from './copy.js';
 import { buildParams, fieldsOf, labelOf, type FormValues } from './form-model.js';
 import { PatternForm } from './pattern-form.js';
@@ -35,8 +36,7 @@ import { fromDefinition } from './builder/from-definition.js';
 import type { SaveMode } from './saved/save-dialog.js';
 import { INITIAL, reduce, type Action, type BuilderState } from './builder/model.js';
 import { PatternEditor, type EditingView, type ProfileView } from './builder/pattern-editor.js';
-import { RunSection } from './run/run-section.js';
-import { SaveControls } from './saved/save-controls.js';
+import { RunFlow, type RunHeader } from './run/run-flow.js';
 import { SAVED_COPY, UNAVAILABLE_TEXT } from './saved/saved-copy.js';
 
 type Reason = Extract<ListedPattern['availability'], { status: 'unavailable' }>['reasons'][number];
@@ -101,7 +101,10 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
   };
   const cancelOrClose = useRef<() => void>(close);
   // the builder is a second view of the panel; the list stays mounted, hidden, so its form is as it was on the way back
-  const [view, setView] = useState<'list' | 'builder' | 'preset'>('list');
+  const [view, setView] = useState<'list' | 'builder' | 'preset' | 'run'>('list');
+  // the draft the editor handed to the preview, and what the screen of the run says under the heading
+  const [previewing, setPreviewing] = useState<PatternDefinition | undefined>(undefined);
+  const [runHeader, setRunHeader] = useState<RunHeader | undefined>(undefined);
   const [presetId, setPresetId] = useState<string | undefined>(undefined);
   // the run of a built-in pattern is kept while the panel is open, so that going back to the list and to the form again shows the result under its own pattern
   const presetRun = usePatternRun(client, sourceId ?? '', mask);
@@ -147,6 +150,7 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
   const cancel = (): void => {
     setBuilder(INITIAL);
     setEditing(undefined);
+    setPreviewing(undefined);
     setView('list');
   };
   const editingView = useMemo(() => (editing === undefined ? undefined : editingViewOf(editing.item, editing.whole)), [editing]);
@@ -163,14 +167,20 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
     if (mode.kind === 'change' && notice.tone === 'done') {
       setBuilder(INITIAL);
       setEditing(undefined);
+      setPreviewing(undefined);
       setView('list');
     }
   };
+  const before = useRef(view);
   useEffect(() => {
+    const was = before.current;
+    before.current = view;
     if (view === 'builder') {
       opened.current = true;
-      startRef.current?.focus();
-    } else if (opened.current) newButton.current?.focus();
+      // back from the preview the editor is as it was left, and the focus goes to its Preview button
+      if (was === 'run') root.current?.querySelector<HTMLElement>('.pattern-editor-actions .primary')?.focus();
+      else startRef.current?.focus();
+    } else if (view !== 'run' && opened.current) newButton.current?.focus();
   }, [view]);
   useEffect(() => {
     const frame = root.current?.closest('.panel-frame');
@@ -189,13 +199,13 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
   return (
     <div className="patterns-panel" ref={root}>
       <div className="search-panel-header">
-        <h2 className="search-panel-heading">{view === 'list' ? PATTERNS_COPY.title : view === 'preset' ? (templateData?.presets.find((candidate) => candidate.id === presetId)?.name ?? PATTERNS_COPY.title) : (editingView?.title ?? SHELL_COPY.newPattern)}</h2>
+        <h2 className="search-panel-heading">{view === 'list' ? PATTERNS_COPY.title : view === 'preset' ? (templateData?.presets.find((candidate) => candidate.id === presetId)?.name ?? PATTERNS_COPY.title) : view === 'run' ? (runHeader?.title ?? RUN_COPY.previewTitle) : (editingView?.title ?? SHELL_COPY.newPattern)}</h2>
         <button type="button" className="legend-close" aria-label={view === 'builder' ? PATTERNS_COPY.closeBuilder : PATTERNS_COPY.close} onClick={close}>
           <span className="icon icon-clear" aria-hidden="true" />
         </button>
       </div>
       {sourceId === null ? null : (
-        <p className="search-panel-note patterns-subhead">{view === 'builder' ? EDITOR_SUBTITLE : listSubtitle(sourceName)}</p>
+        <p className="search-panel-note patterns-subhead">{view === 'run' ? (runHeader?.subtitle ?? RUN_COPY.draft) : view === 'builder' ? EDITOR_SUBTITLE : listSubtitle(sourceName)}</p>
       )}
       {view === 'list' ? <p className="search-panel-note">{PATTERNS_COPY.intro}</p> : null}
       {notice === undefined ? null : (
@@ -257,36 +267,44 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
           {view === 'preset' && templateData !== undefined && presetId !== undefined && templateData.presets.some((candidate) => candidate.id === presetId) ? (
             <PatternsWorkbench client={client} sourceId={sourceId} sourceName={sourceName} mask={mask} list={templateData} presetId={presetId} run={presetRun} close={close} escape={cancelOrClose} onBack={() => setView('list')} />
           ) : null}
-          {view === 'builder' ? (
-            <PatternEditor
-              profile={profileView}
-              retryProfile={reloadProfile}
+          {view === 'builder' || view === 'run' ? (
+            <div hidden={view !== 'builder'}>
+              <PatternEditor
+                profile={profileView}
+                retryProfile={reloadProfile}
+                client={client}
+                sourceId={sourceId}
+                sourceName={sourceName}
+                mask={mask}
+                maxHops={maxHops}
+                state={builder}
+                dispatch={dispatch}
+                onCancel={cancel}
+                onPreview={(definition) => {
+                  setPreviewing(definition);
+                  setRunHeader(undefined);
+                  setNotice(undefined);
+                  setView('run');
+                }}
+                startRef={startRef}
+                editing={editingView}
+              />
+            </div>
+          ) : null}
+          {view === 'run' && previewing !== undefined && profile !== undefined ? (
+            <RunFlow
               client={client}
               sourceId={sourceId}
               sourceName={sourceName}
               mask={mask}
-              maxHops={maxHops}
-              state={builder}
-              dispatch={dispatch}
-              onCancel={cancel}
-              onPreview={() => document.getElementById('pattern-run-start')?.focus()}
-              startRef={startRef}
-              editing={editingView}
-              footer={(footer) => (
-                <RunSection
-                  client={client}
-                  sourceId={sourceId}
-                  sourceName={sourceName}
-                  mask={mask}
-                  profile={footer.profile}
-                  definition={footer.definition}
-                  anchorType={footer.anchorType}
-                  check={footer.check}
-                  validFor={footer.validFor}
-                  focusBuilder={footer.focusStart}
-                  saveControls={(context) => <SaveControls client={client} sourceId={sourceId} definition={footer.definition} context={context} nameOf={(type) => footer.nameOf(type)} editing={editing?.item} onSaved={afterSave} />}
-                />
-              )}
+              profile={profile}
+              definition={previewing}
+              editing={editing?.item}
+              onEdit={() => setView('builder')}
+              onSaved={afterSave}
+              onHeader={setRunHeader}
+              close={close}
+              escape={cancelOrClose}
             />
           ) : null}
         </>

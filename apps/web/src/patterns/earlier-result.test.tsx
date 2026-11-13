@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import type { ApiResult } from '../api/client.js';
 import type { PatternRunResponse, SavedPatternRunResponse, TemplateRunResponse } from '@neburyx/contracts';
 import { definitionOk, failure, heavyRun, listed, okRun, openBuiltIn, openPatterns, patternsWorkspace, selectAccount, settle } from './patterns-kit.js';
-import { runButton, runWorkspace, validPattern } from './run/run-kit.js';
+import { inRun, ran, runButton, runWorkspace } from './run/run-kit.js';
 
 beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }));
 afterEach(() => {
@@ -50,17 +50,19 @@ describe('an earlier result under a run that gave none', () => {
     expect(screen.queryByText(NOTE)).toBeNull();
   });
 
-  it('is labelled in the builder when the next run fails', async () => {
+  it('is not carried into a run of a built pattern: a failed next run shows its refusal on the preview, with no earlier result under it', async () => {
     let calls = 0;
     await runWorkspace({ runDefinition: async () => (++calls === 1 ? { ok: true, value: definitionOk(['acc-2']) as PatternRunResponse } : BUSY) });
-    await validPattern();
+    await ran();
+    expect(inRun().getByRole('list', { name: 'Matches' })).toBeTruthy();
+    await userEvent.click(inRun().getByRole('button', { name: 'Edit pattern' }));
+    await userEvent.click(screen.getByRole('button', { name: /^Preview/ }));
+    await settle();
     await userEvent.click(runButton());
     await settle();
+    expect(inRun().getByText(/is busy/)).toBeTruthy();
     expect(screen.queryByText(NOTE)).toBeNull();
-    await userEvent.click(runButton());
-    await settle();
-    expect(screen.getByText(NOTE)).toBeTruthy();
-    expect(screen.getByRole('region', { name: 'Result' })).toBeTruthy();
+    expect(inRun().queryByRole('list', { name: 'Matches' })).toBeNull();
   });
 
   it('is labelled under a saved pattern when its next run fails', async () => {

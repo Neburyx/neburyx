@@ -42,6 +42,11 @@ async function opened(item: ListedPattern, options: KitOptions = {}) {
   return kit;
 }
 const builder = () => within(screen.getByRole('region', { name: 'Change pattern: Alpha' }));
+/** The preview of the pattern opened for a change, where Save changes… and Save as new… are. */
+const toPreview = async (): Promise<void> => {
+  await userEvent.click(screen.getByRole('button', { name: /^Preview/ }));
+  await settle();
+};
 const calls = (kit: Awaited<ReturnType<typeof opened>>, method: string) => kit.patternCalls.filter((call) => call.method === method);
 
 describe('changing a saved pattern in the builder', () => {
@@ -67,7 +72,8 @@ describe('changing a saved pattern in the builder', () => {
     const kit = await opened(listed({ id: ID, name: 'Alpha', definition: DEFINITION, version: 4, askForStartingEntity: true, anchor: null }), { patterns: { changePattern: async () => ({ ok: true, value: stored() }) } });
     await vi.advanceTimersByTimeAsync(400);
     await settle();
-    await userEvent.click(builder().getByRole('button', { name: 'Save changes' }));
+    await toPreview();
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes…' }));
     expect((within(screen.getByRole('dialog')).getByLabelText('Name') as HTMLInputElement).value).toBe('Alpha');
     await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Save changes' }));
     await settle();
@@ -84,7 +90,8 @@ describe('changing a saved pattern in the builder', () => {
     const kit = await opened(held, { nodes: [], opened: null, patterns: { changePattern: async () => ({ ok: true, value: stored() }) } });
     await vi.advanceTimersByTimeAsync(400);
     await settle();
-    await userEvent.click(builder().getByRole('button', { name: 'Save changes' }));
+    await toPreview();
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes…' }));
     const box = within(screen.getByRole('dialog')).getByRole('checkbox', { name: 'Ask for the starting entity each time' }) as HTMLInputElement;
     expect(box.checked).toBe(false);
     expect(box.disabled).toBe(false);
@@ -99,7 +106,8 @@ describe('changing a saved pattern in the builder', () => {
     const kit = await opened(held, { patterns: { changePattern: async () => ({ ok: true, value: stored() }) } });
     await vi.advanceTimersByTimeAsync(400);
     await settle();
-    await userEvent.click(builder().getByRole('button', { name: 'Save changes' }));
+    await toPreview();
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes…' }));
     await userEvent.click(within(screen.getByRole('dialog')).getByRole('checkbox', { name: 'Ask for the starting entity each time' }));
     await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Save changes' }));
     await settle();
@@ -110,28 +118,32 @@ describe('changing a saved pattern in the builder', () => {
     const kit = await opened(listed({ id: ID, name: 'Alpha', definition: DEFINITION, version: 4 }), { patterns: { changePattern: async () => ({ ok: false, failure: failure('CONFLICT') }), savePattern: async () => ({ ok: true, value: stored({ id: '0192f000-0000-7000-8000-0000000000b2', version: 1 }) }) } });
     await vi.advanceTimersByTimeAsync(400);
     await settle();
-    await userEvent.click(builder().getByRole('button', { name: 'Save changes' }));
+    await toPreview();
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes…' }));
     await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Save changes' }));
     await settle();
     expect(within(screen.getByRole('dialog')).getByRole('alert').textContent).toContain('The pattern changed since you read the list');
     await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }));
+    await userEvent.click(screen.getByRole('button', { name: /Edit$/ }));
     await userEvent.click(builder().getByRole('tab', { name: 'Step 1' }));
     await userEvent.click(builder().getByRole('tab', { name: /^Conditions/ }));
     expect(builder().getByText('b-name is abc')).toBeTruthy();
-    await userEvent.click(builder().getByRole('button', { name: 'Save as new' }));
+    await toPreview();
+    await userEvent.click(screen.getByRole('button', { name: 'Save as new…' }));
     await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Save pattern' }));
     await settle();
     expect(calls(kit, 'savePattern')).toHaveLength(1);
   });
 
-  it('opens a definition the mapping no longer supports with the parts it cannot place said in words, and keeps Save changes disabled', async () => {
+  it('opens a definition the mapping no longer supports with the parts it cannot place said in words, and keeps Preview off, so nothing can be saved', async () => {
     const gone = { anchorType: 'c-a', steps: [{ relationshipTypes: ['k-gone'], direction: 'out', arrivesAt: 'c-gone' }] };
     await opened(listed({ id: ID, name: 'Alpha', definition: gone, availability: { status: 'unavailable', reasons: [{ code: 'unknown-entity-type', path: ['steps', 0, 'arrivesAt'] }] } }), { validate: async () => ({ ok: true, value: { status: 'invalid', problems: [{ path: ['steps', 0, 'arrivesAt'], code: 'unknown-entity-type' }] } }) });
     await vi.advanceTimersByTimeAsync(400);
     await settle();
     await userEvent.click(builder().getByRole('tab', { name: /^Step 1/ }));
     expect(within(builder().getByRole('tabpanel', { name: /^Step 1/ })).getByText(UNAVAILABLE_TEXT['unknown-entity-type'])).toBeTruthy();
-    expect((builder().getByRole('button', { name: 'Save changes' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: /^Preview/ }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole('button', { name: 'Save changes…' })).toBeNull();
   });
 
   it('opens empty, saying so, for a stored definition that no longer passes the schema', async () => {

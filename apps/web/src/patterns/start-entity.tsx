@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import type { GraphNode } from '@neburyx/contracts';
-import type { ApiClient } from '../api/client.js';
+import type { Count, GraphNode } from '@neburyx/contracts';
+import type { ApiClient, ApiFailure } from '../api/client.js';
 import { UNEXPECTED } from '../api/use-request.js';
 import { elementKey } from '../state/keys.js';
 import { PATTERNS_COPY } from './copy.js';
@@ -23,13 +23,19 @@ interface Props {
   readonly id?: string;
 }
 
-type Found = { readonly kind: 'none' } | { readonly kind: 'found'; readonly nodes: readonly GraphNode[] } | { readonly kind: 'failed' };
+export type Found =
+  | { readonly kind: 'none' }
+  | { readonly kind: 'found'; readonly nodes: readonly GraphNode[]; readonly count: Count | undefined }
+  | { readonly kind: 'failed'; readonly failure: ApiFailure };
 
-/**
- * The starting entity is chosen, never typed as an identifier: from the selected and loaded entities of its type, or from a search of the source narrowed to that type. Typed text only ever reaches the search route.
- */
-export function StartEntityField({ client, sourceId, mask, label, entityType, candidates, chosenKey, onChoose, selectRef, id = 'patterns-start' }: Props) {
-  const [text, setText] = useState('');
+export interface EntitySearch {
+  readonly found: Found;
+  /** Whether an answer to the text typed has arrived. */
+  readonly asked: boolean;
+}
+
+/** The search of the source for the text typed, narrowed to one entity type, after a pause; typed text only ever reaches the search route. An answer to older text is never shown. */
+export function useEntitySearch(client: ApiClient, sourceId: string, mask: boolean, entityType: string, text: string): EntitySearch {
   const [found, setFound] = useState<Found>({ kind: 'none' });
   const [asked, setAsked] = useState(false);
 
@@ -51,7 +57,7 @@ export function StartEntityField({ client, sourceId, mask, label, entityType, ca
         }
         if (controller.signal.aborted) return;
         setAsked(true);
-        setFound(result.ok ? { kind: 'found', nodes: result.value.exact } : result.failure.code === 'ABORTED' ? { kind: 'none' } : { kind: 'failed' });
+        setFound(result.ok ? { kind: 'found', nodes: result.value.exact, count: result.value.counts.exact } : result.failure.code === 'ABORTED' ? { kind: 'none' } : { kind: 'failed', failure: result.failure });
       };
       void send();
     }, SEARCH_DEBOUNCE_MS);
@@ -60,6 +66,16 @@ export function StartEntityField({ client, sourceId, mask, label, entityType, ca
       controller.abort();
     };
   }, [text, client, sourceId, mask, entityType]);
+
+  return { found, asked };
+}
+
+/**
+ * The starting entity is chosen, never typed as an identifier: from the selected and loaded entities of its type, or from a search of the source narrowed to that type. Typed text only ever reaches the search route.
+ */
+export function StartEntityField({ client, sourceId, mask, label, entityType, candidates, chosenKey, onChoose, selectRef, id = 'patterns-start' }: Props) {
+  const [text, setText] = useState('');
+  const { found, asked } = useEntitySearch(client, sourceId, mask, entityType, text);
 
   const listed = new Set(candidates.map((node) => elementKey(node.ref)));
   const extra = found.kind === 'found' ? found.nodes.filter((node) => !listed.has(elementKey(node.ref))) : [];

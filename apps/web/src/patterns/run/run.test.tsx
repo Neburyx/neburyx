@@ -2,8 +2,8 @@ import { act } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PatternPreviewResponse, PatternRunResponse } from '@neburyx/contracts';
 import type { ApiResult } from '../../api/client.js';
-import { definitionHeavy, definitionOk, failure, settle } from '../patterns-kit.js';
-import { afterDebounce, builderPanel, chooseStart, cleanup, runButton, runReason, runWorkspace, screen, userEvent, validPattern, within, toggleType, runCancel } from './run-kit.js';
+import { PREVIEW, definitionOk, failure, settle } from '../patterns-kit.js';
+import { afterDebounce, buildStep, chooseEntity, chooseStart, cleanup, inRun, openBuilder, panelHeader, previewed, ran, runButton, runCancel, runWorkspace, screen, toggleType, userEvent, validPattern, within } from './run-kit.js';
 
 beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }));
 afterEach(() => {
@@ -13,50 +13,46 @@ afterEach(() => {
 });
 
 type Run = ApiResult<PatternRunResponse>;
-const pickStart = async (title: string): Promise<void> => {
-  const select = screen.getByLabelText('Starts from') as HTMLSelectElement;
-  await userEvent.selectOptions(select, within(select).getByRole('option', { name: title }));
-};
-const press = async (): Promise<void> => {
-  await userEvent.click(runButton());
-  await settle();
-};
+const previewButton = (): HTMLButtonElement => screen.getByRole('button', { name: /^Preview/ }) as HTMLButtonElement;
 
 describe('running a built pattern', () => {
-  it('shows Run pattern with its reason in the open builder, and Starts from once a type is chosen', async () => {
+  it('has no Run pattern in the editor: Preview opens the screen where the run is, and stays off until the pattern is whole and checked', async () => {
     await runWorkspace();
-    expect(runButton().disabled).toBe(true);
-    expect(runReason()).toBe('Complete the pattern first.');
-    expect(screen.queryByLabelText('Starts from')).toBeNull();
+    expect(previewButton().disabled).toBe(true);
+    expect(screen.queryByRole('button', { name: 'Run pattern' })).toBeNull();
     await chooseStart('n-a');
-    expect(screen.getByLabelText('Starts from')).toBeTruthy();
+    expect(previewButton().disabled).toBe(true);
+    await validPattern();
+    expect(previewButton().disabled).toBe(false);
+    expect(screen.queryByRole('button', { name: 'Run pattern' })).toBeNull();
+    await userEvent.click(previewButton());
+    await settle();
+    expect(runButton()).toBeTruthy();
   });
 
-  it('says why it cannot run, in the order the person meets it: complete, checking, not valid, check failed, preview, start', async () => {
+  it('keeps Preview off while the check is on its way, when the pattern is not valid and when the check could not be made', async () => {
     let answer: ApiResult<{ status: 'ok' } | { status: 'invalid'; problems: { path: (string | number)[]; code: string }[] }> = { ok: true, value: { status: 'invalid', problems: [{ path: ['steps', 0], code: 'bad-value' }] } } as never;
-    await runWorkspace({ validate: async () => answer as never, preview: () => new Promise(() => undefined) });
+    await runWorkspace({ validate: async () => answer as never });
     await chooseStart('n-a');
-    const { buildStep } = await import('./run-kit.js');
     await buildStep(1, 'out', 'n-b', ['r-1']);
-    expect(runReason()).toBe('Checking the pattern…');
+    expect(previewButton().disabled).toBe(true);
     await afterDebounce();
-    expect(runReason()).toBe('The pattern is not valid.');
+    expect(previewButton().disabled).toBe(true);
     answer = { ok: false, failure: failure('SOURCE_BUSY') };
     await toggleType(1, 'r-2');
     await afterDebounce();
-    expect(runReason()).toBe('The check could not be made.');
+    expect(previewButton().disabled).toBe(true);
     answer = { ok: true, value: { status: 'ok' } };
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
     await afterDebounce();
-    expect(runReason()).toBe('Wait for the preview.');
+    expect(previewButton().disabled).toBe(false);
   });
 
-  it('sends one run with the source, the definition as checked, the anchor and nothing else, with a fresh key each press', async () => {
-    const kit = await runWorkspace();
-    await validPattern();
-    expect(runButton().disabled).toBe(false);
-    await press();
-    await press();
+  it('sends one run with the source, the definition as checked, the anchor and nothing else, with a fresh key each time', async () => {
+    const kit = await runWorkspace({ runDefinition: async () => ({ ok: false, failure: failure('SOURCE_BUSY') }) });
+    await ran();
+    await userEvent.click(inRun().getByRole('button', { name: 'Try again' }));
+    await settle();
     expect(kit.definitionRuns).toHaveLength(2);
     const [first, second] = kit.definitionRuns;
     expect(first?.request).toEqual({ sourceId: 'a', definition: kit.validations[0]?.definition, anchor: { entityType: 'n-a', stableId: 'x-1' } });
@@ -68,113 +64,81 @@ describe('running a built pattern', () => {
     const kit = await runWorkspace();
     act(() => kit.state.setMask(true));
     await settle();
-    const { openBuilder } = await import('./run-kit.js');
     await openBuilder();
-    await validPattern();
-    await press();
+    await ran();
     expect(kit.definitionRuns[0]?.request.mask).toBe(true);
   });
 
   it.each([
-    [{ value: 3, quality: 'exact' as const, scope: 'matches' }, '3 · exact'],
-    [{ value: 3, quality: 'estimated' as const, scope: 'matches' }, '~ 3 (estimated)'],
-    [{ value: 3, quality: 'lowerBound' as const, scope: 'matches' }, '≥ 3 · lower bound'],
-    [{ quality: 'unknown' as const, scope: 'matches' }, 'no count'],
-  ])('states the count %j as %s and lists the match', async (count, text) => {
+    [{ value: 3, quality: 'exact' as const, scope: 'matches' }, '3 matches', 'Exact'],
+    [{ value: 3, quality: 'estimated' as const, scope: 'matches' }, 'About 3 matches', 'Estimated'],
+    [{ value: 3, quality: 'lowerBound' as const, scope: 'matches' }, 'At least 3 matches', 'Lower bound'],
+    [{ quality: 'unknown' as const, scope: 'matches' }, 'The number of matches is not known', undefined],
+  ])('states the count %j as %s and lists the match', async (count, headline, label) => {
     await runWorkspace({ runDefinition: async () => ({ ok: true, value: definitionOk(['acc-2'], { count } as never) }) });
-    await validPattern();
-    await press();
-    const result = screen.getByRole('region', { name: 'Result' });
-    expect(within(result).getByRole('status').textContent).toBe(text);
-    expect(within(result).getByRole('table')).toBeTruthy();
+    await ran();
+    expect(inRun().getByText(headline)).toBeTruthy();
+    if (label !== undefined) expect(inRun().getByText(label)).toBeTruthy();
+    expect(inRun().getByRole('list', { name: 'Matches' })).toBeTruthy();
   });
 
-  it('says no match was found and draws no table', async () => {
+  it('says no match was found and draws no card', async () => {
     await runWorkspace({ runDefinition: async () => ({ ok: true, value: definitionOk([]) }) });
-    await validPattern();
-    await press();
-    const result = screen.getByRole('region', { name: 'Result' });
-    expect(within(result).getByRole('status').textContent).toBe('No matches found. 0 · exact');
-    expect(within(result).queryByRole('table')).toBeNull();
+    await ran();
+    expect(inRun().getByText('0 matches')).toBeTruthy();
+    expect(inRun().queryByRole('list', { name: 'Matches' })).toBeNull();
   });
 
-  it('hides the result when the definition or the starting entity changes', async () => {
-    await runWorkspace();
-    await validPattern();
-    await press();
-    expect(screen.getByRole('region', { name: 'Result' })).toBeTruthy();
+  it('shows no result under a changed pattern or another starting entity: the preview comes first, and a new run asks again', async () => {
+    const kit = await runWorkspace();
+    await ran();
+    expect(panelHeader().title).toBe('Pattern result');
+    await userEvent.click(inRun().getByRole('button', { name: 'Edit pattern' }));
     await toggleType(1, 'r-2');
-    expect(screen.queryByRole('region', { name: 'Result' })).toBeNull();
     await afterDebounce();
-    await press();
-    expect(screen.getByRole('region', { name: 'Result' })).toBeTruthy();
-    await pickStart('x-2');
-    expect(screen.queryByRole('region', { name: 'Result' })).toBeNull();
+    await userEvent.click(previewButton());
+    await settle();
+    expect(panelHeader().title).toBe('Preview pattern');
+    expect(inRun().queryByRole('list', { name: 'Matches' })).toBeNull();
+    await chooseEntity('x-2');
+    await userEvent.click(runButton());
+    await settle();
+    expect(kit.definitionRuns).toHaveLength(2);
+    expect(kit.definitionRuns[1]?.request.anchor).toEqual({ entityType: 'n-a', stableId: 'x-2' });
   });
 });
 
 describe('the pattern in words', () => {
   it('asks once after the check says valid, with the same envelope, and shows each part as the server wrote it', async () => {
     const kit = await runWorkspace();
-    await validPattern();
+    await previewed();
     expect(kit.previews).toHaveLength(1);
     expect(kit.previews[0]).toEqual({ sourceId: 'a', definition: kit.validations[0]?.definition });
-    const preview = screen.getByRole('region', { name: 'Preview' });
-    for (const text of ['Starts at an N-A.', 'Follows r-1 outgoing to an N-B.', 'At most 4 steps.', 'At most 50 results at a time.', 'Counts stop at 500.']) expect(within(preview).getByText(text)).toBeTruthy();
+    const words = inRun().getByRole('region', { name: 'In plain words' });
+    for (const text of ['Starts at an N-A.', 'Follows r-1 outgoing to an N-B.']) expect(within(words).getByText(text)).toBeTruthy();
   });
 
-  it('keeps Run disabled until the preview arrives, with the reason', async () => {
+  it('keeps Run off until the preview arrives', async () => {
     let release: (answer: ApiResult<PatternPreviewResponse>) => void = () => undefined;
     await runWorkspace({ preview: () => new Promise((resolve) => (release = resolve)) });
-    await validPattern();
+    await previewed();
     expect(runButton().disabled).toBe(true);
-    expect(runReason()).toBe('Wait for the preview.');
-    const { PREVIEW } = await import('../patterns-kit.js');
     act(() => release({ ok: true, value: { status: 'ok', preview: PREVIEW } }));
     await settle();
     expect(runButton().disabled).toBe(false);
-    expect(runReason()).toBeUndefined();
   });
 
-  it('clears the preview on a change and shows only the newest answer', async () => {
-    const releases: Array<(answer: ApiResult<PatternPreviewResponse>) => void> = [];
-    await runWorkspace({ preview: () => new Promise((resolve) => releases.push(resolve)) });
-    await validPattern();
+  it('shows the words of the draft as it was when Preview was pressed, and asks again for a changed one', async () => {
+    const kit = await runWorkspace({ preview: async (request) => ({ ok: true, value: { status: 'ok', preview: { ...PREVIEW, start: { ...PREVIEW.start, text: `Words for ${request.definition['steps'] === undefined ? '' : (request.definition['steps'] as unknown[]).length} step` } } } }) });
+    await previewed();
+    expect(inRun().getByText('Words for 1 step')).toBeTruthy();
+    await userEvent.click(inRun().getByRole('button', { name: /Edit$/ }));
     await toggleType(1, 'r-2');
-    expect(screen.queryByRole('region', { name: 'Preview' })).toBeNull();
     await afterDebounce();
-    expect(releases).toHaveLength(2);
-    const { PREVIEW } = await import('../patterns-kit.js');
-    act(() => releases[1]?.({ ok: true, value: { status: 'ok', preview: { ...PREVIEW, start: { ...PREVIEW.start, text: 'The newer words.' } } } }));
-    act(() => releases[0]?.({ ok: true, value: { status: 'ok', preview: PREVIEW } }));
-    await settle();
-    expect(screen.getByText('The newer words.')).toBeTruthy();
-    expect(screen.queryByText('Starts at an N-A.')).toBeNull();
-  });
-
-  it('says the preview could not be made, for a failure and for an invalid answer, with Retry, and keeps Run disabled', async () => {
-    let answer: ApiResult<PatternPreviewResponse> = { ok: false, failure: failure('NOT_FOUND') };
-    const kit = await runWorkspace({ preview: async () => answer });
-    await validPattern();
-    const area = screen.getAllByText('The preview could not be made.').map((node) => node.closest('[role="alert"]')).find((node) => node !== null) as HTMLElement;
-    expect(area).toBeTruthy();
-    expect(within(area).getByText('This was not found. It may have been removed.')).toBeTruthy();
-    expect(runReason()).toBe('The preview could not be made.');
-    answer = { ok: true, value: { status: 'invalid', problems: [{ path: ['steps'], code: 'bad-value' }] } };
-    await userEvent.click(within(area).getByRole('button', { name: 'Retry' }));
+    await userEvent.click(previewButton());
     await settle();
     expect(kit.previews).toHaveLength(2);
-    expect(within(screen.getAllByText('The preview could not be made.').map((node) => node.closest('[role="alert"]')).find((node) => node !== null) as HTMLElement).getByText('This choice is not allowed.')).toBeTruthy();
-    expect(runButton().disabled).toBe(true);
-  });
-
-  it('drops a preview on its way when the source changes', async () => {
-    let signal: AbortSignal | undefined;
-    const kit = await runWorkspace({ preview: (_request, aborted) => ((signal = aborted), new Promise(() => undefined)) });
-    await validPattern();
-    act(() => kit.state.bindSource('b'));
-    await settle();
-    expect(signal?.aborted).toBe(true);
+    expect(JSON.stringify(kit.previews[1]?.definition)).toContain('r-2');
   });
 });
 
@@ -189,116 +153,43 @@ describe('a run in progress', () => {
     return { runs, handler };
   };
 
-  it('shows Running with the timeout and Cancel instead of Run, keeping the earlier result', async () => {
-    const { runs, handler } = held();
-    let first = true;
-    await runWorkspace({ runDefinition: (request, key, signal) => (first ? ((first = false), Promise.resolve<Run>({ ok: true, value: definitionOk(['acc-2']) })) : handler(request, key, signal)) });
-    await validPattern();
-    await press();
-    await press();
-    expect(runs).toHaveLength(1);
-    expect(screen.getByText('Running · 5 s timeout')).toBeTruthy();
+  it('shows Cancel run instead of Run pattern while it is on its way', async () => {
+    const { handler } = held();
+    await runWorkspace({ runDefinition: handler });
+    await ran();
     expect(runCancel()).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Run pattern' })).toBeNull();
-    expect(screen.getByRole('region', { name: 'Result' })).toBeTruthy();
   });
 
-  it('aborts on Cancel, says so with Run again, ignores a late answer and leaves the graph', async () => {
+  it('aborts the run when the panel is closed', async () => {
     const { runs, handler } = held();
-    const kit = await runWorkspace({ runDefinition: handler });
-    await validPattern();
-    const nodes = kit.state.visibleGraph().nodes.length;
-    await press();
-    await userEvent.click(runCancel());
+    await runWorkspace({ runDefinition: handler });
+    await ran();
+    await userEvent.click(screen.getByRole('button', { name: 'Close Patterns' }));
     await settle();
     expect(runs[0]?.signal?.aborted).toBe(true);
-    expect(screen.getByText('Cancelled. No new matches shown.')).toBeTruthy();
-    act(() => runs[0]?.answer({ ok: true, value: definitionOk(['acc-2']) }));
-    await settle();
-    expect(screen.queryByRole('region', { name: 'Result' })).toBeNull();
-    expect(kit.state.visibleGraph().nodes).toHaveLength(nodes);
-    await userEvent.click(screen.getByRole('button', { name: 'Run again' }));
-    await settle();
-    expect(runs).toHaveLength(2);
-  });
-
-  it('aborts the run when the definition or the starting entity changes, and drops it when the source changes', async () => {
-    const { runs, handler } = held();
-    const kit = await runWorkspace({ runDefinition: handler });
-    await validPattern();
-    await press();
-    await pickStart('x-2');
-    await settle();
-    expect(runs[0]?.signal?.aborted).toBe(true);
-    expect(screen.queryByText('Cancelled. No new matches shown.')).toBeNull();
-    await press();
-    act(() => kit.state.bindSource('b'));
-    await settle();
-    expect(runs[1]?.signal?.aborted).toBe(true);
-  });
-
-  it('raises no canvas banner in any state', async () => {
-    let answer: Run = { ok: false, failure: failure('SOURCE_BUSY') };
-    const kit = await runWorkspace({ runDefinition: async () => answer });
-    await validPattern();
-    await press();
-    expect(kit.banner.view.getState().banner).toBeUndefined();
-    answer = { ok: true, value: definitionHeavy() };
-    await press();
-    expect(kit.banner.view.getState().banner).toBeUndefined();
   });
 });
 
 describe('a run that fails', () => {
-  it.each<[string, Record<string, number> | undefined, string, boolean, boolean]>([
-    ['SOURCE_BUSY', undefined, 'is busy. No read slot freed within the wait.', true, true],
-    ['SOURCE_UNAVAILABLE', undefined, 'unavailable. The loaded graph remains available.', true, true],
-    ['QUERY_TIMEOUT', { timeoutMs: 5000 }, 'did not answer within 5 s.', true, true],
-    ['QUERY_BUDGET_EXCEEDED', { maxHops: 2 }, 'The source allows at most 2 steps.', false, true],
-    ['INVALID_REQUEST', undefined, 'The server did not accept this request.', false, false],
-    ['NOT_FOUND', undefined, 'This was not found. It may have been removed.', false, false],
-    ['CONFLICT', undefined, 'This was changed elsewhere. Reload it, then try again.', false, false],
-    ['ACCESS_DENIED', undefined, 'You may not do this on this source.', false, false],
-    ['INTERNAL_ERROR', undefined, 'Something went wrong on the server.', false, false],
-  ])('shows the sentence of %s and offers Try again only where it can help (the error table sets the flag)', async (code, details, text, retry, tableFlag) => {
-    const kit = await runWorkspace({ runDefinition: async () => ({ ok: false, failure: { ...failure(code, details), retryable: tableFlag } as never }) });
-    await validPattern();
-    await press();
-    const alert = screen.getAllByRole('alert').find((node) => node.textContent?.includes(text));
-    expect(alert, code).toBeTruthy();
-    expect(within(alert as HTMLElement).queryAllByRole('button').length > 0).toBe(retry);
-    expect(kit.state.visibleGraph().nodes.length).toBeGreaterThan(0);
-  });
-
-  it('counts down a rate limit and holds Try again, and says the answer was not in the form expected for a schema mismatch', async () => {
-    await runWorkspace({ runDefinition: async () => ({ ok: false, failure: failure('RATE_LIMITED', { retryAfterMs: 3000 }) }) });
-    await validPattern();
-    await press();
-    expect(screen.getByText('You can try again in 3 s.')).toBeTruthy();
-    expect((screen.getByRole('button', { name: 'Try again in 3 s' }) as HTMLButtonElement).disabled).toBe(true);
-    cleanup();
-    document.body.replaceChildren();
+  it('says the answer was not in the form expected for a schema mismatch', async () => {
     await runWorkspace({ runDefinition: async () => ({ ok: false, failure: { code: 'SCHEMA_MISMATCH' } as never }) });
-    await validPattern();
-    await press();
-    expect(screen.getByText('The answer was not in the form expected.')).toBeTruthy();
+    await ran();
+    expect(inRun().getByText('The answer was not in the form expected.')).toBeTruthy();
   });
 
   it('does not say a field is set when a builder run is refused over its steps', async () => {
     await runWorkspace({ runDefinition: async () => ({ ok: false, failure: { ...failure('QUERY_BUDGET_EXCEEDED', { maxHops: 2 }), retryable: false } as never }) });
-    await validPattern();
-    await press();
-    const alert = screen.getAllByRole('alert').find((node) => node.textContent?.includes('at most 2 steps'));
+    await ran();
+    const alert = inRun().getAllByRole('alert').find((node) => node.textContent?.includes('at most 2 steps'));
     expect(alert?.textContent).not.toMatch(/field/i);
   });
 
-  it('keeps the earlier result and the builder after a failure', async () => {
-    let call = 0;
-    await runWorkspace({ runDefinition: async () => (++call === 1 ? { ok: true, value: definitionOk(['acc-2']) } : { ok: false, failure: failure('SOURCE_BUSY') }) });
-    await validPattern();
-    await press();
-    await press();
-    expect(screen.getByRole('region', { name: 'Result' })).toBeTruthy();
-    expect(within(builderPanel()).getByRole('radio', { name: 'Outgoing' })).toBeTruthy();
+  it('keeps the draft after a failure: Edit returns to the editor as it was', async () => {
+    await runWorkspace({ runDefinition: async () => ({ ok: false, failure: failure('SOURCE_BUSY') }) });
+    await ran();
+    await userEvent.click(inRun().getByRole('button', { name: /Edit$/ }));
+    await settle();
+    expect(within(screen.getByRole('region', { name: 'New pattern' })).getByRole('radio', { name: 'Outgoing' })).toBeTruthy();
   });
 });

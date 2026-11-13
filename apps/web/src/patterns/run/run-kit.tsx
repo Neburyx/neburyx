@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { PATTERN_LIMITS, type SourceProfile } from '@neburyx/contracts';
 import { testProfile } from '../../dev/test-profile.js';
 import { typedNode } from '../../workspace/filters-kit.js';
-import { openPatterns, patternsWorkspace, settle, type KitOptions, type PatternsKit } from '../patterns-kit.js';
+import { listed, openPatterns, patternsWorkspace, settle, type KitOptions, type PatternsKit } from '../patterns-kit.js';
 import { CHECK_DEBOUNCE_MS } from '../builder/pattern-editor.js';
 import { vi } from 'vitest';
 
@@ -136,19 +136,66 @@ export async function runWorkspace(options: KitOptions = {}): Promise<PatternsKi
   return kit;
 }
 
-/** Builds the one-step pattern the run tests use and lets the check and the preview answer. */
+/** Builds the one-step pattern the run tests use and lets the check answer; the editor's Preview is then on. */
 export async function validPattern(): Promise<void> {
   await chooseStart('n-a');
   await buildStep(1, 'out', 'n-b', ['r-1']);
   await afterDebounce();
 }
 
-export const runButton = (): HTMLButtonElement => screen.getByRole('button', { name: 'Run pattern' }) as HTMLButtonElement;
-export const runReason = (): string | undefined => document.getElementById('pattern-run-reason')?.textContent ?? undefined;
+/** Builds the pattern and opens the preview: the screen of the run lane, with the pattern in words. */
+export async function previewed(): Promise<void> {
+  await validPattern();
+  await userEvent.click(screen.getByRole('button', { name: /^Preview/ }));
+  await settle();
+}
 
-/** The Cancel of a run in progress; the editor's own Cancel is in its footer. */
-export const runCancel = (): HTMLElement => {
-  const found = screen.getAllByRole('button', { name: 'Cancel' }).find((button) => button.closest('.pattern-editor-actions') === null);
-  if (found === undefined) throw new Error('no Cancel of a run');
-  return found;
-};
+export const runButton = (): HTMLButtonElement => screen.getByRole('button', { name: 'Run pattern' }) as HTMLButtonElement;
+export const startCombo = (): HTMLInputElement => screen.getByRole('combobox', { name: /^Start from a / }) as HTMLInputElement;
+export const startHelp = (): string => document.getElementById('run-start-help')?.textContent ?? '';
+
+/** Chooses a loaded entity of the start type from the list the field opens on focus. */
+export async function chooseEntity(title: string): Promise<void> {
+  await userEvent.click(startCombo());
+  await userEvent.click(within(screen.getByRole('listbox')).getByRole('option', { name: new RegExp(`^${title}`) }));
+}
+
+/** Builds the pattern, opens the preview and runs it from the prefilled entity. */
+export async function ran(): Promise<void> {
+  await previewed();
+  await userEvent.click(runButton());
+  await settle();
+}
+
+/** The Cancel of a run in progress. */
+export const runCancel = (): HTMLElement => screen.getByRole('button', { name: 'Cancel run' });
+/** The heading and the line under it that the panel shows for the screen. */
+export const panelHeader = (): { readonly title: string; readonly subtitle: string } => ({
+  title: screen.getByRole('heading', { level: 2 }).textContent ?? '',
+  subtitle: document.querySelector('.patterns-subhead')?.textContent ?? '',
+});
+
+/** Queries inside the screen of the run only: the editor stays mounted, hidden, under it. */
+export const inRun = () => within(document.querySelector('.run-flow') as HTMLElement);
+
+export const SAVED_ID = '0192f000-0000-7000-8000-000000000001';
+
+/** Opens a saved pattern named Alpha for a change, from the list, and then its preview: the header of a pattern that is saved. */
+export async function previewedSaved(options: KitOptions = {}): Promise<PatternsKit> {
+  const item = listed({ id: SAVED_ID, name: 'Alpha', definition: { anchorType: 'c-a', steps: [{ relationshipTypes: ['k-1'], direction: 'out', arrivesAt: 'c-b' }] } });
+  const kit = await patternsWorkspace({
+    profile: async () => ({ ok: true, value: conditionsProfile() }),
+    nodes: [typedNode('x-1', 'c-a')],
+    opened: { entityType: 'c-a', stableId: 'x-1' },
+    ...options,
+    patterns: { listPatterns: async () => ({ ok: true, value: { items: [item], nextCursor: null } }), ...options.patterns },
+  });
+  await openPatterns();
+  await userEvent.click(screen.getByRole('button', { name: 'More: Alpha' }));
+  await userEvent.click(screen.getByRole('menuitem', { name: 'Change' }));
+  await settle();
+  await afterDebounce();
+  await userEvent.click(screen.getByRole('button', { name: /^Preview/ }));
+  await settle();
+  return kit;
+}

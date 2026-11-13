@@ -3,17 +3,30 @@ import type { ApiClient, ApiFailure } from '../../api/client.js';
 import { UNEXPECTED } from '../../api/use-request.js';
 import { createStore, type ReadableStore } from '../../state/store.js';
 
-/** What one press of Run sends: the definition, the entity it starts from, and whether it continues a run that stopped as heavy (with the page the server offered). */
+/**
+ * What one press of Run sends: the definition, the entity it starts from, whether it continues a run that stopped as heavy (with the page the server offered), and the cursor of the page before when it asks for the next page.
+ */
 export interface DefinitionAsk {
   readonly definition: PatternDefinition;
   readonly anchor: { readonly entityType: string; readonly stableId: string };
   readonly continue?: { readonly limit: number };
+  readonly cursor?: string;
+}
+
+/** A page the client kept, with the moment its answer arrived. */
+export interface KeptPage {
+  readonly answer: PatternRunOk;
+  readonly at: Date;
 }
 
 export interface DefinitionRunView {
   readonly running: boolean;
-  /** The last result that arrived, with the ask it answers: it is shown only while the definition and the entity of the builder are those of the ask. */
+  /** The page on screen, with the ask of the run that made its first page: it is shown only while the definition and the entity of the run are those of the ask. */
   readonly result: { readonly ask: DefinitionAsk; readonly answer: PatternRunOk } | undefined;
+  /** The pages of the run read so far, in order; there is no backward cursor, so Previous is served from these. */
+  readonly pages: readonly KeptPage[];
+  /** The index of the page on screen in `pages`. */
+  readonly page: number;
   readonly heavy: PatternRunHeavy | undefined;
   readonly failure: ApiFailure | undefined;
   readonly cancelled: boolean;
@@ -23,11 +36,17 @@ export interface DefinitionRunView {
 
 export interface DefinitionRunStore extends ReadableStore<DefinitionRunView> {
   readonly run: (ask: DefinitionAsk) => void;
+  /** Reads the next page with the cursor of the page on screen, or shows the next kept page after a Previous; it never re-reads a page the client holds. */
+  readonly next: () => void;
+  /** Shows the page before from the pages kept: nothing is asked. */
+  readonly previous: () => void;
   readonly cancel: () => void;
   /** Takes down the heavy stop, the failure and the cancelled line (the builder changed). */
   readonly clear: () => void;
   /** Aborts a run on its way without a cancelled line, and takes down what the run left (the builder changed). */
   readonly stop: () => void;
+  /** Stops and also forgets the pages and the result. */
+  readonly reset: () => void;
   /** Aborts a run on its way, as leaving the panel does. */
   readonly dispose: () => void;
 }
@@ -39,26 +58,45 @@ export type RunRequestMaker = (ask: DefinitionAsk, key: string, signal: AbortSig
 export const definitionRunRequest =
   (client: ApiClient, sourceId: string, mask: boolean): RunRequestMaker =>
   (ask, key, signal) =>
-    client.runPattern({ sourceId, definition: ask.definition, anchor: ask.anchor, ...(mask ? { mask: true } : {}), ...(ask.continue === undefined ? {} : { continue: true, limit: ask.continue.limit }) }, key, signal);
+    client.runPattern(
+      {
+        sourceId,
+        definition: ask.definition,
+        anchor: ask.anchor,
+        ...(mask ? { mask: true } : {}),
+        ...(ask.continue === undefined ? {} : { continue: true, limit: ask.continue.limit }),
+        ...(ask.cursor === undefined ? {} : { cursor: ask.cursor }),
+      },
+      key,
+      signal,
+    );
 
 const newKey = (): string => globalThis.crypto.randomUUID();
 
-const IDLE: DefinitionRunView = { running: false, result: undefined, heavy: undefined, failure: undefined, cancelled: false, ask: undefined };
+const IDLE: DefinitionRunView = { running: false, result: undefined, pages: [], page: 0, heavy: undefined, failure: undefined, cancelled: false, ask: undefined };
 
 /**
  * One pattern run at a time: a newer run, a cancel and leaving abort the older one, and an answer to an aborted run is never shown. It lives outside React, as the preset run's store does, so the cancellation suite drives the
- * same store the panel uses. Nothing here touches the graph; the result is shown beside it.
+ * same store the panel uses. Nothing here touches the graph; the result is shown beside it. The pages of one run are kept so that Previous reads nothing: the first page has no cursor and a re-run would read the estimate again.
  */
 export function createDefinitionRunStore(request: RunRequestMaker): DefinitionRunStore {
   const store = createStore<DefinitionRunView>(IDLE);
   let newest: AbortController | undefined;
+  let origin: DefinitionAsk | undefined;
   const patch = (change: Partial<DefinitionRunView>): void => store.setState({ ...store.getState(), ...change });
+
+  const show = (pages: readonly KeptPage[], page: number): Pick<DefinitionRunView, 'pages' | 'page' | 'result'> => {
+    const shown = pages[page];
+    return { pages, page, result: shown === undefined || origin === undefined ? undefined : { ask: origin, answer: shown.answer } };
+  };
 
   const run = (ask: DefinitionAsk): void => {
     newest?.abort();
     const controller = new AbortController();
     newest = controller;
-    patch({ running: true, heavy: undefined, failure: undefined, cancelled: false, ask });
+    const fresh = ask.cursor === undefined;
+    if (fresh) origin = ask;
+    patch({ running: true, heavy: undefined, failure: undefined, cancelled: false, ask, ...(fresh ? { result: undefined, pages: [], page: 0 } : {}) });
     const send = async (): Promise<void> => {
       let result: Awaited<ReturnType<ApiClient['runPattern']>>;
       try {
@@ -73,19 +111,45 @@ export function createDefinitionRunStore(request: RunRequestMaker): DefinitionRu
         return;
       }
       const answer = result.value;
-      patch(answer.status === 'heavy' ? { running: false, heavy: answer } : { running: false, result: { ask, answer } });
+      if (answer.status === 'heavy') {
+        patch({ running: false, heavy: answer });
+        return;
+      }
+      const { pages, page } = store.getState();
+      const kept: KeptPage = { answer, at: new Date() };
+      patch({ running: false, ...(fresh ? show([kept], 0) : show([...pages.slice(0, page + 1), kept], page + 1)) });
     };
     void send();
+  };
+
+  const turn = (to: number): void => {
+    const { pages } = store.getState();
+    patch({ ...show(pages, to), failure: undefined });
   };
 
   return {
     ...store,
     run,
+    next: () => {
+      const { running, pages, page } = store.getState();
+      if (running || origin === undefined) return;
+      if (page + 1 < pages.length) {
+        turn(page + 1);
+        return;
+      }
+      const cursor = pages[page]?.answer.nextCursor;
+      if (cursor !== undefined) run({ ...origin, cursor });
+    },
+    previous: () => {
+      const { running, page } = store.getState();
+      if (!running && page > 0) turn(page - 1);
+    },
     cancel: () => {
       if (newest === undefined) return;
       newest.abort();
       newest = undefined;
-      patch({ running: false, cancelled: true });
+      // the page on screen stays when what was cancelled was the read of the next one
+      patch(store.getState().ask?.cursor === undefined ? { running: false, cancelled: true } : { running: false });
     },
     clear: () => {
       const { heavy, failure, cancelled } = store.getState();
@@ -95,6 +159,12 @@ export function createDefinitionRunStore(request: RunRequestMaker): DefinitionRu
       newest?.abort();
       newest = undefined;
       patch({ running: false, heavy: undefined, failure: undefined, cancelled: false });
+    },
+    reset: () => {
+      newest?.abort();
+      newest = undefined;
+      origin = undefined;
+      store.setState(IDLE);
     },
     dispose: () => {
       newest?.abort();
