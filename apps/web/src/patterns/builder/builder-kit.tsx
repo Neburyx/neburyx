@@ -134,9 +134,19 @@ export async function conditionsWorkspace(options: KitOptions = {}): Promise<Pat
   return kit;
 }
 
-export const addCondition = async (n: number): Promise<void> => {
+/** Adds a condition to step n from the menu, on `property` or on the first one offered; its form is open when this returns. */
+export const addCondition = async (n: number, property?: string): Promise<void> => {
   await openStep(n, 'Conditions');
-  await userEvent.click(within(stepCard(n)).getByRole('button', { name: 'Add condition' }));
+  await userEvent.click(within(stepCard(n)).getByRole('button', { name: '+ Add condition' }));
+  const items = screen.getAllByRole('menuitem');
+  const item = property === undefined ? items[0] : items.find((candidate) => candidate.querySelector('.popup-menu-type')?.textContent === property);
+  if (item === undefined) throw new Error(`no ${property ?? 'first'} item in the menu`);
+  await userEvent.click(item);
+};
+/** Opens the form of condition m of step n, when it is not open. */
+export const editRow = async (n: number, m: number): Promise<void> => {
+  await openStep(n, 'Conditions');
+  if (within(stepCard(n)).queryByLabelText(`Step ${n} condition ${m}: Property`) === null) await userEvent.click(within(stepCard(n)).getByRole('button', { name: `Edit condition ${m} of step ${n}` }));
 };
 export const conditionRow = (n: number, m: number): HTMLElement => within(stepCard(n)).getByRole('group', { name: `Step ${n} condition ${m}` });
 export const rowField = (n: number, m: number, label: string): HTMLElement => within(conditionRow(n, m)).getByLabelText(`Step ${n} condition ${m}: ${label}`);

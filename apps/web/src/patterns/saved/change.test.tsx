@@ -55,8 +55,8 @@ describe('changing a saved pattern in the builder', () => {
     expect((step.getByLabelText('Arrives at') as HTMLSelectElement).value).toBe('c-b');
     expect(step.getByRole('button', { name: 'Remove k-1' })).toBeTruthy();
     await userEvent.click(step.getByRole('tab', { name: /^Conditions/ }));
-    expect((step.getByLabelText('Step 1 condition 1: Value') as HTMLInputElement).value).toBe('abc');
-    expect((step.getByLabelText('Step 1 condition 2: From') as HTMLInputElement).value).toBe('2026-01-01');
+    expect(step.getByText('b-name is abc')).toBeTruthy();
+    expect(step.getByText('q-when is 2026-01-01 or more')).toBeTruthy();
     await userEvent.click(step.getByRole('tab', { name: /^Window/ }));
     expect((step.getByLabelText('Step 1 window: Days') as HTMLInputElement).value).toBe('30');
     expect(screen.getByText('Changing a saved pattern. Save changes keeps it where it is; Save as new makes another.')).toBeTruthy();
@@ -118,7 +118,7 @@ describe('changing a saved pattern in the builder', () => {
     await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }));
     await userEvent.click(builder().getByRole('tab', { name: 'Step 1' }));
     await userEvent.click(builder().getByRole('tab', { name: /^Conditions/ }));
-    expect((builder().getByLabelText('Step 1 condition 1: Value') as HTMLInputElement).value).toBe('abc');
+    expect(builder().getByText('b-name is abc')).toBeTruthy();
     await userEvent.click(builder().getByRole('button', { name: 'Save as new' }));
     await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Save pattern' }));
     await settle();

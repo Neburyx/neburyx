@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { MAX_FILTER_TEXT, PATTERN_LIMITS, patternProblemsOf } from '@neburyx/contracts';
 import { conditionsProfile } from './builder-kit.js';
-import { addConditionBlock, offeredProperties, readRows, readWindow, windowReach, type ConditionRow } from './conditions.js';
+import { addConditionBlock, conditionSummary, hiddenPersonalCount, offeredProperties, operatorsFor, propertyKind, readRows, readWindow, windowReach, windowTypeLines, type ConditionRow } from './conditions.js';
 import { INITIAL, reduce, toDefinition, type Action, type BuilderState, type StepDraft } from './model.js';
 import { readValue } from '../../workspace/expand-refine.js';
 
@@ -135,5 +135,54 @@ describe('reading as the contract does', () => {
       expect(patternProblemsOf(withWindow(window))).toEqual([]);
     }
     for (const draft of [{ kind: 'days', text: '3651' }, { kind: 'dates', from: '2026-04-01', to: '2026-03-01' }, { kind: 'dates', from: '2010-01-01', to: '2026-01-01' }] as const) expect(readWindow(draft).ok).toBe(false);
+  });
+});
+
+describe('the kinds of properties, the lines of a condition and the reading of a window', () => {
+  const kinds = {
+    ...profile,
+    entityTypes: profile.entityTypes.map((entity) => (entity.type === 'c-b' ? { ...entity, filterKinds: { 'b-name': 'text', 'b-count': 'number' } } : entity)),
+    relationshipTypes: profile.relationshipTypes.map((row) => (row.type === 'k-1' ? { ...row, filterKinds: { 'q-size': 'number' } } : row.type === 'k-2' ? { ...row, filterKinds: { 'q-size': 'text' } } : row)),
+  } as typeof profile;
+  const step = (types: string[]) => ({ direction: 'out' as const, arrivesAt: 'c-b', relationshipTypes: types });
+
+  it('reads the kind of a property from the arriving type, and of a relationship property from the rows, unknown where they differ and nothing without kinds', () => {
+    expect(propertyKind(kinds, 'c-a', step(['k-1']), 'neighbor', 'b-count')).toBe('number');
+    expect(propertyKind(kinds, 'c-a', step(['k-1']), 'relationship', 'q-size')).toBe('number');
+    expect(propertyKind(kinds, 'c-a', step(['k-1', 'k-2']), 'relationship', 'q-size')).toBe('unknown');
+    expect(propertyKind(profile, 'c-a', step(['k-1']), 'neighbor', 'b-count')).toBeUndefined();
+    expect(propertyKind(kinds, 'c-a', step(['k-1']), 'neighbor', 'b-secret')).toBeUndefined();
+  });
+
+  it('gives true or false no range, and counts the personal-data properties that masking hides', () => {
+    expect(operatorsFor('boolean')).toEqual(['eq', 'in']);
+    expect(operatorsFor('number')).toEqual(['eq', 'in', 'between']);
+    expect(hiddenPersonalCount(profile, step(['k-1']), true)).toBe(1);
+    expect(hiddenPersonalCount(profile, step(['k-1']), false)).toBe(0);
+  });
+
+  it('writes a condition as a line', () => {
+    const row: ConditionRow = { id: 1, on: 'neighbor', property: 'p', op: 'eq', text: ' 5 ', from: '', to: '', kind: 'auto' };
+    expect(conditionSummary(row)).toBe('p is 5');
+    expect(conditionSummary({ ...row, op: 'in', text: 'a, b,, c' })).toBe('p is one of a, b, c');
+    expect(conditionSummary({ ...row, op: 'between', from: '1', to: '9' })).toBe('p is between 1 and 9');
+    expect(conditionSummary({ ...row, op: 'between', from: '1' })).toBe('p is 1 or more');
+    expect(conditionSummary({ ...row, op: 'eq', text: '' })).toBe('p has no value yet');
+  });
+
+  it('says what is wrong with a window and at which field', () => {
+    expect(readWindow({ kind: 'days', text: '0' })).toMatchObject({ ok: false, at: 'days' });
+    expect(readWindow({ kind: 'dates', from: '2026-02-30', to: '2026-03-01' })).toMatchObject({ ok: false, at: 'from', reason: 'Enter a calendar date like 2026-03-01.' });
+    expect(readWindow({ kind: 'dates', from: '2026-03-01', to: 'x' })).toMatchObject({ ok: false, at: 'to' });
+    expect(readWindow({ kind: 'dates', from: '2026-03-02', to: '2026-03-01' })).toMatchObject({ ok: false, at: 'to', reason: 'Before the start date' });
+    expect(readWindow({ kind: 'dates', from: '2010-01-01', to: '2026-01-01' })).toMatchObject({ ok: false, at: 'range', reason: 'At most 3,650 days apart.' });
+    expect(readWindow({ kind: 'dates', from: '2026-03-01', to: '2026-03-01' })).toEqual({ ok: true, window: { from: '2026-03-01', to: '2026-03-01' } });
+  });
+
+  it('lists for each chosen type its date properties and whether a row of it has none', () => {
+    expect(windowTypeLines(profile, 'c-a', step(['k-1', 'k-2']))).toEqual([
+      { type: 'k-1', datedOn: ['q-when'], undated: false },
+      { type: 'k-2', datedOn: [], undated: true },
+    ]);
   });
 });

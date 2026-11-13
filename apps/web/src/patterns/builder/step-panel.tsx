@@ -1,12 +1,12 @@
 import type { PatternProblem, SourceProfile } from '@neburyx/contracts';
 import { problemText } from '../copy.js';
-import { ConditionsField } from './conditions-field.js';
+import { ConditionsTab } from './conditions-tab.js';
 import { conditionsTab, EDITOR_COPY, LINK_COPY, stepSummary, windowTab } from './copy.js';
 import { rowsOf, windowOf } from './conditions.js';
 import { LinkTab } from './link-tab.js';
 import { TabList, panelId, tabId } from './tabs.js';
 import type { Action, StepDraft } from './model.js';
-import { WindowField } from './window-field.js';
+import { WindowTab } from './window-tab.js';
 
 export type Part = 'link' | 'conditions' | 'window';
 export const PARTS: readonly Part[] = ['link', 'conditions', 'window'];
@@ -73,7 +73,7 @@ export function StepPanel({ profile, step, steps, index, previous, mask, nameOf,
         {part === 'link' ? <LinkTab profile={profile} step={step} index={index} previous={previous} nameOf={nameOf} dispatch={dispatch} problems={problems} /> : null}
         {part === 'conditions' ? (
           <>
-            <ConditionsField profile={profile} step={step} steps={steps} index={index} previous={previous} mask={mask} nodeName={nameOf(step.arrivesAt)} dispatch={dispatch} rowProblems={rowProblems} />
+            <ConditionsTab profile={profile} step={step} steps={steps} index={index} previous={previous} mask={mask} nodeName={nameOf(step.arrivesAt)} dispatch={dispatch} rowProblems={rowProblems} />
             {problems.map((found, place) => (
               <p className="patterns-error" key={`${found.code}-${place}`}>
                 {problemText(found)}
@@ -81,7 +81,7 @@ export function StepPanel({ profile, step, steps, index, previous, mask, nameOf,
             ))}
           </>
         ) : null}
-        {part === 'window' ? <WindowField profile={profile} step={step} index={index} previous={previous} dispatch={dispatch} problems={windowProblems} /> : null}
+        {part === 'window' ? <WindowTab profile={profile} step={step} index={index} previous={previous} dispatch={dispatch} problems={windowProblems} /> : null}
       </div>
     </div>
   );

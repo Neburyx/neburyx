@@ -1,4 +1,4 @@
-import { PATTERN_LIMITS, windowSchema, type ExpandFilter, type SourceProfile, type Window } from '@neburyx/contracts';
+import { PATTERN_LIMITS, WINDOW_MAX_DAYS, type ExpandFilter, type FilterKind, type SourceProfile, type Window } from '@neburyx/contracts';
 import { readDays } from '../../api/expand-window.js';
 import { declaredProperties, readDraft, type Declared, type FilterDraft } from '../../workspace/expand-refine.js';
 import type { Direction, StepDraft } from './model.js';
@@ -15,6 +15,47 @@ export const windowOf = (step: StepDraft): WindowDraft => step.window ?? NO_WIND
 export const rowsOf = (step: StepDraft): readonly ConditionRow[] => step.conditions ?? [];
 
 type MappingRow = SourceProfile['relationshipTypes'][number];
+
+/** The kind a property is declared to hold, or `unknown`; a hint for the screen, never read by a statement. */
+export type PropertyKind = FilterKind | 'unknown';
+
+/**
+ * The kind the mapping declares for a property of a step: for the arriving node, its type's; for the relationship, the one every carrying row that declares one agrees on (`unknown` when they differ).
+ * Nothing when the source's answer carries no kinds at all (an older server), so that the screen shows names only.
+ */
+export function propertyKind(profile: SourceProfile, from: string | undefined, step: StepDraft, on: ConditionRow['on'], property: string): PropertyKind | undefined {
+  if (on === 'neighbor') return profile.entityTypes.find((entity) => entity.type === step.arrivesAt)?.filterKinds?.[property];
+  const declared = carryingRows(profile, from, step).flatMap((row) => (row.filterKinds === undefined ? [] : [row.filterKinds[property] ?? 'unknown']));
+  if (declared.length === 0) return undefined;
+  return declared.every((kind) => kind === declared[0]) ? declared[0] : 'unknown';
+}
+
+/** How many personal-data properties of the arriving type the mapping lets a condition use and masking hides. */
+export function hiddenPersonalCount(profile: SourceProfile, step: StepDraft, mask: boolean): number {
+  const entity = profile.entityTypes.find((candidate) => candidate.type === step.arrivesAt);
+  return !mask || entity === undefined ? 0 : entity.filterable.filter((property) => entity.pii.includes(property)).length;
+}
+
+/** The kind a row reads its values as: the declared one, or `auto` (the kind is detected from the text) when it is unknown or not declared. */
+export const rowKindFor = (kind: PropertyKind | undefined): ConditionRow['kind'] => (kind === undefined || kind === 'unknown' ? 'auto' : kind);
+
+/** The operators a kind has: a range does not apply to true or false. */
+export const operatorsFor = (kind: PropertyKind | undefined): readonly ConditionRow['op'][] => (kind === 'boolean' ? ['eq', 'in'] : ['eq', 'in', 'between']);
+
+/** The condition of a row in a line: the property, the operator in words and the values as typed. */
+export function conditionSummary(row: ConditionRow): string {
+  if (row.op === 'eq') return row.text.trim() === '' ? `${row.property} has no value yet` : `${row.property} is ${row.text.trim()}`;
+  if (row.op === 'in') {
+    const values = row.text.split(',').map((part) => part.trim()).filter((part) => part !== '');
+    return values.length === 0 ? `${row.property} has no values yet` : `${row.property} is one of ${values.join(', ')}`;
+  }
+  const from = row.from.trim();
+  const to = row.to.trim();
+  if (from !== '' && to !== '') return `${row.property} is between ${from} and ${to}`;
+  if (from !== '') return `${row.property} is ${from} or more`;
+  if (to !== '') return `${row.property} is ${to} or less`;
+  return `${row.property} has no range yet`;
+}
 
 /** The mapping rows of the step's chosen relationship types that carry it from the previous node type in its direction: the rows the server reads, so that what is offered is what is accepted. */
 export function carryingRows(profile: SourceProfile, from: string | undefined, step: StepDraft): readonly MappingRow[] {
@@ -84,19 +125,39 @@ export function readRows(rows: readonly ConditionRow[]): ReadRows {
   return { filters, problems };
 }
 
-const WINDOW_DATES_SENTENCE = 'Enter two calendar dates like 2026-03-01, the start not after the end, at most 3650 days apart.';
+export const WINDOW_SENTENCES = {
+  days: `Enter a whole number of days from 1 to ${WINDOW_MAX_DAYS}.`,
+  date: 'Enter a calendar date like 2026-03-01.',
+  order: 'Before the start date',
+  range: `At most ${WINDOW_MAX_DAYS.toLocaleString('en-US')} days apart.`,
+} as const;
 
-export type WindowRead = { readonly ok: true; readonly window: Window | undefined } | { readonly ok: false; readonly reason: string };
+/** What a window can be wrong in, and at which of its fields: the days, a date, the order of the two or their distance. */
+export type WindowRead = { readonly ok: true; readonly window: Window | undefined } | { readonly ok: false; readonly reason: string; readonly at: 'days' | 'from' | 'to' | 'range' };
 
-/** The window a draft stands for (none for no window), or the one thing wrong with it. */
+const DAY_MS = 86_400_000;
+const calendarDay = (text: string): number | undefined => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return undefined;
+  const time = Date.parse(`${text}T00:00:00Z`);
+  return Number.isNaN(time) || !new Date(time).toISOString().startsWith(text) ? undefined : time;
+};
+
+/** The window a draft stands for (none for no window), or the one thing wrong with it and the field it is at. */
 export function readWindow(draft: WindowDraft): WindowRead {
   if (draft.kind === 'none') return { ok: true, window: undefined };
   if (draft.kind === 'days') {
     const days = readDays(draft.text);
-    return days.ok ? { ok: true, window: { days: days.days } } : days;
+    return days.ok ? { ok: true, window: { days: days.days } } : { ok: false, reason: days.reason, at: 'days' };
   }
-  const parsed = windowSchema.safeParse({ from: draft.from.trim(), to: draft.to.trim() });
-  return parsed.success ? { ok: true, window: parsed.data } : { ok: false, reason: WINDOW_DATES_SENTENCE };
+  const from = draft.from.trim();
+  const to = draft.to.trim();
+  const start = calendarDay(from);
+  const end = calendarDay(to);
+  if (start === undefined) return { ok: false, reason: WINDOW_SENTENCES.date, at: 'from' };
+  if (end === undefined) return { ok: false, reason: WINDOW_SENTENCES.date, at: 'to' };
+  if (end < start) return { ok: false, reason: WINDOW_SENTENCES.order, at: 'to' };
+  if ((end - start) / DAY_MS >= WINDOW_MAX_DAYS) return { ok: false, reason: WINDOW_SENTENCES.range, at: 'range' };
+  return { ok: true, window: { from, to } };
 }
 
 export interface WindowReach {
@@ -110,4 +171,21 @@ export function windowReach(profile: SourceProfile, from: string | undefined, st
   const rows = carryingRows(profile, from, step);
   const typesWhere = (dated: boolean): string[] => step.relationshipTypes.filter((type) => rows.some((row) => row.type === type && (row.observedAt !== null) === dated));
   return { appliesTo: typesWhere(true), notAppliedTo: typesWhere(false) };
+}
+
+export interface WindowTypeLine {
+  readonly type: string;
+  /** The observed-time properties of the carrying rows that have one: the window filters the type on these. */
+  readonly datedOn: readonly string[];
+  /** Whether a carrying row of the type has no observed time: the window does not apply to it. */
+  readonly undated: boolean;
+}
+
+/** For each chosen relationship type, what the window can filter it on and whether any of its carrying rows has no date. */
+export function windowTypeLines(profile: SourceProfile, from: string | undefined, step: StepDraft): readonly WindowTypeLine[] {
+  const rows = carryingRows(profile, from, step);
+  return step.relationshipTypes.map((type) => {
+    const mine = rows.filter((row) => row.type === type);
+    return { type, datedOn: [...new Set(mine.flatMap((row) => (row.observedAt === null ? [] : [row.observedAt])))], undated: mine.some((row) => row.observedAt === null) };
+  });
 }

@@ -1,5 +1,5 @@
 import { PATTERN_LIMITS, type PatternDefinition, type SourceProfile } from '@neburyx/contracts';
-import { NO_WINDOW, addConditionBlock, carryingRows, firstChoice, isOffered, nextRowId, offeredProperties, readRows, readWindow, rowsOf, windowOf, windowReach, type ConditionRow, type WindowDraft } from './conditions.js';
+import { NO_WINDOW, addConditionBlock, carryingRows, countOn, firstChoice, isOffered, nextRowId, offeredProperties, propertyKind, readRows, readWindow, rowKindFor, rowsOf, windowOf, windowReach, type ConditionRow, type WindowDraft } from './conditions.js';
 
 export type Direction = 'out' | 'in' | 'both';
 
@@ -140,7 +140,7 @@ export type Action =
   | { readonly type: 'arrives'; readonly index: number; readonly arrivesAt: string | undefined }
   | { readonly type: 'toggle'; readonly index: number; readonly relationshipType: string }
   | { readonly type: 'remove'; readonly index?: number }
-  | { readonly type: 'add-condition'; readonly index: number; readonly mask: boolean }
+  | { readonly type: 'add-condition'; readonly index: number; readonly mask: boolean; /** The property the row starts on; the first one offered when none is named. */ readonly on?: ConditionRow['on']; readonly property?: string }
   | { readonly type: 'change-condition'; readonly index: number; readonly id: number; readonly change: Partial<ConditionRow> }
   | { readonly type: 'remove-condition'; readonly index: number; readonly id: number }
   | { readonly type: 'window'; readonly index: number; readonly window: WindowDraft };
@@ -193,9 +193,11 @@ export function reduce(profile: SourceProfile, state: BuilderState, action: Acti
       const step = draft.steps[action.index];
       if (step === undefined) return state;
       const offered = offeredProperties(profile, previousTypeOf(draft, action.index), step, action.mask);
-      const choice = addConditionBlock(offered, step, draft.steps) === undefined ? firstChoice(offered, step) : undefined;
+      const named = action.on !== undefined && action.property !== undefined && offered[action.on].includes(action.property) && countOn(rowsOf(step), action.on) < PATTERN_LIMITS.conditionsPerElement ? { on: action.on, property: action.property } : undefined;
+      const choice = addConditionBlock(offered, step, draft.steps) === undefined ? (named ?? firstChoice(offered, step)) : undefined;
       if (choice === undefined) return state;
-      const row: ConditionRow = { id: nextRowId(draft.steps), on: choice.on, property: choice.property, op: 'eq', text: '', from: '', to: '', kind: 'auto' };
+      const kind = rowKindFor(propertyKind(profile, previousTypeOf(draft, action.index), step, choice.on, choice.property));
+      const row: ConditionRow = { id: nextRowId(draft.steps), on: choice.on, property: choice.property, op: 'eq', text: '', from: '', to: '', kind };
       return { draft: withStep(draft, action.index, { ...step, conditions: [...rowsOf(step), row] }), removed: 0 };
     }
     case 'change-condition': {

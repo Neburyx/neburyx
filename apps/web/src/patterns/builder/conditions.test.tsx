@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PatternValidateResponse } from '@neburyx/contracts';
 import type { ApiResult } from '../../api/client.js';
 import { settle } from '../patterns-kit.js';
-import { addStepButton, addCondition, openStep, afterDebounce, buildStep, chooseArrival, chooseDirection, chooseStart, cleanup, conditionRow, conditionsWorkspace, fireEvent, openBuilder, optionTexts, rowField, screen, stepCard, toggleType, userEvent, within } from './builder-kit.js';
+import { addStepButton, addCondition, editRow, openStep, afterDebounce, buildStep, chooseArrival, chooseDirection, chooseStart, cleanup, conditionRow, conditionsWorkspace, fireEvent, openBuilder, optionTexts, rowField, screen, stepCard, toggleType, userEvent, within } from './builder-kit.js';
 
 beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }));
 afterEach(() => {
@@ -22,11 +22,12 @@ async function started(types: readonly string[], options: Parameters<typeof cond
 }
 const lastDefinition = (kit: Awaited<ReturnType<typeof conditionsWorkspace>>) => kit.validations[kit.validations.length - 1]?.definition;
 const type = async (n: number, m: number, label: string, text: string): Promise<void> => {
+  await editRow(n, m);
   fireEvent.change(rowField(n, m, label), { target: { value: text } });
 };
-const windowSelect = (n: number): HTMLElement => within(stepCard(n)).getByRole('combobox', { name: 'Window' });
+const done = async (n: number, m: number): Promise<void> => userEvent.click(within(conditionRow(n, m)).getByRole('button', { name: 'Done' }));
 const addDisabledReason = (n: number): string | undefined => {
-  const button = within(stepCard(n)).getByRole('button', { name: 'Add condition' });
+  const button = within(stepCard(n)).getByRole('button', { name: '+ Add condition' });
   return (button as HTMLButtonElement).disabled ? document.getElementById(button.getAttribute('aria-describedby') ?? '')?.textContent ?? '' : undefined;
 };
 
@@ -80,6 +81,7 @@ describe('one condition on the node', () => {
     await type(1, 1, 'Value', 'x');
     await afterDebounce();
     expect(JSON.stringify(lastDefinition(kit))).toContain('conditions');
+    await done(1, 1);
     await userEvent.click(within(conditionRow(1, 1)).getByRole('button', { name: /^Remove condition/ }));
     await afterDebounce();
     expect(JSON.stringify(lastDefinition(kit))).not.toContain('conditions');
@@ -164,6 +166,7 @@ describe('conditions on the relationship', () => {
     await afterDebounce();
     expect(within(conditionRow(1, 1)).getByText('This property is not available for the types now chosen.')).toBeTruthy();
     expect(kit.validations).toHaveLength(sent);
+    await editRow(1, 1);
     await userEvent.selectOptions(rowField(1, 1, 'Property'), 'relationship:q-when');
     await afterDebounce();
     expect(kit.validations).toHaveLength(sent + 1);
@@ -176,7 +179,7 @@ describe('conditions on the relationship', () => {
     await chooseArrival(2, 'c-c');
     await toggleType(2, 'k-3');
     await chooseDirection(1, 'in');
-    expect(screen.queryByRole('group', { name: 'Step 2' })).toBeNull();
+    expect(screen.queryByRole('tab', { name: 'Step 2' })).toBeNull();
     expect(screen.getByText('Steps after this one were removed because they no longer follow from it.')).toBeTruthy();
   });
 });
@@ -186,8 +189,8 @@ describe('caps and personal data', () => {
     await started(['k-1']);
     for (let count = 0; count < 6; count += 1) await addCondition(1);
     expect(addDisabledReason(1)).toBeUndefined();
-    await addCondition(1);
-    expect(screen.getByText('At most 6 conditions on the node of a step.')).toBeTruthy();
+    await addCondition(1, 'q-size');
+    expect(screen.getByText('Arriving C-B has 6 of 6. Remove one to add another.')).toBeTruthy();
     expect(optionTexts(rowField(1, 7, 'Property'))).toContain('C-B: b-name');
     const disabled = [...(rowField(1, 7, 'Property') as HTMLSelectElement).options].filter((option) => option.disabled).map((option) => option.textContent);
     expect(disabled).toEqual(['C-B: b-name', 'C-B: b-count', 'C-B: b-secret']);
@@ -214,7 +217,8 @@ describe('caps and personal data', () => {
     await buildStep(1, 'out', 'c-b', ['k-6']);
     await addCondition(1);
     expect(optionTexts(rowField(1, 1, 'Property'))).toEqual(['C-B: b-name', 'C-B: b-count']);
-    expect(screen.getByText('Personal-data properties are not offered while masking is on.')).toBeTruthy();
+    expect(screen.getByText('Personal-data properties are hidden')).toBeTruthy();
+    expect(screen.getByText('1 property is not offered in conditions, and their values are not shown in matches. Turn masking off in the toolbar if your role allows it.')).toBeTruthy();
   });
 
   it('starts a new builder when masking changes, says so, and keeps no condition on personal data', async () => {
@@ -229,90 +233,6 @@ describe('caps and personal data', () => {
     expect(screen.queryByText('Masking changed, so the pattern was started again.')).toBeNull();
     expect(screen.queryByRole('group', { name: 'Step 1' })).toBeNull();
     expect(screen.queryByRole('group', { name: 'Step 1 condition 1' })).toBeNull();
-  });
-});
-
-describe('the window', () => {
-  it('offers no window, days and two dates, says nothing of the types while there is no window, names them once one is chosen, and sends nothing for no window', async () => {
-    const kit = await started(['k-1']);
-    await openStep(1, 'Window');
-    expect(optionTexts(windowSelect(1))).toEqual(['No window', 'Last N days', 'Between two dates']);
-    expect(screen.queryByText(/by the window/)).toBeNull();
-    await userEvent.selectOptions(windowSelect(1), 'days');
-    expect(screen.getByText('Filtered by the window: k-1.')).toBeTruthy();
-    await userEvent.selectOptions(windowSelect(1), 'none');
-    expect(screen.queryByText(/by the window/)).toBeNull();
-    await afterDebounce();
-    expect(JSON.stringify(lastDefinition(kit))).not.toContain('window');
-  });
-
-  it('sends days from 1 to 3650 and refuses anything else with Expand’s sentence', async () => {
-    const kit = await started(['k-1']);
-    await openStep(1, 'Window');
-    await userEvent.selectOptions(windowSelect(1), 'days');
-    expect(screen.getByText('Enter a whole number of days from 1 to 3650.')).toBeTruthy();
-    for (const bad of ['0', '3651', '2.5', 'x']) {
-      fireEvent.change(within(stepCard(1)).getByLabelText('Step 1 window: Days'), { target: { value: bad } });
-      expect(screen.getByText('Enter a whole number of days from 1 to 3650.')).toBeTruthy();
-    }
-    fireEvent.change(within(stepCard(1)).getByLabelText('Step 1 window: Days'), { target: { value: '30' } });
-    await afterDebounce();
-    expect(lastDefinition(kit)).toMatchObject({ steps: [{ window: { days: 30 } }] });
-  });
-
-  it('sends two calendar dates in order and refuses a date that is not one, an end before the start and a range over 3,650 days', async () => {
-    const kit = await started(['k-1']);
-    await openStep(1, 'Window');
-    await userEvent.selectOptions(windowSelect(1), 'dates');
-    const set = (from: string, to: string): void => {
-      fireEvent.change(within(stepCard(1)).getByLabelText('Step 1 window: From (UTC date)'), { target: { value: from } });
-      fireEvent.change(within(stepCard(1)).getByLabelText('Step 1 window: To (UTC date)'), { target: { value: to } });
-    };
-    const sentence = 'Enter two calendar dates like 2026-03-01, the start not after the end, at most 3650 days apart.';
-    for (const [from, to] of [['2026-02-30', '2026-03-31'], ['2026-03-31', '2026-03-01'], ['2010-01-01', '2026-01-01']] as const) {
-      set(from, to);
-      expect(screen.getByText(sentence)).toBeTruthy();
-    }
-    set('2026-03-01', '2026-03-31');
-    await afterDebounce();
-    expect(lastDefinition(kit)).toMatchObject({ steps: [{ window: { from: '2026-03-01', to: '2026-03-31' } }] });
-  });
-
-  it('names the types the window does not filter, and a type with both a dated and an undated row in both lines', async () => {
-    await started(['k-1', 'k-2']);
-    await openStep(1, 'Window');
-    expect(screen.queryByText(/by the window/)).toBeNull();
-    await userEvent.selectOptions(windowSelect(1), 'dates');
-    expect(screen.getByText('Filtered by the window: k-1.')).toBeTruthy();
-    expect(screen.getByText('Not filtered by the window: k-2. They are read whole.')).toBeTruthy();
-    cleanup();
-    document.body.replaceChildren();
-    const kit = await conditionsWorkspace();
-    void kit;
-    await openBuilder();
-    await chooseStart('c-c');
-    await userEvent.click(addStepButton());
-    await chooseDirection(1, 'both');
-    await chooseArrival(1, 'c-d');
-    await toggleType(1, 'k-two');
-    await openStep(1, 'Window');
-    await userEvent.selectOptions(windowSelect(1), 'days');
-    expect(screen.getByText('Filtered by the window: k-two.')).toBeTruthy();
-    expect(screen.getByText('Not filtered by the window: k-two. They are read whole.')).toBeTruthy();
-  });
-
-  it('disables the window when no chosen type has an observed time, and takes a window off when a change leaves none', async () => {
-    const kit = await started(['k-1']);
-    await openStep(1, 'Window');
-    await userEvent.selectOptions(windowSelect(1), 'days');
-    fireEvent.change(within(stepCard(1)).getByLabelText('Step 1 window: Days'), { target: { value: '30' } });
-    await toggleType(1, 'k-1');
-    await toggleType(1, 'k-2');
-    expect((windowSelect(1) as HTMLSelectElement).disabled).toBe(true);
-    expect(screen.getByText('The window does not apply: no chosen relationship type has an observed time in the mapping.')).toBeTruthy();
-    expect(screen.getByText('The window was taken off because no chosen relationship type has an observed time.')).toBeTruthy();
-    await afterDebounce();
-    expect(JSON.stringify(lastDefinition(kit))).not.toContain('window');
   });
 });
 
@@ -366,7 +286,7 @@ describe('what the server finds wrong with a condition or a window', () => {
     await addCondition(1);
     await type(1, 1, 'Value', 'a');
     await openStep(1, 'Window');
-    await userEvent.selectOptions(windowSelect(1), 'days');
+    await userEvent.click(within(stepCard(1)).getByRole('radio', { name: 'Last N days' }));
     fireEvent.change(within(stepCard(1)).getByLabelText('Step 1 window: Days'), { target: { value: '30' } });
     await afterDebounce();
     expect(screen.getByText('The mapping can follow this pattern')).toBeTruthy();
@@ -382,6 +302,7 @@ describe('what the server finds wrong with a condition or a window', () => {
     await addCondition(1);
     await type(1, 1, 'Value', 'a');
     await afterDebounce();
+    await done(1, 1);
     await userEvent.click(within(conditionRow(1, 1)).getByRole('button', { name: /^Remove condition/ }));
     await afterDebounce();
     act(() => release(invalid({ path: ['steps', 0, 'conditions', 0, 'property'], code: 'not-filterable' })));
