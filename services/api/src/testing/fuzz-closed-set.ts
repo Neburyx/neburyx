@@ -1,6 +1,6 @@
 import { edgeRefSegmentOf, sourceLinkSegmentOf } from '@neburyx/contracts';
 import { registeredRoutesOf } from '../app.js';
-import { FUZZ_LINKED_PRESETS, FUZZ_SHARED_PRESETS, FUZZ_TIGHT_SOURCE, FUZZ_SOURCE, FUZZ_TEXT, allowedNames, type FuzzRig } from './fuzz-rig.js';
+import { FUZZ_HEAVY_ANCHOR, FUZZ_LINKED_PRESETS, FUZZ_SHARED_PRESETS, FUZZ_TIGHT_SOURCE, FUZZ_SOURCE, FUZZ_TEXT, allowedNames, type FuzzRig } from './fuzz-rig.js';
 
 /** The names a statement quotes in backticks. */
 export const quotedNamesOf = (cypher: string): string[] => [...cypher.matchAll(/`([^`]*)`/g)].flatMap((match) => (match[1] === undefined ? [] : [match[1]]));
@@ -79,9 +79,11 @@ async function buildClosedSet(rig: FuzzRig): Promise<{ readonly statements: Set<
   const served = async (url: string, payload: unknown): Promise<void> => {
     const id = url.split('/')[3] ?? '';
     const template = id === 'linked-entities' || FUZZ_LINKED_PRESETS.some((preset) => preset.id === id) || id.startsWith('linked-') ? 'linked-entities' : 'shared-attribute';
-    cases.add(`${template}:${typeof payload === 'object' && payload !== null && 'continue' in payload && payload.continue === true ? 'continue' : 'estimate'}`);
+    const heavy = JSON.stringify(payload).includes(FUZZ_HEAVY_ANCHOR);
+    cases.add(`${template}:${heavy ? 'heavy' : typeof payload === 'object' && payload !== null && 'continue' in payload && payload.continue === true ? 'continue' : 'estimate'}`);
     const response = await post(url, payload);
     if (response.statusCode !== 200) throw new Error(`the closed set expected ${url} to be served, and it answered ${response.statusCode}: ${JSON.stringify(payload)}`);
+    if (heavy && (JSON.parse(response.body) as { status?: string }).status !== 'heavy') throw new Error(`the closed set expected ${url} to stop as heavy: ${response.body.slice(0, 120)}`);
   };
   const statements = new Set<string>();
   const keep = (): void => {
@@ -163,6 +165,18 @@ async function buildClosedSet(rig: FuzzRig): Promise<{ readonly statements: Set<
       await served('/v1/templates/linked-entities/run', { sourceId: FUZZ_SOURCE, params: { ref: { entityType: 'gadget', stableId: 'GD-0' }, targetType: 'widget', via: ['MADE_FROM'], ...(direction === undefined ? {} : { direction }), ...(window === undefined ? {} : { window }) } });
       keep();
     }
+  }
+  const heavyAnchor = { entityType: 'widget', stableId: FUZZ_HEAVY_ANCHOR };
+  for (const [url, params] of [
+    ['/v1/templates/shared-gadgets/run', { ref: heavyAnchor }],
+    ['/v1/templates/shared-phones/run', { ref: heavyAnchor }],
+    ['/v1/templates/shared-attribute/run', { ref: heavyAnchor, attributeType: 'gadget', via: 'MADE_FROM' }],
+    ['/v1/templates/linked-gadgets/run', { ref: heavyAnchor }],
+    ['/v1/templates/linked-widgets/run', { ref: heavyAnchor, maxHops: 2, direction: 'both' }],
+    ['/v1/templates/linked-entities/run', { ref: heavyAnchor, targetType: 'gadget', via: ['MADE_FROM'] }],
+  ] as const) {
+    await served(url, { sourceId: FUZZ_SOURCE, params });
+    keep();
   }
   const types = [['gadget'], ['phone'], ['gadget', 'phone']];
   for (const neighborTypes of types) {
@@ -261,7 +275,7 @@ async function buildClosedSet(rig: FuzzRig): Promise<{ readonly statements: Set<
       keep();
     }
   }
-  return { statements, routes, cases, values: ['W-1', 'GD-0', 'L-1', '2026-01-01', '2026-01-31', FUZZ_TEXT, 'ne', '+1-212-555-01', ...cursors, ...expandCursors.map((entry) => entry.cursor), ...keys.map((entry) => entry.stableId)] };
+  return { statements, routes, cases, values: ['W-1', 'GD-0', 'L-1', FUZZ_HEAVY_ANCHOR, '2026-01-01', '2026-01-31', FUZZ_TEXT, 'ne', '+1-212-555-01', ...cursors, ...expandCursors.map((entry) => entry.cursor), ...keys.map((entry) => entry.stableId)] };
 }
 
 const escaped = (value: string): string => value.replace(/[.*+?^${}()|[\]\\-]/g, '\\$&');

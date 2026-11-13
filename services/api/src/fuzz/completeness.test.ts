@@ -67,7 +67,7 @@ describe('the closed set of the fuzz suite', () => {
     const sharedProbe = (statements: ReadonlySet<string>): string[] => [...statements].filter((statement) => statement.includes('RETURN matches, anchorBounded, skipped'));
     const linkedProbe = (statements: ReadonlySet<string>): string[] => [...statements].filter((statement) => statement.includes('AS frontierBounded') && statement.includes('AS supernodeSkipped') && statement.includes('count(n) AS matches') || statement.includes('count(x) AS matches'));
     const casesBuilt = casesOfClosedSet.get(closed) ?? new Set<string>();
-    const CASES = ['shared-attribute:estimate', 'shared-attribute:continue', 'linked-entities:estimate', 'linked-entities:continue'];
+    const CASES = ['shared-attribute:estimate', 'shared-attribute:continue', 'shared-attribute:heavy', 'linked-entities:estimate', 'linked-entities:continue', 'linked-entities:heavy'];
     /** What the heavy-operation estimate needs of a closed set: the count statement of each pattern template and a run of each case, so a set without any of them is found. */
     const missingEstimateCases = (statements: ReadonlySet<string>, cases: ReadonlySet<string>): string[] => [
       ...(sharedProbe(statements).length === 0 ? ['the shared-attribute count statement'] : []),

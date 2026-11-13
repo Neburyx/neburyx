@@ -84,6 +84,10 @@ export function allowedNames(): ReadonlySet<string> {
   return names;
 }
 
+/** The anchor whose count probe answers more matches than the source's threshold (500 by default), so a run for it stops as heavy. */
+export const FUZZ_HEAVY_ANCHOR = 'W-HEAVY';
+export const FUZZ_HEAVY_MATCHES = 501;
+
 const MATCHES = 61;
 export const FUZZ_TEXT = 'needle';
 const widgets: StoredNode[] = Array.from({ length: MATCHES }, (_, index) => ({
@@ -173,9 +177,9 @@ export function respond(call: ExecuteCall): Promise<ExecuteOutcome> {
     return Promise.resolve({ status: 'rows', rows: [] });
   }
   if (call.templateId === 'derived-edge-support') return Promise.resolve({ status: 'rows', rows: Array.from({ length: Math.min(call.rowLimit, 3) }, (_, index) => supportRow(index)) });
-  if (call.templateId === 'shared-attribute-count') return Promise.resolve({ status: 'rows', rows: [{ matches: 0, anchorBounded: false, skipped: false }] });
+  if (call.templateId === 'shared-attribute-count') return Promise.resolve({ status: 'rows', rows: [{ matches: call.parameters['stableId'] === FUZZ_HEAVY_ANCHOR ? FUZZ_HEAVY_MATCHES : 0, anchorBounded: false, skipped: false }] });
   if (call.templateId === 'shared-attribute') return Promise.resolve({ status: 'rows', rows: Array.from({ length: Math.min(call.rowLimit, 3) }, (_, index) => sharedRow(index, call)) });
-  if (call.templateId === 'linked-entities-count') return Promise.resolve({ status: 'rows', rows: [{ matches: 0, frontierBounded: false, supernodeSkipped: false }] });
+  if (call.templateId === 'linked-entities-count') return Promise.resolve({ status: 'rows', rows: [{ matches: call.parameters['stableId'] === FUZZ_HEAVY_ANCHOR ? FUZZ_HEAVY_MATCHES : 0, frontierBounded: false, supernodeSkipped: false }] });
   if (call.templateId === 'linked-entities') return Promise.resolve({ status: 'rows', rows: Array.from({ length: Math.min(call.rowLimit, 3) }, (_, index) => linkedRow(index, call)) });
   if (call.templateId === 'derived-rule-run') return Promise.resolve({ status: 'rows', rows: Array.from({ length: Math.min(call.rowLimit, 3) }, (_, index) => derivedRow(index)) });
   if (call.templateId === 'aggregate-sample') {

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { makeToken } from '../reference/token.js';
 import { closedSetOf, statementProblems } from '../testing/fuzz-closed-set.js';
 import { FIELD_NAMES, TEMPLATE_NATIVE, fuzzParams, hostileText, textLeaves, wrongType } from '../testing/fuzz-corpus.js';
-import { FUZZ_ENTITIES, FUZZ_SOURCE, FUZZ_TIGHT_SOURCE, FUZZ_TWIN_SOURCE, allowedNames, startFuzzRig } from '../testing/fuzz-rig.js';
+import { FUZZ_HEAVY_ANCHOR, FUZZ_SOURCE, FUZZ_TIGHT_SOURCE, FUZZ_TWIN_SOURCE, allowedNames, startFuzzRig } from '../testing/fuzz-rig.js';
 import { TEST_REFERENCE_KEYS } from '../testing/gate.js';
 
 const names = new Set([...allowedNames(), 'widget', 'gadget', 'phone', 'holder', 'MADE_FROM', 'USES', 'HOLDS', 'out', 'in', 'both', FUZZ_SOURCE, FUZZ_TWIN_SOURCE, FUZZ_TIGHT_SOURCE, 'shared-gadgets', 'shared-phones', 'linked-gadgets', 'linked-widgets', 'shared-attribute', 'linked-entities']);
@@ -313,6 +313,98 @@ describe('what the route refuses because of the mapping, the budgets or the toke
         refused(response, 'INVALID_REQUEST', {});
       }),
       fuzzParams(60),
+    );
+  });
+});
+
+describe('the continue flag and the estimate of a run', () => {
+  const post = (id: string, body: Record<string, unknown>) => rig.post(`/v1/templates/${id}/run`, body);
+
+  it('a continue that is not a boolean, an extra top-level member, or a continue inside params is INVALID_REQUEST and nothing is read', async () => {
+    await fc.assert(
+      fc.asyncProperty(wrongType.filter((value) => typeof value !== 'boolean' && value !== undefined), hostileText(known), async (flag, key) => {
+        rig.reset();
+        refused(await post('shared-gadgets', { sourceId: FUZZ_SOURCE, params: { ref: ANCHOR }, continue: flag }), 'INVALID_REQUEST', {});
+        rig.reset();
+        refused(await post('linked-gadgets', { sourceId: FUZZ_SOURCE, params: { ref: ANCHOR, continue: true } }), 'INVALID_REQUEST', {});
+        rig.reset();
+        refused(await post('shared-gadgets', { sourceId: FUZZ_SOURCE, params: { ref: ANCHOR }, [key]: true }), 'INVALID_REQUEST', { key });
+      }),
+      fuzzParams(60),
+    );
+  });
+
+  it.each([
+    ['shared-gadgets', {}],
+    ['shared-phones', {}],
+    ['shared-attribute', SHARED_BY_ID],
+    ['linked-gadgets', {}],
+    ['linked-widgets', { maxHops: 2, direction: 'both' }],
+    ['linked-entities', LINKED_BY_ID],
+  ] as const)('%s: a run for an anchor that matches more than the threshold stops as heavy with a lower bound, reads no matches, and continues to a first page of at most 25', async (id, types) => {
+    const ref = { entityType: 'widget', stableId: FUZZ_HEAVY_ANCHOR };
+    rig.reset();
+    const stopped = await post(id, { sourceId: FUZZ_SOURCE, params: { ref, ...types } });
+    const answer = JSON.parse(stopped.body) as { status: string; estimate?: { value: number; quality: string }; threshold?: number; continueLimit?: number };
+    expect(answer).toMatchObject({ status: 'heavy', estimate: { value: 500, quality: 'lowerBound' }, threshold: 500, continueLimit: 25 });
+    expect(rig.executor.calls.map((call) => call.templateId).filter((template) => template !== 'schema-indexes')).toEqual([id.startsWith('linked') ? 'linked-entities-count' : 'shared-attribute-count']);
+    expect(statementProblems(rig, closed, [])).toEqual([]);
+    rig.reset();
+    const continued = await post(id, { sourceId: FUZZ_SOURCE, params: { ref, ...types }, continue: true });
+    expect(JSON.parse(continued.body)).toMatchObject({ status: 'ok' });
+    expect(rig.executor.calls.map((call) => call.templateId)).not.toContain(id.startsWith('linked') ? 'linked-entities-count' : 'shared-attribute-count');
+    expect((JSON.parse(continued.body) as { matchIds: unknown[] }).matchIds.length).toBeLessThanOrEqual(25);
+    expect(statementProblems(rig, closed, [])).toEqual([]);
+  });
+
+  it('hostile text in the anchor of a run reaches the count statement as a parameter only', async () => {
+    await fc.assert(
+      fc.asyncProperty(unmapped, fc.constantFrom('shared-gadgets', 'linked-gadgets'), async (text, id) => {
+        rig.reset();
+        const response = await post(id, { sourceId: FUZZ_SOURCE, params: { ref: { entityType: 'widget', stableId: text } } });
+        expect(codeOf(response.body)).toBeUndefined();
+        const counts = rig.executor.calls.filter((call) => call.templateId.endsWith('-count'));
+        expect(counts.length).toBe(1);
+        expect(counts[0]?.parameters['stableId']).toBe(text);
+        expect(statementProblems(rig, closed, textLeaves({ text }, known))).toEqual([]);
+      }),
+      fuzzParams(60),
+    );
+  });
+});
+
+describe('GET /v1/templates', () => {
+  const list = (query: string) => rig.app.inject({ method: 'GET', url: `/v1/templates${query}` });
+  const encoded = (text: string): string => encodeURIComponent(text.replace(/[\ud800-\udfff]/g, '\ufffd'));
+
+  it('is served for a source of the mapping and reads nothing from the source', async () => {
+    rig.reset();
+    const response = await list(`?sourceId=${FUZZ_SOURCE}`);
+    expect(response.statusCode).toBe(200);
+    expect(rig.executor.calls).toEqual([]);
+  });
+
+  it('answers NOT_FOUND for a source that is not in the mapping, whatever the text, and reads nothing', async () => {
+    await fc.assert(
+      fc.asyncProperty(unmapped, async (text) => {
+        rig.reset();
+        refused(await list(`?sourceId=${encoded(text)}`), 'NOT_FOUND', { text });
+      }),
+      fuzzParams(60),
+    );
+  });
+
+  it('answers INVALID_REQUEST for no source ID, an empty or repeated one, or another query member, and reads nothing', async () => {
+    for (const query of ['', '?sourceId=', `?sourceId=${FUZZ_SOURCE}&sourceId=${FUZZ_SOURCE}`, `?sourceId=${FUZZ_SOURCE}&other=1`, `?other=${FUZZ_SOURCE}`]) {
+      rig.reset();
+      refused(await list(query), 'INVALID_REQUEST', {});
+    }
+    await fc.assert(
+      fc.asyncProperty(hostileText(known).filter((key) => key !== 'sourceId' && !/[&=#%+]/.test(key)), async (key) => {
+        rig.reset();
+        refused(await list(`?sourceId=${FUZZ_SOURCE}&${encoded(key)}=1`), 'INVALID_REQUEST', { key });
+      }),
+      fuzzParams(40),
     );
   });
 });

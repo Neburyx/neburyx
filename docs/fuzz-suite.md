@@ -18,7 +18,7 @@ A test feeds the check a statement built from text and shows it fails.
 
 **Every route is in the set.** (`POST /v1/investigations`, which reads the entity once through the gate when it opens one, is built into the set; no hostile request to it is part of the recorded run below.) `fuzz/completeness.test.ts` compares the routes the closed set was built from (the builder records each route it requests) with the routes the API registers under `/v1`, less a named list with a reason for each: the routes that read no source, and the source test, which runs the tester and not a gate template. A route the builder does not request fails the test, so removing a route from the set, or adding a source-reading route and leaving it out, cannot pass unseen. Negative tests feed the check a set with one route missing. The cancellation route list (`graph/cancel-routes.test.ts`) and the concurrency suite's (`tools/concurrency-suite/src/routes.test.ts`) are compared with the registered routes the same way.
 
-**The estimate cases are in the set.** Beside the routes, the closed set records the pattern-run cases it was built from for each pattern template (`shared-attribute:estimate`, `shared-attribute:continue`, `linked-entities:estimate`, `linked-entities:continue`) and the completeness test requires each of them and the count statement of each template (a negative feeds it a set without one).
+**The estimate cases are in the set.** Beside the routes, the closed set records the pattern-run cases it was built from for each pattern template (`shared-attribute:estimate`, `shared-attribute:continue`, `shared-attribute:heavy`, `linked-entities:estimate`, `linked-entities:continue`, `linked-entities:heavy`) and the completeness test requires each of them and the count statement of each template (a negative feeds it a set without one). The `heavy` case runs each preset and each template for an anchor whose count probe answers more matches than the source's threshold: the answer is the stop, with a lower bound at the threshold and no rows, and the set is built only if it is. `fuzz/templates.test.ts` also checks that the stop reads nothing but the count statement, that a continue reads no estimate and no more than a first page of 25, and that hostile text in the anchor reaches the count statement as a parameter only.
 
 **The matched properties.** The exact group of a search answer and of a next page names the `search` properties that held the typed text (`exactMatches` and `matches`). `fuzz/routes.test.ts` sends hostile texts, masked and not, and checks that every name is a `search` property of the mapping; the answer adds no statement, so the closed set is the one above.
 
@@ -54,7 +54,7 @@ A cursor is stateless and valid for 30 minutes. Replaying it unchanged in the sa
 
 ## A recorded run
 
-Run on the commit that added the pattern routes to the suite, with `NBX_FUZZ_RECORD` set to a file; the fixed seed is **5017**, 120 runs for a property unless the file says otherwise. The counts include the requests that build the closed set, which now has the pattern runs, so every file's counts are higher than they were before them.
+Run on the commit that added the cases of the estimate to the pattern routes' suite, with `NBX_FUZZ_RECORD` set to a file; the fixed seed is **5017**, 120 runs for a property unless the file says otherwise. The counts include the requests that build the closed set, which now has the pattern runs, so every file's counts are higher than they were before them.
 
 | Route | Answers |
 |---|---|
@@ -65,9 +65,9 @@ Run on the commit that added the pattern routes to the suite, with `NBX_FUZZ_REC
 | `POST /v1/graph/preview-expansion` | `NOT_FOUND` 214, `INVALID_REQUEST` 210 |
 | `POST /v1/graph/derived-neighbors` | `INVALID_REQUEST` 206, `served` 169, `NOT_FOUND` 60 |
 | `POST /v1/graph/coverage` | `INVALID_REQUEST` 180, `NOT_FOUND` 65, `SOURCE_MISMATCH` 48, `served` 2 |
-| `POST /v1/templates/{id}/run` | `served` 2408, `INVALID_REQUEST` 1535, `NOT_FOUND` 321, `QUERY_BUDGET_EXCEEDED` 43 |
+| `POST /v1/templates/{id}/run` | `served` 2560, `INVALID_REQUEST` 1715, `NOT_FOUND` 321, `QUERY_BUDGET_EXCEEDED` 43 |
 
-14,854 requests, 15,799 statements seen by the executor, at most 54 distinct statements in a file, all in the closed set. The oversized-page case is `fuzz/routes.test.ts`, "answers QUERY_BUDGET_EXCEEDED, naming the maximum".
+15,186 requests, 21,039 statements seen by the executor, at most 73 distinct statements in a file, all in the closed set. The oversized-page case is `fuzz/routes.test.ts`, "answers QUERY_BUDGET_EXCEEDED, naming the maximum".
 
 The pattern routes' own files are `fuzz/templates.test.ts` (the body, the ID, hostile text in every input, and the refusals that depend on the mapping, the budgets and the token) and the entries of the shape table in `fuzz/routes.test.ts`.
 
@@ -95,4 +95,4 @@ A failing property prints its seed, the path and the shrunk counterexample. To r
 
 ## What it does not cover
 
-Request rate and read slots, cancellation and timeouts (their own suites); the investigation routes, which do not read the source through the gate; the list route of the templates and the heavy-operation probe of a pattern run, which the API does not have yet; text produced for or by a language model; the web client; the network layer in front of the API. The real-server file uses Neo4j 5.26 only.
+Request rate and read slots, cancellation and timeouts (their own suites); the investigation routes, which do not read the source through the gate; text produced for or by a language model; the web client; the network layer in front of the API. The real-server file uses Neo4j 5.26 only.
