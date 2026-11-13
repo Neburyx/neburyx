@@ -2,14 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { MAX_INVESTIGATION_LIST_LIMIT } from './investigations.js';
 import { buildOpenApiDocument } from './openapi.js';
+import { patternRunHeavySchema } from './pattern-run.js';
 
 describe('buildOpenApiDocument', () => {
   it('has info, the probes, the identity, source and source test paths and their components', () => {
     const document = buildOpenApiDocument();
     expect(document.openapi).toBe('3.1.0');
     expect(document.info.title).toBe('Neburyx API');
-    expect(Object.keys(document.paths)).toEqual(['/healthz', '/readyz', '/v1/me', '/v1/ai/status', '/v1/sources/{id}/profile', '/v1/sources/{id}/test', '/v1/entities/{sourceId}/{entityType}/{stableId}', '/v1/entities/lookup', '/v1/investigations', '/v1/investigations/{id}', '/v1/investigations/{id}/status', '/v1/investigations/{id}/exports', '/v1/exports/{id}', '/v1/exports/{id}/download', '/v1/investigations/{id}/restore', '/v1/investigations/{id}/draft', '/v1/views', '/v1/investigations/{id}/views', '/v1/investigations/{id}/views/{viewId}', '/v1/investigations/{id}/views/{viewId}/restore', '/v1/investigations/{id}/views/{viewId}/delete', '/v1/edges/{ref}', '/v1/source-links/{ref}', '/v1/search/entities', '/v1/search/entities/more', '/v1/graph/preview-expansion', '/v1/graph/derived-neighbors', '/v1/patterns/validate', '/v1/patterns/preview', '/v1/templates', '/v1/templates/{id}/run', '/v1/graph/coverage', '/v1/graph/read-refs', '/v1/graph/expand', '/v1/sources']);
-    expect(Object.keys(document.components.schemas)).toEqual(['AiStatusResponse', 'PatternValidateRequest', 'PatternValidateResponse', 'PatternPreviewRequest', 'PatternPreviewResponse', 'CoverageRequest', 'CoverageResponse', 'DegreePreview', 'DegreePreviewRequest', 'DerivedNeighborsRequest', 'DerivedNeighborsResponse', 'TemplateListResponse', 'TemplateRunRequest', 'TemplateRunResponse', 'DraftWriteRequest', 'DraftWriteResponse', 'EdgeDetail', 'EntityLookupRequest', 'ErrorResponse', 'Export', 'ExportFile', 'ExportRequest', 'ExpandRequest', 'ExpandResponse', 'GraphNode', 'HealthResponse', 'InvestigationListResponse', 'InvestigationResponse', 'MeResponse', 'NamedView', 'OpenInvestigationRequest', 'OpenInvestigationResponse', 'ReadRefsRequest', 'ReadRefsResponse', 'ReadyResponse', 'RenameRequest', 'RenameResponse', 'RenameViewRequest', 'RestoreViewResponse', 'SaveViewRequest', 'SaveViewResponse', 'SearchMoreRequest', 'SearchMoreResult', 'SearchRequest', 'SearchResult', 'SourceProfile', 'SourceTestReport', 'SourcesResponse', 'DeleteInvestigationResponse', 'DeleteViewRequest', 'DeleteViewResponse', 'RestoreInvestigationRequest', 'StatusChangeRequest', 'StatusChangeResponse', 'OwnedViewListResponse', 'ViewListResponse']);
+    expect(Object.keys(document.paths)).toEqual(['/healthz', '/readyz', '/v1/me', '/v1/ai/status', '/v1/sources/{id}/profile', '/v1/sources/{id}/test', '/v1/entities/{sourceId}/{entityType}/{stableId}', '/v1/entities/lookup', '/v1/investigations', '/v1/investigations/{id}', '/v1/investigations/{id}/status', '/v1/investigations/{id}/exports', '/v1/exports/{id}', '/v1/exports/{id}/download', '/v1/investigations/{id}/restore', '/v1/investigations/{id}/draft', '/v1/views', '/v1/investigations/{id}/views', '/v1/investigations/{id}/views/{viewId}', '/v1/investigations/{id}/views/{viewId}/restore', '/v1/investigations/{id}/views/{viewId}/delete', '/v1/edges/{ref}', '/v1/source-links/{ref}', '/v1/search/entities', '/v1/search/entities/more', '/v1/graph/preview-expansion', '/v1/graph/derived-neighbors', '/v1/patterns/validate', '/v1/patterns/preview', '/v1/patterns/run', '/v1/templates', '/v1/templates/{id}/run', '/v1/graph/coverage', '/v1/graph/read-refs', '/v1/graph/expand', '/v1/sources']);
+    expect(Object.keys(document.components.schemas)).toEqual(['AiStatusResponse', 'PatternRunRequest', 'PatternRunResponse', 'PatternValidateRequest', 'PatternValidateResponse', 'PatternPreviewRequest', 'PatternPreviewResponse', 'CoverageRequest', 'CoverageResponse', 'DegreePreview', 'DegreePreviewRequest', 'DerivedNeighborsRequest', 'DerivedNeighborsResponse', 'TemplateListResponse', 'TemplateRunRequest', 'TemplateRunResponse', 'DraftWriteRequest', 'DraftWriteResponse', 'EdgeDetail', 'EntityLookupRequest', 'ErrorResponse', 'Export', 'ExportFile', 'ExportRequest', 'ExpandRequest', 'ExpandResponse', 'GraphNode', 'HealthResponse', 'InvestigationListResponse', 'InvestigationResponse', 'MeResponse', 'NamedView', 'OpenInvestigationRequest', 'OpenInvestigationResponse', 'ReadRefsRequest', 'ReadRefsResponse', 'ReadyResponse', 'RenameRequest', 'RenameResponse', 'RenameViewRequest', 'RestoreViewResponse', 'SaveViewRequest', 'SaveViewResponse', 'SearchMoreRequest', 'SearchMoreResult', 'SearchRequest', 'SearchResult', 'SourceProfile', 'SourceTestReport', 'SourcesResponse', 'DeleteInvestigationResponse', 'DeleteViewRequest', 'DeleteViewResponse', 'RestoreInvestigationRequest', 'StatusChangeRequest', 'StatusChangeResponse', 'OwnedViewListResponse', 'ViewListResponse']);
     expect(document.components.schemas.ErrorResponse).not.toHaveProperty('$schema');
     expect(document.components.schemas.MeResponse).not.toHaveProperty('$schema');
   });
@@ -189,5 +190,23 @@ describe('buildOpenApiDocument', () => {
         },
       },
     });
+  });
+
+  it('describes the pattern run route: the idempotency key in the header, the two answers by status, and the refusals it can give', () => {
+    const document = buildOpenApiDocument();
+    const route = (document.paths as Record<string, { post: { parameters: { name: string; in: string; required: boolean }[]; responses: Record<string, unknown> } }>)['/v1/patterns/run']?.post;
+    expect(route?.parameters).toEqual([expect.objectContaining({ name: 'Idempotency-Key', in: 'header', required: true })]);
+    expect(Object.keys(route?.responses ?? {})).toEqual(['200', '400', '403', '404', '409', '415', '422', '429', '500', '503', '504']);
+    const answers = (document.components.schemas.PatternRunResponse as { anyOf: { properties: { status: { const: string } } }[] }).anyOf;
+    expect(answers.map((answer) => answer.properties.status.const)).toEqual(['ok', 'heavy']);
+  });
+
+  it('leaves the rule that a heavy answer is a lower bound at the threshold to the schema: the document lists the members, and the parse refuses an estimate that is not a lower bound at the threshold', () => {
+    const document = buildOpenApiDocument();
+    const heavy = (document.components.schemas.PatternRunResponse as { anyOf: { properties: Record<string, unknown> }[] }).anyOf[1];
+    expect(Object.keys(heavy?.properties ?? {})).toEqual(['status', 'templateVersion', 'estimate', 'threshold', 'continueLimit', 'notices', 'warnings']);
+    const answer = { status: 'heavy', templateVersion: '1', estimate: { value: 500, quality: 'lowerBound', scope: 's' }, threshold: 500, continueLimit: 25, notices: [], warnings: [] };
+    expect(patternRunHeavySchema.safeParse(answer).success).toBe(true);
+    expect(patternRunHeavySchema.safeParse({ ...answer, estimate: { value: 500, quality: 'exact', scope: 's' } }).success).toBe(false);
   });
 });
