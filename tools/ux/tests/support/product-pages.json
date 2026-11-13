@@ -65,6 +65,10 @@
     { "name": "Investigations with the delete view dialog open", "route": "investigations" },
     { "name": "Investigations with the list read failed", "route": "investigations" },
     { "name": "The not-found page", "route": "*" },
-    { "name": "First run", "route": "" }
+    { "name": "First run", "route": "" },
+    { "name": "Explore with the Ask panel open", "route": "explore" },
+    { "name": "Explore with the Ask panel preview", "route": "explore" },
+    { "name": "Explore with the Ask panel blocked word", "route": "explore" },
+    { "name": "Explore with the Ask panel clarification", "route": "explore" }
   ]
 }
