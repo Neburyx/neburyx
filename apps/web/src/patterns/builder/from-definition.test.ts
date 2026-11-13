@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { patternDefinitionSchema, type PatternDefinition } from '@neburyx/contracts';
-import { conditionsProfile } from '../builder/builder-kit.js';
-import { toDefinition } from '../builder/model.js';
+import { conditionsProfile } from './builder-kit.js';
+import { toDefinition } from './model.js';
 import { fromDefinition } from './from-definition.js';
 
 const profile = conditionsProfile();

@@ -1,16 +1,11 @@
 import { useState } from 'react';
 import type { PatternDefinition } from '@neburyx/contracts';
 import type { ApiClient } from '../../api/client.js';
+import type { SaveContext } from '../builder/pattern-editor.js';
 import { SavePatternDialog, type SaveMode } from './save-dialog.js';
 import { SAVED_COPY } from './saved-copy.js';
 import type { Notice } from './use-row-actions.js';
 import type { ListedPattern } from '@neburyx/contracts';
-
-export interface SaveContext {
-  readonly anchor: { readonly entityType: string; readonly stableId: string } | undefined;
-  /** Why nothing can be saved yet, in the order the person meets it, or nothing. */
-  readonly block: string | undefined;
-}
 
 interface Props {
   readonly client: ApiClient;

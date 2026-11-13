@@ -5,7 +5,7 @@ import type { ApiResult } from '../../api/client.js';
 import { ref } from '../../state/test-data.js';
 import { typedNode } from '../../workspace/filters-kit.js';
 import { definitionHeavy, definitionOk, settle } from '../patterns-kit.js';
-import { builderPanel, cleanup, runButton, runWorkspace, screen, userEvent, validPattern, within } from './builder-kit.js';
+import { builderPanel, cleanup, runButton, runWorkspace, screen, userEvent, validPattern, within } from './run-kit.js';
 
 beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }));
 afterEach(() => {

@@ -1,6 +1,6 @@
 import { patternDefinitionSchema, type ExpandFilter, type FilterValue, type PatternDefinition } from '@neburyx/contracts';
-import type { ConditionRow, WindowDraft } from '../builder/conditions.js';
-import { EMPTY_DRAFT, type Draft, type StepDraft } from '../builder/model.js';
+import type { ConditionRow, WindowDraft } from './conditions.js';
+import { EMPTY_DRAFT, type Draft, type StepDraft } from './model.js';
 
 const textOf = (value: FilterValue): string => (typeof value.value === 'string' ? value.value : String(value.value));
 

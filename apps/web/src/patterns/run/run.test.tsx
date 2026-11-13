@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PatternPreviewResponse, PatternRunResponse } from '@neburyx/contracts';
 import type { ApiResult } from '../../api/client.js';
 import { definitionHeavy, definitionOk, failure, settle } from '../patterns-kit.js';
-import { afterDebounce, builderPanel, chooseStart, cleanup, runButton, runReason, runWorkspace, screen, userEvent, validPattern, within } from './builder-kit.js';
+import { afterDebounce, builderPanel, chooseStart, cleanup, runButton, runReason, runWorkspace, screen, userEvent, validPattern, within } from './run-kit.js';
 
 beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }));
 afterEach(() => {
@@ -36,7 +36,7 @@ describe('running a built pattern', () => {
     let answer: ApiResult<{ status: 'ok' } | { status: 'invalid'; problems: { path: (string | number)[]; code: string }[] }> = { ok: true, value: { status: 'invalid', problems: [{ path: ['steps', 0], code: 'bad-value' }] } } as never;
     await runWorkspace({ validate: async () => answer as never, preview: () => new Promise(() => undefined) });
     await chooseStart('n-a');
-    const { buildStep } = await import('./builder-kit.js');
+    const { buildStep } = await import('./run-kit.js');
     await buildStep(1, 'out', 'n-b', ['r-1']);
     expect(runReason()).toBe('Checking the pattern…');
     await afterDebounce();
@@ -68,7 +68,7 @@ describe('running a built pattern', () => {
     const kit = await runWorkspace();
     act(() => kit.state.setMask(true));
     await settle();
-    const { openBuilder } = await import('./builder-kit.js');
+    const { openBuilder } = await import('./run-kit.js');
     await openBuilder();
     await validPattern();
     await press();

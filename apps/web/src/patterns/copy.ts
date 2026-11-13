@@ -5,6 +5,8 @@ import type { AddedOutcome } from './add-to-graph.js';
 import { BUSY_TEXT, busyHeadline, rateLimitedHeadline, RATE_LIMITED_TEXT, REFINE_FILTERS, RETRY, TIMED_OUT_TEXT, timedOutHeadline, UNAVAILABLE_TEXT, unavailableHeadline } from '../banner/copy.js';
 import { GRAPH_UNCHANGED } from '../search/copy.js';
 import { failureText } from '../failure-notice.js';
+import type { PatternProblem, PatternProblemCode } from '@neburyx/contracts';
+import type { Direction } from './builder/model.js';
 
 export const PATTERNS_COPY = {
   title: 'Patterns',
@@ -113,3 +115,39 @@ export function failureView(failure: ApiFailure, source: string): FailureView {
   }
 }
 
+export const ARROW: Readonly<Record<Direction, string>> = { out: '→', in: '←', both: '↔' };
+
+const CHECK_FAILURE_TEXT: Readonly<Record<string, string>> = {
+  NOT_FOUND: 'The server does not know this source.',
+  ACCESS_DENIED: 'You may not check patterns on this source.',
+  SCHEMA_MISMATCH: 'The answer was not in the form expected.',
+  NETWORK_UNAVAILABLE: 'The server could not be reached.',
+  UNEXPECTED_FAILURE: 'Something went wrong.',
+};
+
+/** The reason a check could not be made, in a sentence: one for each code that has none of its own in the panel's failure texts. */
+export const checkFailureText = (code: string, fallback: string): string => CHECK_FAILURE_TEXT[code] ?? fallback;
+
+const PROBLEM_TEXT: Readonly<Record<PatternProblemCode, string>> = {
+  'unknown-key': 'This part of the pattern has something the mapping does not know.',
+  'wrong-type': 'This part of the pattern is not in the form the mapping expects.',
+  missing: 'Something is missing here.',
+  'too-many': 'There are more here than a pattern may have.',
+  'too-few': 'There are fewer here than a pattern needs.',
+  'too-many-hops': 'This pattern has more steps than the source allows.',
+  'bad-value': 'This choice is not allowed.',
+  'bad-shape': 'This choice does not fit with the others.',
+  'unknown-entity-type': 'This type is not in the mapping.',
+  'unknown-relationship-type': 'This relationship type is not in the mapping.',
+  'relationship-does-not-join': 'This relationship type does not join the types of this step in this direction.',
+  'unknown-property': 'This property is not in the mapping.',
+  'not-filterable': 'This property cannot be used in a condition.',
+  'personal-data-masked': 'This property holds personal data and cannot be used while masking is on.',
+};
+
+export const problemText = (problem: PatternProblem): string => PROBLEM_TEXT[problem.code];
+
+/** The line under the panel's heading in the list: which source, and that the list is read-only. */
+export const listHeader = (source: string): string => `Patterns · Source: ${source} · read-only`;
+/** The line under the panel's heading in the editor: what is being made, and that it is not saved. */
+export const editorHeader = (title: string): string => `${title} · Draft · not saved`;

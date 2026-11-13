@@ -1,7 +1,8 @@
 import { PATTERN_LIMITS, type PatternProblem, type SourceProfile } from '@neburyx/contracts';
 import { FILTER_FROM_LABEL, FILTER_KIND_LABEL, FILTER_OPERATORS, FILTER_OPERATOR_LABEL, FILTER_PROPERTY_LABEL, FILTER_ROW_UNAVAILABLE, FILTER_TO_LABEL, FILTER_VALUES_LABEL, FILTER_VALUE_LABEL, PERSONAL_DATA_NOT_OFFERED, filterPropertyOption } from '../../workspace/expand-copy.js';
 import { FILTER_KIND_CHOICES, KIND_LABELS, readDraft } from '../../workspace/expand-refine.js';
-import { CONDITIONS_COPY, conditionBlockText, problemText, sideCapText } from './copy.js';
+import { problemText } from '../copy.js';
+import { CONDITIONS_COPY, conditionBlockText, sideCapText } from './copy.js';
 import { addConditionBlock, countOn, isOffered, maskLeftOut, offeredProperties, rowsOf, type ConditionRow } from './conditions.js';
 import type { Action, StepDraft } from './model.js';
 

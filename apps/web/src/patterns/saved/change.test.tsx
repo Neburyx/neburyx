@@ -3,7 +3,7 @@ import { cleanup, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { savedPatternSchema, type ListedPattern, type PatternListResponse, type SavedPattern } from '@neburyx/contracts';
 import type { ApiResult } from '../../api/client.js';
-import { conditionsProfile } from '../builder/builder-kit.js';
+import { conditionsProfile } from '../run/run-kit.js';
 import { failure, listed, openPatterns, patternsWorkspace, settle, type KitOptions } from '../patterns-kit.js';
 import { UNAVAILABLE_TEXT } from './saved-copy.js';
 

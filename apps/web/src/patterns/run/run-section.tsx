@@ -16,9 +16,8 @@ import { createDefinitionRunStore, definitionRunRequest, type DefinitionRunView 
 import { DefinitionResult } from './definition-result.js';
 import { useAddResult } from './use-add-result.js';
 import { PreviewArea } from './preview-area.js';
-import type { SaveContext } from '../saved/save-controls.js';
 import { RUN_COPY, runFailureView } from './run-copy.js';
-import type { CheckState } from './use-check.js';
+import type { CheckState, SaveContext } from '../builder/pattern-editor.js';
 import { usePatternPreview } from './use-preview.js';
 import { useStartEntity } from './use-start-entity.js';
 

@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import type { ApiResult } from '../api/client.js';
 import type { PatternRunResponse, SavedPatternRunResponse, TemplateRunResponse } from '@neburyx/contracts';
 import { definitionOk, failure, heavyRun, listed, okRun, openPatterns, patternsWorkspace, selectAccount, settle } from './patterns-kit.js';
-import { runButton, runWorkspace, validPattern } from './builder/builder-kit.js';
+import { runButton, runWorkspace, validPattern } from './run/run-kit.js';
 
 beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }));
 afterEach(() => {

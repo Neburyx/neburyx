@@ -1,21 +1,51 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { PATTERN_LIMITS, type PatternProblem, type SourceProfile } from '@neburyx/contracts';
 import { failureView } from '../copy.js';
 import type { ApiClient } from '../../api/client.js';
-import { ARROW, BUILDER_COPY, CONDITIONS_COPY, DIRECTION_TEXT, blockText, checkFailureText, noArrival, placeOf, problemText, stepTitle, stepsLine, tooManyTypes } from './copy.js';
+import { ARROW, checkFailureText, problemText } from '../copy.js';
+import { BUILDER_COPY, CONDITIONS_COPY, DIRECTION_TEXT, blockText, noArrival, placeOf, stepTitle, stepsLine, tooManyTypes } from './copy.js';
 import { DIRECTIONS, addStepBlock, arrivalTypes, isComplete, lastTypeOf, previousTypeOf, relationshipChoices, stepLimitOf, toDefinition, type Action, type BuilderState, type Direction, type StepDraft } from './model.js';
 import { rowsOf } from './conditions.js';
-import type { ListedPattern } from '@neburyx/contracts';
-import { SaveControls } from '../saved/save-controls.js';
-import type { SaveMode } from '../saved/save-dialog.js';
-import { SAVED_COPY, UNAVAILABLE_TEXT } from '../saved/saved-copy.js';
-import type { Notice } from '../saved/use-row-actions.js';
 import { ConditionsField } from './conditions-field.js';
 import { WindowField } from './window-field.js';
-import { RunSection } from './run-section.js';
+import type { PatternDefinition } from '@neburyx/contracts';
 import { usePatternCheck, type CheckState } from './use-check.js';
 
+export type { CheckState };
+export { CHECK_DEBOUNCE_MS } from './use-check.js';
+
 export type ProfileView = { readonly kind: 'loading' } | { readonly kind: 'failed' } | { readonly kind: 'ready'; readonly profile: SourceProfile };
+
+/** What the editor says of a saved pattern it was opened from, in words the panel has already chosen: the editor shows them and knows nothing of where they came from. */
+export interface EditingView {
+  readonly title: string;
+  /** Lines under the title. */
+  readonly notes: readonly string[];
+  /** Reasons that have no step to sit beside. */
+  readonly loose: readonly string[];
+  /** Reasons that sit in a step's card, by the index of the step. */
+  readonly stepNotes: ReadonlyMap<number, readonly string[]>;
+}
+
+/** Why a pattern cannot be saved or run yet, and what it starts from, handed to whatever the footer shows. */
+export interface SaveContext {
+  readonly anchor: { readonly entityType: string; readonly stableId: string } | undefined;
+  /** Why nothing can be saved yet, in the order the person meets it, or nothing. */
+  readonly block: string | undefined;
+}
+
+/** What the editor knows and the footer needs: the definition the draft makes, the check on it and where focus goes back to. */
+export interface FooterState {
+  readonly profile: SourceProfile;
+  readonly definition: PatternDefinition | undefined;
+  readonly anchorType: string | undefined;
+  readonly check: CheckState;
+  /** The definition the check's `valid` belongs to. */
+  readonly validFor: string | undefined;
+  readonly nameOf: (type: string | undefined) => string;
+  /** Puts the focus on the editor's first choice. */
+  readonly focusStart: () => void;
+}
 
 interface Props {
   readonly profile: ProfileView;
@@ -29,15 +59,16 @@ interface Props {
   readonly dispatch: (action: Action) => void;
   readonly onBack: () => void;
   readonly startRef: React.Ref<HTMLSelectElement>;
-  /** The saved pattern the builder was opened from, with whether its stored definition could be shown whole. */
-  readonly editing?: { readonly item: ListedPattern; readonly whole: boolean } | undefined;
-  readonly onSaved: (notice: Notice, mode: SaveMode) => void;
+  /** The saved pattern the editor was opened from. */
+  readonly editing?: EditingView | undefined;
+  /** What follows the steps: the run and the save controls, given by the panel. */
+  readonly footer?: ((state: FooterState) => ReactNode) | undefined;
 }
 
 /** The builder of a pattern: where it starts and the steps that follow, every control a choice, a checkbox or a button; the server checks what is built. */
-export function PatternBuilder({ profile, retryProfile, client, sourceId, sourceName, mask, maxHops, state, dispatch, onBack, startRef, editing, onSaved }: Props) {
+export function PatternEditor({ profile, retryProfile, client, sourceId, sourceName, mask, maxHops, state, dispatch, onBack, startRef, editing, footer }: Props) {
   const { draft } = state;
-  const title = editing === undefined ? BUILDER_COPY.title : `${SAVED_COPY.changeTitle}: ${editing.item.name}`;
+  const title = editing === undefined ? BUILDER_COPY.title : editing.title;
   const ready = profile.kind === 'ready' ? profile.profile : undefined;
   const nameOf = (type: string | undefined): string => (type === undefined ? '' : (ready?.entityTypes.find((candidate) => candidate.type === type)?.displayName ?? type));
   const limit = stepLimitOf(maxHops);
@@ -114,7 +145,7 @@ export function PatternBuilder({ profile, retryProfile, client, sourceId, source
                 return (place.kind === 'step' && place.index === index) || (place.kind === 'condition' && place.index === index && place.row >= rowsOf(step).length);
               })}
               rowProblems={rowProblemsOf(problems, index)}
-              unplaced={reasonsOf(editing).filter((reason) => stepOfReason(reason) === index).map((reason) => UNAVAILABLE_TEXT[reason.code])}
+              unplaced={editing?.stepNotes.get(index) ?? []}
               windowProblems={problems.filter((problem) => {
                 const place = placeOf(problem);
                 return place.kind === 'window' && place.index === index;
@@ -143,30 +174,27 @@ export function PatternBuilder({ profile, retryProfile, client, sourceId, source
           )}
           <Problems list={at('top')} />
           <CheckResult state={check.state} sourceName={sourceName} retry={check.retry} />
-          <RunSection client={client} sourceId={sourceId} sourceName={sourceName} mask={mask} profile={ready} definition={definition} anchorType={draft.anchorType} check={check.state} validFor={check.validFor} focusBuilder={() => document.getElementById('pattern-builder-start')?.focus()} saveControls={(context) => <SaveControls client={client} sourceId={sourceId} definition={definition} context={context} nameOf={(type) => nameOf(type)} editing={editing?.item} onSaved={onSaved} />} />
+          {footer === undefined ? null : footer({ profile: ready, definition, anchorType: draft.anchorType, check: check.state, validFor: check.validFor, nameOf, focusStart: () => document.getElementById('pattern-builder-start')?.focus() })}
         </>
       )}
     </section>
   );
 }
 
-type Reason = Extract<ListedPattern['availability'], { status: 'unavailable' }>['reasons'][number];
-
-const reasonsOf = (editing: Props['editing']): readonly Reason[] => (editing === undefined || editing.item.availability.status !== 'unavailable' ? [] : editing.item.availability.reasons);
-const stepOfReason = (reason: Reason): number | undefined => (reason.path?.[0] === 'steps' && typeof reason.path[1] === 'number' ? reason.path[1] : undefined);
-
-/** What the builder says of a saved pattern it was opened from: that it is a change, and the reasons that have no step to sit beside (the ones that have one are in that step's card). */
-function EditingNotes({ editing }: { readonly editing: NonNullable<Props['editing']> }) {
-  const loose = reasonsOf(editing).filter((reason) => stepOfReason(reason) === undefined);
+/** What the editor says of a saved pattern it was opened from: that it is a change, and the reasons that have no step to sit beside (the ones that have one are in that step's card). */
+function EditingNotes({ editing }: { readonly editing: EditingView }) {
   return (
     <>
-      <p className="search-panel-note">{SAVED_COPY.changeLine}</p>
-      {editing.whole ? null : <p className="search-panel-note">{SAVED_COPY.changeUnplaced}</p>}
-      {loose.length === 0 ? null : (
+      {editing.notes.map((text) => (
+        <p key={text} className="search-panel-note">
+          {text}
+        </p>
+      ))}
+      {editing.loose.length === 0 ? null : (
         <ul className="pattern-row-reasons">
-          {loose.map((reason, index) => (
-            <li key={`${reason.code}-${index}`} className="search-panel-note">
-              {UNAVAILABLE_TEXT[reason.code]}
+          {editing.loose.map((text, index) => (
+            <li key={`${text}-${index}`} className="search-panel-note">
+              {text}
             </li>
           ))}
         </ul>

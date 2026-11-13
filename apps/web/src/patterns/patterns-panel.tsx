@@ -18,7 +18,7 @@ import { useStoreSelector } from '../state/store.js';
 import { canRetry } from '../failure-notice.js';
 import { continueWith, rateLimitedRetry } from '../banner/copy.js';
 import { heavyHeadline, heavyLine } from '../banner/heavy-banner.js';
-import { failureView, maxHopsOf, maxPageOf, PATTERNS_COPY, startHint, timeoutLabel } from './copy.js';
+import { editorHeader, failureView, listHeader, maxHopsOf, maxPageOf, PATTERNS_COPY, startHint, timeoutLabel } from './copy.js';
 import { buildParams, fieldsOf, labelOf, type FormValues } from './form-model.js';
 import { PatternForm } from './pattern-form.js';
 import { RunFailure } from './run-failure.js';
@@ -31,10 +31,33 @@ import { BUILDER_COPY } from './builder/copy.js';
 import { useRowActions, RowDialogs, type Notice } from './saved/use-row-actions.js';
 import { useSavedPatterns } from './saved/use-saved-patterns.js';
 import { SavedPatternsTabs } from './saved/saved-tabs.js';
-import { fromDefinition } from './saved/from-definition.js';
+import { fromDefinition } from './builder/from-definition.js';
 import type { SaveMode } from './saved/save-dialog.js';
 import { INITIAL, reduce, type Action, type BuilderState } from './builder/model.js';
-import { PatternBuilder, type ProfileView } from './builder/pattern-builder.js';
+import { PatternEditor, type EditingView, type ProfileView } from './builder/pattern-editor.js';
+import { RunSection } from './run/run-section.js';
+import { SaveControls } from './saved/save-controls.js';
+import { SAVED_COPY, UNAVAILABLE_TEXT } from './saved/saved-copy.js';
+
+type Reason = Extract<ListedPattern['availability'], { status: 'unavailable' }>['reasons'][number];
+
+const stepOfReason = (reason: Reason): number | undefined => (reason.path?.[0] === 'steps' && typeof reason.path[1] === 'number' ? reason.path[1] : undefined);
+
+/** What the editor says of a saved pattern it was opened from, in the words of the saved list. */
+function editingViewOf(item: ListedPattern, whole: boolean): EditingView {
+  const reasons = item.availability.status === 'unavailable' ? item.availability.reasons : [];
+  const stepNotes = new Map<number, string[]>();
+  for (const reason of reasons) {
+    const index = stepOfReason(reason);
+    if (index !== undefined) stepNotes.set(index, [...(stepNotes.get(index) ?? []), UNAVAILABLE_TEXT[reason.code]]);
+  }
+  return {
+    title: `${SAVED_COPY.changeTitle}: ${item.name}`,
+    notes: whole ? [SAVED_COPY.changeLine] : [SAVED_COPY.changeLine, SAVED_COPY.changeUnplaced],
+    loose: reasons.filter((reason) => stepOfReason(reason) === undefined).map((reason) => UNAVAILABLE_TEXT[reason.code]),
+    stepNotes,
+  };
+}
 
 type Preset = TemplateListResponse['presets'][number];
 
@@ -105,6 +128,7 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
   const startRef = useRef<HTMLSelectElement>(null);
   const opened = useRef(false);
   const back = (): void => setView('list');
+  const editingView = useMemo(() => (editing === undefined ? undefined : editingViewOf(editing.item, editing.whole)), [editing]);
   const change = (item: ListedPattern): void => {
     const opened = fromDefinition(item.kind === 'definition' ? item.definition : undefined);
     setBuilder({ draft: opened.draft, removed: 0 });
@@ -149,6 +173,9 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
           <span className="icon icon-clear" aria-hidden="true" />
         </button>
       </div>
+      {sourceId === null ? null : (
+        <p className="search-panel-note patterns-subhead">{view === 'list' ? listHeader(sourceName) : editorHeader(editingView?.title ?? BUILDER_COPY.title)}</p>
+      )}
       {view === 'list' ? <p className="search-panel-note">{PATTERNS_COPY.intro}</p> : null}
       {notice === undefined ? null : (
         <p className="search-panel-note" role={notice.tone === 'problem' ? 'alert' : 'status'}>
@@ -183,7 +210,35 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
             <SavedPatternsTabs client={client} sourceId={sourceId} sourceName={sourceName} mask={mask} close={close} escape={cancelOrClose} saved={saved} rows={rows} onChange={change} renderBuiltIn={(list, presetEscape) => <PatternsList client={client} sourceId={sourceId} sourceName={sourceName} mask={mask} close={close} escape={presetEscape} list={list} />} />
           </div>
           {view === 'builder' ? (
-            <PatternBuilder profile={profileView} retryProfile={reloadProfile} client={client} sourceId={sourceId} sourceName={sourceName} mask={mask} maxHops={maxHops} state={builder} dispatch={dispatch} onBack={back} startRef={startRef} editing={editing} onSaved={afterSave} />
+            <PatternEditor
+              profile={profileView}
+              retryProfile={reloadProfile}
+              client={client}
+              sourceId={sourceId}
+              sourceName={sourceName}
+              mask={mask}
+              maxHops={maxHops}
+              state={builder}
+              dispatch={dispatch}
+              onBack={back}
+              startRef={startRef}
+              editing={editingView}
+              footer={(footer) => (
+                <RunSection
+                  client={client}
+                  sourceId={sourceId}
+                  sourceName={sourceName}
+                  mask={mask}
+                  profile={footer.profile}
+                  definition={footer.definition}
+                  anchorType={footer.anchorType}
+                  check={footer.check}
+                  validFor={footer.validFor}
+                  focusBuilder={footer.focusStart}
+                  saveControls={(context) => <SaveControls client={client} sourceId={sourceId} definition={footer.definition} context={context} nameOf={(type) => footer.nameOf(type)} editing={editing?.item} onSaved={afterSave} />}
+                />
+              )}
+            />
           ) : null}
         </>
       )}

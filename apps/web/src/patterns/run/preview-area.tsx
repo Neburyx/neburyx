@@ -1,7 +1,6 @@
 import type { PatternPreview } from '@neburyx/contracts';
 import { RETRY } from '../../banner/copy.js';
-import { failureView } from '../copy.js';
-import { checkFailureText, problemText } from './copy.js';
+import { checkFailureText, failureView, problemText } from '../copy.js';
 import type { PreviewState } from './use-preview.js';
 import { RUN_COPY } from './run-copy.js';
 

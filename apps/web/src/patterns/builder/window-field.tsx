@@ -1,5 +1,6 @@
 import { type PatternProblem, type SourceProfile } from '@neburyx/contracts';
-import { CONDITIONS_COPY, problemText, windowAppliesText, windowNotAppliedText } from './copy.js';
+import { problemText } from '../copy.js';
+import { CONDITIONS_COPY, windowAppliesText, windowNotAppliedText } from './copy.js';
 import { readWindow, windowOf, windowReach, type WindowDraft } from './conditions.js';
 import type { Action, StepDraft } from './model.js';
 
