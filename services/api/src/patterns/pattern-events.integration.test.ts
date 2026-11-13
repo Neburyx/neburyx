@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { AuditEvent, AuditSink } from '@neburyx/contracts';
-import { AppError, errorResponse } from '../errors.js';
+import { AppError, errorResponse, errorStatus } from '../errors.js';
 import { rows } from '../testing/database.js';
 import { seededDatabase, type SeededDatabase } from '../testing/pattern-events-rig.js';
 import { startPostgres, type TestPostgres } from '../testing/postgres.js';
@@ -105,6 +105,7 @@ describe('the pattern event writer', () => {
     const body = errorResponse('AUDIT_UNAVAILABLE', 'trace-1');
     expect(JSON.stringify(body)).not.toMatch(/alpha|pattern/);
     expect(body).toMatchObject({ error: { code: 'AUDIT_UNAVAILABLE' } });
+    expect(errorStatus('AUDIT_UNAVAILABLE')).toBe(503);
   });
 });
 
@@ -162,6 +163,34 @@ describe('the pattern transaction helper', () => {
     expect(recording.events).toEqual([]);
     expect(await readPatternEvents(pool, { sourceId: seeded.sourceId })).toEqual([]);
     expect(await standInRows(seeded)).toBe(0);
+  });
+
+  it('refuses the change, with no sink call and no row, when the work catches the error of a failed event write', async () => {
+    const seeded = await seededDatabase(postgres);
+    const pool = poolOn(seeded);
+    const recording = recordingSink();
+    const failure = await inPatternTransaction({ pool, audit: recording.sink, newId: randomUUID }, { principal: principalOf(seeded), traceId: 't' }, async (transaction) => {
+      await transaction.record({ sourceId: seeded.sourceId, patternId: randomUUID(), action: 'saved', version: 1 });
+      await transaction.record({ sourceId: 'nowhere', patternId: randomUUID(), action: 'saved', version: 1 }).catch(() => undefined);
+      return 'looks fine';
+    }).catch((error: unknown) => error);
+    expect(failure).toMatchObject({ code: 'AUDIT_UNAVAILABLE' });
+    expect(recording.events).toEqual([]);
+    expect(await readPatternEvents(pool, { sourceId: seeded.sourceId })).toEqual([]);
+  });
+
+  it('refuses the change, with no sink call and no row, when the work catches a failed statement of its own after recording an event', async () => {
+    const seeded = await seededDatabase(postgres);
+    const pool = poolOn(seeded);
+    const recording = recordingSink();
+    const failure = await inPatternTransaction({ pool, audit: recording.sink, newId: randomUUID }, { principal: principalOf(seeded), traceId: 't' }, async (transaction) => {
+      await transaction.record({ sourceId: seeded.sourceId, patternId: randomUUID(), action: 'saved', version: 1 });
+      await transaction.client.query('SELECT * FROM a_table_that_is_not_there').catch(() => undefined);
+      return 'looks fine';
+    }).catch((error: unknown) => error);
+    expect(failure).toMatchObject({ code: 'INTERNAL_ERROR' });
+    expect(recording.events).toEqual([]);
+    expect(await readPatternEvents(pool, { sourceId: seeded.sourceId })).toEqual([]);
   });
 
   it('keeps the rows and passes every event on when the sink rejects, then throws INTERNAL_ERROR with no details', async () => {

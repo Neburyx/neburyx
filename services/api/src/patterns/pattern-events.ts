@@ -1,7 +1,6 @@
 import type pg from 'pg';
 import type { AuditSink } from '@neburyx/contracts';
 import { AppError } from '../errors.js';
-import { inTransaction } from '../db/investigations-repository.js';
 import type { Principal } from '../seams/seams.js';
 
 /**
@@ -89,21 +88,40 @@ export interface PatternTransaction {
 
 /**
  * Runs the change of a pattern and its events as one transaction, and only after the commit passes each event, in the order recorded, to the audit seam.
- * A failed event write or a failed change rolls everything back and makes no seam call.
+ * A failed event write or a failed change rolls everything back and makes no seam call, also when the work caught the error: a failed event write is refused after the work returns, and a commit that did not commit is an error.
  * Interim rule for a sink that rejects (the final rule is set with the Enterprise audit log), taken from how a committed investigation change behaves: the commit stands, every event is still passed on, and the call throws `INTERNAL_ERROR`.
  */
 export async function inPatternTransaction<T>(deps: PatternTransactionDeps, context: PatternTransactionContext, work: (transaction: PatternTransaction) => Promise<T>): Promise<T> {
   const recorded: PatternEvent[] = [];
-  const result = await inTransaction(deps.pool, (client) =>
-    work({
+  const client = await deps.pool.connect();
+  let result: T;
+  try {
+    await client.query('BEGIN');
+    let writeFailed = false;
+    result = await work({
       client,
       async record(input) {
         const event: PatternEvent = { id: deps.newId(), actorId: context.principal.id, ...input };
-        await recordPatternEvent(client, event);
+        try {
+          await recordPatternEvent(client, event);
+        } catch (error) {
+          writeFailed = true;
+          throw error;
+        }
         recorded.push(event);
       },
-    }),
-  );
+    });
+    // a change whose event could not be written is refused even when the work caught that error
+    if (writeFailed) throw new AppError('AUDIT_UNAVAILABLE');
+    // Postgres answers COMMIT of a transaction that failed with the command tag ROLLBACK and no error, so the tag is checked: nothing committed means no success and no seam call
+    const committed = await client.query('COMMIT');
+    if (committed.command !== 'COMMIT') throw new AppError('INTERNAL_ERROR');
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
   let rejected = false;
   for (const event of recorded) {
     await deps.audit
