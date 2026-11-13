@@ -143,6 +143,8 @@ export {
   typeaheadTextSchema,
   unreferencedHitSchema,
 } from './search.js';
+export { MAX_PATTERN_PROBLEMS, PATTERN_LIMITS, PATTERN_PROBLEM_CODES, patternDefinitionSchema, patternProblemSchema, patternProblemsOf, patternValidateRequestSchema, patternValidateResponseSchema } from './pattern.js';
+export type { PatternDefinition, PatternProblem, PatternProblemCode, PatternStep, PatternValidateRequest, PatternValidateResponse } from './pattern.js';
 export { TEMPLATE_PARAMS_SCHEMAS, listedTemplateSchema, paramsJsonSchemaOf, templateListQuerySchema, templateListResponseSchema } from './template-list.js';
 export type { ListedTemplate, TemplateListResponse } from './template-list.js';
 export { HEAVY_CONTINUE_LIMIT, LINKED_HOPS_MAX, MIN_SHARED_MAX, TEMPLATE_RUN_NOTICE_CODES, WINDOW_MAX_DAYS, linkedEntitiesParamsSchema, linkedMatchSchema, sharedAttributeParamsSchema, templateRunHeavySchema, templateRunNoticeSchema, templateRunOkSchema, templateRunRequestSchema, templateRunResponseSchema, windowSchema } from './template-run.js';
@@ -152,7 +154,7 @@ export type { DerivedNeighborsRequest, DerivedNeighborsResponse, DerivedNeighbor
 export { DEGREE_DIRECTIONS, DEGREE_WARNING_CODES, degreeByNeighborTypeSchema, degreeByTypeSchema, degreePreviewRequestSchema, degreePreviewSchema, degreeWarningSchema } from './degree-preview.js';
 export { COVERAGE_MAX_ENTITIES, COVERAGE_SCOPE, LOADED_QUALITIES, combineCoverage, notRetrievedText, coverageEntitySchema, coverageRequestSchema, coverageResponseSchema } from './coverage.js';
 export type { CoverageEntity, CoverageRequest, CoverageResponse } from './coverage.js';
-export { EXPAND_DIRECTIONS, EXPAND_SORTS, FILTER_KINDS, MAX_FILTERS, MAX_FILTER_VALUES, expandFilterSchema, expandPageSchema, expandPageWindowSchema, expandRankSchema, expandRequestSchema, expandResponseSchema, filterShapeProblem, filterValueSchema } from './expand.js';
+export { EXPAND_DIRECTIONS, EXPAND_SORTS, FILTER_KINDS, MAX_FILTER_TEXT, MAX_FILTERS, MAX_FILTER_VALUES, expandFilterSchema, expandPageSchema, expandPageWindowSchema, expandRankSchema, expandRequestSchema, expandResponseSchema, filterShapeProblem, filterValueSchema } from './expand.js';
 export type { ExpandFilter, ExpandPage, ExpandPageWindow, ExpandRank, ExpandRequest, ExpandResponse, FilterKind, FilterValue } from './expand.js';
 export type { DegreeByType, DegreePreview, DegreePreviewRequest, DegreeWarning } from './degree-preview.js';
 export type { AggregateEvidenceHit, AggregateMember, DisabledRelationship, DisabledType, EvidenceGroup, ExactMatch, EvidenceHit, EvidenceRecord, Facets, GroupFailure, RelatedGroup, RelatedHit, RelationshipContext, SearchFailureGroup, SearchFilters, SearchGroup, SearchMatchMode, SearchMoreRequest, SearchMoreResult, SearchPagedGroup, SearchRequest, SearchResult, StartsWithGroup, StoredEvidenceHit, UnreferencedHit } from './search.js';

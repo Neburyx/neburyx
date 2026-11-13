@@ -13,6 +13,7 @@ export const NOT_IN_THE_CLOSED_SET: Readonly<Record<string, string>> = {
   'GET /v1/sources/:id/profile': 'reads no source: the stored profile',
   'POST /v1/sources/:id/test': 'runs the source tester, which does not go through the gate templates',
   'POST /v1/graph/coverage': 'reads no source: it answers from the references it is given',
+  'POST /v1/patterns/validate': 'reads no source: it answers from the mapping and the definition, never from the source',
   'GET /v1/investigations': 'reads no source: the application database',
   'GET /v1/investigations/:id': 'reads no source: the application database',
   'PUT /v1/investigations/:id/draft': 'reads no source: the application database',

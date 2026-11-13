@@ -12,7 +12,8 @@ export type FilterKind = (typeof FILTER_KINDS)[number];
 /** The most predicates one request holds, and the most values of one `in`. */
 export const MAX_FILTERS = 6;
 export const MAX_FILTER_VALUES = 20;
-const MAX_FILTER_TEXT = 256;
+/** The most characters of a name or a text condition value. */
+export const MAX_FILTER_TEXT = 256;
 
 const OFFSET = '(?:Z|[+-](?:[01]\\d|2[0-3]):[0-5]\\d)';
 const DATE = '\\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\\d|3[01])';

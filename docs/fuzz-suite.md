@@ -38,6 +38,9 @@ A test feeds the check a statement built from text and shows it fails.
 | Expand `filters`, `rank` or `window` changed, taken off, or put on, when continuing with a cursor | `CURSOR_INVALIDATED` |
 | Expand `window` that is not days from 1 to 3650 or a range of calendar dates in order and at most 3650 days: a bad or reversed bound, text that is not an ISO date, both forms, an extra key, a wrong type | `INVALID_REQUEST`, no read |
 | Expand `limit` above the source's `max_page` (default 50) | `QUERY_BUDGET_EXCEEDED`, with `maxPage` |
+| `POST /v1/patterns/validate`: an unknown source, or one the person may not read | `NOT_FOUND` |
+| `POST /v1/patterns/validate`: a body that is not the envelope (a missing, extra or mistyped member, a definition that is not an object), malformed JSON, a body over 1 MiB | `INVALID_REQUEST`, no read; a content type that is not JSON: `UNSUPPORTED_MEDIA_TYPE` |
+| `POST /v1/patterns/validate`: a definition with hostile text in a name, a key, a value, a window or an operator | answered `200` with problems that hold none of the text, no read |
 | `GET /v1/templates`: an unknown source | `NOT_FOUND` |
 | `GET /v1/templates`: no `sourceId`, an empty or repeated one, or another query member | `INVALID_REQUEST` |
 | `POST /v1/templates/{id}/run`: an ID that is neither a preset of the source nor a built-in template, however long (the path segment is not capped at 401 units as the entity path is); an entity type of the anchor the mapping does not name; an unknown source; an anchor that does not resolve | `NOT_FOUND` |

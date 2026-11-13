@@ -1,5 +1,6 @@
 import {
   coverageResponseSchema,
+  patternValidateResponseSchema,
   readRefsResponseSchema,
   degreePreviewSchema,
   derivedNeighborsResponseSchema,
@@ -88,6 +89,8 @@ const SCENARIOS: readonly Scenario[] = [
   { name: 'expand', route: 'POST /v1/graph/expand', method: 'POST', url: '/v1/graph/expand', payload: { sourceId: FUZZ_SOURCE, ref: { entityType: 'widget', stableId: 'W-1' }, neighborTypes: ['gadget'], direction: 'out' }, schema: expandResponseSchema },
   { name: 'search', route: 'POST /v1/search/entities', method: 'POST', url: '/v1/search/entities', payload: { sourceId: FUZZ_SOURCE, text: 'needle' }, schema: searchResultSchema },
   { name: 'coverage', route: 'POST /v1/graph/coverage', method: 'POST', url: '/v1/graph/coverage', payload: { sourceId: FUZZ_SOURCE, entities: [{ ref: entity, loadedRelationships: 1, loadedQuality: 'exact' }] }, schema: coverageResponseSchema },
+  { name: 'pattern validation', route: 'POST /v1/patterns/validate', method: 'POST', url: '/v1/patterns/validate', payload: { sourceId: FUZZ_SOURCE, definition: { anchorType: 'widget', steps: [{ relationshipTypes: ['MADE_FROM'], direction: 'out', arrivesAt: 'gadget' }] } }, schema: patternValidateResponseSchema },
+  { name: 'pattern validation with problems', route: 'POST /v1/patterns/validate', method: 'POST', url: '/v1/patterns/validate', payload: { sourceId: FUZZ_SOURCE, definition: { anchorType: 'widget', steps: [{ relationshipTypes: ['W-1'], direction: 'out', arrivesAt: 'gadget' }] } }, schema: patternValidateResponseSchema },
   { name: 'open investigation', route: 'POST /v1/investigations', method: 'POST', url: '/v1/investigations', payload: { sourceId: FUZZ_SOURCE, entity: { sourceId: FUZZ_SOURCE, entityType: 'widget', stableId: 'W-1' } }, schema: openInvestigationResponseSchema },
 ];
 
