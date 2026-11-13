@@ -1,9 +1,9 @@
 # Architecture checks
 
-Two checks run with the unit tests (`pnpm test`, and so in CI) and fail the build when code breaks a structural rule.
+Several checks run with the unit tests (`pnpm test`, and so in CI) and fail the build when code breaks a structural rule.
 The first lives in `tools/workspace-checks/src/architecture/` and reports the file, line and import that breaks the
 rule. The second, [no domain words in code](#no-domain-words-in-code), lives in `tools/workspace-checks/src/domain-words/`
-and reports the file, line and word. The [web client rules](#the-web-client) are a third group, in the same folder as the first. A fourth, [test containers](#test-containers), reports a container started without the retry helper.
+and reports the file, line and word. The [web client rules](#the-web-client) are a third group, in the same folder as the first. A fourth, [test containers](#test-containers), reports a container started without the retry helper. A fifth, [pattern events](#pattern-events), reports a statement that changes or removes one.
 
 ## No way around the gate
 
@@ -187,3 +187,9 @@ bound and has no setting for it, so a stall of the Docker daemon fails a start; 
 error (three attempts in all) and removes the containers of a failed attempt first. The check reads every file under
 `services/`, `apps/`, `packages/` and `tools/`, tests included, and reports the file and line of a `.start()` call on
 `new …Container(…)` (or on a variable that holds one, found by its scope and by later assignments) that is not inside a `startWithRetry(…)` call.
+
+## Pattern events
+
+The `pattern_events` table is append-only: the database refuses an update, a delete and a truncate (the application role has no right to them, and a trigger stops the owner), and no code may try one.
+The check (`tools/workspace-checks/src/architecture/pattern-events.ts`) reads every source file under `services/`, `apps/`, `packages/`, `tools/` and `ee/` and reports the file and line of an `UPDATE`, a `DELETE FROM` or a `TRUNCATE` of that table, written in any case, with or without the `public` schema or quotes.
+Test files and `services/api/src/testing/` are not read, because they prove that the table refuses these statements; the migration is SQL and is not read. A statement assembled from fragments is for review.
