@@ -311,6 +311,18 @@ describe('the Ask edit and cancel routes', () => {
   });
 
   it.each([
+    ['a continue with no token', { planId: PLAN_ID, continue: true }],
+    ['a token with no continue', { planId: PLAN_ID, continueToken: 'c'.repeat(64) }],
+    ['a token that is not the shape', { planId: PLAN_ID, continue: true, continueToken: 'abc' }],
+    ['a continue that is false', { planId: PLAN_ID, continue: false, continueToken: 'c'.repeat(64) }],
+  ])('answers 400 INVALID_REQUEST for %s on the run route', async (_name, payload) => {
+    const app = await appOf(available, createListPlanStore());
+    const answer = await post(app, '/v1/ask/run', payload);
+    expect([answer.statusCode, answer.json().error.code]).toEqual([400, 'INVALID_REQUEST']);
+    await app.close();
+  });
+
+  it.each([
     ['/v1/ask/edit', { planId: 'plan-1', templateId: 'entity', params: {} }],
     ['/v1/ask/edit', { planId: PLAN_ID, templateId: 'free-query', params: {} }],
     ['/v1/ask/edit', { planId: PLAN_ID, templateId: 'entity' }],
@@ -331,7 +343,7 @@ describe('the Ask edit and cancel routes', () => {
   });
 
   it('answers 409 CONFLICT with the reason plan-not-runnable and its sentence for a plan that is no longer proposed', async () => {
-    const store: PlanStore = { ...createListPlanStore(), get: async () => ({ ...base, state: 'confirmed' }), cancel: async () => ({ status: 'not-runnable' }) };
+    const store: PlanStore = { ...createListPlanStore(), get: async () => ({ ...base, state: 'confirmed', expired: false }), cancel: async () => ({ status: 'not-runnable' }) };
     const app = await appOf(available, store);
     for (const [url, payload] of [['/v1/ask/edit', { planId: PLAN_ID, templateId: 'entity', params: {} }], ['/v1/ask/cancel', { planId: PLAN_ID }]] as const) {
       const answer = await post(app, url, payload);

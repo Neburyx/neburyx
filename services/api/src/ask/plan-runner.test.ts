@@ -126,6 +126,15 @@ describe('the run of each template', () => {
     expect(calls[0]?.request['params']).toEqual({ ref: REF, attributeType: 'attr_type', via: 'link_a', limit: 5 });
   });
 
+  it('sets the continue flag of the template run service only when the call says so, and no other service gets one', async () => {
+    const { runnerFor, calls } = rig();
+    await runnerFor().run({ templateId: 'shared-attribute', params: { ref: REF } });
+    await runnerFor().run({ templateId: 'linked-entities', params: { ref: REF } }, { continue: true });
+    await runnerFor().run({ templateId: 'entity', params: { ref: REF } }, { continue: true });
+    await runnerFor().run({ templateId: 'expand', params: { ref: REF, neighborTypes: ['node_b'] } }, { continue: true });
+    expect(calls.map((call) => [call.service, call.request['continue']])).toEqual([['templateRuns', false], ['templateRuns', true], ['entities', undefined], ['expansions', undefined]]);
+  });
+
   it('answers each result with the template ID it came from', async () => {
     const { runnerFor } = rig();
     const answer = await runnerFor().run({ templateId: 'entity', params: { ref: REF } });

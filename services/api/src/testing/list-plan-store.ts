@@ -34,7 +34,10 @@ export function createListPlanStore(): PlanStore & { readonly stored: StoredPlan
     runs,
     put,
     insert: async (fields) => put({ userId: fields.userId, sourceId: fields.sourceId, templateId: fields.templateId, templateVersion: fields.templateVersion, params: fields.params, planningTraceId: fields.planningTraceId }),
-    get: async (planId, userId) => mine(planId, userId),
+    get: async (planId, userId) => {
+      const plan = mine(planId, userId);
+      return plan === undefined ? undefined : { ...plan, expired: false };
+    },
     claim: async (planId, userId) => {
       const plan = mine(planId, userId);
       if (plan === undefined) return { status: 'absent' };
@@ -43,6 +46,12 @@ export function createListPlanStore(): PlanStore & { readonly stored: StoredPlan
     },
     cancel: unused,
     edit: unused,
+    release: async (planId, userId) => {
+      const plan = mine(planId, userId);
+      if (plan === undefined || plan.state !== 'confirmed') return false;
+      change(plan, 'proposed');
+      return true;
+    },
     finish: async (finish) => {
       const plan = mine(finish.planId, finish.userId);
       if (plan === undefined || plan.state !== 'confirmed') return { status: 'not-runnable' };

@@ -60,7 +60,10 @@ export function createMemoryPlanStore(): MemoryPlanStore {
     runs,
     advance: (milliseconds) => void (now += milliseconds),
     failNext: (method) => void failing.add(method),
-    get: async (planId, userId) => mine(planId, userId),
+    get: async (planId, userId) => {
+      const plan = mine(planId, userId);
+      return plan === undefined ? undefined : { ...plan, expired: plan.expiresAt.getTime() <= now };
+    },
     insert: async (fields) => insertPlan(fields, undefined),
     claim: async (planId, userId): Promise<ClaimResult> => {
       const plan = mine(planId, userId);
@@ -80,6 +83,12 @@ export function createMemoryPlanStore(): MemoryPlanStore {
       if (!runnable(plan)) return { status: refusalOf(plan) };
       replace(plan, { state: 'cancelled', params: scrubbed(plan) });
       return { status: 'edited', plan: insertPlan({ userId: edit.userId, sourceId: plan.sourceId, ...(plan.turnId === undefined ? {} : { turnId: plan.turnId }), templateId: edit.templateId, templateVersion: edit.templateVersion, params: edit.params, planningTraceId: plan.planningTraceId }, plan.id) };
+    },
+    release: async (planId, userId) => {
+      const plan = mine(planId, userId);
+      if (plan === undefined || plan.state !== 'confirmed') return false;
+      replace(plan, { state: 'proposed' });
+      return true;
     },
     finish: async (finish): Promise<FinishResult> => {
       const plan = mine(finish.planId, finish.userId);

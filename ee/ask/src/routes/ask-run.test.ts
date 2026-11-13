@@ -1,6 +1,7 @@
 import { createHmac } from 'node:crypto';
 import { askRunResponseSchema, parseExtensionRefusal, type AskPlanRun, type AskPlanRunner, type AskPlanner, type AskRunResult, type AskRunScope, type AuditEvent, type ExtensionRequest } from '@neburyx/contracts';
 import { describe, expect, it, vi } from 'vitest';
+import { continueTokenOf } from '../plans/continue-token.js';
 import { paramsHashOf } from '../plans/params-hash.js';
 import { createMemoryPlanStore, type MemoryPlanStore } from '../testing/memory-plans.js';
 import { ASK_RUN_ACTION, ASK_RUN_URL, askRunRoute, createAskRunRoute } from './ask-run.js';
@@ -18,6 +19,7 @@ interface Rig {
   readonly events: AuditEvent[];
   readonly scopes: AskRunScope[];
   readonly runs: { templateId: string; params: unknown }[];
+  readonly options: (({ continue?: boolean }) | undefined)[];
   request(body: unknown, over?: Partial<ExtensionRequest>): ExtensionRequest;
   plan(over?: { templateId?: string; params?: unknown; sourceId?: string; userId?: string }): ReturnType<MemoryPlanStore['insert']>;
 }
@@ -27,10 +29,12 @@ function rig(answer: (plan: { templateId: string; params: unknown }) => Promise<
   const events: AuditEvent[] = [];
   const scopes: AskRunScope[] = [];
   const runs: Rig['runs'] = [];
+  const options: Rig['options'] = [];
   const runner = (scope: AskRunScope): AskPlanRunner => ({
-    run: async (plan) => {
+    run: async (plan, given) => {
       scopes.push(scope);
       runs.push(plan);
+      options.push(given);
       return answer(plan);
     },
   });
@@ -40,6 +44,7 @@ function rig(answer: (plan: { templateId: string; params: unknown }) => Promise<
     events,
     scopes,
     runs,
+    options,
     request: (body, over = {}) => ({ ...base, body, ...over }),
     plan: (over = {}) => plans.insert({ userId: over.userId ?? 'u-1', sourceId: over.sourceId ?? 'demo', templateId: over.templateId ?? 'entity', templateVersion: 1, params: over.params ?? { ref: REF }, planningTraceId: 'tr-plan' }),
   };
@@ -281,3 +286,152 @@ describe('a mac that is a spy', () => {
     expect(spy).toHaveBeenCalledTimes(1);
   });
 });
+
+const heavyResult: AskRunResult = { templateId: 'shared-attribute', result: { status: 'heavy', templateId: 'shared-attribute', templateVersion: '1', estimate: count('lowerBound', 1000), threshold: 1000, continueLimit: 25, notices: [], warnings: [] } };
+const TEMPLATE_PARAMS = { ref: REF, attributeType: 'attr_type', via: 'link_a' };
+
+describe('a run that stops as heavy', () => {
+  it('gives the plan back as proposed with its expiry unchanged, writes no run and no event, and answers the stop with a token for this plan and its stored parameters', async () => {
+    const rg = rig(async () => ({ status: 'ok', result: heavyResult }));
+    const plan = await rg.plan({ templateId: 'shared-attribute', params: TEMPLATE_PARAMS });
+    const answer = askRunResponseSchema.parse(await route(rg).handler(rg.request({ planId: plan.id })));
+    expect(answer).toEqual({ planId: plan.id, outcome: 'partial', result: heavyResult, continueToken: continueTokenOf(mac('key-one'), plan.id, TEMPLATE_PARAMS) });
+    expect(rg.plans.plans[0]).toMatchObject({ state: 'proposed', expiresAt: plan.expiresAt, params: TEMPLATE_PARAMS });
+    expect(rg.plans.runs).toEqual([]);
+    expect(rg.events).toEqual([]);
+  });
+
+  it('gives no result and no token, and leaves the plan confirmed, when the release fails', async () => {
+    const rg = rig(async () => ({ status: 'ok', result: heavyResult }));
+    const plan = await rg.plan({ templateId: 'shared-attribute', params: TEMPLATE_PARAMS });
+    rg.plans.failNext('release');
+    const thrown = await route(rg).handler(rg.request({ planId: plan.id })).catch((error: unknown) => error);
+    expect(thrown).toMatchObject({ code: 'PLAN_STORE_FAILED' });
+    expect(rg.plans.plans[0]?.state).toBe('confirmed');
+    expect(rg.plans.runs).toEqual([]);
+    expect(rg.events).toEqual([]);
+  });
+
+  it('lets the plan be run again after the release, until its original expiry, and not after it', async () => {
+    let heavy = true;
+    const rg = rig(async () => ({ status: 'ok', result: heavy ? heavyResult : sharedResult('exact') }));
+    const plan = await rg.plan({ templateId: 'shared-attribute', params: TEMPLATE_PARAMS });
+    await route(rg).handler(rg.request({ planId: plan.id }));
+    heavy = false;
+    expect(askRunResponseSchema.parse(await route(rg).handler(rg.request({ planId: plan.id }))).outcome).toBe('complete');
+    const second = await rg.plan({ templateId: 'shared-attribute', params: TEMPLATE_PARAMS });
+    heavy = true;
+    await route(rg).handler(rg.request({ planId: second.id }));
+    rg.plans.advance(16 * 60_000);
+    expect(await refusalOf(route(rg).handler(rg.request({ planId: second.id })))).toEqual({ code: 'CONFLICT', reason: 'plan-expired' });
+  });
+
+  it('is released again, with a token, when a continued run of a plan kind that can stop again stops as heavy', async () => {
+    const rg = rig(async () => ({ status: 'ok', result: heavyResult }));
+    const plan = await rg.plan({ templateId: 'shared-attribute', params: TEMPLATE_PARAMS });
+    const token = continueTokenOf(mac('key-one'), plan.id, TEMPLATE_PARAMS);
+    const answer = askRunResponseSchema.parse(await route(rg).handler(rg.request({ planId: plan.id, continue: true, continueToken: token })));
+    expect(answer.continueToken).toBe(token);
+    expect(rg.plans.plans[0]?.state).toBe('proposed');
+    expect(rg.plans.runs).toEqual([]);
+  });
+
+  it('does not set the continue flag for a run that has no token', async () => {
+    const rg = rig();
+    const plan = await rg.plan();
+    await route(rg).handler(rg.request({ planId: plan.id }));
+    expect(rg.options).toEqual([{ continue: false }]);
+  });
+});
+
+describe('a continue', () => {
+  const planFor = async (rg: Rig) => rg.plan({ templateId: 'shared-attribute', params: TEMPLATE_PARAMS });
+  const good = (planId: string) => continueTokenOf(mac('key-one'), planId, TEMPLATE_PARAMS);
+
+  it.each([
+    ['a token of another key', continueTokenOf(mac('key-two'), 'x', TEMPLATE_PARAMS)],
+    ['the token of another plan', continueTokenOf(mac('key-one'), '01939999-0000-7000-8000-0000000000dd', TEMPLATE_PARAMS)],
+    ['the token of other parameters', continueTokenOf(mac('key-one'), 'PLAN', { ...TEMPLATE_PARAMS, limit: 9 })],
+  ])('is refused as an invalid request, with nothing claimed or read, for %s', async (_name, token) => {
+    const rg = rig();
+    const plan = await planFor(rg);
+    const body = { planId: plan.id, continue: true, ...(token === undefined ? {} : { continueToken: token === 'PLAN' ? undefined : token }) };
+    const request = rg.request(body);
+    expect(await refusalOf(route(rg).handler(request))).toEqual({ code: 'INVALID_REQUEST', reason: 'continue-token' });
+    expect(rg.plans.plans[0]?.state).toBe('proposed');
+    expect(rg.runs).toEqual([]);
+    expect(rg.events).toEqual([]);
+  });
+
+  it.each([
+    ['a continue with no token', { continue: true }],
+    ['a token with no continue', { continueToken: 'c'.repeat(64) }],
+    ['a token that is not the shape', { continue: true, continueToken: 'abc' }],
+  ])('is refused as a malformed body, with nothing claimed or read, for %s', async (_name, extra) => {
+    const rg = rig();
+    const plan = await planFor(rg);
+    expect(await refusalOf(route(rg).handler(rg.request({ planId: plan.id, ...extra })))).toEqual({ code: 'INVALID_REQUEST', reason: 'body' });
+    expect(rg.plans.plans[0]?.state).toBe('proposed');
+    expect(rg.runs).toEqual([]);
+  });
+
+  it('is refused for a token made for a plan with other parameters than the plan holds now', async () => {
+    const rg = rig();
+    const plan = await planFor(rg);
+    const stale = continueTokenOf(mac('key-one'), plan.id, { ...TEMPLATE_PARAMS, limit: 9 });
+    expect(await refusalOf(route(rg).handler(rg.request({ planId: plan.id, continue: true, continueToken: stale })))).toEqual({ code: 'INVALID_REQUEST', reason: 'continue-token' });
+    expect(rg.runs).toEqual([]);
+  });
+
+  it('answers NOT_FOUND, plan-expired and plan-not-runnable before it looks at the token, whatever the token is', async () => {
+    const rg = rig();
+    const wrong = 'd'.repeat(64);
+    expect(await refusalOf(route(rg).handler(rg.request({ planId: '01939999-0000-7000-8000-0000000000ff', continue: true, continueToken: wrong })))).toEqual({ code: 'NOT_FOUND' });
+    const other = await rg.plan({ userId: 'u-2', templateId: 'shared-attribute', params: TEMPLATE_PARAMS });
+    expect(await refusalOf(route(rg).handler(rg.request({ planId: other.id, continue: true, continueToken: wrong })))).toEqual({ code: 'NOT_FOUND' });
+    const cancelled = await planFor(rg);
+    await rg.plans.cancel(cancelled.id, 'u-1');
+    expect(await refusalOf(route(rg).handler(rg.request({ planId: cancelled.id, continue: true, continueToken: wrong })))).toEqual({ code: 'CONFLICT', reason: 'plan-not-runnable' });
+    const late = await planFor(rg);
+    rg.plans.advance(16 * 60_000);
+    expect(await refusalOf(route(rg).handler(rg.request({ planId: late.id, continue: true, continueToken: wrong })))).toEqual({ code: 'CONFLICT', reason: 'plan-expired' });
+    expect(rg.runs).toEqual([]);
+  });
+
+  it('claims the plan, runs it with the continue flag, finishes and audits it like any run, when the token is the plan\u2019s', async () => {
+    const rg = rig(async () => ({ status: 'ok', result: sharedResult('exact') }));
+    const plan = await planFor(rg);
+    const answer = askRunResponseSchema.parse(await route(rg).handler(rg.request({ planId: plan.id, continue: true, continueToken: good(plan.id) })));
+    expect(answer).toMatchObject({ outcome: 'complete', result: { templateId: 'shared-attribute' } });
+    expect(answer.continueToken).toBeUndefined();
+    expect(rg.options).toEqual([{ continue: true }]);
+    expect(rg.plans.plans[0]?.state).toBe('run');
+    expect(rg.plans.runs).toHaveLength(1);
+    expect(rg.events).toHaveLength(1);
+  });
+
+  it('cannot be used twice: the second continue is refused as not runnable, and reads nothing', async () => {
+    const rg = rig(async () => ({ status: 'ok', result: sharedResult('exact') }));
+    const plan = await planFor(rg);
+    await route(rg).handler(rg.request({ planId: plan.id, continue: true, continueToken: good(plan.id) }));
+    expect(await refusalOf(route(rg).handler(rg.request({ planId: plan.id, continue: true, continueToken: good(plan.id) })))).toEqual({ code: 'CONFLICT', reason: 'plan-not-runnable' });
+    expect(rg.runs).toHaveLength(1);
+  });
+
+  it('is voided by an edit: the old plan is cancelled and the new plan has another token', async () => {
+    const rg = rig();
+    const plan = await planFor(rg);
+    const token = good(plan.id);
+    const edited = await rg.plans.edit({ planId: plan.id, userId: 'u-1', templateId: 'shared-attribute', templateVersion: 1, params: { ...TEMPLATE_PARAMS, limit: 3 } });
+    if (edited.status !== 'edited') throw new Error('not edited');
+    expect(await refusalOf(route(rg).handler(rg.request({ planId: plan.id, continue: true, continueToken: token })))).toEqual({ code: 'CONFLICT', reason: 'plan-not-runnable' });
+    expect(await refusalOf(route(rg).handler(rg.request({ planId: edited.plan.id, continue: true, continueToken: token })))).toEqual({ code: 'INVALID_REQUEST', reason: 'continue-token' });
+  });
+
+  it('refuses with ASK_UNSUPPORTED, before the token, when the signing capability is missing', async () => {
+    const rg = rig();
+    const plan = await planFor(rg);
+    expect(await refusalOf(route(rg).handler({ ...rg.request({ planId: plan.id, continue: true, continueToken: 'e'.repeat(64) }), previewMac: undefined }))).toEqual({ code: 'ASK_UNSUPPORTED', reason: 'not-in-this-edition' });
+  });
+});
+

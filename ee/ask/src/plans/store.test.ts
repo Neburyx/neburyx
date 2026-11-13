@@ -167,10 +167,34 @@ describe('the sweep of plans that expired unread', () => {
   });
 });
 
+describe('releasing a plan', () => {
+  it('moves a confirmed plan of the caller back to proposed in one statement that leaves the expiry, the parameters and everything else alone', async () => {
+    const { store, calls } = rig([[{ id: PLAN }]]);
+    expect(await store.release(PLAN, USER)).toBe(true);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.text).toBe("UPDATE ask_plans SET state = 'proposed' WHERE id = $1 AND user_id = $2 AND state = 'confirmed' RETURNING id");
+    expect(calls[0]?.text).not.toContain('expires_at');
+    expect(calls[0]?.values).toEqual([PLAN, USER]);
+  });
+
+  it('changes nothing and answers false for a plan that is not confirmed, not the caller\u2019s or not there', async () => {
+    const { store } = rig([[]]);
+    expect(await store.release(PLAN, USER)).toBe(false);
+  });
+
+  it('says only a fixed code when the statement is refused', async () => {
+    const { store } = rig([new Error('connection terminated, plan secret')]);
+    const failure = await store.release(PLAN, USER).catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(PlanStoreError);
+    expect(String(failure)).not.toContain('secret');
+  });
+});
+
 describe('reading a plan', () => {
   it('reads a plan of the caller whatever its state, from one statement that names the owner', async () => {
-    const { store, calls } = rig([[{ ...ROW, state: 'cancelled' }]]);
-    expect(await store.get(PLAN, USER)).toMatchObject({ id: PLAN, state: 'cancelled', userId: USER });
+    const { store, calls } = rig([[{ ...ROW, state: 'cancelled', past: true }]]);
+    expect(await store.get(PLAN, USER)).toMatchObject({ id: PLAN, state: 'cancelled', userId: USER, expired: true });
+    expect(calls[0]?.text).toContain('expires_at <= clock_timestamp() AS past');
     expect(calls).toHaveLength(1);
     expect(calls[0]?.text).toMatch(/WHERE id = \$1 AND user_id = \$2/);
     expect(calls[0]?.values).toEqual([PLAN, USER]);

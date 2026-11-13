@@ -177,6 +177,47 @@ async function paramsOf(database: TestDatabase, id: string): Promise<unknown> {
   return (await rows(database.ownerUrl, 'SELECT params FROM ask_plans WHERE id = $1', [id]))[0]?.['params'];
 }
 
+describe('releasing a plan', () => {
+  it('moves a confirmed plan back to proposed with its expiry and parameters as they were, and no run row', async () => {
+    const { database, owner, store } = await setup();
+    const plan = await store.insert({ ...PLAN, userId: owner });
+    const [before] = await rows(database.ownerUrl, 'SELECT expires_at, params FROM ask_plans WHERE id = $1', [plan.id]);
+    await store.claim(plan.id, owner);
+    expect(await store.release(plan.id, owner)).toBe(true);
+    const [after] = await rows(database.ownerUrl, 'SELECT state, expires_at, params FROM ask_plans WHERE id = $1', [plan.id]);
+    expect(after).toEqual({ state: 'proposed', expires_at: before?.['expires_at'], params: before?.['params'] });
+    expect(await rows(database.ownerUrl, 'SELECT count(*)::int AS n FROM ask_runs')).toEqual([{ n: 0 }]);
+    expect((await store.claim(plan.id, owner)).status).toBe('claimed');
+  });
+
+  it('changes nothing for a plan that is proposed, cancelled, run, another user\u2019s or not there', async () => {
+    const { database, owner, other, store } = await setup();
+    const proposed = await store.insert({ ...PLAN, userId: owner });
+    const cancelled = await store.insert({ ...PLAN, userId: owner });
+    await store.cancel(cancelled.id, owner);
+    const ran = await store.insert({ ...PLAN, userId: owner });
+    await store.claim(ran.id, owner);
+    await store.finish({ planId: ran.id, userId: owner, outcome: 'complete', rowCount: 0, elapsedMs: 1 });
+    const mine = await store.insert({ ...PLAN, userId: owner });
+    await store.claim(mine.id, owner);
+    for (const id of [proposed.id, cancelled.id, ran.id, uuidv7()]) expect(await store.release(id, owner)).toBe(false);
+    expect(await store.release(mine.id, other)).toBe(false);
+    expect(await stateOf(database, mine.id)).toBe('confirmed');
+    expect([await stateOf(database, proposed.id), await stateOf(database, cancelled.id), await stateOf(database, ran.id)]).toEqual(['proposed', 'cancelled', 'run']);
+  });
+
+  it('lets exactly one of a release and a finish of one claimed plan win', async () => {
+    const { owner, store, database } = await setup();
+    const second = storeFor(database.appUrl);
+    for (let round = 0; round < 10; round += 1) {
+      const plan = await store.insert({ ...PLAN, userId: owner });
+      await store.claim(plan.id, owner);
+      const [released, finished] = await Promise.all([store.release(plan.id, owner), second.finish({ planId: plan.id, userId: owner, outcome: 'complete', rowCount: 0, elapsedMs: 1 })]);
+      expect([released, finished.status === 'finished'].filter(Boolean)).toHaveLength(1);
+    }
+  });
+});
+
 describe('the typed value of a search plan', () => {
   it('is held while the plan can run, and no longer once it is claimed, which gives the run the value it had', async () => {
     const { database, owner, store } = await setup();

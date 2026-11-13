@@ -32,13 +32,15 @@ interface Options {
   readonly answer?: (call: ExecuteCall) => Promise<ExecuteOutcome>;
   readonly deny?: boolean;
   readonly mapping?: Record<string, number>;
+  /** The matches the estimate reads before the run; more than the source's `heavy_op_threshold` stops the run as heavy. */
+  readonly probeMatches?: number;
 }
 
 async function started(options: Options = {}) {
   const mapping = sharedMappingOf(options.mapping === undefined ? {} : { budgets: options.mapping });
   const [source] = mapping.sources;
   if (source === undefined) throw new Error('the mapping has no source');
-  const probe: ExecuteOutcome = { status: 'rows', rows: [{ matches: 0, anchorBounded: false, skipped: false }] };
+  const probe: ExecuteOutcome = { status: 'rows', rows: [{ matches: options.probeMatches ?? 0, anchorBounded: false, skipped: false }] };
   const base = options.answer ?? ((call: ExecuteCall): Promise<ExecuteOutcome> => Promise.resolve(call.templateId === SHARED_ATTRIBUTE_COUNT_ID ? probe : { status: 'rows', rows: options.rows ?? [] }));
   const executor = new TestExecutor(withSchema(() => schemaAnswer(onlineIndexesOf(source)), base));
   const events: AuditEvent[] = [];
@@ -171,3 +173,55 @@ describe('a run of a plan through the application and the gate', () => {
     await rig.app.close();
   });
 });
+
+describe('a run that stops as heavy, and its continue', () => {
+  const heavyRig = () => started({ mapping: { heavy_op_threshold: 3 }, probeMatches: 4, rows: [sharedRow({ match: 'O-1' }), sharedRow({ match: 'O-2' })] });
+
+  it('answers the stop of the service with a token, gives the plan back, reads no rows and writes no run row and no run event', async () => {
+    const rig = await heavyRig();
+    const plan = stored(rig);
+    const response = await run(rig, { planId: plan.id });
+    expect(response.statusCode).toBe(200);
+    const body = askRunResponseSchema.parse(response.json());
+    expect(body).toMatchObject({ planId: plan.id, outcome: 'partial', result: { templateId: 'shared-attribute', result: { status: 'heavy', threshold: 3 } }, continueToken: expect.stringMatching(/^[0-9a-f]{64}$/) });
+    expect(rig.plans.stored[0]?.state).toBe('proposed');
+    expect(rig.plans.runs).toEqual([]);
+    expect(rig.events.filter((event) => event.action === 'ask.run')).toEqual([]);
+    expect(sharedRuns(rig)).toHaveLength(0);
+    await rig.app.close();
+  });
+
+  it('reads one bounded page, without an estimate, when the plan is continued with its token, and runs it as any run', async () => {
+    const rig = await heavyRig();
+    const plan = stored(rig);
+    const stop = askRunResponseSchema.parse((await run(rig, { planId: plan.id })).json());
+    const probesBefore = rig.executor.calls.filter((call) => call.templateId === SHARED_ATTRIBUTE_COUNT_ID).length;
+    const response = await run(rig, { planId: plan.id, continue: true, continueToken: stop.continueToken });
+    expect(response.statusCode).toBe(200);
+    const body = askRunResponseSchema.parse(response.json());
+    expect(body).toMatchObject({ outcome: expect.stringMatching(/complete|partial/), result: { templateId: 'shared-attribute', result: { status: 'ok' } } });
+    expect(body.continueToken).toBeUndefined();
+    expect(rig.executor.calls.filter((call) => call.templateId === SHARED_ATTRIBUTE_COUNT_ID)).toHaveLength(probesBefore);
+    expect(sharedRuns(rig)).toHaveLength(1);
+    expect(sharedRuns(rig)[0]?.parameters['limit']).toBe(25);
+    expect(rig.plans.stored[0]?.state).toBe('run');
+    expect(rig.plans.runs).toHaveLength(1);
+    expect(rig.events.filter((event) => event.action === 'ask.run')).toHaveLength(1);
+    await rig.app.close();
+  });
+
+  it('refuses a continue with no token, a token of another plan or a token with no continue, before anything is claimed or read', async () => {
+    const rig = await heavyRig();
+    const first = stored(rig);
+    const second = rig.plans.put({ userId: principalFixture.id, ...SHARED, id: '01939999-0000-7000-8000-0000000000cc' } as never);
+    const stop = askRunResponseSchema.parse((await run(rig, { planId: first.id })).json());
+    for (const body of [{ planId: second.id, continue: true, continueToken: stop.continueToken }, { planId: first.id, continue: true }, { planId: first.id, continueToken: stop.continueToken }, { planId: first.id, continue: true, continueToken: 'a'.repeat(64) }]) {
+      const response = await run(rig, body);
+      expect([response.statusCode, response.json().error.code]).toEqual([400, 'INVALID_REQUEST']);
+    }
+    expect(sharedRuns(rig)).toHaveLength(0);
+    expect(rig.plans.stored.map((plan) => plan.state)).toEqual(['proposed', 'proposed']);
+    await rig.app.close();
+  });
+});
+

@@ -5902,6 +5902,14 @@
           },
           "mask": {
             "type": "boolean"
+          },
+          "continue": {
+            "type": "boolean",
+            "const": true
+          },
+          "continueToken": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
           }
         },
         "required": [
@@ -13249,6 +13257,10 @@
                 "additionalProperties": false
               }
             ]
+          },
+          "continueToken": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
           }
         },
         "required": [

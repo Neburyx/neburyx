@@ -41,8 +41,8 @@ export interface AskRunScope {
 export type AskPlanRun = { readonly status: 'ok'; readonly result: AskRunResult } | { readonly status: 'refused'; readonly refusal: ExtensionRefusalFields };
 
 export interface AskPlanRunner {
-  /** Runs a template with the parameters a stored plan holds, as the service of its manual route would. */
-  run(plan: { readonly templateId: (typeof ASK_PLAN_TEMPLATE_IDS)[number]; readonly params: unknown }): Promise<AskPlanRun>;
+  /** Runs a template with the parameters a stored plan holds, as the service of its manual route would; `continue` is set only by a verified token and lets a heavy run read its bounded page. */
+  run(plan: { readonly templateId: (typeof ASK_PLAN_TEMPLATE_IDS)[number]; readonly params: unknown }, options?: { readonly continue?: boolean }): Promise<AskPlanRun>;
 }
 
 export type ExtensionRouteMethod = 'GET' | 'POST';

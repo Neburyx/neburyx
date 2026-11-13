@@ -97,7 +97,8 @@ describe('the body of the run endpoint', () => {
     expect(askRunRequestSchema.safeParse({ planId }).success).toBe(true);
     expect(askRunRequestSchema.safeParse({ planId, mask: true }).success).toBe(true);
     expect(askRunRequestSchema.safeParse({ planId, mask: false }).success).toBe(true);
-    for (const body of [{}, { planId: 'plan-1' }, { planId: 7 }, { planId, send: true }, { planId, mask: 'yes' }, { planId, mask: null }, { mask: true }]) {
+    expect(askRunRequestSchema.safeParse({ planId, continue: true, continueToken: 'c'.repeat(64) }).success).toBe(true);
+    for (const body of [{}, { planId: 'plan-1' }, { planId: 7 }, { planId, send: true }, { planId, mask: 'yes' }, { planId, mask: null }, { mask: true }, { planId, continue: true }, { planId, continueToken: 'c'.repeat(64) }, { planId, continue: false, continueToken: 'c'.repeat(64) }, { planId, continue: 'yes', continueToken: 'c'.repeat(64) }, { planId, continue: true, continueToken: 'short' }, { planId, continue: true, continueToken: 'C'.repeat(64) }]) {
       expect(askRunRequestSchema.safeParse(body).success).toBe(false);
     }
   });
@@ -115,7 +116,6 @@ describe('the answer of the run endpoint', () => {
 
   it.each([
     ['a shared-attribute result', { templateId: 'shared-attribute', result: shared }],
-    ['the stop of a heavy shared-attribute run', { templateId: 'shared-attribute', result: heavy }],
     ['a linked-entities result', { templateId: 'linked-entities', result: { ...shared, templateId: 'linked-entities' } }],
     ['an entity', { templateId: 'entity', result: node }],
     ['a degree preview', { templateId: 'degree-preview', result: degree }],
@@ -123,6 +123,18 @@ describe('the answer of the run endpoint', () => {
     ['the derived neighbors of a rule', { templateId: 'derived-rule-run', result: derived }],
   ])('takes %s with the outcome complete or partial', (_name, result) => {
     for (const outcome of ['complete', 'partial']) expect(askRunResponseSchema.safeParse({ planId, outcome, result }).success).toBe(true);
+  });
+
+  const token = 'c'.repeat(64);
+
+  it('takes the stop of a heavy run only with a continue token, and only that result with one', () => {
+    const stop = { templateId: 'shared-attribute', result: heavy };
+    expect(askRunResponseSchema.safeParse({ planId, outcome: 'partial', result: stop, continueToken: token }).success).toBe(true);
+    expect(askRunResponseSchema.safeParse({ planId, outcome: 'partial', result: { templateId: 'linked-entities', result: { ...heavy, templateId: 'linked-entities' } }, continueToken: token }).success).toBe(true);
+    expect(askRunResponseSchema.safeParse({ planId, outcome: 'partial', result: stop }).success).toBe(false);
+    expect(askRunResponseSchema.safeParse({ planId, outcome: 'complete', result: { templateId: 'entity', result: node }, continueToken: token }).success).toBe(false);
+    expect(askRunResponseSchema.safeParse({ planId, outcome: 'partial', result: stop, continueToken: 'short' }).success).toBe(false);
+    expect(askRunResponseSchema.safeParse({ planId, outcome: 'partial', result: { templateId: 'shared-attribute', result: shared }, continueToken: token }).success).toBe(false);
   });
 
   it.each([

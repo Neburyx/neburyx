@@ -1,2 +1,2 @@
 export { PLAN_LIFETIME_MINUTES, PLAN_POOL_SIZE, PLAN_STATES, PLAN_SWEEP_BATCH, PLAN_SWEEP_SCHEDULE, PLAN_SWEEP_TASK, PlanStoreError, RUN_OUTCOMES, createPlanStore } from './store.js';
-export type { CancelResult, ClaimResult, Edit, EditResult, Finish, FinishResult, NewPlan, PlanClient, PlanPool, PlanQueryResult, PlanRefusal, PlanState, PlanStore, PlanStoreDeps, PlanStoreErrorCode, RunOutcome, StoredPlan } from './store.js';
+export type { CancelResult, ClaimResult, Edit, EditResult, Finish, FinishResult, NewPlan, PlanClient, PlanPool, PlanQueryResult, PlanRefusal, PlanState, PlanStore, ReadPlan, PlanStoreDeps, PlanStoreErrorCode, RunOutcome, StoredPlan } from './store.js';

@@ -130,7 +130,9 @@ export const askCancelRequestSchema = z.strictObject({ planId: z.uuid() });
 export const askCancelResponseSchema = z.strictObject({ planId: z.uuid(), state: z.literal('cancelled') });
 
 /** What `POST /v1/ask/run` takes: the plan to run and, as every read of the product does, whether the personal data of the nodes of the answer is masked. */
-export const askRunRequestSchema = z.strictObject({ planId: z.uuid(), mask: z.boolean().optional() });
+export const askRunRequestSchema = z
+  .strictObject({ planId: z.uuid(), mask: z.boolean().optional(), continue: z.literal(true).optional(), continueToken: z.string().regex(ASK_PREVIEW_HASH_PATTERN).optional() })
+  .refine((request) => (request.continue === true) === (request.continueToken !== undefined), { message: 'a continue and its token come together', path: ['continueToken'] });
 
 export const ASK_RUN_OUTCOMES = ['complete', 'partial', 'failed'] as const;
 
@@ -149,7 +151,18 @@ export const askRunResultSchema = z.union([
 /** `complete` or `partial` (the result reports a cut); a run that failed answers the error of the read, and only the run's own record says `failed`. */
 export const ASK_RUN_ANSWER_OUTCOMES = ['complete', 'partial'] as const;
 
-export const askRunResponseSchema = z.strictObject({ planId: z.uuid(), outcome: z.enum(ASK_RUN_ANSWER_OUTCOMES), result: askRunResultSchema });
+/** Whether a result is the stop of a run that would read more than the source allows without being asked again: the plan was given back, so the answer carries the token to continue it. */
+export function isHeavyResult(run: AskRunResult): boolean {
+  return (run.templateId === 'shared-attribute' || run.templateId === 'linked-entities') && run.result.status === 'heavy';
+}
+
+/**
+ * What a run answers. A result that stopped as heavy comes with `continueToken` (the plan is `proposed` again, nothing was run or recorded), and only such a result does: the token is the signature that
+ * lets `POST /v1/ask/run` with `continue: true` read it.
+ */
+export const askRunResponseSchema = z
+  .strictObject({ planId: z.uuid(), outcome: z.enum(ASK_RUN_ANSWER_OUTCOMES), result: askRunResultSchema, continueToken: z.string().regex(ASK_PREVIEW_HASH_PATTERN).optional() })
+  .refine((answer) => isHeavyResult(answer.result) === (answer.continueToken !== undefined), { message: 'a heavy result comes with a continue token and no other result does', path: ['continueToken'] });
 
 export type AskPlan = z.infer<typeof askPlanSchema>;
 export type AskPlanRequest = z.infer<typeof askPlanRequestSchema>;

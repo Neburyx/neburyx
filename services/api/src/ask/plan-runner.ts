@@ -49,10 +49,10 @@ export function refusalOfError(error: unknown): ExtensionRefusalFields | undefin
  */
 export function createAskPlanRunnerFactory(services: AskPlanRunnerServices): (context: AskRunContext) => (scope: AskRunScope) => AskPlanRunner {
   return (context) => (scope) => ({
-    async run(plan): Promise<AskPlanRun> {
+    async run(plan, options): Promise<AskPlanRun> {
       const base = { traceId: context.traceId, principal: context.principal, sourceId: scope.sourceId, mask: scope.mask, ...(context.signal === undefined ? {} : { signal: context.signal }) };
       try {
-        const result = await runOf(services, base, plan);
+        const result = await runOf(services, base, plan, options?.continue === true);
         return result === undefined ? { status: 'refused', refusal: invalidPlan } : { status: 'ok', result };
       } catch (error) {
         const refusal = refusalOfError(error);
@@ -72,13 +72,13 @@ interface Base {
 }
 
 /** The result of one plan, or undefined when the parameters it holds are not the template's. */
-async function runOf(services: AskPlanRunnerServices, base: Base, plan: { readonly templateId: keyof typeof ASK_PLAN_PARAMS; readonly params: unknown }): Promise<AskRunResult | undefined> {
+async function runOf(services: AskPlanRunnerServices, base: Base, plan: { readonly templateId: keyof typeof ASK_PLAN_PARAMS; readonly params: unknown }, continuing: boolean): Promise<AskRunResult | undefined> {
   switch (plan.templateId) {
     case 'shared-attribute':
     case 'linked-entities': {
       const parsed = ASK_PLAN_PARAMS[plan.templateId].safeParse(plan.params);
       if (!parsed.success) return undefined;
-      const result = await services.templateRuns.run({ ...base, id: plan.templateId, params: parsed.data, continue: false });
+      const result = await services.templateRuns.run({ ...base, id: plan.templateId, params: parsed.data, continue: continuing });
       return { templateId: plan.templateId, result };
     }
     case 'entity': {

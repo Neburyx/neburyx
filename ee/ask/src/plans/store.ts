@@ -43,6 +43,9 @@ export interface StoredPlan {
   readonly expiresAt: Date;
 }
 
+/** A plan as a read gives it: with whether it is past its expiry on the database clock, so a caller need not compare with a clock of its own. */
+export type ReadPlan = StoredPlan & { readonly expired: boolean };
+
 export interface NewPlan {
   readonly userId: string;
   readonly sourceId: string;
@@ -84,13 +87,15 @@ export interface PlanStore {
   /** Stores a plan as `proposed`, to expire 15 minutes after the database clock. */
   insert(plan: NewPlan): Promise<StoredPlan>;
   /** Reads a plan of the caller, whatever its state; a plan that is not there or is another user's is undefined. */
-  get(planId: string, userId: string): Promise<StoredPlan | undefined>;
+  get(planId: string, userId: string): Promise<ReadPlan | undefined>;
   /** Moves a plan of the caller from `proposed` to `confirmed` in one statement, for one run. */
   claim(planId: string, userId: string): Promise<ClaimResult>;
   /** Moves a `proposed` plan of the caller to `cancelled`. */
   cancel(planId: string, userId: string): Promise<CancelResult>;
   /** Stores an edited plan with the old one as its parent and cancels the old one, together or not at all. */
   edit(edit: Edit): Promise<EditResult>;
+  /** Gives a claimed plan back as `proposed`, its expiry unchanged, writing no run: true when it was `confirmed` and the caller's. */
+  release(planId: string, userId: string): Promise<boolean>;
   /** Makes a claimed plan `run` and writes its run row, together or not at all. */
   finish(finish: Finish): Promise<FinishResult>;
   /** Marks `proposed` plans that expired unread as `expired` and removes their typed value, at most `limit` of them; says how many it cleared. */
@@ -129,7 +134,7 @@ const INSERT = `INSERT INTO ask_plans (id, user_id, source_id, turn_id, template
   VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, 'proposed', $8, $9, clock_timestamp() + interval '${PLAN_LIFETIME_MINUTES} minutes')
   RETURNING ${COLUMNS}`;
 
-const GET = `SELECT ${COLUMNS} FROM ask_plans WHERE id = $1 AND user_id = $2`;
+const GET = `SELECT ${COLUMNS}, expires_at <= clock_timestamp() AS past FROM ask_plans WHERE id = $1 AND user_id = $2`;
 
 /**
  * The parameters of a plan once it can no longer run: the typed text of a search is removed, which is the one value a plan holds that the investigator typed. Every statement that moves a plan out of
@@ -154,6 +159,9 @@ const CANCEL = `UPDATE ask_plans SET state = 'cancelled', params = ${SCRUBBED}
 const EDIT_CANCEL = `UPDATE ask_plans SET state = 'cancelled', params = ${SCRUBBED}
   WHERE id = $1 AND user_id = $2 AND state = 'proposed' AND expires_at > clock_timestamp()
   RETURNING source_id, turn_id, planning_trace_id`;
+
+/** A plan that was claimed and stopped before anything was read goes back to proposed with its expiry as it was; nothing else about it changes. */
+const RELEASE = `UPDATE ask_plans SET state = 'proposed' WHERE id = $1 AND user_id = $2 AND state = 'confirmed' RETURNING id`;
 
 const FINISH_PLAN = `UPDATE ask_plans SET state = 'run' WHERE id = $1 AND user_id = $2 AND state = 'confirmed' RETURNING id`;
 const FINISH_RUN = 'INSERT INTO ask_runs (id, plan_id, actor_id, outcome, row_count, elapsed_ms) VALUES ($1, $2, $3, $4, $5, $6)';
@@ -252,7 +260,7 @@ export function createPlanStore(context: AuditSinkContext, deps: PlanStoreDeps =
     get: (planId, userId) =>
       guarded(async () => {
         const [row] = (await pool.query(GET, [planId, userId])).rows;
-        return row === undefined ? undefined : plan(row);
+        return row === undefined ? undefined : { ...plan(row), expired: row['past'] === true };
       }),
 
     claim: (planId, userId) =>
@@ -288,6 +296,8 @@ export function createPlanStore(context: AuditSinkContext, deps: PlanStoreDeps =
         if (edited !== undefined) return { status: 'edited', plan: edited };
         return { status: await refusalOf(pool, edit.planId, edit.userId) };
       }),
+
+    release: (planId, userId) => guarded(async () => (await pool.query(RELEASE, [planId, userId])).rows.length === 1),
 
     finish: (finish) =>
       guarded(async (): Promise<FinishResult> => {
