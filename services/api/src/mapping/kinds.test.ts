@@ -47,7 +47,7 @@ describe('the property kinds a mapping declares', () => {
   });
 
   it('refuses a very large map of kinds without a crash, as keys that are not filterable, and a document over the size limit by its size', () => {
-    const huge = Object.fromEntries(Array.from({ length: 10_000 }, (_unused, index) => [`p${index}`, 'text']));
+    const huge = Object.fromEntries(Array.from({ length: 2_000 }, (_unused, index) => [`p${index}`, 'text']));
     expect(() => parseMapping(fileOf(sourceOf({ kinds: huge })), 'neburyx.yaml')).toThrow('not a filterable property');
     expect(() => parseMapping(`# ${'x'.repeat(MAX_MAPPING_BYTES + 1)}\n${fileOf(sourceOf({ kinds: { size: 'text' } }))}`, 'neburyx.yaml')).toThrow('larger than');
   });

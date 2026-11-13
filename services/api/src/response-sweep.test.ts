@@ -171,8 +171,11 @@ describe('no response of a route of the inspector holds an element ID of the sou
 });
 
 describe('the run of a saved pattern holds no element ID of the source', () => {
+  // a name is used once on a source, so each saved pattern is named by its place in the order
+  let saved = 0;
   const save = async (body: Record<string, unknown>): Promise<string> => {
-    const made = await rig.app.inject({ method: 'POST', url: '/v1/patterns', payload: JSON.stringify({ sourceId: FUZZ_SOURCE, name: 'A pattern', ...body }), headers: { 'content-type': 'application/json' } });
+    saved += 1;
+    const made = await rig.app.inject({ method: 'POST', url: '/v1/patterns', payload: JSON.stringify({ sourceId: FUZZ_SOURCE, name: `A pattern ${saved}`, ...body }), headers: { 'content-type': 'application/json' } });
     expect(made.statusCode).toBe(201);
     return (made.json() as { id: string }).id;
   };

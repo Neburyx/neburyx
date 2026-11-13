@@ -28,6 +28,10 @@
         "status",
         "accountKind"
       ],
+      "filterKinds": {
+        "status": "unknown",
+        "accountKind": "unknown"
+      },
       "sortable": [],
       "pii": [
         "holderName",
@@ -62,6 +66,7 @@
         "fullName"
       ],
       "filterable": [],
+      "filterKinds": {},
       "sortable": [],
       "pii": [
         "fullName",
@@ -98,6 +103,9 @@
       "filterable": [
         "platform"
       ],
+      "filterKinds": {
+        "platform": "unknown"
+      },
       "sortable": [],
       "pii": [],
       "properties": [
@@ -127,6 +135,9 @@
       "filterable": [
         "network"
       ],
+      "filterKinds": {
+        "network": "unknown"
+      },
       "sortable": [],
       "pii": [],
       "properties": [
@@ -158,6 +169,11 @@
         "channel",
         "amount"
       ],
+      "filterKinds": {
+        "status": "unknown",
+        "channel": "unknown",
+        "amount": "unknown"
+      },
       "sortable": [],
       "pii": [],
       "properties": [
@@ -190,6 +206,9 @@
       "filterable": [
         "category"
       ],
+      "filterKinds": {
+        "category": "unknown"
+      },
       "sortable": [],
       "pii": [],
       "properties": [
@@ -209,6 +228,7 @@
       "observedAt": null,
       "stableIdProperty": null,
       "filterable": [],
+      "filterKinds": {},
       "sortable": [],
       "evidence": [],
       "properties": [],
@@ -224,6 +244,9 @@
       "filterable": [
         "channel"
       ],
+      "filterKinds": {
+        "channel": "unknown"
+      },
       "sortable": [],
       "evidence": [
         "sourceRecordId"
@@ -244,6 +267,7 @@
       "observedAt": "lastSeen",
       "stableIdProperty": "eventId",
       "filterable": [],
+      "filterKinds": {},
       "sortable": [],
       "evidence": [
         "sourceRecordId"
@@ -263,6 +287,7 @@
       "observedAt": "initiatedAt",
       "stableIdProperty": "eventId",
       "filterable": [],
+      "filterKinds": {},
       "sortable": [],
       "evidence": [],
       "properties": [
@@ -279,6 +304,7 @@
       "observedAt": null,
       "stableIdProperty": null,
       "filterable": [],
+      "filterKinds": {},
       "sortable": [],
       "evidence": [],
       "properties": [],
@@ -292,6 +318,7 @@
       "observedAt": null,
       "stableIdProperty": null,
       "filterable": [],
+      "filterKinds": {},
       "sortable": [],
       "evidence": [],
       "properties": [],
