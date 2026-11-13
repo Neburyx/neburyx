@@ -97,7 +97,7 @@ describe('the insurance demo graph', () => {
 
   it('gives the answer written in its scripted case and holds the starting entity of its preset', async () => {
     const cases = readCases(files.cases, mapping, definition);
-    expect(cases.cases).toHaveLength(1);
+    expect(cases.cases).toHaveLength(6);
     const run: Run = (cypher, parameters) => query(server, cypher, parameters);
     expect(await checkCases(cases, mapping, run)).toEqual([]);
     expect(await presetExists(cases, mapping, run)).toBe(true);

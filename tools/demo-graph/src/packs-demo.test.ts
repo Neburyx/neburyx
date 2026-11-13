@@ -95,10 +95,10 @@ describe('the scripted demo cases of the shipped packs', () => {
     return { name, cases: readCases(files.cases, mapping, readDefinition(files.definition, mapping)).cases };
   });
 
-  it('are five in all, at least one in each pack and one in the insurance pack', () => {
-    expect(counts.reduce((total, pack) => total + pack.cases.length, 0)).toBe(5);
+  it('are twelve in all, at least one in each pack and six in the insurance pack', () => {
+    expect(counts.reduce((total, pack) => total + pack.cases.length, 0)).toBe(12);
     for (const pack of counts) expect(pack.cases.length, pack.name).toBeGreaterThanOrEqual(1);
-    expect(counts.find((pack) => pack.name === 'insurance-claims')?.cases).toHaveLength(1);
+    expect(counts.find((pack) => pack.name === 'insurance-claims')?.cases).toHaveLength(6);
   });
 });
 

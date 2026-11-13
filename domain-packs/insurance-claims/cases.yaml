@@ -10,3 +10,24 @@ cases:
       - { node: { type: phone, id: "+1-555-000010" }, property: isShared, equals: false }
       - { node: { type: phone, id: "+1-555-000000" }, via: REACHED_AT, direction: in, count: 30 }
       - { node: { type: phone, id: "+1-555-000000" }, property: isShared, equals: true }
+  - id: claimants-sharing-an-address
+    title: Four claimants live at one address
+    expect:
+      - { node: { type: address, id: AD-00200 }, via: LIVES_AT, direction: in, ids: [CT-00100, CT-00101, CT-00102, CT-00103] }
+  - id: claimant-living-alone
+    title: One claimant lives at an address nobody else shares
+    expect:
+      - { node: { type: address, id: AD-00379 }, via: LIVES_AT, direction: in, ids: [CT-00000] }
+  - id: same-text-different-addresses
+    title: Two address nodes with the same street and city have no claimant in common
+    expect:
+      - { node: { type: address, id: AD-00001 }, via: LIVES_AT, direction: in, ids: [CT-00458] }
+      - { node: { type: address, id: AD-00002 }, via: LIVES_AT, direction: in, ids: [CT-00485] }
+  - id: claims-filed-by-one-claimant
+    title: One claimant filed three claims
+    expect:
+      - { node: { type: claimant, id: CT-00100 }, via: FILED_BY, direction: in, ids: [CL-001007, CL-001504, CL-001968] }
+  - id: claimant-with-no-claim
+    title: One claimant filed no claim
+    expect:
+      - { node: { type: claimant, id: CT-00000 }, via: FILED_BY, direction: in, count: 0 }

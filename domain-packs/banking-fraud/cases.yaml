@@ -23,3 +23,11 @@ cases:
     title: One merchant receives 100,000 payments
     expect:
       - { node: { type: merchant, id: MR-0000 }, via: PAID_TO, direction: in, count: 100000 }
+  - id: repeated-payments-to-one-account
+    title: Seven payments go from the first ring account to the second, and that is one connected account
+    expect:
+      - { node: { type: account, id: AC-0002000 }, via: TRANSFERRED_TO, direction: out, ids: [AC-0002001] }
+  - id: transfers-from-one-account
+    title: One account transferred to two accounts
+    expect:
+      - { node: { type: account, id: AC-0000006 }, via: TRANSFERRED_TO, direction: out, ids: [AC-0006607, AC-0008253] }
