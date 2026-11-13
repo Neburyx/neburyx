@@ -11,6 +11,7 @@ import type { Direction } from './builder/model.js';
 export const PATTERNS_COPY = {
   title: 'Patterns',
   close: 'Close Patterns',
+  closeBuilder: 'Close pattern builder',
   intro: 'Approved ways to explore. No query language needed.',
   list: 'Patterns',
   run: 'Run pattern',

@@ -139,8 +139,17 @@ describe('leaving and coming back', () => {
     await openPatterns();
     await openBuilder();
     expect(startSelect().value).toBe('');
-    await userEvent.click(screen.getByRole('button', { name: 'Close Patterns' }));
+    expect(screen.queryByRole('button', { name: 'Close Patterns' })).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Close pattern builder' }));
     expect(screen.queryByRole('heading', { name: 'Patterns' })).toBeNull();
+  });
+
+  it('names the close button for the list, and for the builder while it is open', async () => {
+    await builderWorkspace();
+    expect(screen.getByRole('button', { name: 'Close Patterns' })).toBeTruthy();
+    await openBuilder();
+    expect(screen.getByRole('button', { name: 'Close pattern builder' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Close Patterns' })).toBeNull();
   });
 
   it('is drawn again empty when the source changes', async () => {

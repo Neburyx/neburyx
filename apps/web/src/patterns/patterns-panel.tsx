@@ -190,7 +190,7 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
     <div className="patterns-panel" ref={root}>
       <div className="search-panel-header">
         <h2 className="search-panel-heading">{view === 'list' ? PATTERNS_COPY.title : view === 'preset' ? (templateData?.presets.find((candidate) => candidate.id === presetId)?.name ?? PATTERNS_COPY.title) : (editingView?.title ?? SHELL_COPY.newPattern)}</h2>
-        <button type="button" className="legend-close" aria-label={PATTERNS_COPY.close} onClick={close}>
+        <button type="button" className="legend-close" aria-label={view === 'builder' ? PATTERNS_COPY.closeBuilder : PATTERNS_COPY.close} onClick={close}>
           <span className="icon icon-clear" aria-hidden="true" />
         </button>
       </div>
