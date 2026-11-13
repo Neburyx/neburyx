@@ -165,11 +165,15 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
     setView('list');
   };
   const changed = editing !== undefined && JSON.stringify(builder.draft) !== editing.baseline;
-  // the X of the preview of a draft or of a change that was edited: closing throws the draft away, so it asks first
+  // the X and Escape of the builder and of the preview of a draft or of a change that was edited: closing throws the draft away, so it asks first
   const [askingClose, setAskingClose] = useState(false);
   const [savedDraft, setSavedDraft] = useState<string | undefined>(undefined);
-  const lostOnClose = editing !== undefined ? changed : JSON.stringify(builder.draft) !== savedDraft;
-  const closePreview = (): void => (previewing === undefined || !lostOnClose ? close() : setAskingClose(true));
+  const emptyDraft = builder.draft.anchorType === undefined && builder.draft.steps.length === 0;
+  const lostOnClose = editing !== undefined ? changed : !emptyDraft && JSON.stringify(builder.draft) !== savedDraft;
+  const closeGuarded = (): void => (lostOnClose ? setAskingClose(true) : close());
+  // the frame's Escape listener is set once, so it reads the current rule through a ref
+  const closeRef = useRef(closeGuarded);
+  closeRef.current = closeGuarded;
   const backToList = (): void => {
     setSavedItem(undefined);
     setPreviewing(undefined);
@@ -260,7 +264,7 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
       event.preventDefault();
       event.stopPropagation();
       // in the builder Escape closes the panel; the list below, hidden, may hold a run that Escape would cancel
-      if (viewRef.current === 'builder') close();
+      if (viewRef.current === 'builder') closeRef.current();
       else cancelOrClose.current();
     };
     frame.addEventListener('keydown', onKey);
@@ -270,7 +274,7 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
     <div className="patterns-panel" ref={root}>
       <div className="search-panel-header">
         <h2 className="search-panel-heading">{view === 'list' ? PATTERNS_COPY.title : view === 'preset' ? (templateData?.presets.find((candidate) => candidate.id === presetId)?.name ?? PATTERNS_COPY.title) : view === 'run' ? (runHeader?.title ?? RUN_COPY.previewTitle) : view === 'saved-preset' ? (savedItem?.name ?? PATTERNS_COPY.title) : (editingView?.title ?? SHELL_COPY.newPattern)}</h2>
-        <button type="button" className="legend-close" aria-label={view === 'builder' ? PATTERNS_COPY.closeBuilder : PATTERNS_COPY.close} onClick={view === 'run' && savedItem === undefined ? closePreview : close}>
+        <button type="button" className="legend-close" aria-label={view === 'builder' ? PATTERNS_COPY.closeBuilder : PATTERNS_COPY.close} onClick={view === 'builder' || (view === 'run' && savedItem === undefined) ? closeGuarded : close}>
           <span className="icon icon-clear" aria-hidden="true" />
         </button>
       </div>
@@ -408,7 +412,7 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
                     },
                   })}
               onHeader={setRunHeader}
-              close={savedItem === undefined ? closePreview : close}
+              close={savedItem === undefined ? closeGuarded : close}
               escape={cancelOrClose}
             />
           ) : null}

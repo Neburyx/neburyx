@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, screen } from '@testing-library/react';
+import { cleanup, fireEvent, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ListedPattern, PatternListResponse } from '@neburyx/contracts';
 import type { ApiResult } from '../api/client.js';
@@ -93,6 +93,34 @@ describe('the X of the preview of an edited change', () => {
     expect(subhead()).toBe('Alpha · Changes not saved');
     await userEvent.click(closeX());
     expect(screen.getByRole('dialog').textContent).toContain('The changes you have made to this pattern are not saved.');
+    expect(screen.getByRole('button', { name: 'Discard changes' })).toBeTruthy();
+  });
+});
+
+describe('the X and Escape of the builder of a change', () => {
+  const change = async (): Promise<void> => {
+    await patternsWorkspace({ profile: async () => ({ ok: true, value: conditionsProfile() }), patterns: { listPatterns: async () => page([listed({ id: ID, name: 'Alpha', definition: DEFINITION, version: 4 })]) } });
+    await openPatterns();
+    await userEvent.click(screen.getByRole('button', { name: 'More: Alpha' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Change' }));
+    await settle();
+  };
+
+  it('closes at once while the pattern is as it was opened', async () => {
+    await change();
+    await userEvent.click(screen.getByRole('button', { name: 'Close pattern builder' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Change pattern: Alpha' })).toBeNull();
+  });
+
+  it('asks, in the words of changes, once it is edited, on the close button and on Escape', async () => {
+    await change();
+    await userEvent.click(screen.getByRole('tab', { name: 'Step 1' }));
+    await userEvent.click(screen.getByRole('radio', { name: 'Either' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Close pattern builder' }));
+    expect(screen.getByRole('dialog').textContent).toContain('The changes you have made to this pattern are not saved.');
+    await userEvent.click(screen.getByRole('button', { name: 'Keep editing' }));
+    fireEvent.keyDown(screen.getByRole('radio', { name: 'Either' }), { key: 'Escape' });
     expect(screen.getByRole('button', { name: 'Discard changes' })).toBeTruthy();
   });
 });

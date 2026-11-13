@@ -129,18 +129,34 @@ describe('leaving and coming back', () => {
     expect(startSelect().value).toBe('');
   });
 
-  it('closes the panel on Escape and on the close button, dropping the draft, with the focus on the Patterns tool', async () => {
+  it('asks before closing on Escape and on the close button while a draft would be lost, and closes the panel with the focus on the Patterns tool on Discard draft', async () => {
     await builderWorkspace();
     await openBuilder();
     await chooseStart('n-b');
     fireEvent.keyDown(startSelect(), { key: 'Escape' });
+    expect(screen.getByRole('dialog').textContent).toContain('The pattern you have built is not saved.');
+    await userEvent.click(screen.getByRole('button', { name: 'Keep editing' }));
+    expect(startSelect().value).toBe('n-b');
+    await userEvent.click(screen.getByRole('button', { name: 'Close pattern builder' }));
+    expect(screen.getByRole('dialog').textContent).toContain('The pattern you have built is not saved.');
+    await userEvent.click(screen.getByRole('button', { name: 'Discard draft' }));
     expect(screen.queryByRole('heading', { name: 'Patterns' })).toBeNull();
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Patterns' }));
     await openPatterns();
     await openBuilder();
     expect(startSelect().value).toBe('');
-    expect(screen.queryByRole('button', { name: 'Close Patterns' })).toBeNull();
+  });
+
+  it('closes the panel at once on Escape and on the close button while nothing is built', async () => {
+    await builderWorkspace();
+    await openBuilder();
+    fireEvent.keyDown(startSelect(), { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Patterns' })).toBeNull();
+    await openPatterns();
+    await openBuilder();
     await userEvent.click(screen.getByRole('button', { name: 'Close pattern builder' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Patterns' })).toBeNull();
   });
 
