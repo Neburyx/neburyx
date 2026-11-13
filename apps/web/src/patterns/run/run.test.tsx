@@ -46,7 +46,7 @@ describe('running a built pattern', () => {
     await afterDebounce();
     expect(runReason()).toBe('The check could not be made.');
     answer = { ok: true, value: { status: 'ok' } };
-    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
     await afterDebounce();
     expect(runReason()).toBe('Wait for the preview.');
   });

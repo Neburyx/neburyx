@@ -194,7 +194,7 @@ export const EDITOR_COPY = {
   previewNeedsValid: 'Preview is on once the source has checked the pattern.',
 } as const;
 
-export const chainTitle = (steps: number, conditions: number): string => (steps === 0 ? EDITOR_COPY.chainNone : `Chain · ${steps} ${steps === 1 ? 'step' : 'steps'} · ${conditions} ${conditions === 1 ? 'condition' : 'conditions'}`);
+export const chainTitle = (steps: number, stepLimit: number, conditions: number): string => (steps === 0 ? EDITOR_COPY.chainNone : `Chain · ${steps} of ${stepLimit} ${stepLimit === 1 ? 'step' : 'steps'} · ${conditions} of ${PATTERN_LIMITS.conditionsPerPattern} conditions`);
 export const stepSummary = (types: readonly string[], arrival: string | undefined): string => `${types.length === 0 ? '…' : types.join(' or ')} → ${arrival ?? '…'}`;
 export const conditionsTab = (count: number): string => `Conditions · ${count}`;
 export const windowTab = (days: number | undefined): string => (days === undefined ? 'Window · none' : `Window · ${days} d`);
@@ -279,3 +279,22 @@ export const chainProblems = (count: number): string => `${problemCount(count)}.
 export const leadsElsewhere = (type: string, actual: readonly string[], arrival: string): string => `${type} leads to ${actual.join(' or ')}, not ${arrival}.`;
 export const doesNotLeave = (type: string, from: string): string => `${type} does not leave a ${from}.`;
 export const arrivalChanged = (was: string | undefined, arrival: string): string => `${was === undefined ? '' : `Changed from ${was}. `}Choose types that lead to ${arrival}, or change it back.`;
+
+/** The problems the source found, the checking states and the states of the mapping (frames PB9 and PB19 states 1 to 4). */
+export const CHECK_COPY = {
+  problemsTitle: 'The mapping cannot follow this pattern yet',
+  show: 'Show',
+  checking: 'Checking with the source…',
+  checkingNote: 'Preview is off until the check finishes. You can keep editing.',
+  couldNot: 'The check could not be made.',
+  tooMany: 'Too many checks in a short time.',
+  loadingMapping: 'Reading the mapping for this source…',
+  editingOff: 'Editing is off until it loads. Built-in patterns stay listed.',
+  couldNotRead: 'Could not read the mapping.',
+  nothingChanged: 'Nothing was changed.',
+  close: 'Close',
+} as const;
+
+export const sourceProblems = (count: number): string => `${problemCount(count)} from the source. Preview is off.`;
+export const PART_NAME = { link: 'Link', conditions: 'Conditions', window: 'Window' } as const;
+export const checkedAtText = (at: Date): string => `Checked by the source at ${String(at.getUTCHours()).padStart(2, '0')}:${String(at.getUTCMinutes()).padStart(2, '0')} UTC.`;

@@ -43,7 +43,7 @@ describe('the chain and the tabs of a new pattern', () => {
     expect(screen.getByText('Add a step to continue')).toBeTruthy();
     expect(path()).toBe('N-A');
     await buildStep(1, 'out', 'n-b', ['r-1']);
-    expect(chain()).toBe('Chain · 1 step · 0 conditions');
+    expect(chain()).toBe('Chain · 1 of 4 steps · 0 of 24 conditions');
     expect(path()).toBe('N-A→r-1→N-B');
     await toggleType(1, 'r-2');
     expect(path()).toBe('N-A→r-1 / r-2→N-B');
@@ -175,6 +175,7 @@ describe('why + Step is disabled', () => {
     await buildStep(2, 'out', 'n-c', ['r-3']);
     expect(addStepButton().disabled).toBe(true);
     expect(reason('limit').textContent).toBe('This source allows at most 2 steps.');
+    expect(chain()).toBe('Chain · 2 of 2 steps · 0 of 24 conditions');
     await userEvent.click(within(stepCard(2)).getByRole('button', { name: 'Remove step 2' }));
     expect(addStepButton().disabled).toBe(false);
     expect(document.getElementById('pattern-builder-add-reason')).toBeNull();

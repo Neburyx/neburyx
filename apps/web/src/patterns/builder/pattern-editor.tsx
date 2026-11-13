@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { PatternDefinition, PatternProblem, SourceProfile } from '@neburyx/contracts';
-import type { ApiClient } from '../../api/client.js';
+import type { ApiClient, ApiFailure } from '../../api/client.js';
 import { Dialog } from '../../views/dialog.js';
 import { failureView, problemText } from '../copy.js';
 import { BreakBanner } from './break-banner.js';
 import { ChainSummary } from './chain-summary.js';
-import { BUILDER_COPY, CONDITIONS_COPY, EDITOR_COPY, blockText, placeOf } from './copy.js';
+import { BUILDER_COPY, CHECK_COPY, EDITOR_COPY, blockText, checkedAtText, placeOf, type ProblemPlace } from './copy.js';
+import { ProblemsPanel } from './problems-panel.js';
+import { TRY_AGAIN, rateLimitedSentence, retryAfterMsOf, tryAgainIn } from '../failure-words.js';
 import { addStepBlock, breaksOf, hasConditions, previousTypeOf, stepLimitOf, toDefinition, type Action, type BuilderState } from './model.js';
 import { rowsOf, totalConditions } from './conditions.js';
 import { StepPanel, type Part } from './step-panel.js';
@@ -15,7 +17,7 @@ import { usePatternCheck, type CheckState } from './use-check.js';
 export type { CheckState };
 export { CHECK_DEBOUNCE_MS } from './use-check.js';
 
-export type ProfileView = { readonly kind: 'loading' } | { readonly kind: 'failed' } | { readonly kind: 'ready'; readonly profile: SourceProfile };
+export type ProfileView = { readonly kind: 'loading' } | { readonly kind: 'failed'; readonly failure?: ApiFailure } | { readonly kind: 'ready'; readonly profile: SourceProfile };
 
 /** What the editor says of a saved pattern it was opened from, in words the panel has already chosen: the editor shows them and knows nothing of where they came from. */
 export interface EditingView {
@@ -88,6 +90,7 @@ export function PatternEditor({ profile, retryProfile, client, sourceId, sourceN
   const [asking, setAsking] = useState<'discard' | { readonly remove: number } | undefined>(undefined);
   const focusNew = useRef(false);
   const focusStart = useRef(false);
+  const showing = useRef<ProblemPlace | undefined>(undefined);
   const panel = useRef<HTMLDivElement>(null);
   // a step that is gone cannot stay selected
   const current = selected !== 'start' && selected >= draft.steps.length ? (draft.steps.length === 0 ? 'start' : draft.steps.length - 1) : selected;
@@ -117,6 +120,30 @@ export function PatternEditor({ profile, retryProfile, client, sourceId, sourceN
     setSelected(id === 'start' ? 'start' : Number(id.slice('step-'.length)));
     setPart('link');
   };
+  /** Opens the tab and the part a problem is in, and puts the focus on its control. */
+  const show = (place: ProblemPlace): void => {
+    if (place.kind === 'start') setSelected('start');
+    else if (place.kind === 'top') return;
+    else {
+      setSelected(place.index);
+      setPart(place.kind === 'condition' ? 'conditions' : place.kind === 'window' ? 'window' : 'link');
+    }
+    showing.current = place;
+  };
+  useEffect(() => {
+    const place = showing.current;
+    if (place === undefined) return;
+    showing.current = undefined;
+    const target =
+      place.kind === 'start'
+        ? document.getElementById('pattern-builder-start')
+        : place.kind === 'condition'
+          ? panel.current?.querySelector<HTMLElement>(`[role="group"][aria-label="Step ${place.index + 1} condition ${place.row + 1}"] button, [role="group"][aria-label="Step ${place.index + 1} condition ${place.row + 1}"] select`)
+          : place.kind === 'window'
+            ? panel.current?.querySelector<HTMLElement>('.patterns-window [role="radio"]')
+            : panel.current?.querySelector<HTMLElement>('[role="radio"], select');
+    target?.focus();
+  }, [selected, part]);
   const tabs = [{ id: 'start', label: EDITOR_COPY.start }, ...draft.steps.map((_, index) => (breaks.some((found) => found.step === index) ? { id: `step-${index}`, label: `Step ${index + 1} !`, marked: true } : { id: `step-${index}`, label: `Step ${index + 1}` }))];
   const selectedId = current === 'start' ? 'start' : `step-${current}`;
   const step = current === 'start' ? undefined : draft.steps[current];
@@ -126,20 +153,30 @@ export function PatternEditor({ profile, retryProfile, client, sourceId, sourceN
       <div className="pattern-editor-body">
         {editing === undefined ? null : <EditingNotes editing={editing} />}
         {profile.kind === 'loading' ? (
-          <p className="search-panel-note" role="status">
-            {BUILDER_COPY.loadingProfile}
-          </p>
-        ) : null}
-        {profile.kind === 'failed' ? (
-          <div className="patterns-state" role="alert">
-            <p>{BUILDER_COPY.profileFailed}</p>
-            <button type="button" className="secondary" onClick={retryProfile}>
-              {BUILDER_COPY.retry}
-            </button>
+          <div className="pattern-loading" role="status">
+            <div className="pattern-skeleton" aria-hidden="true" />
+            <p>{CHECK_COPY.loadingMapping}</p>
+            <p className="pattern-help">{CHECK_COPY.editingOff}</p>
           </div>
         ) : null}
-        <ChainSummary draft={draft} nameOf={nameOf} valid={checked} problems={breaks.length} brokenSteps={new Set(breaks.map((found) => found.step))} />
+        {profile.kind === 'failed' ? (
+          <div className="patterns-state" data-tone="bad" role="alert">
+            <p>{CHECK_COPY.couldNotRead}</p>
+            <p>{profile.failure === undefined ? BUILDER_COPY.profileFailed : failureView(profile.failure, sourceName).text}</p>
+            <p>{CHECK_COPY.nothingChanged}</p>
+            <div className="patterns-actions">
+              <button type="button" className="primary" onClick={retryProfile}>
+                {TRY_AGAIN}
+              </button>
+              <button type="button" className="secondary" onClick={onCancel}>
+                {CHECK_COPY.close}
+              </button>
+            </div>
+          </div>
+        ) : null}
+        <ChainSummary draft={draft} nameOf={nameOf} valid={checked} problems={breaks.length} brokenSteps={new Set(breaks.map((found) => found.step))} sourceProblems={breaks.length === 0 ? problems.length : 0} stepLimit={limit} />
         <BreakBanner breaks={breaks} undo={state.undo} nameOf={nameOf} onUndo={() => dispatch({ type: 'undo' })} />
+        {breaks.length === 0 ? <ProblemsPanel problems={problems} onShow={show} /> : null}
         <>
             <TabList
               label={EDITOR_COPY.stepsLabel}
@@ -208,8 +245,7 @@ export function PatternEditor({ profile, retryProfile, client, sourceId, sourceN
                 />
               )}
             </div>
-            <Problems list={at('top')} />
-            <CheckResult state={check.state} sourceName={sourceName} retry={check.retry} />
+            <CheckResult state={check.state} sourceName={sourceName} retry={check.retry} checkedAt={check.checkedAt} />
             {footer === undefined || ready === undefined ? null : footer({ profile: ready, definition, anchorType: draft.anchorType, check: check.state, validFor: check.validFor, nameOf, focusStart: () => { setSelected('start'); focusStart.current = true; } })}
         </>
       </div>
@@ -295,23 +331,52 @@ function Problems({ list }: { readonly list: readonly PatternProblem[] }) {
   );
 }
 
-function CheckResult({ state, sourceName, retry }: { readonly state: CheckState; readonly sourceName: string; readonly retry: () => void }) {
-  if (state.kind === 'none' || state.kind === 'valid') return null;
+/** Counts the seconds of a wait down to nothing, one a second. */
+function useCountdown(waitMs: number | undefined): number {
+  const [left, setLeft] = useState(waitMs === undefined ? 0 : Math.ceil(waitMs / 1000));
+  useEffect(() => setLeft(waitMs === undefined ? 0 : Math.ceil(waitMs / 1000)), [waitMs]);
+  useEffect(() => {
+    if (left <= 0) return undefined;
+    const timer = setTimeout(() => setLeft((seconds) => Math.max(0, seconds - 1)), 1000);
+    return () => clearTimeout(timer);
+  }, [left]);
+  return left;
+}
+
+/** What the check says besides the problems: that it is on its way, that it could not be made (in words, with Try again, and the wait of a rate limit counted down), and when the source last answered. */
+function CheckResult({ state, sourceName, retry, checkedAt }: { readonly state: CheckState; readonly sourceName: string; readonly retry: () => void; readonly checkedAt: Date | undefined }) {
+  const wait = state.kind === 'failed' && state.failure.code === 'RATE_LIMITED' ? retryAfterMsOf(state.failure) : undefined;
+  const left = useCountdown(wait);
+  if (state.kind === 'none') return null;
+  if (state.kind === 'checking') {
+    return (
+      <div className="patterns-summary" role="status">
+        <p>{CHECK_COPY.checking}</p>
+        <p className="pattern-help">{CHECK_COPY.checkingNote}</p>
+      </div>
+    );
+  }
   if (state.kind === 'failed') {
+    if (state.failure.code === 'RATE_LIMITED') {
+      return (
+        <div className="patterns-state" data-tone="warning" role="alert">
+          <p>{`${CHECK_COPY.tooMany} ${wait === undefined ? 'Try again in a moment.' : rateLimitedSentence(left)}`}</p>
+          <button type="button" className="secondary" disabled={wait !== undefined && left > 0} onClick={retry}>
+            {wait === undefined ? TRY_AGAIN : tryAgainIn(left)}
+          </button>
+        </div>
+      );
+    }
     const view = failureView(state.failure, sourceName);
     return (
       <div className="patterns-state" role="alert">
-        <p>{BUILDER_COPY.checkFailed}</p>
+        <p>{CHECK_COPY.couldNot}</p>
         <p>{view.text}</p>
         <button type="button" className="secondary" onClick={retry}>
-          {BUILDER_COPY.retry}
+          {TRY_AGAIN}
         </button>
       </div>
     );
   }
-  return (
-    <p className="patterns-summary" role="status">
-      {state.kind === 'checking' ? BUILDER_COPY.checking : BUILDER_COPY.invalid}
-    </p>
-  );
+  return checkedAt === undefined ? null : <p className="pattern-help">{checkedAtText(checkedAt)}</p>;
 }

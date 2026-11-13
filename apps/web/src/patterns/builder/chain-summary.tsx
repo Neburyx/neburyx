@@ -1,5 +1,5 @@
 import { totalConditions } from './conditions.js';
-import { BUILDER_COPY, DIRECTION_TEXT, EDITOR_COPY, chainProblems, chainTitle } from './copy.js';
+import { BUILDER_COPY, DIRECTION_TEXT, EDITOR_COPY, chainProblems, chainTitle, sourceProblems } from './copy.js';
 import { ARROW } from '../copy.js';
 import type { Draft } from './model.js';
 import { isComplete } from './model.js';
@@ -12,13 +12,17 @@ interface Props {
   /** How many parts of the draft the mapping does not follow, and in which steps: they are marked and Preview is off. */
   readonly problems: number;
   readonly brokenSteps: ReadonlySet<number>;
+  /** How many problems the source found with the pattern as it stands. */
+  readonly sourceProblems: number;
+  /** How many steps the source allows. */
+  readonly stepLimit: number;
 }
 
 /** The chain on top of the editor, always in view: the start type, then each step as its relationship types and the type it arrives at, and the source's word when it has checked the pattern. */
-export function ChainSummary({ draft, nameOf, valid, problems, brokenSteps }: Props) {
+export function ChainSummary({ draft, nameOf, valid, problems, brokenSteps, sourceProblems: found, stepLimit }: Props) {
   return (
     <div className="pattern-chain">
-      <p className="pattern-chain-title">{chainTitle(draft.steps.length, totalConditions(draft.steps))}</p>
+      <p className="pattern-chain-title">{chainTitle(draft.steps.length, stepLimit, totalConditions(draft.steps))}</p>
       {draft.anchorType === undefined ? null : (
         <div className="pattern-path" role="group" aria-label={BUILDER_COPY.path}>
           <span className="pattern-chip pattern-chip-node">{nameOf(draft.anchorType)}</span>
@@ -46,6 +50,12 @@ export function ChainSummary({ draft, nameOf, valid, problems, brokenSteps }: Pr
         <p className="pattern-chain-note" role="status" data-tone="bad">
           <span aria-hidden="true">! </span>
           {chainProblems(problems)}
+        </p>
+      ) : null}
+      {problems === 0 && found > 0 ? (
+        <p className="pattern-chain-note" role="status" data-tone="bad">
+          <span aria-hidden="true">! </span>
+          {sourceProblems(found)}
         </p>
       ) : null}
       {valid ? (

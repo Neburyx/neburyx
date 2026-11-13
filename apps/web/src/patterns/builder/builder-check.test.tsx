@@ -34,7 +34,8 @@ describe('asking the server about the definition', () => {
     expect(kit.validations).toHaveLength(0);
     await chooseArrival(1, 'n-b');
     await toggleType(1, 'r-1');
-    expect(screen.getByText('Checking…')).toBeTruthy();
+    expect(screen.getByText('Checking with the source…')).toBeTruthy();
+    expect(screen.getByText('Preview is off until the check finishes. You can keep editing.')).toBeTruthy();
     await afterDebounce();
     expect(kit.validations).toEqual([{ sourceId: 'a', definition: { anchorType: 'n-a', steps: [{ relationshipTypes: ['r-1'], direction: 'out', arrivesAt: 'n-b' }] } }]);
     expect(screen.getByText('The mapping can follow this pattern')).toBeTruthy();
@@ -62,7 +63,8 @@ describe('what the server finds wrong', () => {
         invalid({ path: ['steps', 0, 'relationshipTypes'], code: 'relationship-does-not-join' }, { path: ['anchorType'], code: 'unknown-entity-type' }, { path: ['steps'], code: 'too-many' }),
     });
     await afterDebounce();
-    expect(screen.getByText(/^Not valid\./)).toBeTruthy();
+    expect(screen.getByText('3 problems from the source. Preview is off.')).toBeTruthy();
+    expect(screen.getByRole('group', { name: 'The mapping cannot follow this pattern yet' })).toBeTruthy();
     expect(within(stepCard(1)).getByText('This relationship type does not join the types of this step in this direction.')).toBeTruthy();
     const top = screen.getByText('There are more here than a pattern may have.');
     expect(stepCard(1).contains(top)).toBe(false);
@@ -84,7 +86,7 @@ describe('what the server finds wrong', () => {
     expect(screen.getByText('The mapping can follow this pattern')).toBeTruthy();
     act(() => release(invalid({ path: ['steps', 0], code: 'bad-value' })));
     await settle();
-    expect(screen.queryByText(/^Not valid/)).toBeNull();
+    expect(screen.queryByRole('group', { name: 'The mapping cannot follow this pattern yet' })).toBeNull();
     expect(screen.getByText('The mapping can follow this pattern')).toBeTruthy();
   });
 
@@ -94,32 +96,32 @@ describe('what the server finds wrong', () => {
     expect(screen.getByText('The mapping can follow this pattern')).toBeTruthy();
     await toggleType(1, 'r-1');
     await afterDebounce();
-    expect(screen.queryByText(/The mapping can follow this pattern|Not valid|Checking/)).toBeNull();
+    expect(screen.queryByText(/The mapping can follow this pattern|problems? from the source|Checking/)).toBeNull();
   });
 });
 
 describe('a check that could not be made', () => {
   it.each([
-    ['RATE_LIMITED', { retryAfterMs: 12000 }, 'You can try again in 12 s.'],
+    ['RATE_LIMITED', { retryAfterMs: 12000 }, 'Too many checks in a short time. You can try again in 12 s.'],
     ['NOT_FOUND', undefined, 'This was not found. It may have been removed.'],
     ['ACCESS_DENIED', undefined, 'You may not do this on this source.'],
     ['SCHEMA_MISMATCH', undefined, 'The answer was not in the form expected.'],
     ['NETWORK_UNAVAILABLE', undefined, 'The server could not be reached.'],
-  ])('says so with the reason and Retry for %s, keeps the choices and never says valid', async (code, details, reason) => {
+  ])('says so with the reason and Try again for %s, keeps the choices and never says valid', async (code, details, reason) => {
     await oneStep({ validate: async () => ({ ok: false, failure: code === 'SCHEMA_MISMATCH' || code === 'NETWORK_UNAVAILABLE' ? ({ code } as never) : failure(code, details) }) });
     await afterDebounce();
-    expect(within(screen.getByRole('alert')).getByText('The check could not be made.')).toBeTruthy();
+    if (code !== 'RATE_LIMITED') expect(within(screen.getByRole('alert')).getByText('The check could not be made.')).toBeTruthy();
     expect(screen.getByText(reason)).toBeTruthy();
     expect(screen.queryByText(/The mapping can follow this pattern/)).toBeNull();
     expect(screen.getByRole('radio', { name: 'Outgoing' }).getAttribute('aria-checked')).toBe('true');
-    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^Try again/ })).toBeTruthy();
   });
 
   it('asks again on Retry and shows valid when the answer comes', async () => {
     let call = 0;
     const kit = await oneStep({ validate: async () => (++call === 1 ? { ok: false, failure: { code: 'NETWORK_UNAVAILABLE' } as never } : { ok: true, value: { status: 'ok' } }) });
     await afterDebounce();
-    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
     await settle();
     expect(kit.validations).toHaveLength(2);
     expect(screen.getByText('The mapping can follow this pattern')).toBeTruthy();
@@ -141,5 +143,24 @@ describe('a check that could not be made', () => {
     act(() => release({ ok: true, value: { status: 'ok' } }));
     await settle();
     expect(screen.queryByText(/The mapping can follow this pattern/)).toBeNull();
+  });
+});
+
+describe('the states of the check', () => {
+  it('counts the wait of too many checks down and turns Try again on when it is over', async () => {
+    await oneStep({ validate: async () => ({ ok: false, failure: failure('RATE_LIMITED', { retryAfterMs: 3000 }) }) });
+    await afterDebounce();
+    expect(screen.getByText('Too many checks in a short time. You can try again in 3 s.')).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'Try again in 3 s' }) as HTMLButtonElement).disabled).toBe(true);
+    for (let second = 0; second < 3; second += 1) await act(async () => void (await vi.advanceTimersByTimeAsync(1000)));
+    expect(screen.getByText('Too many checks in a short time. You can try again now.')).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'Try again' }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('says there is no wait to count when the source gives none', async () => {
+    await oneStep({ validate: async () => ({ ok: false, failure: failure('RATE_LIMITED') }) });
+    await afterDebounce();
+    expect(screen.getByText('Too many checks in a short time. Try again in a moment.')).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'Try again' }) as HTMLButtonElement).disabled).toBe(false);
   });
 });

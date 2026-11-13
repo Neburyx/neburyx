@@ -117,7 +117,7 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
   }, [drafted, hasDraft]);
   const profile = useProfile();
   const profileState = useProfileState();
-  const profileView: ProfileView = profile !== undefined ? { kind: 'ready', profile } : profileState.sourceId === sourceId && profileState.request.phase === 'failed' ? { kind: 'failed' } : { kind: 'loading' };
+  const profileView: ProfileView = profile !== undefined ? { kind: 'ready', profile } : profileState.sourceId === sourceId && profileState.request.phase === 'failed' ? { kind: 'failed', failure: profileState.request.failure } : { kind: 'loading' };
   const reloadProfile = useProfileReload();
   const maxHops = (sourceId === null ? undefined : answeredData(shell.sources)?.items.find((item) => item.id === sourceId)?.maxHops);
   const dispatch = (action: Action): void => {
