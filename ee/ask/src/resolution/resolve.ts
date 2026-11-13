@@ -20,11 +20,13 @@ export interface Clarification {
   readonly unreferenced: number;
 }
 
-/** A placeholder in the resolved text, as offsets in UTF-16 code units of that text. */
+/** A placeholder in the resolved text, as offsets in UTF-16 code units of that text, with the range of the typed message it replaced, in the same units. */
 export interface PlaceholderSpan {
   readonly start: number;
   readonly end: number;
   readonly placeholder: string;
+  readonly typedStart: number;
+  readonly typedEnd: number;
 }
 
 export type ResolutionOutcome =
@@ -106,7 +108,7 @@ function placeholdersOf(message: string, replacements: readonly Replacement[]): 
       placeholders.set(name, entry);
     }
     text += message.slice(cursor, replacement.start);
-    spans.push({ start: text.length, end: text.length + name.length, placeholder: name });
+    spans.push({ start: text.length, end: text.length + name.length, placeholder: name, typedStart: replacement.start, typedEnd: replacement.end });
     text += name;
     cursor = replacement.end;
   }

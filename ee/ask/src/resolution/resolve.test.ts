@@ -211,11 +211,13 @@ describe('the resolved text', () => {
     if (outcome.status !== 'resolved') throw new Error('not resolved');
     expect(outcome.text).toBe('‹node_a#1› then ‹node_b#1› then ‹node_a#1›');
     expect(outcome.spans).toEqual([
-      { start: 0, end: 10, placeholder: '‹node_a#1›' },
-      { start: 16, end: 26, placeholder: '‹node_b#1›' },
-      { start: 32, end: 42, placeholder: '‹node_a#1›' },
+      { start: 0, end: 10, placeholder: '‹node_a#1›', typedStart: 0, typedEnd: 3 },
+      { start: 16, end: 26, placeholder: '‹node_b#1›', typedStart: 9, typedEnd: 12 },
+      { start: 32, end: 42, placeholder: '‹node_a#1›', typedStart: 18, typedEnd: 21 },
     ]);
     for (const span of outcome.spans) expect(outcome.text.slice(span.start, span.end)).toBe(span.placeholder);
+    const typed = 'A-1 then K-1 then A-1';
+    expect(outcome.spans.map((span) => typed.slice(span.typedStart, span.typedEnd))).toEqual(['A-1', 'K-1', 'A-1']);
   });
 
   it.each(['Who is ‹node_a#1›?', 'Who is A-1 ›'])('refuses a message that holds a placeholder bracket, before any read: %s', async (message) => {
