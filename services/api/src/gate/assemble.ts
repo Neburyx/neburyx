@@ -4,38 +4,13 @@ import type { MappingModel, SourceModel } from '../mapping/model.js';
 import type { Seams } from '../seams/seams.js';
 import { allowlistFromMapping } from './allowlist.js';
 import { DEFAULT_BUDGETS } from './budgets.js';
-import { createTemplateCatalog, type TemplateDefinition } from './catalog.js';
+import { defaultCatalog } from './default-catalog.js';
 import type { ReadExecutor } from './executor.js';
 import { createGates } from './gate.js';
 import { redactItems } from './redact/index.js';
 import { createCursorCodec, type CursorCodec } from './cursor/codec.js';
 import { deriveReferenceKeys, type ReferenceKeys } from '../reference/keys.js';
 import { normalizeModelOf } from './normalize/model.js';
-import { capabilitiesTemplate } from './templates/capabilities.js';
-import { connectivityTemplate } from './templates/connectivity.js';
-import { degreePreviewBoundedTemplate, degreePreviewCheapTemplate } from './templates/degree-preview.js';
-import { degreeProbeTemplate } from './templates/degree-probe.js';
-import { derivedEdgeSupportTemplate } from './templates/derived-edge-support.js';
-import { derivedRuleRunTemplate } from './templates/derived-rule-run.js';
-import { linkedEntitiesTemplate } from './templates/linked-entities.js';
-import { sharedAttributeTemplate } from './templates/shared-attribute.js';
-import { aggregateSampleTemplate, aggregateSummaryTemplate } from './templates/aggregate-evidence.js';
-import { edgeLoadTemplate } from './templates/edge-load.js';
-import { edgeLoadManyTemplate } from './templates/edge-load-many.js';
-import { entityLoadTemplate } from './templates/entity-load.js';
-import { entityLoadManyTemplate } from './templates/entity-load-many.js';
-import { expandCountTemplate } from './templates/expand-count.js';
-import { expandNeighborsTemplate } from './templates/expand-neighbors.js';
-import { searchExactTemplate } from './templates/search-exact.js';
-import { searchPrefixTemplate } from './templates/search-prefix.js';
-import { searchEvidenceTemplate } from './templates/search-evidence.js';
-import { searchFacetsTemplate } from './templates/search-facets.js';
-import { searchRelatedTemplate } from './templates/search-related.js';
-import { relatedContextTemplate } from './templates/related-context.js';
-import { privilegesTemplate } from './templates/privileges.js';
-import { schemaIndexesTemplate } from './templates/schema-indexes.js';
-import { schemaTokensTemplate } from './templates/schema-tokens.js';
-import { stableIdDuplicatesTemplate } from './templates/stable-id-duplicates.js';
 import type { Budgets, Clock, Gate, GateLogger, IndexReader, GateObserver, Item, SourceAllowlist, SystemRunner, TemplateCatalog, GateContext } from './types.js';
 
 export interface AssembleOptions {
@@ -55,13 +30,7 @@ export interface AssembleOptions {
   readonly policyVersion?: (sourceId: string) => string;
 }
 
-export function defaultCatalogTemplates(): readonly TemplateDefinition[] {
-  return [connectivityTemplate, capabilitiesTemplate, privilegesTemplate, schemaTokensTemplate, schemaIndexesTemplate, stableIdDuplicatesTemplate, degreeProbeTemplate, degreePreviewBoundedTemplate, degreePreviewCheapTemplate, entityLoadTemplate, entityLoadManyTemplate, edgeLoadTemplate, edgeLoadManyTemplate, expandNeighborsTemplate, expandCountTemplate, searchExactTemplate, searchRelatedTemplate, searchEvidenceTemplate, searchFacetsTemplate, searchPrefixTemplate, relatedContextTemplate, derivedRuleRunTemplate, sharedAttributeTemplate, linkedEntitiesTemplate, derivedEdgeSupportTemplate, aggregateSampleTemplate, aggregateSummaryTemplate];
-}
-
-export function defaultCatalog(): TemplateCatalog {
-  return createTemplateCatalog({ templates: defaultCatalogTemplates() });
-}
+export { defaultCatalog, defaultCatalogTemplates } from './default-catalog.js';
 
 export function budgetsFrom(source: SourceModel): Budgets {
   return {
@@ -77,13 +46,14 @@ export function budgetsFrom(source: SourceModel): Budgets {
   };
 }
 
-export function assembleGate(options: AssembleOptions): { readonly gate: Gate; readonly system: SystemRunner; readonly indexes: IndexReader } {
+export function assembleGate(options: AssembleOptions): { readonly gate: Gate; readonly system: SystemRunner; readonly indexes: IndexReader; readonly catalog: TemplateCatalog } {
+  const catalog = options.catalog ?? defaultCatalog();
   const budgets = new Map(options.mapping.sources.map((source) => [source.id, budgetsFrom(source)]));
   const allowlists = new Map<string, SourceAllowlist>(options.mapping.sources.map((source) => [source.id, allowlistFromMapping(source)]));
   const models = new Map(options.mapping.sources.map((source) => [source.id, normalizeModelOf(source)]));
-  return createGates({
+  const gates = createGates({
     seams: options.seams,
-    catalog: options.catalog ?? defaultCatalog(),
+    catalog,
     executor: options.executor,
     budgetsFor: (sourceId) => {
       const found = budgets.get(sourceId);
@@ -108,4 +78,5 @@ export function assembleGate(options: AssembleOptions): { readonly gate: Gate; r
     logger: options.logger,
     observer: options.observer,
   });
+  return { ...gates, catalog };
 }

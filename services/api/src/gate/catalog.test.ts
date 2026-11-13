@@ -5,7 +5,10 @@ import { connectivityTemplate } from './templates/connectivity.js';
 import { edgeLoadTemplate } from './templates/edge-load.js';
 import { edgeLoadManyTemplate } from './templates/edge-load-many.js';
 import { entityLoadManyTemplate } from './templates/entity-load-many.js';
-import { defaultCatalogTemplates } from './assemble.js';
+import { defaultCatalog, defaultCatalogTemplates } from './assemble.js';
+import { derivedRuleRunTemplate } from './templates/derived-rule-run.js';
+import { linkedEntitiesTemplate } from './templates/linked-entities.js';
+import { sharedAttributeTemplate } from './templates/shared-attribute.js';
 import { integerTemplate, markerTemplate, nodesTemplate } from '../testing/gate-fixtures.js';
 
 function failure(...templates: TemplateDefinition[]): string {
@@ -298,5 +301,21 @@ describe('the declarations of a read of a list', () => {
 
   it('refuses a single edge read that is bounded by a list', () => {
     expect(problem({ ...edgeLoadTemplate, boundedBy: 'stableId' })).toBeDefined();
+  });
+});
+
+describe('a template a pattern can bind', () => {
+  it('fails the catalog build, naming the template, when it has no name or no description, and the shipped catalog builds', () => {
+    const { name: _name, ...nameless } = sharedAttributeTemplate;
+    const { description: _description, ...undescribed } = linkedEntitiesTemplate;
+    expect(() => createTemplateCatalog({ templates: [nameless] })).toThrow('the template shared-attribute is a template a pattern can bind and has no name');
+    expect(() => createTemplateCatalog({ templates: [undescribed] })).toThrow('the template linked-entities is a template a pattern can bind and has no description');
+    expect(() => createTemplateCatalog({ templates: [{ ...sharedAttributeTemplate, name: '  ' }] })).toThrow('has no name');
+    expect(() => defaultCatalog()).not.toThrow();
+  });
+
+  it('leaves a template that no pattern can bind free of a name', () => {
+    const { name: _name, ...nameless } = derivedRuleRunTemplate;
+    expect(() => createTemplateCatalog({ templates: [nameless] })).not.toThrow();
   });
 });

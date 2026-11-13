@@ -27,6 +27,7 @@ const ELSEWHERE: Readonly<Record<string, string>> = {
   'GET /v1/me': 'reads no source',
   'GET /v1/sources': 'reads no source',
   'GET /v1/sources/:id/profile': 'reads no source',
+  'GET /v1/templates': 'reads no source',
   'GET /v1/investigations': 'reads no source',
   'GET /v1/investigations/:id': 'reads no source',
   'PUT /v1/investigations/:id/draft': 'reads no source',

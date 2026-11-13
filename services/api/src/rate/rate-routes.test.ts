@@ -67,6 +67,7 @@ const NOT_COUNTED: Readonly<Record<string, Call>> = {
   me: { method: 'GET', url: () => '/v1/me' },
   sources: { method: 'GET', url: () => '/v1/sources' },
   profile: { method: 'GET', url: (s) => `/v1/sources/${s}/profile` },
+  'template list': { method: 'GET', url: (s) => `/v1/templates?sourceId=${s}` },
   'investigation list': { method: 'GET', url: () => '/v1/investigations' },
   'investigation read': { method: 'GET', url: () => '/v1/investigations/00000000-0000-4000-8000-000000000000' },
   healthz: { method: 'GET', url: () => '/healthz' },
@@ -251,7 +252,7 @@ const COUNTED_ROUTES = [
   'POST /v1/investigations',
   'POST /v1/sources/:id/test',
 ];
-const UNCOUNTED_ROUTES = ['GET /v1/me', 'GET /v1/sources', 'GET /v1/sources/:id/profile', 'GET /v1/investigations', 'GET /v1/investigations/:id', 'PUT /v1/investigations/:id/draft', 'PUT /v1/investigations/:id', 'DELETE /v1/investigations/:id', 'POST /v1/investigations/:id/restore', 'POST /v1/investigations/:id/views/:viewId/delete', 'POST /v1/investigations/:id/status', 'GET /healthz', 'GET /readyz', 'POST /v1/investigations/:id/views', 'POST /v1/investigations/:id/views/:viewId/restore', 'GET /v1/investigations/:id/views', 'GET /v1/views', 'PUT /v1/investigations/:id/views/:viewId'];
+const UNCOUNTED_ROUTES = ['GET /v1/me', 'GET /v1/sources', 'GET /v1/sources/:id/profile', 'GET /v1/templates', 'GET /v1/investigations', 'GET /v1/investigations/:id', 'PUT /v1/investigations/:id/draft', 'PUT /v1/investigations/:id', 'DELETE /v1/investigations/:id', 'POST /v1/investigations/:id/restore', 'POST /v1/investigations/:id/views/:viewId/delete', 'POST /v1/investigations/:id/status', 'GET /healthz', 'GET /readyz', 'POST /v1/investigations/:id/views', 'POST /v1/investigations/:id/views/:viewId/restore', 'GET /v1/investigations/:id/views', 'GET /v1/views', 'PUT /v1/investigations/:id/views/:viewId'];
 
 describe('every route has a decision', () => {
   it('is either counted or on the list of routes that read no source, so a new route cannot be left out', async () => {

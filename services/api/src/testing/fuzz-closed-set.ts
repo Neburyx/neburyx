@@ -80,6 +80,8 @@ async function buildClosedSet(rig: FuzzRig): Promise<{ readonly statements: Set<
   const cursors: string[] = [];
   const expandCursors: { neighborType: string; cursor: string }[] = [];
   const keys: { entityType: string; stableId: string }[] = [];
+  await get(`/v1/templates?sourceId=${FUZZ_SOURCE}`);
+  keep();
   const anchor = { entityType: 'widget', stableId: 'W-1' };
   const windows = [undefined, { days: 30 }, { from: '2026-01-01', to: '2026-01-31' }];
   for (const preset of FUZZ_SHARED_PRESETS) {

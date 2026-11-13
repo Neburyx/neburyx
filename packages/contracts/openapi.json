@@ -2922,6 +2922,66 @@
         }
       }
     },
+    "/v1/templates": {
+      "get": {
+        "operationId": "listTemplates",
+        "summary": "The built-in templates and the presets of a source",
+        "parameters": [
+          {
+            "name": "sourceId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "description": "Lists the built-in templates a pattern can bind, in a fixed order, each enabled for the source: its id, version, a generic name, the description the Ask planner reads, and `paramsSchema`, a JSON Schema generated from the contract schema of the parameters a caller sends. The schema states the shape: every input the run route accepts passes it, and the route also refuses inputs it accepts (a date that is not on the calendar, a range in the wrong order or too wide, a stable ID longer than the bound counted in UTF-16 units, the members a preset fixes, a name the mapping does not have, a limit or a hop count above the source budget). Lists the presets of the source as its profile gives them, in mapping order, and nothing else; a source with no presets lists none. Reads no source and no database. An unknown source is NOT_FOUND; a missing, empty or repeated sourceId, or another query member, is INVALID_REQUEST.",
+        "responses": {
+          "200": {
+            "description": "The templates and the presets of the source",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The query is not valid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The source is not configured",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The list could not be built",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/templates/{id}/run": {
       "post": {
         "operationId": "runTemplate",
@@ -4740,6 +4800,132 @@
         "required": [
           "ref",
           "results"
+        ],
+        "additionalProperties": false
+      },
+      "TemplateListResponse": {
+        "type": "object",
+        "properties": {
+          "sourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "templates": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "enum": [
+                    "shared-attribute",
+                    "linked-entities"
+                  ]
+                },
+                "version": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "name": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "description": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "paramsSchema": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {},
+                  "description": "A JSON Schema (draft 2020-12) of the parameters a caller sends for the template, generated from its contract schema; it states the shape, and the run route also refuses inputs it accepts."
+                }
+              },
+              "required": [
+                "id",
+                "version",
+                "name",
+                "description",
+                "paramsSchema"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "presets": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "name": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "template": {
+                  "type": "string",
+                  "enum": [
+                    "shared-attribute",
+                    "linked-entities"
+                  ]
+                },
+                "bind": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string",
+                    "enum": [
+                      "anchor",
+                      "attribute",
+                      "target",
+                      "via"
+                    ]
+                  },
+                  "additionalProperties": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "labels": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "text": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "key",
+                      "text"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "template",
+                "bind",
+                "labels"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "sourceId",
+          "templates",
+          "presets"
         ],
         "additionalProperties": false
       },

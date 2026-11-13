@@ -30,6 +30,7 @@ import {
   sourceProfileSchema,
   sourcesResponseSchema,
   sourceTestReportSchema,
+  templateListResponseSchema,
   type CoverageRequest,
   type CoverageResponse,
   type DegreePreview,
@@ -71,6 +72,7 @@ import {
   type SearchRequest,
   type SearchResult,
   type SourceProfile,
+  type TemplateListResponse,
   type SourcesResponse,
   type SourceTestReport,
   type EdgeReadRef,
@@ -118,6 +120,8 @@ export interface ApiClient {
   getMe(signal?: AbortSignal): Promise<ApiResult<MeResponse>>;
   getSources(signal?: AbortSignal): Promise<ApiResult<SourcesResponse>>;
   getProfile(sourceId: string, signal?: AbortSignal): Promise<ApiResult<SourceProfile>>;
+  /** The built-in templates and the presets of a source, with each template's parameter schema; reads no source. The answer names the source asked for, or it is a `SCHEMA_MISMATCH`. */
+  listTemplates(sourceId: string, signal?: AbortSignal): Promise<ApiResult<TemplateListResponse>>;
   testSource(sourceId: string, signal?: AbortSignal): Promise<ApiResult<SourceTestReport>>;
   /** One entity of a source, without its neighbors; `mask` asks for the personal-data fields to be masked. */
   getEntity(ref: ElementRef, options?: { readonly mask?: boolean }, signal?: AbortSignal): Promise<ApiResult<GraphNode>>;
@@ -271,6 +275,10 @@ export function createApiClient(fetcher: Fetcher = (input, init) => fetch(input,
     getMe: (signal) => request(fetcher, '/v1/me', meResponseSchema, signal),
     getSources: (signal) => request(fetcher, '/v1/sources', sourcesResponseSchema, signal),
     getProfile: (sourceId, signal) => request(fetcher, `/v1/sources/${encodeURIComponent(sourceId)}/profile`, sourceProfileSchema, signal),
+    listTemplates: async (sourceId, signal) => {
+      const result = await request(fetcher, `/v1/templates?sourceId=${encodeURIComponent(sourceId)}`, templateListResponseSchema, signal);
+      return result.ok && result.value.sourceId !== sourceId ? failed('SCHEMA_MISMATCH') : result;
+    },
     testSource: async (sourceId, signal) => {
       const result = await request(fetcher, `/v1/sources/${encodeURIComponent(sourceId)}/test`, sourceTestReportSchema, signal, 'POST');
       return result.ok && result.value.sourceId !== sourceId ? failed('SCHEMA_MISMATCH') : result;

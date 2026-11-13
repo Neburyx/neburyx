@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import type { Socket } from 'node:net';
 import fastifyStatic from '@fastify/static';
-import { type ErrorCode, type ProfileExtension, deleteInvestigationResponseSchema, deleteViewRequestSchema, deleteViewResponseSchema, restoreInvestigationRequestSchema, MAX_DRAFT_DOCUMENT_BYTES, readRefsRequestSchema, readRefsResponseSchema, exportRequestSchema, exportSchema, draftWriteRequestSchema, draftWriteResponseSchema, renameRequestSchema, renameResponseSchema, statusChangeRequestSchema, statusChangeResponseSchema, derivedNeighborsRequestSchema, derivedNeighborsResponseSchema, templateRunRequestSchema, templateRunResponseSchema, coverageRequestSchema, coverageResponseSchema, degreePreviewRequestSchema, edgeDetailSchema, edgePathSchema, entityLookupRequestSchema, degreePreviewSchema, entityPathSchema, entityQuerySchema, expandRequestSchema, expandResponseSchema, healthResponseSchema, investigationListQuerySchema, investigationListResponseSchema, investigationResponseSchema, meResponseSchema, nodeSchema, parseEdgeRefSegment, parseSourceLinkSegment, sourceLinkPathSchema, sourceLinkQuerySchema, openInvestigationRequestSchema, openInvestigationResponseSchema, readyResponseSchema, searchMoreRequestSchema, searchMoreResultSchema, searchRequestSchema, searchResultSchema, sourceProfileSchema, sourceTestReportSchema, sourcesResponseSchema, renameViewRequestSchema, restoreViewResponseSchema, saveViewRequestSchema, saveViewResponseSchema, viewListQuerySchema, viewListResponseSchema, ownedViewListResponseSchema, namedViewSchema } from '@neburyx/contracts';
+import { type ErrorCode, type ProfileExtension, deleteInvestigationResponseSchema, deleteViewRequestSchema, deleteViewResponseSchema, restoreInvestigationRequestSchema, MAX_DRAFT_DOCUMENT_BYTES, readRefsRequestSchema, readRefsResponseSchema, exportRequestSchema, exportSchema, draftWriteRequestSchema, draftWriteResponseSchema, renameRequestSchema, renameResponseSchema, statusChangeRequestSchema, statusChangeResponseSchema, derivedNeighborsRequestSchema, derivedNeighborsResponseSchema, templateListQuerySchema, templateListResponseSchema, templateRunRequestSchema, templateRunResponseSchema, coverageRequestSchema, coverageResponseSchema, degreePreviewRequestSchema, edgeDetailSchema, edgePathSchema, entityLookupRequestSchema, degreePreviewSchema, entityPathSchema, entityQuerySchema, expandRequestSchema, expandResponseSchema, healthResponseSchema, investigationListQuerySchema, investigationListResponseSchema, investigationResponseSchema, meResponseSchema, nodeSchema, parseEdgeRefSegment, parseSourceLinkSegment, sourceLinkPathSchema, sourceLinkQuerySchema, openInvestigationRequestSchema, openInvestigationResponseSchema, readyResponseSchema, searchMoreRequestSchema, searchMoreResultSchema, searchRequestSchema, searchResultSchema, sourceProfileSchema, sourceTestReportSchema, sourcesResponseSchema, renameViewRequestSchema, restoreViewResponseSchema, saveViewRequestSchema, saveViewResponseSchema, viewListQuerySchema, viewListResponseSchema, ownedViewListResponseSchema, namedViewSchema } from '@neburyx/contracts';
 import { z } from 'zod';
 import Fastify, {
   type FastifyBaseLogger,
@@ -23,6 +23,7 @@ import { createShownReader } from './exports/shown-reader.js';
 import type { ExportFileStore } from './exports/store.js';
 import { createDegreePreviewService } from './graph/degree-preview-service.js';
 import { createDerivedNeighborsService } from './graph/derived-neighbors-service.js';
+import { createTemplateListService } from './graph/template-list-service.js';
 import { createTemplateRunService } from './graph/template-run-service.js';
 import { createExpandService } from './graph/expand-service.js';
 import { createDegreeCache, type DegreeCacheOptions } from './graph/degree-cache.js';
@@ -39,7 +40,8 @@ import { createOwnedViewService } from './investigations/owned-view-service.js';
 import { createStoredReferences } from './investigations/stored-references.js';
 import { createSourceAccess } from './investigations/source-access.js';
 import { createRequestLimiter, type RequestLimiter } from './rate/request-limiter.js';
-import type { Gate, IndexReader } from './gate/types.js';
+import { defaultCatalog } from './gate/default-catalog.js';
+import type { Gate, IndexReader, TemplateCatalog } from './gate/types.js';
 import type { JobRunner } from './jobs/runner.js';
 import type { MappingModel } from './mapping/model.js';
 import { buildSourceProfile } from './registry/profile.js';
@@ -84,6 +86,8 @@ export interface AppOptions {
   readonly exportFiles?: ExportFileStore | undefined;
   /** The version of the policy a person's access is under, for an export to be made under and a download to be checked against; Community has none. */
   readonly policyVersion?: ((sourceId: string) => string) | undefined;
+  /** The catalog the gate validates against, which the template list describes; absent, the shipped one. */
+  readonly catalog?: TemplateCatalog | undefined;
   /** The time a window of a template run counts back from; a test passes a fixed one. */
   readonly templateRunClock?: (() => Date) | undefined;
   /** The enterprise extension, only when the preview switch is on; its routes are mounted and `GET /v1/me` says `enterprise`. */
@@ -463,6 +467,13 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       const identity = await options.store.current();
       const answer = await derivedNeighbors.derive({ traceId: request.id, principal: identity.principal, sourceId: body.data.sourceId, ...body.data.ref, mask: body.data.mask === true, signal: signalOf(request) });
       return derivedNeighborsResponseSchema.parse(answer);
+    });
+
+    const templateList = createTemplateListService({ mapping, catalog: options.catalog ?? defaultCatalog() });
+    app.get('/v1/templates', { exposeHeadRoute: false, config: { permission: 'principal' } }, async (request) => {
+      const query = templateListQuerySchema.safeParse(request.query);
+      if (!query.success) throw new AppError('INVALID_REQUEST');
+      return templateListResponseSchema.parse(templateList.list(query.data.sourceId));
     });
 
     const templateRuns = createTemplateRunService({ gate: options.gate, mapping, access, ...(options.templateRunClock === undefined ? {} : { now: options.templateRunClock }) });

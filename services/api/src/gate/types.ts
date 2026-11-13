@@ -83,6 +83,8 @@ export interface Template {
   /** A template whose request names a number of hops: the integer parameter that holds it and the most hops the template reads. The gate refuses more than the lower of that and the source's `max_hops`. */
   readonly hops?: { readonly param: string; readonly max: number };
   readonly cutMeans?: 'duplicate' | 'lowerBound';
+  /** A generic name for the template, shown where a source's own preset names are not (the template list); a template a preset can bind has one. */
+  readonly name?: string;
   /** What the template answers, in the words the Ask planner is given to choose between templates. */
   readonly description?: string;
   readonly entityParams: readonly string[];

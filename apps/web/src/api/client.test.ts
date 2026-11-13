@@ -396,3 +396,35 @@ describe('the API client, reading one stored edge', () => {
     expect(asked).toBe(0);
   });
 });
+
+describe('the API client, listing the templates of a source', () => {
+  const list = { sourceId: 'a b/c', templates: [{ id: 'shared-attribute', version: '1', name: 'Shared attribute', description: 'd', paramsSchema: { type: 'object' } }], presets: [] };
+
+  it('asks for /v1/templates with the source in the query, encoded, and returns the parsed answer', async () => {
+    const asked: string[] = [];
+    const client = createApiClient(async (input) => {
+      asked.push(input);
+      return new Response(JSON.stringify(list));
+    });
+    const result = await client.listTemplates('a b/c');
+    expect(asked).toEqual(['/v1/templates?sourceId=a%20b%2Fc']);
+    expect(result).toEqual({ ok: true, value: list });
+  });
+
+  it('gives a schema mismatch for an answer that is not a list, and for a list of another source', async () => {
+    expect(await createApiClient(async () => new Response(JSON.stringify({ sourceId: 'a b/c' }))).listTemplates('a b/c')).toEqual({ ok: false, failure: { code: 'SCHEMA_MISMATCH' } });
+    expect(await createApiClient(async () => new Response(JSON.stringify(list))).listTemplates('other')).toEqual({ ok: false, failure: { code: 'SCHEMA_MISMATCH' } });
+  });
+
+  it('keeps the code of an error the route answers with, gives a network failure, and ABORTED after an abort', async () => {
+    const body = { error: { code: 'NOT_FOUND', message: ERROR_TABLE.NOT_FOUND.message, retryable: ERROR_TABLE.NOT_FOUND.retryable, traceId: 'trace-3' } };
+    expect(await createApiClient(async () => new Response(JSON.stringify(body), { status: 404 })).listTemplates('a')).toMatchObject({ ok: false, failure: { code: 'NOT_FOUND', traceId: 'trace-3' } });
+    const down = createApiClient(async () => {
+      throw new TypeError('failed to fetch');
+    });
+    expect(await down.listTemplates('a')).toEqual({ ok: false, failure: { code: 'NETWORK_UNAVAILABLE' } });
+    const controller = new AbortController();
+    controller.abort();
+    expect(await createApiClient(async () => new Response(JSON.stringify(list))).listTemplates('a b/c', controller.signal)).toEqual({ ok: false, failure: { code: 'ABORTED' } });
+  });
+});

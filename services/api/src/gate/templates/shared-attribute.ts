@@ -52,6 +52,7 @@ export const sharedAttributeTemplate: TemplateDefinition = {
   id: SHARED_ATTRIBUTE_ID,
   version: '1',
   auditAction: 'entity.shared_attribute_run',
+  name: 'Shared attribute',
   description: "Finds the other entities of the anchor's type that share an attribute node of one mapped type, joined by one mapped relationship type, with the anchor. Plan this template for a plain question of who shares an attribute; a question that asks for the chain that shows the link plans derived-rule-run.",
   cypher: '@sharedAttribute(attributeType)',
   sharedAttribute: { entityTypeParam: 'entityType', attributeTypeParam: 'attributeType', viaParam: 'via' },

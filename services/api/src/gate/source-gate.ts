@@ -4,7 +4,7 @@ import type { ReferenceKeys } from '../reference/keys.js';
 import { createNeo4jExecutor } from '../sources/executor.js';
 import { assembleGate } from './assemble.js';
 import type { CursorCodec } from './cursor/codec.js';
-import type { Clock, Gate, GateLogger, GateObserver, IndexReader, SystemRunner } from './types.js';
+import type { Clock, Gate, GateLogger, GateObserver, IndexReader, SystemRunner, TemplateCatalog } from './types.js';
 
 export interface SourceGateOptions {
   readonly mapping: MappingModel;
@@ -23,6 +23,8 @@ export interface SourceGate {
   readonly gate: Gate;
   readonly system: SystemRunner;
   readonly indexes: IndexReader;
+  /** The catalog the gate validates against, which the routes that describe it read. */
+  readonly catalog: TemplateCatalog;
   close(): Promise<void>;
 }
 
@@ -35,7 +37,7 @@ export function createSourceGate(options: SourceGateOptions): SourceGate {
     ...(options.clock === undefined ? {} : { clock: options.clock }),
   });
   try {
-    const { gate, system, indexes } = assembleGate({
+    const { gate, system, indexes, catalog } = assembleGate({
       mapping: options.mapping,
       seams: options.seams,
       executor,
@@ -45,7 +47,7 @@ export function createSourceGate(options: SourceGateOptions): SourceGate {
       ...(options.clock === undefined ? {} : { clock: options.clock }),
       ...(options.observer === undefined ? {} : { observer: options.observer }),
     });
-    return { gate, system, indexes, close: () => executor.close() };
+    return { gate, system, indexes, catalog, close: () => executor.close() };
   } catch (error) {
     void executor.close();
     throw error;

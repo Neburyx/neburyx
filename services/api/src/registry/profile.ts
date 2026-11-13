@@ -4,6 +4,17 @@ import { entityProjection, relationshipProjection } from '../mapping/projection.
 import { canonicalBind, sortedEntries } from './canonical.js';
 import { mappingExcerptOf } from './excerpt.js';
 
+/** The presets of a source as a client reads them, in the mapping's order. */
+export function presetProfilesOf(source: SourceModel): SourceProfile['presets'] {
+  return source.presets.map((preset) => ({
+    id: preset.id,
+    name: preset.name,
+    template: preset.template,
+    bind: canonicalBind(preset.bind),
+    labels: sortedEntries(preset.labels).map(([key, text]) => ({ key, text })),
+  }));
+}
+
 export function buildSourceProfile(source: SourceModel): SourceProfile {
   return {
     sourceId: source.id,
@@ -41,13 +52,7 @@ export function buildSourceProfile(source: SourceModel): SourceProfile {
       recordLink: relationship.evidenceLink !== undefined && !relationship.aggregate,
     })),
     derivedRules: source.derived.map((rule) => ({ id: rule.id, from: rule.from, to: rule.to, via: [...rule.via], ruleVersion: rule.ruleVersion })),
-    presets: source.presets.map((preset) => ({
-      id: preset.id,
-      name: preset.name,
-      template: preset.template,
-      bind: canonicalBind(preset.bind),
-      labels: sortedEntries(preset.labels).map(([key, text]) => ({ key, text })),
-    })),
+    presets: presetProfilesOf(source),
     mappingExcerpt: mappingExcerptOf(source),
   };
 }

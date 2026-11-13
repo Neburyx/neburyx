@@ -1,3 +1,4 @@
+import { PRESET_TEMPLATES } from '@neburyx/contracts';
 import { z } from 'zod';
 import { MAX_HOPS_CEILING } from '../mapping/budgets.js';
 import { CONTEXT_BRANCHES } from './templates/related-context-statement.js';
@@ -389,6 +390,13 @@ function checkRows(definition: TemplateDefinition): void {
   if (!definition.paged && declared !== 1) throw new CatalogError(definition.id, "is not paged and does not declare exactly one of rows: 'one', rows: 'bounded', cutMeans: 'duplicate' or cutMeans: 'lowerBound'");
 }
 
+/** A template a pattern can bind is listed to clients, so it says what to call it and what it answers. */
+function checkListed(definition: TemplateDefinition): void {
+  if (!PRESET_TEMPLATES.some((id) => id === definition.id)) return;
+  if ((definition.name ?? '').trim() === '') throw new CatalogError(definition.id, 'is a template a pattern can bind and has no name');
+  if ((definition.description ?? '').trim() === '') throw new CatalogError(definition.id, 'is a template a pattern can bind and has no description');
+}
+
 /** A template that names hops declares an integer parameter its schema has and a maximum from 1 to the ceiling of the mapping's `max_hops`. */
 function checkHops(definition: TemplateDefinition, shape: Shape): void {
   const hops = definition.hops;
@@ -426,6 +434,7 @@ function build(definition: TemplateDefinition): Template {
   checkAggregateRead(definition, shape);
   checkBoundedBy(definition, shape);
   checkHops(definition, shape);
+  checkListed(definition);
   checkReferenceParams(definition, shape);
   checkGateParameters(definition, shape);
   const integerParameters = [...shape.properties].flatMap(([name, type]) => (type === 'integer' ? [name] : []));

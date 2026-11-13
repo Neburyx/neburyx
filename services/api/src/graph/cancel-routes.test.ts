@@ -146,6 +146,7 @@ const OTHER_CASES: Readonly<Record<string, string>> = {
   'GET /v1/me': 'reads no source',
   'GET /v1/sources': 'reads no source',
   'GET /v1/sources/:id/profile': 'reads no source',
+  'GET /v1/templates': 'reads no source',
   'POST /v1/sources/:id/test': 'the tester is called with no signal (below)',
   'POST /v1/graph/coverage': 'reads no source (below)',
   'GET /v1/investigations': 'reads no source',

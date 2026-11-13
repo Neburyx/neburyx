@@ -56,6 +56,7 @@ export const linkedEntitiesTemplate: TemplateDefinition = {
   id: LINKED_ENTITIES_ID,
   version: '1',
   auditAction: 'entity.linked_entities_run',
+  name: 'Linked entities',
   description: 'Finds the entities of one mapped type that are reached from the anchor over the listed relationship types, in one or two hops, in the direction asked or the stored one. Plan this template for a question of who or what an entity is connected to; a question about a shared attribute plans shared-attribute.',
   cypher: '@linkedEntities(targetType)',
   linkedEntities: { entityTypeParam: 'entityType', targetTypeParam: 'targetType', viaParam: 'via' },
