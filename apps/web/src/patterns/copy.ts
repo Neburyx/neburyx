@@ -19,6 +19,7 @@ export const PATTERNS_COPY = {
   noPatterns: 'This source has no patterns.',
   noMatches: 'No matches found.',
   cancelled: 'Cancelled. No new matches shown.',
+  earlierResult: 'This is the result of the earlier run. The last run gave no result.',
   loading: 'Loading patterns…',
   refine: REFINE_FILTERS,
   startNone: 'Choose an entity',

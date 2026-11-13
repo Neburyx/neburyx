@@ -473,6 +473,11 @@ function PatternsWorkbench({ client, sourceId, sourceName, mask, list, first, cl
           </div>
         </div>
       )}
+      {result !== undefined && (run.failure !== undefined || run.cancelled || run.heavy !== undefined) ? (
+        <p className="search-panel-note" role="status">
+          {PATTERNS_COPY.earlierResult}
+        </p>
+      ) : null}
       {result === undefined ? null : (
         <PatternResult
           result={result}

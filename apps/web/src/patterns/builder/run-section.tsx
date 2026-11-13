@@ -158,6 +158,11 @@ export function RunSection({ client, sourceId, sourceName, mask, profile, defini
           </div>
         </div>
       )}
+      {shown !== undefined && (run.failure !== undefined || run.cancelled || run.heavy !== undefined) ? (
+        <p className="search-panel-note" role="status">
+          {PATTERNS_COPY.earlierResult}
+        </p>
+      ) : null}
       {shown === undefined ? null : (
         <DefinitionResult
           result={shown}

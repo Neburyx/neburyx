@@ -132,6 +132,11 @@ export function SavedRunArea({ client, sourceId, sourceName, mask, store, target
           </div>
         </div>
       )}
+      {shown !== undefined && (view.failure !== undefined || view.cancelled || view.heavy !== undefined || unavailable) ? (
+        <p className="search-panel-note" role="status">
+          {PATTERNS_COPY.earlierResult}
+        </p>
+      ) : null}
       {shown === undefined ? null : shown.kind === 'pattern' ? (
         <DefinitionResult
           result={shown.answer}
