@@ -386,11 +386,11 @@ parameters. Built-in catalog for the first release:
 |---|---|---|---|
 | `search` | Prefix or exact search on configured properties; also lists, separately, records that reference the ID through properties the mapping marks `reference` | type, text, limit | C |
 | `entity` | One entity + properties + evidence | ref | C |
-| `degree-preview` | Per-type degree / facet counts | ref, direction | C |
+| `degree-preview` | Per-type degree / facet counts | ref | C |
 | `expand` | Paged one-hop by type, direction, time window, sort; one page per neighbor type | ref, relTypes, neighborTypes, window, sort, limit, cursor per type | C |
 | `shortest-paths` | Bounded shortest paths | from, to, relTypes, maxHops ≤ budget, limit | C |
 | `shared-attribute` | Entities of the anchor's type that share an attribute node (for example a device, address or phone) with the anchor, with stop-list | ref, attributeType, via, window, minShared, limit | C |
-| `linked-entities` | Entities of a chosen type linked to the anchor through shared attributes, with stop-list (was `connected-accounts`) | ref, targetType, via, maxHops ≤ 2, window, limit | C |
+| `linked-entities` | Entities of a chosen type reached from the anchor over the listed relationship types, in one or two hops and in the direction asked or the stored one, with stop-list (was `connected-accounts`) | ref, targetType, via (a list of relationship types), direction, maxHops ≤ 2, window, limit | C |
 | `derived-rule-run` | The other ends of one derived rule of the mapping from the anchor, each with the first chain of nodes and relationships that supports it; at most the cap (25, or a lower `max_page`) and one more to learn of a cut | ref, ruleId, limit | C |
 | `derived-edge-support` | The chains of one derived rule between the two ends of a derived edge, one for each distinct tuple of middle entities, each with the first path that supports it; at most the cap (25, or a lower `max_page`) and one more to learn of a cut; the statement is written by the gate from the rule's chain with both ends fixed | ruleId, two entity references, limit | C |
 
@@ -640,7 +640,8 @@ question ─► local entity resolution (search; mentions → placeholders)
   "templateId": "shared-attribute",
   "templateVersion": 1,
   "params": { "ref": {"entityType": "account", "stableId": "A-1029"},
-              "via": "device", "window": {"days": 90}, "limit": 25 },
+              "attributeType": "device", "via": "USES_DEVICE",
+              "window": {"days": 90}, "limit": 25 },
   "rationale": "Accounts linked to the same device as A-1029 in the last 90 days"
 }
 ```
