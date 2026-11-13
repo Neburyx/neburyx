@@ -115,6 +115,11 @@
   text-overflow: ellipsis;
 }
 
+.header-title-empty {
+  color: var(--color-text-muted);
+  font-weight: var(--font-weight-medium);
+}
+
 .header-reference {
   flex: none;
   font-family: var(--font-mono);

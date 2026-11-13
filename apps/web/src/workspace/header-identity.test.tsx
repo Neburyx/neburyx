@@ -39,12 +39,21 @@ describe('the investigation identity in the header', () => {
     expect(within(header()).getByRole('status').textContent).toBe('Unsaved');
   });
 
-  it('shows only the breadcrumb when no investigation record is held', () => {
-    renderApp('/explore', client, stateWith(null));
+  it('shows only the breadcrumb when no source is bound and no investigation record is held', () => {
+    renderApp('/explore', client, createClientState());
     const bar = within(header());
     expect(bar.getByRole('link', { name: 'Investigations' })).toBeTruthy();
     expect(bar.queryByRole('heading')).toBeNull();
     expect(bar.queryByRole('status')).toBeNull();
+  });
+
+  it('says No investigation open, with no pill, when a source is bound and there is no investigation', () => {
+    renderApp('/explore', client, stateWith(null));
+    const bar = within(header());
+    expect(bar.getByRole('link', { name: 'Investigations' }).parentElement?.textContent).toBe('Investigations /');
+    expect(bar.getByRole('heading', { level: 1, name: 'No investigation open' })).toBeTruthy();
+    expect(bar.queryByRole('status')).toBeNull();
+    expect(bar.queryByText(/Unsaved|Not saved/)).toBeNull();
   });
 
   it('shows no reference for a record without a case reference', () => {

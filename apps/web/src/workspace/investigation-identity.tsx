@@ -8,6 +8,8 @@ import { isSourceChanged } from '../state/investigation-state.js';
 import { unsavedChangesOf } from '../draft/draft-sync.js';
 import { Slot } from './slots.js';
 
+const NO_INVESTIGATION_OPEN = 'No investigation open';
+
 function pillTextOf(record: NonNullable<InvestigationState['record']>, unsavedChanges: boolean): string {
   if (!record.readOnly) return saveStateText(record.save);
   // a changed source is the cause an operator must act on, so its pill is the one shown; nothing is saved, so there are no unsaved changes to name
@@ -18,6 +20,7 @@ function pillTextOf(record: NonNullable<InvestigationState['record']>, unsavedCh
 export function InvestigationIdentity() {
   const state = useClientState();
   const record = useStoreSelector(state.investigation, (held) => held.record);
+  const sourceBound = useStoreSelector(state.investigation, (held) => held.sourceId !== null);
   const unsavedChanges = useStoreSelector(unsavedChangesOf(state), (value) => value);
   return (
     <div className="header-identity">
@@ -25,7 +28,11 @@ export function InvestigationIdentity() {
         <Link to="/investigations">Investigations</Link>
         <span aria-hidden="true"> /</span>
       </nav>
-      {record === null ? null : (
+      {record === null ? (
+        sourceBound ? (
+          <h1 className="header-title header-title-empty">{NO_INVESTIGATION_OPEN}</h1>
+        ) : null
+      ) : (
         <>
           <h1 className="header-title">{record.title}</h1>
           {record.caseRef === null ? null : <span className="header-reference">{record.caseRef}</span>}
