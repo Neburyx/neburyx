@@ -1,8 +1,7 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { PATTERN_LIMITS, type PatternProblem, type SourceProfile } from '@neburyx/contracts';
-import { failureView } from '../copy.js';
 import type { ApiClient } from '../../api/client.js';
-import { ARROW, checkFailureText, problemText } from '../copy.js';
+import { ARROW, failureView, problemText } from '../copy.js';
 import { BUILDER_COPY, CONDITIONS_COPY, DIRECTION_TEXT, blockText, noArrival, placeOf, stepTitle, stepsLine, tooManyTypes } from './copy.js';
 import { DIRECTIONS, addStepBlock, arrivalTypes, isComplete, lastTypeOf, previousTypeOf, relationshipChoices, stepLimitOf, toDefinition, type Action, type BuilderState, type Direction, type StepDraft } from './model.js';
 import { rowsOf } from './conditions.js';
@@ -344,7 +343,7 @@ function CheckResult({ state, sourceName, retry }: { readonly state: CheckState;
     return (
       <div className="patterns-state" role="alert">
         <p>{BUILDER_COPY.checkFailed}</p>
-        <p>{checkFailureText(state.failure.code, view.text)}</p>
+        <p>{view.text}</p>
         <button type="button" className="secondary" onClick={retry}>
           {BUILDER_COPY.retry}
         </button>

@@ -135,7 +135,7 @@ export function RunSection({ client, sourceId, sourceName, mask, profile, defini
           )}
         </div>
       ) : null}
-      {failure === undefined || run.failure === undefined ? null : <RunFailure key={run.failure.code} failure={failure} budgetCap={undefined} canRetry={run.ask !== undefined && failure.action !== undefined} onRetry={() => run.ask !== undefined && store.run(run.ask)} />}
+      {failure === undefined || run.failure === undefined ? null : <RunFailure key={run.failure.code} failure={failure} canRetry={run.ask !== undefined && failure.action !== undefined} onRetry={() => run.ask !== undefined && store.run(run.ask)} />}
       {heavy === undefined || run.ask === undefined ? null : (
         <div className="patterns-state" data-tone="warning" role="alert">
           <p>{heavyHeadline(estimateOf(heavy), heavy.threshold)}</p>

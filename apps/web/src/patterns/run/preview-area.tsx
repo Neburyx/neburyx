@@ -1,6 +1,6 @@
 import type { PatternPreview } from '@neburyx/contracts';
 import { RETRY } from '../../banner/copy.js';
-import { checkFailureText, failureView, problemText } from '../copy.js';
+import { failureView, problemText } from '../copy.js';
 import type { PreviewState } from './use-preview.js';
 import { RUN_COPY } from './run-copy.js';
 
@@ -19,7 +19,7 @@ export function PreviewArea({ state, sourceName, retry }: { readonly state: Prev
       <div className="patterns-state" role="alert">
         <p>{RUN_COPY.previewFailed}</p>
         {state.kind === 'failed' ? (
-          <p>{checkFailureText(state.failure.code, failureView(state.failure, sourceName).text)}</p>
+          <p>{failureView(state.failure, sourceName).text}</p>
         ) : (
           state.problems.map((problem, index) => <p key={`${problem.code}-${index}`}>{problemText(problem)}</p>)
         )}

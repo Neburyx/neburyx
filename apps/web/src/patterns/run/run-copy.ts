@@ -1,8 +1,6 @@
 import type { ApiFailure } from '../../api/client.js';
-import { GRAPH_UNCHANGED } from '../../search/copy.js';
 import { canRetry } from '../../failure-notice.js';
-import { RETRY } from '../../banner/copy.js';
-import { failureView, maxHopsOf, type FailureView } from '../copy.js';
+import { failureView, type FailureView } from '../copy.js';
 
 /** The words of the run section of the builder. The heavy, cancelled, busy, rate-limited and unavailable texts are the panel's (ui-spec §13); the rest is proposed copy, listed with the frame differences. */
 export const RUN_COPY = {
@@ -25,32 +23,11 @@ export const RUN_COPY = {
   runFailed: 'The run could not be made.',
 } as const;
 
-export const stepLimitText = (limit: number): string => `The source allows at most ${limit} steps.`;
-
-/** The sentence of a failed pattern run, with Retry only where a retry can help: the source states are the panel's own texts. */
+/** The sentence of a failed pattern run, in the table's words, with Try again only where a retry can help: the server says so, or for the client's own failures when the network or the page failed. */
 export function runFailureView(failure: ApiFailure, sourceName: string): FailureView {
+  const view = failureView(failure, sourceName);
   const retryable = canRetry(failure) && ('retryable' in failure ? failure.retryable : failure.code === 'NETWORK_UNAVAILABLE' || failure.code === 'UNEXPECTED_FAILURE');
-  const plain = (text: string): FailureView => ({ text, detail: GRAPH_UNCHANGED, ...(retryable ? { action: RETRY } : {}) });
-  switch (failure.code) {
-    case 'QUERY_BUDGET_EXCEEDED': {
-      const hops = maxHopsOf(failure);
-      return { text: hops === undefined ? RUN_COPY.runFailed : stepLimitText(hops), detail: GRAPH_UNCHANGED };
-    }
-    case 'INVALID_REQUEST':
-      return plain('The server refused this pattern.');
-    case 'NOT_FOUND':
-      return plain('The starting entity or the source was not found.');
-    case 'SCHEMA_MISMATCH':
-      return plain('The answer was not in the form expected.');
-    case 'CONFLICT':
-    case 'ACCESS_DENIED':
-    case 'INTERNAL_ERROR': {
-      const trace = 'traceId' in failure ? ` Trace ${failure.traceId}.` : '';
-      return plain(`${RUN_COPY.runFailed}${trace}`);
-    }
-    default: {
-      const view = failureView(failure, sourceName);
-      return view.action === undefined || retryable ? view : { text: view.text, detail: view.detail };
-    }
-  }
+  const trace = 'traceId' in failure && (failure.code === 'CONFLICT' || failure.code === 'ACCESS_DENIED' || failure.code === 'INTERNAL_ERROR') ? ` Trace ${failure.traceId}.` : '';
+  const { action, ...rest } = view;
+  return { ...rest, text: `${view.text}${trace}`, ...(action !== undefined && retryable ? { action } : {}) };
 }

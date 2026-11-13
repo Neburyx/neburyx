@@ -2,9 +2,9 @@ import type { ApiFailure } from '../api/client.js';
 import type { Count, TemplateRunNotice } from '@neburyx/contracts';
 import { degreeCountText } from '../workspace/degree-text.js';
 import type { AddedOutcome } from './add-to-graph.js';
-import { BUSY_TEXT, busyHeadline, rateLimitedHeadline, RATE_LIMITED_TEXT, REFINE_FILTERS, RETRY, TIMED_OUT_TEXT, timedOutHeadline, UNAVAILABLE_TEXT, unavailableHeadline } from '../banner/copy.js';
+import { BUSY_TEXT, RATE_LIMITED_TEXT, REFINE_FILTERS, RETRY, TIMED_OUT_TEXT, UNAVAILABLE_TEXT } from '../banner/copy.js';
 import { GRAPH_UNCHANGED } from '../search/copy.js';
-import { failureText } from '../failure-notice.js';
+import { failureWords, TRY_AGAIN } from './failure-words.js';
 import type { PatternProblem, PatternProblemCode } from '@neburyx/contracts';
 import type { Direction } from './builder/model.js';
 
@@ -80,10 +80,7 @@ export function noticeText(notice: TemplateRunNotice): string {
   }
 }
 
-const retryAfterMs = (failure: ApiFailure): number | undefined => ('details' in failure && failure.details !== undefined && 'retryAfterMs' in failure.details && typeof failure.details.retryAfterMs === 'number' ? failure.details.retryAfterMs : undefined);
-const timeoutOf = (failure: ApiFailure): number | undefined => ('details' in failure && failure.details !== undefined && 'timeoutMs' in failure.details && typeof failure.details.timeoutMs === 'number' ? failure.details.timeoutMs : undefined);
-export const maxHopsOf = (failure: ApiFailure): number | undefined => ('details' in failure && failure.details !== undefined && 'maxHops' in failure.details && typeof failure.details.maxHops === 'number' ? failure.details.maxHops : undefined);
-export const maxPageOf = (failure: ApiFailure): number | undefined => ('details' in failure && failure.details !== undefined && 'maxPage' in failure.details && typeof failure.details.maxPage === 'number' ? failure.details.maxPage : undefined);
+export { maxHopsOf, maxPageOf } from './failure-words.js';
 
 export interface FailureView {
   readonly text: string;
@@ -95,38 +92,15 @@ export interface FailureView {
   readonly waitMs?: number;
 }
 
-/** The text of a failed call, in the words of ui-spec §13 for a source state; any other code is named by its failure text. */
+/** The text of a failed call, in words: a sentence from the table of `failure-words.ts` and, for a source state, the explanation of ui-spec §13 under it; the action's label is Try again. */
 export function failureView(failure: ApiFailure, source: string): FailureView {
-  switch (failure.code) {
-    case 'SOURCE_BUSY':
-      return { text: busyHeadline(source), detail: BUSY_TEXT, action: RETRY };
-    case 'RATE_LIMITED': {
-      const wait = retryAfterMs(failure);
-      return { text: rateLimitedHeadline(Math.ceil((wait ?? 0) / 1000)), detail: RATE_LIMITED_TEXT, action: RETRY, ...(wait === undefined ? {} : { waitMs: wait }) };
-    }
-    case 'SOURCE_UNAVAILABLE':
-      return { text: unavailableHeadline(source), detail: UNAVAILABLE_TEXT, action: RETRY };
-    case 'QUERY_TIMEOUT': {
-      const limit = timeoutOf(failure);
-      return { text: limit === undefined ? `${source} did not answer in time.` : timedOutHeadline(source, limit), detail: TIMED_OUT_TEXT, action: RETRY };
-    }
-    default:
-      return { text: failureText(failure), detail: PATTERNS_COPY.graphUnchanged };
-  }
+  const words = failureWords(failure, source);
+  const action = words.action === 'try-again' ? TRY_AGAIN : undefined;
+  const detail = failure.code === 'SOURCE_BUSY' ? BUSY_TEXT : failure.code === 'RATE_LIMITED' ? RATE_LIMITED_TEXT : failure.code === 'SOURCE_UNAVAILABLE' ? UNAVAILABLE_TEXT : failure.code === 'QUERY_TIMEOUT' ? TIMED_OUT_TEXT : PATTERNS_COPY.graphUnchanged;
+  return { text: words.text, detail, ...(action === undefined ? {} : { action }), ...(words.waitMs === undefined ? {} : { waitMs: words.waitMs }) };
 }
 
 export const ARROW: Readonly<Record<Direction, string>> = { out: '→', in: '←', both: '↔' };
-
-const CHECK_FAILURE_TEXT: Readonly<Record<string, string>> = {
-  NOT_FOUND: 'The server does not know this source.',
-  ACCESS_DENIED: 'You may not check patterns on this source.',
-  SCHEMA_MISMATCH: 'The answer was not in the form expected.',
-  NETWORK_UNAVAILABLE: 'The server could not be reached.',
-  UNEXPECTED_FAILURE: 'Something went wrong.',
-};
-
-/** The reason a check could not be made, in a sentence: one for each code that has none of its own in the panel's failure texts. */
-export const checkFailureText = (code: string, fallback: string): string => CHECK_FAILURE_TEXT[code] ?? fallback;
 
 const PROBLEM_TEXT: Readonly<Record<PatternProblemCode, string>> = {
   'unknown-key': 'This part of the pattern has something the mapping does not know.',

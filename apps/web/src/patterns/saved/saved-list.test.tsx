@@ -132,7 +132,7 @@ describe('reading the list a page at a time', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Load more' }));
     await settle();
     expect(screen.getByText('Alpha')).toBeTruthy();
-    expect(screen.getByRole('alert').textContent).toContain('Too many requests');
+    expect(screen.getByRole('alert').textContent).toContain('You can try again in 12 s.');
   });
 
   it('says why the list cannot be read in the saved tabs with Retry, and the Built-in tab keeps working', async () => {

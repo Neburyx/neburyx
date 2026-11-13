@@ -404,7 +404,6 @@ function PatternsWorkbench({ client, sourceId, sourceName, mask, list, first, cl
   const heavy = run.heavy === undefined ? undefined : heavyDecisionOfRun(run.heavy);
   const timeout = source?.timeoutMs;
   const failure = run.failure === undefined ? undefined : failureView(run.failure, sourceName);
-  const budgetCap = run.failure === undefined || run.failure.code !== 'QUERY_BUDGET_EXCEEDED' ? undefined : (maxPageOf(run.failure) ?? maxHopsOf(run.failure));
   // a result is shown only under the pattern that produced it
   const result = run.result !== undefined && run.result.presetId === preset.id ? run.result : undefined;
   const firstMatch = result?.matchIds[0];
@@ -497,7 +496,7 @@ function PatternsWorkbench({ client, sourceId, sourceName, mask, list, first, cl
           )}
         </div>
       ) : null}
-      {failure === undefined || run.failure === undefined ? null : <RunFailure key={run.failure.code} failure={failure} budgetCap={budgetCap} canRetry={run.ask !== undefined && canRetry(run.failure)} onRetry={() => submit(run.ask)} />}
+      {failure === undefined || run.failure === undefined ? null : <RunFailure key={run.failure.code} failure={failure} canRetry={run.ask !== undefined && canRetry(run.failure)} onRetry={() => submit(run.ask)} />}
       {heavy === undefined || heavy.kind !== 'heavy' || run.ask === undefined ? null : (
         <div className="patterns-state" data-tone="warning" role="alert">
           <p>{heavyHeadline(heavy.estimate, heavy.threshold)}</p>

@@ -158,7 +158,7 @@ describe('the pattern in words', () => {
     await validPattern();
     const area = screen.getAllByText('The preview could not be made.').map((node) => node.closest('[role="alert"]')).find((node) => node !== null) as HTMLElement;
     expect(area).toBeTruthy();
-    expect(within(area).getByText('The server does not know this source.')).toBeTruthy();
+    expect(within(area).getByText('This was not found. It may have been removed.')).toBeTruthy();
     expect(runReason()).toBe('The preview could not be made.');
     answer = { ok: true, value: { status: 'invalid', problems: [{ path: ['steps'], code: 'bad-value' }] } };
     await userEvent.click(within(area).getByRole('button', { name: 'Retry' }));
@@ -254,13 +254,13 @@ describe('a run that fails', () => {
     ['SOURCE_BUSY', undefined, 'is busy. No read slot freed within the wait.', true, true],
     ['SOURCE_UNAVAILABLE', undefined, 'unavailable. The loaded graph remains available.', true, true],
     ['QUERY_TIMEOUT', { timeoutMs: 5000 }, 'did not answer within 5 s.', true, true],
-    ['QUERY_BUDGET_EXCEEDED', { maxHops: 2 }, 'The source allows at most 2 steps.', false, true],
-    ['INVALID_REQUEST', undefined, 'The server refused this pattern.', false, false],
-    ['NOT_FOUND', undefined, 'The starting entity or the source was not found.', false, false],
-    ['CONFLICT', undefined, 'The run could not be made.', false, false],
-    ['ACCESS_DENIED', undefined, 'The run could not be made.', false, false],
-    ['INTERNAL_ERROR', undefined, 'The run could not be made.', false, false],
-  ])('shows the sentence of %s and offers Retry only where it can help (the error table sets the flag)', async (code, details, text, retry, tableFlag) => {
+    ['QUERY_BUDGET_EXCEEDED', { maxHops: 2 }, 'The source allows at most 2 steps; the field is set to it.', false, true],
+    ['INVALID_REQUEST', undefined, 'The server did not accept this request.', false, false],
+    ['NOT_FOUND', undefined, 'This was not found. It may have been removed.', false, false],
+    ['CONFLICT', undefined, 'This was changed elsewhere. Reload it, then try again.', false, false],
+    ['ACCESS_DENIED', undefined, 'You may not do this on this source.', false, false],
+    ['INTERNAL_ERROR', undefined, 'Something went wrong on the server.', false, false],
+  ])('shows the sentence of %s and offers Try again only where it can help (the error table sets the flag)', async (code, details, text, retry, tableFlag) => {
     const kit = await runWorkspace({ runDefinition: async () => ({ ok: false, failure: { ...failure(code, details), retryable: tableFlag } as never }) });
     await validPattern();
     await press();
@@ -270,12 +270,12 @@ describe('a run that fails', () => {
     expect(kit.state.visibleGraph().nodes.length).toBeGreaterThan(0);
   });
 
-  it('counts down a rate limit and holds Retry, and says the answer was not in the form expected for a schema mismatch', async () => {
+  it('counts down a rate limit and holds Try again, and says the answer was not in the form expected for a schema mismatch', async () => {
     await runWorkspace({ runDefinition: async () => ({ ok: false, failure: failure('RATE_LIMITED', { retryAfterMs: 3000 }) }) });
     await validPattern();
     await press();
-    expect(screen.getByText('Too many requests. Retry after 3 s.')).toBeTruthy();
-    expect((screen.getByRole('button', { name: 'Retry in 3 s' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText('You can try again in 3 s.')).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'Try again in 3 s' }) as HTMLButtonElement).disabled).toBe(true);
     cleanup();
     document.body.replaceChildren();
     await runWorkspace({ runDefinition: async () => ({ ok: false, failure: { code: 'SCHEMA_MISMATCH' } as never }) });

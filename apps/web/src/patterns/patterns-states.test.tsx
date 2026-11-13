@@ -47,16 +47,16 @@ describe('the Patterns panel: empty, failure and source-state answers', () => {
     const nodes = kit.state.visibleGraph().nodes.length;
     await userEvent.click(run());
     await settle();
-    expect(screen.getAllByRole('alert')[0]?.textContent).toContain('INTERNAL_ERROR');
+    expect(screen.getAllByRole('alert')[0]?.textContent).toContain('Something went wrong on the server.');
     expect(screen.getByRole('table')).toBeTruthy();
     expect(kit.state.visibleGraph().nodes).toHaveLength(nodes);
   });
 
   it.each([
-    ['SOURCE_BUSY', undefined, 'is busy. No read slot freed within the wait.', 'Loaded graph and filters preserved; nothing was read. Retry when ready.', 'Retry'],
-    ['RATE_LIMITED', { retryAfterMs: 12000 }, 'Too many requests. Retry after 12 s.', 'Loaded graph and filters preserved; nothing was read. The wait is set by the server.', 'Retry in 12 s'],
-    ['SOURCE_UNAVAILABLE', undefined, 'unavailable. The loaded graph remains available.', 'Filters and saved view preserved; retry does not discard the graph.', 'Retry'],
-    ['QUERY_TIMEOUT', { timeoutMs: 5000 }, 'did not answer within 5 s.', 'Loaded graph and filters preserved; nothing was merged. Retry when ready.', 'Retry'],
+    ['SOURCE_BUSY', undefined, 'is busy. No read slot freed within the wait.', 'Loaded graph and filters preserved; nothing was read. Retry when ready.', 'Try again'],
+    ['RATE_LIMITED', { retryAfterMs: 12000 }, 'You can try again in 12 s.', 'Loaded graph and filters preserved; nothing was read. The wait is set by the server.', 'Try again in 12 s'],
+    ['SOURCE_UNAVAILABLE', undefined, 'unavailable. The loaded graph remains available.', 'Filters and saved view preserved; retry does not discard the graph.', 'Try again'],
+    ['QUERY_TIMEOUT', { timeoutMs: 5000 }, 'did not answer within 5 s.', 'Loaded graph and filters preserved; nothing was merged. Retry when ready.', 'Try again'],
   ])('shows the §13 text, its explanation line and the recovery action for %s', async (code, details, text, line, action) => {
     await ran({ run: async () => ({ ok: false, failure: failure(code, details) }) });
     const alert = screen.getAllByRole('alert')[0];
@@ -65,37 +65,37 @@ describe('the Patterns panel: empty, failure and source-state answers', () => {
     expect(screen.getByRole('button', { name: action })).toBeTruthy();
   });
 
-  it('holds the Retry of a rate limit until the server’s wait is over, counting down, and announces it once', async () => {
+  it('holds the Try again of a rate limit until the server’s wait is over, counting down, and announces it once', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const kit = await patternsWorkspace({ run: async () => ({ ok: false, failure: failure('RATE_LIMITED', { retryAfterMs: 3000 }) }) });
     await openPatterns();
     selectAccount(kit.state, 'acc-1');
     await userEvent.click(run());
     await settle();
-    const retry = (): HTMLButtonElement => screen.getByRole('button', { name: /^Retry/ });
-    expect(retry().textContent).toBe('Retry in 3 s');
+    const retry = (): HTMLButtonElement => screen.getByRole('button', { name: /^Try again/ });
+    expect(retry().textContent).toBe('Try again in 3 s');
     expect(retry().disabled).toBe(true);
-    expect(screen.getByText('Too many requests. Retry after 3 s.')).toBeTruthy();
+    expect(screen.getByText('You can try again in 3 s.')).toBeTruthy();
     const lines = screen.getAllByRole('alert')[0]?.querySelectorAll('p, button') ?? [];
     expect([...lines].map((line) => line.tagName)).toEqual(['P', 'P', 'BUTTON']);
-    expect(lines[0]?.textContent).toBe('Too many requests. Retry after 3 s.');
+    expect(lines[0]?.textContent).toBe('You can try again in 3 s.');
     expect(lines[1]?.textContent).toContain('The wait is set by the server');
     await act(async () => void (await vi.advanceTimersByTimeAsync(1000)));
-    expect(retry().textContent).toBe('Retry in 2 s');
-    expect(screen.getByText('Too many requests. Retry after 2 s.')).toBeTruthy();
+    expect(retry().textContent).toBe('Try again in 2 s');
+    expect(screen.getByText('You can try again in 2 s.')).toBeTruthy();
     await act(async () => void (await vi.advanceTimersByTimeAsync(1000)));
-    expect(retry().textContent).toBe('Retry in 1 s');
+    expect(retry().textContent).toBe('Try again in 1 s');
     await act(async () => void (await vi.advanceTimersByTimeAsync(1000)));
-    expect(retry().textContent).toBe('Retry');
+    expect(retry().textContent).toBe('Try again');
     expect(retry().disabled).toBe(false);
-    expect(screen.getAllByText('Too many requests. You can retry now.')).toHaveLength(1);
-    expect(screen.queryByText(/Retry after/)).toBeNull();
+    expect(screen.getAllByText('You can try again now.')).toHaveLength(1);
+    expect(screen.queryByText(/You can try again in/)).toBeNull();
   });
 
-  it('shows no number and no countdown, and an enabled Retry, for a rate limit with no wait given', async () => {
+  it('shows no number and no countdown, and an enabled Try again, for a rate limit with no wait given', async () => {
     await ran({ run: async () => ({ ok: false, failure: failure('RATE_LIMITED') }) });
-    expect(screen.getAllByText('Too many requests. You can retry now.')).toHaveLength(1);
-    expect((screen.getByRole('button', { name: 'Retry' }) as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.getAllByText('Too many requests. Try again in a moment.')).toHaveLength(1);
+    expect((screen.getByRole('button', { name: 'Try again' }) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it('names the page cap of QUERY_BUDGET_EXCEEDED and sets the limit field to it', async () => {
@@ -115,13 +115,13 @@ describe('the Patterns panel: empty, failure and source-state answers', () => {
     expect((screen.getByLabelText('Hops') as HTMLInputElement).value).toBe('1');
   });
 
-  it('shows the SCHEMA_MISMATCH text for an answer that does not parse and keeps the earlier table', async () => {
+  it('says in words that the answer was not in the form expected for an answer that does not parse and keeps the earlier table', async () => {
     let call = 0;
     const kit = await ran({ run: async () => (++call === 1 ? { ok: true, value: okRun(['acc-2']) } : { ok: false, failure: { code: 'SCHEMA_MISMATCH' } }) });
     const nodes = kit.state.visibleGraph().nodes.length;
     await userEvent.click(run());
     await settle();
-    expect(screen.getAllByRole('alert')[0]?.textContent).toContain('SCHEMA_MISMATCH');
+    expect(screen.getAllByRole('alert')[0]?.textContent).toContain('The answer was not in the form expected.');
     expect(screen.getByRole('table')).toBeTruthy();
     expect(kit.state.visibleGraph().nodes).toHaveLength(nodes);
   });

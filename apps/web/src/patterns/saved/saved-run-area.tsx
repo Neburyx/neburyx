@@ -105,7 +105,7 @@ export function SavedRunArea({ client, sourceId, sourceName, mask, store, target
           )}
         </div>
       ) : null}
-      {failure === undefined || view.failure === undefined ? null : <RunFailure key={view.failure.code} failure={failure} budgetCap={undefined} canRetry={view.ask !== undefined && failure.action !== undefined} onRetry={() => view.ask !== undefined && press(view.ask)} />}
+      {failure === undefined || view.failure === undefined ? null : <RunFailure key={view.failure.code} failure={failure} canRetry={view.ask !== undefined && failure.action !== undefined} onRetry={() => view.ask !== undefined && press(view.ask)} />}
       {unavailable && view.unavailable !== undefined ? (
         <div className="patterns-state" role="alert">
           <p>{SAVED_COPY.unavailable}</p>

@@ -1,5 +1,6 @@
 import { PATTERN_LIMITS, type PATTERN_UNAVAILABLE_CODES } from '@neburyx/contracts';
 import type { ApiFailure } from '../../api/client.js';
+import { patternLimitSentence, personalConditionSentence } from '../failure-words.js';
 
 export const TABS = ['mine', 'shared', 'built-in'] as const;
 export type Tab = (typeof TABS)[number];
@@ -93,8 +94,8 @@ export function refusalText(failure: ApiFailure): string {
   const reason = 'details' in failure && failure.details !== undefined && typeof failure.details['reason'] === 'string' ? failure.details['reason'] : undefined;
   switch (failure.code) {
     case 'INVALID_REQUEST':
-      if (reason === 'pattern-limit') return `This source already holds ${PATTERN_LIMITS.patternsPerSource} saved patterns. Delete one first.`;
-      if (reason === 'pattern-personal-condition') return 'A condition of this pattern uses a property the mapping marks as personal data, so it cannot be saved, shared or copied.';
+      if (reason === 'pattern-limit') return patternLimitSentence;
+      if (reason === 'pattern-personal-condition') return personalConditionSentence;
       return 'The server did not accept this pattern.';
     case 'CONFLICT':
       return SAVED_COPY.changedByOther;

@@ -69,14 +69,14 @@ describe('the form of a pattern', () => {
     expect(kit.sent).toHaveLength(0);
   });
 
-  it('keeps every field as filled after INVALID_REQUEST or NOT_FOUND and shows the code', async () => {
+  it('keeps every field as filled after INVALID_REQUEST and says it in words', async () => {
     const kit = await patternsWorkspace({ run: async () => ({ ok: false, failure: failure('INVALID_REQUEST') }) });
     await openPatterns();
     selectAccount(kit.state, 'acc-1');
     await userEvent.type(screen.getByLabelText('Max matching accounts'), '7');
     await userEvent.click(run());
     await settle();
-    expect(screen.getAllByRole('alert')[0]?.textContent).toContain('INVALID_REQUEST');
+    expect(screen.getAllByRole('alert')[0]?.textContent).toContain('The server did not accept this request.');
     expect((screen.getByLabelText('Max matching accounts') as HTMLInputElement).value).toBe('7');
   });
 
