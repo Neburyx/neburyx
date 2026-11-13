@@ -231,10 +231,14 @@ describe('caps and personal data', () => {
 });
 
 describe('the window', () => {
-  it('offers no window, days and two dates, names the types it filters, and sends nothing for no window', async () => {
+  it('offers no window, days and two dates, says nothing of the types while there is no window, names them once one is chosen, and sends nothing for no window', async () => {
     const kit = await started(['k-1']);
     expect(optionTexts(windowSelect(1))).toEqual(['No window', 'Last N days', 'Between two dates']);
+    expect(screen.queryByText(/by the window/)).toBeNull();
+    await userEvent.selectOptions(windowSelect(1), 'days');
     expect(screen.getByText('Filtered by the window: k-1.')).toBeTruthy();
+    await userEvent.selectOptions(windowSelect(1), 'none');
+    expect(screen.queryByText(/by the window/)).toBeNull();
     await afterDebounce();
     expect(JSON.stringify(lastDefinition(kit))).not.toContain('window');
   });
@@ -271,6 +275,8 @@ describe('the window', () => {
 
   it('names the types the window does not filter, and a type with both a dated and an undated row in both lines', async () => {
     await started(['k-1', 'k-2']);
+    expect(screen.queryByText(/by the window/)).toBeNull();
+    await userEvent.selectOptions(windowSelect(1), 'dates');
     expect(screen.getByText('Filtered by the window: k-1.')).toBeTruthy();
     expect(screen.getByText('Not filtered by the window: k-2. They are read whole.')).toBeTruthy();
     cleanup();
@@ -283,6 +289,7 @@ describe('the window', () => {
     await userEvent.selectOptions(within(stepCard(1)).getByLabelText('Direction'), 'both');
     await userEvent.selectOptions(within(stepCard(1)).getByLabelText('Arrives at'), 'c-d');
     await userEvent.click(within(stepCard(1)).getByRole('checkbox', { name: 'k-two' }));
+    await userEvent.selectOptions(windowSelect(1), 'days');
     expect(screen.getByText('Filtered by the window: k-two.')).toBeTruthy();
     expect(screen.getByText('Not filtered by the window: k-two. They are read whole.')).toBeTruthy();
   });

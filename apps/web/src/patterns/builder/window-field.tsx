@@ -51,8 +51,8 @@ export function WindowField({ profile, step, index, previous, dispatch, problems
       <div id={`${id}-note`}>
         {!typed ? <p className="neighbor-types-note">{CONDITIONS_COPY.windowChooseTypes}</p> : null}
         {typed && !dated ? <p className="neighbor-types-note">{CONDITIONS_COPY.windowNoDated}</p> : null}
-        {dated ? <p className="neighbor-types-note">{windowAppliesText(reach.appliesTo)}</p> : null}
-        {dated && reach.notAppliedTo.length > 0 ? <p className="neighbor-types-note">{windowNotAppliedText(reach.notAppliedTo)}</p> : null}
+        {dated && draft.kind !== 'none' ? <p className="neighbor-types-note">{windowAppliesText(reach.appliesTo)}</p> : null}
+        {dated && draft.kind !== 'none' && reach.notAppliedTo.length > 0 ? <p className="neighbor-types-note">{windowNotAppliedText(reach.notAppliedTo)}</p> : null}
         {dated && !read.ok ? (
           <p className="neighbor-types-note" role="alert">
             {read.reason}
