@@ -2,6 +2,7 @@ import { rmSync } from 'node:fs';
 import type { ElementRef, GraphEdge, GraphNode } from '@neburyx/contracts';
 import { createApiClient, type ApiClient } from '../../../apps/web/src/api/client.js';
 import { createExpandStore, type ExpandStore } from '../../../apps/web/src/api/expand-store.js';
+import { addResultToGraph } from '../../../apps/web/src/patterns/add-to-graph.js';
 import { createPatternRunStore, type PatternRunStore } from '../../../apps/web/src/patterns/pattern-run-store.js';
 import { createDerivedStore, type DerivedStore } from '../../../apps/web/src/api/derived-store.js';
 import { createPreviewStore, type PreviewStore } from '../../../apps/web/src/api/preview-store.js';
@@ -331,4 +332,15 @@ export function personalise(rig: Rig): void {
   rig.state.presentation.select([elementKey(leaf.ref)]);
   rig.state.hide([elementKey(leaf.ref)]);
   rig.state.presentation.select([elementKey(rig.hub)]);
+}
+
+/** Runs the pattern to its answer and adds the result to the graph, as a person does; the client then holds the added items and the result stays retained. */
+export async function runAndAdd(rig: Rig): Promise<void> {
+  rig.patterns.run({ id: PATTERN, params: { ref: { entityType: 'hub', stableId: 'H-1' } } });
+  (await rig.nextRead()).answerRows();
+  (await rig.nextRead()).answerRows();
+  await until(() => rig.patterns.getState().result !== undefined, 'the result');
+  const result = rig.patterns.getState().result;
+  if (result === undefined) throw new Error('no result');
+  addResultToGraph(rig.state, result, { sourceId: result.nodes[0]?.ref.sourceId ?? '', principalId: 'person-1' });
 }

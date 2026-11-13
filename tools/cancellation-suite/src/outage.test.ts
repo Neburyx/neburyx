@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { unavailableHeadline } from '../../../apps/web/src/banner/copy.js';
-import { HUB, NEIGHBOR_TYPES, PATTERN, personalise, startRig, until, type Rig } from './rig.js';
+import { HUB, NEIGHBOR_TYPES, PATTERN, personalise, runAndAdd, startRig, until, type Rig } from './rig.js';
 
 let rig: Rig;
 afterEach(async () => {
@@ -79,5 +79,16 @@ describe('a template run whose source stops answering', () => {
     expect(rig.patterns.getState()).toMatchObject({ failure: { code: 'SOURCE_UNAVAILABLE' }, result: undefined });
     expect(rig.snapshot()).toBe(before);
     await until(() => rig.slots.inspect().sources.size === 0 && rig.slots.inspect().users.size === 0, 'the read slots to be free');
+  });
+
+  it('leaves what an earlier add put on the canvas as it was', async () => {
+    rig = await startRig();
+    personalise(rig);
+    await runAndAdd(rig);
+    const added = rig.snapshot();
+    rig.patterns.run({ id: PATTERN, params: { ref: { entityType: 'hub', stableId: 'H-1' } } });
+    (await rig.nextRead()).fail(unreachable);
+    await until(() => !rig.patterns.getState().running, 'the run to end');
+    expect(rig.snapshot()).toBe(added);
   });
 });

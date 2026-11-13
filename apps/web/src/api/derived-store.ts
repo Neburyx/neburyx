@@ -1,9 +1,10 @@
 import type { DerivedNeighborsResponse, ElementRef } from '@neburyx/contracts';
 import { outsideFocusNote } from '../canvas/focus-note.js';
 import type { ClientState } from '../state/client-state.js';
-import { DEFAULT_FILTER_HASH, DEFAULT_POLICY_VERSION, edgeKey, elementKey, type QueryKey } from '../state/keys.js';
+import { DEFAULT_FILTER_HASH, DEFAULT_POLICY_VERSION, elementKey } from '../state/keys.js';
 import { outsideFocusKeys } from '../state/loaded-graph.js';
 import type { ApiClient } from './client.js';
+import { mergeIntoLoaded } from './merge-into-loaded.js';
 import { createRequestStore, type RequestStore } from './request-store.js';
 
 export interface ShownOutcome {
@@ -50,14 +51,13 @@ export function createDerivedStore(client: ApiClient, state: ClientState, person
       const result = answerOf(ref)?.results.find((entry) => entry.ruleId === ruleId);
       if (result === undefined) return undefined;
       const current = state.investigation.getState();
-      const heldNodes = new Set(current.nodeRefs.map(elementKey));
-      const heldEdges = new Set(current.edgeRefs.map(edgeKey));
-      const nodes = result.nodes.filter((node) => !heldNodes.has(elementKey(node.ref)));
-      const edges = result.edges.filter((edge) => !heldEdges.has(edgeKey(edge.ref)));
+      const { freshNodes: nodes, freshEdges: edges } = mergeIntoLoaded(state, {
+        sourceId: ref.sourceId,
+        nodes: result.nodes,
+        edges: result.edges,
+        queryKey: () => ({ sourceId: ref.sourceId, principalId: person(), policyVersion: DEFAULT_POLICY_VERSION, filterHash: DEFAULT_FILTER_HASH, params: JSON.stringify(['derived', current.id, elementKey(ref), ruleId, ++counter]), mask: state.mask.getState() }),
+      });
       if (nodes.length === 0 && edges.length === 0) return { nodes: 0, edges: 0 };
-      const queryKey: QueryKey = { sourceId: ref.sourceId, principalId: person(), policyVersion: DEFAULT_POLICY_VERSION, filterHash: DEFAULT_FILTER_HASH, params: JSON.stringify(['derived', current.id, elementKey(ref), ruleId, ++counter]), mask: state.mask.getState() };
-      state.putResult(queryKey, { sourceId: ref.sourceId, nodes, edges });
-      state.setLoaded([...current.resultKeys, queryKey], [...current.nodeRefs, ...nodes.map((node) => node.ref)], [...current.edgeRefs, ...edges.map((edge) => edge.ref)]);
       const { neighborhoodFocus, hidden } = state.presentation.view.getState();
       const outside = outsideFocusKeys(state.loadedGraph(), neighborhoodFocus, hidden);
       const focusNote = outsideFocusNote(nodes.filter((node) => outside.has(elementKey(node.ref))).length, nodes.length);

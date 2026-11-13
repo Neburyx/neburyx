@@ -36,7 +36,7 @@ describe('the result of a pattern run', () => {
 
   it('lists the evidence records as references under the table', async () => {
     await shown(() => okRun(['acc-2', 'acc-3']));
-    expect(screen.getByText('Evidence: AUTH-0, AUTH-1')).toBeTruthy();
+    expect(screen.getByText(/^Evidence:/).textContent).toBe('Evidence: AUTH-0, AUTH-1');
   });
 
   it('says no matches were found, shows the count as stated and draws no table', async () => {

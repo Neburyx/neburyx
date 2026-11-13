@@ -1,5 +1,7 @@
 import type { ApiFailure } from '../api/client.js';
-import type { TemplateRunNotice } from '@neburyx/contracts';
+import type { Count, TemplateRunNotice } from '@neburyx/contracts';
+import { degreeCountText } from '../workspace/degree-text.js';
+import type { AddedOutcome } from './add-to-graph.js';
 import { BUSY_TEXT, busyHeadline, rateLimitedHeadline, RATE_LIMITED_TEXT, REFINE_FILTERS, RETRY, TIMED_OUT_TEXT, timedOutHeadline, UNAVAILABLE_TEXT, unavailableHeadline } from '../banner/copy.js';
 import { GRAPH_UNCHANGED } from '../search/copy.js';
 import { failureText } from '../failure-notice.js';
@@ -28,10 +30,27 @@ export const PATTERNS_COPY = {
   matchHeading: 'Match',
   reachedHeading: 'Reached',
   evidence: 'Evidence',
+  /** Proposed copy (frame 09 draws no control for adding a result). */
+  addToGraph: 'Add to graph',
+  onCanvas: 'On canvas',
+  runInProgress: 'A run is in progress',
 } as const;
 
 /** Says what is missing in the words of the form's own field label, so no article is chosen from a type name. */
 export const startHint = (fieldLabel: string): string => `Choose the ${fieldLabel.toLowerCase()} to run this pattern.`;
+
+const plural = (count: number, one: string, many: string): string => `${count} ${count === 1 ? one : many}`;
+
+/** What adding a result did, in exact facts of the client; the run's own count is named, with its label, only when it says more may exist. */
+export function addedText(outcome: AddedOutcome, count: Count): string {
+  const added = `Added ${plural(outcome.entities, 'entity', 'entities')} and ${plural(outcome.relationships, 'relationship', 'relationships')}.`;
+  const heldParts = [outcome.heldEntities === 0 ? '' : plural(outcome.heldEntities, 'entity', 'entities'), outcome.heldRelationships === 0 ? '' : plural(outcome.heldRelationships, 'relationship', 'relationships')].filter((part) => part !== '');
+  const held = heldParts.length === 0 ? '' : ` ${heldParts.join(' and ')} already loaded.`;
+  const more = count.quality === 'lowerBound' ? ` The run’s count is ${degreeCountText(count)}: more matches may exist and were not loaded.` : count.quality === 'unknown' ? ' The run gave no count: more matches may exist and were not loaded.' : '';
+  return `${added}${held}${more}`;
+}
+
+export const selectTypeHint = (typeName: string): string => `Select ${typeName === '' ? 'an entity' : `a ${typeName}`} to start.`;
 export const timeoutLabel = (timeoutMs: number): string => `${Math.round(timeoutMs / 100) / 10} s timeout`;
 
 /** One sentence for a notice of a run; the codes that carry names say how many. */

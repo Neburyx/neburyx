@@ -27,35 +27,78 @@ const node = (sourceId: string, entityType: string, stableId: string) => ({
 export const RING_MATES = 5;
 
 /**
- * What the support server does with a run, chosen by what the form sends, so a spec reaches each state with the form alone: a `limit` of 1 gives no match, 3 a run that waits until the client leaves, 4 a busy source; a `minShared` of 2 gives a heavy stop,
+ * What the support server does with a run, chosen by what the form sends, so a spec reaches each state with the form alone: a `limit` of 1 gives no match, 3 a run that waits until the client leaves, 4 a busy source, 5 a cut result (a lower-bound count), 6 a result with the stop-list notice; a `minShared` of 2 gives a heavy stop,
  * whose `continueLimit` is the product's 25 lowered by the page the run asked for, as the API does, and the same request with the continue flag gives the ring. Any other request gets the ring.
  */
-export const LIMITS = { none: 1, slow: 3, busy: 4 } as const;
+export const LIMITS = { none: 1, slow: 3, busy: 4, cut: 5, stopList: 6 } as const;
 export const HEAVY_MIN_SHARED = 2;
 const CONTINUE_LIMIT = 25;
 
-function ring(sourceId: string, anchor: string, mates: number, presetId: string | undefined): TemplateRunResponse {
-  const matches = Array.from({ length: mates }, (_, index) => `AC-${index + 2}`).filter((id) => id !== anchor);
-  const edges = matches.map((id, index) => ({
-    ref: { sourceId, type: 'USES_DEVICE', from: 'account', to: 'device', stableId: `ud-${index}` },
-    from: ref(sourceId, 'account', id),
-    to: ref(sourceId, 'device', 'DV-1'),
-    type: 'USES_DEVICE',
-    direction: 'from-to' as const,
-    semantics: 'stored' as const,
-    properties: [],
-    evidenceRefs: [`AUTH-7710${index}`],
-    qualityFlags: [],
-  }));
+const evidenceEdge = (sourceId: string, type: string, fromType: string, toType: string, id: string, from: string, to: string, evidence: string[]) => ({
+  ref: { sourceId, type, from: fromType, to: toType, stableId: id },
+  from: ref(sourceId, fromType, from),
+  to: ref(sourceId, toType, to),
+  type,
+  direction: 'from-to' as const,
+  semantics: 'stored' as const,
+  properties: [],
+  evidenceRefs: evidence,
+  qualityFlags: [],
+});
+
+const BANKING = { anchor: 'account', attribute: 'device', via: 'USES_DEVICE', prefix: 'AC-', shared: 'DV-1', mates: RING_MATES };
+const INSURANCE = { anchor: 'claimant', attribute: 'address', via: 'LIVES_AT', prefix: 'CL-', shared: 'AD-1', mates: 2 };
+const typesOfSource = (sourceId: string) => (sourceId === 'claims-demo' ? INSURANCE : BANKING);
+
+interface RingOptions {
+  readonly cut?: boolean;
+  readonly stopList?: boolean;
+}
+
+function ring(sourceId: string, anchor: string, mates: number, presetId: string | undefined, options: RingOptions = {}): TemplateRunResponse {
+  const types = typesOfSource(sourceId);
+  const matches = Array.from({ length: mates }, (_, index) => `${types.prefix}${index + 2}`).filter((id) => id !== anchor);
+  const edges = [anchor, ...matches].map((id, index) => evidenceEdge(sourceId, types.via, types.anchor, types.attribute, `ud-${index}`, id, types.shared, [`AUTH-7710${index}`]));
   return templateRunResponseSchema.parse({
     status: 'ok',
     templateId: 'shared-attribute',
     templateVersion: '1',
     ...(presetId === undefined ? {} : { presetId }),
-    count: { value: matches.length, quality: 'exact', scope: 'matches' },
-    matchIds: matches.map((id) => ref(sourceId, 'account', id)),
-    nodes: [node(sourceId, 'account', anchor), node(sourceId, 'device', 'DV-1'), ...matches.map((id) => node(sourceId, 'account', id))],
+    count: { value: matches.length, quality: options.cut === true ? 'lowerBound' : 'exact', scope: 'matches' },
+    matchIds: matches.map((id) => ref(sourceId, types.anchor, id)),
+    nodes: [node(sourceId, types.anchor, anchor), node(sourceId, types.attribute, types.shared), ...matches.map((id) => node(sourceId, types.anchor, id))],
     edges,
+    notices: options.stopList === true ? [{ code: 'stopListSkipped' }] : [],
+    warnings: [],
+  });
+}
+
+/** A linked-entities answer: one match one hop from the anchor and one two hops away through a third entity, so the answer holds four entities and three relationships. */
+function linked(sourceId: string, anchor: string, presetId: string | undefined): TemplateRunResponse {
+  const from = 'account';
+  const to = 'account';
+  const via = 'TRANSFERRED_TO';
+  const id = (n: number): string => `AC-${n}`;
+  const near = id(2);
+  const between = id(3);
+  const far = id(4);
+  return templateRunResponseSchema.parse({
+    status: 'ok',
+    templateId: 'linked-entities',
+    templateVersion: '1',
+    ...(presetId === undefined ? {} : { presetId }),
+    count: { value: 2, quality: 'exact', scope: 'matches' },
+    matchIds: [ref(sourceId, to, near), ref(sourceId, to, far)],
+    links: [
+      { match: ref(sourceId, to, near), hops: 1 },
+      { match: ref(sourceId, to, far), hops: 2, through: ref(sourceId, to, between) },
+    ],
+    nodes: [node(sourceId, from, anchor), node(sourceId, to, near), node(sourceId, to, between), node(sourceId, to, far)],
+    edges: [
+      evidenceEdge(sourceId, via, from, to, 'lk-0', anchor, near, ['AUTH-77200']),
+      evidenceEdge(sourceId, via, from, to, 'lk-1', anchor, between, ['AUTH-77201']),
+      evidenceEdge(sourceId, via, to, to, 'lk-2', between, far, ['AUTH-77202']),
+    ],
     notices: [],
     warnings: [],
   });
@@ -97,7 +140,8 @@ export function createPatterns(profiles: () => readonly PatternProfile[]) {
       if (params?.['minShared'] === HEAVY_MIN_SHARED && parsed.data.continue !== true) {
         return json(response, 200, templateRunResponseSchema.parse({ status: 'heavy', templateId: 'shared-attribute', templateVersion: '1', presetId, estimate: { value: 500, quality: 'lowerBound', scope: 'matches' }, threshold: 500, continueLimit: Math.min(CONTINUE_LIMIT, limit ?? CONTINUE_LIMIT), notices: [], warnings: [] }));
       }
-      json(response, 200, ring(sourceId, anchor, limit === LIMITS.none ? 0 : RING_MATES, presetId));
+      if (presetId === 'connected-accounts') return json(response, 200, linked(sourceId, anchor, presetId));
+      json(response, 200, ring(sourceId, anchor, limit === LIMITS.none ? 0 : typesOfSource(sourceId).mates, presetId, { cut: limit === LIMITS.cut, stopList: limit === LIMITS.stopList }));
     },
   };
 }

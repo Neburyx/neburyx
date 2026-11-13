@@ -7,6 +7,7 @@ import { useExpandStoreWhenProvided } from '../workspace/expand-context.js';
 import { leaveFocus } from '../canvas/focus-commands.js';
 import type { ClientState } from '../state/client-state.js';
 import { DEFAULT_FILTER_HASH, DEFAULT_POLICY_VERSION, elementKey, type QueryKey } from '../state/keys.js';
+import { mergeIntoLoaded } from '../api/merge-into-loaded.js';
 
 export interface AddEntity {
   readonly add: (node: GraphNode) => void;
@@ -25,14 +26,12 @@ function addedKey(investigationId: string | null, sourceId: string, principalId:
 function place(state: ClientState, sourceId: string, principalId: string, mask: boolean, node: GraphNode, expansions: ExpandStore | undefined): void {
   const current = state.investigation.getState();
   if (current.sourceId !== sourceId) return;
-  if (current.nodeRefs.some((ref) => elementKey(ref) === elementKey(node.ref))) {
+  const { freshNodes } = mergeIntoLoaded(state, { sourceId, nodes: [node], edges: [], queryKey: () => addedKey(current.id, sourceId, principalId, node, mask) });
+  if (freshNodes.length === 0) {
     // an expansion put the entity on the canvas while the answer was on its way: the person asked for it, so no collapse takes it away
     expansions?.keep(node.ref);
     return;
   }
-  const key = addedKey(current.id, sourceId, principalId, node, mask);
-  state.putResult(key, { sourceId, nodes: [node], edges: [] });
-  state.setLoaded([...current.resultKeys, key], [...current.nodeRefs, node.ref], [...current.edgeRefs]);
   // An entity added while focus is on is joined to none, so it would be loaded and not drawn: focus ends first.
   if (state.presentation.view.getState().neighborhoodFocus !== undefined) leaveFocus(state);
 }

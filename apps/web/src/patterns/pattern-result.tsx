@@ -1,7 +1,8 @@
 import type { TemplateRunOk } from '@neburyx/contracts';
 import { degreeCountText } from '../workspace/degree-text.js';
 import { elementKey } from '../state/keys.js';
-import { noticeText, PATTERNS_COPY } from './copy.js';
+import { addedText, noticeText, PATTERNS_COPY } from './copy.js';
+import type { AddedOutcome } from './add-to-graph.js';
 
 type Ref = TemplateRunOk['matchIds'][number];
 
@@ -30,7 +31,14 @@ function linkOf(result: TemplateRunOk, match: Ref, titles: ReadonlyMap<string, s
 }
 
 /** The count with its quality in the words of the UI, and the table of matches with what they share, the notices and the evidence references. */
-export function PatternResult({ result, matchHeading, sharedHeading }: { readonly result: TemplateRunOk; readonly matchHeading: string; readonly sharedHeading: string }) {
+export interface AddControl {
+  /** `onCanvas`: everything of the result is already loaded; `running`: a run is in flight; `ready`: the result can be added. */
+  readonly state: 'ready' | 'onCanvas' | 'running';
+  readonly disabled: boolean;
+  readonly onAdd: () => void;
+}
+
+export function PatternResult({ result, matchHeading, sharedHeading, add, added, evidenceOpener }: { readonly result: TemplateRunOk; readonly matchHeading: string; readonly sharedHeading: string; readonly add?: AddControl; readonly added?: AddedOutcome; readonly evidenceOpener?: (reference: string) => (() => void) | undefined }) {
   const titles = new Map(result.nodes.map((node) => [elementKey(node.ref), node.display.title]));
   const evidence = [...new Set(result.edges.flatMap((edge) => edge.evidenceRefs))];
   return (
@@ -40,6 +48,19 @@ export function PatternResult({ result, matchHeading, sharedHeading }: { readonl
         {result.matchIds.length === 0 ? ' ' : null}
         {degreeCountText(result.count)}
       </p>
+      {result.matchIds.length === 0 || add === undefined ? null : (
+        <div className="patterns-actions">
+          <button type="button" className="primary" disabled={add.disabled} onClick={add.onAdd} {...(add.state === 'running' ? { 'aria-describedby': 'patterns-run-in-progress' } : {})}>
+            {add.state === 'onCanvas' ? PATTERNS_COPY.onCanvas : PATTERNS_COPY.addToGraph}
+          </button>
+          {add.state === 'running' ? <span id="patterns-run-in-progress" className="search-panel-note">{PATTERNS_COPY.runInProgress}</span> : null}
+        </div>
+      )}
+      {added === undefined ? null : (
+        <p className="patterns-state" role="status">
+          {addedText(added, result.count)}
+        </p>
+      )}
       {result.matchIds.length === 0 ? null : (
         <table className="patterns-table">
           <thead>
@@ -62,7 +83,20 @@ export function PatternResult({ result, matchHeading, sharedHeading }: { readonl
       )}
       {evidence.length === 0 ? null : (
         <p className="search-panel-note">
-          {PATTERNS_COPY.evidence}: {evidence.join(', ')}
+          {PATTERNS_COPY.evidence}:{' '}
+          {evidence.map((reference, index) => {
+            const open = evidenceOpener?.(reference);
+            return (
+              <span key={reference}>
+                {index === 0 ? '' : ', '}
+                {open === undefined ? reference : (
+                  <button type="button" className="link" onClick={open}>
+                    {reference}
+                  </button>
+                )}
+              </span>
+            );
+          })}
         </p>
       )}
       {result.notices.map((notice, index) => (

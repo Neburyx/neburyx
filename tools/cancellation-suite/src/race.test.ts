@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { HUB, PATTERN, personalise, startRig, until, type Rig } from './rig.js';
+import { HUB, PATTERN, personalise, runAndAdd, startRig, until, type Rig } from './rig.js';
 
 let open: Rig | undefined;
 afterEach(async () => {
@@ -134,5 +134,19 @@ describe('a template run whose answer reaches the client after the person cancel
     expect(rig.patterns.getState()).toMatchObject({ cancelled: false });
     expect(rig.patterns.getState().result).toBeDefined();
     expect(rig.snapshot()).toBe(settled);
+  });
+
+  it('leaves what an earlier add put on the canvas as it was when a cancel lands after the whole body was read', async () => {
+    const rig = await begin();
+    personalise(rig);
+    await runAndAdd(rig);
+    const added = rig.snapshot();
+    rig.at.afterBody = () => rig.patterns.cancel();
+    rig.patterns.run({ id: PATTERN, params: { ref: { entityType: 'hub', stableId: 'H-1' } } });
+    (await rig.nextRead()).answerRows();
+    (await rig.nextRead()).answerRows();
+    await until(() => rig.patterns.getState().cancelled, 'the cancel');
+    await until(() => rig.slots.inspect().sources.size === 0 && rig.slots.inspect().users.size === 0, 'the read slots to be free');
+    expect(rig.snapshot()).toBe(added);
   });
 });

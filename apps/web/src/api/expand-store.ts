@@ -1,5 +1,6 @@
 import type { Count, ElementRef, ExpandFilter, ExpandPageWindow, ExpandRank, ExpandRequest, ExpandResponse, GraphEdge } from '@neburyx/contracts';
 import type { ClientState } from '../state/client-state.js';
+import { heldKeysOf, mergeIntoLoaded } from './merge-into-loaded.js';
 import { DEFAULT_FILTER_HASH, DEFAULT_POLICY_VERSION, edgeKey, elementKey, queryKeyText, type QueryKey } from '../state/keys.js';
 import { outsideFocusNote } from '../canvas/focus-note.js';
 import { drawnKeys, outsideFocusKeys } from '../state/loaded-graph.js';
@@ -264,14 +265,11 @@ export function createExpandStore(client: ApiClient, state: ClientState, person:
 
   const merge = (ref: ElementRef, answer: ExpandResponse, action: ExpansionAction, nodeKey: string): { readonly duplicates: readonly string[]; readonly nothingNew: boolean } => {
     const current = state.investigation.getState();
-    const heldNodes = new Set(current.nodeRefs.map(elementKey));
-    const heldEdges = new Set(current.edgeRefs.map(edgeKey));
+    const { nodes: heldNodes, edges: heldEdges } = heldKeysOf(state);
     const typeChains = chainsOf(nodeKey);
     // a first page or a restart begins a new chain, and only once its answer is here: a failed ask leaves the chain it had
     for (const type of firstTypesOf(action)) typeChains.set(type, { all: typeChains.get(type)?.all ?? new Set<string>(), chain: new Set<string>(), relTypes: action.kind === 'first' || action.kind === 'pages' ? action.relTypes : typeChains.get(type)?.relTypes, refinement: action.kind === 'first' || action.kind === 'pages' ? action.refinement : typeChains.get(type)?.refinement });
     const duplicates: string[] = [];
-    const fresh = answer.edges.filter((edge) => !heldEdges.has(edgeKey(edge.ref)));
-    const freshNodes = answer.nodes.filter((node) => !heldNodes.has(elementKey(node.ref)));
     for (const edge of answer.edges) {
       const type = neighborTypeOf(edge, ref);
       const chain = typeChains.get(type) ?? { all: new Set<string>(), chain: new Set<string>(), relTypes: undefined, refinement: undefined };
@@ -299,11 +297,14 @@ export function createExpandStore(client: ApiClient, state: ClientState, person:
       }
     }
     recordsChanged();
-    const queryKey: QueryKey = { sourceId: ref.sourceId, principalId: person(), policyVersion: DEFAULT_POLICY_VERSION, filterHash: DEFAULT_FILTER_HASH, params: JSON.stringify(['expanded', current.id, nodeKey, ++counter]), mask: state.mask.getState() };
+    const { freshNodes, freshEdges: fresh, queryKey } = mergeIntoLoaded(state, {
+      sourceId: ref.sourceId,
+      nodes: answer.nodes,
+      edges: answer.edges,
+      queryKey: () => ({ sourceId: ref.sourceId, principalId: person(), policyVersion: DEFAULT_POLICY_VERSION, filterHash: DEFAULT_FILTER_HASH, params: JSON.stringify(['expanded', current.id, nodeKey, ++counter]), mask: state.mask.getState() }),
+    });
     if (freshNodes.length > 0 || fresh.length > 0) {
-      state.putResult(queryKey, { sourceId: ref.sourceId, nodes: freshNodes, edges: fresh });
-      state.setLoaded([...current.resultKeys, queryKey], [...current.nodeRefs, ...freshNodes.map((node) => node.ref)], [...current.edgeRefs, ...fresh.map((edge) => edge.ref)]);
-      for (const edge of fresh) placed.set(edgeKey(edge.ref), queryKey);
+      for (const edge of fresh) if (queryKey !== undefined) placed.set(edgeKey(edge.ref), queryKey);
       const drawn = drawnKeys(state.visibleGraph());
       state.presentation.select([...freshNodes.map((node) => elementKey(node.ref)), ...fresh.map((edge) => edgeKey(edge.ref))].filter((key) => drawn.has(key)));
       const { neighborhoodFocus, hidden } = state.presentation.view.getState();

@@ -29,6 +29,7 @@ import { bindLegend } from './workspace/legend-binder.js';
 import { bindSupernodePanel } from './workspace/supernode-panel-binder.js';
 import { bindSearchPanel } from './search/search-panel-binder.js';
 import { bindFiltersPanel } from './workspace/filters-binder.js';
+import type { Evidence } from './evidence/evidence.js';
 import { bindPatternsPanel } from './patterns/patterns-binder.js';
 import { createPanelRegistryFor, PanelsProvider, type PanelRegistry } from './workspace/panel-registry.js';
 import { createSlotRegistry, SlotsProvider, type SlotRegistry } from './workspace/slots.js';
@@ -229,7 +230,7 @@ export function renderAppWithCauses(path: Parameters<typeof renderApp>[0], clien
   return { ...view, reported: vi.spyOn(view.banner, 'showFailure') };
 }
 
-export function renderApp(path: string | { readonly pathname: string; readonly search?: string; readonly state?: unknown }, client: ApiClient, state: ClientState = createClientState(), slots: SlotRegistry = createSlotRegistry(), createRenderer: CreateRenderer = stubFactory().create, selectionActions: SelectionActionRegistry = createSelectionActionRegistry(), tools: ToolRegistry = createToolRegistry(), menus: MenuRegistry = createMenuRegistry(), panels: PanelRegistry = createPanelRegistryFor(state), keyBindings: KeyBindingRegistry = builtInKeyBindings(), banner: BannerController = createBannerController()): { readonly banner: BannerController; readonly router: ReturnType<typeof createMemoryRouter>; readonly state: ClientState; readonly slots: SlotRegistry; readonly tools: ToolRegistry; readonly panels: PanelRegistry; readonly keyBindings: KeyBindingRegistry; readonly container: HTMLElement; readonly unmount: () => void } {
+export function renderApp(path: string | { readonly pathname: string; readonly search?: string; readonly state?: unknown }, client: ApiClient, state: ClientState = createClientState(), slots: SlotRegistry = createSlotRegistry(), createRenderer: CreateRenderer = stubFactory().create, selectionActions: SelectionActionRegistry = createSelectionActionRegistry(), tools: ToolRegistry = createToolRegistry(), menus: MenuRegistry = createMenuRegistry(), panels: PanelRegistry = createPanelRegistryFor(state), keyBindings: KeyBindingRegistry = builtInKeyBindings(), banner: BannerController = createBannerController(), evidence?: Evidence): { readonly banner: BannerController; readonly router: ReturnType<typeof createMemoryRouter>; readonly state: ClientState; readonly slots: SlotRegistry; readonly tools: ToolRegistry; readonly panels: PanelRegistry; readonly keyBindings: KeyBindingRegistry; readonly container: HTMLElement; readonly unmount: () => void } {
   const router = createMemoryRouter(appRoutes(client, state, banner), { initialEntries: [path] });
   const view = render(
     <ClientStateProvider state={state}>
@@ -255,7 +256,7 @@ export function renderApp(path: string | { readonly pathname: string; readonly s
   const unbindLegend = bindLegend(state, panels);
   const unbindSearch = bindSearchPanel(state, panels);
   const unbindFilters = bindFiltersPanel(state, panels);
-  const unbindPatterns = bindPatternsPanel(state, panels);
+  const unbindPatterns = bindPatternsPanel(state, panels, evidence);
   const unbindSupernode = bindSupernodePanel(state, panels);
   const unbindBanner = bindBannerToInvestigation(state, banner);
   return {

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
-import type { GraphNode, TemplateListResponse } from '@neburyx/contracts';
+import type { GraphNode, TemplateListResponse, TemplateRunOk } from '@neburyx/contracts';
 import { withoutReadsWhileSourceChanged } from '../api/changed-source-guard.js';
 import { useApiClient } from '../api/client-context.js';
 import { heavyDecisionOfRun } from '../api/heavy-estimate.js';
@@ -7,8 +7,13 @@ import { useRequest } from '../api/use-request.js';
 import { useProfile } from '../canvas/profile-context.js';
 import { useContextEpoch } from '../search/use-context-epoch.js';
 import { answeredData, useShellData } from '../shell/shell-data.js';
-import { useClientState, useLoadedGraph, useSessionMask } from '../state/context.js';
-import { elementKey } from '../state/keys.js';
+import { useClientState, useLoadedGraph, useSessionMask, useVisibleGraph } from '../state/context.js';
+import { edgeKey, elementKey } from '../state/keys.js';
+import { partitionEdges } from '../state/loaded-graph.js';
+import { useEvidenceHandle } from './evidence-handle.js';
+import { isSourceChanged } from '../state/investigation-state.js';
+import { addResultToGraph, type AddedOutcome } from './add-to-graph.js';
+import { useExpandStoreWhenProvided } from '../workspace/expand-context.js';
 import { useStoreSelector } from '../state/store.js';
 import { canRetry } from '../failure-notice.js';
 import { continueWith, rateLimitedRetry } from '../banner/copy.js';
@@ -140,6 +145,8 @@ function PatternsWorkbench({ client, sourceId, sourceName, mask, list, first, cl
   const [values, setValues] = useState<FormValues>({});
   const [errors, setErrors] = useState<Readonly<Record<string, string>>>({});
   const [chosen, setChosen] = useState<GraphNode | undefined>(undefined);
+  const [added, setAdded] = useState<{ readonly result: TemplateRunOk; readonly outcome: AddedOutcome } | undefined>(undefined);
+  const expansions = useExpandStoreWhenProvided();
   const cards = useRef<Array<HTMLButtonElement | null>>([]);
   const startField = useRef<HTMLSelectElement>(null);
   const preset: Preset = list.presets.find((candidate) => candidate.id === selectedId) ?? first;
@@ -232,6 +239,30 @@ function PatternsWorkbench({ client, sourceId, sourceName, mask, list, first, cl
   // a result is shown only under the pattern that produced it
   const result = run.result !== undefined && run.result.presetId === preset.id ? run.result : undefined;
   const firstMatch = result?.matchIds[0];
+  const principalId = answeredData(shell.me)?.principal.id;
+  const sourceChanged = useStoreSelector(state.investigation, (investigation) => isSourceChanged(investigation.record?.sourceState));
+  // the control follows what the investigation holds: a result whose entities and relationships are all loaded is on the canvas already
+  const allLoaded = useStoreSelector(state.investigation, (investigation) => {
+    if (result === undefined) return false;
+    const nodes = new Set(investigation.nodeRefs.map(elementKey));
+    const edges = new Set(investigation.edgeRefs.map(edgeKey));
+    return result.nodes.every((node) => nodes.has(elementKey(node.ref))) && result.edges.every((edge) => edges.has(edgeKey(edge.ref)));
+  });
+  const evidence = useEvidenceHandle();
+  const visible = useVisibleGraph();
+  const evidenceOpener = evidence === undefined || result === undefined
+    ? undefined
+    : (reference: string): (() => void) | undefined => {
+        const drawn = new Set(partitionEdges(visible).drawable.map((edge) => edgeKey(edge.ref)));
+        const edge = result.edges.find((candidate) => candidate.evidenceRefs.includes(reference) && drawn.has(edgeKey(candidate.ref)));
+        return edge === undefined ? undefined : () => void evidence.open(edge.ref);
+      };
+  const addControl =
+    result === undefined || sourceChanged || principalId === undefined
+      ? undefined
+      : { state: (run.running ? 'running' : allLoaded ? 'onCanvas' : 'ready') as 'running' | 'onCanvas' | 'ready', disabled: run.running || allLoaded, onAdd: () => {
+          setAdded({ result, outcome: addResultToGraph(state, result, { sourceId, principalId, expansions }) });
+        } };
 
   return (
     <>
@@ -331,6 +362,9 @@ function PatternsWorkbench({ client, sourceId, sourceName, mask, list, first, cl
       {result === undefined ? null : (
         <PatternResult
           result={result}
+          {...(addControl === undefined ? {} : { add: addControl })}
+          {...(added === undefined || added.result !== result ? {} : { added: added.outcome })}
+          {...(evidenceOpener === undefined ? {} : { evidenceOpener })}
           matchHeading={firstMatch === undefined ? PATTERNS_COPY.matchHeading : typeName(firstMatch.entityType)}
           sharedHeading={result.links !== undefined ? PATTERNS_COPY.reachedHeading : `Shared ${typeName(preset.bind.attribute).toLowerCase() || 'attribute'}`}
         />

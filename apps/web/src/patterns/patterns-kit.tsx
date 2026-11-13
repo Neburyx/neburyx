@@ -19,6 +19,9 @@ import { typedNode } from '../workspace/filters-kit.js';
 import { createPanelRegistryFor } from '../workspace/panel-registry.js';
 import { createSlotRegistry } from '../workspace/slots.js';
 import { createToolRegistry } from '../workspace/tool-registry.js';
+import type { Evidence } from '../evidence/evidence.js';
+import { createEvidence } from '../evidence/evidence.js';
+import { storedEvidenceKind } from '../evidence/stored-evidence.js';
 import { registerPatternsTool } from './patterns-tool.js';
 
 type Preset = TemplateListResponse['presets'][number];
@@ -60,6 +63,7 @@ export interface PatternsKit {
   readonly client: ApiClient;
   readonly sent: Sent[];
   readonly searches: unknown[];
+  readonly evidence: Evidence;
   readonly unmount: () => void;
 }
 
@@ -104,9 +108,11 @@ export async function patternsWorkspace(options: KitOptions = {}): Promise<Patte
   registerSearchTool(tools, state);
   registerPatternsTool(tools, state);
   const banner = createBuiltInBannerController();
-  const view = renderApp('/explore', client, state, slots, stubFactory().create, undefined, tools, undefined, createPanelRegistryFor(state), undefined, banner);
+  const evidence = createEvidence();
+  evidence.kinds.register(storedEvidenceKind);
+  const view = renderApp('/explore', client, state, slots, stubFactory().create, undefined, tools, undefined, createPanelRegistryFor(state), undefined, banner, evidence);
   await settle();
-  return { state, banner, client, sent, searches, unmount: view.unmount };
+  return { state, banner, client, sent, searches, evidence, unmount: view.unmount };
 }
 
 export async function settle(): Promise<void> {

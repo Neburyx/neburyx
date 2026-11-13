@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { HUB, HUB_THREE, HUB_TWO, NEIGHBOR_TYPES, PATTERN, personalise, RULE, startRig, until, type Rig } from './rig.js';
+import { HUB, HUB_THREE, HUB_TWO, NEIGHBOR_TYPES, PATTERN, personalise, RULE, runAndAdd, startRig, until, type Rig } from './rig.js';
 import { elementKey } from '../../../apps/web/src/state/keys.js';
 import { cancelledHeadline } from '../../../apps/web/src/banner/copy.js';
 import { EXPAND_NEIGHBORS_ID } from '../../../services/api/src/gate/templates/expand-neighbors.js';
@@ -209,5 +209,35 @@ describe('cancelling a running template run', () => {
     expect(rig.patterns.getState().result).toBeUndefined();
     expect(rig.snapshot()).toBe(before);
     await until(() => rig.slots.inspect().sources.size === 0 && rig.slots.inspect().users.size === 0, 'the read slots to be free');
+  });
+
+  it('keeps what an earlier result added to the graph when a later run is cancelled', async () => {
+    rig = await startRig();
+    personalise(rig);
+    await runAndAdd(rig);
+    const added = rig.snapshot();
+    rig.patterns.run({ id: PATTERN, params: { ref: { entityType: 'hub', stableId: 'H-1' } } });
+    const read = await rig.nextRead();
+    rig.patterns.cancel();
+    await until(() => read.call.signal?.aborted === true, 'the read to be aborted');
+    read.answerRows();
+    await until(() => rig.slots.inspect().sources.size === 0 && rig.slots.inspect().users.size === 0, 'the read slots to be free');
+    expect(rig.snapshot()).toBe(added);
+  });
+
+  it('changes only what a person adds: the loaded items, their result key and the selection, and nothing saved', async () => {
+    rig = await startRig();
+    personalise(rig);
+    const before = JSON.parse(rig.snapshot());
+    const savedBefore = rig.saved();
+    await runAndAdd(rig);
+    const after = JSON.parse(rig.snapshot());
+    const differing = Object.keys(after).filter((part) => JSON.stringify(after[part]) !== JSON.stringify(before[part])).sort();
+    expect(differing).toEqual(['graph', 'investigation', 'presentation', 'progress'].filter((part) => differing.includes(part)));
+    expect(differing).not.toContain('saved');
+    expect(rig.saved()).toBe(savedBefore);
+    const changed = (part: string, keys: readonly string[]): string[] => Object.keys(after[part]).filter((key) => !keys.includes(key) && JSON.stringify(after[part][key]) !== JSON.stringify(before[part][key]));
+    expect(changed('investigation', ['resultKeys', 'nodeRefs', 'edgeRefs'])).toEqual([]);
+    expect(changed('presentation', ['selection'])).toEqual([]);
   });
 });
